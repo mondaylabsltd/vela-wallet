@@ -137,8 +137,11 @@ class VelaPasskeyModule: NSObject {
         )
         let request = provider.createCredentialAssertionRequest(challenge: challengeData)
 
-        if let credHex = credentialId, !credHex.isEmpty,
-           let credData = Data(hexString: credHex) {
+        if let credHex = credentialId, !credHex.isEmpty {
+            guard let credData = Data(hexString: credHex) else {
+                reject("PASSKEY_FAILED", "Invalid credentialId hex", nil)
+                return
+            }
             request.allowedCredentials = [
                 ASAuthorizationPlatformPublicKeyCredentialDescriptor(credentialID: credData)
             ]

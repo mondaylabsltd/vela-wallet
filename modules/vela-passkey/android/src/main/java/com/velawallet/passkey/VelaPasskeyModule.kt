@@ -142,12 +142,20 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
             try {
                 val challengeBytes = fromHex(challengeHex)
                 val challengeB64 = base64UrlEncode(challengeBytes)
+                val allowCredentialsJson = credentialId
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let {
+                        val credentialIdB64 = base64UrlEncode(fromHex(it))
+                        """,
+                    "allowCredentials": [{"type": "public-key", "id": "$credentialIdB64"}]"""
+                    }
+                    ?: ""
 
                 val json = """
                 {
                     "challenge": "$challengeB64",
                     "rpId": "$RELYING_PARTY",
-                    "userVerification": "required"
+                    "userVerification": "required"$allowCredentialsJson
                 }
                 """.trimIndent()
 
