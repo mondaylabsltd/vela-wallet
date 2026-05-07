@@ -1,16 +1,15 @@
 import { Redirect } from 'expo-router';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useWallet } from '@/models/wallet-state';
-import { VelaColor } from '@/constants/theme';
+import { color } from '@/constants/theme';
 
 export default function Index() {
   const { state } = useWallet();
 
-  // Wait for storage to load before routing
   if (state.isLoading) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color={VelaColor.accent} />
+        <ActivityIndicator size="large" color={color.accent.base} />
       </View>
     );
   }
@@ -26,6 +25,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: VelaColor.bg,
+    backgroundColor: color.bg.base,
   },
 });

@@ -6,7 +6,7 @@ import * as Clipboard from 'expo-clipboard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenLogo } from '@/components/TokenLogo';
-import { VelaColor, VelaFont, VelaSpacing } from '@/constants/theme';
+import { color, text, weight, space, radius, font } from '@/constants/theme';
 import { useWallet } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
 import { loadCustomTokens } from '@/services/storage';
@@ -34,6 +34,16 @@ function formatUsdDec(value: number): string {
   return dot === -1 ? '.00' : full.slice(dot);
 }
 
+/** Scale balance font size down as the number gets longer */
+function balanceFontSize(usd: number): number {
+  const len = formatUsdInt(usd).length; // includes "$" and commas
+  if (len <= 7) return 30;   // up to $9,999
+  if (len <= 9) return 26;   // up to $999,999
+  if (len <= 12) return 22;  // up to $999,999,999
+  if (len <= 15) return 18;  // up to $999,999,999,999
+  return 15;
+}
+
 function TokenRow({ token, onPress }: { token: APIToken; onPress: () => void }) {
   const balance = tokenBalanceDouble(token);
   const usd = tokenUsdValue(token);
@@ -42,13 +52,13 @@ function TokenRow({ token, onPress }: { token: APIToken; onPress: () => void }) 
 
   return (
     <TouchableOpacity style={styles.tokenRow} onPress={onPress} activeOpacity={0.7}>
-      <TokenLogo symbol={token.symbol} logoUrl={logo} size={40} />
+      <TokenLogo symbol={token.symbol} logoUrl={logo} size={32} />
       <View style={styles.tokenInfo}>
-        <Text style={styles.tokenName} numberOfLines={1}>{token.name || token.symbol}</Text>
+        <Text style={styles.tokenName} numberOfLines={1}>{token.symbol}</Text>
         <Text style={styles.tokenChain}>{chain}</Text>
       </View>
       <View style={styles.tokenValues}>
-        <Text style={styles.tokenBalance}>{formatBalance(balance)} {token.symbol}</Text>
+        <Text style={styles.tokenBalance}>{formatBalance(balance)}</Text>
         {usd > 0 && <Text style={styles.tokenUsd}>{formatUsd(usd)}</Text>}
       </View>
     </TouchableOpacity>
@@ -162,15 +172,19 @@ export default function HomeScreen() {
         <Text style={styles.accountName}>{accountName}</Text>
         <TouchableOpacity style={styles.addrRow} onPress={copyAddress} activeOpacity={0.7}>
           <Text style={styles.accountAddr}>{shortAddr(address)}</Text>
-          <Copy size={12} color={copied ? VelaColor.accent : VelaColor.textTertiary} />
+          <Copy size={12} color={copied ? color.accent.base : color.fg.subtle} />
           {copied && <Text style={styles.copiedText}>Copied</Text>}
         </TouchableOpacity>
       </View>
 
-      {/* Total balance */}
+      {/* Total balance — dynamic font size based on digit count */}
       <View style={styles.balanceRow}>
-        <Text style={styles.balanceInt}>{formatUsdInt(totalUsd)}</Text>
-        <Text style={styles.balanceDec}>{formatUsdDec(totalUsd)}</Text>
+        <Text style={[styles.balanceInt, { fontSize: balanceFontSize(totalUsd) }]}>
+          {formatUsdInt(totalUsd)}
+        </Text>
+        <Text style={[styles.balanceDec, { fontSize: balanceFontSize(totalUsd) * 0.62 }]}>
+          {formatUsdDec(totalUsd)}
+        </Text>
       </View>
 
       {/* Action buttons */}
@@ -179,6 +193,11 @@ export default function HomeScreen() {
         <ActionButton label="Receive" icon={ArrowDown} onPress={() => router.push('/receive')} />
         <ActionButton label="History" icon={Menu} onPress={() => router.push('/history')} />
       </View>
+
+      {/* Add Token */}
+      <TouchableOpacity onPress={() => router.push('/add-token')} activeOpacity={0.7}>
+        <Text style={styles.addTokenLink}>+ Add Token</Text>
+      </TouchableOpacity>
     </View>
   );
 
@@ -206,7 +225,7 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={VelaColor.accent}
+            tintColor={color.accent.base}
           />
         }
         contentContainerStyle={styles.listContent}
@@ -219,9 +238,7 @@ export default function HomeScreen() {
 function ActionButton({ label, icon: Icon, onPress }: { label: string; icon: React.ComponentType<any>; onPress: () => void }) {
   return (
     <TouchableOpacity style={styles.actionBtn} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.actionIconBg}>
-        <Icon size={20} color="#FFFFFF" strokeWidth={2.5} />
-      </View>
+      <Icon size={14} color={color.fg.base} strokeWidth={2.5} />
       <Text style={styles.actionLabel}>{label}</Text>
     </TouchableOpacity>
   );
@@ -232,115 +249,129 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   header: {
-    paddingTop: 20,
-    marginBottom: 24,
+    paddingTop: space.xl,
+    marginBottom: space.md,
   },
   accountRow: {
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: space.md,
   },
   accountName: {
-    ...VelaFont.title(18),
-    color: VelaColor.textPrimary,
+    fontSize: text.base,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   addrRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    marginTop: 3,
+    gap: space.sm,
+    marginTop: space.xs,
   },
   accountAddr: {
-    ...VelaFont.mono(13),
-    color: VelaColor.textTertiary,
+    fontSize: text.xs,
+    fontWeight: weight.medium,
+    fontFamily: font.mono,
+    color: color.fg.subtle,
   },
   copiedText: {
-    ...VelaFont.caption(),
-    color: VelaColor.accent,
-    marginLeft: 2,
+    fontSize: text.xs,
+    fontWeight: weight.medium,
+    color: color.accent.base,
+    marginLeft: space.xs,
   },
   balanceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'center',
-    marginBottom: 28,
+    marginBottom: space['2xl'],
   },
   balanceInt: {
-    ...VelaFont.heading(38),
-    color: VelaColor.textPrimary,
+    fontSize: text['4xl'],
+    fontWeight: weight.bold,
+    color: color.fg.base,
   },
   balanceDec: {
-    ...VelaFont.heading(24),
-    color: VelaColor.textTertiary,
+    fontSize: text['2xl'],
+    fontWeight: weight.bold,
+    color: color.fg.subtle,
   },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 36,
-    marginBottom: 16,
+    gap: space.md,
+    marginBottom: space.xl,
   },
   actionBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  actionIconBg: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: VelaColor.textPrimary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionIcon: {
-    fontSize: 22,
-    color: '#FFFFFF',
-    fontWeight: '700',
+    gap: space.sm,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.md,
+    borderRadius: radius['2xl'],
+    borderWidth: 1,
+    borderColor: color.border.base,
+    backgroundColor: color.bg.raised,
   },
   actionLabel: {
-    ...VelaFont.label(12),
-    color: VelaColor.textSecondary,
+    fontSize: text.sm,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
+  },
+  addTokenLink: {
+    fontSize: text.sm,
+    fontWeight: weight.regular,
+    color: color.accent.base,
+    textAlign: 'right',
+    marginBottom: space.sm,
   },
   tokenRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: VelaSpacing.itemGap,
-    paddingHorizontal: 4,
-    gap: 12,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.sm,
+    gap: space.lg,
   },
   tokenInfo: {
     flex: 1,
-    gap: 2,
+    gap: space.xs,
   },
   tokenName: {
-    ...VelaFont.title(15),
-    color: VelaColor.textPrimary,
+    fontSize: text.base,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   tokenChain: {
-    ...VelaFont.body(13),
-    color: VelaColor.textSecondary,
+    fontSize: text.xs,
+    fontWeight: weight.regular,
+    color: color.fg.subtle,
   },
   tokenValues: {
     alignItems: 'flex-end',
-    gap: 2,
+    gap: space.xs,
   },
   tokenBalance: {
-    ...VelaFont.title(15),
-    color: VelaColor.textPrimary,
+    fontSize: text.base,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   tokenUsd: {
-    ...VelaFont.body(13),
-    color: VelaColor.textSecondary,
+    fontSize: text.xs,
+    fontWeight: weight.regular,
+    color: color.fg.subtle,
   },
   emptyContainer: {
     alignItems: 'center',
-    paddingTop: 60,
-    gap: 8,
+    paddingTop: space['5xl'],
+    gap: space.md,
   },
   emptyText: {
-    ...VelaFont.title(17),
-    color: VelaColor.textSecondary,
+    fontSize: text.lg,
+    fontWeight: weight.semibold,
+    color: color.fg.muted,
   },
   emptySubtext: {
-    ...VelaFont.body(14),
-    color: VelaColor.textTertiary,
+    fontSize: text.base,
+    fontWeight: weight.regular,
+    color: color.fg.subtle,
   },
 });

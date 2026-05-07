@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, type ViewStyle } from 'react-native';
-import { VelaColor, VelaRadius } from '@/constants/theme';
+import { color, radius } from '@/constants/theme';
 
 interface Props {
   children: React.ReactNode;
@@ -13,9 +13,9 @@ export function VelaCard({ children, style }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: VelaColor.bgCard,
-    borderRadius: VelaRadius.card,
+    backgroundColor: color.bg.raised,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: VelaColor.border,
+    borderColor: color.border.base,
   },
 });

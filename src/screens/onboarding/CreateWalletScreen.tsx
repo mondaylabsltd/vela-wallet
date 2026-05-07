@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme';
+import { color, text, weight, space, radius } from '@/constants/theme';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { useWallet } from '@/models/wallet-state';
@@ -12,6 +12,7 @@ import { fromHex, toHex } from '@/services/hex';
 import * as Passkey from '@/modules/passkey';
 import { PasskeyError, PasskeyErrorCode } from '@/modules/passkey';
 import { uploadPublicKey } from '@/services/public-key-upload';
+import { verifySafeWebAuthn } from '@/services/webauthn-verify';
 import type { StoredAccount } from '@/models/types';
 
 interface Props {
@@ -146,10 +147,47 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
       name: pending.name,
     });
     if (ok) {
-      finishCreation(pending.account);
-    } else {
+      setCreated(true);
+      setUploadFailed(false);
+    }
+    setLoading(false);
+    setStatus('');
+  }
+
+  /** Sign with the just-created credential to verify compatibility, then enter wallet */
+  async function handleSignIn() {
+    const pending = pendingRef.current;
+    if (!pending || loading) return;
+    setLoading(true);
+    setStatus('Verifying passkey...');
+
+    try {
+      const testChallenge = toHex(new TextEncoder().encode('vela-verify-' + Date.now()));
+      const assertion = await Passkey.sign(testChallenge, pending.credentialId);
+      const compat = verifySafeWebAuthn(assertion);
+
+      if (!compat.ok) {
+        Alert.alert(
+          'Device Not Compatible',
+          'Your passkey provider is not compatible with this wallet. Please switch to Google Password Manager in system settings and try again.',
+        );
+        setLoading(false);
+        setStatus('');
+        return;
+      }
+
+      // Verification passed — enter wallet
+      dispatch({ type: 'ADD_ACCOUNT', account: pending.account });
+      onCreated?.(pending.account.address, pending.account.name);
+      router.replace('/(tabs)/wallet');
+    } catch (error) {
+      if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
+        setStatus('Verification was cancelled. Please try again.');
+      } else {
+        Alert.alert('Error', error instanceof Error ? error.message : String(error));
+        setStatus('');
+      }
       setLoading(false);
-      setStatus('');
     }
   }
 
@@ -158,7 +196,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <View style={styles.header}>
-        {onBack && !uploadFailed && !created && (
+        {onBack && !uploadFailed && (
           <Text onPress={onBack} style={styles.backButton}>
             Back
           </Text>
@@ -166,7 +204,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
         <Text style={styles.title}>
           {created ? 'Wallet Created' : uploadFailed ? 'Save Public Key' : 'Create Wallet'}
         </Text>
-        {onBack && !uploadFailed && !created && <View style={styles.headerSpacer} />}
+        {onBack && !uploadFailed && <View style={styles.headerSpacer} />}
       </View>
 
       <View style={styles.content}>
@@ -199,7 +237,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
               value={name}
               onChangeText={setName}
               placeholder="Enter a name for your account"
-              placeholderTextColor={VelaColor.textTertiary}
+              placeholderTextColor={color.fg.subtle}
               autoFocus
               returnKeyType="done"
               onSubmitEditing={handleCreate}
@@ -219,8 +257,9 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
       <View style={styles.bottom}>
         {created ? (
           <VelaButton
-            title="Sign in"
-            onPress={() => onBack?.()}
+            title="Verify & Sign in"
+            onPress={handleSignIn}
+            loading={loading}
           />
         ) : uploadFailed ? (
           <VelaButton
@@ -246,11 +285,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: space.xl,
   },
   backButton: {
-    ...VelaFont.body(16),
-    color: VelaColor.accent,
+    fontSize: text.base,
+    fontWeight: weight.regular,
+    color: color.accent.base,
     position: 'absolute',
     left: 0,
   },
@@ -258,73 +298,83 @@ const styles = StyleSheet.create({
     width: 40,
   },
   title: {
-    ...VelaFont.title(20),
-    color: VelaColor.textPrimary,
+    fontSize: text.xl,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   content: {
     flex: 1,
-    paddingTop: 32,
+    paddingTop: space['4xl'],
   },
   label: {
-    ...VelaFont.label(14),
-    color: VelaColor.textSecondary,
-    marginBottom: 8,
+    fontSize: text.xs,
+    fontWeight: weight.semibold,
+    color: color.fg.muted,
+    marginBottom: space.md,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   input: {
-    ...VelaFont.body(17),
-    color: VelaColor.textPrimary,
-    backgroundColor: VelaColor.bgCard,
+    fontSize: text.lg,
+    fontWeight: weight.regular,
+    color: color.fg.base,
+    backgroundColor: color.bg.raised,
     borderWidth: 1,
-    borderColor: VelaColor.border,
-    borderRadius: VelaRadius.card,
-    paddingHorizontal: VelaSpacing.cardPadding,
-    paddingVertical: 16,
+    borderColor: color.border.base,
+    borderRadius: radius.xl,
+    paddingHorizontal: space['2xl'],
+    paddingVertical: space.xl,
   },
   hint: {
-    ...VelaFont.body(14),
-    color: VelaColor.textTertiary,
-    marginTop: 12,
-    lineHeight: 20,
+    fontSize: text.sm,
+    fontWeight: weight.regular,
+    color: color.fg.subtle,
+    marginTop: space.lg,
+    lineHeight: 18,
   },
   status: {
-    ...VelaFont.body(14),
-    color: VelaColor.blue,
-    marginTop: 16,
+    fontSize: text.sm,
+    fontWeight: weight.regular,
+    color: color.info.base,
+    marginTop: space.xl,
     textAlign: 'center',
   },
   bottom: {
-    paddingBottom: 24,
+    paddingBottom: space['3xl'],
   },
   errorTitle: {
-    ...VelaFont.title(18),
-    color: VelaColor.accent,
-    marginBottom: 12,
+    fontSize: text.lg,
+    fontWeight: weight.semibold,
+    color: color.accent.base,
+    marginBottom: space.md,
   },
   errorMessage: {
-    ...VelaFont.body(15),
-    color: VelaColor.textSecondary,
-    lineHeight: 22,
-    marginBottom: 12,
+    fontSize: text.base,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
+    lineHeight: 19,
+    marginBottom: space.md,
   },
   errorDetail: {
-    ...VelaFont.body(13),
-    color: VelaColor.accent,
-    backgroundColor: VelaColor.bgCard,
-    borderRadius: VelaRadius.card,
-    padding: 12,
-    marginBottom: 12,
+    fontSize: text.sm,
+    fontWeight: weight.regular,
+    color: color.accent.base,
+    backgroundColor: color.bg.raised,
+    borderRadius: radius.xl,
+    padding: space.lg,
+    marginBottom: space.lg,
     overflow: 'hidden',
   },
   successTitle: {
-    ...VelaFont.title(18),
-    color: VelaColor.green,
-    marginBottom: 12,
+    fontSize: text.lg,
+    fontWeight: weight.semibold,
+    color: color.success.base,
+    marginBottom: space.md,
   },
   successMessage: {
-    ...VelaFont.body(15),
-    color: VelaColor.textSecondary,
-    lineHeight: 22,
+    fontSize: text.base,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
+    lineHeight: 19,
   },
 });

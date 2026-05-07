@@ -6,7 +6,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenLogo } from '@/components/TokenLogo';
-import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme';
+import { color, weight, space } from '@/constants/theme';
 import { formatBalance, shortAddr } from '@/models/types';
 import { chainName } from '@/models/network';
 
@@ -153,13 +153,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   backBtn: {
-    ...VelaFont.title(16),
-    color: VelaColor.accent,
+    fontSize: 16, fontWeight: weight.semibold,
+    color: color.accent.base,
     width: 50,
   },
   navTitle: {
-    ...VelaFont.title(17),
-    color: VelaColor.textPrimary,
+    fontSize: 17, fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   tokenHeader: {
     alignItems: 'center',
@@ -167,36 +167,36 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tokenName: {
-    ...VelaFont.heading(22),
-    color: VelaColor.textPrimary,
+    fontSize: 22, fontWeight: weight.bold,
+    color: color.fg.base,
   },
   chainLabel: {
-    ...VelaFont.body(14),
-    color: VelaColor.textSecondary,
+    fontSize: 14, fontWeight: weight.regular,
+    color: color.fg.muted,
   },
   balanceCard: {
-    padding: VelaSpacing.cardPadding,
+    padding: space['2xl'],
     alignItems: 'center',
     gap: 6,
     marginBottom: 20,
   },
   balanceLabel: {
-    ...VelaFont.label(13),
-    color: VelaColor.textSecondary,
+    fontSize: 13, fontWeight: weight.semibold,
+    color: color.fg.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   balanceValue: {
-    ...VelaFont.heading(28),
-    color: VelaColor.textPrimary,
+    fontSize: 28, fontWeight: weight.bold,
+    color: color.fg.base,
   },
   usdValue: {
-    ...VelaFont.title(18),
-    color: VelaColor.textSecondary,
+    fontSize: 18, fontWeight: weight.semibold,
+    color: color.fg.muted,
   },
   priceLabel: {
-    ...VelaFont.body(13),
-    color: VelaColor.textTertiary,
+    fontSize: 13, fontWeight: weight.regular,
+    color: color.fg.subtle,
     marginTop: 4,
   },
   buttonRow: {
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   infoCard: {
-    padding: VelaSpacing.cardPadding,
+    padding: space['2xl'],
   },
   infoRow: {
     flexDirection: 'row',
@@ -217,8 +217,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   infoLabel: {
-    ...VelaFont.body(14),
-    color: VelaColor.textSecondary,
+    fontSize: 14, fontWeight: weight.regular,
+    color: color.fg.muted,
   },
   infoValueRow: {
     flexDirection: 'row',
@@ -226,15 +226,15 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   infoValue: {
-    ...VelaFont.title(14),
-    color: VelaColor.textPrimary,
+    fontSize: 14, fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   copyIcon: {
     fontSize: 14,
-    color: VelaColor.accent,
+    color: color.accent.base,
   },
   separator: {
     height: 1,
-    backgroundColor: VelaColor.border,
+    backgroundColor: color.border.base,
   },
 });

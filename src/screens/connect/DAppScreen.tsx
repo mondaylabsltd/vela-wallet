@@ -15,7 +15,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { AppModal } from '@/components/ui/AppModal';
-import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme';
+import { color, weight, space, radius, font } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { shortAddr, type BLEIncomingRequest } from '@/models/types';
 import { PasskeyErrorCode } from '@/modules/passkey';
@@ -268,7 +268,7 @@ export default function DAppScreen() {
                 <Text style={styles.walletName}>{accountName}</Text>
                 <Text style={styles.walletAddr}>{shortAddress(address)}</Text>
               </View>
-              <ChevronRight size={18} color={VelaColor.textTertiary} />
+              <ChevronRight size={18} color={color.fg.subtle} />
             </View>
           </VelaCard>
         </TouchableOpacity>
@@ -296,7 +296,7 @@ export default function DAppScreen() {
           <View style={styles.section}>
             <VelaCard style={styles.statusCard}>
               <View style={styles.pulseRow}>
-                <Bluetooth size={18} color={VelaColor.blue} />
+                <Bluetooth size={18} color={color.info.base} />
                 <Text style={styles.statusText}>Waiting for connection...</Text>
               </View>
             </VelaCard>
@@ -386,7 +386,7 @@ export default function DAppScreen() {
                     <Text style={styles.accountItemName}>{account.name}</Text>
                     <Text style={styles.accountItemAddr}>{shortAddress(account.address)}</Text>
                   </View>
-                  {isActive && <Check size={18} color={VelaColor.accent} />}
+                  {isActive && <Check size={18} color={color.accent.base} />}
                 </TouchableOpacity>
               );
             })}
@@ -423,54 +423,54 @@ function methodLabel(m: string): string {
 
 const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 40 },
-  pageTitle: { ...VelaFont.heading(28), color: VelaColor.textPrimary, marginTop: 16, marginBottom: 20 },
+  pageTitle: { fontSize: 28, fontWeight: weight.bold, color: color.fg.base, marginTop: 16, marginBottom: 20 },
 
   // Wallet card
-  walletCard: { padding: VelaSpacing.cardPadding, marginBottom: 20 },
+  walletCard: { padding: space['2xl'], marginBottom: 20 },
   walletRow: { flexDirection: 'row', alignItems: 'center' },
-  walletName: { ...VelaFont.title(16), color: VelaColor.textPrimary },
-  walletAddr: { ...VelaFont.mono(13), color: VelaColor.textTertiary, marginTop: 2 },
+  walletName: { fontSize: 16, fontWeight: weight.semibold, color: color.fg.base },
+  walletAddr: { fontSize: 13, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle, marginTop: 2 },
 
   // Sections
   section: { marginBottom: 16 },
-  sectionTitle: { ...VelaFont.title(18), color: VelaColor.textPrimary, marginBottom: 6 },
-  hint: { ...VelaFont.body(14), color: VelaColor.textSecondary, lineHeight: 20, marginBottom: 14 },
+  sectionTitle: { fontSize: 18, fontWeight: weight.semibold, color: color.fg.base, marginBottom: 6 },
+  hint: { fontSize: 14, fontWeight: weight.regular, color: color.fg.muted, lineHeight: 20, marginBottom: 14 },
   centered: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { ...VelaFont.body(16), color: VelaColor.textSecondary },
-  statusText: { ...VelaFont.title(15), color: VelaColor.blue },
-  statusCard: { padding: VelaSpacing.cardPadding },
+  emptyText: { fontSize: 16, fontWeight: weight.regular, color: color.fg.muted },
+  statusText: { fontSize: 15, fontWeight: weight.semibold, color: color.info.base },
+  statusCard: { padding: space['2xl'] },
   pulseRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
   // Connected
-  connectedCard: { padding: VelaSpacing.cardPadding, gap: 6 },
+  connectedCard: { padding: space['2xl'], gap: 6 },
   connectedRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: VelaColor.green },
-  connectedText: { ...VelaFont.title(15), color: VelaColor.textPrimary },
-  connectedHint: { ...VelaFont.body(13), color: VelaColor.textSecondary },
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: color.success.base },
+  connectedText: { fontSize: 15, fontWeight: weight.semibold, color: color.fg.base },
+  connectedHint: { fontSize: 13, fontWeight: weight.regular, color: color.fg.muted },
 
   // Not installed
-  notInstalledCard: { padding: VelaSpacing.cardPadding, gap: 4 },
-  notInstalledTitle: { ...VelaFont.title(17), color: VelaColor.textPrimary },
+  notInstalledCard: { padding: space['2xl'], gap: 4 },
+  notInstalledTitle: { fontSize: 17, fontWeight: weight.semibold, color: color.fg.base },
 
   // Request
-  requestCard: { padding: VelaSpacing.cardPadding, gap: 12 },
-  requestOrigin: { ...VelaFont.body(13), color: VelaColor.textSecondary },
-  requestMethod: { ...VelaFont.heading(20), color: VelaColor.textPrimary },
+  requestCard: { padding: space['2xl'], gap: 12 },
+  requestOrigin: { fontSize: 13, fontWeight: weight.regular, color: color.fg.muted },
+  requestMethod: { fontSize: 20, fontWeight: weight.bold, color: color.fg.base },
   txDetails: { gap: 8, paddingVertical: 4 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  detailLabel: { ...VelaFont.body(14), color: VelaColor.textSecondary },
-  detailValue: { ...VelaFont.mono(14), color: VelaColor.textPrimary, maxWidth: '60%' as any },
-  errorText: { ...VelaFont.body(13), color: VelaColor.accent },
+  detailLabel: { fontSize: 14, fontWeight: weight.regular, color: color.fg.muted },
+  detailValue: { fontSize: 14, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.base, maxWidth: '60%' as any },
+  errorText: { fontSize: 13, fontWeight: weight.regular, color: color.accent.base },
   buttonRow: { flexDirection: 'row', marginTop: 8 },
 
   // Modal
-  modalContainer: { flex: 1, padding: VelaSpacing.cardPadding },
+  modalContainer: { flex: 1, padding: space['2xl'] },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { ...VelaFont.title(18), color: VelaColor.textPrimary },
-  modalClose: { ...VelaFont.title(16), color: VelaColor.accent },
+  modalTitle: { fontSize: 18, fontWeight: weight.semibold, color: color.fg.base },
+  modalClose: { fontSize: 16, fontWeight: weight.semibold, color: color.accent.base },
   modalScroll: { flex: 1 },
-  accountItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: VelaRadius.cardSmall, marginBottom: 8, borderWidth: 1, borderColor: VelaColor.border },
-  accountItemActive: { borderColor: VelaColor.accent, backgroundColor: VelaColor.accentSoft },
-  accountItemName: { ...VelaFont.title(15), color: VelaColor.textPrimary },
-  accountItemAddr: { ...VelaFont.mono(12), color: VelaColor.textTertiary, marginTop: 2 },
+  accountItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: radius.md, marginBottom: 8, borderWidth: 1, borderColor: color.border.base },
+  accountItemActive: { borderColor: color.accent.base, backgroundColor: color.accent.soft },
+  accountItemName: { fontSize: 15, fontWeight: weight.semibold, color: color.fg.base },
+  accountItemAddr: { fontSize: 12, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle, marginTop: 2 },
 });

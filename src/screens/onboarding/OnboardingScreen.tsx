@@ -134,6 +134,7 @@ export default function OnboardingScreen() {
     <WelcomeScreen
       onCreateWallet={() => setStep('create')}
       onLogin={handleLogin}
+      loginLoading={loginLoading}
     />
   );
 }

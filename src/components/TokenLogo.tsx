@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
-import { VelaRadius } from '@/constants/theme';
+import { weight } from '@/constants/theme';
 
 interface Props {
   symbol: string;
@@ -45,8 +45,8 @@ export function TokenLogo({ symbol, logoUrl, size = 40, bgColor, textColor }: Pr
 
   return (
     <View style={[styles.fallback, { width: size, height: size, borderRadius: size / 2, backgroundColor: bg }]}>
-      <Text style={[styles.label, { color: fg, fontSize: size * 0.35 }]}>
-        {symbol.slice(0, 3).toUpperCase()}
+      <Text style={[styles.label, { color: fg, fontSize: size * 0.42 }]}>
+        {symbol.charAt(0).toUpperCase()}
       </Text>
     </View>
   );
@@ -61,6 +61,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   label: {
-    fontWeight: '700',
+    fontWeight: weight.bold,
   },
 });

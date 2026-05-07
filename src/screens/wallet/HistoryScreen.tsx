@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
-import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme';
+import { color, weight, space, radius, font } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import * as WebBrowser from 'expo-web-browser';
@@ -114,19 +114,19 @@ export default function HistoryScreen() {
 
   const renderTransaction = ({ item }: { item: Transaction }) => {
     const iconLabel = item.isIncoming ? '\u2193' : '\u2191';
-    const iconBg = item.isIncoming ? VelaColor.greenSoft : VelaColor.accentSoft;
-    const iconColor = item.isIncoming ? VelaColor.green : VelaColor.accent;
+    const iconBg = item.isIncoming ? color.success.soft : color.accent.soft;
+    const iconColor = item.isIncoming ? color.success.base : color.accent.base;
     const counterparty = item.isIncoming ? item.from : item.to;
     const sign = item.isIncoming ? '+' : '-';
-    const amountColor = item.isIncoming ? VelaColor.green : VelaColor.textPrimary;
+    const amountColor = item.isIncoming ? color.success.base : color.fg.base;
     const nativeSym =
       DEFAULT_NETWORKS.find((n) => n.chainId === item.chainId)?.iconLabel ?? 'ETH';
     const statusColor =
       item.status === 'failed'
-        ? VelaColor.accent
+        ? color.accent.base
         : item.status === 'pending'
-          ? VelaColor.textTertiary
-          : VelaColor.textSecondary;
+          ? color.fg.subtle
+          : color.fg.muted;
 
     return (
       <TouchableOpacity
@@ -271,7 +271,7 @@ export default function HistoryScreen() {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={VelaColor.accent} />
+          <ActivityIndicator size="large" color={color.accent.base} />
           <Text style={styles.loadingText}>Loading transactions...</Text>
         </View>
       ) : transactions.length === 0 ? (
@@ -289,7 +289,7 @@ export default function HistoryScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={VelaColor.accent}
+              tintColor={color.accent.base}
             />
           }
           showsVerticalScrollIndicator={false}
@@ -310,25 +310,29 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   navBack: {
-    ...VelaFont.title(16),
-    color: VelaColor.accent,
+    fontSize: 16,
+    fontWeight: weight.semibold,
+    color: color.accent.base,
     width: 60,
   },
   navTitle: {
-    ...VelaFont.heading(18),
-    color: VelaColor.textPrimary,
+    fontSize: 18,
+    fontWeight: weight.bold,
+    color: color.fg.base,
   },
   addressRow: {
     alignSelf: 'center',
-    backgroundColor: VelaColor.bgWarm,
+    backgroundColor: color.bg.sunken,
     paddingHorizontal: 14,
     paddingVertical: 6,
-    borderRadius: VelaRadius.full,
+    borderRadius: radius.full,
     marginBottom: 16,
   },
   addressText: {
-    ...VelaFont.mono(13),
-    color: VelaColor.textSecondary,
+    fontSize: 13,
+    fontWeight: weight.medium,
+    fontFamily: font.mono,
+    color: color.fg.muted,
   },
   loadingContainer: {
     flex: 1,
@@ -337,8 +341,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   loadingText: {
-    ...VelaFont.body(15),
-    color: VelaColor.textSecondary,
+    fontSize: 15,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
   },
   listContent: {
     paddingBottom: 40,
@@ -349,8 +354,9 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   sectionTitle: {
-    ...VelaFont.label(13),
-    color: VelaColor.textTertiary,
+    fontSize: 13,
+    fontWeight: weight.semibold,
+    color: color.fg.subtle,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -358,7 +364,7 @@ const styles = StyleSheet.create({
   txRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: VelaSpacing.itemGap,
+    paddingVertical: space.lg,
     gap: 12,
   },
   txIcon: {
@@ -377,23 +383,27 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   txType: {
-    ...VelaFont.title(15),
-    color: VelaColor.textPrimary,
+    fontSize: 15,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   txAddress: {
-    ...VelaFont.body(13),
-    color: VelaColor.textSecondary,
+    fontSize: 13,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
   },
   txValues: {
     alignItems: 'flex-end',
     gap: 2,
   },
   txAmount: {
-    ...VelaFont.title(15),
+    fontSize: 15,
+    fontWeight: weight.semibold,
   },
   txTime: {
-    ...VelaFont.body(12),
-    color: VelaColor.textSecondary,
+    fontSize: 12,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
   },
   // Empty state
   emptyContainer: {
@@ -401,7 +411,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   emptyCard: {
-    padding: VelaSpacing.cardPadding,
+    padding: space['2xl'],
     alignItems: 'center',
     gap: 12,
   },
@@ -410,12 +420,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   emptyTitle: {
-    ...VelaFont.heading(20),
-    color: VelaColor.textPrimary,
+    fontSize: 20,
+    fontWeight: weight.bold,
+    color: color.fg.base,
   },
   emptyBody: {
-    ...VelaFont.body(15),
-    color: VelaColor.textSecondary,
+    fontSize: 15,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
     textAlign: 'center',
     lineHeight: 22,
     paddingHorizontal: 8,
@@ -426,8 +438,9 @@ const styles = StyleSheet.create({
   },
   // Network selector
   networkLabel: {
-    ...VelaFont.label(13),
-    color: VelaColor.textTertiary,
+    fontSize: 13,
+    fontWeight: weight.semibold,
+    color: color.fg.subtle,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginTop: 28,
@@ -440,11 +453,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 13,
-    paddingHorizontal: VelaSpacing.cardPadding,
+    paddingHorizontal: space['2xl'],
     gap: 12,
   },
   networkRowSelected: {
-    backgroundColor: VelaColor.bgWarm,
+    backgroundColor: color.bg.sunken,
   },
   networkDot: {
     width: 10,
@@ -452,15 +465,18 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   networkName: {
-    ...VelaFont.body(15),
-    color: VelaColor.textPrimary,
+    fontSize: 15,
+    fontWeight: weight.regular,
+    color: color.fg.base,
     flex: 1,
   },
   networkNameSelected: {
-    ...VelaFont.title(15),
+    fontSize: 15,
+    fontWeight: weight.semibold,
   },
   networkCheck: {
-    ...VelaFont.title(16),
-    color: VelaColor.accent,
+    fontSize: 16,
+    fontWeight: weight.semibold,
+    color: color.accent.base,
   },
 });

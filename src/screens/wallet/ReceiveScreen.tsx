@@ -5,7 +5,7 @@ import * as Clipboard from 'expo-clipboard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme';
+import { color, text, weight, space, radius, font } from '@/constants/theme';
 import { useWallet } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { QRCode } from '@/components/QRCode';
@@ -192,22 +192,25 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   backBtn: {
-    ...VelaFont.title(16),
-    color: VelaColor.accent,
+    fontSize: 16,
+    fontWeight: weight.semibold,
+    color: color.accent.base,
     width: 50,
   },
   title: {
-    ...VelaFont.title(17),
-    color: VelaColor.textPrimary,
+    fontSize: 17,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   addressCard: {
-    padding: VelaSpacing.cardPadding,
+    padding: space['2xl'],
     alignItems: 'center',
     marginBottom: 20,
   },
   addressLabel: {
-    ...VelaFont.label(13),
-    color: VelaColor.textSecondary,
+    fontSize: 13,
+    fontWeight: weight.semibold,
+    color: color.fg.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 20,
@@ -218,37 +221,41 @@ const styles = StyleSheet.create({
   qrPlaceholder: {
     width: 180,
     height: 180,
-    borderRadius: VelaRadius.card,
-    backgroundColor: VelaColor.bgWarm,
+    borderRadius: radius.xl,
+    backgroundColor: color.bg.sunken,
     borderWidth: 1,
-    borderColor: VelaColor.border,
+    borderColor: color.border.base,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   qrIcon: {
     fontSize: 64,
-    color: VelaColor.textTertiary,
+    color: color.fg.subtle,
   },
   qrHint: {
-    ...VelaFont.body(13),
-    color: VelaColor.textTertiary,
+    fontSize: 13,
+    fontWeight: weight.regular,
+    color: color.fg.subtle,
   },
   addressBox: {
-    backgroundColor: VelaColor.bgWarm,
-    borderRadius: VelaRadius.cardSmall,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.md,
     padding: 14,
     width: '100%',
   },
   addressText: {
-    ...VelaFont.mono(13),
-    color: VelaColor.textPrimary,
+    fontSize: 13,
+    fontWeight: weight.medium,
+    fontFamily: font.mono,
+    color: color.fg.base,
     textAlign: 'center',
     lineHeight: 20,
   },
   tapHint: {
-    ...VelaFont.body(12),
-    color: VelaColor.textTertiary,
+    fontSize: 12,
+    fontWeight: weight.regular,
+    color: color.fg.subtle,
     marginTop: 8,
   },
   buttonRow: {
@@ -260,17 +267,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sectionTitle: {
-    ...VelaFont.title(17),
-    color: VelaColor.textPrimary,
+    fontSize: 17,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
     marginBottom: 4,
   },
   sectionSubtitle: {
-    ...VelaFont.body(13),
-    color: VelaColor.textSecondary,
+    fontSize: 13,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
     marginBottom: 14,
   },
   networksCard: {
-    padding: VelaSpacing.cardPadding,
+    padding: space['2xl'],
   },
   networkRow: {
     flexDirection: 'row',
@@ -286,7 +295,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   networkIconText: {
-    ...VelaFont.label(11),
+    fontSize: 11,
+    fontWeight: weight.semibold,
   },
   networkInfo: {
     flex: 1,
@@ -295,13 +305,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   networkName: {
-    ...VelaFont.title(15),
-    color: VelaColor.textPrimary,
+    fontSize: 15,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   networkBadge: {
-    ...VelaFont.caption(),
-    color: VelaColor.blue,
-    backgroundColor: VelaColor.blueSoft,
+    fontSize: text.xs,
+    fontWeight: weight.medium,
+    color: color.info.base,
+    backgroundColor: color.info.soft,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -309,12 +321,12 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 1,
-    backgroundColor: VelaColor.border,
+    backgroundColor: color.border.base,
   },
   listeningRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginVertical: 12 },
-  listeningDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: VelaColor.green },
-  listeningText: { ...VelaFont.body(14), color: VelaColor.green },
-  depositAlert: { backgroundColor: VelaColor.greenSoft, padding: 16, borderRadius: VelaRadius.cardSmall, marginVertical: 12, alignItems: 'center' },
-  depositText: { ...VelaFont.title(16), color: VelaColor.green },
-  warning: { ...VelaFont.body(13), color: VelaColor.textTertiary, textAlign: 'center', marginTop: 16, lineHeight: 18 },
+  listeningDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.success.base },
+  listeningText: { fontSize: 14, fontWeight: weight.regular, color: color.success.base },
+  depositAlert: { backgroundColor: color.success.soft, padding: 16, borderRadius: radius.md, marginVertical: 12, alignItems: 'center' },
+  depositText: { fontSize: 16, fontWeight: weight.semibold, color: color.success.base },
+  warning: { fontSize: 13, fontWeight: weight.regular, color: color.fg.subtle, textAlign: 'center', marginTop: 16, lineHeight: 18 },
 });

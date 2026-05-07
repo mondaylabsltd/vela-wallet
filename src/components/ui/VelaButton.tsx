@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, type ViewStyle } from 'react-native';
-import { VelaColor, VelaFont, VelaRadius } from '@/constants/theme';
+import { color, text, weight, radius, space } from '@/constants/theme';
 
 interface Props {
   title: string;
@@ -12,12 +12,9 @@ interface Props {
 }
 
 export function VelaButton({ title, onPress, variant = 'primary', disabled, loading, style }: Props) {
-  // primary: dark bg, white text
-  // secondary: transparent bg, border, dark text
-  // accent: orange bg, white text
-  const bgColor = variant === 'primary' ? VelaColor.textPrimary : variant === 'accent' ? VelaColor.accent : 'transparent';
-  const textColor = variant === 'secondary' ? VelaColor.textPrimary : '#FFFFFF';
-  const borderColor = variant === 'secondary' ? VelaColor.border : 'transparent';
+  const bgColor = variant === 'primary' ? color.fg.base : variant === 'accent' ? color.accent.base : 'transparent';
+  const textColor = variant === 'secondary' ? color.fg.base : color.fg.inverse;
+  const borderColor = variant === 'secondary' ? color.border.base : 'transparent';
 
   return (
     <TouchableOpacity
@@ -42,13 +39,14 @@ export function VelaButton({ title, onPress, variant = 'primary', disabled, load
 
 const styles = StyleSheet.create({
   button: {
-    paddingVertical: 17,
-    borderRadius: VelaRadius.button,
+    paddingVertical: space.xl,
+    borderRadius: radius.xl,
     alignItems: 'center',
     justifyContent: 'center',
   },
   text: {
-    ...VelaFont.label(16),
+    fontSize: text.lg,
+    fontWeight: weight.semibold,
   },
   disabled: {
     opacity: 0.5,

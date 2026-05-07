@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { VelaColor, VelaSpacing } from '@/constants/theme';
+import { color, space } from '@/constants/theme';
 
 interface Props {
   children: React.ReactNode;
@@ -22,10 +22,10 @@ export function ScreenContainer({ children, style, edges = ['top'] }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: VelaColor.bg,
+    backgroundColor: color.bg.base,
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: VelaSpacing.screenH,
+    paddingHorizontal: space['3xl'],
   },
 });

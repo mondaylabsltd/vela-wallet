@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { VelaColor, VelaFont, VelaRadius } from '@/constants/theme';
+import { color, weight, radius } from '@/constants/theme';
 
 interface Props {
   visible: boolean;
@@ -104,17 +104,17 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   closeButton: {
-    ...VelaFont.title(16),
-    color: VelaColor.accent,
+    fontSize: 16, fontWeight: weight.semibold,
+    color: color.accent.base,
     width: 60,
   },
   title: {
-    ...VelaFont.title(17),
+    fontSize: 17, fontWeight: weight.semibold,
     color: '#FFFFFF',
   },
   flipButton: {
-    ...VelaFont.title(16),
-    color: VelaColor.accent,
+    fontSize: 16, fontWeight: weight.semibold,
+    color: color.accent.base,
     width: 60,
     textAlign: 'right',
   },
@@ -126,18 +126,18 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   permissionText: {
-    ...VelaFont.body(16),
+    fontSize: 16, fontWeight: weight.regular,
     color: '#CCCCCC',
     textAlign: 'center',
   },
   permissionButton: {
-    backgroundColor: VelaColor.accent,
+    backgroundColor: color.accent.base,
     paddingHorizontal: 28,
     paddingVertical: 14,
-    borderRadius: VelaRadius.button,
+    borderRadius: radius.xl,
   },
   permissionButtonText: {
-    ...VelaFont.title(16),
+    fontSize: 16, fontWeight: weight.semibold,
     color: '#FFFFFF',
   },
   cameraContainer: {
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     width: FRAME_SIZE,
     height: FRAME_SIZE,
     borderWidth: 2,
-    borderColor: VelaColor.accent,
+    borderColor: color.accent.base,
     borderRadius: 16,
   },
   overlayBottom: {
@@ -178,7 +178,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   hint: {
-    ...VelaFont.body(14),
+    fontSize: 14, fontWeight: weight.regular,
     color: '#999999',
     textAlign: 'center',
     paddingHorizontal: 40,

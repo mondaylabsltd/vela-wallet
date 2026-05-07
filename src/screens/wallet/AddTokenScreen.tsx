@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme';
+import { color, weight, space, radius, font } from '@/constants/theme';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { saveCustomToken } from '@/services/storage';
 import type { CustomToken } from '@/models/types';
@@ -164,7 +164,7 @@ export default function AddTokenScreen() {
         <TextInput
           style={styles.input}
           placeholder="0x..."
-          placeholderTextColor={VelaColor.textTertiary}
+          placeholderTextColor={color.fg.subtle}
           value={contractAddress}
           onChangeText={(text) => {
             setContractAddress(text);
@@ -234,17 +234,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   backBtn: {
-    ...VelaFont.title(16),
-    color: VelaColor.accent,
+    fontSize: 16, fontWeight: weight.semibold,
+    color: color.accent.base,
     width: 50,
   },
   navTitle: {
-    ...VelaFont.title(17),
-    color: VelaColor.textPrimary,
+    fontSize: 17, fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   fieldLabel: {
-    ...VelaFont.label(13),
-    color: VelaColor.textSecondary,
+    fontSize: 13, fontWeight: weight.semibold,
+    color: color.fg.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
@@ -264,11 +264,11 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: VelaRadius.full,
-    backgroundColor: VelaColor.bgWarm,
+    borderRadius: radius.full,
+    backgroundColor: color.bg.sunken,
   },
   chainChipSelected: {
-    backgroundColor: VelaColor.textPrimary,
+    backgroundColor: color.fg.base,
   },
   chainDot: {
     width: 8,
@@ -276,30 +276,30 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   chainChipText: {
-    ...VelaFont.label(13),
-    color: VelaColor.textPrimary,
+    fontSize: 13, fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   chainChipTextSelected: {
     color: '#FFFFFF',
   },
   input: {
-    backgroundColor: VelaColor.bgWarm,
-    borderRadius: VelaRadius.cardSmall,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    ...VelaFont.mono(14),
-    color: VelaColor.textPrimary,
+    fontSize: 14, fontWeight: weight.medium, fontFamily: font.mono,
+    color: color.fg.base,
   },
   fetchBtn: {
     marginTop: 16,
   },
   resultCard: {
-    padding: VelaSpacing.cardPadding,
+    padding: space['2xl'],
     marginTop: 24,
   },
   resultTitle: {
-    ...VelaFont.title(17),
-    color: VelaColor.green,
+    fontSize: 17, fontWeight: weight.semibold,
+    color: color.success.base,
     marginBottom: 16,
   },
   resultRow: {
@@ -309,16 +309,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   resultLabel: {
-    ...VelaFont.body(14),
-    color: VelaColor.textSecondary,
+    fontSize: 14, fontWeight: weight.regular,
+    color: color.fg.muted,
   },
   resultValue: {
-    ...VelaFont.title(14),
-    color: VelaColor.textPrimary,
+    fontSize: 14, fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   separator: {
     height: 1,
-    backgroundColor: VelaColor.border,
+    backgroundColor: color.border.base,
   },
   saveBtn: {
     marginTop: 20,

@@ -14,7 +14,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { ChainLogo } from '@/components/ChainLogo';
-import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme';
+import { color, weight, space, radius, font } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { loadAccounts, saveNetworkConfig, loadNetworkConfigs, clearAll } from '@/services/storage';
@@ -149,7 +149,7 @@ function ConfigField({
         autoCapitalize="none"
         autoCorrect={false}
         placeholder={label}
-        placeholderTextColor={VelaColor.textTertiary}
+        placeholderTextColor={color.fg.subtle}
       />
     </View>
   );
@@ -201,7 +201,7 @@ function AccountSwitcherModal({
                   <Text style={styles.accountName}>{account.name}</Text>
                   <Text style={styles.accountAddress}>{shortAddress(account.address)}</Text>
                 </View>
-                {isActive && <Check size={18} color={VelaColor.accent} />}
+                {isActive && <Check size={18} color={color.accent.base} />}
               </TouchableOpacity>
             );
           })}
@@ -332,7 +332,7 @@ export default function SettingsScreen() {
         {/* Account Section */}
         <SettingsSection title="Account">
           <SettingsRow
-            icon={{ bg: VelaColor.accentSoft, fg: VelaColor.accent, Icon: UserIcon }}
+            icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: UserIcon }}
             title={accountName}
             subtitle={address ? shortAddress(address) : 'Switch account'}
             showDivider={false}
@@ -343,7 +343,7 @@ export default function SettingsScreen() {
         {/* Networks Section */}
         <SettingsSection title="Networks">
           <SettingsRow
-            icon={{ bg: VelaColor.blueSoft, fg: VelaColor.blue, Icon: NetworkIcon }}
+            icon={{ bg: color.info.soft, fg: color.info.base, Icon: NetworkIcon }}
             title="Networks"
             subtitle="Edit RPC, Explorer & Bundler URLs"
             showDivider={false}
@@ -354,7 +354,7 @@ export default function SettingsScreen() {
         {/* General Section */}
         <SettingsSection title="General">
           <SettingsRow
-            icon={{ bg: VelaColor.bgWarm, fg: VelaColor.textSecondary, Icon: InfoIcon }}
+            icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
             title="About"
             subtitle="Vela Wallet v1.0.0"
             showDivider={false}
@@ -363,7 +363,7 @@ export default function SettingsScreen() {
 
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.7}>
-          <LogOutIcon size={16} color={VelaColor.accent} />
+          <LogOutIcon size={16} color={color.accent.base} />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -391,8 +391,9 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   screenTitle: {
-    ...VelaFont.title(17),
-    color: VelaColor.textPrimary,
+    fontSize: 17,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
     textAlign: 'center',
     marginBottom: 20,
   },
@@ -402,8 +403,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitle: {
-    ...VelaFont.label(11),
-    color: VelaColor.textTertiary,
+    fontSize: 11,
+    fontWeight: weight.semibold,
+    color: color.fg.subtle,
     letterSpacing: 1.5,
     marginBottom: 10,
     paddingHorizontal: 14,
@@ -433,16 +435,18 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   settingsRowTitle: {
-    ...VelaFont.title(15),
-    color: VelaColor.textPrimary,
+    fontSize: 15,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   settingsRowSubtitle: {
-    ...VelaFont.body(12),
-    color: VelaColor.textTertiary,
+    fontSize: 12,
+    fontWeight: weight.regular,
+    color: color.fg.subtle,
   },
   chevron: {
     fontSize: 18,
-    color: VelaColor.textTertiary,
+    color: color.fg.subtle,
     fontWeight: '500',
   },
   settingsRowDivider: {
@@ -451,7 +455,7 @@ const styles = StyleSheet.create({
     left: 66,
     right: 0,
     height: 1,
-    backgroundColor: VelaColor.border,
+    backgroundColor: color.border.base,
   },
 
   // Logout Button
@@ -460,49 +464,52 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
-    backgroundColor: VelaColor.bgCard,
-    borderRadius: VelaRadius.card,
+    backgroundColor: color.bg.raised,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: VelaColor.border,
+    borderColor: color.border.base,
     gap: 8,
   },
   logoutIcon: {
     fontSize: 15,
-    color: VelaColor.accent,
+    color: color.accent.base,
     fontWeight: '700',
   },
   logoutText: {
-    ...VelaFont.label(15),
-    color: VelaColor.accent,
+    fontSize: 15,
+    fontWeight: weight.semibold,
+    color: color.accent.base,
   },
 
   // Modal
   modalContainer: {
     flex: 1,
-    backgroundColor: VelaColor.bg,
+    backgroundColor: color.bg.base,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: VelaSpacing.screenH,
+    paddingHorizontal: space['3xl'],
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: VelaColor.border,
+    borderBottomColor: color.border.base,
   },
   modalTitle: {
-    ...VelaFont.title(17),
-    color: VelaColor.textPrimary,
+    fontSize: 17,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   modalClose: {
-    ...VelaFont.label(15),
-    color: VelaColor.accent,
+    fontSize: 15,
+    fontWeight: weight.semibold,
+    color: color.accent.base,
   },
   modalScroll: {
     flex: 1,
   },
   modalScrollContent: {
-    padding: VelaSpacing.screenH,
+    padding: space['3xl'],
     paddingBottom: 40,
   },
 
@@ -511,44 +518,48 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: VelaColor.bgCard,
-    borderRadius: VelaRadius.card,
+    backgroundColor: color.bg.raised,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: VelaColor.border,
+    borderColor: color.border.base,
     marginBottom: 10,
     gap: 14,
   },
   accountItemActive: {
-    borderColor: VelaColor.accent,
+    borderColor: color.accent.base,
     borderWidth: 1.5,
   },
   accountAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: VelaColor.accentSoft,
+    backgroundColor: color.accent.soft,
     alignItems: 'center',
     justifyContent: 'center',
   },
   accountAvatarText: {
-    ...VelaFont.label(16),
-    color: VelaColor.accent,
+    fontSize: 16,
+    fontWeight: weight.semibold,
+    color: color.accent.base,
   },
   accountInfo: {
     flex: 1,
     gap: 2,
   },
   accountName: {
-    ...VelaFont.title(15),
-    color: VelaColor.textPrimary,
+    fontSize: 15,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   accountAddress: {
-    ...VelaFont.mono(12),
-    color: VelaColor.textTertiary,
+    fontSize: 12,
+    fontWeight: weight.medium,
+    fontFamily: font.mono,
+    color: color.fg.subtle,
   },
   checkmark: {
     fontSize: 20,
-    color: VelaColor.accent,
+    color: color.accent.base,
     fontWeight: '700',
   },
   accountActions: {
@@ -566,30 +577,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: VelaColor.bgCard,
-    borderRadius: VelaRadius.card,
+    backgroundColor: color.bg.raised,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: VelaColor.border,
+    borderColor: color.border.base,
     gap: 14,
   },
   languageItemActive: {
-    backgroundColor: VelaColor.accentSoft,
-    borderColor: VelaColor.accent,
+    backgroundColor: color.accent.soft,
+    borderColor: color.accent.base,
     borderWidth: 1.5,
   },
   languageFlag: {
     fontSize: 24,
   },
   languageName: {
-    ...VelaFont.title(16),
-    color: VelaColor.textPrimary,
+    fontSize: 16,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   languageSpacer: {
     flex: 1,
   },
   checkmarkAccent: {
     fontSize: 20,
-    color: VelaColor.accent,
+    color: color.accent.base,
     fontWeight: '700',
   },
 
@@ -613,16 +625,18 @@ const styles = StyleSheet.create({
     gap: 1,
   },
   networkName: {
-    ...VelaFont.title(15),
-    color: VelaColor.textPrimary,
+    fontSize: 15,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   networkChainId: {
-    ...VelaFont.body(12),
-    color: VelaColor.textTertiary,
+    fontSize: 12,
+    fontWeight: weight.regular,
+    color: color.fg.subtle,
   },
   chevronSmall: {
     fontSize: 16,
-    color: VelaColor.textTertiary,
+    color: color.fg.subtle,
     fontWeight: '500',
   },
   chevronRotated: {
@@ -635,7 +649,7 @@ const styles = StyleSheet.create({
   },
   dividerFull: {
     height: 1,
-    backgroundColor: VelaColor.border,
+    backgroundColor: color.border.base,
     marginHorizontal: -16,
     marginBottom: 2,
   },
@@ -643,15 +657,18 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   configLabel: {
-    ...VelaFont.label(11),
-    color: VelaColor.textTertiary,
+    fontSize: 11,
+    fontWeight: weight.semibold,
+    color: color.fg.subtle,
     letterSpacing: 1,
   },
   configInput: {
-    ...VelaFont.mono(12),
-    color: VelaColor.textPrimary,
+    fontSize: 12,
+    fontWeight: weight.medium,
+    fontFamily: font.mono,
+    color: color.fg.base,
     padding: 12,
-    backgroundColor: VelaColor.bgWarm,
-    borderRadius: VelaRadius.cardSmall,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.md,
   },
 });

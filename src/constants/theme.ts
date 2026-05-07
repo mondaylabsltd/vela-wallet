@@ -1,91 +1,130 @@
 import { Platform } from 'react-native';
 
-// MARK: - Vela Colors (matches iOS VelaTheme.swift)
+// =============================================================================
+// Design Tokens — single source of truth
+//
+// Naming follows Simple Design conventions:
+//   Spacing:    space.xs … space.3xl  (4px base)
+//   Typography: text.xs … text.3xl    (size) + weight.regular … weight.bold
+//   Radius:     radius.sm … radius.full
+//   Colors:     fg (foreground hierarchy), bg (background layers), accent, semantic
+// =============================================================================
 
-export const VelaColor = {
-  bg: '#FAFAF8',
-  bgCard: '#FFFFFF',
-  bgWarm: '#F5F3EF',
+// ---------------------------------------------------------------------------
+// 1. Spacing (4px base grid)
+// ---------------------------------------------------------------------------
 
-  textPrimary: '#1A1A18',
-  textSecondary: '#7A776E',
-  textTertiary: '#B0ADA5',
-
-  accent: '#E8572A',
-  accentSoft: '#FFF0EB',
-
-  green: '#2D8E5F',
-  greenSoft: '#EDFAF2',
-
-  blue: '#4267F4',
-  blueSoft: '#EDF0FF',
-
-  border: '#ECEBE4',
-
-  // Token icon backgrounds
-  ethBg: '#EEF0F8',
-  usdcBg: '#EDF7F0',
-  daiBg: '#FFF8E7',
-
-  // Network icon backgrounds
-  arbBg: '#E8F4FD',
-  baseBg: '#E8EEFF',
-  opBg: '#FFECEC',
+export const space = {
+  '0':   0,
+  'xs':  2,
+  'sm':  4,
+  'md':  8,
+  'lg':  12,
+  'xl':  16,
+  '2xl': 20,
+  '3xl': 24,
+  '4xl': 32,
+  '5xl': 48,
 } as const;
 
-// MARK: - Typography
+// ---------------------------------------------------------------------------
+// 2. Typography — sizes, weights, line-heights
+// ---------------------------------------------------------------------------
 
-export const VelaFont = {
-  heading: (size: number) => ({
-    fontSize: size,
-    fontWeight: '700' as const,
-  }),
-  title: (size: number) => ({
-    fontSize: size,
-    fontWeight: '600' as const,
-  }),
-  body: (size: number) => ({
-    fontSize: size,
-    fontWeight: '400' as const,
-  }),
-  label: (size: number) => ({
-    fontSize: size,
-    fontWeight: '600' as const,
-  }),
-  mono: (size: number) => ({
-    fontSize: size,
-    fontWeight: '500' as const,
-    fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
-  }),
-  caption: () => ({
-    fontSize: 12,
-    fontWeight: '500' as const,
-  }),
+export const text = {
+  'xs':  10,
+  'sm':  11,
+  'base': 13,
+  'lg':  15,
+  'xl':  17,
+  '2xl': 20,
+  '3xl': 26,
+  '4xl': 30,
+} as const;
+
+export const leading = {
+  'none':   1,
+  'tight':  1.2,
+  'normal': 1.4,
+  'relaxed': 1.6,
+} as const;
+
+export const weight = {
+  'regular': '400' as const,
+  'medium':  '500' as const,
+  'semibold': '600' as const,
+  'bold':    '700' as const,
 };
 
-// MARK: - Spacing & Radius
+export const font = {
+  mono: Platform.select({ ios: 'Menlo', default: 'monospace' }),
+};
 
-export const VelaRadius = {
-  card: 16,
-  cardSmall: 10,
-  full: 9999,
-  button: 16,
+// ---------------------------------------------------------------------------
+// 3. Border Radius
+// ---------------------------------------------------------------------------
+
+export const radius = {
+  'none': 0,
+  'sm':   4,
+  'md':   8,
+  'lg':   12,
+  'xl':   16,
+  '2xl':  20,
+  'full': 9999,
 } as const;
 
-export const VelaSpacing = {
-  screenH: 24,
-  cardPadding: 20,
-  itemGap: 14,
+// ---------------------------------------------------------------------------
+// 4. Colors — keep Vela palette, organize semantically
+// ---------------------------------------------------------------------------
+
+export const color = {
+  // Foreground hierarchy
+  fg: {
+    base:   '#1A1A18',   // primary text, icons
+    muted:  '#7A776E',   // secondary text
+    subtle: '#B0ADA5',   // tertiary text, placeholders
+    inverse: '#FFFFFF',  // text on dark/accent bg
+  },
+
+  // Background layers
+  bg: {
+    base:    '#FAFAF8',  // page background
+    raised:  '#FFFFFF',  // cards, inputs
+    sunken:  '#F5F3EF',  // inset areas, warm backgrounds
+  },
+
+  // Brand accent
+  accent: {
+    base:  '#E8572A',
+    soft:  '#FFF0EB',
+  },
+
+  // Semantic
+  success: {
+    base: '#2D8E5F',
+    soft: '#EDFAF2',
+  },
+  info: {
+    base: '#4267F4',
+    soft: '#EDF0FF',
+  },
+
+  // Borders & dividers
+  border: {
+    base:   '#ECEBE4',
+    strong: '#D8D6CE',
+  },
 } as const;
 
-// Legacy exports for compatibility with existing template components
+// Legacy exports for template components
 export const Colors = {
   light: {
-    text: VelaColor.textPrimary,
-    background: VelaColor.bg,
+    text: color.fg.base,
+    background: color.bg.base,
     backgroundElement: '#F0F0F3',
     backgroundSelected: '#E0E1E6',
-    textSecondary: VelaColor.textSecondary,
+    textSecondary: color.fg.muted,
   },
   dark: {
     text: '#FFFFFF',

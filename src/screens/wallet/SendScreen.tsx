@@ -3,7 +3,7 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme';
+import { color, weight, space, radius } from '@/constants/theme';
 import { chainName } from '@/models/network';
 import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURL, tokenUsdValue } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
@@ -288,7 +288,7 @@ export default function SendScreen() {
           <TextInput
             style={[styles.input, styles.recipientInput]}
             placeholder="0x..."
-            placeholderTextColor={VelaColor.textTertiary}
+            placeholderTextColor={color.fg.subtle}
             value={recipient}
             onChangeText={setRecipient}
             autoCapitalize="none"
@@ -309,7 +309,7 @@ export default function SendScreen() {
           <TextInput
             style={[styles.input, styles.amountInput]}
             placeholder="0.00"
-            placeholderTextColor={VelaColor.textTertiary}
+            placeholderTextColor={color.fg.subtle}
             value={amount}
             onChangeText={setAmount}
             keyboardType="decimal-pad"
@@ -415,8 +415,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   navBack: {
-    ...VelaFont.title(16),
-    color: VelaColor.accent,
+    fontSize: 16,
+    fontWeight: weight.semibold,
+    color: color.accent.base,
     width: 60,
   },
   stepRow: {
@@ -427,22 +428,24 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: VelaColor.border,
+    backgroundColor: color.border.base,
   },
   stepDotActive: {
-    backgroundColor: VelaColor.accent,
+    backgroundColor: color.accent.base,
   },
   stepContainer: {
     flex: 1,
   },
   stepTitle: {
-    ...VelaFont.heading(24),
-    color: VelaColor.textPrimary,
+    fontSize: 24,
+    fontWeight: weight.bold,
+    color: color.fg.base,
     marginBottom: 20,
   },
   loadingText: {
-    ...VelaFont.body(15),
-    color: VelaColor.textSecondary,
+    fontSize: 15,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
     textAlign: 'center',
     marginTop: 40,
   },
@@ -451,13 +454,14 @@ const styles = StyleSheet.create({
     marginTop: 60,
   },
   emptyText: {
-    ...VelaFont.title(17),
-    color: VelaColor.textSecondary,
+    fontSize: 17,
+    fontWeight: weight.semibold,
+    color: color.fg.muted,
   },
   tokenRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: VelaSpacing.itemGap,
+    paddingVertical: space.lg,
     gap: 12,
   },
   tokenInfo: {
@@ -465,27 +469,31 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   tokenName: {
-    ...VelaFont.title(15),
-    color: VelaColor.textPrimary,
+    fontSize: 15,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   tokenChain: {
-    ...VelaFont.body(13),
-    color: VelaColor.textSecondary,
+    fontSize: 13,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
   },
   tokenValues: {
     alignItems: 'flex-end',
     gap: 2,
   },
   tokenBalance: {
-    ...VelaFont.title(15),
-    color: VelaColor.textPrimary,
+    fontSize: 15,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   tokenUsd: {
-    ...VelaFont.body(13),
-    color: VelaColor.textSecondary,
+    fontSize: 13,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
   },
   selectedCard: {
-    padding: VelaSpacing.cardPadding,
+    padding: space['2xl'],
     marginBottom: 24,
   },
   selectedRow: {
@@ -494,17 +502,20 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   selectedName: {
-    ...VelaFont.title(16),
-    color: VelaColor.textPrimary,
+    fontSize: 16,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   selectedBalance: {
-    ...VelaFont.body(13),
-    color: VelaColor.textSecondary,
+    fontSize: 13,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
     marginTop: 2,
   },
   fieldLabel: {
-    ...VelaFont.label(13),
-    color: VelaColor.textSecondary,
+    fontSize: 13,
+    fontWeight: weight.semibold,
+    color: color.fg.muted,
     marginBottom: 8,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -518,23 +529,25 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scanButton: {
-    backgroundColor: VelaColor.accentSoft,
+    backgroundColor: color.accent.soft,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    borderRadius: VelaRadius.cardSmall,
+    borderRadius: radius.md,
     marginBottom: 20,
   },
   scanText: {
-    ...VelaFont.label(14),
-    color: VelaColor.accent,
+    fontSize: 14,
+    fontWeight: weight.semibold,
+    color: color.accent.base,
   },
   input: {
-    backgroundColor: VelaColor.bgWarm,
-    borderRadius: VelaRadius.cardSmall,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.md,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    ...VelaFont.body(16),
-    color: VelaColor.textPrimary,
+    fontSize: 16,
+    fontWeight: weight.regular,
+    color: color.fg.base,
     marginBottom: 20,
   },
   amountRow: {
@@ -546,19 +559,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   maxButton: {
-    backgroundColor: VelaColor.accentSoft,
+    backgroundColor: color.accent.soft,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    borderRadius: VelaRadius.cardSmall,
+    borderRadius: radius.md,
     marginBottom: 20,
   },
   maxText: {
-    ...VelaFont.label(14),
-    color: VelaColor.accent,
+    fontSize: 14,
+    fontWeight: weight.semibold,
+    color: color.accent.base,
   },
   usdPreview: {
-    ...VelaFont.body(14),
-    color: VelaColor.textSecondary,
+    fontSize: 14,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
     marginTop: -12,
     marginBottom: 20,
     paddingLeft: 4,
@@ -567,7 +582,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   confirmCard: {
-    padding: VelaSpacing.cardPadding,
+    padding: space['2xl'],
     marginBottom: 24,
     gap: 16,
   },
@@ -577,12 +592,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmLabel: {
-    ...VelaFont.body(14),
-    color: VelaColor.textSecondary,
+    fontSize: 14,
+    fontWeight: weight.regular,
+    color: color.fg.muted,
   },
   confirmValue: {
-    ...VelaFont.title(14),
-    color: VelaColor.textPrimary,
+    fontSize: 14,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
     maxWidth: '60%',
     textAlign: 'right',
   },
