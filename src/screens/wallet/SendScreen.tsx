@@ -1,22 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { QRScanner } from '@/components/QRScanner';
+import { TokenLogo } from '@/components/TokenLogo';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { TokenLogo } from '@/components/TokenLogo';
-import { QRScanner } from '@/components/QRScanner';
 import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme';
-import { useWallet } from '@/models/wallet-state';
-import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
-import { type APIToken, tokenBalanceDouble, tokenUsdValue, tokenLogoURL, formatBalance, tokenChainId, isNativeToken } from '@/models/types';
 import { chainName } from '@/models/network';
-import { sendNative, sendERC20 } from '@/services/safe-transaction';
-import { findAccountByCredentialId } from '@/services/storage';
+import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURL, tokenUsdValue } from '@/models/types';
+import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
-import { derSignatureToRaw } from '@/services/attestation-parser';
-import { keccak256 } from '@/services/eth-crypto';
-import { fromHex, toHex, stripHexPrefix } from '@/services/hex';
+import { fromHex, toHex } from '@/services/hex';
+import { sendERC20, sendNative } from '@/services/safe-transaction';
+import { findAccountByCredentialId } from '@/services/storage';
+import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { Alert, FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 
@@ -125,10 +123,21 @@ export default function SendScreen() {
         throw new Error('Public key not found for this account');
       }
 
-      // Build signFn that calls Passkey.sign
+      // Build signFn that calls Passkey.sign + compatibility check
       const signFn = async (challenge: Uint8Array) => {
         const challengeHex = toHex(challenge);
         const assertion = await Passkey.sign(challengeHex, activeAccount.id);
+
+        // Verify Safe WebAuthn compatibility on first sign
+        const { verifySafeWebAuthn } = await import('@/services/webauthn-verify');
+        const compat = verifySafeWebAuthn(assertion);
+        if (!compat.ok) {
+          throw new Error(
+            'Your passkey provider is not compatible with Vela Wallet. ' +
+            'Please switch to Google Password Manager.\n\n' + compat.reason,
+          );
+        }
+
         return {
           signature: fromHex(assertion.signatureHex),
           authenticatorData: fromHex(assertion.authenticatorDataHex),

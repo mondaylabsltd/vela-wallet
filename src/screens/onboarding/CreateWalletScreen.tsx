@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme';
@@ -12,6 +12,7 @@ import { fromHex, toHex } from '@/services/hex';
 import * as Passkey from '@/modules/passkey';
 import { PasskeyError, PasskeyErrorCode } from '@/modules/passkey';
 import { uploadPublicKey } from '@/services/public-key-upload';
+import type { StoredAccount } from '@/models/types';
 
 interface Props {
   onCreated?: (address: string, name: string) => void;
@@ -22,14 +23,43 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
+  // When passkey is created but upload failed, allow retry without re-registering
+  const [uploadFailed, setUploadFailed] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+  // When creation + upload succeeded, show success and prompt login
+  const [created, setCreated] = useState(false);
+  const pendingRef = useRef<{
+    account: StoredAccount;
+    credentialId: string;
+    publicKeyHex: string;
+    name: string;
+  } | null>(null);
   const { dispatch } = useWallet();
   const router = useRouter();
 
+  /** Attempt to upload public key to server. Returns true on success. */
+  async function tryUpload(params: {
+    credentialId: string;
+    publicKeyHex: string;
+    name: string;
+  }): Promise<boolean> {
+    try {
+      setStatus('Saving public key...');
+      await uploadPublicKey(params);
+      return true;
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : String(err));
+      return false;
+    }
+  }
+
   async function handleCreate() {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (!trimmed || loading) return;
     setLoading(true);
     setStatus('');
+    setUploadFailed(false);
+    setUploadError('');
 
     try {
       // 1. Check passkey support
@@ -57,8 +87,8 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
       setStatus('Computing wallet address...');
       const address = computeAddress(publicKeyHex);
 
-      // 5. Save account locally
-      const account = {
+      // 5. Save account locally first (ensures same-device login always works)
+      const account: StoredAccount = {
         id: registration.credentialId,
         name: trimmed,
         address,
@@ -67,7 +97,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
       };
       await saveAccount(account);
 
-      // 6. Save pending upload (in case upload fails, can retry later)
+      // 6. Save pending upload (safety net for retry)
       await savePendingUpload({
         id: registration.credentialId,
         name: trimmed,
@@ -76,66 +106,110 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
         createdAt: new Date().toISOString(),
       });
 
-      // 7. Update wallet state and navigate (don't block on upload)
-      dispatch({ type: 'ADD_ACCOUNT', account });
-      onCreated?.(address, trimmed);
-      router.replace('/(tabs)/wallet');
+      // 7. Upload public key to server — MUST succeed before navigating
+      const uploadParams = { credentialId: registration.credentialId, publicKeyHex, name: trimmed };
+      pendingRef.current = { account, ...uploadParams };
 
-      // 8. Upload public key to index server (background, non-blocking)
-      //    Triggers a second biometric prompt for the signing challenge.
-      //    If it fails, it stays in pendingUploads for retry on next launch.
-      console.log('[CreateWallet] Starting background public key upload...');
-      uploadPublicKey({
-        credentialId: registration.credentialId,
-        publicKeyHex,
-        name: trimmed,
-      }).then(() => {
-        console.log('[CreateWallet] Public key upload completed successfully');
-      }).catch((err) => {
-        console.error('[CreateWallet] Public key upload FAILED:', err instanceof Error ? err.message : String(err));
-        console.error('[CreateWallet] Will retry on next app launch');
-      });
+      const uploadOk = await tryUpload(uploadParams);
+      if (!uploadOk) {
+        setUploadFailed(true);
+        setLoading(false);
+        setStatus('');
+        return;
+      }
+
+      // Don't auto-login — require sign-in to verify passkey compatibility
+      setCreated(true);
+      setLoading(false);
+      setStatus('');
 
     } catch (error) {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
-        // User cancelled — silently return
+        setStatus('Passkey creation was cancelled.');
       } else {
         Alert.alert('Error', error instanceof Error ? error.message : String(error));
       }
-    } finally {
+      setLoading(false);
+    }
+  }
+
+  /** Retry upload after previous failure */
+  async function handleRetryUpload() {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    setLoading(true);
+    setUploadError('');
+
+    const ok = await tryUpload({
+      credentialId: pending.credentialId,
+      publicKeyHex: pending.publicKeyHex,
+      name: pending.name,
+    });
+    if (ok) {
+      finishCreation(pending.account);
+    } else {
       setLoading(false);
       setStatus('');
     }
   }
 
+
+
   return (
     <ScreenContainer edges={['top', 'bottom']}>
       <View style={styles.header}>
-        {onBack && (
+        {onBack && !uploadFailed && !created && (
           <Text onPress={onBack} style={styles.backButton}>
             Back
           </Text>
         )}
-        <Text style={styles.title}>Create Wallet</Text>
-        {onBack && <View style={styles.headerSpacer} />}
+        <Text style={styles.title}>
+          {created ? 'Wallet Created' : uploadFailed ? 'Save Public Key' : 'Create Wallet'}
+        </Text>
+        {onBack && !uploadFailed && !created && <View style={styles.headerSpacer} />}
       </View>
 
       <View style={styles.content}>
-        <Text style={styles.label}>Account Name</Text>
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder="Enter a name for your account"
-          placeholderTextColor={VelaColor.textTertiary}
-          autoFocus
-          returnKeyType="done"
-          onSubmitEditing={handleCreate}
-          editable={!loading}
-        />
-        <Text style={styles.hint}>
-          This name is stored locally and helps you identify your accounts.
-        </Text>
+        {created ? (
+          <>
+            <Text style={styles.successTitle}>Your wallet is ready!</Text>
+            <Text style={styles.successMessage}>
+              Please sign in to verify your passkey works correctly before using your wallet.
+            </Text>
+          </>
+        ) : uploadFailed ? (
+          <>
+            <Text style={styles.errorTitle}>Public key upload failed</Text>
+            <Text style={styles.errorMessage}>
+              Your passkey was created successfully, but the public key could not be saved to the
+              cloud server. Without this, you won't be able to recover your wallet on another device.
+            </Text>
+            {uploadError ? (
+              <Text style={styles.errorDetail}>{uploadError}</Text>
+            ) : null}
+            <Text style={styles.hint}>
+              Please check your network connection and try again.
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.label}>Account Name</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="Enter a name for your account"
+              placeholderTextColor={VelaColor.textTertiary}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleCreate}
+              editable={!loading}
+            />
+            <Text style={styles.hint}>
+              This name is stored locally and helps you identify your accounts.
+            </Text>
+          </>
+        )}
 
         {status ? (
           <Text style={styles.status}>{status}</Text>
@@ -143,12 +217,25 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
       </View>
 
       <View style={styles.bottom}>
-        <VelaButton
-          title="Create with Passkey"
-          onPress={handleCreate}
-          disabled={!name.trim()}
-          loading={loading}
-        />
+        {created ? (
+          <VelaButton
+            title="Sign in"
+            onPress={() => onBack?.()}
+          />
+        ) : uploadFailed ? (
+          <VelaButton
+            title="Retry Upload"
+            onPress={handleRetryUpload}
+            loading={loading}
+          />
+        ) : (
+          <VelaButton
+            title="Create with Passkey"
+            onPress={handleCreate}
+            disabled={!name.trim() || loading}
+            loading={loading}
+          />
+        )}
       </View>
     </ScreenContainer>
   );
@@ -209,5 +296,35 @@ const styles = StyleSheet.create({
   },
   bottom: {
     paddingBottom: 24,
+  },
+  errorTitle: {
+    ...VelaFont.title(18),
+    color: VelaColor.accent,
+    marginBottom: 12,
+  },
+  errorMessage: {
+    ...VelaFont.body(15),
+    color: VelaColor.textSecondary,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  errorDetail: {
+    ...VelaFont.body(13),
+    color: VelaColor.accent,
+    backgroundColor: VelaColor.bgCard,
+    borderRadius: VelaRadius.card,
+    padding: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  successTitle: {
+    ...VelaFont.title(18),
+    color: VelaColor.green,
+    marginBottom: 12,
+  },
+  successMessage: {
+    ...VelaFont.body(15),
+    color: VelaColor.textSecondary,
+    lineHeight: 22,
   },
 });

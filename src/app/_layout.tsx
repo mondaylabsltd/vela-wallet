@@ -11,6 +11,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
 
   useEffect(() => {
+    // Retry any pending public key uploads (no biometric needed).
     hasPendingUploads().then((has) => {
       if (has) {
         retryPendingUploads().catch(() => {});

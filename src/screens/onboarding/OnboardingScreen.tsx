@@ -1,17 +1,17 @@
-import React, { useState } from 'react';
-import { Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { WelcomeScreen } from './WelcomeScreen';
-import { CreateWalletScreen } from './CreateWalletScreen';
+import type { StoredAccount } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
-import { loadAccounts, saveAccount } from '@/services/storage';
-import { fromHex } from '@/services/hex';
-import { computeAddress } from '@/services/safe-address';
+import * as CloudSync from '@/modules/cloud-sync';
 import * as Passkey from '@/modules/passkey';
 import { PasskeyError, PasskeyErrorCode } from '@/modules/passkey';
+import { fromHex } from '@/services/hex';
 import * as PublicKeyIndex from '@/services/public-key-index';
-import * as CloudSync from '@/modules/cloud-sync';
-import type { StoredAccount } from '@/models/types';
+import { computeAddress } from '@/services/safe-address';
+import { loadAccounts, saveAccount } from '@/services/storage';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { Alert } from 'react-native';
+import { CreateWalletScreen } from './CreateWalletScreen';
+import { WelcomeScreen } from './WelcomeScreen';
 
 type Step = 'welcome' | 'create';
 
@@ -22,6 +22,7 @@ export default function OnboardingScreen() {
   const { dispatch } = useWallet();
 
   async function handleLogin() {
+    if (loginLoading) return;
     try {
       setLoginLoading(true);
       console.log('[Login] Starting login...');
@@ -37,9 +38,20 @@ export default function OnboardingScreen() {
       console.log('[Login] Calling authenticate()...');
       const assertion = await Passkey.authenticate();
       console.log('[Login] credentialId:', assertion.credentialId);
-      console.log('[Login] userIdHex:', assertion.userIdHex ?? 'none');
 
-      // 2. Try local AsyncStorage first
+      // 2. Verify passkey compatibility with Safe contracts
+      const { verifySafeWebAuthn } = await import('@/services/webauthn-verify');
+      const compat = verifySafeWebAuthn(assertion);
+      console.log('[Login] Safe compat:', compat.ok, compat.reason ?? '');
+      if (!compat.ok) {
+        Alert.alert(
+          'Device Not Compatible',
+          'Your passkey provider is not compatible with Vela Wallet. Please switch to Google Password Manager in system settings and try again.',
+        );
+        return;
+      }
+
+      // 3. Try local AsyncStorage first
       const localAccounts = await loadAccounts();
       console.log('[Login] Local accounts:', localAccounts.length, localAccounts.map(a => ({ id: a.id.slice(0, 12), name: a.name })));
       const local = localAccounts.find(a => a.id === assertion.credentialId);
@@ -94,7 +106,15 @@ export default function OnboardingScreen() {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
         // User cancelled — do nothing
       } else {
-        Alert.alert('Login Failed', error instanceof Error ? error.message : String(error));
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg.includes('404')) {
+          Alert.alert(
+            'Account Not Found',
+            'No wallet was found for this passkey. Please create a new wallet first.',
+          );
+        } else {
+          Alert.alert('Login Failed', msg);
+        }
       }
     } finally {
       setLoginLoading(false);

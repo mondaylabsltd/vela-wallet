@@ -1,16 +1,70 @@
 /**
  * Uploads passkey public keys to the index server for cross-device recovery.
  *
- * Flow: getChallenge → Passkey.sign(challenge) → DER→raw → createRecord
+ * Flow: createRecord → verify (no signature needed, server signs on-chain tx)
  */
 import * as PublicKeyIndex from './public-key-index';
-import * as Passkey from '@/modules/passkey';
-import { derSignatureToRaw } from './attestation-parser';
-import { fromHex, toHex, toBase64Url } from './hex';
+import { RELYING_PARTY } from '@/modules/passkey';
+import { fromHex } from './hex';
 import { loadPendingUploads, removePendingUpload } from './storage';
 
+// ---------------------------------------------------------------------------
+// Safe WebAuthn Compatibility Validation
+// ---------------------------------------------------------------------------
+
 /**
- * Upload a public key to the index server.
+ * Error thrown when the passkey provider is not compatible with Safe contracts.
+ * This is NOT retryable — the device/provider cannot be used.
+ */
+export class PasskeyIncompatibleError extends Error {
+  readonly reason: string;
+  constructor(reason: string) {
+    super(`Passkey provider incompatible: ${reason}`);
+    this.name = 'PasskeyIncompatibleError';
+    this.reason = reason;
+  }
+}
+
+/**
+ * Validate the registration (webauthn.create) clientDataJSON for Safe compatibility.
+ *
+ * If the provider outputs wrong field order for create, it will do the same for get.
+ * This lets us reject incompatible providers BEFORE saving anything.
+ *
+ * Expected: {"type":"webauthn.create","challenge":"<base64url>", ...}
+ */
+export function validateCreateClientData(clientDataJSONHex: string): void {
+  const clientDataBytes = fromHex(clientDataJSONHex);
+  const clientDataJSON = new TextDecoder().decode(clientDataBytes);
+
+  const requiredPrefix = '{"type":"webauthn.create","challenge":"';
+  if (!clientDataJSON.startsWith(requiredPrefix)) {
+    const actualStart = clientDataJSON.slice(0, 80);
+    console.error('[SafeCompat] CREATE clientDataJSON prefix mismatch');
+    console.error('[SafeCompat] Expected prefix:', requiredPrefix);
+    console.error('[SafeCompat] Actual start:', actualStart);
+    throw new PasskeyIncompatibleError(
+      'Your device\'s passkey provider produces an incompatible response format. ' +
+      'The clientDataJSON field order does not match Safe contract requirements. ' +
+      'Please try a different passkey provider or device.\n\n' +
+      'Got: ' + actualStart,
+    );
+  }
+
+  if (!clientDataJSON.endsWith('}')) {
+    throw new PasskeyIncompatibleError('clientDataJSON does not end with }');
+  }
+
+  console.log('[SafeCompat] CREATE clientDataJSON format OK');
+}
+
+// ---------------------------------------------------------------------------
+// Upload
+// ---------------------------------------------------------------------------
+
+/**
+ * Upload a public key to the index server, then verify it was stored.
+ * No signature needed — server signs on-chain tx automatically.
  */
 export async function uploadPublicKey(params: {
   credentialId: string;
@@ -20,74 +74,37 @@ export async function uploadPublicKey(params: {
   const { credentialId, publicKeyHex, name } = params;
 
   console.log('[PublicKeyUpload] Starting upload for:', name);
-  console.log('[PublicKeyUpload] credentialId:', credentialId.slice(0, 16) + '...');
-  console.log('[PublicKeyUpload] publicKeyHex length:', publicKeyHex.length);
 
-  // 1. Get challenge from server
-  console.log('[PublicKeyUpload] Fetching challenge...');
-  const challenge = await PublicKeyIndex.getChallenge();
-  console.log('[PublicKeyUpload] Got challenge:', challenge.slice(0, 20) + '...');
-
-  // 2. Sign the challenge with passkey
-  const challengeHex = toHex(new TextEncoder().encode(challenge));
-  console.log('[PublicKeyUpload] Signing challenge (hex):', challengeHex.slice(0, 20) + '...');
-  const assertion = await Passkey.sign(challengeHex);
-  console.log('[PublicKeyUpload] Signed. signatureHex length:', assertion.signatureHex.length);
-  console.log('[PublicKeyUpload] authenticatorDataHex length:', assertion.authenticatorDataHex.length);
-  console.log('[PublicKeyUpload] clientDataJSONHex length:', assertion.clientDataJSONHex.length);
-
-  // 3. Convert DER signature to raw r‖s (64 bytes)
-  const derBytes = fromHex(assertion.signatureHex);
-  console.log('[PublicKeyUpload] DER sig bytes:', derBytes.length);
-  const rawSig = derSignatureToRaw(derBytes);
-  if (!rawSig) {
-    console.error('[PublicKeyUpload] DER→raw conversion FAILED');
-    throw new Error('Failed to convert DER signature to raw format');
-  }
-  console.log('[PublicKeyUpload] Raw sig (r||s):', toHex(rawSig).slice(0, 32) + '...');
-
-  // 4. Prepare authenticatorData and clientDataJSON as base64url
-  const authDataB64 = toBase64Url(fromHex(assertion.authenticatorDataHex));
-  const clientDataB64 = toBase64Url(fromHex(assertion.clientDataJSONHex));
-
-  // 5. Upload to server
-  const request = {
-    rpId: Passkey.RELYING_PARTY,
+  // 1. Upload to server (no challenge/signature needed)
+  await PublicKeyIndex.createRecord({
+    rpId: RELYING_PARTY,
     credentialId,
     publicKey: publicKeyHex,
-    challenge,
-    signature: toHex(rawSig),
-    authenticatorData: authDataB64,
-    clientDataJSON: clientDataB64,
     name,
-  };
-  console.log('[PublicKeyUpload] Submitting to server:', JSON.stringify({
-    rpId: request.rpId,
-    credentialId: request.credentialId.slice(0, 16) + '...',
-    publicKey: request.publicKey.slice(0, 16) + '...',
-    challenge: request.challenge.slice(0, 16) + '...',
-    signature: request.signature.slice(0, 16) + '...',
-    authenticatorData: request.authenticatorData.slice(0, 16) + '...',
-    clientDataJSON: request.clientDataJSON.slice(0, 16) + '...',
-    name: request.name,
-  }));
-
-  await PublicKeyIndex.createRecord(request);
+  });
   console.log('[PublicKeyUpload] Upload SUCCESS for:', name);
 
-  // 6. Remove from pending uploads
+  // 2. Verify: query server to confirm the record exists
+  const record = await PublicKeyIndex.queryRecord(RELYING_PARTY, credentialId);
+  if (record.publicKey !== publicKeyHex) {
+    throw new Error('Server verification failed: public key mismatch');
+  }
+  console.log('[PublicKeyUpload] Verified on server for:', name);
+
+  // 3. Remove from pending uploads
   await removePendingUpload(credentialId);
-  console.log('[PublicKeyUpload] Removed from pending uploads');
 }
 
 /**
  * Retry all pending public key uploads.
+ * No biometric needed — safe to call silently on app launch.
  */
 export async function retryPendingUploads(): Promise<{
   succeeded: number;
   failed: number;
 }> {
   const pending = await loadPendingUploads();
+  if (pending.length === 0) return { succeeded: 0, failed: 0 };
   console.log('[PublicKeyUpload] Retrying', pending.length, 'pending uploads');
 
   let succeeded = 0;

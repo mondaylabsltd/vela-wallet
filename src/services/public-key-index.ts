@@ -1,6 +1,8 @@
 /**
  * Client for WebAuthn P256 Public Key Index API.
- * Matches iOS PublicKeyIndexService.swift.
+ *
+ * The server stores public keys on Gnosis Chain. No signature/challenge
+ * required — the server wallet signs transactions automatically.
  */
 
 const BASE_URL = 'https://webauthnp256-publickey-index.biubiu.tools';
@@ -10,6 +12,8 @@ export interface PublicKeyRecord {
   credentialId: string;
   publicKey: string;
   name: string;
+  initialCredentialId?: string;
+  metadata?: string;
   createdAt: number;
 }
 
@@ -17,22 +21,12 @@ interface CreateRequest {
   rpId: string;
   credentialId: string;
   publicKey: string;
-  challenge: string;
-  signature: string;
-  authenticatorData: string;
-  clientDataJSON: string;
   name: string;
+  initialCredentialId?: string;
+  metadata?: string;
 }
 
-/** Fetch a one-time challenge (5-minute validity). */
-export async function getChallenge(): Promise<string> {
-  const response = await fetch(`${BASE_URL}/api/challenge`);
-  if (!response.ok) throw new Error(`Challenge request failed: ${response.status}`);
-  const data: { challenge: string } = await response.json();
-  return data.challenge;
-}
-
-/** Store a public key record after passkey creation. */
+/** Store a public key record. No signature needed — server signs on-chain tx. */
 export async function createRecord(request: CreateRequest): Promise<PublicKeyRecord> {
   const response = await fetch(`${BASE_URL}/api/create`, {
     method: 'POST',

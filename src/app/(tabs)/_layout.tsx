@@ -3,7 +3,7 @@ import React from 'react';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { VelaColor } from '@/constants/theme';
-import { Wallet, Globe, Settings } from 'lucide-react-native';
+import { Wallet, Settings } from 'lucide-react-native';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -35,8 +35,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="dapps"
         options={{
-          title: 'dApps',
-          tabBarIcon: ({ color, size }) => <Globe size={size ?? 22} color={color} />,
+          href: null, // hidden in v1
         }}
       />
       <Tabs.Screen

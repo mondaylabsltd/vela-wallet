@@ -23,7 +23,7 @@ export function WelcomeScreen({ onCreateWallet, onLogin }: Props) {
         <View style={styles.buttonSection}>
           <VelaButton title="Create Wallet" onPress={onCreateWallet} variant="primary" />
           <View style={styles.buttonGap} />
-          <VelaButton title="Import Wallet" onPress={onLogin} variant="secondary" />
+          <VelaButton title="I already have a wallet" onPress={onLogin} variant="secondary" />
         </View>
       </SafeAreaView>
     </View>

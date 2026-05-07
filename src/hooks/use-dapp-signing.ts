@@ -2,15 +2,15 @@
  * Shared dApp request signing logic.
  * Used by both BLE (native) and WalletConnect (web) connect screens.
  */
+import type { Account } from '@/models/types';
 import * as Passkey from '@/modules/passkey';
-import { sendNative, sendContractCall } from '@/services/safe-transaction';
-import { findAccountByCredentialId } from '@/services/storage';
-import { keccak256 } from '@/services/eth-crypto';
 import { derSignatureToRaw } from '@/services/attestation-parser';
-import { fromHex, toHex, stripHexPrefix } from '@/services/hex';
+import { keccak256 } from '@/services/eth-crypto';
+import { fromHex, stripHexPrefix, toHex } from '@/services/hex';
 import * as PublicKeyIndex from '@/services/public-key-index';
 import { rpcCall } from '@/services/rpc-adapter';
-import type { Account } from '@/models/types';
+import { sendContractCall, sendNative } from '@/services/safe-transaction';
+import { findAccountByCredentialId } from '@/services/storage';
 
 export interface DAppRequest {
   id: string;
@@ -90,6 +90,16 @@ export async function handleSendTransaction(
 
   const signFn = async (challenge: Uint8Array) => {
     const assertion = await Passkey.sign(toHex(challenge), account.id);
+
+    const { verifySafeWebAuthn } = await import('@/services/webauthn-verify');
+    const compat = verifySafeWebAuthn(assertion);
+    if (!compat.ok) {
+      throw new Error(
+        'Your passkey provider is not compatible with Vela Wallet. ' +
+        'Please switch to Google Password Manager.\n\n' + compat.reason,
+      );
+    }
+
     return {
       signature: fromHex(assertion.signatureHex),
       authenticatorData: fromHex(assertion.authenticatorDataHex),

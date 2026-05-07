@@ -85,7 +85,7 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
             } catch (e: CreateCredentialCancellationException) {
                 promise.reject("PASSKEY_CANCELLED", "User cancelled registration", e)
             } catch (e: CreateCredentialException) {
-                promise.reject("PASSKEY_FAILED", e.message ?: "Registration failed", e)
+                promise.reject("PASSKEY_FAILED", "Registration failed: [${e.type}] ${e.message ?: "Unknown"}", e)
             } catch (e: Exception) {
                 promise.reject("PASSKEY_FAILED", e.message ?: "Unknown error", e)
             }
@@ -123,7 +123,7 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
             } catch (e: NoCredentialException) {
                 promise.reject("PASSKEY_NO_CREDENTIAL", "No passkey found", e)
             } catch (e: GetCredentialException) {
-                promise.reject("PASSKEY_FAILED", e.message ?: "Failed", e)
+                promise.reject("PASSKEY_FAILED", "Authentication failed: [${e.type}] ${e.message ?: "Unknown"}", e)
             } catch (e: Exception) {
                 promise.reject("PASSKEY_FAILED", e.message ?: "Unknown error", e)
             }
@@ -169,7 +169,7 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
             } catch (e: NoCredentialException) {
                 promise.reject("PASSKEY_NO_CREDENTIAL", "No passkey found", e)
             } catch (e: GetCredentialException) {
-                promise.reject("PASSKEY_FAILED", e.message ?: "Failed", e)
+                promise.reject("PASSKEY_FAILED", "Sign failed: [${e.type}] ${e.message ?: "Unknown"}", e)
             } catch (e: Exception) {
                 promise.reject("PASSKEY_FAILED", e.message ?: "Unknown error", e)
             }
