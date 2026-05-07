@@ -20,7 +20,6 @@ import { useWallet, shortAddress } from '@/models/wallet-state';
 import { shortAddr, type BLEIncomingRequest } from '@/models/types';
 import { PasskeyErrorCode } from '@/modules/passkey';
 import { handleDAppRequest, isSigningMethod, handleReadOnlyRPC } from '@/hooks/use-dapp-signing';
-import { rpcCall } from '@/services/rpc-adapter';
 import { Bluetooth, Wifi, UserCircle, Check, ChevronRight } from 'lucide-react-native';
 
 // BLE module — only imported on native
@@ -99,9 +98,7 @@ export default function DAppScreen() {
     handleReadOnlyRPC(method, params, addr, cid).then(res => {
       if (res.handled) sendResponse(id, res.result);
       else {
-        rpcCall(method, params ?? [], cid)
-          .then(r => sendResponse(id, r.result ?? null))
-          .catch(() => sendResponse(id, undefined, { code: -32603, message: `RPC failed: ${method}` }));
+        sendResponse(id, undefined, { code: -32603, message: `RPC failed: ${method}` });
       }
     });
   }, [sendResponse]);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Share } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ScrollView, Share, AppState } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -13,6 +13,9 @@ import { fetchTokens } from '@/services/wallet-api';
 import { tokenUsdValue } from '@/models/types';
 import * as Haptics from 'expo-haptics';
 
+const DEPOSIT_CHECK_MS = 5 * 60 * 1000;
+const MAX_DEPOSIT_CHECKS = 3;
+
 export default function ReceiveScreen() {
   const router = useRouter();
   const { activeAccount, state } = useWallet();
@@ -22,13 +25,17 @@ export default function ReceiveScreen() {
   const [isListening, setIsListening] = useState(false);
   const [depositDetected, setDepositDetected] = useState(false);
   const previousBalance = useRef<number | null>(null);
+  const checkCount = useRef(0);
 
   // Deposit detection polling
   useEffect(() => {
     if (!address) return;
     setIsListening(true);
+    previousBalance.current = null;
+    checkCount.current = 0;
 
     const checkDeposit = async () => {
+      if (AppState.currentState !== 'active') return;
       try {
         const tokens = await fetchTokens(address);
         const total = tokens.reduce((sum, t) => sum + tokenUsdValue(t), 0);
@@ -44,7 +51,15 @@ export default function ReceiveScreen() {
     };
 
     checkDeposit();
-    const timer = setInterval(checkDeposit, 10000);
+    const timer = setInterval(() => {
+      checkCount.current += 1;
+      if (checkCount.current > MAX_DEPOSIT_CHECKS) {
+        clearInterval(timer);
+        setIsListening(false);
+        return;
+      }
+      checkDeposit();
+    }, DEPOSIT_CHECK_MS);
     return () => { clearInterval(timer); setIsListening(false); };
   }, [address]);
 

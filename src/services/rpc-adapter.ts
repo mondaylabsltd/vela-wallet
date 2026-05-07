@@ -2,7 +2,7 @@
  * JSON-RPC adapter with fallback routing.
  * Matches iOS RPCAdapter.swift.
  *
- * Routes: user-configured URL → getvela.app proxy → public RPC.
+ * Routes: user-configured URL → public RPC → getvela.app proxy fallback.
  */
 import { DEFAULT_NETWORKS, networkId } from '@/models/network';
 import { getNetworkConfig } from './storage';
@@ -17,10 +17,12 @@ const BUNDLER_METHODS = new Set([
   'pimlico_getUserOperationGasPrice',
 ]);
 
-/** Standard RPC methods (routed to Alchemy via proxy). */
+/** Standard RPC methods that the proxy may route to Alchemy as a fallback. */
 const RPC_METHODS = new Set([
   'eth_call', 'eth_getCode', 'eth_getBalance', 'eth_gasPrice',
-  'eth_maxPriorityFeePerGas',
+  'eth_maxPriorityFeePerGas', 'eth_blockNumber', 'eth_getTransactionCount',
+  'eth_estimateGas', 'eth_getTransactionReceipt', 'eth_getBlockByNumber',
+  'eth_getLogs', 'eth_feeHistory',
 ]);
 
 interface RPCResponse {
@@ -47,20 +49,23 @@ export async function rpcCall(
     } catch { /* fall through */ }
   }
 
-  // 2. getvela.app proxy (for whitelisted methods — has API keys server-side)
-  //    Body format: { method, params, network } — matches iOS RPCAdapter.proxyRPC
+  // 2. Public RPC for standard read calls. This keeps routine wallet/dApp reads
+  //    off the server-side Alchemy key.
   if (!isBundler) {
-    // For standard RPC, try proxy first but fall back to public RPC quickly
-    try {
-      const result = await proxyRPC(method, params, chainId);
-      if (result && !result.error) return result;
-    } catch { /* fall through to public RPC */ }
-
-    // 3. Public RPC fallback — handles any method the proxy doesn't whitelist
     const publicUrl = getPublicRPC(chainId);
     if (publicUrl) {
-      const result = await directRPC(publicUrl, method, params);
-      if (result) return result;
+      try {
+        const result = await directRPC(publicUrl, method, params);
+        if (result) return result;
+      } catch { /* fall through to proxy */ }
+    }
+
+    // 3. getvela.app proxy fallback for whitelisted methods only.
+    if (RPC_METHODS.has(method)) {
+      try {
+        const result = await proxyRPC(method, params, chainId);
+        if (result) return result;
+      } catch { /* fall through */ }
     }
   } else {
     // Bundler methods only go through proxy

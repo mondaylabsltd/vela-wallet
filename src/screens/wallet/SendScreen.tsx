@@ -8,7 +8,7 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { QRScanner } from '@/components/QRScanner';
 import { VelaColor, VelaFont, VelaRadius, VelaSpacing } from '@/constants/theme';
 import { useWallet } from '@/models/wallet-state';
-import { fetchTokens } from '@/services/wallet-api';
+import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { type APIToken, tokenBalanceDouble, tokenUsdValue, tokenLogoURL, formatBalance, tokenChainId, isNativeToken } from '@/models/types';
 import { chainName } from '@/models/network';
 import { sendNative, sendERC20 } from '@/services/safe-transaction';
@@ -160,6 +160,8 @@ export default function SendScreen() {
           signFn,
         );
       }
+
+      clearTokenCache(activeAccount.address);
 
       Alert.alert(
         'Transaction Confirmed',

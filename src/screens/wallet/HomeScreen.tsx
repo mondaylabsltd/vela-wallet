@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Alert } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, RefreshControl, Alert, AppState } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
@@ -13,7 +14,7 @@ import { tokenUsdValue, tokenBalanceDouble, tokenLogoURL, tokenChainId, formatBa
 import { chainName } from '@/models/network';
 import { ArrowUp, ArrowDown, Menu, Copy } from 'lucide-react-native';
 
-const AUTO_REFRESH_MS = 30_000;
+const AUTO_REFRESH_MS = 10 * 60 * 1000;
 
 function formatUsd(value: number): string {
   return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -61,15 +62,25 @@ export default function HomeScreen() {
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const loadInFlightRef = useRef(false);
 
   const address = activeAccount?.address ?? state.address;
   const accountName = activeAccount?.name ?? 'Wallet';
 
-  const loadTokens = useCallback(async (silent = false) => {
-    if (!address) return;
+  const loadTokens = useCallback(async (silent = false, forceRefresh = false) => {
+    if (!address) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    if (loadInFlightRef.current) {
+      if (!silent) setRefreshing(false);
+      return;
+    }
+    loadInFlightRef.current = true;
     if (!silent) setLoading(true);
     try {
-      const result = await fetchTokens(address);
+      const result = await fetchTokens(address, { forceRefresh });
       // Sort by USD value descending
       result.sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
       // Load custom tokens and merge
@@ -96,24 +107,25 @@ export default function HomeScreen() {
         Alert.alert('Error', 'Failed to load token balances.');
       }
     } finally {
+      loadInFlightRef.current = false;
       setLoading(false);
       setRefreshing(false);
     }
   }, [address]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     loadTokens();
-  }, [loadTokens]);
-
-  // Auto-refresh every 30 seconds
-  useEffect(() => {
-    const timer = setInterval(() => loadTokens(true), AUTO_REFRESH_MS);
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') {
+        loadTokens(true);
+      }
+    }, AUTO_REFRESH_MS);
     return () => clearInterval(timer);
-  }, [loadTokens]);
+  }, [loadTokens]));
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    loadTokens();
+    loadTokens(false, true);
   }, [loadTokens]);
 
   const totalUsd = tokens.reduce((sum, t) => sum + tokenUsdValue(t), 0);
