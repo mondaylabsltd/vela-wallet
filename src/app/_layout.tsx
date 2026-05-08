@@ -2,21 +2,13 @@ import '@/global.css';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { useColorScheme, View, Text, TextInput, ActivityIndicator, StyleSheet } from 'react-native';
+import { useColorScheme, View, ActivityIndicator, StyleSheet } from 'react-native';
 import { WalletProvider } from '@/models/wallet-state';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { hasPendingUploads } from '@/services/storage';
 import { loadTextScale, TextScaleProvider } from '@/constants/text-scale';
 import { color, rebuildTextScale } from '@/constants/theme';
 import { refreshCustomNetworks } from '@/models/network';
-
-// Disable system font scaling globally — we provide our own in-app A-/A+ control.
-// Without this, Android system text size multiplies on top of our app scale,
-// causing iOS/Android to render at visually different sizes.
-if ((Text as any).defaultProps == null) (Text as any).defaultProps = {};
-(Text as any).defaultProps.allowFontScaling = false;
-if ((TextInput as any).defaultProps == null) (TextInput as any).defaultProps = {};
-(TextInput as any).defaultProps.allowFontScaling = false;
 
 function AppShell() {
   const colorScheme = useColorScheme();
