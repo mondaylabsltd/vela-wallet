@@ -1,3 +1,4 @@
+import React from 'react';
 import { Platform, StyleSheet as RNStyleSheet } from 'react-native';
 import { getTextScaleFactor } from './text-scale';
 
@@ -98,6 +99,29 @@ export function createStyles<T extends RNStyleSheet.NamedStyles<T>>(
       return (cache as any)[prop];
     },
   });
+}
+
+/**
+ * Hook version of createStyles — guaranteed instant update.
+ *
+ * Unlike the Proxy-based createStyles (module-level, lazily invalidated),
+ * this hook recomputes styles inside the component via useMemo when
+ * the text scale version changes.  Use this in screens where the user
+ * directly adjusts text scale and expects to see the result immediately.
+ *
+ * Usage:
+ *   const styleFactory = () => ({ title: { fontSize: text.xl } });
+ *   function MyScreen() {
+ *     const styles = useStyles(styleFactory);
+ *     return <Text style={styles.title}>Hello</Text>;
+ *   }
+ */
+export function useStyles<T extends RNStyleSheet.NamedStyles<T>>(
+  factory: () => T | RNStyleSheet.NamedStyles<T>,
+): T {
+  const { version } = require('@/constants/text-scale').useTextScale();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return React.useMemo(() => RNStyleSheet.create(factory() as T) as T, [version]);
 }
 
 export const leading = {

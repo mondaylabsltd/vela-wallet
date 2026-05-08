@@ -13,7 +13,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { ChainLogo } from '@/components/ChainLogo';
-import { color, text, weight, space, radius, font, shadow, createStyles } from '@/constants/theme';
+import { color, text, weight, space, radius, font, shadow, createStyles, useStyles } from '@/constants/theme';
 import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
@@ -24,7 +24,8 @@ import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 
 // ---------------------------------------------------------------------------
-// Settings Row
+// Sub-component styles — use createStyles (update on next mount/focus).
+// The main SettingsScreen uses useStyles for instant text-scale feedback.
 // ---------------------------------------------------------------------------
 
 type IconConfig = { bg: string; fg: string; Icon: React.ComponentType<{ size: number; color: string }> };
@@ -44,33 +45,20 @@ function SettingsRow({
 }) {
   return (
     <Pressable
-      style={styles.settingsRow}
+      style={subStyles.settingsRow}
       onPress={onPress}
       disabled={!onPress}
     >
-      <View style={[styles.settingsIcon, { backgroundColor: icon.bg }]}>
+      <View style={[subStyles.settingsIcon, { backgroundColor: icon.bg }]}>
         <icon.Icon size={16} color={icon.fg} />
       </View>
-      <View style={styles.settingsRowContent}>
-        <Text style={styles.settingsRowTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.settingsRowSubtitle}>{subtitle}</Text> : null}
+      <View style={subStyles.settingsRowContent}>
+        <Text style={subStyles.settingsRowTitle}>{title}</Text>
+        {subtitle ? <Text style={subStyles.settingsRowSubtitle}>{subtitle}</Text> : null}
       </View>
       {onPress ? <ChevronRight size={16} color={color.fg.subtle} /> : null}
-      {showDivider ? <View style={styles.settingsRowDivider} /> : null}
+      {showDivider ? <View style={subStyles.settingsRowDivider} /> : null}
     </Pressable>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Settings Section
-// ---------------------------------------------------------------------------
-
-function SettingsSection({ title, children, delay = 0 }: { title: string; children: React.ReactNode; delay?: number }) {
-  return (
-    <Animated.View style={styles.sectionContainer} entering={fadeInDown(delay, 300)}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <VelaCard>{children}</VelaCard>
-    </Animated.View>
   );
 }
 
@@ -97,9 +85,9 @@ function NetworkConfigCard({
   }, [network.chainId, rpcURL, explorerURL, bundlerURL, onSave]);
 
   return (
-    <VelaCard style={styles.networkCard}>
+    <VelaCard style={subStyles.networkCard}>
       <Pressable
-        style={styles.networkHeader}
+        style={subStyles.networkHeader}
         onPress={() => setExpanded(!expanded)}
       >
         <ChainLogo
@@ -109,9 +97,9 @@ function NetworkConfigCard({
           logoURL={network.logoURL}
           size={36}
         />
-        <View style={styles.networkHeaderText}>
-          <Text style={styles.networkName}>{network.displayName}</Text>
-          <Text style={styles.networkChainId}>Chain {network.chainId}</Text>
+        <View style={subStyles.networkHeaderText}>
+          <Text style={subStyles.networkName}>{network.displayName}</Text>
+          <Text style={subStyles.networkChainId}>Chain {network.chainId}</Text>
         </View>
         <ChevronRight
           size={16}
@@ -121,8 +109,8 @@ function NetworkConfigCard({
       </Pressable>
 
       {expanded && (
-        <View style={styles.networkFields}>
-          <View style={styles.dividerFull} />
+        <View style={subStyles.networkFields}>
+          <View style={subStyles.dividerFull} />
           <ConfigField label="RPC URL" value={rpcURL} onChangeText={setRpcURL} onBlur={handleSave} />
           <ConfigField label="EXPLORER" value={explorerURL} onChangeText={setExplorerURL} onBlur={handleSave} />
           <ConfigField label="BUNDLER" value={bundlerURL} onChangeText={setBundlerURL} onBlur={handleSave} />
@@ -144,10 +132,10 @@ function ConfigField({
   onBlur: () => void;
 }) {
   return (
-    <View style={styles.configField}>
-      <Text style={styles.configLabel}>{label}</Text>
+    <View style={subStyles.configField}>
+      <Text style={subStyles.configLabel}>{label}</Text>
       <TextInput
-        style={styles.configInput}
+        style={subStyles.configInput}
         value={value}
         onChangeText={onChangeText}
         onBlur={onBlur}
@@ -176,41 +164,41 @@ function AccountSwitcherModal({
 
   return (
     <AppModal visible={visible} onClose={onClose}>
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Accounts</Text>
+      <View style={subStyles.modalContainer}>
+        <View style={subStyles.modalHeader}>
+          <Text style={subStyles.modalTitle}>Accounts</Text>
           <Pressable onPress={onClose} hitSlop={8}>
             <X size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
         </View>
 
-        <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+        <ScrollView style={subStyles.modalScroll} contentContainerStyle={subStyles.modalScrollContent}>
           {state.accounts.map((account, index) => {
             const isActive = index === state.activeAccountIndex;
             return (
               <Pressable
                 key={account.id}
-                style={[styles.accountItem, isActive && styles.accountItemActive]}
+                style={[subStyles.accountItem, isActive && subStyles.accountItemActive]}
                 onPress={() => {
                   dispatch({ type: 'SWITCH_ACCOUNT', index });
                   onClose();
                 }}
               >
-                <View style={styles.accountAvatar}>
-                  <Text style={styles.accountAvatarText}>
+                <View style={subStyles.accountAvatar}>
+                  <Text style={subStyles.accountAvatarText}>
                     {(account.name[0] ?? 'V').toUpperCase()}
                   </Text>
                 </View>
-                <View style={styles.accountInfo}>
-                  <Text style={styles.accountNameModal}>{account.name}</Text>
-                  <Text style={styles.accountAddress}>{shortAddress(account.address)}</Text>
+                <View style={subStyles.accountInfo}>
+                  <Text style={subStyles.accountNameModal}>{account.name}</Text>
+                  <Text style={subStyles.accountAddress}>{shortAddress(account.address)}</Text>
                 </View>
                 {isActive && <Check size={18} color={color.accent.base} />}
               </Pressable>
             );
           })}
 
-          <View style={styles.accountActions}>
+          <View style={subStyles.accountActions}>
             <VelaButton
               title="Create New Account"
               onPress={() => {
@@ -260,17 +248,17 @@ function NetworkEditorModal({
 
   return (
     <AppModal visible={visible} onClose={onClose}>
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Networks</Text>
+      <View style={subStyles.modalContainer}>
+        <View style={subStyles.modalHeader}>
+          <Text style={subStyles.modalTitle}>Networks</Text>
           <Pressable onPress={onClose} hitSlop={8}>
             <X size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
         </View>
 
         <ScrollView
-          style={styles.modalScroll}
-          contentContainerStyle={styles.networkScrollContent}
+          style={subStyles.modalScroll}
+          contentContainerStyle={subStyles.networkScrollContent}
           keyboardShouldPersistTaps="handled"
         >
           {DEFAULT_NETWORKS.map((network) => {
@@ -295,6 +283,7 @@ function NetworkEditorModal({
 // ---------------------------------------------------------------------------
 
 export default function SettingsScreen() {
+  const styles = useStyles(styleFactory);
   const { state, dispatch, activeAccount } = useWallet();
   const router = useRouter();
 
@@ -333,29 +322,37 @@ export default function SettingsScreen() {
         </Animated.View>
 
         {/* Account Section */}
-        <SettingsSection title="Account" delay={50}>
-          <SettingsRow
-            icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: UserIcon }}
-            title={accountName}
-            subtitle={address ? shortAddress(address) : 'Switch account'}
-            showDivider={false}
-            onPress={() => setShowAccountSwitcher(true)}
-          />
-        </SettingsSection>
+        <Animated.View style={styles.sectionContainer} entering={fadeInDown(50, 300)}>
+          <Text style={styles.sectionTitle}>ACCOUNT</Text>
+          <VelaCard>
+            <SettingsRow
+              icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: UserIcon }}
+              title={accountName}
+              subtitle={address ? shortAddress(address) : 'Switch account'}
+              showDivider={false}
+              onPress={() => setShowAccountSwitcher(true)}
+            />
+          </VelaCard>
+        </Animated.View>
 
         {/* Networks Section */}
-        <SettingsSection title="Networks" delay={100}>
-          <SettingsRow
-            icon={{ bg: color.info.soft, fg: color.info.base, Icon: NetworkIcon }}
-            title="Networks"
-            subtitle="RPC, Explorer & Bundler URLs"
-            showDivider={false}
-            onPress={() => setShowNetworkEditor(true)}
-          />
-        </SettingsSection>
+        <Animated.View style={styles.sectionContainer} entering={fadeInDown(100, 300)}>
+          <Text style={styles.sectionTitle}>NETWORKS</Text>
+          <VelaCard>
+            <SettingsRow
+              icon={{ bg: color.info.soft, fg: color.info.base, Icon: NetworkIcon }}
+              title="Networks"
+              subtitle="RPC, Explorer & Bundler URLs"
+              showDivider={false}
+              onPress={() => setShowNetworkEditor(true)}
+            />
+          </VelaCard>
+        </Animated.View>
 
         {/* Text Size */}
-        <SettingsSection title="Text Size" delay={150}>
+        <Animated.View style={styles.sectionContainer} entering={fadeInDown(150, 300)}>
+          <Text style={styles.sectionTitle}>TEXT SIZE</Text>
+          <VelaCard>
           <View style={styles.textScaleStepper}>
             <Pressable
               style={[styles.textScaleBtn, currentScaleIndex === 0 && styles.textScaleBtnDisabled]}
@@ -389,17 +386,21 @@ export default function SettingsScreen() {
           <Text style={styles.textScaleLabel}>
             {TEXT_SCALE_LEVELS[currentScaleIndex].label}
           </Text>
-        </SettingsSection>
+          </VelaCard>
+        </Animated.View>
 
         {/* General Section */}
-        <SettingsSection title="General" delay={200}>
-          <SettingsRow
-            icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
-            title="About"
-            subtitle="Vela Wallet v1.0.0"
-            showDivider={false}
-          />
-        </SettingsSection>
+        <Animated.View style={styles.sectionContainer} entering={fadeInDown(200, 300)}>
+          <Text style={styles.sectionTitle}>GENERAL</Text>
+          <VelaCard>
+            <SettingsRow
+              icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
+              title="About"
+              subtitle="Vela Wallet v1.0.0"
+              showDivider={false}
+            />
+          </VelaCard>
+        </Animated.View>
 
         {/* Logout Button */}
         <Animated.View entering={fadeInDown(250, 300)}>
@@ -424,10 +425,10 @@ export default function SettingsScreen() {
 }
 
 // ---------------------------------------------------------------------------
-// Styles
+// Styles — main screen uses useStyles (instant update), sub-components use createStyles
 // ---------------------------------------------------------------------------
 
-const styles = createStyles(() => ({
+const styleFactory = () => ({
   scrollContent: {
     paddingTop: space.md,
     paddingBottom: space['5xl'],
@@ -438,8 +439,6 @@ const styles = createStyles(() => ({
     color: color.fg.base,
     marginBottom: space['3xl'],
   },
-
-  // Settings Section
   sectionContainer: {
     marginBottom: space['2xl'],
   },
@@ -448,55 +447,14 @@ const styles = createStyles(() => ({
     fontWeight: weight.semibold,
     color: color.fg.subtle,
     letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    textTransform: 'uppercase' as const,
     marginBottom: space.md,
     paddingHorizontal: space.sm,
   },
-
-  // Settings Row
-  settingsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: space.xl,
-    paddingVertical: space.xl,
-    position: 'relative',
-  },
-  settingsIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  settingsRowContent: {
-    flex: 1,
-    marginLeft: space.lg,
-    gap: 2,
-  },
-  settingsRowTitle: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.fg.base,
-  },
-  settingsRowSubtitle: {
-    fontSize: text.sm,
-    fontWeight: weight.regular,
-    color: color.fg.subtle,
-  },
-  settingsRowDivider: {
-    position: 'absolute',
-    bottom: 0,
-    left: 66,
-    right: 0,
-    height: 1,
-    backgroundColor: color.border.base,
-  },
-
-  // Logout Button
   logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     paddingVertical: space.xl,
     backgroundColor: color.bg.raised,
     borderRadius: radius.xl,
@@ -510,12 +468,10 @@ const styles = createStyles(() => ({
     fontWeight: weight.semibold,
     color: color.accent.base,
   },
-
-  // Text Scale
   textScaleStepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     paddingVertical: space.lg,
     paddingHorizontal: space.xl,
     gap: space.xl,
@@ -526,196 +482,73 @@ const styles = createStyles(() => ({
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: color.border.base,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     backgroundColor: color.bg.base,
   },
-  textScaleBtnDisabled: {
-    opacity: 0.3,
-  },
+  textScaleBtnDisabled: { opacity: 0.3 },
   textScaleBtnText: {
     fontSize: text.lg,
     fontWeight: weight.bold,
     color: color.fg.base,
   },
-  textScaleBtnTextDisabled: {
-    color: color.fg.subtle,
-  },
+  textScaleBtnTextDisabled: { color: color.fg.subtle },
   textScaleTrack: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
     height: 4,
     backgroundColor: color.border.base,
     borderRadius: 2,
     paddingHorizontal: space.sm,
   },
-  textScaleTick: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: color.border.strong,
-  },
-  textScaleTickActive: {
-    backgroundColor: color.accent.base,
-  },
-  textScaleTickCurrent: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: color.accent.base,
-    ...shadow.sm,
-  },
+  textScaleTick: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.border.strong },
+  textScaleTickActive: { backgroundColor: color.accent.base },
+  textScaleTickCurrent: { width: 12, height: 12, borderRadius: 6, backgroundColor: color.accent.base, ...shadow.sm },
   textScaleLabel: {
     fontSize: text.sm,
     fontWeight: weight.medium,
     color: color.fg.muted,
-    textAlign: 'center',
+    textAlign: 'center' as const,
     paddingBottom: space.lg,
   },
+});
 
+const subStyles = createStyles(() => ({
+  // Settings Row
+  settingsRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.xl, paddingVertical: space.xl, position: 'relative' },
+  settingsIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  settingsRowContent: { flex: 1, marginLeft: space.lg, gap: 2 },
+  settingsRowTitle: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
+  settingsRowSubtitle: { fontSize: text.sm, fontWeight: weight.regular, color: color.fg.subtle },
+  settingsRowDivider: { position: 'absolute', bottom: 0, left: 66, right: 0, height: 1, backgroundColor: color.border.base },
   // Modal
-  modalContainer: {
-    flex: 1,
-    backgroundColor: color.bg.base,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: space['3xl'],
-    paddingVertical: space.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: color.border.base,
-  },
-  modalTitle: {
-    fontSize: text.xl,
-    fontWeight: weight.bold,
-    color: color.fg.base,
-  },
-  modalClose: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.accent.base,
-  },
-  modalScroll: {
-    flex: 1,
-  },
-  modalScrollContent: {
-    padding: space['3xl'],
-    paddingBottom: space['5xl'],
-  },
-
+  modalContainer: { flex: 1, backgroundColor: color.bg.base },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space['3xl'], paddingVertical: space.xl, borderBottomWidth: 1, borderBottomColor: color.border.base },
+  modalTitle: { fontSize: text.xl, fontWeight: weight.bold, color: color.fg.base },
+  modalClose: { fontSize: text.lg, fontWeight: weight.semibold, color: color.accent.base },
+  modalScroll: { flex: 1 },
+  modalScrollContent: { padding: space['3xl'], paddingBottom: space['5xl'] },
   // Account Switcher
-  accountItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: space.xl,
-    backgroundColor: color.bg.raised,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    marginBottom: space.lg,
-    gap: space.lg,
-    ...shadow.sm,
-  },
-  accountItemActive: {
-    borderColor: color.accent.base,
-    borderWidth: 1.5,
-  },
-  accountAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: color.accent.soft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  accountAvatarText: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.accent.base,
-  },
-  accountInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  accountNameModal: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.fg.base,
-  },
-  accountAddress: {
-    fontSize: text.sm,
-    fontWeight: weight.medium,
-    fontFamily: font.mono,
-    color: color.fg.subtle,
-  },
-  accountActions: {
-    marginTop: space.xl,
-    gap: space.lg,
-  },
-
+  accountItem: { flexDirection: 'row', alignItems: 'center', padding: space.xl, backgroundColor: color.bg.raised, borderRadius: radius.xl, borderWidth: 1, borderColor: color.border.base, marginBottom: space.lg, gap: space.lg, ...shadow.sm },
+  accountItemActive: { borderColor: color.accent.base, borderWidth: 1.5 },
+  accountAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: color.accent.soft, alignItems: 'center', justifyContent: 'center' },
+  accountAvatarText: { fontSize: text.lg, fontWeight: weight.semibold, color: color.accent.base },
+  accountInfo: { flex: 1, gap: 2 },
+  accountNameModal: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
+  accountAddress: { fontSize: text.sm, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle },
+  accountActions: { marginTop: space.xl, gap: space.lg },
   // Network Editor
-  networkScrollContent: {
-    padding: space.xl,
-    paddingBottom: space['5xl'],
-    gap: space.lg,
-  },
-  networkCard: {
-    overflow: 'hidden',
-  },
-  networkHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: space.xl,
-    gap: space.lg,
-  },
-  networkHeaderText: {
-    flex: 1,
-    gap: 2,
-  },
-  networkName: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.fg.base,
-  },
-  networkChainId: {
-    fontSize: text.sm,
-    fontWeight: weight.regular,
-    color: color.fg.subtle,
-  },
-  networkFields: {
-    paddingHorizontal: space.xl,
-    paddingBottom: space.xl,
-    gap: space.lg,
-  },
-  dividerFull: {
-    height: 1,
-    backgroundColor: color.border.base,
-    marginHorizontal: -space.xl,
-    marginBottom: space.sm,
-  },
-  configField: {
-    gap: space.sm,
-  },
-  configLabel: {
-    fontSize: text.xs,
-    fontWeight: weight.semibold,
-    color: color.fg.subtle,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  configInput: {
-    fontSize: text.sm,
-    fontWeight: weight.medium,
-    fontFamily: font.mono,
-    color: color.fg.base,
-    padding: space.lg,
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border.base,
-  },
+  networkScrollContent: { padding: space.xl, paddingBottom: space['5xl'], gap: space.lg },
+  networkCard: { overflow: 'hidden' },
+  networkHeader: { flexDirection: 'row', alignItems: 'center', padding: space.xl, gap: space.lg },
+  networkHeaderText: { flex: 1, gap: 2 },
+  networkName: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
+  networkChainId: { fontSize: text.sm, fontWeight: weight.regular, color: color.fg.subtle },
+  networkFields: { paddingHorizontal: space.xl, paddingBottom: space.xl, gap: space.lg },
+  dividerFull: { height: 1, backgroundColor: color.border.base, marginHorizontal: -space.xl, marginBottom: space.sm },
+  configField: { gap: space.sm },
+  configLabel: { fontSize: text.xs, fontWeight: weight.semibold, color: color.fg.subtle, letterSpacing: 1, textTransform: 'uppercase' },
+  configInput: { fontSize: text.sm, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.base, padding: space.lg, backgroundColor: color.bg.sunken, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border.base },
 }));
