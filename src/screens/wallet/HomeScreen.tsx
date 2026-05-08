@@ -1,18 +1,25 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert, AppState } from 'react-native';
+import { View, Text, FlatList, RefreshControl, Alert, AppState, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  FadeIn,
+  FadeInDown,
+} from 'react-native-reanimated';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { TokenLogo } from '@/components/TokenLogo';
-import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
+import { TokenRow } from '@/components/ui/TokenRow';
+import { color, text, weight, space, radius, shadow, motion, font, createStyles } from '@/constants/theme';
 import { useWallet } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
 import { loadCustomTokens } from '@/services/storage';
 import { tokenUsdValue, tokenBalanceDouble, tokenLogoURL, tokenChainId, formatBalance, shortAddr, type APIToken } from '@/models/types';
 import { chainName } from '@/models/network';
-import { ArrowUp, ArrowDown, Menu, Copy } from 'lucide-react-native';
+import { ArrowUp, ArrowDown, Clock, Copy, Plus, Check } from 'lucide-react-native';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
 
@@ -20,50 +27,47 @@ function formatUsd(value: number): string {
   return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** Integer part including "$" sign, e.g. "$1,234" */
 function formatUsdInt(value: number): string {
   const full = formatUsd(value);
   const dot = full.indexOf('.');
   return dot === -1 ? full : full.slice(0, dot);
 }
 
-/** Decimal part including dot, e.g. ".00" */
 function formatUsdDec(value: number): string {
   const full = formatUsd(value);
   const dot = full.indexOf('.');
   return dot === -1 ? '.00' : full.slice(dot);
 }
 
-/** Scale balance font size down as the number gets longer */
 function balanceFontSize(usd: number): number {
-  const len = formatUsdInt(usd).length; // includes "$" and commas
-  if (len <= 7) return 30;   // up to $9,999
-  if (len <= 9) return 26;   // up to $999,999
-  if (len <= 12) return 22;  // up to $999,999,999
-  if (len <= 15) return 18;  // up to $999,999,999,999
-  return 15;
+  const len = formatUsdInt(usd).length;
+  if (len <= 7) return 36;
+  if (len <= 9) return 30;
+  if (len <= 12) return 26;
+  if (len <= 15) return 22;
+  return 18;
 }
 
-function TokenRow({ token, onPress }: { token: APIToken; onPress: () => void }) {
-  const balance = tokenBalanceDouble(token);
-  const usd = tokenUsdValue(token);
-  const logo = tokenLogoURL(token);
-  const chain = chainName(tokenChainId(token));
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+function ActionButton({ label, icon: Icon, onPress, accent }: { label: string; icon: React.ComponentType<any>; onPress: () => void; accent?: boolean }) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
 
   return (
-    <TouchableOpacity style={styles.tokenRow} onPress={onPress} activeOpacity={0.7}>
-      <TokenLogo symbol={token.symbol} logoUrl={logo} size={32} />
-      <View style={styles.tokenInfo}>
-        <Text style={styles.tokenName} numberOfLines={1}>{token.symbol}</Text>
-        <Text style={styles.tokenChain}>{chain}</Text>
+    <AnimatedPressable
+      style={[styles.actionBtn, accent && styles.actionBtnAccent, animatedStyle]}
+      onPress={onPress}
+      onPressIn={() => { scale.value = withSpring(0.95, motion.spring); }}
+      onPressOut={() => { scale.value = withSpring(1, motion.spring); }}
+    >
+      <View style={[styles.actionIconWrap, accent && styles.actionIconWrapAccent]}>
+        <Icon size={18} color={accent ? color.fg.inverse : color.fg.base} strokeWidth={2.5} />
       </View>
-      <View style={styles.tokenValues}>
-        <Text style={styles.tokenBalance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-          {formatBalance(balance)}
-        </Text>
-        {usd > 0 && <Text style={styles.tokenUsd} numberOfLines={1}>{formatUsd(usd)}</Text>}
-      </View>
-    </TouchableOpacity>
+      <Text style={[styles.actionLabel, accent && styles.actionLabelAccent]}>{label}</Text>
+    </AnimatedPressable>
   );
 }
 
@@ -93,9 +97,7 @@ export default function HomeScreen() {
     if (!silent) setLoading(true);
     try {
       const result = await fetchTokens(address, { forceRefresh });
-      // Sort by USD value descending
       result.sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
-      // Load custom tokens and merge
       const custom = await loadCustomTokens();
       for (const ct of custom) {
         if (!result.find(t => t.tokenAddress?.toLowerCase() === ct.contractAddress.toLowerCase() && tokenChainId(t) === ct.chainId)) {
@@ -169,47 +171,72 @@ export default function HomeScreen() {
 
   const renderHeader = () => (
     <View style={styles.header}>
-      {/* Account name + address */}
-      <View style={styles.accountRow}>
-        <Text style={styles.accountName}>{accountName}</Text>
-        <TouchableOpacity style={styles.addrRow} onPress={copyAddress} activeOpacity={0.7}>
-          <Text style={styles.accountAddr}>{shortAddr(address)}</Text>
-          <Copy size={12} color={copied ? color.accent.base : color.fg.subtle} />
-          {copied && <Text style={styles.copiedText}>Copied</Text>}
-        </TouchableOpacity>
-      </View>
+      {/* Account chip */}
+      <Animated.View entering={FadeIn.duration(400)}>
+        <Pressable style={styles.accountChip} onPress={copyAddress}>
+          <View style={styles.accountAvatar}>
+            <Text style={styles.accountAvatarText}>
+              {(accountName[0] ?? 'V').toUpperCase()}
+            </Text>
+          </View>
+          <View style={styles.accountTextGroup}>
+            <Text style={styles.accountName}>{accountName}</Text>
+            <View style={styles.addrRow}>
+              <Text style={styles.accountAddr}>{shortAddr(address)}</Text>
+              {copied ? (
+                <Check size={10} color={color.accent.base} strokeWidth={3} />
+              ) : (
+                <Copy size={10} color={color.fg.subtle} strokeWidth={2} />
+              )}
+            </View>
+          </View>
+        </Pressable>
+      </Animated.View>
 
-      {/* Total balance — dynamic font size based on digit count */}
-      <View style={styles.balanceRow}>
-        <Text style={[styles.balanceInt, { fontSize: balanceFontSize(totalUsd) }]}>
-          {formatUsdInt(totalUsd)}
-        </Text>
-        <Text style={[styles.balanceDec, { fontSize: balanceFontSize(totalUsd) * 0.62 }]}>
-          {formatUsdDec(totalUsd)}
-        </Text>
-      </View>
+      {/* Hero balance */}
+      <Animated.View style={styles.balanceSection} entering={FadeInDown.delay(100).duration(500)}>
+        <Text style={styles.balanceLabel}>Total Balance</Text>
+        <View style={styles.balanceRow}>
+          <Text style={[styles.balanceInt, { fontSize: balanceFontSize(totalUsd) }]}>
+            {formatUsdInt(totalUsd)}
+          </Text>
+          <Text style={[styles.balanceDec, { fontSize: balanceFontSize(totalUsd) * 0.58 }]}>
+            {formatUsdDec(totalUsd)}
+          </Text>
+        </View>
+      </Animated.View>
 
       {/* Action buttons */}
-      <View style={styles.actionRow}>
-        <ActionButton label="Send" icon={ArrowUp} onPress={() => router.push('/send')} />
+      <Animated.View style={styles.actionRow} entering={FadeInDown.delay(200).duration(400)}>
+        <ActionButton label="Send" icon={ArrowUp} onPress={() => router.push('/send')} accent />
         <ActionButton label="Receive" icon={ArrowDown} onPress={() => router.push('/receive')} />
-        <ActionButton label="History" icon={Menu} onPress={() => router.push('/history')} />
-      </View>
+        <ActionButton label="History" icon={Clock} onPress={() => router.push('/history')} />
+      </Animated.View>
 
-      {/* Add Token */}
-      <TouchableOpacity onPress={() => router.push('/add-token')} activeOpacity={0.7}>
-        <Text style={styles.addTokenLink}>+ Add Token</Text>
-      </TouchableOpacity>
+      {/* Token list header */}
+      <View style={styles.tokenListHeader}>
+        <Text style={styles.tokenListTitle}>Assets</Text>
+        <Pressable
+          style={styles.addTokenBtn}
+          onPress={() => router.push('/add-token')}
+          hitSlop={8}
+        >
+          <Plus size={14} color={color.accent.base} strokeWidth={2.5} />
+          <Text style={styles.addTokenText}>Add</Text>
+        </Pressable>
+      </View>
     </View>
   );
 
   const renderEmpty = () => {
     if (loading) return null;
     return (
-      <View style={styles.emptyContainer}>
-        <Text style={styles.emptyText}>No tokens found</Text>
-        <Text style={styles.emptySubtext}>Receive tokens to get started</Text>
-      </View>
+      <VelaCard style={styles.emptyCard}>
+        <Text style={styles.emptyTitle}>No tokens yet</Text>
+        <Text style={styles.emptySubtext}>
+          Receive tokens to your wallet address to get started
+        </Text>
+      </VelaCard>
     );
   };
 
@@ -220,8 +247,16 @@ export default function HomeScreen() {
         keyExtractor={(item) => `${item.network}_${item.tokenAddress ?? 'native'}_${item.symbol}`}
         ListHeaderComponent={renderHeader}
         ListEmptyComponent={renderEmpty}
-        renderItem={({ item }) => (
-          <TokenRow token={item} onPress={() => navigateToToken(item)} />
+        renderItem={({ item, index }) => (
+          <TokenRow
+            symbol={item.symbol}
+            chainLabel={chainName(tokenChainId(item))}
+            logoUrl={tokenLogoURL(item)}
+            balance={formatBalance(tokenBalanceDouble(item))}
+            usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
+            onPress={() => navigateToToken(item)}
+            index={index}
+          />
         )}
         refreshControl={
           <RefreshControl
@@ -237,137 +272,158 @@ export default function HomeScreen() {
   );
 }
 
-function ActionButton({ label, icon: Icon, onPress }: { label: string; icon: React.ComponentType<any>; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={styles.actionBtn} onPress={onPress} activeOpacity={0.7}>
-      <Icon size={14} color={color.fg.base} strokeWidth={2.5} />
-      <Text style={styles.actionLabel}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
 const styles = createStyles(() => ({
   listContent: {
     paddingBottom: 100,
   },
   header: {
     paddingTop: space.xl,
-    marginBottom: space.md,
+    marginBottom: space.sm,
   },
-  accountRow: {
+
+  // Account chip
+  accountChip: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: space.md,
+    alignSelf: 'center',
+    gap: space.md,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.full,
+    backgroundColor: color.bg.sunken,
+  },
+  accountAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: color.accent.soft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  accountAvatarText: {
+    fontSize: text.xs,
+    fontWeight: weight.bold,
+    color: color.accent.base,
+  },
+  accountTextGroup: {
+    gap: 0,
   },
   accountName: {
-    fontSize: text.base,
+    fontSize: text.sm,
     fontWeight: weight.semibold,
     color: color.fg.base,
   },
   addrRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
-    marginTop: space.xs,
+    gap: space.xs,
   },
   accountAddr: {
     fontSize: text.xs,
     fontWeight: weight.medium,
-    fontFamily: font.mono,
     color: color.fg.subtle,
   },
-  copiedText: {
-    fontSize: text.xs,
+
+  // Balance
+  balanceSection: {
+    alignItems: 'center',
+    marginTop: space['3xl'],
+    marginBottom: space['2xl'],
+  },
+  balanceLabel: {
+    fontSize: text.sm,
     fontWeight: weight.medium,
-    color: color.accent.base,
-    marginLeft: space.xs,
+    color: color.fg.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: space.sm,
   },
   balanceRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'center',
-    marginBottom: space['2xl'],
   },
   balanceInt: {
-    fontSize: text['4xl'],
+    fontSize: 36,
     fontWeight: weight.bold,
+    fontFamily: font.display,
     color: color.fg.base,
   },
   balanceDec: {
-    fontSize: text['2xl'],
     fontWeight: weight.bold,
+    fontFamily: font.display,
     color: color.fg.subtle,
   },
+
+  // Actions
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: space.md,
-    marginBottom: space.xl,
+    gap: space.xl,
+    marginBottom: space['3xl'],
   },
   actionBtn: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
-    paddingHorizontal: space.xl,
-    paddingVertical: space.md,
-    borderRadius: radius['2xl'],
-    borderWidth: 1,
-    borderColor: color.border.base,
-    backgroundColor: color.bg.raised,
+    gap: space.md,
+    minWidth: 72,
+  },
+  actionBtnAccent: {},
+  actionIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: color.bg.sunken,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow.sm,
+  },
+  actionIconWrapAccent: {
+    backgroundColor: color.accent.base,
+    ...shadow.md,
   },
   actionLabel: {
     fontSize: text.sm,
-    fontWeight: weight.semibold,
+    fontWeight: weight.medium,
     color: color.fg.base,
   },
-  addTokenLink: {
-    fontSize: text.sm,
-    fontWeight: weight.regular,
-    color: color.accent.base,
-    textAlign: 'right',
-    marginBottom: space.sm,
+  actionLabelAccent: {
+    fontWeight: weight.semibold,
   },
-  tokenRow: {
+
+  // Token list header
+  tokenListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: space.md,
+    paddingHorizontal: space.sm,
+  },
+  tokenListTitle: {
+    fontSize: text.lg,
+    fontWeight: weight.bold,
+    color: color.fg.base,
+  },
+  addTokenBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: space.lg,
-    paddingHorizontal: space.sm,
-    gap: space.lg,
-  },
-  tokenInfo: {
-    flex: 1,
     gap: space.xs,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
   },
-  tokenName: {
-    fontSize: text.base,
+  addTokenText: {
+    fontSize: text.sm,
     fontWeight: weight.semibold,
-    color: color.fg.base,
+    color: color.accent.base,
   },
-  tokenChain: {
-    fontSize: text.xs,
-    fontWeight: weight.regular,
-    color: color.fg.subtle,
-  },
-  tokenValues: {
-    alignItems: 'flex-end',
-    gap: space.xs,
-  },
-  tokenBalance: {
-    fontSize: text.base,
-    fontWeight: weight.semibold,
-    color: color.fg.base,
-  },
-  tokenUsd: {
-    fontSize: text.xs,
-    fontWeight: weight.regular,
-    color: color.fg.subtle,
-  },
-  emptyContainer: {
+
+  // Empty
+  emptyCard: {
+    padding: space['4xl'],
     alignItems: 'center',
-    paddingTop: space['5xl'],
     gap: space.md,
   },
-  emptyText: {
-    fontSize: text.lg,
+  emptyTitle: {
+    fontSize: text.xl,
     fontWeight: weight.semibold,
     color: color.fg.muted,
   },
@@ -375,5 +431,7 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     fontWeight: weight.regular,
     color: color.fg.subtle,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 }));

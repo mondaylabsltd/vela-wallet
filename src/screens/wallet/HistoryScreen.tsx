@@ -3,18 +3,20 @@ import {
   View,
   Text,
   FlatList,
-  TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
-import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
+import { color, text, weight, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import * as WebBrowser from 'expo-web-browser';
+import { ArrowDownLeft, ArrowUpRight, ExternalLink, Check } from 'lucide-react-native';
 
 // MARK: - Types
 
@@ -97,7 +99,6 @@ export default function HistoryScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    // Placeholder: when a real API is wired up, refresh here
     setTimeout(() => setRefreshing(false), 800);
   }, []);
 
@@ -112,7 +113,7 @@ export default function HistoryScreen() {
   // MARK: - Transaction Row
 
   const renderTransaction = ({ item }: { item: Transaction }) => {
-    const iconLabel = item.isIncoming ? '\u2193' : '\u2191';
+    const IconComponent = item.isIncoming ? ArrowDownLeft : ArrowUpRight;
     const iconBg = item.isIncoming ? color.success.soft : color.accent.soft;
     const iconColor = item.isIncoming ? color.success.base : color.accent.base;
     const counterparty = item.isIncoming ? item.from : item.to;
@@ -128,21 +129,18 @@ export default function HistoryScreen() {
           : color.fg.muted;
 
     return (
-      <TouchableOpacity
+      <Pressable
         style={styles.txRow}
-        activeOpacity={0.7}
         onPress={() => {
           const network = DEFAULT_NETWORKS.find((n) => n.chainId === item.chainId);
           const base = network?.explorerURL ?? 'https://etherscan.io';
           WebBrowser.openBrowserAsync(`${base}/tx/${item.hash}`);
         }}
       >
-        {/* Icon */}
         <View style={[styles.txIcon, { backgroundColor: iconBg }]}>
-          <Text style={[styles.txIconText, { color: iconColor }]}>{iconLabel}</Text>
+          <IconComponent size={18} color={iconColor} strokeWidth={2.5} />
         </View>
 
-        {/* Info */}
         <View style={styles.txInfo}>
           <Text style={styles.txType}>
             {item.isIncoming ? 'Received' : 'Sent'}
@@ -153,11 +151,9 @@ export default function HistoryScreen() {
           </Text>
         </View>
 
-        {/* Amount + time */}
         <View style={styles.txValues}>
           <Text style={[styles.txAmount, { color: amountColor }]}>
-            {sign}
-            {formatEthValue(item.value)} {nativeSym}
+            {sign}{formatEthValue(item.value)} {nativeSym}
           </Text>
           <Text style={[styles.txTime, { color: statusColor }]}>
             {item.status === 'pending'
@@ -167,11 +163,9 @@ export default function HistoryScreen() {
                 : formatTime(item.timestamp)}
           </Text>
         </View>
-      </TouchableOpacity>
+      </Pressable>
     );
   };
-
-  // MARK: - Section Header
 
   const renderSectionHeader = (title: string) => (
     <View style={styles.sectionHeader}>
@@ -183,53 +177,51 @@ export default function HistoryScreen() {
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <VelaCard style={styles.emptyCard}>
-        <Text style={styles.emptyIcon}>{'\uD83D\uDCCB'}</Text>
-        <Text style={styles.emptyTitle}>No Transaction History</Text>
-        <Text style={styles.emptyBody}>
-          On-chain transaction history is available via your network's block explorer. Tap below
-          to view your full history.
-        </Text>
-        <VelaButton
-          title={`View on ${selectedNetwork?.displayName ?? 'Explorer'}`}
-          onPress={handleViewOnExplorer}
-          variant="accent"
-          style={styles.explorerBtn}
-        />
-        <VelaButton
-          title="Open a Different Explorer"
-          onPress={() => {}}
-          variant="secondary"
-          style={styles.explorerBtn}
-        />
-      </VelaCard>
+      <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+        <VelaCard elevated style={styles.emptyCard}>
+          <View style={styles.emptyIconWrap}>
+            <ExternalLink size={28} color={color.fg.subtle} />
+          </View>
+          <Text style={styles.emptyTitle}>No History Yet</Text>
+          <Text style={styles.emptyBody}>
+            View your full transaction history on the block explorer.
+          </Text>
+          <VelaButton
+            title={`View on ${selectedNetwork?.displayName ?? 'Explorer'}`}
+            onPress={handleViewOnExplorer}
+            variant="accent"
+            style={styles.explorerBtn}
+          />
+        </VelaCard>
+      </Animated.View>
 
       {/* Network Selector */}
-      <Text style={styles.networkLabel}>SELECT NETWORK</Text>
-      <VelaCard style={styles.networkCard}>
-        {DEFAULT_NETWORKS.map((net) => {
-          const isSelected = net.chainId === selectedChainId;
-          return (
-            <TouchableOpacity
-              key={net.id}
-              style={[styles.networkRow, isSelected && styles.networkRowSelected]}
-              activeOpacity={0.7}
-              onPress={() => setSelectedChainId(net.chainId)}
-            >
-              <View style={[styles.networkDot, { backgroundColor: net.iconColor }]} />
-              <Text
-                style={[
-                  styles.networkName,
-                  isSelected && styles.networkNameSelected,
-                ]}
+      <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+        <Text style={styles.networkLabel}>SELECT NETWORK</Text>
+        <VelaCard style={styles.networkCard}>
+          {DEFAULT_NETWORKS.map((net) => {
+            const isSelected = net.chainId === selectedChainId;
+            return (
+              <Pressable
+                key={net.id}
+                style={[styles.networkRow, isSelected && styles.networkRowSelected]}
+                onPress={() => setSelectedChainId(net.chainId)}
               >
-                {net.displayName}
-              </Text>
-              {isSelected && <Text style={styles.networkCheck}>{'\u2713'}</Text>}
-            </TouchableOpacity>
-          );
-        })}
-      </VelaCard>
+                <View style={[styles.networkDot, { backgroundColor: net.iconColor }]} />
+                <Text
+                  style={[
+                    styles.networkName,
+                    isSelected && styles.networkNameSelected,
+                  ]}
+                >
+                  {net.displayName}
+                </Text>
+                {isSelected && <Check size={16} color={color.accent.base} strokeWidth={2.5} />}
+              </Pressable>
+            );
+          })}
+        </VelaCard>
+      </Animated.View>
     </View>
   );
 
@@ -237,7 +229,6 @@ export default function HistoryScreen() {
 
   const groups = groupByDate(transactions);
 
-  // Flatten groups for FlatList with section headers
   type ListItem =
     | { type: 'header'; title: string; key: string }
     | { type: 'tx'; tx: Transaction; key: string };
@@ -254,18 +245,18 @@ export default function HistoryScreen() {
     <ScreenContainer>
       {/* Nav Bar */}
       <View style={styles.navBar}>
-        <TouchableOpacity onPress={handleBack} activeOpacity={0.7}>
+        <Pressable onPress={handleBack} hitSlop={8}>
           <Text style={styles.navBack}>Close</Text>
-        </TouchableOpacity>
+        </Pressable>
         <Text style={styles.navTitle}>History</Text>
-        <View style={{ width: 60 }} />
+        <View style={styles.navSpacer} />
       </View>
 
       {/* Address pill */}
       {address ? (
-        <View style={styles.addressRow}>
+        <Animated.View style={styles.addressRow} entering={FadeIn.duration(300)}>
           <Text style={styles.addressText}>{shortAddress(address)}</Text>
-        </View>
+        </Animated.View>
       ) : null}
 
       {loading ? (
@@ -306,29 +297,31 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: space.lg,
   },
   navBack: {
     fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.accent.base,
-    width: 60,
+    minWidth: 60,
   },
   navTitle: {
     fontSize: text.xl,
     fontWeight: weight.bold,
     color: color.fg.base,
   },
+  navSpacer: { minWidth: 60 },
+
   addressRow: {
     alignSelf: 'center',
     backgroundColor: color.bg.sunken,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.sm,
     borderRadius: radius.full,
-    marginBottom: 16,
+    marginBottom: space.xl,
   },
   addressText: {
-    fontSize: text.base,
+    fontSize: text.sm,
     fontWeight: weight.medium,
     fontFamily: font.mono,
     color: color.fg.muted,
@@ -337,7 +330,7 @@ const styles = createStyles(() => ({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: space.lg,
   },
   loadingText: {
     fontSize: text.lg,
@@ -345,26 +338,28 @@ const styles = createStyles(() => ({
     color: color.fg.muted,
   },
   listContent: {
-    paddingBottom: 40,
+    paddingBottom: space['5xl'],
   },
+
   // Section Headers
   sectionHeader: {
-    paddingTop: 20,
-    paddingBottom: 8,
+    paddingTop: space['2xl'],
+    paddingBottom: space.md,
   },
   sectionTitle: {
-    fontSize: text.base,
+    fontSize: text.sm,
     fontWeight: weight.semibold,
     color: color.fg.subtle,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
+
   // Transaction Row
   txRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: space.lg,
-    gap: 12,
+    gap: space.lg,
   },
   txIcon: {
     width: 40,
@@ -372,10 +367,6 @@ const styles = createStyles(() => ({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  txIconText: {
-    fontSize: text['2xl'],
-    fontWeight: weight.bold,
   },
   txInfo: {
     flex: 1,
@@ -387,7 +378,7 @@ const styles = createStyles(() => ({
     color: color.fg.base,
   },
   txAddress: {
-    fontSize: text.base,
+    fontSize: text.sm,
     fontWeight: weight.regular,
     color: color.fg.muted,
   },
@@ -404,56 +395,62 @@ const styles = createStyles(() => ({
     fontWeight: weight.regular,
     color: color.fg.muted,
   },
+
   // Empty state
   emptyContainer: {
     flex: 1,
-    paddingTop: 8,
+    paddingTop: space.md,
   },
   emptyCard: {
-    padding: space['2xl'],
+    padding: space['3xl'],
     alignItems: 'center',
-    gap: 12,
+    gap: space.lg,
   },
-  emptyIcon: {
-    fontSize: text['4xl'],
-    marginBottom: 4,
+  emptyIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: color.bg.sunken,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: space.sm,
   },
   emptyTitle: {
-    fontSize: text['2xl'],
+    fontSize: text.xl,
     fontWeight: weight.bold,
     color: color.fg.base,
   },
   emptyBody: {
-    fontSize: text.lg,
+    fontSize: text.base,
     fontWeight: weight.regular,
     color: color.fg.muted,
     textAlign: 'center',
     lineHeight: 22,
-    paddingHorizontal: 8,
   },
   explorerBtn: {
-    marginTop: 4,
+    marginTop: space.md,
     width: '100%',
   },
+
   // Network selector
   networkLabel: {
-    fontSize: text.base,
+    fontSize: text.sm,
     fontWeight: weight.semibold,
     color: color.fg.subtle,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginTop: 28,
-    marginBottom: 10,
+    letterSpacing: 0.8,
+    marginTop: space['3xl'],
+    marginBottom: space.lg,
   },
   networkCard: {
-    paddingVertical: 4,
+    paddingVertical: space.sm,
   },
   networkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 13,
+    paddingVertical: space.lg,
     paddingHorizontal: space['2xl'],
-    gap: 12,
+    gap: space.lg,
   },
   networkRowSelected: {
     backgroundColor: color.bg.sunken,
@@ -464,18 +461,12 @@ const styles = createStyles(() => ({
     borderRadius: 5,
   },
   networkName: {
-    fontSize: text.lg,
+    fontSize: text.base,
     fontWeight: weight.regular,
     color: color.fg.base,
     flex: 1,
   },
   networkNameSelected: {
-    fontSize: text.lg,
     fontWeight: weight.semibold,
-  },
-  networkCheck: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.accent.base,
   },
 }));

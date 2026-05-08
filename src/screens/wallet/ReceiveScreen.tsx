@@ -1,20 +1,54 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Alert, ScrollView, Share, AppState } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, Pressable, Alert, ScrollView, Share, AppState } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  FadeIn,
+  FadeInDown,
+} from 'react-native-reanimated';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
+import { ChainLogo } from '@/components/ChainLogo';
+import { color, text, weight, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
 import { useWallet } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { QRCode } from '@/components/QRCode';
 import { fetchTokens } from '@/services/wallet-api';
 import { tokenUsdValue } from '@/models/types';
 import * as Haptics from 'expo-haptics';
+import { Copy, Share2, Check } from 'lucide-react-native';
 
 const DEPOSIT_CHECK_MS = 5 * 60 * 1000;
 const MAX_DEPOSIT_CHECKS = 3;
+
+function PulsingDot() {
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.3, { duration: 800 }),
+        withTiming(1, { duration: 800 }),
+      ),
+      -1,
+      false,
+    );
+  }, [opacity]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+  }));
+
+  return (
+    <Animated.View style={[styles.listeningDot, animatedStyle]} />
+  );
+}
 
 export default function ReceiveScreen() {
   const router = useRouter();
@@ -24,6 +58,7 @@ export default function ReceiveScreen() {
 
   const [isListening, setIsListening] = useState(false);
   const [depositDetected, setDepositDetected] = useState(false);
+  const [copied, setCopied] = useState(false);
   const previousBalance = useRef<number | null>(null);
   const checkCount = useRef(0);
 
@@ -43,7 +78,6 @@ export default function ReceiveScreen() {
         if (previousBalance.current !== null && total > previousBalance.current) {
           setDepositDetected(true);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          // Reset after 5 seconds
           setTimeout(() => setDepositDetected(false), 5000);
         }
         previousBalance.current = total;
@@ -66,7 +100,8 @@ export default function ReceiveScreen() {
   const copyAddress = async () => {
     if (!address) return;
     await Clipboard.setStringAsync(address);
-    Alert.alert('Copied', 'Address copied to clipboard.');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const shareAddress = async () => {
@@ -76,9 +111,7 @@ export default function ReceiveScreen() {
         message: address,
         title: `${accountName} Address`,
       });
-    } catch {
-      // User cancelled share
-    }
+    } catch {}
   };
 
   return (
@@ -86,39 +119,52 @@ export default function ReceiveScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
+          <Pressable onPress={() => router.back()} hitSlop={8}>
             <Text style={styles.backBtn}>Back</Text>
-          </TouchableOpacity>
+          </Pressable>
           <Text style={styles.title}>Receive</Text>
-          <View style={{ width: 50 }} />
+          <View style={styles.headerSpacer} />
         </View>
 
-        {/* Address display */}
-        <VelaCard style={styles.addressCard}>
-          <Text style={styles.addressLabel}>Your Wallet Address</Text>
+        {/* QR Card */}
+        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+          <VelaCard elevated style={styles.qrCard}>
+            <View style={styles.qrContainer}>
+              {address ? (
+                <View style={styles.qrFrame}>
+                  <QRCode value={address} size={200} />
+                </View>
+              ) : (
+                <View style={styles.qrPlaceholder}>
+                  <Text style={styles.qrPlaceholderText}>No address</Text>
+                </View>
+              )}
+            </View>
 
-          {/* QR Code */}
-          <View style={styles.qrContainer}>
-            {address ? (
-              <QRCode value={address} size={200} />
-            ) : (
-              <View style={styles.qrPlaceholder}>
-                <Text style={styles.qrIcon}>QR</Text>
-                <Text style={styles.qrHint}>QR Code</Text>
-              </View>
+            {/* Full address */}
+            <Pressable onPress={copyAddress} style={styles.addressBox}>
+              <Text style={styles.addressText} selectable>{address}</Text>
+            </Pressable>
+
+            {/* Status indicator */}
+            {isListening && !depositDetected && (
+              <Animated.View style={styles.listeningRow} entering={FadeIn.duration(300)}>
+                <PulsingDot />
+                <Text style={styles.listeningText}>Listening for deposits</Text>
+              </Animated.View>
             )}
-          </View>
 
-          {/* Full address */}
-          <TouchableOpacity onPress={copyAddress} activeOpacity={0.7} style={styles.addressBox}>
-            <Text style={styles.addressText} selectable>{address}</Text>
-          </TouchableOpacity>
-
-          <Text style={styles.tapHint}>Tap address to copy</Text>
-        </VelaCard>
+            {depositDetected && (
+              <Animated.View style={styles.depositAlert} entering={FadeIn.duration(300)}>
+                <Check size={16} color={color.success.base} strokeWidth={3} />
+                <Text style={styles.depositText}>Deposit received!</Text>
+              </Animated.View>
+            )}
+          </VelaCard>
+        </Animated.View>
 
         {/* Action buttons */}
-        <View style={styles.buttonRow}>
+        <Animated.View style={styles.buttonRow} entering={FadeInDown.delay(200).duration(400)}>
           <VelaButton
             title="Copy Address"
             onPress={copyAddress}
@@ -130,51 +176,38 @@ export default function ReceiveScreen() {
             variant="secondary"
             style={styles.actionButton}
           />
-        </View>
-
-        {/* Listening indicator */}
-        {isListening && !depositDetected && (
-          <View style={styles.listeningRow}>
-            <View style={styles.listeningDot} />
-            <Text style={styles.listeningText}>Listening for deposits...</Text>
-          </View>
-        )}
-
-        {/* Deposit detected */}
-        {depositDetected && (
-          <View style={styles.depositAlert}>
-            <Text style={styles.depositText}>Deposit received!</Text>
-          </View>
-        )}
+        </Animated.View>
 
         {/* Supported networks */}
-        <Text style={styles.sectionTitle}>Supported Networks</Text>
-        <Text style={styles.sectionSubtitle}>
-          This address is the same across all EVM networks
-        </Text>
+        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+          <Text style={styles.sectionTitle}>Supported Networks</Text>
+          <Text style={styles.sectionSubtitle}>
+            Same address across all EVM networks
+          </Text>
 
-        <VelaCard style={styles.networksCard}>
-          {DEFAULT_NETWORKS.map((network, index) => (
-            <View key={network.id}>
-              {index > 0 && <View style={styles.separator} />}
-              <View style={styles.networkRow}>
-                <View style={[styles.networkIcon, { backgroundColor: network.iconBg }]}>
-                  <Text style={[styles.networkIconText, { color: network.iconColor }]}>
-                    {network.iconLabel}
-                  </Text>
-                </View>
-                <View style={styles.networkInfo}>
+          <VelaCard style={styles.networksCard}>
+            {DEFAULT_NETWORKS.map((network, index) => (
+              <View key={network.id}>
+                {index > 0 && <View style={styles.separator} />}
+                <View style={styles.networkRow}>
+                  <ChainLogo
+                    label={network.iconLabel}
+                    color={network.iconColor}
+                    bgColor={network.iconBg}
+                    logoURL={network.logoURL}
+                    size={32}
+                  />
                   <Text style={styles.networkName}>{network.displayName}</Text>
-                  {network.isL2 && <Text style={styles.networkBadge}>L2</Text>}
+                  {network.isL2 && (
+                    <View style={styles.networkBadge}>
+                      <Text style={styles.networkBadgeText}>L2</Text>
+                    </View>
+                  )}
                 </View>
               </View>
-            </View>
-          ))}
-        </VelaCard>
-
-        <Text style={styles.warning}>
-          All supported networks share the same wallet address. Make sure the sender uses the correct network.
-        </Text>
+            ))}
+          </VelaCard>
+        </Animated.View>
       </ScrollView>
     </ScreenContainer>
   );
@@ -188,145 +221,154 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    marginBottom: 8,
+    paddingVertical: space.lg,
+    marginBottom: space.md,
   },
   backBtn: {
     fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.accent.base,
-    width: 50,
+    minWidth: 50,
   },
   title: {
     fontSize: text.xl,
-    fontWeight: weight.semibold,
+    fontWeight: weight.bold,
     color: color.fg.base,
   },
-  addressCard: {
-    padding: space['2xl'],
+  headerSpacer: { minWidth: 50 },
+
+  // QR Card
+  qrCard: {
+    padding: space['3xl'],
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  addressLabel: {
-    fontSize: text.base,
-    fontWeight: weight.semibold,
-    color: color.fg.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 20,
+    marginBottom: space['2xl'],
   },
   qrContainer: {
-    marginBottom: 20,
+    marginBottom: space['2xl'],
+  },
+  qrFrame: {
+    padding: space.xl,
+    backgroundColor: color.bg.raised,
+    borderRadius: radius.xl,
+    ...shadow.sm,
   },
   qrPlaceholder: {
-    width: 180,
-    height: 180,
+    width: 200,
+    height: 200,
     borderRadius: radius.xl,
     backgroundColor: color.bg.sunken,
-    borderWidth: 1,
-    borderColor: color.border.base,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
   },
-  qrIcon: {
-    fontSize: text['4xl'],
-    color: color.fg.subtle,
-  },
-  qrHint: {
+  qrPlaceholderText: {
     fontSize: text.base,
-    fontWeight: weight.regular,
     color: color.fg.subtle,
   },
   addressBox: {
     backgroundColor: color.bg.sunken,
-    borderRadius: radius.md,
-    padding: 14,
+    borderRadius: radius.lg,
+    padding: space.xl,
     width: '100%',
+    marginBottom: space.lg,
   },
   addressText: {
-    fontSize: text.base,
+    fontSize: text.sm,
     fontWeight: weight.medium,
     fontFamily: font.mono,
     color: color.fg.base,
     textAlign: 'center',
     lineHeight: 20,
   },
-  tapHint: {
-    fontSize: text.sm,
-    fontWeight: weight.regular,
-    color: color.fg.subtle,
-    marginTop: 8,
+
+  // Listening
+  listeningRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.sm,
   },
+  listeningDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: color.success.base,
+  },
+  listeningText: {
+    fontSize: text.sm,
+    fontWeight: weight.medium,
+    color: color.success.base,
+  },
+
+  // Deposit
+  depositAlert: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: color.success.soft,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.lg,
+    borderRadius: radius.lg,
+    width: '100%',
+  },
+  depositText: {
+    fontSize: text.base,
+    fontWeight: weight.semibold,
+    color: color.success.base,
+  },
+
+  // Buttons
   buttonRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 32,
+    gap: space.lg,
+    marginBottom: space['4xl'],
   },
   actionButton: {
     flex: 1,
   },
+
+  // Networks
   sectionTitle: {
-    fontSize: text.xl,
-    fontWeight: weight.semibold,
+    fontSize: text.lg,
+    fontWeight: weight.bold,
     color: color.fg.base,
-    marginBottom: 4,
+    marginBottom: space.sm,
   },
   sectionSubtitle: {
     fontSize: text.base,
     fontWeight: weight.regular,
     color: color.fg.muted,
-    marginBottom: 14,
+    marginBottom: space.xl,
   },
   networksCard: {
-    padding: space['2xl'],
+    paddingVertical: space.md,
   },
   networkRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-  },
-  networkIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  networkIconText: {
-    fontSize: text.sm,
-    fontWeight: weight.semibold,
-  },
-  networkInfo: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    gap: space.lg,
+    paddingVertical: space.lg,
+    paddingHorizontal: space['2xl'],
   },
   networkName: {
-    fontSize: text.lg,
+    fontSize: text.base,
     fontWeight: weight.semibold,
     color: color.fg.base,
+    flex: 1,
   },
   networkBadge: {
-    fontSize: text.xs,
-    fontWeight: weight.medium,
-    color: color.info.base,
     backgroundColor: color.info.soft,
-    paddingHorizontal: 6,
+    paddingHorizontal: space.md,
     paddingVertical: 2,
-    borderRadius: 4,
-    overflow: 'hidden',
+    borderRadius: radius.sm,
+  },
+  networkBadgeText: {
+    fontSize: text.xs,
+    fontWeight: weight.semibold,
+    color: color.info.base,
   },
   separator: {
     height: 1,
     backgroundColor: color.border.base,
+    marginHorizontal: space['2xl'],
   },
-  listeningRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginVertical: 12 },
-  listeningDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.success.base },
-  listeningText: { fontSize: text.base, fontWeight: weight.regular, color: color.success.base },
-  depositAlert: { backgroundColor: color.success.soft, padding: 16, borderRadius: radius.md, marginVertical: 12, alignItems: 'center' },
-  depositText: { fontSize: text.lg, fontWeight: weight.semibold, color: color.success.base },
-  warning: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.subtle, textAlign: 'center', marginTop: 16, lineHeight: 18 },
 }));

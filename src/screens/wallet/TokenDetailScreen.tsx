@@ -1,14 +1,16 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, Pressable, ScrollView, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenLogo } from '@/components/TokenLogo';
-import { color, text, weight, space, createStyles } from '@/constants/theme';
+import { color, text, weight, space, radius, shadow, font, createStyles } from '@/constants/theme';
 import { formatBalance, shortAddr } from '@/models/types';
 import { chainName } from '@/models/network';
+import { Copy } from 'lucide-react-native';
 
 export default function TokenDetailScreen() {
   const router = useRouter();
@@ -35,7 +37,6 @@ export default function TokenDetailScreen() {
   const decimals = parseInt(params.decimals ?? '18', 10);
   const isNative = !contractAddress;
 
-  // Derive chainId from network string
   const chainIdMap: Record<string, number> = {
     'eth-mainnet': 1,
     'arb-mainnet': 42161,
@@ -73,71 +74,78 @@ export default function TokenDetailScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         {/* Nav bar */}
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
+          <Pressable onPress={() => router.back()} hitSlop={8}>
             <Text style={styles.backBtn}>Back</Text>
-          </TouchableOpacity>
+          </Pressable>
           <Text style={styles.navTitle}>{symbol}</Text>
-          <View style={{ width: 50 }} />
+          <View style={styles.navSpacer} />
         </View>
 
         {/* Token header */}
-        <View style={styles.tokenHeader}>
-          <TokenLogo symbol={symbol} logoUrl={logoUrl} size={64} />
+        <Animated.View style={styles.tokenHeader} entering={FadeIn.duration(400)}>
+          <TokenLogo symbol={symbol} logoUrl={logoUrl} size={72} />
           <Text style={styles.tokenName}>{tokenName}</Text>
-          <Text style={styles.chainLabel}>{chain}</Text>
-        </View>
+          <View style={styles.chainBadge}>
+            <Text style={styles.chainBadgeText}>{chain}</Text>
+          </View>
+        </Animated.View>
 
         {/* Balance card */}
-        <VelaCard style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Balance</Text>
-          <Text style={styles.balanceValue}>
-            {formatBalance(balance)} {symbol}
-          </Text>
-          {usdValue > 0 && (
-            <Text style={styles.usdValue}>{formatUsd(usdValue)}</Text>
-          )}
-          {priceUsd > 0 && (
-            <Text style={styles.priceLabel}>
-              1 {symbol} = {formatUsd(priceUsd)}
+        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+          <VelaCard elevated style={styles.balanceCard}>
+            <Text style={styles.balanceLabel}>Balance</Text>
+            <Text style={styles.balanceValue} adjustsFontSizeToFit numberOfLines={1}>
+              {formatBalance(balance)} {symbol}
             </Text>
-          )}
-        </VelaCard>
+            {usdValue > 0 && (
+              <Text style={styles.usdValue}>{formatUsd(usdValue)}</Text>
+            )}
+            {priceUsd > 0 && (
+              <Text style={styles.priceLabel}>
+                1 {symbol} = {formatUsd(priceUsd)}
+              </Text>
+            )}
+          </VelaCard>
+        </Animated.View>
 
         {/* Action buttons */}
-        <View style={styles.buttonRow}>
+        <Animated.View style={styles.buttonRow} entering={FadeInDown.delay(200).duration(400)}>
           <VelaButton title="Send" onPress={handleSend} style={styles.actionBtn} />
           <VelaButton title="Receive" onPress={handleReceive} variant="secondary" style={styles.actionBtn} />
-        </View>
+        </Animated.View>
 
         {/* Token info */}
-        <VelaCard style={styles.infoCard}>
-          <InfoRow label="Type" value={isNative ? 'Native' : 'ERC-20'} />
-          <View style={styles.separator} />
-          <InfoRow label="Network" value={chain} />
-          <View style={styles.separator} />
-          <InfoRow label="Decimals" value={String(decimals)} />
-          {contractAddress && (
-            <>
-              <View style={styles.separator} />
-              <TouchableOpacity onPress={copyContract} activeOpacity={0.7}>
-                <InfoRow label="Contract" value={shortAddr(contractAddress)} copyable />
-              </TouchableOpacity>
-            </>
-          )}
-        </VelaCard>
+        <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+          <VelaCard style={styles.infoCard}>
+            <InfoRow label="Type" value={isNative ? 'Native' : 'ERC-20'} />
+            <View style={styles.separator} />
+            <InfoRow label="Network" value={chain} />
+            <View style={styles.separator} />
+            <InfoRow label="Decimals" value={String(decimals)} />
+            {contractAddress && (
+              <>
+                <View style={styles.separator} />
+                <Pressable onPress={copyContract} style={styles.contractRow}>
+                  <Text style={styles.infoLabel}>Contract</Text>
+                  <View style={styles.infoValueRow}>
+                    <Text style={styles.infoValue}>{shortAddr(contractAddress)}</Text>
+                    <Copy size={12} color={color.accent.base} />
+                  </View>
+                </Pressable>
+              </>
+            )}
+          </VelaCard>
+        </Animated.View>
       </ScrollView>
     </ScreenContainer>
   );
 }
 
-function InfoRow({ label, value, copyable }: { label: string; value: string; copyable?: boolean }) {
+function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{label}</Text>
-      <View style={styles.infoValueRow}>
-        <Text style={styles.infoValue}>{value}</Text>
-        {copyable && <Text style={styles.copyIcon}>⧉</Text>}
-      </View>
+      <Text style={styles.infoValue}>{value}</Text>
     </View>
   );
 }
@@ -150,63 +158,87 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: space.lg,
   },
   backBtn: {
-    fontSize: text.lg, fontWeight: weight.semibold,
+    fontSize: text.lg,
+    fontWeight: weight.semibold,
     color: color.accent.base,
-    width: 50,
+    minWidth: 50,
   },
   navTitle: {
-    fontSize: text.xl, fontWeight: weight.semibold,
+    fontSize: text.xl,
+    fontWeight: weight.bold,
     color: color.fg.base,
   },
+  navSpacer: { minWidth: 50 },
+
+  // Token header
   tokenHeader: {
     alignItems: 'center',
-    paddingVertical: 24,
-    gap: 8,
+    paddingVertical: space['3xl'],
+    gap: space.md,
   },
   tokenName: {
-    fontSize: text['2xl'], fontWeight: weight.bold,
+    fontSize: text['2xl'],
+    fontWeight: weight.bold,
     color: color.fg.base,
   },
-  chainLabel: {
-    fontSize: text.base, fontWeight: weight.regular,
+  chainBadge: {
+    backgroundColor: color.bg.sunken,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    borderRadius: radius.full,
+  },
+  chainBadgeText: {
+    fontSize: text.sm,
+    fontWeight: weight.medium,
     color: color.fg.muted,
   },
+
+  // Balance card
   balanceCard: {
-    padding: space['2xl'],
+    padding: space['3xl'],
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 20,
+    gap: space.md,
+    marginBottom: space['2xl'],
   },
   balanceLabel: {
-    fontSize: text.base, fontWeight: weight.semibold,
+    fontSize: text.sm,
+    fontWeight: weight.semibold,
     color: color.fg.muted,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 1,
   },
   balanceValue: {
-    fontSize: text['4xl'], fontWeight: weight.bold,
+    fontSize: text['4xl'],
+    fontWeight: weight.bold,
+    fontFamily: font.display,
     color: color.fg.base,
   },
   usdValue: {
-    fontSize: text.xl, fontWeight: weight.semibold,
+    fontSize: text.xl,
+    fontWeight: weight.semibold,
     color: color.fg.muted,
   },
   priceLabel: {
-    fontSize: text.base, fontWeight: weight.regular,
+    fontSize: text.sm,
+    fontWeight: weight.regular,
     color: color.fg.subtle,
-    marginTop: 4,
+    marginTop: space.xs,
   },
+
+  // Buttons
   buttonRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 24,
+    gap: space.lg,
+    marginBottom: space['3xl'],
   },
   actionBtn: {
     flex: 1,
   },
+
+  // Info card
   infoCard: {
     padding: space['2xl'],
   },
@@ -214,24 +246,28 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: space.lg,
+  },
+  contractRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: space.lg,
   },
   infoLabel: {
-    fontSize: text.base, fontWeight: weight.regular,
+    fontSize: text.base,
+    fontWeight: weight.regular,
     color: color.fg.muted,
   },
   infoValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: space.sm,
   },
   infoValue: {
-    fontSize: text.base, fontWeight: weight.semibold,
-    color: color.fg.base,
-  },
-  copyIcon: {
     fontSize: text.base,
-    color: color.accent.base,
+    fontWeight: weight.semibold,
+    color: color.fg.base,
   },
   separator: {
     height: 1,

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
+import { color, text, weight, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { saveCustomToken } from '@/services/storage';
 import type { CustomToken } from '@/models/types';
+import { Check } from 'lucide-react-native';
 
 // Minimal ABI-encoded function selectors for ERC-20 metadata
 const NAME_SELECTOR = '0x06fdde03';
@@ -15,7 +17,6 @@ const SYMBOL_SELECTOR = '0x95d89b41';
 const DECIMALS_SELECTOR = '0x313ce567';
 
 function hexToUtf8(hex: string): string {
-  // ABI-encoded string: skip offset (32 bytes) + length (32 bytes), then read data
   const stripped = hex.startsWith('0x') ? hex.slice(2) : hex;
   if (stripped.length < 128) return '';
   const lengthHex = stripped.slice(64, 128);
@@ -124,11 +125,11 @@ export default function AddTokenScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         {/* Nav bar */}
         <View style={styles.navBar}>
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
+          <Pressable onPress={() => router.back()} hitSlop={8}>
             <Text style={styles.backBtn}>Back</Text>
-          </TouchableOpacity>
+          </Pressable>
           <Text style={styles.navTitle}>Add Token</Text>
-          <View style={{ width: 50 }} />
+          <View style={styles.navSpacer} />
         </View>
 
         {/* Chain selector */}
@@ -138,14 +139,13 @@ export default function AddTokenScreen() {
             {DEFAULT_NETWORKS.map((network) => {
               const isSelected = network.chainId === selectedChainId;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={network.id}
                   style={[styles.chainChip, isSelected && styles.chainChipSelected]}
                   onPress={() => {
                     setSelectedChainId(network.chainId);
                     setTokenMeta(null);
                   }}
-                  activeOpacity={0.7}
                 >
                   <View style={[styles.chainDot, { backgroundColor: network.iconColor }]} />
                   <Text
@@ -153,7 +153,7 @@ export default function AddTokenScreen() {
                   >
                     {network.displayName}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </ScrollView>
@@ -166,8 +166,8 @@ export default function AddTokenScreen() {
           placeholder="0x..."
           placeholderTextColor={color.fg.subtle}
           value={contractAddress}
-          onChangeText={(text) => {
-            setContractAddress(text);
+          onChangeText={(t) => {
+            setContractAddress(t);
             setTokenMeta(null);
           }}
           autoCapitalize="none"
@@ -186,36 +186,41 @@ export default function AddTokenScreen() {
 
         {/* Token metadata result */}
         {tokenMeta && (
-          <VelaCard style={styles.resultCard}>
-            <Text style={styles.resultTitle}>Token Found</Text>
-            <View style={styles.resultRow}>
-              <Text style={styles.resultLabel}>Name</Text>
-              <Text style={styles.resultValue}>{tokenMeta.name}</Text>
-            </View>
-            <View style={styles.separator} />
-            <View style={styles.resultRow}>
-              <Text style={styles.resultLabel}>Symbol</Text>
-              <Text style={styles.resultValue}>{tokenMeta.symbol}</Text>
-            </View>
-            <View style={styles.separator} />
-            <View style={styles.resultRow}>
-              <Text style={styles.resultLabel}>Decimals</Text>
-              <Text style={styles.resultValue}>{tokenMeta.decimals}</Text>
-            </View>
-            <View style={styles.separator} />
-            <View style={styles.resultRow}>
-              <Text style={styles.resultLabel}>Network</Text>
-              <Text style={styles.resultValue}>{selectedNetwork?.displayName}</Text>
-            </View>
+          <Animated.View entering={FadeInDown.duration(300)}>
+            <VelaCard elevated style={styles.resultCard}>
+              <View style={styles.resultHeader}>
+                <Check size={20} color={color.success.base} strokeWidth={2.5} />
+                <Text style={styles.resultTitle}>Token Found</Text>
+              </View>
+              <View style={styles.resultRow}>
+                <Text style={styles.resultLabel}>Name</Text>
+                <Text style={styles.resultValue}>{tokenMeta.name}</Text>
+              </View>
+              <View style={styles.separator} />
+              <View style={styles.resultRow}>
+                <Text style={styles.resultLabel}>Symbol</Text>
+                <Text style={styles.resultValue}>{tokenMeta.symbol}</Text>
+              </View>
+              <View style={styles.separator} />
+              <View style={styles.resultRow}>
+                <Text style={styles.resultLabel}>Decimals</Text>
+                <Text style={styles.resultValue}>{tokenMeta.decimals}</Text>
+              </View>
+              <View style={styles.separator} />
+              <View style={styles.resultRow}>
+                <Text style={styles.resultLabel}>Network</Text>
+                <Text style={styles.resultValue}>{selectedNetwork?.displayName}</Text>
+              </View>
 
-            <VelaButton
-              title="Add to Wallet"
-              onPress={handleSave}
-              variant="accent"
-              loading={saving}
-              style={styles.saveBtn}
-            />
-          </VelaCard>
+              <VelaButton
+                title="Add to Wallet"
+                onPress={handleSave}
+                variant="accent"
+                loading={saving}
+                style={styles.saveBtn}
+              />
+            </VelaCard>
+          </Animated.View>
         )}
       </ScrollView>
     </ScreenContainer>
@@ -230,40 +235,44 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
-    marginBottom: 8,
+    paddingVertical: space.lg,
+    marginBottom: space.md,
   },
   backBtn: {
-    fontSize: text.lg, fontWeight: weight.semibold,
+    fontSize: text.lg,
+    fontWeight: weight.semibold,
     color: color.accent.base,
-    width: 50,
+    minWidth: 50,
   },
   navTitle: {
-    fontSize: text.xl, fontWeight: weight.semibold,
+    fontSize: text.xl,
+    fontWeight: weight.bold,
     color: color.fg.base,
   },
+  navSpacer: { minWidth: 50 },
   fieldLabel: {
-    fontSize: text.base, fontWeight: weight.semibold,
+    fontSize: text.sm,
+    fontWeight: weight.semibold,
     color: color.fg.muted,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-    marginTop: 20,
+    letterSpacing: 0.8,
+    marginBottom: space.md,
+    marginTop: space['2xl'],
   },
   chainCard: {
-    padding: 4,
+    padding: space.sm,
   },
   chainScroll: {
-    gap: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    gap: space.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
   },
   chainChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: space.sm,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.lg,
     borderRadius: radius.full,
     backgroundColor: color.bg.sunken,
   },
@@ -276,7 +285,8 @@ const styles = createStyles(() => ({
     borderRadius: 4,
   },
   chainChipText: {
-    fontSize: text.base, fontWeight: weight.semibold,
+    fontSize: text.sm,
+    fontWeight: weight.semibold,
     color: color.fg.base,
   },
   chainChipTextSelected: {
@@ -284,36 +294,48 @@ const styles = createStyles(() => ({
   },
   input: {
     backgroundColor: color.bg.sunken,
-    borderRadius: radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: text.base, fontWeight: weight.medium, fontFamily: font.mono,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.xl,
+    fontSize: text.base,
+    fontWeight: weight.medium,
+    fontFamily: font.mono,
     color: color.fg.base,
+    borderWidth: 1,
+    borderColor: color.border.base,
   },
   fetchBtn: {
-    marginTop: 16,
+    marginTop: space.xl,
   },
   resultCard: {
     padding: space['2xl'],
-    marginTop: 24,
+    marginTop: space['3xl'],
+  },
+  resultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginBottom: space.xl,
   },
   resultTitle: {
-    fontSize: text.xl, fontWeight: weight.semibold,
+    fontSize: text.lg,
+    fontWeight: weight.bold,
     color: color.success.base,
-    marginBottom: 16,
   },
   resultRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: space.lg,
   },
   resultLabel: {
-    fontSize: text.base, fontWeight: weight.regular,
+    fontSize: text.base,
+    fontWeight: weight.regular,
     color: color.fg.muted,
   },
   resultValue: {
-    fontSize: text.base, fontWeight: weight.semibold,
+    fontSize: text.base,
+    fontWeight: weight.semibold,
     color: color.fg.base,
   },
   separator: {
@@ -321,6 +343,6 @@ const styles = createStyles(() => ({
     backgroundColor: color.border.base,
   },
   saveBtn: {
-    marginTop: 20,
+    marginTop: space['2xl'],
   },
 }));

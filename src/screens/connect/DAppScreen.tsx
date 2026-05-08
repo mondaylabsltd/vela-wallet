@@ -8,24 +8,58 @@
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View, Text, TextInput, ScrollView, TouchableOpacity,
+  View, Text, ScrollView, Pressable,
   Alert, Platform,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  FadeIn,
+  FadeInDown,
+} from 'react-native-reanimated';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { AppModal } from '@/components/ui/AppModal';
-import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
+import { color, text, weight, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { shortAddr, type BLEIncomingRequest } from '@/models/types';
 import { PasskeyErrorCode } from '@/modules/passkey';
 import { handleDAppRequest, isSigningMethod, handleReadOnlyRPC } from '@/hooks/use-dapp-signing';
-import { Bluetooth, Wifi, UserCircle, Check, ChevronRight } from 'lucide-react-native';
+import {
+  Bluetooth, Wifi, ChevronRight, Check,
+  Radio, Unplug, Shield, AlertTriangle, Download,
+  Send, FileSignature, FileText,
+} from 'lucide-react-native';
 
 // BLE module — only imported on native
 const BLE = Platform.OS !== 'web' ? require('@/modules/ble') : null;
 
 type ConnectState = 'idle' | 'connecting' | 'advertising' | 'connected' | 'not-installed';
+
+// Pulsing dot for BLE advertising state
+function PulsingBluetooth() {
+  const opacity = useSharedValue(1);
+  useEffect(() => {
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.3, { duration: 800 }),
+        withTiming(1, { duration: 800 }),
+      ),
+      -1,
+      false,
+    );
+  }, [opacity]);
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return (
+    <Animated.View style={animatedStyle}>
+      <Bluetooth size={18} color={color.info.base} strokeWidth={2.5} />
+    </Animated.View>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Main screen
@@ -55,8 +89,8 @@ export default function DAppScreen() {
   useEffect(() => { accountsRef.current = state.accounts; }, [state.accounts]);
 
   // --- Transport-specific refs ---
-  const wsRef = useRef<WebSocket | null>(null); // web
-  const bleUnsubsRef = useRef<(() => void)[]>([]); // native
+  const wsRef = useRef<WebSocket | null>(null);
+  const bleUnsubsRef = useRef<(() => void)[]>([]);
 
   // --- Send response (works for both transports) ---
   const sendResponse = useCallback((id: string, result?: any, error?: { code: number; message: string }) => {
@@ -77,13 +111,11 @@ export default function DAppScreen() {
     const addr = addressRef.current;
     const cid = chainIdRef.current;
 
-    // Signing → show approval UI
     if (isSigningMethod(method)) {
       setIncomingRequest({ id, method, params, origin });
       return;
     }
 
-    // Chain switch
     if (method === 'wallet_switchEthereumChain') {
       const cp = params?.[0] as { chainId?: string } | undefined;
       if (cp?.chainId) {
@@ -94,12 +126,9 @@ export default function DAppScreen() {
       return;
     }
 
-    // Auto-reply
     handleReadOnlyRPC(method, params, addr, cid).then(res => {
       if (res.handled) sendResponse(id, res.result);
-      else {
-        sendResponse(id, undefined, { code: -32603, message: `RPC failed: ${method}` });
-      }
+      else sendResponse(id, undefined, { code: -32603, message: `RPC failed: ${method}` });
     });
   }, [sendResponse]);
 
@@ -127,7 +156,7 @@ export default function DAppScreen() {
     setIncomingRequest(null);
   }, [sendResponse]);
 
-  // --- Push wallet info (both transports) ---
+  // --- Push wallet info ---
   const pushWalletInfo = useCallback(() => {
     const info = {
       address: addressRef.current,
@@ -143,14 +172,10 @@ export default function DAppScreen() {
     }
   }, []);
 
-  // Push wallet info when account/chain changes (NOT on connect — native layer handles that)
   const wasConnected = useRef(false);
   useEffect(() => {
     if (connectState === 'connected') {
-      if (wasConnected.current) {
-        // Already connected — push updated info
-        pushWalletInfo();
-      }
+      if (wasConnected.current) pushWalletInfo();
       wasConnected.current = true;
     } else {
       wasConnected.current = false;
@@ -228,7 +253,6 @@ export default function DAppScreen() {
     setIncomingRequest(null);
   }, []);
 
-  // Disconnect (both)
   const disconnect = useCallback(() => {
     if (Platform.OS === 'web') { wsRef.current?.close(); wsRef.current = null; }
     else stopBLE();
@@ -236,7 +260,6 @@ export default function DAppScreen() {
     setIncomingRequest(null);
   }, [stopBLE]);
 
-  // Cleanup
   useEffect(() => () => { wsRef.current?.close(); }, []);
 
   // =========================================================================
@@ -246,7 +269,10 @@ export default function DAppScreen() {
   if (!state.hasWallet) {
     return (
       <ScreenContainer>
-        <View style={styles.centered}><Text style={styles.emptyText}>Create a wallet first.</Text></View>
+        <View style={styles.centered}>
+          <Shield size={32} color={color.fg.subtle} />
+          <Text style={styles.emptyText}>Create a wallet first</Text>
+        </View>
       </ScreenContainer>
     );
   }
@@ -254,112 +280,144 @@ export default function DAppScreen() {
   const isWeb = Platform.OS === 'web';
   const isNative = !isWeb;
   const isAdvertising = connectState === 'advertising';
+  const ConnectIcon = isWeb ? Wifi : Bluetooth;
 
   return (
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.pageTitle}>dApps</Text>
+        <Animated.View entering={FadeIn.duration(300)}>
+          <Text style={styles.pageTitle}>dApps</Text>
+        </Animated.View>
 
         {/* Wallet card */}
-        <TouchableOpacity activeOpacity={0.7} onPress={() => setShowAccountPicker(true)}>
-          <VelaCard style={styles.walletCard}>
-            <View style={styles.walletRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.walletName}>{accountName}</Text>
-                <Text style={styles.walletAddr}>{shortAddress(address)}</Text>
+        <Animated.View entering={FadeInDown.delay(50).duration(300)}>
+          <Pressable onPress={() => setShowAccountPicker(true)}>
+            <VelaCard style={styles.walletCard}>
+              <View style={styles.walletRow}>
+                <View style={styles.walletAvatar}>
+                  <Text style={styles.walletAvatarText}>
+                    {(accountName[0] ?? 'V').toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.walletInfo}>
+                  <Text style={styles.walletName}>{accountName}</Text>
+                  <Text style={styles.walletAddr}>{shortAddress(address)}</Text>
+                </View>
+                <ChevronRight size={16} color={color.fg.subtle} />
               </View>
-              <ChevronRight size={18} color={color.fg.subtle} />
-            </View>
-          </VelaCard>
-        </TouchableOpacity>
+            </VelaCard>
+          </Pressable>
+        </Animated.View>
 
-        {/* Connection section — platform specific */}
+        {/* Connection section */}
         {connectState === 'idle' && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              {isWeb ? 'Connect to dApp Browser' : 'Connect via Bluetooth'}
-            </Text>
-            <Text style={styles.hint}>
-              {isWeb
-                ? 'Connect to the local dApp Browser to interact with dApps.'
-                : 'Start advertising to pair with the Vela Connect browser extension.'}
-            </Text>
+          <Animated.View style={styles.section} entering={FadeInDown.delay(100).duration(300)}>
+            <View style={styles.connectPrompt}>
+              <View style={styles.connectIconWrap}>
+                <ConnectIcon size={24} color={color.info.base} />
+              </View>
+              <Text style={styles.sectionTitle}>
+                {isWeb ? 'Connect to dApp Browser' : 'Connect via Bluetooth'}
+              </Text>
+              <Text style={styles.hint}>
+                {isWeb
+                  ? 'Connect to the local dApp Browser to interact with dApps.'
+                  : 'Start advertising to pair with the Vela Connect browser extension.'}
+              </Text>
+            </View>
             <VelaButton title="Connect" onPress={isWeb ? connectWS : startBLE} />
-          </View>
+          </Animated.View>
         )}
 
         {connectState === 'connecting' && (
-          <View style={styles.centered}><Text style={styles.statusText}>Connecting...</Text></View>
-        )}
-
-        {isAdvertising && isNative && (
-          <View style={styles.section}>
-            <VelaCard style={styles.statusCard}>
-              <View style={styles.pulseRow}>
-                <Bluetooth size={18} color={color.info.base} />
-                <Text style={styles.statusText}>Waiting for connection...</Text>
-              </View>
-            </VelaCard>
-            <VelaButton title="Stop" onPress={stopBLE} variant="secondary" style={{ marginTop: 12 }} />
+          <View style={styles.centered}>
+            <Radio size={24} color={color.info.base} />
+            <Text style={styles.statusText}>Connecting...</Text>
           </View>
         )}
 
+        {isAdvertising && isNative && (
+          <Animated.View style={styles.section} entering={FadeIn.duration(300)}>
+            <VelaCard style={styles.statusCard}>
+              <View style={styles.pulseRow}>
+                <PulsingBluetooth />
+                <Text style={styles.statusText}>Waiting for connection...</Text>
+              </View>
+            </VelaCard>
+            <VelaButton title="Stop" onPress={stopBLE} variant="secondary" style={styles.sectionBtn} />
+          </Animated.View>
+        )}
+
         {connectState === 'not-installed' && isWeb && (
-          <VelaCard style={styles.notInstalledCard}>
-            <Text style={styles.notInstalledTitle}>dApp Browser not found</Text>
-            <Text style={styles.hint}>Install the dApp Browser to connect.</Text>
-            <VelaButton title="Download" onPress={() => {
-              if (Platform.OS === 'web') window.open('https://getvela.app/dpp-browser', '_blank');
-            }} variant="accent" style={{ marginTop: 12 }} />
-            <VelaButton title="Try Again" onPress={connectWS} variant="secondary" style={{ marginTop: 8 }} />
-          </VelaCard>
+          <Animated.View entering={FadeInDown.duration(300)}>
+            <VelaCard style={styles.notInstalledCard}>
+              <AlertTriangle size={24} color={color.fg.muted} />
+              <Text style={styles.notInstalledTitle}>dApp Browser not found</Text>
+              <Text style={styles.hint}>Install the dApp Browser to connect.</Text>
+              <VelaButton title="Download" onPress={() => {
+                if (Platform.OS === 'web') window.open('https://getvela.app/dpp-browser', '_blank');
+              }} variant="accent" style={styles.sectionBtn} />
+              <VelaButton title="Try Again" onPress={connectWS} variant="secondary" style={styles.retryBtn} />
+            </VelaCard>
+          </Animated.View>
         )}
 
         {/* Connected state */}
         {connectState === 'connected' && !incomingRequest && (
-          <View style={styles.section}>
+          <Animated.View style={styles.section} entering={FadeIn.duration(300)}>
             <VelaCard style={styles.connectedCard}>
               <View style={styles.connectedRow}>
-                <View style={styles.dot} />
+                <View style={styles.connectedDot} />
                 <Text style={styles.connectedText}>Connected to {peerName}</Text>
               </View>
               <Text style={styles.connectedHint}>
                 Signing requests from dApps will appear here.
               </Text>
             </VelaCard>
-            <VelaButton title="Disconnect" onPress={disconnect} variant="secondary" style={{ marginTop: 12 }} />
-          </View>
+            <VelaButton title="Disconnect" onPress={disconnect} variant="secondary" style={styles.sectionBtn} />
+          </Animated.View>
         )}
 
         {/* Signing request */}
         {incomingRequest && (
-          <VelaCard style={styles.requestCard}>
-            <Text style={styles.requestOrigin}>{incomingRequest.origin || peerName}</Text>
-            <Text style={styles.requestMethod}>{methodLabel(incomingRequest.method)}</Text>
-
-            {incomingRequest.method === 'eth_sendTransaction' && incomingRequest.params?.[0] && (
-              <View style={styles.txDetails}>
-                <DetailRow label="To" value={shortAddr(incomingRequest.params[0].to ?? '')} />
-                <DetailRow label="Value" value={incomingRequest.params[0].value ?? '0x0'} />
+          <Animated.View entering={FadeInDown.duration(300)}>
+            <VelaCard elevated style={styles.requestCard}>
+              <View style={styles.requestHeader}>
+                {methodIcon(incomingRequest.method)}
+                <View style={styles.requestHeaderText}>
+                  <Text style={styles.requestMethod}>{methodLabel(incomingRequest.method)}</Text>
+                  <Text style={styles.requestOrigin}>{incomingRequest.origin || peerName}</Text>
+                </View>
               </View>
-            )}
 
-            {signError && <Text style={styles.errorText}>{signError}</Text>}
+              {incomingRequest.method === 'eth_sendTransaction' && incomingRequest.params?.[0] && (
+                <View style={styles.txDetails}>
+                  <DetailRow label="To" value={shortAddr(incomingRequest.params[0].to ?? '')} />
+                  <DetailRow label="Value" value={incomingRequest.params[0].value ?? '0x0'} />
+                </View>
+              )}
 
-            <View style={styles.buttonRow}>
-              <VelaButton
-                title={isSigning ? 'Signing...' : 'Approve'}
-                onPress={() => approveRequest(incomingRequest)}
-                variant="accent" loading={isSigning} style={{ flex: 1 }}
-              />
-              <View style={{ width: 12 }} />
-              <VelaButton
-                title="Reject"
-                onPress={() => rejectRequest(incomingRequest)}
-                variant="secondary" disabled={isSigning} style={{ flex: 1 }}
-              />
-            </View>
-          </VelaCard>
+              {signError && (
+                <View style={styles.errorRow}>
+                  <AlertTriangle size={14} color={color.accent.base} />
+                  <Text style={styles.errorText}>{signError}</Text>
+                </View>
+              )}
+
+              <View style={styles.buttonRow}>
+                <VelaButton
+                  title={isSigning ? 'Signing...' : 'Approve'}
+                  onPress={() => approveRequest(incomingRequest)}
+                  variant="accent" loading={isSigning} style={styles.buttonFlex}
+                />
+                <VelaButton
+                  title="Reject"
+                  onPress={() => rejectRequest(incomingRequest)}
+                  variant="secondary" disabled={isSigning} style={styles.buttonFlex}
+                />
+              </View>
+            </VelaCard>
+          </Animated.View>
         )}
       </ScrollView>
 
@@ -368,26 +426,25 @@ export default function DAppScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Accounts</Text>
-            <TouchableOpacity onPress={() => setShowAccountPicker(false)}>
+            <Pressable onPress={() => setShowAccountPicker(false)} hitSlop={8}>
               <Text style={styles.modalClose}>Done</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
           <ScrollView style={styles.modalScroll}>
             {state.accounts.map((account, index) => {
               const isActive = account.id === activeAccount?.id;
               return (
-                <TouchableOpacity
+                <Pressable
                   key={account.id}
                   style={[styles.accountItem, isActive && styles.accountItemActive]}
                   onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); setShowAccountPicker(false); }}
-                  activeOpacity={0.7}
                 >
-                  <View>
+                  <View style={styles.accountItemInfo}>
                     <Text style={styles.accountItemName}>{account.name}</Text>
                     <Text style={styles.accountItemAddr}>{shortAddress(account.address)}</Text>
                   </View>
-                  {isActive && <Check size={18} color={color.accent.base} />}
-                </TouchableOpacity>
+                  {isActive && <Check size={18} color={color.accent.base} strokeWidth={2.5} />}
+                </Pressable>
               );
             })}
           </ScrollView>
@@ -417,60 +474,106 @@ function methodLabel(m: string): string {
   return m;
 }
 
+function methodIcon(m: string): React.ReactNode {
+  const size = 20;
+  const strokeWidth = 2;
+  if (m === 'eth_sendTransaction') return <Send size={size} color={color.accent.base} strokeWidth={strokeWidth} />;
+  if (m === 'personal_sign') return <FileSignature size={size} color={color.info.base} strokeWidth={strokeWidth} />;
+  if (m.includes('signTypedData')) return <FileText size={size} color={color.info.base} strokeWidth={strokeWidth} />;
+  return <Shield size={size} color={color.fg.muted} strokeWidth={strokeWidth} />;
+}
+
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
 
 const styles = createStyles(() => ({
-  scrollContent: { paddingBottom: 40 },
-  pageTitle: { fontSize: text['4xl'], fontWeight: weight.bold, color: color.fg.base, marginTop: 16, marginBottom: 20 },
+  scrollContent: { paddingBottom: space['5xl'] },
+  pageTitle: {
+    fontSize: text['2xl'],
+    fontWeight: weight.bold,
+    color: color.fg.base,
+    marginTop: space.xl,
+    marginBottom: space['2xl'],
+  },
 
   // Wallet card
-  walletCard: { padding: space['2xl'], marginBottom: 20 },
-  walletRow: { flexDirection: 'row', alignItems: 'center' },
+  walletCard: { padding: space['2xl'], marginBottom: space['2xl'] },
+  walletRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  walletAvatar: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: color.accent.soft,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  walletAvatarText: { fontSize: text.lg, fontWeight: weight.bold, color: color.accent.base },
+  walletInfo: { flex: 1, gap: 2 },
   walletName: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
-  walletAddr: { fontSize: text.base, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle, marginTop: 2 },
+  walletAddr: { fontSize: text.sm, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle },
 
   // Sections
-  section: { marginBottom: 16 },
-  sectionTitle: { fontSize: text.xl, fontWeight: weight.semibold, color: color.fg.base, marginBottom: 6 },
-  hint: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted, lineHeight: 20, marginBottom: 14 },
-  centered: { alignItems: 'center', paddingVertical: 40 },
+  section: { marginBottom: space.xl },
+  sectionTitle: { fontSize: text.xl, fontWeight: weight.bold, color: color.fg.base, marginBottom: space.sm },
+  hint: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted, lineHeight: 20, marginBottom: space.xl },
+  sectionBtn: { marginTop: space.lg },
+  retryBtn: { marginTop: space.md },
+  centered: { alignItems: 'center', paddingVertical: space['5xl'], gap: space.lg },
   emptyText: { fontSize: text.lg, fontWeight: weight.regular, color: color.fg.muted },
   statusText: { fontSize: text.lg, fontWeight: weight.semibold, color: color.info.base },
   statusCard: { padding: space['2xl'] },
-  pulseRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pulseRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+
+  // Connect prompt
+  connectPrompt: { alignItems: 'center', paddingVertical: space['2xl'] },
+  connectIconWrap: {
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: color.info.soft,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: space.xl,
+  },
 
   // Connected
-  connectedCard: { padding: space['2xl'], gap: 6 },
-  connectedRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: color.success.base },
+  connectedCard: { padding: space['2xl'], gap: space.md },
+  connectedRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  connectedDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: color.success.base },
   connectedText: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
   connectedHint: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted },
 
   // Not installed
-  notInstalledCard: { padding: space['2xl'], gap: 4 },
-  notInstalledTitle: { fontSize: text.xl, fontWeight: weight.semibold, color: color.fg.base },
+  notInstalledCard: { padding: space['2xl'], alignItems: 'center', gap: space.md },
+  notInstalledTitle: { fontSize: text.xl, fontWeight: weight.bold, color: color.fg.base },
 
   // Request
-  requestCard: { padding: space['2xl'], gap: 12 },
-  requestOrigin: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted },
-  requestMethod: { fontSize: text['2xl'], fontWeight: weight.bold, color: color.fg.base },
-  txDetails: { gap: 8, paddingVertical: 4 },
+  requestCard: { padding: space['2xl'], gap: space.xl },
+  requestHeader: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  requestHeaderText: { flex: 1, gap: 2 },
+  requestOrigin: { fontSize: text.sm, fontWeight: weight.regular, color: color.fg.muted },
+  requestMethod: { fontSize: text.xl, fontWeight: weight.bold, color: color.fg.base },
+  txDetails: {
+    gap: space.md, paddingVertical: space.lg,
+    borderTopWidth: 1, borderBottomWidth: 1, borderColor: color.border.base,
+  },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between' },
   detailLabel: { fontSize: text.base, fontWeight: weight.regular, color: color.fg.muted },
   detailValue: { fontSize: text.base, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.base, maxWidth: '60%' as any },
-  errorText: { fontSize: text.base, fontWeight: weight.regular, color: color.accent.base },
-  buttonRow: { flexDirection: 'row', marginTop: 8 },
+  errorRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  errorText: { fontSize: text.base, fontWeight: weight.regular, color: color.accent.base, flex: 1 },
+  buttonRow: { flexDirection: 'row', gap: space.lg },
+  buttonFlex: { flex: 1 },
 
   // Modal
-  modalContainer: { flex: 1, padding: space['2xl'] },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: text.xl, fontWeight: weight.semibold, color: color.fg.base },
+  modalContainer: { flex: 1, padding: space['3xl'] },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space['2xl'] },
+  modalTitle: { fontSize: text.xl, fontWeight: weight.bold, color: color.fg.base },
   modalClose: { fontSize: text.lg, fontWeight: weight.semibold, color: color.accent.base },
   modalScroll: { flex: 1 },
-  accountItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderRadius: radius.md, marginBottom: 8, borderWidth: 1, borderColor: color.border.base },
+  accountItem: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: space.xl, borderRadius: radius.xl, marginBottom: space.md,
+    borderWidth: 1, borderColor: color.border.base,
+    ...shadow.sm,
+  },
   accountItemActive: { borderColor: color.accent.base, backgroundColor: color.accent.soft },
+  accountItemInfo: { gap: 2 },
   accountItemName: { fontSize: text.lg, fontWeight: weight.semibold, color: color.fg.base },
-  accountItemAddr: { fontSize: text.sm, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle, marginTop: 2 },
+  accountItemAddr: { fontSize: text.sm, fontWeight: weight.medium, fontFamily: font.mono, color: color.fg.subtle },
 }));

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { color, text, weight, radius, createStyles } from '@/constants/theme';
+import { color, text, weight, space, radius, createStyles } from '@/constants/theme';
+import { X, SwitchCamera, Camera } from 'lucide-react-native';
 
 interface Props {
   visible: boolean;
@@ -22,12 +23,10 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
     // Parse ethereum: URI scheme if present
     let address = data;
     if (data.startsWith('ethereum:')) {
-      // ethereum:0x1234...?value=1000 or ethereum:0x1234...@1
       address = data.replace('ethereum:', '').split('?')[0].split('@')[0];
     }
 
     onScan(address);
-    // Reset after a short delay so the scanner can be reused
     setTimeout(() => setScanned(false), 2000);
   }
 
@@ -37,27 +36,28 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
     <AppModal visible={visible}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
-            <Text style={styles.closeButton}>Close</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Scan QR Code</Text>
-          <TouchableOpacity onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')} activeOpacity={0.7}>
-            <Text style={styles.flipButton}>{facing === 'back' ? 'Front' : 'Back'}</Text>
-          </TouchableOpacity>
+          <Pressable onPress={onClose} hitSlop={8} style={styles.headerBtn}>
+            <X size={22} color={color.accent.base} strokeWidth={2.5} />
+          </Pressable>
+          <Text style={styles.title}>Scan QR</Text>
+          <Pressable
+            onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}
+            hitSlop={8}
+            style={styles.headerBtn}
+          >
+            <SwitchCamera size={22} color={color.accent.base} strokeWidth={2} />
+          </Pressable>
         </View>
 
         {!permission?.granted ? (
           <View style={styles.permissionContainer}>
+            <Camera size={40} color={color.fg.subtle} />
             <Text style={styles.permissionText}>
               Camera access is needed to scan QR codes.
             </Text>
-            <TouchableOpacity
-              style={styles.permissionButton}
-              onPress={requestPermission}
-              activeOpacity={0.7}
-            >
+            <Pressable style={styles.permissionButton} onPress={requestPermission}>
               <Text style={styles.permissionButtonText}>Grant Permission</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
         ) : (
           <View style={styles.cameraContainer}>
@@ -72,7 +72,13 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
               <View style={styles.overlayTop} />
               <View style={styles.overlayMiddle}>
                 <View style={styles.overlaySide} />
-                <View style={styles.scanFrame} />
+                <View style={styles.scanFrame}>
+                  {/* Corner accents */}
+                  <View style={[styles.corner, styles.cornerTL]} />
+                  <View style={[styles.corner, styles.cornerTR]} />
+                  <View style={[styles.corner, styles.cornerBL]} />
+                  <View style={[styles.corner, styles.cornerBR]} />
+                </View>
                 <View style={styles.overlaySide} />
               </View>
               <View style={styles.overlayBottom} />
@@ -89,6 +95,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
 }
 
 const FRAME_SIZE = 250;
+const CORNER_SIZE = 24;
 
 const styles = createStyles(() => ({
   container: {
@@ -99,45 +106,44 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: space['2xl'],
     paddingTop: 60,
-    paddingBottom: 16,
+    paddingBottom: space.xl,
   },
-  closeButton: {
-    fontSize: text.lg, fontWeight: weight.semibold,
-    color: color.accent.base,
-    width: 60,
+  headerBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
-    fontSize: text.xl, fontWeight: weight.semibold,
+    fontSize: text.xl,
+    fontWeight: weight.bold,
     color: color.fg.inverse,
-  },
-  flipButton: {
-    fontSize: text.lg, fontWeight: weight.semibold,
-    color: color.accent.base,
-    width: 60,
-    textAlign: 'right',
   },
   permissionContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
-    gap: 20,
+    paddingHorizontal: space['5xl'],
+    gap: space['2xl'],
   },
   permissionText: {
-    fontSize: text.lg, fontWeight: weight.regular,
+    fontSize: text.lg,
+    fontWeight: weight.regular,
     color: color.fg.subtle,
     textAlign: 'center',
+    lineHeight: 22,
   },
   permissionButton: {
     backgroundColor: color.accent.base,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
+    paddingHorizontal: space['3xl'],
+    paddingVertical: space.xl,
     borderRadius: radius.xl,
   },
   permissionButtonText: {
-    fontSize: text.lg, fontWeight: weight.semibold,
+    fontSize: text.lg,
+    fontWeight: weight.semibold,
     color: color.fg.inverse,
   },
   cameraContainer: {
@@ -168,9 +174,33 @@ const styles = createStyles(() => ({
   scanFrame: {
     width: FRAME_SIZE,
     height: FRAME_SIZE,
-    borderWidth: 2,
+    position: 'relative',
+  },
+  corner: {
+    position: 'absolute',
+    width: CORNER_SIZE,
+    height: CORNER_SIZE,
     borderColor: color.accent.base,
-    borderRadius: 16,
+  },
+  cornerTL: {
+    top: 0, left: 0,
+    borderTopWidth: 3, borderLeftWidth: 3,
+    borderTopLeftRadius: 8,
+  },
+  cornerTR: {
+    top: 0, right: 0,
+    borderTopWidth: 3, borderRightWidth: 3,
+    borderTopRightRadius: 8,
+  },
+  cornerBL: {
+    bottom: 0, left: 0,
+    borderBottomWidth: 3, borderLeftWidth: 3,
+    borderBottomLeftRadius: 8,
+  },
+  cornerBR: {
+    bottom: 0, right: 0,
+    borderBottomWidth: 3, borderRightWidth: 3,
+    borderBottomRightRadius: 8,
   },
   overlayBottom: {
     flex: 1,
@@ -178,11 +208,12 @@ const styles = createStyles(() => ({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   hint: {
-    fontSize: text.base, fontWeight: weight.regular,
+    fontSize: text.base,
+    fontWeight: weight.regular,
     color: color.fg.subtle,
     textAlign: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 24,
-    paddingBottom: 48,
+    paddingHorizontal: space['5xl'],
+    paddingVertical: space['3xl'],
+    paddingBottom: space['5xl'],
   },
 }));

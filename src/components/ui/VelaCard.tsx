@@ -1,14 +1,19 @@
 import React from 'react';
 import { View, type ViewStyle } from 'react-native';
-import { color, radius, createStyles } from '@/constants/theme';
+import { color, radius, shadow, createStyles } from '@/constants/theme';
 
 interface Props {
   children: React.ReactNode;
   style?: ViewStyle;
+  elevated?: boolean;
 }
 
-export function VelaCard({ children, style }: Props) {
-  return <View style={[styles.card, style]}>{children}</View>;
+export function VelaCard({ children, style, elevated }: Props) {
+  return (
+    <View style={[styles.card, elevated && styles.elevated, style]}>
+      {children}
+    </View>
+  );
 }
 
 const styles = createStyles(() => ({
@@ -17,5 +22,10 @@ const styles = createStyles(() => ({
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: color.border.base,
+    ...shadow.sm,
+  },
+  elevated: {
+    borderColor: 'transparent',
+    ...shadow.md,
   },
 }));

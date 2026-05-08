@@ -5,10 +5,12 @@ import { getTextScaleFactor } from './text-scale';
 // Design Tokens — single source of truth
 //
 // Naming follows Simple Design conventions:
-//   Spacing:    space.xs … space.3xl  (4px base)
-//   Typography: text.xs … text.3xl    (size, scaled) + weight.regular … weight.bold
+//   Spacing:    space.xs … space.5xl  (4px base)
+//   Typography: text.xs … text.5xl    (size, scaled) + weight.regular … weight.bold
 //   Radius:     radius.sm … radius.full
 //   Colors:     fg (foreground hierarchy), bg (background layers), accent, semantic
+//   Shadows:    shadow.sm … shadow.lg
+//   Motion:     motion.fast … motion.slow
 // =============================================================================
 
 // ---------------------------------------------------------------------------
@@ -34,14 +36,15 @@ export const space = {
 
 // Base sizes before scaling
 const TEXT_BASE = {
-  'xs':  9,
-  'sm':  10,
-  'base': 12,
-  'lg':  14,
-  'xl':  16,
-  '2xl': 18,
-  '3xl': 24,
-  '4xl': 28,
+  'xs':  10,
+  'sm':  11,
+  'base': 13,
+  'lg':  15,
+  'xl':  17,
+  '2xl': 20,
+  '3xl': 26,
+  '4xl': 32,
+  '5xl': 40,
 };
 
 type TextKey = keyof typeof TEXT_BASE;
@@ -111,8 +114,27 @@ export const weight = {
   'bold':    '700' as const,
 };
 
+/**
+ * Font zones — each zone serves a distinct purpose:
+ *
+ *   sans:    Primary UI text — labels, buttons, body copy.
+ *            Uses the platform system font for best readability and native feel.
+ *
+ *   display: Large headings & hero numbers (balance, token name on detail).
+ *            On iOS uses SF Rounded for a softer, premium feel;
+ *            on Android falls back to system sans.
+ *
+ *   mono:    Addresses, hashes, technical values.
+ *            Fixed-width ensures alignment and signals "machine-readable data".
+ *
+ *   numeric: Tabular numbers in lists (token balances, USD values).
+ *            Uses tabular-nums feature on iOS for column-aligned figures.
+ */
 export const font = {
+  sans: Platform.select({ ios: 'System', default: 'normal' }),
+  display: Platform.select({ ios: 'ui-rounded', default: 'normal' }),
   mono: Platform.select({ ios: 'Menlo', default: 'monospace' }),
+  numeric: Platform.select({ ios: 'System', default: 'normal' }),
 };
 
 // ---------------------------------------------------------------------------
@@ -170,6 +192,46 @@ export const color = {
     base:   '#ECEBE4',
     strong: '#D8D6CE',
   },
+} as const;
+
+// ---------------------------------------------------------------------------
+// 5. Shadows
+// ---------------------------------------------------------------------------
+
+export const shadow = {
+  sm: {
+    shadowColor: '#1A1A18',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  md: {
+    shadowColor: '#1A1A18',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  lg: {
+    shadowColor: '#1A1A18',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
+// 6. Motion
+// ---------------------------------------------------------------------------
+
+export const motion = {
+  fast: 150,
+  normal: 250,
+  slow: 400,
+  spring: { damping: 15, stiffness: 150, mass: 0.8 },
+  springGentle: { damping: 20, stiffness: 120, mass: 1 },
 } as const;
 
 // Legacy exports for template components

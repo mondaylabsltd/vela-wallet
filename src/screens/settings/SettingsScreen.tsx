@@ -3,7 +3,7 @@ import {
   View,
   Text,
   ScrollView,
-  TouchableOpacity,
+  Pressable,
   Alert,
   TextInput,
 } from 'react-native';
@@ -13,13 +13,14 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { ChainLogo } from '@/components/ChainLogo';
-import { color, text, weight, space, radius, font, createStyles } from '@/constants/theme';
+import { color, text, weight, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import { loadAccounts, saveNetworkConfig, loadNetworkConfigs, clearAll } from '@/services/storage';
-import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check } from 'lucide-react-native';
+import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, Type as TypeIcon } from 'lucide-react-native';
 import type { NetworkConfig } from '@/models/types';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 // ---------------------------------------------------------------------------
 // Settings Row
@@ -41,22 +42,21 @@ function SettingsRow({
   onPress?: () => void;
 }) {
   return (
-    <TouchableOpacity
+    <Pressable
       style={styles.settingsRow}
       onPress={onPress}
-      activeOpacity={onPress ? 0.7 : 1}
       disabled={!onPress}
     >
       <View style={[styles.settingsIcon, { backgroundColor: icon.bg }]}>
-        <icon.Icon size={18} color={icon.fg} />
+        <icon.Icon size={16} color={icon.fg} />
       </View>
       <View style={styles.settingsRowContent}>
         <Text style={styles.settingsRowTitle}>{title}</Text>
         {subtitle ? <Text style={styles.settingsRowSubtitle}>{subtitle}</Text> : null}
       </View>
-      {onPress ? <Text style={styles.chevron}>›</Text> : null}
+      {onPress ? <ChevronRight size={16} color={color.fg.subtle} /> : null}
       {showDivider ? <View style={styles.settingsRowDivider} /> : null}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -64,12 +64,12 @@ function SettingsRow({
 // Settings Section
 // ---------------------------------------------------------------------------
 
-function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
+function SettingsSection({ title, children, delay = 0 }: { title: string; children: React.ReactNode; delay?: number }) {
   return (
-    <View style={styles.sectionContainer}>
-      <Text style={styles.sectionTitle}>{title.toUpperCase()}</Text>
+    <Animated.View style={styles.sectionContainer} entering={FadeInDown.delay(delay).duration(300)}>
+      <Text style={styles.sectionTitle}>{title}</Text>
       <VelaCard>{children}</VelaCard>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -97,23 +97,27 @@ function NetworkConfigCard({
 
   return (
     <VelaCard style={styles.networkCard}>
-      <TouchableOpacity
+      <Pressable
         style={styles.networkHeader}
         onPress={() => setExpanded(!expanded)}
-        activeOpacity={0.7}
       >
         <ChainLogo
           label={network.iconLabel}
           color={network.iconColor}
           bgColor={network.iconBg}
+          logoURL={network.logoURL}
           size={36}
         />
         <View style={styles.networkHeaderText}>
           <Text style={styles.networkName}>{network.displayName}</Text>
           <Text style={styles.networkChainId}>Chain {network.chainId}</Text>
         </View>
-        <Text style={[styles.chevronSmall, expanded && styles.chevronRotated]}>›</Text>
-      </TouchableOpacity>
+        <ChevronRight
+          size={16}
+          color={color.fg.subtle}
+          style={expanded ? { transform: [{ rotate: '90deg' }] } : undefined}
+        />
+      </Pressable>
 
       {expanded && (
         <View style={styles.networkFields}>
@@ -174,23 +178,22 @@ function AccountSwitcherModal({
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Accounts</Text>
-          <TouchableOpacity onPress={onClose}>
+          <Pressable onPress={onClose} hitSlop={8}>
             <Text style={styles.modalClose}>Done</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
           {state.accounts.map((account, index) => {
             const isActive = index === state.activeAccountIndex;
             return (
-              <TouchableOpacity
+              <Pressable
                 key={account.id}
                 style={[styles.accountItem, isActive && styles.accountItemActive]}
                 onPress={() => {
                   dispatch({ type: 'SWITCH_ACCOUNT', index });
                   onClose();
                 }}
-                activeOpacity={0.7}
               >
                 <View style={styles.accountAvatar}>
                   <Text style={styles.accountAvatarText}>
@@ -198,11 +201,11 @@ function AccountSwitcherModal({
                   </Text>
                 </View>
                 <View style={styles.accountInfo}>
-                  <Text style={styles.accountName}>{account.name}</Text>
+                  <Text style={styles.accountNameModal}>{account.name}</Text>
                   <Text style={styles.accountAddress}>{shortAddress(account.address)}</Text>
                 </View>
                 {isActive && <Check size={18} color={color.accent.base} />}
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
 
@@ -228,10 +231,6 @@ function AccountSwitcherModal({
     </AppModal>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Language Picker Modal
-// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Network Editor Modal
@@ -263,9 +262,9 @@ function NetworkEditorModal({
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Networks</Text>
-          <TouchableOpacity onPress={onClose}>
+          <Pressable onPress={onClose} hitSlop={8}>
             <Text style={styles.modalClose}>Done</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
         <ScrollView
@@ -328,10 +327,12 @@ export default function SettingsScreen() {
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Title */}
-        <Text style={styles.screenTitle}>Settings</Text>
+        <Animated.View entering={FadeIn.duration(300)}>
+          <Text style={styles.screenTitle}>Settings</Text>
+        </Animated.View>
 
         {/* Account Section */}
-        <SettingsSection title="Account">
+        <SettingsSection title="Account" delay={50}>
           <SettingsRow
             icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: UserIcon }}
             title={accountName}
@@ -342,43 +343,55 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         {/* Networks Section */}
-        <SettingsSection title="Networks">
+        <SettingsSection title="Networks" delay={100}>
           <SettingsRow
             icon={{ bg: color.info.soft, fg: color.info.base, Icon: NetworkIcon }}
             title="Networks"
-            subtitle="Edit RPC, Explorer & Bundler URLs"
+            subtitle="RPC, Explorer & Bundler URLs"
             showDivider={false}
             onPress={() => setShowNetworkEditor(true)}
           />
         </SettingsSection>
 
         {/* Text Size */}
-        <SettingsSection title="Text Size">
+        <SettingsSection title="Text Size" delay={150}>
           <View style={styles.textScaleStepper}>
-            <TouchableOpacity
+            <Pressable
               style={[styles.textScaleBtn, currentScaleIndex === 0 && styles.textScaleBtnDisabled]}
               onPress={() => changeTextScale(-1)}
               disabled={currentScaleIndex === 0}
-              activeOpacity={0.7}
             >
-              <Text style={[styles.textScaleBtnText, currentScaleIndex === 0 && styles.textScaleBtnTextDisabled]}>A-</Text>
-            </TouchableOpacity>
-            <Text style={styles.textScaleCurrentLabel}>
-              {TEXT_SCALE_LEVELS[currentScaleIndex].label}
-            </Text>
-            <TouchableOpacity
+              <Text style={[styles.textScaleBtnText, currentScaleIndex === 0 && styles.textScaleBtnTextDisabled]}>A−</Text>
+            </Pressable>
+
+            <View style={styles.textScaleTrack}>
+              {TEXT_SCALE_LEVELS.map((_, i) => (
+                <View
+                  key={i}
+                  style={[
+                    styles.textScaleTick,
+                    i <= currentScaleIndex && styles.textScaleTickActive,
+                    i === currentScaleIndex && styles.textScaleTickCurrent,
+                  ]}
+                />
+              ))}
+            </View>
+
+            <Pressable
               style={[styles.textScaleBtn, currentScaleIndex === TEXT_SCALE_LEVELS.length - 1 && styles.textScaleBtnDisabled]}
               onPress={() => changeTextScale(1)}
               disabled={currentScaleIndex === TEXT_SCALE_LEVELS.length - 1}
-              activeOpacity={0.7}
             >
               <Text style={[styles.textScaleBtnText, currentScaleIndex === TEXT_SCALE_LEVELS.length - 1 && styles.textScaleBtnTextDisabled]}>A+</Text>
-            </TouchableOpacity>
+            </Pressable>
           </View>
+          <Text style={styles.textScaleLabel}>
+            {TEXT_SCALE_LEVELS[currentScaleIndex].label}
+          </Text>
         </SettingsSection>
 
         {/* General Section */}
-        <SettingsSection title="General">
+        <SettingsSection title="General" delay={200}>
           <SettingsRow
             icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
             title="About"
@@ -388,10 +401,12 @@ export default function SettingsScreen() {
         </SettingsSection>
 
         {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.7}>
-          <LogOutIcon size={16} color={color.accent.base} />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        <Animated.View entering={FadeInDown.delay(250).duration(300)}>
+          <Pressable style={styles.logoutButton} onPress={handleLogout}>
+            <LogOutIcon size={16} color={color.accent.base} />
+            <Text style={styles.logoutText}>Logout</Text>
+          </Pressable>
+        </Animated.View>
       </ScrollView>
 
       {/* Modals */}
@@ -413,36 +428,36 @@ export default function SettingsScreen() {
 
 const styles = createStyles(() => ({
   scrollContent: {
-    paddingTop: 8,
-    paddingBottom: 40,
+    paddingTop: space.md,
+    paddingBottom: space['5xl'],
   },
   screenTitle: {
-    fontSize: text.xl,
-    fontWeight: weight.semibold,
+    fontSize: text['2xl'],
+    fontWeight: weight.bold,
     color: color.fg.base,
-    textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: space['3xl'],
   },
 
   // Settings Section
   sectionContainer: {
-    marginBottom: 24,
+    marginBottom: space['2xl'],
   },
   sectionTitle: {
     fontSize: text.sm,
     fontWeight: weight.semibold,
     color: color.fg.subtle,
-    letterSpacing: 1.5,
-    marginBottom: 10,
-    paddingHorizontal: 14,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: space.md,
+    paddingHorizontal: space.sm,
   },
 
   // Settings Row
   settingsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingHorizontal: space.xl,
+    paddingVertical: space.xl,
     position: 'relative',
   },
   settingsIcon: {
@@ -452,13 +467,10 @@ const styles = createStyles(() => ({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  settingsIconText: {
-    fontSize: text.lg,
-  },
   settingsRowContent: {
     flex: 1,
-    marginLeft: 14,
-    gap: 1,
+    marginLeft: space.lg,
+    gap: 2,
   },
   settingsRowTitle: {
     fontSize: text.lg,
@@ -469,11 +481,6 @@ const styles = createStyles(() => ({
     fontSize: text.sm,
     fontWeight: weight.regular,
     color: color.fg.subtle,
-  },
-  chevron: {
-    fontSize: text.xl,
-    color: color.fg.subtle,
-    fontWeight: weight.medium,
   },
   settingsRowDivider: {
     position: 'absolute',
@@ -489,17 +496,13 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: space.xl,
     backgroundColor: color.bg.raised,
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: color.border.base,
-    gap: 8,
-  },
-  logoutIcon: {
-    fontSize: text.lg,
-    color: color.accent.base,
-    fontWeight: weight.bold,
+    gap: space.md,
+    ...shadow.sm,
   },
   logoutText: {
     fontSize: text.lg,
@@ -507,18 +510,19 @@ const styles = createStyles(() => ({
     color: color.accent.base,
   },
 
-  // Text Scale Stepper
+  // Text Scale
   textScaleStepper: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: space.lg,
     paddingHorizontal: space.xl,
+    gap: space.xl,
   },
   textScaleBtn: {
     width: 40,
     height: 40,
-    borderRadius: radius['2xl'],
+    borderRadius: radius.full,
     borderWidth: 1,
     borderColor: color.border.base,
     alignItems: 'center',
@@ -536,10 +540,38 @@ const styles = createStyles(() => ({
   textScaleBtnTextDisabled: {
     color: color.fg.subtle,
   },
-  textScaleCurrentLabel: {
-    fontSize: text.base,
-    fontWeight: weight.semibold,
-    color: color.fg.base,
+  textScaleTrack: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 4,
+    backgroundColor: color.border.base,
+    borderRadius: 2,
+    paddingHorizontal: space.sm,
+  },
+  textScaleTick: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: color.border.strong,
+  },
+  textScaleTickActive: {
+    backgroundColor: color.accent.base,
+  },
+  textScaleTickCurrent: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: color.accent.base,
+    ...shadow.sm,
+  },
+  textScaleLabel: {
+    fontSize: text.sm,
+    fontWeight: weight.medium,
+    color: color.fg.muted,
+    textAlign: 'center',
+    paddingBottom: space.lg,
   },
 
   // Modal
@@ -552,13 +584,13 @@ const styles = createStyles(() => ({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: space['3xl'],
-    paddingVertical: 16,
+    paddingVertical: space.xl,
     borderBottomWidth: 1,
     borderBottomColor: color.border.base,
   },
   modalTitle: {
     fontSize: text.xl,
-    fontWeight: weight.semibold,
+    fontWeight: weight.bold,
     color: color.fg.base,
   },
   modalClose: {
@@ -571,20 +603,21 @@ const styles = createStyles(() => ({
   },
   modalScrollContent: {
     padding: space['3xl'],
-    paddingBottom: 40,
+    paddingBottom: space['5xl'],
   },
 
   // Account Switcher
   accountItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: space.xl,
     backgroundColor: color.bg.raised,
     borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: color.border.base,
-    marginBottom: 10,
-    gap: 14,
+    marginBottom: space.lg,
+    gap: space.lg,
+    ...shadow.sm,
   },
   accountItemActive: {
     borderColor: color.accent.base,
@@ -607,7 +640,7 @@ const styles = createStyles(() => ({
     flex: 1,
     gap: 2,
   },
-  accountName: {
+  accountNameModal: {
     fontSize: text.lg,
     fontWeight: weight.semibold,
     color: color.fg.base,
@@ -618,59 +651,16 @@ const styles = createStyles(() => ({
     fontFamily: font.mono,
     color: color.fg.subtle,
   },
-  checkmark: {
-    fontSize: text['2xl'],
-    color: color.accent.base,
-    fontWeight: weight.bold,
-  },
   accountActions: {
-    marginTop: 16,
-    gap: 10,
-  },
-
-  // Language Picker
-  languageList: {
-    padding: 20,
-    gap: 8,
-  },
-  languageItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: color.bg.raised,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    gap: 14,
-  },
-  languageItemActive: {
-    backgroundColor: color.accent.soft,
-    borderColor: color.accent.base,
-    borderWidth: 1.5,
-  },
-  languageFlag: {
-    fontSize: text['3xl'],
-  },
-  languageName: {
-    fontSize: text.lg,
-    fontWeight: weight.semibold,
-    color: color.fg.base,
-  },
-  languageSpacer: {
-    flex: 1,
-  },
-  checkmarkAccent: {
-    fontSize: text['2xl'],
-    color: color.accent.base,
-    fontWeight: weight.bold,
+    marginTop: space.xl,
+    gap: space.lg,
   },
 
   // Network Editor
   networkScrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-    gap: 12,
+    padding: space.xl,
+    paddingBottom: space['5xl'],
+    gap: space.lg,
   },
   networkCard: {
     overflow: 'hidden',
@@ -678,12 +668,12 @@ const styles = createStyles(() => ({
   networkHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    gap: 12,
+    padding: space.xl,
+    gap: space.lg,
   },
   networkHeaderText: {
     flex: 1,
-    gap: 1,
+    gap: 2,
   },
   networkName: {
     fontSize: text.lg,
@@ -695,41 +685,36 @@ const styles = createStyles(() => ({
     fontWeight: weight.regular,
     color: color.fg.subtle,
   },
-  chevronSmall: {
-    fontSize: text.lg,
-    color: color.fg.subtle,
-    fontWeight: weight.medium,
-  },
-  chevronRotated: {
-    transform: [{ rotate: '90deg' }],
-  },
   networkFields: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    gap: 14,
+    paddingHorizontal: space.xl,
+    paddingBottom: space.xl,
+    gap: space.lg,
   },
   dividerFull: {
     height: 1,
     backgroundColor: color.border.base,
-    marginHorizontal: -16,
-    marginBottom: 2,
+    marginHorizontal: -space.xl,
+    marginBottom: space.sm,
   },
   configField: {
-    gap: 6,
+    gap: space.sm,
   },
   configLabel: {
-    fontSize: text.sm,
+    fontSize: text.xs,
     fontWeight: weight.semibold,
     color: color.fg.subtle,
     letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   configInput: {
     fontSize: text.sm,
     fontWeight: weight.medium,
     fontFamily: font.mono,
     color: color.fg.base,
-    padding: 12,
+    padding: space.lg,
     backgroundColor: color.bg.sunken,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: color.border.base,
   },
 }));
