@@ -48,15 +48,16 @@ const POOL_REFRESH_MS = 10 * 60 * 1000; // 10 min
 /** Built-in bundler base URL */
 const BUILTIN_BUNDLER = 'https://bundler.getvela.app';
 
-/** Reliable public RPCs per chain. */
-const PUBLIC_RPCS: Record<number, string> = {
-  1:     'https://1rpc.io/eth',
-  56:    'https://1rpc.io/bnb',
-  137:   'https://1rpc.io/matic',
-  42161: 'https://1rpc.io/arb',
-  10:    'https://1rpc.io/op',
-  8453:  'https://1rpc.io/base',
-  43114: 'https://1rpc.io/avax/c',
+/** Reliable public RPCs per chain (curated, known to work without auth). */
+const PUBLIC_RPCS: Record<number, string[]> = {
+  1:     ['https://ethereum-rpc.publicnode.com', 'https://1rpc.io/eth'],
+  56:    ['https://bsc-rpc.publicnode.com', 'https://1rpc.io/bnb'],
+  137:   ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'],
+  42161: ['https://arbitrum-one-rpc.publicnode.com', 'https://1rpc.io/arb'],
+  10:    ['https://optimism-rpc.publicnode.com', 'https://1rpc.io/op'],
+  8453:  ['https://base-rpc.publicnode.com', 'https://1rpc.io/base'],
+  43114: ['https://avalanche-c-chain-rpc.publicnode.com', 'https://1rpc.io/avax/c'],
+  100:   ['https://gnosis-rpc.publicnode.com', 'https://1rpc.io/gnosis'],
 };
 
 // ---------------------------------------------------------------------------
@@ -164,8 +165,8 @@ async function collectRpcUrls(chainId: number): Promise<{ url: string; source: E
   const customNet = getAllNetworksSync().find(n => n.chainId === chainId);
   if (customNet?.rpcURL) add(customNet.rpcURL, 'default');
 
-  // 4. Public fallback
-  if (PUBLIC_RPCS[chainId]) add(PUBLIC_RPCS[chainId], 'public');
+  // 4. Public fallback (curated reliable RPCs)
+  for (const url of PUBLIC_RPCS[chainId] ?? []) add(url, 'public');
 
   return entries;
 }
@@ -320,6 +321,11 @@ function recordFailure(stats: EndpointStats): void {
 /** Per-request timeout (ms). Prevents a hanging server from blocking failover. */
 const REQUEST_TIMEOUT_MS = 15_000;
 
+/** Custom error to flag HTTP-level permanent failures (401, 403, 404). */
+class HttpBanError extends Error {
+  constructor(status: number) { super(`HTTP ${status}`); this.name = 'HttpBanError'; }
+}
+
 async function tryEndpoint(
   url: string,
   method: string,
@@ -337,6 +343,10 @@ async function tryEndpoint(
       signal: controller.signal,
     });
 
+    // HTTP 401/403/404 = permanent access issue → ban this endpoint
+    if (res.status === 401 || res.status === 403 || res.status === 404) {
+      throw new HttpBanError(res.status);
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     if (!json || typeof json !== 'object') throw new Error('Invalid response');
@@ -389,8 +399,14 @@ export async function poolRpcCall(
       console.log(`[RPC] ${method} → ${shorten(ep.url)} ${ms}ms ${response.error ? 'ERR:' + response.error.message?.slice(0, 60) : 'OK'}`);
       return response;
     } catch (err) {
-      recordFailure(ep);
-      console.warn(`[RPC] ${method} → ${shorten(ep.url)} FAIL: ${err instanceof Error ? err.message : String(err)}`);
+      if (err instanceof HttpBanError) {
+        ep.banned = true;
+        recordFailure(ep);
+        console.warn(`[RPC] ${method} → ${shorten(ep.url)} BANNED: ${err.message}`);
+      } else {
+        recordFailure(ep);
+        console.warn(`[RPC] ${method} → ${shorten(ep.url)} FAIL: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }
 
@@ -439,8 +455,14 @@ export async function poolBundlerCall(
       console.log(`[Bundler] ${method} → ${shorten(ep.url)} ${ms}ms ${response.error ? 'ERR:' + response.error.message?.slice(0, 80) : 'OK'}`);
       return response;
     } catch (err) {
-      recordFailure(ep);
-      console.warn(`[Bundler] ${method} → ${shorten(ep.url)} FAIL: ${err instanceof Error ? err.message : String(err)}`);
+      if (err instanceof HttpBanError) {
+        ep.banned = true;
+        recordFailure(ep);
+        console.warn(`[Bundler] ${method} → ${shorten(ep.url)} BANNED: ${err.message}`);
+      } else {
+        recordFailure(ep);
+        console.warn(`[Bundler] ${method} → ${shorten(ep.url)} FAIL: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }
 
