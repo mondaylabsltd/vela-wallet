@@ -475,11 +475,12 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
   const [compatResult, setCompatResult] = useState<CompatibilityResult | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [customRpc, setCustomRpc] = useState('');
   const searchTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const reset = () => {
     setQuery(''); setSuggestions([]); setSelectedChainId(null);
-    setChainInfo(null); setCompatResult(null); setError('');
+    setChainInfo(null); setCompatResult(null); setError(''); setCustomRpc('');
   };
 
   // Debounced search
@@ -503,13 +504,14 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
   };
 
   // Select a chain from suggestions
-  const handleSelect = async (chainId: number) => {
+  const handleSelect = async (chainId: number, keepCustomRpc = false) => {
     setSelectedChainId(chainId);
     setSuggestions([]);
     setLoading(true);
     setError('');
     setChainInfo(null);
     setCompatResult(null);
+    if (!keepCustomRpc) setCustomRpc('');
 
     // Check if already exists
     const existing = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
@@ -526,8 +528,11 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
       setChainInfo(info);
       setQuery(info.name);
 
-      if (info.rpcUrls.length > 0 || info.rpcUrl) {
-        const rpcs = info.rpcUrls.length > 0 ? info.rpcUrls : [info.rpcUrl];
+      const rpcs = [
+        ...(customRpc.trim() ? [customRpc.trim()] : []),
+        ...(info.rpcUrls.length > 0 ? info.rpcUrls : info.rpcUrl ? [info.rpcUrl] : []),
+      ];
+      if (rpcs.length > 0) {
         const compat = await checkNetworkCompatibility(rpcs, chainId);
         setCompatResult(compat);
       } else {
@@ -639,6 +644,30 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
             </VelaCard>
           )}
 
+          {/* Custom RPC input */}
+          {chainInfo && (
+            <VelaCard style={s.addNetCompat}>
+              <Text style={s.addNetCompatTitle}>Custom RPC (optional)</Text>
+              <TextInput
+                style={s.configInput}
+                value={customRpc}
+                onChangeText={setCustomRpc}
+                placeholder="https://your-rpc-url..."
+                placeholderTextColor={color.fg.subtle}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {customRpc.trim() !== '' && (
+                <VelaButton
+                  title="Re-check with this RPC"
+                  onPress={() => selectedChainId && handleSelect(selectedChainId, true)}
+                  variant="secondary"
+                  style={{ marginTop: space.sm }}
+                />
+              )}
+            </VelaCard>
+          )}
+
           {/* Best RPC info */}
           {compatResult?.bestRpcUrl && (
             <VelaCard style={s.addNetCompat}>
@@ -701,7 +730,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
               />
               <VelaButton
                 title="Re-check"
-                onPress={() => selectedChainId && handleSelect(selectedChainId)}
+                onPress={() => selectedChainId && handleSelect(selectedChainId, true)}
                 variant="secondary"
                 style={s.checkBtn}
               />
