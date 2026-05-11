@@ -169,7 +169,9 @@ export default function SendScreen() {
     // Pre-flight: check bundler funding for vela bundler
     const chainId = tokenChainId(selectedToken);
     try {
-      const funding = await checkBundlerFunding(chainId, activeAccount.address);
+      // Estimate gas cost so the funding check uses a realistic threshold
+      const { totalWei } = await estimateTransactionFee(activeAccount.address, chainId);
+      const funding = await checkBundlerFunding(chainId, activeAccount.address, totalWei);
       if (funding) {
         setSending(false);
         setFundingNeeded(funding);
@@ -263,6 +265,17 @@ export default function SendScreen() {
     } catch (error: any) {
       if (error?.code === 'PASSKEY_CANCELLED') {
         // User cancelled biometric
+      } else if (error?.message?.includes('Insufficient balance on dedicated bundler EOA')) {
+        // Bundler EOA underfunded — show funding modal
+        try {
+          const chainId = tokenChainId(selectedToken!);
+          const funding = await checkBundlerFunding(chainId, activeAccount!.address, 0n);
+          if (funding) {
+            setFundingNeeded(funding);
+            return;
+          }
+        } catch { /* fall through to generic alert */ }
+        Alert.alert('Transaction Failed', 'Bundler account needs more gas. Please fund it in Settings.');
       } else {
         Alert.alert('Transaction Failed', error?.message ?? String(error));
       }
