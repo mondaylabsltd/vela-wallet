@@ -216,18 +216,19 @@ async function sendUserOp(
       callGasLimit: estimated.callGasLimit.toString(),
       preVerificationGas: estimated.preVerificationGas.toString(),
     });
-    userOp.verificationGasLimit = bigintMax(
-      userOp.verificationGasLimit,
-      (estimated.verificationGasLimit * 15n) / 10n, // 1.5x safety margin
-    );
+    // Trust the bundler's estimate with a safety margin.
+    // For undeployed wallets, the verification phase includes CREATE2 + Safe.setup +
+    // P256 signature validation — needs significantly more gas than the estimation
+    // reports (estimation uses dummy sig which skips P256 verify).
+    const estVerification = (estimated.verificationGasLimit * 15n) / 10n;
+    userOp.verificationGasLimit = deployed
+      ? estVerification
+      : bigintMax(estVerification, 450_000n); // floor for first-time deploy (under bundler's 500k MAX)
     userOp.callGasLimit = bigintMax(
-      userOp.callGasLimit,
-      (estimated.callGasLimit * 15n) / 10n, // 1.5x safety margin
+      (estimated.callGasLimit * 15n) / 10n,
+      100_000n, // reasonable floor
     );
-    userOp.preVerificationGas = bigintMax(
-      userOp.preVerificationGas,
-      estimated.preVerificationGas + 10000n,
-    );
+    userOp.preVerificationGas = estimated.preVerificationGas + 10_000n;
   } catch (err) {
     console.error('[UserOp] Gas estimation failed, using defaults:', err instanceof Error ? err.message : String(err));
   }
@@ -608,35 +609,34 @@ async function getNonce(
 async function getGasPrices(
   chainId: number,
 ): Promise<{ maxFee: bigint; maxPriority: bigint }> {
-  // Try pimlico_getUserOperationGasPrice first (recommended by Pimlico)
+  // EIP-1559: try eth_maxPriorityFeePerGas + eth_gasPrice
   try {
-    const response = await rpcCall(
-      'pimlico_getUserOperationGasPrice',
-      [],
-      chainId,
-    );
-    const result = response.result as
-      | { fast?: { maxFeePerGas?: string; maxPriorityFeePerGas?: string } }
-      | undefined;
+    const [gasPriceRes] = await Promise.all([
+      rpcCall('eth_gasPrice', [], chainId),
+    ]);
 
-    if (result?.fast?.maxFeePerGas && result?.fast?.maxPriorityFeePerGas) {
-      const maxFee = parseHexUInt64(result.fast.maxFeePerGas);
-      const maxPriority = parseHexUInt64(result.fast.maxPriorityFeePerGas);
-      if (maxFee > 0n) {
-        return { maxFee, maxPriority };
-      }
-    }
-  } catch {
-    // Fall through to eth_gasPrice
-  }
-
-  // Fallback: eth_gasPrice * 1.5
-  try {
-    const response = await rpcCall('eth_gasPrice', [], chainId);
-    const result = response.result as string | undefined;
-    if (result) {
-      const gasPrice = parseHexUInt64(result);
-      return { maxFee: (gasPrice * 3n) / 2n, maxPriority: gasPrice };
+    const gasPrice = parseHexUInt64(gasPriceRes.result as string | undefined);
+    if (gasPrice > 0n) {
+      // ERC-4337 effectivePrice = min(maxFeePerGas, baseFee + maxPriorityFeePerGas).
+      // Vela bundler requires: effectivePrice >= (baseFee + bundlerTip) × (1 + margin).
+      // With bundlerTip=1.5gwei, margin=20%:
+      //   required = (baseFee + 1.5gwei) × 1.2 = baseFee × 1.2 + 1.8gwei
+      //
+      // Set maxPriority = maxFee so effective = min(maxFee, baseFee+maxFee) = maxFee.
+      // Formula: maxFee = gasPrice × 2 + 4gwei (covers tip + margin + buffer at any gas price).
+      //
+      // Verification:
+      //   baseFee=0.5gwei → maxFee=5gwei > required 2.4gwei ✓
+      //   baseFee=1gwei   → maxFee=6gwei > required 3.0gwei ✓
+      //   baseFee=10gwei  → maxFee=24gwei > required 13.8gwei ✓
+      //   baseFee=100gwei → maxFee=204gwei > required 121.8gwei ✓
+      const BUNDLER_TIP_BUFFER = 4_000_000_000n; // 4 gwei — covers tip(1.5) × margin(1.2) + headroom
+      const maxFee = gasPrice * 2n + BUNDLER_TIP_BUFFER;
+      console.log(`[UserOp] Gas price: ${gasPrice} → maxFee=${maxFee} maxPriority=${maxFee}`);
+      return {
+        maxFee,
+        maxPriority: maxFee,
+      };
     }
   } catch {
     // Use defaults
@@ -683,9 +683,22 @@ async function submitUserOp(
   userOp: UserOperation,
   chainId: number,
 ): Promise<string> {
+  const dict = userOpToDict(userOp);
+  console.log('[UserOp] Submitting:', JSON.stringify({
+    sender: dict.sender,
+    nonce: dict.nonce,
+    factory: dict.factory ?? '(none)',
+    factoryDataLen: dict.factoryData?.length ?? 0,
+    callDataLen: dict.callData?.length ?? 0,
+    signatureLen: dict.signature?.length ?? 0,
+    verificationGasLimit: dict.verificationGasLimit,
+    callGasLimit: dict.callGasLimit,
+    maxFeePerGas: dict.maxFeePerGas,
+  }));
+
   const response = await rpcCall(
     'eth_sendUserOperation',
-    [userOpToDict(userOp), ENTRY_POINT],
+    [dict, ENTRY_POINT],
     chainId,
   );
 

@@ -13,6 +13,8 @@ import { fromHex, toHex } from '@/services/hex';
 import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth } from '@/services/safe-transaction';
 import { findAccountByCredentialId, saveTransaction } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
+import { checkBundlerFunding, clearBundlerCache, type FundingNeeded } from '@/services/bundler-service';
+import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, FlatList, ScrollView, Text, TextInput, TouchableOpacity, View, Pressable } from 'react-native';
@@ -91,6 +93,7 @@ export default function SendScreen() {
   const [showScanner, setShowScanner] = useState(false);
   const [estimatedGas, setEstimatedGas] = useState<string | null>(null);
   const [estimatingGas, setEstimatingGas] = useState(false);
+  const [fundingNeeded, setFundingNeeded] = useState<FundingNeeded | null>(null);
 
   useEffect(() => {
     if (!address) return;
@@ -158,6 +161,39 @@ export default function SendScreen() {
   };
 
   const handleConfirm = async () => {
+    if (!selectedToken || !activeAccount) return;
+
+    // Show loading immediately so user knows something is happening
+    setSending(true);
+
+    // Pre-flight: check bundler funding for vela bundler
+    const chainId = tokenChainId(selectedToken);
+    try {
+      const funding = await checkBundlerFunding(chainId, activeAccount.address);
+      if (funding) {
+        setSending(false);
+        setFundingNeeded(funding);
+        return; // Modal shown — user taps "Retry Transaction" after funding
+      }
+    } catch {
+      // Bundler unreachable — proceed to transaction (bundler will reject with clear error)
+    }
+
+    // setSending stays true — executeTransaction manages it from here
+    await executeTransaction();
+  };
+
+  /** Called when user taps "Send Transaction" in the funding modal. */
+  const handleFundingComplete = () => {
+    if (selectedToken && activeAccount) {
+      clearBundlerCache(tokenChainId(selectedToken), activeAccount.address);
+    }
+    setFundingNeeded(null);
+    // Directly execute — user already confirmed, funding is done, no need to re-confirm
+    executeTransaction();
+  };
+
+  const executeTransaction = async () => {
     if (!selectedToken || !activeAccount) return;
     setSending(true);
     try {
@@ -431,6 +467,15 @@ export default function SendScreen() {
         }}
         onClose={() => setShowScanner(false)}
       />
+
+      {fundingNeeded && (
+        <BundlerFundingModal
+          visible={!!fundingNeeded}
+          funding={fundingNeeded}
+          onFunded={handleFundingComplete}
+          onCancel={() => setFundingNeeded(null)}
+        />
+      )}
     </ScreenContainer>
   );
 }

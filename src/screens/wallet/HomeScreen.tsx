@@ -8,7 +8,6 @@ import { color, createStyles, font, inter, motion, radius, shadow, space, text }
 import { chainName } from '@/models/network';
 import { formatBalance, shortAddr, tokenBalanceDouble, tokenChainId, tokenLogoURL, tokenUsdValue, type APIToken } from '@/models/types';
 import { useWallet, shortAddress } from '@/models/wallet-state';
-import { loadCustomTokens } from '@/services/storage';
 import { fetchTokens } from '@/services/wallet-api';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
@@ -98,24 +97,6 @@ export default function HomeScreen() {
     if (!silent) setLoading(true);
     try {
       const result = await fetchTokens(address, { forceRefresh });
-      result.sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
-      const custom = await loadCustomTokens();
-      for (const ct of custom) {
-        if (!result.find(t => t.tokenAddress?.toLowerCase() === ct.contractAddress.toLowerCase() && tokenChainId(t) === ct.chainId)) {
-          result.push({
-            network: ct.id.split('_')[0] || 'eth-mainnet',
-            chainName: ct.networkName,
-            symbol: ct.symbol,
-            balance: '0',
-            decimals: ct.decimals,
-            logo: null,
-            name: ct.name,
-            tokenAddress: ct.contractAddress,
-            priceUsd: null,
-            spam: false,
-          });
-        }
-      }
       setTokens(result);
     } catch (err) {
       if (!silent) {
