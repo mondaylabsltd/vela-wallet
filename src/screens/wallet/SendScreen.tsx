@@ -233,7 +233,10 @@ export default function SendScreen() {
 
   const handleMaxAmount = () => {
     if (!selectedToken) return;
-    setAmount(String(tokenBalanceDouble(selectedToken)));
+    // Use the raw balance string directly to avoid floating-point precision loss.
+    // tokenBalanceDouble() converts through parseFloat which loses precision for
+    // large balances (e.g., 1234567890.123456789 → scientific notation).
+    setAmount(selectedToken.balance || '0');
   };
 
   const handleConfirm = async () => {
