@@ -108,12 +108,18 @@ export default function HomeScreen() {
       const result = await fetchTokens(address, {
         forceRefresh,
         onProgress: (partial) => {
-          setTokens(partial);
+          // Merge: replace tokens from chains that have new data,
+          // keep old tokens from chains that haven't responded yet.
+          // This prevents the total from dropping to zero during refresh.
+          setTokens(prev => {
+            const freshChains = new Set(partial.map(t => tokenChainId(t)));
+            const kept = prev.filter(t => !freshChains.has(tokenChainId(t)));
+            return [...kept, ...partial].sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
+          });
           setLoading(false);
         },
         onFailedChains: (ids) => setFailedChainIds(ids),
       });
-      if (result.length > 0) setFailedChainIds(prev => prev); // keep last reported
       setTokens(result);
       // Cache total USD for this account
       const usd = result.reduce((s, t) => s + tokenUsdValue(t), 0);
