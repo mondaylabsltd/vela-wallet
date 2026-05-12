@@ -18,9 +18,9 @@ import { uploadPublicKey } from '@/services/public-key-upload';
 import { verifySafeWebAuthn } from '@/services/webauthn-verify';
 import type { StoredAccount } from '@/models/types';
 import {
-  ArrowLeft, CheckCircle2, AlertTriangle, Loader, Copy, Check,
+  ArrowLeft, CheckCircle2, AlertTriangle, Loader, Copy, Check, Square, CheckSquare,
 } from 'lucide-react-native';
-import { showAlert, copyToClipboard } from '@/services/platform';
+import { showAlert, copyToClipboard, openURL } from '@/services/platform';
 
 interface Props {
   onCreated?: (address: string, name: string) => void;
@@ -28,8 +28,16 @@ interface Props {
   onOpenSettings?: () => void;
 }
 
+const ACKNOWLEDGMENTS = [
+  'This is a self-custodial wallet. Your passkey private key is managed by your device\'s password manager (iCloud Keychain / Google Password Manager). Vela Wallet cannot access or recover it.',
+  'If you lose your device, you can restore your wallet on a new device through your iCloud or Google account.',
+  'If your iCloud or Google account is compromised, your wallet control may also be compromised. Protect it with a strong password and 2FA.',
+  'I agree to the Privacy Policy and Terms of Service.',
+] as const;
+
 export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props) {
   const [name, setName] = useState('');
+  const [checks, setChecks] = useState<boolean[]>(ACKNOWLEDGMENTS.map(() => false));
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [uploadFailed, setUploadFailed] = useState(false);
@@ -278,6 +286,36 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             <Text style={styles.hint}>
               This name is stored locally and helps you identify your accounts.
             </Text>
+
+            {/* Acknowledgment checklist */}
+            <View style={styles.checklistWrap}>
+              {ACKNOWLEDGMENTS.map((item, i) => {
+                const checked = checks[i];
+                const isLast = i === ACKNOWLEDGMENTS.length - 1;
+                return (
+                  <Pressable
+                    key={i}
+                    style={styles.checkRow}
+                    onPress={() => setChecks(prev => { const next = [...prev]; next[i] = !next[i]; return next; })}
+                  >
+                    {checked
+                      ? <CheckSquare size={18} color={color.accent.base} strokeWidth={2} />
+                      : <Square size={18} color={color.fg.subtle} strokeWidth={1.5} />
+                    }
+                    <Text style={styles.checkText}>
+                      {isLast ? (
+                        <>
+                          I agree to the{' '}
+                          <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/privacy')}>Privacy Policy</Text>
+                          {' '}and{' '}
+                          <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/terms')}>Terms of Service</Text>.
+                        </>
+                      ) : item}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </Animated.View>
         )}
 
@@ -306,7 +344,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
           <VelaButton
             title="Create Wallet"
             onPress={handleCreate}
-            disabled={!name.trim() || loading}
+            disabled={!name.trim() || loading || !checks.every(Boolean)}
             loading={loading}
           />
         )}
@@ -476,6 +514,29 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     ...inter.semibold,
     color: color.accent.base,
+    textDecorationLine: 'underline',
+  },
+
+  // Acknowledgment checklist
+  checklistWrap: {
+    marginTop: space['3xl'],
+    gap: space.xl,
+  },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: space.lg,
+  },
+  checkText: {
+    flex: 1,
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.muted,
+    lineHeight: 20,
+  },
+  checkLink: {
+    color: color.accent.base,
+    ...inter.semibold,
     textDecorationLine: 'underline',
   },
 }));
