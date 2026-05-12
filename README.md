@@ -132,7 +132,7 @@ Each service exposes a `/api/health` endpoint for status verification. The walle
 
 ## Security Model
 
-- **No private keys** — Signing uses WebAuthn P-256 keys stored in your device's secure enclave. The app never sees or stores a private key.
+- **No private key access** — Signing uses WebAuthn P-256 keys managed by your OS (iCloud Keychain / Google Password Manager). Vela Wallet never has access to the private key.
 - **Safe smart account** — Your wallet is a Safe proxy contract, audited and battle-tested with billions in TVL.
 - **On-device only** — Transaction construction, signing, and signature verification all happen locally. The bundler only receives the signed UserOperation.
 - **Passkey-scoped** — Each wallet is bound to a passkey credential. Transactions require biometric verification (Face ID / fingerprint) every time.

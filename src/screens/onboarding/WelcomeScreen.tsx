@@ -154,7 +154,7 @@ export function OnboardingSettingsModal({ visible, onClose, unreachable }: { vis
           <Text style={settingsStyles.sectionLabel}>PASSKEY INDEX</Text>
           <Text style={settingsStyles.hint}>
             This service stores your passkey's public key for cross-device sign-in.
-            Your private key never leaves your device — only the public key is uploaded.
+            Vela Wallet never has access to your passkey's private key.
           </Text>
           <View style={settingsStyles.field}>
             <View style={settingsStyles.fieldHeader}>
