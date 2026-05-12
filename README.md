@@ -18,6 +18,30 @@ Vela Wallet uses ERC-4337 account abstraction with WebAuthn (passkey) authentica
    npx expo start
    ```
 
+## Build for Web (Cloudflare Pages)
+
+1. Build the static web bundle
+
+   ```bash
+   npm run build:web
+   ```
+
+   Output goes to `dist/`.
+
+2. Deploy with Wrangler CLI
+
+   ```bash
+   npx wrangler pages deploy dist --project-name vela-wallet
+   ```
+
+   Or connect your GitHub repo in the [Cloudflare Dashboard](https://dash.cloudflare.com) → Pages → Create a project:
+
+   | Setting | Value |
+   |---------|-------|
+   | Build command | `npm run build:web` |
+   | Output directory | `dist` |
+   | Environment variable | `NODE_VERSION` = `20` |
+
 ## Self-Deploy Service Endpoints
 
 Vela Wallet relies on three backend services. Default instances are provided, but you can deploy your own for full self-custody.
