@@ -675,30 +675,25 @@ async function getGasPrices(
     return { maxFee: cached.maxFee, maxPriority: cached.maxPriority };
   }
 
-  // EIP-1559: try eth_maxPriorityFeePerGas + eth_gasPrice
+  // UserOp maxFeePerGas should be close to the actual on-chain gas price.
+  // Too high → overpays EntryPoint, creates MEV extraction opportunity.
+  // Too low → bundler rejects or tx gets stuck.
+  // Target: gasPrice × 1.3 (30% above chain rate — covers bundler margin + 1-block fluctuation).
   try {
-    const [gasPriceRes] = await Promise.all([
-      rpcCall('eth_gasPrice', [], chainId),
-    ]);
-
+    const gasPriceRes = await rpcCall('eth_gasPrice', [], chainId);
     const gasPrice = parseHexUInt64(gasPriceRes.result as string | undefined);
     if (gasPrice > 0n) {
-      // ERC-4337 effectivePrice = min(maxFeePerGas, baseFee + maxPriorityFeePerGas).
-      // Vela bundler requires: effectivePrice >= (baseFee + bundlerTip) × (1 + margin).
-      // With bundlerTip=1.5gwei, margin=20%:
-      //   required = (baseFee + 1.5gwei) × 1.2 = baseFee × 1.2 + 1.8gwei
-      //
-      // Set maxPriority = maxFee so effective = min(maxFee, baseFee+maxFee) = maxFee.
-      // Formula: maxFee = gasPrice × 2 + 4gwei (covers tip + margin + buffer at any gas price).
-      //
-      // Verification:
-      //   baseFee=0.5gwei → maxFee=5gwei > required 2.4gwei ✓
-      //   baseFee=1gwei   → maxFee=6gwei > required 3.0gwei ✓
-      //   baseFee=10gwei  → maxFee=24gwei > required 13.8gwei ✓
-      //   baseFee=100gwei → maxFee=204gwei > required 121.8gwei ✓
-      const BUNDLER_TIP_BUFFER = 4_000_000_000n; // 4 gwei — covers tip(1.5) × margin(1.2) + headroom
-      const maxFee = gasPrice * 2n + BUNDLER_TIP_BUFFER;
-      console.log(`[UserOp] Gas price: ${gasPrice} → maxFee=${maxFee} maxPriority=${maxFee}`);
+      // 30% buffer: covers bundler's 10% profit margin + baseFee fluctuation headroom.
+      // BSC:  gasPrice≈1gwei → maxFee=1.3gwei  (was 6gwei — 4.6x reduction)
+      // ETH:  gasPrice≈32gwei → maxFee=41.6gwei (was 68gwei)
+      // Poly: gasPrice≈50gwei → maxFee=65gwei   (was 104gwei)
+      let maxFee = (gasPrice * 13n) / 10n;
+
+      // Floor: 0.001 gwei to prevent zero-fee edge cases
+      const MIN_FEE = 1_000_000n;
+      if (maxFee < MIN_FEE) maxFee = MIN_FEE;
+
+      console.log(`[UserOp] Gas: gasPrice=${gasPrice} → maxFee=${maxFee} (×1.3)`);
       const result = { maxFee, maxPriority: maxFee };
       _gasPriceCache.set(chainId, { ...result, at: Date.now() });
       return result;
@@ -708,8 +703,8 @@ async function getGasPrices(
   }
 
   const fallback = {
-    maxFee: 50_000_000_000n,
-    maxPriority: 25_000_000_000n,
+    maxFee: 5_000_000_000n,  // 5 gwei — conservative fallback
+    maxPriority: 5_000_000_000n,
   };
   _gasPriceCache.set(chainId, { ...fallback, at: Date.now() });
   return fallback;
