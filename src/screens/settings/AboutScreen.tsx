@@ -97,8 +97,6 @@ export default function AboutScreen() {
           <VelaCard style={styles.linksCard}>
             <LinkRow label="Website" url="https://getvela.app" />
             <View style={styles.separator} />
-            <LinkRow label="GitHub" url="https://github.com/atshelchin/vela-wallet-mobile" />
-            <View style={styles.separator} />
             <LinkRow label="Safe Wallet" url="https://safe.global" />
           </VelaCard>
         </Animated.View>
