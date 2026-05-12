@@ -244,9 +244,8 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             </View>
             <Text style={styles.errorTitle}>Sync failed</Text>
             <Text style={styles.errorMessage}>
-              Your wallet was created successfully, but your passkey public key could not be
-              saved to the index server. Without this, you won't be able to sign in on another
-              device. Your private key never leaves your device — only the public key is uploaded.
+              Wallet created, but your public key wasn't synced to the server.
+              You won't be able to sign in on other devices until this is resolved.
             </Text>
             {uploadError ? (
               <VelaCard style={styles.errorDetail}>
@@ -254,7 +253,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
               </VelaCard>
             ) : null}
             <Text style={styles.hint}>
-              Check your network connection, or configure a custom Passkey Index endpoint below.
+              Check your network, or configure a custom endpoint below.
             </Text>
             {onOpenSettings && (
               <Pressable style={styles.settingsLink} onPress={onOpenSettings}>
