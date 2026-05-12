@@ -18,15 +18,72 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, ChevronDown, Search, X, AlertTriangle, Wifi } from 'lucide-react-native';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, FlatList, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
+  useAnimatedProps,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
+  Easing,
 } from 'react-native-reanimated';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
+
+const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
+
+/**
+ * Smoothly animates between USD values instead of snapping.
+ * Uses Reanimated's useAnimatedProps to drive a TextInput on the UI thread.
+ */
+function AnimatedBalance({ value }: { value: number }) {
+  const displayed = useSharedValue(value);
+
+  useEffect(() => {
+    displayed.value = withTiming(value, {
+      duration: 350,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [value, displayed]);
+
+  const fontSize = balanceFontSize(value);
+
+  const intProps = useAnimatedProps(() => {
+    'worklet';
+    const v = displayed.value;
+    const full = '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const dot = full.indexOf('.');
+    return { text: dot === -1 ? full : full.slice(0, dot) } as any;
+  });
+
+  const decProps = useAnimatedProps(() => {
+    'worklet';
+    const v = displayed.value;
+    const full = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const dot = full.indexOf('.');
+    return { text: dot === -1 ? '.00' : full.slice(full.indexOf('.')) } as any;
+  });
+
+  return (
+    <View style={styles.balanceRow}>
+      <AnimatedTextInput
+        editable={false}
+        underlineColorAndroid="transparent"
+        style={[styles.balanceInt, { fontSize }]}
+        animatedProps={intProps}
+        defaultValue={formatUsdInt(value)}
+      />
+      <AnimatedTextInput
+        editable={false}
+        underlineColorAndroid="transparent"
+        style={[styles.balanceDec, { fontSize: fontSize * 0.58 }]}
+        animatedProps={decProps}
+        defaultValue={formatUsdDec(value)}
+      />
+    </View>
+  );
+}
 
 function formatUsd(value: number): string {
   return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -260,15 +317,7 @@ export default function HomeScreen() {
 
       {/* Hero balance */}
       <Animated.View style={styles.balanceSection} entering={fadeInDown(100, 500)}>
-        {/* <Text style={styles.balanceLabel}>Total Balance</Text> */}
-        <View style={styles.balanceRow}>
-          <Text style={[styles.balanceInt, { fontSize: balanceFontSize(totalUsd) }]}>
-            {formatUsdInt(totalUsd)}
-          </Text>
-          <Text style={[styles.balanceDec, { fontSize: balanceFontSize(totalUsd) * 0.58 }]}>
-            {formatUsdDec(totalUsd)}
-          </Text>
-        </View>
+        <AnimatedBalance value={totalUsd} />
       </Animated.View>
 
       {/* Action buttons */}
@@ -379,8 +428,8 @@ export default function HomeScreen() {
       <FlatList
         data={filteredTokens}
         keyExtractor={(item) => `${item.network}_${item.tokenAddress ?? 'native'}_${item.symbol}`}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmpty}
+        ListHeaderComponent={renderHeader()}
+        ListEmptyComponent={renderEmpty()}
         renderItem={({ item, index }) => (
           <TokenRow
             symbol={item.symbol}
@@ -599,11 +648,13 @@ const styles = createStyles(() => ({
     ...inter.bold,
     fontFamily: font.display,
     color: color.fg.base,
+    padding: 0,
   },
   balanceDec: {
     ...inter.bold,
     fontFamily: font.display,
     color: color.fg.subtle,
+    padding: 0,
   },
 
   // Actions
