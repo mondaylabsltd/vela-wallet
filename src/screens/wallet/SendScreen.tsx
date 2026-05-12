@@ -13,7 +13,7 @@ import { fromHex, toHex } from '@/services/hex';
 import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth } from '@/services/safe-transaction';
 import { findAccountByCredentialId, saveTransaction, loadTransactions } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
-import { checkBundlerFunding, clearBundlerCache, type FundingNeeded } from '@/services/bundler-service';
+import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, estimateRecommendedFunding, formatWei, type FundingNeeded } from '@/services/bundler-service';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
@@ -164,18 +164,30 @@ export default function SendScreen() {
       return;
     }
 
-    // Estimate gas fee
-    if (selectedToken && address) {
+    // Estimate gas fee + check bundler funding before entering confirm screen
+    if (selectedToken && activeAccount) {
       setEstimatingGas(true);
+      const chainId = tokenChainId(selectedToken);
+      let gasCost: bigint | undefined;
       try {
-        const chainId = tokenChainId(selectedToken);
-        const fee = await estimateTransactionFee(address, chainId);
+        const fee = await estimateTransactionFee(activeAccount.address, chainId);
         setEstimatedGas(formatWeiToEth(fee.totalWei));
+        gasCost = fee.totalWei;
       } catch {
         setEstimatedGas(null);
-      } finally {
-        setEstimatingGas(false);
       }
+
+      // Pre-check bundler funding — show modal now instead of after signing
+      try {
+        const funding = await checkBundlerFunding(chainId, activeAccount.address, gasCost);
+        if (funding) {
+          setEstimatingGas(false);
+          setFundingNeeded(funding);
+          return; // Don't navigate to confirm — show funding modal first
+        }
+      } catch { /* proceed */ }
+
+      setEstimatingGas(false);
     }
 
     setStep('confirm');
@@ -189,30 +201,19 @@ export default function SendScreen() {
   const handleConfirm = async () => {
     if (!selectedToken || !activeAccount) return;
 
-    setSending(true);
-
-    const chainId = tokenChainId(selectedToken);
-    try {
-      const { totalWei } = await estimateTransactionFee(activeAccount.address, chainId);
-      const funding = await checkBundlerFunding(chainId, activeAccount.address, totalWei);
-      if (funding) {
-        setSending(false);
-        setFundingNeeded(funding);
-        return;
-      }
-    } catch (err) {
-      console.warn('[Send] Bundler funding check failed (proceeding anyway):', err);
-    }
-
+    // Funding was already checked before entering the confirm screen.
+    // Proceed directly to transaction execution.
     await executeTransaction();
   };
 
+  /** Called when user taps "Send Transaction" in the funding modal after funding. */
   const handleFundingComplete = () => {
     if (selectedToken && activeAccount) {
       clearBundlerCache(tokenChainId(selectedToken), activeAccount.address);
     }
     setFundingNeeded(null);
-    executeTransaction();
+    // Re-run handleContinue which will re-check funding → pass → enter confirm screen
+    handleContinue();
   };
 
   const executeTransaction = async () => {
@@ -297,12 +298,25 @@ export default function SendScreen() {
       if (error?.code === 'PASSKEY_CANCELLED') {
         setTxStatus('idle');
       } else if (error?.message?.includes('Insufficient balance on dedicated bundler EOA')) {
+        // Bundler explicitly says EOA balance is insufficient — always show funding modal.
+        // Fetch account info just to get the deposit address and current balance for display.
         setTxStatus('idle');
         try {
           const chainId = tokenChainId(selectedToken!);
-          const funding = await checkBundlerFunding(chainId, activeAccount!.address, 0n);
-          if (funding) {
-            setFundingNeeded(funding);
+          clearBundlerCache(chainId, activeAccount!.address);
+          const info = await fetchBundlerAccountInfo(chainId, activeAccount!.address);
+          if (info) {
+            const recommendedWei = await estimateRecommendedFunding(chainId);
+            setFundingNeeded({
+              depositAddress: info.depositAddress,
+              safeAddress: activeAccount!.address,
+              chainId,
+              nativeSym: info.nativeSym,
+              recommendedWei,
+              currentBalance: info.spendableBalance,
+              recommendedFormatted: formatWei(recommendedWei),
+              currentFormatted: formatWei(info.spendableBalance),
+            });
             return;
           }
         } catch { /* fall through */ }

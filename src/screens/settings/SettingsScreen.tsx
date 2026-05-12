@@ -23,6 +23,8 @@ import { DEFAULT_NETWORKS, getAllNetworks, refreshCustomNetworks } from '@/model
 import type { Network } from '@/models/network';
 import { saveNetworkConfig, loadNetworkConfigs, clearAll, loadServiceEndpoints, saveServiceEndpoints, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork } from '@/services/storage';
 import { checkNetworkCompatibility } from '@/services/network-checker';
+import { refreshPool } from '@/services/rpc-pool';
+import { clearBundlerCache } from '@/services/bundler-service';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Sun, Moon, Monitor } from 'lucide-react-native';
 import type { NetworkConfig, ServiceEndpoints, CustomNetwork, CompatibilityResult } from '@/models/types';
@@ -298,6 +300,9 @@ function NetworkEditorModal({ s, visible, onClose }: { s: S; visible: boolean; o
   const handleSave = useCallback(async (config: NetworkConfig) => {
     await saveNetworkConfig(config);
     setSavedConfigs(await loadNetworkConfigs());
+    // Flush caches so new endpoints take effect immediately
+    refreshPool(config.chainId);
+    clearBundlerCache(config.chainId);
   }, []);
 
   const handleDelete = useCallback(async (id: string) => {

@@ -18,7 +18,8 @@ import { useWallet } from '@/models/wallet-state';
 import { getAllNetworksSync } from '@/models/network';
 import { QRCode } from '@/components/QRCode';
 import { fetchTokens } from '@/services/wallet-api';
-import { tokenUsdValue } from '@/models/types';
+import { tokenBalanceDouble, tokenUsdValue, tokenId, tokenChainId, formatBalance, type APIToken } from '@/models/types';
+import { chainName } from '@/models/network';
 import * as Haptics from 'expo-haptics';
 import { Copy, Check, ArrowLeft, Share2 } from 'lucide-react-native';
 import type { Network } from '@/models/network';
@@ -298,6 +299,8 @@ export default function ReceiveScreen() {
 
   const [isListening, setIsListening] = useState(false);
   const [depositDetected, setDepositDetected] = useState(false);
+  const [depositDetails, setDepositDetails] = useState<string | null>(null);
+  const previousTokens = useRef<APIToken[] | null>(null);
   const [copied, setCopied] = useState(false);
   const [sharing, setSharing] = useState(false);
   const previousBalance = useRef<number | null>(null);
@@ -315,16 +318,32 @@ export default function ReceiveScreen() {
       if (AppState.currentState !== 'active') return;
       try {
         const tokens = await fetchTokens(address, { forceRefresh: true });
-        const total = tokens.reduce((sum, t) => sum + tokenUsdValue(t), 0);
 
-        if (previousBalance.current !== null && total > previousBalance.current) {
-          setDepositDetected(true);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setTimeout(() => setDepositDetected(false), 5000);
-          setIsListening(false);
-          return;
+        if (previousTokens.current !== null) {
+          // Diff: find tokens whose balance increased
+          const prevMap = new Map(previousTokens.current.map(t => [tokenId(t), tokenBalanceDouble(t)]));
+          const changes: string[] = [];
+          for (const t of tokens) {
+            const prevBal = prevMap.get(tokenId(t)) ?? 0;
+            const curBal = tokenBalanceDouble(t);
+            if (curBal > prevBal) {
+              const diff = curBal - prevBal;
+              const network = chainName(tokenChainId(t));
+              const usd = tokenUsdValue(t) > 0 ? ` (~$${(diff * (t.priceUsd ?? 0)).toFixed(2)})` : '';
+              changes.push(`+${formatBalance(diff)} ${t.symbol} on ${network}${usd}`);
+            }
+          }
+
+          if (changes.length > 0) {
+            const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+            setDepositDetected(true);
+            setDepositDetails(`${time}\n${changes.join('\n')}`);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            // Keep showing until user leaves the page (no auto-dismiss)
+            // Continue listening for more deposits
+          }
         }
-        previousBalance.current = total;
+        previousTokens.current = tokens;
       } catch {}
 
       const elapsed = Date.now() - startTime;
@@ -441,7 +460,12 @@ export default function ReceiveScreen() {
             {depositDetected && (
               <Animated.View style={styles.depositAlert} entering={fadeIn(0, 300)}>
                 <Check size={14} color={color.success.base} strokeWidth={3} />
-                <Text style={styles.depositText}>Deposit received!</Text>
+                <View>
+                  <Text style={styles.depositText}>Deposit received!</Text>
+                  {depositDetails && (
+                    <Text style={styles.depositDetails}>{depositDetails}</Text>
+                  )}
+                </View>
               </Animated.View>
             )}
           </VelaCard>
@@ -641,6 +665,13 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     ...inter.semibold,
     color: color.success.base,
+  },
+  depositDetails: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.success.base,
+    marginTop: space.xs,
+    lineHeight: 18,
   },
 
   // Networks — compact chip grid

@@ -93,10 +93,15 @@ export async function checkBundlerFunding(
   console.log(`[BundlerFunding] account info:`, info ? `deposit=${info.depositAddress} balance=${info.spendableBalance} status=${info.status}` : 'unreachable');
   if (!info) return null; // Can't reach bundler — let the transaction attempt proceed
 
-  // Check if balance is sufficient
+  // Check if balance is sufficient.
+  // The bundler requires: spendableBalance >= expectedCost × balanceReserveMultiplier (2x).
+  // expectedCost ≈ totalGas × outerGasPrice (which includes bundler tip).
+  // Use 4x the wallet's gas estimate to match: 2x for bundler's outerGasPrice overhead, 2x for reserve.
   const threshold = estimatedGasCostWei
-    ? estimatedGasCostWei * 2n // 2x buffer
+    ? estimatedGasCostWei * 4n
     : MIN_BALANCE_WEI;
+
+  console.log(`[BundlerFunding] threshold=${threshold} spendable=${info.spendableBalance} sufficient=${info.spendableBalance >= threshold} (gasCost=${estimatedGasCostWei ?? 'default'})`);
 
   if (info.spendableBalance >= threshold) return null;
 
@@ -166,15 +171,22 @@ export async function fetchBundlerAccountInfo(
 }
 
 /** Clear cached account info (e.g. after funding). */
-export function clearBundlerCache(chainId: number, safeAddress: string): void {
-  infoCache.delete(`${chainId}:${safeAddress.toLowerCase()}`);
+export function clearBundlerCache(chainId: number, safeAddress?: string): void {
+  if (safeAddress) {
+    infoCache.delete(`${chainId}:${safeAddress.toLowerCase()}`);
+  } else {
+    // Clear all entries for this chain
+    for (const key of infoCache.keys()) {
+      if (key.startsWith(`${chainId}:`)) infoCache.delete(key);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function estimateRecommendedFunding(chainId: number): Promise<bigint> {
+export async function estimateRecommendedFunding(chainId: number): Promise<bigint> {
   // Try to get current gas price for a more accurate recommendation
   try {
     const res = await poolRpcCall('eth_gasPrice', [], chainId);
@@ -197,7 +209,7 @@ function parseBigIntHex(value: any): bigint {
   return 0n;
 }
 
-function formatWei(wei: bigint): string {
+export function formatWei(wei: bigint): string {
   const eth = Number(wei) / 1e18;
   if (eth === 0) return '0';
   if (eth < 0.000001) return '< 0.000001';
