@@ -26,7 +26,7 @@ function AppShell() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <WalletProvider>
         <ThemeProvider value={resolved === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack screenOptions={{ headerShown: false }}>
+          <Stack screenOptions={{ headerShown: false }} key={resolved}>
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="onboarding" />
             <Stack.Screen name="send" options={{ presentation: 'modal' }} />
