@@ -14,7 +14,7 @@ import { Platform } from 'react-native';
 type AlertButton = { text?: string; onPress?: () => void; style?: string };
 
 /**
- * Show an alert dialog. Uses native Alert on iOS/Android, window.confirm/alert on web.
+ * Show an alert dialog. Uses native Alert on iOS/Android, styled in-app modal on web.
  */
 export function showAlert(
   title: string,
@@ -22,7 +22,14 @@ export function showAlert(
   buttons?: AlertButton[],
 ): void {
   if (Platform.OS === 'web') {
-    // If there are destructive/cancel buttons, use confirm
+    // Use in-app styled alert if AlertProvider is mounted
+    const { getGlobalShowAlert } = require('@/components/ui/AppAlert');
+    const globalShow = getGlobalShowAlert();
+    if (globalShow) {
+      globalShow(title, message, buttons);
+      return;
+    }
+    // Fallback: browser alert (AlertProvider not yet mounted)
     if (buttons && buttons.length > 1) {
       const ok = window.confirm(`${title}${message ? '\n\n' + message : ''}`);
       if (ok) {

@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { Appearance, View, ActivityIndicator } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { WalletProvider } from '@/models/wallet-state';
+import { AlertProvider } from '@/components/ui/AppAlert';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { hasPendingUploads } from '@/services/storage';
 import { loadTextScale, TextScaleProvider } from '@/constants/text-scale';
@@ -77,7 +78,9 @@ export default function RootLayout() {
   return (
     <TextScaleProvider>
       <ColorSchemeProvider>
-        <AppShell />
+        <AlertProvider>
+          <AppShell />
+        </AlertProvider>
       </ColorSchemeProvider>
     </TextScaleProvider>
   );
