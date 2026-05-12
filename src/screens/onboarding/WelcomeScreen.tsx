@@ -281,9 +281,11 @@ export function WelcomeScreen({ onCreateWallet, onLogin, loginLoading, onOpenSet
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
         <View style={styles.logoSection}>
           <Animated.View entering={fadeIn(200, 600)}>
-            <Text style={styles.logo}>
-              vel<Text style={styles.logoAccent}>a</Text>
-            </Text>
+            <Pressable onLongPress={__DEV__ ? onOpenSettings : undefined} delayLongPress={800}>
+              <Text style={styles.logo}>
+                vel<Text style={styles.logoAccent}>a</Text>
+              </Text>
+            </Pressable>
           </Animated.View>
           <Animated.View entering={fadeIn(500, 600)}>
             <Text style={styles.tagline}>
