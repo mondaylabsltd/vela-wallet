@@ -3,6 +3,7 @@ import { KeyboardAvoidingView, Platform, View, type ViewStyle } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { color, space, createStyles } from '@/constants/theme';
 import { useTextScale } from '@/constants/text-scale';
+import { useColorSchemePreference } from '@/constants/color-scheme';
 
 interface Props {
   children: React.ReactNode;
@@ -21,8 +22,9 @@ interface Props {
  * No key-based remounting — pure re-render, zero flicker.
  */
 export function ScreenContainer({ children, style, edges = ['top'] }: Props) {
-  // Force re-render on text scale change so styles.* Proxy returns fresh values
+  // Force re-render on text scale / color scheme change so styles.* Proxy returns fresh values
   useTextScale();
+  useColorSchemePreference();
 
   return (
     <View style={[styles.container, style]}>

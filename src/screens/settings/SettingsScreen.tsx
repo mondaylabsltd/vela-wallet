@@ -17,13 +17,14 @@ import { VelaButton } from '@/components/ui/VelaButton';
 import { ChainLogo } from '@/components/ChainLogo';
 import { color, text, inter, space, radius, font, shadow, useStyles } from '@/constants/theme';
 import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
+import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { DEFAULT_NETWORKS, getAllNetworks, refreshCustomNetworks } from '@/models/network';
 import type { Network } from '@/models/network';
 import { saveNetworkConfig, loadNetworkConfigs, clearAll, loadServiceEndpoints, saveServiceEndpoints, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork } from '@/services/storage';
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
-import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle, ExternalLink } from 'lucide-react-native';
+import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Sun, Moon, Monitor } from 'lucide-react-native';
 import type { NetworkConfig, ServiceEndpoints, CustomNetwork, CompatibilityResult } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
 import { getAccountBalances } from '@/services/balance-cache';
@@ -790,6 +791,43 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
 }
 
 // ---------------------------------------------------------------------------
+// Theme Picker — segmented control for auto / light / dark
+// ---------------------------------------------------------------------------
+
+const THEME_OPTIONS: { key: ColorSchemePreference; label: string; Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }> }[] = [
+  { key: 'light', label: 'Light', Icon: Sun },
+  { key: 'dark', label: 'Dark', Icon: Moon },
+  { key: 'auto', label: 'Auto', Icon: Monitor },
+];
+
+function ThemePicker({ s, current, onChange }: {
+  s: S; current: ColorSchemePreference; onChange: (pref: ColorSchemePreference) => void;
+}) {
+  return (
+    <View style={s.themePickerContainer}>
+      {THEME_OPTIONS.map(({ key, label, Icon }) => {
+        const active = current === key;
+        return (
+          <Pressable
+            key={key}
+            style={[s.themeOption, active && s.themeOptionActive]}
+            onPress={() => {
+              if (key !== current) {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                onChange(key);
+              }
+            }}
+          >
+            <Icon size={18} color={active ? color.accent.base : color.fg.subtle} strokeWidth={2} />
+            <Text style={[s.themeOptionLabel, active && s.themeOptionLabelActive]}>{label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Text Scale Slider — drag to adjust, snaps to levels, haptic on each snap
 // ---------------------------------------------------------------------------
 
@@ -897,6 +935,7 @@ export default function SettingsScreen() {
   const [showAddNetwork, setShowAddNetwork] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const { levelIndex: currentScaleIndex, setIndex: setScaleIndex } = useTextScale();
+  const { preference: colorPref, setPreference: setColorPref } = useColorSchemePreference();
 
   const accountName = activeAccount?.name ?? 'No Wallet';
   const address = activeAccount?.address ?? state.address;
@@ -934,6 +973,8 @@ export default function SettingsScreen() {
               currentIndex={currentScaleIndex}
               onChangeIndex={setScaleIndex}
             />
+            <View style={styles.settingsRowDividerFull} />
+            <ThemePicker s={styles} current={colorPref} onChange={setColorPref} />
             <View style={styles.settingsRowDividerFull} />
             <SettingsRow s={styles} icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
               title="About" subtitle="Vela Wallet v1.0.0" showDivider={false} onPress={() => router.push('/about')} />
@@ -1003,6 +1044,13 @@ const styleFactory = () => ({
   logoutText: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
 
   // Text Scale
+  // Theme Picker
+  themePickerContainer: { flexDirection: 'row' as const, paddingVertical: space.xl, paddingHorizontal: space.xl, gap: space.md },
+  themeOption: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: space.sm, paddingVertical: space.lg, borderRadius: radius.lg, backgroundColor: color.bg.sunken },
+  themeOptionActive: { backgroundColor: color.accent.soft, borderWidth: 1.5, borderColor: color.accent.base },
+  themeOptionLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
+  themeOptionLabelActive: { color: color.accent.base, ...inter.semibold },
+
   // Slider
   sliderContainer: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: space['2xl'], paddingHorizontal: space.xl, gap: space.lg },
   sliderLabelSmall: { fontSize: text.sm, ...inter.semibold, color: color.fg.subtle },

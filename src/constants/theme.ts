@@ -119,9 +119,10 @@ export function createStyles<T extends RNStyleSheet.NamedStyles<T>>(
 export function useStyles<T extends RNStyleSheet.NamedStyles<T>>(
   factory: () => T | RNStyleSheet.NamedStyles<T>,
 ): T {
-  const { version } = require('@/constants/text-scale').useTextScale();
+  const { version: textVer } = require('@/constants/text-scale').useTextScale();
+  const { version: colorVer } = require('@/constants/color-scheme').useColorSchemePreference();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  return React.useMemo(() => RNStyleSheet.create(factory() as T) as T, [version]);
+  return React.useMemo(() => RNStyleSheet.create(factory() as T) as T, [textVer, colorVer]);
 }
 
 export const leading = {
@@ -208,46 +209,52 @@ export const radius = {
 
 // ---------------------------------------------------------------------------
 // 4. Colors — keep Vela palette, organize semantically
+//    Supports light + dark mode via rebuildColors()
 // ---------------------------------------------------------------------------
 
+const LIGHT_COLORS = {
+  fg:      { base: '#1A1A18', muted: '#7A776E', subtle: '#B0ADA5', inverse: '#FFFFFF' },
+  bg:      { base: '#FAFAF8', raised: '#FFFFFF', sunken: '#F5F3EF' },
+  accent:  { base: '#E8572A', soft: '#FFF0EB' },
+  success: { base: '#2D8E5F', soft: '#EDFAF2' },
+  info:    { base: '#4267F4', soft: '#EDF0FF' },
+  border:  { base: '#ECEBE4', strong: '#D8D6CE' },
+};
+
+const DARK_COLORS = {
+  fg:      { base: '#E8E6E1', muted: '#9A9790', subtle: '#6A6760', inverse: '#1A1A18' },
+  bg:      { base: '#141412', raised: '#1E1E1B', sunken: '#0F0F0D' },
+  accent:  { base: '#E8572A', soft: '#2C1A12' },
+  success: { base: '#3DA872', soft: '#132A1E' },
+  info:    { base: '#5A7CF6', soft: '#131B33' },
+  border:  { base: '#2C2C28', strong: '#3E3E38' },
+};
+
+/** Mutable color tokens — mutated in place by rebuildColors(). */
 export const color = {
-  // Foreground hierarchy
-  fg: {
-    base:   '#1A1A18',   // primary text, icons
-    muted:  '#7A776E',   // secondary text
-    subtle: '#B0ADA5',   // tertiary text, placeholders
-    inverse: '#FFFFFF',  // text on dark/accent bg
-  },
+  fg:      { ...LIGHT_COLORS.fg },
+  bg:      { ...LIGHT_COLORS.bg },
+  accent:  { ...LIGHT_COLORS.accent },
+  success: { ...LIGHT_COLORS.success },
+  info:    { ...LIGHT_COLORS.info },
+  border:  { ...LIGHT_COLORS.border },
+};
 
-  // Background layers
-  bg: {
-    base:    '#FAFAF8',  // page background
-    raised:  '#FFFFFF',  // cards, inputs
-    sunken:  '#F5F3EF',  // inset areas, warm backgrounds
-  },
+let _isDark = false;
+export function isDarkMode(): boolean { return _isDark; }
 
-  // Brand accent
-  accent: {
-    base:  '#E8572A',
-    soft:  '#FFF0EB',
-  },
-
-  // Semantic
-  success: {
-    base: '#2D8E5F',
-    soft: '#EDFAF2',
-  },
-  info: {
-    base: '#4267F4',
-    soft: '#EDF0FF',
-  },
-
-  // Borders & dividers
-  border: {
-    base:   '#ECEBE4',
-    strong: '#D8D6CE',
-  },
-} as const;
+/** Rebuild color tokens for the given mode. Bumps style version. */
+export function rebuildColors(isDark: boolean): void {
+  if (_isDark === isDark && _styleVersion > 0) return; // no-op if unchanged
+  _isDark = isDark;
+  const palette = isDark ? DARK_COLORS : LIGHT_COLORS;
+  for (const group of Object.keys(palette) as (keyof typeof palette)[]) {
+    for (const key of Object.keys(palette[group])) {
+      (color as any)[group][key] = (palette as any)[group][key];
+    }
+  }
+  _styleVersion++;
+}
 
 // ---------------------------------------------------------------------------
 // 5. Shadows
@@ -289,25 +296,18 @@ export const motion = {
   springGentle: { damping: 20, stiffness: 120, mass: 1 },
 } as const;
 
-// Legacy exports for template components
-export const Colors = {
-  light: {
+// Legacy themed color accessor — reads from mutable `color` tokens.
+export function getThemeColors() {
+  return {
     text: color.fg.base,
     background: color.bg.base,
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
+    backgroundElement: _isDark ? '#212225' : '#F0F0F3',
+    backgroundSelected: _isDark ? '#2E3135' : '#E0E1E6',
     textSecondary: color.fg.muted,
-  },
-  dark: {
-    text: '#FFFFFF',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-  },
-} as const;
+  };
+}
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+export type ThemeColor = 'text' | 'background' | 'backgroundElement' | 'backgroundSelected' | 'textSecondary';
 
 export const Fonts = Platform.select({
   ios: { sans: 'system-ui', serif: 'ui-serif', rounded: 'ui-rounded', mono: 'ui-monospace' },

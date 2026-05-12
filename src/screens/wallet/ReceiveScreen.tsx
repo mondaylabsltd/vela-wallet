@@ -24,8 +24,13 @@ import { Copy, Check, ArrowLeft, Share2 } from 'lucide-react-native';
 import type { Network } from '@/models/network';
 import QRCodeLib from 'qrcode';
 
-// ── Web Canvas share-card renderer ──
+// ── Share card helpers ──
 const LOGO_ASSET = require('@/../assets/images/icon.png');
+
+/** Truncate network name so it fits in a chip */
+function truncateName(name: string, maxLen: number): string {
+  return name.length > maxLen ? name.slice(0, maxLen - 1).trimEnd() + '…' : name;
+}
 
 function resolveAssetUri(asset: any): string {
   if (typeof asset === 'string') return asset;
@@ -42,121 +47,107 @@ async function renderShareCardToCanvas(
   walletName: string,
   networks: Network[],
 ): Promise<Blob> {
-  const W = 750; // 2x for retina
-  const PAD = 64;
+  const W = 750;
+  const PAD = 80;
   const contentW = W - PAD * 2;
-
-  const logoSize = 80;
-  const qrSize = 360;
-  const chipH = 48;
-  const chipGap = 16;
+  const qrSize = 340;
+  const qrPad = 36;
+  const qrContainerSize = qrSize + qrPad * 2;
+  const chipH = 44;
+  const chipGap = 12;
   const chipsPerRow = 2;
   const networkRows = Math.ceil(networks.length / chipsPerRow);
   const networksH = networkRows * chipH + (networkRows - 1) * chipGap;
-  // Logo + title + wallet name + QR + address + divider + networks + footer
-  const H = PAD + logoSize + 24 + 48 + 20 + 40 + 16 + qrSize + 40 + 64 + 48 + 2 + 40 + 36 + 20 + networksH + 60 + 30 + 24 + PAD;
+  const logoSize = 48;
+
+  const H = PAD
+    + 46 + 12                              // title + gap
+    + 28 + 6 + 24 + 40                    // wallet name + gap + address + gap
+    + qrContainerSize + 40                 // QR container + gap
+    + 1 + 32                               // divider + gap
+    + 22 + 16                              // "Works on" label + gap
+    + networksH + 48                       // chips + gap
+    + logoSize + 12 + 28 + 20             // footer
+    + PAD;
 
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
 
-  // Background
+  // — Background —
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, 0, W, H);
 
-  let y = PAD;
-
-  // App logo
-  const lx = (W - logoSize) / 2;
-  let logoDrawn = false;
+  // — Preload logo —
+  let logoImg: HTMLImageElement | null = null;
   const logoSources = [
     resolveAssetUri(LOGO_ASSET),
     '/assets/assets/images/icon.png',
     '/assets/images/icon.png',
-    '/icon.png',
-    '/favicon.png',
   ].filter(s => s && s !== '[object Object]');
-
   for (const src of logoSources) {
-    try {
-      const logoImg = await loadImageRobust(src);
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(lx + logoSize / 2, y + logoSize / 2, logoSize / 2, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(logoImg, lx, y, logoSize, logoSize);
-      ctx.restore();
-      logoDrawn = true;
-      break;
-    } catch {}
+    try { logoImg = await loadImageRobust(src); break; } catch {}
   }
-  if (!logoDrawn) {
-    // Fallback: draw app icon background with sailboat silhouette
-    ctx.fillStyle = '#0A1929';
-    ctx.beginPath();
-    ctx.arc(lx + logoSize / 2, y + logoSize / 2, logoSize / 2, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  y += logoSize + 24;
 
-  // Title: "Scan to Send Me Crypto"
+  let y = PAD;
+
+  // — Title —
   ctx.fillStyle = '#1A1A18';
   ctx.font = 'bold 40px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Scan to Send Me Crypto', W / 2, y + 36);
-  y += 48 + 20;
+  ctx.fillText('Scan to Send Me Crypto', W / 2, y + 34);
+  y += 46 + 12;
 
-  // Wallet name
-  ctx.fillStyle = '#7A776E';
-  ctx.font = '500 30px Inter, system-ui, sans-serif';
-  ctx.fillText(walletName, W / 2, y + 28);
-  y += 40 + 16;
+  // — Wallet name —
+  ctx.fillStyle = '#1A1A18';
+  ctx.font = '600 28px Inter, system-ui, sans-serif';
+  ctx.fillText(walletName, W / 2, y + 22);
+  y += 28 + 6;
 
-  // QR code
+  // — Short address —
+  const shortAddr = `${address.slice(0, 6)}···${address.slice(-4)}`;
+  ctx.fillStyle = '#9E9B93';
+  ctx.font = '400 24px "SF Mono", "Fira Code", monospace';
+  ctx.fillText(shortAddr, W / 2, y + 18);
+  y += 24 + 40;
+
+  // — QR container with subtle border —
+  const qcX = (W - qrContainerSize) / 2;
+  ctx.strokeStyle = '#E8E6E1';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, qcX, y, qrContainerSize, qrContainerSize, 24);
+  ctx.stroke();
+
+  // QR code inside container
   const qrModules = QRCodeLib.create(address, { errorCorrectionLevel: 'M' }).modules;
   const moduleCount = qrModules.size;
   const moduleSize = qrSize / moduleCount;
-  const qrX = (W - qrSize) / 2;
-  ctx.fillStyle = '#000000';
+  const qrX = qcX + qrPad;
+  const qrY = y + qrPad;
+  ctx.fillStyle = '#1A1A18';
   for (let row = 0; row < moduleCount; row++) {
     for (let col = 0; col < moduleCount; col++) {
       if (qrModules.data[row * moduleCount + col] === 1) {
-        ctx.fillRect(qrX + col * moduleSize, y + row * moduleSize, moduleSize + 0.5, moduleSize + 0.5);
+        ctx.fillRect(qrX + col * moduleSize, qrY + row * moduleSize, moduleSize + 0.5, moduleSize + 0.5);
       }
     }
   }
-  y += qrSize + 40;
+  y += qrContainerSize + 40;
 
-  // Address box
-  const addrBoxH = 64;
-  ctx.fillStyle = '#F5F3EF';
-  roundRect(ctx, PAD, y, contentW, addrBoxH, 16);
-  ctx.fill();
-  ctx.fillStyle = '#1A1A18';
-  ctx.font = '500 22px "SF Mono", "Fira Code", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(address, W / 2, y + addrBoxH / 2 + 8);
-  y += addrBoxH + 48;
-
-  // Divider
+  // — Divider —
   ctx.fillStyle = '#ECEBE4';
-  ctx.fillRect(PAD, y, contentW, 2);
-  y += 2 + 40;
+  ctx.fillRect(PAD, y, contentW, 1);
+  y += 1 + 32;
 
-  // Supported Networks title
-  ctx.fillStyle = '#1A1A18';
-  ctx.font = 'bold 30px Inter, system-ui, sans-serif';
+  // — "Works on X networks" label —
+  ctx.fillStyle = '#9E9B93';
+  ctx.font = '500 22px Inter, system-ui, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('Supported Networks', PAD, y + 24);
-  y += 36;
+  ctx.fillText(`Works on ${networks.length} EVM networks`, PAD, y + 18);
+  y += 22 + 16;
 
-  ctx.fillStyle = '#7A776E';
-  ctx.font = '400 22px Inter, system-ui, sans-serif';
-  ctx.fillText('Same address across all EVM networks', PAD, y + 18);
-  y += 20 + 24;
-
-  // Network chips (2-column grid)
+  // — Network chips (2-column grid, justified) —
   const chipW = (contentW - chipGap) / 2;
   const logoImages = await Promise.all(
     networks.map(n => loadImage(n.logoURL).catch(() => null)),
@@ -169,12 +160,12 @@ async function renderShareCardToCanvas(
     const cy = y + row * (chipH + chipGap);
     const n = networks[i];
 
-    ctx.fillStyle = '#F5F3EF';
-    roundRect(ctx, cx, cy, chipW, chipH, 24);
+    ctx.fillStyle = '#F7F6F3';
+    roundRect(ctx, cx, cy, chipW, chipH, chipH / 2);
     ctx.fill();
 
-    const cLogoSize = 28;
-    const cLogoX = cx + 16;
+    const cLogoSize = 24;
+    const cLogoX = cx + 14;
     const cLogoY = cy + (chipH - cLogoSize) / 2;
     const img = logoImages[i];
     if (img) {
@@ -190,40 +181,45 @@ async function renderShareCardToCanvas(
       ctx.arc(cLogoX + cLogoSize / 2, cLogoY + cLogoSize / 2, cLogoSize / 2, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = n.iconColor;
-      ctx.font = `bold ${cLogoSize * 0.35}px Inter, sans-serif`;
+      ctx.font = `bold ${cLogoSize * 0.4}px Inter, sans-serif`;
       ctx.textAlign = 'center';
       ctx.fillText(n.iconLabel, cLogoX + cLogoSize / 2, cLogoY + cLogoSize / 2 + 4);
     }
 
-    ctx.fillStyle = '#1A1A18';
-    ctx.font = '600 22px Inter, system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(n.displayName, cLogoX + cLogoSize + 10, cy + chipH / 2 + 7);
-
-    if (n.isL2) {
-      const badgeText = 'L2';
-      ctx.font = '600 16px Inter, sans-serif';
-      const badgeW = ctx.measureText(badgeText).width + 12;
-      const badgeX = cx + chipW - badgeW - 14;
-      const badgeY = cy + (chipH - 22) / 2;
-      ctx.fillStyle = '#E8F0FE';
-      roundRect(ctx, badgeX, badgeY, badgeW, 22, 6);
-      ctx.fill();
-      ctx.fillStyle = '#4267F4';
-      ctx.textAlign = 'center';
-      ctx.fillText(badgeText, badgeX + badgeW / 2, badgeY + 16);
+    // Name — truncate to fit
+    const textX = cLogoX + cLogoSize + 8;
+    const maxTextX = cx + chipW - 16;
+    ctx.font = '600 20px Inter, system-ui, sans-serif';
+    const maxTextW = maxTextX - textX;
+    let label = n.displayName;
+    while (ctx.measureText(label).width > maxTextW && label.length > 2) {
+      label = label.slice(0, -1);
     }
+    if (label !== n.displayName) label = label.trimEnd() + '…';
+    ctx.fillStyle = '#4A4843';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, textX, cy + chipH / 2 + 7);
   }
-  y += networksH + 60;
+  y += networksH + 48;
 
-  // Footer: Vela Wallet + website
+  // — Footer —
+  if (logoImg) {
+    const flx = (W - logoSize) / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(flx + logoSize / 2, y + logoSize / 2, logoSize / 2, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(logoImg, flx, y, logoSize, logoSize);
+    ctx.restore();
+  }
+  y += logoSize + 12;
   ctx.fillStyle = '#1A1A18';
-  ctx.font = '600 26px Inter, system-ui, sans-serif';
+  ctx.font = '600 24px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('Vela Wallet', W / 2, y);
-  y += 30;
+  y += 28;
   ctx.fillStyle = '#B0ADA5';
-  ctx.font = '400 22px Inter, system-ui, sans-serif';
+  ctx.font = '400 20px Inter, system-ui, sans-serif';
   ctx.fillText('getvela.app', W / 2, y);
 
   return new Promise((resolve) => canvas.toBlob(resolve as BlobCallback, 'image/png', 1));
@@ -401,12 +397,21 @@ export default function ReceiveScreen() {
         {/* QR Card */}
         <Animated.View entering={fadeInDown(100, 400)}>
           <VelaCard elevated style={styles.qrCard}>
-            {/* Wallet name */}
+            {/* Identity */}
             <Text style={styles.walletName}>{accountName}</Text>
+            <Pressable onPress={copyAddress} style={styles.addressRow}>
+              <Text style={styles.addressText} numberOfLines={1}>{truncatedAddress}</Text>
+              {copied ? (
+                <Check size={14} color={color.success.base} strokeWidth={2.5} />
+              ) : (
+                <Copy size={14} color={color.fg.subtle} strokeWidth={1.8} />
+              )}
+            </Pressable>
 
-            <View style={styles.qrContainer}>
+            {/* QR */}
+            <View style={styles.qrBorder}>
               {address ? (
-                <QRCode value={address} size={180} />
+                <QRCode value={address} size={200} />
               ) : (
                 <View style={styles.qrPlaceholder}>
                   <Text style={styles.qrPlaceholderText}>No address</Text>
@@ -414,76 +419,52 @@ export default function ReceiveScreen() {
               )}
             </View>
 
-            {/* Address row with inline copy */}
-            <Pressable onPress={copyAddress} style={styles.addressRow}>
-              <Text style={styles.addressText} numberOfLines={1}>{truncatedAddress}</Text>
-              {copied ? (
-                <Check size={16} color={color.success.base} strokeWidth={2.5} />
-              ) : (
-                <Copy size={16} color={color.fg.muted} strokeWidth={2} />
-              )}
+            {/* Share */}
+            <Pressable
+              onPress={shareAsImage}
+              style={styles.shareBtn}
+              disabled={sharing}
+            >
+              <Share2 size={16} color={color.fg.base} strokeWidth={2} />
+              <Text style={styles.shareBtnText}>
+                {sharing ? 'Generating...' : 'Share'}
+              </Text>
             </Pressable>
 
-            {/* Status indicator */}
+            {/* Status */}
             {isListening && !depositDetected && (
               <Animated.View style={styles.listeningRow} entering={fadeIn(0, 300)}>
                 <PulsingDot />
                 <Text style={styles.listeningText}>Listening for deposits</Text>
               </Animated.View>
             )}
-
             {depositDetected && (
               <Animated.View style={styles.depositAlert} entering={fadeIn(0, 300)}>
-                <Check size={16} color={color.success.base} strokeWidth={3} />
+                <Check size={14} color={color.success.base} strokeWidth={3} />
                 <Text style={styles.depositText}>Deposit received!</Text>
               </Animated.View>
             )}
           </VelaCard>
         </Animated.View>
 
-        {/* Share button */}
+        {/* Networks */}
         <Animated.View entering={fadeInDown(200, 400)}>
-          <Pressable
-            onPress={shareAsImage}
-            style={styles.shareBtn}
-            disabled={sharing}
-          >
-            <Share2 size={18} color={color.fg.base} strokeWidth={2} />
-            <Text style={styles.shareBtnText}>
-              {sharing ? 'Generating...' : 'Share as Image'}
-            </Text>
-          </Pressable>
-        </Animated.View>
+          <Text style={styles.sectionLabel}>{`Works on ${networks.length} EVM networks`}</Text>
 
-        {/* Supported networks */}
-        <Animated.View entering={fadeInDown(300, 400)}>
-          <Text style={styles.sectionTitle}>Supported Networks</Text>
-          <Text style={styles.sectionSubtitle}>
-            Same address across all EVM networks
-          </Text>
-
-          <VelaCard style={styles.networksCard}>
-            {networks.map((network, index) => (
-              <View key={network.id}>
-                {index > 0 && <View style={styles.separator} />}
-                <View style={styles.networkRow}>
-                  <ChainLogo
-                    label={network.iconLabel}
-                    color={network.iconColor}
-                    bgColor={network.iconBg}
-                    logoURL={network.logoURL}
-                    size={32}
-                  />
-                  <Text style={styles.networkName}>{network.displayName}</Text>
-                  {network.isL2 && (
-                    <View style={styles.networkBadge}>
-                      <Text style={styles.networkBadgeText}>L2</Text>
-                    </View>
-                  )}
-                </View>
+          <View style={styles.networkGrid}>
+            {networks.map((network) => (
+              <View key={network.id} style={styles.networkChip}>
+                <ChainLogo
+                  label={network.iconLabel}
+                  color={network.iconColor}
+                  bgColor={network.iconBg}
+                  logoURL={network.logoURL}
+                  size={22}
+                />
+                <Text style={styles.networkChipName} numberOfLines={1}>{network.displayName}</Text>
               </View>
             ))}
-          </VelaCard>
+          </View>
         </Animated.View>
       </ScrollView>
 
@@ -491,28 +472,20 @@ export default function ReceiveScreen() {
       {Platform.OS !== 'web' && (
         <View style={styles.shareCardWrapper} pointerEvents="none">
           <View ref={shareCardRef} style={styles.shareCard} collapsable={false}>
-            {/* Logo */}
-            <Image source={require('@/../assets/images/icon.png')} style={styles.shareCardLogo} />
-
-            {/* Title */}
             <Text style={styles.shareCardHeadline}>Scan to Send Me Crypto</Text>
+            <Text style={styles.shareCardName}>{accountName}</Text>
+            <Text style={styles.shareCardAddr}>
+              {address ? `${address.slice(0, 6)}···${address.slice(-4)}` : ''}
+            </Text>
 
-            {/* Wallet name */}
-            <Text style={styles.shareCardTitle}>{accountName}</Text>
-
-            <View style={styles.shareCardQR}>
-              {address && <QRCode value={address} size={200} />}
-            </View>
-
-            <View style={styles.shareCardAddressBox}>
-              <Text style={styles.shareCardAddress}>{address}</Text>
+            <View style={styles.shareCardQRContainer}>
+              {address && <QRCode value={address} size={170} />}
             </View>
 
             <View style={styles.shareCardDivider} />
 
-            <Text style={styles.shareCardNetworksTitle}>Supported Networks</Text>
             <Text style={styles.shareCardNetworksSub}>
-              Same address across all EVM networks
+              {`Works on ${networks.length} EVM networks`}
             </Text>
 
             <View style={styles.shareCardNetworkGrid}>
@@ -523,19 +496,17 @@ export default function ReceiveScreen() {
                     color={network.iconColor}
                     bgColor={network.iconBg}
                     logoURL={network.logoURL}
-                    size={24}
+                    size={12}
                   />
-                  <Text style={styles.shareCardNetworkName}>{network.displayName}</Text>
-                  {network.isL2 && (
-                    <View style={styles.shareCardL2}>
-                      <Text style={styles.shareCardL2Text}>L2</Text>
-                    </View>
-                  )}
+                  <Text style={styles.shareCardNetworkName} numberOfLines={1}>
+                    {truncateName(network.displayName, 10)}
+                  </Text>
                 </View>
               ))}
             </View>
 
             <View style={styles.shareCardFooter}>
+              <Image source={require('@/../assets/images/icon.png')} style={styles.shareCardFooterLogo} />
               <Text style={styles.shareCardBrand}>Vela Wallet</Text>
               <Text style={styles.shareCardUrl}>getvela.app</Text>
             </View>
@@ -574,22 +545,41 @@ const styles = createStyles(() => ({
 
   // QR Card
   qrCard: {
-    padding: space['2xl'],
+    padding: space['3xl'],
+    paddingTop: space['4xl'],
+    paddingBottom: space['2xl'],
     alignItems: 'center',
     marginBottom: space.xl,
   },
   walletName: {
-    fontSize: text.lg,
-    ...inter.semibold,
+    fontSize: text['2xl'],
+    ...inter.bold,
     color: color.fg.base,
-    marginBottom: space.xl,
+    marginBottom: space.xs,
   },
-  qrContainer: {
-    marginBottom: space.xl,
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    alignSelf: 'center',
+    marginBottom: space['3xl'],
+  },
+  addressText: {
+    fontSize: text.sm,
+    ...inter.regular,
+    fontFamily: font.mono,
+    color: color.fg.subtle,
+  },
+  qrBorder: {
+    borderWidth: 1,
+    borderColor: color.border.base,
+    borderRadius: radius.xl,
+    padding: space['2xl'],
+    marginBottom: space['2xl'],
   },
   qrPlaceholder: {
-    width: 180,
-    height: 180,
+    width: 200,
+    height: 200,
     borderRadius: radius.xl,
     backgroundColor: color.bg.sunken,
     alignItems: 'center',
@@ -600,25 +590,25 @@ const styles = createStyles(() => ({
     color: color.fg.subtle,
   },
 
-  // Address row
-  addressRow: {
+  // Share button — inside the card
+  shareBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: space.md,
+    paddingVertical: space.md,
+    paddingHorizontal: space['2xl'],
+    borderRadius: radius.full,
     backgroundColor: color.bg.sunken,
-    borderRadius: radius.lg,
-    paddingHorizontal: space.xl,
-    paddingVertical: space.lg,
     alignSelf: 'center',
   },
-  addressText: {
+  shareBtnText: {
     fontSize: text.sm,
-    ...inter.medium,
-    fontFamily: font.mono,
+    ...inter.semibold,
     color: color.fg.base,
   },
 
-  // Listening
+  // Status
   listeningRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -636,8 +626,6 @@ const styles = createStyles(() => ({
     ...inter.medium,
     color: color.success.base,
   },
-
-  // Deposit
   depositAlert: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -655,70 +643,35 @@ const styles = createStyles(() => ({
     color: color.success.base,
   },
 
-  // Share button
-  shareBtn: {
+  // Networks — compact chip grid
+  sectionLabel: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.subtle,
+    marginBottom: space.lg,
+  },
+  networkGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.md,
-    paddingVertical: space.lg,
-    paddingHorizontal: space['2xl'],
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border.strong,
-    alignSelf: 'center',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: space.md,
     marginBottom: space['4xl'],
   },
-  shareBtnText: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.fg.base,
-  },
-
-  // Networks
-  sectionTitle: {
-    fontSize: text.lg,
-    ...inter.bold,
-    color: color.fg.base,
-    marginBottom: space.sm,
-  },
-  sectionSubtitle: {
-    fontSize: text.base,
-    ...inter.regular,
-    color: color.fg.muted,
-    marginBottom: space.xl,
-  },
-  networksCard: {
-    paddingVertical: space.md,
-  },
-  networkRow: {
+  networkChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.lg,
-    paddingVertical: space.lg,
-    paddingHorizontal: space['2xl'],
+    gap: space.md,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.full,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    width: '48.5%',
   },
-  networkName: {
-    fontSize: text.base,
+  networkChipName: {
+    fontSize: text.sm,
     ...inter.semibold,
     color: color.fg.base,
-    flex: 1,
-  },
-  networkBadge: {
-    backgroundColor: color.info.soft,
-    paddingHorizontal: space.md,
-    paddingVertical: 2,
-    borderRadius: radius.sm,
-  },
-  networkBadgeText: {
-    fontSize: text.xs,
-    ...inter.semibold,
-    color: color.info.base,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: color.border.base,
-    marginHorizontal: space['2xl'],
+    flexShrink: 1,
   },
 
   // ── Hidden share card (rendered off-screen for capture) ──
@@ -730,114 +683,92 @@ const styles = createStyles(() => ({
   shareCard: {
     width: SHARE_CARD_W,
     backgroundColor: '#FFFFFF',
-    padding: 32,
-    paddingBottom: 40,
+    padding: 40,
     alignItems: 'center',
-  },
-  shareCardLogo: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    marginBottom: 16,
   },
   shareCardHeadline: {
     fontSize: 20,
     fontWeight: '700',
     color: '#1A1A18',
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  shareCardTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#7A776E',
-    marginBottom: 20,
+  shareCardName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A1A18',
+    marginBottom: 3,
   },
-  shareCardQR: {
-    padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    marginBottom: 20,
-  },
-  shareCardAddressBox: {
-    backgroundColor: '#F5F3EF',
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    width: '100%',
-    marginBottom: 24,
-  },
-  shareCardAddress: {
+  shareCardAddr: {
     fontSize: 12,
     fontFamily: font.mono,
-    fontWeight: '500',
-    color: '#1A1A18',
-    textAlign: 'center',
-    lineHeight: 18,
+    fontWeight: '400',
+    color: '#9E9B93',
+    marginBottom: 20,
+  },
+  shareCardQRContainer: {
+    borderWidth: 0.75,
+    borderColor: '#E8E6E1',
+    borderRadius: 12,
+    padding: 18,
+    marginBottom: 20,
   },
   shareCardDivider: {
     height: 1,
     backgroundColor: '#ECEBE4',
     width: '100%',
-    marginBottom: 20,
-  },
-  shareCardNetworksTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1A1A18',
-    marginBottom: 4,
-    alignSelf: 'flex-start',
+    marginBottom: 14,
   },
   shareCardNetworksSub: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#7A776E',
-    marginBottom: 16,
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#9E9B93',
+    marginBottom: 8,
     alignSelf: 'flex-start',
   },
   shareCardNetworkGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    justifyContent: 'space-between',
+    rowGap: 6,
     width: '100%',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   shareCardNetworkChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#F5F3EF',
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: 4,
+    backgroundColor: '#F7F6F3',
+    borderRadius: 11,
+    paddingHorizontal: 7,
+    width: '48.5%',
+    height: 22,
   },
   shareCardNetworkName: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600',
-    color: '#1A1A18',
-  },
-  shareCardL2: {
-    backgroundColor: '#E8F0FE',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  shareCardL2Text: {
-    fontSize: 9,
-    fontWeight: '600',
-    color: '#4267F4',
+    color: '#4A4843',
+    flexShrink: 1,
   },
   shareCardFooter: {
-    paddingTop: 24,
+    alignItems: 'center',
+  },
+  shareCardFooterLogo: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginBottom: 5,
   },
   shareCardBrand: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
     color: '#1A1A18',
-    marginBottom: 4,
+    marginBottom: 2,
+    textAlign: 'center',
   },
   shareCardUrl: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '400',
     color: '#B0ADA5',
+    textAlign: 'center',
   },
 }));

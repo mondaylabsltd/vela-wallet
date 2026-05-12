@@ -1,14 +1,13 @@
 /**
- * Learn more about light and dark modes:
- * https://docs.expo.dev/guides/color-schemes/
+ * Legacy theme hook — returns dynamic colors based on current color scheme.
+ * Reads from the mutable `color` tokens so it always reflects the active mode.
  */
 
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { getThemeColors } from '@/constants/theme';
+import { useColorSchemePreference } from '@/constants/color-scheme';
 
 export function useTheme() {
-  const scheme = useColorScheme();
-  const theme = scheme === 'unspecified' ? 'light' : scheme;
-
-  return Colors[theme];
+  // Subscribe to color scheme changes so consumers re-render
+  useColorSchemePreference();
+  return getThemeColors();
 }
