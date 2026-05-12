@@ -418,6 +418,8 @@ export default function SendScreen() {
               index={index}
             />
           )}
+          initialNumToRender={10}
+          windowSize={5}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -591,10 +593,11 @@ export default function SendScreen() {
 
           {txStatus === 'idle' && (
             <VelaButton
-              title="Confirm & Send"
+              title={estimatingGas ? 'Checking gas...' : 'Confirm & Send'}
               onPress={handleConfirm}
               variant="accent"
               loading={sending}
+              disabled={estimatingGas}
               style={styles.confirmBtn}
             />
           )}
