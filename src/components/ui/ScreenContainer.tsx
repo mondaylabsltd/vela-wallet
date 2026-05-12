@@ -14,16 +14,17 @@ interface Props {
 /**
  * Standard screen wrapper with safe area, consistent padding, and keyboard avoidance.
  *
- * Uses `key={resolved}` so that when the color scheme changes, the entire
- * children tree remounts with fresh color tokens. Theme switches are rare,
- * so the brief remount is acceptable for guaranteed correctness.
+ * Subscribes to color scheme and text scale contexts so that createStyles
+ * Proxy returns fresh values on re-render. The actual re-render trigger
+ * comes from Appearance.setColorScheme() which fires useColorScheme()
+ * throughout the entire app — including React Navigation internals.
  */
 export function ScreenContainer({ children, style, edges = ['top'] }: Props) {
   useTextScale();
-  const { resolved } = useColorSchemePreference();
+  useColorSchemePreference();
 
   return (
-    <View style={[styles.container, style]} key={resolved}>
+    <View style={[styles.container, style]}>
       <SafeAreaView style={styles.safeArea} edges={edges}>
         <KeyboardAvoidingView
           style={styles.keyboardAvoiding}

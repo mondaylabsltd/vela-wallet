@@ -1,15 +1,16 @@
 /**
  * Color scheme preference system — auto / light / dark.
  *
- * Follows the same pattern as text-scale.ts:
- *   - Module-level cache for synchronous startup
- *   - AsyncStorage persistence
- *   - React context for reactive updates
- *   - Synchronous rebuild BEFORE re-render (not in useEffect)
+ * Uses Appearance.setColorScheme() to set the app-wide color scheme natively.
+ * This triggers useColorScheme() hooks everywhere — including React Navigation's
+ * internal components — causing ALL screens to re-render with correct colors.
+ *
+ * Pattern: Appearance.setColorScheme → useColorScheme fires → rebuildColors
+ *          synchronously → components re-render with new color tokens.
  */
 import { Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useState, useCallback, useMemo, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { useColorScheme as useSystemColorScheme } from 'react-native';
 
 const STORAGE_KEY = 'vela.colorScheme';
@@ -47,6 +48,15 @@ export async function loadColorScheme(): Promise<void> {
   }
 }
 
+/**
+ * Apply the preference to the native Appearance API.
+ * Call at startup after loading preference, and when user changes preference.
+ */
+export function applyColorScheme(pref: ColorSchemePreference): void {
+  // 'unspecified' tells React Native to follow system preference
+  Appearance.setColorScheme(pref === 'auto' ? 'unspecified' : pref);
+}
+
 // ---------------------------------------------------------------------------
 // React Context
 // ---------------------------------------------------------------------------
@@ -72,49 +82,40 @@ export function useColorSchemePreference() {
 /**
  * Provider that manages color scheme state.
  *
- * Key design: rebuildColors() is called SYNCHRONOUSLY before state updates,
- * so by the time React re-renders children, color tokens are already correct.
- * This mirrors how text-scale.ts calls rebuildTextScale() synchronously.
+ * Relies on Appearance.setColorScheme() to propagate changes natively.
+ * useColorScheme() fires in ALL components (including React Navigation
+ * internals), causing the entire screen tree to re-render.
+ *
+ * rebuildColors() is called synchronously so color tokens are correct
+ * by the time components access them during re-render.
  */
 export function ColorSchemeProvider({ children }: { children: React.ReactNode }) {
+  // This hook fires whenever Appearance.setColorScheme() is called
+  // or when the system scheme changes (for 'auto' mode)
   const systemScheme = useSystemColorScheme();
   const [preference, setPreferenceState] = useState<ColorSchemePreference>(_preference);
   const [version, setVersion] = useState(0);
-  const prevResolved = useRef<string>('');
 
   const resolved = resolveColorScheme(preference, systemScheme);
 
-  // Synchronously rebuild colors during render when resolved changes.
-  // This ensures color tokens are correct BEFORE children render.
-  // rebuildColors is idempotent — safe to call during render.
-  if (resolved !== prevResolved.current) {
-    prevResolved.current = resolved;
-    const { rebuildColors } = require('@/constants/theme');
-    rebuildColors(resolved === 'dark');
-  }
-
-  // When system scheme changes, we need to bump version to trigger consumer re-renders.
-  // The colors are already rebuilt synchronously above, but children won't re-render
-  // unless the context value changes.
-  const prevSystemScheme = useRef(systemScheme);
-  if (systemScheme !== prevSystemScheme.current) {
-    prevSystemScheme.current = systemScheme;
-    // Schedule a version bump (React allows setState during render for derived state)
-    // We use a micro-task to avoid the "setState during render" warning
-    Promise.resolve().then(() => setVersion(v => v + 1));
-  }
+  // Synchronously rebuild colors during render.
+  // By the time children render, color tokens are already correct.
+  const { rebuildColors } = require('@/constants/theme');
+  rebuildColors(resolved === 'dark');
 
   const setPreference = useCallback((pref: ColorSchemePreference) => {
     _preference = pref;
-    // 1. Rebuild colors SYNCHRONOUSLY before triggering re-renders
-    const sys = Appearance.getColorScheme();
-    const newResolved = resolveColorScheme(pref, sys);
-    const { rebuildColors } = require('@/constants/theme');
-    rebuildColors(newResolved === 'dark');
-    // 2. Trigger re-render (React batches these)
+    // 1. Set native color scheme — triggers useColorScheme() everywhere
+    Appearance.setColorScheme(pref === 'auto' ? 'unspecified' : pref);
+    // 2. Rebuild tokens synchronously (before React processes state updates)
+    const effectiveScheme = Appearance.getColorScheme();
+    const newResolved = resolveColorScheme(pref, effectiveScheme);
+    const { rebuildColors: rebuild } = require('@/constants/theme');
+    rebuild(newResolved === 'dark');
+    // 3. Update state (React batches with the Appearance-triggered re-renders)
     setPreferenceState(pref);
     setVersion(v => v + 1);
-    // 3. Persist in background
+    // 4. Persist in background
     AsyncStorage.setItem(STORAGE_KEY, pref).catch(() => {});
   }, []);
 

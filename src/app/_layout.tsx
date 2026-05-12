@@ -14,6 +14,7 @@ import {
   loadColorScheme,
   getColorSchemePreference,
   resolveColorScheme,
+  applyColorScheme,
   ColorSchemeProvider,
   useColorSchemePreference,
 } from '@/constants/color-scheme';
@@ -48,8 +49,11 @@ export default function RootLayout() {
     Promise.all([
       loadTextScale().then(() => rebuildTextScale()),
       loadColorScheme().then(() => {
+        const pref = getColorSchemePreference();
+        // Set native color scheme so useColorScheme() returns correct value
+        applyColorScheme(pref);
         const systemScheme = Appearance.getColorScheme();
-        const resolved = resolveColorScheme(getColorSchemePreference(), systemScheme);
+        const resolved = resolveColorScheme(pref, systemScheme);
         rebuildColors(resolved === 'dark');
       }),
       refreshCustomNetworks(),
