@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
-import { Platform, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Platform, View, Text, StyleSheet, Pressable } from 'react-native';
+import { showAlert } from '@/services/platform';
 import { AppModal } from '@/components/ui/AppModal';
-import { CameraView, useCameraPermissions, scanFromURLAsync } from 'expo-camera';
-import * as ImagePicker from 'expo-image-picker';
 import jsQR from 'jsqr';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { X, SwitchCamera, Camera, ImagePlus } from 'lucide-react-native';
@@ -22,8 +21,140 @@ function parseAddress(data: string): string {
   return address;
 }
 
-export function QRScanner({ visible, onScan, onClose }: Props) {
+// ---------------------------------------------------------------------------
+// Web camera component using getUserMedia + jsQR
+// ---------------------------------------------------------------------------
+
+function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanned: boolean }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const rafRef = useRef<number>(0);
+
+  const scan = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
+      rafRef.current = requestAnimationFrame(scan);
+      return;
+    }
+    const ctx = canvas.getContext('2d')!;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(imageData.data as any, imageData.width, imageData.height);
+    if (code?.data && !scanned) {
+      onScan(code.data);
+    }
+    rafRef.current = requestAnimationFrame(scan);
+  }, [onScan, scanned]);
+
+  useEffect(() => {
+    let mounted = true;
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then(stream => {
+        if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+      })
+      .catch(() => {});
+    rafRef.current = requestAnimationFrame(scan);
+    return () => {
+      mounted = false;
+      cancelAnimationFrame(rafRef.current);
+      streamRef.current?.getTracks().forEach(t => t.stop());
+    };
+  }, [scan]);
+
+  return (
+    <View style={styles.cameraContainer}>
+      <video
+        ref={videoRef as any}
+        style={{ width: '100%', height: '100%', objectFit: 'cover' } as any}
+        playsInline
+        muted
+        autoPlay
+      />
+      <canvas ref={canvasRef as any} style={{ display: 'none' } as any} />
+      {/* Overlay with scanning frame */}
+      <View style={styles.overlay}>
+        <View style={styles.overlayTop} />
+        <View style={styles.overlayMiddle}>
+          <View style={styles.overlaySide} />
+          <View style={styles.scanFrame}>
+            <View style={[styles.corner, styles.cornerTL]} />
+            <View style={[styles.corner, styles.cornerTR]} />
+            <View style={[styles.corner, styles.cornerBL]} />
+            <View style={[styles.corner, styles.cornerBR]} />
+          </View>
+          <View style={styles.overlaySide} />
+        </View>
+        <View style={styles.overlayBottom} />
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Native camera component using expo-camera
+// ---------------------------------------------------------------------------
+
+function NativeCamera({ facing, onBarCodeScanned }: {
+  facing: 'back' | 'front';
+  onBarCodeScanned: (result: { data: string }) => void;
+}) {
+  const { CameraView, useCameraPermissions } = require('expo-camera');
   const [permission, requestPermission] = useCameraPermissions();
+
+  if (!permission?.granted) {
+    return (
+      <View style={styles.permissionContainer}>
+        <Camera size={40} color={color.fg.subtle} />
+        <Text style={styles.permissionText}>
+          Camera access is needed to scan QR codes.
+        </Text>
+        <Pressable style={styles.permissionButton} onPress={requestPermission}>
+          <Text style={styles.permissionButtonText}>Grant Permission</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.cameraContainer}>
+      <CameraView
+        style={styles.camera}
+        facing={facing}
+        barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+        onBarcodeScanned={onBarCodeScanned}
+      />
+      <View style={styles.overlay}>
+        <View style={styles.overlayTop} />
+        <View style={styles.overlayMiddle}>
+          <View style={styles.overlaySide} />
+          <View style={styles.scanFrame}>
+            <View style={[styles.corner, styles.cornerTL]} />
+            <View style={[styles.corner, styles.cornerTR]} />
+            <View style={[styles.corner, styles.cornerBL]} />
+            <View style={[styles.corner, styles.cornerBR]} />
+          </View>
+          <View style={styles.overlaySide} />
+        </View>
+        <View style={styles.overlayBottom} />
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main QRScanner
+// ---------------------------------------------------------------------------
+
+export function QRScanner({ visible, onScan, onClose }: Props) {
   const [scanned, setScanned] = useState(false);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
 
@@ -36,40 +167,45 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
 
   async function handlePickImage() {
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 1,
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-
-      const uri = result.assets[0].uri;
-
       if (Platform.OS === 'web') {
-        // Web: decode via canvas + jsQR
-        const response = await fetch(uri);
-        const blob = await response.blob();
-        const bitmap = await createImageBitmap(blob);
-        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(bitmap, 0, 0);
-        const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
-        const code = jsQR(imageData.data as any, imageData.width, imageData.height);
-        if (code?.data) {
-          onScan(parseAddress(code.data));
-        } else {
-          Alert.alert('No QR Found', 'Could not find a QR code in the selected image.');
-        }
+        // Web: use file input to pick image, then decode via canvas + jsQR
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = async () => {
+          const file = input.files?.[0];
+          if (!file) return;
+          const bitmap = await createImageBitmap(file);
+          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(bitmap, 0, 0);
+          const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+          const code = jsQR(imageData.data as any, imageData.width, imageData.height);
+          if (code?.data) {
+            onScan(parseAddress(code.data));
+          } else {
+            showAlert('No QR Found', 'Could not find a QR code in the selected image.');
+          }
+        };
+        input.click();
       } else {
-        // Native: use expo-camera's built-in image scanner
+        const ImagePicker = await import('expo-image-picker');
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 1,
+        });
+        if (result.canceled || !result.assets?.[0]) return;
+        const uri = result.assets[0].uri;
+        const { scanFromURLAsync } = await import('expo-camera');
         const barcodes = await scanFromURLAsync(uri, ['qr']);
         if (barcodes.length > 0 && barcodes[0].data) {
           onScan(parseAddress(barcodes[0].data));
         } else {
-          Alert.alert('No QR Found', 'Could not find a QR code in the selected image.');
+          showAlert('No QR Found', 'Could not find a QR code in the selected image.');
         }
       }
     } catch {
-      Alert.alert('Error', 'Failed to scan the image.');
+      showAlert('Error', 'Failed to scan the image.');
     }
   }
 
@@ -83,50 +219,23 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             <X size={22} color={color.accent.base} strokeWidth={2.5} />
           </Pressable>
           <Text style={styles.title}>Scan QR</Text>
-          <Pressable
-            onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}
-            hitSlop={8}
-            style={styles.headerBtn}
-          >
-            <SwitchCamera size={22} color={color.accent.base} strokeWidth={2} />
-          </Pressable>
+          {Platform.OS !== 'web' ? (
+            <Pressable
+              onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}
+              hitSlop={8}
+              style={styles.headerBtn}
+            >
+              <SwitchCamera size={22} color={color.accent.base} strokeWidth={2} />
+            </Pressable>
+          ) : (
+            <View style={styles.headerBtn} />
+          )}
         </View>
 
-        {!permission?.granted ? (
-          <View style={styles.permissionContainer}>
-            <Camera size={40} color={color.fg.subtle} />
-            <Text style={styles.permissionText}>
-              Camera access is needed to scan QR codes.
-            </Text>
-            <Pressable style={styles.permissionButton} onPress={requestPermission}>
-              <Text style={styles.permissionButtonText}>Grant Permission</Text>
-            </Pressable>
-          </View>
+        {Platform.OS === 'web' ? (
+          <WebCamera onScan={(data) => handleBarCodeScanned({ data })} scanned={scanned} />
         ) : (
-          <View style={styles.cameraContainer}>
-            <CameraView
-              style={styles.camera}
-              facing={facing}
-              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-              onBarcodeScanned={handleBarCodeScanned}
-            />
-            {/* Overlay with scanning frame */}
-            <View style={styles.overlay}>
-              <View style={styles.overlayTop} />
-              <View style={styles.overlayMiddle}>
-                <View style={styles.overlaySide} />
-                <View style={styles.scanFrame}>
-                  {/* Corner accents */}
-                  <View style={[styles.corner, styles.cornerTL]} />
-                  <View style={[styles.corner, styles.cornerTR]} />
-                  <View style={[styles.corner, styles.cornerBL]} />
-                  <View style={[styles.corner, styles.cornerBR]} />
-                </View>
-                <View style={styles.overlaySide} />
-              </View>
-              <View style={styles.overlayBottom} />
-            </View>
-          </View>
+          <NativeCamera facing={facing} onBarCodeScanned={handleBarCodeScanned} />
         )}
 
         <View style={styles.footer}>

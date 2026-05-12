@@ -4,10 +4,8 @@ import {
   Text,
   ScrollView,
   Pressable,
-  Alert,
   TextInput,
   ActivityIndicator,
-  Linking,
 } from 'react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { useRouter } from 'expo-router';
@@ -38,7 +36,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import * as Haptics from 'expo-haptics';
+import { showAlert, openURL, hapticSuccess, hapticLight } from '@/services/platform';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 
 // All styles in one factory → useStyles recomputes everything on text scale change
@@ -256,7 +254,7 @@ function AccountSwitcherModal({ s, visible, onClose }: { s: S; visible: boolean;
             const bal = cachedBalances.get(account.address);
             return (
               <Pressable key={account.id} style={[s.accountItem, isActive && s.accountItemActive]}
-                onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); onClose(); }}>
+                onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); hapticSuccess(); onClose(); }}>
                 <View style={s.accountAvatar}>
                   <Text style={s.accountAvatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text>
                 </View>
@@ -306,7 +304,7 @@ function NetworkEditorModal({ s, visible, onClose }: { s: S; visible: boolean; o
   }, []);
 
   const handleDelete = useCallback(async (id: string) => {
-    Alert.alert('Remove Network', 'Remove this custom network?', [
+    showAlert('Remove Network', 'Remove this custom network?', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
         await removeCustomNetwork(id);
@@ -453,7 +451,7 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
         <View style={s.modalHeader}>
           <Text style={s.modalTitle}>Service Endpoints</Text>
           <View style={s.modalHeaderRight}>
-            <Pressable onPress={() => Linking.openURL('https://github.com/atshelchin/vela-wallet-mobile#self-deploy-service-endpoints')} hitSlop={8} style={s.refreshBtn}>
+            <Pressable onPress={() => openURL('https://github.com/atshelchin/vela-wallet-mobile#self-deploy-service-endpoints')} hitSlop={8} style={s.refreshBtn}>
               <ExternalLink size={18} color={color.fg.muted} strokeWidth={2} />
             </Pressable>
             <Pressable onPress={() => setRefreshCount(c => c + 1)} hitSlop={8} style={s.refreshBtn}>
@@ -777,7 +775,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
               </Text>
               <VelaButton
                 title="Open Chain Setup Tool"
-                onPress={() => Linking.openURL(VELA_CHAIN_SETUP_URL)}
+                onPress={() => openURL(VELA_CHAIN_SETUP_URL)}
                 variant="accent"
                 style={s.checkBtn}
               />
@@ -818,7 +816,7 @@ function ThemePicker({ s, current, onChange }: {
             style={[s.themeOption, active && s.themeOptionActive]}
             onPress={() => {
               if (key !== current) {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                hapticLight();
                 onChange(key);
               }
             }}
@@ -861,7 +859,7 @@ function TextScaleSlider({ s, currentIndex, onChangeIndex }: {
   }, [currentIndex, isDragging, thumbX, trackWidth, lastSnappedIndex]);
 
   const snapAndApply = useCallback((index: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticLight();
     onChangeIndex(index);
   }, [onChangeIndex]);
 
@@ -946,7 +944,7 @@ export default function SettingsScreen() {
   const address = activeAccount?.address ?? state.address;
 
   const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout? This will clear all local data.', [
+    showAlert('Logout', 'Are you sure you want to logout? This will clear all local data.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Logout', style: 'destructive', onPress: async () => { await clearAll(); dispatch({ type: 'LOGOUT' }); router.replace('/'); } },
     ]);

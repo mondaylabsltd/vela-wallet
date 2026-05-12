@@ -10,15 +10,18 @@ import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenC
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
-import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth } from '@/services/safe-transaction';
+import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend } from '@/services/safe-transaction';
 import { findAccountByCredentialId, saveTransaction, loadTransactions } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, estimateRecommendedFunding, formatWei, type FundingNeeded } from '@/services/bundler-service';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
-import React, { useEffect, useState } from 'react';
-import { Alert, FlatList, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
+import { openBrowser } from '@/services/platform';
+import { getAllNetworksSync } from '@/models/network';
+import { showAlert } from '@/services/platform';
+import React, { useEffect, useRef, useState } from 'react';
+import { FlatList, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   withSpring,
@@ -29,7 +32,7 @@ import { fadeInDown } from '@/constants/entering';
 import { ArrowLeft, X, ScanLine, BookUser, CheckCircle2, AlertCircle, Loader } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
-type TxStatus = 'idle' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
+type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
 
 function isValidAddress(addr: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(addr);
@@ -107,6 +110,10 @@ export default function SendScreen() {
   const [recentRecipients, setRecentRecipients] = useState<string[]>([]);
   const [showContacts, setShowContacts] = useState(false);
 
+  // Prefetch account credential + webauthn module while user reviews confirm screen
+  const prefetchedAccount = useRef<{ publicKeyHex: string } | null>(null);
+  const webauthnModuleRef = useRef<typeof import('@/services/webauthn-verify') | null>(null);
+
   useEffect(() => {
     if (!address) return;
     setLoading(true);
@@ -126,7 +133,7 @@ export default function SendScreen() {
           }
         }
       })
-      .catch(() => Alert.alert('Error', 'Failed to load tokens.'))
+      .catch(() => showAlert('Error', 'Failed to load tokens.'))
       .finally(() => setLoading(false));
 
     // Load recent recipients from transaction history
@@ -151,43 +158,56 @@ export default function SendScreen() {
 
   const handleContinue = async () => {
     if (!isValidAddress(recipient)) {
-      Alert.alert('Invalid Address', 'Please enter a valid Ethereum address (0x...).');
+      showAlert('Invalid Address', 'Please enter a valid Ethereum address (0x...).');
       return;
     }
     const amountNum = parseFloat(amount);
     if (isNaN(amountNum) || amountNum <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount greater than zero.');
+      showAlert('Invalid Amount', 'Please enter a valid amount greater than zero.');
       return;
     }
     if (selectedToken && amountNum > tokenBalanceDouble(selectedToken)) {
-      Alert.alert('Insufficient Balance', 'Amount exceeds your available balance.');
+      showAlert('Insufficient Balance', 'Amount exceeds your available balance.');
       return;
     }
 
-    // Estimate gas fee + check bundler funding before entering confirm screen
+    // Estimate gas fee + check bundler funding in parallel before entering confirm screen
     if (selectedToken && activeAccount) {
       setEstimatingGas(true);
       const chainId = tokenChainId(selectedToken);
-      let gasCost: bigint | undefined;
       try {
-        const fee = await estimateTransactionFee(activeAccount.address, chainId);
-        setEstimatedGas(formatWeiToEth(fee.totalWei));
-        gasCost = fee.totalWei;
-      } catch {
-        setEstimatedGas(null);
-      }
+        // Run gas estimation and bundler pre-fetch concurrently
+        // bundler info is fetched to warm cache — checkBundlerFunding reuses it
+        const [feeResult] = await Promise.allSettled([
+          estimateTransactionFee(activeAccount.address, chainId),
+          fetchBundlerAccountInfo(chainId, activeAccount.address),
+        ]);
 
-      // Pre-check bundler funding — show modal now instead of after signing
-      try {
-        const funding = await checkBundlerFunding(chainId, activeAccount.address, gasCost);
+        const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
+        if (fee) {
+          setEstimatedGas(formatWeiToEth(fee.totalWei));
+        } else {
+          setEstimatedGas(null);
+        }
+
+        // Check bundler funding using pre-fetched info (avoids second REST call)
+        const funding = await checkBundlerFunding(chainId, activeAccount.address, fee?.totalWei);
         if (funding) {
           setEstimatingGas(false);
           setFundingNeeded(funding);
-          return; // Don't navigate to confirm — show funding modal first
+          return;
         }
       } catch { /* proceed */ }
 
       setEstimatingGas(false);
+    }
+
+    // Prefetch everything while user reviews confirm screen
+    if (activeAccount && selectedToken) {
+      const chainId = tokenChainId(selectedToken);
+      prefetchForSend(activeAccount.address, chainId);
+      findAccountByCredentialId(activeAccount.id).then(s => { prefetchedAccount.current = s ?? null; });
+      import('@/services/webauthn-verify').then(m => { webauthnModuleRef.current = m; });
     }
 
     setStep('confirm');
@@ -219,22 +239,25 @@ export default function SendScreen() {
   const executeTransaction = async () => {
     if (!selectedToken || !activeAccount) return;
     setSending(true);
-    setTxStatus('signing');
+    setTxStatus('preparing');
     setTxHash(null);
     setTxError(null);
     try {
       const chainId = tokenChainId(selectedToken);
-      const stored = await findAccountByCredentialId(activeAccount.id);
+      // Use prefetched account if available, otherwise fetch now
+      const stored = prefetchedAccount.current ?? await findAccountByCredentialId(activeAccount.id);
       if (!stored?.publicKeyHex) {
         throw new Error('Public key not found for this account');
       }
 
       const signFn = async (challenge: Uint8Array) => {
+        setTxStatus('signing');
         const challengeHex = toHex(challenge);
         const assertion = await Passkey.sign(challengeHex, activeAccount.id);
 
-        const { verifySafeWebAuthn } = await import('@/services/webauthn-verify');
-        const compat = verifySafeWebAuthn(assertion);
+        // Use prefetched module if available, otherwise dynamic import
+        const webauthnMod = webauthnModuleRef.current ?? await import('@/services/webauthn-verify');
+        const compat = webauthnMod.verifySafeWebAuthn(assertion);
         if (!compat.ok) {
           throw new Error(
             'Your device\'s identity provider is not compatible with Vela Wallet. ' +
@@ -557,13 +580,14 @@ export default function SendScreen() {
 
           {txStatus !== 'idle' && (
             <Animated.View entering={fadeInDown(0, 200)} style={styles.txStatusWrap}>
-              {(txStatus === 'signing' || txStatus === 'submitting' || txStatus === 'confirming') && (
+              {(txStatus === 'preparing' || txStatus === 'signing' || txStatus === 'submitting' || txStatus === 'confirming') && (
                 <View style={styles.txStatusRow}>
                   <Animated.View style={styles.txSpinner}>
                     <Loader size={20} color={color.accent.base} strokeWidth={2.5} />
                   </Animated.View>
                   <Text style={styles.txStatusText}>
-                    {txStatus === 'signing' ? 'Waiting for biometric...' :
+                    {txStatus === 'preparing' ? 'Preparing transaction...' :
+                     txStatus === 'signing' ? 'Waiting for biometric...' :
                      txStatus === 'submitting' ? 'Submitting transaction...' :
                      'Confirming on-chain...'}
                   </Text>
@@ -574,10 +598,17 @@ export default function SendScreen() {
                   <CheckCircle2 size={20} color={color.success.base} strokeWidth={2.5} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.txStatusSuccess}>Transaction Confirmed</Text>
-                    {txHash && (
-                      <Text style={styles.txStatusHash} numberOfLines={1} ellipsizeMode="middle">
-                        {txHash}
-                      </Text>
+                    {txHash && selectedToken && (
+                      <Pressable onPress={() => {
+                        const chainId = tokenChainId(selectedToken);
+                        const network = getAllNetworksSync().find(n => n.chainId === chainId);
+                        const base = network?.explorerURL ?? 'https://etherscan.io';
+                        openBrowser(`${base}/tx/${txHash}`);
+                      }}>
+                        <Text style={styles.txStatusHash} numberOfLines={1} ellipsizeMode="middle">
+                          {txHash} ↗
+                        </Text>
+                      </Pressable>
                     )}
                   </View>
                 </View>
@@ -961,10 +992,11 @@ const styles = createStyles(() => ({
   },
   txStatusHash: {
     fontSize: text.xs,
-    ...inter.regular,
+    ...inter.medium,
     fontFamily: font.mono,
-    color: color.fg.subtle,
+    color: color.accent.base,
     marginTop: 2,
+    textDecorationLine: 'underline',
   },
   txStatusError: {
     fontSize: text.base,

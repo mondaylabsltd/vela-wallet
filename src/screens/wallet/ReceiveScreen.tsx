@@ -10,12 +10,11 @@ import { chainName, getAllNetworksSync } from '@/models/network';
 import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
-import * as Clipboard from 'expo-clipboard';
-import * as Haptics from 'expo-haptics';
+import { copyToClipboard, hapticSuccess, hapticLight, isAppActive } from '@/services/platform';
 import { ArrowLeft, Check, Copy, Share2 } from 'lucide-react-native';
 import QRCodeLib from 'qrcode';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -67,7 +66,7 @@ async function renderShareCardToCanvas(
     + 1 + 32                               // divider + gap
     + 22 + 16                              // "Works on" label + gap
     + networksH + 48                       // chips + gap
-    + logoSize + 12 + 28 + 20             // footer
+    + logoSize + 24 + 28 + 20             // footer
     + PAD;
 
   const canvas = document.createElement('canvas');
@@ -212,7 +211,7 @@ async function renderShareCardToCanvas(
     ctx.drawImage(logoImg, flx, y, logoSize, logoSize);
     ctx.restore();
   }
-  y += logoSize + 12;
+  y += logoSize + 24;
   ctx.fillStyle = '#1A1A18';
   ctx.font = '600 24px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
@@ -315,7 +314,7 @@ export default function ReceiveScreen() {
     let timerId: ReturnType<typeof setTimeout>;
 
     const checkDeposit = async () => {
-      if (AppState.currentState !== 'active') return;
+      if (!isAppActive()) return;
       try {
         const tokens = await fetchTokens(address, { forceRefresh: true });
 
@@ -341,7 +340,7 @@ export default function ReceiveScreen() {
             const time = new Date().toLocaleTimeString('en-US', { hour12: false });
             setDepositDetected(true);
             setDeposits(prev => [{ time, items: changes }, ...prev]);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            hapticSuccess();
           }
         }
         previousTokens.current = tokens; // always update baseline
@@ -362,8 +361,8 @@ export default function ReceiveScreen() {
 
   const copyAddress = useCallback(async () => {
     if (!address) return;
-    await Clipboard.setStringAsync(address);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await copyToClipboard(address);
+    hapticLight();
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [address]);

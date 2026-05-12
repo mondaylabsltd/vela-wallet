@@ -1,5 +1,6 @@
+import { openURL } from '@/services/platform';
 import React from 'react';
-import { View, Text, ScrollView, Pressable, Linking } from 'react-native';
+import { View, Text, ScrollView, Pressable } from 'react-native';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
@@ -110,7 +111,7 @@ function TechRow({ label, value }: { label: string; value: string }) {
 
 function LinkRow({ label, url }: { label: string; url: string }) {
   return (
-    <Pressable style={styles.linkRow} onPress={() => Linking.openURL(url)}>
+    <Pressable style={styles.linkRow} onPress={() => openURL(url)}>
       <Text style={styles.linkLabel}>{label}</Text>
       <ExternalLink size={14} color={color.fg.subtle} strokeWidth={2} />
     </Pressable>

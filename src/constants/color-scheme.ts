@@ -50,7 +50,9 @@ export async function loadColorScheme(): Promise<void> {
 
 /** Apply the preference to the native Appearance API (status bar, keyboard, etc.). */
 export function applyColorScheme(pref: ColorSchemePreference): void {
-  Appearance.setColorScheme(pref === 'auto' ? 'unspecified' : pref);
+  if (typeof Appearance.setColorScheme === 'function') {
+    Appearance.setColorScheme(pref === 'auto' ? 'unspecified' : pref);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +89,9 @@ export function ColorSchemeProvider({ children }: { children: React.ReactNode })
   const setPreference = useCallback((pref: ColorSchemePreference) => {
     _preference = pref;
     // Native UI (status bar, keyboard, system dialogs)
-    Appearance.setColorScheme(pref === 'auto' ? 'unspecified' : pref);
+    if (typeof Appearance.setColorScheme === 'function') {
+      Appearance.setColorScheme(pref === 'auto' ? 'unspecified' : pref);
+    }
     // Rebuild tokens synchronously
     const effectiveScheme = Appearance.getColorScheme();
     const { rebuildColors: rebuild } = require('@/constants/theme');

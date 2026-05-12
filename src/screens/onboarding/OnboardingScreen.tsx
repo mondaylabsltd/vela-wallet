@@ -8,8 +8,8 @@ import * as PublicKeyIndex from '@/services/public-key-index';
 import { computeAddress } from '@/services/safe-address';
 import { loadAccounts, saveAccount } from '@/services/storage';
 import { useRouter } from 'expo-router';
+import { showAlert } from '@/services/platform';
 import React, { useState } from 'react';
-import { Alert } from 'react-native';
 import { CreateWalletScreen } from './CreateWalletScreen';
 import { WelcomeScreen } from './WelcomeScreen';
 
@@ -30,7 +30,7 @@ export default function OnboardingScreen() {
       const supported = await Passkey.isSupported();
       console.log('[Login] Passkey supported:', supported);
       if (!supported) {
-        Alert.alert('Not Supported', 'Biometric authentication is not available on this device.');
+        showAlert('Not Supported', 'Biometric authentication is not available on this device.');
         return;
       }
 
@@ -44,7 +44,7 @@ export default function OnboardingScreen() {
       const compat = verifySafeWebAuthn(assertion);
       console.log('[Login] Safe compat:', compat.ok, compat.reason ?? '');
       if (!compat.ok) {
-        Alert.alert(
+        showAlert(
           'Device Not Compatible',
           'Your device\'s identity provider is not compatible with Vela Wallet. Please switch to Google Password Manager in system settings and try again.',
         );
@@ -109,7 +109,7 @@ export default function OnboardingScreen() {
       } else {
         const msg = error instanceof Error ? error.message : String(error);
         if (msg.includes('404')) {
-          Alert.alert(
+          showAlert(
             'Account Not Found',
             'No wallet was found for this identity.\n\n' +
             'Possible reasons:\n' +
@@ -119,7 +119,7 @@ export default function OnboardingScreen() {
             'Try creating a new wallet, or ensure your identity provider (Face ID / fingerprint) is synced across devices.',
           );
         } else {
-          Alert.alert(
+          showAlert(
             'Sign In Failed',
             msg + '\n\nMake sure your device has Face ID, Touch ID, or fingerprint set up and try again.',
           );

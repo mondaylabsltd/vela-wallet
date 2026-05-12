@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
-import * as Clipboard from 'expo-clipboard';
+import { copyToClipboard } from '@/services/platform';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -56,7 +56,7 @@ export default function TokenDetailScreen() {
   const [copied, setCopied] = useState(false);
   const copyContract = async () => {
     if (!contractAddress) return;
-    await Clipboard.setStringAsync(contractAddress);
+    await copyToClipboard(contractAddress);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

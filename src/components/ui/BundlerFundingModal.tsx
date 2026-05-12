@@ -8,8 +8,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
-import * as Haptics from 'expo-haptics';
+import { copyToClipboard, hapticSuccess, hapticLight } from '@/services/platform';
 import { Check, Copy, RefreshCw } from 'lucide-react-native';
 
 import { AppModal } from './AppModal';
@@ -43,7 +42,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
       if (info && info.spendableBalance >= MIN_BALANCE_WEI) {
         setFunded(true);
         setCurrentBalance(formatWei(info.spendableBalance));
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        hapticSuccess();
       } else if (info) {
         setCurrentBalance(formatWei(info.spendableBalance));
       }
@@ -61,9 +60,9 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
   }, [visible, checkBalance]);
 
   const copyAddress = async () => {
-    await Clipboard.setStringAsync(funding.depositAddress);
+    await copyToClipboard(funding.depositAddress);
     setCopied(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticLight();
     setTimeout(() => setCopied(false), 2000);
   };
 

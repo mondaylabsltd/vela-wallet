@@ -1,5 +1,6 @@
+import { showAlert } from '@/services/platform';
 import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, Alert, ScrollView, FlatList } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, FlatList } from 'react-native';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import Animated from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
@@ -179,13 +180,13 @@ export default function AddTokenScreen() {
       const meta = await fetchErc20Meta(selectedNetwork.chainId, contractAddress);
 
       if (!meta) {
-        Alert.alert('Not Found', 'Could not find a valid ERC-20 token at this address.');
+        showAlert('Not Found', 'Could not find a valid ERC-20 token at this address.');
         return;
       }
 
       setTokenMeta(meta);
     } catch (err) {
-      Alert.alert('Error', 'Failed to fetch token metadata. Check the address and network.');
+      showAlert('Error', 'Failed to fetch token metadata. Check the address and network.');
     } finally {
       setLoading(false);
     }
@@ -207,11 +208,11 @@ export default function AddTokenScreen() {
       };
 
       await saveCustomToken(token);
-      Alert.alert('Token Added', `${tokenMeta.symbol} has been added to your wallet.`, [
+      showAlert('Token Added', `${tokenMeta.symbol} has been added to your wallet.`, [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch {
-      Alert.alert('Error', 'Failed to save token.');
+      showAlert('Error', 'Failed to save token.');
     } finally {
       setSaving(false);
     }

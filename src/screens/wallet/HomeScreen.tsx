@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { TokenRow } from '@/components/ui/TokenRow';
 import { VelaCard } from '@/components/ui/VelaCard';
@@ -13,13 +12,13 @@ import { fetchTokens } from '@/services/wallet-api';
 import { saveNetworkConfig } from '@/services/storage';
 import { refreshPool } from '@/services/rpc-pool';
 import { setAccountBalance, getAccountBalances } from '@/services/balance-cache';
+import { showAlert, copyToClipboard, hapticSuccess, isAppActive } from '@/services/platform';
 import { ChainLogo } from '@/components/ChainLogo';
 import { useFocusEffect } from '@react-navigation/native';
-import * as Clipboard from 'expo-clipboard';
 import { useRouter } from 'expo-router';
 import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, ChevronDown, Search, X, AlertTriangle, Wifi } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, FlatList, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
   useAnimatedProps,
   useAnimatedStyle,
@@ -36,8 +35,24 @@ const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 /**
  * Smoothly animates between USD values instead of snapping.
  * Uses Reanimated's useAnimatedProps to drive a TextInput on the UI thread.
+ * On web, useAnimatedProps can't set `text` on inputs, so we fall back to plain Text.
  */
 function AnimatedBalance({ value }: { value: number }) {
+  const fontSize = balanceFontSize(value);
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.balanceRow}>
+        <Text style={[styles.balanceInt, { fontSize }]}>{formatUsdInt(value)}</Text>
+        <Text style={[styles.balanceDec, { fontSize: fontSize * 0.58 }]}>{formatUsdDec(value)}</Text>
+      </View>
+    );
+  }
+
+  return <AnimatedBalanceNative value={value} fontSize={fontSize} />;
+}
+
+function AnimatedBalanceNative({ value, fontSize }: { value: number; fontSize: number }) {
   const displayed = useSharedValue(value);
 
   useEffect(() => {
@@ -46,8 +61,6 @@ function AnimatedBalance({ value }: { value: number }) {
       easing: Easing.out(Easing.quad),
     });
   }, [value, displayed]);
-
-  const fontSize = balanceFontSize(value);
 
   const intProps = useAnimatedProps(() => {
     'worklet';
@@ -183,7 +196,7 @@ export default function HomeScreen() {
       setAccountBalance(address, usd);
     } catch (err) {
       if (!silent) {
-        Alert.alert('Error', 'Failed to load token balances.');
+        showAlert('Error', 'Failed to load token balances.');
       }
     } finally {
       loadInFlightRef.current = false;
@@ -195,7 +208,7 @@ export default function HomeScreen() {
   useFocusEffect(useCallback(() => {
     loadTokens();
     const timer = setInterval(() => {
-      if (AppState.currentState === 'active') {
+      if (isAppActive()) {
         loadTokens(true);
       }
     }, AUTO_REFRESH_MS);
@@ -236,7 +249,7 @@ export default function HomeScreen() {
       setRpcFixChainId(null);
       loadTokens(true, true);
     } catch {
-      Alert.alert('Error', 'Failed to save RPC URL.');
+      showAlert('Error', 'Failed to save RPC URL.');
     } finally {
       setRpcFixSaving(false);
     }
@@ -261,7 +274,7 @@ export default function HomeScreen() {
   const [copied, setCopied] = useState(false);
   const copyAddress = async () => {
     if (!address) return;
-    await Clipboard.setStringAsync(address);
+    await copyToClipboard(address);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -486,7 +499,7 @@ export default function HomeScreen() {
                   style={[styles.switcherItem, isActive && styles.switcherItemActive]}
                   onPress={() => {
                     dispatch({ type: 'SWITCH_ACCOUNT', index });
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    hapticSuccess();
                     setShowAccountSwitcher(false);
                   }}
                 >

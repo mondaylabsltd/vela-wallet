@@ -18,7 +18,7 @@ import { color, text, inter, space, radius, font, shadow, createStyles } from '@
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { getAllNetworksSync } from '@/models/network';
 import { loadTransactions, type LocalTransaction } from '@/services/storage';
-import * as WebBrowser from 'expo-web-browser';
+import { openBrowser } from '@/services/platform';
 import { ArrowDownLeft, ArrowUpRight, ExternalLink, Check, X } from 'lucide-react-native';
 
 // MARK: - Helpers
@@ -107,7 +107,7 @@ export default function HistoryScreen() {
   const handleViewOnExplorer = useCallback(() => {
     if (!address) return;
     const chainId = selectedChainId ?? 1;
-    WebBrowser.openBrowserAsync(explorerAddressUrl(address, chainId));
+    openBrowser(explorerAddressUrl(address, chainId));
   }, [address, selectedChainId]);
 
   const handleBack = () => router.back();
@@ -121,7 +121,7 @@ export default function HistoryScreen() {
     return (
       <Pressable
         style={styles.txRow}
-        onPress={() => WebBrowser.openBrowserAsync(explorerTxUrl(item.txHash, item.chainId))}
+        onPress={() => openBrowser(explorerTxUrl(item.txHash, item.chainId))}
       >
         <View style={[styles.txIcon, { backgroundColor: color.accent.soft }]}>
           <ArrowUpRight size={18} color={color.accent.base} strokeWidth={2.5} />

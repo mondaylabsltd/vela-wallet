@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, Alert, Pressable } from 'react-native';
+import { View, Text, TextInput, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -20,7 +20,7 @@ import type { StoredAccount } from '@/models/types';
 import {
   ArrowLeft, CheckCircle2, AlertTriangle, Loader, Copy, Check,
 } from 'lucide-react-native';
-import * as Clipboard from 'expo-clipboard';
+import { showAlert, copyToClipboard } from '@/services/platform';
 
 interface Props {
   onCreated?: (address: string, name: string) => void;
@@ -70,7 +70,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
     try {
       const supported = await Passkey.isSupported();
       if (!supported) {
-        Alert.alert('Not Supported', 'Biometric authentication is not available on this device.');
+        showAlert('Not Supported', 'Biometric authentication is not available on this device.');
         setLoading(false);
         return;
       }
@@ -125,7 +125,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
         setStatus('Setup was cancelled.');
       } else {
-        Alert.alert('Error', error instanceof Error ? error.message : String(error));
+        showAlert('Error', error instanceof Error ? error.message : String(error));
       }
       setLoading(false);
     }
@@ -162,7 +162,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
       const compat = verifySafeWebAuthn(assertion);
 
       if (!compat.ok) {
-        Alert.alert(
+        showAlert(
           'Device Not Compatible',
           'Your device\'s identity provider is not compatible with this wallet. Please switch to Google Password Manager in system settings and try again.',
         );
@@ -178,7 +178,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
         setStatus('Verification was cancelled. Please try again.');
       } else {
-        Alert.alert('Error', error instanceof Error ? error.message : String(error));
+        showAlert('Error', error instanceof Error ? error.message : String(error));
         setStatus('');
       }
       setLoading(false);
@@ -216,7 +216,7 @@ export function CreateWalletScreen({ onCreated, onBack }: Props) {
               <Pressable
                 style={styles.addressBox}
                 onPress={async () => {
-                  await Clipboard.setStringAsync(pendingRef.current!.account.address);
+                  await copyToClipboard(pendingRef.current!.account.address);
                   setAddressCopied(true);
                   setTimeout(() => setAddressCopied(false), 2000);
                 }}
