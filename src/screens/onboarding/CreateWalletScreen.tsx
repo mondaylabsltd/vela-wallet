@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, TextInput, Pressable } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Keyboard } from 'react-native';
 import { useRouter } from 'expo-router';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -270,56 +270,75 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             )}
           </Animated.View>
         ) : (
-          <Animated.View entering={fadeIn(0, 400)}>
-            <Text style={styles.label}>Account Name</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter a name for your account"
-              placeholderTextColor={color.fg.subtle}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={handleCreate}
-              editable={!loading}
-            />
-            <Text style={styles.hint}>
-              This name is stored with your public key on-chain for cross-device sign-in.
-            </Text>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            <Animated.View entering={fadeIn(0, 400)}>
+              <Text style={styles.label}>Account Name</Text>
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="Enter a name for your account"
+                placeholderTextColor={color.fg.subtle}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={() => Keyboard.dismiss()}
+                editable={!loading}
+              />
+              <Text style={styles.hint}>
+                This name is stored with your public key on-chain for cross-device sign-in.
+              </Text>
 
-            {/* Acknowledgment checklist */}
-            <View style={styles.checklistWrap}>
-              {ACKNOWLEDGMENTS.map((item, i) => {
-                const checked = checks[i];
-                const isLast = i === ACKNOWLEDGMENTS.length - 1;
-                return (
-                  <Pressable
-                    key={i}
-                    style={styles.checkRow}
-                    onPress={() => setChecks(prev => { const next = [...prev]; next[i] = !next[i]; return next; })}
-                  >
-                    {checked
-                      ? <CheckSquare size={18} color={color.accent.base} strokeWidth={2} />
-                      : <Square size={18} color={color.fg.subtle} strokeWidth={1.5} />
-                    }
-                    <Text style={styles.checkText}>
-                      {isLast ? (
-                        <>
-                          I agree to the{' '}
-                          <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/privacy')}>Privacy Policy</Text>
-                          {' '}and{' '}
-                          <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/terms')}>Terms of Service</Text>.
-                        </>
-                      ) : item}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </Animated.View>
+              {/* Acknowledgment checklist */}
+              <View style={styles.checklistWrap}>
+                {ACKNOWLEDGMENTS.map((item, i) => {
+                  const checked = checks[i];
+                  const isLast = i === ACKNOWLEDGMENTS.length - 1;
+                  return (
+                    <Pressable
+                      key={i}
+                      style={styles.checkRow}
+                      onPress={() => setChecks(prev => { const next = [...prev]; next[i] = !next[i]; return next; })}
+                    >
+                      {checked
+                        ? <CheckSquare size={18} color={color.accent.base} strokeWidth={2} />
+                        : <Square size={18} color={color.fg.subtle} strokeWidth={1.5} />
+                      }
+                      <Text style={styles.checkText}>
+                        {isLast ? (
+                          <>
+                            I agree to the{' '}
+                            <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/privacy')}>Privacy Policy</Text>
+                            {' '}and{' '}
+                            <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/terms')}>Terms of Service</Text>.
+                          </>
+                        ) : item}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              {status ? (
+                <Animated.View style={styles.statusRow} entering={fadeIn(0, 200)}>
+                  <Loader size={14} color={color.info.base} />
+                  <Text style={styles.status}>{status}</Text>
+                </Animated.View>
+              ) : null}
+
+              <View style={styles.inlineBottom}>
+                <VelaButton
+                  title="Create Wallet"
+                  onPress={handleCreate}
+                  disabled={!name.trim() || loading || !checks.every(Boolean)}
+                  loading={loading}
+                />
+              </View>
+            </Animated.View>
+          </ScrollView>
         )}
 
-        {status ? (
+        {/* Status + buttons for created/uploadFailed states (not in ScrollView) */}
+        {(created || uploadFailed) && status ? (
           <Animated.View style={styles.statusRow} entering={fadeIn(0, 200)}>
             <Loader size={14} color={color.info.base} />
             <Text style={styles.status}>{status}</Text>
@@ -340,14 +359,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             onPress={handleRetryUpload}
             loading={loading}
           />
-        ) : (
-          <VelaButton
-            title="Create Wallet"
-            onPress={handleCreate}
-            disabled={!name.trim() || loading || !checks.every(Boolean)}
-            loading={loading}
-          />
-        )}
+        ) : null}
       </View>
     </ScreenContainer>
   );
@@ -538,5 +550,9 @@ const styles = createStyles(() => ({
     color: color.accent.base,
     ...inter.semibold,
     textDecorationLine: 'underline',
+  },
+  inlineBottom: {
+    marginTop: space['3xl'],
+    paddingBottom: space['3xl'],
   },
 }));
