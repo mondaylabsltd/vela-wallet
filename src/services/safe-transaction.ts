@@ -292,6 +292,9 @@ async function sendUserOp(
   // 11. Submit to bundler
   const userOpHash = await submitUserOp(userOp, chainId);
 
+  // 12. Optimistically increment nonce so concurrent sends don't collide
+  incrementNonceCache(safeAddress, chainId);
+
   // Return immediately — caller can await txHash separately
   return {
     userOpHash,
@@ -644,6 +647,20 @@ async function getNonce(
   const nonce = result ?? '0x0';
   _nonceCache.set(key, { nonce, at: Date.now() });
   return nonce;
+}
+
+/**
+ * Optimistically increment the cached nonce after submitting a UserOp.
+ * Prevents concurrent transactions from reusing the same nonce.
+ * If the cache is stale or missing, the next getNonce() will fetch fresh.
+ */
+function incrementNonceCache(safeAddress: string, chainId: number): void {
+  const key = `${chainId}:${safeAddress.toLowerCase()}`;
+  const cached = _nonceCache.get(key);
+  if (!cached) return;
+  const currentNonce = BigInt(cached.nonce);
+  const nextNonce = '0x' + (currentNonce + 1n).toString(16);
+  _nonceCache.set(key, { nonce: nextNonce, at: Date.now() });
 }
 
 // Cache: gas prices are stable enough for 15s

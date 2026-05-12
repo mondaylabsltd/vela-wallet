@@ -461,6 +461,9 @@ export default function HomeScreen() {
             tintColor={color.accent.base}
           />
         }
+        initialNumToRender={10}
+        windowSize={5}
+        maxToRenderPerBatch={8}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />

@@ -256,7 +256,12 @@ async function loadImageRobust(src: string): Promise<HTMLImageElement> {
   const resp = await fetch(src);
   const blob = await resp.blob();
   const blobUrl = URL.createObjectURL(blob);
-  return loadImage(blobUrl);
+  try {
+    const img = await loadImage(blobUrl);
+    return img;
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
 }
 
 // Aggressive polling: 3s for first 1 min, then 60s for next 4 min, then stop

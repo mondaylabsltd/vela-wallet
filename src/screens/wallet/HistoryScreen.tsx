@@ -268,6 +268,9 @@ export default function HistoryScreen() {
                 tintColor={color.accent.base}
               />
             }
+            initialNumToRender={15}
+            windowSize={5}
+            maxToRenderPerBatch={10}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={

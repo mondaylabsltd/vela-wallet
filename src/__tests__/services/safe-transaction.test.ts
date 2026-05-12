@@ -4,7 +4,18 @@
  * Tests the pure functions that build calldata, compute hashes, and format values.
  * RPC-dependent functions are not tested here (require network mocking).
  */
-import { formatWeiToEth, estimateTransactionFee } from '@/services/safe-transaction';
+
+// Mock react-native transitive dependencies
+jest.mock('react-native', () => ({}));
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: { getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() },
+}));
+jest.mock('@/modules/cloud-sync', () => ({
+  get: jest.fn(), save: jest.fn(), remove: jest.fn(), syncNow: jest.fn(),
+}));
+
+import { formatWeiToEth } from '@/services/safe-transaction';
 
 describe('safe-transaction', () => {
   describe('formatWeiToEth', () => {

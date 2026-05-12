@@ -138,7 +138,7 @@ export default function DAppScreen() {
     setIsSigning(true);
     setSignError(null);
     try {
-      const result = await handleDAppRequest(request, activeAccount, state.address, chainIdRef.current);
+      const result = await handleDAppRequest(request, activeAccount, activeAccount.address, chainIdRef.current);
       sendResponse(request.id, result);
       setIncomingRequest(null);
     } catch (err: any) {
@@ -149,7 +149,7 @@ export default function DAppScreen() {
     } finally {
       setIsSigning(false);
     }
-  }, [activeAccount, state.address, sendResponse]);
+  }, [activeAccount, sendResponse]);
 
   const rejectRequest = useCallback((request: BLEIncomingRequest) => {
     sendResponse(request.id, undefined, { code: 4001, message: 'User rejected' });

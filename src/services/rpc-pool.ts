@@ -53,6 +53,7 @@ const POOL_REFRESH_MS = 10 * 60 * 1000; // 10 min
  */
 const BANNED_STORAGE_KEY = 'vela.rpc.banned';
 const TEMP_BAN_TTL_MS = 60 * 60 * 1000; // 1 hour
+const PERMA_BAN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours — allows recovery from transient outages
 const PERMA_BAN_MIN_FAILURES = 6;
 
 interface BanEntry { url: string; bannedAt: number; permanent: boolean }
@@ -80,7 +81,14 @@ async function saveBans(): Promise<void> {
 function isBanned(url: string): boolean {
   const entry = banMap.get(url);
   if (!entry) return false;
-  if (entry.permanent) return true;
+  if (entry.permanent) {
+    // Permanent bans expire after 24h to allow recovery from transient outages
+    if (Date.now() - entry.bannedAt >= PERMA_BAN_TTL_MS) {
+      banMap.delete(url);
+      return false;
+    }
+    return true;
+  }
   if (Date.now() - entry.bannedAt < TEMP_BAN_TTL_MS) return true;
   // Temp ban expired — remove it
   banMap.delete(url);

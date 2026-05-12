@@ -5,6 +5,9 @@
  * Run: npx jest src/__tests__/price-query.test.ts --testTimeout=30000
  */
 
+// These tests hit real RPCs which can be slow (especially Gnosis)
+jest.setTimeout(30_000);
+
 import {
   MULTICALL3,
   encAggregate3, decAggregate3,
