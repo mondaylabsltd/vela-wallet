@@ -42,12 +42,13 @@ export function getRelyingPartyId(): string {
     if (hostname === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname === '127.0.0.1') {
       return hostname;
     }
-    // Extract registrable domain: take last 2 parts (e.g. getvela.app)
-    const parts = hostname.split('.');
-    if (parts.length > 2) {
-      return parts.slice(-2).join('.');
+    // Only extract registrable domain for *.getvela.app subdomains.
+    // Other deployment hosts (e.g. pages.dev, github.io) use the
+    // native rpId so passkeys stay consistent across environments.
+    if (hostname.endsWith('.' + RELYING_PARTY_NATIVE)) {
+      return RELYING_PARTY_NATIVE;
     }
-    return hostname;
+    return hostname === RELYING_PARTY_NATIVE ? hostname : RELYING_PARTY_NATIVE;
   }
   return RELYING_PARTY_NATIVE;
 }
