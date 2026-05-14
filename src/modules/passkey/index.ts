@@ -32,6 +32,11 @@ export const RELYING_PARTY_NATIVE = 'getvela.app';
  */
 export function getRelyingPartyId(): string {
   if (isWeb && typeof window !== 'undefined') {
+    // When the WebAuthn proxy extension is installed it sets this global
+    // so that rpId is consistent across WebAuthn calls AND server queries.
+    const proxyRpId = (window as any).__VELA_WEBAUTHN_PROXY_RPID__;
+    if (proxyRpId) return proxyRpId;
+
     const hostname = window.location.hostname;
     // localhost or IP address — use as-is
     if (hostname === 'localhost' || /^\d+\.\d+\.\d+\.\d+$/.test(hostname) || hostname === '127.0.0.1') {

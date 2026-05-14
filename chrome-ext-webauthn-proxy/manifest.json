@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Vela WebAuthn Dev Proxy",
+  "version": "1.0.0",
+  "description": "Proxy WebAuthn calls on localhost to use getvela.app rpId",
+  "host_permissions": [
+    "*://getvela.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1/*",
+        "http://127.0.0.1:*/*"
+      ],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1/*",
+        "http://127.0.0.1:*/*"
+      ],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
