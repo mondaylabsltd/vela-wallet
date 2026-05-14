@@ -156,6 +156,63 @@ Before your first transaction on a network, you need to fund a **dedicated gas r
 
 When sending the maximum amount of a native token (ETH, BNB, etc.), the wallet automatically reserves enough for the transaction's gas fee (EntryPoint prefund). This prevents "insufficient balance" failures.
 
+## WebAuthn Proxy Extension (Domain Recovery / Dev Passkeys)
+
+If the production domain (`getvela.app`) becomes unavailable, passkeys bound to it will stop working on the new hosting domain because WebAuthn ties credentials to the rpId (relying party ID). The included Chrome extension solves this by proxying WebAuthn calls through the extension's own origin, which has `host_permissions` for `getvela.app`.
+
+This also enables local development and preview deployments to authenticate with production passkeys.
+
+### How rpId is resolved
+
+| Environment | Without extension | With extension |
+|---|---|---|
+| `getvela.app` / `*.getvela.app` | `getvela.app` | `getvela.app` |
+| `localhost` / `127.0.0.1` | `localhost` | `getvela.app` |
+| Preview domains (`*.pages.dev`, `*.vercel.app`, etc.) | current hostname | `getvela.app` |
+
+Without the extension, each environment uses its own rpId and maintains independent passkeys. With the extension installed, all environments share the `getvela.app` rpId and the same set of passkeys.
+
+### Supported preview domains
+
+`pages.dev`, `workers.dev`, `github.io`, `vercel.app`, `netlify.app`, `deno.dev`, `fly.dev`, `railway.app`, `render.com`, `surge.sh`, `ngrok-free.app`, `trycloudflare.com`
+
+### Setup
+
+1. Open `chrome://extensions/` and enable **Developer mode**.
+2. Click **Load unpacked** and select the `chrome-ext-webauthn-proxy/` directory.
+3. Grant the requested permissions when prompted.
+4. Navigate to your dev/preview URL — the extension activates automatically.
+
+When a page calls `navigator.credentials.create()` or `.get()` with a non-matching rpId, the extension intercepts the call, opens a small popup window, and performs the WebAuthn ceremony with `rpId: "getvela.app"`. The system authenticator prompt (Touch ID / Windows Hello) appears as usual, and the result is passed back to the page.
+
+### How it works
+
+```
+Page JS (any domain)
+  │  navigator.credentials.create/get intercepted
+  ▼
+inject.js (MAIN world, document_start)
+  │  serialize options, window.postMessage
+  ▼
+bridge.js (ISOLATED world, has chrome.runtime API)
+  │  chrome.runtime.sendMessage
+  ▼
+background.js (service worker)
+  │  chrome.windows.create → opens popup
+  ▼
+webauthn.html/js (extension origin, has host_permissions)
+  │  navigator.credentials.create/get({ rpId: "getvela.app" })
+  │  → System authenticator prompt (Touch ID / Windows Hello)
+  ▼
+Result flows back: webauthn.js → background → bridge → inject → page
+```
+
+### Important notes
+
+- The `clientDataJSON.origin` in the WebAuthn response will be `chrome-extension://<id>`, not the page origin. Your relying party server must accept this origin when validating credentials created through the extension.
+- The extension sets `window.__VELA_WEBAUTHN_PROXY_RPID__` in the page context. The app's `getRelyingPartyId()` reads this global to ensure public key uploads and server queries use the same rpId as the WebAuthn call.
+- This extension is for development and disaster recovery only. Do not publish it to the Chrome Web Store.
+
 ## Security Model
 
 - **No private key access** — Signing uses WebAuthn P-256 keys managed by your OS (iCloud Keychain / Google Password Manager). Vela Wallet never has access to the private key.
