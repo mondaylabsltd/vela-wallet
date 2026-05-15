@@ -13,6 +13,11 @@ export default function Root({ children }: PropsWithChildren) {
         {/* Safari address bar + status bar color — dark mode */}
         <meta name="theme-color" content="#141412" media="(prefers-color-scheme: dark)" />
         <ScrollViewStyleReset />
+        <script
+          src="https://tj.appsdata.org/api/script.js"
+          data-site-id="d9a1055d13df"
+          defer
+      ></script>
       </head>
       <body>{children}</body>
     </html>
