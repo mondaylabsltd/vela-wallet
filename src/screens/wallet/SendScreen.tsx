@@ -15,6 +15,7 @@ import { findAccountByCredentialId, saveTransaction, loadTransactions } from '@/
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, type FundingNeeded } from '@/services/bundler-service';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
+import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { openBrowser } from '@/services/platform';
@@ -56,12 +57,43 @@ function amountToWeiHex(amount: string, decimals: number): string {
   return n.toString(16);
 }
 
-/** Resolve the token amount from user input, handling USD mode. */
-function resolveTokenAmount(amount: string, inUsd: boolean, priceUsd: number | null | undefined): string {
+/** Convert a human-readable balance string (e.g. "0.0113") to BigInt wei. */
+function balanceToWei(balance: string, decimals: number): bigint {
+  return BigInt('0x' + amountToWeiHex(balance, decimals));
+}
+
+/** Resolve the token amount from user input, handling USD mode.
+ *  Truncates to `decimals` to avoid floating-point garbage digits. */
+function resolveTokenAmount(amount: string, inUsd: boolean, priceUsd: number | null | undefined, decimals: number = 18): string {
   if (!inUsd || !priceUsd || priceUsd <= 0) return amount;
   const usd = parseFloat(amount || '0');
   if (usd <= 0) return '0';
-  return (usd / priceUsd).toFixed(18).replace(/\.?0+$/, '');
+  return (usd / priceUsd).toFixed(decimals).replace(/\.?0+$/, '');
+}
+
+/** Compute font size for the amount display — shrinks as the number gets longer. */
+function amountFontSize(value: string): number {
+  const len = value.length || 1;
+  if (len <= 4) return 40;
+  if (len <= 7) return 34;
+  if (len <= 10) return 28;
+  if (len <= 14) return 22;
+  return 17;
+}
+
+/** Validate and constrain amount input: max `maxDecimals` decimal places, valid number chars only. */
+function sanitizeAmountInput(text: string, maxDecimals: number): string | null {
+  // Allow only digits and a single dot
+  const cleaned = text.replace(/[^0-9.]/g, '');
+  // Reject multiple dots
+  if ((cleaned.match(/\./g) || []).length > 1) return null;
+
+  const parts = cleaned.split('.');
+  if (parts.length === 2 && parts[1].length > maxDecimals) {
+    // Truncate excess decimals
+    return parts[0] + '.' + parts[1].slice(0, maxDecimals);
+  }
+  return cleaned;
 }
 
 function shortAddr(addr: string): string {
@@ -119,6 +151,8 @@ export default function SendScreen() {
   const [gasExpanded, setGasExpanded] = useState(false);
   const [recentRecipients, setRecentRecipients] = useState<string[]>([]);
   const [showContacts, setShowContacts] = useState(false);
+  const [amountWarning, setAmountWarning] = useState<string | null>(null);
+  const [recipientIdentity, setRecipientIdentity] = useState<RecipientIdentity | null>(null);
 
   // Prefetch account credential + webauthn module while user reviews confirm screen
   const prefetchedAccount = useRef<{ publicKeyHex: string } | null>(null);
@@ -168,6 +202,77 @@ export default function SendScreen() {
     });
   }, [address, params.preselectedSymbol, params.preselectedNetwork]);
 
+  // Compute real-time amount warnings
+  useEffect(() => {
+    if (!selectedToken || !amount) {
+      setAmountWarning(null);
+      return;
+    }
+
+    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals);
+    const amountNum = parseFloat(tokenAmount || '0');
+    if (isNaN(amountNum) || amountNum <= 0) {
+      setAmountWarning(null);
+      return;
+    }
+
+    const chainId = tokenChainId(selectedToken);
+    const sym = nativeSymbol(chainId);
+
+    if (isNativeToken(selectedToken)) {
+      // Native token: check amount + gas > balance
+      const balanceWei = balanceToWei(selectedToken.balance, selectedToken.decimals);
+      const amountWei = BigInt('0x' + amountToWeiHex(tokenAmount, selectedToken.decimals));
+      if (amountWei > balanceWei) {
+        setAmountWarning(`You do not have enough ${selectedToken.symbol} in this account`);
+        return;
+      }
+      // Also check if gas can be covered (use cached estimate if available)
+      if (feeEstimate) {
+        const reserveWei = feeEstimate.totalWei * 3n;
+        if (amountWei + reserveWei > balanceWei) {
+          setAmountWarning(`Insufficient ${sym} to cover amount + gas fees`);
+          return;
+        }
+      }
+    } else {
+      // ERC-20: check token balance
+      const tokenBal = tokenBalanceDouble(selectedToken);
+      if (amountNum > tokenBal) {
+        setAmountWarning(`You do not have enough ${selectedToken.symbol} in this account`);
+        return;
+      }
+      // Check native token balance for gas
+      const nativeToken = tokens.find(t => isNativeToken(t) && tokenChainId(t) === chainId);
+      if (feeEstimate) {
+        const nativeBalWei = nativeToken
+          ? balanceToWei(nativeToken.balance, nativeToken.decimals)
+          : 0n;
+        if (nativeBalWei < feeEstimate.totalWei) {
+          setAmountWarning(`Insufficient ${sym} for gas fees`);
+          return;
+        }
+      } else if (!nativeToken || tokenBalanceDouble(nativeToken) === 0) {
+        setAmountWarning(`You need ${sym} to pay gas fees`);
+        return;
+      }
+    }
+
+    setAmountWarning(null);
+  }, [amount, inputInUsd, selectedToken, tokens, feeEstimate]);
+
+  // Resolve recipient identity (passkey index → ENS) when a valid address is entered
+  useEffect(() => {
+    setRecipientIdentity(null);
+    if (!/^0x[0-9a-fA-F]{40}$/.test(recipient)) return;
+
+    let cancelled = false;
+    resolveRecipientIdentity(recipient)
+      .then((id) => { if (!cancelled) setRecipientIdentity(id); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [recipient]);
+
   const handleSelectToken = (token: APIToken) => {
     setSelectedToken(token);
     setStep('enter-details');
@@ -189,13 +294,14 @@ export default function SendScreen() {
       showAlert('Invalid Address', 'Please enter a valid Ethereum address (0x...).');
       return;
     }
-    const amountNum = parseFloat(amount);
+    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken!.priceUsd, selectedToken!.decimals);
+    const amountNum = parseFloat(tokenAmount);
     if (isNaN(amountNum) || amountNum <= 0) {
       showAlert('Invalid Amount', 'Please enter a valid amount greater than zero.');
       return;
     }
-    if (selectedToken && amountNum > tokenBalanceDouble(selectedToken)) {
-      showAlert('Insufficient Balance', 'Amount exceeds your available balance.');
+    if (amountWarning) {
+      showAlert('Insufficient Balance', amountWarning);
       return;
     }
 
@@ -246,14 +352,15 @@ export default function SendScreen() {
 
     // For native tokens (ETH, BNB, etc.), reserve gas for the EntryPoint prefund.
     // The Safe must hold: transferAmount + prefund, so max = balance - prefund.
+    // We add a 50% gas margin to avoid tx failure from gas price volatility.
     if (isNativeToken(selectedToken) && activeAccount) {
       try {
         const chainId = tokenChainId(selectedToken);
         const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId);
-        const balanceWei = BigInt(
-          Math.floor(tokenBalanceDouble(selectedToken) * 1e18).toString(),
-        );
-        const reserveWei = fee.totalWei;
+        // Use string-based conversion to avoid floating-point precision loss
+        const balanceWei = balanceToWei(selectedToken.balance, selectedToken.decimals);
+        // Reserve 3x estimated gas (200% margin for gas price volatility)
+        const reserveWei = fee.totalWei * 3n;
         if (balanceWei > reserveWei) {
           const maxWei = balanceWei - reserveWei;
           const maxEth = Number(maxWei) / 1e18;
@@ -328,7 +435,7 @@ export default function SendScreen() {
       };
 
       setTxStatus('submitting');
-      const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd);
+      const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals);
       const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
 
       let result;
@@ -499,6 +606,64 @@ export default function SendScreen() {
             </View>
           </VelaCard>
 
+          {/* Amount — large display with inline unit */}
+          <View style={styles.amountWrap}>
+            <View style={styles.amountTopRow}>
+              <TextInput
+                style={[styles.amountInput, { fontSize: amountFontSize(amount) }]}
+                placeholder="0"
+                placeholderTextColor={color.fg.subtle}
+                value={amount}
+                onChangeText={(t) => {
+                  const maxDec = inputInUsd ? 2 : selectedToken.decimals;
+                  const sanitized = sanitizeAmountInput(t, maxDec);
+                  if (sanitized !== null) setAmount(sanitized);
+                }}
+                keyboardType="decimal-pad"
+              />
+              {/* Unit suffix — static label (not a toggle) */}
+              <Text style={styles.unitLabel}>{inputInUsd ? 'USD' : selectedToken.symbol}</Text>
+              {/* Max button — only visible when amount is empty */}
+              {!amount && (
+                <Pressable onPress={handleMaxAmount} hitSlop={8} style={styles.maxBtn}>
+                  <Text style={styles.maxBtnText}>Max</Text>
+                </Pressable>
+              )}
+            </View>
+            {/* Conversion toggle row — below the input, like ↕ 0.0113 ETH */}
+            {selectedToken.priceUsd != null && selectedToken.priceUsd > 0 ? (
+              <Pressable
+                onPress={() => {
+                  const val = parseFloat(amount || '0');
+                  if (val > 0 && selectedToken.priceUsd) {
+                    if (inputInUsd) {
+                      setAmount((val / selectedToken.priceUsd).toFixed(selectedToken.decimals).replace(/\.?0+$/, ''));
+                    } else {
+                      setAmount((val * selectedToken.priceUsd).toFixed(2));
+                    }
+                  }
+                  setInputInUsd(!inputInUsd);
+                }}
+                hitSlop={8}
+                style={styles.conversionRow}
+              >
+                <Text style={styles.conversionSwap}>↕</Text>
+                <Text style={styles.conversionText}>
+                  {amount
+                    ? inputInUsd
+                      ? `${(parseFloat(amount || '0') / (selectedToken.priceUsd || 1)).toFixed(Math.min(selectedToken.decimals, 8)).replace(/\.?0+$/, '')} ${selectedToken.symbol}`
+                      : formatUsd(parseFloat(amount || '0') * (selectedToken.priceUsd ?? 0))
+                    : inputInUsd
+                      ? `0 ${selectedToken.symbol}`
+                      : '$0.00'}
+                </Text>
+              </Pressable>
+            ) : null}
+            {amountWarning ? (
+              <Text style={styles.amountWarning}>{amountWarning}</Text>
+            ) : null}
+          </View>
+
           {/* Recipient */}
           <View style={styles.fieldLabelRow}>
             <Text style={styles.fieldLabel}>Recipient</Text>
@@ -526,6 +691,19 @@ export default function SendScreen() {
             )}
           </View>
 
+          {/* Recipient identity */}
+          {recipientIdentity && (
+            <View style={styles.identityRow}>
+              <Text style={styles.identityName}>
+                {recipientIdentity.source === 'passkey' ? '👤 ' : ''}
+                {recipientIdentity.name}
+              </Text>
+              <Text style={styles.identitySource}>
+                {recipientIdentity.source === 'passkey' ? 'Vela User' : recipientIdentity.source}
+              </Text>
+            </View>
+          )}
+
           {/* Recent recipients dropdown */}
           {showContacts && recentRecipients.length > 0 && (
             <VelaCard style={styles.contactsCard}>
@@ -546,73 +724,6 @@ export default function SendScreen() {
             </VelaCard>
           )}
 
-          {/* Amount */}
-          <Text style={styles.fieldLabel}>Amount</Text>
-          <View style={styles.amountWrap}>
-            <View style={styles.amountTopRow}>
-              <TextInput
-                style={styles.amountInput}
-                placeholder="0"
-                placeholderTextColor={color.fg.subtle}
-                value={amount}
-                onChangeText={setAmount}
-                keyboardType="decimal-pad"
-              />
-              {/* Unit label — tap to toggle USD/token if price is available */}
-              {selectedToken.priceUsd != null && selectedToken.priceUsd > 0 ? (
-                <Pressable
-                  onPress={() => {
-                    // Convert current amount to the other unit before switching
-                    const val = parseFloat(amount || '0');
-                    if (val > 0 && selectedToken.priceUsd) {
-                      if (inputInUsd) {
-                        // USD → token
-                        setAmount((val / selectedToken.priceUsd).toFixed(8).replace(/\.?0+$/, ''));
-                      } else {
-                        // token → USD
-                        setAmount((val * selectedToken.priceUsd).toFixed(2));
-                      }
-                    }
-                    setInputInUsd(!inputInUsd);
-                  }}
-                  hitSlop={8}
-                  style={styles.unitToggle}
-                >
-                  <Text style={styles.unitText}>{inputInUsd ? 'USD' : selectedToken.symbol}</Text>
-                  <Text style={styles.unitSwap}>⇄</Text>
-                </Pressable>
-              ) : (
-                <Pressable onPress={handleMaxAmount} hitSlop={6}>
-                  <Text style={styles.goText}>{selectedToken.symbol}</Text>
-                </Pressable>
-              )}
-            </View>
-            {amount ? (
-              <Text style={styles.amountUsd}>
-                {inputInUsd
-                  ? `≈ ${(parseFloat(amount || '0') / (selectedToken.priceUsd || 1)).toFixed(6)} ${selectedToken.symbol}`
-                  : selectedToken.priceUsd
-                    ? `≈ ${formatUsd(parseFloat(amount || '0') * (selectedToken.priceUsd ?? 0))}`
-                    : null}
-              </Text>
-            ) : null}
-          </View>
-
-          {/* Available balance — right aligned */}
-          <View style={styles.balanceHint}>
-            <Text style={styles.balanceHintText}>
-              {formatBalance(balance)} {selectedToken.symbol} available
-            </Text>
-            <Pressable onPress={handleMaxAmount} hitSlop={6}>
-              <Text style={styles.balanceHintMax}>Max</Text>
-            </Pressable>
-          </View>
-          {selectedToken.priceUsd != null && selectedToken.priceUsd > 0 && (
-            <Text style={styles.balanceHintUsd}>
-              ≈ {formatUsd(balance * selectedToken.priceUsd)}
-            </Text>
-          )}
-
           <VelaButton
             title="Continue"
             onPress={handleContinue}
@@ -627,7 +738,7 @@ export default function SendScreen() {
   // Step 3: Confirm
   const renderConfirm = () => {
     if (!selectedToken) return null;
-    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd);
+    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals);
     const amountNum = parseFloat(tokenAmount || '0');
     const usdAmount = amountNum * (selectedToken.priceUsd ?? 0);
 
@@ -964,39 +1075,24 @@ const styles = createStyles(() => ({
     gap: space.lg,
     paddingRight: space.lg,
   },
-  goText: {
-    fontSize: text.sm,
-    ...inter.bold,
-    color: color.accent.base,
-    letterSpacing: 0.3,
-  },
-
-  // Balance hint
-  balanceHint: {
+  // Recipient identity
+  identityRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: space.sm,
-    paddingRight: space.xs,
+    justifyContent: 'space-between',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
     marginBottom: space.xs,
   },
-  balanceHintText: {
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.subtle,
-  },
-  balanceHintMax: {
+  identityName: {
     fontSize: text.sm,
     ...inter.semibold,
     color: color.accent.base,
   },
-  balanceHintUsd: {
+  identitySource: {
     fontSize: text.xs,
-    ...inter.regular,
+    ...inter.medium,
     color: color.fg.subtle,
-    textAlign: 'right',
-    paddingRight: space.xs,
-    marginBottom: space['2xl'],
   },
 
   // Recent contacts
@@ -1021,13 +1117,8 @@ const styles = createStyles(() => ({
   },
 
   amountWrap: {
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    paddingHorizontal: space.xl,
-    paddingVertical: space.lg,
-    marginBottom: space.sm,
+    paddingVertical: space.xl,
+    marginBottom: space.lg,
   },
   amountTopRow: {
     flexDirection: 'row',
@@ -1035,33 +1126,50 @@ const styles = createStyles(() => ({
   },
   amountInput: {
     flex: 1,
-    fontSize: text.xl,
     ...inter.bold,
+    fontFamily: font.display,
     color: color.fg.base,
     padding: 0,
   },
-  unitToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
+  unitLabel: {
+    fontSize: text['3xl'],
+    ...inter.regular,
+    color: color.fg.subtle,
+    opacity: 0.35,
+    marginLeft: space.sm,
+  },
+  maxBtn: {
     paddingVertical: space.xs,
-    paddingHorizontal: space.sm,
+    paddingHorizontal: space.md,
     backgroundColor: color.accent.soft,
     borderRadius: radius.md,
+    marginLeft: space.sm,
   },
-  unitText: {
+  maxBtnText: {
     fontSize: text.sm,
     ...inter.bold,
     color: color.accent.base,
   },
-  unitSwap: {
+  conversionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    marginTop: space.sm,
+  },
+  conversionSwap: {
+    fontSize: text.base,
+    color: color.accent.base,
+    ...inter.bold,
+  },
+  conversionText: {
     fontSize: text.sm,
+    ...inter.medium,
     color: color.accent.base,
   },
-  amountUsd: {
+  amountWarning: {
     fontSize: text.xs,
     ...inter.medium,
-    color: color.fg.subtle,
+    color: color.error.base,
     marginTop: space.xs,
   },
   continueBtn: {

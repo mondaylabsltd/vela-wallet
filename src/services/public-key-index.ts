@@ -70,3 +70,19 @@ export async function queryRecord(rpId: string, credentialId: string): Promise<P
   if (!response.ok) throw new Error(`Query failed: ${response.status}`);
   return response.json();
 }
+
+/** Convert a 20-byte address to a bytes32 hex string (left-padded with zeros). */
+function addressToBytes32(address: string): string {
+  const stripped = address.toLowerCase().replace(/^0x/, '');
+  return '0x' + stripped.padStart(64, '0');
+}
+
+/** Query a public key record by wallet address (walletRef). Returns null if not found. */
+export async function queryByWalletRef(address: string): Promise<PublicKeyRecord | null> {
+  const baseUrl = await getBaseUrl();
+  const walletRef = addressToBytes32(address);
+  const url = `${baseUrl}/api/query?walletRef=${encodeURIComponent(walletRef)}`;
+  const response = await fetch(url);
+  if (!response.ok) return null;
+  return response.json();
+}

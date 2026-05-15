@@ -213,6 +213,26 @@ Result flows back: webauthn.js → background → bridge → inject → page
 - The extension sets `window.__VELA_WEBAUTHN_PROXY_RPID__` in the page context. The app's `getRelyingPartyId()` reads this global to ensure public key uploads and server queries use the same rpId as the WebAuthn call.
 - This extension is for development and disaster recovery only. Do not publish it to the Chrome Web Store.
 
+## Recipient Identity Resolution
+
+When sending tokens, the wallet resolves recipient addresses to human-readable names for verification. Resolution queries run in parallel across multiple name services, returning the first match by priority:
+
+| Priority | Service | Chain | Registry | Pattern |
+|----------|---------|-------|----------|---------|
+| 1 | Passkey Index | — | Vela API | walletRef lookup |
+| 2 | .bnb | BSC (56) | `0x08CEd32a...` | Standard ENS |
+| 3 | .arb | Arbitrum (42161) | `0x4a067EE5...` | Standard ENS |
+| 4 | .g | Gravity (1625) | `0x5dC881dd...` | Standard ENS |
+| 5 | Basename | Base (8453) | `0xb9470442...` | ENSIP-19 |
+| 6 | ENS | Mainnet (1) | `0x00000000000C...` | Standard ENS |
+
+- **Standard ENS**: `namehash(addr.addr.reverse)` → `registry.resolver(node)` → `resolver.name(node)`
+- **ENSIP-19** (Basenames): `reverseRegistrar.node(addr)` → chain-specific reverse node → same flow
+- Only positive results are cached (AsyncStorage, 24h TTL)
+- No third-party API dependencies — all queries use direct on-chain RPC calls
+
+To add a new name service, add an entry to `NAME_SERVICES` in `src/services/recipient-identity.ts`.
+
 ## Security Model
 
 - **No private key access** — Signing uses WebAuthn P-256 keys managed by your OS (iCloud Keychain / Google Password Manager). Vela Wallet never has access to the private key.
