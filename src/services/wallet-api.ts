@@ -92,21 +92,28 @@ export async function fetchTokens(
   const cached = tokenCache.get(cacheKey);
   const now = Date.now();
 
-  if (!options.forceRefresh && cached) {
+  // includeZeroBalance bypasses cache (different result set)
+  if (!options.forceRefresh && !options.includeZeroBalance && cached) {
     if (cached.inFlight) return cloneTokens(await cached.inFlight);
     if (now - cached.fetchedAt < maxAgeMs) return cloneTokens(cached.tokens);
   }
 
   const request = fetchAllChainTokens(address, options.onProgress, options.onFailedChains, options.includeZeroBalance);
-  tokenCache.set(cacheKey, {
-    fetchedAt: cached?.fetchedAt ?? 0,
-    tokens: cached?.tokens ?? [],
-    inFlight: request,
-  });
+
+  // Don't pollute the main cache with includeZeroBalance results
+  if (!options.includeZeroBalance) {
+    tokenCache.set(cacheKey, {
+      fetchedAt: cached?.fetchedAt ?? 0,
+      tokens: cached?.tokens ?? [],
+      inFlight: request,
+    });
+  }
 
   try {
     const tokens = await request;
-    tokenCache.set(cacheKey, { fetchedAt: Date.now(), tokens });
+    if (!options.includeZeroBalance) {
+      tokenCache.set(cacheKey, { fetchedAt: Date.now(), tokens });
+    }
     return cloneTokens(tokens);
   } catch (error) {
     if (cached?.tokens.length) {
