@@ -543,10 +543,13 @@ export default function HomeScreen() {
   const hiddenCount = allTokens.length - tokens.length;
   const displayTokens = showZeroBalance ? allTokens : tokens;
   const filteredTokens = tokenSearch
-    ? displayTokens.filter(t =>
-        t.symbol.toLowerCase().includes(tokenSearch.toLowerCase()) ||
-        t.name.toLowerCase().includes(tokenSearch.toLowerCase())
-      )
+    ? displayTokens.filter(t => {
+        const q = tokenSearch.toLowerCase();
+        return t.symbol.toLowerCase().includes(q) ||
+          t.name.toLowerCase().includes(q) ||
+          t.network.toLowerCase().includes(q) ||
+          chainName(tokenChainId(t)).toLowerCase().includes(q);
+      })
     : displayTokens;
 
   return (

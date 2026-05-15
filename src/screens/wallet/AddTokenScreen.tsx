@@ -368,6 +368,56 @@ export default function AddTokenScreen() {
               </VelaCard>
             )}
 
+            {/* Chain info card — shown as soon as chain data is fetched */}
+            {netChainInfo && !netChainInfo._added && (
+              <Animated.View entering={fadeInDown(0, 300)}>
+                <VelaCard style={styles.resultCard}>
+                  <View style={styles.resultRow}>
+                    <Text style={styles.resultLabel}>Name</Text>
+                    <Text style={styles.resultValue}>{netChainInfo.name}</Text>
+                  </View>
+                  <View style={styles.separator} />
+                  <View style={styles.resultRow}>
+                    <Text style={styles.resultLabel}>Chain ID</Text>
+                    <Text style={styles.resultValue}>{netChainInfo.chainId}</Text>
+                  </View>
+                  <View style={styles.separator} />
+                  <View style={styles.resultRow}>
+                    <Text style={styles.resultLabel}>Native Token</Text>
+                    <Text style={styles.resultValue}>{netChainInfo.nativeCurrency?.symbol}</Text>
+                  </View>
+                  <View style={styles.separator} />
+                  <View style={styles.resultRow}>
+                    <Text style={styles.resultLabel}>Decimals</Text>
+                    <Text style={styles.resultValue}>{netChainInfo.nativeCurrency?.decimals}</Text>
+                  </View>
+                  {netChainInfo.explorerUrl ? (
+                    <>
+                      <View style={styles.separator} />
+                      <View style={styles.resultRow}>
+                        <Text style={styles.resultLabel}>Explorer</Text>
+                        <Pressable onPress={() => openBrowser(netChainInfo.explorerUrl)}>
+                          <Text style={[styles.resultValue, { color: color.accent.base }]}>View ↗</Text>
+                        </Pressable>
+                      </View>
+                    </>
+                  ) : null}
+                  {/* Editable RPC URL */}
+                  <View style={styles.separator} />
+                  <Text style={[styles.fieldLabel, { marginTop: space.lg }]}>RPC URL</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={netChainInfo.rpcUrl}
+                    onChangeText={(t) => setNetChainInfo({ ...netChainInfo, rpcUrl: t, rpcUrls: [t] })}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="https://..."
+                    placeholderTextColor={color.fg.subtle}
+                  />
+                </VelaCard>
+              </Animated.View>
+            )}
+
             {netLoading && <Text style={styles.searchHint}>Checking compatibility...</Text>}
             {netError && netCompat && !netCompat.compatible && (
               <Animated.View entering={fadeInDown(0, 300)}>
@@ -420,20 +470,6 @@ export default function AddTokenScreen() {
                   <View style={styles.resultHeader}>
                     <Check size={20} color={color.success.base} strokeWidth={2.5} />
                     <Text style={styles.resultTitle}>Compatible</Text>
-                  </View>
-                  <View style={styles.resultRow}>
-                    <Text style={styles.resultLabel}>Name</Text>
-                    <Text style={styles.resultValue}>{netChainInfo.name}</Text>
-                  </View>
-                  <View style={styles.separator} />
-                  <View style={styles.resultRow}>
-                    <Text style={styles.resultLabel}>Chain ID</Text>
-                    <Text style={styles.resultValue}>{netChainInfo.chainId}</Text>
-                  </View>
-                  <View style={styles.separator} />
-                  <View style={styles.resultRow}>
-                    <Text style={styles.resultLabel}>Native Token</Text>
-                    <Text style={styles.resultValue}>{netChainInfo.nativeCurrency?.symbol}</Text>
                   </View>
                   {netChainInfo._added ? (
                     <View style={styles.addedRow}>
