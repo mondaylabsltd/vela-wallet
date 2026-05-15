@@ -900,7 +900,11 @@ export default function SendScreen() {
                     </Pressable>
                   ))}
                   <Pressable onPress={handleRefreshGas} hitSlop={8} style={styles.tierRefresh}>
-                    <RefreshCw size={14} color={refreshingGas ? color.fg.subtle : color.fg.muted} strokeWidth={2} />
+                    {refreshingGas ? (
+                      <ActivityIndicator size={14} color={color.fg.muted} />
+                    ) : (
+                      <RefreshCw size={14} color={color.fg.muted} strokeWidth={2} />
+                    )}
                   </Pressable>
                 </View>
                 <View style={styles.confirmSeparator} />
