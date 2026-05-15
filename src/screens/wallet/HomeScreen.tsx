@@ -348,7 +348,6 @@ export default function HomeScreen() {
     setShowAccountSwitcher(true);
   }, [address, totalUsd, state.accounts]);
   const [tokenSearch, setTokenSearch] = useState('');
-  const [showSearch, setShowSearch] = useState(false);
 
   const [copied, setCopied] = useState(false);
   const copyAddress = async () => {
@@ -458,17 +457,6 @@ export default function HomeScreen() {
             </Pressable>
           )}
           <Pressable
-            style={styles.searchToggleBtn}
-            onPress={() => { setShowSearch(!showSearch); if (showSearch) setTokenSearch(''); }}
-            hitSlop={8}
-          >
-            {showSearch ? (
-              <X size={14} color={color.fg.muted} strokeWidth={2.5} />
-            ) : (
-              <Search size={14} color={color.fg.muted} strokeWidth={2.5} />
-            )}
-          </Pressable>
-          <Pressable
             style={styles.addTokenBtn}
             onPress={() => router.push('/add-token')}
             hitSlop={8}
@@ -479,22 +467,19 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Search bar */}
-      {showSearch && (
-        <View style={styles.searchBar}>
-          <Search size={14} color={color.fg.subtle} strokeWidth={2} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search tokens..."
-            placeholderTextColor={color.fg.subtle}
-            value={tokenSearch}
-            onChangeText={setTokenSearch}
-            autoFocus
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
-      )}
+      {/* Search bar — always visible */}
+      <View style={styles.searchBar}>
+        <Search size={14} color={color.fg.subtle} strokeWidth={2} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search tokens..."
+          placeholderTextColor={color.fg.subtle}
+          value={tokenSearch}
+          onChangeText={setTokenSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
 
       {/* RPC failure banner */}
       {failedNetworks.length > 0 && (
