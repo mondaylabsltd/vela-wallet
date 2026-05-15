@@ -12,6 +12,7 @@ import { copyToClipboard, hapticSuccess, hapticLight } from '@/services/platform
 import { Check, Copy, RefreshCw } from 'lucide-react-native';
 
 import { AppModal } from './AppModal';
+import { chainName } from '@/models/network';
 import { QRCode } from '@/components/QRCode';
 import { VelaCard } from './VelaCard';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
@@ -74,6 +75,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Activate Gas Relayer</Text>
+          <Text style={styles.networkLabel}>{chainName(funding.chainId)}</Text>
         </View>
 
         {/* QR Code */}
@@ -173,7 +175,12 @@ const styles = createStyles(() => ({
     fontSize: text.xl,
     ...inter.bold,
     color: color.fg.base,
-    marginBottom: space.sm,
+    marginBottom: space.xs,
+  },
+  networkLabel: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.muted,
   },
 
   qrWrap: {
