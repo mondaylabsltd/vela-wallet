@@ -208,8 +208,8 @@ export default function TokenDetailScreen() {
           >
             <Text style={styles.detailLabel}>Transactions</Text>
             <View style={styles.detailValueRow}>
-              <Text style={[styles.detailValue, { color: color.accent.base }]}>View on Explorer</Text>
-              <ExternalLink size={12} color={color.accent.base} strokeWidth={2} />
+              <Text style={[styles.detailValue, { color: color.fg.muted }]}>View on Explorer</Text>
+              <ExternalLink size={12} color={color.fg.muted} strokeWidth={2} />
             </View>
           </Pressable>
         </Animated.View>
