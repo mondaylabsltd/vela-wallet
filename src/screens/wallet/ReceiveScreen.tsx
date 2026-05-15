@@ -381,7 +381,7 @@ export default function ReceiveScreen() {
         const blob = await renderShareCardToCanvas(address!, accountName, networks);
         const file = new File([blob], `${accountName}-address.png`, { type: 'image/png' });
         if (navigator.share && navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file], title: `${accountName} Wallet Address` });
+          await navigator.share({ files: [file] });
         } else {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');

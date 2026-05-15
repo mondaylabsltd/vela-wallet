@@ -334,7 +334,7 @@ export function TransactionReceipt({
         const file = new File([blob], `vela-receipt-${txHash.slice(0, 10)}.png`, { type: 'image/png' });
 
         if (navigator.share && navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file], title: `Sent ${amount} ${symbol}` });
+          await navigator.share({ files: [file] });
           return;
         }
 
