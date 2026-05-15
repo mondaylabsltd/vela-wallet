@@ -160,8 +160,8 @@ export type GasTier = 'slow' | 'standard' | 'fast';
 
 export const GAS_TIER_MULTIPLIERS: Record<GasTier, { num: bigint; den: bigint; label: string }> = {
   slow:     { num: 6n, den: 10n, label: 'Slow' },       // ×0.6
-  standard: { num: 11n, den: 10n, label: 'Standard' },   // ×1.1
-  fast:     { num: 18n, den: 10n, label: 'Fast' },        // ×1.8
+  standard: { num: 12n, den: 10n, label: 'Standard' },   // ×1.2
+  fast:     { num: 36n, den: 10n, label: 'Fast' },        // ×3.6
 };
 
 /** Detailed gas fee estimate for display and max-send calculation. */
