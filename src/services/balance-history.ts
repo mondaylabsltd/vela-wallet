@@ -239,11 +239,5 @@ export async function fetch7DayHistory(params: {
     }
   });
 
-  const results = await Promise.all(queries);
-
-  // Add today
-  const todayLabel = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  results.push({ label: todayLabel, balance: currentBalance });
-
-  return results;
+  return Promise.all(queries);
 }

@@ -138,7 +138,7 @@ export default function TokenDetailScreen() {
               <View style={styles.chartLoading}>
                 <ActivityIndicator size="small" color={color.fg.subtle} />
               </View>
-            ) : historyData.length > 1 ? (
+            ) : historyData.length > 0 ? (
               <BarChart data={historyData} symbol={symbol} />
             ) : (
               <Text style={styles.chartEmpty}>No historical data available</Text>
