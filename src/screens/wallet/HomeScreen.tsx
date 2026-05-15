@@ -14,9 +14,10 @@ import { refreshPool } from '@/services/rpc-pool';
 import { setAccountBalance, getAccountBalances } from '@/services/balance-cache';
 import { showAlert, copyToClipboard, hapticSuccess, isAppActive } from '@/services/platform';
 import { ChainLogo } from '@/components/ChainLogo';
+import { QRScanner } from '@/components/QRScanner';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, ChevronDown, Search, X, AlertTriangle, Wifi, RefreshCw } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, ChevronDown, Search, X, AlertTriangle, Wifi, RefreshCw, ScanLine } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
@@ -154,6 +155,7 @@ export default function HomeScreen() {
 
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [debugBalance, setDebugBalance] = useState<number | null>(null);
+  const [showScanner, setShowScanner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -435,6 +437,7 @@ export default function HomeScreen() {
       {/* Action buttons */}
       <Animated.View style={styles.actionRow} entering={fadeInDown(200, 400)}>
         <ActionButton label="Send" icon={ArrowUp} onPress={() => router.push('/send')} accent />
+        <ActionButton label="Scan" icon={ScanLine} onPress={() => setShowScanner(true)} />
         <ActionButton label="Receive" icon={ArrowDown} onPress={() => router.push('/receive')} />
         <ActionButton label="History" icon={Clock} onPress={() => router.push('/history')} />
       </Animated.View>
@@ -695,6 +698,16 @@ export default function HomeScreen() {
           );
         })()}
       </AppModal>
+      {showScanner && (
+        <QRScanner
+          visible={showScanner}
+          onScan={(addr) => {
+            setShowScanner(false);
+            router.push(`/send?prefilledRecipient=${addr}`);
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </ScreenContainer>
   );
 }

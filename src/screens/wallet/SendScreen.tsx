@@ -129,7 +129,7 @@ function StepIndicator({ current }: { current: Step }) {
 
 export default function SendScreen() {
   const router = useSafeRouter();
-  const params = useLocalSearchParams<{ preselectedSymbol?: string; preselectedNetwork?: string }>();
+  const params = useLocalSearchParams<{ preselectedSymbol?: string; preselectedNetwork?: string; prefilledRecipient?: string }>();
   const { activeAccount, state } = useWallet();
   const address = activeAccount?.address ?? state.address;
 
@@ -186,6 +186,11 @@ export default function SendScreen() {
             setSelectedToken(match);
             setStep('enter-details');
           }
+        } else if (params.prefilledRecipient && nonZero.length > 0) {
+          // Quick-send from scan: auto-select highest-value token, prefill recipient
+          setSelectedToken(nonZero[0]);
+          setRecipient(params.prefilledRecipient);
+          setStep('enter-details');
         }
       })
       .catch(() => showAlert('Error', 'Failed to load tokens.'))
@@ -715,6 +720,7 @@ export default function SendScreen() {
               onChangeText={(t) => { setRecipient(t); setShowContacts(false); }}
               autoCapitalize="none"
               autoCorrect={false}
+              editable={!params.prefilledRecipient}
               multiline
               blurOnSubmit
               returnKeyType="done"
