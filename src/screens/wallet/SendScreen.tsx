@@ -944,23 +944,6 @@ export default function SendScreen() {
                   </Text>
                 </View>
               )}
-              {txStatus === 'confirmed' && selectedToken && (
-                <TransactionReceipt
-                  from={activeAccount?.address ?? ''}
-                  fromName={activeAccount?.name}
-                  to={recipient}
-                  toName={recipientIdentity?.name}
-                  amount={resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals)}
-                  symbol={selectedToken.symbol}
-                  chainId={tokenChainId(selectedToken)}
-                  txHash={txHash ?? ''}
-                  logoUrls={tokenLogoURLs(selectedToken)}
-                  usdValue={parseFloat(resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals)) * (selectedToken.priceUsd ?? 0)}
-                  timestamp={new Date()}
-                  recipientIdentity={recipientIdentity}
-                  onDone={() => router.back()}
-                />
-              )}
               {txStatus === 'error' && (
                 <View style={styles.txStatusRow}>
                   <AlertCircle size={20} color={color.error.base} strokeWidth={2.5} />
@@ -998,9 +981,30 @@ export default function SendScreen() {
         <View style={styles.navSpacer} />
       </View>
 
-      {step === 'select-token' && renderSelectToken()}
-      {step === 'enter-details' && renderEnterDetails()}
-      {step === 'confirm' && renderConfirm()}
+      {/* Transaction confirmed — full-screen receipt replaces everything */}
+      {txStatus === 'confirmed' && selectedToken ? (
+        <TransactionReceipt
+          from={activeAccount?.address ?? ''}
+          fromName={activeAccount?.name}
+          to={recipient}
+          toName={recipientIdentity?.name}
+          amount={resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals)}
+          symbol={selectedToken.symbol}
+          chainId={tokenChainId(selectedToken)}
+          txHash={txHash ?? ''}
+          logoUrls={tokenLogoURLs(selectedToken)}
+          usdValue={parseFloat(resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals)) * (selectedToken.priceUsd ?? 0)}
+          timestamp={new Date()}
+          recipientIdentity={recipientIdentity}
+          onDone={() => router.back()}
+        />
+      ) : (
+        <>
+          {step === 'select-token' && renderSelectToken()}
+          {step === 'enter-details' && renderEnterDetails()}
+          {step === 'confirm' && renderConfirm()}
+        </>
+      )}
 
       <QRScanner
         visible={showScanner}

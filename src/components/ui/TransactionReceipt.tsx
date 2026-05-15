@@ -4,18 +4,18 @@
  * Native: react-native-view-shot screenshot.
  */
 
-import React, { useRef } from 'react';
-import { Image, Platform, View, Text, Pressable, ScrollView } from 'react-native';
-import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
-import { TokenLogo } from '@/components/TokenLogo';
 import { ChainLogo } from '@/components/ChainLogo';
 import { QRCode } from '@/components/QRCode';
-import QRCodeLib from 'qrcode';
-import { formatBalance, shortAddr } from '@/models/types';
+import { TokenLogo } from '@/components/TokenLogo';
+import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { chainName, getAllNetworksSync } from '@/models/network';
-import { copyToClipboard, hapticSuccess, showAlert, openBrowser } from '@/services/platform';
-import { Share2, ExternalLink } from 'lucide-react-native';
+import { formatBalance, shortAddr } from '@/models/types';
+import { copyToClipboard, hapticSuccess, openBrowser, showAlert } from '@/services/platform';
 import type { RecipientIdentity } from '@/services/recipient-identity';
+import { ExternalLink, Share2 } from 'lucide-react-native';
+import QRCodeLib from 'qrcode';
+import React, { useRef } from 'react';
+import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -100,71 +100,122 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 async function renderReceiptToCanvas(props: Props): Promise<Blob> {
-  const { from, fromName, to, amount, symbol, chainId, txHash, usdValue, timestamp, recipientIdentity } = props;
+  const { from, fromName, to, amount, symbol, chainId, txHash, logoUrls, usdValue, timestamp, recipientIdentity } = props;
   const chain = chainName(chainId);
   const net = getAllNetworksSync().find(n => n.chainId === chainId);
   const explorerUrl = `${net?.explorerURL ?? 'https://etherscan.io'}/tx/${txHash}`;
   const displayToName = recipientIdentity?.name ?? props.toName;
 
-  const W = 750;
-  const PAD = 60;
-  const contentW = W - PAD * 2;
-  const qrSize = 200;
-  const logoSize = 40;
+  // Phone-like proportions: 9:16 aspect, similar to in-app card
+  const SCALE = 2; // @2x for retina
+  const W = 390 * SCALE;
+  const OUTER_PAD = 20 * SCALE;
+  const CARD_PAD = 24 * SCALE;
+  const CARD_W = W - OUTER_PAD * 2;
+  const CARD_R = 20 * SCALE;
+  const qrSize = 100 * SCALE;
+  const tokenLogoSize = 44 * SCALE;
+  const appLogoSize = 32 * SCALE;
 
-  const H = PAD + 40 + 20 + 30 + 10  // header
-    + 60 + 10 + 40 + 20               // amount
-    + 1 + 30                           // divider
-    + 5 * 50                           // 5 detail rows
-    + 30 + qrSize + 10 + 20 + 40      // QR section
-    + logoSize + 20 + 24 + PAD;       // footer
+  // Pre-compute height
+  const hasUsd = usdValue != null && usdValue > 0;
+  const nameRows = [fromName, displayToName].filter(Boolean).length;
+  const detailRowH = 40 * SCALE;
+  const nameRowH = 52 * SCALE;
+  const cardH =
+    CARD_PAD                                  // top padding
+    + 24 * SCALE + 16 * SCALE                // header + gap
+    + 1 + 20 * SCALE                         // divider
+    + tokenLogoSize + 10 * SCALE             // token logo
+    + 36 * SCALE                              // amount text
+    + (hasUsd ? 24 * SCALE : 0)              // usd
+    + 16 * SCALE                              // gap
+    + 1 + 16 * SCALE                         // divider
+    + nameRows * nameRowH + (5 - nameRows) * detailRowH // detail rows
+    + 20 * SCALE + 1 + 20 * SCALE            // qr divider
+    + qrSize + 10 * SCALE + 16 * SCALE       // qr + hint
+    + 24 * SCALE                              // gap before footer
+    + appLogoSize + 8 * SCALE + 18 * SCALE + 16 * SCALE  // logo + brand + url
+    + CARD_PAD;                               // bottom padding
+
+  const H = OUTER_PAD + cardH + OUTER_PAD;
 
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
 
-  // Background
-  ctx.fillStyle = '#FFFFFF';
-  roundRect(ctx, 0, 0, W, H, 32);
-  ctx.fill();
+  // Outer background (matches app bg)
+  ctx.fillStyle = '#F5F4F0';
+  ctx.fillRect(0, 0, W, H);
 
-  let y = PAD;
+  // Card background
+  ctx.fillStyle = '#FFFFFF';
+  roundRect(ctx, OUTER_PAD, OUTER_PAD, CARD_W, cardH, CARD_R);
+  ctx.fill();
+  // Card border
+  ctx.strokeStyle = '#ECEBE4';
+  ctx.lineWidth = 1;
+  roundRect(ctx, OUTER_PAD, OUTER_PAD, CARD_W, cardH, CARD_R);
+  ctx.stroke();
+
+  const L = OUTER_PAD + CARD_PAD;
+  const R = OUTER_PAD + CARD_W - CARD_PAD;
+  const contentW = R - L;
+  let y = OUTER_PAD + CARD_PAD;
+
+  const s = (px: number) => px * SCALE;
 
   // Header: TRANSACTION RECEIPT + chain name
   ctx.fillStyle = '#1A1A18';
-  ctx.font = 'bold 24px Inter, system-ui, sans-serif';
+  ctx.font = `bold ${s(13)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'left';
-  ctx.fillText('TRANSACTION RECEIPT', PAD, y + 20);
+  ctx.fillText('TRANSACTION RECEIPT', L, y + s(14));
   ctx.fillStyle = '#7A776E';
-  ctx.font = '500 20px Inter, system-ui, sans-serif';
+  ctx.font = `500 ${s(12)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'right';
-  ctx.fillText(chain, W - PAD, y + 20);
-  y += 40 + 20;
+  ctx.fillText(chain, R, y + s(14));
+  y += s(24) + s(16);
 
   // Divider
   ctx.fillStyle = '#ECEBE4';
-  ctx.fillRect(PAD, y, contentW, 1);
-  y += 1 + 30;
+  ctx.fillRect(L, y, contentW, 1);
+  y += 1 + s(20);
+
+  // Token logo (try to load, skip if fails)
+  const tokenLogoSrc = logoUrls?.[0];
+  if (tokenLogoSrc) {
+    try {
+      const tokenImg = await loadImageRobust(tokenLogoSrc);
+      const tx = (W - tokenLogoSize) / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(tx + tokenLogoSize / 2, y + tokenLogoSize / 2, tokenLogoSize / 2, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(tokenImg, tx, y, tokenLogoSize, tokenLogoSize);
+      ctx.restore();
+    } catch {}
+  }
+  y += tokenLogoSize + s(10);
 
   // Amount
   ctx.fillStyle = '#1A1A18';
-  ctx.font = `bold 48px Inter, system-ui, sans-serif`;
+  ctx.font = `bold ${s(28)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText(`${formatBalance(parseFloat(amount))} ${symbol}`, W / 2, y + 40);
-  y += 60;
-  if (usdValue && usdValue > 0) {
+  ctx.fillText(`${formatBalance(parseFloat(amount))} ${symbol}`, W / 2, y + s(28));
+  y += s(36);
+  if (hasUsd) {
     ctx.fillStyle = '#7A776E';
-    ctx.font = '500 24px Inter, system-ui, sans-serif';
-    ctx.fillText(formatUsd(usdValue), W / 2, y + 18);
-    y += 30;
+    ctx.font = `500 ${s(15)}px Inter, system-ui, sans-serif`;
+    ctx.fillText(formatUsd(usdValue!), W / 2, y + s(15));
+    y += s(24);
   }
-  y += 20;
+  y += s(16);
 
   // Divider
   ctx.fillStyle = '#ECEBE4';
-  ctx.fillRect(PAD, y, contentW, 1);
-  y += 1 + 20;
+  ctx.fillRect(L, y, contentW, 1);
+  y += 1 + s(12);
 
   // Detail rows
   const details: [string, string, string?][] = [
@@ -177,32 +228,34 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
 
   for (const [label, value, name] of details) {
     ctx.fillStyle = '#7A776E';
-    ctx.font = '400 22px Inter, system-ui, sans-serif';
+    ctx.font = `400 ${s(13)}px Inter, system-ui, sans-serif`;
     ctx.textAlign = 'left';
-    ctx.fillText(label, PAD, y + 22);
 
-    ctx.textAlign = 'right';
     if (name) {
+      ctx.fillText(label, L, y + s(18));
+      ctx.textAlign = 'right';
       ctx.fillStyle = '#1A1A18';
-      ctx.font = '600 22px Inter, system-ui, sans-serif';
-      ctx.fillText(name, W - PAD, y + 14);
+      ctx.font = `600 ${s(13)}px Inter, system-ui, sans-serif`;
+      ctx.fillText(name, R, y + s(12));
       ctx.fillStyle = '#7A776E';
-      ctx.font = '400 20px "SF Mono", monospace';
-      ctx.fillText(value, W - PAD, y + 38);
-      y += 50;
+      ctx.font = `400 ${s(12)}px "SF Mono", monospace`;
+      ctx.fillText(value, R, y + s(30));
+      y += nameRowH;
     } else {
+      ctx.fillText(label, L, y + s(18));
+      ctx.textAlign = 'right';
       ctx.fillStyle = '#1A1A18';
-      ctx.font = '600 22px Inter, system-ui, sans-serif';
-      ctx.fillText(value, W - PAD, y + 22);
-      y += 44;
+      ctx.font = `600 ${s(13)}px Inter, system-ui, sans-serif`;
+      ctx.fillText(value, R, y + s(18));
+      y += detailRowH;
     }
   }
 
   // QR section
-  y += 20;
+  y += s(8);
   ctx.fillStyle = '#ECEBE4';
-  ctx.fillRect(PAD, y, contentW, 1);
-  y += 1 + 30;
+  ctx.fillRect(L, y, contentW, 1);
+  y += 1 + s(20);
 
   // QR code
   const qrModules = QRCodeLib.create(explorerUrl, { errorCorrectionLevel: 'M' }).modules;
@@ -217,36 +270,39 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
       }
     }
   }
-  y += qrSize + 10;
+  y += qrSize + s(8);
   ctx.fillStyle = '#B0ADA5';
-  ctx.font = '400 18px Inter, system-ui, sans-serif';
+  ctx.font = `400 ${s(11)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText('Scan to view on explorer', W / 2, y + 14);
-  y += 40;
+  ctx.fillText('Scan to view on explorer', W / 2, y + s(12));
+  y += s(16) + s(24);
 
-  // Footer: logo + Vela Wallet + getvela.app
+  // Footer: logo + VELA WALLET + getvela.app
   let logoImg: HTMLImageElement | null = null;
   const logoSources = [resolveAssetUri(LOGO_ASSET), '/assets/assets/images/icon.png', '/assets/images/icon.png'].filter(Boolean);
   for (const src of logoSources) {
     try { logoImg = await loadImageRobust(src); break; } catch {}
   }
   if (logoImg) {
-    const lx = (W - logoSize) / 2;
+    const lx = (W - appLogoSize) / 2;
     ctx.save();
     ctx.beginPath();
-    ctx.arc(lx + logoSize / 2, y + logoSize / 2, logoSize / 2, 0, Math.PI * 2);
+    ctx.arc(lx + appLogoSize / 2, y + appLogoSize / 2, appLogoSize / 2, 0, Math.PI * 2);
     ctx.clip();
-    ctx.drawImage(logoImg, lx, y, logoSize, logoSize);
+    ctx.drawImage(logoImg, lx, y, appLogoSize, appLogoSize);
     ctx.restore();
   }
-  y += logoSize + 12;
+  y += appLogoSize + s(8);
   ctx.fillStyle = '#1A1A18';
-  ctx.font = '600 20px Inter, system-ui, sans-serif';
-  ctx.fillText('Vela Wallet', W / 2, y + 14);
-  y += 24;
+  ctx.font = `bold ${s(13)}px Inter, system-ui, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.letterSpacing = `${s(2)}px`;
+  ctx.fillText('VELA WALLET', W / 2, y + s(13));
+  y += s(18);
   ctx.fillStyle = '#B0ADA5';
-  ctx.font = '400 18px Inter, system-ui, sans-serif';
-  ctx.fillText('getvela.app', W / 2, y + 12);
+  ctx.font = `400 ${s(11)}px Inter, system-ui, sans-serif`;
+  ctx.letterSpacing = '0px';
+  ctx.fillText('getvela.app', W / 2, y + s(11));
 
   return new Promise((resolve) => canvas.toBlob(resolve as BlobCallback, 'image/png', 1));
 }
@@ -347,6 +403,7 @@ export function TransactionReceipt({
           <Text style={styles.qrHint}>Scan to view on explorer</Text>
         </View>
         <View style={styles.footer}>
+          <Image source={LOGO_ASSET} style={styles.footerLogoImg} />
           <Text style={styles.footerLogo}>VELA WALLET</Text>
           <Text style={styles.footerUrl}>getvela.app</Text>
         </View>
@@ -373,7 +430,7 @@ export function TransactionReceipt({
 
 const styles = createStyles(() => ({
   screen: { flex: 1, backgroundColor: color.bg.base },
-  screenContent: { padding: space.xl, paddingBottom: 100 },
+  screenContent: { paddingBottom: 100 },
   receipt: {
     backgroundColor: '#FFFFFF',
     borderRadius: radius.xl,
@@ -397,7 +454,8 @@ const styles = createStyles(() => ({
   detailValue: { fontSize: text.sm, ...inter.semibold, color: color.fg.base, textAlign: 'right' as const, flex: 1 },
   qrSection: { alignItems: 'center', marginTop: space.xl, paddingTop: space.lg, borderTopWidth: 1, borderTopColor: color.border.base, gap: space.sm },
   qrHint: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle },
-  footer: { alignItems: 'center', marginTop: space.xl, gap: 2 },
+  footer: { alignItems: 'center', marginTop: space.xl, gap: 4 },
+  footerLogoImg: { width: 32, height: 32, borderRadius: 16, marginBottom: 4 },
   footerLogo: { fontSize: text.sm, ...inter.bold, color: color.fg.muted, letterSpacing: 2 },
   footerUrl: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle },
   actions: { flexDirection: 'row', justifyContent: 'center', gap: space['5xl'], marginTop: space['2xl'] },
