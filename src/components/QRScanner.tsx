@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Platform, View, Text, StyleSheet, Pressable, Modal, StatusBar } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -184,8 +184,8 @@ function ScanOverlay() {
 export function QRScanner({ visible, onScan, onClose }: Props) {
   const [scanned, setScanned] = useState(false);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
+  const insets = useSafeAreaInsets();
 
-  // Reset scanned state when modal opens
   useEffect(() => {
     if (visible) setScanned(false);
   }, [visible]);
@@ -199,16 +199,16 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   }
 
   async function handlePickImage() {
-    try {
-      if (Platform.OS === 'web') {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        input.onchange = async () => {
+    if (Platform.OS === 'web') {
+      // Web: use native file input + jsQR
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = async () => {
+        try {
           const file = input.files?.[0];
           if (!file) return;
           const bitmap = await createImageBitmap(file);
-          // Scale down large images for faster processing
           const maxDim = 1024;
           const scale = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
           const w = Math.round(bitmap.width * scale);
@@ -224,27 +224,60 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           } else {
             showAlert('No QR Found', 'Could not find a QR code in the selected image.');
           }
-        };
-        input.click();
-      } else {
+        } catch (e) {
+          console.warn('[QRScanner] Web image scan error:', e);
+          showAlert('Error', 'Failed to process the image.');
+        }
+      };
+      input.click();
+    } else {
+      // Native: expo-image-picker + expo-camera scanFromURLAsync (with jsQR fallback)
+      try {
         const ImagePicker = await import('expo-image-picker');
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           quality: 1,
+          base64: true,
         });
         if (result.canceled || !result.assets?.[0]) return;
-        const uri = result.assets[0].uri;
-        const { scanFromURLAsync } = await import('expo-camera');
-        const barcodes = await scanFromURLAsync(uri, ['qr']);
-        if (barcodes.length > 0 && barcodes[0].data) {
-          hapticSuccess();
-          onScan(parseAddress(barcodes[0].data));
-        } else {
-          showAlert('No QR Found', 'Could not find a QR code in the selected image.');
+        const asset = result.assets[0];
+
+        // 1. Try expo-camera scanFromURLAsync (uses ML Kit on Android, Vision on iOS)
+        try {
+          const ExpoCamera = await import('expo-camera');
+          const barcodes = await ExpoCamera.scanFromURLAsync(asset.uri, ['qr']);
+          if (barcodes.length > 0 && barcodes[0].data) {
+            hapticSuccess();
+            onScan(parseAddress(barcodes[0].data));
+            return;
+          }
+        } catch (e) {
+          console.warn('[QRScanner] scanFromURLAsync failed:', e);
         }
+
+        // 2. Fallback: decode base64 image → jsQR (works without ML Kit)
+        if (asset.base64) {
+          try {
+            const { decodeBase64Image } = await import('@/services/image-decode');
+            const imageData = decodeBase64Image(asset.base64, asset.width, asset.height);
+            if (imageData) {
+              const code = jsQR(imageData.data as any, imageData.width, imageData.height);
+              if (code?.data) {
+                hapticSuccess();
+                onScan(parseAddress(code.data));
+                return;
+              }
+            }
+          } catch (e) {
+            console.warn('[QRScanner] jsQR fallback error:', e);
+          }
+        }
+
+        showAlert('No QR Found', 'Could not find a QR code in the selected image.');
+      } catch (e) {
+        console.warn('[QRScanner] Native image pick error:', e);
+        showAlert('Error', 'Failed to open image picker.');
       }
-    } catch {
-      showAlert('Error', 'Failed to scan the image.');
     }
   }
 
@@ -259,8 +292,8 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
         <NativeCamera facing={facing} onBarCodeScanned={handleBarCodeScanned} />
       )}
 
-      {/* Header overlay — on top of camera */}
-      <SafeAreaView style={styles.headerOverlay} edges={['top']}>
+      {/* Header overlay — manual safe area padding */}
+      <View style={[styles.headerOverlay, { paddingTop: Math.max(insets.top, 20) }]}>
         <Pressable onPress={onClose} hitSlop={8} style={styles.headerBtn}>
           <X size={22} color="#fff" strokeWidth={2.5} />
         </Pressable>
@@ -279,12 +312,12 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             </Pressable>
           )}
         </View>
-      </SafeAreaView>
+      </View>
 
       {/* Footer hint */}
-      <SafeAreaView style={styles.footerOverlay} edges={['bottom']}>
+      <View style={[styles.footerOverlay, { paddingBottom: Math.max(insets.bottom, 20) }]}>
         <Text style={styles.hint}>Point camera at a QR code</Text>
-      </SafeAreaView>
+      </View>
     </View>
   );
 
@@ -327,7 +360,7 @@ const styles = createStyles(() => ({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: space.xl,
-    paddingBottom: space.xl,
+    paddingBottom: space.md,
     zIndex: 10,
   },
   headerBtn: {
@@ -351,7 +384,6 @@ const styles = createStyles(() => ({
     left: 0,
     right: 0,
     alignItems: 'center',
-    paddingBottom: space.xl,
     zIndex: 10,
   },
   hint: {

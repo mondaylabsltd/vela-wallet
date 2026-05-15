@@ -62,7 +62,9 @@
         }
       ],
       "./plugins/with-native-modules",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-camera",
+      "expo-image-picker"
     ],
     "experiments": {
       "typedRoutes": true,
