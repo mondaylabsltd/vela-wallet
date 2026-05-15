@@ -474,6 +474,7 @@ export default function SendScreen() {
           txHash: hash,
           from: activeAccount.address,
           to: recipient,
+          toName: recipientIdentity?.name,
           value: tokenAmount,
           symbol: selectedToken!.symbol,
           decimals: selectedToken!.decimals,

@@ -130,7 +130,7 @@ export default function HistoryScreen() {
         <View style={styles.txInfo}>
           <Text style={styles.txType}>Sent {item.symbol}</Text>
           <Text style={styles.txAddress}>
-            To {shortAddress(item.to)} · {networkName}
+            To {item.toName ?? shortAddress(item.to)} · {networkName}
           </Text>
         </View>
 
@@ -239,7 +239,9 @@ export default function HistoryScreen() {
       {/* Address pill */}
       {address ? (
         <Animated.View style={styles.addressRow} entering={fadeIn(0, 300)}>
-          <Text style={styles.addressText}>{shortAddress(address)}</Text>
+          <Text style={styles.addressText}>
+            {activeAccount?.name ? `${activeAccount.name} · ` : ''}{shortAddress(address)}
+          </Text>
         </Animated.View>
       ) : null}
 

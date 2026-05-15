@@ -264,6 +264,8 @@ export interface LocalTransaction {
   txHash: string;
   from: string;
   to: string;
+  /** Resolved identity name of the recipient (e.g. "vitalik.eth", "spaceid.bnb"). */
+  toName?: string;
   value: string;
   symbol: string;
   decimals: number;
