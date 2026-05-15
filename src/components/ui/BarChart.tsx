@@ -80,7 +80,7 @@ const styles = createStyles(() => ({
   },
   tooltip: {
     alignItems: 'center',
-    marginBottom: space.3xl,
+    marginBottom: space['3xl'],
     minHeight: 36,
     justifyContent: 'center',
   },
