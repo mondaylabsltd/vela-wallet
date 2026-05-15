@@ -75,7 +75,7 @@ async function renderShareCardToCanvas(
   const ctx = canvas.getContext('2d')!;
 
   // — Background —
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillStyle = color.bg.raised;
   ctx.fillRect(0, 0, W, H);
 
   // — Preload logo —
@@ -92,28 +92,28 @@ async function renderShareCardToCanvas(
   let y = PAD;
 
   // — Title —
-  ctx.fillStyle = '#1A1A18';
+  ctx.fillStyle = color.fg.base;
   ctx.font = 'bold 40px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('Scan to Send Me Crypto', W / 2, y + 34);
   y += 46 + 12;
 
   // — Wallet name —
-  ctx.fillStyle = '#1A1A18';
+  ctx.fillStyle = color.fg.base;
   ctx.font = '600 28px Inter, system-ui, sans-serif';
   ctx.fillText(walletName, W / 2, y + 22);
   y += 28 + 6;
 
   // — Short address —
   const shortAddr = `${address.slice(0, 6)}···${address.slice(-4)}`;
-  ctx.fillStyle = '#9E9B93';
+  ctx.fillStyle = color.fg.subtle;
   ctx.font = '400 24px "SF Mono", "Fira Code", monospace';
   ctx.fillText(shortAddr, W / 2, y + 18);
   y += 24 + 40;
 
   // — QR container with subtle border —
   const qcX = (W - qrContainerSize) / 2;
-  ctx.strokeStyle = '#E8E6E1';
+  ctx.strokeStyle = color.border.base;
   ctx.lineWidth = 1.5;
   roundRect(ctx, qcX, y, qrContainerSize, qrContainerSize, 24);
   ctx.stroke();
@@ -124,7 +124,7 @@ async function renderShareCardToCanvas(
   const moduleSize = qrSize / moduleCount;
   const qrX = qcX + qrPad;
   const qrY = y + qrPad;
-  ctx.fillStyle = '#1A1A18';
+  ctx.fillStyle = color.fg.base;
   for (let row = 0; row < moduleCount; row++) {
     for (let col = 0; col < moduleCount; col++) {
       if (qrModules.data[row * moduleCount + col] === 1) {
@@ -135,12 +135,12 @@ async function renderShareCardToCanvas(
   y += qrContainerSize + 40;
 
   // — Divider —
-  ctx.fillStyle = '#ECEBE4';
+  ctx.fillStyle = color.border.base;
   ctx.fillRect(PAD, y, contentW, 1);
   y += 1 + 32;
 
   // — "Works on X networks" label —
-  ctx.fillStyle = '#9E9B93';
+  ctx.fillStyle = color.fg.subtle;
   ctx.font = '500 22px Inter, system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(`Works on ${networks.length} EVM networks`, PAD, y + 18);
@@ -159,7 +159,7 @@ async function renderShareCardToCanvas(
     const cy = y + row * (chipH + chipGap);
     const n = networks[i];
 
-    ctx.fillStyle = '#F7F6F3';
+    ctx.fillStyle = color.bg.sunken;
     roundRect(ctx, cx, cy, chipW, chipH, chipH / 2);
     ctx.fill();
 
@@ -195,7 +195,7 @@ async function renderShareCardToCanvas(
       label = label.slice(0, -1);
     }
     if (label !== n.displayName) label = label.trimEnd() + '…';
-    ctx.fillStyle = '#4A4843';
+    ctx.fillStyle = color.fg.muted;
     ctx.textAlign = 'left';
     ctx.fillText(label, textX, cy + chipH / 2 + 7);
   }
@@ -212,12 +212,12 @@ async function renderShareCardToCanvas(
     ctx.restore();
   }
   y += logoSize + 24;
-  ctx.fillStyle = '#1A1A18';
+  ctx.fillStyle = color.fg.base;
   ctx.font = '600 24px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('Vela Wallet', W / 2, y);
   y += 28;
-  ctx.fillStyle = '#B0ADA5';
+  ctx.fillStyle = color.fg.subtle;
   ctx.font = '400 20px Inter, system-ui, sans-serif';
   ctx.fillText('getvela.app', W / 2, y);
 
@@ -866,46 +866,46 @@ const styles = createStyles(() => ({
   },
   shareCard: {
     width: SHARE_CARD_W,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: color.bg.raised,
     padding: 40,
     alignItems: 'center',
   },
   shareCardHeadline: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1A1A18',
+    color: color.fg.base,
     marginBottom: 6,
   },
   shareCardName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1A1A18',
+    color: color.fg.base,
     marginBottom: 3,
   },
   shareCardAddr: {
     fontSize: 12,
     fontFamily: font.mono,
     fontWeight: '400',
-    color: '#9E9B93',
+    color: color.fg.subtle,
     marginBottom: 20,
   },
   shareCardQRContainer: {
     borderWidth: 0.75,
-    borderColor: '#E8E6E1',
+    borderColor: color.border.base,
     borderRadius: 12,
     padding: 18,
     marginBottom: 20,
   },
   shareCardDivider: {
     height: 1,
-    backgroundColor: '#ECEBE4',
+    backgroundColor: color.border.base,
     width: '100%',
     marginBottom: 14,
   },
   shareCardNetworksSub: {
     fontSize: 11,
     fontWeight: '500',
-    color: '#9E9B93',
+    color: color.fg.subtle,
     marginBottom: 8,
     alignSelf: 'flex-start',
   },
@@ -921,7 +921,7 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#F7F6F3',
+    backgroundColor: color.bg.sunken,
     borderRadius: 11,
     paddingHorizontal: 7,
     width: '48.5%',
@@ -930,7 +930,7 @@ const styles = createStyles(() => ({
   shareCardNetworkName: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#4A4843',
+    color: color.fg.muted,
     flexShrink: 1,
   },
   shareCardFooter: {
@@ -945,14 +945,14 @@ const styles = createStyles(() => ({
   shareCardBrand: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#1A1A18',
+    color: color.fg.base,
     marginBottom: 2,
     textAlign: 'center',
   },
   shareCardUrl: {
     fontSize: 10,
     fontWeight: '400',
-    color: '#B0ADA5',
+    color: color.fg.subtle,
     textAlign: 'center',
   },
 }));

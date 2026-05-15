@@ -146,15 +146,15 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
   const ctx = canvas.getContext('2d')!;
 
   // Outer background (matches app bg)
-  ctx.fillStyle = '#F5F4F0';
+  ctx.fillStyle = color.bg.sunken;
   ctx.fillRect(0, 0, W, H);
 
   // Card background
-  ctx.fillStyle = '#FFFFFF';
+  ctx.fillStyle = color.bg.raised;
   roundRect(ctx, OUTER_PAD, OUTER_PAD, CARD_W, cardH, CARD_R);
   ctx.fill();
   // Card border
-  ctx.strokeStyle = '#ECEBE4';
+  ctx.strokeStyle = color.border.base;
   ctx.lineWidth = 1;
   roundRect(ctx, OUTER_PAD, OUTER_PAD, CARD_W, cardH, CARD_R);
   ctx.stroke();
@@ -167,18 +167,18 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
   const s = (px: number) => px * SCALE;
 
   // Header: TRANSACTION RECEIPT + chain name
-  ctx.fillStyle = '#1A1A18';
+  ctx.fillStyle = color.fg.base;
   ctx.font = `bold ${s(13)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'left';
   ctx.fillText('TRANSACTION RECEIPT', L, y + s(14));
-  ctx.fillStyle = '#7A776E';
+  ctx.fillStyle = color.fg.muted;
   ctx.font = `500 ${s(12)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'right';
   ctx.fillText(chain, R, y + s(14));
   y += s(24) + s(16);
 
   // Divider
-  ctx.fillStyle = '#ECEBE4';
+  ctx.fillStyle = color.border.base;
   ctx.fillRect(L, y, contentW, 1);
   y += 1 + s(20);
 
@@ -199,13 +199,13 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
   y += tokenLogoSize + s(10);
 
   // Amount
-  ctx.fillStyle = '#1A1A18';
+  ctx.fillStyle = color.fg.base;
   ctx.font = `bold ${s(28)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.fillText(`${formatBalance(parseFloat(amount))} ${symbol}`, W / 2, y + s(28));
   y += s(36);
   if (hasUsd) {
-    ctx.fillStyle = '#7A776E';
+    ctx.fillStyle = color.fg.muted;
     ctx.font = `500 ${s(15)}px Inter, system-ui, sans-serif`;
     ctx.fillText(formatUsd(usdValue!), W / 2, y + s(15));
     y += s(24);
@@ -213,7 +213,7 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
   y += s(16);
 
   // Divider
-  ctx.fillStyle = '#ECEBE4';
+  ctx.fillStyle = color.border.base;
   ctx.fillRect(L, y, contentW, 1);
   y += 1 + s(12);
 
@@ -227,24 +227,24 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
   ];
 
   for (const [label, value, name] of details) {
-    ctx.fillStyle = '#7A776E';
+    ctx.fillStyle = color.fg.muted;
     ctx.font = `400 ${s(13)}px Inter, system-ui, sans-serif`;
     ctx.textAlign = 'left';
 
     if (name) {
       ctx.fillText(label, L, y + s(18));
       ctx.textAlign = 'right';
-      ctx.fillStyle = '#1A1A18';
+      ctx.fillStyle = color.fg.base;
       ctx.font = `600 ${s(13)}px Inter, system-ui, sans-serif`;
       ctx.fillText(name, R, y + s(12));
-      ctx.fillStyle = '#7A776E';
+      ctx.fillStyle = color.fg.muted;
       ctx.font = `400 ${s(12)}px "SF Mono", monospace`;
       ctx.fillText(value, R, y + s(30));
       y += nameRowH;
     } else {
       ctx.fillText(label, L, y + s(18));
       ctx.textAlign = 'right';
-      ctx.fillStyle = '#1A1A18';
+      ctx.fillStyle = color.fg.base;
       ctx.font = `600 ${s(13)}px Inter, system-ui, sans-serif`;
       ctx.fillText(value, R, y + s(18));
       y += detailRowH;
@@ -253,7 +253,7 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
 
   // QR section
   y += s(8);
-  ctx.fillStyle = '#ECEBE4';
+  ctx.fillStyle = color.border.base;
   ctx.fillRect(L, y, contentW, 1);
   y += 1 + s(20);
 
@@ -262,7 +262,7 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
   const moduleCount = qrModules.size;
   const moduleSize = qrSize / moduleCount;
   const qrX = (W - qrSize) / 2;
-  ctx.fillStyle = '#1A1A18';
+  ctx.fillStyle = color.fg.base;
   for (let row = 0; row < moduleCount; row++) {
     for (let col = 0; col < moduleCount; col++) {
       if (qrModules.data[row * moduleCount + col] === 1) {
@@ -271,7 +271,7 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
     }
   }
   y += qrSize + s(8);
-  ctx.fillStyle = '#B0ADA5';
+  ctx.fillStyle = color.fg.subtle;
   ctx.font = `400 ${s(11)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.fillText('Scan to view on explorer', W / 2, y + s(12));
@@ -293,13 +293,13 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
     ctx.restore();
   }
   y += appLogoSize + s(8);
-  ctx.fillStyle = '#1A1A18';
+  ctx.fillStyle = color.fg.base;
   ctx.font = `bold ${s(13)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.letterSpacing = `${s(2)}px`;
   ctx.fillText('VELA WALLET', W / 2, y + s(13));
   y += s(18);
-  ctx.fillStyle = '#B0ADA5';
+  ctx.fillStyle = color.fg.subtle;
   ctx.font = `400 ${s(11)}px Inter, system-ui, sans-serif`;
   ctx.letterSpacing = '0px';
   ctx.fillText('getvela.app', W / 2, y + s(11));
@@ -433,7 +433,7 @@ const styles = createStyles(() => ({
   screen: { flex: 1, backgroundColor: color.bg.base },
   screenContent: { paddingBottom: 100 },
   receipt: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: color.bg.raised,
     borderRadius: radius.xl,
     padding: space['2xl'],
     borderWidth: 1,
