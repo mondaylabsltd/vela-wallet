@@ -10,7 +10,7 @@ import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenC
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
-import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend, type TransactionFeeEstimate } from '@/services/safe-transaction';
+import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, GAS_TIER_MULTIPLIERS, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
 import { findAccountByCredentialId, saveTransaction, loadTransactions } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, type FundingNeeded } from '@/services/bundler-service';
@@ -30,7 +30,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, ScanLine, BookUser, CheckCircle2, AlertCircle, Loader, ArrowUpDown, Search } from 'lucide-react-native';
+import { ArrowLeft, X, ScanLine, BookUser, CheckCircle2, AlertCircle, Loader, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
@@ -150,6 +150,8 @@ export default function SendScreen() {
   const [txError, setTxError] = useState<string | null>(null);
   const [inputInUsd, setInputInUsd] = useState(false);
   const [gasExpanded, setGasExpanded] = useState(false);
+  const [gasTier, setGasTier] = useState<GasTier>('standard');
+  const [refreshingGas, setRefreshingGas] = useState(false);
   const [recentRecipients, setRecentRecipients] = useState<string[]>([]);
   const [showContacts, setShowContacts] = useState(false);
   const [amountWarning, setAmountWarning] = useState<string | null>(null);
@@ -329,7 +331,7 @@ export default function SendScreen() {
       (async () => {
         try {
           const [feeResult] = await Promise.allSettled([
-            estimateTransactionFee(activeAccount.address, chainId),
+            estimateTransactionFee(activeAccount.address, chainId, gasTier),
             fetchBundlerAccountInfo(chainId, activeAccount.address),
           ]);
 
@@ -360,7 +362,7 @@ export default function SendScreen() {
     if (isNativeToken(selectedToken) && activeAccount) {
       try {
         const chainId = tokenChainId(selectedToken);
-        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId);
+        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId, gasTier);
         // Use string-based conversion to avoid floating-point precision loss
         const balanceWei = balanceToWei(selectedToken.balance, selectedToken.decimals);
         // Reserve 3x estimated gas (200% margin for gas price volatility)
@@ -442,16 +444,17 @@ export default function SendScreen() {
       const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals);
       const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
 
+      const maxFee = feeEstimate?.maxFeePerGas;
       let result;
       if (isNativeToken(selectedToken)) {
         result = await sendNative(
           activeAccount.address, recipient, weiHex, chainId,
-          stored.publicKeyHex, signFn,
+          stored.publicKeyHex, signFn, maxFee,
         );
       } else {
         result = await sendERC20(
           activeAccount.address, selectedToken.tokenAddress!, recipient, weiHex, chainId,
-          stored.publicKeyHex, signFn,
+          stored.publicKeyHex, signFn, maxFee,
         );
       }
 
@@ -496,7 +499,7 @@ export default function SendScreen() {
           clearBundlerCache(chainId, activeAccount!.address);
           const info = await fetchBundlerAccountInfo(chainId, activeAccount!.address);
           if (info) {
-            const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId);
+            const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId, gasTier);
             const thresholdWei = fee.totalWei * 2n;
             const deficit = thresholdWei - info.spendableBalance;
             const base = deficit > 0n ? deficit : thresholdWei;
@@ -635,30 +638,27 @@ export default function SendScreen() {
           {/* Amount — large display with inline unit */}
           <Pressable style={styles.amountWrap} onPress={() => amountInputRef.current?.focus()}>
             <View style={styles.amountTopRow}>
-              <TextInput
-                ref={amountInputRef}
-                style={[styles.amountInput, { fontSize: amountFontSize(amount) }]}
-                placeholder="0"
-                placeholderTextColor={color.fg.subtle}
-                value={amount}
-                onChangeText={(t) => {
-                  const maxDec = inputInUsd ? 2 : selectedToken.decimals;
-                  const sanitized = sanitizeAmountInput(t, maxDec);
-                  if (sanitized !== null) setAmount(sanitized);
-                }}
-                keyboardType="decimal-pad"
-                selectionColor={color.fg.muted}
-              />
+              <View style={styles.amountInputWrap}>
+                <TextInput
+                  ref={amountInputRef}
+                  style={[styles.amountInput, { fontSize: amountFontSize(amount) }]}
+                  placeholder="0"
+                  placeholderTextColor={color.fg.subtle}
+                  value={amount}
+                  onChangeText={(t) => {
+                    const maxDec = inputInUsd ? 2 : selectedToken.decimals;
+                    const sanitized = sanitizeAmountInput(t, maxDec);
+                    if (sanitized !== null) setAmount(sanitized);
+                  }}
+                  keyboardType="decimal-pad"
+                  selectionColor={color.fg.muted}
+                />
+              </View>
               {amount ? (
-                /* Unit suffix — faded label next to the number */
                 <Text style={[styles.unitLabel, { fontSize: Math.max(amountFontSize(amount) * 0.7, 16) }]}>
                   {inputInUsd ? 'USD' : selectedToken.symbol}
                 </Text>
-              ) : null}
-              {/* Spacer pushes Max to the right */}
-              <View style={{ flex: 1 }} />
-              {!amount && (
-                /* Max button — right-aligned when amount is empty */
+              ) : (
                 <Pressable onPress={handleMaxAmount} hitSlop={8} style={styles.maxBtn}>
                   <Text style={styles.maxBtnText}>Max</Text>
                 </Pressable>
@@ -777,6 +777,8 @@ export default function SendScreen() {
     const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals);
     const amountNum = parseFloat(tokenAmount || '0');
     const usdAmount = amountNum * (selectedToken.priceUsd ?? 0);
+    const logos = tokenLogoURLs(selectedToken);
+    const chain = chainName(tokenChainId(selectedToken));
 
     // Fee calculations
     const sym = nativeSymbol(tokenChainId(selectedToken));
@@ -791,41 +793,109 @@ export default function SendScreen() {
         <Animated.View entering={fadeInDown(0, 300)}>
           <Text style={styles.stepTitle}>Confirm</Text>
 
-          <VelaCard elevated style={styles.confirmCard}>
-            <ConfirmRow label="From" value={activeAccount?.name ?? 'Wallet'} />
-            <View style={styles.confirmSeparator} />
-            <ConfirmRow label="To" value={shortAddr(recipient)} />
-            <View style={styles.confirmSeparator} />
-            <ConfirmRow
-              label="Amount"
-              value={`${formatBalance(amountNum)} ${selectedToken.symbol}`}
-              sub={usdAmount > 0 ? `≈ ${formatUsd(usdAmount)}` : undefined}
-              highlight
-            />
-            <View style={styles.confirmSeparator} />
-            <ConfirmRow label="Network" value={chainName(tokenChainId(selectedToken))} />
-            <View style={styles.confirmSeparator} />
-            <ConfirmRow
-              label="Est. Fee"
-              value={estimatingGas ? 'Estimating...' : feeEstimate ? `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}` : 'Unable to estimate'}
-              sub={!estimatingGas && feeUsd > 0.001 ? `≈ ${formatUsd(feeUsd)}` : undefined}
-            />
+          {/* Transfer card: From → To with token info */}
+          <VelaCard style={styles.confirmCard}>
+            {/* From */}
+            <View style={styles.transferEndpoint}>
+              <Text style={styles.transferLabel}>From</Text>
+              <Text style={styles.transferName}>{activeAccount?.name ?? 'Wallet'}</Text>
+              <Text style={styles.transferAddr}>{shortAddr(address ?? '')}</Text>
+            </View>
+
+            {/* Line + Token */}
+            <View style={styles.transferMiddle}>
+              <View style={styles.transferLineCol}>
+                <View style={styles.transferLine} />
+              </View>
+              <View style={styles.transferToken}>
+                <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} size={36} />
+                <View style={styles.transferTokenIdentity}>
+                  <Text style={styles.transferTokenSymbol}>{selectedToken.symbol}</Text>
+                  <Text style={styles.transferTokenChain}>{chain}</Text>
+                </View>
+                <View style={styles.transferTokenValues}>
+                  <Text style={styles.transferTokenAmount}>{formatBalance(amountNum)}</Text>
+                  {usdAmount > 0 && (
+                    <Text style={styles.transferTokenSub}>≈ {formatUsd(usdAmount)}</Text>
+                  )}
+                </View>
+              </View>
+            </View>
+
+            {/* To */}
+            <View style={styles.transferEndpoint}>
+              <Text style={styles.transferLabel}>To</Text>
+              {recipientIdentity && (
+                <Text style={styles.transferName}>{recipientIdentity.name}</Text>
+              )}
+              <Text style={styles.transferAddr}>{shortAddr(recipient)}</Text>
+            </View>
           </VelaCard>
 
-          {/* Gas Details — collapsed by default */}
-          {feeEstimate && !estimatingGas && (
-            <Pressable onPress={() => setGasExpanded(!gasExpanded)}>
-              <Text style={styles.gasToggle}>
-                {gasExpanded ? 'Hide' : 'Show'} gas details
-              </Text>
-            </Pressable>
-          )}
+          {/* Gas Details — collapsed by default, fee shown in toggle row */}
+          <Pressable onPress={() => setGasExpanded(!gasExpanded)} style={styles.gasToggleRow}>
+            <Text style={styles.gasToggleLabel}>Est. Fee</Text>
+            <View style={styles.gasToggleRight}>
+              <View style={styles.gasToggleValues}>
+                <Text style={styles.gasToggleValue}>
+                  {estimatingGas ? 'Estimating...' : feeEstimate ? `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}` : '—'}
+                </Text>
+                {!estimatingGas && feeUsd > 0.001 && (
+                  <Text style={styles.gasToggleSub}>≈ {formatUsd(feeUsd)}</Text>
+                )}
+              </View>
+              {feeEstimate && !estimatingGas && (
+                gasExpanded
+                  ? <ChevronUp size={16} color={color.fg.subtle} strokeWidth={2} />
+                  : <ChevronDown size={16} color={color.fg.subtle} strokeWidth={2} />
+              )}
+            </View>
+          </Pressable>
           {gasExpanded && feeEstimate && (() => {
-            const chainGasGwei = Number(feeEstimate.onChainGasPrice) / 1e9;
+            const bundlerGwei = Number(feeEstimate.bundlerGasPrice) / 1e9;
             const userOpGwei = Number(feeEstimate.maxFeePerGas) / 1e9;
+
+            const handleRefreshGas = async () => {
+              if (!activeAccount || !selectedToken || refreshingGas) return;
+              setRefreshingGas(true);
+              try {
+                await refreshGasPrice(tokenChainId(selectedToken));
+                const fee = await estimateTransactionFee(activeAccount.address, tokenChainId(selectedToken), gasTier);
+                setFeeEstimate(fee);
+              } catch { /* ignore */ }
+              setRefreshingGas(false);
+            };
+
+            const handleTierChange = async (tier: GasTier) => {
+              setGasTier(tier);
+              if (!activeAccount || !selectedToken) return;
+              try {
+                const fee = await estimateTransactionFee(activeAccount.address, tokenChainId(selectedToken), tier);
+                setFeeEstimate(fee);
+              } catch { /* ignore */ }
+            };
+
             return (
               <VelaCard style={styles.gasCard}>
-                <ConfirmRow label="Gas Price (chain)" value={`${chainGasGwei.toFixed(4)} Gwei`} />
+                {/* Tier selector */}
+                <View style={styles.tierRow}>
+                  {(['slow', 'standard', 'fast'] as GasTier[]).map((t) => (
+                    <Pressable
+                      key={t}
+                      style={[styles.tierBtn, gasTier === t && styles.tierBtnActive]}
+                      onPress={() => handleTierChange(t)}
+                    >
+                      <Text style={[styles.tierBtnText, gasTier === t && styles.tierBtnTextActive]}>
+                        {GAS_TIER_MULTIPLIERS[t].label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                  <Pressable onPress={handleRefreshGas} hitSlop={8} style={styles.tierRefresh}>
+                    <RefreshCw size={14} color={refreshingGas ? color.fg.subtle : color.fg.muted} strokeWidth={2} />
+                  </Pressable>
+                </View>
+                <View style={styles.confirmSeparator} />
+                <ConfirmRow label="Gas Price" value={`${bundlerGwei.toFixed(4)} Gwei`} />
                 <View style={styles.confirmSeparator} />
                 <ConfirmRow label="Gas Price (UserOp)" value={`${userOpGwei.toFixed(4)} Gwei`} />
                 <View style={styles.confirmSeparator} />
@@ -1188,19 +1258,22 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  amountInputWrap: {
+    flex: 1,
+    overflow: 'hidden',
+  },
   amountInput: {
     ...inter.bold,
     fontFamily: font.display,
     color: color.fg.base,
     padding: 0,
-    // Remove focus outline (web) and underline (Android)
     outlineStyle: 'none',
   } as any,
   unitLabel: {
     ...inter.medium,
-    color: color.fg.muted,
-    opacity: 0.4,
+    color: color.fg.subtle,
     marginLeft: space.sm,
+    flexShrink: 0,
   },
   maxBtn: {
     paddingVertical: space.xs,
@@ -1238,11 +1311,151 @@ const styles = createStyles(() => ({
     marginTop: space.lg,
   },
 
-  // Confirm
+  // Confirm — transfer flow card
   confirmCard: {
     padding: space['2xl'],
-    marginBottom: space['3xl'],
+    marginBottom: space.lg,
   },
+  transferEndpoint: {
+    gap: 2,
+  },
+  transferLabel: {
+    fontSize: text.xs,
+    ...inter.semibold,
+    color: color.fg.subtle,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+  },
+  transferName: {
+    fontSize: text.base,
+    ...inter.bold,
+    color: color.fg.base,
+  },
+  transferAddr: {
+    fontSize: text.sm,
+    ...inter.medium,
+    fontFamily: font.mono,
+    color: color.fg.muted,
+  },
+  transferMiddle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.lg,
+    marginVertical: space['2xl'],
+  },
+  transferLineCol: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    width: space.lg,
+  },
+  transferLine: {
+    width: 1,
+    flex: 1,
+    backgroundColor: color.border.base,
+  },
+  transferToken: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+  },
+  transferTokenIdentity: {
+    flex: 1,
+    gap: 1,
+  },
+  transferTokenSymbol: {
+    fontSize: text.base,
+    ...inter.bold,
+    color: color.fg.base,
+  },
+  transferTokenChain: {
+    fontSize: text.xs,
+    ...inter.medium,
+    color: color.fg.subtle,
+  },
+  transferTokenValues: {
+    alignItems: 'flex-end' as const,
+    gap: 1,
+  },
+  transferTokenAmount: {
+    fontSize: text.base,
+    ...inter.bold,
+    fontFamily: font.display,
+    color: color.fg.base,
+  },
+  transferTokenSub: {
+    fontSize: text.xs,
+    ...inter.medium,
+    color: color.fg.subtle,
+  },
+  // Gas toggle row
+  gasToggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: space.lg,
+    paddingHorizontal: space.sm,
+    marginBottom: space.sm,
+  },
+  gasToggleLabel: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.muted,
+  },
+  gasToggleRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  gasToggleValues: {
+    alignItems: 'flex-end' as const,
+  },
+  gasToggleValue: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.fg.base,
+  },
+  gasToggleSub: {
+    fontSize: text.xs,
+    ...inter.regular,
+    color: color.fg.subtle,
+  },
+  gasCard: {
+    padding: space.xl,
+    marginBottom: space.lg,
+  },
+  tierRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingBottom: space.lg,
+  },
+  tierBtn: {
+    flex: 1,
+    paddingVertical: space.sm,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    backgroundColor: color.bg.sunken,
+  },
+  tierBtnActive: {
+    backgroundColor: color.fg.base,
+  },
+  tierBtnText: {
+    fontSize: text.xs,
+    ...inter.semibold,
+    color: color.fg.muted,
+  },
+  tierBtnTextActive: {
+    color: color.fg.inverse,
+  },
+  tierRefresh: {
+    padding: space.sm,
+  },
+  // Kept for gas detail rows (ConfirmRow)
   confirmRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1254,7 +1467,7 @@ const styles = createStyles(() => ({
     backgroundColor: color.border.base,
   },
   confirmLabel: {
-    fontSize: text.base,
+    fontSize: text.sm,
     ...inter.regular,
     color: color.fg.muted,
     flexShrink: 0,
@@ -1265,36 +1478,10 @@ const styles = createStyles(() => ({
     flexShrink: 1,
   },
   confirmValue: {
-    fontSize: text.base,
+    fontSize: text.sm,
     ...inter.semibold,
     color: color.fg.base,
     textAlign: 'right' as const,
-  },
-  gasTitle: {
-    fontSize: text.sm,
-    ...inter.semibold,
-    color: color.fg.muted,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
-    marginBottom: space.md,
-  },
-  gasEstimating: {
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.subtle,
-    paddingVertical: space.lg,
-  },
-  gasToggle: {
-    fontSize: text.sm,
-    ...inter.semibold,
-    color: color.accent.base,
-    textAlign: 'center' as const,
-    paddingVertical: space.md,
-    marginBottom: space.md,
-  },
-  gasCard: {
-    padding: space.xl,
-    marginBottom: space['2xl'],
   },
   confirmSub: {
     fontSize: text.xs,

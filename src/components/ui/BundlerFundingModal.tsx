@@ -73,11 +73,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Fund Gas Relayer</Text>
-          <Text style={styles.subtitle}>
-            A small deposit is needed to activate your transaction relayer
-            on this network.
-          </Text>
+          <Text style={styles.title}>Activate Gas Relayer</Text>
         </View>
 
         {/* QR Code */}
@@ -95,11 +91,8 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
               <Copy size={14} color={color.fg.subtle} strokeWidth={2} />
             )}
           </View>
-          <Text style={styles.addressText} numberOfLines={1} ellipsizeMode="middle">
+          <Text style={styles.addressText} selectable>
             {funding.depositAddress}
-          </Text>
-          <Text style={styles.addressHint}>
-            Tap to copy full address
           </Text>
         </Pressable>
 
@@ -122,13 +115,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
 
         {/* Note */}
         <Text style={styles.note}>
-          This deposit funds the relayer that submits your transactions
-          on-chain. It is non-refundable. The relayer address may change
-          due to service upgrades, which would require a new deposit.
-          Each transaction also costs a small gas fee (shown before you
-          confirm), deducted from your Safe wallet, which includes
-          a ~30% relayer service fee. You can deposit from any wallet
-          or exchange.
+          Non-refundable deposit to activate the gas relayer. Relayer address may change with service upgrades.
         </Text>
 
         {/* Actions */}
@@ -188,13 +175,6 @@ const styles = createStyles(() => ({
     color: color.fg.base,
     marginBottom: space.sm,
   },
-  subtitle: {
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.subtle,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
 
   qrWrap: {
     alignItems: 'center',
@@ -228,16 +208,11 @@ const styles = createStyles(() => ({
     letterSpacing: 0.5,
   },
   addressText: {
-    fontSize: text.base,
+    fontSize: text.sm,
     ...inter.medium,
     fontFamily: font.mono,
     color: color.fg.base,
-    marginBottom: space.xs,
-  },
-  addressHint: {
-    fontSize: text.xs,
-    ...inter.regular,
-    color: color.fg.subtle,
+    lineHeight: 20,
   },
 
   infoCard: {
@@ -271,11 +246,11 @@ const styles = createStyles(() => ({
   },
 
   note: {
-    fontSize: text.xs,
+    fontSize: text.sm,
     ...inter.regular,
-    color: color.fg.subtle,
+    color: color.fg.muted,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 20,
     marginBottom: space.lg,
   },
 

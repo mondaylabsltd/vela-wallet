@@ -92,9 +92,10 @@ export async function sendNative(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
+  maxFeeOverride?: bigint,
 ): Promise<SubmitResult> {
   const callData = buildExecuteCallData(to, valueWei, new Uint8Array(0));
-  return sendUserOp(from, callData, chainId, publicKeyHex, signFn);
+  return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
 /** Send ERC-20 token. */
@@ -106,6 +107,7 @@ export async function sendERC20(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
+  maxFeeOverride?: bigint,
 ): Promise<SubmitResult> {
   const transferSelector = functionSelector('transfer(address,uint256)');
   const transferData = concatBytes(
@@ -115,7 +117,7 @@ export async function sendERC20(
   );
 
   const callData = buildExecuteCallData(tokenAddress, '0', transferData);
-  return sendUserOp(from, callData, chainId, publicKeyHex, signFn);
+  return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
 /** Send arbitrary contract call (e.g. dApp interaction like swap). */
@@ -127,9 +129,10 @@ export async function sendContractCall(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
+  maxFeeOverride?: bigint,
 ): Promise<SubmitResult> {
   const callData = buildExecuteCallData(to, valueWei, data);
-  return sendUserOp(from, callData, chainId, publicKeyHex, signFn);
+  return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,41 +156,70 @@ export function prefetchForSend(safeAddress: string, chainId: number): void {
 // Gas Estimation (public)
 // ---------------------------------------------------------------------------
 
+/** Gas speed tier multipliers (applied to on-chain gasPrice). */
+export type GasTier = 'slow' | 'standard' | 'fast';
+
+export const GAS_TIER_MULTIPLIERS: Record<GasTier, { num: bigint; den: bigint; label: string }> = {
+  slow:     { num: 8n,  den: 10n, label: 'Slow' },       // ×0.8
+  standard: { num: 10n, den: 10n, label: 'Standard' },   // ×1.0
+  fast:     { num: 15n, den: 10n, label: 'Fast' },        // ×1.5
+};
+
 /** Detailed gas fee estimate for display and max-send calculation. */
 export interface TransactionFeeEstimate {
   /** Total estimated cost in wei (totalGas × maxFeePerGas). */
   totalWei: bigint;
-  /** UserOp maxFeePerGas (gasPrice × 1.3). */
+  /** UserOp maxFeePerGas = bundlerGasPrice × 1.3 (signed into the UserOp). */
   maxFeePerGas: bigint;
-  /** On-chain gas price from eth_gasPrice. */
-  onChainGasPrice: bigint;
+  /** Bundler gas price = rawGasPrice × tier multiplier (what bundler pays on-chain). */
+  bundlerGasPrice: bigint;
   /** Total gas units (verification + call + preVerification). */
   totalGas: bigint;
   /** Whether the wallet is already deployed on this chain. */
   deployed: boolean;
+  /** Which tier was used for this estimate. */
+  tier: GasTier;
+}
+
+/** Fetch fresh on-chain gas price (bypasses cache). */
+export async function refreshGasPrice(chainId: number): Promise<bigint> {
+  _gasPriceCache.delete(chainId);
+  const { maxFee } = await getGasPrices(chainId);
+  // maxFee = gasPrice × 1.3, derive raw
+  return (maxFee * 10n) / 13n;
 }
 
 /** Estimate the total gas fee in wei for a transaction. */
 export async function estimateTransactionFee(
   from: string,
   chainId: number,
+  tier: GasTier = 'standard',
 ): Promise<TransactionFeeEstimate> {
   const [deployed, { maxFee }] = await Promise.all([
     isDeployed(from, chainId),
     getGasPrices(chainId),
   ]);
 
+  // getGasPrices returns gasPrice × 1.3 — derive raw on-chain price
+  const onChainGasPrice = (maxFee * 10n) / 13n;
+
+  // Layer 1: bundler gas price = raw × tier multiplier (what bundler actually pays)
+  const m = GAS_TIER_MULTIPLIERS[tier];
+  let bundlerGasPrice = (onChainGasPrice * m.num) / m.den;
+  const MIN_FEE = 1_000_000n;
+  if (bundlerGasPrice < MIN_FEE) bundlerGasPrice = MIN_FEE;
+
+  // Layer 2: UserOp maxFeePerGas = bundlerGasPrice × 1.3 (30% bundler profit margin)
+  const userOpMaxFee = (bundlerGasPrice * 13n) / 10n;
+
   const verificationGas = deployed
     ? VERIFICATION_GAS_DEPLOYED
     : VERIFICATION_GAS_UNDEPLOYED;
 
   const totalGas = verificationGas + CALL_GAS_LIMIT + PRE_VERIFICATION_GAS;
-  const totalWei = totalGas * maxFee;
+  const totalWei = totalGas * userOpMaxFee;
 
-  // Derive on-chain gasPrice: maxFee = gasPrice × 1.3, so gasPrice = maxFee / 1.3
-  const onChainGasPrice = (maxFee * 10n) / 13n;
-
-  return { totalWei, maxFeePerGas: maxFee, onChainGasPrice, totalGas, deployed };
+  return { totalWei, maxFeePerGas: userOpMaxFee, bundlerGasPrice, totalGas, deployed, tier };
 }
 
 /** Format wei to a human-readable ETH-like string. */
@@ -210,6 +242,7 @@ async function sendUserOp(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
+  maxFeeOverride?: bigint,
 ): Promise<SubmitResult> {
   // 0. Pre-check: verify critical contracts exist on this chain (cached after first success)
   await verifyChainReady(chainId);
@@ -229,7 +262,8 @@ async function sendUserOp(
   // Use fetched nonce for deployed wallets, 0 for undeployed
   const nonce: string = deployed ? nonceResult : '0x0';
 
-  const { maxFee, maxPriority } = gasPrices;
+  const maxFee = maxFeeOverride ?? gasPrices.maxFee;
+  const maxPriority = maxFee;
 
   // 5. Initial gas estimates
   const verificationGas = deployed
