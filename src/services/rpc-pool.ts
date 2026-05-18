@@ -430,6 +430,10 @@ async function tryEndpoint(
       throw new HttpBanError(res.status);
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.includes('json')) {
+      throw new Error(`Non-JSON response (${contentType.split(';')[0] || 'unknown'})`);
+    }
     const json = await res.json();
     if (!json || typeof json !== 'object') throw new Error('Invalid response');
     return json as RPCResponse;
