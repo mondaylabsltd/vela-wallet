@@ -110,7 +110,7 @@ export async function checkBundlerFunding(
   // Attempt auto-sponsorship from treasury before prompting user.
   // The bundler will check eligibility (nonce, WebAuthn registration, etc.)
   try {
-    const sponsorResult = await requestSponsorship(chainId, safeAddress);
+    const sponsorResult = await requestSponsorship(chainId, safeAddress, threshold);
     console.log(`[BundlerFunding] sponsorship result:`, sponsorResult);
     if (sponsorResult.sponsored) {
       // Clear cache and re-check — the sponsored ETH should now be available.
@@ -152,20 +152,29 @@ export async function checkBundlerFunding(
 async function requestSponsorship(
   chainId: number,
   safeAddress: string,
+  requiredWei: bigint,
 ): Promise<{ sponsored: boolean; reason?: string }> {
   try {
     const baseUrl = getBuiltinBundlerUrl();
     const url = `${baseUrl}/v1/sponsor/${chainId}/${safeAddress.toLowerCase()}`;
 
     const chainRpc = await getChainRpcUrl(chainId);
-    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    const headers: Record<string, string> = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
     if (chainRpc) headers['X-Rpc-Url'] = chainRpc;
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20_000); // longer timeout — bundler waits for tx confirmation
+    const timer = setTimeout(() => controller.abort(), 20_000);
     let res: Response;
     try {
-      res = await fetch(url, { method: 'POST', headers, signal: controller.signal });
+      res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ requiredWei: '0x' + requiredWei.toString(16) }),
+        signal: controller.signal,
+      });
     } finally {
       clearTimeout(timer);
     }
