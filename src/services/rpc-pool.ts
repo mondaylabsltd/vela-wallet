@@ -10,7 +10,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getBundlerServiceURL } from './storage';
+import { getBundlerServiceURL, loadServiceEndpoints } from './storage';
 import { DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
 import { fetchChainInfo } from './chain-registry';
 import { getNetworkConfig } from './storage';
@@ -160,6 +160,8 @@ async function ensurePool(chainId: number): Promise<void> {
 
 async function initPool(chainId: number): Promise<void> {
   await loadBans();
+  // Ensure user-configured endpoints are loaded so getBuiltinBundler() returns the right URL
+  await loadServiceEndpoints();
 
   const [rpcUrls, bundlerUrls] = await Promise.all([
     collectRpcUrls(chainId),
