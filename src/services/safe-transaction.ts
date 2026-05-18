@@ -216,7 +216,25 @@ export async function estimateTransactionFee(
     ? VERIFICATION_GAS_DEPLOYED
     : VERIFICATION_GAS_UNDEPLOYED;
 
-  const totalGas = verificationGas + CALL_GAS_LIMIT + PRE_VERIFICATION_GAS;
+  let totalGas = verificationGas + CALL_GAS_LIMIT + PRE_VERIFICATION_GAS;
+
+  // Arbitrum (and other L2 rollups) charge an additional L1 data fee for posting
+  // calldata to L1. This isn't captured by the gas limit constants above.
+  // Add a conservative estimate so the funding check asks for enough.
+  // The bundler's eth_estimateUserOperationGas returns the precise value via
+  // NodeInterface, but this rough estimate prevents the funding modal loop.
+  const ARBITRUM_CHAIN_IDS = [42161, 421614];
+  const OP_STACK_CHAIN_IDS = [10, 8453, 11155420, 84532]; // Optimism, Base, testnets
+  if (ARBITRUM_CHAIN_IDS.includes(chainId)) {
+    // Arbitrum L1 data cost is included in gas limit (~400k-800k gas units).
+    totalGas += 600_000n;
+  } else if (OP_STACK_CHAIN_IDS.includes(chainId)) {
+    // OP Stack L1 data cost is a separate ETH deduction (not in gas limit),
+    // but still needs to be covered by bundler EOA balance.
+    // Post-blob this is small (~50k-150k gas equivalent), but add it for safety.
+    totalGas += 150_000n;
+  }
+
   const totalWei = totalGas * userOpMaxFee;
 
   return { totalWei, maxFeePerGas: userOpMaxFee, bundlerGasPrice, totalGas, deployed, tier };

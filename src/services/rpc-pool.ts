@@ -676,6 +676,7 @@ export function getBuiltinBundlerUrl(): string {
   return getBuiltinBundler();
 }
 
+
 /** Get the best RPC URL for a chain (for passing to bundler via X-Rpc-Url). */
 export async function getChainRpcUrl(chainId: number): Promise<string | null> {
   await ensurePool(chainId);
@@ -687,4 +688,9 @@ export async function getChainRpcUrl(chainId: number): Promise<string | null> {
 export async function refreshPool(chainId: number): Promise<void> {
   poolInitAt.delete(chainId);
   await initPool(chainId);
+}
+
+/** Invalidate all pools so they re-read config on next use. */
+export function invalidateAllPools(): void {
+  poolInitAt.clear();
 }

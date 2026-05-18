@@ -21,7 +21,7 @@ import { DEFAULT_NETWORKS, getAllNetworks, refreshCustomNetworks } from '@/model
 import type { Network } from '@/models/network';
 import { saveNetworkConfig, loadNetworkConfigs, loadServiceEndpoints, saveServiceEndpoints, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork, hasPendingUploads, getBundlerServiceURL } from '@/services/storage';
 import { checkNetworkCompatibility } from '@/services/network-checker';
-import { refreshPool } from '@/services/rpc-pool';
+import { refreshPool, invalidateAllPools } from '@/services/rpc-pool';
 import { clearBundlerCache } from '@/services/bundler-service';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Sun, Moon, Monitor } from 'lucide-react-native';
@@ -356,8 +356,9 @@ async function checkServiceEndpointHealth(
 ): Promise<ServiceHealth> {
   if (!url) return { status: 'unreachable', detail: 'Empty URL' };
 
-  // 1. HTTPS check
-  if (!url.startsWith('https://')) {
+  // 1. HTTPS check (allow http for localhost / 127.0.0.1 during development)
+  const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url);
+  if (!url.startsWith('https://') && !isLocalhost) {
     return { status: 'not_https', detail: 'HTTPS required' };
   }
 
@@ -436,6 +437,7 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
     const updated = { ...endpoints, [field]: clean };
     setEndpoints(updated);
     await saveServiceEndpoints(updated);
+    invalidateAllPools();
     setRefreshCount(c => c + 1);
   }, [endpoints]);
 
