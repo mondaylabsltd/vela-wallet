@@ -169,7 +169,7 @@ export const GAS_TIER_MULTIPLIERS: Record<GasTier, { num: bigint; den: bigint; l
 export interface TransactionFeeEstimate {
   /** Total estimated cost in wei (totalGas × maxFeePerGas). */
   totalWei: bigint;
-  /** UserOp maxFeePerGas = bundlerGasPrice × 1.3 (signed into the UserOp). */
+  /** UserOp maxFeePerGas = bundlerGasPrice × 1.6 (signed into the UserOp). */
   maxFeePerGas: bigint;
   /** Bundler gas price = rawGasPrice × tier multiplier (what bundler pays on-chain). */
   bundlerGasPrice: bigint;
@@ -185,8 +185,8 @@ export interface TransactionFeeEstimate {
 export async function refreshGasPrice(chainId: number): Promise<bigint> {
   _gasPriceCache.delete(chainId);
   const { maxFee } = await getGasPrices(chainId);
-  // maxFee = gasPrice × 1.3, derive raw
-  return (maxFee * 10n) / 13n;
+  // maxFee = gasPrice × 1.6, derive raw
+  return (maxFee * 10n) / 16n;
 }
 
 /** Estimate the total gas fee in wei for a transaction. */
@@ -200,8 +200,8 @@ export async function estimateTransactionFee(
     getGasPrices(chainId),
   ]);
 
-  // getGasPrices returns gasPrice × 1.3 — derive raw on-chain price
-  const onChainGasPrice = (maxFee * 10n) / 13n;
+  // getGasPrices returns gasPrice × 1.6 — derive raw on-chain price
+  const onChainGasPrice = (maxFee * 10n) / 16n;
 
   // Layer 1: bundler gas price = raw × tier multiplier (what bundler actually pays)
   const m = GAS_TIER_MULTIPLIERS[tier];
@@ -209,8 +209,8 @@ export async function estimateTransactionFee(
   const MIN_FEE = 1_000_000n;
   if (bundlerGasPrice < MIN_FEE) bundlerGasPrice = MIN_FEE;
 
-  // Layer 2: UserOp maxFeePerGas = bundlerGasPrice × 1.3 (30% bundler profit margin)
-  const userOpMaxFee = (bundlerGasPrice * 13n) / 10n;
+  // Layer 2: UserOp maxFeePerGas = bundlerGasPrice × 1.6 (60% bundler profit margin)
+  const userOpMaxFee = (bundlerGasPrice * 16n) / 10n;
 
   const verificationGas = deployed
     ? VERIFICATION_GAS_DEPLOYED
@@ -748,22 +748,22 @@ async function getGasPrices(
   // UserOp maxFeePerGas should be close to the actual on-chain gas price.
   // Too high → overpays EntryPoint, creates MEV extraction opportunity.
   // Too low → bundler rejects or tx gets stuck.
-  // Target: gasPrice × 1.3 (30% above chain rate — covers bundler margin + 1-block fluctuation).
+  // Target: gasPrice × 1.6 (60% above chain rate — covers bundler margin + multi-block fluctuation).
   try {
     const gasPriceRes = await rpcCall('eth_gasPrice', [], chainId);
     const gasPrice = parseHexUInt64(gasPriceRes.result as string | undefined);
     if (gasPrice > 0n) {
-      // 30% buffer: covers bundler's 10% profit margin + baseFee fluctuation headroom.
-      // BSC:  gasPrice≈1gwei → maxFee=1.3gwei  (was 6gwei — 4.6x reduction)
-      // ETH:  gasPrice≈32gwei → maxFee=41.6gwei (was 68gwei)
-      // Poly: gasPrice≈50gwei → maxFee=65gwei   (was 104gwei)
-      let maxFee = (gasPrice * 13n) / 10n;
+      // 60% buffer: covers bundler's profit margin + baseFee fluctuation headroom.
+      // BSC:  gasPrice≈1gwei → maxFee=1.6gwei
+      // ETH:  gasPrice≈32gwei → maxFee=51.2gwei
+      // Poly: gasPrice≈50gwei → maxFee=80gwei
+      let maxFee = (gasPrice * 16n) / 10n;
 
       // Floor: 0.001 gwei to prevent zero-fee edge cases
       const MIN_FEE = 1_000_000n;
       if (maxFee < MIN_FEE) maxFee = MIN_FEE;
 
-      console.log(`[UserOp] Gas: gasPrice=${gasPrice} → maxFee=${maxFee} (×1.3)`);
+      console.log(`[UserOp] Gas: gasPrice=${gasPrice} → maxFee=${maxFee} (×1.6)`);
       const result = { maxFee, maxPriority: maxFee };
       _gasPriceCache.set(chainId, { ...result, at: Date.now() });
       return result;

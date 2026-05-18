@@ -1,9 +1,9 @@
 /**
- * Modal prompting the user to fund their bundler EOA.
+ * Modal prompting the user to fund their gas account.
  *
- * Shown before a transaction when the built-in bundler's dedicated EOA
- * has insufficient balance to relay. Displays deposit address + QR code
- * and auto-refreshes until funding is detected.
+ * Shown as a fallback when auto-sponsorship is unavailable and the
+ * dedicated gas account has insufficient balance. Displays deposit
+ * address + QR code and auto-refreshes until funding is detected.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -75,7 +75,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.title}>Activate Gas Relayer</Text>
+          <Text style={styles.title}>Activate Gas Account</Text>
           {(() => {
             const net = getAllNetworksSync().find(n => n.chainId === funding.chainId);
             return (
@@ -127,7 +127,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
 
         {/* Note */}
         <Text style={styles.note}>
-          Non-refundable deposit to activate the gas relayer. Relayer address may change with service upgrades.
+          Deposit to activate the gas account for this network. The deposit address may change with service upgrades.
         </Text>
 
         {/* Actions */}

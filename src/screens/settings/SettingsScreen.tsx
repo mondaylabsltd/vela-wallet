@@ -24,7 +24,7 @@ import { checkNetworkCompatibility } from '@/services/network-checker';
 import { refreshPool, invalidateAllPools } from '@/services/rpc-pool';
 import { clearBundlerCache } from '@/services/bundler-service';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
-import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Sun, Moon, Monitor } from 'lucide-react-native';
+import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Sun, Moon, Monitor, Copy, Key } from 'lucide-react-native';
 import type { NetworkConfig, ServiceEndpoints, CustomNetwork, CompatibilityResult } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
 import { getAccountBalances } from '@/services/balance-cache';
@@ -36,8 +36,11 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { showAlert, openURL, hapticSuccess, hapticLight } from '@/services/platform';
+import { showAlert, openURL, hapticSuccess, hapticLight, copyToClipboard } from '@/services/platform';
 import { fadeIn, fadeInDown } from '@/constants/entering';
+import { QRCode } from '@/components/QRCode';
+import { getBuiltinBundlerUrl, poolRpcCall } from '@/services/rpc-pool';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // All styles in one factory → useStyles recomputes everything on text scale change
 type S = ReturnType<typeof styleFactory>;
@@ -927,6 +930,189 @@ function TextScaleSlider({ s, currentIndex, onChangeIndex }: {
 }
 
 // ---------------------------------------------------------------------------
+// Treasury (Developer Options)
+// ---------------------------------------------------------------------------
+
+type TreasuryBalance = { chainId: number; name: string; explorerURL: string; balance: string; wei: bigint; loading: boolean };
+
+function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const [address, setAddress] = useState<string | null>(null);
+  const [balances, setBalances] = useState<TreasuryBalance[]>([]);
+  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const loadBalances = useCallback(async (addr: string) => {
+    const networks = DEFAULT_NETWORKS;
+    const initial: TreasuryBalance[] = networks.map(n => ({
+      chainId: n.chainId, name: n.displayName, explorerURL: n.explorerURL,
+      balance: '...', wei: 0n, loading: true,
+    }));
+    setBalances(initial);
+    for (const net of networks) {
+      fetchTreasuryBalance(addr, net.chainId).then(result => {
+        setBalances(prev => prev.map(b =>
+          b.chainId === net.chainId ? { ...b, balance: result.formatted, wei: result.wei, loading: false } : b
+        ));
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        // Ensure user-configured endpoints are loaded before reading bundler URL
+        const endpoints = await loadServiceEndpoints();
+        const baseUrl = endpoints.bundlerServiceURL || getBuiltinBundlerUrl();
+        const res = await fetch(`${baseUrl}/v1/treasury`, { headers: { 'Accept': 'application/json' } });
+        if (!res.ok) throw new Error('Failed to fetch treasury');
+        const data = await res.json();
+        if (cancelled) return;
+        setAddress(data.address);
+        setLoading(false);
+        loadBalances(data.address);
+      } catch (err) {
+        console.warn('[Treasury] Failed:', err);
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [visible, loadBalances]);
+
+  // Refresh balances when refreshKey changes (but not on initial mount)
+  useEffect(() => {
+    if (refreshKey > 0 && address) loadBalances(address);
+  }, [refreshKey, address, loadBalances]);
+
+  const handleCopy = async () => {
+    if (!address) return;
+    await copyToClipboard(address);
+    setCopied(true);
+    hapticLight();
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRefresh = () => {
+    hapticLight();
+    setRefreshKey(k => k + 1);
+  };
+
+  return (
+    <AppModal visible={visible} onClose={onClose}>
+      <ScrollView style={{ flex: 1, backgroundColor: color.bg.base }} contentContainerStyle={{ padding: space['2xl'], paddingTop: space.xl }}>
+        {/* Header with refresh */}
+        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: space.lg }}>
+          <Text style={{ fontSize: text.xl, ...inter.bold, color: color.fg.base }}>Treasury</Text>
+          {address && (
+            <Pressable onPress={handleRefresh} hitSlop={8} style={{ position: 'absolute', right: 0 }}>
+              <RefreshCw size={18} color={color.fg.subtle} strokeWidth={2} />
+            </Pressable>
+          )}
+        </View>
+
+        {loading && !address ? (
+          <ActivityIndicator color={color.accent.base} style={{ marginTop: space['2xl'] }} />
+        ) : address ? (
+          <>
+            {/* QR Code */}
+            <View style={{ alignItems: 'center', padding: space.lg, backgroundColor: '#FFFFFF', borderRadius: radius.xl, alignSelf: 'center', marginBottom: space.lg, ...shadow.sm }}>
+              <QRCode value={address} size={120} />
+            </View>
+
+            {/* Address + Copy */}
+            <Pressable
+              onPress={handleCopy}
+              style={{ backgroundColor: color.bg.sunken, borderRadius: radius.lg, padding: space.lg, marginBottom: space.lg, borderWidth: 1, borderColor: color.border.base }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.xs }}>
+                <Text style={{ fontSize: text.xs, ...inter.semibold, color: color.fg.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  Address (all networks)
+                </Text>
+                {copied
+                  ? <Check size={14} color={color.accent.base} strokeWidth={3} />
+                  : <Copy size={14} color={color.fg.subtle} strokeWidth={2} />}
+              </View>
+              <Text style={{ fontSize: text.xs, ...inter.medium, fontFamily: font.mono, color: color.fg.base }} selectable>
+                {address}
+              </Text>
+            </Pressable>
+
+            {/* Balances per chain */}
+            <Text style={{ fontSize: text.sm, ...inter.semibold, color: color.fg.muted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.sm }}>
+              Balances
+            </Text>
+            <VelaCard style={{ padding: 0 }}>
+              {balances.map((b, i) => {
+                const needsFunding = !b.loading && b.wei < 10_000_000_000_000_000n; // < 0.01 ETH
+                const explorerLink = `${b.explorerURL}/address/${address}`;
+                return (
+                  <View key={b.chainId}>
+                    <Pressable
+                      style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg, paddingVertical: space.md }}
+                      onPress={() => openURL(explorerLink)}
+                    >
+                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                        <Text style={{ fontSize: text.sm, ...inter.medium, color: color.fg.base }}>{b.name}</Text>
+                        <ExternalLink size={10} color={color.fg.subtle} strokeWidth={2} />
+                      </View>
+                      {b.loading ? (
+                        <ActivityIndicator size="small" color={color.fg.subtle} />
+                      ) : (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
+                          {needsFunding && (
+                            <AlertTriangle size={12} color={color.warning.base} strokeWidth={2.5} />
+                          )}
+                          <Text style={{
+                            fontSize: text.sm, ...inter.semibold, fontFamily: font.mono,
+                            color: needsFunding ? color.warning.base : color.fg.base,
+                          }}>
+                            {b.balance}
+                          </Text>
+                        </View>
+                      )}
+                    </Pressable>
+                    {i < balances.length - 1 && <View style={{ height: 1, backgroundColor: color.border.base, marginLeft: space.lg }} />}
+                  </View>
+                );
+              })}
+            </VelaCard>
+          </>
+        ) : (
+          <Text style={{ fontSize: text.sm, color: color.fg.muted, textAlign: 'center' }}>
+            Could not reach bundler
+          </Text>
+        )}
+
+        <Pressable style={{ alignItems: 'center', paddingVertical: space.xl }} onPress={onClose}>
+          <Text style={{ fontSize: text.base, ...inter.medium, color: color.fg.subtle }}>Close</Text>
+        </Pressable>
+      </ScrollView>
+    </AppModal>
+  );
+}
+
+/** Fetch treasury balance using the RPC pool (auto-fallback on failure). */
+async function fetchTreasuryBalance(address: string, chainId: number): Promise<{ formatted: string; wei: bigint }> {
+  try {
+    const res = await poolRpcCall('eth_getBalance', [address, 'latest'], chainId);
+    const wei = BigInt((res.result as string) ?? '0x0');
+    const eth = Number(wei) / 1e18;
+    let formatted: string;
+    if (eth === 0) formatted = '0';
+    else if (eth < 0.000001) formatted = '< 0.000001';
+    else if (eth < 0.001) formatted = eth.toFixed(6);
+    else if (eth < 1) formatted = eth.toFixed(4);
+    else formatted = eth.toFixed(3);
+    return { formatted, wei };
+  } catch {
+    return { formatted: 'error', wei: 0n };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -939,6 +1125,9 @@ export default function SettingsScreen() {
   const [showEndpointEditor, setShowEndpointEditor] = useState(false);
   const [showAddNetwork, setShowAddNetwork] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showDevOptions, setShowDevOptions] = useState(false);
+  const [devUnlocked, setDevUnlocked] = useState(false);
+  useEffect(() => { AsyncStorage.getItem('dev_unlocked').then(v => { if (v === '1') setDevUnlocked(true); }); }, []);
   const [showSignOut, setShowSignOut] = useState(false);
   const [pendingSync, setPendingSync] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -1015,6 +1204,18 @@ export default function SettingsScreen() {
           )}
         </Animated.View>
 
+        {/* Developer Options (hidden until 6-tap unlock on ADVANCED) */}
+        {devUnlocked && (
+          <Animated.View style={styles.sectionContainer} entering={fadeInDown(175, 300)}>
+            <Text style={styles.sectionTitle}>DEVELOPER</Text>
+            <VelaCard>
+              <SettingsRow s={styles} icon={{ bg: color.warning.soft, fg: color.warning.base, Icon: Key }}
+                title="Treasury" subtitle="View treasury address & balances"
+                showDivider={false} onPress={() => setShowDevOptions(true)} />
+            </VelaCard>
+          </Animated.View>
+        )}
+
         {/* Sign Out */}
         <Animated.View entering={fadeInDown(200, 300)}>
           <Pressable style={styles.logoutButton} onPress={handleOpenSignOut}>
@@ -1028,6 +1229,7 @@ export default function SettingsScreen() {
       <NetworkEditorModal s={styles} visible={showNetworkEditor} onClose={() => setShowNetworkEditor(false)} />
       <EndpointEditorModal s={styles} visible={showEndpointEditor} onClose={() => setShowEndpointEditor(false)} />
       <AddNetworkModal s={styles} visible={showAddNetwork} onClose={() => setShowAddNetwork(false)} onAdded={() => {}} />
+      <TreasuryModal visible={showDevOptions} onClose={() => setShowDevOptions(false)} />
 
       {/* Sign Out Confirmation */}
       <AppModal visible={showSignOut} onClose={() => setShowSignOut(false)}>

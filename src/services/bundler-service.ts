@@ -1,12 +1,13 @@
 /**
- * Bundler funding service.
+ * Gas account service.
  *
  * When using the built-in bundler (bundler.getvela.app), each Safe wallet
- * has a dedicated bundler EOA per chain. This EOA must be funded with
- * native tokens to relay transactions.
+ * has a dedicated gas account (EOA) per chain. The bundler auto-sponsors
+ * new users from its treasury; if auto-sponsorship is unavailable the user
+ * is prompted to fund the gas account manually.
  *
- * This module queries the bundler REST API for account info and checks
- * whether the EOA has sufficient balance before transaction submission.
+ * This module queries the bundler REST API for account info, requests
+ * auto-sponsorship, and checks balance before transaction submission.
  */
 
 import { isUsingBuiltinBundler, getBuiltinBundlerUrl, poolRpcCall, getChainRpcUrl } from './rpc-pool';
@@ -106,6 +107,24 @@ export async function checkBundlerFunding(
 
   if (info.spendableBalance >= threshold) return null;
 
+  // Attempt auto-sponsorship from treasury before prompting user.
+  // The bundler will check eligibility (nonce, WebAuthn registration, etc.)
+  try {
+    const sponsorResult = await requestSponsorship(chainId, safeAddress);
+    console.log(`[BundlerFunding] sponsorship result:`, sponsorResult);
+    if (sponsorResult.sponsored) {
+      // Clear cache and re-check — the sponsored ETH should now be available.
+      clearBundlerCache(chainId, safeAddress);
+      const refreshed = await fetchBundlerAccountInfo(chainId, safeAddress);
+      if (refreshed && refreshed.spendableBalance >= threshold) {
+        console.log(`[BundlerFunding] Auto-sponsored successfully, no modal needed`);
+        return null;
+      }
+    }
+  } catch (err) {
+    console.warn(`[BundlerFunding] Sponsorship request failed, falling back to manual:`, err);
+  }
+
   // Recommend the amount needed plus 20% buffer so the user doesn't need
   // to top up again immediately for the next transaction.
   const deficit = threshold - info.spendableBalance;
@@ -123,6 +142,38 @@ export async function checkBundlerFunding(
     recommendedFormatted: formatWei(recommendedWei),
     currentFormatted: formatWei(info.spendableBalance),
   };
+}
+
+/**
+ * Request auto-sponsorship of the gas account from the bundler's treasury.
+ * The bundler checks eligibility (nonce ≤ 3, WebAuthn registration, treasury balance)
+ * and transfers ETH from the treasury to the gas account if all conditions are met.
+ */
+async function requestSponsorship(
+  chainId: number,
+  safeAddress: string,
+): Promise<{ sponsored: boolean; reason?: string }> {
+  try {
+    const baseUrl = getBuiltinBundlerUrl();
+    const url = `${baseUrl}/v1/sponsor/${chainId}/${safeAddress.toLowerCase()}`;
+
+    const chainRpc = await getChainRpcUrl(chainId);
+    const headers: Record<string, string> = { 'Accept': 'application/json' };
+    if (chainRpc) headers['X-Rpc-Url'] = chainRpc;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20_000); // longer timeout — bundler waits for tx confirmation
+    let res: Response;
+    try {
+      res = await fetch(url, { method: 'POST', headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!res.ok) return { sponsored: false, reason: 'request_failed' };
+    return await res.json();
+  } catch {
+    return { sponsored: false, reason: 'network_error' };
+  }
 }
 
 /**

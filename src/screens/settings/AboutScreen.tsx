@@ -1,5 +1,6 @@
-import { openURL } from '@/services/platform';
-import React, { useMemo } from 'react';
+import { openURL, hapticSuccess } from '@/services/platform';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useMemo, useRef } from 'react';
 import { View, Text, ScrollView, Pressable } from 'react-native';
 import { getAllNetworksSync } from '@/models/network';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -14,6 +15,20 @@ export default function AboutScreen() {
   const router = useSafeRouter();
   const networks = useMemo(() => getAllNetworksSync(), []);
   const networkNames = networks.map(n => n.displayName);
+  const devTapRef = useRef({ count: 0, lastTap: 0 });
+
+  const handleLogoTap = () => {
+    const now = Date.now();
+    const ref = devTapRef.current;
+    if (now - ref.lastTap > 3000) ref.count = 0;
+    ref.lastTap = now;
+    ref.count++;
+    if (ref.count >= 6) {
+      ref.count = 0;
+      AsyncStorage.setItem('dev_unlocked', '1');
+      hapticSuccess();
+    }
+  };
 
   return (
     <ScreenContainer>
@@ -27,11 +42,13 @@ export default function AboutScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
-        {/* Logo */}
+        {/* Logo — tap 6 times to unlock developer options */}
         <Animated.View style={styles.logoSection} entering={fadeIn(0, 400)}>
-          <Text style={styles.logo}>
-            vel<Text style={styles.logoAccent}>a</Text>
-          </Text>
+          <Pressable onPress={handleLogoTap}>
+            <Text style={styles.logo}>
+              vel<Text style={styles.logoAccent}>a</Text>
+            </Text>
+          </Pressable>
           <Text style={styles.version}>v1.0.0</Text>
         </Animated.View>
 
