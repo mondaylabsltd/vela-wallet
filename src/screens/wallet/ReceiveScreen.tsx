@@ -316,6 +316,7 @@ export default function ReceiveScreen() {
     if (!address) return;
     setIsListening(true);
     previousBalance.current = null;
+    previousTokens.current = null;
     const startTime = Date.now();
     let timerId: ReturnType<typeof setTimeout>;
 
@@ -325,7 +326,14 @@ export default function ReceiveScreen() {
         const tokens = await fetchTokens(address, { forceRefresh: true });
 
         if (previousTokens.current !== null) {
-          // Diff: find tokens whose balance increased
+          // Guard: if this fetch returned fewer tokens than baseline,
+          // a chain likely failed — skip comparison to avoid false positives
+          if (tokens.length < previousTokens.current.length) {
+            scheduleNext();
+            return;
+          }
+
+          // Diff: find tokens whose balance increased vs baseline
           const prevMap = new Map(previousTokens.current.map(t => [tokenId(t), tokenBalanceDouble(t)]));
           const changes: DepositEntry['items'] = [];
           for (const t of tokens) {
@@ -347,11 +355,20 @@ export default function ReceiveScreen() {
             setDepositDetected(true);
             setDeposits(prev => [{ time, items: changes }, ...prev]);
             hapticSuccess();
+            // Only update baseline when deposit detected
+            previousTokens.current = tokens;
           }
+          // No change or balance decreased: keep baseline unchanged
+        } else {
+          // First fetch — record initial baseline
+          previousTokens.current = tokens;
         }
-        previousTokens.current = tokens; // always update baseline
       } catch {}
 
+      scheduleNext();
+    };
+
+    const scheduleNext = () => {
       const elapsed = Date.now() - startTime;
       if (elapsed >= TOTAL_LISTEN_MS) {
         setIsListening(false);
