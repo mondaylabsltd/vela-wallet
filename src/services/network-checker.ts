@@ -189,6 +189,33 @@ const VALID_P256_CALL =
   'f989ef9bfaae0fee03c36625e88eae99806a879d813411f876e7e03a2ffd8314';
 
 async function checkP256Precompile(rpcUrl: string): Promise<boolean> {
+  // Strategy 1: eth_call with a valid P256 signature (include gas for zkSync compat)
+  const callResult = await rpcCall(rpcUrl, 'eth_call', [
+    { to: P256_PRECOMPILE, data: VALID_P256_CALL, gas: '0x100000' },
+    'latest',
+  ]);
+  if (callResult) {
+    const result = callResult as string;
+    if (result !== '0x' && result.length >= 66) {
+      try {
+        if (BigInt(result) === 1n) return true;
+      } catch {}
+    }
+  }
+
+  // Strategy 2: fallback — check if code exists at the precompile address.
+  // Some chains (e.g. zkSync) support P256 but eth_call to precompile may
+  // behave unexpectedly. If there is code deployed at 0x100, it is the
+  // RIP-7212 precompile.
+  const hasCode = await checkCode(rpcUrl, P256_PRECOMPILE);
+  return hasCode;
+}
+
+// ---------------------------------------------------------------------------
+// Generic RPC helper
+// ---------------------------------------------------------------------------
+
+async function rpcCall(rpcUrl: string, method: string, params: unknown[]): Promise<unknown | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
 
@@ -196,20 +223,17 @@ async function checkP256Precompile(rpcUrl: string): Promise<boolean> {
     const res = await fetch(rpcUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0', id: 1, method: 'eth_call',
-        params: [{ to: P256_PRECOMPILE, data: VALID_P256_CALL }, 'latest'],
-      }),
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
-    if (!res.ok) return false;
+    if (!res.ok) return null;
     const json = await res.json();
-    const result = json.result as string | undefined;
-    return !!result && result !== '0x' && result.length >= 66 && BigInt(result) === 1n;
+    if (json.error) return null;
+    return json.result ?? null;
   } catch {
     clearTimeout(timeout);
-    return false;
+    return null;
   }
 }
 
@@ -218,23 +242,9 @@ async function checkP256Precompile(rpcUrl: string): Promise<boolean> {
 // ---------------------------------------------------------------------------
 
 async function checkCode(rpcUrl: string, address: string): Promise<boolean> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-
-  try {
-    const res = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getCode', params: [address, 'latest'] }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!res.ok) return false;
-    const json = await res.json();
-    const code = json.result as string | undefined;
-    return !!code && code !== '0x' && code.length > 4;
-  } catch {
-    clearTimeout(timeout);
-    return false;
-  }
+  const code = await rpcCall(rpcUrl, 'eth_getCode', [address, 'latest']) as string | null;
+  if (!code || code === '0x' || code === '0x0') return false;
+  // Some chains (e.g. zkSync) may return a short bytecode hash instead of full
+  // bytecode. Any non-empty response beyond "0x" / "0x0" indicates deployment.
+  return code.length > 2;
 }

@@ -1,9 +1,9 @@
+import { color } from '@/constants/theme';
 import { Tabs } from 'expo-router';
+import { Settings, Wallet } from 'lucide-react-native';
 import React from 'react';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { color } from '@/constants/theme';
-import { Wallet, Settings } from 'lucide-react-native';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -29,6 +29,12 @@ export default function TabLayout() {
         options={{
           title: 'Wallet',
           tabBarIcon: ({ color: c, size }) => <Wallet size={size ?? 22} color={c} />,
+        }}
+      />
+      <Tabs.Screen
+        name="connect"
+        options={{
+          href: null,
         }}
       />
       <Tabs.Screen
