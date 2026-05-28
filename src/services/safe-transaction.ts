@@ -304,10 +304,11 @@ async function sendUserOp(
   };
 
   // 7. Estimate gas via bundler
-  // For deployed wallets: skip bundler estimation — defaults are safe for simple
-  // transfers and saves 500-1500ms of bundler RPC latency.
-  // For undeployed wallets: estimation is critical (CREATE2 + Safe.setup needs accurate gas).
-  if (!deployed) {
+  // Skip estimation only for deployed wallets with small calldata (simple transfers).
+  // DApp transactions have large/complex calldata that needs accurate gas estimation,
+  // especially for preVerificationGas which scales with calldata size.
+  const needsEstimation = !deployed || callData.length > 200;
+  if (needsEstimation) {
     try {
       const estimated = await estimateGas(userOp, chainId);
       console.log('[UserOp] Gas estimate:', {

@@ -5,6 +5,8 @@ import React, { useEffect, useState } from 'react';
 import { Appearance, View, ActivityIndicator } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { WalletProvider } from '@/models/wallet-state';
+import { DAppConnectionProvider } from '@/models/dapp-connection';
+import { SigningRequestModal } from '@/components/SigningRequestModal';
 import { AlertProvider } from '@/components/ui/AppAlert';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { hasPendingUploads } from '@/services/storage';
@@ -27,18 +29,21 @@ function AppShell() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <WalletProvider>
-        <ThemeProvider value={resolved === 'dark' ? DarkTheme : DefaultTheme}>
-          <Stack screenOptions={{ headerShown: false }} key={resolved}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="onboarding" />
-            <Stack.Screen name="send" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="receive" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="token-detail" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="add-token" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="history" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="about" options={{ presentation: 'modal' }} />
-          </Stack>
-        </ThemeProvider>
+        <DAppConnectionProvider>
+          <ThemeProvider value={resolved === 'dark' ? DarkTheme : DefaultTheme}>
+            <Stack screenOptions={{ headerShown: false }} key={resolved}>
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="onboarding" />
+              <Stack.Screen name="send" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="receive" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="token-detail" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="add-token" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="history" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="about" options={{ presentation: 'modal' }} />
+            </Stack>
+            <SigningRequestModal />
+          </ThemeProvider>
+        </DAppConnectionProvider>
       </WalletProvider>
     </GestureHandlerRootView>
   );
