@@ -1,15 +1,15 @@
-import { openURL, hapticSuccess } from '@/services/platform';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useMemo, useRef } from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
-import { getAllNetworksSync } from '@/models/network';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
-import { useSafeRouter } from '@/hooks/use-safe-router';
-import { ArrowLeft, ExternalLink, Code, Star } from 'lucide-react-native';
-import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
+import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
+import { useSafeRouter } from '@/hooks/use-safe-router';
+import { getAllNetworksSync } from '@/models/network';
+import { hapticSuccess, openURL } from '@/services/platform';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ArrowLeft, Code, ExternalLink, Star } from 'lucide-react-native';
+import React, { useMemo, useRef } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 export default function AboutScreen() {
   const router = useSafeRouter();
@@ -66,7 +66,7 @@ export default function AboutScreen() {
         <Animated.View entering={fadeInDown(125, 400)}>
           <Pressable
             style={styles.githubCard}
-            onPress={() => openURL('https://github.com/atshelchin/vela-wallet-mobile')}
+            onPress={() => openURL('https://github.com/atshelchin/vela-wallet')}
           >
             <View style={styles.githubLeft}>
               <View style={styles.githubIconWrap}>
@@ -117,7 +117,7 @@ export default function AboutScreen() {
           <VelaCard style={styles.linksCard}>
             <LinkRow label="Website" url="https://getvela.app" />
             <View style={styles.separator} />
-            <LinkRow label="Safe Wallet" url="https://safe.global" />
+            <LinkRow label="Safe Wallet" url="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1" />
           </VelaCard>
         </Animated.View>
 

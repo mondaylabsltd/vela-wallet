@@ -9,7 +9,7 @@ Runs on **iOS**, **Android**, and **Web** from a single codebase.
 ## Features
 
 - **Passkey authentication** — Sign transactions with Face ID, Touch ID, or fingerprint. No seed phrases or private key management.
-- **Smart contract wallet** — Built on [Safe](https://safe.global) with ERC-4337 account abstraction. Your wallet is a Safe smart account.
+- **Smart contract wallet** — Built on [Safe](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1) with ERC-4337 account abstraction. Your wallet is a Safe smart account.
 - **8 EVM networks** — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis. Custom networks supported.
 - **Multi-chain portfolio** — Balances and USD prices across all chains in one view. Native tokens, stablecoins, wrapped assets, and custom ERC-20s.
 - **On-chain pricing** — DEX quotes (Uniswap V3, PancakeSwap, Aerodrome) with Chainlink oracle fallback. No third-party price API dependency.

@@ -177,7 +177,7 @@
 			<a href="https://wallet.getvela.app/" target="_blank" rel="noopener">Create wallet</a>
 			<a href="#how-it-works">How it works</a>
 			<a href="#faq">FAQ</a>
-			<a href="https://github.com/atshelchin/vela-wallet-mobile" target="_blank" rel="noopener">GitHub</a>
+			<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a>
 		</div>
 	</div>
 </nav>
@@ -329,17 +329,19 @@
 			{#if displayCount > 0}
 				<div class="trust-chip">
 					<span class="live-dot"></span>
-					<span class="stat-number">{displayCount.toLocaleString()}</span>
+						<a href="https://gnosisscan.io/address/0xdd93420bd49baabdff4a363ddd300622ae87e9c3#readContract#F14" target="_blank" rel="noopener">					<span class="stat-number">{displayCount.toLocaleString()}</span> </a>
+		
+
 					wallets created on-chain
 				</div>
 			{/if}
 			<div class="trust-chip">
 				<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-				<a href="https://safe.global" target="_blank" rel="noopener">Safe v1.4.1</a> — audited, unmodified
+				<a href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1" target="_blank" rel="noopener">Safe v1.4.1</a> — audited, unmodified
 			</div>
 			<div class="trust-chip">
 				<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-				<a href="https://github.com/atshelchin/vela-wallet-mobile" target="_blank" rel="noopener">100% open source</a> — app + all services
+				<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">100% open source</a> — app + all services
 			</div>
 		</div>
 	</div>
@@ -389,7 +391,7 @@
 			<div class="pillar-content">
 				<h3>Safe smart contracts, not custom code</h3>
 				<p>
-					Every Vela wallet is a <a href="https://safe.global" target="_blank" rel="noopener">Safe</a> smart contract account —
+					Every Vela wallet is a <a href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1" target="_blank" rel="noopener">Safe</a> smart contract account —
 					the same audited v1.4.1 contracts that secure over $100B in assets across the ecosystem.
 					We didn't write our own contract. We use the official, unmodified Safe with a WebAuthn signer module.
 				</p>
@@ -449,7 +451,7 @@
 		</div>
 		<p class="security-note">
 			All data handling is described in our <a href={resolve('/privacy')}>privacy policy</a>.
-			All source code is <a href="https://github.com/atshelchin/vela-wallet-mobile" target="_blank" rel="noopener">publicly auditable</a>.
+			All source code is <a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">publicly auditable</a>.
 		</p>
 	</div>
 </section>
@@ -507,7 +509,7 @@
 					Your funds are safe — they live on-chain in your Smart Account, not on our servers.
 					Passkeys are tied to the domain (rpId), but we provide an open-source Chrome extension
 					that lets you use your existing passkeys from any other domain or localhost.
-					See the <a href="https://github.com/atshelchin/vela-wallet-mobile#webauthn-proxy-extension-domain-recovery--dev-passkeys" target="_blank" rel="noopener">Domain Recovery guide</a> for setup instructions.
+					See the <a href="https://github.com/atshelchin/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys" target="_blank" rel="noopener">Domain Recovery guide</a> for setup instructions.
 				</p>
 			</details>
 			<details>
@@ -568,7 +570,7 @@
 		<div class="footer-links">
 			<a href={resolve('/privacy')}>Privacy</a>
 			<a href={resolve('/terms')}>Terms</a>
-			<a href="https://github.com/atshelchin/vela-wallet-mobile" target="_blank" rel="noopener">GitHub</a>
+			<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a>
 			<a href="https://x.com/realvelawallet" target="_blank" rel="noopener">X</a>
 			<a href="https://t.me/velawallet" target="_blank" rel="noopener">Telegram</a>
 		</div>
