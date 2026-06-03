@@ -175,6 +175,7 @@
 		</a>
 		<div class="nav-links">
 			<a href="https://wallet.getvela.app/" target="_blank" rel="noopener">Create wallet</a>
+			<a href="#why">Why Vela</a>
 			<a href="#how-it-works">How it works</a>
 			<a href="#faq">FAQ</a>
 			<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a>
@@ -347,18 +348,42 @@
 	</div>
 </section>
 
-<!-- Problem / Solution -->
-<section class="problem">
+<!-- Why -->
+<section id="why" class="why">
 	<div class="container">
-		<div class="problem-content">
-			<h2>Seed phrases are the weakest link in crypto.</h2>
+		<div class="why-content">
+			<h2>Why we built Vela</h2>
 			<p>
-				12 words on paper. One photo, one screenshot, one house fire — and your funds are gone.
-				Most wallet hacks don't exploit smart contracts. They exploit people who wrote down a seed phrase.
+				Managing a seed phrase is hard. Not "I got hacked" hard — quietly, constantly hard.
+				Where do you store 12 words so they survive a house fire, a stolen phone, and your own forgetfulness?
+				Most people end up with a screenshot in their photo library. That's not security. That's a liability.
 			</p>
 			<p>
-				Vela removes the seed phrase entirely. Your wallet key is a passkey — the same technology Apple, Google, and Microsoft use to replace passwords.
-				It lives in your device's secure enclave, protected by your biometric. You can't screenshot it, you can't copy it, and Vela never has access to it.
+				Passkey wallets make this much easier. We used <a href="https://account.base.app" target="_blank" rel="noopener">Base Account</a> daily — great UX, loved signing with Face ID.
+				But we kept hitting walls: a recovery key generated in the browser that we had to trust blindly.
+				No way to add custom networks. No way to self-host.
+				And no way to keep using the wallet if the service goes away.
+			</p>
+			<p>
+				We built Vela because <strong>we wanted a passkey wallet we could fully own.</strong>
+				Your passkey lives in iCloud Keychain or Google Password Manager.
+				When you sign a transaction, the app sends a challenge — your credential manager signs it internally and returns only the result.
+				Your passkey's private key never leaves the credential manager. The app never sees it.
+				With most software seed phrase wallets, there's a moment where your secret exists in app memory. With recovery key wallets, there's a moment where the recovery key is generated in a browser.
+				In Vela, that moment doesn't exist. <strong>We can't access your keys. Not "we promise not to" — we architecturally can't.</strong>
+			</p>
+			<p>
+				Open source, so you can verify every line.
+				Self-hostable, so you're never dependent on us.
+				Built on unmodified Safe contracts — you're not trusting a custom wallet contract, you're trusting the same contracts that secure the broader ecosystem.
+			</p>
+			<p>
+				<strong>The trade-off:</strong> you're trusting iCloud Keychain or Google Password Manager to safeguard your passkey.
+				If you lose access to your Apple or Google account, or accidentally delete the passkey from your credential manager, you lose access to your wallet.
+				There is no recovery mechanism — no backup seed, no support ticket, no reset.
+				This is true of any self-custodial wallet — the question is what you're protecting.
+				With a seed phrase wallet, you're protecting 12 words that can be copied, screenshotted, exported, and phished.
+				With Vela, you're protecting access to the credential manager that holds your passkey: your Apple or Google account, your trusted devices, and the passkey itself.
 			</p>
 		</div>
 	</div>
@@ -411,14 +436,14 @@
 					Add any custom EVM network. Manage all your assets from a single portfolio view.
 				</p>
 				<div class="chain-row">
-					<img src="https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg" alt="Ethereum" width="24" height="24" />
-					<img src="https://icons.llamao.fi/icons/chains/rsz_base.jpg" alt="Base" width="24" height="24" />
-					<img src="https://icons.llamao.fi/icons/chains/rsz_arbitrum.jpg" alt="Arbitrum" width="24" height="24" />
-					<img src="https://icons.llamao.fi/icons/chains/rsz_optimism.jpg" alt="Optimism" width="24" height="24" />
-					<img src="https://icons.llamao.fi/icons/chains/rsz_polygon.jpg" alt="Polygon" width="24" height="24" />
-					<img src="https://icons.llamao.fi/icons/chains/rsz_binance.jpg" alt="BNB Chain" width="24" height="24" />
-					<img src="https://icons.llamao.fi/icons/chains/rsz_avalanche.jpg" alt="Avalanche" width="24" height="24" />
-					<img src="https://icons.llamao.fi/icons/chains/rsz_xdai.jpg" alt="Gnosis" width="24" height="24" />
+					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-1.png" alt="Ethereum" width="24" height="24" />
+					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-8453.png" alt="Base" width="24" height="24" />
+					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-42161.png" alt="Arbitrum" width="24" height="24" />
+					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-10.png" alt="Optimism" width="24" height="24" />
+					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-137.png" alt="Polygon" width="24" height="24" />
+					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-56.png" alt="BNB Chain" width="24" height="24" />
+					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-43114.png" alt="Avalanche" width="24" height="24" />
+					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-100.png" alt="Gnosis" width="24" height="24" />
 				</div>
 			</div>
 		</div>
@@ -798,17 +823,20 @@
 	.trust-chip a { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
 	.trust-chip a:hover { color: var(--accent); }
 
-	/* ── Problem ── */
-	.problem { padding: 120px 0 60px; }
-	.problem-content {
+	/* ── Why ── */
+	.why { padding: 120px 0 60px; }
+	.why-content {
 		max-width: 640px; margin: 0 auto;
 	}
-	.problem-content h2 {
+	.why-content h2 {
 		text-align: left; margin-bottom: 20px;
 	}
-	.problem-content p {
+	.why-content p {
 		color: var(--text-secondary); font-size: 1rem; line-height: 1.8;
 		margin-bottom: 16px;
+	}
+	.why-content strong {
+		color: var(--text);
 	}
 
 	/* ── How It Works (Pillars) ── */
@@ -949,8 +977,8 @@
 		.mockup-actions { gap: 20px; }
 		.trust-row { justify-content: center; }
 		.trust-chip { font-size: 0.72rem; }
-		.problem-content { text-align: left; }
-		.problem-content h2 { font-size: 1.4rem; }
+		.why-content { text-align: left; }
+		.why-content h2 { font-size: 1.4rem; }
 		.pillar { flex-direction: column; gap: 12px; }
 		.pillar-number { align-self: flex-start; }
 		.chain-row { flex-wrap: wrap; }
