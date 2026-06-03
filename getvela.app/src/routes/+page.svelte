@@ -156,10 +156,10 @@
 </script>
 
 <svelte:head>
-	<title>Vela Wallet — Self-custodial EVM wallet with passkey security</title>
-	<meta name="description" content="Open-source Ethereum and EVM wallet that replaces seed phrases with passkeys. Built on Safe smart contracts. 8+ chains. Your fingerprint is your private key." />
-	<meta property="og:title" content="Vela Wallet — No seed phrases. Just your fingerprint." />
-	<meta property="og:description" content="Self-custodial Ethereum wallet secured by passkeys, built on audited Safe smart contracts. Open source." />
+	<title>Vela Wallet — No seed phrases. No recovery keys. No vendor lock-in.</title>
+	<meta name="description" content="Self-custodial, self-hostable passkey wallet for ETH & EVM. Built on audited Safe smart contracts. 100% open source." />
+	<meta property="og:title" content="Vela Wallet — No seed phrases. No recovery keys. No vendor lock-in." />
+	<meta property="og:description" content="Self-custodial, self-hostable passkey wallet for ETH & EVM. Built on Safe. Open source." />
 	<meta property="og:image" content="https://getvela.app/getvela-app-preview.png" />
 	<meta property="og:url" content="https://getvela.app" />
 	<meta name="twitter:card" content="summary_large_image" />
@@ -174,7 +174,7 @@
 			<span>vela</span>
 		</a>
 		<div class="nav-links">
-			<a href="https://wallet.getvela.app/" target="_blank" rel="noopener">Web Wallet</a>
+			<a href="https://wallet.getvela.app/" target="_blank" rel="noopener">Create wallet</a>
 			<a href="#how-it-works">How it works</a>
 			<a href="#faq">FAQ</a>
 			<a href="https://github.com/atshelchin/vela-wallet-mobile" target="_blank" rel="noopener">GitHub</a>
@@ -186,23 +186,13 @@
 <section class="hero">
 	<div class="container hero-grid">
 		<div class="hero-text">
-			<h1>An Ethereum wallet that uses<br />your fingerprint,<br />not a seed phrase.</h1>
+			<h1>No seed phrases.<br />No recovery keys.</h1>
 			<p class="subtitle">
-				Vela is a self-custodial wallet built on <a href="https://safe.global" target="_blank" rel="noopener">Safe</a> smart contracts.
-				Your private key lives in your device's secure enclave — managed by your OS, not by us. Open source. 8+ EVM chains.
+				Self-custodial, self-hostable wallet for ETH & EVM. Signed with passkeys. No vendor lock-in.
 			</p>
-			{#if displayCount > 0}
-				<div class="live-stat">
-					<span class="live-dot"></span>
-					<span class="stat-number">{displayCount.toLocaleString()}</span>
-					<span class="stat-label">wallets created on-chain</span>
-				</div>
-			{/if}
 			<div class="hero-cta">
-				<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" class="btn btn-primary">Open Web Wallet</a>
-				<a href="https://github.com/atshelchin/vela-wallet-mobile" target="_blank" rel="noopener" class="btn btn-ghost">View Source Code</a>
+				<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" class="btn btn-primary">Create wallet</a>
 			</div>
-			<p class="hero-note">Web version is free. iOS & Android coming soon.</p>
 		</div>
 		<div class="hero-visual">
 			<div class="mockup-phone">
@@ -327,19 +317,25 @@
 			</div>
 		</div>
 	</div>
+	<div class="scroll-hint">
+		<svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+	</div>
 </section>
 
 <!-- Trust Strip -->
 <section class="trust-strip">
 	<div class="container">
 		<div class="trust-row">
+			{#if displayCount > 0}
+				<div class="trust-chip">
+					<span class="live-dot"></span>
+					<span class="stat-number">{displayCount.toLocaleString()}</span>
+					wallets created on-chain
+				</div>
+			{/if}
 			<div class="trust-chip">
 				<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" stroke-linecap="round" stroke-linejoin="round"/></svg>
 				<a href="https://safe.global" target="_blank" rel="noopener">Safe v1.4.1</a> — audited, unmodified
-			</div>
-			<div class="trust-chip">
-				<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-				$100B+ secured by Safe ecosystem
 			</div>
 			<div class="trust-chip">
 				<svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -636,7 +632,7 @@
 	.nav-links a:hover { color: var(--text); }
 
 	/* ── Hero ── */
-	.hero { padding: 120px 0 40px; }
+	.hero { padding: 80px 0 80px; min-height: 100vh; display: flex; align-items: center; position: relative; }
 	.hero-grid {
 		display: grid;
 		grid-template-columns: 1fr 380px;
@@ -652,26 +648,27 @@
 		color: var(--text-secondary); font-size: 1.05rem; line-height: 1.75;
 		max-width: 520px; margin-bottom: 28px;
 	}
-	.subtitle a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
-	.hero-cta { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-	.hero-note { color: var(--text-tertiary); font-size: 0.8rem; }
+	.hero-cta { display: flex; align-items: center; gap: 12px; }
 
-	/* ── Live Stat ── */
-	.live-stat {
-		display: inline-flex; align-items: center; gap: 9px;
-		padding: 7px 16px; border: 1px solid var(--border); border-radius: 999px;
-		background: var(--bg-raised); margin-bottom: 24px;
-		animation: stat-fade-in 0.6s ease-out;
+	/* ── Scroll Hint ── */
+	.scroll-hint {
+		position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%);
+		color: var(--text-tertiary); opacity: 0.5;
+		animation: breathe 2.5s ease-in-out infinite;
 	}
+	@keyframes breathe {
+		0%, 100% { opacity: 0.2; transform: translateX(-50%) translateY(0); }
+		50% { opacity: 0.6; transform: translateX(-50%) translateY(6px); }
+	}
+
+	/* ── Live Stat (trust strip) ── */
 	.live-dot {
 		width: 6px; height: 6px; border-radius: 50%; background: var(--green);
 		box-shadow: 0 0 6px rgba(45, 142, 95, 0.5);
 		animation: pulse-dot 2s ease-in-out infinite;
 	}
 	.stat-number { font-size: 0.92rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--accent); }
-	.stat-label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 500; }
 	@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-	@keyframes stat-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
 	/* ── Buttons ── */
 	.btn {
@@ -681,10 +678,14 @@
 	}
 	.btn-primary { background: var(--accent); color: #fff; }
 	.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(232, 87, 42, 0.3); }
-	.btn-ghost { color: var(--text-secondary); background: none; padding: 11px 16px; }
-	.btn-ghost:hover { color: var(--text); }
 
 	/* ── Phone Mockup ── */
+	.hero-visual {
+		max-height: 520px;
+		overflow: hidden;
+		-webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+		mask-image: linear-gradient(to bottom, #000 60%, transparent 100%);
+	}
 	.mockup-phone {
 		width: 320px; margin: 0 auto;
 		background: #1C1B19;
@@ -928,16 +929,15 @@
 
 	/* ── Responsive ── */
 	@media (max-width: 768px) {
-		.hero { padding-top: 100px; padding-bottom: 24px; }
+		.hero { padding-top: 80px; padding-bottom: 24px; min-height: 100vh; }
 		.hero-grid { grid-template-columns: 1fr; gap: 40px; }
 		.hero-text { text-align: center; }
 		.hero-cta { justify-content: center; }
-		.hero-note { text-align: center; }
 		.hero-visual { order: -1; }
-		.live-stat { margin-left: auto; margin-right: auto; }
 		h1 { font-size: 2rem; }
 		h2 { font-size: 1.5rem; }
 		.subtitle { font-size: 0.95rem; margin-left: auto; margin-right: auto; }
+		.hero-visual { max-height: 400px; }
 		.mockup-phone { width: min(400px, 85vw); }
 		.mockup-screen { padding: 16px 14px 0; }
 		.mockup-balance { font-size: 1.7rem; }
