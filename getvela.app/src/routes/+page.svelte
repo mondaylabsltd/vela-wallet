@@ -177,6 +177,7 @@
 			<a href="https://wallet.getvela.app/" target="_blank" rel="noopener">Create wallet</a>
 			<a href="#why">Why Vela</a>
 			<a href="#how-it-works">How it works</a>
+			<a href="#pricing">Pricing</a>
 			<a href="#faq">FAQ</a>
 			<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a>
 		</div>
@@ -393,20 +394,17 @@
 <section id="how-it-works" class="how-it-works">
 	<div class="container">
 		<h2>How Vela works</h2>
-		<p class="section-desc">Three things make Vela different from traditional wallets.</p>
+		<p class="section-desc">What happens at each step.</p>
 
 		<div class="pillar">
 			<div class="pillar-number">01</div>
 			<div class="pillar-content">
-				<h3>Passkeys replace seed phrases</h3>
+				<h3>Create a wallet</h3>
 				<p>
-					When you create a Vela wallet, your device generates a passkey — a cryptographic credential
-					stored in your OS secure enclave (the same chip that protects Face ID data).
-					You sign transactions with your fingerprint or face. The private key never leaves your device.
-				</p>
-				<p>
-					Lost your phone? Your passkey syncs automatically through iCloud Keychain or Google Password Manager.
-					Sign in on a new device in seconds.
+					Tap create, authenticate with Face ID or fingerprint. Your device generates a passkey
+					and derives a <a href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1" target="_blank" rel="noopener">Safe</a> smart account address from it —
+					the same address works across all supported chains.
+					No deployment cost upfront. The contract activates on-chain with your first transaction.
 				</p>
 			</div>
 		</div>
@@ -414,15 +412,12 @@
 		<div class="pillar">
 			<div class="pillar-number">02</div>
 			<div class="pillar-content">
-				<h3>Safe smart contracts, not custom code</h3>
+				<h3>Sign a transaction</h3>
 				<p>
-					Every Vela wallet is a <a href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1" target="_blank" rel="noopener">Safe</a> smart contract account —
-					the same audited v1.4.1 contracts that secure over $100B in assets across the ecosystem.
-					We didn't write our own contract. We use the official, unmodified Safe with a WebAuthn signer module.
-				</p>
-				<p>
-					This means your wallet exists on-chain, independent of Vela. If our servers go down, your funds are still yours.
-					All three backend services are open source and self-hostable.
+					The app builds a transaction and sends a signing challenge to your credential manager.
+					Your credential manager signs it internally with your passkey and returns only the signature.
+					The signed transaction is submitted on-chain through an <a href="https://eips.ethereum.org/EIPS/eip-4337" target="_blank" rel="noopener">ERC-4337</a> bundler.
+					The app never touches your passkey's private key at any point.
 				</p>
 			</div>
 		</div>
@@ -430,54 +425,95 @@
 		<div class="pillar">
 			<div class="pillar-number">03</div>
 			<div class="pillar-content">
-				<h3>One wallet, 8+ chains</h3>
+				<h3>Sign in on a new device</h3>
 				<p>
-					Same address across Ethereum, Base, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche, and Gnosis.
-					Add any custom EVM network. Manage all your assets from a single portfolio view.
+					Get a new phone, sign in with the same Apple or Google account.
+					Your passkey syncs automatically through iCloud Keychain or Google Password Manager.
+					Same address, same assets, same chains — no seed phrase to import, no recovery key to enter.
 				</p>
-				<div class="chain-row">
-					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-1.png" alt="Ethereum" width="24" height="24" />
-					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-8453.png" alt="Base" width="24" height="24" />
-					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-42161.png" alt="Arbitrum" width="24" height="24" />
-					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-10.png" alt="Optimism" width="24" height="24" />
-					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-137.png" alt="Polygon" width="24" height="24" />
-					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-56.png" alt="BNB Chain" width="24" height="24" />
-					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-43114.png" alt="Avalanche" width="24" height="24" />
-					<img src="https://ethereum-data.awesometools.dev/chainlogos/eip155-100.png" alt="Gnosis" width="24" height="24" />
-				</div>
 			</div>
+		</div>
+
+		<div class="tech-details">
+			<h3>Technical details</h3>
+			<table>
+				<tbody>
+					<tr>
+						<td>Wallet</td>
+						<td><a href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1" target="_blank" rel="noopener">Safe v1.4.1</a></td>
+					</tr>
+					<tr>
+						<td>Authentication</td>
+						<td><a href="https://www.w3.org/TR/webauthn-2/" target="_blank" rel="noopener">WebAuthn</a> / P-256</td>
+					</tr>
+					<tr>
+						<td>Account type</td>
+						<td><a href="https://eips.ethereum.org/EIPS/eip-4337" target="_blank" rel="noopener">ERC-4337</a> (Smart Account)</td>
+					</tr>
+					<tr>
+						<td>Signer module</td>
+						<td><a href="https://github.com/safe-global/safe-modules/tree/main/modules/passkey/contracts/4337" target="_blank" rel="noopener">SafeWebAuthnSharedSigner</a></td>
+					</tr>
+					<tr>
+						<td>Networks</td>
+						<td>8 EVM chains (+ custom)</td>
+					</tr>
+					<tr>
+						<td>Source code</td>
+						<td><a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a></td>
+					</tr>
+				</tbody>
+			</table>
 		</div>
 	</div>
 </section>
 
-<!-- Security Model -->
-<section class="security">
+
+<!-- Business Model -->
+<section id="pricing" class="business-model">
 	<div class="container">
-		<h2>What Vela can and cannot do</h2>
-		<p class="section-desc">Transparency about our access model.</p>
-		<div class="security-grid">
-			<div class="security-col">
-				<h4 class="security-heading-never">Vela never has access to</h4>
-				<ul>
-					<li>Your private key</li>
-					<li>Your biometric data</li>
-					<li>Your transaction contents</li>
-					<li>Ability to freeze or move your funds</li>
-				</ul>
+		<div class="bm-content">
+			<h2>How Vela sustains itself</h2>
+			<p class="bm-intro">
+				No VC funding, no token, no ads, no data sales. Vela is funded by the people who use it.
+				We're transparent about how we make money because you deserve to know.
+			</p>
+
+			<div class="bm-grid">
+				<div class="bm-card">
+					<h4>Web wallet</h4>
+					<div class="bm-price">Free</div>
+					<p>Full-featured web wallet. No time limit, no feature restrictions.</p>
+				</div>
+				<div class="bm-card">
+					<h4>Mobile app</h4>
+					<div class="bm-price">Paid download</div>
+					<p>
+						iOS & Android via App Store and Google Play.
+						Pricing is adjusted by region so the app is accessible worldwide.
+						No subscriptions. No in-app purchases.
+					</p>
+				</div>
+				<div class="bm-card">
+					<h4>Bundler gas fee</h4>
+					<div class="bm-price">~2–2.5× network gas</div>
+					<p>
+						Transactions go through an ERC-4337 bundler. By default, Vela's bundler pays on-chain gas on your behalf.
+						Your total cost is about 2–2.5× the network gas — this includes the gas itself plus the bundler's service fee.
+						On low-fee chains like Base or Arbitrum, this is usually a few cents.
+						The exact fee is shown before you confirm every transaction.
+						You can avoid Vela's bundler service fee by using a compatible
+						<a href="https://github.com/atshelchin/vela-bundler" target="_blank" rel="noopener">self-hosted bundler</a>. Network gas still applies.
+					</p>
+				</div>
 			</div>
-			<div class="security-col">
-				<h4 class="security-heading-does">Vela stores</h4>
-				<ul>
-					<li>Your passkey's public key (on Gnosis blockchain)</li>
-					<li>Your account display name</li>
-					<li>Signed transactions you submit (relayed to the blockchain)</li>
-				</ul>
-			</div>
+
+			<p class="bm-note">
+				This revenue keeps the bundler running, the app maintained, and the project independent.
+				Nothing is locked in — you can swap to any ERC-4337 bundler, build the mobile app from source, and self-host all services.
+				You're paying for convenience, not for access — and for keeping an independent, open-source wallet alive in the ecosystem.
+			</p>
 		</div>
-		<p class="security-note">
-			All data handling is described in our <a href={resolve('/privacy')}>privacy policy</a>.
-			All source code is <a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">publicly auditable</a>.
-		</p>
 	</div>
 </section>
 
@@ -488,61 +524,59 @@
 		<p class="section-desc">Common questions about security, recovery, and fees.</p>
 		<div class="faq-list">
 			<details>
-				<summary>How is Vela different from MetaMask?</summary>
-				<p>
-					MetaMask uses seed phrases (12-24 words) that you must write down and protect.
-					If someone finds your seed phrase, they control your wallet. Vela uses passkeys —
-					your private key lives in your device's secure enclave, protected by biometric authentication.
-					Nothing to write down, nothing to leak.
-				</p>
-			</details>
-			<details>
 				<summary>What if I lose my phone?</summary>
 				<p>
 					Your passkey syncs through iCloud Keychain (iOS) or Google Password Manager (Android).
-					Get a new phone, sign in with the same Apple/Google account, and your wallet is restored.
+					Get a new phone, sign in with the same Apple/Google account, and you can access your wallet again.
 				</p>
 			</details>
 			<details>
 				<summary>What if my iCloud or Google account is compromised?</summary>
 				<p>
-					An attacker with full access to your iCloud/Google account could potentially use your passkey.
-					We strongly recommend enabling two-factor authentication and using a strong, unique password
-					for your Apple/Google account.
+					If someone gains control of your Apple/Google account and can sync or use your passkey, they may be able to access your wallet.
+					We strongly recommend enabling two-factor authentication and using a strong, unique password.
+					Treat your Apple/Google account as part of your wallet security.
 				</p>
 			</details>
 			<details>
 				<summary>What happens if Vela shuts down?</summary>
 				<p>
-					Your wallet is a smart contract on the blockchain — it doesn't depend on Vela's servers.
+					Your wallet is a Safe smart contract on the blockchain — it doesn't depend on Vela's servers.
 					All three backend services (chain data, passkey index, bundler) are open source and self-hostable.
-					Your passkey still works regardless.
-				</p>
-			</details>
-			<details>
-				<summary>How do gas fees work?</summary>
-				<p>
-					Vela uses an ERC-4337 bundler to submit transactions. Each account requires a one-time gas deposit
-					per network to activate the bundler. After that, each transaction is independently charged.
-					Fee estimates are shown before you confirm. You can switch to any standard ERC-4337 bundler
-					or <a href="https://github.com/atshelchin/vela-bundler" target="_blank" rel="noopener">self-host the Vela Bundler</a> to eliminate the service fee.
+					Your passkey still works, and you can interact with your wallet through any Safe-compatible interface.
 				</p>
 			</details>
 			<details>
 				<summary>What if the getvela.app domain goes offline?</summary>
 				<p>
-					Your funds are safe — they live on-chain in your Smart Account, not on our servers.
-					Passkeys are tied to the domain (rpId), but we provide an open-source Chrome extension
-					that lets you use your existing passkeys from any other domain or localhost.
-					See the <a href="https://github.com/atshelchin/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys" target="_blank" rel="noopener">Domain Recovery guide</a> for setup instructions.
+					If getvela.app goes offline, your funds remain safe on-chain.
+					Because passkeys are normally tied to a domain, Vela provides an open-source
+					<a href="https://github.com/atshelchin/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys" target="_blank" rel="noopener">recovery extension</a>
+					that lets you use your existing passkey from another domain or localhost.
 				</p>
 			</details>
 			<details>
-				<summary>Is it free?</summary>
+				<summary>Can I use Vela with dApps?</summary>
 				<p>
-					The web version is free. iOS and Android apps will have a one-time purchase price —
-					no subscriptions, no in-app purchases. Since Vela is fully open source,
-					you can also build and install it yourself for free.
+					Yes. Vela supports DApp Connect — pair your phone with the Vela browser extension via Bluetooth
+					or relay, and sign transactions on desktop dApps using your phone's passkey.
+					Supports eth_sendTransaction, personal_sign, and eth_signTypedData_v4.
+				</p>
+			</details>
+			<details>
+				<summary>Can I add a second passkey as backup?</summary>
+				<p>
+					No. Each wallet is bound to a single passkey — this is a fundamental design constraint of the WebAuthn signer architecture.
+					Your backup is iCloud Keychain or Google Password Manager's built-in cross-device sync, which replicates
+					the passkey across all your trusted devices automatically.
+				</p>
+			</details>
+			<details>
+				<summary>Has the code been audited?</summary>
+				<p>
+					The Safe contracts and Safe WebAuthn signer module Vela relies on have been audited.
+					Vela's own app code has not yet received a third-party audit.
+					All source code is <a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">public</a> for review.
 				</p>
 			</details>
 		</div>
@@ -552,6 +586,10 @@
 <!-- CTA -->
 <section id="notify" class="notify">
 	<div class="container">
+		<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" class="btn btn-primary btn-cta-main">Create wallet</a>
+
+		<div class="notify-divider"><span>stay in the loop</span></div>
+
 		<h2>Get notified when mobile apps launch</h2>
 
 		{#if subscribeStatus === 'success'}
@@ -705,6 +743,7 @@
 	}
 	.btn-primary { background: var(--accent); color: #fff; }
 	.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(232, 87, 42, 0.3); }
+	.btn-cta-main { padding: 14px 36px; font-size: 1rem; margin-bottom: 32px; }
 
 	/* ── Phone Mockup ── */
 	.hero-visual {
@@ -861,42 +900,52 @@
 	.pillar-content p { color: var(--text-secondary); font-size: 0.92rem; line-height: 1.75; margin-bottom: 12px; }
 	.pillar-content p:last-child, .pillar-content p:last-of-type { margin-bottom: 0; }
 	.pillar-content a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
-	.chain-row {
-		display: flex; gap: 8px; align-items: center; margin-top: 16px;
-	}
-	.chain-row img { border-radius: 50%; opacity: 0.85; transition: opacity 0.15s; }
-	.chain-row img:hover { opacity: 1; }
-
-	/* ── Security ── */
-	.security h2, .security .section-desc { text-align: center; }
-	.security-grid {
-		display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
-		max-width: 640px; margin: 0 auto;
-	}
-	.security-col {
+	/* ── Tech Details ── */
+	.tech-details {
+		max-width: 640px; margin: 56px auto 0;
 		background: var(--bg-raised); border: 1px solid var(--border);
-		border-radius: var(--radius); padding: 28px 24px;
+		border-radius: var(--radius); padding: 28px 28px;
 	}
-	.security-heading-never {
-		font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
-		letter-spacing: 0.06em; margin-bottom: 14px; color: #C97070;
+	.tech-details h3 {
+		font-size: 0.82rem; font-weight: 600; text-transform: uppercase;
+		letter-spacing: 0.06em; color: var(--text-secondary); margin-bottom: 16px;
 	}
-	.security-heading-does {
-		font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
-		letter-spacing: 0.06em; margin-bottom: 14px; color: var(--text-secondary);
+	.tech-details table { width: 100%; border-collapse: collapse; }
+	.tech-details td {
+		padding: 8px 0; font-size: 0.88rem; border-bottom: 1px solid var(--border);
 	}
-	.security-col ul { list-style: none; padding: 0; }
-	.security-col li {
-		font-size: 0.88rem; color: var(--text-secondary); line-height: 1.6;
-		padding: 5px 0; border-bottom: 1px solid var(--border);
+	.tech-details tr:last-child td { border-bottom: none; }
+	.tech-details td:first-child { color: var(--text-secondary); width: 40%; }
+	.tech-details td:last-child { color: var(--text); font-weight: 500; }
+	.tech-details a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+
+	/* ── Business Model ── */
+	.business-model h2 { text-align: center; }
+	.bm-content { max-width: 720px; margin: 0 auto; }
+	.bm-intro {
+		text-align: center; color: var(--text-secondary);
+		font-size: 1rem; line-height: 1.7; margin-bottom: 40px; max-width: 560px; margin-left: auto; margin-right: auto;
 	}
-	.security-col li:last-child { border-bottom: none; }
-	.security-note {
+	.bm-grid {
+		display: flex; flex-direction: column; gap: 16px;
+		max-width: 560px; margin: 0 auto 32px;
+	}
+	.bm-card {
+		background: var(--bg-raised); border: 1px solid var(--border);
+		border-radius: var(--radius); padding: 24px 20px;
+	}
+	.bm-card h4 { font-size: 0.88rem; font-weight: 600; margin-bottom: 8px; }
+	.bm-price {
+		font-size: 1.1rem; font-weight: 700; color: var(--accent); margin-bottom: 12px;
+	}
+	.bm-card p { color: var(--text-secondary); font-size: 0.82rem; line-height: 1.6; margin-bottom: 8px; }
+	.bm-card p:last-child { margin-bottom: 0; }
+.bm-card a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+	.bm-note {
 		text-align: center; color: var(--text-tertiary); font-size: 0.82rem;
-		margin-top: 24px; max-width: 640px; margin-left: auto; margin-right: auto;
+		line-height: 1.6; max-width: 560px; margin: 0 auto;
 	}
-	.security-note a { color: var(--text-secondary); text-decoration: underline; text-underline-offset: 2px; }
-	.security-note a:hover { color: var(--accent); }
 
 	/* ── FAQ ── */
 	.faq h2 { text-align: center; }
@@ -981,8 +1030,6 @@
 		.why-content h2 { font-size: 1.4rem; }
 		.pillar { flex-direction: column; gap: 12px; }
 		.pillar-number { align-self: flex-start; }
-		.chain-row { flex-wrap: wrap; }
-		.security-grid { grid-template-columns: 1fr; }
 		.nav-links { display: none; }
 		.subscribe-form { flex-direction: column; padding: 0 16px; }
 		.subscribe-input, .subscribe-btn { width: 100%; }
