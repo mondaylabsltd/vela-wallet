@@ -521,7 +521,7 @@
 <section id="faq" class="faq">
 	<div class="container">
 		<h2>FAQ</h2>
-		<p class="section-desc">Common questions about security, recovery, and fees.</p>
+		<p class="section-desc">Common questions about security, recovery, and trust.</p>
 		<div class="faq-list">
 			<details>
 				<summary>What if I lose my phone?</summary>
@@ -1013,6 +1013,7 @@
 		.hero-text { text-align: center; }
 		.hero-cta { justify-content: center; }
 		.hero-visual { order: -1; }
+		.scroll-hint { display: none; }
 		h1 { font-size: 2rem; }
 		h2 { font-size: 1.5rem; }
 		.subtitle { font-size: 0.95rem; margin-left: auto; margin-right: auto; }
