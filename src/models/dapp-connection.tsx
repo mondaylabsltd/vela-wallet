@@ -26,6 +26,8 @@ import {
 } from '@/services/walletpair-transport';
 import { isSigningMethod, handleDAppRequest, handleReadOnlyRPC } from '@/hooks/use-dapp-signing';
 import { PasskeyErrorCode } from '@/modules/passkey';
+import { saveTransaction } from '@/services/storage';
+import { nativeSymbol } from '@/models/network';
 import type { BLEIncomingRequest } from '@/models/types';
 
 // ---------------------------------------------------------------------------
@@ -332,8 +334,29 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     setIsSigning(true);
     setSignError(null);
     try {
-      const result = await handleDAppRequest(request, account, account.address, chainIdRef.current);
+      const cid = chainIdRef.current;
+      const result = await handleDAppRequest(request, account, account.address, cid);
       transportRef.current?.sendResponse(request.id, result);
+
+      // Record eth_sendTransaction to local history
+      if (request.method === 'eth_sendTransaction' && typeof result === 'string') {
+        const tx = request.params?.[0] as Record<string, string> | undefined;
+        const sym = nativeSymbol(cid);
+        saveTransaction({
+          id: `dapp-${Date.now()}`,
+          userOpHash: '',
+          txHash: result,
+          from: account.address,
+          to: tx?.to ?? '',
+          value: tx?.value ?? '0x0',
+          symbol: sym,
+          decimals: 18,
+          chainId: cid,
+          timestamp: Math.floor(Date.now() / 1000),
+          status: 'confirmed',
+        }).catch(() => {}); // best-effort, don't block UI
+      }
+
       setIncomingRequest(null);
     } catch (err: any) {
       if (err?.code === PasskeyErrorCode.CANCELLED) {
