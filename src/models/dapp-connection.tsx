@@ -338,23 +338,59 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       const result = await handleDAppRequest(request, account, account.address, cid);
       transportRef.current?.sendResponse(request.id, result);
 
-      // Record eth_sendTransaction to local history
+      // Record all dApp signing operations to local history
+      const dappOrigin = dappInfo?.name ?? request.origin ?? '';
+      const now = Math.floor(Date.now() / 1000);
+
       if (request.method === 'eth_sendTransaction' && typeof result === 'string') {
         const tx = request.params?.[0] as Record<string, string> | undefined;
-        const sym = nativeSymbol(cid);
         saveTransaction({
-          id: `dapp-${Date.now()}`,
+          id: `dapp-${now}-tx`,
           userOpHash: '',
           txHash: result,
           from: account.address,
           to: tx?.to ?? '',
           value: tx?.value ?? '0x0',
-          symbol: sym,
+          symbol: nativeSymbol(cid),
           decimals: 18,
           chainId: cid,
-          timestamp: Math.floor(Date.now() / 1000),
+          timestamp: now,
           status: 'confirmed',
-        }).catch(() => {}); // best-effort, don't block UI
+          type: 'dapp_tx',
+          dappOrigin,
+        }).catch(() => {});
+      } else if (request.method === 'personal_sign') {
+        saveTransaction({
+          id: `dapp-${now}-msg`,
+          userOpHash: '',
+          txHash: '',
+          from: account.address,
+          to: '',
+          value: '0',
+          symbol: '',
+          decimals: 0,
+          chainId: cid,
+          timestamp: now,
+          status: 'confirmed',
+          type: 'sign_message',
+          dappOrigin,
+        }).catch(() => {});
+      } else if (request.method.includes('signTypedData')) {
+        saveTransaction({
+          id: `dapp-${now}-typed`,
+          userOpHash: '',
+          txHash: '',
+          from: account.address,
+          to: '',
+          value: '0',
+          symbol: '',
+          decimals: 0,
+          chainId: cid,
+          timestamp: now,
+          status: 'confirmed',
+          type: 'sign_typed_data',
+          dappOrigin,
+        }).catch(() => {});
       }
 
       setIncomingRequest(null);

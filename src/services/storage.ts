@@ -282,13 +282,31 @@ export async function savePriceSource(source: PriceSource): Promise<void> {
 // Transaction History (local recording)
 // ---------------------------------------------------------------------------
 
+/**
+ * History entry type.
+ *
+ * On-chain (have txHash, viewable on explorer):
+ *   - send:        User-initiated transfer from the Send screen
+ *   - dapp_tx:     dApp-initiated transaction (eth_sendTransaction)
+ *
+ * Off-chain (signature only, no txHash):
+ *   - sign_message:    personal_sign (e.g. login, verify ownership)
+ *   - sign_typed_data: eth_signTypedData_v4 (e.g. Permit, order, gasless approval)
+ */
+export type TransactionType =
+  | 'send'
+  | 'dapp_tx'
+  | 'sign_message'
+  | 'sign_typed_data';
+
 export interface LocalTransaction {
   id: string;
   userOpHash: string;
+  /** On-chain tx hash. Empty string for off-chain signatures. */
   txHash: string;
   from: string;
   to: string;
-  /** Resolved identity name of the recipient (e.g. "vitalik.eth", "spaceid.bnb"). */
+  /** Resolved identity name of the recipient (e.g. "vitalik.eth"). */
   toName?: string;
   value: string;
   symbol: string;
@@ -296,6 +314,12 @@ export interface LocalTransaction {
   chainId: number;
   timestamp: number;
   status: 'confirmed' | 'failed';
+  /** Operation type. Defaults to 'send' for backwards compatibility with old records. */
+  type?: TransactionType;
+  /** dApp name or domain (e.g. "Uniswap", "walletpair.org"). */
+  dappOrigin?: string;
+  /** ERC-7730 clear signing intent (e.g. "Swap", "Approve", "Permit"). */
+  intent?: string;
 }
 
 export async function saveTransaction(tx: LocalTransaction): Promise<void> {

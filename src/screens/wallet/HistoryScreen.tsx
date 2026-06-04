@@ -20,7 +20,11 @@ import { getAllNetworksSync } from '@/models/network';
 import { loadTransactions, type LocalTransaction } from '@/services/storage';
 import { formatBalance } from '@/models/types';
 import { openBrowser } from '@/services/platform';
-import { ArrowDownLeft, ArrowUpRight, ExternalLink, Check, X } from 'lucide-react-native';
+import {
+  ArrowDownLeft, ArrowUpRight, ExternalLink, Check, X,
+  FileSignature, FileText, Send, Code,
+} from 'lucide-react-native';
+import type { TransactionType } from '@/services/storage';
 
 // MARK: - Helpers
 
@@ -118,27 +122,33 @@ export default function HistoryScreen() {
   const renderTransaction = ({ item }: { item: LocalTransaction }) => {
     const network = getAllNetworksSync().find((n) => n.chainId === item.chainId);
     const networkName = network?.displayName ?? `Chain ${item.chainId}`;
+    const t = item.type ?? 'send';
+    const { icon, iconBg, label, subtitle, showAmount } = txDisplayInfo(t, item, networkName);
 
     return (
       <Pressable
         style={styles.txRow}
-        onPress={() => openBrowser(explorerTxUrl(item.txHash, item.chainId))}
+        onPress={item.txHash ? () => openBrowser(explorerTxUrl(item.txHash, item.chainId)) : undefined}
       >
-        <View style={[styles.txIcon, { backgroundColor: color.accent.soft }]}>
-          <ArrowUpRight size={18} color={color.accent.base} strokeWidth={2.5} />
+        <View style={[styles.txIcon, { backgroundColor: iconBg }]}>
+          {icon}
         </View>
 
         <View style={styles.txInfo}>
-          <Text style={styles.txType}>Sent {item.symbol}</Text>
-          <Text style={styles.txAddress}>
-            To {item.toName ?? shortAddress(item.to)} · {networkName}
-          </Text>
+          <Text style={styles.txType}>{label}</Text>
+          <Text style={styles.txAddress} numberOfLines={1}>{subtitle}</Text>
         </View>
 
         <View style={styles.txValues}>
-          <Text style={styles.txAmount}>
-            -{formatBalance(parseFloat(item.value))} {item.symbol}
-          </Text>
+          {showAmount ? (
+            <Text style={styles.txAmount}>
+              -{formatBalance(parseFloat(item.value))} {item.symbol}
+            </Text>
+          ) : (
+            <Text style={[styles.txTime, { fontSize: text.sm }]}>
+              {item.dappOrigin || ''}
+            </Text>
+          )}
           <Text style={styles.txTime}>
             {item.status === 'failed' ? 'Failed' : formatTime(item.timestamp)}
           </Text>
@@ -146,6 +156,52 @@ export default function HistoryScreen() {
       </Pressable>
     );
   };
+
+  function txDisplayInfo(t: TransactionType | undefined, item: LocalTransaction, networkName: string) {
+    const sw = 2.5;
+    const sz = 18;
+    switch (t) {
+      case 'dapp_tx':
+        return {
+          icon: item.intent
+            ? <Code size={sz} color={color.accent.base} strokeWidth={sw} />
+            : <ArrowUpRight size={sz} color={color.accent.base} strokeWidth={sw} />,
+          iconBg: color.accent.soft,
+          label: item.intent || 'dApp Transaction',
+          subtitle: [
+            item.dappOrigin,
+            item.to ? shortAddress(item.to) : null,
+            networkName,
+          ].filter(Boolean).join(' · '),
+          showAmount: parseFloat(item.value || '0') > 0,
+        };
+      case 'sign_message':
+        return {
+          icon: <FileSignature size={sz} color={color.fg.muted} strokeWidth={sw} />,
+          iconBg: color.bg.sunken,
+          label: 'Sign Message',
+          subtitle: [item.dappOrigin, networkName].filter(Boolean).join(' · '),
+          showAmount: false,
+        };
+      case 'sign_typed_data':
+        return {
+          icon: <FileText size={sz} color={color.fg.muted} strokeWidth={sw} />,
+          iconBg: color.bg.sunken,
+          label: item.intent || 'Sign Typed Data',
+          subtitle: [item.dappOrigin, networkName].filter(Boolean).join(' · '),
+          showAmount: false,
+        };
+      case 'send':
+      default:
+        return {
+          icon: <ArrowUpRight size={sz} color={color.accent.base} strokeWidth={sw} />,
+          iconBg: color.accent.soft,
+          label: `Sent ${item.symbol}`,
+          subtitle: `To ${item.toName ?? shortAddress(item.to)} · ${networkName}`,
+          showAmount: true,
+        };
+    }
+  }
 
   const renderSectionHeader = (title: string) => (
     <View style={styles.sectionHeader}>
