@@ -241,7 +241,7 @@ export type PriceSource = 'api' | 'dex';
 
 export const DEFAULT_SERVICE_ENDPOINTS: ServiceEndpoints = {
   ethereumDataURL: 'https://ethereum-data.awesometools.dev',
-  passkeyIndexURL: 'https://webauthnp256-publickey-index.biubiu.tools',
+  passkeyIndexURL: 'https://p256-index.getvela.app',
   bundlerServiceURL: 'https://bundler.getvela.app',
 };
 
