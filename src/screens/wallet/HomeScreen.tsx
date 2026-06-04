@@ -17,7 +17,7 @@ import { ChainLogo } from '@/components/ChainLogo';
 import { QRScanner } from '@/components/QRScanner';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, ChevronDown, Search, X, AlertTriangle, Wifi, RefreshCw, ScanLine } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, Search, X, AlertTriangle, Wifi, RefreshCw, ScanLine } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
@@ -392,34 +392,18 @@ export default function HomeScreen() {
           </Animated.View>
         </View>
       )}
-      {/* Account chip */}
+      {/* Account + scan */}
       <Animated.View entering={fadeIn(0, 400)}>
-        <View style={styles.accountChipWrap}>
+        <View style={styles.headerTopRow}>
           <Pressable
-            style={styles.accountChip}
+            style={styles.accountInfo}
             onPress={state.accounts.length > 1 ? openAccountSwitcher : copyAddress}
           >
-            <View style={styles.accountAvatar}>
-              <Text style={styles.accountAvatarText}>
-                {(accountName[0] ?? 'V').toUpperCase()}
-              </Text>
-            </View>
-            <View style={styles.accountTextGroup}>
-              <Text style={styles.accountName}>{accountName}</Text>
-              <View style={styles.addrRow}>
-                <Text style={styles.accountAddr}>{shortAddr(address)}</Text>
-                {state.accounts.length > 1 && (
-                  <ChevronDown size={10} color={color.fg.subtle} strokeWidth={2.5} />
-                )}
-              </View>
-            </View>
+            <Text style={styles.accountName} numberOfLines={1}>{accountName}</Text>
+            <Text style={styles.accountAddr}>{shortAddr(address)}</Text>
           </Pressable>
-          <Pressable onPress={copyAddress} hitSlop={6} style={styles.copyBtn}>
-            {copied ? (
-              <Check size={14} color={color.accent.base} strokeWidth={3} />
-            ) : (
-              <Copy size={14} color={color.fg.subtle} strokeWidth={2} />
-            )}
+          <Pressable onPress={() => setShowScanner(true)} hitSlop={8} style={styles.scanBtn}>
+            <ScanLine size={20} color={color.fg.base} strokeWidth={2} />
           </Pressable>
         </View>
       </Animated.View>
@@ -442,7 +426,6 @@ export default function HomeScreen() {
       {/* Action buttons */}
       <Animated.View style={styles.actionRow} entering={fadeInDown(200, 400)}>
         <ActionButton label="Send" icon={ArrowUp} onPress={() => router.push('/send')} accent />
-        <ActionButton label="Scan" icon={ScanLine} onPress={() => setShowScanner(true)} />
         <ActionButton label="Receive" icon={ArrowDown} onPress={() => router.push('/receive')} />
         <ActionButton label="History" icon={Clock} onPress={() => router.push('/history')} />
       </Animated.View>
@@ -735,53 +718,30 @@ const styles = createStyles(() => ({
     marginBottom: space.sm,
   },
 
-  // Account chip
-  accountChipWrap: {
-    flexDirection: 'row',
+  // Header top row (account chip + scan)
+  headerTopRow: {
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.sm,
-  },
-  copyBtn: {
-    padding: space.xs,
-  },
-  accountChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    paddingVertical: space.sm,
     paddingHorizontal: space.lg,
-    borderRadius: radius.full,
-    backgroundColor: color.bg.sunken,
   },
-  accountAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: color.accent.soft,
+  scanBtn: {
+    position: 'absolute',
+    right: space.lg,
+    padding: space.sm,
+  },
+
+  // Account info (centered, two-line)
+  accountInfo: {
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  accountAvatarText: {
-    fontSize: text.xs,
-    ...inter.bold,
-    color: color.accent.base,
-  },
-  accountTextGroup: {
-    gap: 0,
+    gap: 2,
   },
   accountName: {
-    fontSize: text.sm,
+    fontSize: text.lg,
     ...inter.semibold,
     color: color.fg.base,
-  },
-  addrRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
+    maxWidth: '70%',
   },
   accountAddr: {
-    fontSize: text.xs,
+    fontSize: text.sm,
     ...inter.medium,
     color: color.fg.subtle,
   },
@@ -839,6 +799,8 @@ const styles = createStyles(() => ({
     backgroundColor: color.bg.sunken,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: color.border.base,
     ...shadow.sm,
   },
   actionIconWrapAccent: {

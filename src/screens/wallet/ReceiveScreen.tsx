@@ -510,11 +510,11 @@ export default function ReceiveScreen() {
                   </View>
                   <Text style={styles.warningTitle}>Before you receive</Text>
                   <Text style={styles.warningText}>
-                    Sending assets from unsupported networks to this address may result in permanent loss.
+                    Only send assets on supported networks — unsupported transfers may be lost permanently.
                   </Text>
                   <Text style={styles.warningHint}>
-                    Please review the supported networks listed under{' '}
-                    <Text style={styles.warningHintBold}>Works on {networks.length} EVM networks</Text>
+                    Check the{' '}
+                    <Text style={styles.warningHintBold}>{networks.length} supported networks</Text>
                     {' '}below before sharing your address.
                   </Text>
                   <Pressable style={styles.warningBtn} onPress={() => setWarningDismissed(true)}>
