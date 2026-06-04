@@ -1,6 +1,6 @@
 import { color } from '@/constants/theme';
 import { Tabs } from 'expo-router';
-import { Settings, Wallet } from 'lucide-react-native';
+import { Plug, Settings, Wallet } from 'lucide-react-native';
 import React from 'react';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,7 +34,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="connect"
         options={{
-          href: null,
+          title: 'Connect',
+          tabBarIcon: ({ color: c, size }) => <Plug size={size ?? 22} color={c} />,
         }}
       />
       <Tabs.Screen

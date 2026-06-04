@@ -19,6 +19,11 @@ import {
   type DAppInfo,
   type RemoteInjectSession,
 } from '@/services/dapp-transport';
+import {
+  WalletPairTransport,
+  loadWalletPairSnapshot,
+  clearWalletPairSession,
+} from '@/services/walletpair-transport';
 import { isSigningMethod, handleDAppRequest, handleReadOnlyRPC } from '@/hooks/use-dapp-signing';
 import { PasskeyErrorCode } from '@/modules/passkey';
 import type { BLEIncomingRequest } from '@/models/types';
@@ -52,6 +57,7 @@ export async function clearSession(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type ConnectionType = 'remote-inject' | 'walletpair' | null;
 
 interface DAppConnectionContextValue {
   /** Current connection status. */
@@ -70,8 +76,18 @@ interface DAppConnectionContextValue {
   signError: string | null;
   /** Current chain ID for the bridge connection. */
   chainId: number;
+  /** Which transport is active. */
+  connectionType: ConnectionType;
+  /** 4-digit fingerprint pending user verification (WalletPair only). */
+  pendingFingerprint: string | null;
   /** Connect to a remote-inject bridge. */
   connectToBridge: (session: RemoteInjectSession) => Promise<void>;
+  /** Connect via WalletPair pairing URI. */
+  connectToWalletPair: (uri: string) => Promise<void>;
+  /** Confirm the WalletPair fingerprint and complete connection. */
+  confirmFingerprint: () => Promise<void>;
+  /** Cancel a pending WalletPair fingerprint verification. */
+  cancelFingerprint: () => void;
   /** Disconnect from the current bridge. */
   disconnectBridge: () => void;
   /** Approve the current incoming request. */
@@ -93,7 +109,12 @@ const DAppConnectionContext = createContext<DAppConnectionContextValue>({
   isSigning: false,
   signError: null,
   chainId: 1,
+  connectionType: null,
+  pendingFingerprint: null,
   connectToBridge: async () => {},
+  connectToWalletPair: async () => {},
+  confirmFingerprint: async () => {},
+  cancelFingerprint: () => {},
   disconnectBridge: () => {},
   approveRequest: async () => {},
   rejectRequest: () => {},
@@ -122,8 +143,12 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const [isSigning, setIsSigning] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
   const [chainId, setChainId] = useState(1);
+  const [connectionType, setConnectionType] = useState<ConnectionType>(null);
+  const [pendingFingerprint, setPendingFingerprint] = useState<string | null>(null);
 
   const transportRef = useRef<DAppTransport | null>(null);
+  /** Holds WalletPairTransport during fingerprint verification (before connect). */
+  const pendingWpTransportRef = useRef<WalletPairTransport | null>(null);
   const addressRef = useRef(address);
   const chainIdRef = useRef(chainId);
   const accountNameRef = useRef(accountName);
@@ -174,23 +199,11 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // --- Connect ---
-  const connectToBridge = useCallback(async (sess: RemoteInjectSession) => {
-    // Disconnect existing
-    if (transportRef.current) {
-      transportRef.current.disconnect();
-      transportRef.current = null;
-    }
-
-    setStatus('connecting');
-    setErrorMessage(null);
-    setSession(sess);
-
-    const transport = new RemoteInjectTransport(sess);
-
+  // --- Wire transport events (shared by both transport types) ---
+  const wireTransport = useCallback((transport: DAppTransport, type: ConnectionType) => {
     transport.on('connected', () => {
       setStatus('connected');
-      // Push wallet info on connect
+      setConnectionType(type);
       transport.pushWalletInfo({
         address: addressRef.current,
         chainId: chainIdRef.current,
@@ -201,6 +214,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
 
     transport.on('disconnected', () => {
       setStatus('disconnected');
+      setConnectionType(null);
       setIncomingRequest(null);
       transportRef.current = null;
     });
@@ -212,10 +226,31 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     });
 
     transportRef.current = transport;
+  }, [handleIncoming]);
+
+  // --- Disconnect any active transport ---
+  const disconnectCurrent = useCallback(() => {
+    pendingWpTransportRef.current = null;
+    setPendingFingerprint(null);
+    if (transportRef.current) {
+      transportRef.current.disconnect();
+      transportRef.current = null;
+    }
+  }, []);
+
+  // --- Connect (Remote Inject) ---
+  const connectToBridge = useCallback(async (sess: RemoteInjectSession) => {
+    disconnectCurrent();
+
+    setStatus('connecting');
+    setErrorMessage(null);
+    setSession(sess);
+
+    const transport = new RemoteInjectTransport(sess);
+    wireTransport(transport, 'remote-inject');
 
     try {
       await transport.connect();
-      // Fetch DApp metadata and persist session in parallel
       const [info] = await Promise.all([
         transport.fetchDAppInfo().catch(() => null),
         saveSession(sess),
@@ -226,18 +261,67 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       setErrorMessage(err.message ?? 'Connection failed');
       transportRef.current = null;
     }
-  }, [handleIncoming]);
+  }, [wireTransport, disconnectCurrent]);
+
+  // --- Connect (WalletPair) ---
+  const connectToWalletPair = useCallback(async (uri: string) => {
+    disconnectCurrent();
+
+    setStatus('connecting');
+    setErrorMessage(null);
+    setSession(null);
+
+    try {
+      const { fingerprint, dappInfo: info, transport } = WalletPairTransport.prepare(uri);
+      setPendingFingerprint(fingerprint);
+      setDappInfo(info);
+      pendingWpTransportRef.current = transport;
+      // Wait for user to call confirmFingerprint()
+    } catch (err: any) {
+      setStatus('error');
+      setErrorMessage(err.message ?? 'Failed to prepare WalletPair session');
+    }
+  }, [disconnectCurrent]);
+
+  // --- Confirm fingerprint (WalletPair) ---
+  const confirmFingerprint = useCallback(async () => {
+    const transport = pendingWpTransportRef.current;
+    if (!transport) return;
+
+    setPendingFingerprint(null);
+    pendingWpTransportRef.current = null;
+
+    wireTransport(transport, 'walletpair');
+
+    try {
+      await transport.connect();
+    } catch (err: any) {
+      setStatus('error');
+      setErrorMessage(err.message ?? 'WalletPair connection failed');
+      transportRef.current = null;
+    }
+  }, [wireTransport]);
+
+  // --- Cancel fingerprint verification ---
+  const cancelFingerprint = useCallback(() => {
+    pendingWpTransportRef.current = null;
+    setPendingFingerprint(null);
+    setStatus('disconnected');
+    setDappInfo(null);
+    setErrorMessage(null);
+  }, []);
 
   // --- Disconnect ---
   const disconnectBridge = useCallback(() => {
-    transportRef.current?.disconnect();
-    transportRef.current = null;
+    disconnectCurrent();
     setStatus('disconnected');
+    setConnectionType(null);
     setSession(null);
     setDappInfo(null);
     setIncomingRequest(null);
     clearSession();
-  }, []);
+    clearWalletPairSession();
+  }, [disconnectCurrent]);
 
   // --- Approve ---
   const approveRequest = useCallback(async () => {
@@ -299,12 +383,49 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   // --- Auto-reconnect on mount ---
   useEffect(() => {
     if (!state.hasWallet || state.isLoading) return;
-    loadSession().then(sess => {
+
+    // Try Remote Inject first, then WalletPair
+    (async () => {
+      const sess = await loadSession();
       if (sess) {
-        setSession(sess);
-        connectToBridge(sess).catch(() => {});
+        // Try auto-reconnect — on failure, clear stale session silently
+        const transport = new RemoteInjectTransport(sess);
+        wireTransport(transport, 'remote-inject');
+        try {
+          await transport.connect();
+          setSession(sess);
+          const info = await transport.fetchDAppInfo().catch(() => null);
+          setDappInfo(info);
+          await saveSession(sess);
+        } catch {
+          // Stale session — clean up silently, don't show error
+          transport.disconnect();
+          transportRef.current = null;
+          await clearSession();
+        }
+        return;
       }
-    });
+
+      // Try restoring a WalletPair session
+      try {
+        const wpTransport = await WalletPairTransport.restore();
+        if (wpTransport) {
+          wireTransport(wpTransport, 'walletpair');
+          const info = await wpTransport.fetchDAppInfo();
+          setDappInfo(info);
+          try {
+            await wpTransport.reconnect();
+          } catch {
+            // Reconnect failed — session will retry via SDK backoff
+            // or phase listener will set status to disconnected
+          }
+        }
+      } catch {
+        // WalletPair restore failed — clean up
+        clearWalletPairSession();
+      }
+    })();
+
     return () => {
       transportRef.current?.disconnect();
     };
@@ -314,12 +435,16 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const value = React.useMemo(() => ({
     status, errorMessage, session, dappInfo,
     incomingRequest, isSigning, signError, chainId,
-    connectToBridge, disconnectBridge,
+    connectionType, pendingFingerprint,
+    connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
+    disconnectBridge,
     approveRequest, rejectRequest, dismissRequest, switchChain,
   }), [
     status, errorMessage, session, dappInfo,
     incomingRequest, isSigning, signError, chainId,
-    connectToBridge, disconnectBridge,
+    connectionType, pendingFingerprint,
+    connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
+    disconnectBridge,
     approveRequest, rejectRequest, dismissRequest, switchChain,
   ]);
 

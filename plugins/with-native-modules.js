@@ -92,7 +92,7 @@ function withIOSSourceFiles(config) {
       // Subdirectories under ios/<project>/ are NOT auto-included in the build.
       const destDir = path.join(projectRoot, 'ios', projectName);
 
-      const modules = ['vela-ble', 'vela-passkey', 'vela-cloud-sync'];
+      const modules = ['vela-ble', 'vela-passkey', 'vela-cloud-sync', 'walletpair-ble'];
       for (const moduleName of modules) {
         const srcDir = path.join(projectRoot, 'modules', moduleName, 'ios');
         if (!fs.existsSync(srcDir)) continue;
@@ -195,6 +195,7 @@ function withAndroidSourceFiles(config) {
         { name: 'vela-ble', subdir: 'ble' },
         { name: 'vela-passkey', subdir: 'passkey' },
         { name: 'vela-cloud-sync', subdir: 'cloudsync' },
+        { name: 'walletpair-ble', subdir: 'walletpairble' },
       ];
 
       for (const { name, subdir } of moduleMappings) {
@@ -276,12 +277,14 @@ function registerAndroidPackages(projectRoot) {
     'import com.velawallet.ble.VelaBLEPackage',
     'import com.velawallet.passkey.VelaPasskeyPackage',
     'import com.velawallet.cloudsync.VelaCloudSyncPackage',
+    'import com.velawallet.walletpairble.WalletPairBlePackage',
   ];
 
   const packageRegistrations = [
     'add(VelaBLEPackage())',
     'add(VelaPasskeyPackage())',
     'add(VelaCloudSyncPackage())',
+    'add(WalletPairBlePackage())',
   ];
 
   // Add imports (after the last existing import line)
@@ -347,6 +350,8 @@ function withXcodeProjectFiles(config) {
       'VelaPasskeyModule.m',
       'VelaCloudSyncModule.swift',
       'VelaCloudSyncModule.m',
+      'WalletPairBleModule.swift',
+      'WalletPairBleModule.m',
     ];
 
     for (const fileName of nativeFiles) {

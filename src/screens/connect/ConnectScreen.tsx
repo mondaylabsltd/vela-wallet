@@ -8,7 +8,7 @@
  *   - Error: Shows error + retry
  */
 import React, { useState, useCallback } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable, Linking, Platform } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -19,32 +19,43 @@ import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { chainName } from '@/models/network';
 import { parseRemoteInjectURL } from '@/services/dapp-transport';
+import { isWalletPairURI } from '@/services/walletpair-transport';
 import { showAlert } from '@/services/platform';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 import {
-  Radio, Unplug, Globe, QrCode, Shield, AlertTriangle,
-  ExternalLink, ChevronRight, Zap, Smartphone, Monitor,
-  ArrowRight, Link,
+  Radio, QrCode, Shield, AlertTriangle,
+  Globe, Zap, Smartphone,
+  ArrowRight, Link, Lock, Fingerprint,
 } from 'lucide-react-native';
 
 export default function ConnectScreen() {
   const { state, activeAccount } = useWallet();
   const {
     status, errorMessage, session, chainId, dappInfo,
-    connectToBridge, disconnectBridge,
+    connectionType, pendingFingerprint,
+    connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
+    disconnectBridge,
   } = useDAppConnection();
 
   const [showScanner, setShowScanner] = useState(false);
   const [linkInput, setLinkInput] = useState('');
 
   const handleConnect = useCallback((data: string) => {
-    const parsed = parseRemoteInjectURL(data.trim());
+    const trimmed = data.trim();
+
+    // Auto-detect: WalletPair URI vs Remote Inject URL
+    if (isWalletPairURI(trimmed)) {
+      connectToWalletPair(trimmed);
+      return;
+    }
+
+    const parsed = parseRemoteInjectURL(trimmed);
     if (!parsed) {
-      showAlert('Invalid Link', 'This is not a valid Remote Inject connection link.');
+      showAlert('Invalid Link', 'Not a valid connection link. Supported: WalletPair URI or Remote Inject URL.');
       return;
     }
     connectToBridge(parsed);
-  }, [connectToBridge]);
+  }, [connectToBridge, connectToWalletPair]);
 
   const handleScan = useCallback((data: string) => {
     setShowScanner(false);
@@ -84,30 +95,27 @@ export default function ConnectScreen() {
             <Animated.View entering={fadeInDown(50, 300)}>
               <VelaCard style={styles.guideCard}>
                 <Text style={styles.guideTitle}>Connect to dApps</Text>
-                <Text style={styles.guideSubtitle}>
-                  Use your wallet with any dApp in your desktop browser.
-                </Text>
 
                 <View style={styles.steps}>
                   <StepRow
                     number={1}
-                    icon={<Monitor size={18} color={color.info.base} strokeWidth={2} />}
-                    title="Install browser extension"
-                    subtitle="Install the Remote Inject extension in Chrome"
+                    icon={<QrCode size={18} color={color.accent.base} strokeWidth={2} />}
+                    title="Get a pairing URI"
+                    subtitle="From a WalletPair dApp or the browser extension"
                   />
                   <View style={styles.stepConnector} />
                   <StepRow
                     number={2}
-                    icon={<QrCode size={18} color={color.info.base} strokeWidth={2} />}
-                    title="Scan QR code"
-                    subtitle="Open the extension and scan its QR code"
+                    icon={<Lock size={12} color={color.accent.base} strokeWidth={2} />}
+                    title="Verify the 4-digit code"
+                    subtitle="Make sure it matches on both sides"
                   />
                   <View style={styles.stepConnector} />
                   <StepRow
                     number={3}
-                    icon={<Zap size={18} color={color.info.base} strokeWidth={2} />}
-                    title="Use dApps"
-                    subtitle="Signing requests will appear on your phone"
+                    icon={<Zap size={18} color={color.accent.base} strokeWidth={2} />}
+                    title="Done"
+                    subtitle="Requests appear here automatically"
                   />
                 </View>
               </VelaCard>
@@ -134,7 +142,7 @@ export default function ConnectScreen() {
                   style={styles.linkInput}
                   value={linkInput}
                   onChangeText={setLinkInput}
-                  placeholder="Paste connection link"
+                  placeholder="Paste walletpair:?... URI"
                   placeholderTextColor={color.fg.subtle}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -149,29 +157,75 @@ export default function ConnectScreen() {
                   <ArrowRight size={18} color={!linkInput.trim() ? color.fg.subtle : color.fg.inverse} strokeWidth={2.5} />
                 </Pressable>
               </View>
-
-              <Pressable
-                style={styles.extensionLink}
-                onPress={() => {
-                  const url = 'https://remote-inject.awesometools.dev';
-                  if (Platform.OS === 'web') window.open(url, '_blank');
-                  else Linking.openURL(url);
-                }}
-              >
-                <ExternalLink size={14} color={color.accent.base} strokeWidth={2} />
-                <Text style={styles.extensionLinkText}>Get the browser extension</Text>
-              </Pressable>
             </Animated.View>
           </>
         )}
 
         {/* ================================================================= */}
-        {/* Connecting */}
+        {/* Connecting — fingerprint verification (WalletPair) */}
         {/* ================================================================= */}
-        {status === 'connecting' && (
+        {status === 'connecting' && pendingFingerprint && (
+          <Animated.View entering={fadeInDown(50, 300)}>
+            <VelaCard style={styles.fingerprintCard}>
+              <View style={styles.fingerprintHeader}>
+                <Fingerprint size={28} color={color.accent.base} strokeWidth={2} />
+                <Text style={styles.fingerprintTitle}>Verify Connection</Text>
+              </View>
+
+              <Text style={styles.fingerprintHint}>
+                Confirm this code matches what the dApp displays:
+              </Text>
+
+              <View style={styles.fingerprintCodeRow}>
+                {pendingFingerprint.split('').map((digit, i) => (
+                  <View key={i} style={styles.fingerprintDigitBox}>
+                    <Text style={styles.fingerprintDigit}>{digit}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {dappInfo && (
+                <View style={styles.fingerprintDapp}>
+                  <Globe size={14} color={color.fg.muted} strokeWidth={2} />
+                  <Text style={styles.fingerprintDappText} numberOfLines={1}>
+                    {dappInfo.name}
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.fingerprintBadge}>
+                <Lock size={12} color={color.success.base} strokeWidth={2.5} />
+                <Text style={styles.fingerprintBadgeText}>End-to-end encrypted</Text>
+              </View>
+
+              <View style={styles.fingerprintActions}>
+                <VelaButton
+                  title="Confirm"
+                  onPress={confirmFingerprint}
+                  variant="accent"
+                  style={styles.fingerprintBtn}
+                />
+                <VelaButton
+                  title="Cancel"
+                  onPress={cancelFingerprint}
+                  variant="secondary"
+                  style={styles.fingerprintBtn}
+                />
+              </View>
+            </VelaCard>
+          </Animated.View>
+        )}
+
+        {/* ================================================================= */}
+        {/* Connecting — waiting for dApp to accept */}
+        {/* ================================================================= */}
+        {status === 'connecting' && !pendingFingerprint && (
           <Animated.View entering={fadeIn(0, 300)} style={styles.centered}>
-            <Radio size={28} color={color.info.base} />
-            <Text style={styles.statusText}>Connecting to bridge...</Text>
+            <Radio size={28} color={color.accent.base} />
+            <Text style={styles.statusText}>Waiting for dApp to accept...</Text>
+            <Text style={styles.statusHint}>
+              Go back to the dApp and approve the connection.
+            </Text>
           </Animated.View>
         )}
 
@@ -185,13 +239,19 @@ export default function ConnectScreen() {
               <View style={styles.connectedHeader}>
                 <View style={styles.connectedDot} />
                 <Text style={styles.connectedTitle}>Connected</Text>
+                {connectionType === 'walletpair' && (
+                  <View style={styles.encryptedBadge}>
+                    <Lock size={10} color={color.success.base} strokeWidth={2.5} />
+                    <Text style={styles.encryptedBadgeText}>E2E</Text>
+                  </View>
+                )}
               </View>
 
               {dappInfo ? (
                 <View style={styles.infoRow}>
                   <Globe size={14} color={color.fg.muted} strokeWidth={2} />
                   <Text style={styles.infoText} numberOfLines={1}>
-                    {dappInfo.name} ({(() => { try { return new URL(dappInfo.url).host; } catch { return dappInfo.url; } })()})
+                    {dappInfo.name}{dappInfo.url ? ` (${(() => { try { return new URL(dappInfo.url).host; } catch { return dappInfo.url; } })()})` : ''}
                   </Text>
                 </View>
               ) : (
@@ -311,7 +371,8 @@ const styles = createStyles(() => ({
     gap: space.lg,
   },
   emptyText: { fontSize: text.lg, ...inter.regular, color: color.fg.muted },
-  statusText: { fontSize: text.lg, ...inter.semibold, color: color.info.base },
+  statusText: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
+  statusHint: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center' },
 
   // Guide card
   guideCard: { padding: space['2xl'], gap: space.lg },
@@ -327,7 +388,7 @@ const styles = createStyles(() => ({
   },
   stepIcon: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: color.info.soft,
+    backgroundColor: color.accent.soft,
     alignItems: 'center', justifyContent: 'center',
   },
   stepContent: { flex: 1, gap: 2 },
@@ -398,9 +459,56 @@ const styles = createStyles(() => ({
     fontSize: text.base, ...inter.semibold, color: color.accent.base,
   },
 
+  // Fingerprint verification
+  fingerprintCard: { padding: space['2xl'], gap: space.lg, alignItems: 'center' },
+  fingerprintHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  fingerprintTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
+  fingerprintHint: {
+    fontSize: text.base, ...inter.regular, color: color.fg.muted,
+    textAlign: 'center', lineHeight: 20,
+  },
+  fingerprintCodeRow: {
+    flexDirection: 'row', gap: space.lg,
+    marginVertical: space.xl,
+  },
+  fingerprintDigitBox: {
+    width: 52, height: 64, borderRadius: radius.lg,
+    backgroundColor: color.bg.sunken,
+    borderWidth: 1, borderColor: color.border.base,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  fingerprintDigit: {
+    fontSize: 28, fontWeight: '700' as const, fontFamily: font.mono,
+    color: color.fg.base,
+  },
+  fingerprintDapp: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  fingerprintDappText: {
+    fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono,
+    color: color.fg.subtle,
+  },
+  fingerprintBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: space.md, paddingVertical: 4,
+    backgroundColor: color.success.soft, borderRadius: radius.full,
+  },
+  fingerprintBadgeText: {
+    fontSize: text.xs, ...inter.semibold, color: color.success.base,
+  },
+  fingerprintActions: { width: '100%', gap: space.md, marginTop: space.md },
+  fingerprintBtn: { width: '100%' },
+
   // Connected card
   connectedCard: { padding: space['2xl'], gap: space.lg },
   connectedHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  encryptedBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: space.sm, paddingVertical: 2,
+    backgroundColor: color.success.soft, borderRadius: radius.full,
+    marginLeft: 'auto',
+  },
+  encryptedBadgeText: {
+    fontSize: text.xs, ...inter.semibold, color: color.success.base,
+  },
   connectedDot: {
     width: 10, height: 10, borderRadius: 5,
     backgroundColor: color.success.base,
