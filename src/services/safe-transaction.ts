@@ -378,7 +378,23 @@ async function sendUserOp(
   userOp.signature = realSig;
 
   // 11. Submit to bundler
-  const userOpHash = await submitUserOp(userOp, chainId);
+  let userOpHash: string;
+  try {
+    userOpHash = await submitUserOp(userOp, chainId);
+  } catch (err) {
+    // If bundler says a previous UserOp is already pending (replacement or duplicate),
+    // extract the existing hash and poll for its receipt instead of failing.
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const existingHashMatch = errMsg.match(/\[existingHash:(0x[0-9a-fA-F]+)\]/);
+    if (existingHashMatch) {
+      console.log(`[UserOp] Previous op pending (${existingHashMatch[1]}), polling for receipt...`);
+      return {
+        userOpHash: existingHashMatch[1],
+        waitForTxHash: () => waitForReceipt(existingHashMatch[1], chainId, 60_000),
+      };
+    }
+    throw err;
+  }
 
   // 12. Optimistically increment nonce so concurrent sends don't collide
   incrementNonceCache(safeAddress, chainId);
