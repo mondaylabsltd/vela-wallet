@@ -242,7 +242,7 @@ export type PriceSource = 'api' | 'dex';
 export const DEFAULT_SERVICE_ENDPOINTS: ServiceEndpoints = {
   ethereumDataURL: 'https://ethereum-data.awesometools.dev',
   passkeyIndexURL: 'https://p256-index.getvela.app',
-  bundlerServiceURL: 'https://bundler.getvela.app',
+  bundlerServiceURL: 'https://vela-bundler.getvela.app',
 };
 
 // MARK: - BLE Message Types

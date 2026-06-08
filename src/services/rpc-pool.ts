@@ -3,17 +3,16 @@
  *
  * Endpoints are collected from multiple sources per chain:
  *   RPC:     user-configured > built-in (ethereum-data API) > network default > public fallback
- *   Bundler: user-configured > built-in (bundler.getvela.app)
+ *   Bundler: user-configured > built-in (vela-bundler.getvela.app)
  *
  * Each endpoint tracks latency and failure stats. Calls are routed to the
  * highest-scoring endpoint first, with automatic failover on connectivity errors.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getBundlerServiceURL, loadServiceEndpoints } from './storage';
 import { DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchChainInfo } from './chain-registry';
-import { getNetworkConfig } from './storage';
+import { getBundlerServiceURL, getNetworkConfig, loadServiceEndpoints } from './storage';
 
 // ---------------------------------------------------------------------------
 // Types

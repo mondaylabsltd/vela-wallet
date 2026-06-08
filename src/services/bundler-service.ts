@@ -1,7 +1,7 @@
 /**
  * Gas account service.
  *
- * When using the built-in bundler (bundler.getvela.app), each Safe wallet
+ * When using the built-in bundler (vela-bundler.getvela.app), each Safe wallet
  * has a dedicated gas account (EOA) per chain. The bundler auto-sponsors
  * new users from its treasury; if auto-sponsorship is unavailable the user
  * is prompted to fund the gas account manually.
@@ -10,8 +10,8 @@
  * auto-sponsorship, and checks balance before transaction submission.
  */
 
-import { isUsingBuiltinBundler, getBuiltinBundlerUrl, poolRpcCall, getChainRpcUrl } from './rpc-pool';
 import { nativeSymbol } from '@/models/network';
+import { getBuiltinBundlerUrl, getChainRpcUrl, isUsingBuiltinBundler, poolRpcCall } from './rpc-pool';
 import { loadServiceEndpoints } from './storage';
 
 /** Timeout for bundler REST API calls. */
