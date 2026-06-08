@@ -108,10 +108,10 @@ export async function checkBundlerFunding(
   if (!info) return null; // Can't reach bundler — let the transaction attempt proceed
 
   // Check if balance is sufficient for this transaction.
-  // Must match bundler server's balanceReserveMultiplier (2x) to avoid
+  // Must match bundler server's balanceReserveMultiplier (1.5x) to avoid
   // the client saying "OK" but the server rejecting with insufficient balance.
   const threshold = estimatedGasCostWei
-    ? estimatedGasCostWei * 2n
+    ? (estimatedGasCostWei * 15n) / 10n
     : MIN_BALANCE_WEI;
 
   console.log(`[BundlerFunding] threshold=${threshold} spendable=${info.spendableBalance} sufficient=${info.spendableBalance >= threshold} (gasCost=${estimatedGasCostWei ?? 'default'})`);
