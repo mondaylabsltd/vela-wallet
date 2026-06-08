@@ -155,36 +155,39 @@ export function prefetchForSend(safeAddress: string, chainId: number): void {
 // Gas Estimation (public)
 // ---------------------------------------------------------------------------
 
-/** Gas speed tiers — for UI display of fee levels.
- * Speed is controlled by the bundler's outer tx gas price (baseFeeMultiplier, bundlerTipGwei),
- * NOT by these tiers. In a private bundler, speed is always the same. */
+/**
+ * Gas speed tiers — multiplier over chain gas price for outer tx speed.
+ * Higher tier → bundler bids higher gas → faster inclusion.
+ *
+ * maxFeePerGas = gasPrice × speedTier × BUNDLER_MARGIN
+ * Bundler derives: outerGasPrice = maxFeePerGas / BUNDLER_MARGIN = gasPrice × speedTier
+ * Margin is always BUNDLER_MARGIN - 1 = 150%, independent of tier.
+ * User cost scales with tier (faster = more expensive).
+ */
 export type GasTier = 'slow' | 'standard' | 'rapid' | 'fast';
 
+export const GAS_TIER_MULTIPLIERS: Record<GasTier, { num: bigint; den: bigint; label: string }> = {
+  slow:     { num: 8n,  den: 10n, label: 'Slow' },       // ×0.8 (below market, may delay)
+  standard: { num: 10n, den: 10n, label: 'Standard' },   // ×1.0 (market rate)
+  rapid:    { num: 13n, den: 10n, label: 'Rapid' },       // ×1.3 (above market)
+  fast:     { num: 16n, den: 10n, label: 'Fast' },        // ×1.6 (well above market)
+};
+
 /**
- * Bundler margin multiplier — the fixed markup over chain gas price.
- * maxFeePerGas = gasPrice × BUNDLER_MARGIN_MULTIPLIER.
- *
- * Since maxPriorityFeePerGas = maxFeePerGas, EntryPoint charges the full
- * maxFeePerGas. Bundler pays ~gasPrice. Profit ≈ multiplier - 1.
- *
- * 2.5x → 150% margin.  Clamp range: [1.1x, 2.5x].
+ * Bundler profit margin multiplier (fixed, independent of speed tier).
+ * Must match WALLET_GAS_MARKUP on the bundler side.
+ * Bundler derives outerGasPrice = userOpGasPrice / BUNDLER_MARGIN.
  */
 const BUNDLER_MARGIN_NUM = 25n;  // 2.5x → 150% margin
 const BUNDLER_MARGIN_DEN = 10n;
-
-/** Minimum gas markup — floor at gasPrice × 1.1 (10% margin). */
-const MIN_GAS_MARKUP_NUM = 11n;
-/** Maximum gas markup — cap at gasPrice × 2.5 (150% margin). */
-const MAX_GAS_MARKUP_NUM = 25n;
-const GAS_MARKUP_DEN = 10n;
 
 /** Detailed gas fee estimate for display and max-send calculation. */
 export interface TransactionFeeEstimate {
   /** Total estimated cost in wei (totalGas × maxFeePerGas). */
   totalWei: bigint;
-  /** UserOp maxFeePerGas = gasPrice × tier, clamped to [1.1x, 2.0x]. */
+  /** UserOp maxFeePerGas = gasPrice × speedTier × BUNDLER_MARGIN. */
   maxFeePerGas: bigint;
-  /** Raw chain gas price (what bundler pays on-chain). */
+  /** Intended outer tx gas price = gasPrice × speedTier. */
   bundlerGasPrice: bigint;
   /** Total gas units (verification + call + preVerification). */
   totalGas: bigint;
@@ -212,10 +215,12 @@ export async function estimateTransactionFee(
     getGasPrices(chainId),
   ]);
 
-  // maxFeePerGas = gasPrice × BUNDLER_MARGIN (fixed, independent of speed tier)
-  const userOpMaxFee = calcMaxFeePerGas(gasPrice);
-  // bundlerGasPrice = raw chain rate (what bundler actually pays on-chain)
-  const bundlerGasPrice = gasPrice;
+  // maxFeePerGas = gasPrice × speedTier × BUNDLER_MARGIN
+  const userOpMaxFee = calcMaxFeePerGas(gasPrice, tier);
+  // bundlerGasPrice = gasPrice × speedTier (what bundler pays on-chain for this tier)
+  const m = GAS_TIER_MULTIPLIERS[tier];
+  let bundlerGasPrice = (gasPrice * m.num) / m.den;
+  if (bundlerGasPrice < 1n) bundlerGasPrice = 1n;
 
   const verificationGas = deployed
     ? VERIFICATION_GAS_DEPLOYED
@@ -778,21 +783,22 @@ async function getGasPrices(
 }
 
 /**
- * Calculate UserOp maxFeePerGas from raw gas price.
- * Uses a fixed bundler margin multiplier, clamped to [1.1x, 2.5x].
+ * Calculate UserOp maxFeePerGas = gasPrice × speedTier × BUNDLER_MARGIN.
  *
- * Formula: maxFeePerGas = gasPrice × BUNDLER_MARGIN (2.5x)
- * Bundler profit ≈ BUNDLER_MARGIN - 1 = 150%
+ * Speed tier controls how much the bundler bids for on-chain inclusion.
+ * BUNDLER_MARGIN is the fixed profit margin (2.5x → 150%).
+ * Bundler derives outerGasPrice = maxFeePerGas / BUNDLER_MARGIN.
+ *
+ * Example (standard, 10 gwei):
+ *   maxFee = 10 × 1.0 × 2.5 = 25 gwei
+ *   bundler outerGasPrice = 25 / 2.5 = 10 gwei
+ *   margin = 150%
  */
-export function calcMaxFeePerGas(gasPrice: bigint): bigint {
-  let maxFee = (gasPrice * BUNDLER_MARGIN_NUM) / BUNDLER_MARGIN_DEN;
-
-  const minFee = (gasPrice * MIN_GAS_MARKUP_NUM) / GAS_MARKUP_DEN;
-  const maxCap = (gasPrice * MAX_GAS_MARKUP_NUM) / GAS_MARKUP_DEN;
-  if (maxFee < minFee) maxFee = minFee;
-  if (maxFee > maxCap) maxFee = maxCap;
+export function calcMaxFeePerGas(gasPrice: bigint, tier: GasTier = 'standard'): bigint {
+  const m = GAS_TIER_MULTIPLIERS[tier];
+  // gasPrice × speedTier × BUNDLER_MARGIN
+  let maxFee = (gasPrice * m.num * BUNDLER_MARGIN_NUM) / (m.den * BUNDLER_MARGIN_DEN);
   if (maxFee < 1n) maxFee = 1n;
-
   return maxFee;
 }
 

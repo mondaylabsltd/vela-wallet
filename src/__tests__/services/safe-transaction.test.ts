@@ -15,7 +15,8 @@ jest.mock('@/modules/cloud-sync', () => ({
   get: jest.fn(), save: jest.fn(), remove: jest.fn(), syncNow: jest.fn(),
 }));
 
-import { formatWeiToEth, calcMaxFeePerGas } from '@/services/safe-transaction';
+import { formatWeiToEth, calcMaxFeePerGas, GAS_TIER_MULTIPLIERS } from '@/services/safe-transaction';
+import type { GasTier } from '@/services/safe-transaction';
 
 describe('safe-transaction', () => {
   describe('formatWeiToEth', () => {
@@ -64,33 +65,50 @@ describe('safe-transaction', () => {
   describe('calcMaxFeePerGas', () => {
     const gasPrice = 10_000_000_000n; // 10 gwei
 
-    test('fixed 2.5x markup → 150% margin', () => {
-      const maxFee = calcMaxFeePerGas(gasPrice);
-      expect(maxFee).toBe(25_000_000_000n); // 25 gwei = 10 × 2.5
+    test('standard tier: gasPrice × 1.0 × 2.5 = 25 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'standard')).toBe(25_000_000_000n);
     });
 
-    test('margin = maxFee / gasPrice - 1 = 150%', () => {
-      const maxFee = calcMaxFeePerGas(gasPrice);
-      const margin = Number(maxFee - gasPrice) / Number(gasPrice);
-      expect(margin).toBeCloseTo(1.5, 5); // 150%
+    test('slow tier: gasPrice × 0.8 × 2.5 = 20 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'slow')).toBe(20_000_000_000n);
+    });
+
+    test('rapid tier: gasPrice × 1.3 × 2.5 = 32.5 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'rapid')).toBe(32_500_000_000n);
+    });
+
+    test('fast tier: gasPrice × 1.6 × 2.5 = 40 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'fast')).toBe(40_000_000_000n);
+    });
+
+    test('default tier is standard', () => {
+      expect(calcMaxFeePerGas(gasPrice)).toBe(calcMaxFeePerGas(gasPrice, 'standard'));
     });
 
     test('floor: gasPrice=0 → 1 wei', () => {
       expect(calcMaxFeePerGas(0n)).toBe(1n);
     });
 
-    test('works with typical chain gas prices', () => {
-      // Polygon ~280 gwei
-      const poly = calcMaxFeePerGas(280_000_000_000n);
-      expect(poly).toBe(700_000_000_000n); // 700 gwei = 280 × 2.5
+    test('margin is constant 150% across all tiers', () => {
+      // margin = BUNDLER_MARGIN - 1 = 2.5 - 1 = 1.5, for ALL tiers
+      const tiers: GasTier[] = ['slow', 'standard', 'rapid', 'fast'];
+      for (const tier of tiers) {
+        const m = GAS_TIER_MULTIPLIERS[tier];
+        const outerGasPrice = (gasPrice * m.num) / m.den; // gasPrice × speedTier
+        const maxFee = calcMaxFeePerGas(gasPrice, tier);
+        const margin = Number(maxFee - outerGasPrice) / Number(outerGasPrice);
+        expect(margin).toBeCloseTo(1.5, 5); // always 150%
+      }
+    });
 
-      // Ethereum ~30 gwei
-      const eth = calcMaxFeePerGas(30_000_000_000n);
-      expect(eth).toBe(75_000_000_000n); // 75 gwei = 30 × 2.5
-
-      // BSC ~1 gwei
-      const bsc = calcMaxFeePerGas(1_000_000_000n);
-      expect(bsc).toBe(2_500_000_000n); // 2.5 gwei
+    test('user cost scales with tier (faster = more expensive)', () => {
+      const slow = calcMaxFeePerGas(gasPrice, 'slow');
+      const std = calcMaxFeePerGas(gasPrice, 'standard');
+      const rapid = calcMaxFeePerGas(gasPrice, 'rapid');
+      const fast = calcMaxFeePerGas(gasPrice, 'fast');
+      expect(slow < std).toBe(true);
+      expect(std < rapid).toBe(true);
+      expect(rapid < fast).toBe(true);
     });
   });
 });
