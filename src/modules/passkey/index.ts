@@ -138,6 +138,9 @@ export async function authenticate(): Promise<PasskeyAssertionResult> {
   catch (err) { throw normalizeError(err); }
 }
 
+/** Active AbortController for the current WebAuthn sign request (web only). */
+let _signAbortController: AbortController | null = null;
+
 export async function sign(
   challengeHex: string,
   credentialId?: string | null,
@@ -146,6 +149,14 @@ export async function sign(
   assertNativeAvailable();
   try { return await VelaPasskey.sign(challengeHex, credentialId ?? null); }
   catch (err) { throw normalizeError(err); }
+}
+
+/** Cancel any pending sign request. Safe to call even if no request is active. */
+export function cancelSign(): void {
+  if (_signAbortController) {
+    _signAbortController.abort();
+    _signAbortController = null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -223,6 +234,13 @@ async function webSign(
   credentialId: string | null,
 ): Promise<PasskeyAssertionResult> {
   assertWebSupported();
+
+  // Cancel any previous pending request to avoid "a request is already pending"
+  if (_signAbortController) {
+    _signAbortController.abort();
+  }
+  _signAbortController = new AbortController();
+
   const challenge = hexToBuf(challengeHex);
 
   const options: PublicKeyCredentialRequestOptions = {
@@ -241,6 +259,7 @@ async function webSign(
   try {
     const credential = await navigator.credentials.get({
       publicKey: options,
+      signal: _signAbortController.signal,
     }) as PublicKeyCredential | null;
 
     if (!credential) {
@@ -250,6 +269,8 @@ async function webSign(
     return parseAssertionResponse(credential);
   } catch (err) {
     throw normalizeWebError(err);
+  } finally {
+    _signAbortController = null;
   }
 }
 

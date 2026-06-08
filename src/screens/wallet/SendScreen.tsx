@@ -38,6 +38,21 @@ function isValidAddress(addr: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(addr);
 }
 
+/** X button that appears after 3 seconds — gives biometric time to pop up before showing cancel. */
+function TxCancelButton({ onCancel }: { onCancel: () => void }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(true), 3000);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!visible) return null;
+  return (
+    <Pressable onPress={onCancel} hitSlop={12} style={{ padding: space.xs }}>
+      <X size={18} color={color.fg.subtle} strokeWidth={2} />
+    </Pressable>
+  );
+}
+
 function formatUsd(value: number): string {
   return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -974,27 +989,20 @@ export default function SendScreen() {
           {txStatus !== 'idle' && (
             <Animated.View entering={fadeInDown(0, 200)} style={styles.txStatusWrap}>
               {(txStatus === 'preparing' || txStatus === 'signing' || txStatus === 'submitting' || txStatus === 'confirming') && (
-                <>
-                  <View style={styles.txStatusRow}>
-                    <Animated.View style={styles.txSpinner}>
-                      <ActivityIndicator size="small" color={color.accent.base} />
-                    </Animated.View>
-                    <Text style={styles.txStatusText}>
-                      {txStatus === 'preparing' ? 'Preparing transaction...' :
-                       txStatus === 'signing' ? 'Waiting for biometric...' :
-                       txStatus === 'submitting' ? 'Submitting transaction...' :
-                       'Confirming on-chain...'}
-                    </Text>
-                  </View>
+                <View style={styles.txStatusRow}>
+                  <Animated.View style={styles.txSpinner}>
+                    <ActivityIndicator size="small" color={color.accent.base} />
+                  </Animated.View>
+                  <Text style={[styles.txStatusText, { flex: 1 }]}>
+                    {txStatus === 'preparing' ? 'Preparing transaction...' :
+                     txStatus === 'signing' ? 'Waiting for biometric...' :
+                     txStatus === 'submitting' ? 'Submitting transaction...' :
+                     'Confirming on-chain...'}
+                  </Text>
                   {(txStatus === 'preparing' || txStatus === 'signing') && (
-                    <Pressable
-                      style={styles.txCancelBtn}
-                      onPress={() => { setTxStatus('idle'); setSending(false); }}
-                    >
-                      <Text style={styles.txCancelBtnText}>Cancel</Text>
-                    </Pressable>
+                    <TxCancelButton onCancel={() => { Passkey.cancelSign(); setTxStatus('idle'); setSending(false); }} />
                   )}
-                </>
+                </View>
               )}
               {txStatus === 'error' && (
                 <View style={styles.txStatusRow}>
@@ -1638,15 +1646,5 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     ...inter.semibold,
     color: color.fg.base,
-  },
-  txCancelBtn: {
-    alignItems: 'center',
-    paddingVertical: space.md,
-    marginTop: space.sm,
-  },
-  txCancelBtnText: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.subtle,
   },
 }));
