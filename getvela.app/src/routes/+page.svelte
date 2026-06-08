@@ -496,14 +496,11 @@
 				</div>
 				<div class="bm-card">
 					<h4>Bundler gas fee</h4>
-					<div class="bm-price">~2–2.5× network gas</div>
+					<div class="bm-price">Network gas + service fee</div>
 					<p>
-						Transactions go through an ERC-4337 bundler. By default, Vela's bundler pays on-chain gas on your behalf.
-						Your total cost is about 2–2.5× the network gas — this includes the gas itself plus the bundler's service fee.
-						On low-fee chains like Base or Arbitrum, this is usually a few cents.
-						The exact fee is shown before you confirm every transaction.
-						You can avoid Vela's bundler service fee by using a compatible
-						<a href="https://github.com/atshelchin/vela-bundler" target="_blank" rel="noopener">self-hosted bundler</a>. Network gas still applies.
+						Transactions go through an ERC-4337 bundler. Your total cost includes network gas plus a bundler service fee.
+						You can avoid the bundler fee by using a compatible
+						<a href="https://github.com/atshelchin/vela-bundler" target="_blank" rel="noopener">self-hosted bundler</a>.
 					</p>
 				</div>
 			</div>
