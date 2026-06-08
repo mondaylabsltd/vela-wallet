@@ -29,13 +29,50 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, ScanLine, BookUser, AlertCircle, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native';
+import { ArrowLeft, X, ScanLine, BookUser, AlertCircle, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw, ExternalLink } from 'lucide-react-native';
+import { getAllNetworksSync } from '@/models/network';
+import { openBrowser } from '@/services/platform';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
 
 function isValidAddress(addr: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(addr);
+}
+
+/** Estimated confirmation time (seconds) per chain, accounting for bundler overhead. */
+function estimatedConfirmSecs(chainId: number): number {
+  const net = getAllNetworksSync().find(n => n.chainId === chainId);
+  // L2s are fast (~2-4s block time + bundler overhead), L1s are slower
+  if (net?.isL2) return 15;
+  switch (chainId) {
+    case 1: return 30;   // Ethereum: ~12s block + bundler
+    case 56: return 20;  // BNB: ~3s block + bundler
+    case 100: return 20; // Gnosis: ~5s block + bundler
+    case 43114: return 20; // Avalanche: ~2s block + bundler
+    default: return 25;
+  }
+}
+
+/** Hook that ticks elapsed seconds while active. */
+function useElapsedTimer(active: boolean) {
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef(0);
+  useEffect(() => {
+    if (!active) { setElapsed(0); return; }
+    startRef.current = Date.now();
+    setElapsed(0);
+    const id = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [active]);
+  return elapsed;
+}
+
+function explorerUserOpUrl(chainId: number): string | null {
+  // Most ERC-4337 UserOps can be tracked via jiffyscan
+  return `https://jiffyscan.xyz`;
 }
 
 /** X button that appears after 3 seconds — gives biometric time to pop up before showing cancel. */
@@ -172,6 +209,7 @@ export default function SendScreen() {
   const [showContacts, setShowContacts] = useState(false);
   const [amountWarning, setAmountWarning] = useState<string | null>(null);
   const [recipientIdentity, setRecipientIdentity] = useState<RecipientIdentity | null>(null);
+  const confirmingElapsed = useElapsedTimer(txStatus === 'confirming');
 
   // Prefetch account credential + webauthn module while user reviews confirm screen
   const amountInputRef = useRef<TextInput>(null);
@@ -988,7 +1026,7 @@ export default function SendScreen() {
 
           {txStatus !== 'idle' && (
             <Animated.View entering={fadeInDown(0, 200)} style={styles.txStatusWrap}>
-              {(txStatus === 'preparing' || txStatus === 'signing' || txStatus === 'submitting' || txStatus === 'confirming') && (
+              {(txStatus === 'preparing' || txStatus === 'signing' || txStatus === 'submitting') && (
                 <View style={styles.txStatusRow}>
                   <Animated.View style={styles.txSpinner}>
                     <ActivityIndicator size="small" color={color.accent.base} />
@@ -996,14 +1034,52 @@ export default function SendScreen() {
                   <Text style={[styles.txStatusText, { flex: 1 }]}>
                     {txStatus === 'preparing' ? 'Preparing transaction...' :
                      txStatus === 'signing' ? 'Waiting for biometric...' :
-                     txStatus === 'submitting' ? 'Submitting transaction...' :
-                     'Confirming on-chain...'}
+                     'Submitting to network...'}
                   </Text>
                   {(txStatus === 'preparing' || txStatus === 'signing') && (
                     <TxCancelButton onCancel={() => { Passkey.cancelSign(); setTxStatus('idle'); setSending(false); }} />
                   )}
                 </View>
               )}
+              {txStatus === 'confirming' && selectedToken && (() => {
+                const chainId = tokenChainId(selectedToken);
+                const estSecs = estimatedConfirmSecs(chainId);
+                const remaining = Math.max(0, estSecs - confirmingElapsed);
+                const progress = Math.min(1, confirmingElapsed / estSecs);
+                const overEstimate = confirmingElapsed > estSecs;
+                const statusMsg = confirmingElapsed < 3
+                  ? 'Transaction submitted to the network'
+                  : overEstimate
+                    ? 'Taking longer than usual, please wait...'
+                    : 'Waiting for blockchain confirmation...';
+                const timeLabel = overEstimate
+                  ? `${confirmingElapsed}s elapsed — almost there`
+                  : `~${remaining}s remaining`;
+                return (
+                  <View>
+                    <View style={styles.txStatusRow}>
+                      <Animated.View style={styles.txSpinner}>
+                        <ActivityIndicator size="small" color={color.accent.base} />
+                      </Animated.View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.txStatusText}>{statusMsg}</Text>
+                        <Text style={styles.txConfirmTime}>{timeLabel}</Text>
+                      </View>
+                    </View>
+                    {/* Progress bar */}
+                    <View style={styles.txProgressTrack}>
+                      <Animated.View style={[
+                        styles.txProgressFill,
+                        { width: `${Math.max(5, progress * 100)}%` as any },
+                        overEstimate && styles.txProgressFillSlow,
+                      ]} />
+                    </View>
+                    <Text style={styles.txConfirmHint}>
+                      {chainName(chainId)} typically confirms in ~{estSecs}s
+                    </Text>
+                  </View>
+                );
+              })()}
               {txStatus === 'error' && (
                 <View style={styles.txStatusRow}>
                   <AlertCircle size={20} color={color.error.base} strokeWidth={2.5} />
@@ -1646,5 +1722,32 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     ...inter.semibold,
     color: color.fg.base,
+  },
+  txConfirmTime: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.accent.base,
+    marginTop: 2,
+  },
+  txProgressTrack: {
+    height: 4,
+    backgroundColor: color.border.base,
+    borderRadius: 2,
+    marginTop: space.lg,
+    overflow: 'hidden' as const,
+  },
+  txProgressFill: {
+    height: 4,
+    backgroundColor: color.accent.base,
+    borderRadius: 2,
+  },
+  txProgressFillSlow: {
+    backgroundColor: color.warning?.base ?? '#F59E0B',
+  },
+  txConfirmHint: {
+    fontSize: text.xs,
+    ...inter.regular,
+    color: color.fg.subtle,
+    marginTop: space.sm,
   },
 }));
