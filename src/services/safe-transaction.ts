@@ -167,10 +167,10 @@ export function prefetchForSend(safeAddress: string, chainId: number): void {
 export type GasTier = 'slow' | 'standard' | 'rapid' | 'fast';
 
 export const GAS_TIER_MULTIPLIERS: Record<GasTier, { num: bigint; den: bigint; label: string }> = {
-  slow:     { num: 8n,  den: 10n, label: 'Slow' },       // ×0.8 (below market, may delay)
-  standard: { num: 10n, den: 10n, label: 'Standard' },   // ×1.0 (market rate)
-  rapid:    { num: 13n, den: 10n, label: 'Rapid' },       // ×1.3 (above market)
-  fast:     { num: 16n, den: 10n, label: 'Fast' },        // ×1.6 (well above market)
+  slow:     { num: 11n, den: 10n, label: 'Slow' },       // ×1.1 (just above market)
+  standard: { num: 12n, den: 10n, label: 'Standard' },   // ×1.2 (comfortable buffer)
+  rapid:    { num: 15n, den: 10n, label: 'Rapid' },       // ×1.5 (priority)
+  fast:     { num: 20n, den: 10n, label: 'Fast' },        // ×2.0 (high priority)
 };
 
 /**

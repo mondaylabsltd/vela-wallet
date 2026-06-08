@@ -65,20 +65,20 @@ describe('safe-transaction', () => {
   describe('calcMaxFeePerGas', () => {
     const gasPrice = 10_000_000_000n; // 10 gwei
 
-    test('standard tier: gasPrice × 1.0 × 2.5 = 25 gwei', () => {
-      expect(calcMaxFeePerGas(gasPrice, 'standard')).toBe(25_000_000_000n);
+    test('standard tier: gasPrice × 1.2 × 2.5 = 30 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'standard')).toBe(30_000_000_000n);
     });
 
-    test('slow tier: gasPrice × 0.8 × 2.5 = 20 gwei', () => {
-      expect(calcMaxFeePerGas(gasPrice, 'slow')).toBe(20_000_000_000n);
+    test('slow tier: gasPrice × 1.1 × 2.5 = 27.5 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'slow')).toBe(27_500_000_000n);
     });
 
-    test('rapid tier: gasPrice × 1.3 × 2.5 = 32.5 gwei', () => {
-      expect(calcMaxFeePerGas(gasPrice, 'rapid')).toBe(32_500_000_000n);
+    test('rapid tier: gasPrice × 1.5 × 2.5 = 37.5 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'rapid')).toBe(37_500_000_000n);
     });
 
-    test('fast tier: gasPrice × 1.6 × 2.5 = 40 gwei', () => {
-      expect(calcMaxFeePerGas(gasPrice, 'fast')).toBe(40_000_000_000n);
+    test('fast tier: gasPrice × 2.0 × 2.5 = 50 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'fast')).toBe(50_000_000_000n);
     });
 
     test('default tier is standard', () => {
