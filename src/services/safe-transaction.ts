@@ -224,27 +224,54 @@ export async function estimateTransactionFee(
   let bundlerGasPrice = (gasPrice * m.num) / m.den;
   if (bundlerGasPrice < 1n) bundlerGasPrice = 1n;
 
-  const verificationGas = deployed
-    ? VERIFICATION_GAS_DEPLOYED
-    : VERIFICATION_GAS_UNDEPLOYED;
+  // Try to get accurate gas estimates from the bundler. This catches high-gas chains
+  // (e.g. Monad) where actual gas usage is 3-10x higher than the static defaults below.
+  let totalGas: bigint | null = null;
+  try {
+    const verificationGas = deployed ? VERIFICATION_GAS_DEPLOYED : VERIFICATION_GAS_UNDEPLOYED;
+    const dummySig = buildDummySignature();
+    // Minimal ERC-20 transfer callData for estimation
+    const dummyCallData = buildExecuteCallData(from, '0', new Uint8Array(68));
+    const dummyOp: UserOperation = {
+      sender: from,
+      nonce: '0x0',
+      initCode: new Uint8Array(0),
+      callData: dummyCallData,
+      verificationGasLimit: verificationGas,
+      callGasLimit: CALL_GAS_LIMIT,
+      preVerificationGas: PRE_VERIFICATION_GAS,
+      maxFeePerGas: userOpMaxFee,
+      maxPriorityFeePerGas: userOpMaxFee,
+      paymasterAndData: new Uint8Array(0),
+      signature: dummySig,
+    };
+    const est = await estimateGas(dummyOp, chainId);
+    const estVgl = deployed
+      ? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
+      : bigintMax((est.verificationGasLimit * 15n) / 10n, 2_000_000n);
+    const estCgl = bigintMax((est.callGasLimit * 15n) / 10n, 100_000n);
+    const estPvg = est.preVerificationGas + 10_000n;
+    totalGas = estVgl + estCgl + estPvg;
+    console.log(`[FeeEstimate] Bundler gas: vgl=${estVgl} cgl=${estCgl} pvg=${estPvg} total=${totalGas}`);
+  } catch (err) {
+    console.log(`[FeeEstimate] Bundler estimation unavailable, using defaults:`, err instanceof Error ? err.message : String(err));
+  }
 
-  let totalGas = verificationGas + CALL_GAS_LIMIT + PRE_VERIFICATION_GAS;
+  // Fallback to static gas constants if bundler estimation failed
+  if (totalGas === null) {
+    const verificationGas = deployed
+      ? VERIFICATION_GAS_DEPLOYED
+      : VERIFICATION_GAS_UNDEPLOYED;
+    totalGas = verificationGas + CALL_GAS_LIMIT + PRE_VERIFICATION_GAS;
 
-  // Arbitrum (and other L2 rollups) charge an additional L1 data fee for posting
-  // calldata to L1. This isn't captured by the gas limit constants above.
-  // Add a conservative estimate so the funding check asks for enough.
-  // The bundler's eth_estimateUserOperationGas returns the precise value via
-  // NodeInterface, but this rough estimate prevents the funding modal loop.
-  const ARBITRUM_CHAIN_IDS = [42161, 421614];
-  const OP_STACK_CHAIN_IDS = [10, 8453, 11155420, 84532]; // Optimism, Base, testnets
-  if (ARBITRUM_CHAIN_IDS.includes(chainId)) {
-    // Arbitrum L1 data cost is included in gas limit (~400k-800k gas units).
-    totalGas += 600_000n;
-  } else if (OP_STACK_CHAIN_IDS.includes(chainId)) {
-    // OP Stack L1 data cost is a separate ETH deduction (not in gas limit),
-    // but still needs to be covered by bundler EOA balance.
-    // Post-blob this is small (~50k-150k gas equivalent), but add it for safety.
-    totalGas += 150_000n;
+    // L2 rollup data fee adjustments
+    const ARBITRUM_CHAIN_IDS = [42161, 421614];
+    const OP_STACK_CHAIN_IDS = [10, 8453, 11155420, 84532];
+    if (ARBITRUM_CHAIN_IDS.includes(chainId)) {
+      totalGas += 600_000n;
+    } else if (OP_STACK_CHAIN_IDS.includes(chainId)) {
+      totalGas += 150_000n;
+    }
   }
 
   const totalWei = totalGas * userOpMaxFee;
