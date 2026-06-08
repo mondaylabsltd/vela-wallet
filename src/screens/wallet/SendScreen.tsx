@@ -334,23 +334,27 @@ export default function SendScreen() {
       setFeeEstimate(null);
 
       try {
-        const [feeResult] = await Promise.allSettled([
-          estimateTransactionFee(activeAccount.address, chainId, gasTier),
-          fetchBundlerAccountInfo(chainId, activeAccount.address),
-        ]);
+        // Race with a timeout — pool init for new chains can stall on slow RPCs.
+        // If it takes too long, skip the pre-check and let the bundler reject at submit time.
+        const preCheck = async () => {
+          const [feeResult] = await Promise.allSettled([
+            estimateTransactionFee(activeAccount!.address, chainId, gasTier),
+            fetchBundlerAccountInfo(chainId, activeAccount!.address),
+          ]);
 
-        const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
-        setFeeEstimate(fee);
+          const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
+          setFeeEstimate(fee);
 
-        // Divide out tier markup: fee.totalWei uses userOpMaxFee (gasPrice × tier),
-        // but the bundler's balance check uses raw chain gasPrice. Without this,
-        // the threshold is ~20% too high and blocks transactions unnecessarily.
-        const m = GAS_TIER_MULTIPLIERS[gasTier];
-        const bundlerCost = fee ? (fee.totalWei * m.den) / m.num : undefined;
-        const funding = await checkBundlerFunding(chainId, activeAccount.address, bundlerCost);
+          // Divide out tier markup: fee.totalWei uses userOpMaxFee (gasPrice × tier),
+          // but the bundler's balance check uses raw chain gasPrice.
+          const m = GAS_TIER_MULTIPLIERS[gasTier];
+          const bundlerCost = fee ? (fee.totalWei * m.den) / m.num : undefined;
+          return checkBundlerFunding(chainId, activeAccount!.address, bundlerCost);
+        };
+        const timeout = new Promise<null>(r => setTimeout(() => r(null), 15_000));
+        const funding = await Promise.race([preCheck(), timeout]);
         if (funding) {
           setFundingNeeded(funding);
-          // Stay on enter-details — don't advance to confirm
           setEstimatingGas(false);
           return;
         }
