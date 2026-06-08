@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { copyToClipboard, hapticSuccess, hapticLight } from '@/services/platform';
 import { Check, Copy, RefreshCw, Fuel, Gift } from 'lucide-react-native';
 
@@ -159,9 +159,12 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
                 <Text style={styles.optionTitle}>Free Activation</Text>
                 <Text style={styles.optionBadge}>FREE</Text>
               </View>
-              <Text style={styles.optionDesc}>
-                {requesting ? 'Requesting...' : 'Sponsored by Vela for new users'}
-              </Text>
+              <View style={styles.optionDescRow}>
+                {requesting && <ActivityIndicator size="small" color={color.success.base} />}
+                <Text style={styles.optionDesc}>
+                  {requesting ? 'Requesting...' : 'Sponsored by Vela for new users'}
+                </Text>
+              </View>
             </Pressable>
 
             <Pressable
@@ -366,11 +369,16 @@ const styles = createStyles(() => ({
     color: color.fg.base,
     fontFamily: font.mono,
   },
+  optionDescRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginLeft: 26,
+  },
   optionDesc: {
     fontSize: text.sm,
     ...inter.regular,
     color: color.fg.muted,
-    marginLeft: 26,
   },
 
   // Denial

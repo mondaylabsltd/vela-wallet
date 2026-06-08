@@ -305,6 +305,9 @@ async function sendUserOp(
   await verifyChainReady(chainId);
 
   // 1-4. Fetch deployment status, nonce, and gas prices in parallel
+  // Clear gas price cache to get fresh values — stale prices cause
+  // "gas price too low" rejections on chains with volatile gas (e.g. Gnosis).
+  _gasPriceCache.delete(chainId);
   const [deployed, nonceResult, gasPrices] = await Promise.all([
     isDeployed(safeAddress, chainId),
     getNonce(safeAddress, chainId).catch(() => '0x0'),
