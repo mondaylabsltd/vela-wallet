@@ -811,10 +811,21 @@ async function getGasPrices(
   }
 
   try {
-    const gasPriceRes = await rpcCall('eth_gasPrice', [], chainId);
-    const gasPrice = parseHexUInt64(gasPriceRes.result as string | undefined);
+    // Fetch eth_gasPrice and latest block baseFee in parallel.
+    // On some chains (Gnosis), eth_gasPrice returns an absurdly low value
+    // that doesn't reflect the actual baseFee. Use max(eth_gasPrice, baseFee)
+    // to ensure the UserOp gas price covers at least the base fee.
+    const [gasPriceRes, blockRes] = await Promise.all([
+      rpcCall('eth_gasPrice', [], chainId),
+      rpcCall('eth_getBlockByNumber', ['latest', false], chainId).catch(() => null),
+    ]);
+    const ethGasPrice = parseHexUInt64(gasPriceRes.result as string | undefined);
+    const baseFee = blockRes?.result?.baseFeePerGas
+      ? parseHexUInt64(blockRes.result.baseFeePerGas as string)
+      : 0n;
+    const gasPrice = ethGasPrice > baseFee ? ethGasPrice : baseFee;
     if (gasPrice > 0n) {
-      console.log(`[UserOp] Gas: chainGasPrice=${gasPrice}`);
+      console.log(`[UserOp] Gas: ethGasPrice=${ethGasPrice} baseFee=${baseFee} using=${gasPrice}`);
       _gasPriceCache.set(chainId, { gasPrice, at: Date.now() });
       return { gasPrice };
     }
