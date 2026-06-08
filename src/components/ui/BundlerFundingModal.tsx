@@ -1,18 +1,14 @@
 /**
- * Modal for funding the gas account.
+ * Gas account activation modal.
  *
- * Two-step flow:
- * 1. "Request Free Gas" — user explicitly requests sponsorship
- * 2. If denied → shows deposit address for manual funding
- *
- * This makes the process transparent: the user understands what's
- * happening instead of seeing an unexplained deposit screen.
+ * Step 1: Choose activation method — free (bundler-sponsored) or self-funded
+ * Step 2 (if self-funded): Show amount + address + QR
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { copyToClipboard, hapticSuccess, hapticLight } from '@/services/platform';
-import { Check, Copy, RefreshCw, Fuel, Gift, ChevronDown } from 'lucide-react-native';
+import { Check, Copy, RefreshCw, Fuel, Gift } from 'lucide-react-native';
 
 import { AppModal } from './AppModal';
 import { ChainLogo } from '@/components/ChainLogo';
@@ -34,30 +30,23 @@ interface Props {
   onCancel: () => void;
 }
 
-const POLL_INTERVAL = 10_000; // 10s
+const POLL_INTERVAL = 10_000;
 
-type Step = 'request' | 'deposit';
+type Step = 'choose' | 'self-fund';
 
-/** Human-readable denial reason after sponsorship request fails. */
 function denialText(reason?: string): string {
-  if (!reason) return 'Free activation is not available right now.';
-  if (reason === 'nonce_exceeded')
-    return 'Free activation is for your first few transactions. You\'ve used your free quota.';
-  if (reason === 'treasury_depleted')
-    return 'Our activation fund is temporarily empty. Please try again later or deposit manually.';
-  if (reason === 'wallet_balance_too_low')
-    return 'Your wallet balance is too low to qualify for free activation.';
-  if (reason === 'no_passkey_registered')
-    return 'Free activation requires a passkey. Set up a passkey first.';
-  if (reason === 'rate_limited')
-    return 'Too many requests. Please wait a moment and try again.';
-  if (reason.startsWith('transfer_failed'))
-    return 'Activation transfer failed. Please try again or deposit manually.';
-  return 'Free activation is not available right now.';
+  if (!reason) return 'Free activation unavailable.';
+  if (reason === 'nonce_exceeded') return 'Free quota used up.';
+  if (reason === 'treasury_depleted') return 'Free fund temporarily empty.';
+  if (reason === 'wallet_balance_too_low') return 'Wallet balance too low to qualify.';
+  if (reason === 'no_passkey_registered') return 'Passkey required for free activation.';
+  if (reason === 'rate_limited') return 'Too many requests. Try later.';
+  if (reason.startsWith('transfer_failed')) return 'Transfer failed. Try again.';
+  return 'Free activation unavailable.';
 }
 
 export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Props) {
-  const [step, setStep] = useState<Step>('request');
+  const [step, setStep] = useState<Step>('choose');
   const [requesting, setRequesting] = useState(false);
   const [denialReason, setDenialReason] = useState<string | undefined>();
 
@@ -85,43 +74,33 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
     setChecking(false);
   }, [funding.chainId, funding.safeAddress, requiredWei]);
 
-  // Auto-poll for balance changes (only on deposit step)
   useEffect(() => {
-    if (!visible || step !== 'deposit') return;
+    if (!visible || step !== 'self-fund') return;
     pollRef.current = setInterval(checkBalance, POLL_INTERVAL);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [visible, step, checkBalance]);
 
-  const handleRequestSponsorship = async () => {
+  const handleFreeActivation = async () => {
     setRequesting(true);
     try {
-      const result = await requestGasSponsorship(
-        funding.chainId,
-        funding.safeAddress,
-        funding.thresholdWei,
-      );
+      const result = await requestGasSponsorship(funding.chainId, funding.safeAddress, funding.thresholdWei);
       if (result.sponsored) {
-        // Re-check balance to confirm
         clearBundlerCache(funding.chainId, funding.safeAddress);
         const info = await fetchBundlerAccountInfo(funding.chainId, funding.safeAddress);
         if (info && info.spendableBalance >= requiredWei) {
           setFunded(true);
           setCurrentBalance(formatWei(info.spendableBalance));
           hapticSuccess();
-          // Auto-continue after brief delay so user sees the success
           setTimeout(() => onFunded(), 600);
           setRequesting(false);
           return;
         }
       }
-      // Sponsorship denied — show deposit step
       setDenialReason(result.reason);
-      setStep('deposit');
+      setStep('self-fund');
     } catch {
       setDenialReason('network_error');
-      setStep('deposit');
+      setStep('self-fund');
     }
     setRequesting(false);
   };
@@ -134,6 +113,10 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
   };
 
   const net = getAllNetworksSync().find(n => n.chainId === funding.chainId);
+  const deficit = funding.thresholdWei > funding.currentBalance
+    ? funding.thresholdWei - funding.currentBalance
+    : 0n;
+  const activationAmount = deficit > 0n ? formatWei((deficit * 12n) / 10n) : funding.recommendedFormatted;
 
   return (
     <AppModal visible={visible} onClose={onCancel}>
@@ -141,45 +124,53 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.iconWrap}>
-            <Fuel size={24} color={color.accent.base} strokeWidth={2} />
+            <Fuel size={22} color={color.accent.base} strokeWidth={2} />
           </View>
-          <Text style={styles.title}>Gas Account</Text>
+          <Text style={styles.title}>Activate Gas Account</Text>
           <View style={styles.networkChip}>
-            {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={18} />}
+            {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />}
             <Text style={styles.networkLabel}>{chainName(funding.chainId)}</Text>
           </View>
         </View>
 
-        {/* Explanation */}
-        <Text style={styles.explainText}>
-          To send transactions on {chainName(funding.chainId)}, the gas account needs a minimum {funding.nativeSym} balance. You can request free activation or deposit manually.
-        </Text>
-
-        {/* Balance card */}
-        <VelaCard style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Gas Balance</Text>
-          <Text style={[styles.balanceValue, funded && styles.balanceValueGreen]}>
+        {/* Balance */}
+        <View style={styles.balanceRow}>
+          <Text style={styles.balanceLabel}>Balance</Text>
+          <Text style={[styles.balanceValue, funded && styles.balanceGreen]}>
             {currentBalance} {funding.nativeSym}
           </Text>
-        </VelaCard>
+        </View>
 
-        {step === 'request' && !funded && (
+        {step === 'choose' && !funded && (
           <>
-            {/* Step 1: Request sponsorship */}
+            {/* Two options */}
             <Pressable
-              style={[styles.btn, styles.btnSponsor]}
-              onPress={handleRequestSponsorship}
+              style={[styles.optionCard, styles.optionFree]}
+              onPress={handleFreeActivation}
               disabled={requesting}
             >
-              <Gift size={18} color={color.fg.inverse} strokeWidth={2} />
-              <Text style={styles.btnSponsorText}>
-                {requesting ? 'Requesting...' : 'Request Free Activation'}
+              <View style={styles.optionHeader}>
+                <Gift size={18} color={color.success.base} strokeWidth={2} />
+                <Text style={styles.optionTitle}>Free Activation</Text>
+                <Text style={styles.optionBadge}>FREE</Text>
+              </View>
+              <Text style={styles.optionDesc}>
+                {requesting ? 'Requesting...' : 'Sponsored by Vela for new users'}
               </Text>
             </Pressable>
 
-            <Pressable style={styles.skipBtn} onPress={() => setStep('deposit')}>
-              <Text style={styles.skipText}>I'll deposit manually</Text>
-              <ChevronDown size={14} color={color.fg.subtle} strokeWidth={2} />
+            <Pressable
+              style={[styles.optionCard, styles.optionPaid]}
+              onPress={() => setStep('self-fund')}
+            >
+              <View style={styles.optionHeader}>
+                <Fuel size={18} color={color.fg.muted} strokeWidth={2} />
+                <Text style={styles.optionTitle}>Self Activate</Text>
+                <Text style={styles.optionAmount}>{activationAmount} {funding.nativeSym}</Text>
+              </View>
+              <Text style={styles.optionDesc}>
+                Send {funding.nativeSym} to activate the gas account
+              </Text>
             </Pressable>
 
             <Pressable style={styles.cancelBtn} onPress={onCancel}>
@@ -188,29 +179,30 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
           </>
         )}
 
-        {step === 'deposit' && !funded && (
+        {step === 'self-fund' && !funded && (
           <>
-            {/* Denial reason (if came from failed sponsorship) */}
             {denialReason && (
-              <VelaCard style={styles.denialCard}>
-                <Text style={styles.denialText}>
-                  {denialText(denialReason)}
-                </Text>
-              </VelaCard>
+              <View style={styles.denialRow}>
+                <Text style={styles.denialText}>{denialText(denialReason)}</Text>
+              </View>
             )}
 
-            {/* Deposit info */}
-            <Text style={styles.sectionLabel}>
-              Send {funding.nativeSym} to your gas account:
-            </Text>
+            {/* Amount needed */}
+            <VelaCard style={styles.amountCard}>
+              <Text style={styles.amountLabel}>Activation Fee</Text>
+              <Text style={styles.amountValue}>
+                {activationAmount} {funding.nativeSym}
+              </Text>
+            </VelaCard>
 
+            {/* QR + Address */}
             <View style={styles.qrWrap}>
-              <QRCode value={funding.depositAddress} size={120} />
+              <QRCode value={funding.depositAddress} size={110} />
             </View>
 
             <Pressable style={styles.addressCard} onPress={copyAddress}>
               <View style={styles.addressRow}>
-                <Text style={styles.addressLabel}>Address</Text>
+                <Text style={styles.addressLabel}>Gas Account</Text>
                 {copied ? (
                   <Check size={14} color={color.accent.base} strokeWidth={3} />
                 ) : (
@@ -223,13 +215,13 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
             </Pressable>
 
             <Pressable
-              style={[styles.btn, styles.btnSecondary]}
+              style={[styles.btn, styles.btnCheck]}
               onPress={checkBalance}
               disabled={checking}
             >
               <RefreshCw size={16} color={color.accent.base} strokeWidth={2} />
-              <Text style={styles.btnSecondaryText}>
-                {checking ? 'Checking...' : 'Check Balance'}
+              <Text style={styles.btnCheckText}>
+                {checking ? 'Checking...' : 'I\'ve Sent It'}
               </Text>
             </Pressable>
 
@@ -267,21 +259,23 @@ const styles = createStyles(() => ({
     paddingTop: space.xl,
     paddingBottom: space.lg,
   },
+
+  // Header
   header: {
     alignItems: 'center',
     marginBottom: space.lg,
   },
   iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: color.accent.soft,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: space.sm,
   },
   title: {
-    fontSize: text.xl,
+    fontSize: text.lg,
     ...inter.bold,
     color: color.fg.base,
     marginBottom: space.xs,
@@ -289,52 +283,97 @@ const styles = createStyles(() => ({
   networkChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.sm,
+    gap: space.xs,
     backgroundColor: color.bg.sunken,
     borderRadius: radius.full,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.xs,
+    paddingHorizontal: space.md,
+    paddingVertical: 3,
   },
   networkLabel: {
-    fontSize: text.sm,
+    fontSize: text.xs,
     ...inter.semibold,
     color: color.fg.base,
   },
 
-  explainText: {
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.muted,
-    lineHeight: 20,
-    textAlign: 'center',
-    marginBottom: space.lg,
-  },
-
-  balanceCard: {
-    padding: space.lg,
-    marginBottom: space.lg,
+  // Balance row
+  balanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: space.lg,
+    paddingHorizontal: space.sm,
   },
   balanceLabel: {
     fontSize: text.sm,
     ...inter.regular,
     color: color.fg.subtle,
-    marginBottom: space.xs,
   },
   balanceValue: {
-    fontSize: text.xl,
-    ...inter.bold,
+    fontSize: text.sm,
+    ...inter.semibold,
     color: color.fg.base,
     fontFamily: font.mono,
   },
-  balanceValueGreen: {
+  balanceGreen: {
     color: color.success.base,
   },
 
-  denialCard: {
+  // Option cards (choose step)
+  optionCard: {
+    borderRadius: radius.lg,
     padding: space.lg,
-    marginBottom: space.lg,
+    marginBottom: space.md,
+    borderWidth: 1,
+  },
+  optionFree: {
+    backgroundColor: color.success.soft,
+    borderColor: color.success.base + '30',
+  },
+  optionPaid: {
+    backgroundColor: color.bg.sunken,
+    borderColor: color.border.base,
+  },
+  optionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginBottom: space.xs,
+  },
+  optionTitle: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.fg.base,
+    flex: 1,
+  },
+  optionBadge: {
+    fontSize: text.xs,
+    ...inter.bold,
+    color: color.success.base,
+    backgroundColor: color.success.base + '18',
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+  },
+  optionAmount: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.fg.base,
+    fontFamily: font.mono,
+  },
+  optionDesc: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.muted,
+    marginLeft: 26,
+  },
+
+  // Denial
+  denialRow: {
     backgroundColor: color.warning.soft,
+    borderRadius: radius.md,
+    padding: space.md,
+    marginBottom: space.lg,
     borderWidth: 1,
     borderColor: color.warning.border,
   },
@@ -342,26 +381,37 @@ const styles = createStyles(() => ({
     fontSize: text.sm,
     ...inter.medium,
     color: color.warning.base,
-    lineHeight: 20,
   },
 
-  sectionLabel: {
+  // Amount card (self-fund step)
+  amountCard: {
+    padding: space.lg,
+    marginBottom: space.lg,
+    alignItems: 'center',
+  },
+  amountLabel: {
     fontSize: text.sm,
-    ...inter.semibold,
+    ...inter.regular,
     color: color.fg.subtle,
-    marginBottom: space.md,
+    marginBottom: space.xs,
+  },
+  amountValue: {
+    fontSize: text.xl,
+    ...inter.bold,
+    color: color.accent.base,
+    fontFamily: font.mono,
   },
 
+  // QR + Address
   qrWrap: {
     alignItems: 'center',
-    padding: space.lg,
+    padding: space.md,
     backgroundColor: '#FFFFFF',
     borderRadius: radius.xl,
     alignSelf: 'center',
     marginBottom: space.md,
     ...shadow.sm,
   },
-
   addressCard: {
     backgroundColor: color.bg.sunken,
     borderRadius: radius.lg,
@@ -374,26 +424,24 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: space.sm,
+    marginBottom: space.xs,
   },
   addressLabel: {
-    fontSize: text.sm,
+    fontSize: text.xs,
     ...inter.semibold,
     color: color.fg.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   addressText: {
-    fontSize: text.sm,
+    fontSize: text.xs,
     ...inter.medium,
     fontFamily: font.mono,
     color: color.fg.base,
-    lineHeight: 20,
+    lineHeight: 18,
   },
 
-  actions: {
-    gap: space.md,
-  },
+  // Buttons
   btn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -402,15 +450,6 @@ const styles = createStyles(() => ({
     paddingVertical: space.lg,
     borderRadius: radius.xl,
     marginBottom: space.sm,
-  },
-  btnSponsor: {
-    backgroundColor: color.accent.base,
-    ...shadow.md,
-  },
-  btnSponsorText: {
-    fontSize: text.lg,
-    ...inter.semibold,
-    color: color.fg.inverse,
   },
   btnPrimary: {
     backgroundColor: color.accent.base,
@@ -421,34 +460,22 @@ const styles = createStyles(() => ({
     ...inter.semibold,
     color: color.fg.inverse,
   },
-  btnSecondary: {
+  btnCheck: {
     backgroundColor: color.bg.sunken,
     borderWidth: 1,
     borderColor: color.border.base,
   },
-  btnSecondaryText: {
+  btnCheckText: {
     fontSize: text.base,
     ...inter.semibold,
     color: color.accent.base,
-  },
-  skipBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.xs,
-    paddingVertical: space.md,
-  },
-  skipText: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.subtle,
   },
   cancelBtn: {
     alignItems: 'center',
     paddingVertical: space.md,
   },
   cancelText: {
-    fontSize: text.base,
+    fontSize: text.sm,
     ...inter.medium,
     color: color.fg.subtle,
   },
