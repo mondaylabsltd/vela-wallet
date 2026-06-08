@@ -91,7 +91,6 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
           setFunded(true);
           setCurrentBalance(formatWei(info.spendableBalance));
           hapticSuccess();
-          setTimeout(() => onFunded(), 600);
           setRequesting(false);
           return;
         }
