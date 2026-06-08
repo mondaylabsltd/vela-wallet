@@ -15,8 +15,7 @@ jest.mock('@/modules/cloud-sync', () => ({
   get: jest.fn(), save: jest.fn(), remove: jest.fn(), syncNow: jest.fn(),
 }));
 
-import { formatWeiToEth, calcMaxFeePerGas, GAS_TIER_MULTIPLIERS } from '@/services/safe-transaction';
-import type { GasTier } from '@/services/safe-transaction';
+import { formatWeiToEth, calcMaxFeePerGas } from '@/services/safe-transaction';
 
 describe('safe-transaction', () => {
   describe('formatWeiToEth', () => {
@@ -65,47 +64,33 @@ describe('safe-transaction', () => {
   describe('calcMaxFeePerGas', () => {
     const gasPrice = 10_000_000_000n; // 10 gwei
 
-    test('standard tier: 1.2x → 20% margin', () => {
-      const maxFee = calcMaxFeePerGas(gasPrice, 'standard');
-      expect(maxFee).toBe(12_000_000_000n); // 12 gwei
-    });
-
-    test('slow tier: clamped to 1.1x minimum', () => {
-      // slow = 1.1x, already at minimum
-      const maxFee = calcMaxFeePerGas(gasPrice, 'slow');
-      expect(maxFee).toBe(11_000_000_000n); // 11 gwei (1.1x)
-    });
-
-    test('rapid tier: 1.5x → 50% margin', () => {
-      const maxFee = calcMaxFeePerGas(gasPrice, 'rapid');
-      expect(maxFee).toBe(15_000_000_000n);
-    });
-
-    test('fast tier: clamped to 2.0x maximum', () => {
-      // fast = 2.0x, at maximum
-      const maxFee = calcMaxFeePerGas(gasPrice, 'fast');
-      expect(maxFee).toBe(20_000_000_000n); // 20 gwei (2.0x cap)
-    });
-
-    test('default tier is standard', () => {
+    test('fixed 2.5x markup → 150% margin', () => {
       const maxFee = calcMaxFeePerGas(gasPrice);
-      expect(maxFee).toBe(12_000_000_000n);
+      expect(maxFee).toBe(25_000_000_000n); // 25 gwei = 10 × 2.5
     });
 
-    test('floor: never below 1 wei', () => {
-      const maxFee = calcMaxFeePerGas(0n, 'standard');
-      expect(maxFee).toBe(1n);
+    test('margin = maxFee / gasPrice - 1 = 150%', () => {
+      const maxFee = calcMaxFeePerGas(gasPrice);
+      const margin = Number(maxFee - gasPrice) / Number(gasPrice);
+      expect(margin).toBeCloseTo(1.5, 5); // 150%
     });
 
-    test('margin formula: margin = maxFee / gasPrice - 1', () => {
-      const tiers: GasTier[] = ['slow', 'standard', 'rapid', 'fast'];
-      const expectedMargins = [0.1, 0.2, 0.5, 1.0]; // 10%, 20%, 50%, 100%
+    test('floor: gasPrice=0 → 1 wei', () => {
+      expect(calcMaxFeePerGas(0n)).toBe(1n);
+    });
 
-      for (let i = 0; i < tiers.length; i++) {
-        const maxFee = calcMaxFeePerGas(gasPrice, tiers[i]);
-        const margin = Number(maxFee - gasPrice) / Number(gasPrice);
-        expect(margin).toBeCloseTo(expectedMargins[i], 5);
-      }
+    test('works with typical chain gas prices', () => {
+      // Polygon ~280 gwei
+      const poly = calcMaxFeePerGas(280_000_000_000n);
+      expect(poly).toBe(700_000_000_000n); // 700 gwei = 280 × 2.5
+
+      // Ethereum ~30 gwei
+      const eth = calcMaxFeePerGas(30_000_000_000n);
+      expect(eth).toBe(75_000_000_000n); // 75 gwei = 30 × 2.5
+
+      // BSC ~1 gwei
+      const bsc = calcMaxFeePerGas(1_000_000_000n);
+      expect(bsc).toBe(2_500_000_000n); // 2.5 gwei
     });
   });
 });
