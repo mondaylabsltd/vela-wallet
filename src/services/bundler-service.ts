@@ -39,6 +39,8 @@ export interface BundlerAccountInfo {
 export interface FundingNeeded {
   /** Why funding is needed. */
   reason: 'deposit_needed' | 'wallet_balance_too_low';
+  /** Whether this network supports sponsored activation. */
+  sponsorshipAvailable: boolean;
   /** Deposit address for the bundler EOA. */
   depositAddress: string;
   /** The Safe wallet address (needed to re-query bundler API). */
@@ -107,49 +109,30 @@ export async function checkBundlerFunding(
   console.log(`[BundlerFunding] account info:`, info ? `deposit=${info.depositAddress} balance=${info.spendableBalance} status=${info.status}` : 'unreachable');
   if (!info) return null; // Can't reach bundler — let the transaction attempt proceed
 
-  // Check if balance is sufficient for this transaction.
-  // Must match bundler server's balanceReserveMultiplier (1.5x) to avoid
-  // the client saying "OK" but the server rejecting with insufficient balance.
-  const threshold = estimatedGasCostWei
-    ? (estimatedGasCostWei * 15n) / 10n
-    : MIN_BALANCE_WEI;
+  // Check if balance covers the worst-case gas cost (gasLimit × gasPrice).
+  // No additional reserve multiplier needed — the gas limits are already
+  // 3-5× actual usage, and the bundler's baseFeeMultiplier (1.25×) provides
+  // headroom for gas price fluctuations.
+  const threshold = estimatedGasCostWei ?? MIN_BALANCE_WEI;
 
   console.log(`[BundlerFunding] threshold=${threshold} spendable=${info.spendableBalance} sufficient=${info.spendableBalance >= threshold} (gasCost=${estimatedGasCostWei ?? 'default'})`);
 
   if (info.spendableBalance >= threshold) return null;
 
-  // Attempt auto-sponsorship from treasury before prompting user.
-  // The bundler will check eligibility (nonce, WebAuthn registration, etc.)
-  let sponsorReason: string | undefined;
-  try {
-    const sponsorResult = await requestSponsorship(chainId, safeAddress, threshold);
-    console.log(`[BundlerFunding] sponsorship result:`, sponsorResult);
-    if (sponsorResult.sponsored) {
-      // Clear cache and re-check — the sponsored ETH should now be available.
-      clearBundlerCache(chainId, safeAddress);
-      const refreshed = await fetchBundlerAccountInfo(chainId, safeAddress);
-      if (refreshed && refreshed.spendableBalance >= threshold) {
-        console.log(`[BundlerFunding] Auto-sponsored successfully, no modal needed`);
-        return null;
-      }
-    }
-    sponsorReason = sponsorResult.reason;
-  } catch (err) {
-    console.warn(`[BundlerFunding] Sponsorship request failed, falling back to manual:`, err);
-  }
-
+  // Balance insufficient — return info for the funding modal.
+  // Sponsorship is NOT attempted here; the modal lets the user explicitly
+  // request it so they understand what's happening.
   const deficit = threshold - info.spendableBalance;
   const base = deficit > 0n ? deficit : threshold;
   const recommendedWei = (base * 12n) / 10n;
 
-  // If the user's wallet balance is too low, don't show the deposit modal —
-  // they can't afford the transaction anyway.
-  const reason: FundingNeeded['reason'] = sponsorReason === 'wallet_balance_too_low'
-    ? 'wallet_balance_too_low'
-    : 'deposit_needed';
+  // Custom networks don't support sponsored activation — only built-in networks do.
+  const { DEFAULT_NETWORKS } = await import('@/models/network');
+  const isBuiltinNetwork = DEFAULT_NETWORKS.some((n: { chainId: number }) => n.chainId === chainId);
 
   return {
-    reason,
+    reason: 'deposit_needed',
+    sponsorshipAvailable: isBuiltinNetwork,
     depositAddress: info.depositAddress,
     safeAddress,
     chainId,
@@ -160,6 +143,18 @@ export async function checkBundlerFunding(
     recommendedFormatted: formatWei(recommendedWei),
     currentFormatted: formatWei(info.spendableBalance),
   };
+}
+
+/**
+ * Request gas sponsorship from the bundler's treasury.
+ * Exposed for the funding modal to call on user action.
+ */
+export async function requestGasSponsorship(
+  chainId: number,
+  safeAddress: string,
+  requiredWei: bigint,
+): Promise<{ sponsored: boolean; reason?: string }> {
+  return requestSponsorship(chainId, safeAddress, requiredWei);
 }
 
 /**

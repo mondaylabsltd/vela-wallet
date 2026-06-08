@@ -5,7 +5,7 @@ import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenRow } from '@/components/ui/TokenRow';
 import { color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
-import { chainName, nativeSymbol } from '@/models/network';
+import { chainName, nativeSymbol, DEFAULT_NETWORKS } from '@/models/network';
 import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
@@ -531,14 +531,14 @@ export default function SendScreen() {
                 const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId, gasTier);
                 // Divide out tier markup to match server's raw gasPrice calculation
                 const tm = GAS_TIER_MULTIPLIERS[gasTier];
-                const rawCost = (fee.totalWei * tm.den) / tm.num;
-                thresholdWei = (rawCost * 15n) / 10n;
+                thresholdWei = (fee.totalWei * tm.den) / tm.num;
               }
               const deficit = thresholdWei - info.spendableBalance;
               const base = deficit > 0n ? deficit : thresholdWei;
               const recommendedWei = (base * 12n) / 10n;
               setFundingNeeded({
                 reason: 'deposit_needed',
+                sponsorshipAvailable: DEFAULT_NETWORKS.some(n => n.chainId === chainId),
                 depositAddress: info.depositAddress,
                 safeAddress: activeAccount!.address,
                 chainId,
