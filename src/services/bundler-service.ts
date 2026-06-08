@@ -126,13 +126,11 @@ export async function checkBundlerFunding(
   const base = deficit > 0n ? deficit : threshold;
   const recommendedWei = (base * 12n) / 10n;
 
-  // Custom networks don't support sponsored activation — only built-in networks do.
-  const { DEFAULT_NETWORKS } = await import('@/models/network');
-  const isBuiltinNetwork = DEFAULT_NETWORKS.some((n: { chainId: number }) => n.chainId === chainId);
-
+  // Sponsorship is always available — the bundler decides whether to sponsor
+  // based on treasury balance, nonce limits, and Safe wallet balance.
   return {
     reason: 'deposit_needed',
-    sponsorshipAvailable: isBuiltinNetwork,
+    sponsorshipAvailable: true,
     depositAddress: info.depositAddress,
     safeAddress,
     chainId,

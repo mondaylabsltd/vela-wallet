@@ -41,8 +41,6 @@ type Step = 'request' | 'deposit';
 /** Human-readable denial reason after sponsorship request fails. */
 function denialText(reason?: string): string {
   if (!reason) return 'Free activation is not available right now.';
-  if (reason === 'custom_network')
-    return 'Free activation is not supported on custom networks.';
   if (reason === 'nonce_exceeded')
     return 'Free activation is for your first few transactions. You\'ve used your free quota.';
   if (reason === 'treasury_depleted')
@@ -59,12 +57,9 @@ function denialText(reason?: string): string {
 }
 
 export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Props) {
-  // Skip sponsorship step for custom networks — they don't support it.
-  const [step, setStep] = useState<Step>(funding.sponsorshipAvailable ? 'request' : 'deposit');
+  const [step, setStep] = useState<Step>('request');
   const [requesting, setRequesting] = useState(false);
-  const [denialReason, setDenialReason] = useState<string | undefined>(
-    funding.sponsorshipAvailable ? undefined : 'custom_network',
-  );
+  const [denialReason, setDenialReason] = useState<string | undefined>();
 
   const [copied, setCopied] = useState(false);
   const [checking, setChecking] = useState(false);
