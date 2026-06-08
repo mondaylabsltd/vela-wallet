@@ -974,17 +974,27 @@ export default function SendScreen() {
           {txStatus !== 'idle' && (
             <Animated.View entering={fadeInDown(0, 200)} style={styles.txStatusWrap}>
               {(txStatus === 'preparing' || txStatus === 'signing' || txStatus === 'submitting' || txStatus === 'confirming') && (
-                <View style={styles.txStatusRow}>
-                  <Animated.View style={styles.txSpinner}>
-                    <ActivityIndicator size="small" color={color.accent.base} />
-                  </Animated.View>
-                  <Text style={styles.txStatusText}>
-                    {txStatus === 'preparing' ? 'Preparing transaction...' :
-                     txStatus === 'signing' ? 'Waiting for biometric...' :
-                     txStatus === 'submitting' ? 'Submitting transaction...' :
-                     'Confirming on-chain...'}
-                  </Text>
-                </View>
+                <>
+                  <View style={styles.txStatusRow}>
+                    <Animated.View style={styles.txSpinner}>
+                      <ActivityIndicator size="small" color={color.accent.base} />
+                    </Animated.View>
+                    <Text style={styles.txStatusText}>
+                      {txStatus === 'preparing' ? 'Preparing transaction...' :
+                       txStatus === 'signing' ? 'Waiting for biometric...' :
+                       txStatus === 'submitting' ? 'Submitting transaction...' :
+                       'Confirming on-chain...'}
+                    </Text>
+                  </View>
+                  {(txStatus === 'preparing' || txStatus === 'signing') && (
+                    <Pressable
+                      style={styles.txCancelBtn}
+                      onPress={() => { setTxStatus('idle'); setSending(false); }}
+                    >
+                      <Text style={styles.txCancelBtnText}>Cancel</Text>
+                    </Pressable>
+                  )}
+                </>
               )}
               {txStatus === 'error' && (
                 <View style={styles.txStatusRow}>
@@ -1628,5 +1638,15 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     ...inter.semibold,
     color: color.fg.base,
+  },
+  txCancelBtn: {
+    alignItems: 'center',
+    paddingVertical: space.md,
+    marginTop: space.sm,
+  },
+  txCancelBtnText: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.subtle,
   },
 }));
