@@ -145,6 +145,7 @@ export default function SendScreen() {
   const [feeEstimate, setFeeEstimate] = useState<TransactionFeeEstimate | null>(null);
   const [estimatingGas, setEstimatingGas] = useState(false);
   const [fundingNeeded, setFundingNeeded] = useState<FundingNeeded | null>(null);
+  const fundingRetryCount = useRef(0);
   const [txStatus, setTxStatus] = useState<TxStatus>('idle');
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
@@ -406,8 +407,10 @@ export default function SendScreen() {
       clearBundlerCache(tokenChainId(selectedToken), activeAccount.address);
     }
     setFundingNeeded(null);
-    // Re-run handleContinue which will re-check funding → pass → enter confirm screen
-    handleContinue();
+    // Go straight to confirm — the modal already verified balance >= threshold.
+    // Re-running handleContinue would re-estimate gas (potentially getting a higher
+    // price), causing the modal to reappear in a loop.
+    setStep('confirm');
   };
 
   const executeTransaction = async () => {
@@ -498,35 +501,52 @@ export default function SendScreen() {
       if (error?.code === 'PASSKEY_CANCELLED') {
         setTxStatus('idle');
       } else if (error?.message?.includes('Insufficient balance on dedicated bundler EOA')) {
-        // Bundler explicitly says EOA balance is insufficient — always show funding modal.
-        // Fetch account info just to get the deposit address and current balance for display.
-        setTxStatus('idle');
-        try {
-          const chainId = tokenChainId(selectedToken!);
-          clearBundlerCache(chainId, activeAccount!.address);
-          const info = await fetchBundlerAccountInfo(chainId, activeAccount!.address);
-          if (info) {
-            const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId, gasTier);
-            const thresholdWei = fee.totalWei * 2n;
-            const deficit = thresholdWei - info.spendableBalance;
-            const base = deficit > 0n ? deficit : thresholdWei;
-            const recommendedWei = (base * 12n) / 10n;
-            setFundingNeeded({
-              depositAddress: info.depositAddress,
-              safeAddress: activeAccount!.address,
-              chainId,
-              nativeSym: info.nativeSym,
-              thresholdWei,
-              recommendedWei,
-              currentBalance: info.spendableBalance,
-              recommendedFormatted: formatWei(recommendedWei),
-              currentFormatted: formatWei(info.spendableBalance),
-            });
-            return;
-          }
-        } catch { /* fall through */ }
-        setTxError('Bundler account needs more gas. Please fund it in Settings.');
-        setTxStatus('error');
+        // Bundler explicitly says EOA balance is insufficient — show funding modal.
+        // Parse the server's actual required balance from the error message to avoid
+        // threshold mismatch (client estimate vs server's gas price) causing an infinite loop.
+        fundingRetryCount.current += 1;
+        if (fundingRetryCount.current > 3) {
+          // Break infinite loop — show error instead of modal
+          fundingRetryCount.current = 0;
+          setTxError('Gas account balance keeps being rejected by the bundler. Try again later or increase gas tier.');
+          setTxStatus('error');
+        } else {
+          setTxStatus('idle');
+          try {
+            const chainId = tokenChainId(selectedToken!);
+            clearBundlerCache(chainId, activeAccount!.address);
+            const info = await fetchBundlerAccountInfo(chainId, activeAccount!.address);
+            if (info) {
+              // Try to parse server's required balance: "...required: 123456..."
+              const requiredMatch = error.message.match(/required:\s*(\d+)/);
+              let thresholdWei: bigint;
+              if (requiredMatch) {
+                thresholdWei = BigInt(requiredMatch[1]);
+              } else {
+                const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId, gasTier);
+                thresholdWei = fee.totalWei * 2n;
+              }
+              const deficit = thresholdWei - info.spendableBalance;
+              const base = deficit > 0n ? deficit : thresholdWei;
+              const recommendedWei = (base * 12n) / 10n;
+              setFundingNeeded({
+                reason: 'deposit_needed',
+                depositAddress: info.depositAddress,
+                safeAddress: activeAccount!.address,
+                chainId,
+                nativeSym: info.nativeSym,
+                thresholdWei,
+                recommendedWei,
+                currentBalance: info.spendableBalance,
+                recommendedFormatted: formatWei(recommendedWei),
+                currentFormatted: formatWei(info.spendableBalance),
+              });
+              return;
+            }
+          } catch { /* fall through */ }
+          setTxError('Bundler account needs more gas. Please fund it in Settings.');
+          setTxStatus('error');
+        }
       } else {
         setTxError(error?.message ?? String(error));
         setTxStatus('error');
@@ -1030,7 +1050,7 @@ export default function SendScreen() {
           visible={!!fundingNeeded}
           funding={fundingNeeded}
           onFunded={handleFundingComplete}
-          onCancel={() => setFundingNeeded(null)}
+          onCancel={() => { setFundingNeeded(null); fundingRetryCount.current = 0; }}
         />
       )}
     </ScreenContainer>

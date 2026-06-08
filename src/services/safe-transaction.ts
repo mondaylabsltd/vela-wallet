@@ -155,23 +155,37 @@ export function prefetchForSend(safeAddress: string, chainId: number): void {
 // Gas Estimation (public)
 // ---------------------------------------------------------------------------
 
-/** Gas speed tier multipliers (applied to on-chain gasPrice). */
+/** Gas speed tier multipliers (applied to on-chain gasPrice).
+ *
+ * The tier determines the UserOp's maxFeePerGas relative to the chain rate.
+ * Bundler margin = tier - 1 (e.g. standard 1.2x → 20% bundler margin).
+ *
+ * Final maxFeePerGas is clamped to [MIN_GAS_MARKUP, MAX_GAS_MARKUP] so that:
+ * - The bundler always accepts (margin >= MIN_PROFIT_MARGIN_BPS on bundler side)
+ * - The user never overpays (margin <= MAX_PROFIT_MARGIN_BPS on bundler side)
+ */
 export type GasTier = 'slow' | 'standard' | 'rapid' | 'fast';
 
 export const GAS_TIER_MULTIPLIERS: Record<GasTier, { num: bigint; den: bigint; label: string }> = {
-  slow:     { num: 6n,  den: 10n, label: 'Slow' },       // ×0.6
-  standard: { num: 12n, den: 10n, label: 'Standard' },   // ×1.2
-  rapid:    { num: 20n, den: 10n, label: 'Rapid' },       // ×2.0
-  fast:     { num: 36n, den: 10n, label: 'Fast' },        // ×3.6
+  slow:     { num: 11n, den: 10n, label: 'Slow' },       // ×1.1 (10% margin)
+  standard: { num: 12n, den: 10n, label: 'Standard' },   // ×1.2 (20% margin)
+  rapid:    { num: 15n, den: 10n, label: 'Rapid' },       // ×1.5 (50% margin)
+  fast:     { num: 20n, den: 10n, label: 'Fast' },        // ×2.0 (100% margin)
 };
+
+/** Minimum gas markup — wallet never sets maxFeePerGas below gasPrice × 1.1 (10%). */
+const MIN_GAS_MARKUP_NUM = 11n;
+/** Maximum gas markup — wallet never sets maxFeePerGas above gasPrice × 2.0 (100%). */
+const MAX_GAS_MARKUP_NUM = 20n;
+const GAS_MARKUP_DEN = 10n;
 
 /** Detailed gas fee estimate for display and max-send calculation. */
 export interface TransactionFeeEstimate {
   /** Total estimated cost in wei (totalGas × maxFeePerGas). */
   totalWei: bigint;
-  /** UserOp maxFeePerGas = bundlerGasPrice × 1.6 (signed into the UserOp). */
+  /** UserOp maxFeePerGas = gasPrice × tier, clamped to [1.1x, 2.0x]. */
   maxFeePerGas: bigint;
-  /** Bundler gas price = rawGasPrice × tier multiplier (what bundler pays on-chain). */
+  /** Raw chain gas price (what bundler pays on-chain). */
   bundlerGasPrice: bigint;
   /** Total gas units (verification + call + preVerification). */
   totalGas: bigint;
@@ -184,9 +198,8 @@ export interface TransactionFeeEstimate {
 /** Fetch fresh on-chain gas price (bypasses cache). */
 export async function refreshGasPrice(chainId: number): Promise<bigint> {
   _gasPriceCache.delete(chainId);
-  const { maxFee } = await getGasPrices(chainId);
-  // maxFee = gasPrice × 1.6, derive raw
-  return (maxFee * 10n) / 16n;
+  const { gasPrice } = await getGasPrices(chainId);
+  return gasPrice;
 }
 
 /** Estimate the total gas fee in wei for a transaction. */
@@ -195,21 +208,15 @@ export async function estimateTransactionFee(
   chainId: number,
   tier: GasTier = 'standard',
 ): Promise<TransactionFeeEstimate> {
-  const [deployed, { maxFee }] = await Promise.all([
+  const [deployed, { gasPrice }] = await Promise.all([
     isDeployed(from, chainId),
     getGasPrices(chainId),
   ]);
 
-  // getGasPrices returns gasPrice × 1.6 — derive raw on-chain price
-  const onChainGasPrice = (maxFee * 10n) / 16n;
-
-  // Layer 1: bundler gas price = raw × tier multiplier (what bundler actually pays)
-  const m = GAS_TIER_MULTIPLIERS[tier];
-  let bundlerGasPrice = (onChainGasPrice * m.num) / m.den;
-  if (bundlerGasPrice < 1n) bundlerGasPrice = 1n;
-
-  // Layer 2: UserOp maxFeePerGas = bundlerGasPrice × 1.6 (60% bundler profit margin)
-  const userOpMaxFee = (bundlerGasPrice * 16n) / 10n;
+  // maxFeePerGas = gasPrice × tier, clamped to [1.1x, 2.0x]
+  const userOpMaxFee = calcMaxFeePerGas(gasPrice, tier);
+  // bundlerGasPrice = raw chain rate (what bundler actually pays on-chain)
+  const bundlerGasPrice = gasPrice;
 
   const verificationGas = deployed
     ? VERIFICATION_GAS_DEPLOYED
@@ -279,7 +286,7 @@ async function sendUserOp(
   // Use fetched nonce for deployed wallets, 0 for undeployed
   const nonce: string = deployed ? nonceResult : '0x0';
 
-  const maxFee = maxFeeOverride ?? gasPrices.maxFee;
+  const maxFee = maxFeeOverride ?? calcMaxFeePerGas(gasPrices.gasPrice);
   const maxPriority = maxFee;
 
   // 5. Initial gas estimates
@@ -317,7 +324,12 @@ async function sendUserOp(
         preVerificationGas: estimated.preVerificationGas.toString(),
       });
       const estVerification = (estimated.verificationGasLimit * 15n) / 10n;
-      userOp.verificationGasLimit = bigintMax(estVerification, 2_000_000n);
+      // 2M floor is only needed for undeployed wallets (account creation).
+      // For deployed wallets, use the estimated value — inflating to 2M
+      // causes the bundler's balance check to require ~4x more gas reserve.
+      userOp.verificationGasLimit = deployed
+        ? bigintMax(estVerification, VERIFICATION_GAS_DEPLOYED)
+        : bigintMax(estVerification, 2_000_000n);
       userOp.callGasLimit = bigintMax(
         (estimated.callGasLimit * 15n) / 10n,
         100_000n,
@@ -734,51 +746,57 @@ function incrementNonceCache(safeAddress: string, chainId: number): void {
 }
 
 // Cache: gas prices are stable enough for 15s
-const _gasPriceCache = new Map<number, { maxFee: bigint; maxPriority: bigint; at: number }>();
+const _gasPriceCache = new Map<number, { gasPrice: bigint; at: number }>();
 const GAS_PRICE_CACHE_TTL = 15_000; // 15s
 
+/**
+ * Fetch raw on-chain gas price (no markup applied).
+ * The tier-based markup is applied by callers (estimateTransactionFee, sendUserOp).
+ */
 async function getGasPrices(
   chainId: number,
-): Promise<{ maxFee: bigint; maxPriority: bigint }> {
+): Promise<{ gasPrice: bigint }> {
   const cached = _gasPriceCache.get(chainId);
   if (cached && Date.now() - cached.at < GAS_PRICE_CACHE_TTL) {
-    return { maxFee: cached.maxFee, maxPriority: cached.maxPriority };
+    return { gasPrice: cached.gasPrice };
   }
 
-  // UserOp maxFeePerGas should be close to the actual on-chain gas price.
-  // Too high → overpays EntryPoint, creates MEV extraction opportunity.
-  // Too low → bundler rejects or tx gets stuck.
-  // Target: gasPrice × 1.6 (60% above chain rate — covers bundler margin + multi-block fluctuation).
   try {
     const gasPriceRes = await rpcCall('eth_gasPrice', [], chainId);
     const gasPrice = parseHexUInt64(gasPriceRes.result as string | undefined);
     if (gasPrice > 0n) {
-      // 60% buffer: covers bundler's profit margin + baseFee fluctuation headroom.
-      // BSC:  gasPrice≈1gwei → maxFee=1.6gwei
-      // ETH:  gasPrice≈32gwei → maxFee=51.2gwei
-      // Poly: gasPrice≈50gwei → maxFee=80gwei
-      let maxFee = (gasPrice * 16n) / 10n;
-
-      // Floor: 1 wei — only prevents literal zero. Chains like Gnosis have
-      // legitimate gas prices as low as ~200 wei; any higher floor inflates
-      // the UserOp maxFeePerGas and causes the bundler EOA to run out of balance.
-      if (maxFee < 1n) maxFee = 1n;
-
-      console.log(`[UserOp] Gas: gasPrice=${gasPrice} → maxFee=${maxFee} (×1.6)`);
-      const result = { maxFee, maxPriority: maxFee };
-      _gasPriceCache.set(chainId, { ...result, at: Date.now() });
-      return result;
+      console.log(`[UserOp] Gas: chainGasPrice=${gasPrice}`);
+      _gasPriceCache.set(chainId, { gasPrice, at: Date.now() });
+      return { gasPrice };
     }
   } catch {
     // Use defaults
   }
 
-  const fallback = {
-    maxFee: 5_000_000_000n,  // 5 gwei — conservative fallback
-    maxPriority: 5_000_000_000n,
-  };
+  const fallback = { gasPrice: 5_000_000_000n }; // 5 gwei
   _gasPriceCache.set(chainId, { ...fallback, at: Date.now() });
   return fallback;
+}
+
+/**
+ * Calculate UserOp maxFeePerGas from raw gas price + tier.
+ * Clamped to [MIN_GAS_MARKUP, MAX_GAS_MARKUP] to guarantee bundler acceptance
+ * and protect users from overpaying.
+ *
+ * Formula: maxFeePerGas = gasPrice × tier, clamped to [gasPrice × 1.1, gasPrice × 2.0]
+ * Bundler margin = maxFeePerGas / chainGasPrice - 1
+ */
+export function calcMaxFeePerGas(gasPrice: bigint, tier: GasTier = 'standard'): bigint {
+  const m = GAS_TIER_MULTIPLIERS[tier];
+  let maxFee = (gasPrice * m.num) / m.den;
+
+  const minFee = (gasPrice * MIN_GAS_MARKUP_NUM) / GAS_MARKUP_DEN;
+  const maxCap = (gasPrice * MAX_GAS_MARKUP_NUM) / GAS_MARKUP_DEN;
+  if (maxFee < minFee) maxFee = minFee;
+  if (maxFee > maxCap) maxFee = maxCap;
+  if (maxFee < 1n) maxFee = 1n;
+
+  return maxFee;
 }
 
 async function estimateGas(
