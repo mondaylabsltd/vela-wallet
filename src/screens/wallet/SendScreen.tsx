@@ -342,7 +342,12 @@ export default function SendScreen() {
         const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
         setFeeEstimate(fee);
 
-        const funding = await checkBundlerFunding(chainId, activeAccount.address, fee?.totalWei);
+        // Divide out tier markup: fee.totalWei uses userOpMaxFee (gasPrice × tier),
+        // but the bundler's balance check uses raw chain gasPrice. Without this,
+        // the threshold is ~20% too high and blocks transactions unnecessarily.
+        const m = GAS_TIER_MULTIPLIERS[gasTier];
+        const bundlerCost = fee ? (fee.totalWei * m.den) / m.num : undefined;
+        const funding = await checkBundlerFunding(chainId, activeAccount.address, bundlerCost);
         if (funding) {
           setFundingNeeded(funding);
           // Stay on enter-details — don't advance to confirm
@@ -524,7 +529,10 @@ export default function SendScreen() {
                 thresholdWei = BigInt(requiredMatch[1]);
               } else {
                 const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId, gasTier);
-                thresholdWei = fee.totalWei * 2n;
+                // Divide out tier markup to match server's raw gasPrice calculation
+                const tm = GAS_TIER_MULTIPLIERS[gasTier];
+                const rawCost = (fee.totalWei * tm.den) / tm.num;
+                thresholdWei = (rawCost * 15n) / 10n;
               }
               const deficit = thresholdWei - info.spendableBalance;
               const base = deficit > 0n ? deficit : thresholdWei;
