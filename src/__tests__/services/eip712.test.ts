@@ -214,6 +214,78 @@ describe('EIP-712', () => {
     expect(() => hashTypedData(data)).toThrow('Unsupported EIP-712 type');
   });
 
+  test('circular type references do not cause infinite loop', () => {
+    // TypeA references TypeB and TypeB references TypeA.
+    // The type resolver (findTypeDependencies) must not infinitely recurse.
+    // Data encoding may fail on null sub-structs, but the key assertion is
+    // that this terminates promptly rather than hanging.
+    const circular: TypedData = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+        ],
+        TypeA: [
+          { name: 'value', type: 'uint256' },
+          { name: 'b', type: 'TypeB' },
+        ],
+        TypeB: [
+          { name: 'value', type: 'uint256' },
+          { name: 'a', type: 'TypeA' },
+        ],
+      },
+      primaryType: 'TypeA',
+      domain: { name: 'Test' },
+      message: {
+        value: 1,
+        b: {
+          value: 2,
+          a: { value: 3, b: { value: 4, a: { value: 5, b: { value: 6, a: { value: 7, b: { value: 8, a: {} } } } } } },
+        },
+      },
+    };
+
+    // Should terminate (not hang). It may throw during data encoding because
+    // the innermost nested struct has missing fields, but it must not loop forever.
+    try {
+      const hash = hashTypedData(circular);
+      expect(hash).toBeInstanceOf(Uint8Array);
+      expect(hash.length).toBe(32);
+    } catch (e: any) {
+      // Acceptable — encoding deeply-nested circular data may fail,
+      // but the important thing is it didn't infinite-loop.
+      expect(e.message).not.toMatch(/Maximum call stack size exceeded/);
+    }
+  });
+
+  test('self-referencing type does not cause infinite loop', () => {
+    // Node references itself.
+    const selfRef: TypedData = {
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+        ],
+        Node: [
+          { name: 'value', type: 'uint256' },
+          { name: 'child', type: 'Node' },
+        ],
+      },
+      primaryType: 'Node',
+      domain: { name: 'Test' },
+      message: {
+        value: 1,
+        child: { value: 2, child: { value: 3, child: { value: 4, child: {} } } },
+      },
+    };
+
+    try {
+      const hash = hashTypedData(selfRef);
+      expect(hash).toBeInstanceOf(Uint8Array);
+      expect(hash.length).toBe(32);
+    } catch (e: any) {
+      expect(e.message).not.toMatch(/Maximum call stack size exceeded/);
+    }
+  });
+
   // Permit2 style typed data (common DeFi pattern)
   test('handles Permit2-style typed data', () => {
     const permit2: TypedData = {

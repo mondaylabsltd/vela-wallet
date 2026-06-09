@@ -93,14 +93,26 @@ function encodeType(
   }).join('');
 }
 
+/** Maximum recursion depth when resolving type dependencies. */
+const MAX_TYPE_DEPTH = 256;
+
 /**
  * Find all custom type dependencies for a given type.
+ * Uses a visited set (`deps`) to handle circular references and a depth limit
+ * as a secondary safety net.
  */
 function findTypeDependencies(
   type: string,
   types: Record<string, TypedDataField[]>,
   deps: Set<string> = new Set(),
+  depth: number = 0,
 ): Set<string> {
+  if (depth > MAX_TYPE_DEPTH) {
+    throw new Error(
+      `EIP-712: maximum type depth exceeded (${MAX_TYPE_DEPTH}). Possible circular type reference.`,
+    );
+  }
+
   // Strip array suffix if present (e.g., "Person[]" -> "Person")
   const baseType = type.replace(/\[\d*\]$/, '');
   if (deps.has(baseType)) return deps;
@@ -108,7 +120,7 @@ function findTypeDependencies(
 
   deps.add(baseType);
   for (const field of types[baseType]) {
-    findTypeDependencies(field.type, types, deps);
+    findTypeDependencies(field.type, types, deps, depth + 1);
   }
   return deps;
 }
