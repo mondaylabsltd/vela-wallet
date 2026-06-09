@@ -88,7 +88,9 @@ export async function handleSignTypedData(
   // Wrap in Safe message hash — Safe4337Module.isValidSignature wraps the
   // original hash before passing it to the WebAuthn signer for verification
   const safeHash = computeSafeMessageHash(originalHash, chainId, safeAddress);
+  console.log('[DEBUG signTypedData] originalHash:', toHex(originalHash), 'safeHash:', toHex(safeHash), 'chainId:', chainId, 'safeAddress:', safeAddress);
   const assertion = await Passkey.sign(toHex(safeHash), account.id);
+  console.log('[DEBUG signTypedData] signatureHex:', assertion.signatureHex.slice(0, 40) + '...');
   return buildContractSignature(assertion);
 }
 

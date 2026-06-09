@@ -89,7 +89,12 @@ export function derSignatureToRaw(derSig: Uint8Array): Uint8Array | null {
   // Normalize s to low-s form (s <= n/2) for RIP-7212 P256 precompile compatibility.
   // P256 curve order n = FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
   // @ts-ignore - Uint8Array slice buffer type mismatch
+  const sBeforeNorm = Array.from(s).map(b => b.toString(16).padStart(2, '0')).join('');
   s = normalizeP256S(s);
+  const sAfterNorm = Array.from(s).map(b => b.toString(16).padStart(2, '0')).join('');
+  if (sBeforeNorm !== sAfterNorm) {
+    console.log('[DEBUG derSignatureToRaw] s normalized:', sBeforeNorm, '→', sAfterNorm);
+  }
 
   const raw = new Uint8Array(64);
   raw.set(r, 0);
