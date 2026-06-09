@@ -114,6 +114,13 @@ export async function handleSendTransaction(
   const valueHex = txDict.value ?? '0x0';
   const dataHex = txDict.data ?? '0x';
 
+  // Use chainId from the transaction if available (dApp-provided),
+  // since the component-level chainId may default to wrong value
+  if (txDict.chainId) {
+    const txChainId = parseInt(txDict.chainId, 16);
+    if (!isNaN(txChainId) && txChainId > 0) chainId = txChainId;
+  }
+
   // Get public key
   let publicKeyHex: string | undefined;
   const stored = await findAccountByCredentialId(account.id);
@@ -214,12 +221,18 @@ export async function handleSendCalls(
 ): Promise<string> {
   const payload = request.params[0] as {
     calls: Array<{ to: string; value?: string; data?: string }>;
-    chainId?: string;
+    chainId?: string;  // hex chain ID from dApp
     from?: string;
   };
 
   const calls = payload.calls ?? [];
   if (calls.length === 0) throw new Error('No calls provided');
+
+  // Use chainId from the payload if available
+  if (payload.chainId) {
+    const payloadChainId = parseInt(payload.chainId, 16);
+    if (!isNaN(payloadChainId) && payloadChainId > 0) chainId = payloadChainId;
+  }
 
   // Get public key
   let publicKeyHex: string | undefined;
