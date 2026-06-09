@@ -1,29 +1,83 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 
+	// Analytics helper
+	interface RybbitWindow extends Window { rybbit?: { event: (name: string, props?: Record<string, string | number>) => void } }
+	function track(event: string, props?: Record<string, string | number>) {
+		try { (globalThis as unknown as RybbitWindow).rybbit?.event(event, props); } catch { /* noop */ }
+	}
+
 	let email = $state('');
 	let subscribeStatus: 'idle' | 'loading' | 'success' | 'error' = $state('idle');
 	let subscribeMessage = $state('');
 
-	// Mockup animation steps: wallet → send → faceid → done
-	type MockupStep = 'wallet' | 'send' | 'faceid' | 'done';
+	// Mockup animation: wallet → amount → confirm → faceid → done
+	type MockupStep = 'wallet' | 'amount' | 'confirm' | 'faceid' | 'done';
 	const stepTimings: [MockupStep, number][] = [
-		['wallet', 2500],
-		['send', 2200],
-		['faceid', 2000],
-		['done', 2000],
+		['wallet', 4500],
+		['amount', 3000],
+		['confirm', 3000],
+		['faceid', 2500],
+		['done', 2500],
 	];
 	let mockupStep: MockupStep = $state('wallet');
+	let sendTapped = $state(false);
 	let stepIndex = 0;
+	let amountText = $state('');
 
 	$effect(() => {
+		function typeAmount(full: string, i: number) {
+			if (i <= full.length) {
+				amountText = full.slice(0, i);
+				setTimeout(() => typeAmount(full, i + 1), 180);
+			}
+		}
+
 		function nextStep() {
 			stepIndex = (stepIndex + 1) % stepTimings.length;
-			mockupStep = stepTimings[stepIndex][0];
+			const step = stepTimings[stepIndex][0];
+			mockupStep = step;
+			sendTapped = false;
+			if (step === 'wallet') {
+				setTimeout(() => { sendTapped = true; }, 3500);
+			}
+			if (step === 'amount') {
+				amountText = '';
+				setTimeout(() => typeAmount('0.05', 0), 400);
+			}
 			setTimeout(nextStep, stepTimings[stepIndex][1]);
 		}
 		const firstTimeout = setTimeout(nextStep, stepTimings[0][1]);
-		return () => clearTimeout(firstTimeout);
+
+		// Section visibility tracking
+		const seen: Record<string, boolean> = {};
+		const observer = new IntersectionObserver((entries) => {
+			for (const entry of entries) {
+				const id = entry.target.id;
+				if (entry.isIntersecting && id && !seen[id]) {
+					seen[id] = true;
+					track('section_viewed', { section: id });
+				}
+			}
+		}, { threshold: 0.3 });
+		for (const el of document.querySelectorAll('section[id]')) observer.observe(el);
+
+		// FAQ click tracking
+		function onFaqToggle(e: Event) {
+			const details = (e.target as HTMLElement).closest('details');
+			if (details?.open) {
+				const q = details.querySelector('summary')?.textContent?.trim() ?? '';
+				track('faq_opened', { question: q.slice(0, 80) });
+			}
+		}
+		const faqList = document.querySelector('.faq-list');
+		faqList?.addEventListener('toggle', onFaqToggle, true);
+
+		return () => {
+			clearTimeout(firstTimeout);
+			observer.disconnect();
+			faqList?.removeEventListener('toggle', onFaqToggle, true);
+		};
 	});
 
 	async function handleSubscribe(e: Event) {
@@ -66,6 +120,7 @@
 			if (res.ok) {
 				subscribeStatus = 'success';
 				subscribeMessage = "You're on the list. We'll email you when mobile apps launch.";
+				track('email_subscribe');
 				email = '';
 			} else {
 				const data = await res.json().catch(() => null);
@@ -177,10 +232,10 @@
 </script>
 
 <svelte:head>
-	<title>Vela Wallet — No seed phrases. No recovery keys. No vendor lock-in.</title>
-	<meta name="description" content="Self-custodial, self-hostable passkey wallet for ETH & EVM. Built on audited Safe smart contracts. 100% open source." />
-	<meta property="og:title" content="Vela Wallet — No seed phrases. No recovery keys. No vendor lock-in." />
-	<meta property="og:description" content="Self-custodial, self-hostable passkey wallet for ETH & EVM. Built on Safe. Open source." />
+	<title>Vela Wallet — Your keys. Your face.</title>
+	<meta name="description" content="Self-custodial passkey wallet for ETH & EVM. Sign transactions with Face ID — no seed phrases, no hardware wallets. Open source and self-hostable." />
+	<meta property="og:title" content="Vela Wallet — Your keys. Your face." />
+	<meta property="og:description" content="Self-custodial passkey wallet for ETH & EVM. Sign with Face ID — no seed phrases. Open source and self-hostable." />
 	<meta property="og:image" content="https://getvela.app/getvela-app-preview.png" />
 	<meta property="og:url" content="https://getvela.app" />
 	<meta name="twitter:card" content="summary_large_image" />
@@ -195,7 +250,7 @@
 			<span>vela</span>
 		</a>
 		<div class="nav-links">
-			<a href="https://wallet.getvela.app/" target="_blank" rel="noopener">Create wallet</a>
+			<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" data-rybbit-event="cta_click" data-rybbit-prop-location="nav">Create wallet</a>
 			<a href="#why">Why Vela</a>
 			<a href="#how-it-works">How it works</a>
 			<a href="#pricing">Pricing</a>
@@ -214,7 +269,7 @@
 				Sign transactions with passkeys — no seed phrases to lose, no hardware wallets to carry.
 			</p>
 			<div class="hero-cta">
-				<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" class="btn btn-primary">Try it - no seed phrase needed</a>
+				<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" class="btn btn-primary" data-rybbit-event="cta_click" data-rybbit-prop-location="hero">Try it - no seed phrase needed</a>
 				<p class="hero-note">Self-custodial, self-hostable wallet for ETH & EVM.</p>
 			</div>
 		</div>
@@ -240,7 +295,7 @@
 						<div class="mockup-balance">$1,969<span class="mockup-cents">.53</span></div>
 						<div class="mockup-actions">
 							<div class="mockup-action">
-								<div class="mockup-action-circle active">
+								<div class="mockup-action-circle active" class:tapping={sendTapped}>
 									<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" stroke-linecap="round" stroke-linejoin="round"/></svg>
 								</div>
 								<span>Send</span>
@@ -295,8 +350,31 @@
 						</div>
 					</div>
 
-					<!-- Step 2: Confirm transaction -->
-					<div class="mockup-step" class:active={mockupStep === 'send'}>
+					<!-- Step 3: Enter amount -->
+					<div class="mockup-step" class:active={mockupStep === 'amount'}>
+						<div class="mockup-step-header">Send ETH</div>
+						<div class="mockup-send-form">
+							<div class="mockup-token-select">
+								<img class="mockup-token-icon" src="https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg" alt="ETH" width="24" height="24" />
+								<span class="mockup-token-select-name">ETH</span>
+								<span class="mockup-token-select-chain">Ethereum</span>
+								<svg class="mockup-chevron" width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19.5 8.25l-7.5 7.5-7.5-7.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+							</div>
+							<div class="mockup-amount-input">
+								<span class="mockup-amount-value">{amountText}<span class="mockup-cursor">&nbsp;</span></span>
+								<span class="mockup-amount-unit">ETH</span>
+							</div>
+							<div class="mockup-amount-usd">≈ $114.50</div>
+							<div class="mockup-to-field">
+								<span class="mockup-to-label">To</span>
+								<span class="mockup-to-addr">0x7a3B…9f2E</span>
+							</div>
+						</div>
+						<div class="mockup-send-btn">Continue</div>
+					</div>
+
+					<!-- Step 4: Confirm transaction -->
+					<div class="mockup-step" class:active={mockupStep === 'confirm'}>
 						<div class="mockup-step-header">Confirm Transaction</div>
 						<div class="mockup-tx-card">
 							<div class="mockup-tx-row">
@@ -316,7 +394,7 @@
 								<span class="mockup-tx-value">~$0.42</span>
 							</div>
 						</div>
-						<div class="mockup-slide-track">
+						<div class="mockup-slide-track" class:sliding={mockupStep === 'confirm'}>
 							<div class="mockup-slide-thumb">
 								<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" stroke-linecap="round" stroke-linejoin="round"/></svg>
 							</div>
@@ -324,7 +402,7 @@
 						</div>
 					</div>
 
-					<!-- Step 3: Face ID signing -->
+					<!-- Step 5: Face ID signing -->
 					<div class="mockup-step" class:active={mockupStep === 'faceid'}>
 						<div class="mockup-faceid-screen">
 							<div class="mockup-faceid-icon">
@@ -344,7 +422,7 @@
 						</div>
 					</div>
 
-					<!-- Step 4: Success -->
+					<!-- Step 6: Success -->
 					<div class="mockup-step" class:active={mockupStep === 'done'}>
 						<div class="mockup-done-screen">
 							<div class="mockup-done-check">
@@ -356,6 +434,15 @@
 							<span class="mockup-done-detail">0.05 ETH → 0x7a3B…9f2E</span>
 							<span class="mockup-done-time">Confirmed in 3s</span>
 						</div>
+					</div>
+
+					<!-- Progress dots -->
+					<div class="mockup-dots">
+						<span class="mockup-dot" class:active={mockupStep === 'wallet'}></span>
+						<span class="mockup-dot" class:active={mockupStep === 'amount'}></span>
+						<span class="mockup-dot" class:active={mockupStep === 'confirm'}></span>
+						<span class="mockup-dot" class:active={mockupStep === 'faceid'}></span>
+						<span class="mockup-dot" class:active={mockupStep === 'done'}></span>
 					</div>
 				</div>
 			</div>
@@ -651,11 +738,13 @@
 <!-- CTA -->
 <section id="notify" class="notify">
 	<div class="container">
-		<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" class="btn btn-primary btn-cta-main">Create wallet</a>
+		<h2>Ready to try it?</h2>
+		<p class="notify-sub">The web wallet is live and free. No install, no seed phrase — just authenticate and go.</p>
+		<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" class="btn btn-primary btn-cta-main" data-rybbit-event="cta_click" data-rybbit-prop-location="bottom">Create a wallet</a>
 
-		<div class="notify-divider"><span>stay in the loop</span></div>
+		<div class="notify-divider"><span>mobile apps coming soon</span></div>
 
-		<h2>Get notified when mobile apps launch</h2>
+		<p class="notify-email-desc">Leave your email and we'll let you know when iOS & Android launch.</p>
 
 		{#if subscribeStatus === 'success'}
 			<div class="subscribe-success">
@@ -668,7 +757,7 @@
 			<form class="subscribe-form" onsubmit={handleSubscribe}>
 				<input type="email" bind:value={email} placeholder="you@example.com" required class="subscribe-input" />
 				<button type="submit" class="btn btn-primary subscribe-btn" disabled={subscribeStatus === 'loading'}>
-					{subscribeStatus === 'loading' ? 'Subscribing...' : 'Notify Me'}
+					{subscribeStatus === 'loading' ? 'Subscribing...' : 'Notify me'}
 				</button>
 			</form>
 			{#if subscribeStatus === 'error'}
@@ -676,12 +765,6 @@
 			{/if}
 		{/if}
 
-		<div class="notify-divider"><span>or</span></div>
-
-		<a href="https://x.com/realvelawallet" target="_blank" rel="noopener" class="btn btn-x">
-			<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
-			Follow @realvelawallet
-		</a>
 	</div>
 </section>
 
@@ -857,9 +940,27 @@
 	/* ── Mockup Steps (animated flow) ── */
 	.mockup-step {
 		display: none; flex-direction: column; padding: 0 4px 16px;
-		opacity: 0; transition: opacity 0.4s ease;
+		opacity: 0;
 	}
-	.mockup-step.active { display: flex; opacity: 1; }
+	.mockup-step.active { display: flex; animation: step-fade 0.25s ease forwards; }
+	@keyframes step-fade { from { opacity: 0; } to { opacity: 1; } }
+
+	/* Progress dots */
+	.mockup-dots {
+		display: flex; justify-content: center; gap: 6px; padding: 8px 0 4px;
+	}
+	.mockup-dot {
+		width: 5px; height: 5px; border-radius: 50%;
+		background: var(--border); transition: all 0.3s ease;
+	}
+	.mockup-dot.active { background: var(--accent); width: 16px; border-radius: 3px; }
+
+	/* Step 2: Tap Send — pulse ring */
+	.mockup-action-circle.tapping {
+		box-shadow: 0 0 0 6px rgba(232, 87, 42, 0.35);
+		transform: scale(0.93);
+		transition: all 0.2s ease;
+	}
 
 	/* Step 1: Wallet home */
 	.mockup-account { display: flex; flex-direction: column; align-items: center; gap: 1px; margin-bottom: 16px; }
@@ -895,7 +996,48 @@
 	.mockup-token-qty { font-size: 0.82rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 	.mockup-token-usd { font-size: 0.65rem; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 
-	/* Step 2: Confirm tx */
+	/* Step 3: Enter amount */
+	.mockup-send-form {
+		display: flex; flex-direction: column; gap: 16px; margin-bottom: 20px;
+	}
+	.mockup-token-select {
+		display: flex; align-items: center; gap: 8px;
+		padding: 10px 14px; border-radius: 12px;
+		background: var(--bg-raised); border: 1px solid var(--border-accent);
+	}
+	.mockup-token-select-name { font-size: 0.82rem; font-weight: 600; color: var(--text); }
+	.mockup-token-select-chain { font-size: 0.65rem; color: var(--text-tertiary); flex: 1; }
+	.mockup-chevron { color: var(--text-tertiary); }
+	.mockup-amount-input {
+		display: flex; align-items: baseline; justify-content: center; gap: 6px;
+		padding: 12px 0;
+	}
+	.mockup-amount-value {
+		font-size: 2rem; font-weight: 700; color: var(--text);
+		font-variant-numeric: tabular-nums; min-height: 2.4rem;
+	}
+	.mockup-cursor {
+		border-right: 2px solid var(--accent);
+		margin-left: 1px;
+		animation: cursor-breathe 1.2s ease-in-out infinite;
+	}
+	@keyframes cursor-breathe { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+	.mockup-amount-unit { font-size: 0.88rem; color: var(--text-tertiary); font-weight: 500; }
+	.mockup-amount-usd { text-align: center; font-size: 0.75rem; color: var(--text-tertiary); margin-top: -10px; }
+	.mockup-to-field {
+		display: flex; justify-content: space-between; align-items: center;
+		padding: 10px 14px; border-radius: 12px;
+		background: var(--bg-raised); border: 1px solid var(--border);
+	}
+	.mockup-to-label { font-size: 0.75rem; color: var(--text-tertiary); }
+	.mockup-to-addr { font-size: 0.75rem; color: var(--text); font-family: monospace; }
+	.mockup-send-btn {
+		text-align: center; padding: 12px; border-radius: 12px;
+		background: var(--accent); color: #fff;
+		font-size: 0.85rem; font-weight: 600;
+	}
+
+	/* Step 4: Confirm tx */
 	.mockup-step-header {
 		font-size: 0.92rem; font-weight: 600; color: var(--text);
 		text-align: center; margin-bottom: 20px; margin-top: 8px;
@@ -918,18 +1060,40 @@
 		background: var(--bg-raised); border: 1px solid var(--border);
 		border-radius: 22px; display: flex; align-items: center;
 		justify-content: center; overflow: hidden;
+		transition: background 0.3s ease, border-color 0.3s ease;
 	}
 	.mockup-slide-thumb {
 		position: absolute; left: 4px; top: 4px;
 		width: 36px; height: 36px; border-radius: 50%;
 		background: var(--accent); color: #fff;
 		display: flex; align-items: center; justify-content: center;
-		animation: slide-hint 2s ease-in-out infinite;
 	}
-	@keyframes slide-hint { 0%, 100% { left: 4px; } 50% { left: 28px; } }
-	.mockup-slide-text { font-size: 0.72rem; color: var(--text-tertiary); font-weight: 500; }
+	/* Only animate when confirm step is active */
+	.mockup-slide-track.sliding .mockup-slide-thumb {
+		animation: slide-complete 2.2s ease-in-out forwards;
+	}
+	.mockup-slide-track.sliding {
+		animation: slide-track-done 2.2s ease-in-out forwards;
+	}
+	@keyframes slide-complete {
+		0% { left: 4px; }
+		70% { left: calc(100% - 40px); }
+		100% { left: calc(100% - 40px); }
+	}
+	@keyframes slide-track-done {
+		0%, 69% { background: var(--bg-raised); border-color: var(--border); }
+		70%, 100% { background: var(--green-soft); border-color: rgba(45, 142, 95, 0.3); }
+	}
+	.mockup-slide-text { font-size: 0.72rem; color: var(--text-tertiary); font-weight: 500; transition: opacity 0.3s; }
+	.mockup-slide-track.sliding .mockup-slide-text {
+		animation: slide-text-fade 2.2s ease forwards;
+	}
+	@keyframes slide-text-fade {
+		0%, 60% { opacity: 1; }
+		70%, 100% { opacity: 0; }
+	}
 
-	/* Step 3: Face ID */
+	/* Step 5: Face ID */
 	.mockup-faceid-screen {
 		display: flex; flex-direction: column; align-items: center;
 		justify-content: center; gap: 16px;
@@ -937,11 +1101,13 @@
 	}
 	.mockup-faceid-icon {
 		color: var(--accent);
-		animation: faceid-pulse 1.8s ease-in-out infinite;
+		animation: faceid-scan 2s ease forwards;
 	}
-	@keyframes faceid-pulse {
-		0%, 100% { opacity: 0.7; transform: scale(1); }
-		50% { opacity: 1; transform: scale(1.08); }
+	@keyframes faceid-scan {
+		0% { opacity: 0.5; transform: scale(0.9); }
+		30% { opacity: 1; transform: scale(1); }
+		60% { opacity: 1; transform: scale(1); filter: brightness(1.3); }
+		100% { opacity: 1; transform: scale(1); filter: brightness(1); }
 	}
 	.mockup-faceid-label { font-size: 0.92rem; font-weight: 600; color: var(--text); }
 	.mockup-faceid-sub { font-size: 0.72rem; color: var(--text-tertiary); text-align: center; }
@@ -1100,13 +1266,9 @@
 	.notify-divider { display: flex; align-items: center; gap: 16px; margin: 24px auto; max-width: 400px; }
 	.notify-divider::before, .notify-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 	.notify-divider span { color: var(--text-tertiary); font-size: 0.78rem; }
-	.btn-x {
-		display: inline-flex; align-items: center; gap: 7px;
-		padding: 10px 22px; border-radius: 10px; font-size: 0.88rem;
-		font-weight: 600; background: #fff; color: #000;
-		transition: all 0.15s; border: none; font-family: inherit;
-	}
-	.btn-x:hover { background: #e5e5e5; transform: translateY(-1px); }
+	/* Notify social links */
+	.notify-sub { color: var(--text-secondary); font-size: 0.95rem; margin-bottom: 28px; }
+	.notify-email-desc { color: var(--text-tertiary); font-size: 0.82rem; margin-bottom: 16px; }
 
 	/* ── Footer ── */
 	footer { padding: 28px 0; border-top: 1px solid var(--border); }
