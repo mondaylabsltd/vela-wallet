@@ -153,6 +153,8 @@ export async function handleDAppRequest(
 
   if (method === 'eth_sendTransaction') {
     return handleSendTransaction(request, account, safeAddress, chainId);
+  } else if (method === 'wallet_sendCalls') {
+    return handleSendCalls(request, account, safeAddress, chainId);
   } else if (method === 'personal_sign') {
     return handlePersonalSign(request, account);
   } else if (method.includes('signTypedData')) {
@@ -163,10 +165,95 @@ export async function handleDAppRequest(
 }
 
 /**
+ * Handle a wallet_sendCalls request (EIP-5792 batched atomic calls).
+ * Executes multiple calls as a single UserOp via the Safe account.
+ */
+export async function handleSendCalls(
+  request: DAppRequest,
+  account: Account,
+  safeAddress: string,
+  chainId: number,
+): Promise<string> {
+  const payload = request.params[0] as {
+    calls: Array<{ to: string; value?: string; data?: string }>;
+    chainId?: string;
+    from?: string;
+  };
+
+  const calls = payload.calls ?? [];
+  if (calls.length === 0) throw new Error('No calls provided');
+
+  // Get public key
+  let publicKeyHex: string | undefined;
+  const stored = await findAccountByCredentialId(account.id);
+  publicKeyHex = stored?.publicKeyHex;
+
+  if (!publicKeyHex) {
+    const record = await PublicKeyIndex.queryRecord(Passkey.getRelyingPartyId(), account.id);
+    publicKeyHex = record.publicKey;
+  }
+
+  if (!publicKeyHex) throw new Error('Public key not found');
+
+  const signFn = async (challenge: Uint8Array) => {
+    const assertion = await Passkey.sign(toHex(challenge), account.id);
+
+    const { verifySafeWebAuthn } = await import('@/services/webauthn-verify');
+    const compat = verifySafeWebAuthn(assertion);
+    if (!compat.ok) {
+      throw new Error(
+        'Your device\'s identity provider is not compatible with Vela Wallet. ' +
+        'Please switch to Google Password Manager.\n\n' + compat.reason,
+      );
+    }
+
+    return {
+      signature: fromHex(assertion.signatureHex),
+      authenticatorData: fromHex(assertion.authenticatorDataHex),
+      clientDataJSON: fromHex(assertion.clientDataJSONHex),
+    };
+  };
+
+  // Single call → use existing send logic
+  if (calls.length === 1) {
+    const call = calls[0];
+    const to = call.to ?? '';
+    const valueHex = call.value ?? '0x0';
+    const dataHex = call.data ?? '0x';
+    const valueClean = stripHexPrefix(valueHex) || '0';
+
+    let txResult;
+    if (dataHex === '0x' || dataHex === '') {
+      txResult = await sendNative(safeAddress, to, valueClean, chainId, publicKeyHex, signFn);
+    } else {
+      const txData = fromHex(stripHexPrefix(dataHex));
+      txResult = await sendContractCall(safeAddress, to, valueClean, txData, chainId, publicKeyHex, signFn);
+    }
+    return await txResult.waitForTxHash();
+  }
+
+  // Multiple calls → batch via Safe multiSend
+  const { sendBatchCalls } = await import('@/services/safe-transaction');
+  const txResult = await sendBatchCalls(
+    safeAddress,
+    calls.map(c => ({
+      to: c.to,
+      value: stripHexPrefix(c.value ?? '0x0') || '0',
+      data: c.data ?? '0x',
+    })),
+    chainId,
+    publicKeyHex,
+    signFn,
+  );
+  return await txResult.waitForTxHash();
+}
+
+/**
  * Check if a method is a signing method that needs user approval.
  */
 export function isSigningMethod(method: string): boolean {
   return method === 'eth_sendTransaction' ||
+    method === 'wallet_sendCalls' ||
     method === 'personal_sign' ||
     method === 'eth_sign' ||
     method.includes('signTypedData');

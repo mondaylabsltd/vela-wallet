@@ -16,11 +16,13 @@ import { concatBytes, fromHex, stripHexPrefix, toHex } from './hex';
 
 import {
   ENTRY_POINT,
+  MULTI_SEND,
   SAFE_4337_MODULE,
   SAFE_PROXY_FACTORY,
   SAFE_SINGLETON,
   WEBAUTHN_SIGNER,
   calculateSaltNonce,
+  encodeMultiSendTx,
   encodeSetupData,
   parsePublicKey
 } from './safe-address';
@@ -132,6 +134,63 @@ export async function sendContractCall(
 ): Promise<SubmitResult> {
   const callData = buildExecuteCallData(to, valueWei, data);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
+}
+
+/** Send batched calls atomically via Safe MultiSend (EIP-5792 wallet_sendCalls). */
+export async function sendBatchCalls(
+  from: string,
+  calls: Array<{ to: string; value: string; data: string }>,
+  chainId: number,
+  publicKeyHex: string,
+  signFn: SignFn,
+): Promise<SubmitResult> {
+  // Encode each call for MultiSend: operation(1) + to(20) + value(32) + dataLen(32) + data
+  const encodedTxs = calls.map(c => {
+    const dataBytes = c.data && c.data !== '0x'
+      ? fromHex(stripHexPrefix(c.data))
+      : new Uint8Array(0);
+    const valueClean = stripHexPrefix(c.value) || '0';
+    // operation 0 = CALL
+    const toBytes = fromHex(stripHexPrefix(c.to));
+    const operationByte = new Uint8Array([0]);
+    const value = abiEncodeUint256Hex(valueClean);
+    const lenBytes = abiEncodeUint256(dataBytes.length);
+    return concatBytes(operationByte, toBytes, value, lenBytes, dataBytes);
+  });
+  const packed = concatBytes(...encodedTxs);
+
+  // multiSend(bytes)
+  const multiSendSelector = functionSelector('multiSend(bytes)');
+  const paddingLen = (32 - (packed.length % 32)) % 32;
+  const multiSendPayload = concatBytes(
+    multiSendSelector,
+    abiEncodeUint256(32),              // offset
+    abiEncodeUint256(packed.length),   // length
+    packed,
+    new Uint8Array(paddingLen),        // padding
+  );
+
+  // executeUserOp with DELEGATECALL to MultiSend
+  const selector = functionSelector('executeUserOp(address,uint256,bytes,uint8)');
+  const toEncoded = abiEncodeAddress(MULTI_SEND);
+  const valueEncoded = abiEncodeUint256(0n);
+  const dataOffset = abiEncodeUint256(128n); // 4 * 32
+  const operation = abiEncodeUint256(1n);    // DELEGATECALL
+  const dataLen = abiEncodeUint256(BigInt(multiSendPayload.length));
+  const dataPaddingLen = (32 - (multiSendPayload.length % 32)) % 32;
+
+  const callData = concatBytes(
+    selector,
+    toEncoded,
+    valueEncoded,
+    dataOffset,
+    operation,
+    dataLen,
+    multiSendPayload,
+    new Uint8Array(dataPaddingLen),
+  );
+
+  return sendUserOp(from, callData, chainId, publicKeyHex, signFn);
 }
 
 // ---------------------------------------------------------------------------

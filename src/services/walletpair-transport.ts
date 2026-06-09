@@ -40,6 +40,15 @@ function buildCapabilities(): Capabilities {
     rpcUrls[evmChainId(n.chainId)] = n.rpcURL;
   }
 
+  // Declare EIP-5792 capabilities per chain (smart contract wallet)
+  const walletCapabilities: Record<string, Record<string, unknown>> = {};
+  for (const n of allNetworks) {
+    const hexChainId = '0x' + n.chainId.toString(16);
+    walletCapabilities[hexChainId] = {
+      atomic: { status: 'supported' },
+    };
+  }
+
   return {
     methods: [
       'wallet_getAccounts',
@@ -48,11 +57,13 @@ function buildCapabilities(): Capabilities {
       'wallet_signMessage',
       'wallet_signTypedData',
       'wallet_switchChain',
+      'wallet_sendCalls',
     ],
     events: ['accountsChanged', 'chainChanged', 'disconnect'],
     chains,
     version: { evm: 1 },
     rpcUrls,
+    walletCapabilities,
   };
 }
 
@@ -64,6 +75,7 @@ const METHOD_MAP: Record<string, string> = {
   wallet_signTransaction: 'eth_sendTransaction',
   wallet_getAccounts: 'eth_requestAccounts',
   wallet_switchChain: 'wallet_switchEthereumChain',
+  wallet_sendCalls: 'wallet_sendCalls',
 };
 
 /**
@@ -119,6 +131,9 @@ function walletPairParamsToJsonRpc(mappedMethod: string, params: unknown): any[]
     }
     case 'eth_requestAccounts':
       return [];
+    case 'wallet_sendCalls':
+      // Pass through as-is — the params object is the EIP-5792 sendCalls payload
+      return [p];
     default:
       return [p];
   }
@@ -388,6 +403,9 @@ export class WalletPairTransport implements DAppTransport {
       case 'wallet_sendTransaction':
         // dApp expects { txHash: "0x..." }
         return { txHash: result };
+      case 'wallet_sendCalls':
+        // dApp expects { id: "0x..." } — the bundle ID (tx hash)
+        return { id: result };
       case 'wallet_getAccounts':
         // dApp expects { accounts: [{ address, chains }] }
         if (Array.isArray(result)) {
