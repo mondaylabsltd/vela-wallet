@@ -12,12 +12,46 @@ import * as PublicKeyIndex from '@/services/public-key-index';
 import { rpcCall } from '@/services/rpc-adapter';
 import { sendContractCall, sendNative, buildEip1271Signature, extractClientDataFields, computeSafeMessageHash } from '@/services/safe-transaction';
 import { findAccountByCredentialId } from '@/services/storage';
+import { getAllNetworksSync } from '@/models/network';
 
 export interface DAppRequest {
   id: string;
   method: string;
   params: any[];
   origin?: string;
+}
+
+// ── Chain ID resolution & validation ──────────────────────────────────────
+
+const UNSUPPORTED_CHAIN_ERROR_CODE = 4902; // EIP-3085: unrecognized chain ID
+
+/**
+ * Resolve the effective chain ID from request context.
+ * Priority: request-embedded chainId > fallback (component-level chainId).
+ */
+function resolveChainId(fallback: number, ...candidates: (string | number | undefined | null)[]): number {
+  for (const c of candidates) {
+    if (c == null) continue;
+    const n = typeof c === 'string'
+      ? (c.startsWith('0x') ? parseInt(c, 16) : parseInt(c, 10))
+      : c;
+    if (!isNaN(n) && n > 0) return n;
+  }
+  return fallback;
+}
+
+/**
+ * Assert the wallet supports the given chain ID.
+ * Throws with EIP-3085 error code 4902 if unsupported.
+ */
+function assertChainSupported(chainId: number): void {
+  const supported = getAllNetworksSync().some(n => n.chainId === chainId);
+  if (!supported) {
+    throw Object.assign(
+      new Error(`Unsupported chain: ${chainId}. Add this network in wallet settings.`),
+      { code: UNSUPPORTED_CHAIN_ERROR_CODE },
+    );
+  }
 }
 
 /**
@@ -51,6 +85,9 @@ export async function handlePersonalSign(
   safeAddress: string,
   chainId: number,
 ): Promise<string> {
+  // personal_sign has no embedded chainId — use the fallback
+  assertChainSupported(chainId);
+
   const hexMsg = request.params[0] as string;
   const clean = stripHexPrefix(hexMsg);
   const msgBytes = fromHex(clean);
@@ -61,8 +98,6 @@ export async function handlePersonalSign(
   combined.set(msgBytes, prefix.length);
   const originalHash = keccak256(combined);
 
-  // Wrap in Safe message hash — Safe4337Module.isValidSignature wraps the
-  // original hash before passing it to the WebAuthn signer for verification
   const safeHash = computeSafeMessageHash(originalHash, chainId, safeAddress);
   const assertion = await Passkey.sign(toHex(safeHash), account.id);
   return buildContractSignature(assertion);
@@ -78,25 +113,17 @@ export async function handleSignTypedData(
   safeAddress: string,
   chainId: number,
 ): Promise<string> {
-  // EIP-712: params[1] is the typed data JSON string (or object)
   const typedDataRaw = request.params[1] ?? request.params[0];
   const typedData: TypedData = typeof typedDataRaw === 'string'
     ? JSON.parse(typedDataRaw)
     : typedDataRaw;
+
+  const effectiveChainId = resolveChainId(chainId, typedData.domain?.chainId);
+  assertChainSupported(effectiveChainId);
+
   const originalHash = hashTypedData(typedData);
-
-  // Use the chain ID from the typed data domain if available, since the
-  // component-level chainId may not have been updated (defaults to 1).
-  const domainChainId = typedData.domain?.chainId
-    ? Number(typedData.domain.chainId)
-    : chainId;
-
-  // Wrap in Safe message hash — Safe4337Module.isValidSignature wraps the
-  // original hash before passing it to the WebAuthn signer for verification
-  const safeHash = computeSafeMessageHash(originalHash, domainChainId, safeAddress);
-  console.log('[DEBUG signTypedData] originalHash:', toHex(originalHash), 'safeHash:', toHex(safeHash), 'chainId:', domainChainId, 'safeAddress:', safeAddress);
+  const safeHash = computeSafeMessageHash(originalHash, effectiveChainId, safeAddress);
   const assertion = await Passkey.sign(toHex(safeHash), account.id);
-  console.log('[DEBUG signTypedData] signatureHex:', assertion.signatureHex.slice(0, 40) + '...');
   return buildContractSignature(assertion);
 }
 
@@ -110,16 +137,12 @@ export async function handleSendTransaction(
   chainId: number,
 ): Promise<string> {
   const txDict = request.params[0] as Record<string, string>;
+  const effectiveChainId = resolveChainId(chainId, txDict.chainId);
+  assertChainSupported(effectiveChainId);
+
   const to = txDict.to ?? '';
   const valueHex = txDict.value ?? '0x0';
   const dataHex = txDict.data ?? '0x';
-
-  // Use chainId from the transaction if available (dApp-provided),
-  // since the component-level chainId may default to wrong value
-  if (txDict.chainId) {
-    const txChainId = parseInt(txDict.chainId, 16);
-    if (!isNaN(txChainId) && txChainId > 0) chainId = txChainId;
-  }
 
   // Get public key
   let publicKeyHex: string | undefined;
@@ -156,10 +179,10 @@ export async function handleSendTransaction(
 
   let txResult;
   if (dataHex === '0x' || dataHex === '') {
-    txResult = await sendNative(safeAddress, to, valueClean, chainId, publicKeyHex, signFn);
+    txResult = await sendNative(safeAddress, to, valueClean, effectiveChainId, publicKeyHex, signFn);
   } else {
     const txData = fromHex(stripHexPrefix(dataHex));
-    txResult = await sendContractCall(safeAddress, to, valueClean, txData, chainId, publicKeyHex, signFn);
+    txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn);
   }
 
   return await txResult.waitForTxHash();
@@ -175,6 +198,8 @@ export async function handleGenericSign(
   safeAddress: string,
   chainId: number,
 ): Promise<string> {
+  assertChainSupported(chainId);
+
   const jsonStr = JSON.stringify(request.params);
   const jsonBytes = new TextEncoder().encode(jsonStr);
   const originalHash = keccak256(jsonBytes);
@@ -225,14 +250,11 @@ export async function handleSendCalls(
     from?: string;
   };
 
+  const effectiveChainId = resolveChainId(chainId, payload.chainId);
+  assertChainSupported(effectiveChainId);
+
   const calls = payload.calls ?? [];
   if (calls.length === 0) throw new Error('No calls provided');
-
-  // Use chainId from the payload if available
-  if (payload.chainId) {
-    const payloadChainId = parseInt(payload.chainId, 16);
-    if (!isNaN(payloadChainId) && payloadChainId > 0) chainId = payloadChainId;
-  }
 
   // Get public key
   let publicKeyHex: string | undefined;
@@ -275,10 +297,10 @@ export async function handleSendCalls(
 
     let txResult;
     if (dataHex === '0x' || dataHex === '') {
-      txResult = await sendNative(safeAddress, to, valueClean, chainId, publicKeyHex, signFn);
+      txResult = await sendNative(safeAddress, to, valueClean, effectiveChainId, publicKeyHex, signFn);
     } else {
       const txData = fromHex(stripHexPrefix(dataHex));
-      txResult = await sendContractCall(safeAddress, to, valueClean, txData, chainId, publicKeyHex, signFn);
+      txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn);
     }
     return await txResult.waitForTxHash();
   }
@@ -292,7 +314,7 @@ export async function handleSendCalls(
       value: stripHexPrefix(c.value ?? '0x0') || '0',
       data: c.data ?? '0x',
     })),
-    chainId,
+    effectiveChainId,
     publicKeyHex,
     signFn,
   );
