@@ -32,7 +32,7 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import {
   Shield, AlertTriangle, Copy, ChevronDown, Check,
-  ArrowDown, Lock, ShieldAlert, ShieldCheck, Pen,
+  ArrowDown, ShieldAlert, ShieldCheck, Pen,
 } from 'lucide-react-native';
 
 // ---------------------------------------------------------------------------
@@ -118,16 +118,16 @@ export function SigningRequestModal() {
   // Choose which view to render
   const renderContent = () => {
     if (clearSign) {
-      return <ClearSignView cs={clearSign} chainId={chainId} accountName={activeAccount?.name} accountAddress={addr} />;
+      return <ClearSignView cs={clearSign} />;
     }
     if (isPersonalSign && params?.[0]) {
-      return <MessageSignView hexMsg={params[0]} chainId={chainId} accountName={activeAccount?.name} accountAddress={addr} />;
+      return <MessageSignView hexMsg={params[0]} />;
     }
     if (isTypedData && params) {
-      return <BlindTypedDataView params={params} chainId={chainId} accountName={activeAccount?.name} accountAddress={addr} />;
+      return <BlindTypedDataView params={params} />;
     }
     if (isTx && params?.[0]) {
-      return <BlindTransactionView tx={params[0]} chainId={chainId} accountName={activeAccount?.name} accountAddress={addr} />;
+      return <BlindTransactionView tx={params[0]} chainId={chainId} />;
     }
     // Fallback
     return (
@@ -138,12 +138,14 @@ export function SigningRequestModal() {
     );
   };
 
-  // Button config
+  // Button config — keep label short (max ~15 chars)
   const buttonLabel = (): string => {
     if (isSigning) return 'Signing...';
     if (clearSign) {
       if (clearSign.type === 'signature') return 'Sign';
       const i = clearSign.intent;
+      // Truncate long intents: "Manage operator rights for" → "Confirm"
+      if (i.length > 12) return 'Confirm';
       return `Confirm ${i.charAt(0).toUpperCase() + i.slice(1)}`;
     }
     if (isPersonalSign || isTypedData) return 'Sign';
@@ -161,6 +163,9 @@ export function SigningRequestModal() {
             name={displayOrigin}
             domain={displayDomain}
             icon={dappInfo?.icon}
+            chainId={chainId}
+            accountName={activeAccount?.name}
+            accountAddress={addr}
           />
 
           {renderContent()}
@@ -212,28 +217,43 @@ export function SigningRequestModal() {
 // dApp Banner
 // ===========================================================================
 
-function DAppBanner({ name, domain, icon }: {
+function DAppBanner({ name, domain, icon, chainId, accountName, accountAddress }: {
   name: string;
   domain?: string;
   icon?: string;
+  chainId: number;
+  accountName?: string;
+  accountAddress?: string;
 }) {
+  const net = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
+
   return (
     <View style={styles.dappBanner}>
-      {icon ? (
-        <Image source={{ uri: icon }} style={styles.dappLogo} />
-      ) : (
-        <View style={[styles.dappLogo, styles.dappLogoFallback]}>
-          <Text style={styles.dappLogoText}>{(name[0] ?? '?').toUpperCase()}</Text>
+      {/* Row 1: dApp identity ←→ chain */}
+      <View style={styles.dappRow1}>
+        {icon ? (
+          <Image source={{ uri: icon }} style={styles.dappLogo} />
+        ) : (
+          <View style={[styles.dappLogo, styles.dappLogoFallback]}>
+            <Text style={styles.dappLogoText}>{(name[0] ?? '?').toUpperCase()}</Text>
+          </View>
+        )}
+        <View style={styles.dappInfo}>
+          <Text style={styles.dappName} numberOfLines={1}>{name}</Text>
+          {domain && <Text style={styles.dappDomain} numberOfLines={1}>{domain}</Text>}
         </View>
+        <View style={styles.dappChainRow}>
+          {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />}
+          <Text style={styles.dappChainName}>{chainName(chainId)}</Text>
+        </View>
+      </View>
+
+      {/* Row 2: wallet name · address */}
+      {accountName && (
+        <Text style={styles.dappAccountLine} numberOfLines={1}>
+          {accountName}{accountAddress ? `  ·  ${shortAddr(accountAddress)}` : ''}
+        </Text>
       )}
-      <View style={styles.dappInfo}>
-        <Text style={styles.dappName} numberOfLines={1}>{name}</Text>
-        {domain && <Text style={styles.dappDomain} numberOfLines={1}>{domain}</Text>}
-      </View>
-      <View style={styles.e2eBadge}>
-        <Lock size={10} color={color.success.base} strokeWidth={2.5} />
-        <Text style={styles.e2eText}>E2E</Text>
-      </View>
     </View>
   );
 }
@@ -242,11 +262,8 @@ function DAppBanner({ name, domain, icon }: {
 // Clear Sign View (descriptor found)
 // ===========================================================================
 
-function ClearSignView({ cs, chainId, accountName, accountAddress }: {
+function ClearSignView({ cs }: {
   cs: ClearSignResult;
-  chainId: number;
-  accountName?: string;
-  accountAddress?: string;
 }) {
   const rc = riskColor(cs.risk);
 
@@ -264,7 +281,7 @@ function ClearSignView({ cs, chainId, accountName, accountAddress }: {
   return (
     <View>
       {/* Context: chain + account */}
-      <ContextStrip chainId={chainId} accountName={accountName} accountAddress={accountAddress} />
+      {/* context shown in dApp banner */}
 
       {/* L1: Intent */}
       <IntentHeader intent={cs.intent} color={rc} />
@@ -343,17 +360,14 @@ function ClearSignView({ cs, chainId, accountName, accountAddress }: {
 // Message Sign View (personal_sign)
 // ===========================================================================
 
-function MessageSignView({ hexMsg, chainId, accountName, accountAddress }: {
+function MessageSignView({ hexMsg }: {
   hexMsg: string;
-  chainId: number;
-  accountName?: string;
-  accountAddress?: string;
 }) {
   const decoded = decodePersonalMessage(hexMsg);
 
   return (
     <View>
-      <ContextStrip chainId={chainId} accountName={accountName} accountAddress={accountAddress} />
+      {/* context shown in dApp banner */}
       <IntentHeader intent="Sign Message" color={signatureColor()} />
 
       <View style={styles.msgBubble}>
@@ -371,17 +385,14 @@ function MessageSignView({ hexMsg, chainId, accountName, accountAddress }: {
 // Blind Typed Data View (EIP-712, no descriptor)
 // ===========================================================================
 
-function BlindTypedDataView({ params, chainId, accountName, accountAddress }: {
+function BlindTypedDataView({ params }: {
   params: any[];
-  chainId: number;
-  accountName?: string;
-  accountAddress?: string;
 }) {
   const { primaryType, domain, fields } = parseTypedDataForDisplay(params);
 
   return (
     <View>
-      <ContextStrip chainId={chainId} accountName={accountName} accountAddress={accountAddress} />
+      {/* context shown in dApp banner */}
       <IntentHeader intent="Sign Typed Data" color="#d4890a" />
 
       {/* Domain info */}
@@ -422,11 +433,9 @@ function BlindTypedDataView({ params, chainId, accountName, accountAddress }: {
 // Blind Transaction View (no descriptor)
 // ===========================================================================
 
-function BlindTransactionView({ tx, chainId, accountName, accountAddress }: {
+function BlindTransactionView({ tx, chainId }: {
   tx: any;
   chainId: number;
-  accountName?: string;
-  accountAddress?: string;
 }) {
   const [showRaw, setShowRaw] = useState(false);
   const sym = nativeSymbol(chainId);
@@ -436,7 +445,7 @@ function BlindTransactionView({ tx, chainId, accountName, accountAddress }: {
 
   return (
     <View>
-      <ContextStrip chainId={chainId} accountName={accountName} accountAddress={accountAddress} />
+      {/* context shown in dApp banner */}
       <IntentHeader
         intent={hasData ? 'Unknown' : 'Send'}
         color={hasData ? '#d43a2a' : '#E8572A'}
@@ -655,38 +664,7 @@ function GenericFieldRow({ field }: { field: ClearSignField }) {
   );
 }
 
-function ContextStrip({ chainId, accountName, accountAddress }: {
-  chainId: number;
-  accountName?: string;
-  accountAddress?: string;
-}) {
-  const net = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
-
-  return (
-    <View style={styles.contextStrip}>
-      <View style={styles.contextLeft}>
-        {net ? (
-          <ChainLogo
-            label={net.iconLabel}
-            color={net.iconColor}
-            bgColor={net.iconBg}
-            logoURL={net.logoURL}
-            size={20}
-          />
-        ) : null}
-        <View>
-          <Text style={styles.contextChainName}>{chainName(chainId)}</Text>
-          {accountName && (
-            <Text style={styles.contextAccountLine}>
-              {accountName}
-              {accountAddress ? `  ${shortAddr(accountAddress)}` : ''}
-            </Text>
-          )}
-        </View>
-      </View>
-    </View>
-  );
-}
+// ContextStrip merged into DAppBanner
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -750,14 +728,17 @@ const styles = createStyles(() => ({
 
   // ===== dApp Banner =====
   dappBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.lg,
     paddingVertical: space.lg,
     paddingHorizontal: space.xl,
     backgroundColor: color.bg.sunken,
     borderRadius: radius.xl,
     marginBottom: space['2xl'],
+    gap: space.md,
+  },
+  dappRow1: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.lg,
   },
   dappLogo: {
     width: 36, height: 36, borderRadius: 10,
@@ -775,12 +756,18 @@ const styles = createStyles(() => ({
     fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono,
     color: color.fg.muted,
   },
-  e2eBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingHorizontal: space.md, paddingVertical: space.xs,
-    backgroundColor: color.success.soft, borderRadius: radius.full,
+  dappChainRow: {
+    flexDirection: 'row', alignItems: 'center', gap: space.sm,
+    marginLeft: 'auto',
   },
-  e2eText: { fontSize: text.xs, ...inter.bold, color: color.success.base },
+  dappChainName: {
+    fontSize: text.xs, ...inter.semibold, color: color.fg.base,
+  },
+  dappAccountLine: {
+    fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono,
+    color: color.fg.muted,
+    paddingLeft: space.sm,
+  },
 
   // ===== Intent Header =====
   intentHeader: {
@@ -974,30 +961,7 @@ const styles = createStyles(() => ({
     textAlign: 'center',
   },
 
-  // ===== Context Strip (full-width "subject") =====
-  contextStrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: space.lg,
-    paddingHorizontal: space.xl,
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.xl,
-    marginBottom: space.xl,
-  },
-  contextLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.lg,
-    flex: 1,
-  },
-  contextChainName: {
-    fontSize: text.sm, ...inter.semibold, color: color.fg.base,
-  },
-  contextAccountLine: {
-    fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono,
-    color: color.fg.muted,
-    marginTop: 1,
-  },
+  // (context strip merged into dApp banner)
 
   // ===== Details Toggle =====
   detailsToggle: {

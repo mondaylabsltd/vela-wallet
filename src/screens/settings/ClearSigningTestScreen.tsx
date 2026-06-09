@@ -455,7 +455,7 @@ import { chainName, nativeSymbol } from '@/models/network';
 import { shortAddr } from '@/models/types';
 import {
   AlertTriangle, Copy, Check, ChevronDown,
-  ArrowDown, Lock, ShieldCheck, Shield,
+  ArrowDown, ShieldCheck, Shield,
 } from 'lucide-react-native';
 import { showAlert } from '@/services/platform';
 import * as Clipboard from 'expo-clipboard';
@@ -543,34 +543,27 @@ function MockSigningModal({ request, onClose }: {
       <View style={ms.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
 
-          {/* dApp banner */}
-          <View style={ms.dappBanner}>
-            <View style={ms.dappLogoFallback}>
-              <Text style={ms.dappLogoText}>T</Text>
-            </View>
-            <View style={ms.dappInfo}>
-              <Text style={ms.dappName}>{dappName}</Text>
-              <Text style={ms.dappDomain}>clear-signing-test</Text>
-            </View>
-            <View style={ms.e2e}>
-              <Lock size={10} color={color.success.base} strokeWidth={2.5} />
-              <Text style={ms.e2eText}>E2E</Text>
-            </View>
-          </View>
-
-          {/* Context strip — "subject" (who is signing) */}
+          {/* dApp banner + context (merged, two-row) */}
           {(() => {
             const net = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
             return (
-              <View style={ms.ctxStrip}>
-                {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={20} />}
-                <View>
-                  <Text style={ms.ctxChainName}>{chainName(chainId)}</Text>
-                  <Text style={ms.ctxAccountLine}>
-                    {accountName}
-                    {activeAccount?.address ? `  ${shortAddr(activeAccount.address)}` : ''}
-                  </Text>
+              <View style={ms.dappBanner}>
+                <View style={ms.dappRow1}>
+                  <View style={ms.dappLogoFallback}>
+                    <Text style={ms.dappLogoText}>T</Text>
+                  </View>
+                  <View style={ms.dappInfo}>
+                    <Text style={ms.dappName}>{dappName}</Text>
+                    <Text style={ms.dappDomain}>clear-signing-test</Text>
+                  </View>
+                  <View style={ms.dappChainRow}>
+                    {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />}
+                    <Text style={ms.dappChainName}>{chainName(chainId)}</Text>
+                  </View>
                 </View>
+                <Text style={ms.dappAccountLine} numberOfLines={1}>
+                  {accountName}{activeAccount?.address ? `  ·  ${shortAddr(activeAccount.address)}` : ''}
+                </Text>
               </View>
             );
           })()}
@@ -775,14 +768,14 @@ function MockSigningModal({ request, onClose }: {
           ) : (
             <View style={{ alignItems: 'center', padding: 40 }}>
               <Shield size={28} color={color.fg.muted} strokeWidth={2} />
-              <Text style={ms.ctxChainName}>Signature request</Text>
+              <Text style={ms.dappChainName}>Signature request</Text>
             </View>
           )}
 
           {/* Resolving indicator */}
           {resolving && (
             <View style={{ alignItems: 'center', padding: space.lg }}>
-              <Text style={ms.ctxChainName}>Loading descriptor...</Text>
+              <Text style={ms.dappChainName}>Loading descriptor...</Text>
             </View>
           )}
         </ScrollView>
@@ -791,7 +784,7 @@ function MockSigningModal({ request, onClose }: {
         <View style={ms.btns}>
           <VelaButton title="Reject" onPress={onClose} variant="secondary" style={ms.btnFlex} />
           <VelaButton
-            title={clearSign ? (clearSign.type === 'signature' ? 'Sign' : `Confirm ${clearSign.intent}`) : (isPersonalSign || isTypedData ? 'Sign' : 'Approve')}
+            title={clearSign ? (clearSign.type === 'signature' ? 'Sign' : (clearSign.intent.length > 12 ? 'Confirm' : `Confirm ${clearSign.intent}`)) : (isPersonalSign || isTypedData ? 'Sign' : 'Approve')}
             onPress={() => { showAlert('Signed!', 'This is a test — no actual signature was created.'); onClose(); }}
             variant="accent"
             loading={resolving}
@@ -850,9 +843,12 @@ const styles = createStyles(() => ({
 const ms = createStyles(() => ({
   container: { flex: 1, padding: space['3xl'] },
   dappBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: space.lg,
     paddingVertical: space.lg, paddingHorizontal: space.xl,
     backgroundColor: color.bg.sunken, borderRadius: radius.xl, marginBottom: space['2xl'],
+    gap: space.md,
+  },
+  dappRow1: {
+    flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.lg,
   },
   dappLogoFallback: {
     width: 36, height: 36, borderRadius: 10,
@@ -862,21 +858,9 @@ const ms = createStyles(() => ({
   dappInfo: { flex: 1, gap: 1 },
   dappName: { fontSize: text.base, ...inter.bold, color: color.fg.base },
   dappDomain: { fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.muted },
-  e2e: {
-    flexDirection: 'row', alignItems: 'center', gap: 3,
-    paddingHorizontal: space.md, paddingVertical: space.xs,
-    backgroundColor: color.success.soft, borderRadius: radius.full,
-  },
-  e2eText: { fontSize: text.xs, ...inter.bold, color: color.success.base },
-
-  ctxStrip: {
-    flexDirection: 'row', alignItems: 'center', gap: space.lg,
-    paddingVertical: space.lg, paddingHorizontal: space.xl,
-    backgroundColor: color.bg.sunken, borderRadius: radius.xl,
-    marginBottom: space.xl,
-  },
-  ctxChainName: { fontSize: text.sm, ...inter.semibold, color: color.fg.base },
-  ctxAccountLine: { fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.muted, marginTop: 1 },
+  dappChainRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, marginLeft: 'auto' as const },
+  dappChainName: { fontSize: text.xs, ...inter.semibold, color: color.fg.base },
+  dappAccountLine: { fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.muted, paddingLeft: space.sm },
 
   intent: { alignItems: 'center', paddingTop: space.lg, paddingBottom: space['2xl'] },
   intentText: { fontSize: text['5xl'], fontWeight: '800' as const, fontFamily: 'Inter-Bold', letterSpacing: -1 },
