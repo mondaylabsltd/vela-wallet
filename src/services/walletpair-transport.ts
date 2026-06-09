@@ -64,6 +64,9 @@ function buildCapabilities(): Capabilities {
     version: { evm: 1 },
     rpcUrls,
     walletCapabilities,
+    // Safe Proxy runtime bytecode — tells the extension this is a smart
+    // contract wallet so dApps get non-empty eth_getCode even before deployment.
+    contractBytecode: '0x608060405234801561001057600080fd5b506040516101e63803806101e68339818101604052810190610032919061011f565b600173ffffffffffffffffffffffffffffffffffffffff163073ffffffffffffffffffffffffffffffffffffffff16036100a0576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161009790610203565b60405180910390fd5b60005b7f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc5af43d82803e903d91602b57fd5bf3',
   };
 }
 

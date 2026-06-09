@@ -40,7 +40,7 @@ export const DEFAULT_NETWORKS: Network[] = [
     id: 'polygon', displayName: 'Polygon', chainId: 137,
     iconLabel: 'POL', iconColor: '#8247E5', iconBg: '#F0EAFF',
     logoURL: `${CHAIN_LOGO_BASE}/eip155-137.png`, isL2: true,
-    rpcURL: 'https://polygon-rpc.com', explorerURL: 'https://polygonscan.com',
+    rpcURL: 'https://polygon.drpc.org', explorerURL: 'https://polygonscan.com',
     bundlerURL: 'https://vela-bundler.getvela.app/137',
   },
   {
