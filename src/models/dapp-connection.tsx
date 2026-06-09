@@ -297,6 +297,26 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
 
     try {
       await transport.connect();
+
+      // If still not connected after confirmJoin resolved, start a timeout.
+      // The relay may silently drop the join message (e.g. CF Worker hibernation),
+      // leaving both sides stuck in waiting_accept with no transport-level error.
+      if (!transport.connected) {
+        const timeout = setTimeout(() => {
+          if (!transport.connected && transportRef.current === transport) {
+            setStatus('error');
+            setErrorMessage('Connection timed out. The relay may be unavailable — try scanning again.');
+            transport.disconnect();
+            transportRef.current = null;
+          }
+        }, 15_000);
+
+        // Clear timeout if connection succeeds before deadline
+        const unsub = transport.on('connected', () => {
+          clearTimeout(timeout);
+          unsub();
+        });
+      }
     } catch (err: any) {
       setStatus('error');
       setErrorMessage(err.message ?? 'WalletPair connection failed');
