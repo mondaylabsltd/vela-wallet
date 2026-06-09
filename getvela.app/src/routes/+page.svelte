@@ -397,36 +397,34 @@
 		<div class="why-content">
 			<h2>Why we built Vela</h2>
 			<p>
-				Managing a seed phrase is hard. Not "I got hacked" hard — quietly, constantly hard.
-				Where do you store 12 words so they survive a house fire, a stolen phone, and your own forgetfulness?
-				Most people end up with a screenshot in their photo library. That's not security. That's a liability.
+				Seed phrases are hard to live with. Not "I got hacked" hard — quietly, constantly hard.
+				Where do you keep 12 words so they survive a house fire, a stolen phone, and your own forgetfulness?
+				Most people end up with a screenshot in their camera roll. That's not security. That's a liability.
 			</p>
 			<p>
-				Passkey wallets make this much easier. We used <a href="https://account.base.app" target="_blank" rel="noopener">Base Account</a> daily — great UX, loved signing with Face ID.
-				But we kept hitting walls: a recovery key generated in the browser that we had to trust blindly.
-				No way to add custom networks. No way to self-host.
-				And no way to keep using the wallet if the service goes away.
+				Passkey wallets fix this. We used <a href="https://account.base.app" target="_blank" rel="noopener">Base Account</a> daily — loved the UX, loved signing with Face ID.
+				But we kept hitting walls: a recovery key generated in the browser that you just had to trust.
+				No custom networks. No self-hosting.
+				And if the service shuts down, your wallet goes with it.
 			</p>
 			<p>
-				We built Vela because <strong>we wanted a passkey wallet we could fully own.</strong>
+				So we built Vela — <strong>a passkey wallet you can fully own.</strong>
 				Your passkey lives in iCloud Keychain or Google Password Manager.
-				When you sign a transaction, the app sends a challenge — your credential manager signs it internally and returns only the result.
-				Your passkey's private key never leaves the credential manager. The app never sees it.
-				With most software seed phrase wallets, there's a moment where your secret exists in app memory. With recovery key wallets, there's a moment where the recovery key is generated in a browser.
-				In Vela, that moment doesn't exist. <strong>We can't access your keys. Not "we promise not to" — we architecturally can't.</strong>
+				When you sign a transaction, the app sends a challenge to your device — your device signs it and sends back just the signature. The private key never leaves.
+				Most wallets have a moment where your secret is exposed: a seed phrase in memory, a recovery key in a browser tab.
+				Vela has no such moment. <strong>We can't access your keys. Not "we promise not to" — we architecturally can't.</strong>
 			</p>
 			<p>
 				Open source, so you can verify every line.
 				Self-hostable, so you're never dependent on us.
-				Built on unmodified Safe contracts — you're not trusting a custom wallet contract, you're trusting the same contracts that secure the broader ecosystem.
+				Built on unmodified <a href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1" target="_blank" rel="noopener">Safe contracts</a> — the same ones that already secure billions across the ecosystem.
 			</p>
 			<p>
-				<strong>The trade-off:</strong> you're trusting iCloud Keychain or Google Password Manager to safeguard your passkey.
-				If you lose access to your Apple or Google account, or accidentally delete the passkey from your credential manager, you lose access to your wallet.
-				There is no recovery mechanism — no backup seed, no support ticket, no reset.
-				This is true of any self-custodial wallet — the question is what you're protecting.
-				With a seed phrase wallet, you're protecting 12 words that can be copied, screenshotted, exported, and phished.
-				With Vela, you're protecting access to the credential manager that holds your passkey: your Apple or Google account, your trusted devices, and the passkey itself.
+				<strong>The trade-off:</strong> your wallet security depends on your Apple or Google account, because that's where your passkey lives.
+				Lose access to that account, or delete the passkey, and there's no way back — no backup seed, no support ticket, no reset.
+				But every self-custodial wallet has this trade-off. The question is what you're guarding.
+				A seed phrase can be copied, screenshotted, and phished.
+				A passkey is bound to a domain — there's no secret to type, no words to reveal, and no fake site that can trick you into handing it over.
 			</p>
 		</div>
 	</div>
