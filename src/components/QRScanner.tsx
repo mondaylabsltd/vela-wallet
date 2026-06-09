@@ -35,7 +35,6 @@ function tryJsQR(
   return jsQR(imageData.data as any, tw, th, JSQR_OPTS)?.data ?? null;
 }
 
-const NOOP = () => {};
 const INVERT = (d: Uint8ClampedArray) => {
   for (let i = 0; i < d.length; i += 4) { d[i] = 255 - d[i]; d[i+1] = 255 - d[i+1]; d[i+2] = 255 - d[i+2]; }
 };
@@ -54,14 +53,23 @@ const BINARIZE = (t: number) => (d: Uint8ClampedArray) => {
  *   - PNG screenshot (998×1298): bin160@600
  */
 function decodeFromCanvas(canvas: HTMLCanvasElement, label = 'image'): string | null {
-  const strategies: [string, () => string | null][] = [
-    ['raw', () => tryJsQR(canvas, canvas.width, NOOP)],
-    ['invert@400', () => tryJsQR(canvas, 400, INVERT)],
-    ['bin160@600', () => tryJsQR(canvas, 600, BINARIZE(160))],
-    ['invert@600', () => tryJsQR(canvas, 600, INVERT)],
-    ['bin120@600', () => tryJsQR(canvas, 600, BINARIZE(120))],
-    ['bin80@400', () => tryJsQR(canvas, 400, BINARIZE(80))],
-  ];
+  const w = canvas.width;
+  // Build target widths: original, then progressively smaller
+  // Full image first (QR could be anywhere), then smaller for speed
+  const targets = new Set<number>();
+  targets.add(w); // original size
+  for (const s of [1200, 1000, 800, 600, 400]) {
+    if (s < w) targets.add(s);
+  }
+  const sizes = [...targets].sort((a, b) => b - a); // largest first
+
+  const strategies: [string, () => string | null][] = [];
+  for (const s of sizes) {
+    strategies.push(
+      [`invert@${s}`, () => tryJsQR(canvas, s, INVERT)],
+      [`bin160@${s}`, () => tryJsQR(canvas, s, BINARIZE(160))],
+    );
+  }
 
   for (const [name, fn] of strategies) {
     const r = fn();

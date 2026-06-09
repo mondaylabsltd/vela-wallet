@@ -95,22 +95,19 @@ async function fileToCanvas(source) {
 
 // Try all strategies on a canvas
 async function decodeCanvas(canvas) {
+  // Full image at all sizes — QR could be anywhere, don't crop
+  const w = canvas.width;
+  const targets = new Set([w]);
+  for (const s of [1200, 1000, 800, 600, 400]) { if (s < w) targets.add(s); }
+  const sizes = [...targets].sort((a, b) => b - a);
+
   const strategies = [
     ['WASM', async () => { try { return (await QrScanner.scanImage(canvas, {returnDetailedScanResult:true}))?.data; } catch { return null; } }],
-    ['jsQR raw', () => tryJsQR(canvas, canvas.width, NOOP)],
-    ['invert@400', () => tryJsQR(canvas, 400, INVERT)],
-    ['invert@600', () => tryJsQR(canvas, 600, INVERT)],
-    ['bin160@600', () => tryJsQR(canvas, 600, BINARIZE(160))],
-    ['bin120@600', () => tryJsQR(canvas, 600, BINARIZE(120))],
-    ['bin80@400', () => tryJsQR(canvas, 400, BINARIZE(80))],
   ];
-
-  // Also try on center-cropped version
-  const cropped = cropCenter(canvas);
-  if (cropped.width !== canvas.width || cropped.height !== canvas.height) {
+  for (const s of sizes) {
     strategies.push(
-      ['crop+invert@400', () => tryJsQR(cropped, 400, INVERT)],
-      ['crop+bin160@600', () => tryJsQR(cropped, 600, BINARIZE(160))],
+      [`invert@${s}`, () => tryJsQR(canvas, s, INVERT)],
+      [`bin160@${s}`, () => tryJsQR(canvas, s, BINARIZE(160))],
     );
   }
 
