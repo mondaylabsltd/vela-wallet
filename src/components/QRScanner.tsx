@@ -73,11 +73,12 @@ async function loadZbar(): Promise<typeof zbarScanImageData> {
   if (zbarLoadAttempted) return zbarScanImageData;
   zbarLoadAttempted = true;
   try {
-    const m = await import('@undecaf/zbar-wasm');
-    // Tell zbar where to find the .wasm file (Metro doesn't bundle it)
-    m.setModuleArgs({ locateFile: (file: string) => `/${file}` });
+    // Metro bundler can't handle @undecaf/zbar-wasm (uses import.meta).
+    // Load from CDN via bare import() — use Function trick to bypass Metro's rewrite.
+    const importFromCDN = new Function('url', 'return import(url)');
+    const m = await importFromCDN('https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/main.mjs');
     zbarScanImageData = m.scanImageData;
-    console.log('[QR] zbar WASM loaded');
+    console.log('[QR] zbar WASM loaded from CDN');
   } catch (e: any) {
     console.warn('[QR] zbar WASM failed to load:', e?.message);
   }
