@@ -156,6 +156,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
   useEffect(() => {
     let mounted = true;
     const busyRef = { current: false };
+    let frameCount = 0;
 
     navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -163,12 +164,15 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       .then(stream => {
         if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
+        const track = stream.getVideoTracks()[0];
+        const settings = track?.getSettings?.();
+        console.log('[QR] camera: stream ready', settings?.width ?? '?', '×', settings?.height ?? '?');
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.play();
         }
       })
-      .catch(() => {});
+      .catch((e) => { console.warn('[QR] camera: getUserMedia failed', e?.message); });
 
     // Stable interval — reads refs, never needs to be re-created
     timerRef.current = setInterval(async () => {
@@ -176,25 +180,30 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       const video = videoRef.current;
       if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
       busyRef.current = true;
+      frameCount++;
 
       try {
         const canvas = canvasRef.current;
         if (canvas) {
           const vw = video.videoWidth;
           const vh = video.videoHeight;
-          // Crop to the center scan-frame region (~60% of the shorter side)
+          // Crop to the center scan-frame region (~65% of the shorter side)
           // with some padding so the QR quiet zone is captured.
           const side = Math.round(Math.min(vw, vh) * 0.65);
           const sx = Math.round((vw - side) / 2);
           const sy = Math.round((vh - side) / 2);
-          // Render cropped region at 400px — small enough for fast jsQR,
-          // large enough for dense QR codes
-          const size = Math.min(side, 400);
+          // Render cropped region at 600px — dense QR codes (walletpair, 57×57
+          // modules) need ~5px/module minimum for reliable jsQR decoding
+          const size = Math.min(side, 600);
           canvas.width = size;
           canvas.height = size;
           const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
           ctx.drawImage(video, sx, sy, side, side, 0, 0, size, size);
           const imageData = ctx.getImageData(0, 0, size, size);
+          // Log every 10th frame so we know scanning is alive
+          if (frameCount % 10 === 1) {
+            console.log(`[QR] camera: frame#${frameCount} video=${vw}×${vh} crop=${side} canvas=${size}`);
+          }
           // Use full decodeQR: raw + 3 binarize thresholds
           // 400×400 = 160K pixels → 4 jsQR calls ≈ 60ms, well within 500ms budget
           const decoded = decodeQR(imageData, 'camera');
@@ -316,9 +325,11 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
       input.onchange = async () => {
         try {
           const file = input.files?.[0];
-          if (!file) return;
+          if (!file) { console.log('[QR] pick: no file selected'); return; }
+          console.log(`[QR] pick: file ${file.name} (${file.type}, ${(file.size / 1024).toFixed(0)}KB)`);
 
-          // Load image via HTMLImageElement (universally supported)
+          // Load image — keep blob URL alive until canvas draw completes
+          // (iOS Safari may evict decoded pixels under memory pressure)
           const url = URL.createObjectURL(file);
           const img = new Image();
           await new Promise<void>((resolve, reject) => {
@@ -327,7 +338,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             img.src = url;
           });
 
-          URL.revokeObjectURL(url);
+          console.log(`[QR] pick: loaded ${img.naturalWidth}×${img.naturalHeight}`);
 
           // Let the browser do high-quality downscaling (much faster than JS).
           // 800px is enough for jsQR; decodeQR may further shrink to 600px.
@@ -341,9 +352,11 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           canvas.height = h;
           const ctx = canvas.getContext('2d')!;
           ctx.drawImage(img, 0, 0, w, h);
+          // Only revoke AFTER drawImage — iOS Safari may need the URL alive
+          URL.revokeObjectURL(url);
 
           const imageData = ctx.getImageData(0, 0, w, h);
-          console.log(`[QR] pick: image ${img.naturalWidth}×${img.naturalHeight} → canvas ${w}×${h}`);
+          console.log(`[QR] pick: canvas ${w}×${h}, pixels[0..3]=${imageData.data[0]},${imageData.data[1]},${imageData.data[2]},${imageData.data[3]}`);
           const decoded = decodeQR(imageData, 'pick');
           if (decoded) {
             hapticSuccess();
@@ -351,8 +364,8 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           } else {
             showAlert('No QR Found', 'Could not find a QR code in the selected image.');
           }
-        } catch (e) {
-          console.warn('[QRScanner] Web image scan error:', e);
+        } catch (e: any) {
+          console.warn('[QR] pick error:', e?.message ?? e);
           showAlert('Error', 'Failed to process the image.');
         }
       };
