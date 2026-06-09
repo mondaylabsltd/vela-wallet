@@ -5,6 +5,27 @@
 	let subscribeStatus: 'idle' | 'loading' | 'success' | 'error' = $state('idle');
 	let subscribeMessage = $state('');
 
+	// Mockup animation steps: wallet → send → faceid → done
+	type MockupStep = 'wallet' | 'send' | 'faceid' | 'done';
+	const stepTimings: [MockupStep, number][] = [
+		['wallet', 2500],
+		['send', 2200],
+		['faceid', 2000],
+		['done', 2000],
+	];
+	let mockupStep: MockupStep = $state('wallet');
+	let stepIndex = 0;
+
+	$effect(() => {
+		function nextStep() {
+			stepIndex = (stepIndex + 1) % stepTimings.length;
+			mockupStep = stepTimings[stepIndex][0];
+			setTimeout(nextStep, stepTimings[stepIndex][1]);
+		}
+		const firstTimeout = setTimeout(nextStep, stepTimings[0][1]);
+		return () => clearTimeout(firstTimeout);
+	});
+
 	async function handleSubscribe(e: Event) {
 		e.preventDefault();
 		if (!email.trim()) return;
@@ -188,131 +209,152 @@
 <section class="hero">
 	<div class="container hero-grid">
 		<div class="hero-text">
-			<h1>No seed phrases.<br />No recovery keys.</h1>
+			<h1>Your keys.<br />Your face.</h1>
 			<p class="subtitle">
-				Self-custodial, self-hostable wallet for ETH & EVM. Signed with passkeys. No vendor lock-in.
+				Sign transactions with passkeys — no seed phrases to lose, no hardware wallets to carry.
 			</p>
 			<div class="hero-cta">
-				<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" class="btn btn-primary">Create wallet</a>
+				<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" class="btn btn-primary">Try it - no seed phrase needed</a>
+				<p class="hero-note">Self-custodial, self-hostable wallet for ETH & EVM.</p>
 			</div>
 		</div>
 		<div class="hero-visual">
 			<div class="mockup-phone">
 				<div class="mockup-screen">
-					<!-- Status bar + notch -->
+					<!-- Status bar + notch (shared) -->
 					<div class="mockup-statusbar">
 						<span class="mockup-time">9:41</span>
 						<div class="mockup-notch"></div>
 						<div class="mockup-statusbar-icons">
-							<!-- Signal bars -->
 							<svg width="12" height="10" viewBox="0 0 16 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="0.5" opacity="0.4"/><rect x="4.5" y="5" width="3" height="7" rx="0.5" opacity="0.6"/><rect x="9" y="2" width="3" height="10" rx="0.5" opacity="0.8"/><rect x="13.5" y="0" width="2.5" height="12" rx="0.5" opacity="1"/></svg>
-							<!-- Battery -->
 							<svg width="18" height="10" viewBox="0 0 25 10" fill="currentColor"><rect x="0" y="0" width="21" height="10" rx="2" stroke="currentColor" stroke-width="1" fill="none" opacity="0.4"/><rect x="22" y="2.5" width="2" height="5" rx="1" opacity="0.25"/><rect x="1.5" y="1.5" width="14" height="7" rx="1" opacity="0.6"/></svg>
 						</div>
 					</div>
-					<!-- Account header -->
-					<div class="mockup-account">
-						<!-- <div class="mockup-avatar"></div> -->
-						<div class="mockup-account-info">
+
+					<!-- Step 1: Wallet home -->
+					<div class="mockup-step" class:active={mockupStep === 'wallet'}>
+						<div class="mockup-account">
 							<span class="mockup-account-name">My Wallet</span>
 							<span class="mockup-account-addr">0x14fB…D1eA5c</span>
 						</div>
-					</div>
-					<!-- Balance -->
-					<div class="mockup-balance">$1,969<span class="mockup-cents">.53</span></div>
-					<!-- Action buttons -->
-					<div class="mockup-actions">
-						<div class="mockup-action">
-							<div class="mockup-action-circle active">
-								<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" stroke-linecap="round" stroke-linejoin="round"/></svg>
+						<div class="mockup-balance">$1,969<span class="mockup-cents">.53</span></div>
+						<div class="mockup-actions">
+							<div class="mockup-action">
+								<div class="mockup-action-circle active">
+									<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" stroke-linecap="round" stroke-linejoin="round"/></svg>
+								</div>
+								<span>Send</span>
 							</div>
-							<span>Send</span>
-						</div>
-						<div class="mockup-action">
-							<div class="mockup-action-circle">
-								<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+							<div class="mockup-action">
+								<div class="mockup-action-circle">
+									<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+								</div>
+								<span>Receive</span>
 							</div>
-							<span>Receive</span>
-						</div>
-						<div class="mockup-action">
-							<div class="mockup-action-circle">
-								<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-							</div>
-							<span>History</span>
-						</div>
-					</div>
-					<!-- Assets header -->
-					<div class="mockup-assets-header">
-						<span class="mockup-assets-title">Assets</span>
-						<span class="mockup-assets-add">+ Add</span>
-					</div>
-					<!-- Token list -->
-					<div class="mockup-tokens">
-						<div class="mockup-token">
-							<img class="mockup-token-icon" src="https://icons.llamao.fi/icons/chains/rsz_binance.jpg" alt="BNB" width="36" height="36" />
-							<div class="mockup-token-info">
-								<span class="mockup-token-name">BNB</span>
-								<span class="mockup-token-chain">BNB Chain</span>
-							</div>
-							<div class="mockup-token-value">
-								<span class="mockup-token-qty">1.1655</span>
-								<span class="mockup-token-usd">$768.43</span>
+							<div class="mockup-action">
+								<div class="mockup-action-circle">
+									<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+								</div>
+								<span>History</span>
 							</div>
 						</div>
-						<div class="mockup-token">
-							<img class="mockup-token-icon" src="https://icons.llamao.fi/icons/chains/rsz_arbitrum.jpg" alt="ETH" width="36" height="36" />
-							<div class="mockup-token-info">
-								<span class="mockup-token-name">ETH</span>
-								<span class="mockup-token-chain">Arbitrum</span>
+						<div class="mockup-tokens">
+							<div class="mockup-token">
+								<img class="mockup-token-icon" src="https://icons.llamao.fi/icons/chains/rsz_binance.jpg" alt="BNB" width="32" height="32" />
+								<div class="mockup-token-info">
+									<span class="mockup-token-name">BNB</span>
+									<span class="mockup-token-chain">BNB Chain</span>
+								</div>
+								<div class="mockup-token-value">
+									<span class="mockup-token-qty">1.1655</span>
+									<span class="mockup-token-usd">$768.43</span>
+								</div>
 							</div>
-							<div class="mockup-token-value">
-								<span class="mockup-token-qty">0.1997</span>
-								<span class="mockup-token-usd">$457.69</span>
+							<div class="mockup-token">
+								<img class="mockup-token-icon" src="https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg" alt="ETH" width="32" height="32" />
+								<div class="mockup-token-info">
+									<span class="mockup-token-name">ETH</span>
+									<span class="mockup-token-chain">Ethereum</span>
+								</div>
+								<div class="mockup-token-value">
+									<span class="mockup-token-qty">0.1844</span>
+									<span class="mockup-token-usd">$422.68</span>
+								</div>
 							</div>
-						</div>
-						<div class="mockup-token">
-							<img class="mockup-token-icon" src="https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg" alt="ETH" width="36" height="36" />
-							<div class="mockup-token-info">
-								<span class="mockup-token-name">ETH</span>
-								<span class="mockup-token-chain">Ethereum</span>
-							</div>
-							<div class="mockup-token-value">
-								<span class="mockup-token-qty">0.1844</span>
-								<span class="mockup-token-usd">$422.68</span>
-							</div>
-						</div>
-						<div class="mockup-token">
-							<img class="mockup-token-icon" src="https://assets.coingecko.com/coins/images/325/small/Tether.png" alt="USDT" width="36" height="36" />
-							<div class="mockup-token-info">
-								<span class="mockup-token-name">USDT</span>
-								<span class="mockup-token-chain">Polygon</span>
-							</div>
-							<div class="mockup-token-value">
-								<span class="mockup-token-qty">178.5160</span>
-								<span class="mockup-token-usd">$178.52</span>
-							</div>
-						</div>
-						<div class="mockup-token last">
-							<img class="mockup-token-icon" src="https://icons.llamao.fi/icons/chains/rsz_base.jpg" alt="ETH" width="36" height="36" />
-							<div class="mockup-token-info">
-								<span class="mockup-token-name">ETH</span>
-								<span class="mockup-token-chain">Base</span>
-							</div>
-							<div class="mockup-token-value">
-								<span class="mockup-token-qty">0.02406</span>
-								<span class="mockup-token-usd">$54.86</span>
+							<div class="mockup-token">
+								<img class="mockup-token-icon" src="https://assets.coingecko.com/coins/images/325/small/Tether.png" alt="USDT" width="32" height="32" />
+								<div class="mockup-token-info">
+									<span class="mockup-token-name">USDT</span>
+									<span class="mockup-token-chain">Polygon</span>
+								</div>
+								<div class="mockup-token-value">
+									<span class="mockup-token-qty">178.5160</span>
+									<span class="mockup-token-usd">$178.52</span>
+								</div>
 							</div>
 						</div>
 					</div>
-					<!-- Tab bar -->
-					<div class="mockup-tabbar">
-						<div class="mockup-tab active">
-							<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 013 6v3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-							<span>Wallet</span>
+
+					<!-- Step 2: Confirm transaction -->
+					<div class="mockup-step" class:active={mockupStep === 'send'}>
+						<div class="mockup-step-header">Confirm Transaction</div>
+						<div class="mockup-tx-card">
+							<div class="mockup-tx-row">
+								<span class="mockup-tx-label">Send</span>
+								<span class="mockup-tx-value">0.05 ETH</span>
+							</div>
+							<div class="mockup-tx-row">
+								<span class="mockup-tx-label">To</span>
+								<span class="mockup-tx-value mockup-tx-addr">0x7a3B…9f2E</span>
+							</div>
+							<div class="mockup-tx-row">
+								<span class="mockup-tx-label">Network</span>
+								<span class="mockup-tx-value">Ethereum</span>
+							</div>
+							<div class="mockup-tx-row last">
+								<span class="mockup-tx-label">Gas fee</span>
+								<span class="mockup-tx-value">~$0.42</span>
+							</div>
 						</div>
-						<div class="mockup-tab">
-							<svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"/></svg>
-							<span>Settings</span>
+						<div class="mockup-slide-track">
+							<div class="mockup-slide-thumb">
+								<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+							</div>
+							<span class="mockup-slide-text">Slide to confirm</span>
+						</div>
+					</div>
+
+					<!-- Step 3: Face ID signing -->
+					<div class="mockup-step" class:active={mockupStep === 'faceid'}>
+						<div class="mockup-faceid-screen">
+							<div class="mockup-faceid-icon">
+								<svg width="64" height="64" viewBox="0 0 96 96" fill="none">
+									<path d="M28 8h-12a8 8 0 00-8 8v12" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+									<path d="M68 8h12a8 8 0 018 8v12" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+									<path d="M28 88h-12a8 8 0 01-8-8v-12" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+									<path d="M68 88h12a8 8 0 008-8v-12" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+									<path d="M36 36v10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+									<path d="M60 36v10" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+									<path d="M48 44v10h-4" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+									<path d="M36 64c2 6 10 10 16 10s12-4 16-10" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/>
+								</svg>
+							</div>
+							<span class="mockup-faceid-label">Sign with Face ID</span>
+							<span class="mockup-faceid-sub">Confirm with passkey to send 0.05 ETH</span>
+						</div>
+					</div>
+
+					<!-- Step 4: Success -->
+					<div class="mockup-step" class:active={mockupStep === 'done'}>
+						<div class="mockup-done-screen">
+							<div class="mockup-done-check">
+								<svg width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+									<path d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"/>
+								</svg>
+							</div>
+							<span class="mockup-done-title">Transaction Sent</span>
+							<span class="mockup-done-detail">0.05 ETH → 0x7a3B…9f2E</span>
+							<span class="mockup-done-time">Confirmed in 3s</span>
 						</div>
 					</div>
 				</div>
@@ -710,7 +752,8 @@
 		color: var(--text-secondary); font-size: 1.05rem; line-height: 1.75;
 		max-width: 520px; margin-bottom: 28px;
 	}
-	.hero-cta { display: flex; align-items: center; gap: 12px; }
+	.hero-cta { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; }
+	.hero-note { color: var(--text-tertiary); font-size: 0.78rem; margin: 0; }
 
 	/* ── Scroll Hint ── */
 	.scroll-hint {
@@ -785,20 +828,24 @@
 		display: flex; align-items: center; gap: 4px; width: 36px;
 		justify-content: flex-end; color: var(--text-tertiary);
 	}
-	/* Account header */
-	.mockup-account { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 20px; }
-	.mockup-account-info { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+	/* ── Mockup Steps (animated flow) ── */
+	.mockup-step {
+		display: none; flex-direction: column; padding: 0 4px 16px;
+		opacity: 0; transition: opacity 0.4s ease;
+	}
+	.mockup-step.active { display: flex; opacity: 1; }
+
+	/* Step 1: Wallet home */
+	.mockup-account { display: flex; flex-direction: column; align-items: center; gap: 1px; margin-bottom: 16px; }
 	.mockup-account-name { font-size: 0.88rem; font-weight: 600; color: var(--text); }
 	.mockup-account-addr { font-size: 0.65rem; color: var(--text-tertiary); font-family: monospace; }
-	/* Balance */
 	.mockup-balance {
 		text-align: center; font-size: 2.2rem; font-weight: 700;
-		color: var(--text); letter-spacing: -0.02em; margin-bottom: 20px;
+		color: var(--text); letter-spacing: -0.02em; margin-bottom: 16px;
 		font-variant-numeric: tabular-nums;
 	}
 	.mockup-cents { font-size: 1.3rem; color: var(--text-secondary); }
-	/* Action buttons */
-	.mockup-actions { display: flex; justify-content: center; gap: 28px; margin-bottom: 22px; }
+	.mockup-actions { display: flex; justify-content: center; gap: 28px; margin-bottom: 18px; }
 	.mockup-action { display: flex; flex-direction: column; align-items: center; gap: 5px; }
 	.mockup-action span { font-size: 0.65rem; color: var(--text-secondary); }
 	.mockup-action-circle {
@@ -807,44 +854,87 @@
 		display: flex; align-items: center; justify-content: center;
 		color: var(--text-secondary);
 	}
-	.mockup-action-circle.active {
-		background: var(--accent); border-color: var(--accent);
-		color: #fff;
-	}
-	/* Assets header */
-	.mockup-assets-header {
-		display: flex; justify-content: space-between; align-items: center;
-		margin-bottom: 8px; padding-bottom: 10px;
-	}
-	.mockup-assets-title { font-size: 0.92rem; font-weight: 600; color: var(--text); }
-	.mockup-assets-add { font-size: 0.75rem; font-weight: 600; color: var(--accent); }
-	/* Token list */
+	.mockup-action-circle.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 	.mockup-tokens { display: flex; flex-direction: column; }
 	.mockup-token {
 		display: flex; align-items: center; gap: 12px;
-		padding: 11px 0;
-		border-bottom: 1px solid var(--border);
+		padding: 10px 0; border-bottom: 1px solid var(--border);
 	}
-	.mockup-token.last { border-bottom: none; }
-	.mockup-token-icon { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; }
-
+	.mockup-token:last-child { border-bottom: none; }
+	.mockup-token-icon { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; }
 	.mockup-token-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 	.mockup-token-name { font-size: 0.82rem; font-weight: 600; color: var(--text); }
 	.mockup-token-chain { font-size: 0.65rem; color: var(--text-tertiary); }
 	.mockup-token-value { text-align: right; display: flex; flex-direction: column; gap: 2px; }
 	.mockup-token-qty { font-size: 0.82rem; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
 	.mockup-token-usd { font-size: 0.65rem; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
-	/* Tab bar */
-	.mockup-tabbar {
-		display: flex; justify-content: space-around; align-items: center;
-		padding: 10px 0 14px; margin-top: 8px;
-		border-top: 1px solid var(--border);
+
+	/* Step 2: Confirm tx */
+	.mockup-step-header {
+		font-size: 0.92rem; font-weight: 600; color: var(--text);
+		text-align: center; margin-bottom: 20px; margin-top: 8px;
 	}
-	.mockup-tab {
-		display: flex; flex-direction: column; align-items: center; gap: 3px;
-		color: var(--text-tertiary); font-size: 0.6rem;
+	.mockup-tx-card {
+		width: 100%; background: var(--bg-raised);
+		border: 1px solid var(--border); border-radius: 12px;
+		padding: 14px 16px; margin-bottom: 24px;
 	}
-	.mockup-tab.active { color: var(--accent); }
+	.mockup-tx-row {
+		display: flex; justify-content: space-between; align-items: center;
+		padding: 9px 0; border-bottom: 1px solid var(--border);
+	}
+	.mockup-tx-row.last { border-bottom: none; }
+	.mockup-tx-label { font-size: 0.75rem; color: var(--text-tertiary); }
+	.mockup-tx-value { font-size: 0.78rem; font-weight: 600; color: var(--text); }
+	.mockup-tx-addr { font-family: monospace; font-size: 0.72rem; }
+	.mockup-slide-track {
+		position: relative; width: 100%; height: 44px;
+		background: var(--bg-raised); border: 1px solid var(--border);
+		border-radius: 22px; display: flex; align-items: center;
+		justify-content: center; overflow: hidden;
+	}
+	.mockup-slide-thumb {
+		position: absolute; left: 4px; top: 4px;
+		width: 36px; height: 36px; border-radius: 50%;
+		background: var(--accent); color: #fff;
+		display: flex; align-items: center; justify-content: center;
+		animation: slide-hint 2s ease-in-out infinite;
+	}
+	@keyframes slide-hint { 0%, 100% { left: 4px; } 50% { left: 28px; } }
+	.mockup-slide-text { font-size: 0.72rem; color: var(--text-tertiary); font-weight: 500; }
+
+	/* Step 3: Face ID */
+	.mockup-faceid-screen {
+		display: flex; flex-direction: column; align-items: center;
+		justify-content: center; gap: 16px;
+		padding: 60px 0 40px;
+	}
+	.mockup-faceid-icon {
+		color: var(--accent);
+		animation: faceid-pulse 1.8s ease-in-out infinite;
+	}
+	@keyframes faceid-pulse {
+		0%, 100% { opacity: 0.7; transform: scale(1); }
+		50% { opacity: 1; transform: scale(1.08); }
+	}
+	.mockup-faceid-label { font-size: 0.92rem; font-weight: 600; color: var(--text); }
+	.mockup-faceid-sub { font-size: 0.72rem; color: var(--text-tertiary); text-align: center; }
+
+	/* Step 4: Success */
+	.mockup-done-screen {
+		display: flex; flex-direction: column; align-items: center;
+		justify-content: center; gap: 12px;
+		padding: 50px 0 40px;
+	}
+	.mockup-done-check { color: var(--green); animation: done-pop 0.5s ease-out; }
+	@keyframes done-pop {
+		0% { transform: scale(0.5); opacity: 0; }
+		70% { transform: scale(1.15); }
+		100% { transform: scale(1); opacity: 1; }
+	}
+	.mockup-done-title { font-size: 1rem; font-weight: 700; color: var(--text); }
+	.mockup-done-detail { font-size: 0.78rem; color: var(--text-secondary); font-family: monospace; }
+	.mockup-done-time { font-size: 0.72rem; color: var(--green); font-weight: 600; }
 
 	/* ── Trust Strip ── */
 	.trust-strip { padding: 32px 0 0; }
@@ -1008,7 +1098,7 @@
 		.hero { padding-top: 80px; padding-bottom: 24px; min-height: 100vh; }
 		.hero-grid { grid-template-columns: 1fr; gap: 40px; }
 		.hero-text { text-align: center; }
-		.hero-cta { justify-content: center; }
+		.hero-cta { align-items: center; }
 		.hero-visual { order: -1; }
 		.scroll-hint { display: none; }
 		h1 { font-size: 2rem; }
@@ -1016,12 +1106,6 @@
 		.subtitle { font-size: 0.95rem; margin-left: auto; margin-right: auto; }
 		.hero-visual { max-height: 400px; }
 		.mockup-phone { width: min(400px, 85vw); }
-		.mockup-screen { padding: 16px 14px 0; }
-		.mockup-balance { font-size: 1.7rem; }
-		.mockup-cents { font-size: 1rem; }
-		.mockup-token-icon { width: 30px; height: 30px; }
-		.mockup-action-circle { width: 36px; height: 36px; }
-		.mockup-actions { gap: 20px; }
 		.trust-row { justify-content: center; }
 		.trust-chip { font-size: 0.72rem; }
 		.why-content { text-align: left; }
