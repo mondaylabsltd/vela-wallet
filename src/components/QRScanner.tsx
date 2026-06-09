@@ -13,37 +13,64 @@ import jsQR from 'jsqr';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { X, SwitchCamera, Camera, ImagePlus } from 'lucide-react-native';
 
+const JSQR_OPTS = { inversionAttempts: 'attemptBoth' as const };
+
 /**
- * Last-resort QR decoder for dark-themed screenshots/photos.
- * Inverts pixels + downscales to 400px, then runs jsQR.
- * Proven to decode WalletPair JPEG that qr-scanner/zbar/BarcodeDetector all fail on.
+ * Try jsQR with a pixel transform (invert / binarize) at a target size.
+ * Browser canvas drawImage handles the downscale (high quality).
  */
-function decodeInverted(canvas: HTMLCanvasElement): string | null {
-  const { width: w, height: h } = canvas;
-
-  // Downscale to ~400px for optimal jsQR performance on noisy images
-  const targetW = Math.min(w, 400);
-  const targetH = Math.round(targetW * h / w);
+function tryJsQR(
+  canvas: HTMLCanvasElement,
+  targetW: number,
+  transform: (d: Uint8ClampedArray) => void,
+): string | null {
+  const tw = Math.min(canvas.width, targetW);
+  const th = Math.round(tw * canvas.height / canvas.width);
   const small = document.createElement('canvas');
-  small.width = targetW;
-  small.height = targetH;
-  const sCtx = small.getContext('2d')!;
-  sCtx.drawImage(canvas, 0, 0, targetW, targetH);
-  const imageData = sCtx.getImageData(0, 0, targetW, targetH);
+  small.width = tw;
+  small.height = th;
+  small.getContext('2d')!.drawImage(canvas, 0, 0, tw, th);
+  const imageData = small.getContext('2d')!.getImageData(0, 0, tw, th);
+  transform(imageData.data);
+  return jsQR(imageData.data as any, tw, th, JSQR_OPTS)?.data ?? null;
+}
 
-  // Invert all pixels
-  const d = imageData.data;
+const NOOP = () => {};
+const INVERT = (d: Uint8ClampedArray) => {
+  for (let i = 0; i < d.length; i += 4) { d[i] = 255 - d[i]; d[i+1] = 255 - d[i+1]; d[i+2] = 255 - d[i+2]; }
+};
+const BINARIZE = (t: number) => (d: Uint8ClampedArray) => {
   for (let i = 0; i < d.length; i += 4) {
-    d[i] = 255 - d[i];
-    d[i + 1] = 255 - d[i + 1];
-    d[i + 2] = 255 - d[i + 2];
+    const lum = (d[i] * 77 + d[i+1] * 150 + d[i+2] * 29) >> 8;
+    const v = lum <= t ? 0 : 255;
+    d[i] = v; d[i+1] = v; d[i+2] = v;
   }
+};
 
-  const result = jsQR(d as any, targetW, targetH, { inversionAttempts: 'attemptBoth' });
-  if (result?.data) {
-    console.log(`[QR] inverted decode OK at ${targetW}×${targetH}`);
-    return result.data;
+/**
+ * Decode QR from a canvas using multiple strategies.
+ * Proven on iPhone Safari with real WalletPair images:
+ *   - JPEG photo (772×1154): invert@400
+ *   - PNG screenshot (998×1298): bin160@600
+ */
+function decodeFromCanvas(canvas: HTMLCanvasElement, label = 'image'): string | null {
+  const strategies: [string, () => string | null][] = [
+    ['raw', () => tryJsQR(canvas, canvas.width, NOOP)],
+    ['invert@400', () => tryJsQR(canvas, 400, INVERT)],
+    ['bin160@600', () => tryJsQR(canvas, 600, BINARIZE(160))],
+    ['invert@600', () => tryJsQR(canvas, 600, INVERT)],
+    ['bin120@600', () => tryJsQR(canvas, 600, BINARIZE(120))],
+    ['bin80@400', () => tryJsQR(canvas, 400, BINARIZE(80))],
+  ];
+
+  for (const [name, fn] of strategies) {
+    const r = fn();
+    if (r) {
+      console.log(`[QR] ${label}: ${name} OK`);
+      return r;
+    }
   }
+  console.log(`[QR] ${label}: all strategies failed ${canvas.width}×${canvas.height}`);
   return null;
 }
 
@@ -153,7 +180,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
           canvas.width = vw;
           canvas.height = vh;
           canvas.getContext('2d', { willReadFrequently: true })!.drawImage(video, 0, 0);
-          decoded = decodeInverted(canvas);
+          decoded = decodeFromCanvas(canvas, 'camera');
         }
       }
 
@@ -292,7 +319,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             console.log('[QR] pick: WASM failed, trying inverted jsQR...');
           }
 
-          // Strategy 2: jsQR inverted (dark-background photos/screenshots)
+          // Strategy 2: jsQR multi-strategy (invert, binarize at various sizes)
           if (!decoded) {
             const url = URL.createObjectURL(file);
             const img = new Image();
@@ -302,8 +329,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             canvas.height = img.naturalHeight;
             canvas.getContext('2d')!.drawImage(img, 0, 0);
             URL.revokeObjectURL(url);
-            decoded = decodeInverted(canvas);
-            if (decoded) console.log('[QR] pick: inverted decoded', decoded.substring(0, 50) + '...');
+            decoded = decodeFromCanvas(canvas, 'pick');
           }
 
           if (decoded) {
