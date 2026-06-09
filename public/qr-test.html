@@ -109,30 +109,40 @@ async function decodeCanvas(canvas) {
 
   const strategies = [
     // zbar WASM — strongest decoder, handles noisy photos
-    ['zbar', async () => {
-      try {
-        if (!window.zbarScan) {
+    // zbar WASM at multiple sizes (smaller images work better — less noise)
+    ...await (async () => {
+      if (!window.zbarScan) {
+        try {
           addLog('Loading zbar WASM...', 'info');
           const m = await import('https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/main.mjs');
           window.zbarScan = m.scanImageData;
-          addLog('zbar WASM loaded, scanImageData: ' + typeof m.scanImageData, 'info');
-        }
-        const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-        const symbols = await window.zbarScan(imageData);
-        if (symbols.length > 0) return symbols[0].decode();
-      } catch(e) { addLog('zbar error: ' + e?.message, 'fail'); }
-      return null;
-    }],
-    ['zbar+inv', async () => {
-      try {
-        if (!window.zbarScan) return null;
-        const d = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+          addLog('zbar loaded OK', 'info');
+        } catch(e) { addLog('zbar load error: ' + e?.message, 'fail'); return []; }
+      }
+      const zs = window.zbarScan;
+      async function zbarAt(c) {
+        const d = c.getContext('2d').getImageData(0, 0, c.width, c.height);
+        const s = await zs(d);
+        if (s.length > 0) return s[0].decode();
+        // Try inverted
         INVERT(d.data);
-        const symbols = await window.zbarScan(d);
-        if (symbols.length > 0) return symbols[0].decode();
-      } catch(e) { addLog('zbar+inv error: ' + e?.message, 'fail'); }
-      return null;
-    }],
+        const s2 = await zs(d);
+        return s2.length > 0 ? s2[0].decode() : null;
+      }
+      const items = [];
+      for (const tw of sizes) {
+        items.push([`zbar@${tw}`, async () => {
+          try {
+            const c2 = document.createElement('canvas');
+            const th = Math.round(tw * canvas.height / canvas.width);
+            c2.width = tw; c2.height = th;
+            c2.getContext('2d').drawImage(canvas, 0, 0, tw, th);
+            return await zbarAt(c2);
+          } catch(e) { addLog('zbar error: '+e?.message, 'fail'); return null; }
+        }]);
+      }
+      return items;
+    })(),
   ];
   for (const s of sizes) {
     strategies.push(
