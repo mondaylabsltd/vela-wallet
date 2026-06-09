@@ -108,13 +108,39 @@ async function decodeCanvas(canvas) {
   const sizes = [...targets].sort((a, b) => b - a);
 
   const strategies = [
-    ['WASM', async () => { try { return (await QrScanner.scanImage(canvas, {returnDetailedScanResult:true}))?.data; } catch { return null; } }],
+    // zbar WASM — strongest decoder, handles noisy photos
+    ['zbar', async () => {
+      try {
+        if (!window.zbarWasm) {
+          addLog('Loading zbar WASM...', 'info');
+          window.zbarWasm = await import('https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/index.js');
+        }
+        const { scanImageData } = window.zbarWasm;
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const symbols = await scanImageData(imageData);
+        if (symbols.length > 0) return symbols[0].decode();
+      } catch(e) { addLog('zbar error: ' + e?.message, 'fail'); }
+      return null;
+    }],
+    // zbar on inverted image
+    ['zbar+inv', async () => {
+      try {
+        const { scanImageData } = window.zbarWasm || {};
+        if (!scanImageData) return null;
+        const ctx = canvas.getContext('2d');
+        const d = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        INVERT(d.data);
+        const symbols = await scanImageData(d);
+        if (symbols.length > 0) return symbols[0].decode();
+      } catch {}
+      return null;
+    }],
   ];
   for (const s of sizes) {
     strategies.push(
       [`binInv160@${s}`, () => tryJsQR(canvas, s, BIN_INVERT(160))],
       [`invert@${s}`, () => tryJsQR(canvas, s, INVERT)],
-      [`bin160@${s}`, () => tryJsQR(canvas, s, BINARIZE(160))],
     );
   }
 
