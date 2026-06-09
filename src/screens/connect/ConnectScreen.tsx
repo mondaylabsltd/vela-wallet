@@ -245,13 +245,15 @@ export default function ConnectScreen() {
         {/* ================================================================= */}
         {/* Connected */}
         {/* ================================================================= */}
-        {status === 'connected' && (
+        {(status === 'connected' || status === 'reconnecting') && (
           <Animated.View entering={fadeInDown(50, 300)}>
             {/* Status card */}
             <VelaCard style={styles.connectedCard}>
               <View style={styles.connectedHeader}>
-                <View style={styles.connectedDot} />
-                <Text style={styles.connectedTitle}>Connected</Text>
+                <View style={[styles.connectedDot, status === 'reconnecting' && styles.reconnectingDot]} />
+                <Text style={styles.connectedTitle}>
+                  {status === 'reconnecting' ? 'Reconnecting...' : 'Connected'}
+                </Text>
                 {connectionType === 'walletpair' && (
                   <View style={styles.encryptedBadge}>
                     <Lock size={10} color={color.success.base} strokeWidth={2.5} />
@@ -529,6 +531,10 @@ const styles = createStyles(() => ({
   connectedDot: {
     width: 10, height: 10, borderRadius: 5,
     backgroundColor: color.success.base,
+  },
+  reconnectingDot: {
+    backgroundColor: color.warning.base,
+    opacity: 0.7,
   },
   connectedTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },

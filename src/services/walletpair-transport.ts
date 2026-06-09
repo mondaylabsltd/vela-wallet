@@ -8,7 +8,7 @@
  * Mobile: BLE + WebSocket relay (BLE added in Phase 4).
  */
 
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   WalletSession,
@@ -200,6 +200,8 @@ export class WalletPairTransport implements DAppTransport {
   private _connected = false;
   private _dappInfo: DAppInfo;
   private listeners = new Map<string, Set<Function>>();
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private appStateUnsub: (() => void) | null = null;
 
   private constructor(session: WalletSession, dappInfo: DAppInfo) {
     this.session = session;
@@ -339,6 +341,7 @@ export class WalletPairTransport implements DAppTransport {
 
   disconnect(): void {
     this._connected = false;
+    this.stopHeartbeat();
     this.session.destroy();
     this.emit('disconnected');
     this.listeners.clear();
@@ -420,15 +423,48 @@ export class WalletPairTransport implements DAppTransport {
     }
   }
 
+  // -----------------------------------------------------------------------
+  // Heartbeat — keeps the WebSocket alive through CF/NAT idle timeouts
+  // -----------------------------------------------------------------------
+
+  private startHeartbeat() {
+    this.stopHeartbeat();
+    // Ping every 25s (CF Workers idle timeout = 30s)
+    this.pingTimer = setInterval(() => {
+      if (this._connected) this.session.ping();
+    }, 25_000);
+
+    // Reconnect proactively when app returns to foreground
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active' && this._connected) {
+        // Fire a ping; if the socket is dead the SDK will detect the close
+        // and trigger auto-reconnect via its backoff logic.
+        this.session.ping();
+      }
+    });
+    this.appStateUnsub = () => sub.remove();
+  }
+
+  private stopHeartbeat() {
+    if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
+    if (this.appStateUnsub) { this.appStateUnsub(); this.appStateUnsub = null; }
+  }
+
+  // -----------------------------------------------------------------------
+  // Session event wiring
+  // -----------------------------------------------------------------------
+
   private wireSessionEvents() {
     this.session.on('phase', (phase: WalletPhase) => {
       console.log('[WalletPair] phase:', phase);
       if (phase === 'connected') {
         this._connected = true;
+        this.startHeartbeat();
         this.emit('connected', this._dappInfo.name || 'WalletPair');
       } else if (phase === 'closed') {
         const wasConnected = this._connected;
         this._connected = false;
+        this.stopHeartbeat();
         if (wasConnected) {
           this.emit('disconnected');
         } else {
@@ -436,7 +472,12 @@ export class WalletPairTransport implements DAppTransport {
           this.emit('error', 'Connection closed by dApp or relay. Try a fresh pairing URI.');
         }
       } else if (phase === 'disconnected') {
-        // Transport-level disconnect — SDK will auto-reconnect
+        // Transport-level disconnect — SDK will auto-reconnect with backoff.
+        // Don't mark as disconnected yet; emit 'reconnecting' so the UI can
+        // show a subtle indicator instead of resetting to fully disconnected.
+        this._connected = false;
+        this.stopHeartbeat();
+        this.emit('reconnecting');
         console.log('[WalletPair] transport disconnected, SDK will retry...');
       }
     });

@@ -57,7 +57,7 @@ export async function clearSession(): Promise<void> {
 // Context shape
 // ---------------------------------------------------------------------------
 
-export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
+export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 export type ConnectionType = 'remote-inject' | 'walletpair' | null;
 
 interface DAppConnectionContextValue {
@@ -218,6 +218,12 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       setConnectionType(null);
       setIncomingRequest(null);
       transportRef.current = null;
+    });
+
+    transport.on('reconnecting', () => {
+      // Transient disconnect — SDK is auto-reconnecting.
+      // Keep transport ref and dApp info intact; just update the status indicator.
+      setStatus('reconnecting');
     });
 
     transport.on('request', handleIncoming);

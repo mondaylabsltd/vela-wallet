@@ -12,8 +12,10 @@
 export interface DAppTransportEvents {
   /** Connection established — ready to receive requests. */
   connected: (peerName: string) => void;
-  /** Connection lost or closed. */
+  /** Connection lost or closed permanently. */
   disconnected: () => void;
+  /** Transport lost — auto-reconnect in progress. */
+  reconnecting: () => void;
   /** Incoming JSON-RPC request from a dApp. */
   request: (id: string, method: string, params: any[], origin: string) => void;
   /** Transport-level error. */
