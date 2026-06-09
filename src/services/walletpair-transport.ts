@@ -21,7 +21,7 @@ import {
   type WalletPhase,
 } from 'walletpair-sdk';
 import type { DAppTransport, DAppTransportEvents, DAppInfo, WalletInfo } from './dapp-transport';
-import { DEFAULT_NETWORKS } from '@/models/network';
+import { DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -31,7 +31,15 @@ const STORAGE_KEY = 'vela.walletpairSession';
 
 /** Wallet capabilities advertised to dApps. */
 function buildCapabilities(): Capabilities {
-  const chains = DEFAULT_NETWORKS.map(n => evmChainId(n.chainId));
+  const allNetworks = getAllNetworksSync();
+  const chains = allNetworks.map(n => evmChainId(n.chainId));
+
+  // Share RPC URLs so the dApp-side can proxy read-only requests locally
+  const rpcUrls: Record<string, string> = {};
+  for (const n of allNetworks) {
+    rpcUrls[evmChainId(n.chainId)] = n.rpcURL;
+  }
+
   return {
     methods: [
       'wallet_getAccounts',
@@ -44,6 +52,7 @@ function buildCapabilities(): Capabilities {
     events: ['accountsChanged', 'chainChanged', 'disconnect'],
     chains,
     version: { evm: 1 },
+    rpcUrls,
   };
 }
 
