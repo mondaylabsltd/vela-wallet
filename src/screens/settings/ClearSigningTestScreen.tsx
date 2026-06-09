@@ -202,7 +202,7 @@ const SCENARIOS: {
   {
     id: '1inch-swap',
     label: '1inch Swap',
-    subtitle: 'Clear sign — contract descriptor',
+    subtitle: 'Clear sign — contract-specific descriptor',
     icon: <ArrowRightLeft size={18} color="#E8572A" strokeWidth={2} />,
     iconBg: '#FFF0EB',
     request: {
@@ -210,8 +210,160 @@ const SCENARIOS: {
       method: 'eth_sendTransaction',
       params: [{
         to: '0x111111125421cA6dc452d289314280a0f8842A65',
-        // swap(address,address,uint256,uint256) selector = 0x12aa3caf (simplified)
         data: '0x12aa3caf000000000000000000000000111111125421ca6dc452d289314280a0f8842a65000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200000000000000000000000000000000000000000000000000000000003b9aca000000000000000000000000000000000000000000000000000de0b6b3a7640000',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+
+  // --- ERC-721 NFT scenarios ---
+  {
+    id: 'nft-transfer',
+    label: 'NFT Transfer',
+    subtitle: 'ERC-721 — transferFrom(address,address,uint256)',
+    icon: <Send size={18} color="#6c5ce7" strokeWidth={2} />,
+    iconBg: '#EEF0FF',
+    request: {
+      id: 'test-nft-transfer',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D', // BAYC
+        // transferFrom(address,address,uint256) = 0x23b872dd
+        data: '0x23b872dd000000000000000000000000af5e8917831ef08a64e18b2cde9f8f5d32c7b3e1000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa960450000000000000000000000000000000000000000000000000000000000001981',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+  {
+    id: 'nft-approve-all',
+    label: 'NFT Approve All',
+    subtitle: 'ERC-721 — setApprovalForAll(address,bool)',
+    icon: <CheckCircle size={18} color="#d4890a" strokeWidth={2} />,
+    iconBg: '#FFF8F0',
+    request: {
+      id: 'test-nft-approve-all',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D', // BAYC
+        // setApprovalForAll(address,bool) = 0xa22cb465
+        data: '0xa22cb4650000000000000000000000001e0049783f008a0085193e00003d00cd54003c710000000000000000000000000000000000000000000000000000000000000001',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+
+  // --- ERC-4626 Vault scenarios ---
+  {
+    id: 'vault-deposit',
+    label: 'Vault Deposit',
+    subtitle: 'ERC-4626 — deposit(uint256,address)',
+    icon: <Zap size={18} color="#22a456" strokeWidth={2} />,
+    iconBg: '#EDFAF2',
+    request: {
+      id: 'test-vault-deposit',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0xae78736Cd615f374D3085123A210448E74Fc6393', // rETH (used as example vault)
+        // deposit(uint256,address) = 0x6e553f65
+        data: '0x6e553f650000000000000000000000000000000000000000000000001bc16d674ec80000000000000000000000000000af5e8917831ef08a64e18b2cde9f8f5d32c7b3e1',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+  {
+    id: 'vault-withdraw',
+    label: 'Vault Withdraw',
+    subtitle: 'ERC-4626 — withdraw(uint256,address,address)',
+    icon: <Zap size={18} color="#6c5ce7" strokeWidth={2} />,
+    iconBg: '#EEF0FF',
+    request: {
+      id: 'test-vault-withdraw',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0xae78736Cd615f374D3085123A210448E74Fc6393',
+        // withdraw(uint256,address,address) = 0xb460af94
+        data: '0xb460af940000000000000000000000000000000000000000000000000de0b6b3a7640000000000000000000000000000af5e8917831ef08a64e18b2cde9f8f5d32c7b3e1000000000000000000000000af5e8917831ef08a64e18b2cde9f8f5d32c7b3e1',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+
+  // --- ERC-20 transferFrom ---
+  {
+    id: 'erc20-transferFrom',
+    label: 'ERC-20 TransferFrom',
+    subtitle: 'Clear sign — transferFrom(address,address,uint256)',
+    icon: <Send size={18} color="#E8572A" strokeWidth={2} />,
+    iconBg: '#FFF0EB',
+    request: {
+      id: 'test-erc20-transferFrom',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT
+        // transferFrom(address,address,uint256) = 0x23b872dd
+        data: '0x23b872dd000000000000000000000000af5e8917831ef08a64e18b2cde9f8f5d32c7b3e1000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa960450000000000000000000000000000000000000000000000000000000005f5e100',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+
+  // --- Hex message (non-readable personal_sign) ---
+  {
+    id: 'hex-message',
+    label: 'Hex Message Sign',
+    subtitle: 'personal_sign — non-printable hex data',
+    icon: <Pen size={18} color="#d4890a" strokeWidth={2} />,
+    iconBg: '#FFF8F0',
+    request: {
+      id: 'test-hex-msg',
+      method: 'personal_sign',
+      params: [
+        '0xdeadbeefcafebabe0102030405060708091011121314151617181920212223242526272829303132',
+        '0x0000000000000000000000000000000000000000',
+      ],
+      origin: 'clear-signing-test',
+    },
+  },
+
+  // --- Large ETH value send ---
+  {
+    id: 'large-eth-send',
+    label: 'Large ETH Send',
+    subtitle: 'Plain transfer — 10 ETH',
+    icon: <Send size={18} color="#d43a2a" strokeWidth={2} />,
+    iconBg: '#FEF2F2',
+    request: {
+      id: 'test-large-eth',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D',
+        data: '0x',
+        value: '0x8ac7230489e80000', // 10 ETH
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+
+  // --- ERC-20 limited approve (not unlimited) ---
+  {
+    id: 'erc20-approve-limited',
+    label: 'ERC-20 Limited Approve',
+    subtitle: 'Clear sign — approve with specific amount',
+    icon: <CheckCircle size={18} color="#22a456" strokeWidth={2} />,
+    iconBg: '#EDFAF2',
+    request: {
+      id: 'test-erc20-limited-approve',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+        // approve(address,uint256) with 500 USDC (500 * 1e6 = 0x1DCD6500)
+        data: '0x095ea7b30000000000000000000000003fc91a3afd70395cd496c647d5a6cc9d4b2b7fad000000000000000000000000000000000000000000000000000000001dcd6500',
         value: '0x0',
       }],
       origin: 'clear-signing-test',
