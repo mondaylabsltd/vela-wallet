@@ -558,16 +558,19 @@ function MockSigningModal({ request, onClose }: {
             </View>
           </View>
 
-          {/* Context strip */}
+          {/* Context strip — "subject" (who is signing) */}
           {(() => {
             const net = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
             return (
               <View style={ms.ctxStrip}>
-                {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />}
-                <Text style={ms.ctxStripName}>{chainName(chainId)}</Text>
-                <Text style={ms.ctxDot}>·</Text>
-                <Text style={ms.ctxStripName}>{accountName}</Text>
-                {activeAccount?.address && <Text style={ms.ctxStripAddr}>{shortAddr(activeAccount.address)}</Text>}
+                {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={20} />}
+                <View>
+                  <Text style={ms.ctxChainName}>{chainName(chainId)}</Text>
+                  <Text style={ms.ctxAccountLine}>
+                    {accountName}
+                    {activeAccount?.address ? `  ${shortAddr(activeAccount.address)}` : ''}
+                  </Text>
+                </View>
               </View>
             );
           })()}
@@ -658,7 +661,7 @@ function MockSigningModal({ request, onClose }: {
                 </View>
               )}
 
-              <View style={ms.ctx}><Text style={ms.ctxText}>{chainName(chainId)} · {accountName}</Text></View>
+              {/* context already shown at top */}
             </>
 
           /* ---- personal_sign ---- */
@@ -669,7 +672,7 @@ function MockSigningModal({ request, onClose }: {
                 <View style={ms.msgTag}><Text style={ms.msgTagText}>personal_sign · No gas fee</Text></View>
                 <Text style={ms.msgText}>{decodeMsg(params[0])}</Text>
               </View>
-              <View style={ms.ctx}><Text style={ms.ctxText}>{chainName(chainId)} · {accountName}</Text></View>
+              {/* context already shown at top */}
             </>
 
           /* ---- EIP-712 blind ---- */
@@ -714,7 +717,7 @@ function MockSigningModal({ request, onClose }: {
                   </>
                 );
               })()}
-              <View style={ms.ctx}><Text style={ms.ctxText}>{chainName(chainId)} · {accountName}</Text></View>
+              {/* context already shown at top */}
             </>
 
           /* ---- Blind transaction ---- */
@@ -763,7 +766,7 @@ function MockSigningModal({ request, onClose }: {
                         )}
                       </>
                     )}
-                    <View style={ms.ctx}><Text style={ms.ctxText}>{chainName(chainId)} · {accountName}</Text></View>
+                    {/* context already shown at top */}
                   </>
                 );
               })()}
@@ -772,14 +775,14 @@ function MockSigningModal({ request, onClose }: {
           ) : (
             <View style={{ alignItems: 'center', padding: 40 }}>
               <Shield size={28} color={color.fg.muted} strokeWidth={2} />
-              <Text style={ms.ctxText}>Signature request</Text>
+              <Text style={ms.ctxChainName}>Signature request</Text>
             </View>
           )}
 
           {/* Resolving indicator */}
           {resolving && (
             <View style={{ alignItems: 'center', padding: space.lg }}>
-              <Text style={ms.ctxText}>Loading descriptor...</Text>
+              <Text style={ms.ctxChainName}>Loading descriptor...</Text>
             </View>
           )}
         </ScrollView>
@@ -867,14 +870,13 @@ const ms = createStyles(() => ({
   e2eText: { fontSize: text.xs, ...inter.bold, color: color.success.base },
 
   ctxStrip: {
-    flexDirection: 'row', alignItems: 'center', gap: space.md,
-    paddingVertical: space.md, paddingHorizontal: space.lg,
-    borderWidth: 1, borderColor: color.border.base, borderRadius: radius.full,
-    alignSelf: 'center', marginBottom: space.md,
+    flexDirection: 'row', alignItems: 'center', gap: space.lg,
+    paddingVertical: space.lg, paddingHorizontal: space.xl,
+    backgroundColor: color.bg.sunken, borderRadius: radius.xl,
+    marginBottom: space.xl,
   },
-  ctxStripName: { fontSize: text.xs, ...inter.semibold, color: color.fg.base },
-  ctxStripAddr: { fontSize: 10, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.muted },
-  ctxDot: { fontSize: text.xs, color: color.border.strong },
+  ctxChainName: { fontSize: text.sm, ...inter.semibold, color: color.fg.base },
+  ctxAccountLine: { fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.muted, marginTop: 1 },
 
   intent: { alignItems: 'center', paddingTop: space.lg, paddingBottom: space['2xl'] },
   intentText: { fontSize: text['5xl'], fontWeight: '800' as const, fontFamily: 'Inter-Bold', letterSpacing: -1 },
@@ -952,9 +954,6 @@ const ms = createStyles(() => ({
     textTransform: 'uppercase' as const, letterSpacing: 0.3,
   },
   msgText: { fontSize: text.base, ...inter.regular, color: color.fg.base, lineHeight: 22, textAlign: 'center' },
-
-  ctx: { flexDirection: 'row', justifyContent: 'center', paddingVertical: space.xl },
-  ctxText: { fontSize: text.xs, ...inter.medium, color: color.fg.subtle },
 
   detailsToggle: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',

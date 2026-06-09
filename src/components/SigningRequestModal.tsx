@@ -659,27 +659,26 @@ function ContextStrip({ chainId, accountName, accountAddress }: {
 
   return (
     <View style={styles.contextStrip}>
-      {net ? (
-        <ChainLogo
-          label={net.iconLabel}
-          color={net.iconColor}
-          bgColor={net.iconBg}
-          logoURL={net.logoURL}
-          size={18}
-        />
-      ) : null}
-      <Text style={styles.contextChainName}>{chainName(chainId)}</Text>
-      {accountName && (
-        <>
-          <Text style={styles.contextDot}>·</Text>
-          <View style={styles.contextAccount}>
-            <Text style={styles.contextAccountName}>{accountName}</Text>
-            {accountAddress && (
-              <Text style={styles.contextAccountAddr}>{shortAddr(accountAddress)}</Text>
-            )}
-          </View>
-        </>
-      )}
+      <View style={styles.contextLeft}>
+        {net ? (
+          <ChainLogo
+            label={net.iconLabel}
+            color={net.iconColor}
+            bgColor={net.iconBg}
+            logoURL={net.logoURL}
+            size={20}
+          />
+        ) : null}
+        <View>
+          <Text style={styles.contextChainName}>{chainName(chainId)}</Text>
+          {accountName && (
+            <Text style={styles.contextAccountLine}>
+              {accountName}
+              {accountAddress ? `  ${shortAddr(accountAddress)}` : ''}
+            </Text>
+          )}
+        </View>
+      </View>
     </View>
   );
 }
@@ -970,34 +969,29 @@ const styles = createStyles(() => ({
     textAlign: 'center',
   },
 
-  // ===== Context Strip =====
+  // ===== Context Strip (full-width "subject") =====
   contextStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
-    paddingVertical: space.md,
-    paddingHorizontal: space.lg,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    borderRadius: radius.full,
-    alignSelf: 'center',
-    marginBottom: space.md,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.xl,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.xl,
+    marginBottom: space.xl,
+  },
+  contextLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.lg,
+    flex: 1,
   },
   contextChainName: {
-    fontSize: text.xs, ...inter.semibold, color: color.fg.base,
+    fontSize: text.sm, ...inter.semibold, color: color.fg.base,
   },
-  contextDot: {
-    fontSize: text.xs, color: color.border.strong,
-  },
-  contextAccount: {
-    flexDirection: 'row', alignItems: 'center', gap: space.sm,
-  },
-  contextAccountName: {
-    fontSize: text.xs, ...inter.semibold, color: color.fg.base,
-  },
-  contextAccountAddr: {
-    fontSize: 10, fontWeight: '500' as const, fontFamily: font.mono,
+  contextAccountLine: {
+    fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono,
     color: color.fg.muted,
+    marginTop: 1,
   },
 
   // ===== Details Toggle =====
