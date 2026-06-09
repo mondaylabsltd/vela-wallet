@@ -1,12 +1,12 @@
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { fadeIn, fadeInDown } from '@/constants/entering';
-import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
+import { color, createStyles, font, inter, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { getAllNetworksSync } from '@/models/network';
 import { hapticSuccess, openURL } from '@/services/platform';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Code, ExternalLink, Star } from 'lucide-react-native';
+import { ArrowLeft, ExternalLink } from 'lucide-react-native';
 import React, { useMemo, useRef } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -52,29 +52,6 @@ export default function AboutScreen() {
           <Text style={styles.tagline}>A simpler way to own crypto</Text>
         </Animated.View>
 
-        {/* Open Source */}
-        <Animated.View entering={fadeInDown(100, 400)}>
-          <Pressable
-            style={styles.githubCard}
-            onPress={() => openURL('https://github.com/atshelchin/vela-wallet')}
-          >
-            <View style={styles.githubLeft}>
-              <View style={styles.githubIconWrap}>
-                <Code size={20} color={color.fg.base} strokeWidth={2} />
-              </View>
-              <View style={styles.githubText}>
-                <Text style={styles.githubTitle}>Open Source</Text>
-                <Text style={styles.githubRepo}>atshelchin/vela-wallet-mobile</Text>
-              </View>
-            </View>
-            <View style={styles.githubRight}>
-              <Star size={12} color={color.fg.subtle} strokeWidth={2} />
-              <Text style={styles.githubAction}>Star</Text>
-              <ExternalLink size={12} color={color.fg.subtle} strokeWidth={2} />
-            </View>
-          </Pressable>
-        </Animated.View>
-
         {/* Technical */}
         <Animated.View entering={fadeInDown(150, 400)}>
           <Text style={styles.sectionTitle}>Technical details</Text>
@@ -91,6 +68,8 @@ export default function AboutScreen() {
         <Animated.View entering={fadeInDown(200, 400)}>
           <VelaCard style={styles.linksCard}>
             <LinkRow label="Website" url="https://getvela.app" />
+            <View style={styles.separator} />
+            <LinkRow label="GitHub" url="https://github.com/atshelchin/vela-wallet" />
             <View style={styles.separator} />
             <LinkRow label="Safe Wallet" url="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1" />
           </VelaCard>
@@ -171,62 +150,6 @@ const styles = createStyles(() => ({
     ...inter.regular,
     color: color.fg.muted,
     marginTop: space.md,
-  },
-
-  // GitHub card
-  githubCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: color.bg.raised,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    borderRadius: radius.xl,
-    padding: space.xl,
-    marginBottom: space['2xl'],
-  },
-  githubLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.lg,
-    flex: 1,
-  },
-  githubIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: color.bg.sunken,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  githubText: {
-    gap: 2,
-    flex: 1,
-  },
-  githubTitle: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.fg.base,
-  },
-  githubRepo: {
-    fontSize: text.sm,
-    ...inter.medium,
-    fontFamily: font.mono,
-    color: color.fg.subtle,
-  },
-  githubRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    backgroundColor: color.bg.sunken,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-    borderRadius: radius.full,
-  },
-  githubAction: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.subtle,
   },
 
   // Section
