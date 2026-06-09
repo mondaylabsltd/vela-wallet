@@ -10,7 +10,7 @@ import { hashTypedData, type TypedData } from '@/services/eip712';
 import { fromHex, stripHexPrefix, toHex } from '@/services/hex';
 import * as PublicKeyIndex from '@/services/public-key-index';
 import { rpcCall } from '@/services/rpc-adapter';
-import { sendContractCall, sendNative, buildEip1271Signature, extractClientDataFields } from '@/services/safe-transaction';
+import { sendContractCall, sendNative, buildEip1271Signature, extractClientDataFields, computeSafeMessageHash } from '@/services/safe-transaction';
 import { findAccountByCredentialId } from '@/services/storage';
 
 export interface DAppRequest {
@@ -48,6 +48,8 @@ function buildContractSignature(assertion: Passkey.PasskeyAssertionResult): stri
 export async function handlePersonalSign(
   request: DAppRequest,
   account: Account,
+  safeAddress: string,
+  chainId: number,
 ): Promise<string> {
   const hexMsg = request.params[0] as string;
   const clean = stripHexPrefix(hexMsg);
@@ -57,9 +59,12 @@ export async function handlePersonalSign(
   const combined = new Uint8Array(prefix.length + msgBytes.length);
   combined.set(prefix);
   combined.set(msgBytes, prefix.length);
-  const dataToSign = keccak256(combined);
+  const originalHash = keccak256(combined);
 
-  const assertion = await Passkey.sign(toHex(dataToSign), account.id);
+  // Wrap in Safe message hash — Safe4337Module.isValidSignature wraps the
+  // original hash before passing it to the WebAuthn signer for verification
+  const safeHash = computeSafeMessageHash(originalHash, chainId, safeAddress);
+  const assertion = await Passkey.sign(toHex(safeHash), account.id);
   return buildContractSignature(assertion);
 }
 
@@ -70,15 +75,20 @@ export async function handlePersonalSign(
 export async function handleSignTypedData(
   request: DAppRequest,
   account: Account,
+  safeAddress: string,
+  chainId: number,
 ): Promise<string> {
   // EIP-712: params[1] is the typed data JSON string (or object)
   const typedDataRaw = request.params[1] ?? request.params[0];
   const typedData: TypedData = typeof typedDataRaw === 'string'
     ? JSON.parse(typedDataRaw)
     : typedDataRaw;
-  const dataToSign = hashTypedData(typedData);
+  const originalHash = hashTypedData(typedData);
 
-  const assertion = await Passkey.sign(toHex(dataToSign), account.id);
+  // Wrap in Safe message hash — Safe4337Module.isValidSignature wraps the
+  // original hash before passing it to the WebAuthn signer for verification
+  const safeHash = computeSafeMessageHash(originalHash, chainId, safeAddress);
+  const assertion = await Passkey.sign(toHex(safeHash), account.id);
   return buildContractSignature(assertion);
 }
 
@@ -147,12 +157,15 @@ export async function handleSendTransaction(
 export async function handleGenericSign(
   request: DAppRequest,
   account: Account,
+  safeAddress: string,
+  chainId: number,
 ): Promise<string> {
   const jsonStr = JSON.stringify(request.params);
   const jsonBytes = new TextEncoder().encode(jsonStr);
-  const dataToSign = keccak256(jsonBytes);
+  const originalHash = keccak256(jsonBytes);
 
-  const assertion = await Passkey.sign(toHex(dataToSign), account.id);
+  const safeHash = computeSafeMessageHash(originalHash, chainId, safeAddress);
+  const assertion = await Passkey.sign(toHex(safeHash), account.id);
   return buildContractSignature(assertion);
 }
 
@@ -173,11 +186,11 @@ export async function handleDAppRequest(
   } else if (method === 'wallet_sendCalls') {
     return handleSendCalls(request, account, safeAddress, chainId);
   } else if (method === 'personal_sign') {
-    return handlePersonalSign(request, account);
+    return handlePersonalSign(request, account, safeAddress, chainId);
   } else if (method.includes('signTypedData')) {
-    return handleSignTypedData(request, account);
+    return handleSignTypedData(request, account, safeAddress, chainId);
   } else {
-    return handleGenericSign(request, account);
+    return handleGenericSign(request, account, safeAddress, chainId);
   }
 }
 

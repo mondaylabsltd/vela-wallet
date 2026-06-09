@@ -66,16 +66,20 @@ jest.mock('@/services/rpc-adapter', () => ({
 }));
 
 import { handlePersonalSign, handleSignTypedData, handleGenericSign, isSigningMethod } from '@/hooks/use-dapp-signing';
-import { extractClientDataFields, buildEip1271Signature } from '@/services/safe-transaction';
+import { extractClientDataFields, buildEip1271Signature, computeSafeMessageHash } from '@/services/safe-transaction';
 import { derSignatureToRaw } from '@/services/attestation-parser';
 import { fromHex, toHex } from '@/services/hex';
+import { keccak256 } from '@/services/eth-crypto';
 import type { Account } from '@/models/types';
+
+const SAFE_ADDRESS = '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c';
+const CHAIN_ID = 137;
 
 const mockAccount: Account = {
   id: 'mock-credential-id',
   name: 'Test Account',
-  safeAddress: '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c',
-  chainId: 137,
+  safeAddress: SAFE_ADDRESS,
+  chainId: CHAIN_ID,
 } as any;
 
 describe('EIP-1271 contract signature format', () => {
@@ -149,7 +153,7 @@ describe('EIP-1271 contract signature format', () => {
         params: ['0x48656c6c6f', '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c'], // "Hello"
       };
 
-      const result = await handlePersonalSign(request, mockAccount);
+      const result = await handlePersonalSign(request, mockAccount, SAFE_ADDRESS, CHAIN_ID);
 
       // Should be hex string starting with 0x
       expect(result).toMatch(/^0x[0-9a-f]+$/i);
@@ -213,7 +217,7 @@ describe('EIP-1271 contract signature format', () => {
         params: ['0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c', JSON.stringify(typedData)],
       };
 
-      const result = await handleSignTypedData(request, mockAccount);
+      const result = await handleSignTypedData(request, mockAccount, SAFE_ADDRESS, CHAIN_ID);
 
       // Should be hex string
       expect(result).toMatch(/^0x[0-9a-f]+$/i);
@@ -242,7 +246,7 @@ describe('EIP-1271 contract signature format', () => {
         ],
       };
 
-      const result = await handleSignTypedData(request, mockAccount);
+      const result = await handleSignTypedData(request, mockAccount, SAFE_ADDRESS, CHAIN_ID);
       expect(result).toMatch(/^0x[0-9a-f]+$/i);
       const sigBytes = fromHex(result.slice(2));
       expect(sigBytes.length).toBeGreaterThan(200);
@@ -257,7 +261,7 @@ describe('EIP-1271 contract signature format', () => {
         params: ['0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c', '0xdeadbeef'],
       };
 
-      const result = await handleGenericSign(request, mockAccount);
+      const result = await handleGenericSign(request, mockAccount, SAFE_ADDRESS, CHAIN_ID);
 
       expect(result).toMatch(/^0x[0-9a-f]+$/i);
       const sigBytes = fromHex(result.slice(2));
@@ -290,9 +294,9 @@ describe('EIP-1271 contract signature format', () => {
       };
 
       const [sig1, sig2, sig3] = await Promise.all([
-        handlePersonalSign(personalReq, mockAccount),
-        handleSignTypedData(typedDataReq, mockAccount),
-        handleGenericSign(genericReq, mockAccount),
+        handlePersonalSign(personalReq, mockAccount, SAFE_ADDRESS, CHAIN_ID),
+        handleSignTypedData(typedDataReq, mockAccount, SAFE_ADDRESS, CHAIN_ID),
+        handleGenericSign(genericReq, mockAccount, SAFE_ADDRESS, CHAIN_ID),
       ]);
 
       // All three should use the same mock assertion, so they should produce
@@ -313,6 +317,81 @@ describe('EIP-1271 contract signature format', () => {
       // Since all use the same mock assertion, the signatures should be identical
       expect(sig1).toBe(sig2);
       expect(sig2).toBe(sig3);
+    });
+  });
+
+  describe('computeSafeMessageHash', () => {
+    test('matches on-chain Safe4337Module hash computation', () => {
+      // Verified against on-chain trace of Safe.isValidSignature on Polygon
+      // Safe: 0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c, chainId: 137
+      const originalHash = fromHex('854891bd17de26c18ab684074f2dc661fa53ba619a17fc388a199cbb17a1fee1');
+      const safeHash = computeSafeMessageHash(originalHash, 137, '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c');
+      expect(toHex(safeHash)).toBe('d50c52bbf0aae6c8db0ae28f2e6ff5a6565b160ec69c1a2a8e320784d63ebadf');
+    });
+
+    test('different chain IDs produce different hashes', () => {
+      const originalHash = fromHex('854891bd17de26c18ab684074f2dc661fa53ba619a17fc388a199cbb17a1fee1');
+      const hash137 = computeSafeMessageHash(originalHash, 137, SAFE_ADDRESS);
+      const hash1 = computeSafeMessageHash(originalHash, 1, SAFE_ADDRESS);
+      expect(toHex(hash137)).not.toBe(toHex(hash1));
+    });
+
+    test('different Safe addresses produce different hashes', () => {
+      const originalHash = fromHex('854891bd17de26c18ab684074f2dc661fa53ba619a17fc388a199cbb17a1fee1');
+      const hash1 = computeSafeMessageHash(originalHash, 137, '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c');
+      const hash2 = computeSafeMessageHash(originalHash, 137, '0x0000000000000000000000000000000000000001');
+      expect(toHex(hash1)).not.toBe(toHex(hash2));
+    });
+  });
+
+  describe('Permit2 EIP-712 hash computation', () => {
+    test('Vela hashTypedData matches Permit2 on-chain hash (verified via cast)', () => {
+      // This typed data matches a real Uniswap Permit2 request on Polygon
+      const { hashTypedData } = require('@/services/eip712');
+      const typedData = {
+        types: {
+          PermitSingle: [
+            { name: 'details', type: 'PermitDetails' },
+            { name: 'spender', type: 'address' },
+            { name: 'sigDeadline', type: 'uint256' },
+          ],
+          PermitDetails: [
+            { name: 'token', type: 'address' },
+            { name: 'amount', type: 'uint160' },
+            { name: 'expiration', type: 'uint48' },
+            { name: 'nonce', type: 'uint48' },
+          ],
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+            { name: 'verifyingContract', type: 'address' },
+          ],
+        },
+        domain: {
+          name: 'Permit2',
+          chainId: '137',
+          verifyingContract: '0x000000000022d473030f116ddee9f6b43ac78ba3',
+        },
+        primaryType: 'PermitSingle',
+        message: {
+          details: {
+            token: '0xc011a7e12a19f7b1f670d46f03b03f3342e82dfb',
+            amount: '1461501637330902918203684832716283019655932542975',
+            expiration: '1783611309',
+            nonce: '0',
+          },
+          spender: '0x8b844f885672f333bc0042cb669255f93a4c1e6b',
+          sigDeadline: '1781021109',
+        },
+      };
+
+      const hash = hashTypedData(typedData);
+      // Verified with foundry cast on-chain computation
+      expect(toHex(hash)).toBe('854891bd17de26c18ab684074f2dc661fa53ba619a17fc388a199cbb17a1fee1');
+
+      // And the Safe message hash should match on-chain trace
+      const safeHash = computeSafeMessageHash(hash, 137, '0x14fB1fB21751E29F7Ec48dC450017552E3D1eA5c');
+      expect(toHex(safeHash)).toBe('d50c52bbf0aae6c8db0ae28f2e6ff5a6565b160ec69c1a2a8e320784d63ebadf');
     });
   });
 

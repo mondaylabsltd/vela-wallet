@@ -616,6 +616,55 @@ function calculateSafeOpHash(
 }
 
 // ---------------------------------------------------------------------------
+// Safe Message Hash (EIP-1271)
+// ---------------------------------------------------------------------------
+
+const SAFE_MSG_TYPEHASH = keccak256(
+  new TextEncoder().encode('SafeMessage(bytes message)'),
+);
+
+const EIP712_DOMAIN_TYPEHASH = keccak256(
+  new TextEncoder().encode('EIP712Domain(uint256 chainId,address verifyingContract)'),
+);
+
+/**
+ * Compute the Safe message hash that the passkey must sign for EIP-1271 verification.
+ *
+ * Safe4337Module.isValidSignature wraps the original hash in a SafeMessage EIP-712
+ * structure before passing it to checkSignatures/WebAuthn signer:
+ *
+ *   messageHash   = keccak256(abi.encode(originalHash))
+ *   structHash    = keccak256(abi.encode(SAFE_MSG_TYPEHASH, messageHash))
+ *   domainSep     = keccak256(abi.encode(DOMAIN_TYPEHASH, chainId, safeAddress))
+ *   safeMessageHash = keccak256(0x1901 || domainSep || structHash)
+ */
+export function computeSafeMessageHash(
+  originalHash: Uint8Array,
+  chainId: number,
+  safeAddress: string,
+): Uint8Array {
+  // messageHash = keccak256(abi.encode(bytes32 originalHash))
+  const messageHash = keccak256(abiEncodeBytes32(originalHash));
+
+  // structHash = keccak256(abi.encode(SAFE_MSG_TYPEHASH, messageHash))
+  const structHash = keccak256(concatBytes(SAFE_MSG_TYPEHASH, messageHash));
+
+  // domainSep = keccak256(abi.encode(DOMAIN_TYPEHASH, chainId, safeAddress))
+  const domainSep = keccak256(
+    concatBytes(
+      EIP712_DOMAIN_TYPEHASH,
+      abiEncodeUint256(BigInt(chainId)),
+      abiEncodeAddress(safeAddress),
+    ),
+  );
+
+  // safeMessageHash = keccak256(0x1901 || domainSep || structHash)
+  return keccak256(
+    concatBytes(new Uint8Array([0x19, 0x01]), domainSep, structHash),
+  );
+}
+
+// ---------------------------------------------------------------------------
 // WebAuthn Signature
 // ---------------------------------------------------------------------------
 
