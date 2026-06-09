@@ -369,8 +369,11 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
+      input.style.display = 'none';
+      document.body.appendChild(input);
       input.onchange = async () => {
         console.log('[QR] pick: onchange fired, files =', input.files?.length);
+        document.body.removeChild(input);
         try {
           const file = input.files?.[0];
           if (!file) return;
