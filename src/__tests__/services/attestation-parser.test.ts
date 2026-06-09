@@ -28,7 +28,7 @@ describe('derSignatureToRaw', () => {
   test('strips leading zero bytes from r and s', () => {
     // DER with leading zero (signed integer representation)
     const r = new Uint8Array(32).fill(0xAA);
-    const s = new Uint8Array(32).fill(0xBB);
+    const s = new Uint8Array(32).fill(0x11); // low-s value (< n/2)
     const der = new Uint8Array([
       0x30, 0x46, // SEQUENCE, length 70
       0x02, 0x21, // INTEGER, length 33
@@ -41,7 +41,7 @@ describe('derSignatureToRaw', () => {
     expect(raw).not.toBeNull();
     expect(raw!.length).toBe(64);
     expect(toHex(raw!.slice(0, 32))).toBe('aa'.repeat(32));
-    expect(toHex(raw!.slice(32))).toBe('bb'.repeat(32));
+    expect(toHex(raw!.slice(32))).toBe('11'.repeat(32));
   });
 
   test('pads short r or s values to 32 bytes', () => {

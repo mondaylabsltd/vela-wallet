@@ -86,10 +86,39 @@ export function derSignatureToRaw(derSig: Uint8Array): Uint8Array | null {
     s = padded;
   }
 
+  // Normalize s to low-s form (s <= n/2) for RIP-7212 P256 precompile compatibility.
+  // P256 curve order n = FFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
+  // @ts-ignore - Uint8Array slice buffer type mismatch
+  s = normalizeP256S(s);
+
   const raw = new Uint8Array(64);
   raw.set(r, 0);
   raw.set(s, 32);
   return raw;
+}
+
+// P256 curve order n
+const P256_N = BigInt('0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551');
+const P256_HALF_N = P256_N >> 1n;
+
+/**
+ * Normalize P256 ECDSA s-value to low-s form (s <= n/2).
+ * The RIP-7212 P256 precompile rejects signatures with s > n/2.
+ */
+function normalizeP256S(sBytes: Uint8Array): Uint8Array {
+  let sVal = 0n;
+  for (let i = 0; i < sBytes.length; i++) {
+    sVal = (sVal << 8n) | BigInt(sBytes[i]);
+  }
+  if (sVal <= P256_HALF_N) return sBytes;
+  sVal = P256_N - sVal;
+  const out = new Uint8Array(32);
+  let v = sVal;
+  for (let i = 31; i >= 0; i--) {
+    out[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
