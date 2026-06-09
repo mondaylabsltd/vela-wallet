@@ -535,8 +535,9 @@ function formatTokenAmount(
     }
   }
 
-  // Format with 18 decimals as fallback (actual decimal lookup would need token info)
-  const display = formatWeiAmount(amount);
+  // Use known decimals when possible, fallback to smart detection
+  const decimals = guessTokenDecimals(tokenAddr);
+  const display = formatTokenValue(amount, decimals);
 
   return {
     value: display,
@@ -627,14 +628,57 @@ function toBigInt(v: DecodedValue | undefined): bigint {
 
 function formatWeiAmount(wei: bigint): string {
   if (wei === 0n) return '0';
-  // Try 18 decimals first (most common)
   const eth = Number(wei) / 1e18;
   if (eth >= 0.0001) {
     return eth.toFixed(6).replace(/\.?0+$/, '');
   }
-  // Very small amount
   if (wei < 1000000n) return `${wei} wei`;
-  return eth.toExponential(2);
+  return eth.toFixed(8).replace(/\.?0+$/, '');
+}
+
+/** Well-known ERC-20 token decimals (mainnet addresses, lowercased). */
+const KNOWN_DECIMALS: Record<string, number> = {
+  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 6,  // USDC
+  '0xdac17f958d2ee523a2206206994597c13d831ec7': 6,  // USDT
+  '0x6b175474e89094c44da98b954eedeac495271d0f': 18, // DAI
+  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 18, // WETH
+  '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 8,  // WBTC
+  '0x514910771af9ca656af840dff83e8264ecf986ca': 18, // LINK
+  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 18, // UNI
+  // Polygon
+  '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359': 6,  // USDC (Polygon)
+  '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 6,  // USDC.e (Polygon)
+  // Arbitrum
+  '0xaf88d065e77c8cc2239327c5edb3a432268e5831': 6,  // USDC (Arbitrum)
+  '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9': 6,  // USDT (Arbitrum)
+};
+
+function guessTokenDecimals(tokenAddr: string | undefined): number {
+  if (!tokenAddr) return 18;
+  const known = KNOWN_DECIMALS[tokenAddr.toLowerCase()];
+  if (known !== undefined) return known;
+  return 18; // default for unknown ERC-20s
+}
+
+function formatTokenValue(raw: bigint, decimals: number): string {
+  if (raw === 0n) return '0';
+  const divisor = 10 ** decimals;
+  const whole = raw / BigInt(divisor);
+  const frac = raw % BigInt(divisor);
+
+  if (frac === 0n) {
+    return formatWithCommas(whole.toString());
+  }
+
+  const fracStr = frac.toString().padStart(decimals, '0');
+  // Show up to 4 significant fractional digits, trim trailing zeros
+  const trimmed = fracStr.slice(0, Math.min(4, decimals)).replace(/0+$/, '');
+  if (!trimmed) return formatWithCommas(whole.toString());
+  return `${formatWithCommas(whole.toString())}.${trimmed}`;
+}
+
+function formatWithCommas(n: string): string {
+  return n.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 function normalizeAddress(addr: string): string {

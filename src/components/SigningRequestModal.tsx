@@ -28,6 +28,7 @@ import {
 } from '@/services/clear-signing';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { ChainLogo } from '@/components/ChainLogo';
+import { TokenLogo } from '@/components/TokenLogo';
 import { DEFAULT_NETWORKS } from '@/models/network';
 import {
   Shield, AlertTriangle, Copy, ChevronDown, Check,
@@ -517,8 +518,17 @@ function TokenCard({ field, variant }: {
     danger: { backgroundColor: '#FDF0EE' },
   };
 
+  // Extract symbol from value string (e.g. "1,500" from "1,500 USDC" is the amount)
+  // The value from clear-signing is just the number, label has context
+  const symbol = field.tokenAddress ? guessTokenSymbol(field.tokenAddress) : undefined;
+
   return (
     <View style={[styles.tokenCard, bgMap[variant]]}>
+      <TokenLogo
+        symbol={symbol ?? '?'}
+        logoUrl={field.tokenAddress ? `https://ethereum-data.awesometools.dev/tokenlogos/${field.tokenAddress}.png` : undefined}
+        size={40}
+      />
       <View style={styles.tokenInfo}>
         <Text style={styles.tokenAmount} numberOfLines={1}>{field.value}</Text>
         <Text style={styles.tokenLabel}>{field.label}</Text>
@@ -530,6 +540,20 @@ function TokenCard({ field, variant }: {
       )}
     </View>
   );
+}
+
+/** Guess token symbol from known addresses. */
+function guessTokenSymbol(addr: string): string {
+  const SYMBOLS: Record<string, string> = {
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',
+    '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
+    '0x6b175474e89094c44da98b954eedeac495271d0f': 'DAI',
+    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 'WETH',
+    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'WBTC',
+    '0x514910771af9ca656af840dff83e8264ecf986ca': 'LINK',
+    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'UNI',
+  };
+  return SYMBOLS[addr.toLowerCase()] ?? addr.slice(2, 6).toUpperCase();
 }
 
 function FlowArrow({ danger }: { danger?: boolean }) {
@@ -757,20 +781,23 @@ const styles = createStyles(() => ({
   // ===== Intent Header =====
   intentHeader: {
     alignItems: 'center',
-    paddingVertical: space.xl,
+    paddingTop: space.lg,
+    paddingBottom: space['2xl'],
   },
   intentText: {
-    fontSize: text['4xl'],
-    ...inter.bold,
+    fontSize: text['5xl'],
+    fontWeight: '800' as const,
+    fontFamily: 'Inter-Bold',
     textAlign: 'center',
-    letterSpacing: -0.5,
+    letterSpacing: -1,
   },
 
   // ===== Token Card =====
   tokenCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: space.xl,
+    gap: space.xl,
+    paddingVertical: space['2xl'],
     paddingHorizontal: space['2xl'],
     borderRadius: radius['2xl'],
     marginVertical: space.sm,
@@ -778,9 +805,10 @@ const styles = createStyles(() => ({
   tokenInfo: { flex: 1 },
   tokenAmount: {
     fontSize: text['3xl'],
-    ...inter.bold,
+    fontWeight: '800' as const,
+    fontFamily: 'Inter-Bold',
     color: color.fg.base,
-    letterSpacing: -0.3,
+    letterSpacing: -0.5,
   },
   tokenLabel: {
     fontSize: text.sm,
@@ -947,23 +975,25 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    paddingVertical: space.lg,
-    paddingHorizontal: space.xl,
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.xl,
-    marginBottom: space.lg,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    borderWidth: 1,
+    borderColor: color.border.base,
+    borderRadius: radius.full,
+    alignSelf: 'center',
+    marginBottom: space.md,
   },
   contextChainName: {
-    fontSize: text.sm, ...inter.semibold, color: color.fg.base,
+    fontSize: text.xs, ...inter.semibold, color: color.fg.base,
   },
   contextDot: {
-    fontSize: text.xs, color: color.fg.subtle,
+    fontSize: text.xs, color: color.border.strong,
   },
   contextAccount: {
-    flex: 1, gap: 1,
+    flexDirection: 'row', alignItems: 'center', gap: space.sm,
   },
   contextAccountName: {
-    fontSize: text.sm, ...inter.semibold, color: color.fg.base,
+    fontSize: text.xs, ...inter.semibold, color: color.fg.base,
   },
   contextAccountAddr: {
     fontSize: 10, fontWeight: '500' as const, fontFamily: font.mono,
@@ -1019,6 +1049,12 @@ const styles = createStyles(() => ({
   errorText: { fontSize: text.sm, ...inter.regular, color: color.error.base, flex: 1 },
 
   // ===== Buttons =====
-  buttonRow: { flexDirection: 'row', gap: space.lg, paddingTop: space.lg },
+  buttonRow: {
+    flexDirection: 'row', gap: space.lg,
+    paddingTop: space.xl,
+    borderTopWidth: 1,
+    borderTopColor: color.border.base,
+    marginTop: space.sm,
+  },
   buttonFlex: { flex: 1 },
 }));

@@ -308,6 +308,9 @@ import {
 import { showAlert } from '@/services/platform';
 import * as Clipboard from 'expo-clipboard';
 import { useWallet } from '@/models/wallet-state';
+import { TokenLogo } from '@/components/TokenLogo';
+import { ChainLogo } from '@/components/ChainLogo';
+import { DEFAULT_NETWORKS } from '@/models/network';
 
 function MockSigningModal({ request, onClose }: {
   request: BLEIncomingRequest;
@@ -375,9 +378,11 @@ function MockSigningModal({ request, onClose }: {
     catch { return v; }
   }
 
+  const [copiedAddr, setCopiedAddr] = useState<string | null>(null);
   async function copyAddr(addr: string) {
     await Clipboard.setStringAsync(addr);
-    showAlert('Copied', addr);
+    setCopiedAddr(addr);
+    setTimeout(() => setCopiedAddr(null), 1500);
   }
 
   // --- Render ---
@@ -401,6 +406,20 @@ function MockSigningModal({ request, onClose }: {
             </View>
           </View>
 
+          {/* Context strip */}
+          {(() => {
+            const net = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
+            return (
+              <View style={ms.ctxStrip}>
+                {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />}
+                <Text style={ms.ctxStripName}>{chainName(chainId)}</Text>
+                <Text style={ms.ctxDot}>·</Text>
+                <Text style={ms.ctxStripName}>{accountName}</Text>
+                {activeAccount?.address && <Text style={ms.ctxStripAddr}>{shortAddr(activeAccount.address)}</Text>}
+              </View>
+            );
+          })()}
+
           {/* ---- Clear signed ---- */}
           {clearSign ? (
             <>
@@ -411,6 +430,11 @@ function MockSigningModal({ request, onClose }: {
               {/* Token cards by role */}
               {clearSign.fields.filter(f => f.role === 'send-amount').map((f, i) => (
                 <View key={`s${i}`} style={[ms.tokenCard, { backgroundColor: clearSign.risk === 'caution' ? '#FFF8EE' : '#FEF2EE' }]}>
+                  <TokenLogo
+                    symbol={f.tokenAddress ? f.tokenAddress.slice(2, 6).toUpperCase() : '?'}
+                    logoUrl={f.tokenAddress ? `https://ethereum-data.awesometools.dev/tokenlogos/${f.tokenAddress}.png` : undefined}
+                    size={40}
+                  />
                   <View style={ms.tokenInfo}>
                     <Text style={ms.tokenAmt} numberOfLines={1}>{f.value}</Text>
                     <Text style={ms.tokenLabel}>{f.label}{f.warning ? ' ⚠️' : ''}</Text>
@@ -424,6 +448,11 @@ function MockSigningModal({ request, onClose }: {
 
               {clearSign.fields.filter(f => f.role === 'receive-amount').map((f, i) => (
                 <View key={`r${i}`} style={[ms.tokenCard, { backgroundColor: '#EEF6FF' }]}>
+                  <TokenLogo
+                    symbol={f.tokenAddress ? f.tokenAddress.slice(2, 6).toUpperCase() : '?'}
+                    logoUrl={f.tokenAddress ? `https://ethereum-data.awesometools.dev/tokenlogos/${f.tokenAddress}.png` : undefined}
+                    size={40}
+                  />
                   <View style={ms.tokenInfo}>
                     <Text style={ms.tokenAmt} numberOfLines={1}>{f.value}</Text>
                     <Text style={ms.tokenLabel}>{f.label}</Text>
@@ -685,15 +714,26 @@ const ms = createStyles(() => ({
   },
   e2eText: { fontSize: text.xs, ...inter.bold, color: color.success.base },
 
-  intent: { alignItems: 'center', paddingVertical: space.xl },
-  intentText: { fontSize: text['4xl'], ...inter.bold, letterSpacing: -0.5 },
+  ctxStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: space.md,
+    paddingVertical: space.md, paddingHorizontal: space.lg,
+    borderWidth: 1, borderColor: color.border.base, borderRadius: radius.full,
+    alignSelf: 'center', marginBottom: space.md,
+  },
+  ctxStripName: { fontSize: text.xs, ...inter.semibold, color: color.fg.base },
+  ctxStripAddr: { fontSize: 10, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.muted },
+  ctxDot: { fontSize: text.xs, color: color.border.strong },
+
+  intent: { alignItems: 'center', paddingTop: space.lg, paddingBottom: space['2xl'] },
+  intentText: { fontSize: text['5xl'], fontWeight: '800' as const, fontFamily: 'Inter-Bold', letterSpacing: -1 },
 
   tokenCard: {
-    paddingVertical: space.xl, paddingHorizontal: space['2xl'],
+    flexDirection: 'row', alignItems: 'center', gap: space.xl,
+    paddingVertical: space['2xl'], paddingHorizontal: space['2xl'],
     borderRadius: radius['2xl'], marginVertical: space.sm,
   },
   tokenInfo: { flex: 1 },
-  tokenAmt: { fontSize: text['3xl'], ...inter.bold, color: color.fg.base, letterSpacing: -0.3 },
+  tokenAmt: { fontSize: text['3xl'], fontWeight: '800' as const, fontFamily: 'Inter-Bold', color: color.fg.base, letterSpacing: -0.5 },
   tokenLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, marginTop: space.xs },
 
   flowArrow: { alignItems: 'center', marginVertical: -space.sm, zIndex: 1 },
@@ -775,6 +815,6 @@ const ms = createStyles(() => ({
   },
   rawText: { fontSize: 9, fontFamily: font.mono, fontWeight: '400' as const, color: color.fg.subtle, lineHeight: 14 },
 
-  btns: { flexDirection: 'row', gap: space.lg, paddingTop: space.lg },
+  btns: { flexDirection: 'row', gap: space.lg, paddingTop: space.xl, borderTopWidth: 1, borderTopColor: color.border.base, marginTop: space.sm },
   btnFlex: { flex: 1 },
 }));
