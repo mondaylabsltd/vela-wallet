@@ -146,9 +146,25 @@ window.handleFile = async function(input) {
   else addLog('ALL STRATEGIES FAILED', 'fail');
 };
 
-// --- Test 3: camera ---
+// --- Helper: video frame → JPEG blob → Image (denoises via JPEG compression) ---
+async function captureAsPhoto(video, quality = 0.85) {
+  const c = document.createElement('canvas');
+  c.width = video.videoWidth; c.height = video.videoHeight;
+  c.getContext('2d').drawImage(video, 0, 0);
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', quality));
+  const url = URL.createObjectURL(blob);
+  const img = new Image();
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+  URL.revokeObjectURL(url);
+  const out = document.createElement('canvas');
+  out.width = img.naturalWidth; out.height = img.naturalHeight;
+  out.getContext('2d').drawImage(img, 0, 0);
+  return out;
+}
+
+// --- Test 3: camera (fake live = video preview + photo-style capture) ---
 window.testCamera = async function() {
-  addLog('=== Camera ===', 'info');
+  addLog('=== Camera (photo-style) ===', 'info');
   const video = document.getElementById('video');
   video.style.display = 'block';
 
@@ -159,10 +175,10 @@ window.testCamera = async function() {
     video.srcObject = stream;
     await video.play();
     const s = stream.getVideoTracks()[0]?.getSettings?.();
-    addLog(`Camera ready: ${s?.width}×${s?.height}`, 'info');
+    addLog(`Camera: ${s?.width}×${s?.height}`, 'info');
 
     let attempts = 0;
-    const max = 40;
+    const max = 30;
 
     async function tryDecode() {
       if (attempts >= max) {
@@ -173,12 +189,26 @@ window.testCamera = async function() {
       }
       attempts++;
 
-      // Grab frame to canvas
-      const c = document.createElement('canvas');
-      c.width = video.videoWidth; c.height = video.videoHeight;
-      c.getContext('2d').drawImage(video, 0, 0);
+      // Method A: raw video frame → multi-strategy
+      const raw = document.createElement('canvas');
+      raw.width = video.videoWidth; raw.height = video.videoHeight;
+      raw.getContext('2d').drawImage(video, 0, 0);
 
-      const result = await decodeCanvas(c);
+      // Only try the 2 fastest strategies on raw frames (save CPU)
+      let result = tryJsQR(raw, 600, BINARIZE(160));
+      if (!result) result = tryJsQR(raw, 400, INVERT);
+
+      // Method B: JPEG round-trip (denoises), then full strategy
+      if (!result) {
+        try {
+          const photo = await captureAsPhoto(video, 0.92);
+          addLog(`  #${attempts} photo ${photo.width}×${photo.height}`, 'info');
+          result = await decodeCanvas(photo);
+        } catch(e) {
+          addLog(`  #${attempts} photo error: ${e?.message}`, 'fail');
+        }
+      }
+
       if (result) {
         addLog(`Camera decoded #${attempts}: ${result.substring(0, 50)}...`, 'ok');
         stream.getTracks().forEach(t => t.stop());
@@ -186,10 +216,11 @@ window.testCamera = async function() {
         return;
       }
 
-      if (attempts % 5 === 0) addLog(`Attempt ${attempts}/${max}...`, 'info');
-      setTimeout(tryDecode, 500);
+      if (attempts % 3 === 0) addLog(`Attempt ${attempts}/${max}...`, 'info');
+      setTimeout(tryDecode, 1500); // longer gap = more time for auto-focus
     }
-    setTimeout(tryDecode, 1000);
+    // Wait 2s for camera to stabilize (auto-focus, auto-exposure)
+    setTimeout(tryDecode, 2000);
   } catch (e) {
     addLog(`Camera error: ${e?.message}`, 'fail');
   }
