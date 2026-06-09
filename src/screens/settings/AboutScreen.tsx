@@ -14,7 +14,6 @@ import Animated from 'react-native-reanimated';
 export default function AboutScreen() {
   const router = useSafeRouter();
   const networks = useMemo(() => getAllNetworksSync(), []);
-  const networkNames = networks.map(n => n.displayName);
   const devTapRef = useRef({ count: 0, lastTap: 0 });
 
   const handleLogoTap = () => {
@@ -50,20 +49,11 @@ export default function AboutScreen() {
             </Text>
           </Pressable>
           <Text style={styles.version}>v1.0.0</Text>
-        </Animated.View>
-
-        {/* Description */}
-        <Animated.View entering={fadeInDown(100, 400)}>
-          <VelaCard style={styles.descCard}>
-            <Text style={styles.descTitle}>A simpler way to own crypto</Text>
-            <Text style={styles.descBody}>
-              Vela is an Ethereum wallet that uses your device's biometric authentication (Face ID, fingerprint) instead of seed phrases. Your keys are protected by hardware-level security — no 12 words to write down, no private keys to leak.
-            </Text>
-          </VelaCard>
+          <Text style={styles.tagline}>A simpler way to own crypto</Text>
         </Animated.View>
 
         {/* Open Source */}
-        <Animated.View entering={fadeInDown(125, 400)}>
+        <Animated.View entering={fadeInDown(100, 400)}>
           <Pressable
             style={styles.githubCard}
             onPress={() => openURL('https://github.com/atshelchin/vela-wallet')}
@@ -85,22 +75,8 @@ export default function AboutScreen() {
           </Pressable>
         </Animated.View>
 
-        {/* How it works */}
-        <Animated.View entering={fadeInDown(150, 400)}>
-          <Text style={styles.sectionTitle}>How it works</Text>
-          <VelaCard style={styles.howCard}>
-            <InfoRow number="1" title="Device-native security" body="Your wallet key lives inside your device's secure enclave, protected by Face ID or fingerprint." />
-            <View style={styles.separator} />
-            <InfoRow number="2" title="Smart contract wallet" body="Powered by Safe — the most battle-tested smart contract wallet, securing $100B+ in assets." />
-            <View style={styles.separator} />
-            <InfoRow number="3" title="Works across networks" body={`One address on ${networkNames.slice(0, -1).join(', ')}, and ${networkNames[networkNames.length - 1]}.`} />
-            <View style={styles.separator} />
-            <InfoRow number="4" title="Cross-device sign-in" body="Your passkey syncs across devices via iCloud or Google. Vela Wallet never has access to your private key." />
-          </VelaCard>
-        </Animated.View>
-
         {/* Technical */}
-        <Animated.View entering={fadeInDown(200, 400)}>
+        <Animated.View entering={fadeInDown(150, 400)}>
           <Text style={styles.sectionTitle}>Technical details</Text>
           <VelaCard style={styles.techCard}>
             <TechRow label="Wallet" value="Safe v1.4.1" />
@@ -112,8 +88,7 @@ export default function AboutScreen() {
         </Animated.View>
 
         {/* Links */}
-        <Animated.View entering={fadeInDown(250, 400)}>
-          <Text style={styles.sectionTitle}>Links</Text>
+        <Animated.View entering={fadeInDown(200, 400)}>
           <VelaCard style={styles.linksCard}>
             <LinkRow label="Website" url="https://getvela.app" />
             <View style={styles.separator} />
@@ -126,20 +101,6 @@ export default function AboutScreen() {
         </Text>
       </ScrollView>
     </ScreenContainer>
-  );
-}
-
-function InfoRow({ number, title, body }: { number: string; title: string; body: string }) {
-  return (
-    <View style={styles.infoRow}>
-      <View style={styles.infoNumber}>
-        <Text style={styles.infoNumberText}>{number}</Text>
-      </View>
-      <View style={styles.infoContent}>
-        <Text style={styles.infoTitle}>{title}</Text>
-        <Text style={styles.infoBody}>{body}</Text>
-      </View>
-    </View>
   );
 }
 
@@ -205,23 +166,11 @@ const styles = createStyles(() => ({
     color: color.fg.subtle,
     marginTop: space.sm,
   },
-
-  // Description
-  descCard: {
-    padding: space['2xl'],
-    marginBottom: space['2xl'],
-  },
-  descTitle: {
-    fontSize: text.lg,
-    ...inter.bold,
-    color: color.fg.base,
-    marginBottom: space.lg,
-  },
-  descBody: {
+  tagline: {
     fontSize: text.base,
     ...inter.regular,
     color: color.fg.muted,
-    lineHeight: 22,
+    marginTop: space.md,
   },
 
   // GitHub card
@@ -291,49 +240,6 @@ const styles = createStyles(() => ({
     paddingHorizontal: space.sm,
   },
 
-  // How it works
-  howCard: {
-    padding: space.xl,
-    marginBottom: space['2xl'],
-  },
-  infoRow: {
-    flexDirection: 'row',
-    gap: space.lg,
-    paddingVertical: space.lg,
-  },
-  infoNumber: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: color.accent.soft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  infoNumberText: {
-    fontSize: text.sm,
-    ...inter.bold,
-    color: color.accent.base,
-  },
-  infoContent: {
-    flex: 1,
-    gap: space.xs,
-  },
-  infoTitle: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.fg.base,
-  },
-  infoBody: {
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.muted,
-    lineHeight: 20,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: color.border.base,
-  },
-
   // Tech
   techCard: {
     padding: space.xl,
@@ -372,6 +278,10 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     ...inter.semibold,
     color: color.fg.base,
+  },
+  separator: {
+    height: 1,
+    backgroundColor: color.border.base,
   },
 
   // Footer
