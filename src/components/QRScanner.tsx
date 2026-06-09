@@ -168,23 +168,28 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       busyRef.current = true;
 
       try {
-        // 1. Always try jsQR first (synchronous, never blocks)
         const canvas = canvasRef.current;
         if (canvas) {
+          const vw = video.videoWidth;
+          const vh = video.videoHeight;
+          // Crop to the center scan-frame region (~60% of the shorter side)
+          // with some padding so the QR quiet zone is captured.
+          const side = Math.round(Math.min(vw, vh) * 0.65);
+          const sx = Math.round((vw - side) / 2);
+          const sy = Math.round((vh - side) / 2);
+          // Render cropped region at 400px — small enough for fast jsQR,
+          // large enough for dense QR codes
+          const size = Math.min(side, 400);
+          canvas.width = size;
+          canvas.height = size;
           const ctx = canvas.getContext('2d')!;
-          // Capture at 600px — lower res is faster and smooths video noise,
-          // which actually helps jsQR decode dense QR codes
-          const w = Math.min(video.videoWidth, 600);
-          const h = Math.round(w * (video.videoHeight / video.videoWidth));
-          canvas.width = w;
-          canvas.height = h;
-          ctx.drawImage(video, 0, 0, w, h);
-          const imageData = ctx.getImageData(0, 0, w, h);
+          ctx.drawImage(video, sx, sy, side, side, 0, 0, size, size);
+          const imageData = ctx.getImageData(0, 0, size, size);
           // Camera path: raw jsQR + one binarized attempt (keep it fast)
-          let decoded = jsQR(imageData.data as any, w, h, JSQR_OPTS)?.data ?? null;
+          let decoded = jsQR(imageData.data as any, size, size, JSQR_OPTS)?.data ?? null;
           if (!decoded) {
-            const bin = binarizeAt(imageData.data, w, h, 120);
-            decoded = jsQR(bin.data as any, w, h, JSQR_OPTS)?.data ?? null;
+            const bin = binarizeAt(imageData.data, size, size, 120);
+            decoded = jsQR(bin.data as any, size, size, JSQR_OPTS)?.data ?? null;
           }
           if (decoded) {
             onScanRef.current(decoded);
