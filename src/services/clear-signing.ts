@@ -571,8 +571,11 @@ function formatTokenAmount(
   // Use known decimals when possible, fallback to smart detection
   const decimals = guessTokenDecimals(tokenAddr);
   const display = formatTokenValue(amount, decimals);
-  const symbol = tokenAddr ? guessTokenSymbol(tokenAddr) : undefined;
-  const displayWithSymbol = symbol ? `${display} ${symbol}` : display;
+  // Always show a token identifier — known symbol, abbreviated address, or "tokens"
+  const symbol = tokenAddr
+    ? (guessTokenSymbol(tokenAddr) ?? `${tokenAddr.slice(0, 6)}...`)
+    : 'tokens';
+  const displayWithSymbol = `${display} ${symbol}`;
 
   return {
     value: displayWithSymbol,
@@ -704,6 +707,15 @@ const KNOWN_SYMBOLS: Record<string, string> = {
   '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'WBTC',
   '0x514910771af9ca656af840dff83e8264ecf986ca': 'LINK',
   '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'UNI',
+  '0xae7ab96520de3a18e5e111b5eaab095312d7fe84': 'stETH',
+  '0xbe9895146f7af43049ca1c1ae358b0541ea49704': 'cbETH',
+  '0xae78736cd615f374d3085123a210448e74fc6393': 'rETH',
+  '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0': 'wstETH',
+  '0x5a98fcbea516cf06857215779fd812ca3bef1b32': 'LDO',
+  '0xd533a949740bb3306d119cc777fa900ba034cd52': 'CRV',
+  '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'AAVE',
+  '0xc00e94cb662c3520282e6f5717214004a7f26888': 'COMP',
+  '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2': 'MKR',
   '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359': 'USDC',
   '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 'USDC.e',
   '0xaf88d065e77c8cc2239327c5edb3a432268e5831': 'USDC',
