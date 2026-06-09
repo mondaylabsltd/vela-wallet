@@ -81,12 +81,18 @@ const JSQR_OPTS = { inversionAttempts: 'attemptBoth' as const };
  * 2. Downscale to ~600px + binarize at multiple thresholds
  *    (handles JPEG photos of dark-themed screens — smooths artifacts
  *     and separates dark-gray backgrounds from true-black QR modules)
+ *
+ * Threshold 160 works best for real JPEG photos of dark-themed pages;
+ * 120 handles cleaner dark screenshots; 80 is a low-threshold fallback.
  */
-function decodeQR(imageData: ImageData): string | null {
+function decodeQR(imageData: ImageData, label = 'image'): string | null {
   const { data, width, height } = imageData;
   // 1. Fast path: raw image
   const direct = jsQR(data as any, width, height, JSQR_OPTS);
-  if (direct?.data) return direct.data;
+  if (direct?.data) {
+    console.log(`[QR] ${label}: decoded raw ${width}×${height}`);
+    return direct.data;
+  }
 
   // 2. Downscale (smooths JPEG noise) + binarize at progressive thresholds
   const targetW = Math.min(width, 600);
@@ -94,11 +100,15 @@ function decodeQR(imageData: ImageData): string | null {
     ? downscalePixels(data, width, height, targetW)
     : { data, width, height };
 
-  for (const t of [120, 80, 160]) {
+  for (const t of [160, 120, 80]) {
     const bin = binarizeAt(small.data, small.width, small.height, t);
     const result = jsQR(bin.data as any, small.width, small.height, JSQR_OPTS);
-    if (result?.data) return result.data;
+    if (result?.data) {
+      console.log(`[QR] ${label}: decoded at ${small.width}×${small.height} threshold=${t}`);
+      return result.data;
+    }
   }
+  console.log(`[QR] ${label}: failed ${width}×${height} (tried raw + 3 thresholds)`);
   return null;
 }
 
@@ -148,7 +158,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
     const busyRef = { current: false };
 
     navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
     })
       .then(stream => {
         if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
@@ -188,10 +198,11 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
           // Camera path: raw jsQR + one binarized attempt (keep it fast)
           let decoded = jsQR(imageData.data as any, size, size, JSQR_OPTS)?.data ?? null;
           if (!decoded) {
-            const bin = binarizeAt(imageData.data, size, size, 120);
+            const bin = binarizeAt(imageData.data, size, size, 160);
             decoded = jsQR(bin.data as any, size, size, JSQR_OPTS)?.data ?? null;
           }
           if (decoded) {
+            console.log('[QR] camera: decoded', decoded.substring(0, 40) + '...');
             onScanRef.current(decoded);
           }
         }
@@ -320,7 +331,11 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             img.src = url;
           });
 
-          const maxDim = 2048;
+          URL.revokeObjectURL(url);
+
+          // Let the browser do high-quality downscaling (much faster than JS).
+          // 800px is enough for jsQR; decodeQR may further shrink to 600px.
+          const maxDim = 800;
           const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
           const w = Math.round(img.naturalWidth * scale);
           const h = Math.round(img.naturalHeight * scale);
@@ -330,10 +345,10 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           canvas.height = h;
           const ctx = canvas.getContext('2d')!;
           ctx.drawImage(img, 0, 0, w, h);
-          URL.revokeObjectURL(url);
 
           const imageData = ctx.getImageData(0, 0, w, h);
-          const decoded = decodeQR(imageData);
+          console.log(`[QR] pick: image ${img.naturalWidth}×${img.naturalHeight} → canvas ${w}×${h}`);
+          const decoded = decodeQR(imageData, 'pick');
           if (decoded) {
             hapticSuccess();
             onScan(parseAddress(decoded));
