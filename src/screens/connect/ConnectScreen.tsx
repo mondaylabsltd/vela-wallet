@@ -226,6 +226,12 @@ export default function ConnectScreen() {
             <Text style={styles.statusHint}>
               Go back to the dApp and approve the connection.
             </Text>
+            <VelaButton
+              title="Cancel"
+              onPress={disconnectBridge}
+              variant="secondary"
+              style={styles.cancelBtn}
+            />
           </Animated.View>
         )}
 
@@ -533,6 +539,7 @@ const styles = createStyles(() => ({
     fontSize: text.base, ...inter.regular, color: color.fg.muted,
     textAlign: 'center', lineHeight: 20,
   },
+  cancelBtn: { marginTop: space.lg },
   errorBtn: { width: '100%', marginTop: space.md },
   retryBtn: { width: '100%' },
 }));
