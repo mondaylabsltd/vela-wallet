@@ -15,6 +15,9 @@ import { setAccountBalance, getAccountBalances } from '@/services/balance-cache'
 import { showAlert, copyToClipboard, hapticSuccess, isAppActive } from '@/services/platform';
 import { ChainLogo } from '@/components/ChainLogo';
 import { QRScanner } from '@/components/QRScanner';
+import { useDAppConnection } from '@/models/dapp-connection';
+import { isWalletPairURI } from '@/services/walletpair-transport';
+import { parseRemoteInjectURL } from '@/services/dapp-transport';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, Search, X, AlertTriangle, Wifi, RefreshCw, ScanLine } from 'lucide-react-native';
@@ -152,6 +155,7 @@ function ActionButton({ label, icon: Icon, onPress, accent }: { label: string; i
 export default function HomeScreen() {
   const router = useRouter();
   const { activeAccount, state, dispatch } = useWallet();
+  const { connectToWalletPair, connectToBridge } = useDAppConnection();
 
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [allTokens, setAllTokens] = useState<APIToken[]>([]);
@@ -689,12 +693,23 @@ export default function HomeScreen() {
       {showScanner && (
         <QRScanner
           visible={showScanner}
-          onScan={(addr) => {
-            if (/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+          onScan={(data) => {
+            if (/^0x[0-9a-fA-F]{40}$/.test(data)) {
               setShowScanner(false);
-              router.push(`/send?prefilledRecipient=${addr}`);
+              router.push(`/send?prefilledRecipient=${data}`);
+            } else if (isWalletPairURI(data)) {
+              setShowScanner(false);
+              connectToWalletPair(data);
+              router.push('/connect');
             } else {
-              showAlert('Invalid QR', 'Please scan a valid Ethereum address (0x...).');
+              const bridgeSession = parseRemoteInjectURL(data);
+              if (bridgeSession) {
+                setShowScanner(false);
+                connectToBridge(bridgeSession);
+                router.push('/connect');
+              } else {
+                showAlert('Invalid QR', 'Please scan a valid Ethereum address or connection URI.');
+              }
             }
           }}
           onClose={() => setShowScanner(false)}

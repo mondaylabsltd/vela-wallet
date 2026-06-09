@@ -112,7 +112,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d')!;
-      const w = Math.min(video.videoWidth, 640);
+      const w = Math.min(video.videoWidth, 1280);
       const h = Math.round(w * (video.videoHeight / video.videoWidth));
       canvas.width = w;
       canvas.height = h;
@@ -124,7 +124,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       if (code?.data) {
         onScanRef.current(code.data);
       }
-    }, 200);
+    }, 400);
 
     return () => {
       mounted = false;
@@ -246,7 +246,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             img.src = url;
           });
 
-          const maxDim = 1024;
+          const maxDim = 2048;
           const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
           const w = Math.round(img.naturalWidth * scale);
           const h = Math.round(img.naturalHeight * scale);
