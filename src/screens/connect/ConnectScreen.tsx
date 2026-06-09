@@ -8,7 +8,7 @@
  *   - Error: Shows error + retry
  */
 import React, { useState, useCallback } from 'react';
-import { View, Text, TextInput, ScrollView, Pressable } from 'react-native';
+import { View, Text, TextInput, ScrollView, Pressable, Image } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -186,7 +186,11 @@ export default function ConnectScreen() {
 
               {dappInfo && (
                 <View style={styles.fingerprintDapp}>
-                  <Globe size={14} color={color.fg.muted} strokeWidth={2} />
+                  {dappInfo.icon ? (
+                    <Image source={{ uri: dappInfo.icon }} style={styles.dappIcon} />
+                  ) : (
+                    <Globe size={14} color={color.fg.muted} strokeWidth={2} />
+                  )}
                   <Text style={styles.fingerprintDappText} numberOfLines={1}>
                     {dappInfo.name}
                   </Text>
@@ -255,7 +259,11 @@ export default function ConnectScreen() {
 
               {dappInfo ? (
                 <View style={styles.infoRow}>
-                  <Globe size={14} color={color.fg.muted} strokeWidth={2} />
+                  {dappInfo.icon ? (
+                    <Image source={{ uri: dappInfo.icon }} style={styles.dappIcon} />
+                  ) : (
+                    <Globe size={14} color={color.fg.muted} strokeWidth={2} />
+                  )}
                   <Text style={styles.infoText} numberOfLines={1}>
                     {dappInfo.name}{dappInfo.url ? ` (${(() => { try { return new URL(dappInfo.url).host; } catch { return dappInfo.url; } })()})` : ''}
                   </Text>
@@ -539,6 +547,7 @@ const styles = createStyles(() => ({
     fontSize: text.base, ...inter.regular, color: color.fg.muted,
     textAlign: 'center', lineHeight: 20,
   },
+  dappIcon: { width: 14, height: 14, borderRadius: 3 },
   cancelBtn: { marginTop: space.lg },
   errorBtn: { width: '100%', marginTop: space.md },
   retryBtn: { width: '100%' },
