@@ -111,29 +111,26 @@ async function decodeCanvas(canvas) {
     // zbar WASM — strongest decoder, handles noisy photos
     ['zbar', async () => {
       try {
-        if (!window.zbarWasm) {
+        if (!window.zbarScan) {
           addLog('Loading zbar WASM...', 'info');
-          window.zbarWasm = await import('https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/index.js');
+          const m = await import('https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/main.mjs');
+          window.zbarScan = m.scanImageData;
+          addLog('zbar WASM loaded, scanImageData: ' + typeof m.scanImageData, 'info');
         }
-        const { scanImageData } = window.zbarWasm;
-        const ctx = canvas.getContext('2d');
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const symbols = await scanImageData(imageData);
+        const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        const symbols = await window.zbarScan(imageData);
         if (symbols.length > 0) return symbols[0].decode();
       } catch(e) { addLog('zbar error: ' + e?.message, 'fail'); }
       return null;
     }],
-    // zbar on inverted image
     ['zbar+inv', async () => {
       try {
-        const { scanImageData } = window.zbarWasm || {};
-        if (!scanImageData) return null;
-        const ctx = canvas.getContext('2d');
-        const d = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        if (!window.zbarScan) return null;
+        const d = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
         INVERT(d.data);
-        const symbols = await scanImageData(d);
+        const symbols = await window.zbarScan(d);
         if (symbols.length > 0) return symbols[0].decode();
-      } catch {}
+      } catch(e) { addLog('zbar+inv error: ' + e?.message, 'fail'); }
       return null;
     }],
   ];
