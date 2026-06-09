@@ -55,8 +55,14 @@ function ScanLine() {
 }
 
 // ---------------------------------------------------------------------------
-// Web camera component using getUserMedia + jsQR
+// Web camera component using getUserMedia + BarcodeDetector (jsQR fallback)
 // ---------------------------------------------------------------------------
+
+/** Use native BarcodeDetector when available (Chrome Android, Safari 16.4+). */
+const nativeDetector: any =
+  typeof globalThis !== 'undefined' && 'BarcodeDetector' in globalThis
+    ? new (globalThis as any).BarcodeDetector({ formats: ['qr_code'] })
+    : null;
 
 function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanned: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -86,12 +92,25 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       .catch(() => {});
 
     // Stable interval — reads refs, never needs to be re-created
-    timerRef.current = setInterval(() => {
+    timerRef.current = setInterval(async () => {
       if (scannedRef.current) return;
       const video = videoRef.current;
-      const canvas = canvasRef.current;
-      if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+      if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
+      // 1. Try native BarcodeDetector (ML-based, much more reliable)
+      if (nativeDetector) {
+        try {
+          const barcodes = await nativeDetector.detect(video);
+          if (barcodes.length > 0 && barcodes[0].rawValue) {
+            onScanRef.current(barcodes[0].rawValue);
+            return;
+          }
+        } catch {}
+      }
+
+      // 2. Fallback: canvas + jsQR
+      const canvas = canvasRef.current;
+      if (!canvas) return;
       const ctx = canvas.getContext('2d')!;
       const w = Math.min(video.videoWidth, 640);
       const h = Math.round(w * (video.videoHeight / video.videoWidth));
