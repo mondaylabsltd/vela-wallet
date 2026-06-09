@@ -27,6 +27,11 @@ import { isSigningMethod, handleDAppRequest, handleReadOnlyRPC } from '@/hooks/u
 import { PasskeyErrorCode } from '@/modules/passkey';
 import { saveTransaction } from '@/services/storage';
 import { nativeSymbol } from '@/models/network';
+import {
+  fetchBundlerAccountInfo,
+  clearBundlerCache,
+  type FundingNeeded,
+} from '@/services/bundler-service';
 import type { BLEIncomingRequest } from '@/models/types';
 
 // ---------------------------------------------------------------------------
@@ -99,6 +104,12 @@ interface DAppConnectionContextValue {
   dismissRequest: () => void;
   /** Switch chain for the bridge connection. */
   switchChain: (chainId: number) => void;
+  /** Bundler funding needed (gas account underfunded during dApp tx). */
+  fundingNeeded: FundingNeeded | null;
+  /** Called when user has funded the gas account. Retries the pending request. */
+  handleFundingComplete: () => void;
+  /** Called when user cancels funding. Rejects the pending request. */
+  handleFundingCancel: () => void;
 }
 
 const DAppConnectionContext = createContext<DAppConnectionContextValue>({
@@ -121,6 +132,9 @@ const DAppConnectionContext = createContext<DAppConnectionContextValue>({
   rejectRequest: () => {},
   dismissRequest: () => {},
   switchChain: () => {},
+  fundingNeeded: null,
+  handleFundingComplete: () => {},
+  handleFundingCancel: () => {},
 });
 
 export function useDAppConnection() {
@@ -146,6 +160,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const [chainId, setChainId] = useState(1);
   const [connectionType, setConnectionType] = useState<ConnectionType>(null);
   const [pendingFingerprint, setPendingFingerprint] = useState<string | null>(null);
+  const [fundingNeeded, setFundingNeeded] = useState<FundingNeeded | null>(null);
 
   const transportRef = useRef<DAppTransport | null>(null);
   /** Holds WalletPairTransport during fingerprint verification (before connect). */
@@ -425,7 +440,42 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
         setIsSigning(false);
         return;
       }
+
       const msg = err.message ?? 'Signing failed';
+
+      // Bundler EOA underfunded — show funding modal instead of error
+      if (msg.includes('Insufficient balance on dedicated bundler EOA')) {
+        console.log('[DAppConnection] Bundler needs funding, showing modal');
+        setIsSigning(false);
+        try {
+          const cid = chainIdRef.current;
+          const addr = account.address;
+          clearBundlerCache(cid, addr);
+          const info = await fetchBundlerAccountInfo(cid, addr);
+          if (info) {
+            const requiredMatch = msg.match(/required:\s*(\d+)/);
+            const thresholdWei = requiredMatch ? BigInt(requiredMatch[1]) : info.spendableBalance + 100_000_000_000_000n;
+            const deficit = thresholdWei > info.spendableBalance ? thresholdWei - info.spendableBalance : thresholdWei;
+            const recommendedWei = (deficit * 12n) / 10n;
+            const formatWei = (w: bigint) => { const e = Number(w) / 1e18; return e < 0.000001 ? '< 0.000001' : e < 0.001 ? e.toFixed(6) : e < 1 ? e.toFixed(4) : e.toFixed(3); };
+            setFundingNeeded({
+              reason: 'deposit_needed',
+              sponsorshipAvailable: true,
+              depositAddress: info.depositAddress,
+              safeAddress: addr,
+              chainId: cid,
+              nativeSym: info.nativeSym,
+              thresholdWei,
+              recommendedWei,
+              currentBalance: info.spendableBalance,
+              recommendedFormatted: formatWei(recommendedWei),
+              currentFormatted: formatWei(info.spendableBalance),
+            });
+            return; // Don't send error to dApp — keep request pending
+          }
+        } catch { /* fall through to generic error */ }
+      }
+
       console.error('[DAppConnection] Request failed:', msg);
       setSignError(msg);
       transportRef.current?.sendResponse(request.id, undefined, { code: -32603, message: msg });
@@ -448,6 +498,22 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     setIncomingRequest(null);
     setSignError(null);
   }, []);
+
+  // --- Bundler funding complete → retry the pending request ---
+  const handleFundingComplete = useCallback(() => {
+    setFundingNeeded(null);
+    // Retry approve — the request is still in incomingRequest
+    approveRequest();
+  }, [approveRequest]);
+
+  // --- Bundler funding cancelled → reject the pending request ---
+  const handleFundingCancel = useCallback(() => {
+    setFundingNeeded(null);
+    if (incomingRequest) {
+      transportRef.current?.sendResponse(incomingRequest.id, undefined, { code: -32603, message: 'Gas account funding cancelled' });
+      setIncomingRequest(null);
+    }
+  }, [incomingRequest]);
 
   // --- Switch chain ---
   const switchChain = useCallback((newChainId: number) => {
@@ -523,6 +589,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
     disconnectBridge,
     approveRequest, rejectRequest, dismissRequest, switchChain,
+    fundingNeeded, handleFundingComplete, handleFundingCancel,
   }), [
     status, errorMessage, session, dappInfo,
     incomingRequest, isSigning, signError, chainId,
@@ -530,6 +597,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
     disconnectBridge,
     approveRequest, rejectRequest, dismissRequest, switchChain,
+    fundingNeeded, handleFundingComplete, handleFundingCancel,
   ]);
 
   return (

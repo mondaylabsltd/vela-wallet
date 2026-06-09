@@ -27,6 +27,7 @@ import {
   type ClearSignResult, type ClearSignField, type SigningRisk,
 } from '@/services/clear-signing';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
+import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { ChainLogo } from '@/components/ChainLogo';
 import { TokenLogo } from '@/components/TokenLogo';
 import { DEFAULT_NETWORKS } from '@/models/network';
@@ -64,6 +65,7 @@ export function SigningRequestModal() {
   const {
     incomingRequest, isSigning, signError, chainId, dappInfo,
     approveRequest, rejectRequest, dismissRequest,
+    fundingNeeded, handleFundingComplete, handleFundingCancel,
   } = useDAppConnection();
   const { activeAccount } = useWallet();
 
@@ -162,6 +164,7 @@ export function SigningRequestModal() {
   const buttonVariant = (): 'accent' | 'secondary' => 'accent';
 
   return (
+    <>
     <AppModal visible={true} onClose={signError ? dismissRequest : rejectRequest}>
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
@@ -217,6 +220,17 @@ export function SigningRequestModal() {
         </View>
       </View>
     </AppModal>
+
+    {/* Bundler gas account funding modal — overlays the signing modal */}
+    {fundingNeeded && (
+      <BundlerFundingModal
+        visible={true}
+        funding={fundingNeeded}
+        onFunded={handleFundingComplete}
+        onCancel={handleFundingCancel}
+      />
+    )}
+    </>
   );
 }
 
