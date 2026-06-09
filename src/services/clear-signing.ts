@@ -543,9 +543,11 @@ function formatTokenAmount(
   // Use known decimals when possible, fallback to smart detection
   const decimals = guessTokenDecimals(tokenAddr);
   const display = formatTokenValue(amount, decimals);
+  const symbol = tokenAddr ? guessTokenSymbol(tokenAddr) : undefined;
+  const displayWithSymbol = symbol ? `${display} ${symbol}` : display;
 
   return {
-    value: display,
+    value: displayWithSymbol,
     format: 'tokenAmount',
     tokenAddress: tokenAddr ? normalizeAddress(String(tokenAddr)) : undefined,
   };
@@ -662,7 +664,27 @@ function guessTokenDecimals(tokenAddr: string | undefined): number {
   if (!tokenAddr) return 18;
   const known = KNOWN_DECIMALS[tokenAddr.toLowerCase()];
   if (known !== undefined) return known;
-  return 18; // default for unknown ERC-20s
+  return 18;
+}
+
+/** Well-known ERC-20 token symbols (mainnet addresses, lowercased). */
+const KNOWN_SYMBOLS: Record<string, string> = {
+  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',
+  '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
+  '0x6b175474e89094c44da98b954eedeac495271d0f': 'DAI',
+  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 'WETH',
+  '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'WBTC',
+  '0x514910771af9ca656af840dff83e8264ecf986ca': 'LINK',
+  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'UNI',
+  '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359': 'USDC',
+  '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 'USDC.e',
+  '0xaf88d065e77c8cc2239327c5edb3a432268e5831': 'USDC',
+  '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9': 'USDT',
+};
+
+function guessTokenSymbol(tokenAddr: string | undefined): string | undefined {
+  if (!tokenAddr) return undefined;
+  return KNOWN_SYMBOLS[tokenAddr.toLowerCase()];
 }
 
 function formatTokenValue(raw: bigint, decimals: number): string {
