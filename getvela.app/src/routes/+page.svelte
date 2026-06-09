@@ -441,10 +441,10 @@
 			<div class="pillar-content">
 				<h3>Create a wallet</h3>
 				<p>
-					Tap create, authenticate with Face ID or fingerprint. Your device generates a passkey
+					Authenticate with Face ID or fingerprint. Your device creates a passkey
 					and derives a <a href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1" target="_blank" rel="noopener">Safe</a> smart account address from it —
-					the same address works across all supported chains.
-					No deployment cost upfront. The contract activates on-chain with your first transaction.
+					one address across all supported chains.
+					No gas cost upfront. The contract deploys on-chain with your first transaction.
 				</p>
 			</div>
 		</div>
@@ -454,10 +454,9 @@
 			<div class="pillar-content">
 				<h3>Sign a transaction</h3>
 				<p>
-					The app builds a transaction and sends a signing challenge to your credential manager.
-					Your credential manager signs it internally with your passkey and returns only the signature.
-					The signed transaction is submitted on-chain through an <a href="https://eips.ethereum.org/EIPS/eip-4337" target="_blank" rel="noopener">ERC-4337</a> bundler.
-					The app never touches your passkey's private key at any point.
+					The app builds a transaction and sends a signing challenge to your device.
+					Your device signs it with the passkey and sends back just the signature — the private key never leaves.
+					The signed transaction goes on-chain through an <a href="https://eips.ethereum.org/EIPS/eip-4337" target="_blank" rel="noopener">ERC-4337</a> bundler.
 				</p>
 			</div>
 		</div>
@@ -513,24 +512,24 @@
 <section id="pricing" class="business-model">
 	<div class="container">
 		<div class="bm-content">
-			<h2>How Vela sustains itself</h2>
+			<h2>How Vela makes money</h2>
 			<p class="bm-intro">
 				No VC funding, no token, no ads, no data sales. Vela is funded by the people who use it.
-				We're transparent about how we make money because you deserve to know.
+				Here's exactly how.
 			</p>
 
 			<div class="bm-grid">
 				<div class="bm-card">
 					<h4>Web wallet</h4>
 					<div class="bm-price">Free</div>
-					<p>Full-featured web wallet. No time limit, no feature restrictions.</p>
+					<p>Full-featured web wallet. No time limit, no feature gates.</p>
 				</div>
 				<div class="bm-card">
 					<h4>Mobile app</h4>
 					<div class="bm-price">Paid download</div>
 					<p>
 						iOS & Android via App Store and Google Play.
-						Pricing is adjusted by region so the app is accessible worldwide.
+						Priced by region so it's accessible worldwide.
 						No subscriptions. No in-app purchases.
 					</p>
 				</div>
@@ -538,17 +537,15 @@
 					<h4>Bundler gas fee</h4>
 					<div class="bm-price">Network gas + service fee</div>
 					<p>
-						Transactions go through an ERC-4337 bundler. Your total cost includes network gas plus a bundler service fee.
-						You can avoid the bundler fee by using a compatible
+						Transactions go through an ERC-4337 bundler. You pay network gas plus a small service fee.
+						You can skip the fee entirely by running a compatible
 						<a href="https://github.com/atshelchin/vela-bundler" target="_blank" rel="noopener">self-hosted bundler</a>.
 					</p>
 				</div>
 			</div>
 
 			<p class="bm-note">
-				This revenue keeps the bundler running, the app maintained, and the project independent.
-				Nothing is locked in — you can swap to any ERC-4337 bundler, build the mobile app from source, and self-host all services.
-				You're paying for convenience, not for access — and for keeping an independent, open-source wallet alive in the ecosystem.
+				You're paying for convenience, not access. Everything is open source and self-hostable — nothing locks you in.
 			</p>
 		</div>
 	</div>
@@ -558,62 +555,93 @@
 <section id="faq" class="faq">
 	<div class="container">
 		<h2>FAQ</h2>
-		<p class="section-desc">Common questions about security, recovery, and trust.</p>
+		<p class="section-desc">What you'd want to know before putting real money in.</p>
 		<div class="faq-list">
+			<!-- Product -->
+			<details>
+				<summary>What chains does Vela support?</summary>
+				<p>
+					Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, and Gnosis — plus any custom EVM network you add yourself.
+					Same wallet address across all chains.
+				</p>
+			</details>
+			<details>
+				<summary>How is Vela different from Coinbase Smart Wallet or other passkey wallets?</summary>
+				<p>
+					Most passkey wallets are closed-source and run on infrastructure you can't control.
+					If the company pivots or shuts down, you're stuck.
+					Vela is fully open source and self-hostable — the app, the bundler, and all backend services.
+					You can add custom networks, run your own bundler to skip fees, and keep using your wallet even if getvela.app disappears.
+					No recovery keys generated in a browser. No vendor lock-in.
+				</p>
+			</details>
+			<details>
+				<summary>Can I use Vela with dApps?</summary>
+				<p>
+					Yes. Pair your phone with the <a href="https://walletpair.org/" target="_blank" rel="noopener">WalletPair extension</a> and sign transactions on desktop dApps using your phone's passkey.
+				</p>
+			</details>
+			<details>
+				<summary>Do I pay more gas than a regular wallet?</summary>
+				<p>
+					Yes. Smart account transactions have extra overhead from on-chain signature verification and the ERC-4337 EntryPoint.
+					Expect roughly 1.5–3x the gas of a standard wallet transfer, depending on the chain.
+					That's the cost of passkey signing, no seed phrase, and one address across all chains.
+				</p>
+			</details>
+			<!-- Security & recovery -->
 			<details>
 				<summary>What if I lose my phone?</summary>
 				<p>
 					Your passkey syncs through iCloud Keychain (iOS) or Google Password Manager (Android).
-					Get a new phone, sign in with the same Apple/Google account, and you can access your wallet again.
+					Get a new phone, sign in with the same Apple/Google account, and your wallet is right there.
 				</p>
 			</details>
 			<details>
-				<summary>What if my iCloud or Google account is compromised?</summary>
+				<summary>What if I accidentally delete my passkey?</summary>
 				<p>
-					If someone gains control of your Apple/Google account and can sync or use your passkey, they may be able to access your wallet.
-					We strongly recommend enabling two-factor authentication and using a strong, unique password.
-					Treat your Apple/Google account as part of your wallet security.
+					It's gone — and so is access to your wallet.
+					There's no recovery mechanism. This is irreversible.
+					If you ever clean up your password manager, know what each passkey is for before you remove it.
 				</p>
 			</details>
+			<details>
+				<summary>What if my Apple or Google account is compromised?</summary>
+				<p>
+					Anyone who can access your Apple/Google account and use your passkey could access your wallet.
+					Enable two-factor authentication and use a strong, unique password — your Apple/Google account is part of your wallet security.
+				</p>
+			</details>
+			<details>
+				<summary>Can I add a second passkey as backup?</summary>
+				<p>
+					Not right now. Each wallet is bound to a single passkey — a design choice in the current signer module.
+					Your backup is the built-in sync: iCloud Keychain or Google Password Manager replicates the passkey across all your trusted devices automatically.
+				</p>
+			</details>
+			<!-- Trust & transparency -->
 			<details>
 				<summary>What happens if Vela shuts down?</summary>
 				<p>
-					Your wallet is a Safe smart contract on the blockchain — it doesn't depend on Vela's servers.
-					All three backend services (chain data, passkey index, bundler) are open source and self-hostable.
+					Your wallet is a Safe smart contract on-chain — it doesn't depend on Vela's servers.
+					All backend services (chain data, passkey index, bundler) are open source and self-hostable.
 					Your passkey still works, and you can interact with your wallet through any Safe-compatible interface.
 				</p>
 			</details>
 			<details>
 				<summary>What if the getvela.app domain goes offline?</summary>
 				<p>
-					If getvela.app goes offline, your funds remain safe on-chain.
-					Because passkeys are normally tied to a domain, Vela provides an open-source
+					Your funds stay on-chain regardless.
+					Since passkeys are tied to a domain, Vela provides an open-source
 					<a href="https://github.com/atshelchin/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys" target="_blank" rel="noopener">recovery extension</a>
 					that lets you use your existing passkey from another domain or localhost.
 				</p>
 			</details>
 			<details>
-				<summary>Can I use Vela with dApps?</summary>
-				<p>
-					Yes. Vela supports DApp Connect — pair your phone with the Vela browser extension via Bluetooth
-					or relay, and sign transactions on desktop dApps using your phone's passkey.
-					Supports eth_sendTransaction, personal_sign, and eth_signTypedData_v4.
-				</p>
-			</details>
-			<details>
-				<summary>Can I add a second passkey as backup?</summary>
-				<p>
-					No. Each wallet is bound to a single passkey — this is a fundamental design constraint of the WebAuthn signer architecture.
-					Your backup is iCloud Keychain or Google Password Manager's built-in cross-device sync, which replicates
-					the passkey across all your trusted devices automatically.
-				</p>
-			</details>
-			<details>
 				<summary>Has the code been audited?</summary>
 				<p>
-					The Safe contracts and Safe WebAuthn signer module Vela relies on have been audited.
-					Vela's own app code has not yet received a third-party audit.
-					All source code is <a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">public</a> for review.
+					The Safe contracts and Safe WebAuthn signer module that Vela uses have been audited.
+					Vela's own app code hasn't been independently audited yet — all source code is <a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">public</a> for review.
 				</p>
 			</details>
 		</div>
