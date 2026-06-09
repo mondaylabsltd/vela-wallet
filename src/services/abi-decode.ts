@@ -139,7 +139,8 @@ function staticSize(type: string): number {
 // Calldata decoding
 // ---------------------------------------------------------------------------
 
-export type DecodedValue = string | bigint | boolean | DecodedValue[] | Record<string, DecodedValue>;
+// eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
+export type DecodedValue = string | bigint | boolean | Array<string | bigint | boolean | Record<string, any>> | Record<string, any>;
 
 /**
  * Decode calldata against a parsed function signature.
@@ -202,7 +203,7 @@ function decodeTupleParams(
     const dyn = isDynamic(param.type, param.components);
     if (dyn) {
       // Read offset pointer from head
-      const offset = readUint(data, headPos) * 2; // bytes → hex chars
+      const offset = Number(readUint(data, headPos)) * 2; // bytes → hex chars
       const { value } = decodeType(data, param, offset);
       const key = param.name || `_${params.indexOf(param)}`;
       result[key] = value;

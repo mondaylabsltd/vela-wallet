@@ -70,6 +70,11 @@ export interface ClearSignField {
 
 const descriptorCache = new Map<string, any | null>();
 
+/** Clear the descriptor cache (for testing). */
+export function clearDescriptorCache(): void {
+  descriptorCache.clear();
+}
+
 async function fetchDescriptor(path: string): Promise<any | null> {
   if (descriptorCache.has(path)) return descriptorCache.get(path) ?? null;
   try {
