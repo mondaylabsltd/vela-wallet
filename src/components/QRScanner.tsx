@@ -29,10 +29,12 @@ function parseAddress(data: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Scan line animation
+// Scan line animation (native only — web reanimated causes ghost artifacts)
 // ---------------------------------------------------------------------------
 
 function ScanLine() {
+  if (Platform.OS === 'web') return null;
+
   const translateY = useSharedValue(0);
 
   useEffect(() => {
@@ -71,7 +73,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
     let mounted = true;
 
     navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
     })
       .then(stream => {
         if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
@@ -91,19 +93,19 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
       const ctx = canvas.getContext('2d')!;
-      const w = Math.min(video.videoWidth, 480);
+      const w = Math.min(video.videoWidth, 640);
       const h = Math.round(w * (video.videoHeight / video.videoWidth));
       canvas.width = w;
       canvas.height = h;
       ctx.drawImage(video, 0, 0, w, h);
       const imageData = ctx.getImageData(0, 0, w, h);
       const code = jsQR(imageData.data as any, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert',
+        inversionAttempts: 'attemptBoth',
       });
       if (code?.data) {
         onScanRef.current(code.data);
       }
-    }, 300);
+    }, 200);
 
     return () => {
       mounted = false;
