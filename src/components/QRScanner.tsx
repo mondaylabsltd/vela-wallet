@@ -192,17 +192,13 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
           const size = Math.min(side, 400);
           canvas.width = size;
           canvas.height = size;
-          const ctx = canvas.getContext('2d')!;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
           ctx.drawImage(video, sx, sy, side, side, 0, 0, size, size);
           const imageData = ctx.getImageData(0, 0, size, size);
-          // Camera path: raw jsQR + one binarized attempt (keep it fast)
-          let decoded = jsQR(imageData.data as any, size, size, JSQR_OPTS)?.data ?? null;
-          if (!decoded) {
-            const bin = binarizeAt(imageData.data, size, size, 160);
-            decoded = jsQR(bin.data as any, size, size, JSQR_OPTS)?.data ?? null;
-          }
+          // Use full decodeQR: raw + 3 binarize thresholds
+          // 400×400 = 160K pixels → 4 jsQR calls ≈ 60ms, well within 500ms budget
+          const decoded = decodeQR(imageData, 'camera');
           if (decoded) {
-            console.log('[QR] camera: decoded', decoded.substring(0, 40) + '...');
             onScanRef.current(decoded);
           }
         }
