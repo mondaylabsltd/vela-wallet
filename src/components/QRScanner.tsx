@@ -74,6 +74,8 @@ async function loadZbar(): Promise<typeof zbarScanImageData> {
   zbarLoadAttempted = true;
   try {
     const m = await import('@undecaf/zbar-wasm');
+    // Tell zbar where to find the .wasm file (Metro doesn't bundle it)
+    m.setModuleArgs({ locateFile: (file: string) => `/${file}` });
     zbarScanImageData = m.scanImageData;
     console.log('[QR] zbar WASM loaded');
   } catch (e: any) {
@@ -111,14 +113,17 @@ async function decodeFromCanvas(canvas: HTMLCanvasElement, label = 'image'): Pro
   const sizes = [1200, 1000, 800, 600, 400].filter(s => s < w);
 
   // Strategy 1: zbar WASM (strongest, handles camera photos)
+  console.log(`[QR] ${label}: trying zbar at sizes [${sizes.join(',')}] + ${w}`);
   for (const s of sizes) {
     const small = scaleCanvas(canvas, s);
     const r = await tryZbar(small);
     if (r) { console.log(`[QR] ${label}: zbar@${s} OK`); return r; }
+    else console.log(`[QR] ${label}: zbar@${s} FAIL`);
   }
   // Also try at original size
   const rOrig = await tryZbar(canvas);
   if (rOrig) { console.log(`[QR] ${label}: zbar@${w} OK`); return rOrig; }
+  else console.log(`[QR] ${label}: zbar@${w} FAIL`);
 
   // Strategy 2: jsQR with image processing (handles screenshots)
   for (const s of [w, ...sizes]) {
