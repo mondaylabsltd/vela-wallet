@@ -55,40 +55,80 @@ const BIN_INVERT = (t: number) => (d: Uint8ClampedArray) => {
   }
 };
 
+/** Downscale canvas to targetW, returns new canvas. */
+function scaleCanvas(src: HTMLCanvasElement, targetW: number): HTMLCanvasElement {
+  const targetH = Math.round(targetW * src.height / src.width);
+  const c = document.createElement('canvas');
+  c.width = targetW;
+  c.height = targetH;
+  c.getContext('2d')!.drawImage(src, 0, 0, targetW, targetH);
+  return c;
+}
+
+/** Lazy-loaded zbar WASM scanner. */
+let zbarScanImageData: ((imageData: ImageData) => Promise<any[]>) | null = null;
+let zbarLoadAttempted = false;
+
+async function loadZbar(): Promise<typeof zbarScanImageData> {
+  if (zbarLoadAttempted) return zbarScanImageData;
+  zbarLoadAttempted = true;
+  try {
+    const m = await import('@undecaf/zbar-wasm');
+    zbarScanImageData = m.scanImageData;
+    console.log('[QR] zbar WASM loaded');
+  } catch (e: any) {
+    console.warn('[QR] zbar WASM failed to load:', e?.message);
+  }
+  return zbarScanImageData;
+}
+
+/** Try zbar on a canvas (direct + inverted). */
+async function tryZbar(canvas: HTMLCanvasElement): Promise<string | null> {
+  const scan = zbarScanImageData ?? await loadZbar();
+  if (!scan) return null;
+  const ctx = canvas.getContext('2d')!;
+  const d = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  try {
+    const s = await scan(d);
+    if (s.length > 0) return s[0].decode();
+  } catch {}
+  // Try inverted
+  INVERT(d.data);
+  try {
+    const s = await scan(d);
+    if (s.length > 0) return s[0].decode();
+  } catch {}
+  return null;
+}
+
 /**
- * Decode QR from a canvas using multiple strategies.
- * Proven on iPhone Safari with real WalletPair images:
- *   - JPEG photo (772×1154): invert@400
- *   - PNG screenshot (998×1298): bin160@600
+ * Decode QR from a canvas. Strategy order:
+ * 1. zbar WASM at ~1200px (proven on iPhone camera photos)
+ * 2. jsQR with invert/binarize at multiple sizes (fallback)
  */
-function decodeFromCanvas(canvas: HTMLCanvasElement, label = 'image'): string | null {
+async function decodeFromCanvas(canvas: HTMLCanvasElement, label = 'image'): Promise<string | null> {
   const w = canvas.width;
-  // Build target widths: original, then progressively smaller
-  // Full image first (QR could be anywhere), then smaller for speed
-  const targets = new Set<number>();
-  targets.add(w); // original size
-  for (const s of [1200, 1000, 800, 600, 400]) {
-    if (s < w) targets.add(s);
-  }
-  const sizes = [...targets].sort((a, b) => b - a); // largest first
+  const sizes = [1200, 1000, 800, 600, 400].filter(s => s < w);
 
-  const strategies: [string, () => string | null][] = [];
+  // Strategy 1: zbar WASM (strongest, handles camera photos)
   for (const s of sizes) {
-    strategies.push(
-      [`binInv160@${s}`, () => tryJsQR(canvas, s, BIN_INVERT(160))],
-      [`invert@${s}`, () => tryJsQR(canvas, s, INVERT)],
-      [`bin160@${s}`, () => tryJsQR(canvas, s, BINARIZE(160))],
-    );
+    const small = scaleCanvas(canvas, s);
+    const r = await tryZbar(small);
+    if (r) { console.log(`[QR] ${label}: zbar@${s} OK`); return r; }
   }
+  // Also try at original size
+  const rOrig = await tryZbar(canvas);
+  if (rOrig) { console.log(`[QR] ${label}: zbar@${w} OK`); return rOrig; }
 
-  for (const [name, fn] of strategies) {
-    const r = fn();
-    if (r) {
-      console.log(`[QR] ${label}: ${name} OK`);
-      return r;
+  // Strategy 2: jsQR with image processing (handles screenshots)
+  for (const s of [w, ...sizes]) {
+    for (const [tName, transform] of [['binInv160', BIN_INVERT(160)], ['invert', INVERT], ['bin160', BINARIZE(160)]] as const) {
+      const r = tryJsQR(canvas, s, transform as (d: Uint8ClampedArray) => void);
+      if (r) { console.log(`[QR] ${label}: ${tName}@${s} OK`); return r; }
     }
   }
-  console.log(`[QR] ${label}: all strategies failed ${canvas.width}×${canvas.height}`);
+
+  console.log(`[QR] ${label}: all failed ${w}×${canvas.height}`);
   return null;
 }
 
@@ -198,7 +238,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
           canvas.width = vw;
           canvas.height = vh;
           canvas.getContext('2d', { willReadFrequently: true })!.drawImage(video, 0, 0);
-          decoded = decodeFromCanvas(canvas, 'camera');
+          decoded = await decodeFromCanvas(canvas, 'camera');
         }
       }
 
@@ -347,7 +387,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             canvas.height = img.naturalHeight;
             canvas.getContext('2d')!.drawImage(img, 0, 0);
             URL.revokeObjectURL(url);
-            decoded = decodeFromCanvas(canvas, 'pick');
+            decoded = await decodeFromCanvas(canvas, 'pick');
           }
 
           if (decoded) {

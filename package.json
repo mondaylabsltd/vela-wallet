@@ -21,6 +21,7 @@
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/elements": "^2.9.10",
     "@react-navigation/native": "^7.1.33",
+    "@undecaf/zbar-wasm": "^0.11.0",
     "dom-to-image-more": "^3.7.2",
     "expo": "~55.0.17",
     "expo-camera": "^55.0.16",
