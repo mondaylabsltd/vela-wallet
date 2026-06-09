@@ -1,30 +1,54 @@
 /**
- * Global signing request modal.
+ * Global signing request modal — ERC-7730 Clear Signing UI.
  *
- * Pops up over any screen when a dApp sends a signing request
- * through the remote-inject bridge.
+ * Renders signing requests with intent-driven, human-readable layouts:
+ *   - Clear signed transactions/signatures (descriptor found)
+ *   - Plain message signing (personal_sign)
+ *   - Blind sign fallback (no descriptor)
  *
- * For eth_sendTransaction and eth_signTypedData, attempts ERC-7730 clear signing
- * to show human-readable transaction details. Falls back to blind signing if no
- * descriptor matches.
+ * Design principles:
+ *   L1 — Intent: large colored action word (Swap, Send, Approve, Sign)
+ *   L2 — Substance: token cards with amounts, recipients, flow arrows
+ *   L3 — Context: contract info, chain, details (collapsed)
  */
-import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, Image } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+  View, Text, ScrollView, Image, Pressable,
+} from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { AppModal } from '@/components/ui/AppModal';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { useDAppConnection } from '@/models/dapp-connection';
-import { useWallet, shortAddress } from '@/models/wallet-state';
+import { useWallet } from '@/models/wallet-state';
 import { shortAddr } from '@/models/types';
 import { chainName, nativeSymbol } from '@/models/network';
 import {
   resolveTransaction, resolveTypedData,
-  type ClearSignResult, type ClearSignField,
+  type ClearSignResult, type ClearSignField, type SigningRisk,
 } from '@/services/clear-signing';
+import { showAlert } from '@/services/platform';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import {
-  Send, FileSignature, FileText, Shield, AlertTriangle, Globe,
-  ArrowRightLeft, CheckCircle, Zap, Eye,
+  Shield, AlertTriangle, Copy, ChevronDown,
+  ArrowDown, Lock, ShieldAlert, ShieldCheck, Pen,
 } from 'lucide-react-native';
+
+// ---------------------------------------------------------------------------
+// Risk → color mapping
+// ---------------------------------------------------------------------------
+
+const RISK_COLORS: Record<SigningRisk, string> = {
+  safe: '#22a456',
+  normal: '#E8572A',
+  caution: '#d4890a',
+  danger: '#d43a2a',
+};
+
+const PURPLE = '#6c5ce7';
+
+function riskColor(risk: SigningRisk): string {
+  return RISK_COLORS[risk];
+}
 
 // ---------------------------------------------------------------------------
 // Main component
@@ -72,161 +96,66 @@ export function SigningRequestModal() {
 
   if (!incomingRequest) return null;
 
-  const { method, params, origin } = incomingRequest;
-  const hasClearSign = !!clearSign;
+  const { method, params } = incomingRequest;
+  const isPersonalSign = method === 'personal_sign';
+  const isTypedData = method.includes('signTypedData');
+  const isTx = method === 'eth_sendTransaction';
 
-  // Derive display origin from dappInfo or raw origin
-  const displayOrigin = dappInfo?.name ?? origin ?? 'Remote Bridge';
-  const displayDomain = dappInfo?.url ? (() => { try { return new URL(dappInfo.url).host; } catch { return dappInfo.url; } })() : undefined;
+  // Derive display info
+  const displayOrigin = dappInfo?.name ?? incomingRequest.origin ?? 'dApp';
+  const displayDomain = dappInfo?.url
+    ? (() => { try { return new URL(dappInfo.url).host; } catch { return dappInfo.url; } })()
+    : undefined;
+
+  // Choose which view to render
+  const renderContent = () => {
+    if (clearSign) {
+      return <ClearSignView cs={clearSign} chainId={chainId} accountName={activeAccount?.name} />;
+    }
+    if (isPersonalSign && params?.[0]) {
+      return <MessageSignView hexMsg={params[0]} chainId={chainId} accountName={activeAccount?.name} />;
+    }
+    if (isTypedData && params) {
+      return <BlindTypedDataView params={params} chainId={chainId} accountName={activeAccount?.name} />;
+    }
+    if (isTx && params?.[0]) {
+      return <BlindTransactionView tx={params[0]} chainId={chainId} accountName={activeAccount?.name} />;
+    }
+    // Fallback
+    return (
+      <View style={styles.fallback}>
+        <Shield size={28} color={color.fg.muted} strokeWidth={2} />
+        <Text style={styles.fallbackText}>Signature request</Text>
+      </View>
+    );
+  };
+
+  // Button config
+  const buttonLabel = (): string => {
+    if (isSigning) return 'Signing...';
+    if (clearSign) {
+      if (clearSign.type === 'signature') return 'Sign';
+      const i = clearSign.intent;
+      return `Confirm ${i.charAt(0).toUpperCase() + i.slice(1)}`;
+    }
+    if (isPersonalSign || isTypedData) return 'Sign';
+    return 'Approve';
+  };
+
+  const buttonVariant = (): 'accent' | 'secondary' => 'accent';
 
   return (
     <AppModal visible={true} onClose={signError ? dismissRequest : rejectRequest}>
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
+          {/* dApp banner — always shown */}
+          <DAppBanner
+            name={displayOrigin}
+            domain={displayDomain}
+            icon={dappInfo?.icon}
+          />
 
-          {/* DApp banner */}
-          <View style={styles.dappBanner}>
-            {dappInfo?.icon ? (
-              <Image source={{ uri: dappInfo.icon }} style={styles.dappIcon} />
-            ) : (
-              <View style={[styles.dappIcon, styles.dappIconFallback]}>
-                <Text style={styles.dappIconText}>{(displayOrigin[0] ?? '?').toUpperCase()}</Text>
-              </View>
-            )}
-            <View style={styles.dappBannerText}>
-              <Text style={styles.dappName}>{displayOrigin}</Text>
-              {displayDomain && <Text style={styles.dappDomain}>{displayDomain}</Text>}
-            </View>
-          </View>
-
-          {/* ============================================================= */}
-          {/* Clear signed transaction */}
-          {/* ============================================================= */}
-          {hasClearSign ? (
-            <>
-              {/* Intent header */}
-              <View style={styles.intentHeader}>
-                <View style={styles.intentIconWrap}>
-                  {intentIcon(clearSign.intent)}
-                </View>
-                <Text style={styles.intentText}>{clearSign.intent}</Text>
-                {clearSign.contractName && (
-                  <Text style={styles.intentContract}>
-                    via {clearSign.contractName}
-                    {clearSign.owner ? ` · ${clearSign.owner}` : ''}
-                  </Text>
-                )}
-              </View>
-
-              {/* Network + Account strip */}
-              <View style={styles.contextStrip}>
-                <View style={styles.contextChip}>
-                  <Globe size={12} color={color.fg.muted} strokeWidth={2} />
-                  <Text style={styles.contextChipText}>{chainName(chainId)}</Text>
-                </View>
-                {activeAccount && (
-                  <View style={styles.contextChip}>
-                    <View style={styles.miniAvatar}>
-                      <Text style={styles.miniAvatarText}>
-                        {(activeAccount.name[0] ?? 'V').toUpperCase()}
-                      </Text>
-                    </View>
-                    <Text style={styles.contextChipText}>
-                      {activeAccount.name}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Clear sign fields */}
-              <View style={styles.clearFields}>
-                {clearSign.fields.map((field, i) => (
-                  <ClearSignFieldRow key={i} field={field} />
-                ))}
-              </View>
-
-              {/* spacer */}
-              <View style={{ height: space.sm }} />
-            </>
-          ) : (
-            <>
-              {/* ============================================================= */}
-              {/* Blind sign fallback */}
-              {/* ============================================================= */}
-
-              {/* Header */}
-              <View style={styles.header}>
-                {methodIcon(method)}
-                <View style={styles.headerText}>
-                  <Text style={styles.methodName}>{methodLabel(method)}</Text>
-                </View>
-              </View>
-
-              {/* Account info */}
-              {activeAccount && (
-                <View style={styles.accountRow}>
-                  <View style={styles.accountAvatar}>
-                    <Text style={styles.accountAvatarText}>
-                      {(activeAccount.name[0] ?? 'V').toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.accountInfo}>
-                    <Text style={styles.accountName}>{activeAccount.name}</Text>
-                    <Text style={styles.accountAddr}>{shortAddress(activeAccount.address)}</Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Network badge */}
-              <View style={styles.networkBadge}>
-                <Globe size={13} color={color.fg.muted} strokeWidth={2} />
-                <Text style={styles.networkText}>{chainName(chainId)}</Text>
-              </View>
-
-              {/* Request details */}
-              <View style={styles.details}>
-                <Text style={styles.description}>{methodDescription(method)}</Text>
-
-                {method === 'personal_sign' && params?.[0] && (
-                  <View style={styles.messagePreview}>
-                    <Text style={styles.previewLabel}>MESSAGE</Text>
-                    <Text style={styles.previewText} numberOfLines={8}>
-                      {decodePersonalMessage(params[0])}
-                    </Text>
-                  </View>
-                )}
-
-                {method === 'eth_sendTransaction' && params?.[0] && (
-                  <>
-                    <BlindRow label="To" value={shortAddr(params[0].to ?? '')} />
-                    <BlindRow label="Value" value={formatTxValue(params[0].value, chainId)} />
-                    {params[0].data && params[0].data !== '0x' && (
-                      <BlindRow label="Data" value={`${Math.floor((params[0].data.length - 2) / 2)} bytes`} />
-                    )}
-                  </>
-                )}
-
-                {method.includes('signTypedData') && params && (
-                  <View style={styles.messagePreview}>
-                    <Text style={styles.previewLabel}>TYPED DATA</Text>
-                    <Text style={styles.previewText} numberOfLines={6}>
-                      {parseTypedDataSummary(params)}
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Blind sign warning */}
-              {method === 'eth_sendTransaction' && params?.[0]?.data && params[0].data !== '0x' && !resolving && (
-                <View style={styles.blindWarning}>
-                  <Eye size={14} color={color.warning.base} strokeWidth={2} />
-                  <Text style={styles.blindWarningText}>
-                    Unable to decode this transaction. Review carefully before signing.
-                  </Text>
-                </View>
-              )}
-            </>
-          )}
+          {renderContent()}
 
           {/* Error */}
           {signError && (
@@ -249,18 +178,18 @@ export function SigningRequestModal() {
           ) : (
             <>
               <VelaButton
-                title={isSigning ? 'Signing...' : 'Approve'}
-                onPress={approveRequest}
-                variant="accent"
-                loading={isSigning || resolving}
-                disabled={resolving}
-                style={styles.buttonFlex}
-              />
-              <VelaButton
                 title="Reject"
                 onPress={rejectRequest}
                 variant="secondary"
                 disabled={isSigning}
+                style={styles.buttonFlex}
+              />
+              <VelaButton
+                title={buttonLabel()}
+                onPress={approveRequest}
+                variant={buttonVariant()}
+                loading={isSigning || resolving}
+                disabled={resolving}
                 style={styles.buttonFlex}
               />
             </>
@@ -271,22 +200,413 @@ export function SigningRequestModal() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Clear sign field row
-// ---------------------------------------------------------------------------
+// ===========================================================================
+// dApp Banner
+// ===========================================================================
 
-function ClearSignFieldRow({ field }: { field: ClearSignField }) {
-  const isWarning = !!field.warning;
+function DAppBanner({ name, domain, icon }: {
+  name: string;
+  domain?: string;
+  icon?: string;
+}) {
+  return (
+    <View style={styles.dappBanner}>
+      {icon ? (
+        <Image source={{ uri: icon }} style={styles.dappLogo} />
+      ) : (
+        <View style={[styles.dappLogo, styles.dappLogoFallback]}>
+          <Text style={styles.dappLogoText}>{(name[0] ?? '?').toUpperCase()}</Text>
+        </View>
+      )}
+      <View style={styles.dappInfo}>
+        <Text style={styles.dappName} numberOfLines={1}>{name}</Text>
+        {domain && <Text style={styles.dappDomain} numberOfLines={1}>{domain}</Text>}
+      </View>
+      <View style={styles.e2eBadge}>
+        <Lock size={10} color={color.success.base} strokeWidth={2.5} />
+        <Text style={styles.e2eText}>E2E</Text>
+      </View>
+    </View>
+  );
+}
+
+// ===========================================================================
+// Clear Sign View (descriptor found)
+// ===========================================================================
+
+function ClearSignView({ cs, chainId, accountName }: {
+  cs: ClearSignResult;
+  chainId: number;
+  accountName?: string;
+}) {
+  const rc = riskColor(cs.risk);
+
+  // Separate fields by role
+  const sendAmounts = cs.fields.filter(f => f.role === 'send-amount');
+  const receiveAmounts = cs.fields.filter(f => f.role === 'receive-amount');
+  const recipients = cs.fields.filter(f => f.role === 'recipient');
+  const spenders = cs.fields.filter(f => f.role === 'spender');
+  const generic = cs.fields.filter(f => f.role === 'generic');
+
+  // Determine if this is a swap-like layout (send → receive)
+  const isSwapLayout = sendAmounts.length > 0 && receiveAmounts.length > 0;
+  const hasRecipient = recipients.length > 0 || spenders.length > 0;
 
   return (
-    <View style={[styles.fieldRow, isWarning && styles.fieldRowWarning]}>
-      <Text style={styles.fieldLabel}>{field.label}</Text>
+    <View>
+      {/* L1: Intent */}
+      <IntentHeader intent={cs.intent} color={rc} />
+
+      {/* L2: Token cards + flow */}
+      {isSwapLayout ? (
+        <>
+          {sendAmounts.map((f, i) => (
+            <TokenCard key={`s${i}`} field={f} variant="send" />
+          ))}
+          <FlowArrow />
+          {receiveAmounts.map((f, i) => (
+            <TokenCard key={`r${i}`} field={f} variant="receive" />
+          ))}
+        </>
+      ) : sendAmounts.length > 0 ? (
+        <>
+          {sendAmounts.map((f, i) => (
+            <TokenCard key={`s${i}`} field={f} variant={cs.risk === 'caution' ? 'caution' : 'send'} />
+          ))}
+          {hasRecipient && <FlowArrow />}
+        </>
+      ) : null}
+
+      {/* Spender / recipient */}
+      {spenders.map((f, i) => (
+        <ContractBar
+          key={`sp${i}`}
+          label="Spender"
+          name={f.value}
+          address={cs.contractAddress}
+          verified={cs.verified}
+        />
+      ))}
+      {recipients.map((f, i) => (
+        <ContractBar
+          key={`re${i}`}
+          label="Recipient"
+          name={f.value}
+          address={undefined}
+          verified={false}
+        />
+      ))}
+
+      {/* Warning for unlimited approvals etc. */}
+      {cs.fields.some(f => f.warning) && (
+        <WarningBanner
+          severity="danger"
+          text={`Unlimited — this contract can spend all your tokens`}
+        />
+      )}
+
+      {/* Generic fields */}
+      {generic.length > 0 && (
+        <View style={styles.genericFields}>
+          {generic.map((f, i) => (
+            <GenericFieldRow key={i} field={f} />
+          ))}
+        </View>
+      )}
+
+      {/* Contract bar (if not already shown via spender/recipient) */}
+      {!hasRecipient && cs.contractAddress && (
+        <ContractBar
+          label="Interacting with"
+          name={cs.contractName ? `${cs.contractName}${cs.owner ? ` · ${cs.owner}` : ''}` : undefined}
+          address={cs.contractAddress}
+          verified={cs.verified}
+        />
+      )}
+
+      {/* Context strip */}
+      <ContextStrip chainId={chainId} accountName={accountName} />
+    </View>
+  );
+}
+
+// ===========================================================================
+// Message Sign View (personal_sign)
+// ===========================================================================
+
+function MessageSignView({ hexMsg, chainId, accountName }: {
+  hexMsg: string;
+  chainId: number;
+  accountName?: string;
+}) {
+  const decoded = decodePersonalMessage(hexMsg);
+
+  return (
+    <View>
+      <IntentHeader intent="Sign Message" color={PURPLE} />
+
+      <View style={styles.msgBubble}>
+        <View style={styles.msgTag}>
+          <Pen size={10} color={color.fg.subtle} strokeWidth={2} />
+          <Text style={styles.msgTagText}>personal_sign · No gas fee</Text>
+        </View>
+        <Text style={styles.msgText}>{decoded}</Text>
+      </View>
+
+      <ContextStrip chainId={chainId} accountName={accountName} />
+    </View>
+  );
+}
+
+// ===========================================================================
+// Blind Typed Data View (EIP-712, no descriptor)
+// ===========================================================================
+
+function BlindTypedDataView({ params, chainId, accountName }: {
+  params: any[];
+  chainId: number;
+  accountName?: string;
+}) {
+  const { primaryType, domain, fields } = parseTypedDataForDisplay(params);
+
+  return (
+    <View>
+      <IntentHeader intent="Sign Typed Data" color="#d4890a" />
+
+      {/* Domain info */}
+      {domain && (
+        <ContractBar
+          label="Signing for"
+          name={domain.name}
+          address={domain.verifyingContract?.toLowerCase()}
+          verified={false}
+        />
+      )}
+
+      {/* Primary type + fields */}
+      <View style={styles.genericFields}>
+        {primaryType && (
+          <View style={styles.genRow}>
+            <Text style={styles.genLabel}>Type</Text>
+            <Text style={styles.genValue}>{primaryType}</Text>
+          </View>
+        )}
+        {fields.map(([k, v], i) => (
+          <View key={i} style={styles.genRow}>
+            <Text style={styles.genLabel}>{k}</Text>
+            <Text style={styles.genValue} numberOfLines={2}>{v}</Text>
+          </View>
+        ))}
+      </View>
+
+      <WarningBanner
+        severity="caution"
+        text="This typed data could not be decoded with a known descriptor. Review carefully."
+      />
+
+      <ContextStrip chainId={chainId} accountName={accountName} />
+    </View>
+  );
+}
+
+// ===========================================================================
+// Blind Transaction View (no descriptor)
+// ===========================================================================
+
+function BlindTransactionView({ tx, chainId, accountName }: {
+  tx: any;
+  chainId: number;
+  accountName?: string;
+}) {
+  const [showRaw, setShowRaw] = useState(false);
+  const sym = nativeSymbol(chainId);
+  const value = formatTxValue(tx.value, chainId);
+  const hasData = tx.data && tx.data !== '0x';
+  const dataSize = hasData ? Math.floor((tx.data.length - 2) / 2) : 0;
+
+  return (
+    <View>
+      <IntentHeader
+        intent={hasData ? 'Unknown' : 'Send'}
+        color={hasData ? '#d43a2a' : '#E8572A'}
+      />
+
+      {/* Value card */}
+      {value !== `0 ${sym}` && (
+        <TokenCard
+          field={{ label: 'Value', value, format: 'amount', role: 'send-amount' }}
+          variant={hasData ? 'danger' : 'send'}
+        />
+      )}
+
+      {hasData && <FlowArrow danger />}
+
+      {/* Contract */}
+      <ContractBar
+        label={hasData ? 'Unverified contract' : 'Recipient'}
+        address={tx.to}
+        verified={false}
+        warning={hasData}
+      />
+
+      {/* Blind sign warning */}
+      {hasData && (
+        <>
+          <WarningBanner
+            severity="danger"
+            text={`Unable to decode — no ERC-7730 descriptor (${dataSize} bytes)`}
+          />
+
+          {/* Raw data toggle */}
+          <Pressable
+            style={styles.detailsToggle}
+            onPress={() => setShowRaw(!showRaw)}
+          >
+            <Text style={styles.detailsToggleText}>
+              Raw calldata · {dataSize} bytes
+            </Text>
+            <ChevronDown
+              size={12}
+              color={color.fg.subtle}
+              strokeWidth={2}
+              style={showRaw ? { transform: [{ rotate: '180deg' }] } : undefined}
+            />
+          </Pressable>
+          {showRaw && (
+            <ScrollView horizontal={false} style={styles.rawBlock}>
+              <Text style={styles.rawText}>
+                {tx.data.slice(0, 200)}{tx.data.length > 200 ? '...' : ''}
+              </Text>
+            </ScrollView>
+          )}
+        </>
+      )}
+
+      <ContextStrip chainId={chainId} accountName={accountName} />
+    </View>
+  );
+}
+
+// ===========================================================================
+// Shared sub-components
+// ===========================================================================
+
+function IntentHeader({ intent, color: intentColor }: { intent: string; color: string }) {
+  return (
+    <View style={styles.intentHeader}>
+      <Text style={[styles.intentText, { color: intentColor }]}>
+        {intent}
+      </Text>
+    </View>
+  );
+}
+
+function TokenCard({ field, variant }: {
+  field: ClearSignField;
+  variant: 'send' | 'receive' | 'caution' | 'danger';
+}) {
+  const bgMap = {
+    send: { backgroundColor: '#FEF2EE' },
+    receive: { backgroundColor: '#EEF6FF' },
+    caution: { backgroundColor: '#FFF8EE' },
+    danger: { backgroundColor: '#FDF0EE' },
+  };
+
+  return (
+    <View style={[styles.tokenCard, bgMap[variant]]}>
+      <View style={styles.tokenInfo}>
+        <Text style={styles.tokenAmount} numberOfLines={1}>{field.value}</Text>
+        <Text style={styles.tokenLabel}>{field.label}</Text>
+      </View>
+      {field.warning && (
+        <View style={styles.tokenWarning}>
+          <AlertTriangle size={14} color={RISK_COLORS.danger} strokeWidth={2} />
+        </View>
+      )}
+    </View>
+  );
+}
+
+function FlowArrow({ danger }: { danger?: boolean }) {
+  return (
+    <View style={styles.flowArrow}>
+      <View style={[styles.flowCircle, danger && styles.flowCircleDanger]}>
+        <ArrowDown
+          size={14}
+          color={danger ? RISK_COLORS.danger : color.fg.subtle}
+          strokeWidth={2.5}
+        />
+      </View>
+    </View>
+  );
+}
+
+function ContractBar({ label, name, address, verified, warning }: {
+  label: string;
+  name?: string;
+  address?: string;
+  verified: boolean;
+  warning?: boolean;
+}) {
+  const handleCopy = useCallback(async () => {
+    if (!address) return;
+    await Clipboard.setStringAsync(address);
+    showAlert('Copied', address);
+  }, [address]);
+
+  return (
+    <View style={[styles.contractBar, warning && styles.contractBarWarning]}>
+      <View style={styles.contractInfo}>
+        <Text style={styles.contractLabel}>{label}</Text>
+        <View style={styles.contractAddrRow}>
+          {name && <Text style={styles.contractName} numberOfLines={1}>{name}</Text>}
+          {address && (
+            <Text style={styles.contractAddr}>{shortAddr(address)}</Text>
+          )}
+        </View>
+      </View>
+      {address && (
+        <Pressable onPress={handleCopy} hitSlop={8} style={styles.copyBtn}>
+          <Copy size={12} color={color.fg.muted} strokeWidth={2} />
+        </Pressable>
+      )}
+      {verified && (
+        <View style={styles.verifiedBadge}>
+          <ShieldCheck size={12} color={color.success.base} strokeWidth={2} />
+        </View>
+      )}
+      {warning && (
+        <ShieldAlert size={14} color={RISK_COLORS.danger} strokeWidth={2} />
+      )}
+    </View>
+  );
+}
+
+function WarningBanner({ severity, text: msg }: {
+  severity: 'caution' | 'danger';
+  text: string;
+}) {
+  const isDanger = severity === 'danger';
+  return (
+    <View style={[styles.warnBanner, isDanger ? styles.warnDanger : styles.warnCaution]}>
+      <AlertTriangle
+        size={14}
+        color={isDanger ? RISK_COLORS.danger : RISK_COLORS.caution}
+        strokeWidth={2}
+      />
+      <Text style={[styles.warnText, { color: isDanger ? RISK_COLORS.danger : RISK_COLORS.caution }]}>
+        {msg}
+      </Text>
+    </View>
+  );
+}
+
+function GenericFieldRow({ field }: { field: ClearSignField }) {
+  return (
+    <View style={[styles.genRow, field.warning && styles.genRowWarning]}>
+      <Text style={styles.genLabel}>{field.label}</Text>
       <Text
-        style={[
-          styles.fieldValue,
-          isWarning && styles.fieldValueWarning,
-          field.format === 'addressName' && styles.fieldValueMono,
-        ]}
+        style={[styles.genValue, field.warning && { color: RISK_COLORS.danger }]}
         numberOfLines={2}
       >
         {field.value}
@@ -295,32 +615,18 @@ function ClearSignFieldRow({ field }: { field: ClearSignField }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Blind sign row
-// ---------------------------------------------------------------------------
-
-function BlindRow({ label, value }: { label: string; value: string }) {
+function ContextStrip({ chainId, accountName }: { chainId: number; accountName?: string }) {
   return (
-    <View style={styles.detailRow}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue} numberOfLines={1}>{value}</Text>
+    <View style={styles.contextStrip}>
+      <Text style={styles.contextText}>{chainName(chainId)}</Text>
+      {accountName && (
+        <>
+          <Text style={styles.contextDot}>·</Text>
+          <Text style={styles.contextText}>{accountName}</Text>
+        </>
+      )}
     </View>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Intent icon mapping
-// ---------------------------------------------------------------------------
-
-function intentIcon(intent: string): React.ReactNode {
-  const size = 24;
-  const sw = 2;
-  const i = intent.toLowerCase();
-  if (i === 'swap' || i === 'exchange') return <ArrowRightLeft size={size} color={color.accent.base} strokeWidth={sw} />;
-  if (i === 'send' || i === 'transfer') return <Send size={size} color={color.accent.base} strokeWidth={sw} />;
-  if (i === 'approve' || i === 'permit') return <CheckCircle size={size} color={color.warning.base} strokeWidth={sw} />;
-  if (i === 'stake' || i === 'deposit' || i === 'supply') return <Zap size={size} color={color.success.base} strokeWidth={sw} />;
-  return <FileSignature size={size} color={color.info.base} strokeWidth={sw} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -354,44 +660,23 @@ function formatTxValue(value: string | undefined, cid: number): string {
   }
 }
 
-function parseTypedDataSummary(params: any[]): string {
+function parseTypedDataForDisplay(params: any[]): {
+  primaryType: string | null;
+  domain: any;
+  fields: [string, string][];
+} {
   try {
-    const data = typeof params[1] === 'string' ? JSON.parse(params[1]) : params[1];
-    if (data?.primaryType) {
-      const msg = data.message;
-      if (msg) {
-        const fields = Object.entries(msg).slice(0, 3).map(([k, v]) => `${k}: ${String(v).slice(0, 40)}`).join('\n');
-        return `${data.primaryType}\n${fields}`;
-      }
-      return data.primaryType;
-    }
-    return 'Structured data';
+    const data = typeof params[1] === 'string' ? JSON.parse(params[1]) : (params[1] ?? params[0]);
+    const primaryType = data?.primaryType ?? null;
+    const domain = data?.domain;
+    const msg = data?.message;
+    const fields: [string, string][] = msg
+      ? Object.entries(msg).slice(0, 5).map(([k, v]) => [k, String(v).slice(0, 60)])
+      : [];
+    return { primaryType, domain, fields };
   } catch {
-    return 'Structured data';
+    return { primaryType: null, domain: null, fields: [] };
   }
-}
-
-function methodDescription(m: string): string {
-  if (m === 'eth_sendTransaction') return 'This app wants to send a transaction from your wallet.';
-  if (m === 'personal_sign') return 'This app wants you to sign a message.';
-  if (m.includes('signTypedData')) return 'This app wants you to sign structured data.';
-  return 'This app is requesting a signature.';
-}
-
-function methodLabel(m: string): string {
-  if (m === 'eth_sendTransaction') return 'Send Transaction';
-  if (m === 'personal_sign') return 'Sign Message';
-  if (m.includes('signTypedData')) return 'Sign Typed Data';
-  return m;
-}
-
-function methodIcon(m: string): React.ReactNode {
-  const size = 22;
-  const sw = 2;
-  if (m === 'eth_sendTransaction') return <Send size={size} color={color.accent.base} strokeWidth={sw} />;
-  if (m === 'personal_sign') return <FileSignature size={size} color={color.info.base} strokeWidth={sw} />;
-  if (m.includes('signTypedData')) return <FileText size={size} color={color.info.base} strokeWidth={sw} />;
-  return <Shield size={size} color={color.fg.muted} strokeWidth={sw} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -404,153 +689,8 @@ const styles = createStyles(() => ({
     padding: space['3xl'],
   },
 
-  // ===== DApp banner =====
+  // ===== dApp Banner =====
   dappBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.lg,
-    marginBottom: space['2xl'],
-    paddingBottom: space.xl,
-    borderBottomWidth: 1,
-    borderColor: color.border.base,
-  },
-  dappIcon: {
-    width: 36, height: 36, borderRadius: 10,
-  },
-  dappIconFallback: {
-    backgroundColor: color.accent.soft,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  dappIconText: {
-    fontSize: text.lg,
-    ...inter.bold,
-    color: color.accent.base,
-  },
-  dappBannerText: { flex: 1, gap: 1 },
-  dappName: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
-  dappDomain: { fontSize: text.xs, ...inter.regular, color: color.fg.muted },
-
-  // ===== Clear sign styles =====
-  intentHeader: {
-    alignItems: 'center',
-    paddingVertical: space.xl,
-    gap: space.md,
-  },
-  intentIconWrap: {
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: color.bg.sunken,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: space.sm,
-  },
-  intentText: {
-    fontSize: text['2xl'],
-    ...inter.bold,
-    color: color.fg.base,
-    textAlign: 'center',
-  },
-  intentContract: {
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.muted,
-    textAlign: 'center',
-  },
-
-  // Context strip (network + account chips)
-  contextStrip: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: space.md,
-    marginBottom: space.xl,
-    justifyContent: 'center',
-  },
-  contextChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    paddingVertical: space.xs,
-    paddingHorizontal: space.lg,
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.full,
-  },
-  contextChipText: {
-    fontSize: text.xs,
-    ...inter.semibold,
-    color: color.fg.muted,
-  },
-  miniAvatar: {
-    width: 16, height: 16, borderRadius: 8,
-    backgroundColor: color.accent.soft,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  miniAvatarText: {
-    fontSize: 8,
-    ...inter.bold,
-    color: color.accent.base,
-  },
-
-  // Clear sign fields
-  clearFields: {
-    gap: space.sm,
-    paddingVertical: space.lg,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: color.border.base,
-    marginBottom: space.lg,
-  },
-  fieldRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: space.md,
-    paddingHorizontal: space.lg,
-    borderRadius: radius.lg,
-  },
-  fieldRowWarning: {
-    backgroundColor: color.warning.soft,
-  },
-  fieldLabel: {
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.muted,
-    flexShrink: 0,
-    marginRight: space.xl,
-  },
-  fieldValue: {
-    fontSize: text.sm,
-    ...inter.semibold,
-    color: color.fg.base,
-    textAlign: 'right',
-    flex: 1,
-  },
-  fieldValueWarning: {
-    color: color.warning.base,
-    ...inter.bold,
-  },
-  fieldValueMono: {
-    fontFamily: font.mono,
-    fontWeight: '500',
-  },
-
-  originSmall: {
-    fontSize: text.xs,
-    ...inter.regular,
-    color: color.fg.subtle,
-    textAlign: 'center',
-    marginBottom: space.lg,
-  },
-
-  // ===== Blind sign styles =====
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.lg,
-    marginBottom: space['2xl'],
-  },
-  headerText: { flex: 1, gap: 2 },
-  methodName: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
-  origin: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
-
-  accountRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.lg,
@@ -558,86 +698,266 @@ const styles = createStyles(() => ({
     paddingHorizontal: space.xl,
     backgroundColor: color.bg.sunken,
     borderRadius: radius.xl,
-    marginBottom: space.lg,
+    marginBottom: space['2xl'],
   },
-  accountAvatar: {
-    width: 32, height: 32, borderRadius: 16,
+  dappLogo: {
+    width: 36, height: 36, borderRadius: 10,
+  },
+  dappLogoFallback: {
     backgroundColor: color.accent.soft,
     alignItems: 'center', justifyContent: 'center',
   },
-  accountAvatarText: { fontSize: text.base, ...inter.bold, color: color.accent.base },
-  accountInfo: { flex: 1, gap: 1 },
-  accountName: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
-  accountAddr: { fontSize: text.xs, fontWeight: '500', fontFamily: font.mono, color: color.fg.subtle },
-
-  networkBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: space.sm,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.lg,
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.full,
-    marginBottom: space.lg,
+  dappLogoText: {
+    fontSize: text.lg, ...inter.bold, color: color.accent.base,
   },
-  networkText: {
-    fontSize: text.xs,
-    ...inter.semibold,
+  dappInfo: { flex: 1, gap: 1 },
+  dappName: { fontSize: text.base, ...inter.bold, color: color.fg.base },
+  dappDomain: {
+    fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono,
     color: color.fg.muted,
   },
+  e2eBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: space.md, paddingVertical: space.xs,
+    backgroundColor: color.success.soft, borderRadius: radius.full,
+  },
+  e2eText: { fontSize: text.xs, ...inter.bold, color: color.success.base },
 
-  details: {
-    gap: space.md,
-    paddingVertical: space.lg,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: color.border.base,
-    marginBottom: space.lg,
+  // ===== Intent Header =====
+  intentHeader: {
+    alignItems: 'center',
+    paddingVertical: space.xl,
   },
-  description: { fontSize: text.base, ...inter.regular, color: color.fg.muted, lineHeight: 20, marginBottom: space.sm },
-
-  messagePreview: {
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.lg,
-    padding: space.lg,
-    gap: space.sm,
-  },
-  previewLabel: {
-    fontSize: text.xs, ...inter.semibold, color: color.fg.subtle,
-    letterSpacing: 1, textTransform: 'uppercase' as const,
-  },
-  previewText: {
-    fontSize: text.sm, fontWeight: '500', fontFamily: font.mono,
-    color: color.fg.base, lineHeight: 18,
+  intentText: {
+    fontSize: text['4xl'],
+    ...inter.bold,
+    textAlign: 'center',
+    letterSpacing: -0.5,
   },
 
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: space.sm },
-  detailLabel: { fontSize: text.base, ...inter.regular, color: color.fg.muted },
-  detailValue: {
-    fontSize: text.base, fontWeight: '500', fontFamily: font.mono,
-    color: color.fg.base, maxWidth: '60%' as any,
+  // ===== Token Card =====
+  tokenCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: space.xl,
+    paddingHorizontal: space['2xl'],
+    borderRadius: radius['2xl'],
+    marginVertical: space.sm,
+  },
+  tokenInfo: { flex: 1 },
+  tokenAmount: {
+    fontSize: text['3xl'],
+    ...inter.bold,
+    color: color.fg.base,
+    letterSpacing: -0.3,
+  },
+  tokenLabel: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.muted,
+    marginTop: space.xs,
+  },
+  tokenWarning: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: 'rgba(212,58,42,0.1)',
+    alignItems: 'center', justifyContent: 'center',
   },
 
-  blindWarning: {
+  // ===== Flow Arrow =====
+  flowArrow: {
+    alignItems: 'center',
+    marginVertical: -space.sm,
+    zIndex: 1,
+  },
+  flowCircle: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: color.bg.raised,
+    borderWidth: 2, borderColor: color.border.base,
+    alignItems: 'center', justifyContent: 'center',
+    ...shadow.sm,
+  },
+  flowCircleDanger: {
+    borderColor: '#e8a99a',
+  },
+
+  // ===== Contract Bar =====
+  contractBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
     paddingVertical: space.lg,
     paddingHorizontal: space.xl,
-    backgroundColor: color.warning.soft,
-    borderRadius: radius.lg,
-    marginBottom: space.lg,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.xl,
+    marginVertical: space.md,
   },
-  blindWarningText: {
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.warning.base,
-    flex: 1,
-    lineHeight: 18,
+  contractBarWarning: {
+    borderWidth: 1,
+    borderColor: '#e8a99a',
+  },
+  contractInfo: { flex: 1, gap: 2 },
+  contractLabel: {
+    fontSize: 10, ...inter.semibold,
+    color: color.fg.subtle,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
+  contractAddrRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    flexWrap: 'wrap',
+  },
+  contractName: {
+    fontSize: text.sm, ...inter.semibold, color: color.success.base,
+  },
+  contractAddr: {
+    fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono,
+    color: color.fg.muted,
+  },
+  copyBtn: {
+    width: 28, height: 28, borderRadius: radius.md,
+    borderWidth: 1, borderColor: color.border.base,
+    backgroundColor: color.bg.raised,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  verifiedBadge: {
+    width: 24, height: 24,
+    alignItems: 'center', justifyContent: 'center',
   },
 
-  // ===== Shared styles =====
+  // ===== Warning Banner =====
+  warnBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.xl,
+    borderRadius: radius.xl,
+    marginVertical: space.md,
+  },
+  warnCaution: {
+    backgroundColor: color.warning.soft,
+    borderWidth: 1, borderColor: color.warning.border,
+  },
+  warnDanger: {
+    backgroundColor: color.error.soft,
+    borderWidth: 1, borderColor: '#e8a99a',
+  },
+  warnText: {
+    fontSize: text.sm, ...inter.semibold, flex: 1, lineHeight: 18,
+  },
+
+  // ===== Generic Fields =====
+  genericFields: {
+    gap: space.sm,
+    marginVertical: space.md,
+  },
+  genRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: space.lg,
+    paddingHorizontal: space.xl,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
+    gap: space.lg,
+  },
+  genRowWarning: {
+    backgroundColor: color.warning.soft,
+  },
+  genLabel: {
+    fontSize: text.sm, ...inter.medium, color: color.fg.muted,
+    flexShrink: 0,
+  },
+  genValue: {
+    fontSize: text.sm, ...inter.semibold, color: color.fg.base,
+    textAlign: 'right', flex: 1,
+    fontFamily: font.mono, fontWeight: '500' as const,
+  },
+
+  // ===== Message Bubble =====
+  msgBubble: {
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius['2xl'],
+    padding: space['2xl'],
+    marginVertical: space.md,
+  },
+  msgTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    alignSelf: 'center',
+    paddingVertical: space.xs,
+    paddingHorizontal: space.lg,
+    backgroundColor: color.border.base,
+    borderRadius: radius.full,
+    marginBottom: space.xl,
+  },
+  msgTagText: {
+    fontSize: 10, ...inter.semibold,
+    color: color.fg.subtle,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.3,
+  },
+  msgText: {
+    fontSize: text.base, ...inter.regular,
+    color: color.fg.base,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+
+  // ===== Context Strip =====
+  contextStrip: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.xl,
+  },
+  contextText: {
+    fontSize: text.xs, ...inter.medium, color: color.fg.subtle,
+  },
+  contextDot: {
+    fontSize: text.xs, color: color.fg.subtle,
+  },
+
+  // ===== Details Toggle =====
+  detailsToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    paddingVertical: space.md,
+  },
+  detailsToggleText: {
+    fontSize: text.xs, ...inter.semibold, color: color.fg.subtle,
+  },
+
+  // ===== Raw Data =====
+  rawBlock: {
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
+    padding: space.lg,
+    maxHeight: 80,
+    marginBottom: space.lg,
+  },
+  rawText: {
+    fontSize: 9, fontFamily: font.mono, fontWeight: '400' as const,
+    color: color.fg.subtle, lineHeight: 14,
+  },
+
+  // ===== Fallback =====
+  fallback: {
+    alignItems: 'center',
+    paddingVertical: space['5xl'],
+    gap: space.lg,
+  },
+  fallbackText: {
+    fontSize: text.lg, ...inter.regular, color: color.fg.muted,
+  },
+
+  // ===== Error =====
   errorCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -650,6 +970,7 @@ const styles = createStyles(() => ({
   },
   errorText: { fontSize: text.sm, ...inter.regular, color: color.error.base, flex: 1 },
 
+  // ===== Buttons =====
   buttonRow: { flexDirection: 'row', gap: space.lg, paddingTop: space.lg },
   buttonFlex: { flex: 1 },
 }));

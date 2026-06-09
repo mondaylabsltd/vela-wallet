@@ -24,6 +24,9 @@ import type { TypedData } from '@/services/eip712';
 // Public types
 // ---------------------------------------------------------------------------
 
+/** Risk level for visual treatment. */
+export type SigningRisk = 'safe' | 'normal' | 'caution' | 'danger';
+
 /** Resolved clear signing result — ready for display. */
 export interface ClearSignResult {
   /** User-facing intent, e.g. "Swap", "Send", "Approve" */
@@ -34,7 +37,18 @@ export interface ClearSignResult {
   owner?: string;
   /** Resolved display fields */
   fields: ClearSignField[];
+  /** Risk level derived from intent + fields */
+  risk: SigningRisk;
+  /** Contract address being interacted with */
+  contractAddress?: string;
+  /** Whether the contract has a verified descriptor */
+  verified: boolean;
+  /** Signing type for button/color decisions */
+  type: 'transaction' | 'signature';
 }
+
+/** Layout role hint for field rendering. */
+export type FieldRole = 'send-amount' | 'receive-amount' | 'recipient' | 'spender' | 'generic';
 
 export interface ClearSignField {
   label: string;
@@ -44,6 +58,10 @@ export interface ClearSignField {
   tokenAddress?: string;
   /** Whether this is a high-risk field (e.g. unlimited approval) */
   warning?: boolean;
+  /** Role hint for layout decisions */
+  role?: FieldRole;
+  /** Whether this field should be in the collapsed details panel */
+  detail?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -151,13 +169,20 @@ function resolveCalldataDescriptor(
     chainId,
   );
 
+  const intent = format.intent ?? matchedSig.split('(')[0];
+  const enrichedFields = inferFieldRoles(fields, intent);
+
   return {
-    intent: format.intent ?? matchedSig.split('(')[0],
+    intent,
     contractName: isContractSpecific
       ? (descriptor.metadata?.contractName ?? descriptor.context?.$id)
       : undefined,
     owner: isContractSpecific ? descriptor.metadata?.owner : undefined,
-    fields,
+    fields: enrichedFields,
+    risk: assessRisk(intent, enrichedFields, 'transaction'),
+    contractAddress: toAddr,
+    verified: isContractSpecific,
+    type: 'transaction',
   };
 }
 
@@ -229,11 +254,19 @@ function resolveEip712Entry(
     chainId,
   );
 
+  const intent = format.intent ?? typedData.primaryType;
+  const enrichedFields = inferFieldRoles(fields, intent);
+  const contract = typedData.domain?.verifyingContract?.toLowerCase();
+
   return {
-    intent: format.intent ?? typedData.primaryType,
+    intent,
     contractName: entry.metadata?.contractName ?? entry.context?.eip712?.domain?.name,
     owner: entry.metadata?.owner,
-    fields,
+    fields: enrichedFields,
+    risk: assessRisk(intent, enrichedFields, 'signature'),
+    contractAddress: contract,
+    verified: true,
+    type: 'signature' as const,
   };
 }
 
@@ -260,9 +293,16 @@ function resolveEip712Formats(
     chainId,
   );
 
+  const intent = format.intent ?? typedData.primaryType;
+  const enrichedFields = inferFieldRoles(fields, intent);
+
   return {
-    intent: format.intent ?? typedData.primaryType,
-    fields,
+    intent,
+    fields: enrichedFields,
+    risk: assessRisk(intent, enrichedFields, 'signature'),
+    contractAddress: typedData.domain?.verifyingContract?.toLowerCase(),
+    verified: false,
+    type: 'signature' as const,
   };
 }
 
@@ -630,4 +670,54 @@ function flattenForEip712(message: Record<string, any>): any {
     }
   }
   return ctx;
+}
+
+// ---------------------------------------------------------------------------
+// Risk assessment
+// ---------------------------------------------------------------------------
+
+function assessRisk(
+  intent: string,
+  fields: ClearSignField[],
+  type: 'transaction' | 'signature',
+): SigningRisk {
+  // Any field with a warning (e.g. unlimited approval) → danger
+  if (fields.some(f => f.warning)) return 'danger';
+
+  const i = intent.toLowerCase();
+  if (/approve|permit|authorize/.test(i)) return 'caution';
+  if (/stake|deposit|claim|supply/.test(i)) return 'safe';
+  if (/swap|send|transfer|buy|exchange/.test(i)) return 'normal';
+  if (/withdraw|redeem|unstake|exit/.test(i)) return 'normal';
+  return 'normal';
+}
+
+// ---------------------------------------------------------------------------
+// Field role inference
+// ---------------------------------------------------------------------------
+
+function inferFieldRoles(fields: ClearSignField[], intent: string): ClearSignField[] {
+  const i = intent.toLowerCase();
+  return fields.map(f => {
+    if (f.role) return f; // already assigned
+    const label = f.label.toLowerCase();
+
+    // Amount roles
+    if (f.format === 'tokenAmount' || f.format === 'amount') {
+      if (/receive|output|min|return|get/.test(label)) return { ...f, role: 'receive-amount' as const };
+      if (/send|pay|input|deposit|spend|stake|amount|value/.test(label)) return { ...f, role: 'send-amount' as const };
+      // For approve/permit: the amount is what's being approved
+      if (/approve|swap/.test(i)) return { ...f, role: 'send-amount' as const };
+      return { ...f, role: 'send-amount' as const };
+    }
+
+    // Address roles
+    if (f.format === 'addressName') {
+      if (/spender|operator/.test(label)) return { ...f, role: 'spender' as const };
+      if (/to|recipient|receiver|destination/.test(label)) return { ...f, role: 'recipient' as const };
+      return { ...f, role: 'generic' as const };
+    }
+
+    return { ...f, role: 'generic' as const };
+  });
 }
