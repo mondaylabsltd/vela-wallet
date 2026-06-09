@@ -630,7 +630,7 @@ function calculateSafeOpHash(
  *
  * The contract template already includes `,"` before this, so we must NOT include the leading comma.
  */
-function extractClientDataFields(clientDataJSON: Uint8Array): string {
+export function extractClientDataFields(clientDataJSON: Uint8Array): string {
   const decoder = new TextDecoder();
   const json = decoder.decode(clientDataJSON);
 
@@ -664,7 +664,7 @@ function extractClientDataFields(clientDataJSON: Uint8Array): string {
  * Where r = signer address padded, s = 65 (offset), v = 0x00 (contract sig type)
  * dynamicData = abi.encode(bytes authenticatorData, string clientDataFields, uint256 sigR, uint256 sigS)
  */
-function buildUserOpSignature(
+export function buildUserOpSignature(
   authenticatorData: Uint8Array,
   clientDataFields: string,
   sigR: Uint8Array,

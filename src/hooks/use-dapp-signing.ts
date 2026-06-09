@@ -10,7 +10,7 @@ import { hashTypedData, type TypedData } from '@/services/eip712';
 import { fromHex, stripHexPrefix, toHex } from '@/services/hex';
 import * as PublicKeyIndex from '@/services/public-key-index';
 import { rpcCall } from '@/services/rpc-adapter';
-import { sendContractCall, sendNative } from '@/services/safe-transaction';
+import { sendContractCall, sendNative, buildUserOpSignature, extractClientDataFields } from '@/services/safe-transaction';
 import { findAccountByCredentialId } from '@/services/storage';
 
 export interface DAppRequest {
@@ -21,8 +21,29 @@ export interface DAppRequest {
 }
 
 /**
+ * Build a full Safe-compatible EIP-1271 contract signature from a WebAuthn assertion.
+ *
+ * This encodes the signature in the format Safe's isValidSignature expects:
+ * validAfter(6) + validUntil(6) + signerAddr(32) + offset(32) + v=0x00(1) + dataLen(32) + dynamicData
+ * where dynamicData = abi.encode(authenticatorData, clientDataFields, r, s)
+ */
+function buildContractSignature(assertion: Passkey.PasskeyAssertionResult): string {
+  const rawSig = derSignatureToRaw(fromHex(assertion.signatureHex));
+  if (!rawSig) throw new Error('Failed to convert signature');
+
+  const authenticatorData = fromHex(assertion.authenticatorDataHex);
+  const clientDataJSON = fromHex(assertion.clientDataJSONHex);
+  const clientDataFields = extractClientDataFields(clientDataJSON);
+  const sigR = rawSig.slice(0, 32);
+  const sigS = rawSig.slice(32);
+
+  const sig = buildUserOpSignature(authenticatorData, clientDataFields, sigR, sigS);
+  return '0x' + toHex(sig);
+}
+
+/**
  * Handle a personal_sign request.
- * Returns "0x" + raw_signature + "00" (P256 contract sig).
+ * Returns a full Safe contract signature (EIP-1271 compatible).
  */
 export async function handlePersonalSign(
   request: DAppRequest,
@@ -39,14 +60,12 @@ export async function handlePersonalSign(
   const dataToSign = keccak256(combined);
 
   const assertion = await Passkey.sign(toHex(dataToSign), account.id);
-  const rawSig = derSignatureToRaw(fromHex(assertion.signatureHex));
-  if (!rawSig) throw new Error('Failed to convert signature');
-
-  return '0x' + toHex(rawSig) + '00';
+  return buildContractSignature(assertion);
 }
 
 /**
  * Handle an eth_signTypedData_v4 request.
+ * Returns a full Safe contract signature (EIP-1271 compatible).
  */
 export async function handleSignTypedData(
   request: DAppRequest,
@@ -60,10 +79,7 @@ export async function handleSignTypedData(
   const dataToSign = hashTypedData(typedData);
 
   const assertion = await Passkey.sign(toHex(dataToSign), account.id);
-  const rawSig = derSignatureToRaw(fromHex(assertion.signatureHex));
-  if (!rawSig) throw new Error('Failed to convert signature');
-
-  return '0x' + toHex(rawSig) + '00';
+  return buildContractSignature(assertion);
 }
 
 /**
@@ -126,6 +142,7 @@ export async function handleSendTransaction(
 
 /**
  * Handle a generic sign request.
+ * Returns a full Safe contract signature (EIP-1271 compatible).
  */
 export async function handleGenericSign(
   request: DAppRequest,
@@ -136,7 +153,7 @@ export async function handleGenericSign(
   const dataToSign = keccak256(jsonBytes);
 
   const assertion = await Passkey.sign(toHex(dataToSign), account.id);
-  return '0x' + assertion.signatureHex;
+  return buildContractSignature(assertion);
 }
 
 /**
