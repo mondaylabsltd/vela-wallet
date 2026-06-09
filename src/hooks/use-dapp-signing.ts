@@ -10,7 +10,7 @@ import { hashTypedData, type TypedData } from '@/services/eip712';
 import { fromHex, stripHexPrefix, toHex } from '@/services/hex';
 import * as PublicKeyIndex from '@/services/public-key-index';
 import { rpcCall } from '@/services/rpc-adapter';
-import { sendContractCall, sendNative, buildUserOpSignature, extractClientDataFields } from '@/services/safe-transaction';
+import { sendContractCall, sendNative, buildEip1271Signature, extractClientDataFields } from '@/services/safe-transaction';
 import { findAccountByCredentialId } from '@/services/storage';
 
 export interface DAppRequest {
@@ -37,7 +37,7 @@ function buildContractSignature(assertion: Passkey.PasskeyAssertionResult): stri
   const sigR = rawSig.slice(0, 32);
   const sigS = rawSig.slice(32);
 
-  const sig = buildUserOpSignature(authenticatorData, clientDataFields, sigR, sigS);
+  const sig = buildEip1271Signature(authenticatorData, clientDataFields, sigR, sigS);
   return '0x' + toHex(sig);
 }
 

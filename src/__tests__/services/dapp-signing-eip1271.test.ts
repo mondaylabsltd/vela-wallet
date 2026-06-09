@@ -66,7 +66,7 @@ jest.mock('@/services/rpc-adapter', () => ({
 }));
 
 import { handlePersonalSign, handleSignTypedData, handleGenericSign, isSigningMethod } from '@/hooks/use-dapp-signing';
-import { extractClientDataFields, buildUserOpSignature } from '@/services/safe-transaction';
+import { extractClientDataFields, buildEip1271Signature } from '@/services/safe-transaction';
 import { derSignatureToRaw } from '@/services/attestation-parser';
 import { fromHex, toHex } from '@/services/hex';
 import type { Account } from '@/models/types';
@@ -103,8 +103,8 @@ describe('EIP-1271 contract signature format', () => {
     });
   });
 
-  describe('buildUserOpSignature structure', () => {
-    test('produces signature with validity padding + contract sig header + dynamic data', () => {
+  describe('buildEip1271Signature structure', () => {
+    test('produces signature with contract sig header + dynamic data (no validity padding)', () => {
       const authData = fromHex(MOCK_AUTH_DATA_HEX);
       const clientDataJSON = fromHex(MOCK_CLIENT_DATA_HEX);
       const clientDataFields = extractClientDataFields(clientDataJSON);
@@ -114,16 +114,15 @@ describe('EIP-1271 contract signature format', () => {
       const sigR = rawSig!.slice(0, 32);
       const sigS = rawSig!.slice(32);
 
-      const sig = buildUserOpSignature(authData, clientDataFields, sigR, sigS);
+      const sig = buildEip1271Signature(authData, clientDataFields, sigR, sigS);
 
-      // Minimum size: 12 (validity) + 32 (r/signer) + 32 (s/offset) + 1 (v) + 32 (dataLen) + dynamic
-      expect(sig.length).toBeGreaterThan(109);
+      // Minimum size: 32 (r/signer) + 32 (s/offset) + 1 (v) + 32 (dataLen) + dynamic
+      expect(sig.length).toBeGreaterThan(97);
 
-      // First 12 bytes = validity padding (zeros)
-      expect(sig.slice(0, 12)).toEqual(new Uint8Array(12));
-
-      // v byte at position 76 (12 + 32 + 32) should be 0x00 (contract sig type)
-      expect(sig[76]).toBe(0x00);
+      // NO validity padding — starts directly with r field (signer address)
+      // First 12 bytes should NOT all be zero (they contain part of padded address)
+      // v byte at position 64 (32 + 32) should be 0x00 (contract sig type)
+      expect(sig[64]).toBe(0x00);
     });
 
     test('signature is much longer than raw 64 bytes', () => {
@@ -135,7 +134,7 @@ describe('EIP-1271 contract signature format', () => {
       const sigR = rawSig!.slice(0, 32);
       const sigS = rawSig!.slice(32);
 
-      const sig = buildUserOpSignature(authData, clientDataFields, sigR, sigS);
+      const sig = buildEip1271Signature(authData, clientDataFields, sigR, sigS);
 
       // Full contract signature should be significantly longer than 65 bytes (raw r+s+v)
       expect(sig.length).toBeGreaterThan(200);
@@ -164,11 +163,8 @@ describe('EIP-1271 contract signature format', () => {
       const sigBytes = fromHex(result.slice(2));
       expect(sigBytes.length).toBeGreaterThan(200);
 
-      // First 12 bytes should be validity padding (zeros)
-      expect(sigBytes.slice(0, 12)).toEqual(new Uint8Array(12));
-
-      // v byte at position 76 should be 0x00 (contract sig type)
-      expect(sigBytes[76]).toBe(0x00);
+      // v byte at position 64 (r(32) + s(32)) should be 0x00 (contract sig type)
+      expect(sigBytes[64]).toBe(0x00);
     });
   });
 
@@ -309,10 +305,9 @@ describe('EIP-1271 contract signature format', () => {
       expect(bytes1.length).toBe(bytes2.length);
       expect(bytes2.length).toBe(bytes3.length);
 
-      // All should have same validity padding and contract sig type
+      // All should have contract sig type at byte 64
       for (const bytes of [bytes1, bytes2, bytes3]) {
-        expect(bytes.slice(0, 12)).toEqual(new Uint8Array(12));
-        expect(bytes[76]).toBe(0x00);
+        expect(bytes[64]).toBe(0x00);
       }
 
       // Since all use the same mock assertion, the signatures should be identical

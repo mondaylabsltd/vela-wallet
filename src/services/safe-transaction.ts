@@ -658,7 +658,7 @@ export function extractClientDataFields(clientDataJSON: Uint8Array): string {
 }
 
 /**
- * Build contract signature for SafeWebAuthnSharedSigner.
+ * Build contract signature for SafeWebAuthnSharedSigner (4337 UserOp context).
  *
  * Format: validAfter(6) + validUntil(6) + r(32) + s(32) + v(1) + dataLength(32) + dynamicData
  * Where r = signer address padded, s = 65 (offset), v = 0x00 (contract sig type)
@@ -670,9 +670,37 @@ export function buildUserOpSignature(
   sigR: Uint8Array,
   sigS: Uint8Array,
 ): Uint8Array {
-  // Validity window: validAfter(6) + validUntil(6) = 12 bytes of zeros
+  // Validity window: validAfter(6) + validUntil(6) = 12 bytes of zeros (4337 SafeModule only)
   const validityPadding = new Uint8Array(12);
+  const core = buildContractSignatureCore(authenticatorData, clientDataFields, sigR, sigS);
+  return concatBytes(validityPadding, core);
+}
 
+/**
+ * Build contract signature for EIP-1271 isValidSignature (dApp signing context).
+ *
+ * Same as buildUserOpSignature but WITHOUT the 12-byte validity padding,
+ * since isValidSignature calls checkNSignatures directly without the
+ * Safe4337Module validity window prefix.
+ *
+ * Format: r(32) + s(32) + v(1) + dataLength(32) + dynamicData
+ */
+export function buildEip1271Signature(
+  authenticatorData: Uint8Array,
+  clientDataFields: string,
+  sigR: Uint8Array,
+  sigS: Uint8Array,
+): Uint8Array {
+  return buildContractSignatureCore(authenticatorData, clientDataFields, sigR, sigS);
+}
+
+/** Shared core: r(32) + s(32) + v(1) + dataLength(32) + dynamicData */
+function buildContractSignatureCore(
+  authenticatorData: Uint8Array,
+  clientDataFields: string,
+  sigR: Uint8Array,
+  sigS: Uint8Array,
+): Uint8Array {
   // Contract signature header: r(32) + s(32) + v(1)
   const rField = abiEncodeAddress(WEBAUTHN_SIGNER); // r = signer address
   const sField = abiEncodeUint256(65n); // s = offset to dynamic data (after r+s+v)
@@ -688,7 +716,6 @@ export function buildUserOpSignature(
   const dataLength = abiEncodeUint256(BigInt(dynamicData.length));
 
   return concatBytes(
-    validityPadding,
     rField,
     sField,
     vField,
