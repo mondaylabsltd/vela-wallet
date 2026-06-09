@@ -85,10 +85,16 @@ export async function handleSignTypedData(
     : typedDataRaw;
   const originalHash = hashTypedData(typedData);
 
+  // Use the chain ID from the typed data domain if available, since the
+  // component-level chainId may not have been updated (defaults to 1).
+  const domainChainId = typedData.domain?.chainId
+    ? Number(typedData.domain.chainId)
+    : chainId;
+
   // Wrap in Safe message hash — Safe4337Module.isValidSignature wraps the
   // original hash before passing it to the WebAuthn signer for verification
-  const safeHash = computeSafeMessageHash(originalHash, chainId, safeAddress);
-  console.log('[DEBUG signTypedData] originalHash:', toHex(originalHash), 'safeHash:', toHex(safeHash), 'chainId:', chainId, 'safeAddress:', safeAddress);
+  const safeHash = computeSafeMessageHash(originalHash, domainChainId, safeAddress);
+  console.log('[DEBUG signTypedData] originalHash:', toHex(originalHash), 'safeHash:', toHex(safeHash), 'chainId:', domainChainId, 'safeAddress:', safeAddress);
   const assertion = await Passkey.sign(toHex(safeHash), account.id);
   console.log('[DEBUG signTypedData] signatureHex:', assertion.signatureHex.slice(0, 40) + '...');
   return buildContractSignature(assertion);
