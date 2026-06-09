@@ -115,8 +115,16 @@ export function SigningRequestModal() {
 
   const addr = activeAccount?.address;
 
-  // Choose which view to render
+  // Choose which view to render — wait for descriptor resolution before showing content
   const renderContent = () => {
+    // While loading descriptor, show loading state (prevents blind→clear flash)
+    if (resolving) {
+      return (
+        <View style={styles.fallback}>
+          <Text style={styles.fallbackText}>Loading...</Text>
+        </View>
+      );
+    }
     if (clearSign) {
       return <ClearSignView cs={clearSign} />;
     }
@@ -129,7 +137,6 @@ export function SigningRequestModal() {
     if (isTx && params?.[0]) {
       return <BlindTransactionView tx={params[0]} chainId={chainId} />;
     }
-    // Fallback
     return (
       <View style={styles.fallback}>
         <Shield size={28} color={color.fg.muted} strokeWidth={2} />

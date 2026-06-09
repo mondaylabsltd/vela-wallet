@@ -568,8 +568,14 @@ function MockSigningModal({ request, onClose }: {
             );
           })()}
 
-          {/* ---- Clear signed ---- */}
-          {clearSign ? (
+          {/* ---- Loading ---- */}
+          {resolving ? (
+            <View style={{ alignItems: 'center', padding: 40 }}>
+              <Text style={ms.dappChainName}>Loading...</Text>
+            </View>
+
+          /* ---- Clear signed ---- */
+          ) : clearSign ? (
             <>
               <View style={ms.intent}>
                 <Text style={[ms.intentText, { color: RC[clearSign.risk] }]}>{clearSign.intent}</Text>
