@@ -340,4 +340,48 @@ describe('ERC-7730 Clear Signing', () => {
       expect(result!.risk).toBe('normal');
     });
   });
+
+  describe('field resolution safety check', () => {
+    it('falls back to null when too many fields fail to resolve', async () => {
+      // Create a descriptor with 4 visible fields but only 1 can resolve
+      mockDescriptorCache.set('/erc7730/ercs/calldata-erc20-tokens.json', {
+        context: { contract: {} },
+        display: {
+          formats: {
+            'transfer(address _to, uint256 _value)': {
+              intent: 'Send',
+              fields: [
+                { path: '_value', label: 'Amount', format: 'tokenAmount', visible: 'always' },
+                { path: '_to', label: 'To', format: 'addressName', visible: 'always' },
+                { path: 'nonexistent1', label: 'Field 3', format: 'raw', visible: 'always' },
+                { path: 'nonexistent2', label: 'Field 4', format: 'raw', visible: 'always' },
+                { path: 'nonexistent3', label: 'Field 5', format: 'raw', visible: 'always' },
+                { path: 'nonexistent4', label: 'Field 6', format: 'raw', visible: 'always' },
+              ],
+            },
+          },
+        },
+      });
+
+      const calldata = '0xa9059cbb' +
+        '000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045' +
+        '00000000000000000000000000000000000000000000000000000000003b9aca00';
+
+      // Only 2 of 6 visible fields resolve → less than ceil(6/2)=3 → should return null
+      const result = await resolveTransaction('0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', calldata, '0x0', 1);
+      expect(result).toBeNull();
+    });
+
+    it('allows clear sign when enough fields resolve', async () => {
+      loadERC20Descriptor();
+
+      const calldata = '0xa9059cbb' +
+        '000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045' +
+        '00000000000000000000000000000000000000000000000000000000003b9aca00';
+
+      // 2 of 2 visible fields resolve → 2 >= ceil(2/2)=1 → should succeed
+      const result = await resolveTransaction('0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', calldata, '0x0', 1);
+      expect(result).not.toBeNull();
+    });
+  });
 });

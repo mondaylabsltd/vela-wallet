@@ -174,6 +174,17 @@ function resolveCalldataDescriptor(
     chainId,
   );
 
+  // Safety check: if descriptor declared visible fields but we resolved
+  // less than half, the clear sign UI would be misleading — fall back to
+  // blind sign so the user doesn't think they've seen everything.
+  const declaredVisible = (format.fields ?? []).filter(
+    (f: any) => f.visible !== 'never' && f.label,
+  ).length;
+  if (declaredVisible > 0 && fields.length < Math.ceil(declaredVisible / 2)) {
+    console.warn(`[clear-sign] Only resolved ${fields.length}/${declaredVisible} fields for ${matchedSig} — falling back to blind sign`);
+    return null;
+  }
+
   const intent = format.intent ?? matchedSig.split('(')[0];
   const enrichedFields = inferFieldRoles(fields, intent);
 
@@ -259,6 +270,15 @@ function resolveEip712Entry(
     chainId,
   );
 
+  // Safety: fall back to blind sign if too many fields failed to resolve
+  const declaredVisible = (format.fields ?? []).filter(
+    (f: any) => f.visible !== 'never' && f.label,
+  ).length;
+  if (declaredVisible > 0 && fields.length < Math.ceil(declaredVisible / 2)) {
+    console.warn(`[clear-sign] EIP-712: only resolved ${fields.length}/${declaredVisible} fields — falling back`);
+    return null;
+  }
+
   const intent = format.intent ?? typedData.primaryType;
   const enrichedFields = inferFieldRoles(fields, intent);
   const contract = typedData.domain?.verifyingContract?.toLowerCase();
@@ -297,6 +317,14 @@ function resolveEip712Formats(
     descriptor.display?.definitions,
     chainId,
   );
+
+  const declaredVisible = (format.fields ?? []).filter(
+    (f: any) => f.visible !== 'never' && f.label,
+  ).length;
+  if (declaredVisible > 0 && fields.length < Math.ceil(declaredVisible / 2)) {
+    console.warn(`[clear-sign] ERC fallback: only resolved ${fields.length}/${declaredVisible} fields — falling back`);
+    return null;
+  }
 
   const intent = format.intent ?? typedData.primaryType;
   const enrichedFields = inferFieldRoles(fields, intent);
