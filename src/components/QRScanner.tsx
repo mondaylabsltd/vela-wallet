@@ -187,9 +187,9 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
         if (canvas) {
           const vw = video.videoWidth;
           const vh = video.videoHeight;
-          // Crop to the center scan-frame region (~65% of the shorter side)
-          // with some padding so the QR quiet zone is captured.
-          const side = Math.round(Math.min(vw, vh) * 0.65);
+          // Crop to 85% of the shorter side — large enough that dense QR codes
+          // (walletpair 57×57) get ~5px/module at the 600px canvas size
+          const side = Math.round(Math.min(vw, vh) * 0.85);
           const sx = Math.round((vw - side) / 2);
           const sy = Math.round((vh - side) / 2);
           // Render cropped region at 600px — dense QR codes (walletpair, 57×57
