@@ -18,10 +18,12 @@ video { width: 100%; max-width: 400px; border-radius: 8px; }
 <div>
 <button onclick="testBuiltinImage()">Test Built-in Image</button>
 <button onclick="testFileUpload()">Upload Image</button>
-<button onclick="testCamera()">Test Camera</button>
+<button onclick="testTakePhoto()">Take Photo</button>
+<button onclick="testCamera()">Test Video</button>
 <button onclick="document.getElementById('log').innerHTML=''">Clear</button>
 </div>
 <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFile(this)">
+<input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none" onchange="handleFile(this)">
 <video id="video" playsinline muted autoplay style="display:none"></video>
 <div id="log"></div>
 
@@ -136,6 +138,8 @@ window.testBuiltinImage = async function() {
 
 // --- Test 2: file upload ---
 window.testFileUpload = function() { document.getElementById('fileInput').click(); };
+// --- Test 2b: take photo (native camera) ---
+window.testTakePhoto = function() { document.getElementById('photoInput').click(); };
 window.handleFile = async function(input) {
   const file = input.files[0];
   if (!file) return;
