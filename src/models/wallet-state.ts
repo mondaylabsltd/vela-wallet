@@ -116,10 +116,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           // Migrate: fix accounts that have credentialId as address
           for (const acct of accounts) {
             if (!acct.publicKeyHex) continue;
-            const correct = computeAddress(acct.publicKeyHex);
-            if (acct.address !== correct) {
-              acct.address = correct;
-              await saveAccount(acct);
+            try {
+              const correct = computeAddress(acct.publicKeyHex);
+              if (acct.address !== correct) {
+                console.log(`[wallet] Migrating address for ${acct.name}: ${acct.address.slice(0, 10)} → ${correct.slice(0, 10)}`);
+                acct.address = correct;
+                await saveAccount(acct);
+              }
+            } catch (err) {
+              console.error(`[wallet] Address migration failed for ${acct.name}:`, err);
+              // Keep existing address rather than corrupting storage
             }
           }
           // Clamp saved index to valid range

@@ -1,8 +1,8 @@
 import '@/global.css';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import { Appearance, View, ActivityIndicator } from 'react-native';
+import React, { Component, useEffect, useState, type ReactNode } from 'react';
+import { Appearance, View, Text, ActivityIndicator, Pressable } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { WalletProvider } from '@/models/wallet-state';
 import { DAppConnectionProvider } from '@/models/dapp-connection';
@@ -22,6 +22,44 @@ import {
   ColorSchemeProvider,
   useColorSchemePreference,
 } from '@/constants/color-scheme';
+
+// ---------------------------------------------------------------------------
+// Error boundary — catches unhandled errors to prevent white screen
+// ---------------------------------------------------------------------------
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[ErrorBoundary]', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, backgroundColor: '#faf9f7' }}>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: '#1a1a18', marginBottom: 8 }}>
+            Something went wrong
+          </Text>
+          <Text style={{ fontSize: 13, color: '#8a8580', textAlign: 'center', lineHeight: 20, marginBottom: 20 }}>
+            {this.state.error.message}
+          </Text>
+          <Pressable
+            onPress={() => this.setState({ error: null })}
+            style={{ paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#E8572A', borderRadius: 12 }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Try Again</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function AppShell() {
   const { resolved } = useColorSchemePreference();
@@ -83,13 +121,15 @@ export default function RootLayout() {
   }
 
   return (
-    <TextScaleProvider>
-      <ColorSchemeProvider>
-        <AlertProvider>
-          <AppShell />
-        </AlertProvider>
-      </ColorSchemeProvider>
-    </TextScaleProvider>
+    <ErrorBoundary>
+      <TextScaleProvider>
+        <ColorSchemeProvider>
+          <AlertProvider>
+            <AppShell />
+          </AlertProvider>
+        </ColorSchemeProvider>
+      </TextScaleProvider>
+    </ErrorBoundary>
   );
 }
 

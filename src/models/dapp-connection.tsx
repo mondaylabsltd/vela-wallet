@@ -21,7 +21,6 @@ import {
 } from '@/services/dapp-transport';
 import {
   WalletPairTransport,
-  loadWalletPairSnapshot,
   clearWalletPairSession,
 } from '@/services/walletpair-transport';
 import { isSigningMethod, handleDAppRequest, handleReadOnlyRPC } from '@/hooks/use-dapp-signing';
@@ -378,7 +377,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           status: 'confirmed',
           type: 'dapp_tx',
           dappOrigin,
-        }).catch(() => {});
+        }).catch(e => console.warn('[DAppConnection] Failed to save tx record:', e));
       } else if (request.method === 'personal_sign') {
         saveTransaction({
           id: `dapp-${now}-msg`,
@@ -394,7 +393,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           status: 'confirmed',
           type: 'sign_message',
           dappOrigin,
-        }).catch(() => {});
+        }).catch(e => console.warn('[DAppConnection] Failed to save tx record:', e));
       } else if (request.method.includes('signTypedData')) {
         saveTransaction({
           id: `dapp-${now}-typed`,
@@ -410,7 +409,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           status: 'confirmed',
           type: 'sign_typed_data',
           dappOrigin,
-        }).catch(() => {});
+        }).catch(e => console.warn('[DAppConnection] Failed to save tx record:', e));
       }
 
       setIncomingRequest(null);
