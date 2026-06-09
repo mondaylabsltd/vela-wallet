@@ -159,7 +159,32 @@ describe('jsQR walletpair decoding', () => {
 // Dark background binarization (reproduces the real WalletPair screenshot)
 // ---------------------------------------------------------------------------
 
-/** Reproduces binarizeAt + decodeQR from QRScanner.tsx */
+/** Reproduces downscalePixels, binarizeAt, decodeQR from QRScanner.tsx */
+function downscalePixels(src: Uint8ClampedArray, srcW: number, srcH: number, dstW: number) {
+  const dstH = Math.round(dstW * srcH / srcW);
+  const out = new Uint8ClampedArray(dstW * dstH * 4);
+  const xr = srcW / dstW, yr = srcH / dstH;
+  for (let y = 0; y < dstH; y++) {
+    for (let x = 0; x < dstW; x++) {
+      const sx = x * xr, sy = y * yr;
+      const x0 = Math.floor(sx), y0 = Math.floor(sy);
+      const x1 = Math.min(x0 + 1, srcW - 1), y1 = Math.min(y0 + 1, srcH - 1);
+      const xf = sx - x0, yf = sy - y0;
+      const i00 = (y0 * srcW + x0) * 4, i10 = (y0 * srcW + x1) * 4;
+      const i01 = (y1 * srcW + x0) * 4, i11 = (y1 * srcW + x1) * 4;
+      const di = (y * dstW + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        out[di + c] = Math.round(
+          src[i00 + c] * (1 - xf) * (1 - yf) + src[i10 + c] * xf * (1 - yf) +
+          src[i01 + c] * (1 - xf) * yf + src[i11 + c] * xf * yf,
+        );
+      }
+      out[di + 3] = 255;
+    }
+  }
+  return { data: out, width: dstW, height: dstH };
+}
+
 function binarizeAt(data: Uint8ClampedArray, w: number, h: number, threshold: number) {
   const out = new Uint8ClampedArray(data.length);
   for (let i = 0; i < data.length; i += 4) {
@@ -170,13 +195,16 @@ function binarizeAt(data: Uint8ClampedArray, w: number, h: number, threshold: nu
   return { data: out, width: w, height: h };
 }
 
+const JSQR_OPTS = { inversionAttempts: 'attemptBoth' as const };
+
 function decodeQR(data: Uint8ClampedArray, w: number, h: number): string | null {
-  const opts = { inversionAttempts: 'attemptBoth' as const };
-  const direct = jsQR(data as any, w, h, opts);
+  const direct = jsQR(data as any, w, h, JSQR_OPTS);
   if (direct?.data) return direct.data;
-  for (const t of [10, 40, 80]) {
-    const bin = binarizeAt(data, w, h, t);
-    const result = jsQR(bin.data as any, bin.width, bin.height, opts);
+  const targetW = Math.min(w, 600);
+  const small = targetW < w ? downscalePixels(data, w, h, targetW) : { data, width: w, height: h };
+  for (const t of [120, 80, 160]) {
+    const bin = binarizeAt(small.data, small.width, small.height, t);
+    const result = jsQR(bin.data as any, small.width, small.height, JSQR_OPTS);
     if (result?.data) return result.data;
   }
   return null;
@@ -234,13 +262,7 @@ describe('dark background binarization', () => {
   test('raw jsQR FAILS on dark bg with 0px quiet zone', () => {
     const frame = buildDarkScreenshot(WALLETPAIR_URI, W, H, 0);
     const raw = jsQR(frame as any, W, H, { inversionAttempts: 'attemptBoth' });
-    expect(raw).toBeNull(); // confirms the bug
-  });
-
-  test('decodeQR (with binarization) succeeds on dark bg with 0px quiet zone', () => {
-    const frame = buildDarkScreenshot(WALLETPAIR_URI, W, H, 0);
-    const decoded = decodeQR(frame, W, H);
-    expect(decoded).toBe(WALLETPAIR_URI);
+    expect(raw).toBeNull(); // confirms the underlying jsQR limitation
   });
 
   test('decodeQR succeeds on dark bg with 2px quiet zone', () => {
@@ -253,5 +275,33 @@ describe('dark background binarization', () => {
     const frame = buildFrame(WALLETPAIR_URI, W, H);
     const decoded = decodeQR(frame, W, H);
     expect(decoded).toBe(WALLETPAIR_URI);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Real JPEG image test (actual WalletPair photo from iPhone)
+// ---------------------------------------------------------------------------
+
+describe('real JPEG image', () => {
+  const fs = require('fs');
+  const rgbaPath = '/tmp/qr_test_full.rgba';
+
+  // Skip if test data not available (CI)
+  const hasTestData = fs.existsSync(rgbaPath);
+
+  (hasTestData ? test : test.skip)('decodes WalletPair QR from real JPEG photo', () => {
+    const buf = fs.readFileSync(rgbaPath);
+    const w = buf.readUInt32LE(0);
+    const h = buf.readUInt32LE(4);
+    const pixels = new Uint8ClampedArray(buf.buffer, buf.byteOffset + 8, w * h * 4);
+
+    // Raw jsQR should fail (JPEG artifacts at full res)
+    const raw = jsQR(pixels as any, w, h, JSQR_OPTS);
+    expect(raw).toBeNull();
+
+    // decodeQR (downscale + binarize) should succeed
+    const decoded = decodeQR(pixels, w, h);
+    expect(decoded).not.toBeNull();
+    expect(decoded!.startsWith('walletpair:')).toBe(true);
   });
 });

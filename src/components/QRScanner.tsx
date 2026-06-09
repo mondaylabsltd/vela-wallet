@@ -29,6 +29,37 @@ function parseAddress(data: string): string {
 }
 
 /**
+ * Downscale RGBA pixel data using bilinear interpolation.
+ * Smooths JPEG artifacts that confuse jsQR at full resolution.
+ */
+function downscalePixels(
+  src: Uint8ClampedArray, srcW: number, srcH: number, dstW: number,
+): { data: Uint8ClampedArray; width: number; height: number } {
+  const dstH = Math.round(dstW * srcH / srcW);
+  const out = new Uint8ClampedArray(dstW * dstH * 4);
+  const xr = srcW / dstW, yr = srcH / dstH;
+  for (let y = 0; y < dstH; y++) {
+    for (let x = 0; x < dstW; x++) {
+      const sx = x * xr, sy = y * yr;
+      const x0 = Math.floor(sx), y0 = Math.floor(sy);
+      const x1 = Math.min(x0 + 1, srcW - 1), y1 = Math.min(y0 + 1, srcH - 1);
+      const xf = sx - x0, yf = sy - y0;
+      const i00 = (y0 * srcW + x0) * 4, i10 = (y0 * srcW + x1) * 4;
+      const i01 = (y1 * srcW + x0) * 4, i11 = (y1 * srcW + x1) * 4;
+      const di = (y * dstW + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        out[di + c] = Math.round(
+          src[i00 + c] * (1 - xf) * (1 - yf) + src[i10 + c] * xf * (1 - yf) +
+          src[i01 + c] * (1 - xf) * yf + src[i11 + c] * xf * yf,
+        );
+      }
+      out[di + 3] = 255;
+    }
+  }
+  return { data: out, width: dstW, height: dstH };
+}
+
+/**
  * Binarize image data at a fixed luminance threshold.
  * Pixels darker than threshold → black, everything else → white.
  */
@@ -42,24 +73,30 @@ function binarizeAt(data: Uint8ClampedArray, width: number, height: number, thre
   return new ImageData(out, width, height);
 }
 
+const JSQR_OPTS = { inversionAttempts: 'attemptBoth' as const };
+
 /**
- * Try jsQR on raw image data, then retry with binarization at progressive
- * thresholds to handle dark-background screenshots (e.g. WalletPair dark theme).
- *
- * Dark backgrounds (lum ~18–30) sit very close to black QR modules (lum 0).
- * A low threshold (≤15) separates them; higher thresholds merge them and jsQR
- * loses the quiet zone boundary.
+ * Decode QR from image data. Strategy:
+ * 1. Raw jsQR (handles clean / light-bg images)
+ * 2. Downscale to ~600px + binarize at multiple thresholds
+ *    (handles JPEG photos of dark-themed screens — smooths artifacts
+ *     and separates dark-gray backgrounds from true-black QR modules)
  */
 function decodeQR(imageData: ImageData): string | null {
-  const opts = { inversionAttempts: 'attemptBoth' as const };
   const { data, width, height } = imageData;
-  // 1. Try raw image first (fast path for clean / light-background images)
-  const direct = jsQR(data as any, width, height, opts);
+  // 1. Fast path: raw image
+  const direct = jsQR(data as any, width, height, JSQR_OPTS);
   if (direct?.data) return direct.data;
-  // 2. Retry with binarization at low thresholds (dark-bg fix)
-  for (const t of [10, 40, 80]) {
-    const bin = binarizeAt(data, width, height, t);
-    const result = jsQR(bin.data as any, width, height, opts);
+
+  // 2. Downscale (smooths JPEG noise) + binarize at progressive thresholds
+  const targetW = Math.min(width, 600);
+  const small = targetW < width
+    ? downscalePixels(data, width, height, targetW)
+    : { data, width, height };
+
+  for (const t of [120, 80, 160]) {
+    const bin = binarizeAt(small.data, small.width, small.height, t);
+    const result = jsQR(bin.data as any, small.width, small.height, JSQR_OPTS);
     if (result?.data) return result.data;
   }
   return null;
@@ -92,14 +129,8 @@ function ScanLine() {
 }
 
 // ---------------------------------------------------------------------------
-// Web camera component using getUserMedia + BarcodeDetector (jsQR fallback)
+// Web camera component using getUserMedia + jsQR
 // ---------------------------------------------------------------------------
-
-/** Use native BarcodeDetector when available (Chrome Android, Safari 16.4+). */
-const nativeDetector: any =
-  typeof globalThis !== 'undefined' && 'BarcodeDetector' in globalThis
-    ? new (globalThis as any).BarcodeDetector({ formats: ['qr_code'] })
-    : null;
 
 function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanned: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -141,35 +172,28 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
         const canvas = canvasRef.current;
         if (canvas) {
           const ctx = canvas.getContext('2d')!;
-          const w = Math.min(video.videoWidth, 1280);
+          // Capture at 600px — lower res is faster and smooths video noise,
+          // which actually helps jsQR decode dense QR codes
+          const w = Math.min(video.videoWidth, 600);
           const h = Math.round(w * (video.videoHeight / video.videoWidth));
           canvas.width = w;
           canvas.height = h;
           ctx.drawImage(video, 0, 0, w, h);
           const imageData = ctx.getImageData(0, 0, w, h);
-          const decoded = decodeQR(imageData);
+          // Camera path: raw jsQR + one binarized attempt (keep it fast)
+          let decoded = jsQR(imageData.data as any, w, h, JSQR_OPTS)?.data ?? null;
+          if (!decoded) {
+            const bin = binarizeAt(imageData.data, w, h, 120);
+            decoded = jsQR(bin.data as any, w, h, JSQR_OPTS)?.data ?? null;
+          }
           if (decoded) {
             onScanRef.current(decoded);
-            return;
           }
-        }
-
-        // 2. Fallback: BarcodeDetector with timeout (async, may hang on dense codes)
-        if (nativeDetector) {
-          try {
-            const barcodes: any[] = await Promise.race([
-              nativeDetector.detect(video),
-              new Promise<any[]>(r => setTimeout(() => r([]), 500)),
-            ]);
-            if (barcodes.length > 0 && barcodes[0].rawValue) {
-              onScanRef.current(barcodes[0].rawValue);
-            }
-          } catch {}
         }
       } finally {
         busyRef.current = false;
       }
-    }, 350);
+    }, 500);
 
     return () => {
       mounted = false;
