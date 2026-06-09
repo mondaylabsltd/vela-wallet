@@ -225,7 +225,9 @@ export default function ConnectScreen() {
         {/* ================================================================= */}
         {status === 'connecting' && !pendingFingerprint && (
           <Animated.View entering={fadeIn(0, 300)} style={styles.centered}>
-            <Radio size={28} color={color.accent.base} />
+            <View style={styles.waitingIconWrap}>
+              <Radio size={32} color={color.accent.base} />
+            </View>
             <Text style={styles.statusText}>Waiting for dApp to accept...</Text>
             <Text style={styles.statusHint}>
               Go back to the dApp and approve the connection.
@@ -234,6 +236,7 @@ export default function ConnectScreen() {
               title="Cancel"
               onPress={disconnectBridge}
               variant="secondary"
+              compact
               style={styles.cancelBtn}
             />
           </Animated.View>
@@ -548,6 +551,11 @@ const styles = createStyles(() => ({
     textAlign: 'center', lineHeight: 20,
   },
   dappIcon: { width: 14, height: 14, borderRadius: 3 },
+  waitingIconWrap: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: color.accent.base + '12',
+    alignItems: 'center', justifyContent: 'center',
+  },
   cancelBtn: { marginTop: space.lg },
   errorBtn: { width: '100%', marginTop: space.md },
   retryBtn: { width: '100%' },

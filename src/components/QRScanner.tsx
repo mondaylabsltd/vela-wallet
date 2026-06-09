@@ -13,27 +13,13 @@ import jsQR from 'jsqr';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { X, SwitchCamera, Camera, ImagePlus } from 'lucide-react-native';
 
+// ============================================================================
+// Web QR decode engine (zbar WASM primary, jsQR fallback)
+// ============================================================================
+
 const JSQR_OPTS = { inversionAttempts: 'attemptBoth' as const };
 
-/**
- * Try jsQR with a pixel transform (invert / binarize) at a target size.
- * Browser canvas drawImage handles the downscale (high quality).
- */
-function tryJsQR(
-  canvas: HTMLCanvasElement,
-  targetW: number,
-  transform: (d: Uint8ClampedArray) => void,
-): string | null {
-  const tw = Math.min(canvas.width, targetW);
-  const th = Math.round(tw * canvas.height / canvas.width);
-  const small = document.createElement('canvas');
-  small.width = tw;
-  small.height = th;
-  small.getContext('2d')!.drawImage(canvas, 0, 0, tw, th);
-  const imageData = small.getContext('2d')!.getImageData(0, 0, tw, th);
-  transform(imageData.data);
-  return jsQR(imageData.data as any, tw, th, JSQR_OPTS)?.data ?? null;
-}
+// -- Pixel transforms --------------------------------------------------------
 
 const INVERT = (d: Uint8ClampedArray) => {
   for (let i = 0; i < d.length; i += 4) { d[i] = 255 - d[i]; d[i+1] = 255 - d[i+1]; d[i+2] = 255 - d[i+2]; }
@@ -41,121 +27,109 @@ const INVERT = (d: Uint8ClampedArray) => {
 const BINARIZE = (t: number) => (d: Uint8ClampedArray) => {
   for (let i = 0; i < d.length; i += 4) {
     const lum = (d[i] * 77 + d[i+1] * 150 + d[i+2] * 29) >> 8;
-    const v = lum <= t ? 0 : 255;
-    d[i] = v; d[i+1] = v; d[i+2] = v;
+    const v = lum <= t ? 0 : 255; d[i] = v; d[i+1] = v; d[i+2] = v;
   }
 };
-/** Binarize then invert: dark bg → white (restores quiet zone), bright QR → black.
- *  jsQR's attemptBoth handles the resulting inverted QR code. */
 const BIN_INVERT = (t: number) => (d: Uint8ClampedArray) => {
   for (let i = 0; i < d.length; i += 4) {
     const lum = (d[i] * 77 + d[i+1] * 150 + d[i+2] * 29) >> 8;
-    const v = lum <= t ? 255 : 0;
-    d[i] = v; d[i+1] = v; d[i+2] = v;
+    const v = lum <= t ? 255 : 0; d[i] = v; d[i+1] = v; d[i+2] = v;
   }
 };
 
-/** Downscale canvas to targetW, returns new canvas. */
-function scaleCanvas(src: HTMLCanvasElement, targetW: number): HTMLCanvasElement {
-  const targetH = Math.round(targetW * src.height / src.width);
-  const c = document.createElement('canvas');
+// -- Reusable canvases (avoid GC pressure) -----------------------------------
+
+let _canvasA: HTMLCanvasElement | null = null;
+let _canvasB: HTMLCanvasElement | null = null;
+function getCanvas(slot: 'A' | 'B'): HTMLCanvasElement {
+  if (slot === 'A') return (_canvasA ??= document.createElement('canvas'));
+  return (_canvasB ??= document.createElement('canvas'));
+}
+
+function drawScaled(src: HTMLCanvasElement, targetW: number, slot: 'A' | 'B' = 'A'): HTMLCanvasElement {
+  const c = getCanvas(slot);
   c.width = targetW;
-  c.height = targetH;
-  c.getContext('2d')!.drawImage(src, 0, 0, targetW, targetH);
+  c.height = Math.round(targetW * src.height / src.width);
+  c.getContext('2d')!.drawImage(src, 0, 0, c.width, c.height);
   return c;
 }
 
-/** Lazy-loaded zbar WASM scanner. */
-let zbarScanImageData: ((imageData: ImageData) => Promise<any[]>) | null = null;
-let zbarLoadAttempted = false;
+// -- zbar WASM ---------------------------------------------------------------
 
-async function loadZbar(): Promise<typeof zbarScanImageData> {
-  if (zbarLoadAttempted) return zbarScanImageData;
-  zbarLoadAttempted = true;
-  try {
-    // Metro bundler can't handle @undecaf/zbar-wasm (uses import.meta).
-    // Load from CDN via bare import() — use Function trick to bypass Metro's rewrite.
-    const importFromCDN = new Function('url', 'return import(url)');
-    const m = await importFromCDN('https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/main.mjs');
-    zbarScanImageData = m.scanImageData;
-    console.log('[QR] zbar WASM loaded from CDN');
-  } catch (e: any) {
-    console.warn('[QR] zbar WASM failed to load:', e?.message);
-  }
-  return zbarScanImageData;
+let zbarScan: ((d: ImageData) => Promise<any[]>) | null = null;
+let zbarLoading: Promise<void> | null = null;
+
+function loadZbar(): Promise<void> {
+  if (zbarScan) return Promise.resolve();
+  if (zbarLoading) return zbarLoading;
+  zbarLoading = (async () => {
+    // Metro can't import @undecaf/zbar-wasm (uses import.meta).
+    // Load from CDN; fall back to local copy in public/.
+    const urls = [
+      'https://cdn.jsdelivr.net/npm/@undecaf/zbar-wasm@0.11.0/dist/main.mjs',
+      '/zbar-wasm.mjs',
+    ];
+    const imp = new Function('url', 'return import(url)');
+    for (const url of urls) {
+      try {
+        const m = await imp(url);
+        zbarScan = m.scanImageData;
+        console.log('[QR] zbar loaded');
+        return;
+      } catch {}
+    }
+    console.warn('[QR] zbar failed to load from all sources');
+  })();
+  return zbarLoading;
 }
 
-/** Try zbar on a canvas (direct + inverted). */
 async function tryZbar(canvas: HTMLCanvasElement): Promise<string | null> {
-  const scan = zbarScanImageData ?? await loadZbar();
-  if (!scan) return null;
-  const ctx = canvas.getContext('2d')!;
-  const d = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  try {
-    const s = await scan(d);
-    if (s.length > 0) return s[0].decode();
-  } catch {}
-  // Try inverted
+  if (!zbarScan) return null;
+  const d = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+  try { const s = await zbarScan(d); if (s.length > 0) return s[0].decode(); } catch {}
   INVERT(d.data);
-  try {
-    const s = await scan(d);
-    if (s.length > 0) return s[0].decode();
-  } catch {}
+  try { const s = await zbarScan(d); if (s.length > 0) return s[0].decode(); } catch {}
   return null;
 }
 
-/** Reusable canvas for scaling — avoids GC pressure from creating new canvases each frame. */
-let _scaleCanvas: HTMLCanvasElement | null = null;
-function getScaleCanvas(): HTMLCanvasElement {
-  if (!_scaleCanvas) _scaleCanvas = document.createElement('canvas');
-  return _scaleCanvas;
-}
-function scaleToReusable(src: HTMLCanvasElement, targetW: number): HTMLCanvasElement {
-  const c = getScaleCanvas();
-  const targetH = Math.round(targetW * src.height / src.width);
-  c.width = targetW;
-  c.height = targetH;
-  c.getContext('2d')!.drawImage(src, 0, 0, targetW, targetH);
-  return c;
+// -- jsQR with transform -----------------------------------------------------
+
+function tryJsQR(canvas: HTMLCanvasElement, targetW: number, transform: (d: Uint8ClampedArray) => void): string | null {
+  const c = drawScaled(canvas, Math.min(canvas.width, targetW), 'B');
+  const img = c.getContext('2d')!.getImageData(0, 0, c.width, c.height);
+  transform(img.data);
+  return jsQR(img.data as any, c.width, c.height, JSQR_OPTS)?.data ?? null;
 }
 
-/**
- * Fast decode for camera frames — only try zbar at 1000px (proven sweet spot).
- * Must be fast: called every ~1s on live video.
- */
+// -- Public decode functions -------------------------------------------------
+
+/** Camera: fast, single zbar@1000 call per frame. */
 async function decodeCameraFrame(canvas: HTMLCanvasElement): Promise<string | null> {
-  const small = scaleToReusable(canvas, 1000);
-  const r = await tryZbar(small);
-  if (r) console.log('[QR] camera: zbar@1000 OK');
-  return r;
+  return tryZbar(drawScaled(canvas, 1000));
 }
 
-/**
- * Thorough decode for uploaded images — tries all strategies.
- * Can be slow since it's a one-shot operation.
- */
+/** Upload: thorough, tries zbar then jsQR at multiple sizes. */
 async function decodeUploadedImage(canvas: HTMLCanvasElement): Promise<string | null> {
   const w = canvas.width;
   const sizes = [1200, 1000, 800, 600, 400].filter(s => s < w);
 
-  // 1. zbar at sweet-spot sizes
   for (const s of sizes) {
-    const small = scaleCanvas(canvas, s);
-    const r = await tryZbar(small);
-    if (r) { console.log(`[QR] pick: zbar@${s} OK`); return r; }
+    const r = await tryZbar(drawScaled(canvas, s));
+    if (r) { console.log(`[QR] pick: zbar@${s}`); return r; }
   }
 
-  // 2. jsQR with image transforms
   for (const s of [w, ...sizes]) {
-    for (const [tName, transform] of [['binInv160', BIN_INVERT(160)], ['invert', INVERT], ['bin160', BINARIZE(160)]] as [string, (d: Uint8ClampedArray) => void][]) {
-      const r = tryJsQR(canvas, s, transform);
-      if (r) { console.log(`[QR] pick: ${tName}@${s} OK`); return r; }
+    for (const [n, fn] of [['binInv160', BIN_INVERT(160)], ['invert', INVERT], ['bin160', BINARIZE(160)]] as [string, (d: Uint8ClampedArray) => void][]) {
+      const r = tryJsQR(canvas, s, fn);
+      if (r) { console.log(`[QR] pick: ${n}@${s}`); return r; }
     }
   }
-
-  console.log(`[QR] pick: all failed ${w}×${canvas.height}`);
   return null;
 }
+
+// ============================================================================
+// Components
+// ============================================================================
 
 interface Props {
   visible: boolean;
@@ -163,44 +137,28 @@ interface Props {
   onClose: () => void;
 }
 
-/** Parse ethereum: URI or raw address from scanned data. */
 function parseAddress(data: string): string {
-  let address = data.trim();
-  if (address.startsWith('ethereum:')) {
-    address = address.replace('ethereum:', '').split('?')[0].split('@')[0];
-  }
-  return address;
+  let a = data.trim();
+  if (a.startsWith('ethereum:')) a = a.replace('ethereum:', '').split('?')[0].split('@')[0];
+  return a;
 }
 
-// ---------------------------------------------------------------------------
-// Scan line animation (native only — web reanimated causes ghost artifacts)
-// ---------------------------------------------------------------------------
+// -- Scan line animation (native only) ---------------------------------------
 
 function ScanLine() {
   if (Platform.OS === 'web') return null;
-
   const translateY = useSharedValue(0);
-
   useEffect(() => {
     translateY.value = withRepeat(
       withTiming(FRAME_SIZE - 2, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
-      -1,
-      true,
+      -1, true,
     );
   }, [translateY]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-  }));
-
-  return (
-    <Animated.View style={[styles.scanLine, animatedStyle]} />
-  );
+  const style = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
+  return <Animated.View style={[styles.scanLine, style]} />;
 }
 
-// ---------------------------------------------------------------------------
-// Web camera component using zbar WASM
-// ---------------------------------------------------------------------------
+// -- Web camera --------------------------------------------------------------
 
 function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanned: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -213,61 +171,37 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
 
   useEffect(() => {
     let mounted = true;
-    let frameCount = 0;
 
-    // Pre-load zbar WASM
     loadZbar();
 
-    // Start camera
     navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-    })
-      .then(stream => {
-        if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
-        streamRef.current = stream;
-        const s = stream.getVideoTracks()[0]?.getSettings?.();
-        console.log('[QR] camera: stream', s?.width ?? '?', '×', s?.height ?? '?');
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-        }
-      })
-      .catch(e => console.warn('[QR] camera failed:', e?.message));
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+    }).then(stream => {
+      if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
+      streamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+    }).catch(() => {});
 
-    // Grab-and-analyze loop — one zbar@1000 per frame, lightweight
     let timer: ReturnType<typeof setTimeout>;
-    async function scanFrame() {
-      if (!mounted || scannedRef.current) { timer = setTimeout(scanFrame, 500); return; }
-      const video = videoRef.current;
-      if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) { timer = setTimeout(scanFrame, 300); return; }
-      frameCount++;
+    async function scan() {
+      if (!mounted || scannedRef.current) { timer = setTimeout(scan, 500); return; }
+      const v = videoRef.current;
+      if (!v || v.readyState !== v.HAVE_ENOUGH_DATA) { timer = setTimeout(scan, 300); return; }
 
+      const c = canvasRef.current;
       let decoded: string | null = null;
-      const canvas = canvasRef.current;
-      if (canvas) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d', { willReadFrequently: true })!.drawImage(video, 0, 0);
-        decoded = await decodeCameraFrame(canvas);
+      if (c) {
+        c.width = v.videoWidth; c.height = v.videoHeight;
+        c.getContext('2d', { willReadFrequently: true })!.drawImage(v, 0, 0);
+        decoded = await decodeCameraFrame(c);
       }
 
-      if (frameCount % 5 === 1) {
-        console.log(`[QR] camera: frame#${frameCount} ${decoded ? 'OK' : 'no QR'}`);
-      }
-
-      if (decoded && !scannedRef.current) {
-        onScanRef.current(decoded);
-      }
-
-      if (mounted) timer = setTimeout(scanFrame, decoded ? 2000 : 500);
+      if (decoded && !scannedRef.current) onScanRef.current(decoded);
+      if (mounted) timer = setTimeout(scan, decoded ? 2000 : 800);
     }
-    timer = setTimeout(scanFrame, 800);
+    timer = setTimeout(scan, 1000);
 
-    return () => {
-      mounted = false;
-      clearTimeout(timer);
-      streamRef.current?.getTracks().forEach(t => t.stop());
-    };
+    return () => { mounted = false; clearTimeout(timer); streamRef.current?.getTracks().forEach(t => t.stop()); };
   }, []);
 
   return (
@@ -275,9 +209,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       <video
         ref={videoRef as any}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' } as any}
-        playsInline
-        muted
-        autoPlay
+        playsInline muted autoPlay
       />
       <canvas ref={canvasRef as any} style={{ display: 'none' } as any} />
       <ScanOverlay />
@@ -285,9 +217,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
   );
 }
 
-// ---------------------------------------------------------------------------
-// Native camera component using expo-camera
-// ---------------------------------------------------------------------------
+// -- Native camera -----------------------------------------------------------
 
 function NativeCamera({ facing, onBarCodeScanned, active }: {
   facing: 'back' | 'front';
@@ -301,9 +231,7 @@ function NativeCamera({ facing, onBarCodeScanned, active }: {
     return (
       <View style={styles.permissionContainer}>
         <Camera size={40} color={color.fg.subtle} />
-        <Text style={styles.permissionText}>
-          Camera access is needed to scan QR codes.
-        </Text>
+        <Text style={styles.permissionText}>Camera access is needed to scan QR codes.</Text>
         <Pressable style={styles.permissionButton} onPress={requestPermission}>
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
         </Pressable>
@@ -324,9 +252,7 @@ function NativeCamera({ facing, onBarCodeScanned, active }: {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Scan overlay with corners + animated line
-// ---------------------------------------------------------------------------
+// -- Scan overlay ------------------------------------------------------------
 
 function ScanOverlay() {
   return (
@@ -342,18 +268,14 @@ function ScanOverlay() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main QRScanner
-// ---------------------------------------------------------------------------
+// -- Main QRScanner ----------------------------------------------------------
 
 export function QRScanner({ visible, onScan, onClose }: Props) {
   const [scanned, setScanned] = useState(false);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const insets = useSafeAreaInsets();
 
-  useEffect(() => {
-    if (visible) setScanned(false);
-  }, [visible]);
+  useEffect(() => { if (visible) setScanned(false); }, [visible]);
 
   function handleBarCodeScanned({ data }: { data: string }) {
     if (scanned) return;
@@ -364,7 +286,6 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   }
 
   async function handlePickImage() {
-    console.log('[QR] pick: handlePickImage called, platform =', Platform.OS);
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
       input.type = 'file';
@@ -372,14 +293,11 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
       input.style.display = 'none';
       document.body.appendChild(input);
       input.onchange = async () => {
-        console.log('[QR] pick: onchange fired, files =', input.files?.length);
         document.body.removeChild(input);
         try {
           const file = input.files?.[0];
           if (!file) return;
-          console.log(`[QR] pick: file ${file.name} (${file.type}, ${(file.size / 1024).toFixed(0)}KB)`);
 
-          // Load image into canvas
           const url = URL.createObjectURL(file);
           const img = new Image();
           await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = url; });
@@ -388,72 +306,44 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           canvas.height = img.naturalHeight;
           canvas.getContext('2d')!.drawImage(img, 0, 0);
           URL.revokeObjectURL(url);
-          console.log(`[QR] pick: loaded ${canvas.width}×${canvas.height}`);
 
+          await loadZbar();
           const decoded = await decodeUploadedImage(canvas);
-          if (decoded) {
-            hapticSuccess();
-            onScan(parseAddress(decoded));
-          } else {
-            showAlert('No QR Found', 'Could not find a QR code in the selected image.');
-          }
+          if (decoded) { hapticSuccess(); onScan(parseAddress(decoded)); }
+          else showAlert('No QR Found', 'Could not find a QR code in the selected image.');
         } catch (e: any) {
-          console.warn('[QR] pick error:', e?.message ?? e);
+          console.warn('[QR] pick error:', e?.message);
           showAlert('Error', 'Failed to process the image.');
         }
       };
       input.click();
     } else {
-      // Native: expo-image-picker + expo-camera scanFromURLAsync
       try {
         const ImagePicker = await import('expo-image-picker');
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          quality: 1,
-          base64: true,
-        });
+        const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1, base64: true });
         if (result.canceled || !result.assets?.[0]) return;
         const asset = result.assets[0];
 
-        // 1. Try expo-camera scanFromURLAsync (uses ML Kit on Android, Vision on iOS)
         try {
           const ExpoCamera = await import('expo-camera');
           const barcodes = await ExpoCamera.scanFromURLAsync(asset.uri, ['qr']);
           if (barcodes.length > 0 && barcodes[0].data) {
-            hapticSuccess();
-            onScan(parseAddress(barcodes[0].data));
-            return;
+            hapticSuccess(); onScan(parseAddress(barcodes[0].data)); return;
           }
-        } catch (e) {
-          console.warn('[QRScanner] scanFromURLAsync failed:', e);
-        }
+        } catch {}
 
-        // 2. Fallback: decode base64 image → jsQR
         if (asset.base64) {
           try {
-            const jsQR = (await import('jsqr')).default;
             const { decodeBase64Image } = await import('@/services/image-decode');
             const imageData = decodeBase64Image(asset.base64, asset.width, asset.height);
             if (imageData) {
-              const code = jsQR(imageData.data as any, imageData.width, imageData.height, {
-                inversionAttempts: 'attemptBoth',
-              });
-              if (code?.data) {
-                hapticSuccess();
-                onScan(parseAddress(code.data));
-                return;
-              }
+              const code = jsQR(imageData.data as any, imageData.width, imageData.height, JSQR_OPTS);
+              if (code?.data) { hapticSuccess(); onScan(parseAddress(code.data)); return; }
             }
-          } catch (e) {
-            console.warn('[QRScanner] jsQR fallback error:', e);
-          }
+          } catch {}
         }
-
         showAlert('No QR Found', 'Could not find a QR code in the selected image.');
-      } catch (e) {
-        console.warn('[QRScanner] Native image pick error:', e);
-        showAlert('Error', 'Failed to open image picker.');
-      }
+      } catch { showAlert('Error', 'Failed to open image picker.'); }
     }
   }
 
@@ -461,14 +351,12 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
 
   const content = (
     <View style={styles.container}>
-      {/* Camera */}
       {Platform.OS === 'web' ? (
         <WebCamera onScan={(data) => handleBarCodeScanned({ data })} scanned={scanned} />
       ) : (
         <NativeCamera facing={facing} onBarCodeScanned={handleBarCodeScanned} active={!scanned} />
       )}
 
-      {/* Header overlay — manual safe area padding */}
       <View style={[styles.headerOverlay, { paddingTop: Math.max(insets.top, 20) }]}>
         <Pressable onPress={onClose} hitSlop={8} style={styles.headerBtn}>
           <X size={22} color="#fff" strokeWidth={2.5} />
@@ -479,25 +367,19 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             <ImagePlus size={20} color="#fff" strokeWidth={2} />
           </Pressable>
           {Platform.OS !== 'web' && (
-            <Pressable
-              onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')}
-              hitSlop={8}
-              style={styles.headerBtn}
-            >
+            <Pressable onPress={() => setFacing(f => f === 'back' ? 'front' : 'back')} hitSlop={8} style={styles.headerBtn}>
               <SwitchCamera size={20} color="#fff" strokeWidth={2} />
             </Pressable>
           )}
         </View>
       </View>
 
-      {/* Footer hint */}
       <View style={[styles.footerOverlay, { paddingBottom: Math.max(insets.bottom, 20) }]}>
         <Text style={styles.hint}>Point camera at a QR code</Text>
       </View>
     </View>
   );
 
-  // Native: fullscreen modal with dark status bar
   if (Platform.OS !== 'web') {
     return (
       <Modal visible={visible} animationType="slide" statusBarTranslucent>
@@ -507,13 +389,12 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
     );
   }
 
-  // Web: use RN Modal — works on web and handles z-index/overlay correctly
-  return (
-    <Modal visible={visible} animationType="slide" transparent>
-      {content}
-    </Modal>
-  );
+  return <Modal visible={visible} animationType="slide" transparent>{content}</Modal>;
 }
+
+// ============================================================================
+// Styles
+// ============================================================================
 
 const FRAME_SIZE = 240;
 const CORNER_SIZE = 28;
@@ -521,136 +402,29 @@ const CORNER_WIDTH = 3;
 const CORNER_RADIUS = 12;
 
 const styles = createStyles(() => ({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
-
-  // Header + footer float on top of camera
+  container: { flex: 1, backgroundColor: '#000' },
   headerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: space.xl,
-    paddingBottom: space.md,
-    zIndex: 10,
+    position: 'absolute', top: 0, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: space.xl, paddingBottom: space.md, zIndex: 10,
   },
-  headerBtn: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: text.lg,
-    ...inter.bold,
-    color: '#fff',
-  },
-  footerOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  hint: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: 'rgba(255,255,255,0.7)',
-  },
-
-  // Permission screen
-  permissionContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: space['5xl'],
-    gap: space['2xl'],
-  },
-  permissionText: {
-    fontSize: text.lg,
-    ...inter.regular,
-    color: color.fg.subtle,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  permissionButton: {
-    backgroundColor: color.accent.base,
-    paddingHorizontal: space['3xl'],
-    paddingVertical: space.xl,
-    borderRadius: radius.xl,
-  },
-  permissionButtonText: {
-    fontSize: text.lg,
-    ...inter.semibold,
-    color: color.fg.inverse,
-  },
-
-  // Camera
-  cameraContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-  camera: {
-    flex: 1,
-  },
-
-  // Overlay — centers the scan frame
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Scan frame — fixed square with corner brackets
-  scanFrame: {
-    width: FRAME_SIZE,
-    height: FRAME_SIZE,
-    position: 'relative',
-  },
-  corner: {
-    position: 'absolute',
-    width: CORNER_SIZE,
-    height: CORNER_SIZE,
-    borderColor: '#fff',
-  },
-  cornerTL: {
-    top: 0, left: 0,
-    borderTopWidth: CORNER_WIDTH, borderLeftWidth: CORNER_WIDTH,
-    borderTopLeftRadius: CORNER_RADIUS,
-  },
-  cornerTR: {
-    top: 0, right: 0,
-    borderTopWidth: CORNER_WIDTH, borderRightWidth: CORNER_WIDTH,
-    borderTopRightRadius: CORNER_RADIUS,
-  },
-  cornerBL: {
-    bottom: 0, left: 0,
-    borderBottomWidth: CORNER_WIDTH, borderLeftWidth: CORNER_WIDTH,
-    borderBottomLeftRadius: CORNER_RADIUS,
-  },
-  cornerBR: {
-    bottom: 0, right: 0,
-    borderBottomWidth: CORNER_WIDTH, borderRightWidth: CORNER_WIDTH,
-    borderBottomRightRadius: CORNER_RADIUS,
-  },
-
-  // Animated scan line
-  scanLine: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    height: 2,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    borderRadius: 1,
-  },
+  headerBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerRight: { flexDirection: 'row', alignItems: 'center' },
+  title: { fontSize: text.lg, ...inter.bold, color: '#fff' },
+  footerOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', zIndex: 10 },
+  hint: { fontSize: text.sm, ...inter.medium, color: 'rgba(255,255,255,0.7)' },
+  permissionContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space['5xl'], gap: space['2xl'] },
+  permissionText: { fontSize: text.lg, ...inter.regular, color: color.fg.subtle, textAlign: 'center', lineHeight: 22 },
+  permissionButton: { backgroundColor: color.accent.base, paddingHorizontal: space['3xl'], paddingVertical: space.xl, borderRadius: radius.xl },
+  permissionButtonText: { fontSize: text.lg, ...inter.semibold, color: color.fg.inverse },
+  cameraContainer: { flex: 1, position: 'relative' },
+  camera: { flex: 1 },
+  overlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' },
+  scanFrame: { width: FRAME_SIZE, height: FRAME_SIZE, position: 'relative' },
+  corner: { position: 'absolute', width: CORNER_SIZE, height: CORNER_SIZE, borderColor: '#fff' },
+  cornerTL: { top: 0, left: 0, borderTopWidth: CORNER_WIDTH, borderLeftWidth: CORNER_WIDTH, borderTopLeftRadius: CORNER_RADIUS },
+  cornerTR: { top: 0, right: 0, borderTopWidth: CORNER_WIDTH, borderRightWidth: CORNER_WIDTH, borderTopRightRadius: CORNER_RADIUS },
+  cornerBL: { bottom: 0, left: 0, borderBottomWidth: CORNER_WIDTH, borderLeftWidth: CORNER_WIDTH, borderBottomLeftRadius: CORNER_RADIUS },
+  cornerBR: { bottom: 0, right: 0, borderBottomWidth: CORNER_WIDTH, borderRightWidth: CORNER_WIDTH, borderBottomRightRadius: CORNER_RADIUS },
+  scanLine: { position: 'absolute', left: 8, right: 8, height: 2, backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 1 },
 }));
