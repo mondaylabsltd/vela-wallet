@@ -1,3 +1,4 @@
+import { APP_VERSION, GIT_COMMIT } from '@/constants/build-info';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -48,7 +49,7 @@ export default function AboutScreen() {
               vel<Text style={styles.logoAccent}>a</Text>
             </Text>
           </Pressable>
-          <Text style={styles.version}>v1.0.0</Text>
+          <Text style={styles.version}>v{APP_VERSION} ({GIT_COMMIT})</Text>
           <Text style={styles.tagline}>A simpler way to own crypto</Text>
         </Animated.View>
 
