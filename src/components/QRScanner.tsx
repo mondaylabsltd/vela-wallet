@@ -199,7 +199,7 @@ function ScanLine() {
 }
 
 // ---------------------------------------------------------------------------
-// Web camera component using qr-scanner (WASM-based, works on all browsers)
+// Web camera component using zbar WASM
 // ---------------------------------------------------------------------------
 
 function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanned: boolean }) {
@@ -214,11 +214,9 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
   useEffect(() => {
     let mounted = true;
     let frameCount = 0;
-    let QrScannerLib: any = null;
 
-    // Load qr-scanner WASM decoder
-    import('qr-scanner').then(m => { QrScannerLib = m.default; console.log('[QR] WASM decoder loaded'); })
-      .catch(e => console.warn('[QR] WASM decoder failed to load:', e?.message));
+    // Pre-load zbar WASM
+    loadZbar();
 
     // Start camera
     navigator.mediaDevices.getUserMedia({
@@ -236,7 +234,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       })
       .catch(e => console.warn('[QR] camera failed:', e?.message));
 
-    // Grab-and-analyze loop
+    // Grab-and-analyze loop — one zbar@1000 per frame, lightweight
     let timer: ReturnType<typeof setTimeout>;
     async function scanFrame() {
       if (!mounted || scannedRef.current) { timer = setTimeout(scanFrame, 500); return; }
@@ -245,26 +243,12 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       frameCount++;
 
       let decoded: string | null = null;
-
-      // Strategy 1: qr-scanner WASM on the video element directly
-      if (QrScannerLib && !decoded) {
-        try {
-          const result = await QrScannerLib.scanImage(video, { returnDetailedScanResult: true });
-          decoded = result?.data ?? null;
-          if (decoded) console.log('[QR] camera: WASM decoded', decoded.substring(0, 50) + '...');
-        } catch {}
-      }
-
-      // Strategy 2: jsQR inverted on canvas (handles dark-themed QR codes)
-      if (!decoded) {
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const vw = video.videoWidth, vh = video.videoHeight;
-          canvas.width = vw;
-          canvas.height = vh;
-          canvas.getContext('2d', { willReadFrequently: true })!.drawImage(video, 0, 0);
-          decoded = await decodeCameraFrame(canvas);
-        }
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d', { willReadFrequently: true })!.drawImage(video, 0, 0);
+        decoded = await decodeCameraFrame(canvas);
       }
 
       if (frameCount % 5 === 1) {
@@ -390,31 +374,18 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           if (!file) return;
           console.log(`[QR] pick: file ${file.name} (${file.type}, ${(file.size / 1024).toFixed(0)}KB)`);
 
-          let decoded: string | null = null;
+          // Load image into canvas
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = url; });
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          canvas.getContext('2d')!.drawImage(img, 0, 0);
+          URL.revokeObjectURL(url);
+          console.log(`[QR] pick: loaded ${canvas.width}×${canvas.height}`);
 
-          // Strategy 1: qr-scanner WASM (handles most QR codes)
-          try {
-            const QrScanner = (await import('qr-scanner')).default;
-            const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true });
-            decoded = result?.data ?? null;
-            if (decoded) console.log('[QR] pick: WASM decoded', decoded.substring(0, 50) + '...');
-          } catch {
-            console.log('[QR] pick: WASM failed, trying inverted jsQR...');
-          }
-
-          // Strategy 2: jsQR multi-strategy (invert, binarize at various sizes)
-          if (!decoded) {
-            const url = URL.createObjectURL(file);
-            const img = new Image();
-            await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = url; });
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth;
-            canvas.height = img.naturalHeight;
-            canvas.getContext('2d')!.drawImage(img, 0, 0);
-            URL.revokeObjectURL(url);
-            decoded = await decodeUploadedImage(canvas);
-          }
-
+          const decoded = await decodeUploadedImage(canvas);
           if (decoded) {
             hapticSuccess();
             onScan(parseAddress(decoded));
