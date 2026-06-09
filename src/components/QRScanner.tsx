@@ -59,7 +59,8 @@ function ScanLine() {
 
 function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanned: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const scannerRef = useRef<any>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const scannedRef = useRef(scanned);
   const onScanRef = useRef(onScan);
   scannedRef.current = scanned;
@@ -67,45 +68,80 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
 
   useEffect(() => {
     let mounted = true;
+    let frameCount = 0;
+    let QrScannerLib: any = null;
 
-    (async () => {
-      try {
-        const QrScanner = (await import('qr-scanner')).default;
+    // Load qr-scanner WASM decoder
+    import('qr-scanner').then(m => { QrScannerLib = m.default; console.log('[QR] WASM decoder loaded'); })
+      .catch(e => console.warn('[QR] WASM decoder failed to load:', e?.message));
 
-        if (!mounted || !videoRef.current) return;
+    // Start camera
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+    })
+      .then(stream => {
+        if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream;
+        const s = stream.getVideoTracks()[0]?.getSettings?.();
+        console.log('[QR] camera: stream', s?.width ?? '?', '×', s?.height ?? '?');
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+      })
+      .catch(e => console.warn('[QR] camera failed:', e?.message));
 
-        const scanner = new QrScanner(
-          videoRef.current,
-          (result: any) => {
-            if (scannedRef.current) return;
-            const data = typeof result === 'string' ? result : result?.data;
-            if (data) {
-              console.log('[QR] camera: decoded', data.substring(0, 50) + '...');
-              onScanRef.current(data);
-            }
-          },
-          {
-            preferredCamera: 'environment',
-            maxScansPerSecond: 2,
-            highlightScanRegion: false,
-            highlightCodeOutline: false,
-            returnDetailedScanResult: true,
-          },
-        );
+    // Grab-and-analyze loop
+    let timer: ReturnType<typeof setTimeout>;
+    async function scanFrame() {
+      if (!mounted || scannedRef.current) { timer = setTimeout(scanFrame, 500); return; }
+      const video = videoRef.current;
+      if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) { timer = setTimeout(scanFrame, 300); return; }
+      frameCount++;
 
-        scannerRef.current = scanner;
-        await scanner.start();
-        console.log('[QR] camera: qr-scanner started');
-      } catch (e: any) {
-        console.warn('[QR] camera: qr-scanner init failed', e?.message);
+      let decoded: string | null = null;
+
+      // Strategy 1: qr-scanner WASM on the video element directly
+      if (QrScannerLib && !decoded) {
+        try {
+          const result = await QrScannerLib.scanImage(video, { returnDetailedScanResult: true });
+          decoded = result?.data ?? null;
+          if (decoded) console.log('[QR] camera: WASM decoded', decoded.substring(0, 50) + '...');
+        } catch {}
       }
-    })();
+
+      // Strategy 2: qr-scanner WASM on a canvas snapshot (different image path)
+      if (QrScannerLib && !decoded) {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const vw = video.videoWidth, vh = video.videoHeight;
+          canvas.width = vw;
+          canvas.height = vh;
+          canvas.getContext('2d', { willReadFrequently: true })!.drawImage(video, 0, 0);
+          try {
+            const result = await QrScannerLib.scanImage(canvas, { returnDetailedScanResult: true });
+            decoded = result?.data ?? null;
+            if (decoded) console.log('[QR] camera: WASM canvas decoded', decoded.substring(0, 50) + '...');
+          } catch {}
+        }
+      }
+
+      if (frameCount % 5 === 1) {
+        console.log(`[QR] camera: frame#${frameCount} ${decoded ? 'OK' : 'no QR'}`);
+      }
+
+      if (decoded && !scannedRef.current) {
+        onScanRef.current(decoded);
+      }
+
+      if (mounted) timer = setTimeout(scanFrame, decoded ? 2000 : 500);
+    }
+    timer = setTimeout(scanFrame, 800);
 
     return () => {
       mounted = false;
-      scannerRef.current?.stop();
-      scannerRef.current?.destroy();
-      scannerRef.current = null;
+      clearTimeout(timer);
+      streamRef.current?.getTracks().forEach(t => t.stop());
     };
   }, []);
 
@@ -118,6 +154,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
         muted
         autoPlay
       />
+      <canvas ref={canvasRef as any} style={{ display: 'none' } as any} />
       <ScanOverlay />
     </View>
   );
