@@ -274,7 +274,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
     <View style={styles.cameraContainer}>
       <video
         ref={videoRef as any}
-        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover' } as any}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' } as any}
         playsInline
         muted
         autoPlay
@@ -364,11 +364,13 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   }
 
   async function handlePickImage() {
+    console.log('[QR] pick: handlePickImage called, platform =', Platform.OS);
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
       input.onchange = async () => {
+        console.log('[QR] pick: onchange fired, files =', input.files?.length);
         try {
           const file = input.files?.[0];
           if (!file) return;
