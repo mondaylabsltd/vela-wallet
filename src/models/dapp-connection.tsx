@@ -309,7 +309,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
             transport.disconnect();
             transportRef.current = null;
           }
-        }, 30_000);
+        }, 120_000);
 
         // Clear timeout if connection succeeds before deadline
         const unsub = transport.on('connected', () => {
