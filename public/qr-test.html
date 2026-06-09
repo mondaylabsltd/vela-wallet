@@ -77,6 +77,11 @@ const BINARIZE = (t) => (d) => { for (let i = 0; i < d.length; i += 4) {
   const lum = (d[i]*77+d[i+1]*150+d[i+2]*29)>>8; const v = lum<=t?0:255;
   d[i]=v; d[i+1]=v; d[i+2]=v;
 }};
+// Binarize then invert: dark bg → white (quiet zone), bright QR → black
+const BIN_INVERT = (t) => (d) => { for (let i = 0; i < d.length; i += 4) {
+  const lum = (d[i]*77+d[i+1]*150+d[i+2]*29)>>8; const v = lum<=t?255:0;
+  d[i]=v; d[i+1]=v; d[i+2]=v;
+}};
 
 // Load image file/url into canvas
 async function fileToCanvas(source) {
@@ -107,6 +112,7 @@ async function decodeCanvas(canvas) {
   ];
   for (const s of sizes) {
     strategies.push(
+      [`binInv160@${s}`, () => tryJsQR(canvas, s, BIN_INVERT(160))],
       [`invert@${s}`, () => tryJsQR(canvas, s, INVERT)],
       [`bin160@${s}`, () => tryJsQR(canvas, s, BINARIZE(160))],
     );

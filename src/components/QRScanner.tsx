@@ -45,6 +45,15 @@ const BINARIZE = (t: number) => (d: Uint8ClampedArray) => {
     d[i] = v; d[i+1] = v; d[i+2] = v;
   }
 };
+/** Binarize then invert: dark bg → white (restores quiet zone), bright QR → black.
+ *  jsQR's attemptBoth handles the resulting inverted QR code. */
+const BIN_INVERT = (t: number) => (d: Uint8ClampedArray) => {
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = (d[i] * 77 + d[i+1] * 150 + d[i+2] * 29) >> 8;
+    const v = lum <= t ? 255 : 0;
+    d[i] = v; d[i+1] = v; d[i+2] = v;
+  }
+};
 
 /**
  * Decode QR from a canvas using multiple strategies.
@@ -66,6 +75,7 @@ function decodeFromCanvas(canvas: HTMLCanvasElement, label = 'image'): string | 
   const strategies: [string, () => string | null][] = [];
   for (const s of sizes) {
     strategies.push(
+      [`binInv160@${s}`, () => tryJsQR(canvas, s, BIN_INVERT(160))],
       [`invert@${s}`, () => tryJsQR(canvas, s, INVERT)],
       [`bin160@${s}`, () => tryJsQR(canvas, s, BINARIZE(160))],
     );
