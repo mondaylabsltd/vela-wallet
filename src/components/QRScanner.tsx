@@ -9,7 +9,6 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { showAlert, hapticSuccess } from '@/services/platform';
-import jsQR from 'jsqr';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { X, SwitchCamera, Camera, ImagePlus } from 'lucide-react-native';
 
@@ -26,90 +25,6 @@ function parseAddress(data: string): string {
     address = address.replace('ethereum:', '').split('?')[0].split('@')[0];
   }
   return address;
-}
-
-/**
- * Downscale RGBA pixel data using bilinear interpolation.
- * Smooths JPEG artifacts that confuse jsQR at full resolution.
- */
-function downscalePixels(
-  src: Uint8ClampedArray, srcW: number, srcH: number, dstW: number,
-): { data: Uint8ClampedArray; width: number; height: number } {
-  const dstH = Math.round(dstW * srcH / srcW);
-  const out = new Uint8ClampedArray(dstW * dstH * 4);
-  const xr = srcW / dstW, yr = srcH / dstH;
-  for (let y = 0; y < dstH; y++) {
-    for (let x = 0; x < dstW; x++) {
-      const sx = x * xr, sy = y * yr;
-      const x0 = Math.floor(sx), y0 = Math.floor(sy);
-      const x1 = Math.min(x0 + 1, srcW - 1), y1 = Math.min(y0 + 1, srcH - 1);
-      const xf = sx - x0, yf = sy - y0;
-      const i00 = (y0 * srcW + x0) * 4, i10 = (y0 * srcW + x1) * 4;
-      const i01 = (y1 * srcW + x0) * 4, i11 = (y1 * srcW + x1) * 4;
-      const di = (y * dstW + x) * 4;
-      for (let c = 0; c < 3; c++) {
-        out[di + c] = Math.round(
-          src[i00 + c] * (1 - xf) * (1 - yf) + src[i10 + c] * xf * (1 - yf) +
-          src[i01 + c] * (1 - xf) * yf + src[i11 + c] * xf * yf,
-        );
-      }
-      out[di + 3] = 255;
-    }
-  }
-  return { data: out, width: dstW, height: dstH };
-}
-
-/**
- * Binarize image data at a fixed luminance threshold.
- * Pixels darker than threshold → black, everything else → white.
- */
-function binarizeAt(data: Uint8ClampedArray, width: number, height: number, threshold: number): ImageData {
-  const out = new Uint8ClampedArray(data.length);
-  for (let i = 0; i < data.length; i += 4) {
-    const lum = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
-    const val = lum <= threshold ? 0 : 255;
-    out[i] = val; out[i + 1] = val; out[i + 2] = val; out[i + 3] = 255;
-  }
-  return new ImageData(out, width, height);
-}
-
-const JSQR_OPTS = { inversionAttempts: 'attemptBoth' as const };
-
-/**
- * Decode QR from image data. Strategy:
- * 1. Raw jsQR (handles clean / light-bg images)
- * 2. Downscale to ~600px + binarize at multiple thresholds
- *    (handles JPEG photos of dark-themed screens — smooths artifacts
- *     and separates dark-gray backgrounds from true-black QR modules)
- *
- * Threshold 160 works best for real JPEG photos of dark-themed pages;
- * 120 handles cleaner dark screenshots; 80 is a low-threshold fallback.
- */
-function decodeQR(imageData: ImageData, label = 'image'): string | null {
-  const { data, width, height } = imageData;
-  // 1. Fast path: raw image
-  const direct = jsQR(data as any, width, height, JSQR_OPTS);
-  if (direct?.data) {
-    console.log(`[QR] ${label}: decoded raw ${width}×${height}`);
-    return direct.data;
-  }
-
-  // 2. Downscale (smooths JPEG noise) + binarize at progressive thresholds
-  const targetW = Math.min(width, 600);
-  const small = targetW < width
-    ? downscalePixels(data, width, height, targetW)
-    : { data, width, height };
-
-  for (const t of [160, 120, 80]) {
-    const bin = binarizeAt(small.data, small.width, small.height, t);
-    const result = jsQR(bin.data as any, small.width, small.height, JSQR_OPTS);
-    if (result?.data) {
-      console.log(`[QR] ${label}: decoded at ${small.width}×${small.height} threshold=${t}`);
-      return result.data;
-    }
-  }
-  console.log(`[QR] ${label}: failed ${width}×${height} (tried raw + 3 thresholds)`);
-  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -139,23 +54,12 @@ function ScanLine() {
 }
 
 // ---------------------------------------------------------------------------
-// Web camera component using getUserMedia + BarcodeDetector / jsQR
+// Web camera component using qr-scanner (WASM-based, works on all browsers)
 // ---------------------------------------------------------------------------
-
-/** Native BarcodeDetector — available on Chrome 83+, Safari 16.4+ (iOS/macOS). */
-const nativeDetector: any =
-  typeof globalThis !== 'undefined' && 'BarcodeDetector' in globalThis
-    ? new (globalThis as any).BarcodeDetector({ formats: ['qr_code'] })
-    : null;
-
-if (nativeDetector) console.log('[QR] BarcodeDetector available');
-else console.log('[QR] BarcodeDetector NOT available — using jsQR only');
 
 function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanned: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  // Use refs so the interval callback always sees latest values without re-creating
+  const scannerRef = useRef<any>(null);
   const scannedRef = useRef(scanned);
   const onScanRef = useRef(onScan);
   scannedRef.current = scanned;
@@ -163,92 +67,47 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
 
   useEffect(() => {
     let mounted = true;
-    let frameCount = 0;
 
-    navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-    })
-      .then(stream => {
-        if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
-        streamRef.current = stream;
-        const track = stream.getVideoTracks()[0];
-        const settings = track?.getSettings?.();
-        console.log('[QR] camera: stream ready', settings?.width ?? '?', '×', settings?.height ?? '?');
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-        }
-      })
-      .catch((e) => { console.warn('[QR] camera: getUserMedia failed', e?.message); });
+    (async () => {
+      try {
+        const QrScanner = (await import('qr-scanner')).default;
 
-    // Grab-and-analyze loop: capture one frame, try hard to decode it,
-    // then wait before grabbing the next. Much less CPU than setInterval.
-    let loopTimer: ReturnType<typeof setTimeout>;
-    async function scanOneFrame() {
-      if (!mounted || scannedRef.current) {
-        loopTimer = setTimeout(scanOneFrame, 500);
-        return;
+        if (!mounted || !videoRef.current) return;
+
+        const scanner = new QrScanner(
+          videoRef.current,
+          (result: any) => {
+            if (scannedRef.current) return;
+            const data = typeof result === 'string' ? result : result?.data;
+            if (data) {
+              console.log('[QR] camera: decoded', data.substring(0, 50) + '...');
+              onScanRef.current(data);
+            }
+          },
+          {
+            preferredCamera: 'environment',
+            maxScansPerSecond: 2,
+            highlightScanRegion: false,
+            highlightCodeOutline: false,
+            returnDetailedScanResult: true,
+          },
+        );
+
+        scannerRef.current = scanner;
+        await scanner.start();
+        console.log('[QR] camera: qr-scanner started');
+      } catch (e: any) {
+        console.warn('[QR] camera: qr-scanner init failed', e?.message);
       }
-      const video = videoRef.current;
-      if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) {
-        loopTimer = setTimeout(scanOneFrame, 300);
-        return;
-      }
-      frameCount++;
-      let decoded: string | null = null;
-
-      // --- Strategy 1: BarcodeDetector (native ML, best for camera) ---
-      if (nativeDetector && !decoded) {
-        try {
-          const barcodes: any[] = await Promise.race([
-            nativeDetector.detect(video),
-            new Promise<any[]>(r => setTimeout(() => r([]), 1500)),
-          ]);
-          if (barcodes.length > 0 && barcodes[0].rawValue) {
-            decoded = barcodes[0].rawValue;
-            console.log('[QR] camera: BarcodeDetector →', decoded!.substring(0, 50) + '...');
-          }
-        } catch {}
-      }
-
-      // --- Strategy 2: jsQR with binarization on cropped frame ---
-      if (!decoded) {
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const vw = video.videoWidth;
-          const vh = video.videoHeight;
-          const side = Math.round(Math.min(vw, vh) * 0.85);
-          const sx = Math.round((vw - side) / 2);
-          const sy = Math.round((vh - side) / 2);
-          const size = Math.min(side, 600);
-          canvas.width = size;
-          canvas.height = size;
-          const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-          ctx.drawImage(video, sx, sy, side, side, 0, 0, size, size);
-          const imageData = ctx.getImageData(0, 0, size, size);
-          if (frameCount % 5 === 1) {
-            console.log(`[QR] camera: frame#${frameCount} ${vw}×${vh} → ${size}px jsQR`);
-          }
-          decoded = decodeQR(imageData, 'camera');
-        }
-      }
-
-      if (decoded && !scannedRef.current) {
-        onScanRef.current(decoded);
-      }
-
-      // Wait before next frame — longer if nothing found (saves CPU)
-      if (mounted) loopTimer = setTimeout(scanOneFrame, decoded ? 2000 : 600);
-    }
-    // Start the loop after camera is ready
-    loopTimer = setTimeout(scanOneFrame, 500);
+    })();
 
     return () => {
       mounted = false;
-      clearTimeout(loopTimer);
-      streamRef.current?.getTracks().forEach(t => t.stop());
+      scannerRef.current?.stop();
+      scannerRef.current?.destroy();
+      scannerRef.current = null;
     };
-  }, []); // stable — no deps, runs once
+  }, []);
 
   return (
     <View style={styles.cameraContainer}>
@@ -259,7 +118,6 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
         muted
         autoPlay
       />
-      <canvas ref={canvasRef as any} style={{ display: 'none' } as any} />
       <ScanOverlay />
     </View>
   );
@@ -345,78 +203,30 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
 
   async function handlePickImage() {
     if (Platform.OS === 'web') {
-      // Web: use native file input + jsQR
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = 'image/*';
       input.onchange = async () => {
         try {
           const file = input.files?.[0];
-          if (!file) { console.log('[QR] pick: no file selected'); return; }
+          if (!file) return;
           console.log(`[QR] pick: file ${file.name} (${file.type}, ${(file.size / 1024).toFixed(0)}KB)`);
 
-          // Load image — keep blob URL alive until canvas draw completes
-          // (iOS Safari may evict decoded pixels under memory pressure)
-          const url = URL.createObjectURL(file);
-          const img = new Image();
-          await new Promise<void>((resolve, reject) => {
-            img.onload = () => resolve();
-            img.onerror = () => reject(new Error('Failed to load image'));
-            img.src = url;
+          const QrScanner = (await import('qr-scanner')).default;
+          const result = await QrScanner.scanImage(file, {
+            returnDetailedScanResult: true,
           });
-
-          console.log(`[QR] pick: loaded ${img.naturalWidth}×${img.naturalHeight}`);
-
-          // Let the browser do high-quality downscaling (much faster than JS).
-          // 800px is enough for jsQR; decodeQR may further shrink to 600px.
-          const maxDim = 800;
-          const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
-          const w = Math.round(img.naturalWidth * scale);
-          const h = Math.round(img.naturalHeight * scale);
-
-          const canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext('2d')!;
-          ctx.drawImage(img, 0, 0, w, h);
-          // Only revoke AFTER drawImage — iOS Safari may need the URL alive
-          URL.revokeObjectURL(url);
-
-          // 1. Try BarcodeDetector on the canvas (native ML, best for noisy images)
-          let decoded: string | null = null;
-          if (nativeDetector) {
-            try {
-              const barcodes = await nativeDetector.detect(canvas);
-              if (barcodes.length > 0 && barcodes[0].rawValue) {
-                decoded = barcodes[0].rawValue;
-                console.log(`[QR] pick: BarcodeDetector decoded at ${w}×${h}`);
-              }
-            } catch (e: any) {
-              console.warn('[QR] pick: BarcodeDetector failed', e?.message);
-            }
-          }
-
-          // 2. Fallback: jsQR with binarization
-          if (!decoded) {
-            const imageData = ctx.getImageData(0, 0, w, h);
-            console.log(`[QR] pick: trying jsQR at ${w}×${h}`);
-            decoded = decodeQR(imageData, 'pick');
-          }
-
-          if (decoded) {
-            hapticSuccess();
-            onScan(parseAddress(decoded));
-          } else {
-            showAlert('No QR Found', 'Could not find a QR code in the selected image.');
-          }
+          console.log('[QR] pick: decoded', result.data.substring(0, 50) + '...');
+          hapticSuccess();
+          onScan(parseAddress(result.data));
         } catch (e: any) {
-          console.warn('[QR] pick error:', e?.message ?? e);
-          showAlert('Error', 'Failed to process the image.');
+          console.warn('[QR] pick: failed', e?.message ?? e);
+          showAlert('No QR Found', 'Could not find a QR code in the selected image.');
         }
       };
       input.click();
     } else {
-      // Native: expo-image-picker + expo-camera scanFromURLAsync (with jsQR fallback)
+      // Native: expo-image-picker + expo-camera scanFromURLAsync
       try {
         const ImagePicker = await import('expo-image-picker');
         const result = await ImagePicker.launchImageLibraryAsync({
@@ -440,16 +250,19 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           console.warn('[QRScanner] scanFromURLAsync failed:', e);
         }
 
-        // 2. Fallback: decode base64 image → jsQR (works without ML Kit)
+        // 2. Fallback: decode base64 image → jsQR
         if (asset.base64) {
           try {
+            const jsQR = (await import('jsqr')).default;
             const { decodeBase64Image } = await import('@/services/image-decode');
             const imageData = decodeBase64Image(asset.base64, asset.width, asset.height);
             if (imageData) {
-              const decoded = decodeQR(imageData as ImageData);
-              if (decoded) {
+              const code = jsQR(imageData.data as any, imageData.width, imageData.height, {
+                inversionAttempts: 'attemptBoth',
+              });
+              if (code?.data) {
                 hapticSuccess();
-                onScan(parseAddress(decoded));
+                onScan(parseAddress(code.data));
                 return;
               }
             }
