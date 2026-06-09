@@ -26,7 +26,10 @@ export interface BalancePoint {
 // ---------------------------------------------------------------------------
 
 /** Cache: chainId → archive-capable RPC URL (null = no archive RPC found) */
-const archiveRpcCache = new Map<number, string | null>();
+const archiveRpcCache = new Map<number, { url: string | null; ts: number }>();
+
+/** Failed archive lookups expire after 1 hour so transient outages are retried. */
+const ARCHIVE_FAILURE_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Direct JSON-RPC call to a specific URL (bypass rpc-pool).
@@ -50,7 +53,16 @@ async function directRpcCall(
  * Result is cached permanently (archive support doesn't change).
  */
 async function findArchiveRpc(chainId: number, testAddress: string, oldBlockHex: string): Promise<string | null> {
-  if (archiveRpcCache.has(chainId)) return archiveRpcCache.get(chainId) ?? null;
+  const cached = archiveRpcCache.get(chainId);
+  if (cached) {
+    // Successful lookups are cached permanently (archive support doesn't change).
+    // Failed lookups (url === null) expire after TTL so transient outages are retried.
+    if (cached.url !== null || Date.now() - cached.ts < ARCHIVE_FAILURE_TTL_MS) {
+      return cached.url;
+    }
+    // Failed entry expired — retry discovery
+    archiveRpcCache.delete(chainId);
+  }
 
   // Get all RPC URLs for this chain from the pool
   const urls = await getChainRpcUrls(chainId);
@@ -60,14 +72,14 @@ async function findArchiveRpc(chainId: number, testAddress: string, oldBlockHex:
       const res = await directRpcCall(url, 'eth_getBalance', [testAddress, oldBlockHex]);
       if (res.result && !res.error) {
         console.log(`[BalanceHistory] Archive RPC found for chain ${chainId}: ${url}`);
-        archiveRpcCache.set(chainId, url);
+        archiveRpcCache.set(chainId, { url, ts: Date.now() });
         return url;
       }
     } catch { /* try next */ }
   }
 
   console.warn(`[BalanceHistory] No archive RPC found for chain ${chainId}`);
-  archiveRpcCache.set(chainId, null);
+  archiveRpcCache.set(chainId, { url: null, ts: Date.now() });
   return null;
 }
 

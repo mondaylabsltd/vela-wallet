@@ -77,8 +77,33 @@ async function saveBans(): Promise<void> {
   } catch { /* ignore */ }
 }
 
+/** Prune all expired entries from the ban map to prevent unbounded growth. */
+let lastBanPruneAt = 0;
+const BAN_PRUNE_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+function pruneExpiredBans(): void {
+  const now = Date.now();
+  if (now - lastBanPruneAt < BAN_PRUNE_INTERVAL_MS) return;
+  lastBanPruneAt = now;
+  let pruned = 0;
+  for (const [url, entry] of banMap) {
+    const expired = entry.permanent
+      ? now - entry.bannedAt >= PERMA_BAN_TTL_MS
+      : now - entry.bannedAt >= TEMP_BAN_TTL_MS;
+    if (expired) {
+      banMap.delete(url);
+      pruned++;
+    }
+  }
+  if (pruned > 0) {
+    saveBans();
+    console.log(`[RPC] Pruned ${pruned} expired ban(s), ${banMap.size} remaining`);
+  }
+}
+
 /** Check whether a URL is currently banned (skipping expired temp bans). */
 function isBanned(url: string): boolean {
+  pruneExpiredBans();
   const entry = banMap.get(url);
   if (!entry) return false;
   if (entry.permanent) {
