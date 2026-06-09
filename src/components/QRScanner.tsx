@@ -104,37 +104,56 @@ async function tryZbar(canvas: HTMLCanvasElement): Promise<string | null> {
   return null;
 }
 
+/** Reusable canvas for scaling — avoids GC pressure from creating new canvases each frame. */
+let _scaleCanvas: HTMLCanvasElement | null = null;
+function getScaleCanvas(): HTMLCanvasElement {
+  if (!_scaleCanvas) _scaleCanvas = document.createElement('canvas');
+  return _scaleCanvas;
+}
+function scaleToReusable(src: HTMLCanvasElement, targetW: number): HTMLCanvasElement {
+  const c = getScaleCanvas();
+  const targetH = Math.round(targetW * src.height / src.width);
+  c.width = targetW;
+  c.height = targetH;
+  c.getContext('2d')!.drawImage(src, 0, 0, targetW, targetH);
+  return c;
+}
+
 /**
- * Decode QR from a canvas. Strategy order:
- * 1. zbar WASM at ~1200px (proven on iPhone camera photos)
- * 2. jsQR with invert/binarize at multiple sizes (fallback)
+ * Fast decode for camera frames — only try zbar at 1000px (proven sweet spot).
+ * Must be fast: called every ~1s on live video.
  */
-async function decodeFromCanvas(canvas: HTMLCanvasElement, label = 'image'): Promise<string | null> {
+async function decodeCameraFrame(canvas: HTMLCanvasElement): Promise<string | null> {
+  const small = scaleToReusable(canvas, 1000);
+  const r = await tryZbar(small);
+  if (r) console.log('[QR] camera: zbar@1000 OK');
+  return r;
+}
+
+/**
+ * Thorough decode for uploaded images — tries all strategies.
+ * Can be slow since it's a one-shot operation.
+ */
+async function decodeUploadedImage(canvas: HTMLCanvasElement): Promise<string | null> {
   const w = canvas.width;
   const sizes = [1200, 1000, 800, 600, 400].filter(s => s < w);
 
-  // Strategy 1: zbar WASM (strongest, handles camera photos)
-  console.log(`[QR] ${label}: trying zbar at sizes [${sizes.join(',')}] + ${w}`);
+  // 1. zbar at sweet-spot sizes
   for (const s of sizes) {
     const small = scaleCanvas(canvas, s);
     const r = await tryZbar(small);
-    if (r) { console.log(`[QR] ${label}: zbar@${s} OK`); return r; }
-    else console.log(`[QR] ${label}: zbar@${s} FAIL`);
+    if (r) { console.log(`[QR] pick: zbar@${s} OK`); return r; }
   }
-  // Also try at original size
-  const rOrig = await tryZbar(canvas);
-  if (rOrig) { console.log(`[QR] ${label}: zbar@${w} OK`); return rOrig; }
-  else console.log(`[QR] ${label}: zbar@${w} FAIL`);
 
-  // Strategy 2: jsQR with image processing (handles screenshots)
+  // 2. jsQR with image transforms
   for (const s of [w, ...sizes]) {
-    for (const [tName, transform] of [['binInv160', BIN_INVERT(160)], ['invert', INVERT], ['bin160', BINARIZE(160)]] as const) {
-      const r = tryJsQR(canvas, s, transform as (d: Uint8ClampedArray) => void);
-      if (r) { console.log(`[QR] ${label}: ${tName}@${s} OK`); return r; }
+    for (const [tName, transform] of [['binInv160', BIN_INVERT(160)], ['invert', INVERT], ['bin160', BINARIZE(160)]] as [string, (d: Uint8ClampedArray) => void][]) {
+      const r = tryJsQR(canvas, s, transform);
+      if (r) { console.log(`[QR] pick: ${tName}@${s} OK`); return r; }
     }
   }
 
-  console.log(`[QR] ${label}: all failed ${w}×${canvas.height}`);
+  console.log(`[QR] pick: all failed ${w}×${canvas.height}`);
   return null;
 }
 
@@ -244,7 +263,7 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
           canvas.width = vw;
           canvas.height = vh;
           canvas.getContext('2d', { willReadFrequently: true })!.drawImage(video, 0, 0);
-          decoded = await decodeFromCanvas(canvas, 'camera');
+          decoded = await decodeCameraFrame(canvas);
         }
       }
 
@@ -393,7 +412,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             canvas.height = img.naturalHeight;
             canvas.getContext('2d')!.drawImage(img, 0, 0);
             URL.revokeObjectURL(url);
-            decoded = await decodeFromCanvas(canvas, 'pick');
+            decoded = await decodeUploadedImage(canvas);
           }
 
           if (decoded) {
