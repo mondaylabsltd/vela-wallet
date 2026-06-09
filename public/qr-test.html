@@ -68,18 +68,31 @@ window.testBuiltinImage = async function() {
       addLog(`Canvas scan: ${r.data.substring(0, 60)}...`, 'ok');
     } catch { addLog('Canvas scan: FAILED', 'fail'); }
 
-    // Try inverted
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    for (let i = 0; i < imageData.data.length; i += 4) {
-      imageData.data[i] = 255 - imageData.data[i];
-      imageData.data[i+1] = 255 - imageData.data[i+1];
-      imageData.data[i+2] = 255 - imageData.data[i+2];
+    // Try jsQR inverted + downscaled (proven to work on dark-bg photos)
+    addLog('Trying jsQR inverted+downscaled...', 'info');
+    const small = document.createElement('canvas');
+    const tw = Math.min(canvas.width, 400);
+    const th = Math.round(tw * canvas.height / canvas.width);
+    small.width = tw; small.height = th;
+    small.getContext('2d').drawImage(canvas, 0, 0, tw, th);
+    const smallData = small.getContext('2d').getImageData(0, 0, tw, th);
+    for (let i = 0; i < smallData.data.length; i += 4) {
+      smallData.data[i] = 255 - smallData.data[i];
+      smallData.data[i+1] = 255 - smallData.data[i+1];
+      smallData.data[i+2] = 255 - smallData.data[i+2];
     }
-    ctx.putImageData(imageData, 0, 0);
-    try {
-      const r = await QrScanner.scanImage(canvas, { returnDetailedScanResult: true });
-      addLog(`Inverted scan: ${r.data.substring(0, 60)}...`, 'ok');
-    } catch { addLog('Inverted scan: FAILED', 'fail'); }
+    // Load jsQR from CDN
+    if (!window.jsQR) {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+      await new Promise(r => { s.onload = r; document.head.appendChild(s); });
+    }
+    const invResult = window.jsQR(smallData.data, tw, th, { inversionAttempts: 'attemptBoth' });
+    if (invResult?.data) {
+      addLog(`jsQR inverted ${tw}×${th}: ${invResult.data.substring(0, 60)}...`, 'ok');
+    } else {
+      addLog(`jsQR inverted ${tw}×${th}: FAILED`, 'fail');
+    }
   }
 };
 

@@ -9,8 +9,43 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { showAlert, hapticSuccess } from '@/services/platform';
+import jsQR from 'jsqr';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { X, SwitchCamera, Camera, ImagePlus } from 'lucide-react-native';
+
+/**
+ * Last-resort QR decoder for dark-themed screenshots/photos.
+ * Inverts pixels + downscales to 400px, then runs jsQR.
+ * Proven to decode WalletPair JPEG that qr-scanner/zbar/BarcodeDetector all fail on.
+ */
+function decodeInverted(canvas: HTMLCanvasElement): string | null {
+  const { width: w, height: h } = canvas;
+
+  // Downscale to ~400px for optimal jsQR performance on noisy images
+  const targetW = Math.min(w, 400);
+  const targetH = Math.round(targetW * h / w);
+  const small = document.createElement('canvas');
+  small.width = targetW;
+  small.height = targetH;
+  const sCtx = small.getContext('2d')!;
+  sCtx.drawImage(canvas, 0, 0, targetW, targetH);
+  const imageData = sCtx.getImageData(0, 0, targetW, targetH);
+
+  // Invert all pixels
+  const d = imageData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = 255 - d[i];
+    d[i + 1] = 255 - d[i + 1];
+    d[i + 2] = 255 - d[i + 2];
+  }
+
+  const result = jsQR(d as any, targetW, targetH, { inversionAttempts: 'attemptBoth' });
+  if (result?.data) {
+    console.log(`[QR] inverted decode OK at ${targetW}×${targetH}`);
+    return result.data;
+  }
+  return null;
+}
 
 interface Props {
   visible: boolean;
@@ -110,19 +145,15 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
         } catch {}
       }
 
-      // Strategy 2: qr-scanner WASM on a canvas snapshot (different image path)
-      if (QrScannerLib && !decoded) {
+      // Strategy 2: jsQR inverted on canvas (handles dark-themed QR codes)
+      if (!decoded) {
         const canvas = canvasRef.current;
         if (canvas) {
           const vw = video.videoWidth, vh = video.videoHeight;
           canvas.width = vw;
           canvas.height = vh;
           canvas.getContext('2d', { willReadFrequently: true })!.drawImage(video, 0, 0);
-          try {
-            const result = await QrScannerLib.scanImage(canvas, { returnDetailedScanResult: true });
-            decoded = result?.data ?? null;
-            if (decoded) console.log('[QR] camera: WASM canvas decoded', decoded.substring(0, 50) + '...');
-          } catch {}
+          decoded = decodeInverted(canvas);
         }
       }
 
@@ -249,16 +280,41 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           if (!file) return;
           console.log(`[QR] pick: file ${file.name} (${file.type}, ${(file.size / 1024).toFixed(0)}KB)`);
 
-          const QrScanner = (await import('qr-scanner')).default;
-          const result = await QrScanner.scanImage(file, {
-            returnDetailedScanResult: true,
-          });
-          console.log('[QR] pick: decoded', result.data.substring(0, 50) + '...');
-          hapticSuccess();
-          onScan(parseAddress(result.data));
+          let decoded: string | null = null;
+
+          // Strategy 1: qr-scanner WASM (handles most QR codes)
+          try {
+            const QrScanner = (await import('qr-scanner')).default;
+            const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true });
+            decoded = result?.data ?? null;
+            if (decoded) console.log('[QR] pick: WASM decoded', decoded.substring(0, 50) + '...');
+          } catch {
+            console.log('[QR] pick: WASM failed, trying inverted jsQR...');
+          }
+
+          // Strategy 2: jsQR inverted (dark-background photos/screenshots)
+          if (!decoded) {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = url; });
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            canvas.getContext('2d')!.drawImage(img, 0, 0);
+            URL.revokeObjectURL(url);
+            decoded = decodeInverted(canvas);
+            if (decoded) console.log('[QR] pick: inverted decoded', decoded.substring(0, 50) + '...');
+          }
+
+          if (decoded) {
+            hapticSuccess();
+            onScan(parseAddress(decoded));
+          } else {
+            showAlert('No QR Found', 'Could not find a QR code in the selected image.');
+          }
         } catch (e: any) {
-          console.warn('[QR] pick: failed', e?.message ?? e);
-          showAlert('No QR Found', 'Could not find a QR code in the selected image.');
+          console.warn('[QR] pick error:', e?.message ?? e);
+          showAlert('Error', 'Failed to process the image.');
         }
       };
       input.click();
