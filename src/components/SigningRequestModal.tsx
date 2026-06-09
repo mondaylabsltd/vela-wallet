@@ -39,17 +39,21 @@ import {
 // Risk → color mapping
 // ---------------------------------------------------------------------------
 
-const RISK_COLORS: Record<SigningRisk, string> = {
-  safe: '#22a456',
-  normal: '#E8572A',
-  caution: '#d4890a',
-  danger: '#d43a2a',
-};
+function riskColors(): Record<SigningRisk, string> {
+  return {
+    safe: color.success.base,
+    normal: color.accent.base,
+    caution: color.warning.base,
+    danger: color.error.base,
+  };
+}
 
-const PURPLE = '#6c5ce7';
+function signatureColor(): string {
+  return color.info.base;
+}
 
 function riskColor(risk: SigningRisk): string {
-  return RISK_COLORS[risk];
+  return riskColors()[risk];
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +354,7 @@ function MessageSignView({ hexMsg, chainId, accountName, accountAddress }: {
   return (
     <View>
       <ContextStrip chainId={chainId} accountName={accountName} accountAddress={accountAddress} />
-      <IntentHeader intent="Sign Message" color={PURPLE} />
+      <IntentHeader intent="Sign Message" color={signatureColor()} />
 
       <View style={styles.msgBubble}>
         <View style={styles.msgTag}>
@@ -511,11 +515,12 @@ function TokenCard({ field, variant }: {
   field: ClearSignField;
   variant: 'send' | 'receive' | 'caution' | 'danger';
 }) {
+  // Use theme tokens for dark mode support
   const bgMap = {
-    send: { backgroundColor: '#FEF2EE' },
-    receive: { backgroundColor: '#EEF6FF' },
-    caution: { backgroundColor: '#FFF8EE' },
-    danger: { backgroundColor: '#FDF0EE' },
+    send: { backgroundColor: color.accent.soft },
+    receive: { backgroundColor: color.info.soft },
+    caution: { backgroundColor: color.warning.soft },
+    danger: { backgroundColor: color.error.soft },
   };
 
   // Extract symbol from value string (e.g. "1,500" from "1,500 USDC" is the amount)
@@ -535,7 +540,7 @@ function TokenCard({ field, variant }: {
       </View>
       {field.warning && (
         <View style={styles.tokenWarning}>
-          <AlertTriangle size={14} color={RISK_COLORS.danger} strokeWidth={2} />
+          <AlertTriangle size={14} color={riskColors().danger} strokeWidth={2} />
         </View>
       )}
     </View>
@@ -562,7 +567,7 @@ function FlowArrow({ danger }: { danger?: boolean }) {
       <View style={[styles.flowCircle, danger && styles.flowCircleDanger]}>
         <ArrowDown
           size={14}
-          color={danger ? RISK_COLORS.danger : color.fg.subtle}
+          color={danger ? riskColors().danger : color.fg.subtle}
           strokeWidth={2.5}
         />
       </View>
@@ -611,7 +616,7 @@ function ContractBar({ label, name, address, verified, warning }: {
         </View>
       )}
       {warning && (
-        <ShieldAlert size={14} color={RISK_COLORS.danger} strokeWidth={2} />
+        <ShieldAlert size={14} color={riskColors().danger} strokeWidth={2} />
       )}
     </View>
   );
@@ -626,10 +631,10 @@ function WarningBanner({ severity, text: msg }: {
     <View style={[styles.warnBanner, isDanger ? styles.warnDanger : styles.warnCaution]}>
       <AlertTriangle
         size={14}
-        color={isDanger ? RISK_COLORS.danger : RISK_COLORS.caution}
+        color={isDanger ? riskColors().danger : riskColors().caution}
         strokeWidth={2}
       />
-      <Text style={[styles.warnText, { color: isDanger ? RISK_COLORS.danger : RISK_COLORS.caution }]}>
+      <Text style={[styles.warnText, { color: isDanger ? riskColors().danger : riskColors().caution }]}>
         {msg}
       </Text>
     </View>
@@ -641,7 +646,7 @@ function GenericFieldRow({ field }: { field: ClearSignField }) {
     <View style={[styles.genRow, field.warning && styles.genRowWarning]}>
       <Text style={styles.genLabel}>{field.label}</Text>
       <Text
-        style={[styles.genValue, field.warning && { color: RISK_COLORS.danger }]}
+        style={[styles.genValue, field.warning && { color: riskColors().danger }]}
         numberOfLines={2}
       >
         {field.value}
@@ -817,7 +822,7 @@ const styles = createStyles(() => ({
   },
   tokenWarning: {
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(212,58,42,0.1)',
+    backgroundColor: color.error.soft,
     alignItems: 'center', justifyContent: 'center',
   },
 
@@ -835,7 +840,7 @@ const styles = createStyles(() => ({
     ...shadow.sm,
   },
   flowCircleDanger: {
-    borderColor: '#e8a99a',
+    borderColor: color.error.base,
   },
 
   // ===== Contract Bar =====
@@ -851,7 +856,7 @@ const styles = createStyles(() => ({
   },
   contractBarWarning: {
     borderWidth: 1,
-    borderColor: '#e8a99a',
+    borderColor: color.error.base,
   },
   contractInfo: { flex: 1, gap: 2 },
   contractLabel: {
@@ -904,7 +909,7 @@ const styles = createStyles(() => ({
   },
   warnDanger: {
     backgroundColor: color.error.soft,
-    borderWidth: 1, borderColor: '#e8a99a',
+    borderWidth: 1, borderColor: color.error.base,
   },
   warnText: {
     fontSize: text.sm, ...inter.semibold, flex: 1, lineHeight: 18,

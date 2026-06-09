@@ -454,7 +454,7 @@ import {
 import { chainName, nativeSymbol } from '@/models/network';
 import { shortAddr } from '@/models/types';
 import {
-  AlertTriangle, Copy, ChevronDown,
+  AlertTriangle, Copy, Check, ChevronDown,
   ArrowDown, Lock, ShieldCheck, Shield,
 } from 'lucide-react-native';
 import { showAlert } from '@/services/platform';
@@ -510,8 +510,8 @@ function MockSigningModal({ request, onClose }: {
   const accountName = activeAccount?.name ?? 'Wallet';
 
   // --- Helpers ---
-  const RISK_COLORS = { safe: '#22a456', normal: '#E8572A', caution: '#d4890a', danger: '#d43a2a' };
-  const PURPLE = '#6c5ce7';
+  const RC = { safe: color.success.base, normal: color.accent.base, caution: color.warning.base, danger: color.error.base };
+  const SIG_COLOR = color.info.base;
 
   function decodeMsg(hex: string): string {
     try {
@@ -579,12 +579,12 @@ function MockSigningModal({ request, onClose }: {
           {clearSign ? (
             <>
               <View style={ms.intent}>
-                <Text style={[ms.intentText, { color: RISK_COLORS[clearSign.risk] }]}>{clearSign.intent}</Text>
+                <Text style={[ms.intentText, { color: RC[clearSign.risk] }]}>{clearSign.intent}</Text>
               </View>
 
               {/* Token cards by role */}
               {clearSign.fields.filter(f => f.role === 'send-amount').map((f, i) => (
-                <View key={`s${i}`} style={[ms.tokenCard, { backgroundColor: clearSign.risk === 'caution' ? '#FFF8EE' : '#FEF2EE' }]}>
+                <View key={`s${i}`} style={[ms.tokenCard, { backgroundColor: clearSign.risk === 'caution' ? color.warning.soft : color.accent.soft }]}>
                   <TokenLogo
                     symbol={f.tokenAddress ? f.tokenAddress.slice(2, 6).toUpperCase() : '?'}
                     logoUrl={f.tokenAddress ? `https://ethereum-data.awesometools.dev/tokenlogos/${f.tokenAddress}.png` : undefined}
@@ -602,7 +602,7 @@ function MockSigningModal({ request, onClose }: {
               )}
 
               {clearSign.fields.filter(f => f.role === 'receive-amount').map((f, i) => (
-                <View key={`r${i}`} style={[ms.tokenCard, { backgroundColor: '#EEF6FF' }]}>
+                <View key={`r${i}`} style={[ms.tokenCard, { backgroundColor: color.info.soft }]}>
                   <TokenLogo
                     symbol={f.tokenAddress ? f.tokenAddress.slice(2, 6).toUpperCase() : '?'}
                     logoUrl={f.tokenAddress ? `https://ethereum-data.awesometools.dev/tokenlogos/${f.tokenAddress}.png` : undefined}
@@ -622,8 +622,8 @@ function MockSigningModal({ request, onClose }: {
                     <Text style={ms.contractLabel}>{f.role === 'spender' ? 'SPENDER' : 'RECIPIENT'}</Text>
                     <Text style={ms.contractAddr}>{f.value}</Text>
                   </View>
-                  <Pressable onPress={() => copyAddr(f.value)} style={ms.copyBtn}>
-                    <Copy size={12} color={color.fg.muted} strokeWidth={2} />
+                  <Pressable onPress={() => copyAddr(f.value)} style={[ms.copyBtn, copiedAddr === f.value && ms.copyBtnDone]}>
+                    {copiedAddr === f.value ? <Check size={12} color={color.success.base} strokeWidth={2.5} /> : <Copy size={12} color={color.fg.muted} strokeWidth={2} />}
                   </Pressable>
                 </View>
               ))}
@@ -631,7 +631,7 @@ function MockSigningModal({ request, onClose }: {
               {/* Warning */}
               {clearSign.fields.some(f => f.warning) && (
                 <View style={ms.warnDanger}>
-                  <AlertTriangle size={14} color={RISK_COLORS.danger} strokeWidth={2} />
+                  <AlertTriangle size={14} color={RC.danger} strokeWidth={2} />
                   <Text style={ms.warnDangerText}>Unlimited — this contract can spend all your tokens</Text>
                 </View>
               )}
@@ -654,8 +654,8 @@ function MockSigningModal({ request, onClose }: {
                       <Text style={ms.contractAddr}>{shortAddr(clearSign.contractAddress)}</Text>
                     </View>
                   </View>
-                  <Pressable onPress={() => copyAddr(clearSign.contractAddress!)} style={ms.copyBtn}>
-                    <Copy size={12} color={color.fg.muted} strokeWidth={2} />
+                  <Pressable onPress={() => copyAddr(clearSign.contractAddress!)} style={[ms.copyBtn, copiedAddr === clearSign.contractAddress && ms.copyBtnDone]}>
+                    {copiedAddr === clearSign.contractAddress ? <Check size={12} color={color.success.base} strokeWidth={2.5} /> : <Copy size={12} color={color.fg.muted} strokeWidth={2} />}
                   </Pressable>
                   {clearSign.verified && <ShieldCheck size={14} color={color.success.base} strokeWidth={2} />}
                 </View>
@@ -667,7 +667,7 @@ function MockSigningModal({ request, onClose }: {
           /* ---- personal_sign ---- */
           ) : isPersonalSign && params?.[0] ? (
             <>
-              <View style={ms.intent}><Text style={[ms.intentText, { color: PURPLE }]}>Sign Message</Text></View>
+              <View style={ms.intent}><Text style={[ms.intentText, { color: SIG_COLOR }]}>Sign Message</Text></View>
               <View style={ms.msgBubble}>
                 <View style={ms.msgTag}><Text style={ms.msgTagText}>personal_sign · No gas fee</Text></View>
                 <Text style={ms.msgText}>{decodeMsg(params[0])}</Text>
@@ -711,8 +711,8 @@ function MockSigningModal({ request, onClose }: {
                       </View>
                     ))}
                     <View style={ms.warnCaution}>
-                      <AlertTriangle size={14} color="#d4890a" strokeWidth={2} />
-                      <Text style={[ms.warnDangerText, { color: '#d4890a' }]}>No descriptor found. Review carefully.</Text>
+                      <AlertTriangle size={14} color={color.warning.base} strokeWidth={2} />
+                      <Text style={[ms.warnDangerText, { color: color.warning.base }]}>No descriptor found. Review carefully.</Text>
                     </View>
                   </>
                 );
@@ -728,9 +728,9 @@ function MockSigningModal({ request, onClose }: {
                 const hasData = tx.data && tx.data !== '0x';
                 return (
                   <>
-                    <View style={ms.intent}><Text style={[ms.intentText, { color: hasData ? '#d43a2a' : '#E8572A' }]}>{hasData ? 'Unknown' : 'Send'}</Text></View>
+                    <View style={ms.intent}><Text style={[ms.intentText, { color: hasData ? color.error.base : '#E8572A' }]}>{hasData ? 'Unknown' : 'Send'}</Text></View>
                     {fmtValue(tx.value) !== `0 ${nativeSymbol(chainId)}` && (
-                      <View style={[ms.tokenCard, { backgroundColor: hasData ? '#FDF0EE' : '#FEF2EE' }]}>
+                      <View style={[ms.tokenCard, { backgroundColor: hasData ? color.error.soft : color.accent.soft }]}>
                         <View style={ms.tokenInfo}>
                           <Text style={ms.tokenAmt}>{fmtValue(tx.value)}</Text>
                           <Text style={ms.tokenLabel}>Value</Text>
@@ -738,9 +738,9 @@ function MockSigningModal({ request, onClose }: {
                       </View>
                     )}
                     {(hasData || tx.to) && (
-                      <View style={ms.flowArrow}><View style={[ms.flowCircle, hasData && { borderColor: '#e8a99a' }]}><ArrowDown size={14} color={hasData ? '#d43a2a' : color.fg.subtle} strokeWidth={2.5} /></View></View>
+                      <View style={ms.flowArrow}><View style={[ms.flowCircle, hasData && { borderColor: color.error.base }]}><ArrowDown size={14} color={hasData ? color.error.base : color.fg.subtle} strokeWidth={2.5} /></View></View>
                     )}
-                    <View style={[ms.contractBar, hasData && { borderWidth: 1, borderColor: '#e8a99a' }]}>
+                    <View style={[ms.contractBar, hasData && { borderWidth: 1, borderColor: color.error.base }]}>
                       <View style={ms.contractInfo}>
                         <Text style={ms.contractLabel}>{hasData ? 'UNVERIFIED CONTRACT' : 'RECIPIENT'}</Text>
                         <Text style={ms.contractAddr}>{shortAddr(tx.to ?? '')}</Text>
@@ -752,7 +752,7 @@ function MockSigningModal({ request, onClose }: {
                     {hasData && (
                       <>
                         <View style={ms.warnDanger}>
-                          <AlertTriangle size={14} color="#d43a2a" strokeWidth={2} />
+                          <AlertTriangle size={14} color={color.error.base} strokeWidth={2} />
                           <Text style={ms.warnDangerText}>Unable to decode — no ERC-7730 descriptor ({Math.floor((tx.data.length - 2) / 2)} bytes)</Text>
                         </View>
                         <Pressable style={ms.detailsToggle} onPress={() => setShowRaw(!showRaw)}>
@@ -913,6 +913,10 @@ const ms = createStyles(() => ({
     borderWidth: 1, borderColor: color.border.base, backgroundColor: color.bg.raised,
     alignItems: 'center', justifyContent: 'center',
   },
+  copyBtnDone: {
+    borderColor: color.success.base,
+    backgroundColor: color.success.soft,
+  },
 
   genRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
@@ -929,7 +933,7 @@ const ms = createStyles(() => ({
   warnDanger: {
     flexDirection: 'row', alignItems: 'center', gap: space.md,
     paddingVertical: space.lg, paddingHorizontal: space.xl,
-    backgroundColor: color.error.soft, borderWidth: 1, borderColor: '#e8a99a',
+    backgroundColor: color.error.soft, borderWidth: 1, borderColor: color.error.base,
     borderRadius: radius.xl, marginVertical: space.md,
   },
   warnCaution: {
@@ -938,7 +942,7 @@ const ms = createStyles(() => ({
     backgroundColor: color.warning.soft, borderWidth: 1, borderColor: color.warning.border,
     borderRadius: radius.xl, marginVertical: space.md,
   },
-  warnDangerText: { fontSize: text.sm, ...inter.semibold, color: '#d43a2a', flex: 1, lineHeight: 18 },
+  warnDangerText: { fontSize: text.sm, ...inter.semibold, color: color.error.base, flex: 1, lineHeight: 18 },
 
   msgBubble: {
     backgroundColor: color.bg.sunken, borderRadius: radius['2xl'],
