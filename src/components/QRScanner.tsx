@@ -77,9 +77,10 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
 
   useEffect(() => {
     let mounted = true;
+    const busyRef = { current: false };
 
     navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
     })
       .then(stream => {
         if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
@@ -93,38 +94,47 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
 
     // Stable interval — reads refs, never needs to be re-created
     timerRef.current = setInterval(async () => {
-      if (scannedRef.current) return;
+      if (scannedRef.current || busyRef.current) return;
       const video = videoRef.current;
       if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+      busyRef.current = true;
 
-      // 1. Try native BarcodeDetector (ML-based, much more reliable)
-      if (nativeDetector) {
-        try {
-          const barcodes = await nativeDetector.detect(video);
-          if (barcodes.length > 0 && barcodes[0].rawValue) {
-            onScanRef.current(barcodes[0].rawValue);
+      try {
+        // 1. Always try jsQR first (synchronous, never blocks)
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const ctx = canvas.getContext('2d')!;
+          const w = Math.min(video.videoWidth, 1280);
+          const h = Math.round(w * (video.videoHeight / video.videoWidth));
+          canvas.width = w;
+          canvas.height = h;
+          ctx.drawImage(video, 0, 0, w, h);
+          const imageData = ctx.getImageData(0, 0, w, h);
+          const code = jsQR(imageData.data as any, imageData.width, imageData.height, {
+            inversionAttempts: 'attemptBoth',
+          });
+          if (code?.data) {
+            onScanRef.current(code.data);
             return;
           }
-        } catch {}
-      }
+        }
 
-      // 2. Fallback: canvas + jsQR
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d')!;
-      const w = Math.min(video.videoWidth, 1280);
-      const h = Math.round(w * (video.videoHeight / video.videoWidth));
-      canvas.width = w;
-      canvas.height = h;
-      ctx.drawImage(video, 0, 0, w, h);
-      const imageData = ctx.getImageData(0, 0, w, h);
-      const code = jsQR(imageData.data as any, imageData.width, imageData.height, {
-        inversionAttempts: 'attemptBoth',
-      });
-      if (code?.data) {
-        onScanRef.current(code.data);
+        // 2. Fallback: BarcodeDetector with timeout (async, may hang on dense codes)
+        if (nativeDetector) {
+          try {
+            const barcodes: any[] = await Promise.race([
+              nativeDetector.detect(video),
+              new Promise<any[]>(r => setTimeout(() => r([]), 500)),
+            ]);
+            if (barcodes.length > 0 && barcodes[0].rawValue) {
+              onScanRef.current(barcodes[0].rawValue);
+            }
+          } catch {}
+        }
+      } finally {
+        busyRef.current = false;
       }
-    }, 400);
+    }, 350);
 
     return () => {
       mounted = false;
