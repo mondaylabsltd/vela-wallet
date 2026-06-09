@@ -1186,6 +1186,7 @@ export default function SettingsScreen() {
   const [showAddNetwork, setShowAddNetwork] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showDevOptions, setShowDevOptions] = useState(false);
+  const [showTreasury, setShowTreasury] = useState(false);
   const [devUnlocked, setDevUnlocked] = useState(false);
   useEffect(() => { AsyncStorage.getItem('dev_unlocked').then(v => { if (v === '1') setDevUnlocked(true); }); }, []);
   const [showSignOut, setShowSignOut] = useState(false);
@@ -1226,9 +1227,9 @@ export default function SettingsScreen() {
           </VelaCard>
         </Animated.View>
 
-        {/* General */}
+        {/* Appearance */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(100, 300)}>
-          <Text style={styles.sectionTitle}>GENERAL</Text>
+          <Text style={styles.sectionTitle}>APPEARANCE</Text>
           <VelaCard>
             <TextScaleSlider
               s={styles}
@@ -1237,9 +1238,6 @@ export default function SettingsScreen() {
             />
             <View style={styles.settingsRowDividerFull} />
             <ThemePicker s={styles} current={colorPref} onChange={setColorPref} />
-            <View style={styles.settingsRowDividerFull} />
-            <SettingsRow s={styles} icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
-              title="About" subtitle="Vela Wallet v1.0.0" showDivider={false} onPress={() => router.push('/about')} />
           </VelaCard>
         </Animated.View>
 
@@ -1267,20 +1265,32 @@ export default function SettingsScreen() {
         {/* Developer Options (hidden until 6-tap unlock on ADVANCED) */}
         {devUnlocked && (
           <Animated.View style={styles.sectionContainer} entering={fadeInDown(175, 300)}>
-            <Text style={styles.sectionTitle}>DEVELOPER</Text>
-            <VelaCard>
-              <SettingsRow s={styles} icon={{ bg: color.warning.soft, fg: color.warning.base, Icon: Key }}
-                title="Treasury" subtitle="View treasury address & balances"
-                showDivider={true} onPress={() => setShowDevOptions(true)} />
-              <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Key }}
-                title="Clear Signing Test" subtitle="ERC-7730 signing UI preview"
-                showDivider={false} onPress={() => router.push('/clear-signing-test')} />
-            </VelaCard>
+            <Pressable style={styles.advancedHeader} onPress={() => setShowDevOptions(!showDevOptions)}>
+              <Text style={styles.sectionTitle}>DEVELOPER</Text>
+              <ChevronDown size={14} color={color.fg.subtle} style={showDevOptions ? { transform: [{ rotate: '180deg' }] } : undefined} />
+            </Pressable>
+            {showDevOptions && (
+              <VelaCard>
+                <SettingsRow s={styles} icon={{ bg: color.warning.soft, fg: color.warning.base, Icon: Key }}
+                  title="Treasury" subtitle="View treasury address & balances"
+                  showDivider={true} onPress={() => setShowTreasury(true)} />
+                <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Key }}
+                  title="Clear Signing Test" subtitle="ERC-7730 signing UI preview"
+                  showDivider={false} onPress={() => router.push('/clear-signing-test')} />
+              </VelaCard>
+            )}
           </Animated.View>
         )}
 
-        {/* Sign Out */}
-        <Animated.View entering={fadeInDown(200, 300)}>
+        {/* About & Sign Out */}
+        <Animated.View style={styles.sectionContainer} entering={fadeInDown(200, 300)}>
+          <VelaCard>
+            <SettingsRow s={styles} icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
+              title="About" subtitle="Vela Wallet v1.0.0" showDivider={false} onPress={() => router.push('/about')} />
+          </VelaCard>
+        </Animated.View>
+
+        <Animated.View entering={fadeInDown(225, 300)}>
           <Pressable style={styles.logoutButton} onPress={handleOpenSignOut}>
             <LogOutIcon size={16} color={color.accent.base} />
             <Text style={styles.logoutText}>Sign Out</Text>
@@ -1292,7 +1302,7 @@ export default function SettingsScreen() {
       <NetworkEditorModal s={styles} visible={showNetworkEditor} onClose={() => setShowNetworkEditor(false)} />
       <EndpointEditorModal s={styles} visible={showEndpointEditor} onClose={() => setShowEndpointEditor(false)} />
       <AddNetworkModal s={styles} visible={showAddNetwork} onClose={() => setShowAddNetwork(false)} onAdded={() => {}} />
-      <TreasuryModal visible={showDevOptions} onClose={() => setShowDevOptions(false)} />
+      <TreasuryModal visible={showTreasury} onClose={() => setShowTreasury(false)} />
 
       {/* Sign Out Confirmation */}
       <AppModal visible={showSignOut} onClose={() => setShowSignOut(false)}>
