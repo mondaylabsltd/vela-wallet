@@ -1239,10 +1239,7 @@ export default function SettingsScreen() {
             <ThemePicker s={styles} current={colorPref} onChange={setColorPref} />
             <View style={styles.settingsRowDividerFull} />
             <SettingsRow s={styles} icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
-              title="About" subtitle="Vela Wallet v1.0.0" onPress={() => router.push('/about')} />
-            <View style={styles.settingsRowDividerFull} />
-            <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Key }}
-              title="Clear Signing Test" subtitle="ERC-7730 signing UI preview" showDivider={false} onPress={() => router.push('/clear-signing-test')} />
+              title="About" subtitle="Vela Wallet v1.0.0" showDivider={false} onPress={() => router.push('/about')} />
           </VelaCard>
         </Animated.View>
 
@@ -1274,7 +1271,10 @@ export default function SettingsScreen() {
             <VelaCard>
               <SettingsRow s={styles} icon={{ bg: color.warning.soft, fg: color.warning.base, Icon: Key }}
                 title="Treasury" subtitle="View treasury address & balances"
-                showDivider={false} onPress={() => setShowDevOptions(true)} />
+                showDivider={true} onPress={() => setShowDevOptions(true)} />
+              <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Key }}
+                title="Clear Signing Test" subtitle="ERC-7730 signing UI preview"
+                showDivider={false} onPress={() => router.push('/clear-signing-test')} />
             </VelaCard>
           </Animated.View>
         )}

@@ -26,10 +26,11 @@ import {
   resolveTransaction, resolveTypedData,
   type ClearSignResult, type ClearSignField, type SigningRisk,
 } from '@/services/clear-signing';
-import { showAlert } from '@/services/platform';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
+import { ChainLogo } from '@/components/ChainLogo';
+import { DEFAULT_NETWORKS } from '@/models/network';
 import {
-  Shield, AlertTriangle, Copy, ChevronDown,
+  Shield, AlertTriangle, Copy, ChevronDown, Check,
   ArrowDown, Lock, ShieldAlert, ShieldCheck, Pen,
 } from 'lucide-react-native';
 
@@ -107,19 +108,21 @@ export function SigningRequestModal() {
     ? (() => { try { return new URL(dappInfo.url).host; } catch { return dappInfo.url; } })()
     : undefined;
 
+  const addr = activeAccount?.address;
+
   // Choose which view to render
   const renderContent = () => {
     if (clearSign) {
-      return <ClearSignView cs={clearSign} chainId={chainId} accountName={activeAccount?.name} />;
+      return <ClearSignView cs={clearSign} chainId={chainId} accountName={activeAccount?.name} accountAddress={addr} />;
     }
     if (isPersonalSign && params?.[0]) {
-      return <MessageSignView hexMsg={params[0]} chainId={chainId} accountName={activeAccount?.name} />;
+      return <MessageSignView hexMsg={params[0]} chainId={chainId} accountName={activeAccount?.name} accountAddress={addr} />;
     }
     if (isTypedData && params) {
-      return <BlindTypedDataView params={params} chainId={chainId} accountName={activeAccount?.name} />;
+      return <BlindTypedDataView params={params} chainId={chainId} accountName={activeAccount?.name} accountAddress={addr} />;
     }
     if (isTx && params?.[0]) {
-      return <BlindTransactionView tx={params[0]} chainId={chainId} accountName={activeAccount?.name} />;
+      return <BlindTransactionView tx={params[0]} chainId={chainId} accountName={activeAccount?.name} accountAddress={addr} />;
     }
     // Fallback
     return (
@@ -234,10 +237,11 @@ function DAppBanner({ name, domain, icon }: {
 // Clear Sign View (descriptor found)
 // ===========================================================================
 
-function ClearSignView({ cs, chainId, accountName }: {
+function ClearSignView({ cs, chainId, accountName, accountAddress }: {
   cs: ClearSignResult;
   chainId: number;
   accountName?: string;
+  accountAddress?: string;
 }) {
   const rc = riskColor(cs.risk);
 
@@ -254,6 +258,9 @@ function ClearSignView({ cs, chainId, accountName }: {
 
   return (
     <View>
+      {/* Context: chain + account */}
+      <ContextStrip chainId={chainId} accountName={accountName} accountAddress={accountAddress} />
+
       {/* L1: Intent */}
       <IntentHeader intent={cs.intent} color={rc} />
 
@@ -323,9 +330,6 @@ function ClearSignView({ cs, chainId, accountName }: {
           verified={cs.verified}
         />
       )}
-
-      {/* Context strip */}
-      <ContextStrip chainId={chainId} accountName={accountName} />
     </View>
   );
 }
@@ -334,15 +338,17 @@ function ClearSignView({ cs, chainId, accountName }: {
 // Message Sign View (personal_sign)
 // ===========================================================================
 
-function MessageSignView({ hexMsg, chainId, accountName }: {
+function MessageSignView({ hexMsg, chainId, accountName, accountAddress }: {
   hexMsg: string;
   chainId: number;
   accountName?: string;
+  accountAddress?: string;
 }) {
   const decoded = decodePersonalMessage(hexMsg);
 
   return (
     <View>
+      <ContextStrip chainId={chainId} accountName={accountName} accountAddress={accountAddress} />
       <IntentHeader intent="Sign Message" color={PURPLE} />
 
       <View style={styles.msgBubble}>
@@ -352,8 +358,6 @@ function MessageSignView({ hexMsg, chainId, accountName }: {
         </View>
         <Text style={styles.msgText}>{decoded}</Text>
       </View>
-
-      <ContextStrip chainId={chainId} accountName={accountName} />
     </View>
   );
 }
@@ -362,15 +366,17 @@ function MessageSignView({ hexMsg, chainId, accountName }: {
 // Blind Typed Data View (EIP-712, no descriptor)
 // ===========================================================================
 
-function BlindTypedDataView({ params, chainId, accountName }: {
+function BlindTypedDataView({ params, chainId, accountName, accountAddress }: {
   params: any[];
   chainId: number;
   accountName?: string;
+  accountAddress?: string;
 }) {
   const { primaryType, domain, fields } = parseTypedDataForDisplay(params);
 
   return (
     <View>
+      <ContextStrip chainId={chainId} accountName={accountName} accountAddress={accountAddress} />
       <IntentHeader intent="Sign Typed Data" color="#d4890a" />
 
       {/* Domain info */}
@@ -403,8 +409,6 @@ function BlindTypedDataView({ params, chainId, accountName }: {
         severity="caution"
         text="This typed data could not be decoded with a known descriptor. Review carefully."
       />
-
-      <ContextStrip chainId={chainId} accountName={accountName} />
     </View>
   );
 }
@@ -413,10 +417,11 @@ function BlindTypedDataView({ params, chainId, accountName }: {
 // Blind Transaction View (no descriptor)
 // ===========================================================================
 
-function BlindTransactionView({ tx, chainId, accountName }: {
+function BlindTransactionView({ tx, chainId, accountName, accountAddress }: {
   tx: any;
   chainId: number;
   accountName?: string;
+  accountAddress?: string;
 }) {
   const [showRaw, setShowRaw] = useState(false);
   const sym = nativeSymbol(chainId);
@@ -426,6 +431,7 @@ function BlindTransactionView({ tx, chainId, accountName }: {
 
   return (
     <View>
+      <ContextStrip chainId={chainId} accountName={accountName} accountAddress={accountAddress} />
       <IntentHeader
         intent={hasData ? 'Unknown' : 'Send'}
         color={hasData ? '#d43a2a' : '#E8572A'}
@@ -482,7 +488,6 @@ function BlindTransactionView({ tx, chainId, accountName }: {
         </>
       )}
 
-      <ContextStrip chainId={chainId} accountName={accountName} />
     </View>
   );
 }
@@ -548,10 +553,13 @@ function ContractBar({ label, name, address, verified, warning }: {
   verified: boolean;
   warning?: boolean;
 }) {
+  const [copied, setCopied] = useState(false);
+
   const handleCopy = useCallback(async () => {
     if (!address) return;
     await Clipboard.setStringAsync(address);
-    showAlert('Copied', address);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   }, [address]);
 
   return (
@@ -566,8 +574,11 @@ function ContractBar({ label, name, address, verified, warning }: {
         </View>
       </View>
       {address && (
-        <Pressable onPress={handleCopy} hitSlop={8} style={styles.copyBtn}>
-          <Copy size={12} color={color.fg.muted} strokeWidth={2} />
+        <Pressable onPress={handleCopy} hitSlop={8} style={[styles.copyBtn, copied && styles.copyBtnDone]}>
+          {copied
+            ? <Check size={12} color={color.success.base} strokeWidth={2.5} />
+            : <Copy size={12} color={color.fg.muted} strokeWidth={2} />
+          }
         </Pressable>
       )}
       {verified && (
@@ -615,14 +626,34 @@ function GenericFieldRow({ field }: { field: ClearSignField }) {
   );
 }
 
-function ContextStrip({ chainId, accountName }: { chainId: number; accountName?: string }) {
+function ContextStrip({ chainId, accountName, accountAddress }: {
+  chainId: number;
+  accountName?: string;
+  accountAddress?: string;
+}) {
+  const net = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
+
   return (
     <View style={styles.contextStrip}>
-      <Text style={styles.contextText}>{chainName(chainId)}</Text>
+      {net ? (
+        <ChainLogo
+          label={net.iconLabel}
+          color={net.iconColor}
+          bgColor={net.iconBg}
+          logoURL={net.logoURL}
+          size={18}
+        />
+      ) : null}
+      <Text style={styles.contextChainName}>{chainName(chainId)}</Text>
       {accountName && (
         <>
           <Text style={styles.contextDot}>·</Text>
-          <Text style={styles.contextText}>{accountName}</Text>
+          <View style={styles.contextAccount}>
+            <Text style={styles.contextAccountName}>{accountName}</Text>
+            {accountAddress && (
+              <Text style={styles.contextAccountAddr}>{shortAddr(accountAddress)}</Text>
+            )}
+          </View>
         </>
       )}
     </View>
@@ -821,6 +852,10 @@ const styles = createStyles(() => ({
     backgroundColor: color.bg.raised,
     alignItems: 'center', justifyContent: 'center',
   },
+  copyBtnDone: {
+    borderColor: color.success.base,
+    backgroundColor: color.success.soft,
+  },
   verifiedBadge: {
     width: 24, height: 24,
     alignItems: 'center', justifyContent: 'center',
@@ -910,16 +945,29 @@ const styles = createStyles(() => ({
   // ===== Context Strip =====
   contextStrip: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
     gap: space.md,
-    paddingVertical: space.xl,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.xl,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.xl,
+    marginBottom: space.lg,
   },
-  contextText: {
-    fontSize: text.xs, ...inter.medium, color: color.fg.subtle,
+  contextChainName: {
+    fontSize: text.sm, ...inter.semibold, color: color.fg.base,
   },
   contextDot: {
     fontSize: text.xs, color: color.fg.subtle,
+  },
+  contextAccount: {
+    flex: 1, gap: 1,
+  },
+  contextAccountName: {
+    fontSize: text.sm, ...inter.semibold, color: color.fg.base,
+  },
+  contextAccountAddr: {
+    fontSize: 10, fontWeight: '500' as const, fontFamily: font.mono,
+    color: color.fg.muted,
   },
 
   // ===== Details Toggle =====
