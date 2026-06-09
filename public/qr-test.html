@@ -19,17 +19,20 @@ video { width: 100%; max-width: 400px; border-radius: 8px; }
 <button onclick="testBuiltinImage()">Test Built-in Image</button>
 <button onclick="testFileUpload()">Upload Image</button>
 <button onclick="testCamera()">Test Camera</button>
+<button onclick="document.getElementById('log').innerHTML=''">Clear</button>
 </div>
 <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="handleFile(this)">
 <video id="video" playsinline muted autoplay style="display:none"></video>
 <div id="log"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script type="module">
 import QrScanner from 'https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.min.js';
 window.QrScanner = QrScanner;
 
 const log = document.getElementById('log');
 window.addLog = function(msg, cls = '') {
+  console.log(`[QR-TEST] ${msg}`);
   const line = document.createElement('div');
   line.className = cls;
   line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
@@ -37,111 +40,115 @@ window.addLog = function(msg, cls = '') {
   log.scrollTop = log.scrollHeight;
 };
 
-addLog('Page loaded', 'info');
-addLog(`BarcodeDetector: ${'BarcodeDetector' in window ? 'YES' : 'NO'}`, 'info');
-addLog(`UserAgent: ${navigator.userAgent.substring(0, 80)}...`, 'info');
+// -------------------------------------------------------
+// Core decode strategies
+// -------------------------------------------------------
+const OPTS = { inversionAttempts: 'attemptBoth' };
 
-// Test 1: decode the built-in test image
-window.testBuiltinImage = async function() {
-  addLog('--- Testing built-in WalletPair JPEG ---', 'info');
-  try {
-    const result = await QrScanner.scanImage('/test-qr.jpg', { returnDetailedScanResult: true });
-    addLog(`SUCCESS: ${result.data.substring(0, 60)}...`, 'ok');
-  } catch (e) {
-    addLog(`FAILED: ${e?.message || e}`, 'fail');
+function tryJsQR(canvas, targetW, transform) {
+  const tw = Math.min(canvas.width, targetW);
+  const th = Math.round(tw * canvas.height / canvas.width);
+  const small = document.createElement('canvas');
+  small.width = tw; small.height = th;
+  small.getContext('2d').drawImage(canvas, 0, 0, tw, th);
+  const d = small.getContext('2d').getImageData(0, 0, tw, th);
+  transform(d.data);
+  const r = jsQR(d.data, tw, th, OPTS);
+  return r?.data ?? null;
+}
 
-    // Try with canvas manipulation
-    addLog('Trying manual approaches...', 'info');
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = '/test-qr.jpg'; });
+// Crop center square from canvas
+function cropCenter(canvas) {
+  const side = Math.min(canvas.width, canvas.height);
+  const sx = Math.round((canvas.width - side) / 2);
+  const sy = Math.round((canvas.height - side) / 2);
+  const c = document.createElement('canvas');
+  c.width = side; c.height = side;
+  c.getContext('2d').drawImage(canvas, sx, sy, side, side, 0, 0, side, side);
+  return c;
+}
 
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
+const NOOP = () => {};
+const INVERT = (d) => { for (let i = 0; i < d.length; i += 4) { d[i]=255-d[i]; d[i+1]=255-d[i+1]; d[i+2]=255-d[i+2]; } };
+const BINARIZE = (t) => (d) => { for (let i = 0; i < d.length; i += 4) {
+  const lum = (d[i]*77+d[i+1]*150+d[i+2]*29)>>8; const v = lum<=t?0:255;
+  d[i]=v; d[i+1]=v; d[i+2]=v;
+}};
 
-    // Try on canvas
-    try {
-      const r = await QrScanner.scanImage(canvas, { returnDetailedScanResult: true });
-      addLog(`Canvas scan: ${r.data.substring(0, 60)}...`, 'ok');
-    } catch { addLog('Canvas scan: FAILED', 'fail'); }
+// Load image file/url into canvas
+async function fileToCanvas(source) {
+  let url;
+  if (typeof source === 'string') { url = source; }
+  else { url = URL.createObjectURL(source); }
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+  if (typeof source !== 'string') URL.revokeObjectURL(url);
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  c.getContext('2d').drawImage(img, 0, 0);
+  addLog(`Image loaded: ${c.width}×${c.height}`, 'info');
+  return c;
+}
 
-    // Try jsQR inverted + downscaled (proven to work on dark-bg photos)
-    addLog('Trying jsQR inverted+downscaled...', 'info');
-    const small = document.createElement('canvas');
-    const tw = Math.min(canvas.width, 400);
-    const th = Math.round(tw * canvas.height / canvas.width);
-    small.width = tw; small.height = th;
-    small.getContext('2d').drawImage(canvas, 0, 0, tw, th);
-    const smallData = small.getContext('2d').getImageData(0, 0, tw, th);
-    for (let i = 0; i < smallData.data.length; i += 4) {
-      smallData.data[i] = 255 - smallData.data[i];
-      smallData.data[i+1] = 255 - smallData.data[i+1];
-      smallData.data[i+2] = 255 - smallData.data[i+2];
-    }
-    // Load jsQR from CDN
-    if (!window.jsQR) {
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
-      await new Promise(r => { s.onload = r; document.head.appendChild(s); });
-    }
-    const invResult = window.jsQR(smallData.data, tw, th, { inversionAttempts: 'attemptBoth' });
-    if (invResult?.data) {
-      addLog(`jsQR inverted ${tw}×${th}: ${invResult.data.substring(0, 60)}...`, 'ok');
-    } else {
-      addLog(`jsQR inverted ${tw}×${th}: FAILED`, 'fail');
-    }
+// Try all strategies on a canvas
+async function decodeCanvas(canvas) {
+  const strategies = [
+    ['WASM', async () => { try { return (await QrScanner.scanImage(canvas, {returnDetailedScanResult:true}))?.data; } catch { return null; } }],
+    ['jsQR raw', () => tryJsQR(canvas, canvas.width, NOOP)],
+    ['invert@400', () => tryJsQR(canvas, 400, INVERT)],
+    ['invert@600', () => tryJsQR(canvas, 600, INVERT)],
+    ['bin160@600', () => tryJsQR(canvas, 600, BINARIZE(160))],
+    ['bin120@600', () => tryJsQR(canvas, 600, BINARIZE(120))],
+    ['bin80@400', () => tryJsQR(canvas, 400, BINARIZE(80))],
+  ];
+
+  // Also try on center-cropped version
+  const cropped = cropCenter(canvas);
+  if (cropped.width !== canvas.width || cropped.height !== canvas.height) {
+    strategies.push(
+      ['crop+invert@400', () => tryJsQR(cropped, 400, INVERT)],
+      ['crop+bin160@600', () => tryJsQR(cropped, 600, BINARIZE(160))],
+    );
   }
+
+  for (const [name, fn] of strategies) {
+    const r = await fn();
+    if (r) { addLog(`${name}: OK`, 'ok'); return r; }
+    addLog(`${name}: FAIL`, 'fail');
+  }
+  return null;
+}
+
+addLog('Page loaded', 'info');
+addLog(`HTTPS: ${location.protocol === 'https:'}`, 'info');
+addLog(`BarcodeDetector: ${'BarcodeDetector' in window ? 'YES' : 'NO'}`, 'info');
+addLog(`UA: ${navigator.userAgent.substring(0, 60)}...`, 'info');
+
+// --- Test 1: built-in image ---
+window.testBuiltinImage = async function() {
+  addLog('=== Built-in WalletPair JPEG ===', 'info');
+  const canvas = await fileToCanvas('/test-qr.jpg');
+  const result = await decodeCanvas(canvas);
+  if (result) addLog(`DECODED: ${result.substring(0, 60)}...`, 'ok');
+  else addLog('ALL STRATEGIES FAILED', 'fail');
 };
 
-// Test 2: file upload
-window.testFileUpload = function() {
-  document.getElementById('fileInput').click();
-};
+// --- Test 2: file upload ---
+window.testFileUpload = function() { document.getElementById('fileInput').click(); };
 window.handleFile = async function(input) {
   const file = input.files[0];
   if (!file) return;
-  addLog(`--- File: ${file.name} (${(file.size/1024).toFixed(0)}KB) ---`, 'info');
-
-  try {
-    const result = await QrScanner.scanImage(file, { returnDetailedScanResult: true });
-    addLog(`SUCCESS: ${result.data.substring(0, 80)}...`, 'ok');
-  } catch (e) {
-    addLog(`Direct scan FAILED: ${e?.message || e}`, 'fail');
-
-    // Try inverted
-    addLog('Trying inverted...', 'info');
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
-    URL.revokeObjectURL(url);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    for (let i = 0; i < imageData.data.length; i += 4) {
-      imageData.data[i] = 255 - imageData.data[i];
-      imageData.data[i+1] = 255 - imageData.data[i+1];
-      imageData.data[i+2] = 255 - imageData.data[i+2];
-    }
-    ctx.putImageData(imageData, 0, 0);
-    try {
-      const r = await QrScanner.scanImage(canvas, { returnDetailedScanResult: true });
-      addLog(`Inverted SUCCESS: ${r.data.substring(0, 80)}...`, 'ok');
-    } catch (e2) {
-      addLog(`Inverted FAILED: ${e2?.message || e2}`, 'fail');
-    }
-  }
+  addLog(`=== Upload: ${file.name} (${(file.size/1024).toFixed(0)}KB) ===`, 'info');
+  const canvas = await fileToCanvas(file);
+  const result = await decodeCanvas(canvas);
+  if (result) addLog(`DECODED: ${result.substring(0, 60)}...`, 'ok');
+  else addLog('ALL STRATEGIES FAILED', 'fail');
 };
 
-// Test 3: camera
+// --- Test 3: camera ---
 window.testCamera = async function() {
-  addLog('--- Testing camera ---', 'info');
+  addLog('=== Camera ===', 'info');
   const video = document.getElementById('video');
   video.style.display = 'block';
 
@@ -152,32 +159,36 @@ window.testCamera = async function() {
     video.srcObject = stream;
     await video.play();
     const s = stream.getVideoTracks()[0]?.getSettings?.();
-    addLog(`Camera: ${s?.width}x${s?.height}`, 'info');
+    addLog(`Camera ready: ${s?.width}×${s?.height}`, 'info');
 
     let attempts = 0;
-    const maxAttempts = 30;
+    const max = 40;
 
     async function tryDecode() {
-      if (attempts >= maxAttempts) {
-        addLog(`Stopped after ${maxAttempts} attempts`, 'fail');
+      if (attempts >= max) {
+        addLog(`Stopped after ${max} attempts`, 'fail');
         stream.getTracks().forEach(t => t.stop());
         video.style.display = 'none';
         return;
       }
       attempts++;
 
-      try {
-        const result = await QrScanner.scanImage(video, { returnDetailedScanResult: true });
-        addLog(`Camera decoded (attempt ${attempts}): ${result.data.substring(0, 60)}...`, 'ok');
+      // Grab frame to canvas
+      const c = document.createElement('canvas');
+      c.width = video.videoWidth; c.height = video.videoHeight;
+      c.getContext('2d').drawImage(video, 0, 0);
+
+      const result = await decodeCanvas(c);
+      if (result) {
+        addLog(`Camera decoded #${attempts}: ${result.substring(0, 50)}...`, 'ok');
         stream.getTracks().forEach(t => t.stop());
         video.style.display = 'none';
         return;
-      } catch {}
+      }
 
-      if (attempts % 5 === 0) addLog(`Attempt ${attempts}/${maxAttempts}...`, 'info');
+      if (attempts % 5 === 0) addLog(`Attempt ${attempts}/${max}...`, 'info');
       setTimeout(tryDecode, 500);
     }
-
     setTimeout(tryDecode, 1000);
   } catch (e) {
     addLog(`Camera error: ${e?.message}`, 'fail');
