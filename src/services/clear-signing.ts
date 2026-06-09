@@ -15,7 +15,7 @@
  *   3. If no match → blind sign (return null)
  */
 import { getEthereumDataURL } from '@/services/storage';
-import { checksumAddress, keccak256 } from '@/services/eth-crypto';
+import { keccak256 } from '@/services/eth-crypto';
 import { toHex } from '@/services/hex';
 import { decodeCalldata, matchSelector, type DecodedValue } from '@/services/abi-decode';
 import type { TypedData } from '@/services/eip712';
@@ -111,10 +111,9 @@ export async function resolveTransaction(
   if (!to) return null;
 
   const toAddr = to.toLowerCase();
-  const checksumTo = checksumAddress(toAddr);
 
-  // 1. Try contract-specific descriptor
-  let descriptor = await fetchDescriptor(`/erc7730/calldata/eip155-${chainId}/${checksumTo}.json`);
+  // 1. Try contract-specific descriptor (filenames are lowercase on the server)
+  let descriptor = await fetchDescriptor(`/erc7730/calldata/eip155-${chainId}/${toAddr}.json`);
   let isContractSpecific = !!descriptor;
 
   // 2. Fallback to ERC standards
@@ -216,14 +215,12 @@ export async function resolveTypedData(
   const contract = typedData.domain?.verifyingContract?.toLowerCase();
   if (!contract) return null;
 
-  const checksumContract = checksumAddress(contract);
-
   // Compute the encodeTypeHash for the primary type
   const encodeType = buildEncodeType(typedData.primaryType, typedData.types);
   const typeHash = toHex(keccak256(new TextEncoder().encode(encodeType)));
 
-  // 1. Try contract-specific descriptor
-  let descriptor = await fetchDescriptor(`/erc7730/eip712/eip155-${chainId}/${checksumContract}.json`);
+  // 1. Try contract-specific descriptor (filenames are lowercase on the server)
+  let descriptor = await fetchDescriptor(`/erc7730/eip712/eip155-${chainId}/${contract}.json`);
   let resolved: ClearSignResult | null = null;
 
   if (descriptor) {

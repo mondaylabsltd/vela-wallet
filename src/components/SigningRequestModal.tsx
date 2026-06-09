@@ -715,7 +715,9 @@ function parseTypedDataForDisplay(params: any[]): {
     const domain = data?.domain;
     const msg = data?.message;
     const fields: [string, string][] = msg
-      ? Object.entries(msg).slice(0, 5).map(([k, v]) => [k, String(v).slice(0, 60)])
+      ? Object.entries(msg).slice(0, 5).map(([k, v]) => [k, (
+          v && typeof v === 'object' ? JSON.stringify(v) : String(v)
+        ).slice(0, 60)])
       : [];
     return { primaryType, domain, fields };
   } catch {
