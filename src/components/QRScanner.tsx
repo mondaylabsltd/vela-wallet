@@ -28,6 +28,43 @@ function parseAddress(data: string): string {
   return address;
 }
 
+/**
+ * Binarize image data at a fixed luminance threshold.
+ * Pixels darker than threshold → black, everything else → white.
+ */
+function binarizeAt(data: Uint8ClampedArray, width: number, height: number, threshold: number): ImageData {
+  const out = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = (data[i] * 77 + data[i + 1] * 150 + data[i + 2] * 29) >> 8;
+    const val = lum <= threshold ? 0 : 255;
+    out[i] = val; out[i + 1] = val; out[i + 2] = val; out[i + 3] = 255;
+  }
+  return new ImageData(out, width, height);
+}
+
+/**
+ * Try jsQR on raw image data, then retry with binarization at progressive
+ * thresholds to handle dark-background screenshots (e.g. WalletPair dark theme).
+ *
+ * Dark backgrounds (lum ~18–30) sit very close to black QR modules (lum 0).
+ * A low threshold (≤15) separates them; higher thresholds merge them and jsQR
+ * loses the quiet zone boundary.
+ */
+function decodeQR(imageData: ImageData): string | null {
+  const opts = { inversionAttempts: 'attemptBoth' as const };
+  const { data, width, height } = imageData;
+  // 1. Try raw image first (fast path for clean / light-background images)
+  const direct = jsQR(data as any, width, height, opts);
+  if (direct?.data) return direct.data;
+  // 2. Retry with binarization at low thresholds (dark-bg fix)
+  for (const t of [10, 40, 80]) {
+    const bin = binarizeAt(data, width, height, t);
+    const result = jsQR(bin.data as any, width, height, opts);
+    if (result?.data) return result.data;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Scan line animation (native only — web reanimated causes ghost artifacts)
 // ---------------------------------------------------------------------------
@@ -110,11 +147,9 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
           canvas.height = h;
           ctx.drawImage(video, 0, 0, w, h);
           const imageData = ctx.getImageData(0, 0, w, h);
-          const code = jsQR(imageData.data as any, imageData.width, imageData.height, {
-            inversionAttempts: 'attemptBoth',
-          });
-          if (code?.data) {
-            onScanRef.current(code.data);
+          const decoded = decodeQR(imageData);
+          if (decoded) {
+            onScanRef.current(decoded);
             return;
           }
         }
@@ -269,10 +304,10 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           URL.revokeObjectURL(url);
 
           const imageData = ctx.getImageData(0, 0, w, h);
-          const code = jsQR(imageData.data as any, imageData.width, imageData.height);
-          if (code?.data) {
+          const decoded = decodeQR(imageData);
+          if (decoded) {
             hapticSuccess();
-            onScan(parseAddress(code.data));
+            onScan(parseAddress(decoded));
           } else {
             showAlert('No QR Found', 'Could not find a QR code in the selected image.');
           }
@@ -313,10 +348,10 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             const { decodeBase64Image } = await import('@/services/image-decode');
             const imageData = decodeBase64Image(asset.base64, asset.width, asset.height);
             if (imageData) {
-              const code = jsQR(imageData.data as any, imageData.width, imageData.height);
-              if (code?.data) {
+              const decoded = decodeQR(imageData as ImageData);
+              if (decoded) {
                 hapticSuccess();
-                onScan(parseAddress(code.data));
+                onScan(parseAddress(decoded));
                 return;
               }
             }
