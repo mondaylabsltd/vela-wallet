@@ -139,14 +139,22 @@ function ScanLine() {
 }
 
 // ---------------------------------------------------------------------------
-// Web camera component using getUserMedia + jsQR
+// Web camera component using getUserMedia + BarcodeDetector / jsQR
 // ---------------------------------------------------------------------------
+
+/** Native BarcodeDetector — available on Chrome 83+, Safari 16.4+ (iOS/macOS). */
+const nativeDetector: any =
+  typeof globalThis !== 'undefined' && 'BarcodeDetector' in globalThis
+    ? new (globalThis as any).BarcodeDetector({ formats: ['qr_code'] })
+    : null;
+
+if (nativeDetector) console.log('[QR] BarcodeDetector available');
+else console.log('[QR] BarcodeDetector NOT available — using jsQR only');
 
 function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanned: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval>>(0 as any);
   // Use refs so the interval callback always sees latest values without re-creating
   const scannedRef = useRef(scanned);
   const onScanRef = useRef(onScan);
@@ -155,7 +163,6 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
 
   useEffect(() => {
     let mounted = true;
-    const busyRef = { current: false };
     let frameCount = 0;
 
     navigator.mediaDevices.getUserMedia({
@@ -174,51 +181,71 @@ function WebCamera({ onScan, scanned }: { onScan: (data: string) => void; scanne
       })
       .catch((e) => { console.warn('[QR] camera: getUserMedia failed', e?.message); });
 
-    // Stable interval — reads refs, never needs to be re-created
-    timerRef.current = setInterval(async () => {
-      if (scannedRef.current || busyRef.current) return;
+    // Grab-and-analyze loop: capture one frame, try hard to decode it,
+    // then wait before grabbing the next. Much less CPU than setInterval.
+    let loopTimer: ReturnType<typeof setTimeout>;
+    async function scanOneFrame() {
+      if (!mounted || scannedRef.current) {
+        loopTimer = setTimeout(scanOneFrame, 500);
+        return;
+      }
       const video = videoRef.current;
-      if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-      busyRef.current = true;
+      if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) {
+        loopTimer = setTimeout(scanOneFrame, 300);
+        return;
+      }
       frameCount++;
+      let decoded: string | null = null;
 
-      try {
+      // --- Strategy 1: BarcodeDetector (native ML, best for camera) ---
+      if (nativeDetector && !decoded) {
+        try {
+          const barcodes: any[] = await Promise.race([
+            nativeDetector.detect(video),
+            new Promise<any[]>(r => setTimeout(() => r([]), 1500)),
+          ]);
+          if (barcodes.length > 0 && barcodes[0].rawValue) {
+            decoded = barcodes[0].rawValue;
+            console.log('[QR] camera: BarcodeDetector →', decoded!.substring(0, 50) + '...');
+          }
+        } catch {}
+      }
+
+      // --- Strategy 2: jsQR with binarization on cropped frame ---
+      if (!decoded) {
         const canvas = canvasRef.current;
         if (canvas) {
           const vw = video.videoWidth;
           const vh = video.videoHeight;
-          // Crop to 85% of the shorter side — large enough that dense QR codes
-          // (walletpair 57×57) get ~5px/module at the 600px canvas size
           const side = Math.round(Math.min(vw, vh) * 0.85);
           const sx = Math.round((vw - side) / 2);
           const sy = Math.round((vh - side) / 2);
-          // Render cropped region at 600px — dense QR codes (walletpair, 57×57
-          // modules) need ~5px/module minimum for reliable jsQR decoding
           const size = Math.min(side, 600);
           canvas.width = size;
           canvas.height = size;
           const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
           ctx.drawImage(video, sx, sy, side, side, 0, 0, size, size);
           const imageData = ctx.getImageData(0, 0, size, size);
-          // Log every 10th frame so we know scanning is alive
-          if (frameCount % 10 === 1) {
-            console.log(`[QR] camera: frame#${frameCount} video=${vw}×${vh} crop=${side} canvas=${size}`);
+          if (frameCount % 5 === 1) {
+            console.log(`[QR] camera: frame#${frameCount} ${vw}×${vh} → ${size}px jsQR`);
           }
-          // Use full decodeQR: raw + 3 binarize thresholds
-          // 400×400 = 160K pixels → 4 jsQR calls ≈ 60ms, well within 500ms budget
-          const decoded = decodeQR(imageData, 'camera');
-          if (decoded) {
-            onScanRef.current(decoded);
-          }
+          decoded = decodeQR(imageData, 'camera');
         }
-      } finally {
-        busyRef.current = false;
       }
-    }, 500);
+
+      if (decoded && !scannedRef.current) {
+        onScanRef.current(decoded);
+      }
+
+      // Wait before next frame — longer if nothing found (saves CPU)
+      if (mounted) loopTimer = setTimeout(scanOneFrame, decoded ? 2000 : 600);
+    }
+    // Start the loop after camera is ready
+    loopTimer = setTimeout(scanOneFrame, 500);
 
     return () => {
       mounted = false;
-      clearInterval(timerRef.current);
+      clearTimeout(loopTimer);
       streamRef.current?.getTracks().forEach(t => t.stop());
     };
   }, []); // stable — no deps, runs once
@@ -355,9 +382,27 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           // Only revoke AFTER drawImage — iOS Safari may need the URL alive
           URL.revokeObjectURL(url);
 
-          const imageData = ctx.getImageData(0, 0, w, h);
-          console.log(`[QR] pick: canvas ${w}×${h}, pixels[0..3]=${imageData.data[0]},${imageData.data[1]},${imageData.data[2]},${imageData.data[3]}`);
-          const decoded = decodeQR(imageData, 'pick');
+          // 1. Try BarcodeDetector on the canvas (native ML, best for noisy images)
+          let decoded: string | null = null;
+          if (nativeDetector) {
+            try {
+              const barcodes = await nativeDetector.detect(canvas);
+              if (barcodes.length > 0 && barcodes[0].rawValue) {
+                decoded = barcodes[0].rawValue;
+                console.log(`[QR] pick: BarcodeDetector decoded at ${w}×${h}`);
+              }
+            } catch (e: any) {
+              console.warn('[QR] pick: BarcodeDetector failed', e?.message);
+            }
+          }
+
+          // 2. Fallback: jsQR with binarization
+          if (!decoded) {
+            const imageData = ctx.getImageData(0, 0, w, h);
+            console.log(`[QR] pick: trying jsQR at ${w}×${h}`);
+            decoded = decodeQR(imageData, 'pick');
+          }
+
           if (decoded) {
             hapticSuccess();
             onScan(parseAddress(decoded));
