@@ -1,48 +1,45 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  TextInput,
-  ActivityIndicator,
-} from 'react-native';
-import { AppModal } from '@/components/ui/AppModal';
-import { useRouter } from 'expo-router';
-import { ScreenContainer } from '@/components/ui/ScreenContainer';
-import { VelaCard } from '@/components/ui/VelaCard';
-import { VelaButton } from '@/components/ui/VelaButton';
 import { ChainLogo } from '@/components/ChainLogo';
-import { color, text, inter, space, radius, font, shadow, useStyles } from '@/constants/theme';
-import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
-import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
-import { useWallet, shortAddress } from '@/models/wallet-state';
-import { DEFAULT_NETWORKS, getAllNetworks, getAllNetworksSync, refreshCustomNetworks } from '@/models/network';
-import type { Network } from '@/models/network';
-import { saveNetworkConfig, loadNetworkConfigs, loadServiceEndpoints, saveServiceEndpoints, saveCustomNetwork, loadCustomNetworks, removeCustomNetwork, hasPendingUploads, getBundlerServiceURL } from '@/services/storage';
-import { checkNetworkCompatibility } from '@/services/network-checker';
-import { refreshPool, invalidateAllPools } from '@/services/rpc-pool';
-import { clearBundlerCache } from '@/services/bundler-service';
-import { fetchTokens } from '@/services/wallet-api';
-import { isNativeToken, tokenChainId } from '@/models/types';
-import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
-import { User as UserIcon, Globe as NetworkIcon, Info as InfoIcon, LogOut as LogOutIcon, Check, ChevronRight, ChevronDown, X, Server, Plus, Trash2, RefreshCw, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Sun, Moon, Monitor, Copy, Key } from 'lucide-react-native';
-import type { NetworkConfig, ServiceEndpoints, CustomNetwork, CompatibilityResult } from '@/models/types';
-import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
-import { getAccountBalances } from '@/services/balance-cache';
-import { toHex } from '@/services/hex';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  runOnJS,
-} from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { showAlert, openURL, hapticSuccess, hapticLight, copyToClipboard } from '@/services/platform';
-import { fadeIn, fadeInDown } from '@/constants/entering';
 import { QRCode } from '@/components/QRCode';
-import { getBuiltinBundlerUrl, poolRpcCall } from '@/services/rpc-pool';
+import { AppModal } from '@/components/ui/AppModal';
+import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { VelaButton } from '@/components/ui/VelaButton';
+import { VelaCard } from '@/components/ui/VelaCard';
+import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
+import { fadeIn, fadeInDown } from '@/constants/entering';
+import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
+import { color, font, inter, radius, shadow, space, text, useStyles } from '@/constants/theme';
+import type { Network } from '@/models/network';
+import { DEFAULT_NETWORKS, getAllNetworks, getAllNetworksSync, refreshCustomNetworks } from '@/models/network';
+import type { CompatibilityResult, CustomNetwork, NetworkConfig, ServiceEndpoints } from '@/models/types';
+import { DEFAULT_SERVICE_ENDPOINTS, isNativeToken, tokenChainId } from '@/models/types';
+import { shortAddress, useWallet } from '@/models/wallet-state';
+import { getAccountBalances } from '@/services/balance-cache';
+import { clearBundlerCache } from '@/services/bundler-service';
+import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
+import { checkNetworkCompatibility } from '@/services/network-checker';
+import { copyToClipboard, hapticLight, hapticSuccess, openURL, showAlert } from '@/services/platform';
+import { getBuiltinBundlerUrl, invalidateAllPools, poolRpcCall, refreshPool } from '@/services/rpc-pool';
+import { getBundlerServiceURL, hasPendingUploads, loadCustomNetworks, loadNetworkConfigs, loadServiceEndpoints, removeCustomNetwork, saveCustomNetwork, saveNetworkConfig, saveServiceEndpoints } from '@/services/storage';
+import { fetchTokens } from '@/services/wallet-api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, ExternalLink, Info as InfoIcon, Key, LogOut as LogOutIcon, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, X, XCircle } from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    View,
+} from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+    runOnJS,
+    useAnimatedStyle,
+    useSharedValue,
+    withSpring,
+} from 'react-native-reanimated';
 
 // All styles in one factory → useStyles recomputes everything on text scale change
 type S = ReturnType<typeof styleFactory>;
@@ -458,7 +455,7 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
         <View style={s.modalHeader}>
           <Text style={s.modalTitle}>Service Endpoints</Text>
           <View style={s.modalHeaderRight}>
-            <Pressable onPress={() => openURL('https://github.com/atshelchin/vela-wallet-mobile#self-deploy-service-endpoints')} hitSlop={8} style={s.refreshBtn}>
+            <Pressable onPress={() => openURL('https://github.com/atshelchin/vela-wallet#self-deploy-service-endpoints')} hitSlop={8} style={s.refreshBtn}>
               <ExternalLink size={18} color={color.fg.muted} strokeWidth={2} />
             </Pressable>
             <Pressable onPress={() => setRefreshCount(c => c + 1)} hitSlop={8} style={s.refreshBtn}>
@@ -1242,7 +1239,10 @@ export default function SettingsScreen() {
             <ThemePicker s={styles} current={colorPref} onChange={setColorPref} />
             <View style={styles.settingsRowDividerFull} />
             <SettingsRow s={styles} icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
-              title="About" subtitle="Vela Wallet v1.0.0" showDivider={false} onPress={() => router.push('/about')} />
+              title="About" subtitle="Vela Wallet v1.0.0" onPress={() => router.push('/about')} />
+            <View style={styles.settingsRowDividerFull} />
+            <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Key }}
+              title="Clear Signing Test" subtitle="ERC-7730 signing UI preview" showDivider={false} onPress={() => router.push('/clear-signing-test')} />
           </VelaCard>
         </Animated.View>
 
