@@ -28,7 +28,7 @@ import { color, text, inter, space, radius, font, shadow, createStyles } from '@
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { shortAddr, type BLEIncomingRequest } from '@/models/types';
 import { PasskeyErrorCode } from '@/modules/passkey';
-import { handleDAppRequest, isSigningMethod, handleReadOnlyRPC, INSTANT_READONLY_METHODS } from '@/hooks/use-dapp-signing';
+import { handleDAppRequest, isSigningMethod, handleReadOnlyRPC, INSTANT_READONLY_METHODS, assertChainSupported } from '@/hooks/use-dapp-signing';
 import { gateReadOnly, readOnlyKey } from '@/services/readonly-rpc-gate';
 import {
   Bluetooth, Wifi, ChevronRight, Check, X,
@@ -119,10 +119,27 @@ export default function DAppScreen() {
 
     if (method === 'wallet_switchEthereumChain') {
       const cp = params?.[0] as { chainId?: string } | undefined;
-      if (cp?.chainId) {
-        const nc = parseInt(cp.chainId, 16);
-        if (!isNaN(nc)) { chainIdRef.current = nc; setCurrentChainId(nc); }
+      const nc = cp?.chainId
+        ? (cp.chainId.startsWith('0x') ? parseInt(cp.chainId, 16) : parseInt(cp.chainId, 10))
+        : NaN;
+      if (isNaN(nc)) {
+        // Missing/malformed chainId — don't report a phantom success.
+        sendResponse(id, undefined, { code: -32602, message: 'Invalid params: missing chainId' });
+        return;
       }
+      try {
+        assertChainSupported(nc);
+      } catch (err: any) {
+        // Wallet doesn't support this chain — reject (EIP-3326 / 4902)
+        // instead of silently switching to an unknown network.
+        sendResponse(id, undefined, {
+          code: err.code ?? 4902,
+          message: err.message ?? `Unsupported chain: ${nc}`,
+        });
+        return;
+      }
+      chainIdRef.current = nc;
+      setCurrentChainId(nc);
       sendResponse(id, null);
       return;
     }

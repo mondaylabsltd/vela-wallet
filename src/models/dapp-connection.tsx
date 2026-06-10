@@ -219,22 +219,25 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
 
     if (method === 'wallet_switchEthereumChain') {
       const cp = params?.[0] as { chainId?: string } | undefined;
-      if (cp?.chainId) {
-        const nc = parseInt(cp.chainId, 16);
-        if (!isNaN(nc)) {
-          try {
-            assertChainSupported(nc);
-          } catch (err: any) {
-            transportRef.current?.sendResponse(id, undefined, {
-              code: err.code ?? 4902,
-              message: err.message ?? `Unsupported chain: ${nc}`,
-            });
-            return;
-          }
-          chainIdRef.current = nc;
-          setChainId(nc);
-        }
+      const nc = cp?.chainId
+        ? (cp.chainId.startsWith('0x') ? parseInt(cp.chainId, 16) : parseInt(cp.chainId, 10))
+        : NaN;
+      if (isNaN(nc)) {
+        // Missing/malformed chainId — don't report a phantom success.
+        transportRef.current?.sendResponse(id, undefined, { code: -32602, message: 'Invalid params: missing chainId' });
+        return;
       }
+      try {
+        assertChainSupported(nc);
+      } catch (err: any) {
+        transportRef.current?.sendResponse(id, undefined, {
+          code: err.code ?? 4902,
+          message: err.message ?? `Unsupported chain: ${nc}`,
+        });
+        return;
+      }
+      chainIdRef.current = nc;
+      setChainId(nc);
       transportRef.current?.sendResponse(id, null);
       return;
     }
