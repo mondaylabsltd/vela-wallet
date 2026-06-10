@@ -371,6 +371,9 @@ export class WalletPairTransport implements DAppTransport {
 
   sendResponse(id: string, result?: any, error?: { code: number; message: string }): void {
     if (error) {
+      // Drop the tracked method on the reject path too — wrapResult (which clears
+      // it on success) is never reached for errors, so otherwise the entry leaks.
+      this.requestMethodMap.delete(id);
       this.session.reject(id, String(error.code), error.message);
     } else {
       // Wrap result in WalletPair EVM sub-protocol format.

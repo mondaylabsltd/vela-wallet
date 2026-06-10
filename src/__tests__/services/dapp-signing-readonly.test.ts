@@ -82,10 +82,14 @@ describe('handleReadOnlyRPC — eth_getCode counterfactual override', () => {
 
 describe('handleReadOnlyRPC — wallet_getCallsStatus (EIP-5792)', () => {
   test('status 200 (confirmed) with a receipt when the batch tx succeeded', async () => {
+    // ERC-4337 eth_getUserOperationReceipt: { success, receipt: TransactionReceipt }
     rpcCallMock.mockResolvedValue({
       result: {
-        status: '0x1', logs: [], blockHash: '0xbh', blockNumber: '0x10',
-        gasUsed: '0x5208', transactionHash: '0xbatch',
+        success: true,
+        receipt: {
+          status: '0x1', logs: [], blockHash: '0xbh', blockNumber: '0x10',
+          gasUsed: '0x5208', transactionHash: '0xbatch',
+        },
       },
     });
     const out = unwrap(await handleReadOnlyRPC('wallet_getCallsStatus', ['0xbatch'], OWN, CHAIN));
@@ -96,8 +100,20 @@ describe('handleReadOnlyRPC — wallet_getCallsStatus (EIP-5792)', () => {
     expect(out.receipts[0].transactionHash).toBe('0xbatch');
   });
 
-  test('status 500 (reverted) when the batch tx failed', async () => {
-    rpcCallMock.mockResolvedValue({ result: { status: '0x0', logs: [], transactionHash: '0xbatch' } });
+  test('status 500 (reverted) when the batch tx reverted on-chain', async () => {
+    rpcCallMock.mockResolvedValue({
+      result: { success: true, receipt: { status: '0x0', logs: [], transactionHash: '0xbatch' } },
+    });
+    const out = unwrap(await handleReadOnlyRPC('wallet_getCallsStatus', ['0xbatch'], OWN, CHAIN));
+    expect(out.status).toBe(500);
+  });
+
+  test('status 500 when the UserOp was mined but the inner call failed (success:false)', async () => {
+    // ERC-4337 nuance: the bundle tx can succeed (receipt.status 0x1) while the
+    // UserOp's inner call reverted — opReceipt.success === false must map to 500.
+    rpcCallMock.mockResolvedValue({
+      result: { success: false, receipt: { status: '0x1', logs: [], transactionHash: '0xbatch' } },
+    });
     const out = unwrap(await handleReadOnlyRPC('wallet_getCallsStatus', ['0xbatch'], OWN, CHAIN));
     expect(out.status).toBe(500);
   });

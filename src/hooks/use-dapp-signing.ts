@@ -25,6 +25,59 @@ export interface DAppRequest {
 // ── Chain ID resolution & validation ──────────────────────────────────────
 
 const UNSUPPORTED_CHAIN_ERROR_CODE = 4902; // EIP-3085: unrecognized chain ID
+const UNSUPPORTED_CAPABILITY_ERROR_CODE = 5700; // EIP-5792: unsupported non-optional capability
+
+// ── EIP-5792 batch → chain tracking ────────────────────────────────────────
+//
+// wallet_getCallsStatus must query the chain the batch was submitted on, even if
+// the wallet has since switched networks. Batch ids are opaque (and must stay
+// equal to the userOpHash for the bundler receipt lookup), so we remember the
+// id → chainId mapping at wallet_sendCalls time rather than encoding it in the id.
+const batchChainIds = new Map<string, number>();
+const MAX_TRACKED_BATCHES = 200;
+
+function rememberBatchChain(id: string, chainId: number): void {
+  const key = id.toLowerCase();
+  // Bound memory: drop the oldest entry once we exceed the cap (Map keeps
+  // insertion order, so the first key is the oldest).
+  if (!batchChainIds.has(key) && batchChainIds.size >= MAX_TRACKED_BATCHES) {
+    const oldest = batchChainIds.keys().next().value;
+    if (oldest !== undefined) batchChainIds.delete(oldest);
+  }
+  batchChainIds.set(key, chainId);
+}
+
+/** Resolve the chain a batch id was submitted on; falls back to the current chain. */
+function resolveBatchChain(id: string | undefined, fallback: number): number {
+  if (!id) return fallback;
+  return batchChainIds.get(id.toLowerCase()) ?? fallback;
+}
+
+/**
+ * EIP-5792: request capabilities are assumed REQUIRED unless explicitly marked
+ * `{ optional: true }`. This wallet supports no request-level capabilities, so a
+ * required capability must be rejected with code 5700 ("unsupported non-optional
+ * capability") rather than silently ignored. Optional capabilities are dropped.
+ */
+function assertNoRequiredCapabilities(payload: {
+  capabilities?: Record<string, { optional?: boolean }>;
+  calls?: Array<{ capabilities?: Record<string, { optional?: boolean }> }>;
+}): void {
+  const buckets = [payload.capabilities, ...(payload.calls ?? []).map(c => c.capabilities)];
+  const required = new Set<string>();
+  for (const caps of buckets) {
+    if (!caps) continue;
+    for (const [name, value] of Object.entries(caps)) {
+      if (value?.optional !== true) required.add(name);
+    }
+  }
+  if (required.size > 0) {
+    throw Object.assign(
+      new Error(`Unsupported non-optional capabilities: ${[...required].join(', ')}`),
+      { code: UNSUPPORTED_CAPABILITY_ERROR_CODE },
+    );
+  }
+}
 
 /**
  * Resolve the effective chain ID from request context.
@@ -281,10 +334,15 @@ export async function handleSendCalls(
   chainId: number,
 ): Promise<string> {
   const payload = request.params[0] as {
-    calls: Array<{ to: string; value?: string; data?: string }>;
+    calls: Array<{ to: string; value?: string; data?: string; capabilities?: Record<string, { optional?: boolean }> }>;
     chainId?: string;  // hex chain ID from dApp
     from?: string;
+    capabilities?: Record<string, { optional?: boolean }>;
   };
+
+  // EIP-5792: reject any required capability we don't support before touching the
+  // wallet (so the dApp gets a clean 5700 rather than a silently-dropped feature).
+  assertNoRequiredCapabilities(payload);
 
   const effectiveChainId = resolveChainId(chainId, payload.chainId);
   assertChainSupported(effectiveChainId);
@@ -338,6 +396,7 @@ export async function handleSendCalls(
       const txData = fromHex(stripHexPrefix(dataHex));
       txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn);
     }
+    rememberBatchChain(txResult.userOpHash, effectiveChainId);
     return txResult.userOpHash;
   }
 
@@ -354,6 +413,7 @@ export async function handleSendCalls(
     publicKeyHex,
     signFn,
   );
+  rememberBatchChain(txResult.userOpHash, effectiveChainId);
   return txResult.userOpHash;
 }
 
@@ -416,12 +476,15 @@ export async function handleReadOnlyRPC(
     // (the userOpHash returned from handleSendCalls).
     case 'wallet_getCallsStatus': {
       const id = params?.[0] as string | undefined;
-      const hexChain = '0x' + chainId.toString(16);
+      // Resolve the chain the batch was submitted on (the wallet may have since
+      // switched networks); fall back to the current chain for unknown ids.
+      const batchChain = resolveBatchChain(id, chainId);
+      const hexChain = '0x' + batchChain.toString(16);
       const pending = { version: '2.0.0', id: id ?? '0x', chainId: hexChain, status: 100, atomic: true, receipts: [] as unknown[] };
       if (!id) return { handled: true, result: pending };
       try {
         // ID is a userOpHash — query the bundler for the UserOp receipt
-        const res = await rpcCall('eth_getUserOperationReceipt', [id], chainId);
+        const res = await rpcCall('eth_getUserOperationReceipt', [id], batchChain);
         const opReceipt = res.result as {
           success?: boolean;
           receipt?: {
