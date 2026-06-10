@@ -338,7 +338,7 @@ export async function handleSendCalls(
       const txData = fromHex(stripHexPrefix(dataHex));
       txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn);
     }
-    return await txResult.waitForTxHash();
+    return txResult.userOpHash;
   }
 
   // Multiple calls → batch via Safe multiSend
@@ -354,7 +354,7 @@ export async function handleSendCalls(
     publicKeyHex,
     signFn,
   );
-  return await txResult.waitForTxHash();
+  return txResult.userOpHash;
 }
 
 /**
@@ -413,25 +413,30 @@ export async function handleReadOnlyRPC(
     case 'wallet_addEthereumChain':
       return { handled: true, result: null };
     // EIP-5792: poll the status of a prior wallet_sendCalls batch by its ID
-    // (the tx hash returned from handleSendCalls).
+    // (the userOpHash returned from handleSendCalls).
     case 'wallet_getCallsStatus': {
       const id = params?.[0] as string | undefined;
       const hexChain = '0x' + chainId.toString(16);
-      const pending = { version: '2.0.0', id: id ?? '0x', chainId: hexChain, status: 100, atomic: true, receipts: [] };
+      const pending = { version: '2.0.0', id: id ?? '0x', chainId: hexChain, status: 100, atomic: true, receipts: [] as unknown[] };
       if (!id) return { handled: true, result: pending };
       try {
-        const res = await rpcCall('eth_getTransactionReceipt', [id], chainId);
-        const receipt = res.result as {
-          status?: string; logs?: unknown[]; blockHash?: string;
-          blockNumber?: string; gasUsed?: string; transactionHash?: string;
+        // ID is a userOpHash — query the bundler for the UserOp receipt
+        const res = await rpcCall('eth_getUserOperationReceipt', [id], chainId);
+        const opReceipt = res.result as {
+          success?: boolean;
+          receipt?: {
+            status?: string; logs?: unknown[]; blockHash?: string;
+            blockNumber?: string; gasUsed?: string; transactionHash?: string;
+          };
         } | null;
-        if (!receipt) return { handled: true, result: pending }; // not mined yet
-        const ok = receipt.status === '0x1';
+        if (!opReceipt?.receipt) return { handled: true, result: pending };
+        const receipt = opReceipt.receipt;
+        const ok = opReceipt.success !== false && receipt.status === '0x1';
         return { handled: true, result: {
           version: '2.0.0',
           id,
           chainId: hexChain,
-          status: ok ? 200 : 500, // 200 = confirmed, 500 = reverted
+          status: ok ? 200 : 500,
           atomic: true,
           receipts: [{
             logs: receipt.logs ?? [],
