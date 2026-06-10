@@ -8,7 +8,7 @@
  * Mobile: BLE + WebSocket relay (BLE added in Phase 4).
  */
 
-import { AppState, Platform } from 'react-native';
+import { AppState, type AppStateStatus, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   WalletSession,
@@ -20,9 +20,19 @@ import {
   type Transport as WPTransport,
   type WalletPhase,
 } from 'walletpair-sdk';
+import * as WalletPairSDK from 'walletpair-sdk';
 import type { DAppTransport, DAppTransportEvents, DAppInfo, WalletInfo } from './dapp-transport';
 import { DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
 import { SAFE_PROXY_RUNTIME_CODE } from './safe-address';
+
+// Pipe the SDK's developer-only disconnect diagnostics (close code, relay
+// terminate reason, phase, willReconnect) to the dev console so disconnect
+// causes are queryable. NOT shown to end users (Metro/Flipper/Xcode logs only).
+// Forward-compatible: feature-detected, so it's a no-op until walletpair-sdk is
+// bumped to a version that exposes setDisconnectLogSink, then auto-activates.
+(WalletPairSDK as { setDisconnectLogSink?: (fn: (e: unknown) => void) => void }).setDisconnectLogSink?.(
+  (entry) => console.log('[WalletPair][disconnect]', entry),
+);
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -223,12 +233,19 @@ export class WalletPairTransport implements DAppTransport {
   private _dappInfo: DAppInfo;
   private listeners = new Map<string, Set<Function>>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
-  private appStateUnsub: (() => void) | null = null;
+  private appStateSub: { remove(): void } | null = null;
+  /** Epoch ms when the app last went to background (null while foregrounded). */
+  private backgroundedAt: number | null = null;
 
   private constructor(session: WalletSession, dappInfo: DAppInfo) {
     this.session = session;
     this._dappInfo = dappInfo;
     this.wireSessionEvents();
+    // App-foreground recovery must outlive disconnect/reconnect cycles, so it is
+    // set up here (for the session's whole lifetime) rather than inside the
+    // heartbeat — otherwise it would be torn down the instant we disconnect,
+    // exactly when foreground recovery matters most.
+    this.setupAppStateRecovery();
   }
 
   // -----------------------------------------------------------------------
@@ -364,6 +381,7 @@ export class WalletPairTransport implements DAppTransport {
   disconnect(): void {
     this._connected = false;
     this.stopHeartbeat();
+    this.teardownAppStateRecovery();
     this.session.destroy();
     this.emit('disconnected');
     this.listeners.clear();
@@ -458,21 +476,58 @@ export class WalletPairTransport implements DAppTransport {
     this.pingTimer = setInterval(() => {
       if (this._connected) this.session.ping();
     }, 25_000);
-
-    // Reconnect proactively when app returns to foreground
-    const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active' && this._connected) {
-        // Fire a ping; if the socket is dead the SDK will detect the close
-        // and trigger auto-reconnect via its backoff logic.
-        this.session.ping();
-      }
-    });
-    this.appStateUnsub = () => sub.remove();
   }
 
   private stopHeartbeat() {
     if (this.pingTimer) { clearInterval(this.pingTimer); this.pingTimer = null; }
-    if (this.appStateUnsub) { this.appStateUnsub(); this.appStateUnsub = null; }
+  }
+
+  // -----------------------------------------------------------------------
+  // App foreground/background recovery (mobile)
+  // -----------------------------------------------------------------------
+  //
+  // When the OS backgrounds the app, React Native suspends JS timers — the
+  // heartbeat stops and the SDK's reconnect-backoff timers freeze — and the
+  // relay/NAT idle-closes the WebSocket (~30s). On return to foreground the
+  // socket is usually dead while `_connected` may still read true (the close
+  // event never fired while JS was suspended). So on foreground we force a
+  // reconnect rather than trusting the stale flag.
+
+  private setupAppStateRecovery() {
+    if (this.appStateSub) return;
+    this.appStateSub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next === 'active') {
+        this.onForeground();
+      } else if (next === 'background' || next === 'inactive') {
+        if (this.backgroundedAt == null) this.backgroundedAt = Date.now();
+      }
+    });
+  }
+
+  private onForeground() {
+    const backgroundedMs = this.backgroundedAt != null ? Date.now() - this.backgroundedAt : 0;
+    this.backgroundedAt = null;
+
+    // Nothing to recover before pairing has started ('idle') or once the session
+    // is finished ('closed'); the normal connect() flow owns the initial join.
+    if (this.session.phase === 'idle' || this.session.phase === 'closed') return;
+
+    // If we're not connected, or we were backgrounded long enough that the relay
+    // has almost certainly idle-closed the socket, force an immediate reconnect
+    // (cancels any frozen backoff timer and retries now). For a brief blur, a
+    // ping is enough to confirm the socket is still alive.
+    const STALE_AFTER_MS = 20_000;
+    if (!this._connected || backgroundedMs >= STALE_AFTER_MS) {
+      console.log('[WalletPair] foreground: forcing reconnect (bg', backgroundedMs, 'ms)');
+      this.session.reconnect().catch((e) => console.log('[WalletPair] foreground reconnect failed:', e));
+    } else {
+      this.session.ping();
+    }
+  }
+
+  private teardownAppStateRecovery() {
+    if (this.appStateSub) { this.appStateSub.remove(); this.appStateSub = null; }
+    this.backgroundedAt = null;
   }
 
   // -----------------------------------------------------------------------
@@ -490,6 +545,7 @@ export class WalletPairTransport implements DAppTransport {
         const wasConnected = this._connected;
         this._connected = false;
         this.stopHeartbeat();
+        this.teardownAppStateRecovery();
         if (wasConnected) {
           this.emit('disconnected');
         } else {
