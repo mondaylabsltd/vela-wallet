@@ -601,7 +601,7 @@
 		<div class="bm-content">
 			<h2>How Vela makes money</h2>
 			<p class="bm-intro">
-				No VC funding, no token, no ads, no data sales. Vela is funded by the people who use it.
+				Vela is funded by the people who use it.
 				Here's exactly how.
 			</p>
 
