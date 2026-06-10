@@ -429,6 +429,36 @@ export function isSigningMethod(method: string): boolean {
 }
 
 /**
+ * Read-only methods answered instantly from local wallet state (no network). The
+ * dispatch layer skips the concurrency gate for these so a flood of cheap local
+ * queries never queues behind network-bound reads.
+ */
+export const INSTANT_READONLY_METHODS = new Set([
+  'eth_accounts',
+  'eth_requestAccounts',
+  'eth_chainId',
+  'net_version',
+  'wallet_getPermissions',
+  'wallet_requestPermissions',
+  'wallet_addEthereumChain',
+]);
+
+/**
+ * Cache of the wallet's own deployed Safe code, keyed by `${chainId}|${address}`.
+ * A deployed Safe's code is immutable, so once observed we answer eth_getCode for
+ * our own address without re-querying the RPC (defense-in-depth for older SDKs that
+ * still forward eth_getCode for the wallet's own address). Keyed by address as well
+ * as chain so switching accounts never serves another account's code. Undeployed
+ * accounts are intentionally NOT cached — they may deploy at any time.
+ */
+const deployedSelfCode = new Map<string, string>();
+
+/** Reset module-level read-only caches. Tests only. */
+export function __resetReadOnlyCache(): void {
+  deployedSelfCode.clear();
+}
+
+/**
  * Handle a read-only RPC method. Returns the result or null if not handled.
  */
 export async function handleReadOnlyRPC(
@@ -445,10 +475,14 @@ export async function handleReadOnlyRPC(
   if (method === 'eth_getCode') {
     const target = (params?.[0] as string | undefined)?.toLowerCase();
     if (target && address && target === address.toLowerCase()) {
+      const cacheKey = `${chainId}|${target}`;
+      const cached = deployedSelfCode.get(cacheKey);
+      if (cached) return { handled: true, result: cached };
       try {
         const res = await rpcCall('eth_getCode', params ?? [target, 'latest'], chainId);
         const code = res.result as string | undefined;
         if (code && code !== '0x' && code.length > 2) {
+          deployedSelfCode.set(cacheKey, code);
           return { handled: true, result: code };
         }
       } catch { /* fall through to runtime code */ }

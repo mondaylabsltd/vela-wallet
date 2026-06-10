@@ -33,7 +33,12 @@ jest.mock('@/services/rpc-adapter', () => ({
   rpcCall: (...args: any[]) => rpcCallMock(...args),
 }));
 
-import { handleReadOnlyRPC } from '@/hooks/use-dapp-signing';
+import {
+  handleReadOnlyRPC,
+  __resetReadOnlyCache,
+  INSTANT_READONLY_METHODS,
+  isSigningMethod,
+} from '@/hooks/use-dapp-signing';
 import { SAFE_PROXY_RUNTIME_CODE } from '@/services/safe-address';
 
 const OWN = '0xAccount0000000000000000000000000000000001';
@@ -46,6 +51,7 @@ function unwrap(res: { handled: boolean; result?: any }): any {
 
 beforeEach(() => {
   rpcCallMock.mockReset();
+  __resetReadOnlyCache();
 });
 
 describe('handleReadOnlyRPC — eth_getCode counterfactual override', () => {
@@ -77,6 +83,26 @@ describe('handleReadOnlyRPC — eth_getCode counterfactual override', () => {
     rpcCallMock.mockResolvedValue({ result: '0xfeedface' });
     const res = await handleReadOnlyRPC('eth_getCode', ['0xSomeOtherContract', 'latest'], OWN, CHAIN);
     expect(unwrap(res)).toBe('0xfeedface');
+  });
+
+  test('caches deployed self code and skips the RPC on subsequent self queries', async () => {
+    rpcCallMock.mockResolvedValue({ result: '0x6080604052deadbeef' });
+    const first = await handleReadOnlyRPC('eth_getCode', [OWN, 'latest'], OWN, CHAIN);
+    expect(unwrap(first)).toBe('0x6080604052deadbeef');
+
+    rpcCallMock.mockClear();
+    const second = await handleReadOnlyRPC('eth_getCode', [OWN, 'latest'], OWN, CHAIN);
+    expect(unwrap(second)).toBe('0x6080604052deadbeef');
+    expect(rpcCallMock).not.toHaveBeenCalled(); // served from cache
+  });
+
+  test('does NOT cache an undeployed (0x) self result — keeps re-checking', async () => {
+    rpcCallMock.mockResolvedValue({ result: '0x' });
+    await handleReadOnlyRPC('eth_getCode', [OWN, 'latest'], OWN, CHAIN);
+    rpcCallMock.mockClear();
+    rpcCallMock.mockResolvedValue({ result: '0x' });
+    await handleReadOnlyRPC('eth_getCode', [OWN, 'latest'], OWN, CHAIN);
+    expect(rpcCallMock).toHaveBeenCalledTimes(1); // re-queried, not cached
   });
 });
 
@@ -168,5 +194,25 @@ describe('handleReadOnlyRPC — local methods & EIP-2255 compat shims', () => {
   test('returns handled:false for a signing method (not read-only)', async () => {
     const res = await handleReadOnlyRPC('personal_sign', ['0x', OWN], OWN, CHAIN);
     expect(res.handled).toBe(false);
+  });
+});
+
+describe('read-only dispatch classification', () => {
+  test('instant methods are local and never signing methods', () => {
+    for (const m of INSTANT_READONLY_METHODS) {
+      expect(isSigningMethod(m)).toBe(false);
+    }
+  });
+
+  test('hot network reads are NOT instant (so they pass through the gate)', () => {
+    for (const m of ['eth_call', 'eth_getBalance', 'eth_getLogs', 'eth_estimateGas', 'eth_getCode']) {
+      expect(INSTANT_READONLY_METHODS.has(m)).toBe(false);
+    }
+  });
+
+  test('signing methods are never instant (so they never get throttled by the gate)', () => {
+    for (const m of ['eth_sendTransaction', 'wallet_sendCalls', 'personal_sign', 'eth_signTypedData_v4']) {
+      expect(INSTANT_READONLY_METHODS.has(m)).toBe(false);
+    }
   });
 });

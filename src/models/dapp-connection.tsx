@@ -23,7 +23,8 @@ import {
   WalletPairTransport,
   clearWalletPairSession,
 } from '@/services/walletpair-transport';
-import { isSigningMethod, handleDAppRequest, handleReadOnlyRPC, extractRequestChainId, assertChainSupported } from '@/hooks/use-dapp-signing';
+import { isSigningMethod, handleDAppRequest, handleReadOnlyRPC, extractRequestChainId, assertChainSupported, INSTANT_READONLY_METHODS } from '@/hooks/use-dapp-signing';
+import { gateReadOnly, readOnlyKey } from '@/services/readonly-rpc-gate';
 import { PasskeyErrorCode } from '@/modules/passkey';
 import { saveTransaction } from '@/services/storage';
 import { nativeSymbol } from '@/models/network';
@@ -238,9 +239,17 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    handleReadOnlyRPC(method, params, addr, cid).then(res => {
+    // Network-bound reads go through the dedupe + concurrency gate so a flood
+    // can't starve the signing path; instant local methods bypass it.
+    const dispatch = INSTANT_READONLY_METHODS.has(method)
+      ? handleReadOnlyRPC(method, params, addr, cid)
+      : gateReadOnly(readOnlyKey(cid, addr, method, params), () => handleReadOnlyRPC(method, params, addr, cid));
+    dispatch.then(res => {
       if (res.handled) transportRef.current?.sendResponse(id, res.result);
       else transportRef.current?.sendResponse(id, undefined, { code: -32603, message: `RPC failed: ${method}` });
+    }).catch((err: any) => {
+      // Gate overflow (too many concurrent reads) — answer with a retryable error.
+      transportRef.current?.sendResponse(id, undefined, { code: err?.code ?? -32603, message: err?.message ?? `RPC failed: ${method}` });
     });
   }, []);
 

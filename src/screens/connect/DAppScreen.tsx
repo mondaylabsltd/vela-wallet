@@ -28,7 +28,8 @@ import { color, text, inter, space, radius, font, shadow, createStyles } from '@
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { shortAddr, type BLEIncomingRequest } from '@/models/types';
 import { PasskeyErrorCode } from '@/modules/passkey';
-import { handleDAppRequest, isSigningMethod, handleReadOnlyRPC } from '@/hooks/use-dapp-signing';
+import { handleDAppRequest, isSigningMethod, handleReadOnlyRPC, INSTANT_READONLY_METHODS } from '@/hooks/use-dapp-signing';
+import { gateReadOnly, readOnlyKey } from '@/services/readonly-rpc-gate';
 import {
   Bluetooth, Wifi, ChevronRight, Check, X,
   Radio, Unplug, Shield, AlertTriangle, Download,
@@ -126,9 +127,17 @@ export default function DAppScreen() {
       return;
     }
 
-    handleReadOnlyRPC(method, params, addr, cid).then(res => {
+    // Network-bound reads go through the dedupe + concurrency gate so a flood
+    // can't starve the signing path; instant local methods bypass it.
+    const dispatch = INSTANT_READONLY_METHODS.has(method)
+      ? handleReadOnlyRPC(method, params, addr, cid)
+      : gateReadOnly(readOnlyKey(cid, addr, method, params), () => handleReadOnlyRPC(method, params, addr, cid));
+    dispatch.then(res => {
       if (res.handled) sendResponse(id, res.result);
       else sendResponse(id, undefined, { code: -32603, message: `RPC failed: ${method}` });
+    }).catch((err: any) => {
+      // Gate overflow (too many concurrent reads) — answer with a retryable error.
+      sendResponse(id, undefined, { code: err?.code ?? -32603, message: err?.message ?? `RPC failed: ${method}` });
     });
   }, [sendResponse]);
 
