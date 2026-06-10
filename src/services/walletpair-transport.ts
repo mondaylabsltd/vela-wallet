@@ -22,12 +22,29 @@ import {
 } from 'walletpair-sdk';
 import type { DAppTransport, DAppTransportEvents, DAppInfo, WalletInfo } from './dapp-transport';
 import { DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
+import { SAFE_PROXY_RUNTIME_CODE } from './safe-address';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = 'vela.walletpairSession';
+
+/**
+ * Read-only JSON-RPC methods the wallet will forward to its own RPC when a dApp
+ * routes them over the channel (spec §9.6 Tier 2). They are declared explicitly
+ * in capabilities.methods so the session-layer allowlist (protocol §7.1) admits
+ * them — explicit negotiation rather than implicit pass-through.
+ */
+const READ_ONLY_RPC_METHODS = [
+  'eth_call', 'eth_estimateGas', 'eth_getBalance', 'eth_getCode',
+  'eth_getStorageAt', 'eth_getTransactionCount', 'eth_getTransactionByHash',
+  'eth_getTransactionReceipt', 'eth_getLogs', 'eth_blockNumber',
+  'eth_getBlockByNumber', 'eth_getBlockByHash', 'eth_feeHistory',
+  'eth_gasPrice', 'eth_maxPriorityFeePerGas', 'eth_newFilter',
+  'eth_newBlockFilter', 'eth_getFilterChanges', 'eth_uninstallFilter',
+  'eth_sendRawTransaction', 'eth_syncing',
+];
 
 /** Wallet capabilities advertised to dApps. */
 function buildCapabilities(): Capabilities {
@@ -58,15 +75,20 @@ function buildCapabilities(): Capabilities {
       'wallet_signTypedData',
       'wallet_switchChain',
       'wallet_sendCalls',
+      'wallet_getCallsStatus',
+      ...READ_ONLY_RPC_METHODS,
     ],
     events: ['accountsChanged', 'chainChanged', 'disconnect'],
     chains,
     version: { evm: 1 },
     rpcUrls,
     walletCapabilities,
-    // Safe Proxy runtime bytecode — tells the extension this is a smart
-    // contract wallet so dApps get non-empty eth_getCode even before deployment.
-    contractBytecode: '0x608060405234801561001057600080fd5b506040516101e63803806101e68339818101604052810190610032919061011f565b600173ffffffffffffffffffffffffffffffffffffffff163073ffffffffffffffffffffffffffffffffffffffff16036100a0576040517f08c379a000000000000000000000000000000000000000000000000000000000815260040161009790610203565b60405180910390fd5b60005b7f360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc5af43d82803e903d91602b57fd5bf3',
+    // Safe v1.4.1 SafeProxy *runtime* bytecode — what eth_getCode returns once
+    // deployed, and identical for every proxy from this factory (the singleton
+    // lives in storage slot 0, not in the code). Sent so the extension/SDK can
+    // answer eth_getCode with non-empty code for a counterfactual account, so
+    // dApps detect a smart contract wallet (EIP-1271) instead of an EOA.
+    contractBytecode: SAFE_PROXY_RUNTIME_CODE,
   };
 }
 

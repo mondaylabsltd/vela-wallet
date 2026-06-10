@@ -12,6 +12,7 @@ import * as PublicKeyIndex from '@/services/public-key-index';
 import { rpcCall } from '@/services/rpc-adapter';
 import { sendContractCall, sendNative, buildEip1271Signature, extractClientDataFields, computeSafeMessageHash } from '@/services/safe-transaction';
 import { findAccountByCredentialId } from '@/services/storage';
+import { SAFE_PROXY_RUNTIME_CODE } from '@/services/safe-address';
 import { getAllNetworksSync } from '@/models/network';
 
 export interface DAppRequest {
@@ -29,7 +30,7 @@ const UNSUPPORTED_CHAIN_ERROR_CODE = 4902; // EIP-3085: unrecognized chain ID
  * Resolve the effective chain ID from request context.
  * Priority: request-embedded chainId > fallback (component-level chainId).
  */
-function resolveChainId(fallback: number, ...candidates: (string | number | undefined | null)[]): number {
+export function resolveChainId(fallback: number, ...candidates: (string | number | undefined | null)[]): number {
   for (const c of candidates) {
     if (c == null) continue;
     const n = typeof c === 'string'
@@ -44,7 +45,7 @@ function resolveChainId(fallback: number, ...candidates: (string | number | unde
  * Assert the wallet supports the given chain ID.
  * Throws with EIP-3085 error code 4902 if unsupported.
  */
-function assertChainSupported(chainId: number): void {
+export function assertChainSupported(chainId: number): void {
   const supported = getAllNetworksSync().some(n => n.chainId === chainId);
   if (!supported) {
     throw Object.assign(
@@ -52,6 +53,39 @@ function assertChainSupported(chainId: number): void {
       { code: UNSUPPORTED_CHAIN_ERROR_CODE },
     );
   }
+}
+
+/**
+ * Extract an embedded chain ID from a dApp request's params, if present.
+ * Returns undefined when the request carries no chain hint.
+ */
+export function extractRequestChainId(method: string, params: any[]): number | undefined {
+  try {
+    if (method.includes('signTypedData')) {
+      const raw = params[1] ?? params[0];
+      const typed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      const cid = typed?.domain?.chainId;
+      if (cid != null) {
+        const n = typeof cid === 'string'
+          ? (cid.startsWith('0x') ? parseInt(cid, 16) : parseInt(cid, 10))
+          : Number(cid);
+        if (!isNaN(n) && n > 0) return n;
+      }
+    } else if (method === 'eth_sendTransaction') {
+      const tx = params[0] as Record<string, string> | undefined;
+      if (tx?.chainId) {
+        const n = tx.chainId.startsWith('0x') ? parseInt(tx.chainId, 16) : parseInt(tx.chainId, 10);
+        if (!isNaN(n) && n > 0) return n;
+      }
+    } else if (method === 'wallet_sendCalls') {
+      const payload = params[0] as { chainId?: string } | undefined;
+      if (payload?.chainId) {
+        const n = payload.chainId.startsWith('0x') ? parseInt(payload.chainId, 16) : parseInt(payload.chainId, 10);
+        if (!isNaN(n) && n > 0) return n;
+      }
+    }
+  } catch { /* malformed params — ignore */ }
+  return undefined;
 }
 
 /**
@@ -135,6 +169,7 @@ export async function handleSendTransaction(
   account: Account,
   safeAddress: string,
   chainId: number,
+  maxFeeOverride?: bigint,
 ): Promise<string> {
   const txDict = request.params[0] as Record<string, string>;
   const effectiveChainId = resolveChainId(chainId, txDict.chainId);
@@ -179,10 +214,10 @@ export async function handleSendTransaction(
 
   let txResult;
   if (dataHex === '0x' || dataHex === '') {
-    txResult = await sendNative(safeAddress, to, valueClean, effectiveChainId, publicKeyHex, signFn);
+    txResult = await sendNative(safeAddress, to, valueClean, effectiveChainId, publicKeyHex, signFn, maxFeeOverride);
   } else {
     const txData = fromHex(stripHexPrefix(dataHex));
-    txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn);
+    txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn, maxFeeOverride);
   }
 
   return await txResult.waitForTxHash();
@@ -218,11 +253,12 @@ export async function handleDAppRequest(
   account: Account,
   safeAddress: string,
   chainId: number,
+  maxFeeOverride?: bigint,
 ): Promise<any> {
   const { method } = request;
 
   if (method === 'eth_sendTransaction') {
-    return handleSendTransaction(request, account, safeAddress, chainId);
+    return handleSendTransaction(request, account, safeAddress, chainId, maxFeeOverride);
   } else if (method === 'wallet_sendCalls') {
     return handleSendCalls(request, account, safeAddress, chainId);
   } else if (method === 'personal_sign') {
@@ -341,6 +377,25 @@ export async function handleReadOnlyRPC(
   address: string,
   chainId: number,
 ): Promise<{ handled: true; result: any } | { handled: false }> {
+  // Counterfactual smart-account override: when a dApp queries eth_getCode for
+  // THIS wallet's own address and the Safe proxy isn't deployed yet (real code
+  // is empty), return the Safe proxy runtime bytecode so the dApp detects a
+  // smart contract wallet (EIP-1271) instead of an EOA. Other addresses pass
+  // through to the normal RPC forward below.
+  if (method === 'eth_getCode') {
+    const target = (params?.[0] as string | undefined)?.toLowerCase();
+    if (target && address && target === address.toLowerCase()) {
+      try {
+        const res = await rpcCall('eth_getCode', params ?? [target, 'latest'], chainId);
+        const code = res.result as string | undefined;
+        if (code && code !== '0x' && code.length > 2) {
+          return { handled: true, result: code };
+        }
+      } catch { /* fall through to runtime code */ }
+      return { handled: true, result: SAFE_PROXY_RUNTIME_CODE };
+    }
+  }
+
   switch (method) {
     case 'eth_accounts':
     case 'eth_requestAccounts':
@@ -349,11 +404,48 @@ export async function handleReadOnlyRPC(
       return { handled: true, result: '0x' + chainId.toString(16) };
     case 'net_version':
       return { handled: true, result: String(chainId) };
+    // EIP-2255 compatibility shims — not protocol methods (the WalletPair
+    // pairing IS the authorization), but kept so dApps that call them don't
+    // break. Not advertised in capabilities.methods.
     case 'wallet_getPermissions':
     case 'wallet_requestPermissions':
       return { handled: true, result: [{ parentCapability: 'eth_accounts' }] };
     case 'wallet_addEthereumChain':
       return { handled: true, result: null };
+    // EIP-5792: poll the status of a prior wallet_sendCalls batch by its ID
+    // (the tx hash returned from handleSendCalls).
+    case 'wallet_getCallsStatus': {
+      const id = params?.[0] as string | undefined;
+      const hexChain = '0x' + chainId.toString(16);
+      const pending = { version: '2.0.0', id: id ?? '0x', chainId: hexChain, status: 100, atomic: true, receipts: [] };
+      if (!id) return { handled: true, result: pending };
+      try {
+        const res = await rpcCall('eth_getTransactionReceipt', [id], chainId);
+        const receipt = res.result as {
+          status?: string; logs?: unknown[]; blockHash?: string;
+          blockNumber?: string; gasUsed?: string; transactionHash?: string;
+        } | null;
+        if (!receipt) return { handled: true, result: pending }; // not mined yet
+        const ok = receipt.status === '0x1';
+        return { handled: true, result: {
+          version: '2.0.0',
+          id,
+          chainId: hexChain,
+          status: ok ? 200 : 500, // 200 = confirmed, 500 = reverted
+          atomic: true,
+          receipts: [{
+            logs: receipt.logs ?? [],
+            status: receipt.status ?? '0x0',
+            blockHash: receipt.blockHash,
+            blockNumber: receipt.blockNumber,
+            gasUsed: receipt.gasUsed,
+            transactionHash: receipt.transactionHash ?? id,
+          }],
+        } };
+      } catch {
+        return { handled: true, result: pending };
+      }
+    }
     default:
       // Try forwarding as RPC query
       if (!isSigningMethod(method)) {

@@ -31,6 +31,28 @@ export const MULTI_SEND = '0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526';
 export const PROXY_CREATION_CODE =
   '608060405234801561001057600080fd5b506040516101e63803806101e68339818101604052602081101561003357600080fd5b8101908080519060200190929190505050600073ffffffffffffffffffffffffffffffffffffffff168173ffffffffffffffffffffffffffffffffffffffff1614156100ca576040517f08c379a00000000000000000000000000000000000000000000000000000000081526004018080602001828103825260228152602001806101c46022913960400191505060405180910390fd5b806000806101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff1602179055505060ab806101196000396000f3fe608060405273ffffffffffffffffffffffffffffffffffffffff600054167fa619486e0000000000000000000000000000000000000000000000000000000060003514156050578060005260206000f35b3660008037600080366000845af43d6000803e60008114156070573d6000fd5b3d6000f3fea264697066735822122003d1488ee65e08fa41e58e888a9865554c535f2c77126a82cb4c0f917f31441364736f6c63430007060033496e76616c69642073696e676c65746f6e20616464726573732070726f7669646564';
 
+/**
+ * Deployed (runtime) bytecode of a Safe v1.4.1 SafeProxy — what `eth_getCode`
+ * returns once the account is on-chain. It is IDENTICAL for every proxy from
+ * this factory: the proxy reads its singleton from storage slot 0 at call time
+ * (`sload(0)`), so the singleton address is NOT embedded in the code. Only
+ * storage differs between accounts, not the runtime code.
+ *
+ * Derived from PROXY_CREATION_CODE rather than hardcoded separately, so the two
+ * can never drift: the constructor ends with `…6000396000f3fe` (CODECOPY; RETURN;
+ * INVALID separator) and returns the following 0xab (171) bytes as runtime.
+ *
+ * Used to answer `eth_getCode` for a counterfactual (not-yet-deployed) Vela
+ * account with non-empty code, so dApps detect it as a smart contract wallet
+ * (EIP-1271) instead of an EOA.
+ */
+const _PROXY_RUNTIME_SEPARATOR = '6000396000f3fe';
+const _PROXY_RUNTIME_LEN_BYTES = 0xab; // declared by the constructor's `PUSH1 0xab`
+export const SAFE_PROXY_RUNTIME_CODE: string = (() => {
+  const start = PROXY_CREATION_CODE.indexOf(_PROXY_RUNTIME_SEPARATOR) + _PROXY_RUNTIME_SEPARATOR.length;
+  return '0x' + PROXY_CREATION_CODE.slice(start, start + _PROXY_RUNTIME_LEN_BYTES * 2);
+})();
+
 // MARK: - Parse Public Key
 
 /** Parse uncompressed P-256 public key hex into x, y coordinates (32 bytes each). */

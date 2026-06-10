@@ -16,7 +16,7 @@ jest.mock('@/modules/cloud-sync', () => ({
 }));
 jest.mock('@/modules/passkey', () => ({}));
 
-import { isSigningMethod } from '@/hooks/use-dapp-signing';
+import { isSigningMethod, extractRequestChainId, resolveChainId } from '@/hooks/use-dapp-signing';
 import { keccak256 } from '@/services/eth-crypto';
 import { fromHex, toHex } from '@/services/hex';
 
@@ -55,6 +55,72 @@ describe('dapp-signing', () => {
       expect(isSigningMethod('eth_getBalance')).toBe(false);
       expect(isSigningMethod('eth_blockNumber')).toBe(false);
       expect(isSigningMethod('net_version')).toBe(false);
+    });
+  });
+
+  describe('extractRequestChainId', () => {
+    test('extracts chainId from eth_signTypedData_v4 domain', () => {
+      const typedData = {
+        domain: { name: 'Permit2', chainId: 137, verifyingContract: '0x000000000022D473030F116dDEE9F6B43aC78BA3' },
+        types: { PermitSingle: [] },
+        primaryType: 'PermitSingle',
+        message: {},
+      };
+      expect(extractRequestChainId('eth_signTypedData_v4', ['0xaddr', typedData])).toBe(137);
+    });
+
+    test('extracts chainId from stringified typed data', () => {
+      const typedData = JSON.stringify({
+        domain: { chainId: 42161 },
+        types: {},
+        primaryType: 'Test',
+        message: {},
+      });
+      expect(extractRequestChainId('eth_signTypedData_v4', ['0xaddr', typedData])).toBe(42161);
+    });
+
+    test('extracts hex chainId from eth_sendTransaction', () => {
+      expect(extractRequestChainId('eth_sendTransaction', [{ to: '0x1', chainId: '0x89' }])).toBe(137);
+    });
+
+    test('extracts hex chainId from wallet_sendCalls', () => {
+      expect(extractRequestChainId('wallet_sendCalls', [{ calls: [], chainId: '0xa4b1' }])).toBe(42161);
+    });
+
+    test('returns undefined for personal_sign (no embedded chain)', () => {
+      expect(extractRequestChainId('personal_sign', ['0xdeadbeef', '0xaddr'])).toBeUndefined();
+    });
+
+    test('returns undefined for read-only methods', () => {
+      expect(extractRequestChainId('eth_call', [{ to: '0x1' }])).toBeUndefined();
+    });
+
+    test('returns undefined for missing/malformed params', () => {
+      expect(extractRequestChainId('eth_signTypedData_v4', [])).toBeUndefined();
+      expect(extractRequestChainId('eth_sendTransaction', [{}])).toBeUndefined();
+    });
+
+    test('handles string chainId in typed data domain', () => {
+      const typedData = { domain: { chainId: '0x89' }, types: {}, primaryType: 'Test', message: {} };
+      expect(extractRequestChainId('eth_signTypedData_v4', ['0xaddr', typedData])).toBe(137);
+    });
+  });
+
+  describe('resolveChainId', () => {
+    test('returns first valid candidate over fallback', () => {
+      expect(resolveChainId(1, 137)).toBe(137);
+    });
+
+    test('parses hex string candidates', () => {
+      expect(resolveChainId(1, '0x89')).toBe(137);
+    });
+
+    test('skips null/undefined candidates', () => {
+      expect(resolveChainId(1, undefined, null, 42161)).toBe(42161);
+    });
+
+    test('returns fallback when no valid candidates', () => {
+      expect(resolveChainId(1, undefined, null)).toBe(1);
     });
   });
 

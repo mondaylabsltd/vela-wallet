@@ -21,16 +21,21 @@ import { VelaButton } from '@/components/ui/VelaButton';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet } from '@/models/wallet-state';
 import { shortAddr } from '@/models/types';
-import { chainName, nativeSymbol } from '@/models/network';
+import { chainName, nativeSymbol, DEFAULT_NETWORKS } from '@/models/network';
 import {
   resolveTransaction, resolveTypedData,
   type ClearSignResult, type ClearSignField, type SigningRisk,
 } from '@/services/clear-signing';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
+import { GasFeeCard } from '@/components/ui/GasFeeCard';
 import { ChainLogo } from '@/components/ChainLogo';
 import { TokenLogo } from '@/components/TokenLogo';
-import { DEFAULT_NETWORKS } from '@/models/network';
+import {
+  estimateTransactionFee,
+  type GasTier,
+  type TransactionFeeEstimate,
+} from '@/services/safe-transaction';
 import {
   Shield, AlertTriangle, Copy, ChevronDown, Check,
   ArrowDown, ShieldAlert, ShieldCheck, Pen,
@@ -72,9 +77,19 @@ export function SigningRequestModal() {
   const [clearSign, setClearSign] = useState<ClearSignResult | null>(null);
   const [resolving, setResolving] = useState(false);
 
-  // Resolve clear signing when a new request comes in
+  // Gas estimation state (for eth_sendTransaction only)
+  const [gasTier, setGasTier] = useState<GasTier>('standard');
+  const [feeEstimate, setFeeEstimate] = useState<TransactionFeeEstimate | null>(null);
+  const [estimatingGas, setEstimatingGas] = useState(false);
+
+  // Resolve clear signing + estimate gas when a new request comes in
   useEffect(() => {
-    if (!incomingRequest) { setClearSign(null); return; }
+    if (!incomingRequest) {
+      setClearSign(null);
+      setFeeEstimate(null);
+      setGasTier('standard');
+      return;
+    }
 
     const { method, params } = incomingRequest;
 
@@ -84,6 +99,15 @@ export function SigningRequestModal() {
         .then(setClearSign)
         .catch(() => setClearSign(null))
         .finally(() => setResolving(false));
+
+      // Estimate gas fee in parallel
+      if (activeAccount?.address) {
+        setEstimatingGas(true);
+        estimateTransactionFee(activeAccount.address, chainId, 'standard')
+          .then(setFeeEstimate)
+          .catch(() => setFeeEstimate(null))
+          .finally(() => setEstimatingGas(false));
+      }
     } else if (method.includes('signTypedData') && params) {
       setResolving(true);
       const typedDataRaw = params[1] ?? params[0];
@@ -100,7 +124,7 @@ export function SigningRequestModal() {
     } else {
       setClearSign(null);
     }
-  }, [incomingRequest, chainId]);
+  }, [incomingRequest, chainId, activeAccount?.address]);
 
   if (!incomingRequest) return null;
 

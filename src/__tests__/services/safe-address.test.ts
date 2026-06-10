@@ -2,7 +2,7 @@
  * Tests for Safe address computation.
  * Test vectors match iOS SafeAddressTests.swift and Android SafeAddressComputerTest.kt.
  */
-import { computeAddress, parsePublicKey, calculateSaltNonce, encodeSetupData } from '@/services/safe-address';
+import { computeAddress, parsePublicKey, calculateSaltNonce, encodeSetupData, SAFE_PROXY_RUNTIME_CODE, PROXY_CREATION_CODE } from '@/services/safe-address';
 import { keccak256 } from '@/services/eth-crypto';
 import { toHex } from '@/services/hex';
 
@@ -107,5 +107,43 @@ describe('computeAddress', () => {
     const addr1 = computeAddress(TEST_PUBLIC_KEY);
     const addr2 = computeAddress('0x' + TEST_PUBLIC_KEY);
     expect(addr1).toBe(addr2);
+  });
+});
+
+describe('SAFE_PROXY_RUNTIME_CODE', () => {
+  test('is a 0x-prefixed hex string', () => {
+    expect(SAFE_PROXY_RUNTIME_CODE.startsWith('0x')).toBe(true);
+    expect(/^0x[0-9a-f]+$/.test(SAFE_PROXY_RUNTIME_CODE)).toBe(true);
+  });
+
+  test('is exactly 0xab (171) bytes — the length the proxy constructor returns', () => {
+    const byteLen = (SAFE_PROXY_RUNTIME_CODE.length - 2) / 2;
+    expect(byteLen).toBe(0xab);
+    expect(byteLen).toBe(171);
+  });
+
+  test('is the runtime region of PROXY_CREATION_CODE (after the constructor RETURN)', () => {
+    // Constructor ends with `...6000396000f3fe` (CODECOPY; RETURN; INVALID),
+    // then the runtime it returns, then the baked-in revert string.
+    const sep = '6000396000f3fe';
+    const start = PROXY_CREATION_CODE.indexOf(sep) + sep.length;
+    const expected = '0x' + PROXY_CREATION_CODE.slice(start, start + 0xab * 2);
+    expect(SAFE_PROXY_RUNTIME_CODE).toBe(expected);
+  });
+
+  test('looks like a Safe proxy runtime, not creation code', () => {
+    // Runtime starts with the proxy preamble that loads the singleton from slot 0.
+    expect(SAFE_PROXY_RUNTIME_CODE.startsWith('0x608060405273')).toBe(true);
+    // Ends at the Solidity metadata terminator…
+    expect(SAFE_PROXY_RUNTIME_CODE.endsWith('0033')).toBe(true);
+    // …and must NOT include the "Invalid singleton address provided" revert
+    // string that lives only in the creation code.
+    const errString = Buffer.from('Invalid singleton address provided', 'utf8').toString('hex');
+    expect(SAFE_PROXY_RUNTIME_CODE.includes(errString)).toBe(false);
+  });
+
+  test('is non-empty so eth_getCode marks a counterfactual account as a contract', () => {
+    expect(SAFE_PROXY_RUNTIME_CODE).not.toBe('0x');
+    expect(SAFE_PROXY_RUNTIME_CODE.length).toBeGreaterThan(2);
   });
 });

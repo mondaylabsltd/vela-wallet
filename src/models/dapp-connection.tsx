@@ -23,7 +23,7 @@ import {
   WalletPairTransport,
   clearWalletPairSession,
 } from '@/services/walletpair-transport';
-import { isSigningMethod, handleDAppRequest, handleReadOnlyRPC } from '@/hooks/use-dapp-signing';
+import { isSigningMethod, handleDAppRequest, handleReadOnlyRPC, extractRequestChainId, assertChainSupported } from '@/hooks/use-dapp-signing';
 import { PasskeyErrorCode } from '@/modules/passkey';
 import { saveTransaction } from '@/services/storage';
 import { nativeSymbol } from '@/models/network';
@@ -96,8 +96,8 @@ interface DAppConnectionContextValue {
   cancelFingerprint: () => void;
   /** Disconnect from the current bridge. */
   disconnectBridge: () => void;
-  /** Approve the current incoming request. */
-  approveRequest: () => Promise<void>;
+  /** Approve the current incoming request. Optional maxFeePerGas from gas tier selector. */
+  approveRequest: (maxFeeOverride?: bigint) => Promise<void>;
   /** Reject the current incoming request. */
   rejectRequest: () => void;
   /** Dismiss the modal after an error (response already sent). */
@@ -195,6 +195,23 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     const cid = chainIdRef.current;
 
     if (isSigningMethod(method)) {
+      // Extract chain ID embedded in the request (e.g. typedData.domain.chainId, tx.chainId)
+      const requestChainId = extractRequestChainId(method, params);
+      if (requestChainId != null && requestChainId !== chainIdRef.current) {
+        try {
+          assertChainSupported(requestChainId);
+        } catch (err: any) {
+          // Wallet doesn't support this chain — reject immediately
+          transportRef.current?.sendResponse(id, undefined, {
+            code: err.code ?? 4902,
+            message: err.message ?? `Unsupported chain: ${requestChainId}`,
+          });
+          return;
+        }
+        // Auto-switch wallet chain to match request
+        chainIdRef.current = requestChainId;
+        setChainId(requestChainId);
+      }
       setIncomingRequest({ id, method, params, origin });
       return;
     }
@@ -203,7 +220,19 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       const cp = params?.[0] as { chainId?: string } | undefined;
       if (cp?.chainId) {
         const nc = parseInt(cp.chainId, 16);
-        if (!isNaN(nc)) { chainIdRef.current = nc; setChainId(nc); }
+        if (!isNaN(nc)) {
+          try {
+            assertChainSupported(nc);
+          } catch (err: any) {
+            transportRef.current?.sendResponse(id, undefined, {
+              code: err.code ?? 4902,
+              message: err.message ?? `Unsupported chain: ${nc}`,
+            });
+            return;
+          }
+          chainIdRef.current = nc;
+          setChainId(nc);
+        }
       }
       transportRef.current?.sendResponse(id, null);
       return;
@@ -366,7 +395,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   }, [disconnectCurrent]);
 
   // --- Approve ---
-  const approveRequest = useCallback(async () => {
+  const approveRequest = useCallback(async (maxFeeOverride?: bigint) => {
     const request = incomingRequest;
     const account = activeAccountRef.current;
     if (!request || !account) return;
@@ -375,7 +404,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     setSignError(null);
     try {
       const cid = chainIdRef.current;
-      const result = await handleDAppRequest(request, account, account.address, cid);
+      const result = await handleDAppRequest(request, account, account.address, cid, maxFeeOverride);
       transportRef.current?.sendResponse(request.id, result);
 
       // Record all dApp signing operations to local history
