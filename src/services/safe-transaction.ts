@@ -381,7 +381,14 @@ async function sendUserOp(
   // Use fetched nonce for deployed wallets, 0 for undeployed
   const nonce: string = deployed ? nonceResult : '0x0';
 
-  const maxFee = maxFeeOverride ?? calcMaxFeePerGas(gasPrices.gasPrice);
+  // Guard: maxFeeOverride is typed bigint, but the type is erased at runtime.
+  // A mis-wired caller (e.g. onPress={approveRequest} passing a gesture event)
+  // could hand us a non-bigint, which would serialize to "0x[object Object]"
+  // and blow up both bundler estimation and the SafeOp hash (BigInt parse).
+  const maxFee =
+    typeof maxFeeOverride === 'bigint'
+      ? maxFeeOverride
+      : calcMaxFeePerGas(gasPrices.gasPrice);
   const maxPriority = maxFee;
 
   // 5. Initial gas estimates

@@ -233,7 +233,7 @@ export function SigningRequestModal() {
               />
               <VelaButton
                 title={buttonLabel()}
-                onPress={approveRequest}
+                onPress={() => approveRequest()}
                 variant={buttonVariant()}
                 loading={isSigning || resolving}
                 disabled={resolving}
