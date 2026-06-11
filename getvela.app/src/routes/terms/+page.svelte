@@ -152,7 +152,7 @@
 		--text: #e8e6e1;
 		--text-secondary: #9a9790;
 		--accent: #e8572a;
-		--max-w: 720px;
+		--max-w: 1200px;
 	}
 
 	nav {
