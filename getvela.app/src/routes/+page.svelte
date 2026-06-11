@@ -617,7 +617,6 @@
 					<p>
 						iOS & Android via App Store and Google Play.
 						Priced by region so it's accessible worldwide.
-						No subscriptions. No in-app purchases.
 					</p>
 				</div>
 				<div class="bm-card">
