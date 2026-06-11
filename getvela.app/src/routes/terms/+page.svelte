@@ -166,7 +166,8 @@
 		border-bottom: 1px solid var(--border);
 	}
 	.nav-inner {
-		max-width: 1080px;
+		/* max-width: 1080px; */
+		max-width: var(--max-w);
 		margin: 0 auto;
 		padding: 0 24px;
 		height: 64px;
