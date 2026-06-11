@@ -1115,6 +1115,79 @@
 			data-rybbit-prop-location="bottom">Create a wallet</a
 		>
 
+		<ul class="notify-cards">
+			<li class="notify-card">
+				<svg
+					width="22"
+					height="22"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					stroke-width="2"
+					><path
+						d="M8 6l-5 6 5 6M16 6l5 6-5 6"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/></svg
+				>
+				<h4>Open source</h4>
+				<p>Every line is on GitHub. Verify, don't trust.</p>
+			</li>
+			<li class="notify-card">
+				<svg
+					width="22"
+					height="22"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					stroke-width="2"
+					><rect x="3" y="4" width="18" height="7" rx="1.5" /><rect
+						x="3"
+						y="13"
+						width="18"
+						height="7"
+						rx="1.5"
+					/><path d="M7 7.5h.01M7 16.5h.01" stroke-linecap="round" /></svg
+				>
+				<h4>Self-hostable</h4>
+				<p>Run your own bundler and services — or compile it all.</p>
+			</li>
+			<li class="notify-card">
+				<svg
+					width="22"
+					height="22"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					stroke-width="2"
+					><path
+						d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.4 5.2A9.7 9.7 0 0112 5c5 0 9 4.5 9 7a11 11 0 01-2.2 3.2M6 6.2A11 11 0 003 12c0 2.5 4 7 9 7 1 0 1.9-.1 2.8-.4"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/></svg
+				>
+				<h4>No tracking</h4>
+				<p>No email, no fingerprinting, no ad networks.</p>
+			</li>
+			<li class="notify-card">
+				<svg
+					width="22"
+					height="22"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					stroke-width="2"
+					><path
+						d="M7 3H5a2 2 0 00-2 2v2M17 3h2a2 2 0 012 2v2M7 21H5a2 2 0 01-2-2v-2M17 21h2a2 2 0 002-2v-2M9 10v1M15 10v1M9.5 15a3.5 3.5 0 005 0"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/></svg
+				>
+				<h4>No seed phrase</h4>
+				<p>Sign with a passkey. Nothing to write down or lose.</p>
+			</li>
+		</ul>
+
 		<div class="notify-divider"><span>mobile apps coming soon</span></div>
 
 		<p class="notify-email-desc">
@@ -1364,7 +1437,41 @@
 	.btn-cta-main {
 		padding: 14px 36px;
 		font-size: 1rem;
-		margin-bottom: 32px;
+		margin-bottom: 40px;
+	}
+	.notify-cards {
+		list-style: none;
+		padding: 0;
+		margin: 16px auto 56px;
+		max-width: 760px;
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 14px;
+		text-align: center;
+	}
+	.notify-card {
+		background: var(--bg-raised);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 36px 18px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 10px;
+	}
+	.notify-card svg {
+		color: var(--accent);
+	}
+	.notify-card h4 {
+		font-size: 0.92rem;
+		font-weight: 600;
+		color: var(--text);
+	}
+	.notify-card p {
+		font-size: 0.78rem;
+		color: var(--text-secondary);
+		line-height: 1.55;
+		margin: 0;
 	}
 
 	/* ── Phone Mockup ── */
@@ -2257,7 +2364,7 @@
 	/* ── Notify ── */
 	.notify {
 		text-align: center;
-		padding: 64px 0 80px;
+		padding: 112px 0 128px;
 	}
 	.notify h2 {
 		margin-bottom: 28px;
@@ -2285,7 +2392,7 @@
 		display: flex;
 		align-items: center;
 		gap: 16px;
-		margin: 24px auto;
+		margin: 48px auto;
 		max-width: 400px;
 	}
 	.notify-divider::before,
@@ -2414,6 +2521,9 @@
 		}
 		.nav-links {
 			display: none;
+		}
+		.notify-cards {
+			grid-template-columns: repeat(2, 1fr);
 		}
 		.notify-social {
 			flex-direction: column;
