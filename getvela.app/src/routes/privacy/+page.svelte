@@ -285,7 +285,8 @@
 		border-top: 1px solid var(--border);
 	}
 	.footer-inner {
-		max-width: 1080px;
+		/* max-width: 1080px; */
+		max-width: var(--max-w);
 		margin: 0 auto;
 		padding: 0 24px;
 		display: flex;
