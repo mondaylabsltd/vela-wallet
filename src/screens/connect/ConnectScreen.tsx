@@ -25,10 +25,12 @@ import { color, text, inter, space, radius, font, createStyles } from '@/constan
 import {
   Radio, QrCode, Shield, AlertTriangle,
   Globe, Zap, Smartphone,
-  ArrowRight, Link, Lock, Fingerprint,
+  ArrowRight, Link, Lock, Fingerprint, X,
 } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
 
 export default function ConnectScreen() {
+  const router = useRouter();
   const { state, activeAccount } = useWallet();
   const {
     status, errorMessage, session, chainId, dappInfo,
@@ -82,8 +84,11 @@ export default function ConnectScreen() {
   return (
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Animated.View entering={fadeIn(0, 300)}>
+        <Animated.View entering={fadeIn(0, 300)} style={styles.pageHeader}>
           <Text style={styles.pageTitle}>Connect</Text>
+          <Pressable onPress={() => router.navigate('/wallet')} hitSlop={8} style={styles.pageClose}>
+            <X size={22} color={color.fg.base} strokeWidth={2} />
+          </Pressable>
         </Animated.View>
 
         {/* ================================================================= */}
@@ -377,12 +382,24 @@ function StepRow({ number, icon, title, subtitle }: {
 
 const styles = createStyles(() => ({
   scrollContent: { paddingBottom: space['5xl'] },
-  pageTitle: {
-    fontSize: text['2xl'],
-    ...inter.bold,
-    color: color.fg.base,
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: space.xl,
     marginBottom: space['2xl'],
+  },
+  pageTitle: {
+    fontSize: text['3xl'],
+    ...inter.bold,
+    color: color.fg.base,
+    letterSpacing: -0.5,
+  },
+  pageClose: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   centered: {
     alignItems: 'center',
@@ -411,7 +428,7 @@ const styles = createStyles(() => ({
     alignItems: 'center', justifyContent: 'center',
   },
   stepContent: { flex: 1, gap: 2 },
-  stepTitle: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
+  stepTitle: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
   stepSubtitle: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
   stepConnector: {
     width: 2, height: 16, marginLeft: 19,

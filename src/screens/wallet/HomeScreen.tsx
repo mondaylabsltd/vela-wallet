@@ -1,81 +1,108 @@
-import { ScreenContainer } from '@/components/ui/ScreenContainer';
-import { TokenRow } from '@/components/ui/TokenRow';
-import { VelaCard } from '@/components/ui/VelaCard';
-import { AppModal } from '@/components/ui/AppModal';
-import { fadeIn, fadeInDown } from '@/constants/entering';
-import { color, createStyles, font, inter, motion, radius, shadow, space, text } from '@/constants/theme';
-import { chainName, getAllNetworksSync } from '@/models/network';
-import type { Network } from '@/models/network';
-import { formatBalance, shortAddr, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
-import { useWallet, shortAddress } from '@/models/wallet-state';
-import { fetchTokens } from '@/services/wallet-api';
-import { saveNetworkConfig } from '@/services/storage';
-import { refreshPool } from '@/services/rpc-pool';
-import { setAccountBalance, getAccountBalances } from '@/services/balance-cache';
-import { showAlert, copyToClipboard, hapticSuccess, isAppActive } from '@/services/platform';
-import { ChainLogo } from '@/components/ChainLogo';
-import { QRScanner } from '@/components/QRScanner';
-import { useDAppConnection } from '@/models/dapp-connection';
-import { isWalletPairURI } from '@/services/walletpair-transport';
-import { parseRemoteInjectURL } from '@/services/dapp-transport';
+/**
+ * HomeScreen (layout A) — payment-first, activity-first single screen.
+ *
+ *   Header:   account selector · voice toggle · settings (gear)
+ *   Balance:  total · hide · currency · Manage Assets → AssetsScreen
+ *   Content:  [ Activity | Connections ] toggle + Network filter
+ *               · Activity   = value-transfer feed (received / sent)
+ *               · Connections = single active dApp connection + its events
+ *   Dock:     Receive · Scan · Send  (WaveDock, full-bleed)
+ *
+ * Incoming payments play a voice announcement + haptic + row glow. The Activity
+ * feed currently uses the interim local-tx adapter; the RPC received-transfer
+ * monitor plugs into the same `ActivityItem` shape later.
+ */
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, Search, X, AlertTriangle, Wifi, RefreshCw, ScanLine } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import {
+  Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, Settings, X,
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
-  useAnimatedProps,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
-  withRepeat,
-  Easing,
-  cancelAnimation,
+  Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { QRScanner } from '@/components/QRScanner';
+import { ActivityRow } from '@/components/ui/ActivityRow';
+import { AppModal } from '@/components/ui/AppModal';
+import { CurrencySheet } from '@/components/ui/CurrencySheet';
+import { NetworkFilterButton, NetworkFilterSheet } from '@/components/ui/NetworkFilterSheet';
+import { TransactionDetailSheet } from '@/components/ui/TransactionDetailSheet';
+import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
+import { VelaCard } from '@/components/ui/VelaCard';
+import { WaveDock } from '@/components/ui/WaveDock';
+
+import { fadeIn, fadeInDown } from '@/constants/entering';
+import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
+import { useDAppConnection } from '@/models/dapp-connection';
+import { getAllNetworksSync, type Network } from '@/models/network';
+import { shortAddr, tokenUsdValue } from '@/models/types';
+import { shortAddress, useWallet } from '@/models/wallet-state';
+import {
+  loadActivityItems, loadActivityTransactions, loadConnectionEvents, relativeTime, syncReceivedTransfers,
+  type ActivityItem, type ConnectionEvent,
+} from '@/services/activity';
+import type { LocalTransaction } from '@/services/storage';
+import { getAccountBalances, setAccountBalance } from '@/services/balance-cache';
+import { CURRENCIES, getCurrencyCode, getRate, loadCurrency, setCurrency } from '@/services/currency';
+import { parseRemoteInjectURL } from '@/services/dapp-transport';
+import { copyToClipboard, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
+import { resolveRecipientIdentity } from '@/services/recipient-identity';
+import { announcePayment, loadVoicePreference } from '@/services/voice';
+import { fetchTokens } from '@/services/wallet-api';
+import { isWalletPairURI } from '@/services/walletpair-transport';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
+const LIVE_POLL_MS = 30 * 1000;
+const DOCK_CLEARANCE = 112;
+
+// ---------------------------------------------------------------------------
+// Animated balance (ported — smoothly tweens between USD values)
+// ---------------------------------------------------------------------------
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
-/**
- * Smoothly animates between USD values instead of snapping.
- * Uses Reanimated's useAnimatedProps to drive a TextInput on the UI thread.
- * On web, useAnimatedProps can't set `text` on inputs, so we fall back to plain Text.
- */
-function AnimatedBalance({ value }: { value: number }) {
-  const fontSize = balanceFontSize(value);
+function fmtMoney(value: number, symbol: string): string {
+  return symbol + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtInt(value: number, symbol: string): string {
+  const full = fmtMoney(value, symbol);
+  const dot = full.indexOf('.');
+  return dot === -1 ? full : full.slice(0, dot);
+}
+function fmtDec(value: number): string {
+  const full = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const dot = full.indexOf('.');
+  return dot === -1 ? '.00' : full.slice(dot);
+}
 
+function AnimatedBalance({ value, symbol }: { value: number; symbol: string }) {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.balanceRow}>
-        <Text style={[styles.balanceInt, { fontSize }]}>{formatUsdInt(value)}</Text>
-        <Text style={[styles.balanceDec, { fontSize: fontSize * 0.58 }]}>{formatUsdDec(value)}</Text>
+        <Text style={styles.balanceInt}>{fmtInt(value, symbol)}</Text>
+        <Text style={styles.balanceDec}>{fmtDec(value)}</Text>
       </View>
     );
   }
-
-  return <AnimatedBalanceNative value={value} fontSize={fontSize} />;
+  return <AnimatedBalanceNative value={value} symbol={symbol} />;
 }
 
-function AnimatedBalanceNative({ value, fontSize }: { value: number; fontSize: number }) {
+function AnimatedBalanceNative({ value, symbol }: { value: number; symbol: string }) {
   const displayed = useSharedValue(value);
-
   useEffect(() => {
-    displayed.value = withTiming(value, {
-      duration: 800,
-      easing: Easing.out(Easing.quad),
-    });
+    displayed.value = withTiming(value, { duration: 800, easing: Easing.out(Easing.quad) });
   }, [value, displayed]);
 
   const intProps = useAnimatedProps(() => {
     'worklet';
     const v = displayed.value;
-    const full = '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const full = symbol + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const dot = full.indexOf('.');
     return { text: dot === -1 ? full : full.slice(0, dot) } as any;
   });
-
   const decProps = useAnimatedProps(() => {
     'worklet';
     const v = displayed.value;
@@ -86,1070 +113,714 @@ function AnimatedBalanceNative({ value, fontSize }: { value: number; fontSize: n
 
   return (
     <View style={styles.balanceRow}>
-      <AnimatedTextInput
-        editable={false}
-        underlineColorAndroid="transparent"
-        style={[styles.balanceInt, { fontSize }]}
-        animatedProps={intProps}
-        defaultValue={formatUsdInt(value)}
-      />
-      <AnimatedTextInput
-        editable={false}
-        underlineColorAndroid="transparent"
-        style={[styles.balanceDec, { fontSize: fontSize * 0.58 }]}
-        animatedProps={decProps}
-        defaultValue={formatUsdDec(value)}
-      />
+      <AnimatedTextInput editable={false} underlineColorAndroid="transparent" style={styles.balanceInt} animatedProps={intProps} defaultValue={fmtInt(value, symbol)} />
+      <AnimatedTextInput editable={false} underlineColorAndroid="transparent" style={styles.balanceDec} animatedProps={decProps} defaultValue={fmtDec(value)} />
     </View>
   );
 }
 
-function formatUsd(value: number): string {
-  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+// ---------------------------------------------------------------------------
+// Screen
+// ---------------------------------------------------------------------------
 
-function formatUsdInt(value: number): string {
-  const full = formatUsd(value);
-  const dot = full.indexOf('.');
-  return dot === -1 ? full : full.slice(0, dot);
-}
-
-function formatUsdDec(value: number): string {
-  const full = formatUsd(value);
-  const dot = full.indexOf('.');
-  return dot === -1 ? '.00' : full.slice(dot);
-}
-
-function balanceFontSize(usd: number): number {
-  const len = formatUsdInt(usd).length;
-  if (len <= 7) return 36;
-  if (len <= 9) return 30;
-  if (len <= 12) return 26;
-  if (len <= 15) return 22;
-  return 18;
-}
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-function ActionButton({ label, icon: Icon, onPress, accent }: { label: string; icon: React.ComponentType<any>; onPress: () => void; accent?: boolean }) {
-  const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  return (
-    <AnimatedPressable
-      style={[styles.actionBtn, accent && styles.actionBtnAccent, animatedStyle]}
-      onPress={onPress}
-      onPressIn={() => { scale.value = withSpring(0.95, motion.spring); }}
-      onPressOut={() => { scale.value = withSpring(1, motion.spring); }}
-    >
-      <View style={[styles.actionIconWrap, accent && styles.actionIconWrapAccent]}>
-        <Icon size={18} color={accent ? color.fg.inverse : color.fg.base} strokeWidth={2.5} />
-      </View>
-      <Text style={[styles.actionLabel, accent && styles.actionLabelAccent]}>{label}</Text>
-    </AnimatedPressable>
-  );
-}
+type Tab = 'activity' | 'connections';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { activeAccount, state, dispatch } = useWallet();
-  const { connectToWalletPair, connectToBridge } = useDAppConnection();
-
-  const [tokens, setTokens] = useState<APIToken[]>([]);
-  const [allTokens, setAllTokens] = useState<APIToken[]>([]);
-  const [showZeroBalance, setShowZeroBalance] = useState(false);
-  const [debugBalance, setDebugBalance] = useState<number | null>(null);
-  const [showScanner, setShowScanner] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  // Spinning refresh icon for web
-  const spinRotation = useSharedValue(0);
-  useEffect(() => {
-    if (refreshing) {
-      spinRotation.value = 0;
-      spinRotation.value = withRepeat(
-        withTiming(360, { duration: 800, easing: Easing.linear }),
-        -1,
-      );
-    } else {
-      cancelAnimation(spinRotation);
-      spinRotation.value = withTiming(0, { duration: 200 });
-    }
-  }, [refreshing, spinRotation]);
-  const spinStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${spinRotation.value}deg` }],
-  }));
-
-  // Web pull-to-refresh state
-  const flatListRef = useRef<FlatList>(null);
-  const pullStartY = useRef<number | null>(null);
-  const pullDistanceRef = useRef(0);
-  const [pullDistance, setPullDistance] = useState(0);
-  const PULL_THRESHOLD = 60;
-
-  const loadInFlightRef = useRef(false);
-  const [failedChainIds, setFailedChainIds] = useState<number[]>([]);
-  const [rpcFixChainId, setRpcFixChainId] = useState<number | null>(null);
-  const [rpcFixUrl, setRpcFixUrl] = useState('');
-  const [rpcFixSaving, setRpcFixSaving] = useState(false);
+  const conn = useDAppConnection();
+  const { connectToWalletPair, connectToBridge } = conn;
 
   const address = activeAccount?.address ?? state.address;
   const accountName = activeAccount?.name ?? 'Wallet';
 
-  const loadTokens = useCallback(async (silent = false, forceRefresh = false) => {
-    if (!address) {
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-    if (loadInFlightRef.current) {
-      if (!silent) setRefreshing(false);
-      return;
-    }
-    loadInFlightRef.current = true;
-    if (!silent) setLoading(true);
+  const [tab, setTab] = useState<Tab>('activity');
+  const [totalUsd, setTotalUsd] = useState(0);
+  const [hidden, setHidden] = useState(false);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [connEvents, setConnEvents] = useState<ConnectionEvent[]>([]);
+  const [selectedChainId, setSelectedChainId] = useState<number | null>(null);
+  const [showNetSheet, setShowNetSheet] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
+  const [showSwitcher, setShowSwitcher] = useState(false);
+  const [cachedBalances, setCachedBalances] = useState<Map<string, number>>(new Map());
+  const [newItemId, setNewItemId] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<{ amount: string; token: string } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [currencyCode, setCurrencyCode] = useState(getCurrencyCode());
+  const [rate, setRate] = useState(1);
+  const [showCurrency, setShowCurrency] = useState(false);
+  const [aliasMap, setAliasMap] = useState<Map<string, string>>(new Map());
+  const aliasAttempted = useRef<Set<string>>(new Set());
+  const [detailTx, setDetailTx] = useState<LocalTransaction | null>(null);
+  const txByIdRef = useRef<Map<string, LocalTransaction>>(new Map());
+  const insets = useSafeAreaInsets();
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadDataRef = useRef<(() => Promise<void>) | null>(null);
+
+  // Balance "money in" pulse (cross-platform via shared value).
+  const balancePulse = useSharedValue(0);
+  const balanceScaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + balancePulse.value * 0.03 }] }));
+  const balanceRingStyle = useAnimatedStyle(() => ({ opacity: balancePulse.value }));
+
+  // "Live" indicator pulse.
+  const livePulse = useSharedValue(1);
+  useEffect(() => { livePulse.value = withRepeat(withTiming(0.3, { duration: 850, easing: Easing.inOut(Easing.quad) }), -1, true); }, [livePulse]);
+  const liveDotStyle = useAnimatedStyle(() => ({ opacity: livePulse.value }));
+
+  const networks = useMemo(() => getAllNetworksSync(), []);
+  const selectedNetwork = selectedChainId != null ? networks.find((n) => n.chainId === selectedChainId) ?? null : null;
+  const connected = conn.status === 'connected' || conn.status === 'reconnecting';
+  const currency = CURRENCIES.find((c) => c.code === currencyCode) ?? CURRENCIES[0];
+
+  // --- load voice + currency preferences once ---
+  useEffect(() => { loadVoicePreference(); }, []);
+  useEffect(() => {
+    loadCurrency().then((code) => { setCurrencyCode(code); getRate(code).then(setRate); });
+  }, []);
+
+  const pickCurrency = useCallback(async (code: string) => {
+    await setCurrency(code);
+    setCurrencyCode(code);
+    setRate(await getRate(code));
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadDataRef.current?.(); } finally { setRefreshing(false); }
+  }, []);
+
+  // Full "money in" feedback: row glow + haptic + voice + toast + balance pulse.
+  const celebrateReceipt = useCallback((item: ActivityItem) => {
+    setNewItemId(item.id);
+    hapticSuccess();
+    const amt = item.amount.replace(/^[+\-]/, '').split(' ')[0] ?? '';
+    announcePayment(amt, item.token);
+    setReceipt({ amount: item.amount.replace(/^\+/, ''), token: item.token });
+    balancePulse.value = withSequence(
+      withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) }),
+      withTiming(0, { duration: 1000 }),
+    );
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setReceipt(null), 2800);
+  }, [balancePulse]);
+
+  // Dev helper (web): call `velaSimulateReceipt(100, 'USDT')` in the console to
+  // feel the full "money in" effect (toast + balance pulse + row glow + voice).
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    (globalThis as any).velaSimulateReceipt = (amount: number | string = 1, token = 'USDT') => {
+      const item: ActivityItem = {
+        id: `sim-${Date.now()}`,
+        direction: 'in',
+        title: 'Received',
+        subtitle: 'from 0xSIMULATED…test',
+        amount: `+${amount} ${token}`,
+        usd: `$${Number(amount).toFixed(2)}`,
+        token,
+        chainId: 137,
+        timestamp: Math.floor(Date.now() / 1000),
+      };
+      setActivity((prev) => [item, ...prev]);
+      celebrateReceipt(item);
+      return `simulated +${amount} ${token}`;
+    };
+  }, [celebrateReceipt]);
+
+  // --- data loading ---
+  const initializedRef = useRef(false);
+  const loadData = useCallback(async () => {
+    if (!address) return;
     try {
-      const result = await fetchTokens(address, {
-        forceRefresh,
-        onProgress: (partial) => {
-          // Merge: replace tokens from chains that have new data,
-          // keep old tokens from chains that haven't responded yet.
-          // This prevents the total from dropping to zero during refresh.
-          setTokens(prev => {
-            const freshChains = new Set(partial.map(t => tokenChainId(t)));
-            const kept = prev.filter(t => !freshChains.has(tokenChainId(t)));
-            return [...kept, ...partial].sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
-          });
-          setLoading(false);
-        },
-        onFailedChains: (ids) => setFailedChainIds(ids),
-      });
-      setTokens(result);
-      // Fetch all tokens (including zero balance) for hidden count
-      fetchTokens(address, { includeZeroBalance: true }).then(all => setAllTokens(all)).catch(() => {});
-      // Cache total USD for this account
-      const usd = result.reduce((s, t) => s + tokenUsdValue(t), 0);
-      setAccountBalance(address, usd);
-    } catch (err) {
-      if (!silent) {
-        showAlert('Error', 'Failed to load token balances.');
+      // Discover + persist new receipts first; newCount > 0 means a real new one.
+      const newCount = await syncReceivedTransfers(address).catch(() => 0);
+      const [items, events, rawTxs] = await Promise.all([
+        loadActivityItems(address),
+        loadConnectionEvents(address),
+        loadActivityTransactions(address),
+      ]);
+
+      // Skip the initial load (don't celebrate the existing backlog).
+      const newestIn = items.find((i) => i.direction === 'in');
+      if (initializedRef.current && newCount > 0 && newestIn) {
+        celebrateReceipt(newestIn);
       }
-    } finally {
-      loadInFlightRef.current = false;
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [address]);
+      initializedRef.current = true;
+
+      txByIdRef.current = new Map(rawTxs.map((t) => [t.id, t]));
+      setActivity(items);
+      setConnEvents(events);
+    } catch { /* ignore */ }
+
+    try {
+      const result = await fetchTokens(address);
+      const usd = result.reduce((s, t) => s + tokenUsdValue(t), 0);
+      setTotalUsd(usd);
+      setAccountBalance(address, usd);
+    } catch { /* ignore */ }
+  }, [address, celebrateReceipt]);
+  loadDataRef.current = loadData;
 
   useFocusEffect(useCallback(() => {
-    loadTokens();
-    const timer = setInterval(() => {
-      if (isAppActive()) {
-        loadTokens(true);
-      }
-    }, AUTO_REFRESH_MS);
+    loadData();
+    const timer = setInterval(() => { if (isAppActive()) loadData(); }, AUTO_REFRESH_MS);
     return () => clearInterval(timer);
-  }, [loadTokens]));
+  }, [loadData]));
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadTokens(false, true);
-  }, [loadTokens]);
-
-  // Web pull-to-refresh: attach native DOM touch listeners
+  // Near-real-time payment monitoring while viewing Activity (incremental scans
+  // are cheap — they only fetch logs since the last checkpoint).
   useEffect(() => {
-    if (Platform.OS !== 'web' || !flatListRef.current) return;
-    const node = (flatListRef.current as any)?.getScrollableNode?.()
-      ?? (flatListRef.current as any)?._listRef?._scrollRef
-      ?? (flatListRef.current as any);
-    const el: HTMLElement | null = node instanceof HTMLElement ? node : null;
-    if (!el) return;
+    if (tab !== 'activity') return;
+    const timer = setInterval(() => { if (isAppActive()) loadData(); }, LIVE_POLL_MS);
+    return () => clearInterval(timer);
+  }, [tab, loadData]);
 
-    const getScrollTop = () => {
-      let target: HTMLElement | null = el;
-      while (target) {
-        if (target.scrollHeight > target.clientHeight) return target.scrollTop;
-        target = target.parentElement;
+  // Reset incoming-detection when the active account changes.
+  useEffect(() => { initializedRef.current = false; setNewItemId(null); setReceipt(null); }, [address]);
+
+  // Resolve counterparty names (own accounts → ENS/.bnb/Vela/etc.), best-effort + cached.
+  useEffect(() => {
+    const pending = [...new Set(
+      activity.filter((a) => a.address && !a.alias).map((a) => a.address!.toLowerCase()),
+    )].filter((a) => !aliasAttempted.current.has(a));
+    if (pending.length === 0) return;
+    pending.forEach((a) => aliasAttempted.current.add(a));
+
+    let cancelled = false;
+    (async () => {
+      const resolved: [string, string][] = [];
+      for (const addr of pending) {
+        const own = state.accounts.find((ac) => ac.address.toLowerCase() === addr);
+        if (own) { resolved.push([addr, own.name]); continue; }
+        try {
+          const id = await resolveRecipientIdentity(addr);
+          if (id?.name) resolved.push([addr, id.name]);
+        } catch { /* ignore */ }
       }
-      return 0;
-    };
-
-    const handleTouchStart = (e: TouchEvent) => {
-      if (getScrollTop() <= 0) {
-        pullStartY.current = e.touches[0].clientY;
+      if (!cancelled && resolved.length) {
+        setAliasMap((prev) => {
+          const next = new Map(prev);
+          resolved.forEach(([k, v]) => next.set(k, v));
+          return next;
+        });
       }
-    };
-    const handleTouchMove = (e: TouchEvent) => {
-      if (pullStartY.current === null) return;
-      const dist = Math.max(0, (e.touches[0].clientY - pullStartY.current) * 0.5);
-      pullDistanceRef.current = dist;
-      setPullDistance(dist);
-    };
-    const handleTouchEnd = () => {
-      if (pullDistanceRef.current >= PULL_THRESHOLD) {
-        onRefresh();
-      }
-      pullStartY.current = null;
-      pullDistanceRef.current = 0;
-      setPullDistance(0);
-    };
+    })();
+    return () => { cancelled = true; };
+  }, [activity, state.accounts]);
 
-    el.addEventListener('touchstart', handleTouchStart, { passive: true });
-    el.addEventListener('touchmove', handleTouchMove, { passive: true });
-    el.addEventListener('touchend', handleTouchEnd);
-    return () => {
-      el.removeEventListener('touchstart', handleTouchStart);
-      el.removeEventListener('touchmove', handleTouchMove);
-      el.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [onRefresh]);
-
-  const totalUsd = tokens.reduce((sum, t) => sum + tokenUsdValue(t), 0);
-
-  // --- RPC fix modal helpers ---
-  const failedNetworks = failedChainIds
-    .map(id => getAllNetworksSync().find(n => n.chainId === id))
-    .filter((n): n is Network => !!n);
-
-  const openRpcFix = (chainId: number) => {
-    const net = getAllNetworksSync().find(n => n.chainId === chainId);
-    setRpcFixChainId(chainId);
-    setRpcFixUrl(net?.rpcURL ?? '');
-  };
-
-  const handleRpcFixSave = async () => {
-    if (!rpcFixChainId || !rpcFixUrl.trim()) return;
-    setRpcFixSaving(true);
-    try {
-      const net = getAllNetworksSync().find(n => n.chainId === rpcFixChainId);
-      await saveNetworkConfig({
-        chainId: rpcFixChainId,
-        rpcURL: rpcFixUrl.trim(),
-        explorerURL: net?.explorerURL ?? '',
-        bundlerURL: net?.bundlerURL ?? '',
-      });
-      await refreshPool(rpcFixChainId);
-      setFailedChainIds(prev => prev.filter(id => id !== rpcFixChainId));
-      setRpcFixChainId(null);
-      loadTokens(true, true);
-    } catch {
-      showAlert('Error', 'Failed to save RPC URL.');
-    } finally {
-      setRpcFixSaving(false);
-    }
-  };
-
-  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
-  const [cachedBalances, setCachedBalances] = useState<Map<string, number>>(new Map());
-
-  const openAccountSwitcher = useCallback(async () => {
-    // Update active account's cache with live data before opening
+  // --- account switcher ---
+  const openSwitcher = useCallback(async () => {
+    if (state.accounts.length <= 1) { if (address) await copyToClipboard(address); return; }
     if (address) setAccountBalance(address, totalUsd);
-    const addrs = state.accounts.map(a => a.address);
-    const balances = await getAccountBalances(addrs);
-    // Also set the live balance for current account in case cache was stale
+    const balances = await getAccountBalances(state.accounts.map((a) => a.address));
     if (address) balances.set(address, totalUsd);
     setCachedBalances(balances);
-    setShowAccountSwitcher(true);
+    setShowSwitcher(true);
   }, [address, totalUsd, state.accounts]);
-  const [tokenSearch, setTokenSearch] = useState('');
 
-  const [copied, setCopied] = useState(false);
-  const copyAddress = async () => {
-    if (!address) return;
-    await copyToClipboard(address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  // --- scanner ---
+  const onScan = useCallback((data: string) => {
+    if (/^0x[0-9a-fA-F]{40}$/.test(data)) {
+      setShowScanner(false);
+      router.push(`/send?prefilledRecipient=${data}`);
+    } else if (isWalletPairURI(data)) {
+      setShowScanner(false);
+      connectToWalletPair(data);
+      router.navigate('/connect');
+    } else {
+      const bridge = parseRemoteInjectURL(data);
+      if (bridge) {
+        setShowScanner(false);
+        connectToBridge(bridge);
+        router.navigate('/connect');
+      } else {
+        showAlert('Invalid QR', 'Please scan a valid Ethereum address or connection URI.');
+      }
+    }
+  }, [router, connectToWalletPair, connectToBridge]);
+
+  const filteredActivity = selectedChainId != null
+    ? activity.filter((a) => a.chainId === selectedChainId)
+    : activity;
+
+  const chainFor = (chainId: number): Network | null => networks.find((n) => n.chainId === chainId) ?? null;
+
+  const openDetail = (id: string) => {
+    const t = txByIdRef.current.get(id);
+    if (t) setDetailTx(t);
   };
 
-  const navigateToToken = (token: APIToken) => {
-    router.push({
-      pathname: '/token-detail',
-      params: {
-        symbol: token.symbol,
-        name: token.name,
-        network: token.network,
-        balance: token.balance,
-        decimals: String(token.decimals),
-        logos: JSON.stringify(tokenLogoURLs(token)),
-        tokenAddress: token.tokenAddress ?? '',
-        priceUsd: String(token.priceUsd ?? 0),
-        chainName: token.chainName,
-      },
-    });
-  };
+  // Resolved alias for the open detail tx's counterparty.
+  const detailAlias = (() => {
+    if (!detailTx) return undefined;
+    const cp = ((detailTx.type ?? 'send') === 'receive' ? detailTx.from : detailTx.to) ?? '';
+    return detailTx.toName ?? aliasMap.get(cp.toLowerCase());
+  })();
 
+  // --- renderers ---
   const renderHeader = () => (
-    <View style={styles.header}>
-      {/* Web pull-to-refresh indicator */}
-      {Platform.OS === 'web' && pullDistance > 0 && (
-        <View style={styles.webPullIndicator}>
-          <Animated.View style={pullDistance >= PULL_THRESHOLD ? spinStyle : undefined}>
-            <RefreshCw
-              size={18}
-              color={pullDistance >= PULL_THRESHOLD ? color.accent.base : color.fg.subtle}
-              strokeWidth={2.5}
-            />
-          </Animated.View>
-        </View>
-      )}
-      {/* Account + scan */}
-      <Animated.View entering={fadeIn(0, 400)}>
-        <View style={styles.headerTopRow}>
-          <Pressable
-            style={styles.accountInfo}
-            onPress={state.accounts.length > 1 ? openAccountSwitcher : copyAddress}
-          >
-            <Text style={styles.accountName} numberOfLines={1}>{accountName}</Text>
-            <Text style={styles.accountAddr}>{shortAddr(address)}</Text>
-          </Pressable>
-          <Pressable onPress={() => setShowScanner(true)} hitSlop={8} style={styles.scanBtn}>
-            <ScanLine size={20} color={color.fg.base} strokeWidth={2} />
-          </Pressable>
-        </View>
+    <Animated.View entering={fadeInDown(60, 400)}>
+      {/* Balance */}
+      <Animated.View style={balanceScaleStyle}>
+        <VelaCard elevated style={styles.balanceCard}>
+          <View pointerEvents="none" style={styles.balanceBlob} />
+          <Text style={styles.balanceLabel}>Total balance</Text>
+          <View style={styles.balanceTopRow}>
+            {hidden ? <Text style={styles.balanceHidden}>••••••</Text> : <AnimatedBalance value={totalUsd * rate} symbol={currency.symbol} />}
+            <Pressable onPress={() => setHidden((h) => !h)} hitSlop={8} style={styles.eyeBtn}>
+              {hidden ? <EyeOff size={22} color={color.fg.muted} strokeWidth={2} /> : <Eye size={22} color={color.fg.muted} strokeWidth={2} />}
+            </Pressable>
+          </View>
+          <View style={styles.balanceBottomRow}>
+            <Pressable style={styles.currencyChip} onPress={() => setShowCurrency(true)} hitSlop={6}>
+              <Text style={styles.currencyText}>{currencyCode}</Text>
+              <ChevronDown size={14} color={color.fg.muted} strokeWidth={2.4} />
+            </Pressable>
+            <Pressable style={styles.manageBtn} onPress={() => router.push('/assets')} hitSlop={6}>
+              <Text style={styles.manageText}>Manage Assets</Text>
+              <ChevronRight size={18} color={color.fg.muted} strokeWidth={2.6} />
+            </Pressable>
+          </View>
+          <Animated.View pointerEvents="none" style={[styles.balanceRing, balanceRingStyle]} />
+        </VelaCard>
       </Animated.View>
 
-      {/* Hero balance — long press to cycle mock values (dev only) */}
-      <Pressable
-        onLongPress={() => {
-          if (!__DEV__) return;
-          const mocks = [0.42, 9.99, 150.50, 1234.56, 98765.43, 1234567.89, 12345678.90, 123456789.00, 1234567890.00, 12345678901.00, 123456789012.00, 1234567890123.00, 0];
-          const cur = mocks.findIndex(v => v === debugBalance);
-          setDebugBalance(mocks[(cur + 1) % mocks.length]!);
-        }}
-        delayLongPress={500}
-      >
-        <Animated.View style={styles.balanceSection} entering={fadeInDown(100, 500)}>
-          <AnimatedBalance value={debugBalance ?? totalUsd} />
-        </Animated.View>
-      </Pressable>
-
-      {/* Action buttons */}
-      <Animated.View style={styles.actionRow} entering={fadeInDown(200, 400)}>
-        <ActionButton label="Send" icon={ArrowUp} onPress={() => router.push('/send')} accent />
-        <ActionButton label="Receive" icon={ArrowDown} onPress={() => router.push('/receive')} />
-        <ActionButton label="History" icon={Clock} onPress={() => router.push('/history')} />
-      </Animated.View>
-
-      {/* Token list header */}
-      <View style={styles.tokenListHeader}>
-        <View style={styles.tokenListTitleRow}>
-          <Text style={styles.tokenListTitle}>Assets</Text>
-          {hiddenCount > 0 && (
-            <Pressable onPress={() => setShowZeroBalance(!showZeroBalance)} hitSlop={8}>
-              <Text style={styles.hiddenCount}>
-                {showZeroBalance ? 'Hide zero' : `${hiddenCount} hidden`}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-        <View style={styles.tokenListActions}>
-          {Platform.OS === 'web' && (
-            <Pressable
-              style={styles.searchToggleBtn}
-              onPress={onRefresh}
-              hitSlop={8}
-            >
-              <Animated.View style={spinStyle}>
-                <RefreshCw size={14} color={refreshing ? color.accent.base : color.fg.muted} strokeWidth={2.5} />
-              </Animated.View>
-            </Pressable>
-          )}
-          <Pressable
-            style={styles.addTokenBtn}
-            onPress={() => router.push('/add-token')}
-            hitSlop={8}
-          >
-            <Plus size={14} color={color.accent.base} strokeWidth={2.5} />
-            <Text style={styles.addTokenText}>Add</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      {/* Search bar — always visible */}
-      <View style={styles.searchBar}>
-        <Search size={14} color={color.fg.subtle} strokeWidth={2} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search tokens..."
-          placeholderTextColor={color.fg.subtle}
-          value={tokenSearch}
-          onChangeText={setTokenSearch}
-          autoCapitalize="none"
-          autoCorrect={false}
+      {/* Toggle + network filter */}
+      <View style={styles.navRow}>
+        <SegmentedToggle<Tab>
+          options={[
+            { key: 'activity', label: 'Activity' },
+            { key: 'connections', label: 'Connections', badge: connected ? 1 : 0 },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+        <NetworkFilterButton
+          networks={networks}
+          selected={selectedNetwork}
+          onPress={() => setShowNetSheet(true)}
+          onClear={() => setSelectedChainId(null)}
         />
       </View>
 
-      {/* RPC failure banner */}
-      {failedNetworks.length > 0 && (
-        <Animated.View entering={fadeInDown(0, 300)} style={styles.rpcBanner}>
-          <AlertTriangle size={14} color={'#C07A0A'} strokeWidth={2.5} />
-          <View style={styles.rpcBannerContent}>
-            <Text style={styles.rpcBannerText}>
-              {failedNetworks.length === 1
-                ? `${failedNetworks[0].displayName} RPC unavailable`
-                : `${failedNetworks.length} networks RPC unavailable`}
-            </Text>
-            <View style={styles.rpcBannerChips}>
-              {failedNetworks.map(net => (
-                <Pressable
-                  key={net.chainId}
-                  style={styles.rpcBannerChip}
-                  onPress={() => openRpcFix(net.chainId)}
-                >
-                  <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />
-                  <Text style={styles.rpcBannerChipText}>{net.displayName}</Text>
-                  <Text style={styles.rpcBannerFixLink}>Fix</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        </Animated.View>
+      {/* Live monitoring indicator */}
+      {tab === 'activity' && (
+        <View style={styles.liveRow}>
+          <Animated.View style={[styles.liveDot, liveDotStyle]} />
+          <Text style={styles.liveText}>Live · listening for payments</Text>
+        </View>
       )}
+    </Animated.View>
+  );
+
+  const renderActivityEmpty = () => (
+    <View style={styles.empty}>
+      <View style={styles.emptyIcon}>
+        <Inbox size={28} color={color.fg.subtle} strokeWidth={2} />
+      </View>
+      <Text style={styles.emptyText}>
+        {selectedChainId != null ? 'No activity on this network' : 'No activity yet'}
+      </Text>
+      <Text style={styles.emptySub}>Incoming payments will appear here in real time.</Text>
     </View>
   );
 
-  const renderEmpty = () => {
-    if (loading) return null;
-    return (
-      <Pressable onPress={() => router.push('/receive')}>
-        <VelaCard style={styles.emptyCard}>
-          <View style={styles.emptyIconWrap}>
-            <ArrowDown size={22} color={color.accent.base} strokeWidth={2.5} />
-          </View>
-          <Text style={styles.emptyTitle}>Deposit your first asset</Text>
-          <Text style={styles.emptySubtext}>
-            Tap here to see your address and receive tokens
-          </Text>
-        </VelaCard>
-      </Pressable>
-    );
-  };
-
-  const hiddenCount = allTokens.length - tokens.length;
-  const displayTokens = showZeroBalance ? allTokens : tokens;
-  const filteredTokens = tokenSearch
-    ? displayTokens.filter(t => {
-        const q = tokenSearch.toLowerCase();
-        return t.symbol.toLowerCase().includes(q) ||
-          t.name.toLowerCase().includes(q) ||
-          t.network.toLowerCase().includes(q) ||
-          chainName(tokenChainId(t)).toLowerCase().includes(q);
-      })
-    : displayTokens;
-
   return (
-    <ScreenContainer>
-      <FlatList
-        ref={flatListRef}
-        data={filteredTokens}
-        keyExtractor={(item) => `${item.network}_${item.tokenAddress ?? 'native'}_${item.symbol}`}
-        ListHeaderComponent={renderHeader()}
-        ListEmptyComponent={renderEmpty()}
-        renderItem={({ item, index }) => (
-          <TokenRow
-            symbol={item.symbol}
-            chainLabel={chainName(tokenChainId(item))}
-            logoUrls={tokenLogoURLs(item)}
-            balance={formatBalance(tokenBalanceDouble(item))}
-            usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
-            onPress={() => navigateToToken(item)}
-            index={index}
+    <View style={styles.root}>
+      {receipt && (
+        <ReceiptToast amount={receipt.amount} token={receipt.token} top={insets.top + space.md} />
+      )}
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        {/* Header */}
+        <Animated.View style={styles.header} entering={fadeIn(0, 400)}>
+          <Pressable style={styles.account} onPress={openSwitcher}>
+            <View style={styles.avatar}><Text style={styles.avatarText}>{(accountName[0] ?? 'V').toUpperCase()}</Text></View>
+            <View style={styles.accountInfo}>
+              <Text style={styles.accountName} numberOfLines={1}>{accountName}</Text>
+              <Text style={styles.accountAddr} numberOfLines={1}>{shortAddr(address)}</Text>
+            </View>
+            <ChevronDown size={16} color={color.fg.subtle} strokeWidth={2.4} />
+          </Pressable>
+          <Pressable style={styles.iconBtn} onPress={() => router.navigate('/settings')} hitSlop={6}>
+            <Settings size={22} color={color.fg.base} strokeWidth={2} />
+          </Pressable>
+        </Animated.View>
+
+        {/* Content */}
+        {tab === 'activity' ? (
+          <FlatList
+            data={filteredActivity}
+            keyExtractor={(item) => item.id}
+            ListHeaderComponent={renderHeader()}
+            ListEmptyComponent={renderActivityEmpty()}
+            renderItem={({ item, index }) => (
+              <ActivityRow
+                direction={item.direction}
+                title={item.title}
+                subtitle={item.subtitle}
+                amount={item.amount}
+                usd={item.usd}
+                time={relativeTime(item.timestamp)}
+                alias={item.alias ?? (item.address ? aliasMap.get(item.address.toLowerCase()) : undefined)}
+                chain={chainFor(item.chainId)}
+                index={index}
+                isNew={item.id === newItemId}
+                onPress={() => openDetail(item.id)}
+              />
+            )}
+            ItemSeparatorComponent={() => <View style={styles.sep} />}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.accent.base} />
+            }
           />
-        )}
-        refreshControl={
-          Platform.OS !== 'web' ? (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={color.accent.base}
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.accent.base} />
+            }
+          >
+            {renderHeader()}
+            <ConnectionsView
+              connected={connected}
+              dappName={conn.dappInfo?.name ?? null}
+              dappUrl={conn.dappInfo?.url ?? null}
+              chainId={conn.chainId}
+              events={connEvents}
+              onDisconnect={conn.disconnectBridge}
+              onConnect={() => setShowScanner(true)}
             />
-          ) : undefined
-        }
-        initialNumToRender={10}
-        windowSize={5}
-        maxToRenderPerBatch={8}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
+          </ScrollView>
+        )}
+      </SafeAreaView>
+
+      {/* Bottom dock (full-bleed) */}
+      <WaveDock
+        onReceive={() => router.push('/receive')}
+        onScan={() => setShowScanner(true)}
+        onSend={() => router.push('/send')}
       />
 
-      {/* Account Switcher */}
-      <AppModal visible={showAccountSwitcher} onClose={() => setShowAccountSwitcher(false)}>
-        <View style={styles.switcherContainer}>
-          <View style={styles.switcherHeader}>
-            <View>
-              <Text style={styles.switcherTitle}>Switch Account</Text>
-              {cachedBalances.size > 0 && (
-                <Text style={styles.switcherTotal}>
-                  Total {formatUsd([...cachedBalances.values()].reduce((s, v) => s + v, 0))}
-                </Text>
-              )}
-            </View>
-            <Pressable onPress={() => setShowAccountSwitcher(false)} hitSlop={8}>
-              <X size={22} color={color.fg.base} strokeWidth={2} />
-            </Pressable>
+      {/* Network filter sheet */}
+      <NetworkFilterSheet
+        visible={showNetSheet}
+        networks={networks}
+        selectedChainId={selectedChainId}
+        onSelect={setSelectedChainId}
+        onClose={() => setShowNetSheet(false)}
+        subtitleForChain={(n) => {
+          const c = activity.filter((a) => a.chainId === n.chainId).length;
+          return c > 0 ? `${c} event${c > 1 ? 's' : ''}` : undefined;
+        }}
+      />
+
+      {/* Currency picker */}
+      <CurrencySheet
+        visible={showCurrency}
+        selected={currencyCode}
+        onSelect={pickCurrency}
+        onClose={() => setShowCurrency(false)}
+      />
+
+      {/* Transaction detail */}
+      <TransactionDetailSheet
+        visible={detailTx !== null}
+        tx={detailTx}
+        alias={detailAlias}
+        onClose={() => setDetailTx(null)}
+      />
+
+      {/* Account switcher */}
+      <AppModal visible={showSwitcher} onClose={() => setShowSwitcher(false)}>
+        <View style={styles.switcher}>
+          <View style={styles.switcherHead}>
+            <Text style={styles.switcherTitle}>Switch Account</Text>
+            <Pressable onPress={() => setShowSwitcher(false)} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
           </View>
-          <ScrollView style={styles.switcherScroll} contentContainerStyle={styles.switcherScrollContent}>
+          <ScrollView contentContainerStyle={styles.switcherList}>
             {state.accounts
               .map((account, index) => ({ account, index }))
-              .sort((a, b) => {
-                const balA = cachedBalances.get(a.account.address) ?? -1;
-                const balB = cachedBalances.get(b.account.address) ?? -1;
-                if (balB !== balA) return balB - balA;
-                return a.account.name.localeCompare(b.account.name);
-              })
+              .sort((a, b) => (cachedBalances.get(b.account.address) ?? -1) - (cachedBalances.get(a.account.address) ?? -1))
               .map(({ account, index }) => {
-              const isActive = index === state.activeAccountIndex;
-              const bal = cachedBalances.get(account.address);
-              return (
-                <Pressable
-                  key={account.id}
-                  style={[styles.switcherItem, isActive && styles.switcherItemActive]}
-                  onPress={() => {
-                    dispatch({ type: 'SWITCH_ACCOUNT', index });
-                    hapticSuccess();
-                    setShowAccountSwitcher(false);
-                  }}
-                >
-                  <View style={styles.switcherAvatar}>
-                    <Text style={styles.switcherAvatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text>
-                  </View>
-                  <View style={styles.switcherInfo}>
-                    <Text style={styles.switcherName}>{account.name}</Text>
-                    <Text style={styles.switcherAddr}>{shortAddress(account.address)}</Text>
-                  </View>
-                  <View style={styles.switcherRight}>
-                    {bal != null && <Text style={styles.switcherBal}>{formatUsd(bal)}</Text>}
-                    {isActive && <Check size={18} color={color.accent.base} />}
-                  </View>
-                </Pressable>
-              );
-            })}
-            <View style={styles.switcherEndLine} />
+                const isActive = index === state.activeAccountIndex;
+                const bal = cachedBalances.get(account.address);
+                return (
+                  <Pressable
+                    key={account.id}
+                    style={[styles.switcherItem, isActive && styles.switcherItemActive]}
+                    onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); hapticSuccess(); setShowSwitcher(false); }}
+                  >
+                    <View style={styles.switcherAvatar}><Text style={styles.switcherAvatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text></View>
+                    <View style={styles.switcherInfo}>
+                      <Text style={styles.switcherName}>{account.name}</Text>
+                      <Text style={styles.switcherAddr}>{shortAddress(account.address)}</Text>
+                    </View>
+                    <View style={styles.switcherRight}>
+                      {bal != null && <Text style={styles.switcherBal}>{fmtMoney(bal, '$')}</Text>}
+                      {isActive && <Check size={18} color={color.accent.base} />}
+                    </View>
+                  </Pressable>
+                );
+              })}
           </ScrollView>
         </View>
       </AppModal>
 
-      {/* RPC Fix Modal */}
-      <AppModal visible={rpcFixChainId !== null} onClose={() => setRpcFixChainId(null)}>
-        {rpcFixChainId !== null && (() => {
-          const net = getAllNetworksSync().find(n => n.chainId === rpcFixChainId);
-          return (
-            <View style={styles.rpcFixContainer}>
-              <View style={styles.rpcFixHeader}>
-                <Text style={styles.rpcFixTitle}>Fix RPC</Text>
-                <Pressable onPress={() => setRpcFixChainId(null)} hitSlop={8}>
-                  <X size={22} color={color.fg.base} strokeWidth={2} />
-                </Pressable>
-              </View>
-
-              <View style={styles.rpcFixBody}>
-                <View style={styles.rpcFixChainRow}>
-                  {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={32} />}
-                  <View>
-                    <Text style={styles.rpcFixChainName}>{net?.displayName ?? `Chain ${rpcFixChainId}`}</Text>
-                    <Text style={styles.rpcFixChainSub}>Chain ID: {rpcFixChainId}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.rpcFixWarning}>
-                  <Wifi size={14} color={'#C07A0A'} strokeWidth={2.5} />
-                  <Text style={styles.rpcFixWarningText}>
-                    All RPC endpoints for this network are failing. Enter a working RPC URL to restore connectivity.
-                  </Text>
-                </View>
-
-                <Text style={styles.rpcFixLabel}>RPC URL</Text>
-                <TextInput
-                  style={styles.rpcFixInput}
-                  value={rpcFixUrl}
-                  onChangeText={setRpcFixUrl}
-                  placeholder="https://rpc.example.com"
-                  placeholderTextColor={color.fg.subtle}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoFocus
-                />
-
-                <Pressable
-                  style={[styles.rpcFixBtn, rpcFixSaving && styles.rpcFixBtnDisabled]}
-                  onPress={handleRpcFixSave}
-                  disabled={rpcFixSaving || !rpcFixUrl.trim()}
-                >
-                  {rpcFixSaving ? (
-                    <ActivityIndicator size={16} color={color.fg.inverse} />
-                  ) : (
-                    <Text style={styles.rpcFixBtnText}>Save & Retry</Text>
-                  )}
-                </Pressable>
-              </View>
-            </View>
-          );
-        })()}
-      </AppModal>
       {showScanner && (
-        <QRScanner
-          visible={showScanner}
-          onScan={(data) => {
-            if (/^0x[0-9a-fA-F]{40}$/.test(data)) {
-              setShowScanner(false);
-              router.push(`/send?prefilledRecipient=${data}`);
-            } else if (isWalletPairURI(data)) {
-              setShowScanner(false);
-              connectToWalletPair(data);
-              router.push('/connect');
-            } else {
-              const bridgeSession = parseRemoteInjectURL(data);
-              if (bridgeSession) {
-                setShowScanner(false);
-                connectToBridge(bridgeSession);
-                router.push('/connect');
-              } else {
-                showAlert('Invalid QR', 'Please scan a valid Ethereum address or connection URI.');
-              }
-            }
-          }}
-          onClose={() => setShowScanner(false)}
-        />
+        <QRScanner visible={showScanner} onScan={onScan} onClose={() => setShowScanner(false)} />
       )}
-    </ScreenContainer>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Connections view
+// ---------------------------------------------------------------------------
+
+function ConnectionsView({
+  connected, dappName, dappUrl, chainId, events, onDisconnect, onConnect,
+}: {
+  connected: boolean;
+  dappName: string | null;
+  dappUrl: string | null;
+  chainId: number;
+  events: ConnectionEvent[];
+  onDisconnect: () => void;
+  onConnect: () => void;
+}) {
+  if (!connected) {
+    return (
+      <View style={styles.connEmpty}>
+        <View style={styles.connEmptyIcon}><Plug size={26} color={color.fg.subtle} strokeWidth={2} /></View>
+        <Text style={styles.connEmptyTitle}>No active connection</Text>
+        <Text style={styles.connEmptySub}>Scan a dApp QR code to connect. Only one connection is active at a time.</Text>
+        <Pressable style={styles.connectBtn} onPress={onConnect}>
+          <Text style={styles.connectBtnText}>Scan to connect</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      <VelaCard elevated style={styles.connCard}>
+        <View style={styles.connTop}>
+          <View style={styles.connDapp}><Text style={styles.connDappText}>{(dappName?.[0] ?? '?').toUpperCase()}</Text></View>
+          <View style={styles.connInfo}>
+            <Text style={styles.connName} numberOfLines={1}>{dappName ?? 'Connected dApp'}</Text>
+            {dappUrl ? <Text style={styles.connUrl} numberOfLines={1}>{dappUrl}</Text> : null}
+          </View>
+          <View style={styles.connStatus}><View style={styles.connDot} /><Text style={styles.connStatusText}>Active</Text></View>
+        </View>
+        <Text style={styles.connNote}>Only one active connection at a time</Text>
+        <Pressable style={styles.disconnectBtn} onPress={onDisconnect}>
+          <Text style={styles.disconnectText}>Disconnect</Text>
+        </Pressable>
+      </VelaCard>
+
+      <Text style={styles.connEventsHead}>Connection activity · {events.length}</Text>
+      {events.length === 0 ? (
+        <Text style={styles.connNoEvents}>No requests yet on this connection.</Text>
+      ) : (
+        events.map((e) => (
+          <View key={e.id} style={styles.eventRow}>
+            <View style={styles.eventInfo}>
+              <Text style={styles.eventLabel} numberOfLines={1}>{e.label}</Text>
+              <Text style={styles.eventSub} numberOfLines={1}>{e.subtitle}</Text>
+            </View>
+            <Text style={styles.eventTime}>{relativeTime(e.timestamp)}</Text>
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Receipt toast — strong "money in" cue, slides in from the top (cross-platform).
+// ---------------------------------------------------------------------------
+
+function ReceiptToast({ amount, token, top }: { amount: string; token: string; top: number }) {
+  const v = useSharedValue(0);
+  useEffect(() => {
+    v.value = withTiming(1, { duration: 320, easing: Easing.out(Easing.quad) });
+  }, [v]);
+  const style = useAnimatedStyle(() => ({
+    opacity: v.value,
+    transform: [{ translateY: (1 - v.value) * -24 }],
+  }));
+  return (
+    <Animated.View pointerEvents="none" style={[styles.toast, { top }, style]}>
+      <View style={styles.toastDot} />
+      <Text style={styles.toastText}>{amount} {token} received</Text>
+    </Animated.View>
   );
 }
 
 const styles = createStyles(() => ({
-  listContent: {
-    paddingBottom: 100,
-  },
-  webPullIndicator: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: space.lg,
-  },
+  root: { flex: 1, backgroundColor: color.bg.base },
+  safe: { flex: 1 },
+
+  // Header
   header: {
-    paddingTop: space.xl,
-    marginBottom: space.sm,
-  },
-
-  // Header top row (account chip + scan)
-  headerTopRow: {
-    alignItems: 'center',
-    paddingHorizontal: space.lg,
-  },
-  scanBtn: {
-    position: 'absolute',
-    right: space.lg,
-    padding: space.sm,
-  },
-
-  // Account info (centered, two-line)
-  accountInfo: {
-    alignItems: 'center',
-    gap: 2,
-  },
-  accountName: {
-    fontSize: text.lg,
-    ...inter.semibold,
-    color: color.fg.base,
-    maxWidth: '70%',
-  },
-  accountAddr: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.subtle,
-  },
-
-  // Balance
-  balanceSection: {
-    alignItems: 'center',
-    marginTop: space['3xl'],
-    marginBottom: space['2xl'],
-  },
-  balanceLabel: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: space.sm,
-  },
-  balanceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'center',
-  },
-  balanceInt: {
-    fontSize: 36,
-    ...inter.bold,
-    fontFamily: font.display,
-    color: color.fg.base,
-    padding: 0,
-  },
-  balanceDec: {
-    ...inter.bold,
-    fontFamily: font.display,
-    color: color.fg.subtle,
-    padding: 0,
-  },
-
-  // Actions
-  actionRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: space.xl,
-    marginBottom: space['3xl'],
-  },
-  actionBtn: {
-    alignItems: 'center',
-    gap: space.md,
-    minWidth: 72,
-  },
-  actionBtnAccent: {},
-  actionIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: color.bg.sunken,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: color.border.base,
-    ...shadow.sm,
-  },
-  actionIconWrapAccent: {
-    backgroundColor: color.accent.base,
-    ...shadow.md,
-  },
-  actionLabel: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.base,
-  },
-  actionLabelAccent: {
-    ...inter.semibold,
-  },
-
-  // Token list header
-  tokenListHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: space.md,
-    paddingHorizontal: space.sm,
-  },
-  tokenListTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-  },
-  tokenListTitle: {
-    fontSize: text.lg,
-    ...inter.bold,
-    color: color.fg.base,
-  },
-  hiddenCount: {
-    fontSize: text.xs,
-    ...inter.medium,
-    color: color.fg.subtle,
-  },
-  tokenListActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-  },
-  searchToggleBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addTokenBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
-    paddingVertical: space.sm,
-    paddingHorizontal: space.md,
-  },
-  addTokenText: {
-    fontSize: text.sm,
-    ...inter.semibold,
-    color: color.accent.base,
-  },
-
-  // Search
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.lg,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    marginBottom: space.lg,
-    borderWidth: 1,
-    borderColor: color.border.base,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16, // ≥16px prevents iOS Safari auto-zoom on focus
-    ...inter.regular,
-    color: color.fg.base,
-    paddingVertical: space.xs,
-    outlineStyle: 'none',
-  } as any,
-
-  // Account Switcher Modal
-  switcherContainer: {
-    flex: 1,
-    backgroundColor: color.bg.base,
-  },
-  switcherHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: space['3xl'],
-    paddingVertical: space.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: color.border.base,
+    paddingTop: space.md,
+    paddingBottom: space.lg,
   },
-  switcherTitle: {
-    fontSize: text.xl,
-    ...inter.bold,
-    color: color.fg.base,
-  },
-  switcherScroll: {
-    paddingHorizontal: space['3xl'],
-    paddingTop: space['3xl'],
-  },
-  switcherScrollContent: {
-    paddingBottom: space['3xl'],
-  },
-  switcherEndLine: {
-    height: 1,
-    backgroundColor: color.border.base,
-    marginTop: space.lg,
-    marginBottom: space.xl,
-  },
-  switcherItem: {
+  account: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    padding: space.xl,
+    gap: space.md,
     backgroundColor: color.bg.raised,
-    borderRadius: radius.xl,
     borderWidth: 1,
     borderColor: color.border.base,
-    marginBottom: space.lg,
-    gap: space.lg,
+    borderRadius: radius.lg,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
     ...shadow.sm,
   },
-  switcherItemActive: {
-    borderColor: color.accent.base,
-    borderWidth: 1.5,
-  },
-  switcherAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  avatar: {
+    width: 40, height: 40, borderRadius: 13,
     backgroundColor: color.accent.soft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center',
   },
-  switcherAvatarText: {
-    fontSize: text.lg,
-    ...inter.semibold,
-    color: color.accent.base,
+  avatarText: { fontSize: text.lg, ...inter.bold, color: color.accent.base },
+  accountInfo: { flex: 1, minWidth: 0 },
+  accountName: { fontSize: text.lg, ...inter.bold, color: color.fg.base },
+  accountAddr: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle, fontFamily: font.mono },
+  iconBtn: {
+    width: 58, height: 58, borderRadius: radius.lg,
+    backgroundColor: color.bg.raised,
+    borderWidth: 1, borderColor: color.border.base,
+    alignItems: 'center', justifyContent: 'center',
+    ...shadow.sm,
   },
-  switcherInfo: {
-    flex: 1,
-    gap: 2,
-  },
-  switcherName: {
-    fontSize: text.lg,
-    ...inter.semibold,
-    color: color.fg.base,
-  },
-  switcherAddr: {
-    fontSize: text.sm,
-    ...inter.medium,
-    fontFamily: font.mono,
-    color: color.fg.subtle,
-  },
-  switcherTotal: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.subtle,
-    marginTop: 2,
-  },
-  switcherRight: {
-    marginLeft: 'auto',
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  switcherBal: {
-    fontSize: text.sm,
-    ...inter.bold,
-    color: color.fg.base,
-  },
+  iconBtnMuted: { backgroundColor: color.bg.sunken },
 
-  // Empty
-  emptyCard: {
-    padding: space['4xl'],
-    alignItems: 'center',
-    gap: space.md,
-  },
-  emptyIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  // Balance card
+  balanceCard: { padding: space['2xl'], marginBottom: space.xl, overflow: 'hidden' },
+  balanceBlob: {
+    position: 'absolute', top: -60, right: -50,
+    width: 150, height: 150, borderRadius: 75,
     backgroundColor: color.accent.soft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    opacity: 0.55,
+  },
+  balanceRing: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: radius.xl, borderWidth: 2, borderColor: color.success.base,
+  },
+  balanceLabel: { fontSize: text.base, ...inter.medium, color: color.fg.muted, letterSpacing: 0.3 },
+  balanceTopRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.sm },
+  balanceRow: { flexDirection: 'row', alignItems: 'baseline', flex: 1 },
+  balanceInt: { fontSize: 52, ...inter.bold, fontFamily: font.display, color: color.fg.base, padding: 0, letterSpacing: -1 },
+  balanceDec: { fontSize: 30, ...inter.bold, fontFamily: font.display, color: color.fg.subtle, padding: 0 },
+  balanceHidden: { fontSize: 52, ...inter.bold, color: color.fg.base, flex: 1, letterSpacing: 2 },
+  eyeBtn: { padding: space.xs },
+  balanceBottomRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.xl },
+  currencyChip: {
+    flexDirection: 'row', alignItems: 'center', gap: space.xs,
+    backgroundColor: color.bg.sunken, borderRadius: radius.full,
+    paddingVertical: space.sm, paddingHorizontal: space.lg,
+  },
+  currencyText: { fontSize: text.lg, ...inter.bold, color: color.fg.muted },
+  manageBtn: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 2 },
+  manageText: { fontSize: text.lg, ...inter.semibold, color: color.fg.muted },
+
+  // Receipt toast
+  toast: {
+    position: 'absolute', alignSelf: 'center', zIndex: 50,
+    flexDirection: 'row', alignItems: 'center', gap: space.md,
+    backgroundColor: color.success.base,
+    paddingVertical: space.md, paddingHorizontal: space.xl,
+    borderRadius: radius.full, ...shadow.lg,
+  },
+  toastDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.fg.inverse },
+  toastText: { fontSize: text.lg, ...inter.bold, color: color.fg.inverse },
+
+  // Nav row
+  navRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.lg },
+
+  // Live indicator
+  liveRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.lg, paddingHorizontal: space.xs },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.success.base },
+  liveText: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted, letterSpacing: 0.2 },
+
+  // List
+  listContent: { paddingHorizontal: space['3xl'], paddingBottom: DOCK_CLEARANCE },
+  sep: { height: space.lg },
+  empty: { alignItems: 'center', paddingTop: space['5xl'], gap: space.md },
+  emptyIcon: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: color.bg.sunken,
+    alignItems: 'center', justifyContent: 'center',
     marginBottom: space.sm,
   },
-  emptyTitle: {
-    fontSize: text.xl,
-    ...inter.semibold,
-    color: color.fg.muted,
-  },
-  emptySubtext: {
-    fontSize: text.base,
-    ...inter.regular,
-    color: color.fg.subtle,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  emptyText: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
+  emptySub: { fontSize: text.base, ...inter.regular, color: color.fg.subtle, textAlign: 'center', paddingHorizontal: space['3xl'], lineHeight: 20 },
 
-  // RPC failure banner
-  rpcBanner: {
-    flexDirection: 'row',
-    gap: space.md,
-    padding: space.lg,
-    backgroundColor: color.warning.soft,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.warning.border,
-    marginBottom: space.lg,
+  // Account switcher
+  switcher: { flex: 1, backgroundColor: color.bg.base },
+  switcherHead: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: space['3xl'], paddingVertical: space.xl,
+    borderBottomWidth: 1, borderBottomColor: color.border.base,
   },
-  rpcBannerContent: {
-    flex: 1,
-    gap: space.sm,
+  switcherTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
+  switcherList: { padding: space['3xl'], gap: space.lg },
+  switcherItem: {
+    flexDirection: 'row', alignItems: 'center', gap: space.lg,
+    padding: space.xl, backgroundColor: color.bg.raised,
+    borderRadius: radius.xl, borderWidth: 1, borderColor: color.border.base, ...shadow.sm,
   },
-  rpcBannerText: {
-    fontSize: text.sm,
-    ...inter.semibold,
-    color: color.warning.base,
-  },
-  rpcBannerChips: {
-    gap: space.sm,
-  },
-  rpcBannerChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    paddingVertical: space.xs,
-  },
-  rpcBannerChipText: {
-    flex: 1,
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.base,
-  },
-  rpcBannerFixLink: {
-    fontSize: text.sm,
-    ...inter.semibold,
-    color: color.accent.base,
-  },
+  switcherItemActive: { borderColor: color.accent.base, borderWidth: 1.5 },
+  switcherAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: color.accent.soft, alignItems: 'center', justifyContent: 'center' },
+  switcherAvatarText: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
+  switcherInfo: { flex: 1, gap: 2 },
+  switcherName: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
+  switcherAddr: { fontSize: text.sm, ...inter.medium, fontFamily: font.mono, color: color.fg.subtle },
+  switcherRight: { marginLeft: 'auto', alignItems: 'flex-end', gap: 4 },
+  switcherBal: { fontSize: text.sm, ...inter.bold, color: color.fg.base },
 
-  // RPC Fix Modal
-  rpcFixContainer: {
-    flex: 1,
-    backgroundColor: color.bg.base,
+  // Connections
+  connCard: { padding: space.xl, marginBottom: space.xl },
+  connTop: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  connDapp: { width: 44, height: 44, borderRadius: 13, backgroundColor: color.bg.sunken, alignItems: 'center', justifyContent: 'center' },
+  connDappText: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
+  connInfo: { flex: 1, gap: 2 },
+  connName: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
+  connUrl: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
+  connStatus: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  connDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: color.success.base },
+  connStatusText: { fontSize: text.sm, ...inter.semibold, color: color.success.base },
+  connNote: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, marginTop: space.lg },
+  disconnectBtn: {
+    marginTop: space.lg, alignItems: 'center',
+    paddingVertical: space.lg, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: color.border.base, backgroundColor: color.bg.raised,
   },
-  rpcFixHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: space['3xl'],
-    paddingVertical: space.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: color.border.base,
+  disconnectText: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
+  connEventsHead: { fontSize: text.sm, ...inter.semibold, color: color.fg.subtle, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: space.md },
+  connNoEvents: { fontSize: text.base, ...inter.regular, color: color.fg.subtle },
+  eventRow: {
+    flexDirection: 'row', alignItems: 'center', gap: space.lg,
+    paddingVertical: space.lg, borderBottomWidth: 1, borderBottomColor: color.border.base,
   },
-  rpcFixTitle: {
-    fontSize: text.xl,
-    ...inter.bold,
-    color: color.fg.base,
-  },
-  rpcFixBody: {
-    padding: space['3xl'],
-    gap: space.xl,
-  },
-  rpcFixChainRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.lg,
-  },
-  rpcFixChainName: {
-    fontSize: text.lg,
-    ...inter.semibold,
-    color: color.fg.base,
-  },
-  rpcFixChainSub: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.subtle,
-  },
-  rpcFixWarning: {
-    flexDirection: 'row',
-    gap: space.md,
-    padding: space.lg,
-    backgroundColor: color.warning.soft,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.warning.border,
-  },
-  rpcFixWarningText: {
-    flex: 1,
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.warning.base,
-    lineHeight: 18,
-  },
-  rpcFixLabel: {
-    fontSize: text.sm,
-    ...inter.semibold,
-    color: color.fg.base,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  rpcFixInput: {
-    fontSize: text.base,
-    ...inter.regular,
-    color: color.fg.base,
-    backgroundColor: color.bg.sunken,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    borderRadius: radius.lg,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.lg,
-    marginTop: -space.sm,
-  },
-  rpcFixBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: color.accent.base,
-    borderRadius: radius.lg,
-    paddingVertical: space.lg,
-    ...shadow.sm,
-  },
-  rpcFixBtnDisabled: {
-    opacity: 0.5,
-  },
-  rpcFixBtnText: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.fg.inverse,
-  },
+  eventInfo: { flex: 1, gap: 2 },
+  eventLabel: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
+  eventSub: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
+  eventTime: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle },
+
+  connEmpty: { alignItems: 'center', paddingTop: space['4xl'], gap: space.md },
+  connEmptyIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: color.bg.sunken, alignItems: 'center', justifyContent: 'center' },
+  connEmptyTitle: { fontSize: text.xl, ...inter.semibold, color: color.fg.base },
+  connEmptySub: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center', lineHeight: 20, paddingHorizontal: space.xl },
+  connectBtn: { marginTop: space.md, backgroundColor: color.accent.base, borderRadius: radius.lg, paddingVertical: space.lg, paddingHorizontal: space['3xl'] },
+  connectBtnText: { fontSize: text.base, ...inter.semibold, color: color.fg.inverse },
 }));

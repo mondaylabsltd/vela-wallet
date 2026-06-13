@@ -295,6 +295,7 @@ export async function savePriceSource(source: PriceSource): Promise<void> {
  */
 export type TransactionType =
   | 'send'
+  | 'receive'
   | 'dapp_tx'
   | 'sign_message'
   | 'sign_typed_data';
@@ -320,6 +321,8 @@ export interface LocalTransaction {
   dappOrigin?: string;
   /** ERC-7730 clear signing intent (e.g. "Swap", "Approve", "Permit"). */
   intent?: string;
+  /** USD value at the time of the event, pre-formatted (e.g. "$1.00"). Optional. */
+  usd?: string;
 }
 
 export async function saveTransaction(tx: LocalTransaction): Promise<void> {
@@ -336,6 +339,24 @@ export async function loadTransactions(): Promise<LocalTransaction[]> {
     if (raw) return JSON.parse(raw);
   } catch {}
   return [];
+}
+
+/**
+ * Merge new transactions into the store, de-duplicated by `id`. Used by the
+ * received-transfer monitor so discovered deposits persist (and survive the
+ * monitor's incremental block checkpoint advancing past them). Newest-first,
+ * capped at 200. Returns the count of genuinely-new records added.
+ */
+export async function mergeTransactions(incoming: LocalTransaction[]): Promise<number> {
+  if (incoming.length === 0) return 0;
+  const existing = await loadTransactions();
+  const ids = new Set(existing.map((t) => t.id));
+  const fresh = incoming.filter((t) => !ids.has(t.id));
+  if (fresh.length === 0) return 0;
+  const merged = [...fresh, ...existing].sort((a, b) => b.timestamp - a.timestamp);
+  if (merged.length > 200) merged.length = 200;
+  await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(merged));
+  return fresh.length;
 }
 
 // ---------------------------------------------------------------------------
