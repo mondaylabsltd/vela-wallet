@@ -22,9 +22,10 @@ export interface Currency { code: string; symbol: string; name: string }
 
 export { currencyMeta };
 
-// Currencies the default endpoint (Frankfurter / ECB) covers — used, together
-// with the Chainlink feeds, as the offline/first-paint base before the live
-// endpoint responds. (The live list can be larger if a broader endpoint is set.)
+// A safe, widely-supported base set (ECB/Frankfurter codes) — used, together
+// with the Chainlink feeds, only for the offline/first-paint list before the
+// live endpoint responds. The live list is normally larger (the default
+// endpoint covers ~160 currencies incl. VND).
 export const FRANKFURTER_CODES = [
   'AUD', 'BGN', 'BRL', 'CAD', 'CHF', 'CNY', 'CZK', 'DKK', 'EUR', 'GBP', 'HKD',
   'HUF', 'IDR', 'ILS', 'INR', 'ISK', 'JPY', 'KRW', 'MXN', 'MYR', 'NOK', 'NZD',

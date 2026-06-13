@@ -237,8 +237,10 @@ export interface ServiceEndpoints {
   bundlerServiceURL: string;
   /**
    * Fiat exchange-rate endpoint. Must return USD-based rates as
-   * `{ rates: { EUR: 0.92, JPY: 155.3, … } }` (e.g. Frankfurter / open.er-api).
-   * The displayed currency list is driven by whatever codes this returns.
+   * `{ rates: { EUR: 0.92, JPY: 155.3, VND: 25400, … } }`. The displayed currency
+   * list is driven by whatever codes this returns — the default covers ~160
+   * currencies (incl. VND). Swap it (e.g. Frankfurter/ECB,
+   * `https://api.frankfurter.dev/v1/latest?base=USD`) in Settings if preferred.
    */
   fiatRatesURL: string;
 }
@@ -270,7 +272,8 @@ export const DEFAULT_SERVICE_ENDPOINTS: ServiceEndpoints = {
   ethereumDataURL: 'https://ethereum-data.awesometools.dev',
   passkeyIndexURL: 'https://p256-index.getvela.app',
   bundlerServiceURL: 'https://vela-bundler.getvela.app',
-  fiatRatesURL: 'https://api.frankfurter.dev/v1/latest?base=USD',
+  // open.er-api.com: free, no key, CORS-enabled, ~160 currencies incl. VND.
+  fiatRatesURL: 'https://open.er-api.com/v6/latest/USD',
 };
 
 // MARK: - BLE Message Types

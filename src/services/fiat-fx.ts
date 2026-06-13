@@ -1,7 +1,8 @@
 /**
  * Fiat FX rates fetched directly on the client (no server proxy) from the
  * user-configurable endpoint (`ServiceEndpoints.fiatRatesURL`, default
- * Frankfurter). The endpoint must return USD-based rates as:
+ * open.er-api.com — ~160 currencies incl. VND). The endpoint must return
+ * USD-based rates as:
  *
  *   { rates: { EUR: 0.92, JPY: 155.3, … } }      // rates[X] = X per 1 USD
  *
