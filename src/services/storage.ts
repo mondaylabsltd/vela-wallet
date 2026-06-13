@@ -11,8 +11,8 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as CloudSync from '@/modules/cloud-sync';
-import type { StoredAccount, PendingUpload, CustomToken, NetworkConfig, ServiceEndpoints, PriceSource, CustomNetwork } from '@/models/types';
-import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
+import type { StoredAccount, PendingUpload, CustomToken, NetworkConfig, ServiceEndpoints, PriceSource, CustomNetwork, LocalePrefs } from '@/models/types';
+import { DEFAULT_SERVICE_ENDPOINTS, DEFAULT_LOCALE_PREFS } from '@/models/types';
 
 const KEYS = {
   accounts: 'vela.accounts',
@@ -24,6 +24,7 @@ const KEYS = {
   transactionHistory: 'vela.transactionHistory',
   priceSource: 'vela.priceSource',
   customNetworks: 'vela.customNetworks',
+  localePrefs: 'vela.localePrefs',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -260,6 +261,42 @@ export function getEthereumDataURL(): string {
  */
 export function getBundlerServiceURL(): string {
   return _endpointsCache.bundlerServiceURL || DEFAULT_SERVICE_ENDPOINTS.bundlerServiceURL;
+}
+
+/**
+ * Synchronous getter for the fiat exchange-rate endpoint.
+ * Returns the user-configured value if available, otherwise the default.
+ */
+export function getFiatRatesURL(): string {
+  return _endpointsCache.fiatRatesURL || DEFAULT_SERVICE_ENDPOINTS.fiatRatesURL;
+}
+
+// ---------------------------------------------------------------------------
+// Localization preferences (number / date / time formats)
+// ---------------------------------------------------------------------------
+
+/** In-memory cache — initialised by `loadLocalePrefs()` at startup. */
+let _localePrefsCache: LocalePrefs = { ...DEFAULT_LOCALE_PREFS };
+
+export async function loadLocalePrefs(): Promise<LocalePrefs> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.localePrefs);
+    if (raw) {
+      _localePrefsCache = { ...DEFAULT_LOCALE_PREFS, ...JSON.parse(raw) };
+      return _localePrefsCache;
+    }
+  } catch {}
+  return { ...DEFAULT_LOCALE_PREFS };
+}
+
+export async function saveLocalePrefs(prefs: LocalePrefs): Promise<void> {
+  _localePrefsCache = { ...prefs };
+  await AsyncStorage.setItem(KEYS.localePrefs, JSON.stringify(prefs));
+}
+
+/** Synchronous getter (cache populated by `loadLocalePrefs()` at startup). */
+export function getLocalePrefs(): LocalePrefs {
+  return _localePrefsCache;
 }
 
 // ---------------------------------------------------------------------------

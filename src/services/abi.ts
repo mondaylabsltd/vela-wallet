@@ -268,3 +268,15 @@ export function decChainlinkUsd(hex: string): number {
   const answer = BigInt('0x' + d.slice(64, 128));
   return Number(answer) / 1e8;
 }
+
+/**
+ * Decode the raw `answer` (2nd word, int256) from Chainlink `latestRoundData()`
+ * WITHOUT scaling. Pair with the feed's `decimals()` to compute the price
+ * (`answer / 10**decimals`) — fiat/USD feeds vary (most are 8, e.g. PHP is 18).
+ */
+export function decChainlinkAnswer(hex: string): bigint {
+  const d = hex.startsWith('0x') ? hex.slice(2) : hex;
+  if (d.length < 128) return 0n;
+  const raw = BigInt('0x' + d.slice(64, 128));
+  return raw >= 1n << 255n ? raw - (1n << 256n) : raw; // int256 sign
+}

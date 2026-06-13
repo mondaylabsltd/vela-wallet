@@ -235,14 +235,42 @@ export interface ServiceEndpoints {
   passkeyIndexURL: string;
   /** ERC-4337 bundler service URL */
   bundlerServiceURL: string;
+  /**
+   * Fiat exchange-rate endpoint. Must return USD-based rates as
+   * `{ rates: { EUR: 0.92, JPY: 155.3, … } }` (e.g. Frankfurter / open.er-api).
+   * The displayed currency list is driven by whatever codes this returns.
+   */
+  fiatRatesURL: string;
 }
 
 export type PriceSource = 'api' | 'dex';
+
+// MARK: - Localization (number / date / time formats)
+
+/** Number grouping/decimal style. `auto` follows the system locale. */
+export type NumberFormatKey = 'auto' | 'comma_dot' | 'dot_comma' | 'space_comma' | 'indian';
+/** Date field order + separator. `auto` follows the system locale. */
+export type DateFormatKey = 'auto' | 'ymd_slash' | 'mdy_slash' | 'dmy_slash' | 'dmy_dot' | 'iso';
+/** 12- vs 24-hour clock. `auto` follows the system locale. */
+export type TimeFormatKey = 'auto' | 'h24' | 'h12';
+
+export interface LocalePrefs {
+  numberFormat: NumberFormatKey;
+  dateFormat: DateFormatKey;
+  timeFormat: TimeFormatKey;
+}
+
+export const DEFAULT_LOCALE_PREFS: LocalePrefs = {
+  numberFormat: 'auto',
+  dateFormat: 'auto',
+  timeFormat: 'auto',
+};
 
 export const DEFAULT_SERVICE_ENDPOINTS: ServiceEndpoints = {
   ethereumDataURL: 'https://ethereum-data.awesometools.dev',
   passkeyIndexURL: 'https://p256-index.getvela.app',
   bundlerServiceURL: 'https://vela-bundler.getvela.app',
+  fiatRatesURL: 'https://api.frankfurter.dev/v1/latest?base=USD',
 };
 
 // MARK: - BLE Message Types

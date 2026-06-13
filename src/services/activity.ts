@@ -18,6 +18,7 @@ import { shortAddress } from '@/models/wallet-state';
 import { tokenChainId, type APIToken } from '@/models/types';
 import { fetchTokens } from '@/services/wallet-api';
 import { fetchIncomingTransfers, type IncomingTransfer } from '@/services/transfer-monitor';
+import { formatNumber, formatDate } from '@/services/locale-format';
 
 export interface ActivityItem {
   id: string;
@@ -30,6 +31,8 @@ export interface ActivityItem {
   amount: string;
   /** USD value, pre-formatted, e.g. "$1.00" ("$0.00" when unknown). */
   usd: string;
+  /** USD value as a number (0 when unknown) — used to convert to the display currency. */
+  usdValue: number;
   token: string;
   chainId: number;
   timestamp: number;
@@ -51,7 +54,7 @@ export interface ConnectionEvent {
 /** Compact token amount for the feed: thousands-separated, trailing zeros trimmed (1.0000 → "1"). */
 function compactAmount(n: number): string {
   if (!isFinite(n)) return '0';
-  return n.toLocaleString('en-US', { maximumFractionDigits: 4 });
+  return formatNumber(n, { maximumFractionDigits: 4 });
 }
 
 /** Compact relative time: "now", "2m", "3h", "Mon", "Jun 3". */
@@ -62,13 +65,34 @@ export function relativeTime(tsSeconds: number, nowMs: number = Date.now()): str
   if (diff < 86400) return `${Math.round(diff / 3600)}h`;
   const d = new Date(tsSeconds * 1000);
   if (diff < 7 * 86400) return d.toLocaleDateString('en-US', { weekday: 'short' });
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return formatDate(d);
 }
 
 /** Format a USD number as "$1.00"; "$0.00" for unknown/zero. */
 function formatUsd(n: number): string {
   if (!isFinite(n) || n <= 0) return '$0.00';
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Symbols treated as ≈ $1 so stablecoin transfers aren't shown as "$0.00". */
+const STABLE_SYMBOLS = new Set([
+  'USDT', 'USDC', 'USDC.E', 'DAI', 'BUSD', 'TUSD', 'FDUSD', 'USDE', 'PYUSD', 'USDP', 'GUSD', 'LUSD', 'FRAX', 'USDD',
+]);
+
+/**
+ * Numeric USD value for a transaction. Prefers the value stored at event time;
+ * if that's missing/zero but the token is a known stablecoin, falls back to the
+ * token amount (≈ $1 each) so e.g. a received USDT shows a real fiat value.
+ * Exported so the detail sheet can convert into the display currency too.
+ */
+export function txUsdValue(tx: LocalTransaction): number {
+  const stored = tx.usd ? parseFloat(tx.usd.replace(/[^0-9.]/g, '')) : 0;
+  if (isFinite(stored) && stored > 0) return stored;
+  if (STABLE_SYMBOLS.has((tx.symbol || '').toUpperCase())) {
+    const amt = parseFloat(tx.value || '0');
+    return isFinite(amt) && amt > 0 ? amt : 0;
+  }
+  return 0;
 }
 
 /** Map a local "send"-type transaction into an outgoing ActivityItem. */
@@ -81,6 +105,7 @@ function sendTxToActivity(tx: LocalTransaction): ActivityItem {
     subtitle: `to ${shortAddress(tx.to)}`,
     amount: `-${amt} ${tx.symbol}`,
     usd: tx.usd ?? '$0.00',
+    usdValue: txUsdValue(tx),
     token: tx.symbol,
     chainId: tx.chainId,
     timestamp: tx.timestamp,
@@ -138,6 +163,7 @@ function receiveRecordToActivity(tx: LocalTransaction): ActivityItem {
     subtitle: `from ${shortAddress(tx.from)}`,
     amount: `+${amt} ${tx.symbol}`,
     usd: tx.usd ?? '$0.00',
+    usdValue: txUsdValue(tx),
     token: tx.symbol,
     chainId: tx.chainId,
     timestamp: tx.timestamp,

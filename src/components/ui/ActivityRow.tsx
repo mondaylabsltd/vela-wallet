@@ -11,6 +11,7 @@ import React, { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react-native';
+import { AmountText } from '@/components/ui/AmountText';
 import { ChainLogo } from '@/components/ChainLogo';
 import { fadeInDown } from '@/constants/entering';
 import type { Network } from '@/models/network';
@@ -23,8 +24,8 @@ export interface ActivityRowProps {
   title: string;
   subtitle: string;
   amount: string;
-  /** USD value shown under the amount, e.g. "$1.00". */
-  usd?: string;
+  /** Value in the user's display currency, shown under the amount (e.g. "AR$1,428.20"). */
+  fiat?: string;
   time: string;
   /** Resolved name for the counterparty (shown under the address). */
   alias?: string;
@@ -34,7 +35,7 @@ export interface ActivityRowProps {
   isNew?: boolean;
 }
 
-export function ActivityRow({ direction, title, subtitle, amount, usd, time, alias, chain, onPress, index = 0, isNew }: ActivityRowProps) {
+export function ActivityRow({ direction, title, subtitle, amount, fiat, time, alias, chain, onPress, index = 0, isNew }: ActivityRowProps) {
   const incoming = direction === 'in';
   const scale = useSharedValue(1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -78,8 +79,14 @@ export function ActivityRow({ direction, title, subtitle, amount, usd, time, ali
         </View>
 
         <View style={styles.right}>
-          <Text style={[styles.amount, incoming && styles.amountIn]} numberOfLines={1}>{amount}</Text>
-          {usd ? <Text style={styles.usd} numberOfLines={1}>{usd}</Text> : null}
+          <AmountText
+            text={amount}
+            size={text.xl}
+            minScale={0.7}
+            style={[styles.amount, incoming && styles.amountIn]}
+            containerStyle={styles.amountBox}
+          />
+          {fiat ? <Text style={styles.fiat} numberOfLines={1}>{fiat}</Text> : null}
           <Text style={styles.time}>{time}</Text>
         </View>
       </AnimatedPressable>
@@ -150,11 +157,17 @@ const styles = createStyles(() => ({
   right: {
     alignItems: 'flex-end',
     gap: 2,
+    flexShrink: 1,
+    maxWidth: '52%', // reserve the title's space; long amounts shrink instead
+  },
+  amountBox: {
+    alignSelf: 'stretch', // fill the (capped) column so AmountText can measure + shrink
   },
   amount: {
     fontSize: text.xl,
     ...inter.bold,
     color: color.fg.base,
+    textAlign: 'right',
   },
   amountIn: {
     color: color.success.base,
@@ -165,7 +178,7 @@ const styles = createStyles(() => ({
     color: color.fg.subtle,
     marginTop: 1,
   },
-  usd: {
+  fiat: {
     fontSize: text.sm,
     ...inter.medium,
     color: color.fg.muted,
