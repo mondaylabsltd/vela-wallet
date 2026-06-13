@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "Cancelar",
+    "system": "Sistema",
+    "automatic": "Automático",
+    "error": "Erro",
+    "somethingWrong": "Algo deu errado",
+    "tryAgain": "Tentar de novo"
+  },
+  "language": {
+    "title": "Idioma",
+    "pickerTitle": "Idioma",
+    "pickerSubtitle": "Escolha o idioma usado em todo o app.",
+    "followSystem": "Seguir o sistema",
+    "english": "English",
+    "chinese": "简体中文"
+  },
+  "settings": {
+    "title": "Configurações",
+    "sections": {
+      "account": "Conta",
+      "appearance": "Aparência",
+      "payments": "Pagamentos",
+      "localization": "Localização",
+      "advanced": "Avançado",
+      "developer": "Desenvolvedor"
+    },
+    "account": {
+      "switch": "Trocar de conta"
+    },
+    "appearance": {
+      "themeLight": "Claro",
+      "themeDark": "Escuro",
+      "themeAuto": "Automático"
+    },
+    "payments": {
+      "voiceTitle": "Anúncios por voz",
+      "voiceSubtitle": "Anuncia pagamentos recebidos em voz alta"
+    },
+    "localization": {
+      "autoExample": "Automático · {{example}}",
+      "numberTitle": "Formato de número",
+      "numberSubtitle": "Como os valores são agrupados e qual marca decimal é exibida.",
+      "dateTitle": "Formato de data",
+      "dateSubtitle": "Ordem de dia / mês / ano e o separador.",
+      "timeTitle": "Formato de hora",
+      "timeSubtitle": "Relógio de 12 ou 24 horas."
+    },
+    "advanced": {
+      "networksTitle": "Redes",
+      "networksSubtitle": "URLs de RPC, Explorer e Bundler",
+      "addNetworkTitle": "Adicionar rede",
+      "addNetworkSubtitle": "Adicione uma rede EVM personalizada",
+      "endpointsTitle": "Endpoints de serviço",
+      "endpointsSubtitle": "Dados da chain, índice de identidade, Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "Tesouraria",
+      "treasurySubtitle": "Ver endereço e saldos da tesouraria",
+      "clearSigningTitle": "Teste de Clear Signing",
+      "clearSigningSubtitle": "Prévia da interface de assinatura ERC-7730"
+    },
+    "about": {
+      "title": "Sobre",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "Sair",
+      "title": "Sair",
+      "desc": "Os dados da sua carteira ficam neste dispositivo. Você pode entrar de novo a qualquer momento com sua passkey (Face ID / impressão digital).",
+      "warning": "Sua chave pública ainda não foi sincronizada com o servidor. Sair agora pode impedir a recuperação em outros dispositivos.",
+      "anyway": "Sair mesmo assim",
+      "cancel": "Cancelar"
+    },
+    "formatNote": {
+      "system": "Sistema",
+      "indian": "Indiano",
+      "h24": "24 horas",
+      "h12": "12 horas"
+    }
+  }
+}

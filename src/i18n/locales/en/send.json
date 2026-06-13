@@ -1,0 +1,61 @@
+{
+  "send": {
+    "selectTokenTitle": "Select Token",
+    "searchPlaceholder": "Search tokens...",
+    "loadingTokens": "Loading tokens...",
+    "noMatchingTokens": "No matching tokens",
+    "noTokensWithBalance": "No tokens with balance",
+
+    "sendTitle": "Send {{symbol}}",
+    "maxBtn": "Max",
+    "recipientLabel": "Recipient",
+    "recipientPlaceholder": "0x... address",
+    "velaUser": "Vela User",
+    "lowBalanceWarning": "Insufficient balance to cover network fees. Add more {{nativeSym}} to your wallet before sending.",
+    "preparing": "Preparing...",
+    "continueBtn": "Continue",
+
+    "alertInvalidAddressTitle": "Invalid Address",
+    "alertInvalidAddressBody": "Please enter a valid Ethereum address (0x...).",
+    "alertInvalidAmountTitle": "Invalid Amount",
+    "alertInvalidAmountBody": "Please enter a valid amount greater than zero.",
+    "alertInsufficientBalanceTitle": "Insufficient Balance",
+    "alertLoadTokensError": "Failed to load tokens.",
+
+    "warnNotEnoughToken": "You do not have enough {{symbol}} in this account",
+    "warnInsufficientForGas": "Insufficient {{sym}} to cover amount + gas fees",
+    "warnInsufficientGas": "Insufficient {{sym}} for gas fees",
+    "warnNeedGas": "You need {{sym}} to pay gas fees",
+
+    "confirmTitle": "Confirm",
+    "walletFallbackName": "Wallet",
+    "fromLabel": "From",
+    "toLabel": "To",
+    "estFeeLabel": "Est. Fee",
+    "estimatingFee": "Estimating...",
+    "gasPriceLabel": "Gas Price",
+    "gasPriceUserOpLabel": "Gas Price (UserOp)",
+    "gasLimitLabel": "Gas Limit",
+    "walletDeployedLabel": "Wallet Deployed",
+    "walletDeployedYes": "Yes",
+    "walletDeployedNo": "No (first tx)",
+    "checkingGas": "Checking gas...",
+    "confirmSendBtn": "Confirm & Send",
+
+    "txPreparing": "Preparing transaction...",
+    "txSigning": "Waiting for biometric...",
+    "txSubmitting": "Submitting to network...",
+    "txSubmitted": "Transaction submitted to the network",
+    "txSlowConfirm": "Taking longer than usual, please wait...",
+    "txWaitingConfirm": "Waiting for blockchain confirmation...",
+    "txElapsed": "{{elapsed}}s elapsed — almost there",
+    "txRemaining": "~{{remaining}}s remaining",
+    "txTypicalTime": "{{chainName}} typically confirms in ~{{estSecs}}s",
+    "txRetryBtn": "Try Again",
+
+    "txErrorTimeout": "Transaction submitted but confirmation timed out. Check history later.",
+    "txErrorBundlerLoop": "Gas account balance keeps being rejected by the bundler. Try again later or increase gas tier.",
+    "txErrorBundlerFund": "Bundler account needs more gas. Please fund it in Settings.",
+    "txErrorPublicKey": "Public key not found for this account"
+  }
+}

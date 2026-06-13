@@ -1,0 +1,22 @@
+{
+  "about": {
+    "title": "정보",
+    "version": "v{{version}} ({{commit}})",
+    "tagline": "암호화폐를 소유하는 더 간단한 방법",
+    "sectionTechnical": "기술 세부 정보",
+    "techWalletLabel": "지갑",
+    "techWalletValue": "Safe v1.4.1",
+    "techAuthLabel": "인증",
+    "techAuthValue": "WebAuthn / P-256",
+    "techAccountTypeLabel": "계정 유형",
+    "techAccountTypeValue": "ERC-4337 (스마트 계정)",
+    "techSignerLabel": "서명 모듈",
+    "techSignerValue": "SafeWebAuthnSharedSigner",
+    "techNetworksLabel": "네트워크",
+    "techNetworksValue": "EVM 체인 {{count}}개",
+    "linkWebsite": "웹사이트",
+    "linkGitHub": "GitHub",
+    "linkSafeWallet": "Safe Wallet",
+    "footer": "정성껏 만들었습니다. 당신의 키, 당신의 코인."
+  }
+}

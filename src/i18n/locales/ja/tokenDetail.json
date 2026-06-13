@@ -1,0 +1,15 @@
+{
+  "tokenDetail": {
+    "chartTitle": "7日間の残高",
+    "chartEmpty": "履歴データがありません",
+    "send": "送る",
+    "receive": "受け取る",
+    "labelName": "名前",
+    "labelContract": "コントラクト",
+    "labelDecimals": "小数桁数",
+    "labelPrice": "価格",
+    "priceValue": "1 {{symbol}} = {{value}}",
+    "labelTransactions": "取引",
+    "viewOnExplorer": "エクスプローラーで表示"
+  }
+}

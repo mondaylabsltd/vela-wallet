@@ -1,0 +1,17 @@
+{
+  "history": {
+    "navTitle": "내역",
+    "loadingText": "거래 불러오는 중...",
+    "statusFailed": "실패",
+    "filterAll": "전체",
+    "emptyTitle": "아직 거래가 없습니다",
+    "emptyBody": "보낸 거래가 여기에 표시됩니다. 블록 탐색기에서 전체 내역을 확인할 수도 있습니다.",
+    "viewOnExplorer": "탐색기에서 보기",
+    "emptyFilter": "이 네트워크에 거래가 없습니다",
+    "txLabelDappTx": "dApp 거래",
+    "txLabelSignMessage": "메시지 서명",
+    "txLabelSignTypedData": "타입 데이터 서명",
+    "txLabelSent": "{{symbol}} 보냄",
+    "txSentSubtitle": "{{toName}}에게 · {{networkName}}"
+  }
+}

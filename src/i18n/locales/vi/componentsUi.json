@@ -1,0 +1,92 @@
+{
+  "componentsUi": {
+    "funding": {
+      "title": "Kích hoạt tài khoản Gas",
+      "balance": "Số dư",
+      "freeTitle": "Kích hoạt miễn phí",
+      "freeBadge": "MIỄN PHÍ",
+      "freeRequesting": "Đang yêu cầu...",
+      "freeDesc": "Được Vela tài trợ cho người dùng mới",
+      "selfTitle": "Tự kích hoạt",
+      "selfDesc": "Gửi {{symbol}} để kích hoạt tài khoản gas",
+      "activationFee": "Phí kích hoạt",
+      "gasAccount": "Tài khoản Gas",
+      "checkBtn": "Tôi đã gửi",
+      "checkingBtn": "Đang kiểm tra...",
+      "continue": "Tiếp tục",
+      "cancel": "Hủy",
+      "denialDefault": "Kích hoạt miễn phí không khả dụng.",
+      "denialNonceExceeded": "Đã dùng hết hạn mức miễn phí.",
+      "denialTreasuryDepleted": "Quỹ miễn phí tạm thời đã hết.",
+      "denialBalanceTooLow": "Số dư ví quá thấp để đủ điều kiện.",
+      "denialNoPasskey": "Cần passkey để kích hoạt miễn phí.",
+      "denialRateLimited": "Quá nhiều yêu cầu. Hãy thử lại sau.",
+      "denialTransferFailed": "Chuyển khoản thất bại. Hãy thử lại."
+    },
+    "signing": {
+      "loading": "Đang tải...",
+      "signatureRequest": "Yêu cầu ký",
+      "signing": "Đang ký...",
+      "signLabel": "Ký",
+      "confirmLabel": "Xác nhận",
+      "confirmIntentLabel": "Xác nhận {{intent}}",
+      "approve": "Phê duyệt",
+      "dismiss": "Bỏ qua",
+      "reject": "Từ chối",
+      "personalSignTag": "personal_sign · Không tốn phí gas",
+      "unlimitedWarning": "Không giới hạn — hợp đồng này có thể chi tiêu toàn bộ token của bạn",
+      "blindTypedWarning": "Không thể giải mã dữ liệu có cấu trúc này bằng một bộ mô tả đã biết. Hãy xem xét kỹ.",
+      "blindDecodeWarning": "Không thể giải mã — không có bộ mô tả ERC-7730 ({{bytes}} byte)",
+      "rawCalldataToggle": "Calldata thô · {{bytes}} byte",
+      "signMessage": "Ký tin nhắn",
+      "signTypedData": "Ký dữ liệu có cấu trúc",
+      "spenderLabel": "Bên chi tiêu",
+      "recipientLabel": "Người nhận",
+      "interactingLabel": "Đang tương tác với",
+      "unverifiedLabel": "Hợp đồng chưa xác minh",
+      "typeLabel": "Loại",
+      "intentUnknown": "Không xác định",
+      "intentSend": "Gửi",
+      "signingFor": "Đang ký cho"
+    },
+    "currency": {
+      "title": "Tiền tệ hiển thị",
+      "searchPlaceholder": "Tìm tiền tệ",
+      "noMatch": "Không có tiền tệ nào khớp với \"{{query}}\"."
+    },
+    "scanner": {
+      "title": "Quét QR",
+      "hint": "Hướng camera vào mã QR",
+      "permissionText": "Cần quyền truy cập camera để quét mã QR.",
+      "grantPermission": "Cấp quyền",
+      "noQrFound": "Không tìm thấy QR",
+      "noQrFoundMsg": "Không tìm thấy mã QR trong ảnh đã chọn.",
+      "error": "Lỗi",
+      "errorImage": "Không xử lý được ảnh.",
+      "errorPicker": "Không mở được trình chọn ảnh."
+    },
+    "gas": {
+      "estFee": "Phí ước tính",
+      "gasPrice": "Giá Gas",
+      "gasPriceUserOp": "Giá Gas (UserOp)",
+      "gasLimit": "Giới hạn Gas",
+      "walletDeployed": "Ví đã triển khai",
+      "deployedYes": "Rồi",
+      "deployedNo": "Chưa (giao dịch đầu tiên)"
+    },
+    "dock": {
+      "receive": "Nhận",
+      "send": "Gửi"
+    },
+    "networkFilter": {
+      "selectChain": "Chọn chain",
+      "searchChains": "Tìm chain",
+      "allNetworks": "Tất cả các mạng",
+      "showEvery": "Hiển thị mọi chain"
+    },
+    "chart": {
+      "noDataFor": "Không có dữ liệu cho {{label}}",
+      "tapHint": "Chạm vào một cột để xem số dư"
+    }
+  }
+}

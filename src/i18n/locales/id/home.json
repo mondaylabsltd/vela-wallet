@@ -1,0 +1,26 @@
+{
+  "home": {
+    "totalBalance": "Total saldo",
+    "manageAssets": "Kelola Aset",
+    "tabActivity": "Aktivitas",
+    "tabConnections": "Koneksi",
+    "liveIndicator": "Live · memantau pembayaran",
+    "emptyNoActivityNetwork": "Belum ada aktivitas di jaringan ini",
+    "emptyNoActivity": "Belum ada aktivitas",
+    "emptySubtitle": "Pembayaran masuk akan muncul di sini secara real-time.",
+    "invalidQrTitle": "QR Tidak Valid",
+    "invalidQrBody": "Pindai alamat Ethereum atau URI koneksi yang valid.",
+    "switchAccountTitle": "Ganti Akun",
+    "switcherAccountCount": "{{count}} akun · ",
+    "connEmptyTitle": "Tidak ada koneksi aktif",
+    "connEmptySub": "Pindai kode QR dApp untuk menghubungkan. Hanya satu koneksi yang aktif dalam satu waktu.",
+    "connScanBtn": "Pindai untuk menghubungkan",
+    "connDefaultName": "dApp Terhubung",
+    "connActive": "Aktif",
+    "connNote": "Hanya satu koneksi aktif dalam satu waktu",
+    "connDisconnect": "Putuskan",
+    "connEventsHead": "Aktivitas koneksi · {{count}}",
+    "connNoEvents": "Belum ada permintaan di koneksi ini.",
+    "toastReceived": "{{amount}} {{token}} diterima"
+  }
+}

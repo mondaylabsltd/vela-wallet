@@ -1,0 +1,26 @@
+{
+  "home": {
+    "totalBalance": "Saldo total",
+    "manageAssets": "Administrar activos",
+    "tabActivity": "Actividad",
+    "tabConnections": "Conexiones",
+    "liveIndicator": "En vivo · esperando pagos",
+    "emptyNoActivityNetwork": "Sin actividad en esta red",
+    "emptyNoActivity": "Aún no hay actividad",
+    "emptySubtitle": "Los pagos que recibas aparecerán aquí en tiempo real.",
+    "invalidQrTitle": "QR inválido",
+    "invalidQrBody": "Escanea una dirección de Ethereum o una URI de conexión válida.",
+    "switchAccountTitle": "Cambiar de cuenta",
+    "switcherAccountCount": "{{count}} cuentas · ",
+    "connEmptyTitle": "Sin conexión activa",
+    "connEmptySub": "Escanea el código QR de una dApp para conectarte. Solo puede haber una conexión activa a la vez.",
+    "connScanBtn": "Escanear para conectar",
+    "connDefaultName": "dApp conectada",
+    "connActive": "Activa",
+    "connNote": "Solo una conexión activa a la vez",
+    "connDisconnect": "Desconectar",
+    "connEventsHead": "Actividad de la conexión · {{count}}",
+    "connNoEvents": "Aún no hay solicitudes en esta conexión.",
+    "toastReceived": "Recibiste {{amount}} {{token}}"
+  }
+}

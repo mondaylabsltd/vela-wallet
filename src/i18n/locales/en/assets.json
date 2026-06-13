@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "actionSend": "Send",
+    "actionReceive": "Receive",
+    "actionHistory": "History",
+    "sectionTitle": "Assets",
+    "hideZero": "Hide zero",
+    "hiddenCount": "{{count}} hidden",
+    "addToken": "Add",
+    "searchPlaceholder": "Search tokens...",
+    "rpcUnavailableSingle": "{{name}} RPC unavailable",
+    "rpcUnavailableMultiple": "{{count}} networks RPC unavailable",
+    "rpcFix": "Fix",
+    "emptyTitle": "Deposit your first asset",
+    "emptySubtext": "Tap here to see your address and receive tokens",
+    "errorTitle": "Error",
+    "errorLoadBalances": "Failed to load token balances.",
+    "switcherTitle": "Switch Account",
+    "switcherTotal": "Total {{amount}}",
+    "rpcFixTitle": "Fix RPC",
+    "rpcFixChainId": "Chain ID: {{chainId}}",
+    "rpcFixWarning": "All RPC endpoints for this network are failing. Enter a working RPC URL to restore connectivity.",
+    "rpcFixLabel": "RPC URL",
+    "rpcFixSaveBtn": "Save & Retry",
+    "errorSaveRpc": "Failed to save RPC URL.",
+    "invalidQrTitle": "Invalid QR",
+    "invalidQrMessage": "Please scan a valid Ethereum address or connection URI.",
+    "chainFallback": "Chain {{chainId}}"
+  }
+}

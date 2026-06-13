@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "취소",
+    "system": "시스템",
+    "automatic": "자동",
+    "error": "오류",
+    "somethingWrong": "문제가 발생했습니다",
+    "tryAgain": "다시 시도"
+  },
+  "language": {
+    "title": "언어",
+    "pickerTitle": "언어",
+    "pickerSubtitle": "앱 전체에서 사용할 언어를 선택하세요.",
+    "followSystem": "시스템 설정 따르기",
+    "english": "English",
+    "chinese": "简体中文"
+  },
+  "settings": {
+    "title": "설정",
+    "sections": {
+      "account": "계정",
+      "appearance": "화면",
+      "payments": "결제",
+      "localization": "지역 설정",
+      "advanced": "고급",
+      "developer": "개발자"
+    },
+    "account": {
+      "switch": "계정 전환"
+    },
+    "appearance": {
+      "themeLight": "라이트",
+      "themeDark": "다크",
+      "themeAuto": "자동"
+    },
+    "payments": {
+      "voiceTitle": "음성 알림",
+      "voiceSubtitle": "입금 내역을 음성으로 안내"
+    },
+    "localization": {
+      "autoExample": "자동 · {{example}}",
+      "numberTitle": "숫자 형식",
+      "numberSubtitle": "금액의 자릿수 구분과 소수점 표시 방식입니다.",
+      "dateTitle": "날짜 형식",
+      "dateSubtitle": "일 / 월 / 연도 순서와 구분 기호입니다.",
+      "timeTitle": "시간 형식",
+      "timeSubtitle": "12시간제 또는 24시간제입니다."
+    },
+    "advanced": {
+      "networksTitle": "네트워크",
+      "networksSubtitle": "RPC, 탐색기 및 Bundler URL",
+      "addNetworkTitle": "네트워크 추가",
+      "addNetworkSubtitle": "사용자 지정 EVM 네트워크 추가",
+      "endpointsTitle": "서비스 엔드포인트",
+      "endpointsSubtitle": "체인 데이터, 신원 인덱스, Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "트레저리",
+      "treasurySubtitle": "트레저리 주소 및 잔액 보기",
+      "clearSigningTitle": "Clear Signing 테스트",
+      "clearSigningSubtitle": "ERC-7730 서명 UI 미리보기"
+    },
+    "about": {
+      "title": "정보",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "로그아웃",
+      "title": "로그아웃",
+      "desc": "지갑 데이터는 이 기기에 그대로 남아 있습니다. 패스키(Face ID / 지문)로 언제든 다시 로그인할 수 있습니다.",
+      "warning": "공개 키가 아직 서버에 동기화되지 않았습니다. 지금 로그아웃하면 다른 기기에서 복구하지 못할 수 있습니다.",
+      "anyway": "그래도 로그아웃",
+      "cancel": "취소"
+    },
+    "formatNote": {
+      "system": "시스템",
+      "indian": "인도식",
+      "h24": "24시간제",
+      "h12": "12시간제"
+    }
+  }
+}

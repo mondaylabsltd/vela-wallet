@@ -1,0 +1,26 @@
+{
+  "home": {
+    "totalBalance": "Tổng số dư",
+    "manageAssets": "Quản lý tài sản",
+    "tabActivity": "Hoạt động",
+    "tabConnections": "Kết nối",
+    "liveIndicator": "Trực tiếp · đang chờ thanh toán",
+    "emptyNoActivityNetwork": "Chưa có hoạt động trên mạng này",
+    "emptyNoActivity": "Chưa có hoạt động nào",
+    "emptySubtitle": "Các khoản thanh toán nhận được sẽ hiển thị tại đây theo thời gian thực.",
+    "invalidQrTitle": "QR không hợp lệ",
+    "invalidQrBody": "Vui lòng quét một địa chỉ Ethereum hoặc URI kết nối hợp lệ.",
+    "switchAccountTitle": "Chuyển tài khoản",
+    "switcherAccountCount": "{{count}} tài khoản · ",
+    "connEmptyTitle": "Chưa có kết nối nào",
+    "connEmptySub": "Quét mã QR của dApp để kết nối. Mỗi lần chỉ có một kết nối hoạt động.",
+    "connScanBtn": "Quét để kết nối",
+    "connDefaultName": "dApp đã kết nối",
+    "connActive": "Đang hoạt động",
+    "connNote": "Mỗi lần chỉ một kết nối hoạt động",
+    "connDisconnect": "Ngắt kết nối",
+    "connEventsHead": "Hoạt động kết nối · {{count}}",
+    "connNoEvents": "Chưa có yêu cầu nào trên kết nối này.",
+    "toastReceived": "Đã nhận {{amount}} {{token}}"
+  }
+}

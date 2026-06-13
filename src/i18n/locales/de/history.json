@@ -1,0 +1,17 @@
+{
+  "history": {
+    "navTitle": "Verlauf",
+    "loadingText": "Transaktionen werden geladen ...",
+    "statusFailed": "Fehlgeschlagen",
+    "filterAll": "Alle",
+    "emptyTitle": "Noch keine Transaktionen",
+    "emptyBody": "Ihre gesendeten Transaktionen erscheinen hier. Den vollständigen Verlauf können Sie auch im Block-Explorer einsehen.",
+    "viewOnExplorer": "Im Explorer ansehen",
+    "emptyFilter": "Keine Transaktionen in diesem Netzwerk",
+    "txLabelDappTx": "dApp-Transaktion",
+    "txLabelSignMessage": "Nachricht signieren",
+    "txLabelSignTypedData": "Typisierte Daten signieren",
+    "txLabelSent": "{{symbol}} gesendet",
+    "txSentSubtitle": "An {{toName}} · {{networkName}}"
+  }
+}

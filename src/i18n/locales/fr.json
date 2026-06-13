@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "Annuler",
+    "system": "Système",
+    "automatic": "Automatique",
+    "error": "Erreur",
+    "somethingWrong": "Une erreur s'est produite",
+    "tryAgain": "Réessayer"
+  },
+  "language": {
+    "title": "Langue",
+    "pickerTitle": "Langue",
+    "pickerSubtitle": "Choisissez la langue utilisée dans toute l'application.",
+    "followSystem": "Suivre le système",
+    "english": "English",
+    "chinese": "简体中文"
+  },
+  "settings": {
+    "title": "Réglages",
+    "sections": {
+      "account": "Compte",
+      "appearance": "Apparence",
+      "payments": "Paiements",
+      "localization": "Localisation",
+      "advanced": "Avancé",
+      "developer": "Développeur"
+    },
+    "account": {
+      "switch": "Changer de compte"
+    },
+    "appearance": {
+      "themeLight": "Clair",
+      "themeDark": "Sombre",
+      "themeAuto": "Auto"
+    },
+    "payments": {
+      "voiceTitle": "Annonces vocales",
+      "voiceSubtitle": "Annoncer les paiements entrants à voix haute"
+    },
+    "localization": {
+      "autoExample": "Automatique · {{example}}",
+      "numberTitle": "Format des nombres",
+      "numberSubtitle": "Regroupement des chiffres et symbole décimal affiché.",
+      "dateTitle": "Format de date",
+      "dateSubtitle": "Ordre jour / mois / année et séparateur.",
+      "timeTitle": "Format d'heure",
+      "timeSubtitle": "Horloge 12 ou 24 heures."
+    },
+    "advanced": {
+      "networksTitle": "Réseaux",
+      "networksSubtitle": "URL RPC, explorateur et Bundler",
+      "addNetworkTitle": "Ajouter un réseau",
+      "addNetworkSubtitle": "Ajouter un réseau EVM personnalisé",
+      "endpointsTitle": "Points d'accès des services",
+      "endpointsSubtitle": "Données de chaîne, index d'identité, Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "Trésorerie",
+      "treasurySubtitle": "Voir l'adresse et les soldes de la trésorerie",
+      "clearSigningTitle": "Test de signature claire",
+      "clearSigningSubtitle": "Aperçu de l'interface de signature ERC-7730"
+    },
+    "about": {
+      "title": "À propos",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "Se déconnecter",
+      "title": "Se déconnecter",
+      "desc": "Les données de votre portefeuille restent sur cet appareil. Reconnectez-vous à tout moment avec votre clé d'accès (Face ID / empreinte digitale).",
+      "warning": "Votre clé publique n'a pas encore été synchronisée avec le serveur. Vous déconnecter maintenant pourrait empêcher la récupération sur d'autres appareils.",
+      "anyway": "Se déconnecter quand même",
+      "cancel": "Annuler"
+    },
+    "formatNote": {
+      "system": "Système",
+      "indian": "Indien",
+      "h24": "24 heures",
+      "h12": "12 heures"
+    }
+  }
+}

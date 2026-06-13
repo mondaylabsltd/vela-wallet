@@ -1,0 +1,42 @@
+{
+  "componentsTx": {
+    "receipt": {
+      "title": "İşlem Makbuzu",
+      "canvasTitle": "İŞLEM MAKBUZU",
+      "from": "Gönderen",
+      "to": "Alıcı",
+      "network": "Ağ",
+      "time": "Zaman",
+      "txHash": "İşlem Hash'i",
+      "scanHint": "Gezginde görüntülemek için tara",
+      "footerBrand": "VELA WALLET",
+      "footerUrl": "getvela.app",
+      "explorer": "Gezgin",
+      "share": "Paylaş",
+      "done": "Tamam",
+      "copiedTitle": "Kopyalandı",
+      "copiedImageBody": "Makbuz görseli panoya kopyalandı.",
+      "copiedLinkBody": "Gezgin linki kopyalandı."
+    },
+    "detail": {
+      "received": "Alındı",
+      "sent": "Gönderildi",
+      "from": "Gönderen",
+      "to": "Alıcı",
+      "sectionTitle": "İşlem Ayrıntıları",
+      "labelDate": "Tarih",
+      "labelStatus": "Durum",
+      "labelFrom": "Gönderen",
+      "labelTo": "Alıcı",
+      "labelOperation": "İşlem",
+      "labelChain": "Zincir",
+      "labelHash": "Hash",
+      "statusFailed": "Başarısız",
+      "statusSucceeded": "Başarılı",
+      "opContractInteraction": "Sözleşme etkileşimi",
+      "opSignature": "İmza",
+      "opTypedDataSignature": "Yapılandırılmış veri imzası",
+      "opTransfer": "Transfer"
+    }
+  }
+}

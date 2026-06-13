@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "actionSend": "보내기",
+    "actionReceive": "받기",
+    "actionHistory": "내역",
+    "sectionTitle": "자산",
+    "hideZero": "0 잔액 숨기기",
+    "hiddenCount": "{{count}}개 숨김",
+    "addToken": "추가",
+    "searchPlaceholder": "토큰 검색...",
+    "rpcUnavailableSingle": "{{name}} RPC를 사용할 수 없음",
+    "rpcUnavailableMultiple": "네트워크 {{count}}개의 RPC를 사용할 수 없음",
+    "rpcFix": "수정",
+    "emptyTitle": "첫 자산을 입금하세요",
+    "emptySubtext": "여기를 눌러 주소를 확인하고 토큰을 받으세요",
+    "errorTitle": "오류",
+    "errorLoadBalances": "토큰 잔액을 불러오지 못했습니다.",
+    "switcherTitle": "계정 전환",
+    "switcherTotal": "총 {{amount}}",
+    "rpcFixTitle": "RPC 수정",
+    "rpcFixChainId": "체인 ID: {{chainId}}",
+    "rpcFixWarning": "이 네트워크의 모든 RPC 엔드포인트가 작동하지 않습니다. 연결을 복구하려면 작동하는 RPC URL을 입력하세요.",
+    "rpcFixLabel": "RPC URL",
+    "rpcFixSaveBtn": "저장 후 재시도",
+    "errorSaveRpc": "RPC URL을 저장하지 못했습니다.",
+    "invalidQrTitle": "잘못된 QR",
+    "invalidQrMessage": "올바른 이더리움 주소 또는 연결 URI를 스캔하세요.",
+    "chainFallback": "체인 {{chainId}}"
+  }
+}

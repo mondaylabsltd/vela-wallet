@@ -1,0 +1,22 @@
+{
+  "about": {
+    "title": "Über",
+    "version": "v{{version}} ({{commit}})",
+    "tagline": "Ein einfacherer Weg, Krypto zu besitzen",
+    "sectionTechnical": "Technische Details",
+    "techWalletLabel": "Wallet",
+    "techWalletValue": "Safe v1.4.1",
+    "techAuthLabel": "Authentifizierung",
+    "techAuthValue": "WebAuthn / P-256",
+    "techAccountTypeLabel": "Kontotyp",
+    "techAccountTypeValue": "ERC-4337 (Smart Account)",
+    "techSignerLabel": "Signer-Modul",
+    "techSignerValue": "SafeWebAuthnSharedSigner",
+    "techNetworksLabel": "Netzwerke",
+    "techNetworksValue": "{{count}} EVM-Chains",
+    "linkWebsite": "Website",
+    "linkGitHub": "GitHub",
+    "linkSafeWallet": "Safe Wallet",
+    "footer": "Mit Sorgfalt entwickelt. Ihre Schlüssel, Ihre Coins."
+  }
+}

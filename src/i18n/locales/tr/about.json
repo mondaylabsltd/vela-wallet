@@ -1,0 +1,22 @@
+{
+  "about": {
+    "title": "Hakkında",
+    "version": "v{{version}} ({{commit}})",
+    "tagline": "Kripto sahibi olmanın daha basit bir yolu",
+    "sectionTechnical": "Teknik ayrıntılar",
+    "techWalletLabel": "Cüzdan",
+    "techWalletValue": "Safe v1.4.1",
+    "techAuthLabel": "Kimlik Doğrulama",
+    "techAuthValue": "WebAuthn / P-256",
+    "techAccountTypeLabel": "Hesap türü",
+    "techAccountTypeValue": "ERC-4337 (Akıllı Hesap)",
+    "techSignerLabel": "İmzalayıcı modülü",
+    "techSignerValue": "SafeWebAuthnSharedSigner",
+    "techNetworksLabel": "Ağlar",
+    "techNetworksValue": "{{count}} EVM zinciri",
+    "linkWebsite": "Web Sitesi",
+    "linkGitHub": "GitHub",
+    "linkSafeWallet": "Safe Wallet",
+    "footer": "Özenle yapıldı. Anahtarlarınız, paranız."
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "history": {
+    "navTitle": "Riwayat",
+    "loadingText": "Memuat transaksi...",
+    "statusFailed": "Gagal",
+    "filterAll": "Semua",
+    "emptyTitle": "Belum Ada Transaksi",
+    "emptyBody": "Transaksi yang Anda kirim akan muncul di sini. Anda juga dapat melihat riwayat lengkap di block explorer.",
+    "viewOnExplorer": "Lihat di Explorer",
+    "emptyFilter": "Tidak ada transaksi di jaringan ini",
+    "txLabelDappTx": "Transaksi dApp",
+    "txLabelSignMessage": "Tanda Tangani Pesan",
+    "txLabelSignTypedData": "Tanda Tangani Typed Data",
+    "txLabelSent": "Mengirim {{symbol}}",
+    "txSentSubtitle": "Ke {{toName}} · {{networkName}}"
+  }
+}

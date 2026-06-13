@@ -19,6 +19,7 @@ import { ArrowLeft, Check, ChevronDown, Globe, ScanLine, Search, X } from 'lucid
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 // Minimal ABI-encoded function selectors for ERC-20 metadata
 const NAME_SELECTOR = '0x06fdde03';
@@ -77,6 +78,7 @@ async function fetchErc20Meta(
 // ---------------------------------------------------------------------------
 
 function NetworkPicker({ selected, onSelect }: { selected: Network; onSelect: (n: Network) => void }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -95,7 +97,7 @@ function NetworkPicker({ selected, onSelect }: { selected: Network; onSelect: (n
       <Pressable style={styles.pickerButton} onPress={() => setOpen(!open)}>
         <ChainLogo label={selected.iconLabel} color={selected.iconColor} bgColor={selected.iconBg} logoURL={selected.logoURL} size={28} />
         <Text style={styles.pickerButtonText}>{selected.displayName}</Text>
-        <Text style={styles.pickerChainId}>Chain {selected.chainId}</Text>
+        <Text style={styles.pickerChainId}>{t('addToken.chainId', { chainId: selected.chainId })}</Text>
         <ChevronDown size={16} color={color.fg.subtle} style={open ? { transform: [{ rotate: '180deg' }] } : undefined} />
       </Pressable>
 
@@ -108,7 +110,7 @@ function NetworkPicker({ selected, onSelect }: { selected: Network; onSelect: (n
               <Search size={14} color={color.fg.subtle} strokeWidth={2} />
               <TextInput
                 style={styles.pickerSearchInput}
-                placeholder="Search network..."
+                placeholder={t('addToken.netPickerSearchPlaceholder')}
                 placeholderTextColor={color.fg.subtle}
                 value={search}
                 onChangeText={setSearch}
@@ -140,14 +142,14 @@ function NetworkPicker({ selected, onSelect }: { selected: Network; onSelect: (n
                   <ChainLogo label={network.iconLabel} color={network.iconColor} bgColor={network.iconBg} logoURL={network.logoURL} size={24} />
                   <View style={styles.pickerItemInfo}>
                     <Text style={[styles.pickerItemName, isSelected && styles.pickerItemNameSelected]}>{network.displayName}</Text>
-                    <Text style={styles.pickerItemChainId}>Chain {network.chainId}</Text>
+                    <Text style={styles.pickerItemChainId}>{t('addToken.chainId', { chainId: network.chainId })}</Text>
                   </View>
                   {isSelected && <Check size={16} color={color.accent.base} strokeWidth={2.5} />}
                 </Pressable>
               );
             })}
             {filtered.length === 0 && (
-              <Text style={styles.pickerEmpty}>No networks match "{search}"</Text>
+              <Text style={styles.pickerEmpty}>{t('addToken.netPickerEmpty', { query: search })}</Text>
             )}
           </ScrollView>
         </VelaCard>
@@ -164,6 +166,7 @@ type Tab = 'erc20' | 'network';
 
 export default function AddTokenScreen() {
   const router = useSafeRouter();
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('erc20');
 
   // ERC-20 state
@@ -207,17 +210,17 @@ export default function AddTokenScreen() {
       const existing = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
       const custom = await loadCustomNetworks();
       if (existing || custom.find(n => n.chainId === chainId)) {
-        setNetError('This network is already added');
+        setNetError(t('addToken.errorAlreadyAdded'));
         setNetLoading(false);
         return;
       }
       const info = await fetchChainInfo(chainId);
-      if (!info) { setNetError('Chain info not found'); setNetLoading(false); return; }
+      if (!info) { setNetError(t('addToken.errorChainNotFound')); setNetLoading(false); return; }
       setNetChainInfo(info);
       const compat = await checkNetworkCompatibility(info.rpcUrls, chainId);
       setNetCompat(compat);
       if (!compat.compatible) {
-        setNetError(compat.error ?? 'Not compatible with Vela Wallet');
+        setNetError(compat.error ?? t('addToken.errorNotCompatible'));
       }
     } catch (err) {
       setNetError(err instanceof Error ? err.message : 'Failed to fetch chain info');
@@ -250,7 +253,7 @@ export default function AddTokenScreen() {
       setNetError(null);
       setNetChainInfo({ ...netChainInfo, _added: true });
     } catch {
-      showAlert('Error', 'Failed to add network.');
+      showAlert(t('addToken.errorTitle'), t('addToken.errorAddNetwork'));
     }
     setNetSaving(false);
   };
@@ -279,7 +282,7 @@ export default function AddTokenScreen() {
     }
 
     if (found.length === 0) {
-      showAlert('Not Found', 'Could not find this token on any network.');
+      showAlert(t('addToken.notFoundTitle'), t('addToken.notFoundMessage'));
     }
     setFoundTokens(found);
     setLoading(false);
@@ -310,7 +313,7 @@ export default function AddTokenScreen() {
       hapticSuccess();
       setAddedTokenIds(prev => new Set(prev).add(tokenId));
     } catch {
-      showAlert('Error', 'Failed to save token.');
+      showAlert(t('addToken.errorTitle'), t('addToken.errorSaveToken'));
     } finally {
       setSaving(false);
     }
@@ -324,27 +327,27 @@ export default function AddTokenScreen() {
           <Pressable onPress={() => router.back()} hitSlop={8} style={styles.navBtn}>
             <ArrowLeft size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
-          <Text style={styles.navTitle}>Add Token</Text>
+          <Text style={styles.navTitle}>{t('addToken.navTitle')}</Text>
           <View style={styles.navSpacer} />
         </View>
 
         {/* Tab switcher */}
         <View style={styles.tabRow}>
           <Pressable style={[styles.tab, tab === 'erc20' && styles.tabActive]} onPress={() => setTab('erc20')}>
-            <Text style={[styles.tabText, tab === 'erc20' && styles.tabTextActive]}>ERC-20 Token</Text>
+            <Text style={[styles.tabText, tab === 'erc20' && styles.tabTextActive]}>{t('addToken.tabErc20')}</Text>
           </Pressable>
           <Pressable style={[styles.tab, tab === 'network' && styles.tabActive]} onPress={() => setTab('network')}>
             <Globe size={14} color={tab === 'network' ? color.accent.base : color.fg.subtle} strokeWidth={2} />
-            <Text style={[styles.tabText, tab === 'network' && styles.tabTextActive]}>Native Token</Text>
+            <Text style={[styles.tabText, tab === 'network' && styles.tabTextActive]}>{t('addToken.tabNative')}</Text>
           </Pressable>
         </View>
 
         {tab === 'network' ? (
           <>
-            <Text style={styles.fieldLabel}>Search Network</Text>
+            <Text style={styles.fieldLabel}>{t('addToken.netSearchLabel')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="Name or chain ID (e.g. Avalanche, 43114)"
+              placeholder={t('addToken.netSearchPlaceholder')}
               placeholderTextColor={color.fg.subtle}
               value={netQuery}
               onChangeText={handleNetSearch}
@@ -352,7 +355,7 @@ export default function AddTokenScreen() {
               autoCorrect={false}
             />
 
-            {netSearching && <Text style={styles.searchHint}>Searching...</Text>}
+            {netSearching && <Text style={styles.searchHint}>{t('addToken.netSearching')}</Text>}
 
             {netSuggestions.length > 0 && (
               <VelaCard style={styles.suggestionsCard}>
@@ -361,7 +364,7 @@ export default function AddTokenScreen() {
                     {i > 0 && <View style={styles.separator} />}
                     <Pressable style={styles.suggestionRow} onPress={() => { setNetQuery(s.name); handleNetSelect(s.chainId); }}>
                       <Text style={styles.suggestionName}>{s.name}</Text>
-                      <Text style={styles.suggestionChainId}>Chain {s.chainId}</Text>
+                      <Text style={styles.suggestionChainId}>{t('addToken.chainId', { chainId: s.chainId })}</Text>
                     </Pressable>
                   </React.Fragment>
                 ))}
@@ -373,42 +376,42 @@ export default function AddTokenScreen() {
               <Animated.View entering={fadeInDown(0, 300)}>
                 <VelaCard style={styles.resultCard}>
                   <View style={styles.resultRow}>
-                    <Text style={styles.resultLabel}>Name</Text>
+                    <Text style={styles.resultLabel}>{t('addToken.labelName')}</Text>
                     <Text style={styles.resultValue}>{netChainInfo.name}</Text>
                   </View>
                   <View style={styles.separator} />
                   <View style={styles.resultRow}>
-                    <Text style={styles.resultLabel}>Chain ID</Text>
+                    <Text style={styles.resultLabel}>{t('addToken.labelChainId')}</Text>
                     <Text style={styles.resultValue}>{netChainInfo.chainId}</Text>
                   </View>
                   <View style={styles.separator} />
                   <View style={styles.resultRow}>
-                    <Text style={styles.resultLabel}>Native Token</Text>
+                    <Text style={styles.resultLabel}>{t('addToken.labelNativeToken')}</Text>
                     <Text style={styles.resultValue}>{netChainInfo.nativeCurrency?.symbol}</Text>
                   </View>
                   <View style={styles.separator} />
                   <View style={styles.resultRow}>
-                    <Text style={styles.resultLabel}>Decimals</Text>
+                    <Text style={styles.resultLabel}>{t('addToken.labelDecimals')}</Text>
                     <Text style={styles.resultValue}>{netChainInfo.nativeCurrency?.decimals}</Text>
                   </View>
                   {netChainInfo.explorerUrl ? (
                     <>
                       <View style={styles.separator} />
                       <View style={styles.resultRow}>
-                        <Text style={styles.resultLabel}>Explorer</Text>
+                        <Text style={styles.resultLabel}>{t('addToken.labelExplorer')}</Text>
                         <Pressable onPress={() => openBrowser(netChainInfo.explorerUrl)}>
-                          <Text style={[styles.resultValue, { color: color.accent.base }]}>View ↗</Text>
+                          <Text style={[styles.resultValue, { color: color.accent.base }]}>{t('addToken.labelExplorerLink')}</Text>
                         </Pressable>
                       </View>
                     </>
                   ) : null}
                   {/* Editable RPC URL */}
                   <View style={styles.separator} />
-                  <Text style={[styles.fieldLabel, { marginTop: space.lg }]}>RPC URL</Text>
+                  <Text style={[styles.fieldLabel, { marginTop: space.lg }]}>{t('addToken.labelRpcUrl')}</Text>
                   <TextInput
                     style={styles.input}
                     value={netChainInfo.rpcUrl}
-                    onChangeText={(t) => setNetChainInfo({ ...netChainInfo, rpcUrl: t, rpcUrls: [t] })}
+                    onChangeText={(val) => setNetChainInfo({ ...netChainInfo, rpcUrl: val, rpcUrls: [val] })}
                     autoCapitalize="none"
                     autoCorrect={false}
                     placeholder="https://..."
@@ -418,11 +421,11 @@ export default function AddTokenScreen() {
               </Animated.View>
             )}
 
-            {netLoading && <Text style={styles.searchHint}>Checking compatibility...</Text>}
+            {netLoading && <Text style={styles.searchHint}>{t('addToken.checkingCompat')}</Text>}
             {netError && netCompat && !netCompat.compatible && (
               <Animated.View entering={fadeInDown(0, 300)}>
                 <VelaCard elevated style={styles.compatCard}>
-                  <Text style={styles.compatTitle}>Compatibility Check</Text>
+                  <Text style={styles.compatTitle}>{t('addToken.compatTitle')}</Text>
 
                   {/* Contract checklist */}
                   {netCompat.contracts.map((c) => (
@@ -456,7 +459,7 @@ export default function AddTokenScreen() {
                       style={styles.compatAction}
                       onPress={() => openBrowser(`https://biubiu.tools/apps/vela-wallet-chain-setup?chainId=${netChainInfo.chainId}`)}
                     >
-                      <Text style={styles.compatActionText}>Deploy missing contracts ↗</Text>
+                      <Text style={styles.compatActionText}>{t('addToken.deployContracts')}</Text>
                     </Pressable>
                   )}
                 </VelaCard>
@@ -469,16 +472,16 @@ export default function AddTokenScreen() {
                 <VelaCard elevated style={styles.resultCard}>
                   <View style={styles.resultHeader}>
                     <Check size={20} color={color.success.base} strokeWidth={2.5} />
-                    <Text style={styles.resultTitle}>Compatible</Text>
+                    <Text style={styles.resultTitle}>{t('addToken.compatible')}</Text>
                   </View>
                   {netChainInfo._added ? (
                     <View style={styles.addedRow}>
                       <Check size={16} color={color.success.base} strokeWidth={2.5} />
-                      <Text style={styles.addedText}>Network Added</Text>
+                      <Text style={styles.addedText}>{t('addToken.networkAdded')}</Text>
                     </View>
                   ) : (
                     <VelaButton
-                      title="Add Network"
+                      title={t('addToken.addNetworkBtn')}
                       onPress={handleNetAdd}
                       variant="accent"
                       loading={netSaving}
@@ -492,15 +495,15 @@ export default function AddTokenScreen() {
         ) : (
           <>
         {/* ERC-20 tab content — just contract address, auto-detect networks */}
-        <Text style={styles.fieldLabel}>Token Address</Text>
+        <Text style={styles.fieldLabel}>{t('addToken.tokenAddressLabel')}</Text>
         <View style={styles.inputRow}>
           <TextInput
             style={styles.inputWithIcon}
             placeholder="0x..."
             placeholderTextColor={color.fg.subtle}
             value={contractAddress}
-            onChangeText={(t) => {
-              setContractAddress(t);
+            onChangeText={(val) => {
+              setContractAddress(val);
               setFoundTokens([]);
             }}
             autoCapitalize="none"
@@ -513,7 +516,7 @@ export default function AddTokenScreen() {
 
         {/* Fetch button */}
         <VelaButton
-          title={loading ? 'Searching all networks...' : 'Search Token'}
+          title={loading ? t('addToken.searchingNetworks') : t('addToken.searchTokenBtn')}
           onPress={fetchTokenMetadata}
           disabled={!isValidAddress || loading}
           loading={loading}
@@ -526,33 +529,33 @@ export default function AddTokenScreen() {
           <Animated.View key={token.chainId} entering={fadeInDown(0, 300)}>
             <VelaCard style={styles.resultCard}>
               <View style={styles.resultRow}>
-                <Text style={styles.resultLabel}>Name</Text>
+                <Text style={styles.resultLabel}>{t('addToken.labelName')}</Text>
                 <Text style={styles.resultValue}>{token.name}</Text>
               </View>
               <View style={styles.separator} />
               <View style={styles.resultRow}>
-                <Text style={styles.resultLabel}>Symbol</Text>
+                <Text style={styles.resultLabel}>{t('addToken.labelSymbol')}</Text>
                 <Text style={styles.resultValue}>{token.symbol}</Text>
               </View>
               <View style={styles.separator} />
               <View style={styles.resultRow}>
-                <Text style={styles.resultLabel}>Decimals</Text>
+                <Text style={styles.resultLabel}>{t('addToken.labelDecimals')}</Text>
                 <Text style={styles.resultValue}>{token.decimals}</Text>
               </View>
               <View style={styles.separator} />
               <View style={styles.resultRow}>
-                <Text style={styles.resultLabel}>Network</Text>
+                <Text style={styles.resultLabel}>{t('addToken.labelNetwork')}</Text>
                 <Text style={styles.resultValue}>{token.networkName}</Text>
               </View>
 
               {addedTokenIds.has(`${token.chainId}_${contractAddress.toLowerCase()}`) ? (
                 <View style={styles.addedRow}>
                   <Check size={16} color={color.success.base} strokeWidth={2.5} />
-                  <Text style={styles.addedText}>Added</Text>
+                  <Text style={styles.addedText}>{t('addToken.tokenAdded')}</Text>
                 </View>
               ) : (
                 <VelaButton
-                  title="Add to Wallet"
+                  title={t('addToken.addToWalletBtn')}
                   onPress={() => handleSave(token)}
                   variant="accent"
                   loading={saving}

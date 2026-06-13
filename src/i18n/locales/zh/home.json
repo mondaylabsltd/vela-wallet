@@ -1,0 +1,26 @@
+{
+  "home": {
+    "totalBalance": "总余额",
+    "manageAssets": "管理资产",
+    "tabActivity": "动态",
+    "tabConnections": "连接",
+    "liveIndicator": "实时 · 监听收款中",
+    "emptyNoActivityNetwork": "该网络暂无交易记录",
+    "emptyNoActivity": "暂无交易记录",
+    "emptySubtitle": "收款将实时显示在这里。",
+    "invalidQrTitle": "无效二维码",
+    "invalidQrBody": "请扫描有效的以太坊地址或连接 URI。",
+    "switchAccountTitle": "切换账户",
+    "switcherAccountCount": "{{count}} 个账户 · ",
+    "connEmptyTitle": "暂无活跃连接",
+    "connEmptySub": "扫描 dApp 二维码进行连接。同一时间仅支持一个活跃连接。",
+    "connScanBtn": "扫码连接",
+    "connDefaultName": "已连接的 dApp",
+    "connActive": "活跃",
+    "connNote": "同一时间仅支持一个活跃连接",
+    "connDisconnect": "断开连接",
+    "connEventsHead": "连接活动 · {{count}}",
+    "connNoEvents": "该连接暂无请求记录。",
+    "toastReceived": "已收到 {{amount}} {{token}}"
+  }
+}

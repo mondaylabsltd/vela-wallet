@@ -10,12 +10,15 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { chainName, getAllNetworksSync } from '@/models/network';
 import { formatBalance, shortAddr } from '@/models/types';
+import { formatFiat } from '@/services/currency';
+import { formatDateTime } from '@/services/locale-format';
 import { copyToClipboard, hapticSuccess, openBrowser, showAlert } from '@/services/platform';
 import type { RecipientIdentity } from '@/services/recipient-identity';
 import { ExternalLink, Share2 } from 'lucide-react-native';
 import QRCodeLib from 'qrcode';
 import React, { useRef } from 'react';
 import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -32,25 +35,23 @@ interface Props {
   txHash: string;
   logoUrls: string[];
   usdValue?: number;
+  /** Display-currency conversion for the fiat line (defaults to USD). */
+  rate?: number;
+  currencyCode?: string;
+  currencySymbol?: string;
   timestamp: Date;
   recipientIdentity?: RecipientIdentity | null;
   onDone: () => void;
 }
 
+/** Format a USD value into the receipt's display currency. */
+function fiat(usd: number, p: { rate?: number; currencyCode?: string; currencySymbol?: string }): string {
+  return formatFiat(usd * (p.rate ?? 1), p.currencyCode ?? 'USD', p.currencySymbol ?? '$');
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatTime(d: Date): string {
-  return d.toLocaleString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
-function formatUsd(value: number): string {
-  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 // ---------------------------------------------------------------------------
 // Canvas share image (web) — pixel-perfect, no html2canvas
@@ -99,7 +100,19 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-async function renderReceiptToCanvas(props: Props): Promise<Blob> {
+interface CanvasLabels {
+  canvasTitle: string;
+  from: string;
+  to: string;
+  network: string;
+  time: string;
+  txHash: string;
+  scanHint: string;
+  footerBrand: string;
+  footerUrl: string;
+}
+
+async function renderReceiptToCanvas(props: Props, labels: CanvasLabels): Promise<Blob> {
   const { from, fromName, to, amount, symbol, chainId, txHash, logoUrls, usdValue, timestamp, recipientIdentity } = props;
   const chain = chainName(chainId);
   const net = getAllNetworksSync().find(n => n.chainId === chainId);
@@ -170,7 +183,7 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
   ctx.fillStyle = color.fg.base;
   ctx.font = `bold ${s(13)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'left';
-  ctx.fillText('TRANSACTION RECEIPT', L, y + s(14));
+  ctx.fillText(labels.canvasTitle, L, y + s(14));
   ctx.fillStyle = color.fg.muted;
   ctx.font = `500 ${s(12)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'right';
@@ -207,7 +220,7 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
   if (hasUsd) {
     ctx.fillStyle = color.fg.muted;
     ctx.font = `500 ${s(15)}px Inter, system-ui, sans-serif`;
-    ctx.fillText(formatUsd(usdValue!), W / 2, y + s(15));
+    ctx.fillText(fiat(usdValue!, props), W / 2, y + s(15));
     y += s(24);
   }
   y += s(16);
@@ -219,11 +232,11 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
 
   // Detail rows
   const details: [string, string, string?][] = [
-    ['From', shortAddr(from), fromName],
-    ['To', shortAddr(to), displayToName ?? undefined],
-    ['Network', chain],
-    ['Time', formatTime(timestamp)],
-    ['Tx Hash', shortAddr(txHash)],
+    [labels.from, shortAddr(from), fromName],
+    [labels.to, shortAddr(to), displayToName ?? undefined],
+    [labels.network, chain],
+    [labels.time, formatDateTime(timestamp)],
+    [labels.txHash, shortAddr(txHash)],
   ];
 
   for (const [label, value, name] of details) {
@@ -274,7 +287,7 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
   ctx.fillStyle = color.fg.subtle;
   ctx.font = `400 ${s(11)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText('Scan to view on explorer', W / 2, y + s(12));
+  ctx.fillText(labels.scanHint, W / 2, y + s(12));
   y += s(16) + s(24);
 
   // Footer: logo + VELA WALLET + getvela.app
@@ -297,12 +310,12 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
   ctx.font = `bold ${s(13)}px Inter, system-ui, sans-serif`;
   ctx.textAlign = 'center';
   ctx.letterSpacing = `${s(2)}px`;
-  ctx.fillText('VELA WALLET', W / 2, y + s(13));
+  ctx.fillText(labels.footerBrand, W / 2, y + s(13));
   y += s(18);
   ctx.fillStyle = color.fg.subtle;
   ctx.font = `400 ${s(11)}px Inter, system-ui, sans-serif`;
   ctx.letterSpacing = '0px';
-  ctx.fillText('getvela.app', W / 2, y + s(11));
+  ctx.fillText(labels.footerUrl, W / 2, y + s(11));
 
   return new Promise((resolve) => canvas.toBlob(resolve as BlobCallback, 'image/png', 1));
 }
@@ -313,14 +326,28 @@ async function renderReceiptToCanvas(props: Props): Promise<Blob> {
 
 export function TransactionReceipt({
   from, fromName, to, toName, amount, symbol, chainId,
-  txHash, logoUrls, usdValue, timestamp, recipientIdentity, onDone,
+  txHash, logoUrls, usdValue, rate, currencyCode, currencySymbol, timestamp, recipientIdentity, onDone,
 }: Props) {
+  const { t } = useTranslation();
   const receiptRef = useRef<View>(null);
+  const fiatPrefs = { rate, currencyCode, currencySymbol };
   const chain = chainName(chainId);
   const net = getAllNetworksSync().find(n => n.chainId === chainId);
   const explorerBase = net?.explorerURL ?? 'https://etherscan.io';
   const explorerUrl = `${explorerBase}/tx/${txHash}`;
   const displayToName = recipientIdentity?.name ?? toName;
+
+  const canvasLabels: CanvasLabels = {
+    canvasTitle: t('componentsTx.receipt.canvasTitle'),
+    from: t('componentsTx.receipt.from'),
+    to: t('componentsTx.receipt.to'),
+    network: t('componentsTx.receipt.network'),
+    time: t('componentsTx.receipt.time'),
+    txHash: t('componentsTx.receipt.txHash'),
+    scanHint: t('componentsTx.receipt.scanHint'),
+    footerBrand: t('componentsTx.receipt.footerBrand'),
+    footerUrl: t('componentsTx.receipt.footerUrl'),
+  };
 
   const handleViewExplorer = () => openBrowser(explorerUrl);
 
@@ -329,8 +356,8 @@ export function TransactionReceipt({
       try {
         const blob = await renderReceiptToCanvas({
           from, fromName, to, toName, amount, symbol, chainId,
-          txHash, logoUrls, usdValue, timestamp, recipientIdentity, onDone,
-        });
+          txHash, logoUrls, usdValue, rate, currencyCode, currencySymbol, timestamp, recipientIdentity, onDone,
+        }, canvasLabels);
         const file = new File([blob], `vela-receipt-${txHash.slice(0, 10)}.png`, { type: 'image/png' });
 
         if (navigator.share && navigator.canShare?.({ files: [file] })) {
@@ -342,7 +369,7 @@ export function TransactionReceipt({
         try {
           await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
           hapticSuccess();
-          showAlert('Copied', 'Receipt image copied to clipboard.');
+          showAlert(t('componentsTx.receipt.copiedTitle'), t('componentsTx.receipt.copiedImageBody'));
           return;
         } catch {}
 
@@ -356,7 +383,7 @@ export function TransactionReceipt({
         hapticSuccess();
       } catch {
         await copyToClipboard(explorerUrl);
-        showAlert('Copied', 'Explorer link copied.');
+        showAlert(t('componentsTx.receipt.copiedTitle'), t('componentsTx.receipt.copiedLinkBody'));
       }
     } else {
       try {
@@ -369,7 +396,7 @@ export function TransactionReceipt({
       } catch (e) {
         console.warn('Share failed:', e);
         await copyToClipboard(explorerUrl);
-        showAlert('Copied', 'Explorer link copied.');
+        showAlert(t('componentsTx.receipt.copiedTitle'), t('componentsTx.receipt.copiedLinkBody'));
       }
     }
   };
@@ -379,7 +406,7 @@ export function TransactionReceipt({
       {/* Capturable receipt card */}
       <View ref={receiptRef} testID="receipt-card" collapsable={false} style={styles.receipt}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Transaction Receipt</Text>
+          <Text style={styles.headerTitle}>{t('componentsTx.receipt.title')}</Text>
           <View style={styles.headerNetwork}>
             {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />}
             <Text style={styles.headerChain}>{chain}</Text>
@@ -389,24 +416,24 @@ export function TransactionReceipt({
         <View style={styles.amountSection}>
           <TokenLogo symbol={symbol} logoUrls={logoUrls} size={44} />
           <Text style={styles.amountText}>{formatBalance(parseFloat(amount))} {symbol}</Text>
-          {usdValue != null && usdValue > 0 && <Text style={styles.amountUsd}>{formatUsd(usdValue)}</Text>}
+          {usdValue != null && usdValue > 0 && <Text style={styles.amountUsd}>{fiat(usdValue, fiatPrefs)}</Text>}
         </View>
         <View style={styles.separator} />
 
-        <View style={styles.detailRow}><Text style={styles.detailLabel}>From</Text><View style={styles.detailValueCol}>{fromName && <Text style={styles.detailName}>{fromName}</Text>}<Text style={styles.detailAddr}>{shortAddr(from)}</Text></View></View>
-        <View style={styles.detailRow}><Text style={styles.detailLabel}>To</Text><View style={styles.detailValueCol}>{displayToName && <Text style={styles.detailName}>{displayToName}</Text>}<Text style={styles.detailAddr}>{shortAddr(to)}</Text></View></View>
-        <View style={styles.detailRow}><Text style={styles.detailLabel}>Network</Text><Text style={styles.detailValue}>{chain}</Text></View>
-        <View style={styles.detailRow}><Text style={styles.detailLabel}>Time</Text><Text style={styles.detailValue}>{formatTime(timestamp)}</Text></View>
-        <View style={styles.detailRow}><Text style={styles.detailLabel}>Tx Hash</Text><Text style={styles.detailAddr}>{shortAddr(txHash)}</Text></View>
+        <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.from')}</Text><View style={styles.detailValueCol}>{fromName && <Text style={styles.detailName}>{fromName}</Text>}<Text style={styles.detailAddr}>{shortAddr(from)}</Text></View></View>
+        <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.to')}</Text><View style={styles.detailValueCol}>{displayToName && <Text style={styles.detailName}>{displayToName}</Text>}<Text style={styles.detailAddr}>{shortAddr(to)}</Text></View></View>
+        <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.network')}</Text><Text style={styles.detailValue}>{chain}</Text></View>
+        <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.time')}</Text><Text style={styles.detailValue}>{formatDateTime(timestamp)}</Text></View>
+        <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.txHash')}</Text><Text style={styles.detailAddr}>{shortAddr(txHash)}</Text></View>
 
         <View style={styles.qrSection}>
           <QRCode value={explorerUrl} size={80} />
-          <Text style={styles.qrHint}>Scan to view on explorer</Text>
+          <Text style={styles.qrHint}>{t('componentsTx.receipt.scanHint')}</Text>
         </View>
         <View style={styles.footer}>
           <Image source={LOGO_ASSET} style={styles.footerLogoImg} resizeMode="contain" />
-          <Text style={styles.footerLogo}>VELA WALLET</Text>
-          <Text style={styles.footerUrl}>getvela.app</Text>
+          <Text style={styles.footerLogo}>{t('componentsTx.receipt.footerBrand')}</Text>
+          <Text style={styles.footerUrl}>{t('componentsTx.receipt.footerUrl')}</Text>
         </View>
       </View>
 
@@ -414,16 +441,16 @@ export function TransactionReceipt({
       <View style={styles.actions}>
         <Pressable style={styles.actionBtn} onPress={handleViewExplorer}>
           <ExternalLink size={18} color={color.fg.muted} strokeWidth={2} />
-          <Text style={styles.actionText}>Explorer</Text>
+          <Text style={styles.actionText}>{t('componentsTx.receipt.explorer')}</Text>
         </Pressable>
         <Pressable style={styles.actionBtn} onPress={handleShare}>
           <Share2 size={18} color={color.fg.muted} strokeWidth={2} />
-          <Text style={styles.actionText}>Share</Text>
+          <Text style={styles.actionText}>{t('componentsTx.receipt.share')}</Text>
         </Pressable>
       </View>
 
       <Pressable style={styles.doneBtn} onPress={onDone}>
-        <Text style={styles.doneBtnText}>Done</Text>
+        <Text style={styles.doneBtnText}>{t('componentsTx.receipt.done')}</Text>
       </Pressable>
     </ScrollView>
   );

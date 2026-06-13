@@ -1,0 +1,70 @@
+{
+  "onboarding": {
+    "welcome": {
+      "tagline": "Tus llaves, tus monedas.\nTan fácil como un toque.",
+      "createWallet": "Crear billetera",
+      "alreadyHaveWallet": "Ya tengo una billetera"
+    },
+    "settings": {
+      "title": "Ajustes",
+      "sectionAppearance": "APARIENCIA",
+      "themeLabelLight": "Claro",
+      "themeLabelDark": "Oscuro",
+      "themeLabelAuto": "Automático",
+      "sectionPasskeyIndex": "ÍNDICE DE PASSKEY",
+      "passkeyHint": "Este servicio guarda la llave pública de tu passkey para iniciar sesión entre dispositivos. Vela Wallet nunca tiene acceso a la llave privada de tu passkey.",
+      "endpointUrlLabel": "URL del endpoint",
+      "resetToDefault": "Restablecer al valor predeterminado",
+      "sectionDebug": "DEPURACIÓN",
+      "simulateFailure": "Simular falla del endpoint",
+      "warningText": "No se puede contactar al servicio de índice de Passkey. La creación de billeteras y el inicio de sesión requieren este servicio. Configura abajo un endpoint accesible."
+    },
+    "create": {
+      "headerDefault": "Crear billetera",
+      "headerCreated": "Billetera creada",
+      "headerSyncFailed": "Sincronización entre dispositivos",
+      "accountNameLabel": "Nombre de la cuenta",
+      "accountNamePlaceholder": "Escribe un nombre para tu cuenta",
+      "accountNameHint": "Este nombre se guarda con tu llave pública on-chain para iniciar sesión entre dispositivos.",
+      "ack0": "Esta es una billetera de autocustodia. La llave privada de tu passkey la administra el gestor de contraseñas de tu dispositivo (Llavero de iCloud / Administrador de contraseñas de Google). Vela Wallet no puede acceder a ella ni recuperarla.",
+      "ack1": "Si pierdes tu dispositivo, puedes restaurar tu billetera en uno nuevo a través de tu cuenta de iCloud o Google.",
+      "ack2": "Si tu cuenta de iCloud o Google se ve comprometida, el control de tu billetera también podría verse comprometido. Protégela con una contraseña fuerte y 2FA.",
+      "ack3": "Acepto la ",
+      "ack3PrivacyPolicy": "Política de Privacidad",
+      "ack3And": " y los ",
+      "ack3Terms": "Términos del Servicio",
+      "ack3Period": ".",
+      "createWalletBtn": "Crear billetera",
+      "successTitle": "¡Tu billetera está lista!",
+      "successMessage": "Tu dirección funciona en las {{count}} redes compatibles.",
+      "verifyHint": "Toca abajo para verificar que tu identidad funciona antes de usar la billetera.",
+      "verifySignInBtn": "Verificar e iniciar sesión",
+      "syncFailedTitle": "Falló la sincronización",
+      "syncFailedMessage": "Se creó la billetera, pero tu llave pública no se sincronizó con el servidor. No podrás iniciar sesión en otros dispositivos hasta resolver esto.",
+      "syncFailedHint": "Revisa tu conexión o configura abajo un endpoint personalizado.",
+      "openSettings": "Abrir Ajustes",
+      "retryUploadBtn": "Reintentar subida",
+      "statusSyncingKey": "Sincronizando la llave pública...",
+      "statusSettingUpIdentity": "Configurando una identidad segura...",
+      "statusExtractingKey": "Extrayendo la llave pública...",
+      "statusComputingAddress": "Calculando la dirección de la billetera...",
+      "statusVerifyingIdentity": "Verificando la identidad...",
+      "statusSetupCancelled": "Se canceló la configuración.",
+      "statusVerifyCancelled": "Se canceló la verificación. Inténtalo de nuevo.",
+      "alertNotSupportedTitle": "No compatible",
+      "alertNotSupportedBody": "La autenticación biométrica no está disponible en este dispositivo.",
+      "alertErrorTitle": "Error"
+    },
+    "login": {
+      "alertNotSupportedTitle": "No compatible",
+      "alertNotSupportedBody": "La autenticación biométrica no está disponible en este dispositivo.",
+      "alertIncompatibleTitle": "Dispositivo no compatible",
+      "alertIncompatibleBody": "El proveedor de identidad de tu dispositivo no es compatible con Vela Wallet. Cambia al Administrador de contraseñas de Google en los ajustes del sistema e inténtalo de nuevo.",
+      "alertNotFoundTitle": "Cuenta no encontrada",
+      "alertNotFoundBody": "No se encontró ninguna billetera para esta identidad.\n\nPosibles motivos:\n• Aún no has creado una billetera\n• Tu identidad no se ha sincronizado en este dispositivo (revisa los ajustes de iCloud / Google)\n• No se puede contactar al servidor de llaves públicas\n\nIntenta crear una billetera nueva o asegúrate de que tu proveedor de identidad (Face ID / huella) esté sincronizado entre dispositivos.",
+      "alertSignInFailedTitle": "Error al iniciar sesión",
+      "alertSignInFailedBody": "{{message}}\n\nAsegúrate de que tu dispositivo tenga configurado Face ID, Touch ID o huella e inténtalo de nuevo.",
+      "alertIncompatibleBodyCreate": "El proveedor de identidad de tu dispositivo no es compatible con esta billetera. Cambia al Administrador de contraseñas de Google en los ajustes del sistema e inténtalo de nuevo."
+    }
+  }
+}

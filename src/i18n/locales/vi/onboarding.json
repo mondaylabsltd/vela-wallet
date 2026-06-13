@@ -1,0 +1,70 @@
+{
+  "onboarding": {
+    "welcome": {
+      "tagline": "Khóa của bạn, coin của bạn.\nĐơn giản chỉ một chạm.",
+      "createWallet": "Tạo ví",
+      "alreadyHaveWallet": "Tôi đã có ví"
+    },
+    "settings": {
+      "title": "Cài đặt",
+      "sectionAppearance": "GIAO DIỆN",
+      "themeLabelLight": "Sáng",
+      "themeLabelDark": "Tối",
+      "themeLabelAuto": "Tự động",
+      "sectionPasskeyIndex": "CHỈ MỤC PASSKEY",
+      "passkeyHint": "Dịch vụ này lưu khóa công khai của passkey để bạn đăng nhập trên nhiều thiết bị. Vela Wallet không bao giờ truy cập được khóa riêng tư của passkey.",
+      "endpointUrlLabel": "URL điểm cuối",
+      "resetToDefault": "Khôi phục mặc định",
+      "sectionDebug": "GỠ LỖI",
+      "simulateFailure": "Giả lập lỗi điểm cuối",
+      "warningText": "Không kết nối được dịch vụ Chỉ mục Passkey. Việc tạo ví và đăng nhập đều cần dịch vụ này. Vui lòng cấu hình một điểm cuối có thể truy cập bên dưới."
+    },
+    "create": {
+      "headerDefault": "Tạo ví",
+      "headerCreated": "Đã tạo ví",
+      "headerSyncFailed": "Đồng bộ đa thiết bị",
+      "accountNameLabel": "Tên tài khoản",
+      "accountNamePlaceholder": "Nhập tên cho tài khoản của bạn",
+      "accountNameHint": "Tên này được lưu cùng khóa công khai của bạn on-chain để đăng nhập trên nhiều thiết bị.",
+      "ack0": "Đây là ví tự lưu ký. Khóa riêng tư của passkey do trình quản lý mật khẩu trên thiết bị của bạn quản lý (iCloud Keychain / Google Password Manager). Vela Wallet không thể truy cập hay khôi phục khóa đó.",
+      "ack1": "Nếu mất thiết bị, bạn có thể khôi phục ví trên thiết bị mới thông qua tài khoản iCloud hoặc Google của mình.",
+      "ack2": "Nếu tài khoản iCloud hoặc Google của bạn bị xâm phạm, quyền kiểm soát ví cũng có thể bị xâm phạm. Hãy bảo vệ bằng mật khẩu mạnh và 2FA.",
+      "ack3": "Tôi đồng ý với ",
+      "ack3PrivacyPolicy": "Chính sách quyền riêng tư",
+      "ack3And": " và ",
+      "ack3Terms": "Điều khoản dịch vụ",
+      "ack3Period": ".",
+      "createWalletBtn": "Tạo ví",
+      "successTitle": "Ví của bạn đã sẵn sàng!",
+      "successMessage": "Địa chỉ của bạn hoạt động trên cả {{count}} mạng được hỗ trợ.",
+      "verifyHint": "Chạm bên dưới để xác minh danh tính của bạn trước khi dùng ví.",
+      "verifySignInBtn": "Xác minh và đăng nhập",
+      "syncFailedTitle": "Đồng bộ thất bại",
+      "syncFailedMessage": "Đã tạo ví, nhưng khóa công khai của bạn chưa được đồng bộ lên máy chủ. Bạn sẽ không thể đăng nhập trên thiết bị khác cho đến khi vấn đề này được khắc phục.",
+      "syncFailedHint": "Kiểm tra kết nối mạng, hoặc cấu hình một điểm cuối tùy chỉnh bên dưới.",
+      "openSettings": "Mở Cài đặt",
+      "retryUploadBtn": "Thử tải lên lại",
+      "statusSyncingKey": "Đang đồng bộ khóa công khai...",
+      "statusSettingUpIdentity": "Đang thiết lập danh tính bảo mật...",
+      "statusExtractingKey": "Đang trích xuất khóa công khai...",
+      "statusComputingAddress": "Đang tính toán địa chỉ ví...",
+      "statusVerifyingIdentity": "Đang xác minh danh tính...",
+      "statusSetupCancelled": "Quá trình thiết lập đã bị hủy.",
+      "statusVerifyCancelled": "Quá trình xác minh đã bị hủy. Vui lòng thử lại.",
+      "alertNotSupportedTitle": "Không hỗ trợ",
+      "alertNotSupportedBody": "Thiết bị này không hỗ trợ xác thực sinh trắc học.",
+      "alertErrorTitle": "Lỗi"
+    },
+    "login": {
+      "alertNotSupportedTitle": "Không hỗ trợ",
+      "alertNotSupportedBody": "Thiết bị này không hỗ trợ xác thực sinh trắc học.",
+      "alertIncompatibleTitle": "Thiết bị không tương thích",
+      "alertIncompatibleBody": "Nhà cung cấp danh tính trên thiết bị của bạn không tương thích với Vela Wallet. Vui lòng chuyển sang Google Password Manager trong cài đặt hệ thống và thử lại.",
+      "alertNotFoundTitle": "Không tìm thấy tài khoản",
+      "alertNotFoundBody": "Không tìm thấy ví nào cho danh tính này.\n\nNguyên nhân có thể:\n• Bạn chưa tạo ví\n• Danh tính của bạn chưa đồng bộ đến thiết bị này (kiểm tra cài đặt iCloud / Google)\n• Không kết nối được máy chủ khóa công khai\n\nHãy thử tạo ví mới, hoặc đảm bảo nhà cung cấp danh tính (Face ID / vân tay) đã được đồng bộ giữa các thiết bị.",
+      "alertSignInFailedTitle": "Đăng nhập thất bại",
+      "alertSignInFailedBody": "{{message}}\n\nHãy đảm bảo thiết bị của bạn đã thiết lập Face ID, Touch ID hoặc vân tay rồi thử lại.",
+      "alertIncompatibleBodyCreate": "Nhà cung cấp danh tính trên thiết bị của bạn không tương thích với ví này. Vui lòng chuyển sang Google Password Manager trong cài đặt hệ thống và thử lại."
+    }
+  }
+}

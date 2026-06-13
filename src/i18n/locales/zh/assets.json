@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "actionSend": "发送",
+    "actionReceive": "接收",
+    "actionHistory": "历史",
+    "sectionTitle": "资产",
+    "hideZero": "隐藏零余额",
+    "hiddenCount": "{{count}} 个已隐藏",
+    "addToken": "添加",
+    "searchPlaceholder": "搜索代币...",
+    "rpcUnavailableSingle": "{{name}} RPC 不可用",
+    "rpcUnavailableMultiple": "{{count}} 个网络 RPC 不可用",
+    "rpcFix": "修复",
+    "emptyTitle": "存入您的第一笔资产",
+    "emptySubtext": "点击此处查看地址并接收代币",
+    "errorTitle": "错误",
+    "errorLoadBalances": "加载代币余额失败。",
+    "switcherTitle": "切换账户",
+    "switcherTotal": "总计 {{amount}}",
+    "rpcFixTitle": "修复 RPC",
+    "rpcFixChainId": "链 ID：{{chainId}}",
+    "rpcFixWarning": "该网络所有 RPC 节点均无法连接，请输入可用的 RPC URL 以恢复连接。",
+    "rpcFixLabel": "RPC URL",
+    "rpcFixSaveBtn": "保存并重试",
+    "errorSaveRpc": "保存 RPC URL 失败。",
+    "invalidQrTitle": "无效的 QR 码",
+    "invalidQrMessage": "请扫描有效的以太坊地址或连接 URI。",
+    "chainFallback": "链 {{chainId}}"
+  }
+}

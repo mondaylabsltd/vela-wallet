@@ -1,0 +1,22 @@
+{
+  "about": {
+    "title": "关于",
+    "version": "v{{version}} ({{commit}})",
+    "tagline": "更简单地持有加密货币",
+    "sectionTechnical": "技术详情",
+    "techWalletLabel": "钱包",
+    "techWalletValue": "Safe v1.4.1",
+    "techAuthLabel": "身份验证",
+    "techAuthValue": "WebAuthn / P-256",
+    "techAccountTypeLabel": "账户类型",
+    "techAccountTypeValue": "ERC-4337（智能账户）",
+    "techSignerLabel": "签名模块",
+    "techSignerValue": "SafeWebAuthnSharedSigner",
+    "techNetworksLabel": "网络",
+    "techNetworksValue": "{{count}} 条 EVM 链",
+    "linkWebsite": "官网",
+    "linkGitHub": "GitHub",
+    "linkSafeWallet": "Safe Wallet",
+    "footer": "用心构建。你的密钥，你的资产。"
+  }
+}

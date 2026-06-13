@@ -16,6 +16,7 @@ import {
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import type { BLEIncomingRequest } from '@/models/types';
+import { useTranslation } from 'react-i18next';
 
 // ---------------------------------------------------------------------------
 // Mock data for each scenario
@@ -23,16 +24,16 @@ import type { BLEIncomingRequest } from '@/models/types';
 
 const SCENARIOS: {
   id: string;
-  label: string;
-  subtitle: string;
+  labelKey: string;
+  subtitleKey: string;
   icon: React.ReactNode;
   iconBg: string;
   request: BLEIncomingRequest;
 }[] = [
   {
     id: 'erc20-transfer',
-    label: 'ERC-20 Transfer',
-    subtitle: 'Clear sign — transfer(address, uint256)',
+    labelKey: 'clearSigning.scenarioErc20Transfer',
+    subtitleKey: 'clearSigning.scenarioErc20TransferSub',
     icon: <Send size={18} color="#E8572A" strokeWidth={2} />,
     iconBg: '#FFF0EB',
     request: {
@@ -48,8 +49,8 @@ const SCENARIOS: {
   },
   {
     id: 'erc20-approve',
-    label: 'ERC-20 Approve (Unlimited)',
-    subtitle: 'Clear sign — approve(address, uint256)',
+    labelKey: 'clearSigning.scenarioErc20Approve',
+    subtitleKey: 'clearSigning.scenarioErc20ApproveSub',
     icon: <CheckCircle size={18} color="#d4890a" strokeWidth={2} />,
     iconBg: '#FFF8F0',
     request: {
@@ -65,8 +66,8 @@ const SCENARIOS: {
   },
   {
     id: 'eth-transfer',
-    label: 'ETH Transfer',
-    subtitle: 'Plain transfer — no calldata',
+    labelKey: 'clearSigning.scenarioEthTransfer',
+    subtitleKey: 'clearSigning.scenarioEthTransferSub',
     icon: <Send size={18} color="#E8572A" strokeWidth={2} />,
     iconBg: '#FFF0EB',
     request: {
@@ -82,8 +83,8 @@ const SCENARIOS: {
   },
   {
     id: 'personal-sign',
-    label: 'Personal Sign',
-    subtitle: 'Message signing — login/auth',
+    labelKey: 'clearSigning.scenarioPersonalSign',
+    subtitleKey: 'clearSigning.scenarioPersonalSignSub',
     icon: <Pen size={18} color="#6c5ce7" strokeWidth={2} />,
     iconBg: '#EEF0FF',
     request: {
@@ -100,8 +101,8 @@ const SCENARIOS: {
   },
   {
     id: 'eip712-permit',
-    label: 'EIP-712 Permit2',
-    subtitle: 'Typed data — gasless token approval',
+    labelKey: 'clearSigning.scenarioEip712Permit',
+    subtitleKey: 'clearSigning.scenarioEip712PermitSub',
     icon: <FileText size={18} color="#6c5ce7" strokeWidth={2} />,
     iconBg: '#EEF0FF',
     request: {
@@ -144,8 +145,8 @@ const SCENARIOS: {
   },
   {
     id: 'eip712-unknown',
-    label: 'EIP-712 Unknown',
-    subtitle: 'Typed data — no descriptor (blind)',
+    labelKey: 'clearSigning.scenarioEip712Unknown',
+    subtitleKey: 'clearSigning.scenarioEip712UnknownSub',
     icon: <FileText size={18} color="#d4890a" strokeWidth={2} />,
     iconBg: '#FFF8F0',
     request: {
@@ -184,8 +185,8 @@ const SCENARIOS: {
   },
   {
     id: 'blind-tx',
-    label: 'Blind Transaction',
-    subtitle: 'Unknown contract — no descriptor',
+    labelKey: 'clearSigning.scenarioBlindTx',
+    subtitleKey: 'clearSigning.scenarioBlindTxSub',
     icon: <ShieldAlert size={18} color="#d43a2a" strokeWidth={2} />,
     iconBg: '#FEF2F2',
     request: {
@@ -201,8 +202,8 @@ const SCENARIOS: {
   },
   {
     id: '1inch-swap',
-    label: '1inch Swap',
-    subtitle: 'Clear sign — contract-specific descriptor',
+    labelKey: 'clearSigning.scenario1inchSwap',
+    subtitleKey: 'clearSigning.scenario1inchSwapSub',
     icon: <ArrowRightLeft size={18} color="#E8572A" strokeWidth={2} />,
     iconBg: '#FFF0EB',
     request: {
@@ -220,8 +221,8 @@ const SCENARIOS: {
   // --- ERC-721 NFT scenarios ---
   {
     id: 'nft-transfer',
-    label: 'NFT Transfer',
-    subtitle: 'ERC-721 — transferFrom(address,address,uint256)',
+    labelKey: 'clearSigning.scenarioNftTransfer',
+    subtitleKey: 'clearSigning.scenarioNftTransferSub',
     icon: <Send size={18} color="#6c5ce7" strokeWidth={2} />,
     iconBg: '#EEF0FF',
     request: {
@@ -238,8 +239,8 @@ const SCENARIOS: {
   },
   {
     id: 'nft-approve-all',
-    label: 'NFT Approve All',
-    subtitle: 'ERC-721 — setApprovalForAll(address,bool)',
+    labelKey: 'clearSigning.scenarioNftApproveAll',
+    subtitleKey: 'clearSigning.scenarioNftApproveAllSub',
     icon: <CheckCircle size={18} color="#d4890a" strokeWidth={2} />,
     iconBg: '#FFF8F0',
     request: {
@@ -258,8 +259,8 @@ const SCENARIOS: {
   // --- ERC-4626 Vault scenarios ---
   {
     id: 'vault-deposit',
-    label: 'Vault Deposit',
-    subtitle: 'ERC-4626 — deposit(uint256,address)',
+    labelKey: 'clearSigning.scenarioVaultDeposit',
+    subtitleKey: 'clearSigning.scenarioVaultDepositSub',
     icon: <Zap size={18} color="#22a456" strokeWidth={2} />,
     iconBg: '#EDFAF2',
     request: {
@@ -276,8 +277,8 @@ const SCENARIOS: {
   },
   {
     id: 'vault-withdraw',
-    label: 'Vault Withdraw',
-    subtitle: 'ERC-4626 — withdraw(uint256,address,address)',
+    labelKey: 'clearSigning.scenarioVaultWithdraw',
+    subtitleKey: 'clearSigning.scenarioVaultWithdrawSub',
     icon: <Zap size={18} color="#6c5ce7" strokeWidth={2} />,
     iconBg: '#EEF0FF',
     request: {
@@ -296,8 +297,8 @@ const SCENARIOS: {
   // --- ERC-20 transferFrom ---
   {
     id: 'erc20-transferFrom',
-    label: 'ERC-20 TransferFrom',
-    subtitle: 'Clear sign — transferFrom(address,address,uint256)',
+    labelKey: 'clearSigning.scenarioErc20TransferFrom',
+    subtitleKey: 'clearSigning.scenarioErc20TransferFromSub',
     icon: <Send size={18} color="#E8572A" strokeWidth={2} />,
     iconBg: '#FFF0EB',
     request: {
@@ -316,8 +317,8 @@ const SCENARIOS: {
   // --- Hex message (non-readable personal_sign) ---
   {
     id: 'hex-message',
-    label: 'Hex Message Sign',
-    subtitle: 'personal_sign — non-printable hex data',
+    labelKey: 'clearSigning.scenarioHexMessage',
+    subtitleKey: 'clearSigning.scenarioHexMessageSub',
     icon: <Pen size={18} color="#d4890a" strokeWidth={2} />,
     iconBg: '#FFF8F0',
     request: {
@@ -334,8 +335,8 @@ const SCENARIOS: {
   // --- Large ETH value send ---
   {
     id: 'large-eth-send',
-    label: 'Large ETH Send',
-    subtitle: 'Plain transfer — 10 ETH',
+    labelKey: 'clearSigning.scenarioLargeEthSend',
+    subtitleKey: 'clearSigning.scenarioLargeEthSendSub',
     icon: <Send size={18} color="#d43a2a" strokeWidth={2} />,
     iconBg: '#FEF2F2',
     request: {
@@ -353,8 +354,8 @@ const SCENARIOS: {
   // --- ERC-20 limited approve (not unlimited) ---
   {
     id: 'erc20-approve-limited',
-    label: 'ERC-20 Limited Approve',
-    subtitle: 'Clear sign — approve with specific amount',
+    labelKey: 'clearSigning.scenarioErc20ApproveLimited',
+    subtitleKey: 'clearSigning.scenarioErc20ApproveLimitedSub',
     icon: <CheckCircle size={18} color="#22a456" strokeWidth={2} />,
     iconBg: '#EDFAF2',
     request: {
@@ -376,6 +377,7 @@ const SCENARIOS: {
 // ---------------------------------------------------------------------------
 
 export default function ClearSigningTestScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const {
     incomingRequest,
@@ -398,8 +400,8 @@ export default function ClearSigningTestScreen() {
             <ChevronLeft size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
           <View>
-            <Text style={styles.title}>Clear Signing Test</Text>
-            <Text style={styles.subtitle}>ERC-7730 signing UI scenarios</Text>
+            <Text style={styles.title}>{t('clearSigning.title')}</Text>
+            <Text style={styles.subtitle}>{t('clearSigning.subtitle')}</Text>
           </View>
         </View>
 
@@ -415,8 +417,8 @@ export default function ClearSigningTestScreen() {
                   {scenario.icon}
                 </View>
                 <View style={styles.rowInfo}>
-                  <Text style={styles.rowTitle}>{scenario.label}</Text>
-                  <Text style={styles.rowSub}>{scenario.subtitle}</Text>
+                  <Text style={styles.rowTitle}>{t(scenario.labelKey, { defaultValue: scenario.labelKey })}</Text>
+                  <Text style={styles.rowSub}>{t(scenario.subtitleKey, { defaultValue: scenario.subtitleKey })}</Text>
                 </View>
               </Pressable>
               {i < SCENARIOS.length - 1 && <View style={styles.divider} />}
@@ -424,10 +426,7 @@ export default function ClearSigningTestScreen() {
           ))}
         </VelaCard>
 
-        <Text style={styles.hint}>
-          Tap a scenario to open the signing modal with mock data.
-          Clear signing descriptors are fetched live from the ERC-7730 registry.
-        </Text>
+        <Text style={styles.hint}>{t('clearSigning.hint')}</Text>
       </ScrollView>
 
       {/* Mock signing modal — renders independently from DAppConnection */}
@@ -468,6 +467,7 @@ function MockSigningModal({ request, onClose }: {
   request: BLEIncomingRequest;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const { activeAccount } = useWallet();
   const chainId = 1; // test on Ethereum mainnet
   const [clearSign, setClearSign] = useState<ClearSignResult | null>(null);
@@ -571,7 +571,7 @@ function MockSigningModal({ request, onClose }: {
           {/* ---- Loading ---- */}
           {resolving ? (
             <View style={{ alignItems: 'center', padding: 40 }}>
-              <Text style={ms.dappChainName}>Loading...</Text>
+              <Text style={ms.dappChainName}>{t('clearSigning.modalLoading')}</Text>
             </View>
 
           /* ---- Clear signed ---- */
@@ -618,7 +618,7 @@ function MockSigningModal({ request, onClose }: {
               {clearSign.fields.filter(f => f.role === 'spender' || f.role === 'recipient').map((f, i) => (
                 <View key={`addr${i}`} style={ms.contractBar}>
                   <View style={ms.contractInfo}>
-                    <Text style={ms.contractLabel}>{f.role === 'spender' ? 'SPENDER' : 'RECIPIENT'}</Text>
+                    <Text style={ms.contractLabel}>{f.role === 'spender' ? t('clearSigning.modalSpender') : t('clearSigning.modalRecipient')}</Text>
                     <Text style={ms.contractAddr}>{f.value}</Text>
                   </View>
                   <Pressable onPress={() => copyAddr(f.value)} style={[ms.copyBtn, copiedAddr === f.value && ms.copyBtnDone]}>
@@ -631,7 +631,7 @@ function MockSigningModal({ request, onClose }: {
               {clearSign.fields.some(f => f.warning) && (
                 <View style={ms.warnDanger}>
                   <AlertTriangle size={14} color={RC.danger} strokeWidth={2} />
-                  <Text style={ms.warnDangerText}>Unlimited — this contract can spend all your tokens</Text>
+                  <Text style={ms.warnDangerText}>{t('clearSigning.modalUnlimitedWarning')}</Text>
                 </View>
               )}
 
@@ -647,7 +647,7 @@ function MockSigningModal({ request, onClose }: {
               {clearSign.contractAddress && (
                 <View style={ms.contractBar}>
                   <View style={ms.contractInfo}>
-                    <Text style={ms.contractLabel}>INTERACTING WITH</Text>
+                    <Text style={ms.contractLabel}>{t('clearSigning.modalInteractingWith')}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                       {clearSign.contractName && <Text style={[ms.contractAddr, { color: color.success.base }]}>{clearSign.contractName}</Text>}
                       <Text style={ms.contractAddr}>{shortAddr(clearSign.contractAddress)}</Text>
@@ -666,9 +666,9 @@ function MockSigningModal({ request, onClose }: {
           /* ---- personal_sign ---- */
           ) : isPersonalSign && params?.[0] ? (
             <>
-              <View style={ms.intent}><Text style={[ms.intentText, { color: SIG_COLOR }]}>Sign Message</Text></View>
+              <View style={ms.intent}><Text style={[ms.intentText, { color: SIG_COLOR }]}>{t('clearSigning.modalSignMessage')}</Text></View>
               <View style={ms.msgBubble}>
-                <View style={ms.msgTag}><Text style={ms.msgTagText}>personal_sign · No gas fee</Text></View>
+                <View style={ms.msgTag}><Text style={ms.msgTagText}>{t('clearSigning.modalMsgTag')}</Text></View>
                 <Text style={ms.msgText}>{decodeMsg(params[0])}</Text>
               </View>
               {/* context already shown at top */}
@@ -677,7 +677,7 @@ function MockSigningModal({ request, onClose }: {
           /* ---- EIP-712 blind ---- */
           ) : isTypedData && params ? (
             <>
-              <View style={ms.intent}><Text style={[ms.intentText, { color: '#d4890a' }]}>Sign Typed Data</Text></View>
+              <View style={ms.intent}><Text style={[ms.intentText, { color: '#d4890a' }]}>{t('clearSigning.modalSignTypedData')}</Text></View>
               {(() => {
                 const td = (() => { try { return typeof params[1] === 'string' ? JSON.parse(params[1]) : (params[1] ?? params[0]); } catch { return null; } })();
                 if (!td) return null;
@@ -686,7 +686,7 @@ function MockSigningModal({ request, onClose }: {
                     {td.domain?.verifyingContract && (
                       <View style={ms.contractBar}>
                         <View style={ms.contractInfo}>
-                          <Text style={ms.contractLabel}>SIGNING FOR</Text>
+                          <Text style={ms.contractLabel}>{t('clearSigning.modalSigningFor')}</Text>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                             {td.domain.name && <Text style={[ms.contractAddr, { color: color.fg.base, fontFamily: font.sans }]}>{td.domain.name}</Text>}
                             <Text style={ms.contractAddr}>{shortAddr(td.domain.verifyingContract)}</Text>
@@ -699,7 +699,7 @@ function MockSigningModal({ request, onClose }: {
                     )}
                     {td.primaryType && (
                       <View style={ms.genRow}>
-                        <Text style={ms.genLabel}>Type</Text>
+                        <Text style={ms.genLabel}>{t('clearSigning.modalTypeLabel')}</Text>
                         <Text style={ms.genValue}>{td.primaryType}</Text>
                       </View>
                     )}
@@ -711,7 +711,7 @@ function MockSigningModal({ request, onClose }: {
                     ))}
                     <View style={ms.warnCaution}>
                       <AlertTriangle size={14} color={color.warning.base} strokeWidth={2} />
-                      <Text style={[ms.warnDangerText, { color: color.warning.base }]}>No descriptor found. Review carefully.</Text>
+                      <Text style={[ms.warnDangerText, { color: color.warning.base }]}>{t('clearSigning.modalNoDescriptor')}</Text>
                     </View>
                   </>
                 );
@@ -727,12 +727,12 @@ function MockSigningModal({ request, onClose }: {
                 const hasData = tx.data && tx.data !== '0x';
                 return (
                   <>
-                    <View style={ms.intent}><Text style={[ms.intentText, { color: hasData ? color.error.base : '#E8572A' }]}>{hasData ? 'Unknown' : 'Send'}</Text></View>
+                    <View style={ms.intent}><Text style={[ms.intentText, { color: hasData ? color.error.base : '#E8572A' }]}>{hasData ? t('clearSigning.modalIntentUnknown') : t('clearSigning.modalIntentSend')}</Text></View>
                     {fmtValue(tx.value) !== `0 ${nativeSymbol(chainId)}` && (
                       <View style={[ms.tokenCard, { backgroundColor: hasData ? color.error.soft : color.accent.soft }]}>
                         <View style={ms.tokenInfo}>
                           <Text style={ms.tokenAmt}>{fmtValue(tx.value)}</Text>
-                          <Text style={ms.tokenLabel}>Value</Text>
+                          <Text style={ms.tokenLabel}>{t('clearSigning.modalValueLabel')}</Text>
                         </View>
                       </View>
                     )}
@@ -741,7 +741,7 @@ function MockSigningModal({ request, onClose }: {
                     )}
                     <View style={[ms.contractBar, hasData && { borderWidth: 1, borderColor: color.error.base }]}>
                       <View style={ms.contractInfo}>
-                        <Text style={ms.contractLabel}>{hasData ? 'UNVERIFIED CONTRACT' : 'RECIPIENT'}</Text>
+                        <Text style={ms.contractLabel}>{hasData ? t('clearSigning.modalUnverifiedContract') : t('clearSigning.modalRecipient')}</Text>
                         <Text style={ms.contractAddr}>{shortAddr(tx.to ?? '')}</Text>
                       </View>
                       <Pressable onPress={() => copyAddr(tx.to ?? '')} style={ms.copyBtn}>
@@ -752,10 +752,10 @@ function MockSigningModal({ request, onClose }: {
                       <>
                         <View style={ms.warnDanger}>
                           <AlertTriangle size={14} color={color.error.base} strokeWidth={2} />
-                          <Text style={ms.warnDangerText}>Unable to decode — no ERC-7730 descriptor ({Math.floor((tx.data.length - 2) / 2)} bytes)</Text>
+                          <Text style={ms.warnDangerText}>{t('clearSigning.modalUndecodedWarning', { bytes: Math.floor((tx.data.length - 2) / 2) })}</Text>
                         </View>
                         <Pressable style={ms.detailsToggle} onPress={() => setShowRaw(!showRaw)}>
-                          <Text style={ms.detailsToggleText}>Raw calldata</Text>
+                          <Text style={ms.detailsToggleText}>{t('clearSigning.modalRawCalldata')}</Text>
                           <ChevronDown size={12} color={color.fg.subtle} strokeWidth={2} style={showRaw ? { transform: [{ rotate: '180deg' }] } : undefined} />
                         </Pressable>
                         {showRaw && (
@@ -774,24 +774,24 @@ function MockSigningModal({ request, onClose }: {
           ) : (
             <View style={{ alignItems: 'center', padding: 40 }}>
               <Shield size={28} color={color.fg.muted} strokeWidth={2} />
-              <Text style={ms.dappChainName}>Signature request</Text>
+              <Text style={ms.dappChainName}>{t('clearSigning.modalSignatureRequest')}</Text>
             </View>
           )}
 
           {/* Resolving indicator */}
           {resolving && (
             <View style={{ alignItems: 'center', padding: space.lg }}>
-              <Text style={ms.dappChainName}>Loading descriptor...</Text>
+              <Text style={ms.dappChainName}>{t('clearSigning.modalLoadingDescriptor')}</Text>
             </View>
           )}
         </ScrollView>
 
         {/* Buttons */}
         <View style={ms.btns}>
-          <VelaButton title="Reject" onPress={onClose} variant="secondary" style={ms.btnFlex} />
+          <VelaButton title={t('clearSigning.modalBtnReject')} onPress={onClose} variant="secondary" style={ms.btnFlex} />
           <VelaButton
-            title={clearSign ? (clearSign.type === 'signature' ? 'Sign' : (clearSign.intent.length > 12 ? 'Confirm' : `Confirm ${clearSign.intent}`)) : (isPersonalSign || isTypedData ? 'Sign' : 'Approve')}
-            onPress={() => { showAlert('Signed!', 'This is a test — no actual signature was created.'); onClose(); }}
+            title={clearSign ? (clearSign.type === 'signature' ? t('clearSigning.modalBtnSign') : (clearSign.intent.length > 12 ? t('clearSigning.modalBtnConfirm') : t('clearSigning.modalBtnConfirmIntent', { intent: clearSign.intent }))) : (isPersonalSign || isTypedData ? t('clearSigning.modalBtnSign') : t('clearSigning.modalBtnApprove'))}
+            onPress={() => { showAlert(t('clearSigning.alertSignedTitle'), t('clearSigning.alertSignedBody')); onClose(); }}
             variant="accent"
             loading={resolving}
             style={ms.btnFlex}

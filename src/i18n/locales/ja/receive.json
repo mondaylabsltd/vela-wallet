@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "受け取る",
+    "noAddress": "アドレスがありません",
+    "shareGenerating": "生成中...",
+    "shareButton": "共有",
+    "listeningForDeposits": "入金を待機中",
+    "warningTitle": "受け取る前に",
+    "warningBody": "対応ネットワーク上の資産のみを送ってください。非対応の送金は永久に失われる場合があります。",
+    "warningHint": "アドレスを共有する前に、下の",
+    "warningHintNetworks": "対応ネットワーク {{count}} 件",
+    "warningHintSuffix": "をご確認ください。",
+    "warningConfirm": "理解しました",
+    "networksLabel": "{{count}} 件の EVM ネットワークで利用可能",
+    "shareCardHeadline": "スキャンして暗号資産を送る",
+    "shareDialogTitle": "{{name}} のウォレットアドレス"
+  }
+}

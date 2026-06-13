@@ -1,0 +1,92 @@
+{
+  "componentsUi": {
+    "funding": {
+      "title": "啟用 Gas 帳戶",
+      "balance": "餘額",
+      "freeTitle": "免費啟用",
+      "freeBadge": "免費",
+      "freeRequesting": "請求中…",
+      "freeDesc": "由 Vela 為新使用者贊助",
+      "selfTitle": "自行啟用",
+      "selfDesc": "發送 {{symbol}} 以啟用 Gas 帳戶",
+      "activationFee": "啟用費用",
+      "gasAccount": "Gas 帳戶",
+      "checkBtn": "我已發送",
+      "checkingBtn": "檢查中…",
+      "continue": "繼續",
+      "cancel": "取消",
+      "denialDefault": "無法使用免費啟用。",
+      "denialNonceExceeded": "免費額度已用完。",
+      "denialTreasuryDepleted": "免費資金暫時用罄。",
+      "denialBalanceTooLow": "錢包餘額過低，不符合資格。",
+      "denialNoPasskey": "免費啟用需要通行密鑰。",
+      "denialRateLimited": "請求過於頻繁，請稍後再試。",
+      "denialTransferFailed": "轉帳失敗，請再試一次。"
+    },
+    "signing": {
+      "loading": "載入中…",
+      "signatureRequest": "簽章請求",
+      "signing": "簽署中…",
+      "signLabel": "簽署",
+      "confirmLabel": "確認",
+      "confirmIntentLabel": "確認{{intent}}",
+      "approve": "核准",
+      "dismiss": "關閉",
+      "reject": "拒絕",
+      "personalSignTag": "personal_sign · 免 Gas 費",
+      "unlimitedWarning": "無上限 — 此合約可動用您所有的代幣",
+      "blindTypedWarning": "此型別資料無法以已知描述檔解碼，請仔細審閱。",
+      "blindDecodeWarning": "無法解碼 — 沒有 ERC-7730 描述檔（{{bytes}} 位元組）",
+      "rawCalldataToggle": "原始 calldata · {{bytes}} 位元組",
+      "signMessage": "簽署訊息",
+      "signTypedData": "簽署型別資料",
+      "spenderLabel": "授權對象",
+      "recipientLabel": "收款人",
+      "interactingLabel": "互動對象",
+      "unverifiedLabel": "未驗證合約",
+      "typeLabel": "類型",
+      "intentUnknown": "未知",
+      "intentSend": "發送",
+      "signingFor": "簽署對象"
+    },
+    "currency": {
+      "title": "顯示貨幣",
+      "searchPlaceholder": "搜尋貨幣",
+      "noMatch": "沒有符合「{{query}}」的貨幣。"
+    },
+    "scanner": {
+      "title": "掃描 QR",
+      "hint": "將相機對準 QR 碼",
+      "permissionText": "掃描 QR 碼需要相機存取權限。",
+      "grantPermission": "授予權限",
+      "noQrFound": "找不到 QR",
+      "noQrFoundMsg": "在所選圖片中找不到 QR 碼。",
+      "error": "錯誤",
+      "errorImage": "處理圖片失敗。",
+      "errorPicker": "開啟圖片選擇器失敗。"
+    },
+    "gas": {
+      "estFee": "預估手續費",
+      "gasPrice": "Gas 價格",
+      "gasPriceUserOp": "Gas 價格（UserOp）",
+      "gasLimit": "Gas 上限",
+      "walletDeployed": "錢包已部署",
+      "deployedYes": "是",
+      "deployedNo": "否（首筆交易）"
+    },
+    "dock": {
+      "receive": "收款",
+      "send": "發送"
+    },
+    "networkFilter": {
+      "selectChain": "選擇鏈",
+      "searchChains": "搜尋鏈",
+      "allNetworks": "所有網路",
+      "showEvery": "顯示所有鏈"
+    },
+    "chart": {
+      "noDataFor": "{{label}} 沒有資料",
+      "tapHint": "點選長條即可查看餘額"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "actionSend": "Kirim",
+    "actionReceive": "Terima",
+    "actionHistory": "Riwayat",
+    "sectionTitle": "Aset",
+    "hideZero": "Sembunyikan nol",
+    "hiddenCount": "{{count}} disembunyikan",
+    "addToken": "Tambah",
+    "searchPlaceholder": "Cari token...",
+    "rpcUnavailableSingle": "RPC {{name}} tidak tersedia",
+    "rpcUnavailableMultiple": "RPC {{count}} jaringan tidak tersedia",
+    "rpcFix": "Perbaiki",
+    "emptyTitle": "Setor aset pertama Anda",
+    "emptySubtext": "Ketuk di sini untuk melihat alamat dan menerima token",
+    "errorTitle": "Kesalahan",
+    "errorLoadBalances": "Gagal memuat saldo token.",
+    "switcherTitle": "Ganti Akun",
+    "switcherTotal": "Total {{amount}}",
+    "rpcFixTitle": "Perbaiki RPC",
+    "rpcFixChainId": "Chain ID: {{chainId}}",
+    "rpcFixWarning": "Semua endpoint RPC untuk jaringan ini gagal. Masukkan URL RPC yang berfungsi untuk memulihkan koneksi.",
+    "rpcFixLabel": "URL RPC",
+    "rpcFixSaveBtn": "Simpan & Coba Lagi",
+    "errorSaveRpc": "Gagal menyimpan URL RPC.",
+    "invalidQrTitle": "QR Tidak Valid",
+    "invalidQrMessage": "Pindai alamat Ethereum atau URI koneksi yang valid.",
+    "chainFallback": "Chain {{chainId}}"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "取消",
+    "system": "系统",
+    "automatic": "自动",
+    "error": "错误",
+    "somethingWrong": "出错了",
+    "tryAgain": "重试"
+  },
+  "language": {
+    "title": "语言",
+    "pickerTitle": "语言",
+    "pickerSubtitle": "选择应用中使用的语言。",
+    "followSystem": "跟随系统",
+    "english": "English",
+    "chinese": "简体中文"
+  },
+  "settings": {
+    "title": "设置",
+    "sections": {
+      "account": "账户",
+      "appearance": "外观",
+      "payments": "支付",
+      "localization": "区域格式",
+      "advanced": "高级",
+      "developer": "开发者"
+    },
+    "account": {
+      "switch": "切换账户"
+    },
+    "appearance": {
+      "themeLight": "浅色",
+      "themeDark": "深色",
+      "themeAuto": "自动"
+    },
+    "payments": {
+      "voiceTitle": "语音播报",
+      "voiceSubtitle": "收款时朗读到账提醒"
+    },
+    "localization": {
+      "autoExample": "自动 · {{example}}",
+      "numberTitle": "数字格式",
+      "numberSubtitle": "金额的分组方式与小数点符号。",
+      "dateTitle": "日期格式",
+      "dateSubtitle": "日 / 月 / 年的顺序及分隔符。",
+      "timeTitle": "时间格式",
+      "timeSubtitle": "12 小时制或 24 小时制。"
+    },
+    "advanced": {
+      "networksTitle": "网络",
+      "networksSubtitle": "RPC、区块浏览器与打包器地址",
+      "addNetworkTitle": "添加网络",
+      "addNetworkSubtitle": "添加自定义 EVM 网络",
+      "endpointsTitle": "服务节点",
+      "endpointsSubtitle": "链上数据、身份索引、打包器"
+    },
+    "developer": {
+      "treasuryTitle": "金库",
+      "treasurySubtitle": "查看金库地址与余额",
+      "clearSigningTitle": "清晰签名测试",
+      "clearSigningSubtitle": "ERC-7730 签名界面预览"
+    },
+    "about": {
+      "title": "关于",
+      "subtitle": "Vela 钱包 v{{version}}"
+    },
+    "signOut": {
+      "button": "退出登录",
+      "title": "退出登录",
+      "desc": "你的钱包数据将保留在本设备上。随时可用通行密钥（Face ID / 指纹）重新登录。",
+      "warning": "你的公钥尚未同步到服务器。现在退出可能导致无法在其他设备上恢复。",
+      "anyway": "仍然退出",
+      "cancel": "取消"
+    },
+    "formatNote": {
+      "system": "系统",
+      "indian": "印度计数",
+      "h24": "24 小时制",
+      "h12": "12 小时制"
+    }
+  }
+}

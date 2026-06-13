@@ -1,0 +1,92 @@
+{
+  "componentsUi": {
+    "funding": {
+      "title": "Gas アカウントを有効化",
+      "balance": "残高",
+      "freeTitle": "無料で有効化",
+      "freeBadge": "無料",
+      "freeRequesting": "リクエスト中...",
+      "freeDesc": "新規ユーザー向けに Vela が負担します",
+      "selfTitle": "自分で有効化",
+      "selfDesc": "{{symbol}} を送って Gas アカウントを有効化します",
+      "activationFee": "有効化手数料",
+      "gasAccount": "Gas アカウント",
+      "checkBtn": "送金しました",
+      "checkingBtn": "確認中...",
+      "continue": "次へ",
+      "cancel": "キャンセル",
+      "denialDefault": "無料での有効化は利用できません。",
+      "denialNonceExceeded": "無料枠を使い切りました。",
+      "denialTreasuryDepleted": "無料資金が一時的に不足しています。",
+      "denialBalanceTooLow": "ウォレットの残高が少なく、条件を満たしません。",
+      "denialNoPasskey": "無料での有効化にはパスキーが必要です。",
+      "denialRateLimited": "リクエストが多すぎます。後でお試しください。",
+      "denialTransferFailed": "送金に失敗しました。もう一度お試しください。"
+    },
+    "signing": {
+      "loading": "読み込み中...",
+      "signatureRequest": "署名リクエスト",
+      "signing": "署名中...",
+      "signLabel": "署名",
+      "confirmLabel": "確認",
+      "confirmIntentLabel": "{{intent}}を確認",
+      "approve": "承認",
+      "dismiss": "閉じる",
+      "reject": "拒否",
+      "personalSignTag": "personal_sign · Gas 手数料なし",
+      "unlimitedWarning": "無制限 — このコントラクトはあなたのトークンをすべて使用できます",
+      "blindTypedWarning": "この型付きデータは既知のディスクリプターでデコードできませんでした。内容を慎重にご確認ください。",
+      "blindDecodeWarning": "デコードできません — ERC-7730 ディスクリプターがありません（{{bytes}} バイト）",
+      "rawCalldataToggle": "生の calldata · {{bytes}} バイト",
+      "signMessage": "メッセージに署名",
+      "signTypedData": "型付きデータに署名",
+      "spenderLabel": "支出者",
+      "recipientLabel": "受取人",
+      "interactingLabel": "やり取りする相手",
+      "unverifiedLabel": "未検証のコントラクト",
+      "typeLabel": "種類",
+      "intentUnknown": "不明",
+      "intentSend": "送る",
+      "signingFor": "署名の対象"
+    },
+    "currency": {
+      "title": "表示通貨",
+      "searchPlaceholder": "通貨を検索",
+      "noMatch": "「{{query}}」に一致する通貨はありません。"
+    },
+    "scanner": {
+      "title": "QR をスキャン",
+      "hint": "カメラを QR コードに向けてください",
+      "permissionText": "QR コードのスキャンにはカメラへのアクセスが必要です。",
+      "grantPermission": "アクセスを許可",
+      "noQrFound": "QR コードが見つかりません",
+      "noQrFoundMsg": "選択した画像から QR コードが見つかりませんでした。",
+      "error": "エラー",
+      "errorImage": "画像の処理に失敗しました。",
+      "errorPicker": "画像ピッカーを開けませんでした。"
+    },
+    "gas": {
+      "estFee": "推定手数料",
+      "gasPrice": "Gas 価格",
+      "gasPriceUserOp": "Gas 価格（UserOp）",
+      "gasLimit": "Gas Limit",
+      "walletDeployed": "ウォレットのデプロイ",
+      "deployedYes": "済み",
+      "deployedNo": "未デプロイ（初回の取引）"
+    },
+    "dock": {
+      "receive": "受け取る",
+      "send": "送る"
+    },
+    "networkFilter": {
+      "selectChain": "チェーンを選択",
+      "searchChains": "チェーンを検索",
+      "allNetworks": "すべてのネットワーク",
+      "showEvery": "すべてのチェーンを表示"
+    },
+    "chart": {
+      "noDataFor": "{{label}} のデータはありません",
+      "tapHint": "バーをタップして残高を表示"
+    }
+  }
+}

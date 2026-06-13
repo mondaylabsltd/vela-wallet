@@ -64,7 +64,8 @@
       "./plugins/with-native-modules",
       "expo-sharing",
       "expo-camera",
-      "expo-image-picker"
+      "expo-image-picker",
+      "expo-localization"
     ],
     "experiments": {
       "typedRoutes": true,

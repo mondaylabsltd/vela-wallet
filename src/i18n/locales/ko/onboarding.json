@@ -1,0 +1,70 @@
+{
+  "onboarding": {
+    "welcome": {
+      "tagline": "당신의 키, 당신의 코인.\n탭 한 번처럼 간단하게.",
+      "createWallet": "지갑 만들기",
+      "alreadyHaveWallet": "이미 지갑이 있어요"
+    },
+    "settings": {
+      "title": "설정",
+      "sectionAppearance": "화면",
+      "themeLabelLight": "라이트",
+      "themeLabelDark": "다크",
+      "themeLabelAuto": "자동",
+      "sectionPasskeyIndex": "패스키 인덱스",
+      "passkeyHint": "이 서비스는 기기 간 로그인을 위해 패스키의 공개 키를 저장합니다. Vela Wallet은 패스키의 개인 키에 절대 접근할 수 없습니다.",
+      "endpointUrlLabel": "엔드포인트 URL",
+      "resetToDefault": "기본값으로 재설정",
+      "sectionDebug": "디버그",
+      "simulateFailure": "엔드포인트 실패 시뮬레이션",
+      "warningText": "패스키 인덱스 서비스에 연결할 수 없습니다. 지갑 생성과 로그인에는 이 서비스가 필요합니다. 아래에서 연결 가능한 엔드포인트를 설정하세요."
+    },
+    "create": {
+      "headerDefault": "지갑 만들기",
+      "headerCreated": "지갑 생성 완료",
+      "headerSyncFailed": "기기 간 동기화",
+      "accountNameLabel": "계정 이름",
+      "accountNamePlaceholder": "계정 이름을 입력하세요",
+      "accountNameHint": "이 이름은 기기 간 로그인을 위해 공개 키와 함께 온체인에 저장됩니다.",
+      "ack0": "이것은 자가 수탁형 지갑입니다. 패스키 개인 키는 기기의 비밀번호 관리자(iCloud 키체인 / Google 비밀번호 관리자)가 관리합니다. Vela Wallet은 이를 접근하거나 복구할 수 없습니다.",
+      "ack1": "기기를 분실해도 iCloud 또는 Google 계정을 통해 새 기기에서 지갑을 복원할 수 있습니다.",
+      "ack2": "iCloud 또는 Google 계정이 침해되면 지갑 제어권도 침해될 수 있습니다. 강력한 비밀번호와 2단계 인증으로 보호하세요.",
+      "ack3": "다음에 동의합니다: ",
+      "ack3PrivacyPolicy": "개인정보 처리방침",
+      "ack3And": " 및 ",
+      "ack3Terms": "서비스 약관",
+      "ack3Period": ".",
+      "createWalletBtn": "지갑 만들기",
+      "successTitle": "지갑이 준비되었습니다!",
+      "successMessage": "당신의 주소는 지원되는 {{count}}개 네트워크 모두에서 작동합니다.",
+      "verifyHint": "지갑을 사용하기 전에 아래를 눌러 신원이 정상 작동하는지 확인하세요.",
+      "verifySignInBtn": "확인 후 로그인",
+      "syncFailedTitle": "동기화 실패",
+      "syncFailedMessage": "지갑은 생성되었지만 공개 키가 서버에 동기화되지 않았습니다. 이 문제가 해결될 때까지 다른 기기에서 로그인할 수 없습니다.",
+      "syncFailedHint": "네트워크를 확인하거나 아래에서 사용자 지정 엔드포인트를 설정하세요.",
+      "openSettings": "설정 열기",
+      "retryUploadBtn": "업로드 재시도",
+      "statusSyncingKey": "공개 키 동기화 중...",
+      "statusSettingUpIdentity": "보안 신원 설정 중...",
+      "statusExtractingKey": "공개 키 추출 중...",
+      "statusComputingAddress": "지갑 주소 계산 중...",
+      "statusVerifyingIdentity": "신원 확인 중...",
+      "statusSetupCancelled": "설정이 취소되었습니다.",
+      "statusVerifyCancelled": "확인이 취소되었습니다. 다시 시도하세요.",
+      "alertNotSupportedTitle": "지원되지 않음",
+      "alertNotSupportedBody": "이 기기에서는 생체 인증을 사용할 수 없습니다.",
+      "alertErrorTitle": "오류"
+    },
+    "login": {
+      "alertNotSupportedTitle": "지원되지 않음",
+      "alertNotSupportedBody": "이 기기에서는 생체 인증을 사용할 수 없습니다.",
+      "alertIncompatibleTitle": "호환되지 않는 기기",
+      "alertIncompatibleBody": "기기의 신원 공급자가 Vela Wallet과(와) 호환되지 않습니다. 시스템 설정에서 Google 비밀번호 관리자로 전환한 후 다시 시도하세요.",
+      "alertNotFoundTitle": "계정을 찾을 수 없음",
+      "alertNotFoundBody": "이 신원에 해당하는 지갑을 찾을 수 없습니다.\n\n가능한 원인:\n• 아직 지갑을 만들지 않았습니다\n• 신원이 이 기기에 동기화되지 않았습니다 (iCloud / Google 설정 확인)\n• 공개 키 서버에 연결할 수 없습니다\n\n새 지갑을 만들거나, 신원 공급자(Face ID / 지문)가 기기 간에 동기화되어 있는지 확인하세요.",
+      "alertSignInFailedTitle": "로그인 실패",
+      "alertSignInFailedBody": "{{message}}\n\n기기에 Face ID, Touch ID 또는 지문이 설정되어 있는지 확인한 후 다시 시도하세요.",
+      "alertIncompatibleBodyCreate": "기기의 신원 공급자가 이 지갑과 호환되지 않습니다. 시스템 설정에서 Google 비밀번호 관리자로 전환한 후 다시 시도하세요."
+    }
+  }
+}

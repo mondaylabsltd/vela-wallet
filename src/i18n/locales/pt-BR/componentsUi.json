@@ -1,0 +1,92 @@
+{
+  "componentsUi": {
+    "funding": {
+      "title": "Ativar conta de gas",
+      "balance": "Saldo",
+      "freeTitle": "Ativação gratuita",
+      "freeBadge": "GRÁTIS",
+      "freeRequesting": "Solicitando...",
+      "freeDesc": "Patrocinada pela Vela para novos usuários",
+      "selfTitle": "Ativar por conta própria",
+      "selfDesc": "Envie {{symbol}} para ativar a conta de gas",
+      "activationFee": "Taxa de ativação",
+      "gasAccount": "Conta de gas",
+      "checkBtn": "Já enviei",
+      "checkingBtn": "Verificando...",
+      "continue": "Continuar",
+      "cancel": "Cancelar",
+      "denialDefault": "Ativação gratuita indisponível.",
+      "denialNonceExceeded": "Cota gratuita esgotada.",
+      "denialTreasuryDepleted": "Fundo gratuito temporariamente vazio.",
+      "denialBalanceTooLow": "Saldo da carteira baixo demais para qualificar.",
+      "denialNoPasskey": "Passkey necessária para a ativação gratuita.",
+      "denialRateLimited": "Muitas solicitações. Tente mais tarde.",
+      "denialTransferFailed": "Falha na transferência. Tente de novo."
+    },
+    "signing": {
+      "loading": "Carregando...",
+      "signatureRequest": "Solicitação de assinatura",
+      "signing": "Assinando...",
+      "signLabel": "Assinar",
+      "confirmLabel": "Confirmar",
+      "confirmIntentLabel": "Confirmar {{intent}}",
+      "approve": "Aprovar",
+      "dismiss": "Dispensar",
+      "reject": "Rejeitar",
+      "personalSignTag": "personal_sign · Sem taxa de gas",
+      "unlimitedWarning": "Ilimitado — este contrato pode gastar todos os seus tokens",
+      "blindTypedWarning": "Não foi possível decodificar estes dados tipados com um descritor conhecido. Revise com atenção.",
+      "blindDecodeWarning": "Não foi possível decodificar — sem descritor ERC-7730 ({{bytes}} bytes)",
+      "rawCalldataToggle": "Calldata bruto · {{bytes}} bytes",
+      "signMessage": "Assinar mensagem",
+      "signTypedData": "Assinar dados tipados",
+      "spenderLabel": "Autorizado",
+      "recipientLabel": "Destinatário",
+      "interactingLabel": "Interagindo com",
+      "unverifiedLabel": "Contrato não verificado",
+      "typeLabel": "Tipo",
+      "intentUnknown": "Desconhecido",
+      "intentSend": "Enviar",
+      "signingFor": "Assinando para"
+    },
+    "currency": {
+      "title": "Moeda de exibição",
+      "searchPlaceholder": "Buscar moeda",
+      "noMatch": "Nenhuma moeda corresponde a \"{{query}}\"."
+    },
+    "scanner": {
+      "title": "Escanear QR",
+      "hint": "Aponte a câmera para um QR code",
+      "permissionText": "O acesso à câmera é necessário para escanear QR codes.",
+      "grantPermission": "Conceder permissão",
+      "noQrFound": "Nenhum QR encontrado",
+      "noQrFoundMsg": "Não foi possível encontrar um QR code na imagem selecionada.",
+      "error": "Erro",
+      "errorImage": "Não foi possível processar a imagem.",
+      "errorPicker": "Não foi possível abrir o seletor de imagens."
+    },
+    "gas": {
+      "estFee": "Taxa estimada",
+      "gasPrice": "Preço do Gas",
+      "gasPriceUserOp": "Preço do Gas (UserOp)",
+      "gasLimit": "Limite de Gas",
+      "walletDeployed": "Carteira implantada",
+      "deployedYes": "Sim",
+      "deployedNo": "Não (primeira tx)"
+    },
+    "dock": {
+      "receive": "Receber",
+      "send": "Enviar"
+    },
+    "networkFilter": {
+      "selectChain": "Selecionar chain",
+      "searchChains": "Buscar chains",
+      "allNetworks": "Todas as redes",
+      "showEvery": "Mostrar todas as chains"
+    },
+    "chart": {
+      "noDataFor": "Sem dados para {{label}}",
+      "tapHint": "Toque em uma barra para ver o saldo"
+    }
+  }
+}

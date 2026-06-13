@@ -1,0 +1,26 @@
+{
+  "home": {
+    "totalBalance": "Gesamtguthaben",
+    "manageAssets": "Assets verwalten",
+    "tabActivity": "Aktivität",
+    "tabConnections": "Verbindungen",
+    "liveIndicator": "Live · wartet auf Zahlungen",
+    "emptyNoActivityNetwork": "Keine Aktivität in diesem Netzwerk",
+    "emptyNoActivity": "Noch keine Aktivität",
+    "emptySubtitle": "Eingehende Zahlungen erscheinen hier in Echtzeit.",
+    "invalidQrTitle": "Ungültiger QR-Code",
+    "invalidQrBody": "Bitte scannen Sie eine gültige Ethereum-Adresse oder Verbindungs-URI.",
+    "switchAccountTitle": "Konto wechseln",
+    "switcherAccountCount": "{{count}} Konten · ",
+    "connEmptyTitle": "Keine aktive Verbindung",
+    "connEmptySub": "Scannen Sie den QR-Code einer dApp, um sich zu verbinden. Es ist immer nur eine Verbindung aktiv.",
+    "connScanBtn": "Zum Verbinden scannen",
+    "connDefaultName": "Verbundene dApp",
+    "connActive": "Aktiv",
+    "connNote": "Immer nur eine aktive Verbindung",
+    "connDisconnect": "Trennen",
+    "connEventsHead": "Verbindungsaktivität · {{count}}",
+    "connNoEvents": "Noch keine Anfragen über diese Verbindung.",
+    "toastReceived": "{{amount}} {{token}} erhalten"
+  }
+}

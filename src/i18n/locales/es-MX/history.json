@@ -1,0 +1,17 @@
+{
+  "history": {
+    "navTitle": "Historial",
+    "loadingText": "Cargando transacciones...",
+    "statusFailed": "Fallida",
+    "filterAll": "Todas",
+    "emptyTitle": "Aún no hay transacciones",
+    "emptyBody": "Tus transacciones enviadas aparecerán aquí. También puedes ver el historial completo en el explorador de bloques.",
+    "viewOnExplorer": "Ver en el explorador",
+    "emptyFilter": "No hay transacciones en esta red",
+    "txLabelDappTx": "Transacción de dApp",
+    "txLabelSignMessage": "Firmar mensaje",
+    "txLabelSignTypedData": "Firmar datos estructurados",
+    "txLabelSent": "Enviaste {{symbol}}",
+    "txSentSubtitle": "Para {{toName}} · {{networkName}}"
+  }
+}

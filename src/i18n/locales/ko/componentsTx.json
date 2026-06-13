@@ -1,0 +1,42 @@
+{
+  "componentsTx": {
+    "receipt": {
+      "title": "거래 영수증",
+      "canvasTitle": "거래 영수증",
+      "from": "보내는 곳",
+      "to": "받는 곳",
+      "network": "네트워크",
+      "time": "시간",
+      "txHash": "거래 해시",
+      "scanHint": "스캔해서 탐색기에서 보기",
+      "footerBrand": "VELA WALLET",
+      "footerUrl": "getvela.app",
+      "explorer": "탐색기",
+      "share": "공유",
+      "done": "완료",
+      "copiedTitle": "복사됨",
+      "copiedImageBody": "영수증 이미지를 클립보드에 복사했습니다.",
+      "copiedLinkBody": "탐색기 링크를 복사했습니다."
+    },
+    "detail": {
+      "received": "받음",
+      "sent": "보냄",
+      "from": "보내는 곳",
+      "to": "받는 곳",
+      "sectionTitle": "거래 세부 정보",
+      "labelDate": "날짜",
+      "labelStatus": "상태",
+      "labelFrom": "보내는 곳",
+      "labelTo": "받는 곳",
+      "labelOperation": "작업",
+      "labelChain": "체인",
+      "labelHash": "해시",
+      "statusFailed": "실패",
+      "statusSucceeded": "성공",
+      "opContractInteraction": "컨트랙트 상호작용",
+      "opSignature": "서명",
+      "opTypedDataSignature": "타입 데이터 서명",
+      "opTransfer": "전송"
+    }
+  }
+}

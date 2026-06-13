@@ -1,0 +1,15 @@
+{
+  "tokenDetail": {
+    "chartTitle": "7일간 잔액",
+    "chartEmpty": "이용 가능한 과거 데이터가 없습니다",
+    "send": "보내기",
+    "receive": "받기",
+    "labelName": "이름",
+    "labelContract": "컨트랙트",
+    "labelDecimals": "소수점 자릿수",
+    "labelPrice": "가격",
+    "priceValue": "1 {{symbol}} = {{value}}",
+    "labelTransactions": "거래",
+    "viewOnExplorer": "탐색기에서 보기"
+  }
+}

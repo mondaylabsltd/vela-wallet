@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "Al",
+    "noAddress": "Adres yok",
+    "shareGenerating": "Oluşturuluyor...",
+    "shareButton": "Paylaş",
+    "listeningForDeposits": "Yatırımlar dinleniyor",
+    "warningTitle": "Almadan önce",
+    "warningBody": "Yalnızca desteklenen ağlarda varlık gönderin — desteklenmeyen transferler kalıcı olarak kaybolabilir.",
+    "warningHint": "Adresinizi paylaşmadan önce aşağıdaki",
+    "warningHintNetworks": "{{count}} desteklenen ağı",
+    "warningHintSuffix": "kontrol edin.",
+    "warningConfirm": "Anladım",
+    "networksLabel": "{{count}} EVM ağında çalışır",
+    "shareCardHeadline": "Bana Kripto Göndermek İçin Tara",
+    "shareDialogTitle": "{{name}} Cüzdan Adresi"
+  }
+}

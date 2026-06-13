@@ -8,6 +8,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native';
 import { VelaCard } from './VelaCard';
@@ -94,11 +95,13 @@ export function GasFeeCard({
     } catch { /* ignore */ }
   }, [safeAddress, chainId, onTierChange, onFeeUpdate]);
 
+  const { t } = useTranslation();
+
   return (
     <>
       {/* Collapsed toggle row */}
       <Pressable onPress={() => setExpanded(!expanded)} style={styles.toggleRow}>
-        <Text style={styles.toggleLabel}>Est. Fee</Text>
+        <Text style={styles.toggleLabel}>{t('componentsUi.gas.estFee')}</Text>
         <View style={styles.toggleRight}>
           <View style={styles.toggleValues}>
             <Text style={styles.toggleValue}>
@@ -145,13 +148,13 @@ export function GasFeeCard({
               </Pressable>
             </View>
             <View style={styles.separator} />
-            <DetailRow label="Gas Price" value={`${bundlerGwei.toFixed(4)} Gwei`} />
+            <DetailRow label={t('componentsUi.gas.gasPrice')} value={`${bundlerGwei.toFixed(4)} Gwei`} />
             <View style={styles.separator} />
-            <DetailRow label="Gas Price (UserOp)" value={`${userOpGwei.toFixed(4)} Gwei`} />
+            <DetailRow label={t('componentsUi.gas.gasPriceUserOp')} value={`${userOpGwei.toFixed(4)} Gwei`} />
             <View style={styles.separator} />
-            <DetailRow label="Gas Limit" value={feeEstimate.totalGas.toLocaleString()} />
+            <DetailRow label={t('componentsUi.gas.gasLimit')} value={feeEstimate.totalGas.toLocaleString()} />
             <View style={styles.separator} />
-            <DetailRow label="Wallet Deployed" value={feeEstimate.deployed ? 'Yes' : 'No (first tx)'} />
+            <DetailRow label={t('componentsUi.gas.walletDeployed')} value={feeEstimate.deployed ? t('componentsUi.gas.deployedYes') : t('componentsUi.gas.deployedNo')} />
           </VelaCard>
         );
       })()}

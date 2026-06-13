@@ -1,0 +1,26 @@
+{
+  "home": {
+    "totalBalance": "合計残高",
+    "manageAssets": "資産を管理",
+    "tabActivity": "アクティビティ",
+    "tabConnections": "接続",
+    "liveIndicator": "ライブ · 入金を待機中",
+    "emptyNoActivityNetwork": "このネットワークにアクティビティはありません",
+    "emptyNoActivity": "まだアクティビティはありません",
+    "emptySubtitle": "入金があると、ここにリアルタイムで表示されます。",
+    "invalidQrTitle": "無効な QR コード",
+    "invalidQrBody": "有効な Ethereum アドレスまたは接続 URI をスキャンしてください。",
+    "switchAccountTitle": "アカウントを切り替える",
+    "switcherAccountCount": "{{count}} 個のアカウント · ",
+    "connEmptyTitle": "有効な接続はありません",
+    "connEmptySub": "dApp の QR コードをスキャンして接続します。同時に有効にできる接続は1つだけです。",
+    "connScanBtn": "スキャンして接続",
+    "connDefaultName": "接続中の dApp",
+    "connActive": "有効",
+    "connNote": "同時に有効にできる接続は1つだけです",
+    "connDisconnect": "切断",
+    "connEventsHead": "接続のアクティビティ · {{count}}",
+    "connNoEvents": "この接続にはまだリクエストがありません。",
+    "toastReceived": "{{amount}} {{token}} を受け取りました"
+  }
+}

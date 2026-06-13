@@ -1,0 +1,92 @@
+{
+  "componentsUi": {
+    "funding": {
+      "title": "Activate Gas Account",
+      "balance": "Balance",
+      "freeTitle": "Free Activation",
+      "freeBadge": "FREE",
+      "freeRequesting": "Requesting...",
+      "freeDesc": "Sponsored by Vela for new users",
+      "selfTitle": "Self Activate",
+      "selfDesc": "Send {{symbol}} to activate the gas account",
+      "activationFee": "Activation Fee",
+      "gasAccount": "Gas Account",
+      "checkBtn": "I've Sent It",
+      "checkingBtn": "Checking...",
+      "continue": "Continue",
+      "cancel": "Cancel",
+      "denialDefault": "Free activation unavailable.",
+      "denialNonceExceeded": "Free quota used up.",
+      "denialTreasuryDepleted": "Free fund temporarily empty.",
+      "denialBalanceTooLow": "Wallet balance too low to qualify.",
+      "denialNoPasskey": "Passkey required for free activation.",
+      "denialRateLimited": "Too many requests. Try later.",
+      "denialTransferFailed": "Transfer failed. Try again."
+    },
+    "signing": {
+      "loading": "Loading...",
+      "signatureRequest": "Signature request",
+      "signing": "Signing...",
+      "signLabel": "Sign",
+      "confirmLabel": "Confirm",
+      "confirmIntentLabel": "Confirm {{intent}}",
+      "approve": "Approve",
+      "dismiss": "Dismiss",
+      "reject": "Reject",
+      "personalSignTag": "personal_sign · No gas fee",
+      "unlimitedWarning": "Unlimited — this contract can spend all your tokens",
+      "blindTypedWarning": "This typed data could not be decoded with a known descriptor. Review carefully.",
+      "blindDecodeWarning": "Unable to decode — no ERC-7730 descriptor ({{bytes}} bytes)",
+      "rawCalldataToggle": "Raw calldata · {{bytes}} bytes",
+      "signMessage": "Sign Message",
+      "signTypedData": "Sign Typed Data",
+      "spenderLabel": "Spender",
+      "recipientLabel": "Recipient",
+      "interactingLabel": "Interacting with",
+      "unverifiedLabel": "Unverified contract",
+      "typeLabel": "Type",
+      "intentUnknown": "Unknown",
+      "intentSend": "Send",
+      "signingFor": "Signing for"
+    },
+    "currency": {
+      "title": "Display currency",
+      "searchPlaceholder": "Search currency",
+      "noMatch": "No currency matches \"{{query}}\"."
+    },
+    "scanner": {
+      "title": "Scan QR",
+      "hint": "Point camera at a QR code",
+      "permissionText": "Camera access is needed to scan QR codes.",
+      "grantPermission": "Grant Permission",
+      "noQrFound": "No QR Found",
+      "noQrFoundMsg": "Could not find a QR code in the selected image.",
+      "error": "Error",
+      "errorImage": "Failed to process the image.",
+      "errorPicker": "Failed to open image picker."
+    },
+    "gas": {
+      "estFee": "Est. Fee",
+      "gasPrice": "Gas Price",
+      "gasPriceUserOp": "Gas Price (UserOp)",
+      "gasLimit": "Gas Limit",
+      "walletDeployed": "Wallet Deployed",
+      "deployedYes": "Yes",
+      "deployedNo": "No (first tx)"
+    },
+    "dock": {
+      "receive": "Receive",
+      "send": "Send"
+    },
+    "networkFilter": {
+      "selectChain": "Select Chain",
+      "searchChains": "Search chains",
+      "allNetworks": "All Networks",
+      "showEvery": "Show every chain"
+    },
+    "chart": {
+      "noDataFor": "No data for {{label}}",
+      "tapHint": "Tap a bar to see balance"
+    }
+  }
+}

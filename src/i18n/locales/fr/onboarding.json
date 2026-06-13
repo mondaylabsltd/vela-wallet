@@ -1,0 +1,70 @@
+{
+  "onboarding": {
+    "welcome": {
+      "tagline": "Vos clés, vos cryptos.\nSimple comme bonjour.",
+      "createWallet": "Créer un portefeuille",
+      "alreadyHaveWallet": "J'ai déjà un portefeuille"
+    },
+    "settings": {
+      "title": "Réglages",
+      "sectionAppearance": "APPARENCE",
+      "themeLabelLight": "Clair",
+      "themeLabelDark": "Sombre",
+      "themeLabelAuto": "Auto",
+      "sectionPasskeyIndex": "INDEX DES CLÉS D'ACCÈS",
+      "passkeyHint": "Ce service stocke la clé publique de votre clé d'accès pour la connexion multi-appareils. Vela Wallet n'a jamais accès à la clé privée de votre clé d'accès.",
+      "endpointUrlLabel": "URL du point d'accès",
+      "resetToDefault": "Réinitialiser par défaut",
+      "sectionDebug": "DÉBOGAGE",
+      "simulateFailure": "Simuler une panne du point d'accès",
+      "warningText": "Le service d'index des clés d'accès est injoignable. La création d'un portefeuille et la connexion nécessitent ce service. Veuillez configurer un point d'accès joignable ci-dessous."
+    },
+    "create": {
+      "headerDefault": "Créer un portefeuille",
+      "headerCreated": "Portefeuille créé",
+      "headerSyncFailed": "Synchronisation multi-appareils",
+      "accountNameLabel": "Nom du compte",
+      "accountNamePlaceholder": "Saisissez un nom pour votre compte",
+      "accountNameHint": "Ce nom est enregistré avec votre clé publique on-chain pour la connexion multi-appareils.",
+      "ack0": "Ceci est un portefeuille auto-conservé. La clé privée de votre clé d'accès est gérée par le gestionnaire de mots de passe de votre appareil (Trousseau iCloud / Gestionnaire de mots de passe Google). Vela Wallet ne peut ni y accéder ni la récupérer.",
+      "ack1": "Si vous perdez votre appareil, vous pouvez restaurer votre portefeuille sur un nouvel appareil via votre compte iCloud ou Google.",
+      "ack2": "Si votre compte iCloud ou Google est compromis, le contrôle de votre portefeuille peut l'être aussi. Protégez-le avec un mot de passe fort et la double authentification (2FA).",
+      "ack3": "J'accepte la ",
+      "ack3PrivacyPolicy": "Politique de confidentialité",
+      "ack3And": " et les ",
+      "ack3Terms": "Conditions d'utilisation",
+      "ack3Period": ".",
+      "createWalletBtn": "Créer un portefeuille",
+      "successTitle": "Votre portefeuille est prêt !",
+      "successMessage": "Votre adresse fonctionne sur les {{count}} réseaux pris en charge.",
+      "verifyHint": "Appuyez ci-dessous pour vérifier votre identité avant d'utiliser le portefeuille.",
+      "verifySignInBtn": "Vérifier et se connecter",
+      "syncFailedTitle": "Échec de la synchronisation",
+      "syncFailedMessage": "Portefeuille créé, mais votre clé publique n'a pas été synchronisée avec le serveur. Vous ne pourrez pas vous connecter sur d'autres appareils tant que ce problème n'est pas résolu.",
+      "syncFailedHint": "Vérifiez votre réseau ou configurez un point d'accès personnalisé ci-dessous.",
+      "openSettings": "Ouvrir les Réglages",
+      "retryUploadBtn": "Réessayer l'envoi",
+      "statusSyncingKey": "Synchronisation de la clé publique...",
+      "statusSettingUpIdentity": "Configuration de l'identité sécurisée...",
+      "statusExtractingKey": "Extraction de la clé publique...",
+      "statusComputingAddress": "Calcul de l'adresse du portefeuille...",
+      "statusVerifyingIdentity": "Vérification de l'identité...",
+      "statusSetupCancelled": "La configuration a été annulée.",
+      "statusVerifyCancelled": "La vérification a été annulée. Veuillez réessayer.",
+      "alertNotSupportedTitle": "Non pris en charge",
+      "alertNotSupportedBody": "L'authentification biométrique n'est pas disponible sur cet appareil.",
+      "alertErrorTitle": "Erreur"
+    },
+    "login": {
+      "alertNotSupportedTitle": "Non pris en charge",
+      "alertNotSupportedBody": "L'authentification biométrique n'est pas disponible sur cet appareil.",
+      "alertIncompatibleTitle": "Appareil incompatible",
+      "alertIncompatibleBody": "Le fournisseur d'identité de votre appareil n'est pas compatible avec Vela Wallet. Veuillez passer au Gestionnaire de mots de passe Google dans les réglages système, puis réessayez.",
+      "alertNotFoundTitle": "Compte introuvable",
+      "alertNotFoundBody": "Aucun portefeuille n'a été trouvé pour cette identité.\n\nRaisons possibles :\n• Vous n'avez pas encore créé de portefeuille\n• Votre identité n'a pas été synchronisée sur cet appareil (vérifiez les réglages iCloud / Google)\n• Le serveur de clés publiques est injoignable\n\nEssayez de créer un nouveau portefeuille, ou assurez-vous que votre fournisseur d'identité (Face ID / empreinte digitale) est synchronisé entre vos appareils.",
+      "alertSignInFailedTitle": "Échec de la connexion",
+      "alertSignInFailedBody": "{{message}}\n\nAssurez-vous que votre appareil dispose de Face ID, Touch ID ou d'une empreinte digitale configurée, puis réessayez.",
+      "alertIncompatibleBodyCreate": "Le fournisseur d'identité de votre appareil n'est pas compatible avec ce portefeuille. Veuillez passer au Gestionnaire de mots de passe Google dans les réglages système, puis réessayez."
+    }
+  }
+}

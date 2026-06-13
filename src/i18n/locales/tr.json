@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "İptal",
+    "system": "Sistem",
+    "automatic": "Otomatik",
+    "error": "Hata",
+    "somethingWrong": "Bir şeyler ters gitti",
+    "tryAgain": "Tekrar Dene"
+  },
+  "language": {
+    "title": "Dil",
+    "pickerTitle": "Dil",
+    "pickerSubtitle": "Uygulama genelinde kullanılacak dili seçin.",
+    "followSystem": "Sistemi Takip Et",
+    "english": "English",
+    "chinese": "简体中文"
+  },
+  "settings": {
+    "title": "Ayarlar",
+    "sections": {
+      "account": "Hesap",
+      "appearance": "Görünüm",
+      "payments": "Ödemeler",
+      "localization": "Yerelleştirme",
+      "advanced": "Gelişmiş",
+      "developer": "Geliştirici"
+    },
+    "account": {
+      "switch": "Hesap değiştir"
+    },
+    "appearance": {
+      "themeLight": "Açık",
+      "themeDark": "Koyu",
+      "themeAuto": "Otomatik"
+    },
+    "payments": {
+      "voiceTitle": "Sesli bildirimler",
+      "voiceSubtitle": "Gelen ödemeleri sesli olarak duyur"
+    },
+    "localization": {
+      "autoExample": "Otomatik · {{example}}",
+      "numberTitle": "Sayı biçimi",
+      "numberSubtitle": "Tutarların nasıl gruplandığı ve ondalık işaretinin görünümü.",
+      "dateTitle": "Tarih biçimi",
+      "dateSubtitle": "Gün / ay / yıl sırası ve ayırıcı.",
+      "timeTitle": "Saat biçimi",
+      "timeSubtitle": "12 saatlik veya 24 saatlik saat."
+    },
+    "advanced": {
+      "networksTitle": "Ağlar",
+      "networksSubtitle": "RPC, Gezgin ve Bundler URL'leri",
+      "addNetworkTitle": "Ağ Ekle",
+      "addNetworkSubtitle": "Özel EVM ağı ekle",
+      "endpointsTitle": "Servis Uç Noktaları",
+      "endpointsSubtitle": "Zincir verisi, kimlik dizini, Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "Hazine",
+      "treasurySubtitle": "Hazine adresini ve bakiyeleri görüntüle",
+      "clearSigningTitle": "Açık İmzalama Testi",
+      "clearSigningSubtitle": "ERC-7730 imzalama arayüzü önizlemesi"
+    },
+    "about": {
+      "title": "Hakkında",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "Çıkış Yap",
+      "title": "Çıkış Yap",
+      "desc": "Cüzdan verileriniz bu cihazda kalır. Geçiş anahtarınızla (Face ID / parmak izi) istediğiniz zaman tekrar giriş yapabilirsiniz.",
+      "warning": "Açık anahtarınız henüz sunucuyla eşitlenmedi. Şimdi çıkış yapmanız, diğer cihazlarda kurtarmayı engelleyebilir.",
+      "anyway": "Yine de Çıkış Yap",
+      "cancel": "İptal"
+    },
+    "formatNote": {
+      "system": "Sistem",
+      "indian": "Hint",
+      "h24": "24 saat",
+      "h12": "12 saat"
+    }
+  }
+}

@@ -7,6 +7,7 @@
  *   - Web: WebSocket to local dApp Browser
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   View, Text, ScrollView, Pressable,
   Platform,
@@ -67,6 +68,7 @@ function PulsingBluetooth() {
 // ---------------------------------------------------------------------------
 
 export default function DAppScreen() {
+  const { t } = useTranslation();
   const { state, dispatch, activeAccount } = useWallet();
   const address = activeAccount?.address ?? state.address;
   const accountName = activeAccount?.name ?? 'Wallet';
@@ -265,13 +267,13 @@ export default function DAppScreen() {
 
   const startBLE = useCallback(async () => {
     const granted = await BLE.requestPermissions();
-    if (!granted) { showAlert('Permission Required', 'Bluetooth permission is needed.'); return; }
+    if (!granted) { showAlert(t('connect.dapp.blePermTitle'), t('connect.dapp.blePermBody')); return; }
     await BLE.startAdvertising({
       walletAddress: address, accountName, chainId: currentChainId,
       accounts: state.accounts.map(a => ({ name: a.name, address: a.address })),
     });
     setConnectState('advertising');
-  }, [address, accountName, currentChainId, state.accounts]);
+  }, [address, accountName, currentChainId, state.accounts, t]);
 
   const stopBLE = useCallback(async () => {
     try { await BLE.stopAdvertising(); } catch {}
@@ -297,7 +299,7 @@ export default function DAppScreen() {
       <ScreenContainer>
         <View style={styles.centered}>
           <Shield size={32} color={color.fg.subtle} />
-          <Text style={styles.emptyText}>Create a wallet first</Text>
+          <Text style={styles.emptyText}>{t('connect.dapp.noWallet')}</Text>
         </View>
       </ScreenContainer>
     );
@@ -312,7 +314,7 @@ export default function DAppScreen() {
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <Animated.View entering={fadeIn(0, 300)}>
-          <Text style={styles.pageTitle}>dApps</Text>
+          <Text style={styles.pageTitle}>{t('connect.dapp.pageTitle')}</Text>
         </Animated.View>
 
         {/* Wallet card */}
@@ -343,22 +345,22 @@ export default function DAppScreen() {
                 <ConnectIcon size={24} color={color.info.base} />
               </View>
               <Text style={styles.sectionTitle}>
-                {isWeb ? 'Connect to dApp Browser' : 'Connect via Bluetooth'}
+                {isWeb ? t('connect.dapp.connectWebTitle') : t('connect.dapp.connectBleTitle')}
               </Text>
               <Text style={styles.hint}>
                 {isWeb
-                  ? 'Connect to the local dApp Browser to interact with dApps.'
-                  : 'Start advertising to pair with the Vela Connect browser extension.'}
+                  ? t('connect.dapp.connectWebHint')
+                  : t('connect.dapp.connectBleHint')}
               </Text>
             </View>
-            <VelaButton title="Connect" onPress={isWeb ? connectWS : startBLE} />
+            <VelaButton title={t('connect.dapp.connect')} onPress={isWeb ? connectWS : startBLE} />
           </Animated.View>
         )}
 
         {connectState === 'connecting' && (
           <View style={styles.centered}>
             <Radio size={24} color={color.info.base} />
-            <Text style={styles.statusText}>Connecting...</Text>
+            <Text style={styles.statusText}>{t('connect.dapp.connecting')}</Text>
           </View>
         )}
 
@@ -367,10 +369,10 @@ export default function DAppScreen() {
             <VelaCard style={styles.statusCard}>
               <View style={styles.pulseRow}>
                 <PulsingBluetooth />
-                <Text style={styles.statusText}>Waiting for connection...</Text>
+                <Text style={styles.statusText}>{t('connect.dapp.waiting')}</Text>
               </View>
             </VelaCard>
-            <VelaButton title="Stop" onPress={stopBLE} variant="secondary" style={styles.sectionBtn} />
+            <VelaButton title={t('connect.dapp.stop')} onPress={stopBLE} variant="secondary" style={styles.sectionBtn} />
           </Animated.View>
         )}
 
@@ -378,12 +380,12 @@ export default function DAppScreen() {
           <Animated.View entering={fadeInDown(0, 300)}>
             <VelaCard style={styles.notInstalledCard}>
               <AlertTriangle size={24} color={color.fg.muted} />
-              <Text style={styles.notInstalledTitle}>dApp Browser not found</Text>
-              <Text style={styles.hint}>Install the dApp Browser to connect.</Text>
-              <VelaButton title="Download" onPress={() => {
+              <Text style={styles.notInstalledTitle}>{t('connect.dapp.notInstalledTitle')}</Text>
+              <Text style={styles.hint}>{t('connect.dapp.notInstalledHint')}</Text>
+              <VelaButton title={t('connect.dapp.download')} onPress={() => {
                 if (Platform.OS === 'web') window.open('https://getvela.app/dpp-browser', '_blank');
               }} variant="accent" style={styles.sectionBtn} />
-              <VelaButton title="Try Again" onPress={connectWS} variant="secondary" style={styles.retryBtn} />
+              <VelaButton title={t('connect.dapp.tryAgain')} onPress={connectWS} variant="secondary" style={styles.retryBtn} />
             </VelaCard>
           </Animated.View>
         )}
@@ -394,13 +396,13 @@ export default function DAppScreen() {
             <VelaCard style={styles.connectedCard}>
               <View style={styles.connectedRow}>
                 <View style={styles.connectedDot} />
-                <Text style={styles.connectedText}>Connected to {peerName}</Text>
+                <Text style={styles.connectedText}>{t('connect.dapp.connectedTo', { peerName })}</Text>
               </View>
               <Text style={styles.connectedHint}>
-                Signing requests from dApps will appear here.
+                {t('connect.dapp.connectedHint')}
               </Text>
             </VelaCard>
-            <VelaButton title="Disconnect" onPress={disconnect} variant="secondary" style={styles.sectionBtn} />
+            <VelaButton title={t('connect.dapp.disconnectBtn')} onPress={disconnect} variant="secondary" style={styles.sectionBtn} />
           </Animated.View>
         )}
 
@@ -411,14 +413,14 @@ export default function DAppScreen() {
               <View style={styles.requestHeader}>
                 {methodIcon(incomingRequest.method)}
                 <View style={styles.requestHeaderText}>
-                  <Text style={styles.requestMethod}>{methodLabel(incomingRequest.method)}</Text>
+                  <Text style={styles.requestMethod}>{t(methodLabelKey(incomingRequest.method) as any) || incomingRequest.method}</Text>
                   <Text style={styles.requestOrigin}>{incomingRequest.origin || peerName}</Text>
                 </View>
               </View>
 
               {/* Structured request details */}
               <View style={styles.txDetails}>
-                <Text style={styles.requestDescription}>{methodDescription(incomingRequest.method)}</Text>
+                <Text style={styles.requestDescription}>{t(methodDescKey(incomingRequest.method) as any)}</Text>
                 {incomingRequest.method === 'personal_sign' && incomingRequest.params?.[0] && (
                   <View style={styles.messagePreview}>
                     <Text style={styles.messagePreviewLabel}>MESSAGE</Text>
@@ -429,10 +431,10 @@ export default function DAppScreen() {
                 )}
                 {incomingRequest.method === 'eth_sendTransaction' && incomingRequest.params?.[0] && (
                   <>
-                    <DetailRow label="To" value={shortAddr(incomingRequest.params[0].to ?? '')} />
-                    <DetailRow label="Value" value={formatTxValue(incomingRequest.params[0].value)} />
+                    <DetailRow label={t('connect.dapp.detailTo')} value={shortAddr(incomingRequest.params[0].to ?? '')} />
+                    <DetailRow label={t('connect.dapp.detailValue')} value={formatTxValue(incomingRequest.params[0].value)} />
                     {incomingRequest.params[0].data && incomingRequest.params[0].data !== '0x' && (
-                      <DetailRow label="Data" value={`${incomingRequest.params[0].data.length / 2 - 1} bytes`} />
+                      <DetailRow label={t('connect.dapp.detailData')} value={`${incomingRequest.params[0].data.length / 2 - 1} bytes`} />
                     )}
                   </>
                 )}
@@ -440,7 +442,7 @@ export default function DAppScreen() {
                   <View style={styles.messagePreview}>
                     <Text style={styles.messagePreviewLabel}>TYPED DATA</Text>
                     <Text style={styles.messagePreviewText} numberOfLines={4}>
-                      {parseTypedDataSummary(incomingRequest.params)}
+                      {parseTypedDataSummary(incomingRequest.params, t('connect.dapp.structuredData'))}
                     </Text>
                   </View>
                 )}
@@ -455,12 +457,12 @@ export default function DAppScreen() {
 
               <View style={styles.buttonRow}>
                 <VelaButton
-                  title={isSigning ? 'Signing...' : 'Approve'}
+                  title={isSigning ? t('connect.dapp.signing') : t('connect.dapp.approve')}
                   onPress={() => approveRequest(incomingRequest)}
                   variant="accent" loading={isSigning} style={styles.buttonFlex}
                 />
                 <VelaButton
-                  title="Reject"
+                  title={t('connect.dapp.reject')}
                   onPress={() => rejectRequest(incomingRequest)}
                   variant="secondary" disabled={isSigning} style={styles.buttonFlex}
                 />
@@ -474,7 +476,7 @@ export default function DAppScreen() {
       <AppModal visible={showAccountPicker} onClose={() => setShowAccountPicker(false)}>
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Accounts</Text>
+            <Text style={styles.modalTitle}>{t('connect.dapp.accounts')}</Text>
             <Pressable onPress={() => setShowAccountPicker(false)} hitSlop={8}>
               <X size={22} color={color.fg.base} strokeWidth={2} />
             </Pressable>
@@ -543,7 +545,7 @@ function formatTxValue(value?: string): string {
   }
 }
 
-function parseTypedDataSummary(params: any[]): string {
+function parseTypedDataSummary(params: any[], fallback: string): string {
   try {
     // EIP-712: params[1] is the typed data JSON string
     const data = typeof params[1] === 'string' ? JSON.parse(params[1]) : params[1];
@@ -555,24 +557,24 @@ function parseTypedDataSummary(params: any[]): string {
       }
       return data.primaryType;
     }
-    return 'Structured data';
+    return fallback;
   } catch {
-    return 'Structured data';
+    return fallback;
   }
 }
 
-function methodDescription(m: string): string {
-  if (m === 'eth_sendTransaction') return 'This app wants to send a transaction from your wallet.';
-  if (m === 'personal_sign') return 'This app wants you to sign a message.';
-  if (m.includes('signTypedData')) return 'This app wants you to sign structured data.';
-  return 'This app is requesting a signature.';
+function methodDescKey(m: string): string {
+  if (m === 'eth_sendTransaction') return 'connect.dapp.sendTxDesc';
+  if (m === 'personal_sign') return 'connect.dapp.signMsgDesc';
+  if (m.includes('signTypedData')) return 'connect.dapp.signTypedDesc';
+  return 'connect.dapp.signDesc';
 }
 
-function methodLabel(m: string): string {
-  if (m === 'eth_sendTransaction') return 'Send Transaction';
-  if (m === 'personal_sign') return 'Sign Message';
-  if (m.includes('signTypedData')) return 'Sign Typed Data';
-  return m;
+function methodLabelKey(m: string): string {
+  if (m === 'eth_sendTransaction') return 'connect.dapp.sendTx';
+  if (m === 'personal_sign') return 'connect.dapp.signMsg';
+  if (m.includes('signTypedData')) return 'connect.dapp.signTyped';
+  return '';
 }
 
 function methodIcon(m: string): React.ReactNode {

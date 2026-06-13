@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "actionSend": "Gửi",
+    "actionReceive": "Nhận",
+    "actionHistory": "Lịch sử",
+    "sectionTitle": "Tài sản",
+    "hideZero": "Ẩn số dư 0",
+    "hiddenCount": "Đã ẩn {{count}}",
+    "addToken": "Thêm",
+    "searchPlaceholder": "Tìm token...",
+    "rpcUnavailableSingle": "RPC của {{name}} không khả dụng",
+    "rpcUnavailableMultiple": "RPC của {{count}} mạng không khả dụng",
+    "rpcFix": "Sửa",
+    "emptyTitle": "Nạp tài sản đầu tiên của bạn",
+    "emptySubtext": "Chạm vào đây để xem địa chỉ và nhận token",
+    "errorTitle": "Lỗi",
+    "errorLoadBalances": "Không tải được số dư token.",
+    "switcherTitle": "Chuyển tài khoản",
+    "switcherTotal": "Tổng {{amount}}",
+    "rpcFixTitle": "Sửa RPC",
+    "rpcFixChainId": "Chain ID: {{chainId}}",
+    "rpcFixWarning": "Tất cả điểm cuối RPC cho mạng này đều bị lỗi. Nhập một URL RPC hoạt động để khôi phục kết nối.",
+    "rpcFixLabel": "URL RPC",
+    "rpcFixSaveBtn": "Lưu và thử lại",
+    "errorSaveRpc": "Không lưu được URL RPC.",
+    "invalidQrTitle": "QR không hợp lệ",
+    "invalidQrMessage": "Vui lòng quét một địa chỉ Ethereum hoặc URI kết nối hợp lệ.",
+    "chainFallback": "Chain {{chainId}}"
+  }
+}

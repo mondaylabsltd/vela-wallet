@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "Recibir",
+    "noAddress": "Sin dirección",
+    "shareGenerating": "Generando...",
+    "shareButton": "Compartir",
+    "listeningForDeposits": "Esperando depósitos",
+    "warningTitle": "Antes de recibir",
+    "warningBody": "Solo envía activos en redes compatibles — las transferencias en redes no compatibles pueden perderse para siempre.",
+    "warningHint": "Revisa las",
+    "warningHintNetworks": "{{count}} redes compatibles",
+    "warningHintSuffix": "antes de compartir tu dirección.",
+    "warningConfirm": "Entendido",
+    "networksLabel": "Funciona en {{count}} redes EVM",
+    "shareCardHeadline": "Escanea para enviarme cripto",
+    "shareDialogTitle": "Dirección de billetera de {{name}}"
+  }
+}

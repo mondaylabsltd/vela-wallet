@@ -1,0 +1,69 @@
+{
+  "settingsModals": {
+    "network": {
+      "modalTitle": "Ağlar",
+      "chainId": "Zincir {{chainId}}",
+      "fieldRpcUrl": "RPC URL",
+      "fieldExplorer": "GEZGİN",
+      "fieldBundler": "BUNDLER",
+      "removeTitle": "Ağı Kaldır",
+      "removeBody": "Bu özel ağ kaldırılsın mı?",
+      "removeCancel": "İptal",
+      "removeConfirm": "Kaldır"
+    },
+    "account": {
+      "modalTitle": "Hesaplar",
+      "total": "Toplam {{amount}}",
+      "createNew": "Yeni Hesap Oluştur",
+      "signInExisting": "Mevcut Hesapla Giriş Yap"
+    },
+    "endpoints": {
+      "modalTitle": "Servis Uç Noktaları",
+      "description": "Bu servisler cüzdanınıza güç verir.\nTam kendi kontrolünüz için kendi örneklerinizi dağıtabilirsiniz.",
+      "chainDataLabel": "ZİNCİR VERİ DİZİNİ",
+      "chainDataHint": "Ağ bilgisi, token verisi ve zincir logoları sağlar",
+      "passkeyLabel": "PASSKEY DİZİNİ",
+      "passkeyHint": "Cihazlar arası giriş için geçiş anahtarı açık anahtarlarını saklar",
+      "bundlerLabel": "BUNDLER SERVİSİ",
+      "bundlerHint": "Vela Bundler uyumlu bir uç nokta gereklidir",
+      "fiatLabel": "FİAT KURLARI",
+      "fiatHint": "USD tabanlı kurlar ({rates:{…}}). Para birimi listesini besler — daha geniş kapsam için değiştirin",
+      "resetToDefaults": "Varsayılanlara Sıfırla"
+    },
+    "addNetwork": {
+      "modalTitle": "Ağ Ekle",
+      "description": "Ağ adı, token sembolü veya Zincir ID ile arayın.",
+      "searchPlaceholder": "örn. Gnosis, ACE, 648...",
+      "chainMeta": "Zincir {{chainId}} · {{symbol}}",
+      "searching": "Aranıyor...",
+      "checkingCompatibility": "Uyumluluk kontrol ediliyor...",
+      "customRpcTitle": "Özel RPC (isteğe bağlı)",
+      "customRpcPlaceholder": "https://rpc-url-adresiniz...",
+      "recheckWithRpc": "Bu RPC ile yeniden kontrol et",
+      "bestRpc": "En iyi RPC: {{latencyMs}}ms",
+      "compatibilityCheck": "Uyumluluk Kontrolü",
+      "unableToVerify": "Doğrulanamıyor — RPC isteği başarısız oldu",
+      "retry": "Yeniden Dene",
+      "addNetworkBtn": "Ağ Ekle",
+      "incompatibleHint": "Bu zincirde gerekli bazı sözleşmeler henüz dağıtılmamış.\nBunları dağıtmak için Vela Wallet Chain Setup aracını kullanın, ardından geri dönüp yeniden kontrol edin.",
+      "openChainSetupTool": "Chain Setup Aracını Aç",
+      "recheck": "Yeniden kontrol et",
+      "chainIdLabel": "Zincir ID: {{chainId}}",
+      "nativeLabel": "Yerel: {{symbol}}",
+      "testnet": "Test ağı"
+    },
+    "treasury": {
+      "modalTitle": "Hazine",
+      "addressLabel": "Adres (tüm ağlar)",
+      "balancesLabel": "Bakiyeler",
+      "minBalance": "min {{amount}}",
+      "unreachable": "Bundler'a ulaşılamadı",
+      "close": "Kapat"
+    },
+    "health": {
+      "offline": "Çevrimdışı",
+      "httpsRequired": "HTTPS gerekli",
+      "invalid": "Geçersiz"
+    }
+  }
+}

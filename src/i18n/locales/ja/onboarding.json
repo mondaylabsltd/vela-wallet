@@ -1,0 +1,70 @@
+{
+  "onboarding": {
+    "welcome": {
+      "tagline": "鍵もコインも、あなたのもの。\nタップするだけのかんたんさ。",
+      "createWallet": "ウォレットを作成",
+      "alreadyHaveWallet": "すでにウォレットを持っています"
+    },
+    "settings": {
+      "title": "設定",
+      "sectionAppearance": "外観",
+      "themeLabelLight": "ライト",
+      "themeLabelDark": "ダーク",
+      "themeLabelAuto": "自動",
+      "sectionPasskeyIndex": "パスキーインデックス",
+      "passkeyHint": "このサービスは、端末をまたいだサインインのためにパスキーの公開鍵を保存します。Vela Wallet がパスキーの秘密鍵にアクセスすることは一切ありません。",
+      "endpointUrlLabel": "エンドポイント URL",
+      "resetToDefault": "デフォルトに戻す",
+      "sectionDebug": "デバッグ",
+      "simulateFailure": "エンドポイント障害をシミュレート",
+      "warningText": "パスキーインデックスのサービスに接続できません。ウォレットの作成とサインインにはこのサービスが必要です。接続可能なエンドポイントを下で設定してください。"
+    },
+    "create": {
+      "headerDefault": "ウォレットを作成",
+      "headerCreated": "ウォレットを作成しました",
+      "headerSyncFailed": "端末間の同期",
+      "accountNameLabel": "アカウント名",
+      "accountNamePlaceholder": "アカウントの名前を入力",
+      "accountNameHint": "この名前は、端末をまたいだサインインのために公開鍵とともにオンチェーンに保存されます。",
+      "ack0": "これはセルフカストディ（自己管理型）ウォレットです。パスキーの秘密鍵は端末のパスワードマネージャー（iCloud キーチェーン／Google パスワード マネージャー）によって管理されます。Vela Wallet がアクセスしたり復元したりすることはできません。",
+      "ack1": "端末を紛失した場合でも、iCloud または Google アカウントを通じて新しい端末でウォレットを復元できます。",
+      "ack2": "iCloud または Google アカウントが侵害されると、ウォレットの管理権も侵害される可能性があります。強力なパスワードと2段階認証で保護してください。",
+      "ack3": "次に同意します: ",
+      "ack3PrivacyPolicy": "プライバシーポリシー",
+      "ack3And": " および ",
+      "ack3Terms": "利用規約",
+      "ack3Period": "。",
+      "createWalletBtn": "ウォレットを作成",
+      "successTitle": "ウォレットの準備ができました！",
+      "successMessage": "あなたのアドレスは、対応する {{count}} 件すべてのネットワークで利用できます。",
+      "verifyHint": "ウォレットを使う前に、下をタップして本人確認が機能することを確認しましょう。",
+      "verifySignInBtn": "確認してサインイン",
+      "syncFailedTitle": "同期に失敗しました",
+      "syncFailedMessage": "ウォレットは作成されましたが、公開鍵がサーバーに同期されませんでした。これが解決するまで、他の端末でサインインできません。",
+      "syncFailedHint": "ネットワークを確認するか、下でカスタムエンドポイントを設定してください。",
+      "openSettings": "設定を開く",
+      "retryUploadBtn": "アップロードを再試行",
+      "statusSyncingKey": "公開鍵を同期中...",
+      "statusSettingUpIdentity": "安全な本人確認を設定中...",
+      "statusExtractingKey": "公開鍵を抽出中...",
+      "statusComputingAddress": "ウォレットアドレスを計算中...",
+      "statusVerifyingIdentity": "本人確認中...",
+      "statusSetupCancelled": "セットアップがキャンセルされました。",
+      "statusVerifyCancelled": "確認がキャンセルされました。もう一度お試しください。",
+      "alertNotSupportedTitle": "非対応",
+      "alertNotSupportedBody": "この端末では生体認証を利用できません。",
+      "alertErrorTitle": "エラー"
+    },
+    "login": {
+      "alertNotSupportedTitle": "非対応",
+      "alertNotSupportedBody": "この端末では生体認証を利用できません。",
+      "alertIncompatibleTitle": "端末が非対応です",
+      "alertIncompatibleBody": "お使いの端末の本人確認プロバイダーは Vela Wallet と互換性がありません。システム設定で Google パスワード マネージャーに切り替えてからもう一度お試しください。",
+      "alertNotFoundTitle": "アカウントが見つかりません",
+      "alertNotFoundBody": "この本人確認に対応するウォレットが見つかりませんでした。\n\n考えられる原因:\n• まだウォレットを作成していない\n• 本人確認情報がこの端末に同期されていない（iCloud／Google の設定を確認してください）\n• 公開鍵サーバーに接続できない\n\n新しいウォレットを作成するか、本人確認プロバイダー（Face ID／指紋）が端末間で同期されていることを確認してください。",
+      "alertSignInFailedTitle": "サインインに失敗しました",
+      "alertSignInFailedBody": "{{message}}\n\n端末に Face ID、Touch ID、または指紋認証が設定されていることを確認してから、もう一度お試しください。",
+      "alertIncompatibleBodyCreate": "お使いの端末の本人確認プロバイダーはこのウォレットと互換性がありません。システム設定で Google パスワード マネージャーに切り替えてからもう一度お試しください。"
+    }
+  }
+}

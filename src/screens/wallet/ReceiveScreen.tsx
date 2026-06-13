@@ -14,6 +14,7 @@ import { copyToClipboard, hapticSuccess, hapticLight, isAppActive } from '@/serv
 import { ArrowLeft, Check, Copy, Share2, ShieldAlert } from 'lucide-react-native';
 import QRCodeLib from 'qrcode';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -45,6 +46,7 @@ async function renderShareCardToCanvas(
   address: string,
   walletName: string,
   networks: Network[],
+  strings: { headline: string; networksLabel: string },
 ): Promise<Blob> {
   const W = 750;
   const PAD = 80;
@@ -95,7 +97,7 @@ async function renderShareCardToCanvas(
   ctx.fillStyle = color.fg.base;
   ctx.font = 'bold 40px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Scan to Send Me Crypto', W / 2, y + 34);
+  ctx.fillText(strings.headline, W / 2, y + 34);
   y += 46 + 12;
 
   // — Wallet name —
@@ -143,7 +145,7 @@ async function renderShareCardToCanvas(
   ctx.fillStyle = color.fg.subtle;
   ctx.font = '500 22px Inter, system-ui, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText(`Works on ${networks.length} EVM networks`, PAD, y + 18);
+  ctx.fillText(strings.networksLabel, PAD, y + 18);
   y += 22 + 16;
 
   // — Network chips (2-column grid, justified) —
@@ -294,6 +296,7 @@ function PulsingDot() {
 }
 
 export default function ReceiveScreen() {
+  const { t } = useTranslation();
   const router = useSafeRouter();
   const { activeAccount, state } = useWallet();
   const address = activeAccount?.address ?? state.address;
@@ -395,7 +398,11 @@ export default function ReceiveScreen() {
     setSharing(true);
     try {
       if (Platform.OS === 'web') {
-        const blob = await renderShareCardToCanvas(address!, accountName, networks);
+        const canvasStrings = {
+          headline: t('receive.shareCardHeadline'),
+          networksLabel: t('receive.networksLabel', { count: networks.length }),
+        };
+        const blob = await renderShareCardToCanvas(address!, accountName, networks, canvasStrings);
         const file = new File([blob], `${accountName}-address.png`, { type: 'image/png' });
         if (navigator.share && navigator.canShare?.({ files: [file] })) {
           await navigator.share({ files: [file] });
@@ -412,7 +419,7 @@ export default function ReceiveScreen() {
         const { captureRef } = await import('react-native-view-shot');
         const Sharing = await import('expo-sharing');
         const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: `${accountName} Wallet Address` });
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: t('receive.shareDialogTitle', { name: accountName }) });
       }
     } catch (e) {
       console.warn('Share failed:', e);
@@ -432,7 +439,7 @@ export default function ReceiveScreen() {
           <Pressable onPress={() => router.back()} hitSlop={8} style={styles.navBtn}>
             <ArrowLeft size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
-          <Text style={styles.title}>Receive</Text>
+          <Text style={styles.title}>{t('receive.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -457,7 +464,7 @@ export default function ReceiveScreen() {
                   <QRCode value={address} size={200} />
                 ) : (
                   <View style={styles.qrPlaceholder}>
-                    <Text style={styles.qrPlaceholderText}>No address</Text>
+                    <Text style={styles.qrPlaceholderText}>{t('receive.noAddress')}</Text>
                   </View>
                 )}
               </View>
@@ -470,7 +477,7 @@ export default function ReceiveScreen() {
               >
                 <Share2 size={16} color={color.fg.base} strokeWidth={2} />
                 <Text style={styles.shareBtnText}>
-                  {sharing ? 'Generating...' : 'Share'}
+                  {sharing ? t('receive.shareGenerating') : t('receive.shareButton')}
                 </Text>
               </Pressable>
 
@@ -478,7 +485,7 @@ export default function ReceiveScreen() {
               {isListening && !depositDetected && warningDismissed && (
                 <Animated.View style={styles.listeningRow} entering={fadeIn(0, 300)}>
                   <PulsingDot />
-                  <Text style={styles.listeningText}>Listening for deposits</Text>
+                  <Text style={styles.listeningText}>{t('receive.listeningForDeposits')}</Text>
                 </Animated.View>
               )}
               {depositDetected && deposits.length > 0 && (
@@ -508,17 +515,17 @@ export default function ReceiveScreen() {
                   <View style={styles.warningIconWrap}>
                     <ShieldAlert size={28} color={color.accent.base} strokeWidth={2} />
                   </View>
-                  <Text style={styles.warningTitle}>Before you receive</Text>
+                  <Text style={styles.warningTitle}>{t('receive.warningTitle')}</Text>
                   <Text style={styles.warningText}>
-                    Only send assets on supported networks — unsupported transfers may be lost permanently.
+                    {t('receive.warningBody')}
                   </Text>
                   <Text style={styles.warningHint}>
-                    Check the{' '}
-                    <Text style={styles.warningHintBold}>{networks.length} supported networks</Text>
-                    {' '}below before sharing your address.
+                    {t('receive.warningHint')}{' '}
+                    <Text style={styles.warningHintBold}>{t('receive.warningHintNetworks', { count: networks.length })}</Text>
+                    {' '}{t('receive.warningHintSuffix')}
                   </Text>
                   <Pressable style={styles.warningBtn} onPress={() => setWarningDismissed(true)}>
-                    <Text style={styles.warningBtnText}>I Understand</Text>
+                    <Text style={styles.warningBtnText}>{t('receive.warningConfirm')}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -528,7 +535,7 @@ export default function ReceiveScreen() {
 
         {/* Networks */}
         <Animated.View entering={fadeInDown(200, 400)}>
-          <Text style={styles.sectionLabel}>{`Works on ${networks.length} EVM networks`}</Text>
+          <Text style={styles.sectionLabel}>{t('receive.networksLabel', { count: networks.length })}</Text>
 
           <View style={styles.networkGrid}>
             {networks.map((network) => (
@@ -551,7 +558,7 @@ export default function ReceiveScreen() {
       {Platform.OS !== 'web' && (
         <View style={styles.shareCardWrapper} pointerEvents="none">
           <View ref={shareCardRef} style={styles.shareCard} collapsable={false}>
-            <Text style={styles.shareCardHeadline}>Scan to Send Me Crypto</Text>
+            <Text style={styles.shareCardHeadline}>{t('receive.shareCardHeadline')}</Text>
             <Text style={styles.shareCardName}>{accountName}</Text>
             <Text style={styles.shareCardAddr}>
               {address ? `${address.slice(0, 6)}···${address.slice(-4)}` : ''}
@@ -564,7 +571,7 @@ export default function ReceiveScreen() {
             <View style={styles.shareCardDivider} />
 
             <Text style={styles.shareCardNetworksSub}>
-              {`Works on ${networks.length} EVM networks`}
+              {t('receive.networksLabel', { count: networks.length })}
             </Text>
 
             <View style={styles.shareCardNetworkGrid}>

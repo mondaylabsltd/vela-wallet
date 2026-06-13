@@ -10,8 +10,10 @@ import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
 import { color, font, inter, radius, shadow, space, text, useStyles } from '@/constants/theme';
 import type { Network } from '@/models/network';
 import { DEFAULT_NETWORKS, getAllNetworks, getAllNetworksSync, refreshCustomNetworks } from '@/models/network';
-import type { CompatibilityResult, CustomNetwork, NetworkConfig, ServiceEndpoints } from '@/models/types';
+import type { CompatibilityResult, CustomNetwork, NetworkConfig, ServiceEndpoints, LocalePrefs } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS, isNativeToken, tokenChainId } from '@/models/types';
+import { numberFormatOptions, dateFormatOptions, timeFormatOptions, type FormatOption } from '@/services/locale-format';
+import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import { getAccountBalances } from '@/services/balance-cache';
 import { clearBundlerCache } from '@/services/bundler-service';
@@ -19,11 +21,14 @@ import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { copyToClipboard, hapticLight, hapticSuccess, openURL, showAlert } from '@/services/platform';
 import { getBuiltinBundlerUrl, invalidateAllPools, poolRpcCall, refreshPool } from '@/services/rpc-pool';
-import { getBundlerServiceURL, hasPendingUploads, loadCustomNetworks, loadNetworkConfigs, loadServiceEndpoints, removeCustomNetwork, saveCustomNetwork, saveNetworkConfig, saveServiceEndpoints } from '@/services/storage';
+import { getBundlerServiceURL, getLocalePrefs, hasPendingUploads, loadCustomNetworks, loadLocalePrefs, loadNetworkConfigs, loadServiceEndpoints, removeCustomNetwork, saveCustomNetwork, saveLocalePrefs, saveNetworkConfig, saveServiceEndpoints } from '@/services/storage';
 import { fetchTokens } from '@/services/wallet-api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, ExternalLink, Info as InfoIcon, Key, LogOut as LogOutIcon, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, Volume2, X, XCircle } from 'lucide-react-native';
+import { AlertTriangle, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, Volume2, X, XCircle } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
+import { useLanguagePreference } from '@/i18n/language';
+import { LANGUAGE_NATIVE_NAMES, SUPPORTED_LANGUAGES, type AppLanguage, type LanguagePreference } from '@/i18n';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -122,13 +127,14 @@ async function checkEndpointHealth(url: string, type: 'rpc' | 'explorer' | 'bund
 }
 
 function HealthBadge({ health }: { health: EndpointHealth }) {
+  const { t } = useTranslation();
   if (health.status === 'checking') {
     return <ActivityIndicator size={10} color={color.fg.subtle} style={{ marginLeft: 6 }} />;
   }
   const dotColor = health.status === 'ok' ? color.success.base : color.accent.base;
   const label = health.status === 'ok'
     ? `${health.latencyMs}ms`
-    : 'Offline';
+    : t('settingsModals.health.offline');
   return (
     <View style={healthStyles.badge}>
       <View style={[healthStyles.dot, { backgroundColor: dotColor }]} />
@@ -149,6 +155,7 @@ function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
   s: S; network: Network; savedConfig?: NetworkConfig;
   onSave: (config: NetworkConfig) => void; onDelete?: () => void;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [rpcURL, setRpcURL] = useState(savedConfig?.rpcURL ?? network.rpcURL);
   const [explorerURL, setExplorerURL] = useState(savedConfig?.explorerURL ?? network.explorerURL);
@@ -180,7 +187,7 @@ function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
         <ChainLogo label={network.iconLabel} color={network.iconColor} bgColor={network.iconBg} logoURL={network.logoURL} size={36} />
         <View style={s.networkHeaderText}>
           <Text style={s.networkName}>{network.displayName}</Text>
-          <Text style={s.networkChainId}>Chain {network.chainId}</Text>
+          <Text style={s.networkChainId}>{t('settingsModals.network.chainId', { chainId: network.chainId })}</Text>
         </View>
         {onDelete && (
           <Pressable onPress={onDelete} hitSlop={8} style={s.deleteNetBtn}>
@@ -192,11 +199,16 @@ function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
       {expanded && (
         <View style={s.networkFields}>
           <View style={s.dividerFull} />
-          {(['RPC URL', 'EXPLORER', 'BUNDLER'] as const).map((label, i) => {
+          {([
+            ['settingsModals.network.fieldRpcUrl', 'settingsModals.network.fieldRpcUrl'],
+            ['settingsModals.network.fieldExplorer', 'settingsModals.network.fieldExplorer'],
+            ['settingsModals.network.fieldBundler', 'settingsModals.network.fieldBundler'],
+          ] as const).map(([labelKey], i) => {
+            const label = t(labelKey);
             const vals = [rpcURL, explorerURL, bundlerURL];
             const setters = [setRpcURL, setExplorerURL, setBundlerURL];
             return (
-              <View key={label} style={s.configField}>
+              <View key={labelKey} style={s.configField}>
                 <View style={s.configLabelRow}>
                   <Text style={s.configLabel}>{label}</Text>
                   <HealthBadge health={healths[i]} />
@@ -216,13 +228,11 @@ function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
 // Account Switcher Modal
 // ---------------------------------------------------------------------------
 
-function formatUsd(value: number): string {
-  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 function AccountSwitcherModal({ s, visible, onClose }: { s: S; visible: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const { state, dispatch } = useWallet();
   const router = useRouter();
+  const dc = useDisplayCurrency();
   const [cachedBalances, setCachedBalances] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
@@ -237,9 +247,9 @@ function AccountSwitcherModal({ s, visible, onClose }: { s: S; visible: boolean;
       <View style={s.modalContainer}>
         <View style={s.modalHeader}>
           <View>
-            <Text style={s.modalTitle}>Accounts</Text>
+            <Text style={s.modalTitle}>{t('settingsModals.account.modalTitle')}</Text>
             {cachedBalances.size > 0 && (
-              <Text style={s.accountTotalLabel}>Total {formatUsd(allTotal)}</Text>
+              <Text style={s.accountTotalLabel}>{t('settingsModals.account.total', { amount: dc.fmt(allTotal) })}</Text>
             )}
           </View>
           <Pressable onPress={onClose} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
@@ -267,15 +277,15 @@ function AccountSwitcherModal({ s, visible, onClose }: { s: S; visible: boolean;
                   <Text style={s.accountAddress}>{shortAddress(account.address)}</Text>
                 </View>
                 <View style={s.accountRight}>
-                  {bal != null && <Text style={s.accountBal}>{formatUsd(bal)}</Text>}
+                  {bal != null && <Text style={s.accountBal}>{dc.fmt(bal)}</Text>}
                   {isActive && <Check size={18} color={color.accent.base} />}
                 </View>
               </Pressable>
             );
           })}
           <View style={s.accountActions}>
-            <VelaButton title="Create New Account" onPress={() => { onClose(); router.push('/onboarding'); }} />
-            <VelaButton title="Sign In with Existing" variant="secondary" onPress={() => { onClose(); router.push('/onboarding'); }} />
+            <VelaButton title={t('settingsModals.account.createNew')} onPress={() => { onClose(); router.push('/onboarding'); }} />
+            <VelaButton title={t('settingsModals.account.signInExisting')} variant="secondary" onPress={() => { onClose(); router.push('/onboarding'); }} />
           </View>
         </ScrollView>
       </View>
@@ -288,6 +298,7 @@ function AccountSwitcherModal({ s, visible, onClose }: { s: S; visible: boolean;
 // ---------------------------------------------------------------------------
 
 function NetworkEditorModal({ s, visible, onClose }: { s: S; visible: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const [savedConfigs, setSavedConfigs] = useState<NetworkConfig[]>([]);
   const [allNetworks, setAllNetworks] = useState<Network[]>(DEFAULT_NETWORKS);
   const [customIds, setCustomIds] = useState<Set<string>>(new Set());
@@ -308,22 +319,22 @@ function NetworkEditorModal({ s, visible, onClose }: { s: S; visible: boolean; o
   }, []);
 
   const handleDelete = useCallback(async (id: string) => {
-    showAlert('Remove Network', 'Remove this custom network?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: async () => {
+    showAlert(t('settingsModals.network.removeTitle'), t('settingsModals.network.removeBody'), [
+      { text: t('settingsModals.network.removeCancel'), style: 'cancel' },
+      { text: t('settingsModals.network.removeConfirm'), style: 'destructive', onPress: async () => {
         await removeCustomNetwork(id);
         await refreshCustomNetworks();
         setAllNetworks(await getAllNetworks());
         setCustomIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       }},
     ]);
-  }, []);
+  }, [t]);
 
   return (
     <AppModal visible={visible} onClose={onClose}>
       <View style={s.modalContainer}>
         <View style={s.modalHeader}>
-          <Text style={s.modalTitle}>Networks</Text>
+          <Text style={s.modalTitle}>{t('settingsModals.network.modalTitle')}</Text>
           <Pressable onPress={onClose} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
         </View>
         <ScrollView style={s.modalScroll} contentContainerStyle={s.networkScrollContent} keyboardShouldPersistTaps="handled">
@@ -356,7 +367,7 @@ const SERVICE_IDENTITY: Record<string, string> = {
 };
 
 async function checkServiceEndpointHealth(
-  url: string, type: 'data' | 'passkey' | 'bundler',
+  url: string, type: 'data' | 'passkey' | 'bundler' | 'fiat',
 ): Promise<ServiceHealth> {
   if (!url) return { status: 'unreachable', detail: 'Empty URL' };
 
@@ -364,6 +375,27 @@ async function checkServiceEndpointHealth(
   const isLocalhost = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url);
   if (!url.startsWith('https://') && !isLocalhost) {
     return { status: 'not_https', detail: 'HTTPS required' };
+  }
+
+  // Fiat-rate provider: third-party (no /api/health) — GET the URL itself and
+  // validate it returns a USD-based `{ rates: {...} }` map.
+  if (type === 'fiat') {
+    const start = Date.now();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const res = await fetch(url.trim().replace(/[\r\n]/g, ''), { method: 'GET', signal: controller.signal });
+      clearTimeout(timeout);
+      const latencyMs = Date.now() - start;
+      if (!res.ok) return { status: 'unreachable', latencyMs, detail: `HTTP ${res.status}` };
+      const data = await res.json();
+      const n = data?.rates && typeof data.rates === 'object' ? Object.keys(data.rates).length : 0;
+      if (!n) return { status: 'invalid_response', latencyMs, detail: 'No rates returned' };
+      return { status: 'ok', latencyMs, detail: `${n} currencies` };
+    } catch {
+      clearTimeout(timeout);
+      return { status: 'unreachable', detail: 'Connection failed' };
+    }
   }
 
   // 2. Connectivity + 3. Response validation via /api/health
@@ -398,14 +430,15 @@ async function checkServiceEndpointHealth(
 }
 
 function ServiceHealthBadge({ health }: { health: ServiceHealth }) {
+  const { t } = useTranslation();
   if (health.status === 'checking') {
     return <ActivityIndicator size={10} color={color.fg.subtle} style={{ marginLeft: 6 }} />;
   }
   const cfg: Record<string, { dot: string; label: string }> = {
     ok: { dot: color.success.base, label: `${health.latencyMs ?? 0}ms` },
-    not_https: { dot: color.accent.base, label: 'HTTPS required' },
-    unreachable: { dot: color.accent.base, label: 'Offline' },
-    invalid_response: { dot: color.warning.base, label: health.detail ?? 'Invalid' },
+    not_https: { dot: color.accent.base, label: t('settingsModals.health.httpsRequired') },
+    unreachable: { dot: color.accent.base, label: t('settingsModals.health.offline') },
+    invalid_response: { dot: color.warning.base, label: health.detail ?? t('settingsModals.health.invalid') },
   };
   const { dot, label } = cfg[health.status] ?? cfg.unreachable;
   return (
@@ -417,6 +450,7 @@ function ServiceHealthBadge({ health }: { health: ServiceHealth }) {
 }
 
 function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const [endpoints, setEndpoints] = useState<ServiceEndpoints>({ ...DEFAULT_SERVICE_ENDPOINTS });
   const [healths, setHealths] = useState<Record<string, ServiceHealth>>({});
   const [refreshCount, setRefreshCount] = useState(0);
@@ -426,8 +460,8 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
   // Health checks on open and manual refresh
   useEffect(() => {
     if (!visible) return;
-    const keys = ['ethereumDataURL', 'passkeyIndexURL', 'bundlerServiceURL'] as const;
-    const types = ['data', 'passkey', 'bundler'] as const;
+    const keys = ['ethereumDataURL', 'passkeyIndexURL', 'bundlerServiceURL', 'fiatRatesURL'] as const;
+    const types = ['data', 'passkey', 'bundler', 'fiat'] as const;
     setHealths(Object.fromEntries(keys.map(k => [k, { status: 'checking' as const }])));
     keys.forEach((key, i) => {
       checkServiceEndpointHealth(endpoints[key], types[i]).then(h => {
@@ -445,17 +479,18 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
     setRefreshCount(c => c + 1);
   }, [endpoints]);
 
-  const fields: { key: keyof ServiceEndpoints; label: string; hint: string; healthType: 'data' | 'passkey' | 'bundler' }[] = [
-    { key: 'ethereumDataURL', label: 'CHAIN DATA INDEX', hint: 'Provides network info, token data, and chain logos', healthType: 'data' },
-    { key: 'passkeyIndexURL', label: 'PASSKEY INDEX', hint: 'Stores passkey public keys for cross-device sign-in', healthType: 'passkey' },
-    { key: 'bundlerServiceURL', label: 'BUNDLER SERVICE', hint: 'Vela Bundler compatible endpoint required', healthType: 'bundler' },
+  const fields: { key: keyof ServiceEndpoints; labelKey: string; hintKey: string; healthType: 'data' | 'passkey' | 'bundler' | 'fiat' }[] = [
+    { key: 'ethereumDataURL', labelKey: 'settingsModals.endpoints.chainDataLabel', hintKey: 'settingsModals.endpoints.chainDataHint', healthType: 'data' },
+    { key: 'passkeyIndexURL', labelKey: 'settingsModals.endpoints.passkeyLabel', hintKey: 'settingsModals.endpoints.passkeyHint', healthType: 'passkey' },
+    { key: 'bundlerServiceURL', labelKey: 'settingsModals.endpoints.bundlerLabel', hintKey: 'settingsModals.endpoints.bundlerHint', healthType: 'bundler' },
+    { key: 'fiatRatesURL', labelKey: 'settingsModals.endpoints.fiatLabel', hintKey: 'settingsModals.endpoints.fiatHint', healthType: 'fiat' },
   ];
 
   return (
     <AppModal visible={visible} onClose={onClose}>
       <View style={s.modalContainer}>
         <View style={s.modalHeader}>
-          <Text style={s.modalTitle}>Service Endpoints</Text>
+          <Text style={s.modalTitle}>{t('settingsModals.endpoints.modalTitle')}</Text>
           <View style={s.modalHeaderRight}>
             <Pressable onPress={() => openURL('https://github.com/atshelchin/vela-wallet#self-deploy-service-endpoints')} hitSlop={8} style={s.refreshBtn}>
               <ExternalLink size={18} color={color.fg.muted} strokeWidth={2} />
@@ -467,15 +502,13 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
           </View>
         </View>
         <ScrollView style={s.modalScroll} contentContainerStyle={s.epScrollContent} keyboardShouldPersistTaps="handled">
-          <Text style={s.epDescription}>
-            These services power your wallet.{'\n'}You can deploy your own instances for full self-custody.
-          </Text>
-          {fields.map(({ key, label, hint }) => (
+          <Text style={s.epDescription}>{t('settingsModals.endpoints.description')}</Text>
+          {fields.map(({ key, labelKey, hintKey }) => (
             <VelaCard key={key} style={s.epCard}>
               <View style={s.epCardHeader}>
                 <View style={s.epCardHeaderLeft}>
-                  <Text style={s.epCardLabel}>{label}</Text>
-                  <Text style={s.epCardHint}>{hint}</Text>
+                  <Text style={s.epCardLabel}>{t(labelKey, { defaultValue: labelKey })}</Text>
+                  <Text style={s.epCardHint}>{t(hintKey, { defaultValue: hintKey })}</Text>
                 </View>
                 <ServiceHealthBadge health={healths[key] ?? { status: 'checking' }} />
               </View>
@@ -495,7 +528,7 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
             </VelaCard>
           ))}
           <Pressable style={s.resetEndpointsBtn} onPress={() => { setEndpoints({ ...DEFAULT_SERVICE_ENDPOINTS }); saveServiceEndpoints({ ...DEFAULT_SERVICE_ENDPOINTS }); setRefreshCount(c => c + 1); }}>
-            <Text style={s.resetEndpointsText}>Reset to Defaults</Text>
+            <Text style={s.resetEndpointsText}>{t('settingsModals.endpoints.resetToDefaults')}</Text>
           </Pressable>
         </ScrollView>
       </View>
@@ -505,12 +538,49 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
 
 
 // ---------------------------------------------------------------------------
+// Format Picker Modal (number / date / time) — pick by live example
+// ---------------------------------------------------------------------------
+
+function FormatPickerModal<K extends string>({ s, visible, title, subtitle, options, selected, onSelect, onClose }: {
+  s: S; visible: boolean; title: string; subtitle: string;
+  options: FormatOption<K>[]; selected: K; onSelect: (k: K) => void; onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <AppModal visible={visible} onClose={onClose}>
+      <View style={s.modalContainer}>
+        <View style={s.modalHeader}>
+          <Text style={s.modalTitle}>{title}</Text>
+          <Pressable onPress={onClose} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
+        </View>
+        <ScrollView style={s.modalScroll} contentContainerStyle={s.epScrollContent}>
+          <Text style={s.epDescription}>{subtitle}</Text>
+          {options.map((o) => {
+            const sel = o.key === selected;
+            return (
+              <Pressable key={o.key} style={[s.fmtRow, sel && s.fmtRowSel]} onPress={() => { onSelect(o.key); onClose(); }}>
+                <View style={s.fmtRowInfo}>
+                  <Text style={s.fmtExample}>{o.example}</Text>
+                  {o.noteKey ? <Text style={s.fmtNote}>{t(`settings.formatNote.${o.noteKey}`)}</Text> : null}
+                </View>
+                {sel && <Check size={20} color={color.accent.base} strokeWidth={2.6} />}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </AppModal>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Add Network Modal
 // ---------------------------------------------------------------------------
 
 const VELA_CHAIN_SETUP_URL = 'https://biubiu.tools/apps/vela-wallet-chain-setup';
 
 function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: boolean; onClose: () => void; onAdded: () => void }) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<ChainSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -620,13 +690,11 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
     <AppModal visible={visible} onClose={() => { reset(); onClose(); }}>
       <View style={s.modalContainer}>
         <View style={s.modalHeader}>
-          <Text style={s.modalTitle}>Add Network</Text>
+          <Text style={s.modalTitle}>{t('settingsModals.addNetwork.modalTitle')}</Text>
           <Pressable onPress={() => { reset(); onClose(); }} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
         </View>
         <ScrollView style={s.modalScroll} contentContainerStyle={s.modalScrollContent} keyboardShouldPersistTaps="handled">
-          <Text style={s.endpointDescription}>
-            Search by network name, token symbol, or Chain ID.
-          </Text>
+          <Text style={s.endpointDescription}>{t('settingsModals.addNetwork.description')}</Text>
 
           {/* Search input */}
           <View style={s.searchField}>
@@ -634,7 +702,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
               style={s.configInput}
               value={query}
               onChangeText={handleQueryChange}
-              placeholder="e.g. Gnosis, ACE, 648..."
+              placeholder={t('settingsModals.addNetwork.searchPlaceholder')}
               placeholderTextColor={color.fg.subtle}
               autoFocus
               autoCapitalize="none"
@@ -654,7 +722,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
                   <View style={s.suggestionInfo}>
                     <Text style={s.suggestionName}>{item.name}</Text>
                     <Text style={s.suggestionMeta}>
-                      Chain {item.chainId} · {item.nativeCurrencySymbol}
+                      {t('settingsModals.addNetwork.chainMeta', { chainId: item.chainId, symbol: item.nativeCurrencySymbol })}
                     </Text>
                   </View>
                   <ChevronRight size={14} color={color.fg.subtle} />
@@ -666,14 +734,14 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
           {searching && (
             <View style={s.loadingRow}>
               <ActivityIndicator size="small" color={color.accent.base} />
-              <Text style={s.loadingText}>Searching...</Text>
+              <Text style={s.loadingText}>{t('settingsModals.addNetwork.searching')}</Text>
             </View>
           )}
 
           {loading && (
             <View style={s.loadingRow}>
               <ActivityIndicator size="small" color={color.accent.base} />
-              <Text style={s.loadingText}>Checking compatibility...</Text>
+              <Text style={s.loadingText}>{t('settingsModals.addNetwork.checkingCompatibility')}</Text>
             </View>
           )}
 
@@ -683,28 +751,28 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
           {chainInfo && (
             <VelaCard style={s.addNetResult}>
               <Text style={s.addNetResultName}>{chainInfo.name}</Text>
-              <Text style={s.addNetResultDetail}>Chain ID: {chainInfo.chainId}</Text>
-              <Text style={s.addNetResultDetail}>Native: {chainInfo.nativeCurrency.symbol}</Text>
-              {chainInfo.isTestnet && <Text style={s.addNetTestnet}>Testnet</Text>}
+              <Text style={s.addNetResultDetail}>{t('settingsModals.addNetwork.chainIdLabel', { chainId: chainInfo.chainId })}</Text>
+              <Text style={s.addNetResultDetail}>{t('settingsModals.addNetwork.nativeLabel', { symbol: chainInfo.nativeCurrency.symbol })}</Text>
+              {chainInfo.isTestnet && <Text style={s.addNetTestnet}>{t('settingsModals.addNetwork.testnet')}</Text>}
             </VelaCard>
           )}
 
           {/* Custom RPC input */}
           {chainInfo && (
             <VelaCard style={s.addNetCompat}>
-              <Text style={s.addNetCompatTitle}>Custom RPC (optional)</Text>
+              <Text style={s.addNetCompatTitle}>{t('settingsModals.addNetwork.customRpcTitle')}</Text>
               <TextInput
                 style={s.configInput}
                 value={customRpc}
                 onChangeText={setCustomRpc}
-                placeholder="https://your-rpc-url..."
+                placeholder={t('settingsModals.addNetwork.customRpcPlaceholder')}
                 placeholderTextColor={color.fg.subtle}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
               {customRpc.trim() !== '' && (
                 <VelaButton
-                  title="Re-check with this RPC"
+                  title={t('settingsModals.addNetwork.recheckWithRpc')}
                   onPress={() => selectedChainId && handleSelect(selectedChainId, true)}
                   variant="secondary"
                   style={{ marginTop: space.sm }}
@@ -718,7 +786,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
             <VelaCard style={s.addNetCompat}>
               <View style={s.addNetCompatRow}>
                 <CheckCircle2 size={16} color={color.success.base} strokeWidth={2} />
-                <Text style={s.addNetCompatText}>Best RPC: {compatResult.bestRpcLatency}ms</Text>
+                <Text style={s.addNetCompatText}>{t('settingsModals.addNetwork.bestRpc', { latencyMs: compatResult.bestRpcLatency })}</Text>
               </View>
               <Text style={s.addNetCompatDetail} numberOfLines={1}>{compatResult.bestRpcUrl}</Text>
             </VelaCard>
@@ -727,7 +795,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
           {/* Per-contract status + P256 */}
           {compatResult && !compatResult.rpcFailed && (
             <VelaCard style={s.addNetCompat}>
-              <Text style={s.addNetCompatTitle}>Compatibility Check</Text>
+              <Text style={s.addNetCompatTitle}>{t('settingsModals.addNetwork.compatibilityCheck')}</Text>
 
               {/* P256 precompile — shown first */}
               <View style={s.contractRow}>
@@ -758,11 +826,11 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
             <VelaCard style={s.addNetCompat}>
               <View style={s.addNetCompatRow}>
                 <AlertTriangle size={16} color={color.warning.base} strokeWidth={2} />
-                <Text style={s.addNetCompatText}>Unable to verify — RPC request failed</Text>
+                <Text style={s.addNetCompatText}>{t('settingsModals.addNetwork.unableToVerify')}</Text>
               </View>
               <Text style={s.addNetCompatError}>{compatResult.error}</Text>
               <VelaButton
-                title="Retry"
+                title={t('settingsModals.addNetwork.retry')}
                 onPress={() => selectedChainId && handleSelect(selectedChainId)}
                 variant="secondary"
                 style={{ marginTop: space.md }}
@@ -771,22 +839,19 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
           )}
 
           {compatResult?.compatible && (
-            <VelaButton title="Add Network" onPress={handleAdd} variant="accent" loading={saving} style={s.checkBtn} />
+            <VelaButton title={t('settingsModals.addNetwork.addNetworkBtn')} onPress={handleAdd} variant="accent" loading={saving} style={s.checkBtn} />
           )}
           {compatResult && !compatResult.compatible && !compatResult.rpcFailed && (
             <View>
-              <Text style={s.addNetHint}>
-                Some required contracts are not yet deployed on this chain.{'\n'}
-                Use the Vela Wallet Chain Setup tool to deploy them, then come back and re-check.
-              </Text>
+              <Text style={s.addNetHint}>{t('settingsModals.addNetwork.incompatibleHint')}</Text>
               <VelaButton
-                title="Open Chain Setup Tool"
+                title={t('settingsModals.addNetwork.openChainSetupTool')}
                 onPress={() => openURL(VELA_CHAIN_SETUP_URL)}
                 variant="accent"
                 style={s.checkBtn}
               />
               <VelaButton
-                title="Re-check"
+                title={t('settingsModals.addNetwork.recheck')}
                 onPress={() => selectedChainId && handleSelect(selectedChainId, true)}
                 variant="secondary"
                 style={s.checkBtn}
@@ -803,18 +868,19 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
 // Theme Picker — segmented control for auto / light / dark
 // ---------------------------------------------------------------------------
 
-const THEME_OPTIONS: { key: ColorSchemePreference; label: string; Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }> }[] = [
-  { key: 'light', label: 'Light', Icon: Sun },
-  { key: 'dark', label: 'Dark', Icon: Moon },
-  { key: 'auto', label: 'Auto', Icon: Monitor },
+const THEME_OPTIONS: { key: ColorSchemePreference; labelKey: 'settings.appearance.themeLight' | 'settings.appearance.themeDark' | 'settings.appearance.themeAuto'; Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }> }[] = [
+  { key: 'light', labelKey: 'settings.appearance.themeLight', Icon: Sun },
+  { key: 'dark', labelKey: 'settings.appearance.themeDark', Icon: Moon },
+  { key: 'auto', labelKey: 'settings.appearance.themeAuto', Icon: Monitor },
 ];
 
 function ThemePicker({ s, current, onChange }: {
   s: S; current: ColorSchemePreference; onChange: (pref: ColorSchemePreference) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View style={s.themePickerContainer}>
-      {THEME_OPTIONS.map(({ key, label, Icon }) => {
+      {THEME_OPTIONS.map(({ key, labelKey, Icon }) => {
         const active = current === key;
         return (
           <Pressable
@@ -828,11 +894,53 @@ function ThemePicker({ s, current, onChange }: {
             }}
           >
             <Icon size={18} color={active ? color.accent.base : color.fg.subtle} strokeWidth={2} />
-            <Text style={[s.themeOptionLabel, active && s.themeOptionLabelActive]}>{label}</Text>
+            <Text style={[s.themeOptionLabel, active && s.themeOptionLabelActive]}>{t(labelKey)}</Text>
           </Pressable>
         );
       })}
     </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Language Picker — Follow System / English / 简体中文 (instant, no restart)
+// ---------------------------------------------------------------------------
+
+function LanguagePickerModal({ s, visible, preference, systemLanguage, onSelect, onClose }: {
+  s: S; visible: boolean; preference: LanguagePreference; systemLanguage: AppLanguage;
+  onSelect: (pref: LanguagePreference) => void; onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const options: { key: LanguagePreference; label: string; note?: string }[] = [
+    // "Follow System" first; its note shows which concrete language the device resolves to.
+    { key: 'auto', label: t('language.followSystem'), note: LANGUAGE_NATIVE_NAMES[systemLanguage] },
+    // Each language is listed by its endonym (shown in its own script).
+    ...SUPPORTED_LANGUAGES.map((code) => ({ key: code, label: LANGUAGE_NATIVE_NAMES[code] })),
+  ];
+  return (
+    <AppModal visible={visible} onClose={onClose}>
+      <View style={s.modalContainer}>
+        <View style={s.modalHeader}>
+          <Text style={s.modalTitle}>{t('language.pickerTitle')}</Text>
+          <Pressable onPress={onClose} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
+        </View>
+        <ScrollView style={s.modalScroll} contentContainerStyle={s.epScrollContent}>
+          <Text style={s.epDescription}>{t('language.pickerSubtitle')}</Text>
+          {options.map((o) => {
+            const sel = o.key === preference;
+            return (
+              <Pressable key={o.key} style={[s.fmtRow, sel && s.fmtRowSel]} onPress={() => { onSelect(o.key); onClose(); }}>
+                <View style={s.fmtRowInfo}>
+                  <Text style={s.fmtExample}>{o.label}</Text>
+                  {o.note ? <Text style={s.fmtNote}>{o.note}</Text> : null}
+                </View>
+                {sel && <Check size={20} color={color.accent.base} strokeWidth={2.6} />}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </AppModal>
   );
 }
 
@@ -937,6 +1045,7 @@ function TextScaleSlider({ s, currentIndex, onChangeIndex }: {
 type TreasuryBalance = { chainId: number; name: string; explorerURL: string; balance: string; wei: bigint; recommended: string; recommendedWei: bigint; usd: number | null; loading: boolean };
 
 function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const [address, setAddress] = useState<string | null>(null);
   const [balances, setBalances] = useState<TreasuryBalance[]>([]);
   const [copied, setCopied] = useState(false);
@@ -1025,7 +1134,7 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
       <ScrollView style={{ flex: 1, backgroundColor: color.bg.base }} contentContainerStyle={{ padding: space['2xl'], paddingTop: space.xl }}>
         {/* Header with refresh */}
         <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: space.lg }}>
-          <Text style={{ fontSize: text.xl, ...inter.bold, color: color.fg.base }}>Treasury</Text>
+          <Text style={{ fontSize: text.xl, ...inter.bold, color: color.fg.base }}>{t('settingsModals.treasury.modalTitle')}</Text>
           {address && (
             <Pressable onPress={handleRefresh} hitSlop={8} style={{ position: 'absolute', right: 0 }}>
               <RefreshCw size={18} color={color.fg.subtle} strokeWidth={2} />
@@ -1049,7 +1158,7 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
             >
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.xs }}>
                 <Text style={{ fontSize: text.xs, ...inter.semibold, color: color.fg.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Address (all networks)
+                  {t('settingsModals.treasury.addressLabel')}
                 </Text>
                 {copied
                   ? <Check size={14} color={color.accent.base} strokeWidth={3} />
@@ -1067,7 +1176,7 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
               return (
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.lg }}>
                   <Text style={{ fontSize: text.sm, ...inter.semibold, color: color.fg.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Balances
+                    {t('settingsModals.treasury.balancesLabel')}
                   </Text>
                   {!anyLoading && totalUsd > 0 && (
                     <Text style={{ fontSize: text.sm, ...inter.bold, color: color.fg.base }}>
@@ -1094,7 +1203,7 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
                         </View>
                         {!b.loading && needsFunding && b.recommendedWei > 0n && (
                           <Text style={{ fontSize: text.xs, ...inter.regular, color: color.fg.muted, marginTop: 2 }}>
-                            min {b.recommended}
+                            {t('settingsModals.treasury.minBalance', { amount: b.recommended })}
                           </Text>
                         )}
                       </View>
@@ -1129,12 +1238,12 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
           </>
         ) : (
           <Text style={{ fontSize: text.sm, color: color.fg.muted, textAlign: 'center' }}>
-            Could not reach bundler
+            {t('settingsModals.treasury.unreachable')}
           </Text>
         )}
 
         <Pressable style={{ alignItems: 'center', paddingVertical: space.xl }} onPress={onClose}>
-          <Text style={{ fontSize: text.base, ...inter.medium, color: color.fg.subtle }}>Close</Text>
+          <Text style={{ fontSize: text.base, ...inter.medium, color: color.fg.subtle }}>{t('settingsModals.treasury.close')}</Text>
         </Pressable>
       </ScrollView>
     </AppModal>
@@ -1186,6 +1295,14 @@ export default function SettingsScreen() {
   const [showNetworkEditor, setShowNetworkEditor] = useState(false);
   const [showEndpointEditor, setShowEndpointEditor] = useState(false);
   const [showAddNetwork, setShowAddNetwork] = useState(false);
+  const [localePrefs, setLocalePrefs] = useState<LocalePrefs>(getLocalePrefs);
+  const [fmtPicker, setFmtPicker] = useState<null | 'number' | 'date' | 'time'>(null);
+  useEffect(() => { loadLocalePrefs().then(setLocalePrefs); }, []);
+  const applyLocale = async (patch: Partial<LocalePrefs>) => {
+    const next = { ...localePrefs, ...patch };
+    setLocalePrefs(next);
+    await saveLocalePrefs(next);
+  };
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showDevOptions, setShowDevOptions] = useState(false);
   const [showTreasury, setShowTreasury] = useState(false);
@@ -1196,6 +1313,9 @@ export default function SettingsScreen() {
   const [signingOut, setSigningOut] = useState(false);
   const { levelIndex: currentScaleIndex, setIndex: setScaleIndex } = useTextScale();
   const { preference: colorPref, setPreference: setColorPref } = useColorSchemePreference();
+  const { t } = useTranslation();
+  const { preference: langPref, resolved: langResolved, systemLanguage, setPreference: setLangPref } = useLanguagePreference();
+  const [showLanguagePicker, setShowLanguagePicker] = useState(false);
 
   const [voiceOn, setVoiceOn] = useState(isVoiceEnabled());
   useEffect(() => { loadVoicePreference().then(() => setVoiceOn(isVoiceEnabled())); }, []);
@@ -1220,11 +1340,14 @@ export default function SettingsScreen() {
     router.replace('/');
   };
 
+  const languageLabel = LANGUAGE_NATIVE_NAMES[langResolved];
+  const languageSubtitle = langPref === 'auto' ? `${languageLabel} · ${t('common.system')}` : languageLabel;
+
   return (
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <Animated.View entering={fadeIn(0, 300)} style={styles.screenHeader}>
-          <Text style={styles.screenTitle}>Settings</Text>
+          <Text style={styles.screenTitle}>{t('settings.title')}</Text>
           <Pressable onPress={() => router.navigate('/wallet')} hitSlop={8} style={styles.screenClose}>
             <X size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
@@ -1232,18 +1355,21 @@ export default function SettingsScreen() {
 
         {/* Account */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(50, 300)}>
-          <Text style={styles.sectionTitle}>ACCOUNT</Text>
+          <Text style={styles.sectionTitle}>{t('settings.sections.account')}</Text>
           <VelaCard>
             <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: UserIcon }}
-              title={accountName} subtitle={address ? shortAddress(address) : 'Switch account'}
+              title={accountName} subtitle={address ? shortAddress(address) : t('settings.account.switch')}
               showDivider={false} onPress={() => setShowAccountSwitcher(true)} />
           </VelaCard>
         </Animated.View>
 
         {/* Appearance */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(100, 300)}>
-          <Text style={styles.sectionTitle}>APPEARANCE</Text>
+          <Text style={styles.sectionTitle}>{t('settings.sections.appearance')}</Text>
           <VelaCard>
+            <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Languages }}
+              title={t('language.title')} subtitle={languageSubtitle}
+              showDivider onPress={() => setShowLanguagePicker(true)} />
             <TextScaleSlider
               s={styles}
               currentIndex={currentScaleIndex}
@@ -1256,13 +1382,13 @@ export default function SettingsScreen() {
 
         {/* Payments */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(120, 300)}>
-          <Text style={styles.sectionTitle}>PAYMENTS</Text>
+          <Text style={styles.sectionTitle}>{t('settings.sections.payments')}</Text>
           <VelaCard>
             <SettingsRow
               s={styles}
               icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Volume2 }}
-              title="Voice announcements"
-              subtitle="Speak incoming payments aloud"
+              title={t('settings.payments.voiceTitle')}
+              subtitle={t('settings.payments.voiceSubtitle')}
               showDivider={false}
               right={
                 <Switch
@@ -1277,22 +1403,61 @@ export default function SettingsScreen() {
           </VelaCard>
         </Animated.View>
 
+        {/* Localization */}
+        {(() => {
+          const numOpts = numberFormatOptions();
+          const dateOpts = dateFormatOptions();
+          const timeOpts = timeFormatOptions();
+          const subtitleFor = <K extends string>(key: K, opts: FormatOption<K>[]) => {
+            const ex = opts.find((o) => o.key === key)?.example ?? '';
+            return key === 'auto' ? t('settings.localization.autoExample', { example: ex }) : ex;
+          };
+          return (
+            <Animated.View style={styles.sectionContainer} entering={fadeInDown(135, 300)}>
+              <Text style={styles.sectionTitle}>{t('settings.sections.localization')}</Text>
+              <VelaCard>
+                <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Hash }}
+                  title={t('settings.localization.numberTitle')} subtitle={subtitleFor(localePrefs.numberFormat, numOpts)}
+                  showDivider onPress={() => setFmtPicker('number')} />
+                <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Calendar }}
+                  title={t('settings.localization.dateTitle')} subtitle={subtitleFor(localePrefs.dateFormat, dateOpts)}
+                  showDivider onPress={() => setFmtPicker('date')} />
+                <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Clock }}
+                  title={t('settings.localization.timeTitle')} subtitle={subtitleFor(localePrefs.timeFormat, timeOpts)}
+                  showDivider={false} onPress={() => setFmtPicker('time')} />
+              </VelaCard>
+              <FormatPickerModal s={styles} visible={fmtPicker === 'number'} title={t('settings.localization.numberTitle')}
+                subtitle={t('settings.localization.numberSubtitle')}
+                options={numOpts} selected={localePrefs.numberFormat}
+                onSelect={(k) => applyLocale({ numberFormat: k })} onClose={() => setFmtPicker(null)} />
+              <FormatPickerModal s={styles} visible={fmtPicker === 'date'} title={t('settings.localization.dateTitle')}
+                subtitle={t('settings.localization.dateSubtitle')}
+                options={dateOpts} selected={localePrefs.dateFormat}
+                onSelect={(k) => applyLocale({ dateFormat: k })} onClose={() => setFmtPicker(null)} />
+              <FormatPickerModal s={styles} visible={fmtPicker === 'time'} title={t('settings.localization.timeTitle')}
+                subtitle={t('settings.localization.timeSubtitle')}
+                options={timeOpts} selected={localePrefs.timeFormat}
+                onSelect={(k) => applyLocale({ timeFormat: k })} onClose={() => setFmtPicker(null)} />
+            </Animated.View>
+          );
+        })()}
+
         {/* Advanced */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(150, 300)}>
           <Pressable style={styles.advancedHeader} onPress={() => setShowAdvanced(!showAdvanced)}>
-            <Text style={styles.sectionTitle}>ADVANCED</Text>
+            <Text style={styles.sectionTitle}>{t('settings.sections.advanced')}</Text>
             <ChevronDown size={14} color={color.fg.subtle} style={showAdvanced ? { transform: [{ rotate: '180deg' }] } : undefined} />
           </Pressable>
           {showAdvanced && (
             <VelaCard>
               <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: NetworkIcon }}
-                title="Networks" subtitle="RPC, Explorer & Bundler URLs"
+                title={t('settings.advanced.networksTitle')} subtitle={t('settings.advanced.networksSubtitle')}
                 showDivider={true} onPress={() => setShowNetworkEditor(true)} />
               <SettingsRow s={styles} icon={{ bg: color.success.soft, fg: color.success.base, Icon: Plus }}
-                title="Add Network" subtitle="Add custom EVM network"
+                title={t('settings.advanced.addNetworkTitle')} subtitle={t('settings.advanced.addNetworkSubtitle')}
                 showDivider={true} onPress={() => setShowAddNetwork(true)} />
               <SettingsRow s={styles} icon={{ bg: color.success.soft, fg: color.success.base, Icon: Server }}
-                title="Service Endpoints" subtitle="Chain data, identity index, Bundler"
+                title={t('settings.advanced.endpointsTitle')} subtitle={t('settings.advanced.endpointsSubtitle')}
                 showDivider={false} onPress={() => setShowEndpointEditor(true)} />
             </VelaCard>
           )}
@@ -1302,16 +1467,16 @@ export default function SettingsScreen() {
         {devUnlocked && (
           <Animated.View style={styles.sectionContainer} entering={fadeInDown(175, 300)}>
             <Pressable style={styles.advancedHeader} onPress={() => setShowDevOptions(!showDevOptions)}>
-              <Text style={styles.sectionTitle}>DEVELOPER</Text>
+              <Text style={styles.sectionTitle}>{t('settings.sections.developer')}</Text>
               <ChevronDown size={14} color={color.fg.subtle} style={showDevOptions ? { transform: [{ rotate: '180deg' }] } : undefined} />
             </Pressable>
             {showDevOptions && (
               <VelaCard>
                 <SettingsRow s={styles} icon={{ bg: color.warning.soft, fg: color.warning.base, Icon: Key }}
-                  title="Treasury" subtitle="View treasury address & balances"
+                  title={t('settings.developer.treasuryTitle')} subtitle={t('settings.developer.treasurySubtitle')}
                   showDivider={true} onPress={() => setShowTreasury(true)} />
                 <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Key }}
-                  title="Clear Signing Test" subtitle="ERC-7730 signing UI preview"
+                  title={t('settings.developer.clearSigningTitle')} subtitle={t('settings.developer.clearSigningSubtitle')}
                   showDivider={false} onPress={() => router.push('/clear-signing-test')} />
               </VelaCard>
             )}
@@ -1322,18 +1487,20 @@ export default function SettingsScreen() {
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(200, 300)}>
           <VelaCard>
             <SettingsRow s={styles} icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
-              title="About" subtitle="Vela Wallet v1.0.0" showDivider={false} onPress={() => router.push('/about')} />
+              title={t('settings.about.title')} subtitle={t('settings.about.subtitle', { version: '1.0.0' })} showDivider={false} onPress={() => router.push('/about')} />
           </VelaCard>
         </Animated.View>
 
         <Animated.View entering={fadeInDown(225, 300)}>
           <Pressable style={styles.logoutButton} onPress={handleOpenSignOut}>
             <LogOutIcon size={16} color={color.accent.base} />
-            <Text style={styles.logoutText}>Sign Out</Text>
+            <Text style={styles.logoutText}>{t('settings.signOut.button')}</Text>
           </Pressable>
         </Animated.View>
       </ScrollView>
 
+      <LanguagePickerModal s={styles} visible={showLanguagePicker} preference={langPref}
+        systemLanguage={systemLanguage} onSelect={setLangPref} onClose={() => setShowLanguagePicker(false)} />
       <AccountSwitcherModal s={styles} visible={showAccountSwitcher} onClose={() => setShowAccountSwitcher(false)} />
       <NetworkEditorModal s={styles} visible={showNetworkEditor} onClose={() => setShowNetworkEditor(false)} />
       <EndpointEditorModal s={styles} visible={showEndpointEditor} onClose={() => setShowEndpointEditor(false)} />
@@ -1346,29 +1513,29 @@ export default function SettingsScreen() {
           <View style={styles.signOutIconWrap}>
             <LogOutIcon size={24} color={color.accent.base} strokeWidth={2} />
           </View>
-          <Text style={styles.signOutTitle}>Sign Out</Text>
+          <Text style={styles.signOutTitle}>{t('settings.signOut.title')}</Text>
           <Text style={styles.signOutDesc}>
-            Your wallet data stays on this device. Sign back in anytime with your passkey (Face ID / fingerprint).
+            {t('settings.signOut.desc')}
           </Text>
 
           {pendingSync && (
             <View style={styles.signOutWarning}>
               <AlertTriangle size={16} color={color.warning.base} strokeWidth={2} />
               <Text style={styles.signOutWarningText}>
-                Your public key hasn't been synced to the server yet. Signing out now may prevent recovery on other devices.
+                {t('settings.signOut.warning')}
               </Text>
             </View>
           )}
 
           <VelaButton
-            title={pendingSync ? 'Sign Out Anyway' : 'Sign Out'}
+            title={pendingSync ? t('settings.signOut.anyway') : t('settings.signOut.button')}
             onPress={handleSignOut}
             variant="accent"
             loading={signingOut}
             style={styles.signOutBtn}
           />
           <Pressable style={styles.signOutCancel} onPress={() => setShowSignOut(false)}>
-            <Text style={styles.signOutCancelText}>Cancel</Text>
+            <Text style={styles.signOutCancelText}>{t('settings.signOut.cancel')}</Text>
           </Pressable>
         </View>
       </AppModal>
@@ -1397,6 +1564,13 @@ const styleFactory = () => ({
   settingsRowSubtitle: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle },
   settingsRowDivider: { position: 'absolute' as const, bottom: 0, left: 66, right: 0, height: 1, backgroundColor: color.border.base },
   settingsRowDividerFull: { height: 1, backgroundColor: color.border.base, marginHorizontal: space.xl },
+
+  // Format picker (number / date / time)
+  fmtRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.lg, paddingVertical: space.lg, paddingHorizontal: space.xl, marginBottom: space.md, backgroundColor: color.bg.raised, borderRadius: radius.xl, borderWidth: 1.5, borderColor: 'transparent' as const, ...shadow.sm },
+  fmtRowSel: { borderColor: color.accent.base },
+  fmtRowInfo: { flex: 1, gap: 2 },
+  fmtExample: { fontSize: text.lg, ...inter.semibold, color: color.fg.base, fontFamily: font.mono },
+  fmtNote: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
 
   // Logout
   logoutButton: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, paddingVertical: space.xl, backgroundColor: color.bg.raised, borderRadius: radius.xl, borderWidth: 1, borderColor: color.border.base, gap: space.md, ...shadow.sm },

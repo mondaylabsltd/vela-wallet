@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "actionSend": "Gönder",
+    "actionReceive": "Al",
+    "actionHistory": "Geçmiş",
+    "sectionTitle": "Varlıklar",
+    "hideZero": "Sıfırları gizle",
+    "hiddenCount": "{{count}} gizli",
+    "addToken": "Ekle",
+    "searchPlaceholder": "Token ara...",
+    "rpcUnavailableSingle": "{{name}} RPC kullanılamıyor",
+    "rpcUnavailableMultiple": "{{count}} ağda RPC kullanılamıyor",
+    "rpcFix": "Düzelt",
+    "emptyTitle": "İlk varlığınızı yatırın",
+    "emptySubtext": "Adresinizi görmek ve token almak için buraya dokunun",
+    "errorTitle": "Hata",
+    "errorLoadBalances": "Token bakiyeleri yüklenemedi.",
+    "switcherTitle": "Hesap Değiştir",
+    "switcherTotal": "Toplam {{amount}}",
+    "rpcFixTitle": "RPC'yi Düzelt",
+    "rpcFixChainId": "Zincir ID: {{chainId}}",
+    "rpcFixWarning": "Bu ağ için tüm RPC uç noktaları başarısız oluyor. Bağlantıyı geri yüklemek için çalışan bir RPC URL'si girin.",
+    "rpcFixLabel": "RPC URL",
+    "rpcFixSaveBtn": "Kaydet ve Yeniden Dene",
+    "errorSaveRpc": "RPC URL kaydedilemedi.",
+    "invalidQrTitle": "Geçersiz QR",
+    "invalidQrMessage": "Lütfen geçerli bir Ethereum adresi veya bağlantı URI'si okutun.",
+    "chainFallback": "Zincir {{chainId}}"
+  }
+}

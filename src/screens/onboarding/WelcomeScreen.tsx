@@ -6,6 +6,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 import { fadeIn, fadeInUp } from '@/constants/entering';
 import { color, text, inter, space, radius, font, motion, createStyles } from '@/constants/theme';
 import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
@@ -80,10 +81,10 @@ function HealthDot({ health }: { health: ServiceHealth }) {
 // Onboarding Settings Modal
 // ---------------------------------------------------------------------------
 
-const THEME_OPTIONS: { key: ColorSchemePreference; label: string; Icon: React.ComponentType<any> }[] = [
-  { key: 'light', label: 'Light', Icon: Sun },
-  { key: 'dark', label: 'Dark', Icon: Moon },
-  { key: 'auto', label: 'Auto', Icon: Monitor },
+const THEME_OPTIONS: { key: ColorSchemePreference; labelKey: 'onboarding.settings.themeLabelLight' | 'onboarding.settings.themeLabelDark' | 'onboarding.settings.themeLabelAuto'; Icon: React.ComponentType<any> }[] = [
+  { key: 'light', labelKey: 'onboarding.settings.themeLabelLight', Icon: Sun },
+  { key: 'dark', labelKey: 'onboarding.settings.themeLabelDark', Icon: Moon },
+  { key: 'auto', labelKey: 'onboarding.settings.themeLabelAuto', Icon: Monitor },
 ];
 
 export function OnboardingSettingsModal({ visible, onClose, unreachable }: { visible: boolean; onClose: () => void; unreachable?: boolean }) {
@@ -91,6 +92,7 @@ export function OnboardingSettingsModal({ visible, onClose, unreachable }: { vis
   const [health, setHealth] = useState<ServiceHealth>({ status: 'checking' });
   const [refreshCount, setRefreshCount] = useState(0);
   const { preference: colorPref, setPreference: setColorPref } = useColorSchemePreference();
+  const { t } = useTranslation();
 
   useEffect(() => { if (visible) loadServiceEndpoints().then(setEndpoints); }, [visible]);
 
@@ -113,7 +115,7 @@ export function OnboardingSettingsModal({ visible, onClose, unreachable }: { vis
     <AppModal visible={visible} onClose={onClose}>
       <View style={settingsStyles.container}>
         <View style={settingsStyles.header}>
-          <Text style={settingsStyles.title}>Settings</Text>
+          <Text style={settingsStyles.title}>{t('onboarding.settings.title')}</Text>
           <View style={settingsStyles.headerRight}>
             <Pressable onPress={() => setRefreshCount(c => c + 1)} hitSlop={8} style={settingsStyles.headerBtn}>
               <RefreshCw size={18} color={color.fg.muted} strokeWidth={2} />
@@ -129,36 +131,34 @@ export function OnboardingSettingsModal({ visible, onClose, unreachable }: { vis
             <View style={settingsStyles.warningBanner}>
               <AlertTriangle size={18} color="#E8572A" strokeWidth={2} />
               <Text style={settingsStyles.warningText}>
-                The Passkey Index service is unreachable. Wallet creation and sign-in require this service.
-                Please configure a reachable endpoint below.
+                {t('onboarding.settings.warningText')}
               </Text>
             </View>
           )}
 
           {/* Theme */}
-          <Text style={settingsStyles.sectionLabel}>APPEARANCE</Text>
+          <Text style={settingsStyles.sectionLabel}>{t('onboarding.settings.sectionAppearance')}</Text>
           <View style={settingsStyles.themeRow}>
-            {THEME_OPTIONS.map(({ key, label, Icon }) => {
+            {THEME_OPTIONS.map(({ key, labelKey, Icon }) => {
               const active = colorPref === key;
               return (
                 <Pressable key={key} style={[settingsStyles.themeOption, active && settingsStyles.themeOptionActive]}
                   onPress={() => { if (key !== colorPref) { hapticLight(); setColorPref(key); } }}>
                   <Icon size={16} color={active ? color.accent.base : color.fg.subtle} strokeWidth={2} />
-                  <Text style={[settingsStyles.themeLabel, active && settingsStyles.themeLabelActive]}>{label}</Text>
+                  <Text style={[settingsStyles.themeLabel, active && settingsStyles.themeLabelActive]}>{t(labelKey)}</Text>
                 </Pressable>
               );
             })}
           </View>
 
           {/* Passkey Index — the only endpoint needed for onboarding */}
-          <Text style={settingsStyles.sectionLabel}>PASSKEY INDEX</Text>
+          <Text style={settingsStyles.sectionLabel}>{t('onboarding.settings.sectionPasskeyIndex')}</Text>
           <Text style={settingsStyles.hint}>
-            This service stores your passkey's public key for cross-device sign-in.
-            Vela Wallet never has access to your passkey's private key.
+            {t('onboarding.settings.passkeyHint')}
           </Text>
           <View style={settingsStyles.field}>
             <View style={settingsStyles.fieldHeader}>
-              <Text style={settingsStyles.fieldLabel}>Endpoint URL</Text>
+              <Text style={settingsStyles.fieldLabel}>{t('onboarding.settings.endpointUrlLabel')}</Text>
               <HealthDot health={health} />
             </View>
             <TextInput
@@ -178,20 +178,20 @@ export function OnboardingSettingsModal({ visible, onClose, unreachable }: { vis
             saveServiceEndpoints(updated);
             setRefreshCount(c => c + 1);
           }}>
-            <Text style={settingsStyles.resetText}>Reset to Default</Text>
+            <Text style={settingsStyles.resetText}>{t('onboarding.settings.resetToDefault')}</Text>
           </Pressable>
 
           {/* Debug: simulate endpoint failure */}
           {__DEV__ && (
             <>
-              <Text style={settingsStyles.sectionLabel}>DEBUG</Text>
+              <Text style={settingsStyles.sectionLabel}>{t('onboarding.settings.sectionDebug')}</Text>
               <Pressable style={settingsStyles.debugBtn} onPress={() => {
                 const broken = 'https://invalid.endpoint.test';
                 setEndpoints({ ...endpoints, passkeyIndexURL: broken });
                 saveServiceEndpoints({ ...endpoints, passkeyIndexURL: broken });
                 setRefreshCount(c => c + 1);
               }}>
-                <Text style={settingsStyles.debugBtnText}>Simulate Endpoint Failure</Text>
+                <Text style={settingsStyles.debugBtnText}>{t('onboarding.settings.simulateFailure')}</Text>
               </Pressable>
             </>
           )}
@@ -271,6 +271,7 @@ function AnimatedButton({
 }
 
 export function WelcomeScreen({ onCreateWallet, onLogin, loginLoading, onOpenSettings, autoShowSettings }: Props) {
+  const { t } = useTranslation();
   // Auto-open settings when parent detects endpoint failure
   useEffect(() => {
     if (autoShowSettings) onOpenSettings?.();
@@ -289,14 +290,14 @@ export function WelcomeScreen({ onCreateWallet, onLogin, loginLoading, onOpenSet
           </Animated.View>
           <Animated.View entering={fadeIn(500, 600)}>
             <Text style={styles.tagline}>
-              Your keys, your coins.{'\n'}Simple as a tap.
+              {t('onboarding.welcome.tagline')}
             </Text>
           </Animated.View>
         </View>
 
         <Animated.View style={styles.buttonSection} entering={fadeInUp(700, 500)}>
           <AnimatedButton onPress={onCreateWallet} style={styles.primaryBtn}>
-            <Text style={styles.primaryBtnText}>Create Wallet</Text>
+            <Text style={styles.primaryBtnText}>{t('onboarding.welcome.createWallet')}</Text>
           </AnimatedButton>
 
           <AnimatedButton
@@ -307,7 +308,7 @@ export function WelcomeScreen({ onCreateWallet, onLogin, loginLoading, onOpenSet
             {loginLoading ? (
               <ActivityIndicator color="rgba(255,255,255,0.5)" />
             ) : (
-              <Text style={styles.secondaryBtnText}>I already have a wallet</Text>
+              <Text style={styles.secondaryBtnText}>{t('onboarding.welcome.alreadyHaveWallet')}</Text>
             )}
           </AnimatedButton>
         </Animated.View>

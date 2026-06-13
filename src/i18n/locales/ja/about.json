@@ -1,0 +1,22 @@
+{
+  "about": {
+    "title": "このアプリについて",
+    "version": "v{{version}}（{{commit}}）",
+    "tagline": "暗号資産を持つ、もっとシンプルな方法",
+    "sectionTechnical": "技術的な詳細",
+    "techWalletLabel": "ウォレット",
+    "techWalletValue": "Safe v1.4.1",
+    "techAuthLabel": "認証",
+    "techAuthValue": "WebAuthn / P-256",
+    "techAccountTypeLabel": "アカウントの種類",
+    "techAccountTypeValue": "ERC-4337（スマートアカウント）",
+    "techSignerLabel": "署名モジュール",
+    "techSignerValue": "SafeWebAuthnSharedSigner",
+    "techNetworksLabel": "ネットワーク",
+    "techNetworksValue": "{{count}} 件の EVM チェーン",
+    "linkWebsite": "ウェブサイト",
+    "linkGitHub": "GitHub",
+    "linkSafeWallet": "Safe Wallet",
+    "footer": "心を込めて作りました。鍵もコインも、あなたのもの。"
+  }
+}

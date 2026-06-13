@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "接收",
+    "noAddress": "沒有地址",
+    "shareGenerating": "正在產生⋯",
+    "shareButton": "分享",
+    "listeningForDeposits": "正在接收存款",
+    "warningTitle": "接收前須知",
+    "warningBody": "只可在支援的網絡上發送資產 — 不受支援的轉帳可能永久遺失。",
+    "warningHint": "請查看下方的",
+    "warningHintNetworks": "{{count}} 個支援網絡",
+    "warningHintSuffix": "後再分享你的地址。",
+    "warningConfirm": "我明白",
+    "networksLabel": "適用於 {{count}} 個 EVM 網絡",
+    "shareCardHeadline": "掃描以向我發送加密貨幣",
+    "shareDialogTitle": "{{name}} 錢包地址"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "actionSend": "Envoyer",
+    "actionReceive": "Recevoir",
+    "actionHistory": "Historique",
+    "sectionTitle": "Actifs",
+    "hideZero": "Masquer les zéros",
+    "hiddenCount": "{{count}} masqués",
+    "addToken": "Ajouter",
+    "searchPlaceholder": "Rechercher des tokens...",
+    "rpcUnavailableSingle": "RPC de {{name}} indisponible",
+    "rpcUnavailableMultiple": "RPC indisponible sur {{count}} réseaux",
+    "rpcFix": "Corriger",
+    "emptyTitle": "Déposez votre premier actif",
+    "emptySubtext": "Appuyez ici pour voir votre adresse et recevoir des tokens",
+    "errorTitle": "Erreur",
+    "errorLoadBalances": "Échec du chargement des soldes de tokens.",
+    "switcherTitle": "Changer de compte",
+    "switcherTotal": "Total {{amount}}",
+    "rpcFixTitle": "Corriger le RPC",
+    "rpcFixChainId": "Chain ID : {{chainId}}",
+    "rpcFixWarning": "Tous les points d'accès RPC de ce réseau échouent. Saisissez une URL RPC fonctionnelle pour rétablir la connexion.",
+    "rpcFixLabel": "URL RPC",
+    "rpcFixSaveBtn": "Enregistrer et réessayer",
+    "errorSaveRpc": "Échec de l'enregistrement de l'URL RPC.",
+    "invalidQrTitle": "QR invalide",
+    "invalidQrMessage": "Veuillez scanner une adresse Ethereum ou un URI de connexion valide.",
+    "chainFallback": "Chaîne {{chainId}}"
+  }
+}

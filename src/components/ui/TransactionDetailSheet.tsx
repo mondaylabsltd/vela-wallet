@@ -7,7 +7,9 @@
  */
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Check, CheckCircle2, ChevronRight, Copy, ExternalLink, X, XCircle } from 'lucide-react-native';
+import { AmountText } from '@/components/ui/AmountText';
 import { AppModal } from '@/components/ui/AppModal';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { ChainLogo } from '@/components/ChainLogo';
@@ -16,6 +18,9 @@ import { formatBalance } from '@/models/types';
 import type { LocalTransaction } from '@/services/storage';
 import { shortAddress } from '@/models/wallet-state';
 import { copyToClipboard, openBrowser } from '@/services/platform';
+import { formatFiat, type Currency } from '@/services/currency';
+import { txUsdValue } from '@/services/activity';
+import { formatDateTime } from '@/services/locale-format';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 
 interface Props {
@@ -23,25 +28,29 @@ interface Props {
   tx: LocalTransaction | null;
   /** Resolved name for the counterparty, if known. */
   alias?: string;
+  /** USD → display-currency rate and the chosen currency, for the fiat estimate. */
+  rate: number;
+  currency: Currency;
   onClose: () => void;
 }
 
-function formatDateTime(ts: number): string {
-  return new Date(ts * 1000).toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
-  });
+/** Short token glyph for the hero circle — full symbol up to 4 chars (avoids "USDT" → "USD"). */
+function tokenGlyph(symbol: string): string {
+  return symbol.length <= 4 ? symbol : symbol.slice(0, 4);
 }
 
-function operationLabel(tx: LocalTransaction): string {
+/** Returns a translation key (or raw intent string) for the operation label. */
+function operationLabelKey(tx: LocalTransaction): string {
   switch (tx.type) {
-    case 'dapp_tx': return tx.intent || 'Contract interaction';
-    case 'sign_message': return 'Signature';
-    case 'sign_typed_data': return tx.intent || 'Typed-data signature';
-    default: return 'Transfer';
+    case 'dapp_tx': return tx.intent || 'componentsTx.detail.opContractInteraction';
+    case 'sign_message': return 'componentsTx.detail.opSignature';
+    case 'sign_typed_data': return tx.intent || 'componentsTx.detail.opTypedDataSignature';
+    default: return 'componentsTx.detail.opTransfer';
   }
 }
 
-export function TransactionDetailSheet({ visible, tx, alias, onClose }: Props) {
+export function TransactionDetailSheet({ visible, tx, alias, rate, currency, onClose }: Props) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState<string | null>(null);
 
   const copy = (key: string, value: string) => {
@@ -58,12 +67,14 @@ export function TransactionDetailSheet({ visible, tx, alias, onClose }: Props) {
         const explorer = net?.explorerURL ?? 'https://etherscan.io';
         const amt = formatBalance(parseFloat(tx.value || '0'));
         const counterparty = incoming ? tx.from : tx.to;
+        const usdVal = txUsdValue(tx);
+        const fiat = usdVal > 0 ? formatFiat(usdVal * rate, currency.code, currency.symbol) : null;
 
         return (
           <View style={styles.sheet}>
             <View style={styles.head}>
               <View style={styles.headSpacer} />
-              <Text style={styles.headTitle}>{incoming ? 'Received' : 'Sent'}</Text>
+              <Text style={styles.headTitle}>{incoming ? t('componentsTx.detail.received') : t('componentsTx.detail.sent')}</Text>
               <Pressable onPress={onClose} hitSlop={8} style={styles.closeBtn}>
                 <X size={20} color={color.fg.base} strokeWidth={2} />
               </Pressable>
@@ -73,7 +84,7 @@ export function TransactionDetailSheet({ visible, tx, alias, onClose }: Props) {
               {/* Hero amount */}
               <VelaCard elevated style={styles.hero}>
                 <View style={styles.tokenWrap}>
-                  <View style={styles.token}><Text style={styles.tokenText}>{tx.symbol.slice(0, 3)}</Text></View>
+                  <View style={styles.token}><Text style={styles.tokenText} numberOfLines={1}>{tokenGlyph(tx.symbol)}</Text></View>
                   {net && (
                     <View style={styles.tokenBadge}>
                       <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={20} />
@@ -81,10 +92,16 @@ export function TransactionDetailSheet({ visible, tx, alias, onClose }: Props) {
                   )}
                 </View>
                 <View style={styles.heroAmounts}>
-                  <Text style={[styles.heroAmount, incoming && styles.heroAmountIn]} numberOfLines={1}>
-                    {incoming ? '+' : '-'} {amt} {tx.symbol}
-                  </Text>
-                  <Text style={styles.heroUsd}>≈ {tx.usd ?? '$0.00'}</Text>
+                  <AmountText
+                    text={`${incoming ? '+' : '-'} ${amt}`}
+                    unit={tx.symbol}
+                    size={text['2xl']}
+                    minScale={0.55}
+                    tailScale={0.62}
+                    style={[styles.heroAmount, incoming && styles.heroAmountIn]}
+                    tailStyle={styles.heroUnit}
+                  />
+                  {fiat ? <Text style={styles.heroUsd}>≈ {fiat}</Text> : null}
                 </View>
                 {tx.txHash ? (
                   <Pressable hitSlop={8} onPress={() => openBrowser(`${explorer}/tx/${tx.txHash}`)} style={styles.heroChevron}>
@@ -93,48 +110,47 @@ export function TransactionDetailSheet({ visible, tx, alias, onClose }: Props) {
                 ) : null}
               </VelaCard>
 
-              {/* Counterparty */}
+              {/* Counterparty (the "who" — shown once here, not repeated in Details) */}
               {counterparty ? (
                 <Pressable onPress={() => copy('cp', counterparty)} style={styles.cpCard}>
-                  <Text style={styles.cpLabel}>{incoming ? 'From' : 'To'}</Text>
+                  <Text style={styles.cpLabel}>{incoming ? t('componentsTx.detail.from') : t('componentsTx.detail.to')}</Text>
                   <View style={styles.cpRight}>
-                    {alias ? <Text style={styles.cpAlias}>{alias}</Text> : null}
+                    {alias ? <Text style={styles.cpAlias} numberOfLines={1}>{alias}</Text> : null}
                     <View style={styles.cpAddrRow}>
                       <Text style={styles.cpShort}>{shortAddress(counterparty)}</Text>
                       {copied === 'cp' ? <Check size={15} color={color.success.base} strokeWidth={2.6} /> : <Copy size={15} color={color.fg.subtle} strokeWidth={2} />}
                     </View>
-                    <Text style={styles.cpFull}>{counterparty}</Text>
                   </View>
                 </Pressable>
               ) : null}
 
               {/* Details */}
-              <Text style={styles.sectionTitle}>Transaction Details</Text>
+              <Text style={styles.sectionTitle}>{t('componentsTx.detail.sectionTitle')}</Text>
               <VelaCard style={styles.details}>
-                <Row label="Date" value={formatDateTime(tx.timestamp)} />
+                <Row label={t('componentsTx.detail.labelDate')} value={formatDateTime(tx.timestamp * 1000)} />
                 <Divider />
-                <Row label="Status" custom={
+                <Row label={t('componentsTx.detail.labelStatus')} custom={
                   <View style={styles.statusRow}>
                     {tx.status === 'failed'
                       ? <XCircle size={16} color={color.error.base} strokeWidth={2.4} />
                       : <CheckCircle2 size={16} color={color.success.base} strokeWidth={2.4} />}
                     <Text style={[styles.statusText, { color: tx.status === 'failed' ? color.error.base : color.success.base }]}>
-                      {tx.status === 'failed' ? 'Failed' : 'Succeeded'}
+                      {tx.status === 'failed' ? t('componentsTx.detail.statusFailed') : t('componentsTx.detail.statusSucceeded')}
                     </Text>
                   </View>
                 } />
-                {tx.from ? (<><Divider /><Row label="From" value={shortAddress(tx.from)} mono onCopy={() => copy('from', tx.from)} copied={copied === 'from'} /></>) : null}
-                {tx.to ? (<><Divider /><Row label="To" value={shortAddress(tx.to)} mono onOpen={() => openBrowser(`${explorer}/address/${tx.to}`)} /></>) : null}
+                {tx.from ? (<><Divider /><Row label={t('componentsTx.detail.labelFrom')} value={shortAddress(tx.from)} mono onCopy={() => copy('from', tx.from)} copied={copied === 'from'} /></>) : null}
+                {tx.to ? (<><Divider /><Row label={t('componentsTx.detail.labelTo')} value={shortAddress(tx.to)} mono onOpen={() => openBrowser(`${explorer}/address/${tx.to}`)} /></>) : null}
                 <Divider />
-                <Row label="Operation" value={operationLabel(tx)} />
+                <Row label={t('componentsTx.detail.labelOperation')} value={t(operationLabelKey(tx), { defaultValue: operationLabelKey(tx) })} />
                 <Divider />
-                <Row label="Chain" custom={
+                <Row label={t('componentsTx.detail.labelChain')} custom={
                   <View style={styles.chainRow}>
                     {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={18} />}
                     <Text style={styles.chainText}>{chainName(tx.chainId)}</Text>
                   </View>
                 } />
-                {tx.txHash ? (<><Divider /><Row label="Hash" value={shortAddress(tx.txHash)} mono onOpen={() => openBrowser(`${explorer}/tx/${tx.txHash}`)} /></>) : null}
+                {tx.txHash ? (<><Divider /><Row label={t('componentsTx.detail.labelHash')} value={shortAddress(tx.txHash)} mono onOpen={() => openBrowser(`${explorer}/tx/${tx.txHash}`)} /></>) : null}
               </VelaCard>
             </ScrollView>
           </View>
@@ -184,6 +200,7 @@ const styles = createStyles(() => ({
   heroAmounts: { flex: 1, gap: 2 },
   heroAmount: { fontSize: text['2xl'], ...inter.bold, fontFamily: font.display, color: color.fg.base },
   heroAmountIn: { color: color.success.base },
+  heroUnit: { color: color.fg.muted }, // ticker subordinated next to the amount
   heroUsd: { fontSize: text.base, ...inter.medium, color: color.fg.muted },
   heroChevron: { width: 36, height: 36, borderRadius: 18, backgroundColor: color.bg.sunken, alignItems: 'center', justifyContent: 'center' },
 

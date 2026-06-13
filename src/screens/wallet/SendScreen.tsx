@@ -14,12 +14,15 @@ import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetch
 import { findAccountByCredentialId, saveTransaction, loadTransactions } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, type FundingNeeded } from '@/services/bundler-service';
+import { AmountText } from '@/components/ui/AmountText';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { TransactionReceipt } from '@/components/ui/TransactionReceipt';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
+import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { showAlert } from '@/services/platform';
+import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
 import Animated, {
@@ -88,10 +91,6 @@ function TxCancelButton({ onCancel }: { onCancel: () => void }) {
       <X size={18} color={color.fg.subtle} strokeWidth={2} />
     </Pressable>
   );
-}
-
-function formatUsd(value: number): string {
-  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function amountToWeiHex(amount: string, decimals: number): string {
@@ -179,10 +178,13 @@ function StepIndicator({ current }: { current: Step }) {
 }
 
 export default function SendScreen() {
+  const { t } = useTranslation();
   const router = useSafeRouter();
   const params = useLocalSearchParams<{ preselectedSymbol?: string; preselectedNetwork?: string; prefilledRecipient?: string }>();
   const { activeAccount, state } = useWallet();
   const address = activeAccount?.address ?? state.address;
+  const dc = useDisplayCurrency();
+  const formatUsd = dc.fmt;
 
   const hasPreselection = !!(params.prefilledRecipient || (params.preselectedSymbol && params.preselectedNetwork));
   const [step, setStep] = useState<Step>(hasPreselection ? 'enter-details' : 'select-token');
@@ -247,7 +249,7 @@ export default function SendScreen() {
           setStep('enter-details');
         }
       })
-      .catch(() => showAlert('Error', 'Failed to load tokens.'))
+      .catch(() => showAlert(t('common.error'), t('send.alertLoadTokensError')))
       .finally(() => setLoading(false));
 
     // Load recent recipients from transaction history
@@ -287,14 +289,14 @@ export default function SendScreen() {
       const balanceWei = balanceToWei(selectedToken.balance, selectedToken.decimals);
       const amountWei = BigInt('0x' + amountToWeiHex(tokenAmount, selectedToken.decimals));
       if (amountWei > balanceWei) {
-        setAmountWarning(`You do not have enough ${selectedToken.symbol} in this account`);
+        setAmountWarning(t('send.warnNotEnoughToken', { symbol: selectedToken.symbol }));
         return;
       }
       // Also check if gas can be covered (use cached estimate if available)
       if (feeEstimate) {
         const reserveWei = feeEstimate.totalWei * 3n;
         if (amountWei + reserveWei > balanceWei) {
-          setAmountWarning(`Insufficient ${sym} to cover amount + gas fees`);
+          setAmountWarning(t('send.warnInsufficientForGas', { sym }));
           return;
         }
       }
@@ -302,7 +304,7 @@ export default function SendScreen() {
       // ERC-20: check token balance
       const tokenBal = tokenBalanceDouble(selectedToken);
       if (amountNum > tokenBal) {
-        setAmountWarning(`You do not have enough ${selectedToken.symbol} in this account`);
+        setAmountWarning(t('send.warnNotEnoughToken', { symbol: selectedToken.symbol }));
         return;
       }
       // Check native token balance for gas
@@ -312,11 +314,11 @@ export default function SendScreen() {
           ? balanceToWei(nativeToken.balance, nativeToken.decimals)
           : 0n;
         if (nativeBalWei < feeEstimate.totalWei) {
-          setAmountWarning(`Insufficient ${sym} for gas fees`);
+          setAmountWarning(t('send.warnInsufficientGas', { sym }));
           return;
         }
       } else if (!nativeToken || tokenBalanceDouble(nativeToken) === 0) {
-        setAmountWarning(`You need ${sym} to pay gas fees`);
+        setAmountWarning(t('send.warnNeedGas', { sym }));
         return;
       }
     }
@@ -354,17 +356,17 @@ export default function SendScreen() {
 
   const handleContinue = async () => {
     if (!isValidAddress(recipient)) {
-      showAlert('Invalid Address', 'Please enter a valid Ethereum address (0x...).');
+      showAlert(t('send.alertInvalidAddressTitle'), t('send.alertInvalidAddressBody'));
       return;
     }
     const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken!.priceUsd, selectedToken!.decimals);
     const amountNum = parseFloat(tokenAmount);
     if (isNaN(amountNum) || amountNum <= 0) {
-      showAlert('Invalid Amount', 'Please enter a valid amount greater than zero.');
+      showAlert(t('send.alertInvalidAmountTitle'), t('send.alertInvalidAmountBody'));
       return;
     }
     if (amountWarning) {
-      showAlert('Insufficient Balance', amountWarning);
+      showAlert(t('send.alertInsufficientBalanceTitle'), amountWarning);
       return;
     }
 
@@ -486,7 +488,7 @@ export default function SendScreen() {
       // Use prefetched account if available, otherwise fetch now
       const stored = prefetchedAccount.current ?? await findAccountByCredentialId(activeAccount.id);
       if (!stored?.publicKeyHex) {
-        throw new Error('Public key not found for this account');
+        throw new Error(t('send.txErrorPublicKey'));
       }
 
       const signFn = async (challenge: Uint8Array) => {
@@ -555,7 +557,7 @@ export default function SendScreen() {
         });
       }).catch(() => {
         // Receipt polling timed out — still submitted, just can't confirm yet
-        setTxError('Transaction submitted but confirmation timed out. Check history later.');
+        setTxError(t('send.txErrorTimeout'));
         setTxStatus('error');
       });
 
@@ -570,7 +572,7 @@ export default function SendScreen() {
         if (fundingRetryCount.current > 3) {
           // Break infinite loop — show error instead of modal
           fundingRetryCount.current = 0;
-          setTxError('Gas account balance keeps being rejected by the bundler. Try again later or increase gas tier.');
+          setTxError(t('send.txErrorBundlerLoop'));
           setTxStatus('error');
         } else {
           setTxStatus('idle');
@@ -609,7 +611,7 @@ export default function SendScreen() {
               return;
             }
           } catch { /* fall through */ }
-          setTxError('Bundler account needs more gas. Please fund it in Settings.');
+          setTxError(t('send.txErrorBundlerFund'));
           setTxStatus('error');
         }
       } else {
@@ -649,12 +651,12 @@ export default function SendScreen() {
 
   const renderSelectToken = () => (
     <Animated.View style={styles.stepContainer} entering={fadeInDown(0, 300)}>
-      <Text style={styles.stepTitle}>Select Token</Text>
+      <Text style={styles.stepTitle}>{t('send.selectTokenTitle')}</Text>
       <View style={styles.searchWrap}>
         <Search size={16} color={color.fg.subtle} strokeWidth={2} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search tokens..."
+          placeholder={t('send.searchPlaceholder')}
           placeholderTextColor={color.fg.subtle}
           value={tokenSearch}
           onChangeText={setTokenSearch}
@@ -663,10 +665,10 @@ export default function SendScreen() {
         />
       </View>
       {loading ? (
-        <Text style={styles.loadingText}>Loading tokens...</Text>
+        <Text style={styles.loadingText}>{t('send.loadingTokens')}</Text>
       ) : filteredTokens.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>{tokenSearch ? 'No matching tokens' : 'No tokens with balance'}</Text>
+          <Text style={styles.emptyText}>{tokenSearch ? t('send.noMatchingTokens') : t('send.noTokensWithBalance')}</Text>
         </View>
       ) : (
         <FlatList
@@ -702,7 +704,7 @@ export default function SendScreen() {
     return (
       <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Animated.View entering={fadeInDown(0, 300)}>
-          <Text style={styles.stepTitle}>Send {selectedToken.symbol}</Text>
+          <Text style={styles.stepTitle}>{t('send.sendTitle', { symbol: selectedToken.symbol })}</Text>
 
           {/* Hero card — tap to switch token */}
           <Pressable onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); }}>
@@ -714,9 +716,13 @@ export default function SendScreen() {
                 <Text style={styles.heroChain}>{chain}</Text>
               </View>
               <View style={styles.heroBalance}>
-                <Text style={styles.heroAmount} adjustsFontSizeToFit numberOfLines={1}>
-                  {formatBalance(balance)}
-                </Text>
+                <AmountText
+                  text={formatBalance(balance)}
+                  size={text.xl}
+                  minScale={0.7}
+                  style={styles.heroAmount}
+                  containerStyle={styles.heroAmountBox}
+                />
                 {tokenUsdValue(selectedToken) > 0 && (
                   <Text style={styles.heroUsd}>
                     {formatUsd(tokenUsdValue(selectedToken))}
@@ -753,7 +759,7 @@ export default function SendScreen() {
                 </Text>
               ) : (
                 <Pressable onPress={handleMaxAmount} hitSlop={8} style={styles.maxBtn}>
-                  <Text style={styles.maxBtnText}>Max</Text>
+                  <Text style={styles.maxBtnText}>{t('send.maxBtn')}</Text>
                 </Pressable>
               )}
             </View>
@@ -793,7 +799,7 @@ export default function SendScreen() {
 
           {/* Recipient */}
           <View style={styles.fieldLabelRow}>
-            <Text style={styles.fieldLabel}>Recipient</Text>
+            <Text style={styles.fieldLabel}>{t('send.recipientLabel')}</Text>
             <Pressable onPress={() => setShowScanner(true)} hitSlop={8} style={styles.fieldLabelAction}>
               <ScanLine size={15} color={color.fg.subtle} strokeWidth={2} />
             </Pressable>
@@ -801,7 +807,7 @@ export default function SendScreen() {
           <View style={styles.inputWrap}>
             <TextInput
               style={styles.input}
-              placeholder="0x... address"
+              placeholder={t('send.recipientPlaceholder')}
               placeholderTextColor={color.fg.subtle}
               value={recipient}
               onChangeText={(t) => { setRecipient(t); setShowContacts(false); }}
@@ -829,7 +835,7 @@ export default function SendScreen() {
                 {recipientIdentity.name}
               </Text>
               <Text style={styles.identitySource}>
-                {recipientIdentity.source === 'passkey' ? 'Vela User' : recipientIdentity.source}
+                {recipientIdentity.source === 'passkey' ? t('send.velaUser') : recipientIdentity.source}
               </Text>
             </View>
           )}
@@ -857,13 +863,13 @@ export default function SendScreen() {
           {fundingNeeded?.reason === 'wallet_balance_too_low' && (
             <View style={styles.lowBalanceWarning}>
               <Text style={styles.lowBalanceText}>
-                Insufficient balance to cover network fees. Add more {fundingNeeded.nativeSym} to your wallet before sending.
+                {t('send.lowBalanceWarning', { nativeSym: fundingNeeded.nativeSym })}
               </Text>
             </View>
           )}
 
           <VelaButton
-            title={estimatingGas ? 'Preparing...' : 'Continue'}
+            title={estimatingGas ? t('send.preparing') : t('send.continueBtn')}
             onPress={handleContinue}
             loading={estimatingGas}
             style={styles.continueBtn}
@@ -894,14 +900,14 @@ export default function SendScreen() {
     return (
       <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
         <Animated.View entering={fadeInDown(0, 300)}>
-          <Text style={styles.stepTitle}>Confirm</Text>
+          <Text style={styles.stepTitle}>{t('send.confirmTitle')}</Text>
 
           {/* Transfer card: From → To with token info */}
           <VelaCard style={styles.confirmCard}>
             {/* From */}
             <View style={styles.transferEndpoint}>
-              <Text style={styles.transferLabel}>From</Text>
-              <Text style={styles.transferName}>{activeAccount?.name ?? 'Wallet'}</Text>
+              <Text style={styles.transferLabel}>{t('send.fromLabel')}</Text>
+              <Text style={styles.transferName}>{activeAccount?.name ?? t('send.walletFallbackName')}</Text>
               <Text style={styles.transferAddr}>{shortAddr(address ?? '')}</Text>
             </View>
 
@@ -927,7 +933,7 @@ export default function SendScreen() {
 
             {/* To */}
             <View style={styles.transferEndpoint}>
-              <Text style={styles.transferLabel}>To</Text>
+              <Text style={styles.transferLabel}>{t('send.toLabel')}</Text>
               {recipientIdentity && (
                 <Text style={styles.transferName}>{recipientIdentity.name}</Text>
               )}
@@ -937,11 +943,11 @@ export default function SendScreen() {
 
           {/* Gas Details — collapsed by default, fee shown in toggle row */}
           <Pressable onPress={() => setGasExpanded(!gasExpanded)} style={styles.gasToggleRow}>
-            <Text style={styles.gasToggleLabel}>Est. Fee</Text>
+            <Text style={styles.gasToggleLabel}>{t('send.estFeeLabel')}</Text>
             <View style={styles.gasToggleRight}>
               <View style={styles.gasToggleValues}>
                 <Text style={styles.gasToggleValue}>
-                  {estimatingGas ? 'Estimating...' : feeEstimate ? `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}` : '—'}
+                  {estimatingGas ? t('send.estimatingFee') : feeEstimate ? `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}` : '—'}
                 </Text>
                 {!estimatingGas && feeUsd > 0.001 && (
                   <Text style={styles.gasToggleSub}>≈ {formatUsd(feeUsd)}</Text>
@@ -1002,20 +1008,20 @@ export default function SendScreen() {
                   </Pressable>
                 </View>
                 <View style={styles.confirmSeparator} />
-                <ConfirmRow label="Gas Price" value={`${bundlerGwei.toFixed(4)} Gwei`} />
+                <ConfirmRow label={t('send.gasPriceLabel')} value={`${bundlerGwei.toFixed(4)} Gwei`} />
                 <View style={styles.confirmSeparator} />
-                <ConfirmRow label="Gas Price (UserOp)" value={`${userOpGwei.toFixed(4)} Gwei`} />
+                <ConfirmRow label={t('send.gasPriceUserOpLabel')} value={`${userOpGwei.toFixed(4)} Gwei`} />
                 <View style={styles.confirmSeparator} />
-                <ConfirmRow label="Gas Limit" value={feeEstimate.totalGas.toLocaleString()} />
+                <ConfirmRow label={t('send.gasLimitLabel')} value={feeEstimate.totalGas.toLocaleString()} />
                 <View style={styles.confirmSeparator} />
-                <ConfirmRow label="Wallet Deployed" value={feeEstimate.deployed ? 'Yes' : 'No (first tx)'} />
+                <ConfirmRow label={t('send.walletDeployedLabel')} value={feeEstimate.deployed ? t('send.walletDeployedYes') : t('send.walletDeployedNo')} />
               </VelaCard>
             );
           })()}
 
           {txStatus === 'idle' && (
             <VelaButton
-              title={estimatingGas ? 'Checking gas...' : 'Confirm & Send'}
+              title={estimatingGas ? t('send.checkingGas') : t('send.confirmSendBtn')}
               onPress={handleConfirm}
               variant="accent"
               loading={sending}
@@ -1032,9 +1038,9 @@ export default function SendScreen() {
                     <ActivityIndicator size="small" color={color.accent.base} />
                   </Animated.View>
                   <Text style={[styles.txStatusText, { flex: 1 }]}>
-                    {txStatus === 'preparing' ? 'Preparing transaction...' :
-                     txStatus === 'signing' ? 'Waiting for biometric...' :
-                     'Submitting to network...'}
+                    {txStatus === 'preparing' ? t('send.txPreparing') :
+                     txStatus === 'signing' ? t('send.txSigning') :
+                     t('send.txSubmitting')}
                   </Text>
                   {(txStatus === 'preparing' || txStatus === 'signing') && (
                     <TxCancelButton onCancel={() => { Passkey.cancelSign(); setTxStatus('idle'); setSending(false); }} />
@@ -1048,13 +1054,13 @@ export default function SendScreen() {
                 const progress = Math.min(1, confirmingElapsed / estSecs);
                 const overEstimate = confirmingElapsed > estSecs;
                 const statusMsg = confirmingElapsed < 3
-                  ? 'Transaction submitted to the network'
+                  ? t('send.txSubmitted')
                   : overEstimate
-                    ? 'Taking longer than usual, please wait...'
-                    : 'Waiting for blockchain confirmation...';
+                    ? t('send.txSlowConfirm')
+                    : t('send.txWaitingConfirm');
                 const timeLabel = overEstimate
-                  ? `${confirmingElapsed}s elapsed — almost there`
-                  : `~${remaining}s remaining`;
+                  ? t('send.txElapsed', { elapsed: confirmingElapsed })
+                  : t('send.txRemaining', { remaining });
                 return (
                   <View>
                     <View style={styles.txStatusRow}>
@@ -1075,7 +1081,7 @@ export default function SendScreen() {
                       ]} />
                     </View>
                     <Text style={styles.txConfirmHint}>
-                      {chainName(chainId)} typically confirms in ~{estSecs}s
+                      {t('send.txTypicalTime', { chainName: chainName(chainId), estSecs })}
                     </Text>
                   </View>
                 );
@@ -1092,7 +1098,7 @@ export default function SendScreen() {
                     style={styles.txRetryBtn}
                     onPress={() => { setTxStatus('idle'); setTxError(null); }}
                   >
-                    <Text style={styles.txRetryBtnText}>Try Again</Text>
+                    <Text style={styles.txRetryBtnText}>{t('send.txRetryBtn')}</Text>
                   </Pressable>
                 </View>
               )}
@@ -1130,6 +1136,9 @@ export default function SendScreen() {
           txHash={txHash ?? ''}
           logoUrls={tokenLogoURLs(selectedToken)}
           usdValue={parseFloat(resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals)) * (selectedToken.priceUsd ?? 0)}
+          rate={dc.rate}
+          currencyCode={dc.code}
+          currencySymbol={dc.symbol}
           timestamp={new Date()}
           recipientIdentity={recipientIdentity}
           onDone={() => router.back()}
@@ -1291,12 +1300,18 @@ const styles = createStyles(() => ({
   heroBalance: {
     alignItems: 'flex-end',
     gap: 2,
+    flexShrink: 1,
+    maxWidth: '58%', // keep the token symbol readable; huge balances shrink
+  },
+  heroAmountBox: {
+    alignSelf: 'stretch',
   },
   heroAmount: {
     fontSize: text.xl,
     ...inter.bold,
     fontFamily: font.display,
     color: color.fg.base,
+    textAlign: 'right',
   },
   heroUsd: {
     fontSize: text.sm,

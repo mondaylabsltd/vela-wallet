@@ -15,6 +15,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, Image, Pressable,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
 import { AppModal } from '@/components/ui/AppModal';
 import { VelaButton } from '@/components/ui/VelaButton';
@@ -67,6 +68,7 @@ function riskColor(risk: SigningRisk): string {
 // ---------------------------------------------------------------------------
 
 export function SigningRequestModal() {
+  const { t } = useTranslation();
   const {
     incomingRequest, isSigning, signError, chainId, dappInfo,
     approveRequest, rejectRequest, dismissRequest,
@@ -147,7 +149,7 @@ export function SigningRequestModal() {
     if (resolving) {
       return (
         <View style={styles.fallback}>
-          <Text style={styles.fallbackText}>Loading...</Text>
+          <Text style={styles.fallbackText}>{t('componentsUi.signing.loading')}</Text>
         </View>
       );
     }
@@ -166,23 +168,23 @@ export function SigningRequestModal() {
     return (
       <View style={styles.fallback}>
         <Shield size={28} color={color.fg.muted} strokeWidth={2} />
-        <Text style={styles.fallbackText}>Signature request</Text>
+        <Text style={styles.fallbackText}>{t('componentsUi.signing.signatureRequest')}</Text>
       </View>
     );
   };
 
   // Button config — keep label short (max ~15 chars)
   const buttonLabel = (): string => {
-    if (isSigning) return 'Signing...';
+    if (isSigning) return t('componentsUi.signing.signing');
     if (clearSign) {
-      if (clearSign.type === 'signature') return 'Sign';
+      if (clearSign.type === 'signature') return t('componentsUi.signing.signLabel');
       const i = clearSign.intent;
       // Truncate long intents: "Manage operator rights for" → "Confirm"
-      if (i.length > 12) return 'Confirm';
-      return `Confirm ${i.charAt(0).toUpperCase() + i.slice(1)}`;
+      if (i.length > 12) return t('componentsUi.signing.confirmLabel');
+      return t('componentsUi.signing.confirmIntentLabel', { intent: i.charAt(0).toUpperCase() + i.slice(1) });
     }
-    if (isPersonalSign || isTypedData) return 'Sign';
-    return 'Approve';
+    if (isPersonalSign || isTypedData) return t('componentsUi.signing.signLabel');
+    return t('componentsUi.signing.approve');
   };
 
   const buttonVariant = (): 'accent' | 'secondary' => 'accent';
@@ -217,7 +219,7 @@ export function SigningRequestModal() {
         <View style={styles.buttonRow}>
           {signError ? (
             <VelaButton
-              title="Dismiss"
+              title={t('componentsUi.signing.dismiss')}
               onPress={dismissRequest}
               variant="secondary"
               style={styles.buttonFlex}
@@ -225,7 +227,7 @@ export function SigningRequestModal() {
           ) : (
             <>
               <VelaButton
-                title="Reject"
+                title={t('componentsUi.signing.reject')}
                 onPress={rejectRequest}
                 variant="secondary"
                 disabled={isSigning}
@@ -310,6 +312,7 @@ function DAppBanner({ name, domain, icon, chainId, accountName, accountAddress }
 function ClearSignView({ cs }: {
   cs: ClearSignResult;
 }) {
+  const { t } = useTranslation();
   const rc = riskColor(cs.risk);
 
   // Separate fields by role
@@ -355,7 +358,7 @@ function ClearSignView({ cs }: {
       {spenders.map((f, i) => (
         <ContractBar
           key={`sp${i}`}
-          label="Spender"
+          label={t('componentsUi.signing.spenderLabel')}
           name={f.value}
           address={cs.contractAddress}
           verified={cs.verified}
@@ -364,7 +367,7 @@ function ClearSignView({ cs }: {
       {recipients.map((f, i) => (
         <ContractBar
           key={`re${i}`}
-          label="Recipient"
+          label={t('componentsUi.signing.recipientLabel')}
           name={f.value}
           address={undefined}
           verified={false}
@@ -375,7 +378,7 @@ function ClearSignView({ cs }: {
       {cs.fields.some(f => f.warning) && (
         <WarningBanner
           severity="danger"
-          text={`Unlimited — this contract can spend all your tokens`}
+          text={t('componentsUi.signing.unlimitedWarning')}
         />
       )}
 
@@ -391,7 +394,7 @@ function ClearSignView({ cs }: {
       {/* Contract bar (if not already shown via spender/recipient) */}
       {!hasRecipient && cs.contractAddress && (
         <ContractBar
-          label="Interacting with"
+          label={t('componentsUi.signing.interactingLabel')}
           name={cs.contractName ? `${cs.contractName}${cs.owner ? ` · ${cs.owner}` : ''}` : undefined}
           address={cs.contractAddress}
           verified={cs.verified}
@@ -408,17 +411,18 @@ function ClearSignView({ cs }: {
 function MessageSignView({ hexMsg }: {
   hexMsg: string;
 }) {
+  const { t } = useTranslation();
   const decoded = decodePersonalMessage(hexMsg);
 
   return (
     <View>
       {/* context shown in dApp banner */}
-      <IntentHeader intent="Sign Message" color={signatureColor()} />
+      <IntentHeader intent={t('componentsUi.signing.signMessage')} color={signatureColor()} />
 
       <View style={styles.msgBubble}>
         <View style={styles.msgTag}>
           <Pen size={10} color={color.fg.subtle} strokeWidth={2} />
-          <Text style={styles.msgTagText}>personal_sign · No gas fee</Text>
+          <Text style={styles.msgTagText}>{t('componentsUi.signing.personalSignTag')}</Text>
         </View>
         <Text style={styles.msgText}>{decoded}</Text>
       </View>
@@ -433,17 +437,18 @@ function MessageSignView({ hexMsg }: {
 function BlindTypedDataView({ params }: {
   params: any[];
 }) {
+  const { t } = useTranslation();
   const { primaryType, domain, fields } = parseTypedDataForDisplay(params);
 
   return (
     <View>
       {/* context shown in dApp banner */}
-      <IntentHeader intent="Sign Typed Data" color="#d4890a" />
+      <IntentHeader intent={t('componentsUi.signing.signTypedData')} color="#d4890a" />
 
       {/* Domain info */}
       {domain && (
         <ContractBar
-          label="Signing for"
+          label={t('componentsUi.signing.signingFor')}
           name={domain.name}
           address={domain.verifyingContract?.toLowerCase()}
           verified={false}
@@ -454,7 +459,7 @@ function BlindTypedDataView({ params }: {
       <View style={styles.genericFields}>
         {primaryType && (
           <View style={styles.genRow}>
-            <Text style={styles.genLabel}>Type</Text>
+            <Text style={styles.genLabel}>{t('componentsUi.signing.typeLabel')}</Text>
             <Text style={styles.genValue}>{primaryType}</Text>
           </View>
         )}
@@ -468,7 +473,7 @@ function BlindTypedDataView({ params }: {
 
       <WarningBanner
         severity="caution"
-        text="This typed data could not be decoded with a known descriptor. Review carefully."
+        text={t('componentsUi.signing.blindTypedWarning')}
       />
     </View>
   );
@@ -482,6 +487,7 @@ function BlindTransactionView({ tx, chainId }: {
   tx: any;
   chainId: number;
 }) {
+  const { t } = useTranslation();
   const [showRaw, setShowRaw] = useState(false);
   const sym = nativeSymbol(chainId);
   const value = formatTxValue(tx.value, chainId);
@@ -492,7 +498,7 @@ function BlindTransactionView({ tx, chainId }: {
     <View>
       {/* context shown in dApp banner */}
       <IntentHeader
-        intent={hasData ? 'Unknown' : 'Send'}
+        intent={hasData ? t('componentsUi.signing.intentUnknown') : t('componentsUi.signing.intentSend')}
         color={hasData ? '#d43a2a' : '#E8572A'}
       />
 
@@ -508,7 +514,7 @@ function BlindTransactionView({ tx, chainId }: {
 
       {/* Contract */}
       <ContractBar
-        label={hasData ? 'Unverified contract' : 'Recipient'}
+        label={hasData ? t('componentsUi.signing.unverifiedLabel') : t('componentsUi.signing.recipientLabel')}
         address={tx.to}
         verified={false}
         warning={hasData}
@@ -519,7 +525,7 @@ function BlindTransactionView({ tx, chainId }: {
         <>
           <WarningBanner
             severity="danger"
-            text={`Unable to decode — no ERC-7730 descriptor (${dataSize} bytes)`}
+            text={t('componentsUi.signing.blindDecodeWarning', { bytes: dataSize })}
           />
 
           {/* Raw data toggle */}
@@ -528,7 +534,7 @@ function BlindTransactionView({ tx, chainId }: {
             onPress={() => setShowRaw(!showRaw)}
           >
             <Text style={styles.detailsToggleText}>
-              Raw calldata · {dataSize} bytes
+              {t('componentsUi.signing.rawCalldataToggle', { bytes: dataSize })}
             </Text>
             <ChevronDown
               size={12}

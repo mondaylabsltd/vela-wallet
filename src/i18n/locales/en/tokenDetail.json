@@ -1,0 +1,15 @@
+{
+  "tokenDetail": {
+    "chartTitle": "7-Day Balance",
+    "chartEmpty": "No historical data available",
+    "send": "Send",
+    "receive": "Receive",
+    "labelName": "Name",
+    "labelContract": "Contract",
+    "labelDecimals": "Decimals",
+    "labelPrice": "Price",
+    "priceValue": "1 {{symbol}} = {{value}}",
+    "labelTransactions": "Transactions",
+    "viewOnExplorer": "View on Explorer"
+  }
+}

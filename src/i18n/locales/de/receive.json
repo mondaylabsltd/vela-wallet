@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "Empfangen",
+    "noAddress": "Keine Adresse",
+    "shareGenerating": "Wird erstellt ...",
+    "shareButton": "Teilen",
+    "listeningForDeposits": "Warten auf Eingänge",
+    "warningTitle": "Bevor Sie empfangen",
+    "warningBody": "Senden Sie nur Assets über unterstützte Netzwerke — nicht unterstützte Überweisungen können dauerhaft verloren gehen.",
+    "warningHint": "Prüfen Sie die",
+    "warningHintNetworks": "{{count}} unterstützten Netzwerke",
+    "warningHintSuffix": "unten, bevor Sie Ihre Adresse teilen.",
+    "warningConfirm": "Verstanden",
+    "networksLabel": "Funktioniert auf {{count}} EVM-Netzwerken",
+    "shareCardHeadline": "Scannen, um mir Krypto zu senden",
+    "shareDialogTitle": "Wallet-Adresse von {{name}}"
+  }
+}

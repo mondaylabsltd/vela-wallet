@@ -16,7 +16,9 @@ import { DAppConnectionProvider } from '@/models/dapp-connection';
 import { SigningRequestModal } from '@/components/SigningRequestModal';
 import { AlertProvider } from '@/components/ui/AppAlert';
 import { retryPendingUploads } from '@/services/public-key-upload';
-import { hasPendingUploads } from '@/services/storage';
+import { hasPendingUploads, loadLocalePrefs, loadServiceEndpoints } from '@/services/storage';
+import i18n, { loadLanguage } from '@/i18n';
+import { LanguageProvider, useLanguagePreference } from '@/i18n/language';
 import { loadTextScale, TextScaleProvider } from '@/constants/text-scale';
 import { color, rebuildTextScale, rebuildColors, createStyles } from '@/constants/theme';
 import { refreshCustomNetworks } from '@/models/network';
@@ -50,7 +52,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
       return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, backgroundColor: '#faf9f7' }}>
           <Text style={{ fontSize: 18, fontWeight: '700', color: '#1a1a18', marginBottom: 8 }}>
-            Something went wrong
+            {i18n.t('common.somethingWrong')}
           </Text>
           <Text style={{ fontSize: 13, color: '#8a8580', textAlign: 'center', lineHeight: 20, marginBottom: 20 }}>
             {this.state.error.message}
@@ -59,7 +61,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
             onPress={() => this.setState({ error: null })}
             style={{ paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#E8572A', borderRadius: 12 }}
           >
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Try Again</Text>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{i18n.t('common.tryAgain')}</Text>
           </Pressable>
         </View>
       );
@@ -70,13 +72,15 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 
 function AppShell() {
   const { resolved } = useColorSchemePreference();
+  const { resolved: language } = useLanguagePreference();
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <WalletProvider>
         <DAppConnectionProvider>
           <ThemeProvider value={resolved === 'dark' ? DarkTheme : DefaultTheme}>
-            <Stack screenOptions={{ headerShown: false }} key={resolved}>
+            {/* key folds in language so a switch remounts the tree (instant, no restart) */}
+            <Stack screenOptions={{ headerShown: false }} key={`${resolved}-${language}`}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="onboarding" />
               <Stack.Screen name="send" options={{ presentation: 'modal' }} />
@@ -117,6 +121,11 @@ export default function RootLayout() {
         applyWebThemeColor(resolved);
       }),
       refreshCustomNetworks(),
+      // Warm config caches so saved fiat endpoint + format prefs apply at launch.
+      loadServiceEndpoints(),
+      loadLocalePrefs(),
+      // Apply the stored UI language before the first render.
+      loadLanguage(),
     ]).then(() => setReady(true));
 
     hasPendingUploads().then((has) => {
@@ -136,13 +145,15 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary>
-      <TextScaleProvider>
-        <ColorSchemeProvider>
-          <AlertProvider>
-            <AppShell />
-          </AlertProvider>
-        </ColorSchemeProvider>
-      </TextScaleProvider>
+      <LanguageProvider>
+        <TextScaleProvider>
+          <ColorSchemeProvider>
+            <AlertProvider>
+              <AppShell />
+            </AlertProvider>
+          </ColorSchemeProvider>
+        </TextScaleProvider>
+      </LanguageProvider>
     </ErrorBoundary>
   );
 }

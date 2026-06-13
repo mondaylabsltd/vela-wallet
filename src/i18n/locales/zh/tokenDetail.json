@@ -1,0 +1,15 @@
+{
+  "tokenDetail": {
+    "chartTitle": "7天余额",
+    "chartEmpty": "暂无历史数据",
+    "send": "发送",
+    "receive": "接收",
+    "labelName": "名称",
+    "labelContract": "合约",
+    "labelDecimals": "精度",
+    "labelPrice": "价格",
+    "priceValue": "1 {{symbol}} = {{value}}",
+    "labelTransactions": "交易记录",
+    "viewOnExplorer": "在浏览器中查看"
+  }
+}

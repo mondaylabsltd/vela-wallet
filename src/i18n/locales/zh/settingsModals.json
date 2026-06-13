@@ -1,0 +1,69 @@
+{
+  "settingsModals": {
+    "network": {
+      "modalTitle": "网络",
+      "chainId": "Chain {{chainId}}",
+      "fieldRpcUrl": "RPC URL",
+      "fieldExplorer": "区块浏览器",
+      "fieldBundler": "打包器",
+      "removeTitle": "移除网络",
+      "removeBody": "移除此自定义网络？",
+      "removeCancel": "取消",
+      "removeConfirm": "移除"
+    },
+    "account": {
+      "modalTitle": "账户",
+      "total": "合计 {{amount}}",
+      "createNew": "创建新账户",
+      "signInExisting": "导入已有账户"
+    },
+    "endpoints": {
+      "modalTitle": "服务节点",
+      "description": "这些服务为您的钱包提供支持。\n您可以自行部署以实现完全自托管。",
+      "chainDataLabel": "链数据索引",
+      "chainDataHint": "提供网络信息、代币数据和链图标",
+      "passkeyLabel": "PASSKEY 索引",
+      "passkeyHint": "存储通行密钥公钥，用于跨设备登录",
+      "bundlerLabel": "打包器服务",
+      "bundlerHint": "需要兼容 Vela Bundler 的节点",
+      "fiatLabel": "法币汇率",
+      "fiatHint": "以 USD 为基础的汇率 ({rates:{…}})，驱动货币列表——可替换为覆盖更广的服务",
+      "resetToDefaults": "恢复默认"
+    },
+    "addNetwork": {
+      "modalTitle": "添加网络",
+      "description": "按网络名称、代币符号或 Chain ID 搜索。",
+      "searchPlaceholder": "例：Gnosis、ACE、648...",
+      "chainMeta": "Chain {{chainId}} · {{symbol}}",
+      "searching": "搜索中...",
+      "checkingCompatibility": "兼容性检查中...",
+      "customRpcTitle": "自定义 RPC（可选）",
+      "customRpcPlaceholder": "https://your-rpc-url...",
+      "recheckWithRpc": "用此 RPC 重新检查",
+      "bestRpc": "最优 RPC：{{latencyMs}}ms",
+      "compatibilityCheck": "兼容性检查",
+      "unableToVerify": "无法验证 — RPC 请求失败",
+      "retry": "重试",
+      "addNetworkBtn": "添加网络",
+      "incompatibleHint": "此链上尚未部署所需合约。\n请使用 Vela Wallet 链配置工具进行部署，然后回来重新检查。",
+      "openChainSetupTool": "打开链配置工具",
+      "recheck": "重新检查",
+      "chainIdLabel": "Chain ID: {{chainId}}",
+      "nativeLabel": "原生代币：{{symbol}}",
+      "testnet": "测试网"
+    },
+    "treasury": {
+      "modalTitle": "金库",
+      "addressLabel": "地址（所有网络）",
+      "balancesLabel": "余额",
+      "minBalance": "最低 {{amount}}",
+      "unreachable": "无法连接打包器",
+      "close": "关闭"
+    },
+    "health": {
+      "offline": "离线",
+      "httpsRequired": "需要 HTTPS",
+      "invalid": "无效"
+    }
+  }
+}

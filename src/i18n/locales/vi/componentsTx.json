@@ -1,0 +1,42 @@
+{
+  "componentsTx": {
+    "receipt": {
+      "title": "Biên lai giao dịch",
+      "canvasTitle": "BIÊN LAI GIAO DỊCH",
+      "from": "Từ",
+      "to": "Đến",
+      "network": "Mạng",
+      "time": "Thời gian",
+      "txHash": "Hash giao dịch",
+      "scanHint": "Quét để xem trên explorer",
+      "footerBrand": "VELA WALLET",
+      "footerUrl": "getvela.app",
+      "explorer": "Explorer",
+      "share": "Chia sẻ",
+      "done": "Xong",
+      "copiedTitle": "Đã sao chép",
+      "copiedImageBody": "Đã sao chép ảnh biên lai vào bộ nhớ tạm.",
+      "copiedLinkBody": "Đã sao chép liên kết explorer."
+    },
+    "detail": {
+      "received": "Đã nhận",
+      "sent": "Đã gửi",
+      "from": "Từ",
+      "to": "Đến",
+      "sectionTitle": "Chi tiết giao dịch",
+      "labelDate": "Ngày",
+      "labelStatus": "Trạng thái",
+      "labelFrom": "Từ",
+      "labelTo": "Đến",
+      "labelOperation": "Thao tác",
+      "labelChain": "Chain",
+      "labelHash": "Hash",
+      "statusFailed": "Thất bại",
+      "statusSucceeded": "Thành công",
+      "opContractInteraction": "Tương tác hợp đồng",
+      "opSignature": "Chữ ký",
+      "opTypedDataSignature": "Chữ ký dữ liệu có cấu trúc",
+      "opTransfer": "Chuyển"
+    }
+  }
+}

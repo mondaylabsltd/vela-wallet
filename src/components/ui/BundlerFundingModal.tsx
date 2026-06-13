@@ -7,6 +7,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { copyToClipboard, hapticSuccess, hapticLight } from '@/services/platform';
 import { Check, Copy, RefreshCw, Fuel, Gift } from 'lucide-react-native';
 
@@ -34,18 +35,19 @@ const POLL_INTERVAL = 10_000;
 
 type Step = 'choose' | 'self-fund';
 
-function denialText(reason?: string): string {
-  if (!reason) return 'Free activation unavailable.';
-  if (reason === 'nonce_exceeded') return 'Free quota used up.';
-  if (reason === 'treasury_depleted') return 'Free fund temporarily empty.';
-  if (reason === 'wallet_balance_too_low') return 'Wallet balance too low to qualify.';
-  if (reason === 'no_passkey_registered') return 'Passkey required for free activation.';
-  if (reason === 'rate_limited') return 'Too many requests. Try later.';
-  if (reason.startsWith('transfer_failed')) return 'Transfer failed. Try again.';
-  return 'Free activation unavailable.';
+function denialKey(reason?: string): string {
+  if (!reason) return 'componentsUi.funding.denialDefault';
+  if (reason === 'nonce_exceeded') return 'componentsUi.funding.denialNonceExceeded';
+  if (reason === 'treasury_depleted') return 'componentsUi.funding.denialTreasuryDepleted';
+  if (reason === 'wallet_balance_too_low') return 'componentsUi.funding.denialBalanceTooLow';
+  if (reason === 'no_passkey_registered') return 'componentsUi.funding.denialNoPasskey';
+  if (reason === 'rate_limited') return 'componentsUi.funding.denialRateLimited';
+  if (reason.startsWith('transfer_failed')) return 'componentsUi.funding.denialTransferFailed';
+  return 'componentsUi.funding.denialDefault';
 }
 
 export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Props) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<Step>('choose');
   const [requesting, setRequesting] = useState(false);
   const [denialReason, setDenialReason] = useState<string | undefined>();
@@ -131,7 +133,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
           <View style={styles.iconWrap}>
             <Fuel size={22} color={color.accent.base} strokeWidth={2} />
           </View>
-          <Text style={styles.title}>Activate Gas Account</Text>
+          <Text style={styles.title}>{t('componentsUi.funding.title')}</Text>
           <View style={styles.networkChip}>
             {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />}
             <Text style={styles.networkLabel}>{chainName(funding.chainId)}</Text>
@@ -140,7 +142,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
 
         {/* Balance */}
         <View style={styles.balanceRow}>
-          <Text style={styles.balanceLabel}>Balance</Text>
+          <Text style={styles.balanceLabel}>{t('componentsUi.funding.balance')}</Text>
           <Text style={[styles.balanceValue, funded && styles.balanceGreen]}>
             {currentBalance} {funding.nativeSym}
           </Text>
@@ -156,13 +158,13 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
             >
               <View style={styles.optionHeader}>
                 <Gift size={18} color={color.success.base} strokeWidth={2} />
-                <Text style={styles.optionTitle}>Free Activation</Text>
-                <Text style={styles.optionBadge}>FREE</Text>
+                <Text style={styles.optionTitle}>{t('componentsUi.funding.freeTitle')}</Text>
+                <Text style={styles.optionBadge}>{t('componentsUi.funding.freeBadge')}</Text>
               </View>
               <View style={styles.optionDescRow}>
                 {requesting && <ActivityIndicator size="small" color={color.success.base} />}
                 <Text style={styles.optionDesc}>
-                  {requesting ? 'Requesting...' : 'Sponsored by Vela for new users'}
+                  {requesting ? t('componentsUi.funding.freeRequesting') : t('componentsUi.funding.freeDesc')}
                 </Text>
               </View>
             </Pressable>
@@ -173,16 +175,16 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
             >
               <View style={styles.optionHeader}>
                 <Fuel size={18} color={color.fg.muted} strokeWidth={2} />
-                <Text style={styles.optionTitle}>Self Activate</Text>
+                <Text style={styles.optionTitle}>{t('componentsUi.funding.selfTitle')}</Text>
                 <Text style={styles.optionAmount}>{activationAmount} {funding.nativeSym}</Text>
               </View>
               <Text style={styles.optionDesc}>
-                Send {funding.nativeSym} to activate the gas account
+                {t('componentsUi.funding.selfDesc', { symbol: funding.nativeSym })}
               </Text>
             </Pressable>
 
             <Pressable style={styles.cancelBtn} onPress={onCancel}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{t('componentsUi.funding.cancel')}</Text>
             </Pressable>
           </>
         )}
@@ -191,13 +193,13 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
           <>
             {denialReason && (
               <View style={styles.denialRow}>
-                <Text style={styles.denialText}>{denialText(denialReason)}</Text>
+                <Text style={styles.denialText}>{t(denialKey(denialReason), { defaultValue: denialKey(denialReason) })}</Text>
               </View>
             )}
 
             {/* Amount needed */}
             <VelaCard style={styles.amountCard}>
-              <Text style={styles.amountLabel}>Activation Fee</Text>
+              <Text style={styles.amountLabel}>{t('componentsUi.funding.activationFee')}</Text>
               <Text style={styles.amountValue}>
                 {activationAmount} {funding.nativeSym}
               </Text>
@@ -210,7 +212,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
 
             <Pressable style={styles.addressCard} onPress={copyAddress}>
               <View style={styles.addressRow}>
-                <Text style={styles.addressLabel}>Gas Account</Text>
+                <Text style={styles.addressLabel}>{t('componentsUi.funding.gasAccount')}</Text>
                 {copied ? (
                   <Check size={14} color={color.accent.base} strokeWidth={3} />
                 ) : (
@@ -229,12 +231,12 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
             >
               <RefreshCw size={16} color={color.accent.base} strokeWidth={2} />
               <Text style={styles.btnCheckText}>
-                {checking ? 'Checking...' : 'I\'ve Sent It'}
+                {checking ? t('componentsUi.funding.checkingBtn') : t('componentsUi.funding.checkBtn')}
               </Text>
             </Pressable>
 
             <Pressable style={styles.cancelBtn} onPress={onCancel}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>{t('componentsUi.funding.cancel')}</Text>
             </Pressable>
           </>
         )}
@@ -242,7 +244,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
         {funded && (
           <Pressable style={[styles.btn, styles.btnPrimary]} onPress={onFunded}>
             <Check size={18} color={color.fg.inverse} strokeWidth={2.5} />
-            <Text style={styles.btnPrimaryText}>Continue</Text>
+            <Text style={styles.btnPrimaryText}>{t('componentsUi.funding.continue')}</Text>
           </Pressable>
         )}
       </View>

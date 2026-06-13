@@ -1,0 +1,70 @@
+{
+  "onboarding": {
+    "welcome": {
+      "tagline": "Anahtarlarınız, paranız.\nTek dokunuş kadar basit.",
+      "createWallet": "Cüzdan Oluştur",
+      "alreadyHaveWallet": "Zaten bir cüzdanım var"
+    },
+    "settings": {
+      "title": "Ayarlar",
+      "sectionAppearance": "GÖRÜNÜM",
+      "themeLabelLight": "Açık",
+      "themeLabelDark": "Koyu",
+      "themeLabelAuto": "Otomatik",
+      "sectionPasskeyIndex": "PASSKEY DİZİNİ",
+      "passkeyHint": "Bu servis, cihazlar arası giriş için geçiş anahtarınızın açık anahtarını saklar. Vela Wallet, geçiş anahtarınızın özel anahtarına asla erişemez.",
+      "endpointUrlLabel": "Uç Nokta URL",
+      "resetToDefault": "Varsayılana Sıfırla",
+      "sectionDebug": "HATA AYIKLAMA",
+      "simulateFailure": "Uç Nokta Hatasını Simüle Et",
+      "warningText": "Passkey Dizini servisine ulaşılamıyor. Cüzdan oluşturma ve giriş için bu servis gereklidir. Lütfen aşağıda erişilebilir bir uç nokta yapılandırın."
+    },
+    "create": {
+      "headerDefault": "Cüzdan Oluştur",
+      "headerCreated": "Cüzdan Oluşturuldu",
+      "headerSyncFailed": "Cihazlar Arası Eşitleme",
+      "accountNameLabel": "Hesap Adı",
+      "accountNamePlaceholder": "Hesabınız için bir ad girin",
+      "accountNameHint": "Bu ad, cihazlar arası giriş için açık anahtarınızla birlikte zincir üzerinde saklanır.",
+      "ack0": "Bu, kendi kontrolünüzdeki bir cüzdandır. Geçiş anahtarınızın özel anahtarı cihazınızın parola yöneticisi (iCloud Keychain / Google Password Manager) tarafından yönetilir. Vela Wallet ona erişemez veya kurtaramaz.",
+      "ack1": "Cihazınızı kaybederseniz, iCloud veya Google hesabınız üzerinden yeni bir cihazda cüzdanınızı geri yükleyebilirsiniz.",
+      "ack2": "iCloud veya Google hesabınız ele geçirilirse cüzdan kontrolünüz de ele geçirilmiş olabilir. Güçlü bir parola ve 2FA ile koruyun.",
+      "ack3": "Şunları kabul ediyorum: ",
+      "ack3PrivacyPolicy": "Gizlilik Politikası",
+      "ack3And": " ve ",
+      "ack3Terms": "Hizmet Şartları",
+      "ack3Period": ".",
+      "createWalletBtn": "Cüzdan Oluştur",
+      "successTitle": "Cüzdanınız hazır!",
+      "successMessage": "Adresiniz desteklenen tüm {{count}} ağda çalışır.",
+      "verifyHint": "Cüzdanı kullanmadan önce kimliğinizin çalıştığını doğrulamak için aşağıya dokunun.",
+      "verifySignInBtn": "Doğrula ve Giriş Yap",
+      "syncFailedTitle": "Eşitleme başarısız",
+      "syncFailedMessage": "Cüzdan oluşturuldu ancak açık anahtarınız sunucuyla eşitlenmedi. Bu sorun çözülene kadar diğer cihazlarda giriş yapamazsınız.",
+      "syncFailedHint": "Ağınızı kontrol edin veya aşağıda özel bir uç nokta yapılandırın.",
+      "openSettings": "Ayarları Aç",
+      "retryUploadBtn": "Yüklemeyi Yeniden Dene",
+      "statusSyncingKey": "Açık anahtar eşitleniyor...",
+      "statusSettingUpIdentity": "Güvenli kimlik kuruluyor...",
+      "statusExtractingKey": "Açık anahtar çıkarılıyor...",
+      "statusComputingAddress": "Cüzdan adresi hesaplanıyor...",
+      "statusVerifyingIdentity": "Kimlik doğrulanıyor...",
+      "statusSetupCancelled": "Kurulum iptal edildi.",
+      "statusVerifyCancelled": "Doğrulama iptal edildi. Lütfen tekrar deneyin.",
+      "alertNotSupportedTitle": "Desteklenmiyor",
+      "alertNotSupportedBody": "Bu cihazda biyometrik kimlik doğrulama kullanılamıyor.",
+      "alertErrorTitle": "Hata"
+    },
+    "login": {
+      "alertNotSupportedTitle": "Desteklenmiyor",
+      "alertNotSupportedBody": "Bu cihazda biyometrik kimlik doğrulama kullanılamıyor.",
+      "alertIncompatibleTitle": "Cihaz Uyumlu Değil",
+      "alertIncompatibleBody": "Cihazınızın kimlik sağlayıcısı Vela Wallet ile uyumlu değil. Lütfen sistem ayarlarından Google Password Manager'a geçip tekrar deneyin.",
+      "alertNotFoundTitle": "Hesap Bulunamadı",
+      "alertNotFoundBody": "Bu kimlik için cüzdan bulunamadı.\n\nOlası nedenler:\n• Henüz bir cüzdan oluşturmadınız\n• Kimliğiniz bu cihazla eşitlenmedi (iCloud / Google ayarlarını kontrol edin)\n• Açık anahtar sunucusuna ulaşılamıyor\n\nYeni bir cüzdan oluşturmayı deneyin veya kimlik sağlayıcınızın (Face ID / parmak izi) cihazlar arasında eşitlendiğinden emin olun.",
+      "alertSignInFailedTitle": "Giriş Başarısız",
+      "alertSignInFailedBody": "{{message}}\n\nCihazınızda Face ID, Touch ID veya parmak izinin ayarlı olduğundan emin olup tekrar deneyin.",
+      "alertIncompatibleBodyCreate": "Cihazınızın kimlik sağlayıcısı bu cüzdanla uyumlu değil. Lütfen sistem ayarlarından Google Password Manager'a geçip tekrar deneyin."
+    }
+  }
+}

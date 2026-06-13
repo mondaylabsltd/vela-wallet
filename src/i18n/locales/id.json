@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "Batal",
+    "system": "Sistem",
+    "automatic": "Otomatis",
+    "error": "Kesalahan",
+    "somethingWrong": "Terjadi kesalahan",
+    "tryAgain": "Coba Lagi"
+  },
+  "language": {
+    "title": "Bahasa",
+    "pickerTitle": "Bahasa",
+    "pickerSubtitle": "Pilih bahasa yang digunakan di seluruh aplikasi.",
+    "followSystem": "Ikuti Sistem",
+    "english": "English",
+    "chinese": "简体中文"
+  },
+  "settings": {
+    "title": "Pengaturan",
+    "sections": {
+      "account": "Akun",
+      "appearance": "Tampilan",
+      "payments": "Pembayaran",
+      "localization": "Pelokalan",
+      "advanced": "Lanjutan",
+      "developer": "Developer"
+    },
+    "account": {
+      "switch": "Ganti akun"
+    },
+    "appearance": {
+      "themeLight": "Terang",
+      "themeDark": "Gelap",
+      "themeAuto": "Otomatis"
+    },
+    "payments": {
+      "voiceTitle": "Pengumuman suara",
+      "voiceSubtitle": "Bacakan pembayaran masuk dengan suara"
+    },
+    "localization": {
+      "autoExample": "Otomatis · {{example}}",
+      "numberTitle": "Format angka",
+      "numberSubtitle": "Cara nominal dikelompokkan dan tanda desimal yang ditampilkan.",
+      "dateTitle": "Format tanggal",
+      "dateSubtitle": "Urutan hari / bulan / tahun dan pemisahnya.",
+      "timeTitle": "Format waktu",
+      "timeSubtitle": "Format jam 12 atau 24."
+    },
+    "advanced": {
+      "networksTitle": "Jaringan",
+      "networksSubtitle": "URL RPC, Explorer & Bundler",
+      "addNetworkTitle": "Tambah Jaringan",
+      "addNetworkSubtitle": "Tambahkan jaringan EVM kustom",
+      "endpointsTitle": "Endpoint Layanan",
+      "endpointsSubtitle": "Data chain, indeks identitas, Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "Treasury",
+      "treasurySubtitle": "Lihat alamat & saldo treasury",
+      "clearSigningTitle": "Uji Clear Signing",
+      "clearSigningSubtitle": "Pratinjau UI penandatanganan ERC-7730"
+    },
+    "about": {
+      "title": "Tentang",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "Keluar",
+      "title": "Keluar",
+      "desc": "Data dompet Anda tetap tersimpan di perangkat ini. Masuk kembali kapan saja dengan passkey Anda (Face ID / sidik jari).",
+      "warning": "Kunci publik Anda belum disinkronkan ke server. Keluar sekarang dapat membuat pemulihan di perangkat lain gagal.",
+      "anyway": "Tetap Keluar",
+      "cancel": "Batal"
+    },
+    "formatNote": {
+      "system": "Sistem",
+      "indian": "India",
+      "h24": "24 jam",
+      "h12": "12 jam"
+    }
+  }
+}

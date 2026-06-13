@@ -1,0 +1,92 @@
+{
+  "componentsUi": {
+    "funding": {
+      "title": "Aktifkan Akun Gas",
+      "balance": "Saldo",
+      "freeTitle": "Aktivasi Gratis",
+      "freeBadge": "GRATIS",
+      "freeRequesting": "Meminta...",
+      "freeDesc": "Disponsori oleh Vela untuk pengguna baru",
+      "selfTitle": "Aktifkan Sendiri",
+      "selfDesc": "Kirim {{symbol}} untuk mengaktifkan akun gas",
+      "activationFee": "Biaya Aktivasi",
+      "gasAccount": "Akun Gas",
+      "checkBtn": "Sudah Saya Kirim",
+      "checkingBtn": "Memeriksa...",
+      "continue": "Lanjutkan",
+      "cancel": "Batal",
+      "denialDefault": "Aktivasi gratis tidak tersedia.",
+      "denialNonceExceeded": "Kuota gratis sudah habis.",
+      "denialTreasuryDepleted": "Dana gratis sementara kosong.",
+      "denialBalanceTooLow": "Saldo dompet terlalu rendah untuk memenuhi syarat.",
+      "denialNoPasskey": "Passkey diperlukan untuk aktivasi gratis.",
+      "denialRateLimited": "Terlalu banyak permintaan. Coba lagi nanti.",
+      "denialTransferFailed": "Transfer gagal. Coba lagi."
+    },
+    "signing": {
+      "loading": "Memuat...",
+      "signatureRequest": "Permintaan tanda tangan",
+      "signing": "Menandatangani...",
+      "signLabel": "Tanda Tangani",
+      "confirmLabel": "Konfirmasi",
+      "confirmIntentLabel": "Konfirmasi {{intent}}",
+      "approve": "Setujui",
+      "dismiss": "Tutup",
+      "reject": "Tolak",
+      "personalSignTag": "personal_sign · Tanpa biaya gas",
+      "unlimitedWarning": "Tanpa batas — kontrak ini dapat membelanjakan semua token Anda",
+      "blindTypedWarning": "Typed data ini tidak dapat dipecahkan dengan deskriptor yang dikenal. Tinjau dengan cermat.",
+      "blindDecodeWarning": "Tidak dapat memecahkan kode — tanpa deskriptor ERC-7730 ({{bytes}} byte)",
+      "rawCalldataToggle": "Calldata mentah · {{bytes}} byte",
+      "signMessage": "Tanda Tangani Pesan",
+      "signTypedData": "Tanda Tangani Typed Data",
+      "spenderLabel": "Spender",
+      "recipientLabel": "Penerima",
+      "interactingLabel": "Berinteraksi dengan",
+      "unverifiedLabel": "Kontrak belum diverifikasi",
+      "typeLabel": "Tipe",
+      "intentUnknown": "Tidak dikenal",
+      "intentSend": "Kirim",
+      "signingFor": "Menandatangani untuk"
+    },
+    "currency": {
+      "title": "Mata uang tampilan",
+      "searchPlaceholder": "Cari mata uang",
+      "noMatch": "Tidak ada mata uang yang cocok dengan \"{{query}}\"."
+    },
+    "scanner": {
+      "title": "Pindai QR",
+      "hint": "Arahkan kamera ke kode QR",
+      "permissionText": "Akses kamera diperlukan untuk memindai kode QR.",
+      "grantPermission": "Berikan Izin",
+      "noQrFound": "QR Tidak Ditemukan",
+      "noQrFoundMsg": "Tidak dapat menemukan kode QR di gambar yang dipilih.",
+      "error": "Kesalahan",
+      "errorImage": "Gagal memproses gambar.",
+      "errorPicker": "Gagal membuka pemilih gambar."
+    },
+    "gas": {
+      "estFee": "Est. Biaya",
+      "gasPrice": "Harga Gas",
+      "gasPriceUserOp": "Harga Gas (UserOp)",
+      "gasLimit": "Batas Gas",
+      "walletDeployed": "Dompet Terdeploy",
+      "deployedYes": "Ya",
+      "deployedNo": "Belum (tx pertama)"
+    },
+    "dock": {
+      "receive": "Terima",
+      "send": "Kirim"
+    },
+    "networkFilter": {
+      "selectChain": "Pilih Chain",
+      "searchChains": "Cari chain",
+      "allNetworks": "Semua Jaringan",
+      "showEvery": "Tampilkan semua chain"
+    },
+    "chart": {
+      "noDataFor": "Tidak ada data untuk {{label}}",
+      "tapHint": "Ketuk sebuah batang untuk melihat saldo"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "componentsTx": {
+    "receipt": {
+      "title": "Bukti Transaksi",
+      "canvasTitle": "BUKTI TRANSAKSI",
+      "from": "Dari",
+      "to": "Ke",
+      "network": "Jaringan",
+      "time": "Waktu",
+      "txHash": "Tx Hash",
+      "scanHint": "Pindai untuk melihat di explorer",
+      "footerBrand": "VELA WALLET",
+      "footerUrl": "getvela.app",
+      "explorer": "Explorer",
+      "share": "Bagikan",
+      "done": "Selesai",
+      "copiedTitle": "Disalin",
+      "copiedImageBody": "Gambar bukti transaksi disalin ke clipboard.",
+      "copiedLinkBody": "Tautan explorer disalin."
+    },
+    "detail": {
+      "received": "Diterima",
+      "sent": "Dikirim",
+      "from": "Dari",
+      "to": "Ke",
+      "sectionTitle": "Detail Transaksi",
+      "labelDate": "Tanggal",
+      "labelStatus": "Status",
+      "labelFrom": "Dari",
+      "labelTo": "Ke",
+      "labelOperation": "Operasi",
+      "labelChain": "Chain",
+      "labelHash": "Hash",
+      "statusFailed": "Gagal",
+      "statusSucceeded": "Berhasil",
+      "opContractInteraction": "Interaksi kontrak",
+      "opSignature": "Tanda tangan",
+      "opTypedDataSignature": "Tanda tangan typed data",
+      "opTransfer": "Transfer"
+    }
+  }
+}

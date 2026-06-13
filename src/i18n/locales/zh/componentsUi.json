@@ -1,0 +1,92 @@
+{
+  "componentsUi": {
+    "funding": {
+      "title": "激活 Gas 账户",
+      "balance": "余额",
+      "freeTitle": "免费激活",
+      "freeBadge": "免费",
+      "freeRequesting": "请求中...",
+      "freeDesc": "由 Vela 为新用户赞助",
+      "selfTitle": "自行激活",
+      "selfDesc": "发送{{symbol}}以激活 Gas 账户",
+      "activationFee": "激活费用",
+      "gasAccount": "Gas 账户",
+      "checkBtn": "我已发送",
+      "checkingBtn": "检查中...",
+      "continue": "继续",
+      "cancel": "取消",
+      "denialDefault": "免费激活不可用。",
+      "denialNonceExceeded": "免费额度已用完。",
+      "denialTreasuryDepleted": "免费资金暂时为空。",
+      "denialBalanceTooLow": "钱包余额不足，不符合资格。",
+      "denialNoPasskey": "免费激活需要 Passkey。",
+      "denialRateLimited": "请求次数过多，请稍后重试。",
+      "denialTransferFailed": "转账失败，请重试。"
+    },
+    "signing": {
+      "loading": "加载中...",
+      "signatureRequest": "签名请求",
+      "signing": "签名中...",
+      "signLabel": "签名",
+      "confirmLabel": "确认",
+      "confirmIntentLabel": "确认{{intent}}",
+      "approve": "批准",
+      "dismiss": "关闭",
+      "reject": "拒绝",
+      "personalSignTag": "personal_sign · 无 Gas 费用",
+      "unlimitedWarning": "无限额 — 该合约可花费您所有代币",
+      "blindTypedWarning": "此类型数据无法通过已知描述符解码，请仔细审查。",
+      "blindDecodeWarning": "无法解码 — 无 ERC-7730 描述符（{{bytes}}字节）",
+      "rawCalldataToggle": "原始调用数据 · {{bytes}}字节",
+      "signMessage": "签名消息",
+      "signTypedData": "签名类型数据",
+      "spenderLabel": "支出方",
+      "recipientLabel": "接收方",
+      "interactingLabel": "交互合约",
+      "unverifiedLabel": "未验证合约",
+      "typeLabel": "类型",
+      "intentUnknown": "未知",
+      "intentSend": "发送",
+      "signingFor": "签名给"
+    },
+    "currency": {
+      "title": "显示货币",
+      "searchPlaceholder": "搜索货币",
+      "noMatch": "没有符合\"{{query}}\"的货币。"
+    },
+    "scanner": {
+      "title": "扫描二维码",
+      "hint": "将相机对准二维码",
+      "permissionText": "需要相机权限才能扫描二维码。",
+      "grantPermission": "授予权限",
+      "noQrFound": "未找到二维码",
+      "noQrFoundMsg": "在所选图片中未找到二维码。",
+      "error": "错误",
+      "errorImage": "处理图片失败。",
+      "errorPicker": "打开图片选择器失败。"
+    },
+    "gas": {
+      "estFee": "预估费用",
+      "gasPrice": "Gas 价格",
+      "gasPriceUserOp": "Gas 价格 (UserOp)",
+      "gasLimit": "Gas 上限",
+      "walletDeployed": "钱包已部署",
+      "deployedYes": "是",
+      "deployedNo": "否（首次交易）"
+    },
+    "dock": {
+      "receive": "接收",
+      "send": "发送"
+    },
+    "networkFilter": {
+      "selectChain": "选择链",
+      "searchChains": "搜索链",
+      "allNetworks": "所有网络",
+      "showEvery": "显示所有链"
+    },
+    "chart": {
+      "noDataFor": "{{label}} 暂无数据",
+      "tapHint": "点击柱状图查看余额"
+    }
+  }
+}

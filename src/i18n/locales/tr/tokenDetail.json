@@ -1,0 +1,15 @@
+{
+  "tokenDetail": {
+    "chartTitle": "7 Günlük Bakiye",
+    "chartEmpty": "Geçmiş veri bulunmuyor",
+    "send": "Gönder",
+    "receive": "Al",
+    "labelName": "Ad",
+    "labelContract": "Sözleşme",
+    "labelDecimals": "Ondalık",
+    "labelPrice": "Fiyat",
+    "priceValue": "1 {{symbol}} = {{value}}",
+    "labelTransactions": "İşlemler",
+    "viewOnExplorer": "Gezginde Görüntüle"
+  }
+}

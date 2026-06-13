@@ -1,0 +1,69 @@
+{
+  "settingsModals": {
+    "network": {
+      "modalTitle": "ネットワーク",
+      "chainId": "チェーン {{chainId}}",
+      "fieldRpcUrl": "RPC URL",
+      "fieldExplorer": "エクスプローラー",
+      "fieldBundler": "BUNDLER",
+      "removeTitle": "ネットワークを削除",
+      "removeBody": "このカスタムネットワークを削除しますか？",
+      "removeCancel": "キャンセル",
+      "removeConfirm": "削除"
+    },
+    "account": {
+      "modalTitle": "アカウント",
+      "total": "合計 {{amount}}",
+      "createNew": "新しいアカウントを作成",
+      "signInExisting": "既存のアカウントでサインイン"
+    },
+    "endpoints": {
+      "modalTitle": "サービスエンドポイント",
+      "description": "これらのサービスがウォレットを支えています。\n完全なセルフカストディのために、自分のインスタンスをデプロイすることもできます。",
+      "chainDataLabel": "チェーンデータインデックス",
+      "chainDataHint": "ネットワーク情報、トークンデータ、チェーンのロゴを提供します",
+      "passkeyLabel": "パスキーインデックス",
+      "passkeyHint": "端末をまたいだサインインのためにパスキーの公開鍵を保存します",
+      "bundlerLabel": "BUNDLER サービス",
+      "bundlerHint": "Vela Bundler 互換のエンドポイントが必要です",
+      "fiatLabel": "法定通貨レート",
+      "fiatHint": "USD ベースのレート（{rates:{…}}）。通貨リストの元になります — より広いカバレッジが必要な場合は差し替えてください",
+      "resetToDefaults": "デフォルトに戻す"
+    },
+    "addNetwork": {
+      "modalTitle": "ネットワークを追加",
+      "description": "ネットワーク名、トークンシンボル、またはチェーン ID で検索します。",
+      "searchPlaceholder": "例: Gnosis、ACE、648...",
+      "chainMeta": "チェーン {{chainId}} · {{symbol}}",
+      "searching": "検索中...",
+      "checkingCompatibility": "互換性を確認中...",
+      "customRpcTitle": "カスタム RPC（任意）",
+      "customRpcPlaceholder": "https://your-rpc-url...",
+      "recheckWithRpc": "この RPC で再確認",
+      "bestRpc": "最速の RPC: {{latencyMs}}ms",
+      "compatibilityCheck": "互換性チェック",
+      "unableToVerify": "確認できません — RPC リクエストに失敗しました",
+      "retry": "再試行",
+      "addNetworkBtn": "ネットワークを追加",
+      "incompatibleHint": "このチェーンには必要なコントラクトの一部がまだデプロイされていません。\nVela Wallet のチェーンセットアップツールでデプロイしてから、戻って再確認してください。",
+      "openChainSetupTool": "チェーンセットアップツールを開く",
+      "recheck": "再確認",
+      "chainIdLabel": "チェーン ID: {{chainId}}",
+      "nativeLabel": "ネイティブ: {{symbol}}",
+      "testnet": "テストネット"
+    },
+    "treasury": {
+      "modalTitle": "Treasury",
+      "addressLabel": "アドレス（全ネットワーク共通）",
+      "balancesLabel": "残高",
+      "minBalance": "最小 {{amount}}",
+      "unreachable": "Bundler に接続できませんでした",
+      "close": "閉じる"
+    },
+    "health": {
+      "offline": "オフライン",
+      "httpsRequired": "HTTPS が必要です",
+      "invalid": "無効"
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "キャンセル",
+    "system": "システム",
+    "automatic": "自動",
+    "error": "エラー",
+    "somethingWrong": "問題が発生しました",
+    "tryAgain": "再試行"
+  },
+  "language": {
+    "title": "言語",
+    "pickerTitle": "言語",
+    "pickerSubtitle": "アプリ全体で使用する言語を選択します。",
+    "followSystem": "システムに合わせる",
+    "english": "English",
+    "chinese": "简体中文"
+  },
+  "settings": {
+    "title": "設定",
+    "sections": {
+      "account": "アカウント",
+      "appearance": "外観",
+      "payments": "支払い",
+      "localization": "地域と言語",
+      "advanced": "詳細設定",
+      "developer": "開発者向け"
+    },
+    "account": {
+      "switch": "アカウントを切り替える"
+    },
+    "appearance": {
+      "themeLight": "ライト",
+      "themeDark": "ダーク",
+      "themeAuto": "自動"
+    },
+    "payments": {
+      "voiceTitle": "音声アナウンス",
+      "voiceSubtitle": "入金を音声で読み上げます"
+    },
+    "localization": {
+      "autoExample": "自動 · {{example}}",
+      "numberTitle": "数値の形式",
+      "numberSubtitle": "金額の桁区切りと小数点の表示方法です。",
+      "dateTitle": "日付の形式",
+      "dateSubtitle": "年・月・日の順序と区切り文字です。",
+      "timeTitle": "時刻の形式",
+      "timeSubtitle": "12時間制または24時間制です。"
+    },
+    "advanced": {
+      "networksTitle": "ネットワーク",
+      "networksSubtitle": "RPC・エクスプローラー・Bundler の URL",
+      "addNetworkTitle": "ネットワークを追加",
+      "addNetworkSubtitle": "カスタム EVM ネットワークを追加",
+      "endpointsTitle": "サービスエンドポイント",
+      "endpointsSubtitle": "チェーンデータ、ID インデックス、Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "Treasury",
+      "treasurySubtitle": "Treasury のアドレスと残高を表示",
+      "clearSigningTitle": "Clear Signing テスト",
+      "clearSigningSubtitle": "ERC-7730 署名 UI のプレビュー"
+    },
+    "about": {
+      "title": "このアプリについて",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "サインアウト",
+      "title": "サインアウト",
+      "desc": "ウォレットのデータはこの端末に保存されたままです。パスキー（Face ID／指紋）でいつでも再びサインインできます。",
+      "warning": "公開鍵がまだサーバーに同期されていません。今サインアウトすると、他の端末で復元できなくなる可能性があります。",
+      "anyway": "それでもサインアウト",
+      "cancel": "キャンセル"
+    },
+    "formatNote": {
+      "system": "システム",
+      "indian": "インド式",
+      "h24": "24時間制",
+      "h12": "12時間制"
+    }
+  }
+}

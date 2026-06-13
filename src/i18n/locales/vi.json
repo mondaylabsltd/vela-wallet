@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "Hủy",
+    "system": "Hệ thống",
+    "automatic": "Tự động",
+    "error": "Lỗi",
+    "somethingWrong": "Đã xảy ra sự cố",
+    "tryAgain": "Thử lại"
+  },
+  "language": {
+    "title": "Ngôn ngữ",
+    "pickerTitle": "Ngôn ngữ",
+    "pickerSubtitle": "Chọn ngôn ngữ dùng trong toàn bộ ứng dụng.",
+    "followSystem": "Theo hệ thống",
+    "english": "English",
+    "chinese": "简体中文"
+  },
+  "settings": {
+    "title": "Cài đặt",
+    "sections": {
+      "account": "Tài khoản",
+      "appearance": "Giao diện",
+      "payments": "Thanh toán",
+      "localization": "Bản địa hóa",
+      "advanced": "Nâng cao",
+      "developer": "Nhà phát triển"
+    },
+    "account": {
+      "switch": "Chuyển tài khoản"
+    },
+    "appearance": {
+      "themeLight": "Sáng",
+      "themeDark": "Tối",
+      "themeAuto": "Tự động"
+    },
+    "payments": {
+      "voiceTitle": "Thông báo bằng giọng nói",
+      "voiceSubtitle": "Đọc to các khoản thanh toán nhận được"
+    },
+    "localization": {
+      "autoExample": "Tự động · {{example}}",
+      "numberTitle": "Định dạng số",
+      "numberSubtitle": "Cách nhóm chữ số và dấu thập phân hiển thị.",
+      "dateTitle": "Định dạng ngày",
+      "dateSubtitle": "Thứ tự ngày / tháng / năm và dấu phân cách.",
+      "timeTitle": "Định dạng giờ",
+      "timeSubtitle": "Đồng hồ 12 giờ hoặc 24 giờ."
+    },
+    "advanced": {
+      "networksTitle": "Mạng lưới",
+      "networksSubtitle": "URL của RPC, Explorer và Bundler",
+      "addNetworkTitle": "Thêm mạng",
+      "addNetworkSubtitle": "Thêm mạng EVM tùy chỉnh",
+      "endpointsTitle": "Điểm cuối dịch vụ",
+      "endpointsSubtitle": "Dữ liệu chain, chỉ mục danh tính, Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "Ngân quỹ",
+      "treasurySubtitle": "Xem địa chỉ và số dư ngân quỹ",
+      "clearSigningTitle": "Kiểm thử Clear Signing",
+      "clearSigningSubtitle": "Xem trước giao diện ký ERC-7730"
+    },
+    "about": {
+      "title": "Giới thiệu",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "Đăng xuất",
+      "title": "Đăng xuất",
+      "desc": "Dữ liệu ví của bạn vẫn ở trên thiết bị này. Bạn có thể đăng nhập lại bất cứ lúc nào bằng passkey (Face ID / vân tay).",
+      "warning": "Khóa công khai của bạn chưa được đồng bộ lên máy chủ. Đăng xuất ngay bây giờ có thể khiến bạn không khôi phục được ví trên các thiết bị khác.",
+      "anyway": "Vẫn đăng xuất",
+      "cancel": "Hủy"
+    },
+    "formatNote": {
+      "system": "Hệ thống",
+      "indian": "Ấn Độ",
+      "h24": "24 giờ",
+      "h12": "12 giờ"
+    }
+  }
+}

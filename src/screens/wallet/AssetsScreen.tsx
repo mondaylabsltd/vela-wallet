@@ -2,8 +2,12 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { TokenRow } from '@/components/ui/TokenRow';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { AppModal } from '@/components/ui/AppModal';
+import { AmountText } from '@/components/ui/AmountText';
+import { useDisplayCurrency } from '@/hooks/use-display-currency';
+import { shouldShowDecimals } from '@/services/currency';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, motion, radius, shadow, space, text } from '@/constants/theme';
+import { useTranslation } from 'react-i18next';
 import { chainName, getAllNetworksSync } from '@/models/network';
 import type { Network } from '@/models/network';
 import { formatBalance, shortAddr, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
@@ -24,7 +28,6 @@ import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, Search, X, AlertTriangle,
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
-  useAnimatedProps,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -35,99 +38,6 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
-
-const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
-
-/**
- * Smoothly animates between USD values instead of snapping.
- * Uses Reanimated's useAnimatedProps to drive a TextInput on the UI thread.
- * On web, useAnimatedProps can't set `text` on inputs, so we fall back to plain Text.
- */
-function AnimatedBalance({ value }: { value: number }) {
-  const fontSize = balanceFontSize(value);
-
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.balanceRow}>
-        <Text style={[styles.balanceInt, { fontSize }]}>{formatUsdInt(value)}</Text>
-        <Text style={[styles.balanceDec, { fontSize: fontSize * 0.58 }]}>{formatUsdDec(value)}</Text>
-      </View>
-    );
-  }
-
-  return <AnimatedBalanceNative value={value} fontSize={fontSize} />;
-}
-
-function AnimatedBalanceNative({ value, fontSize }: { value: number; fontSize: number }) {
-  const displayed = useSharedValue(value);
-
-  useEffect(() => {
-    displayed.value = withTiming(value, {
-      duration: 800,
-      easing: Easing.out(Easing.quad),
-    });
-  }, [value, displayed]);
-
-  const intProps = useAnimatedProps(() => {
-    'worklet';
-    const v = displayed.value;
-    const full = '$' + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const dot = full.indexOf('.');
-    return { text: dot === -1 ? full : full.slice(0, dot) } as any;
-  });
-
-  const decProps = useAnimatedProps(() => {
-    'worklet';
-    const v = displayed.value;
-    const full = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const dot = full.indexOf('.');
-    return { text: dot === -1 ? '.00' : full.slice(full.indexOf('.')) } as any;
-  });
-
-  return (
-    <View style={styles.balanceRow}>
-      <AnimatedTextInput
-        editable={false}
-        underlineColorAndroid="transparent"
-        style={[styles.balanceInt, { fontSize }]}
-        animatedProps={intProps}
-        defaultValue={formatUsdInt(value)}
-      />
-      <AnimatedTextInput
-        editable={false}
-        underlineColorAndroid="transparent"
-        style={[styles.balanceDec, { fontSize: fontSize * 0.58 }]}
-        animatedProps={decProps}
-        defaultValue={formatUsdDec(value)}
-      />
-    </View>
-  );
-}
-
-function formatUsd(value: number): string {
-  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatUsdInt(value: number): string {
-  const full = formatUsd(value);
-  const dot = full.indexOf('.');
-  return dot === -1 ? full : full.slice(0, dot);
-}
-
-function formatUsdDec(value: number): string {
-  const full = formatUsd(value);
-  const dot = full.indexOf('.');
-  return dot === -1 ? '.00' : full.slice(dot);
-}
-
-function balanceFontSize(usd: number): number {
-  const len = formatUsdInt(usd).length;
-  if (len <= 7) return 36;
-  if (len <= 9) return 30;
-  if (len <= 12) return 26;
-  if (len <= 15) return 22;
-  return 18;
-}
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -154,8 +64,10 @@ function ActionButton({ label, icon: Icon, onPress, accent }: { label: string; i
 
 export default function AssetsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { activeAccount, state, dispatch } = useWallet();
   const { connectToWalletPair, connectToBridge } = useDAppConnection();
+  const dc = useDisplayCurrency();
 
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [allTokens, setAllTokens] = useState<APIToken[]>([]);
@@ -235,7 +147,7 @@ export default function AssetsScreen() {
       setAccountBalance(address, usd);
     } catch (err) {
       if (!silent) {
-        showAlert('Error', 'Failed to load token balances.');
+        showAlert(t('assets.errorTitle'), t('assets.errorLoadBalances'));
       }
     } finally {
       loadInFlightRef.current = false;
@@ -336,7 +248,7 @@ export default function AssetsScreen() {
       setRpcFixChainId(null);
       loadTokens(true, true);
     } catch {
-      showAlert('Error', 'Failed to save RPC URL.');
+      showAlert(t('assets.errorTitle'), t('assets.errorSaveRpc'));
     } finally {
       setRpcFixSaving(false);
     }
@@ -426,25 +338,34 @@ export default function AssetsScreen() {
         delayLongPress={500}
       >
         <Animated.View style={styles.balanceSection} entering={fadeInDown(100, 500)}>
-          <AnimatedBalance value={debugBalance ?? totalUsd} />
+          <AmountText
+            value={(debugBalance ?? totalUsd) * dc.rate}
+            symbol={dc.symbol}
+            size={36}
+            minScale={0.5}
+            showDecimals={shouldShowDecimals((debugBalance ?? totalUsd) * dc.rate, dc.code)}
+            style={[styles.balanceInt, { textAlign: 'center' }]}
+            tailStyle={styles.balanceDec}
+            containerStyle={styles.balanceBox}
+          />
         </Animated.View>
       </Pressable>
 
       {/* Action buttons */}
       <Animated.View style={styles.actionRow} entering={fadeInDown(200, 400)}>
-        <ActionButton label="Send" icon={ArrowUp} onPress={() => router.push('/send')} accent />
-        <ActionButton label="Receive" icon={ArrowDown} onPress={() => router.push('/receive')} />
-        <ActionButton label="History" icon={Clock} onPress={() => router.push('/history')} />
+        <ActionButton label={t('assets.actionSend')} icon={ArrowUp} onPress={() => router.push('/send')} accent />
+        <ActionButton label={t('assets.actionReceive')} icon={ArrowDown} onPress={() => router.push('/receive')} />
+        <ActionButton label={t('assets.actionHistory')} icon={Clock} onPress={() => router.push('/history')} />
       </Animated.View>
 
       {/* Token list header */}
       <View style={styles.tokenListHeader}>
         <View style={styles.tokenListTitleRow}>
-          <Text style={styles.tokenListTitle}>Assets</Text>
+          <Text style={styles.tokenListTitle}>{t('assets.sectionTitle')}</Text>
           {hiddenCount > 0 && (
             <Pressable onPress={() => setShowZeroBalance(!showZeroBalance)} hitSlop={8}>
               <Text style={styles.hiddenCount}>
-                {showZeroBalance ? 'Hide zero' : `${hiddenCount} hidden`}
+                {showZeroBalance ? t('assets.hideZero') : t('assets.hiddenCount', { count: hiddenCount })}
               </Text>
             </Pressable>
           )}
@@ -467,7 +388,7 @@ export default function AssetsScreen() {
             hitSlop={8}
           >
             <Plus size={14} color={color.accent.base} strokeWidth={2.5} />
-            <Text style={styles.addTokenText}>Add</Text>
+            <Text style={styles.addTokenText}>{t('assets.addToken')}</Text>
           </Pressable>
         </View>
       </View>
@@ -477,7 +398,7 @@ export default function AssetsScreen() {
         <Search size={14} color={color.fg.subtle} strokeWidth={2} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search tokens..."
+          placeholder={t('assets.searchPlaceholder')}
           placeholderTextColor={color.fg.subtle}
           value={tokenSearch}
           onChangeText={setTokenSearch}
@@ -493,8 +414,8 @@ export default function AssetsScreen() {
           <View style={styles.rpcBannerContent}>
             <Text style={styles.rpcBannerText}>
               {failedNetworks.length === 1
-                ? `${failedNetworks[0].displayName} RPC unavailable`
-                : `${failedNetworks.length} networks RPC unavailable`}
+                ? t('assets.rpcUnavailableSingle', { name: failedNetworks[0].displayName })
+                : t('assets.rpcUnavailableMultiple', { count: failedNetworks.length })}
             </Text>
             <View style={styles.rpcBannerChips}>
               {failedNetworks.map(net => (
@@ -505,7 +426,7 @@ export default function AssetsScreen() {
                 >
                   <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />
                   <Text style={styles.rpcBannerChipText}>{net.displayName}</Text>
-                  <Text style={styles.rpcBannerFixLink}>Fix</Text>
+                  <Text style={styles.rpcBannerFixLink}>{t('assets.rpcFix')}</Text>
                 </Pressable>
               ))}
             </View>
@@ -523,9 +444,9 @@ export default function AssetsScreen() {
           <View style={styles.emptyIconWrap}>
             <ArrowDown size={22} color={color.accent.base} strokeWidth={2.5} />
           </View>
-          <Text style={styles.emptyTitle}>Deposit your first asset</Text>
+          <Text style={styles.emptyTitle}>{t('assets.emptyTitle')}</Text>
           <Text style={styles.emptySubtext}>
-            Tap here to see your address and receive tokens
+            {t('assets.emptySubtext')}
           </Text>
         </VelaCard>
       </Pressable>
@@ -558,7 +479,7 @@ export default function AssetsScreen() {
             chainLabel={chainName(tokenChainId(item))}
             logoUrls={tokenLogoURLs(item)}
             balance={formatBalance(tokenBalanceDouble(item))}
-            usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
+            usdValue={tokenUsdValue(item) > 0 ? dc.fmt(tokenUsdValue(item)) : undefined}
             onPress={() => navigateToToken(item)}
             index={index}
           />
@@ -584,10 +505,10 @@ export default function AssetsScreen() {
         <View style={styles.switcherContainer}>
           <View style={styles.switcherHeader}>
             <View>
-              <Text style={styles.switcherTitle}>Switch Account</Text>
+              <Text style={styles.switcherTitle}>{t('assets.switcherTitle')}</Text>
               {cachedBalances.size > 0 && (
                 <Text style={styles.switcherTotal}>
-                  Total {formatUsd([...cachedBalances.values()].reduce((s, v) => s + v, 0))}
+                  {t('assets.switcherTotal', { amount: dc.fmt([...cachedBalances.values()].reduce((s, v) => s + v, 0)) })}
                 </Text>
               )}
             </View>
@@ -625,7 +546,7 @@ export default function AssetsScreen() {
                     <Text style={styles.switcherAddr}>{shortAddress(account.address)}</Text>
                   </View>
                   <View style={styles.switcherRight}>
-                    {bal != null && <Text style={styles.switcherBal}>{formatUsd(bal)}</Text>}
+                    {bal != null && <Text style={styles.switcherBal}>{dc.fmt(bal)}</Text>}
                     {isActive && <Check size={18} color={color.accent.base} />}
                   </View>
                 </Pressable>
@@ -643,7 +564,7 @@ export default function AssetsScreen() {
           return (
             <View style={styles.rpcFixContainer}>
               <View style={styles.rpcFixHeader}>
-                <Text style={styles.rpcFixTitle}>Fix RPC</Text>
+                <Text style={styles.rpcFixTitle}>{t('assets.rpcFixTitle')}</Text>
                 <Pressable onPress={() => setRpcFixChainId(null)} hitSlop={8}>
                   <X size={22} color={color.fg.base} strokeWidth={2} />
                 </Pressable>
@@ -653,19 +574,19 @@ export default function AssetsScreen() {
                 <View style={styles.rpcFixChainRow}>
                   {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={32} />}
                   <View>
-                    <Text style={styles.rpcFixChainName}>{net?.displayName ?? `Chain ${rpcFixChainId}`}</Text>
-                    <Text style={styles.rpcFixChainSub}>Chain ID: {rpcFixChainId}</Text>
+                    <Text style={styles.rpcFixChainName}>{net?.displayName ?? t('assets.chainFallback', { chainId: rpcFixChainId })}</Text>
+                    <Text style={styles.rpcFixChainSub}>{t('assets.rpcFixChainId', { chainId: rpcFixChainId })}</Text>
                   </View>
                 </View>
 
                 <View style={styles.rpcFixWarning}>
                   <Wifi size={14} color={'#C07A0A'} strokeWidth={2.5} />
                   <Text style={styles.rpcFixWarningText}>
-                    All RPC endpoints for this network are failing. Enter a working RPC URL to restore connectivity.
+                    {t('assets.rpcFixWarning')}
                   </Text>
                 </View>
 
-                <Text style={styles.rpcFixLabel}>RPC URL</Text>
+                <Text style={styles.rpcFixLabel}>{t('assets.rpcFixLabel')}</Text>
                 <TextInput
                   style={styles.rpcFixInput}
                   value={rpcFixUrl}
@@ -685,7 +606,7 @@ export default function AssetsScreen() {
                   {rpcFixSaving ? (
                     <ActivityIndicator size={16} color={color.fg.inverse} />
                   ) : (
-                    <Text style={styles.rpcFixBtnText}>Save & Retry</Text>
+                    <Text style={styles.rpcFixBtnText}>{t('assets.rpcFixSaveBtn')}</Text>
                   )}
                 </Pressable>
               </View>
@@ -711,7 +632,7 @@ export default function AssetsScreen() {
                 connectToBridge(bridgeSession);
                 router.push('/connect');
               } else {
-                showAlert('Invalid QR', 'Please scan a valid Ethereum address or connection URI.');
+                showAlert(t('assets.invalidQrTitle'), t('assets.invalidQrMessage'));
               }
             }
           }}
@@ -787,6 +708,9 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'center',
+  },
+  balanceBox: {
+    width: '100%',
   },
   balanceInt: {
     fontSize: 36,

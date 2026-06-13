@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Keyboard } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
@@ -29,16 +30,18 @@ interface Props {
   onOpenSettings?: () => void;
 }
 
-const ACKNOWLEDGMENTS = [
-  'This is a self-custodial wallet. Your passkey private key is managed by your device\'s password manager (iCloud Keychain / Google Password Manager). Vela Wallet cannot access or recover it.',
-  'If you lose your device, you can restore your wallet on a new device through your iCloud or Google account.',
-  'If your iCloud or Google account is compromised, your wallet control may also be compromised. Protect it with a strong password and 2FA.',
-  'I agree to the Privacy Policy and Terms of Service.',
+// Stable label keys for the acknowledgment checklist; t() is called inside the component.
+const ACKNOWLEDGMENT_KEYS = [
+  'onboarding.create.ack0',
+  'onboarding.create.ack1',
+  'onboarding.create.ack2',
+  'onboarding.create.ack3', // last item is rendered with inline links — handled specially in JSX
 ] as const;
 
 export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
-  const [checks, setChecks] = useState<boolean[]>(ACKNOWLEDGMENTS.map(() => false));
+  const [checks, setChecks] = useState<boolean[]>(ACKNOWLEDGMENT_KEYS.map(() => false));
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
   const [uploadFailed, setUploadFailed] = useState(false);
@@ -60,7 +63,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
     name: string;
   }): Promise<boolean> {
     try {
-      setStatus('Syncing public key...');
+      setStatus(t('onboarding.create.statusSyncingKey'));
       await uploadPublicKey(params);
       return true;
     } catch (err) {
@@ -80,15 +83,15 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
     try {
       const supported = await Passkey.isSupported();
       if (!supported) {
-        showAlert('Not Supported', 'Biometric authentication is not available on this device.');
+        showAlert(t('onboarding.create.alertNotSupportedTitle'), t('onboarding.create.alertNotSupportedBody'));
         setLoading(false);
         return;
       }
 
-      setStatus('Setting up secure identity...');
+      setStatus(t('onboarding.create.statusSettingUpIdentity'));
       const registration = await Passkey.register(trimmed);
 
-      setStatus('Extracting public key...');
+      setStatus(t('onboarding.create.statusExtractingKey'));
       const attestationBytes = fromHex(registration.attestationObjectHex);
       const pubKey = extractPublicKey(attestationBytes);
       if (!pubKey) {
@@ -96,7 +99,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
       }
       const publicKeyHex = '04' + toHex(pubKey.x) + toHex(pubKey.y);
 
-      setStatus('Computing wallet address...');
+      setStatus(t('onboarding.create.statusComputingAddress'));
       const address = computeAddress(publicKeyHex);
 
       const account: StoredAccount = {
@@ -133,9 +136,9 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
 
     } catch (error) {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
-        setStatus('Setup was cancelled.');
+        setStatus(t('onboarding.create.statusSetupCancelled'));
       } else {
-        showAlert('Error', error instanceof Error ? error.message : String(error));
+        showAlert(t('onboarding.create.alertErrorTitle'), error instanceof Error ? error.message : String(error));
       }
       setLoading(false);
     }
@@ -164,7 +167,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
     const pending = pendingRef.current;
     if (!pending || loading) return;
     setLoading(true);
-    setStatus('Verifying identity...');
+    setStatus(t('onboarding.create.statusVerifyingIdentity'));
 
     try {
       const testChallenge = toHex(new TextEncoder().encode('vela-verify-' + Date.now()));
@@ -173,8 +176,8 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
 
       if (!compat.ok) {
         showAlert(
-          'Device Not Compatible',
-          'Your device\'s identity provider is not compatible with this wallet. Please switch to Google Password Manager in system settings and try again.',
+          t('onboarding.login.alertIncompatibleTitle'),
+          t('onboarding.login.alertIncompatibleBodyCreate'),
         );
         setLoading(false);
         setStatus('');
@@ -186,9 +189,9 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
       router.replace('/(tabs)/wallet');
     } catch (error) {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
-        setStatus('Verification was cancelled. Please try again.');
+        setStatus(t('onboarding.create.statusVerifyCancelled'));
       } else {
-        showAlert('Error', error instanceof Error ? error.message : String(error));
+        showAlert(t('onboarding.create.alertErrorTitle'), error instanceof Error ? error.message : String(error));
         setStatus('');
       }
       setLoading(false);
@@ -205,7 +208,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
           </Pressable>
         )}
         <Text style={styles.title}>
-          {created ? 'Wallet Created' : uploadFailed ? 'Cross-Device Sync' : 'Create Wallet'}
+          {created ? t('onboarding.create.headerCreated') : uploadFailed ? t('onboarding.create.headerSyncFailed') : t('onboarding.create.headerDefault')}
         </Text>
         {onBack && !uploadFailed && <View style={styles.headerSpacer} />}
       </View>
@@ -216,9 +219,9 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             <View style={styles.stateIconWrap}>
               <CheckCircle2 size={40} color={color.success.base} strokeWidth={1.5} />
             </View>
-            <Text style={styles.successTitle}>Your wallet is ready!</Text>
+            <Text style={styles.successTitle}>{t('onboarding.create.successTitle')}</Text>
             <Text style={styles.successMessage}>
-              Your address works on all {getAllNetworksSync().length} supported networks.
+              {t('onboarding.create.successMessage', { count: getAllNetworksSync().length })}
             </Text>
 
             {/* Address display */}
@@ -243,7 +246,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             )}
 
             <Text style={styles.verifyHint}>
-              Tap below to verify your identity works before using the wallet.
+              {t('onboarding.create.verifyHint')}
             </Text>
           </Animated.View>
         ) : uploadFailed ? (
@@ -251,10 +254,9 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             <View style={styles.stateIconWrapError}>
               <AlertTriangle size={32} color={color.accent.base} strokeWidth={2} />
             </View>
-            <Text style={styles.errorTitle}>Sync failed</Text>
+            <Text style={styles.errorTitle}>{t('onboarding.create.syncFailedTitle')}</Text>
             <Text style={styles.errorMessage}>
-              Wallet created, but your public key wasn't synced to the server.
-              You won't be able to sign in on other devices until this is resolved.
+              {t('onboarding.create.syncFailedMessage')}
             </Text>
             {uploadError ? (
               <VelaCard style={styles.errorDetail}>
@@ -262,23 +264,23 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
               </VelaCard>
             ) : null}
             <Text style={styles.hint}>
-              Check your network, or configure a custom endpoint below.
+              {t('onboarding.create.syncFailedHint')}
             </Text>
             {onOpenSettings && (
               <Pressable style={styles.settingsLink} onPress={onOpenSettings}>
-                <Text style={styles.settingsLinkText}>Open Settings</Text>
+                <Text style={styles.settingsLinkText}>{t('onboarding.create.openSettings')}</Text>
               </Pressable>
             )}
           </Animated.View>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <Animated.View entering={fadeIn(0, 400)}>
-              <Text style={styles.label}>Account Name</Text>
+              <Text style={styles.label}>{t('onboarding.create.accountNameLabel')}</Text>
               <TextInput
                 style={styles.input}
                 value={name}
                 onChangeText={setName}
-                placeholder="Enter a name for your account"
+                placeholder={t('onboarding.create.accountNamePlaceholder')}
                 placeholderTextColor={color.fg.subtle}
                 autoFocus
                 returnKeyType="done"
@@ -286,14 +288,14 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
                 editable={!loading}
               />
               <Text style={styles.hint}>
-                This name is stored with your public key on-chain for cross-device sign-in.
+                {t('onboarding.create.accountNameHint')}
               </Text>
 
               {/* Acknowledgment checklist */}
               <View style={styles.checklistWrap}>
-                {ACKNOWLEDGMENTS.map((item, i) => {
+                {ACKNOWLEDGMENT_KEYS.map((labelKey, i) => {
                   const checked = checks[i];
-                  const isLast = i === ACKNOWLEDGMENTS.length - 1;
+                  const isLast = i === ACKNOWLEDGMENT_KEYS.length - 1;
                   return (
                     <Pressable
                       key={i}
@@ -307,12 +309,13 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
                       <Text style={styles.checkText}>
                         {isLast ? (
                           <>
-                            I agree to the{' '}
-                            <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/privacy')}>Privacy Policy</Text>
-                            {' '}and{' '}
-                            <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/terms')}>Terms of Service</Text>.
+                            {t('onboarding.create.ack3')}
+                            <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/privacy')}>{t('onboarding.create.ack3PrivacyPolicy')}</Text>
+                            {t('onboarding.create.ack3And')}
+                            <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/terms')}>{t('onboarding.create.ack3Terms')}</Text>
+                            {t('onboarding.create.ack3Period')}
                           </>
-                        ) : item}
+                        ) : t(labelKey)}
                       </Text>
                     </Pressable>
                   );
@@ -328,7 +331,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
 
               <View style={styles.inlineBottom}>
                 <VelaButton
-                  title="Create Wallet"
+                  title={t('onboarding.create.createWalletBtn')}
                   onPress={handleCreate}
                   disabled={!name.trim() || loading || !checks.every(Boolean)}
                   loading={loading}
@@ -350,13 +353,13 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
       <View style={styles.bottom}>
         {created ? (
           <VelaButton
-            title="Verify & Sign in"
+            title={t('onboarding.create.verifySignInBtn')}
             onPress={handleSignIn}
             loading={loading}
           />
         ) : uploadFailed ? (
           <VelaButton
-            title="Retry Upload"
+            title={t('onboarding.create.retryUploadBtn')}
             onPress={handleRetryUpload}
             loading={loading}
           />

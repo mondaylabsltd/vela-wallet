@@ -1,0 +1,26 @@
+{
+  "home": {
+    "totalBalance": "Toplam bakiye",
+    "manageAssets": "Varlıkları Yönet",
+    "tabActivity": "Etkinlik",
+    "tabConnections": "Bağlantılar",
+    "liveIndicator": "Canlı · ödemeler dinleniyor",
+    "emptyNoActivityNetwork": "Bu ağda etkinlik yok",
+    "emptyNoActivity": "Henüz etkinlik yok",
+    "emptySubtitle": "Gelen ödemeler burada anlık olarak görünecek.",
+    "invalidQrTitle": "Geçersiz QR",
+    "invalidQrBody": "Lütfen geçerli bir Ethereum adresi veya bağlantı URI'si okutun.",
+    "switchAccountTitle": "Hesap Değiştir",
+    "switcherAccountCount": "{{count}} hesap · ",
+    "connEmptyTitle": "Etkin bağlantı yok",
+    "connEmptySub": "Bağlanmak için bir dApp QR kodu okutun. Aynı anda yalnızca bir bağlantı etkin olur.",
+    "connScanBtn": "Bağlanmak için tara",
+    "connDefaultName": "Bağlı dApp",
+    "connActive": "Etkin",
+    "connNote": "Aynı anda yalnızca bir etkin bağlantı",
+    "connDisconnect": "Bağlantıyı Kes",
+    "connEventsHead": "Bağlantı etkinliği · {{count}}",
+    "connNoEvents": "Bu bağlantıda henüz istek yok.",
+    "toastReceived": "{{amount}} {{token}} alındı"
+  }
+}

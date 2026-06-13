@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useFocusEffect } from '@react-navigation/native';
 import Animated from 'react-native-reanimated';
@@ -20,6 +21,7 @@ import { getAllNetworksSync } from '@/models/network';
 import { loadTransactions, type LocalTransaction } from '@/services/storage';
 import { formatBalance } from '@/models/types';
 import { openBrowser } from '@/services/platform';
+import { formatDate as fmtDateLocale, formatTime as fmtTimeLocale } from '@/services/locale-format';
 import {
   ArrowDownLeft, ArrowUpRight, ExternalLink, Check, X,
   FileSignature, FileText, Send, Code,
@@ -41,20 +43,11 @@ function explorerAddressUrl(address: string, chainId: number): string {
 }
 
 function formatDate(timestamp: number): string {
-  const d = new Date(timestamp * 1000);
-  return d.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return fmtDateLocale(timestamp * 1000);
 }
 
 function formatTime(timestamp: number): string {
-  const d = new Date(timestamp * 1000);
-  return d.toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return fmtTimeLocale(timestamp * 1000);
 }
 
 interface TransactionGroup {
@@ -75,6 +68,7 @@ function groupByDate(txs: LocalTransaction[]): TransactionGroup[] {
 // MARK: - Component
 
 export default function HistoryScreen() {
+  const { t } = useTranslation();
   const router = useSafeRouter();
   const { activeAccount, state } = useWallet();
   const address = activeAccount?.address ?? state.address;
@@ -122,8 +116,8 @@ export default function HistoryScreen() {
   const renderTransaction = ({ item }: { item: LocalTransaction }) => {
     const network = getAllNetworksSync().find((n) => n.chainId === item.chainId);
     const networkName = network?.displayName ?? `Chain ${item.chainId}`;
-    const t = item.type ?? 'send';
-    const { icon, iconBg, label, subtitle, showAmount } = txDisplayInfo(t, item, networkName);
+    const txType = item.type ?? 'send';
+    const { icon, iconBg, label, subtitle, showAmount } = txDisplayInfo(txType, item, networkName);
 
     return (
       <Pressable
@@ -150,24 +144,24 @@ export default function HistoryScreen() {
             </Text>
           )}
           <Text style={styles.txTime}>
-            {item.status === 'failed' ? 'Failed' : formatTime(item.timestamp)}
+            {item.status === 'failed' ? t('history.statusFailed') : formatTime(item.timestamp)}
           </Text>
         </View>
       </Pressable>
     );
   };
 
-  function txDisplayInfo(t: TransactionType | undefined, item: LocalTransaction, networkName: string) {
+  function txDisplayInfo(txType: TransactionType | undefined, item: LocalTransaction, networkName: string) {
     const sw = 2.5;
     const sz = 18;
-    switch (t) {
+    switch (txType) {
       case 'dapp_tx':
         return {
           icon: item.intent
             ? <Code size={sz} color={color.accent.base} strokeWidth={sw} />
             : <ArrowUpRight size={sz} color={color.accent.base} strokeWidth={sw} />,
           iconBg: color.accent.soft,
-          label: item.intent || 'dApp Transaction',
+          label: item.intent || t('history.txLabelDappTx'),
           subtitle: [
             item.dappOrigin,
             item.to ? shortAddress(item.to) : null,
@@ -179,7 +173,7 @@ export default function HistoryScreen() {
         return {
           icon: <FileSignature size={sz} color={color.fg.muted} strokeWidth={sw} />,
           iconBg: color.bg.sunken,
-          label: 'Sign Message',
+          label: t('history.txLabelSignMessage'),
           subtitle: [item.dappOrigin, networkName].filter(Boolean).join(' · '),
           showAmount: false,
         };
@@ -187,7 +181,7 @@ export default function HistoryScreen() {
         return {
           icon: <FileText size={sz} color={color.fg.muted} strokeWidth={sw} />,
           iconBg: color.bg.sunken,
-          label: item.intent || 'Sign Typed Data',
+          label: item.intent || t('history.txLabelSignTypedData'),
           subtitle: [item.dappOrigin, networkName].filter(Boolean).join(' · '),
           showAmount: false,
         };
@@ -196,8 +190,8 @@ export default function HistoryScreen() {
         return {
           icon: <ArrowUpRight size={sz} color={color.accent.base} strokeWidth={sw} />,
           iconBg: color.accent.soft,
-          label: `Sent ${item.symbol}`,
-          subtitle: `To ${item.toName ?? shortAddress(item.to)} · ${networkName}`,
+          label: t('history.txLabelSent', { symbol: item.symbol }),
+          subtitle: t('history.txSentSubtitle', { toName: item.toName ?? shortAddress(item.to), networkName }),
           showAmount: true,
         };
     }
@@ -221,7 +215,7 @@ export default function HistoryScreen() {
           style={[styles.chainFilterChip, !selectedChainId && styles.chainFilterChipActive]}
           onPress={() => setSelectedChainId(null)}
         >
-          <Text style={[styles.chainFilterText, !selectedChainId && styles.chainFilterTextActive]}>All</Text>
+          <Text style={[styles.chainFilterText, !selectedChainId && styles.chainFilterTextActive]}>{t('history.filterAll')}</Text>
         </Pressable>
         {chainsWithTxs.map(chainId => {
           const net = getAllNetworksSync().find(n => n.chainId === chainId);
@@ -251,12 +245,10 @@ export default function HistoryScreen() {
           <View style={styles.emptyIconWrap}>
             <ExternalLink size={28} color={color.fg.subtle} />
           </View>
-          <Text style={styles.emptyTitle}>No Transactions Yet</Text>
-          <Text style={styles.emptyBody}>
-            Your sent transactions will appear here. You can also view full history on the block explorer.
-          </Text>
+          <Text style={styles.emptyTitle}>{t('history.emptyTitle')}</Text>
+          <Text style={styles.emptyBody}>{t('history.emptyBody')}</Text>
           <VelaButton
-            title="View on Explorer"
+            title={t('history.viewOnExplorer')}
             onPress={handleViewOnExplorer}
             variant="accent"
             style={styles.explorerBtn}
@@ -289,7 +281,7 @@ export default function HistoryScreen() {
         <Pressable onPress={handleBack} hitSlop={8} style={styles.navBtn}>
           <X size={22} color={color.fg.base} strokeWidth={2} />
         </Pressable>
-        <Text style={styles.navTitle}>History</Text>
+        <Text style={styles.navTitle}>{t('history.navTitle')}</Text>
         <View style={styles.navSpacer} />
       </View>
 
@@ -305,7 +297,7 @@ export default function HistoryScreen() {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={color.accent.base} />
-          <Text style={styles.loadingText}>Loading transactions...</Text>
+          <Text style={styles.loadingText}>{t('history.loadingText')}</Text>
         </View>
       ) : transactions.length === 0 ? (
         renderEmpty()
@@ -335,7 +327,7 @@ export default function HistoryScreen() {
             ListEmptyComponent={
               filteredTxs.length === 0 && transactions.length > 0 ? (
                 <View style={styles.emptyFilterContainer}>
-                  <Text style={styles.emptyFilterText}>No transactions on this network</Text>
+                  <Text style={styles.emptyFilterText}>{t('history.emptyFilter')}</Text>
                 </View>
               ) : null
             }

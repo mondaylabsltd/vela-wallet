@@ -1,0 +1,70 @@
+{
+  "onboarding": {
+    "welcome": {
+      "tagline": "你的金鑰，你的幣。\n輕輕一點就搞定。",
+      "createWallet": "建立錢包",
+      "alreadyHaveWallet": "我已經有錢包了"
+    },
+    "settings": {
+      "title": "設定",
+      "sectionAppearance": "外觀",
+      "themeLabelLight": "淺色",
+      "themeLabelDark": "深色",
+      "themeLabelAuto": "自動",
+      "sectionPasskeyIndex": "通行密鑰索引",
+      "passkeyHint": "此服務會儲存您通行密鑰的公鑰，用於跨裝置登入。Vela Wallet 永遠無法存取您通行密鑰的私鑰。",
+      "endpointUrlLabel": "端點網址",
+      "resetToDefault": "重設為預設值",
+      "sectionDebug": "除錯",
+      "simulateFailure": "模擬端點失敗",
+      "warningText": "無法連上通行密鑰索引服務。建立錢包與登入都需要此服務。請於下方設定可連線的端點。"
+    },
+    "create": {
+      "headerDefault": "建立錢包",
+      "headerCreated": "錢包已建立",
+      "headerSyncFailed": "跨裝置同步",
+      "accountNameLabel": "帳戶名稱",
+      "accountNamePlaceholder": "為您的帳戶輸入名稱",
+      "accountNameHint": "此名稱會連同您的公鑰一起記錄在鏈上，用於跨裝置登入。",
+      "ack0": "這是一個自我保管錢包。您通行密鑰的私鑰是由裝置的密碼管理工具（iCloud 鑰匙圈／Google 密碼管理工具）保管，Vela Wallet 無法存取或復原。",
+      "ack1": "如果您遺失裝置，可以透過 iCloud 或 Google 帳戶在新裝置上復原錢包。",
+      "ack2": "如果您的 iCloud 或 Google 帳戶遭入侵，您的錢包控制權也可能一併失守。請以高強度密碼與兩步驟驗證（2FA）保護。",
+      "ack3": "我同意",
+      "ack3PrivacyPolicy": "隱私權政策",
+      "ack3And": "與",
+      "ack3Terms": "服務條款",
+      "ack3Period": "。",
+      "createWalletBtn": "建立錢包",
+      "successTitle": "您的錢包已就緒！",
+      "successMessage": "您的地址可在全部 {{count}} 個支援的網路上使用。",
+      "verifyHint": "使用錢包前，請點擊下方驗證您的身分是否正常運作。",
+      "verifySignInBtn": "驗證並登入",
+      "syncFailedTitle": "同步失敗",
+      "syncFailedMessage": "錢包已建立，但您的公鑰尚未同步到伺服器。在解決此問題前，您將無法在其他裝置上登入。",
+      "syncFailedHint": "請檢查您的網路，或於下方設定自訂端點。",
+      "openSettings": "開啟設定",
+      "retryUploadBtn": "重新上傳",
+      "statusSyncingKey": "同步公鑰中…",
+      "statusSettingUpIdentity": "設定安全身分中…",
+      "statusExtractingKey": "擷取公鑰中…",
+      "statusComputingAddress": "計算錢包地址中…",
+      "statusVerifyingIdentity": "驗證身分中…",
+      "statusSetupCancelled": "設定已取消。",
+      "statusVerifyCancelled": "驗證已取消，請再試一次。",
+      "alertNotSupportedTitle": "不支援",
+      "alertNotSupportedBody": "此裝置不支援生物辨識驗證。",
+      "alertErrorTitle": "錯誤"
+    },
+    "login": {
+      "alertNotSupportedTitle": "不支援",
+      "alertNotSupportedBody": "此裝置不支援生物辨識驗證。",
+      "alertIncompatibleTitle": "裝置不相容",
+      "alertIncompatibleBody": "您裝置的身分提供者與 Vela Wallet 不相容。請至系統設定切換為 Google 密碼管理工具後再試一次。",
+      "alertNotFoundTitle": "找不到帳戶",
+      "alertNotFoundBody": "找不到此身分對應的錢包。\n\n可能的原因：\n• 您尚未建立錢包\n• 您的身分尚未同步到此裝置（請檢查 iCloud／Google 設定）\n• 公鑰伺服器無法連線\n\n請嘗試建立新錢包，或確認您的身分提供者（Face ID／指紋）已在各裝置間同步。",
+      "alertSignInFailedTitle": "登入失敗",
+      "alertSignInFailedBody": "{{message}}\n\n請確認您的裝置已設定 Face ID、Touch ID 或指紋後再試一次。",
+      "alertIncompatibleBodyCreate": "您裝置的身分提供者與此錢包不相容。請至系統設定切換為 Google 密碼管理工具後再試一次。"
+    }
+  }
+}

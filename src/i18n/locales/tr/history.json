@@ -1,0 +1,17 @@
+{
+  "history": {
+    "navTitle": "Geçmiş",
+    "loadingText": "İşlemler yükleniyor...",
+    "statusFailed": "Başarısız",
+    "filterAll": "Tümü",
+    "emptyTitle": "Henüz İşlem Yok",
+    "emptyBody": "Gönderdiğiniz işlemler burada görünecek. Tüm geçmişi blok gezgininde de görüntüleyebilirsiniz.",
+    "viewOnExplorer": "Gezginde Görüntüle",
+    "emptyFilter": "Bu ağda işlem yok",
+    "txLabelDappTx": "dApp İşlemi",
+    "txLabelSignMessage": "Mesaj İmzala",
+    "txLabelSignTypedData": "Yapılandırılmış Veri İmzala",
+    "txLabelSent": "{{symbol}} Gönderildi",
+    "txSentSubtitle": "Alıcı: {{toName}} · {{networkName}}"
+  }
+}

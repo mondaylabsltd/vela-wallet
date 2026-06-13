@@ -1,0 +1,17 @@
+{
+  "history": {
+    "navTitle": "Historique",
+    "loadingText": "Chargement des transactions...",
+    "statusFailed": "Échouée",
+    "filterAll": "Toutes",
+    "emptyTitle": "Aucune transaction pour l'instant",
+    "emptyBody": "Vos transactions envoyées apparaîtront ici. Vous pouvez aussi consulter l'historique complet sur l'explorateur de blocs.",
+    "viewOnExplorer": "Voir sur l'explorateur",
+    "emptyFilter": "Aucune transaction sur ce réseau",
+    "txLabelDappTx": "Transaction dApp",
+    "txLabelSignMessage": "Signer un message",
+    "txLabelSignTypedData": "Signer des données typées",
+    "txLabelSent": "{{symbol}} envoyés",
+    "txSentSubtitle": "À {{toName}} · {{networkName}}"
+  }
+}

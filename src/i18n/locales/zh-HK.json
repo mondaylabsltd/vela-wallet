@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "取消",
+    "system": "系統",
+    "automatic": "自動",
+    "error": "錯誤",
+    "somethingWrong": "發生問題",
+    "tryAgain": "重試"
+  },
+  "language": {
+    "title": "語言",
+    "pickerTitle": "語言",
+    "pickerSubtitle": "選擇整個程式所使用的語言。",
+    "followSystem": "跟隨系統",
+    "english": "English",
+    "chinese": "简体中文"
+  },
+  "settings": {
+    "title": "設定",
+    "sections": {
+      "account": "帳戶",
+      "appearance": "外觀",
+      "payments": "付款",
+      "localization": "本地化",
+      "advanced": "進階",
+      "developer": "開發者"
+    },
+    "account": {
+      "switch": "切換帳戶"
+    },
+    "appearance": {
+      "themeLight": "淺色",
+      "themeDark": "深色",
+      "themeAuto": "自動"
+    },
+    "payments": {
+      "voiceTitle": "語音播報",
+      "voiceSubtitle": "以語音讀出收到的款項"
+    },
+    "localization": {
+      "autoExample": "自動 · {{example}}",
+      "numberTitle": "數字格式",
+      "numberSubtitle": "金額的分組方式及小數點符號的顯示。",
+      "dateTitle": "日期格式",
+      "dateSubtitle": "日 / 月 / 年的次序及分隔符號。",
+      "timeTitle": "時間格式",
+      "timeSubtitle": "12 小時制或 24 小時制。"
+    },
+    "advanced": {
+      "networksTitle": "網絡",
+      "networksSubtitle": "RPC、瀏覽器及 Bundler 網址",
+      "addNetworkTitle": "新增網絡",
+      "addNetworkSubtitle": "新增自訂 EVM 網絡",
+      "endpointsTitle": "服務端點",
+      "endpointsSubtitle": "區塊鏈數據、身分索引、Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "資金庫",
+      "treasurySubtitle": "查看資金庫地址及餘額",
+      "clearSigningTitle": "清晰簽署測試",
+      "clearSigningSubtitle": "ERC-7730 簽署介面預覽"
+    },
+    "about": {
+      "title": "關於",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "登出",
+      "title": "登出",
+      "desc": "你的錢包數據會保留在此裝置上。你隨時可以使用通行密鑰（Face ID／指紋）重新登入。",
+      "warning": "你的公鑰尚未同步至伺服器。現在登出可能導致無法在其他裝置上復原。",
+      "anyway": "仍然登出",
+      "cancel": "取消"
+    },
+    "formatNote": {
+      "system": "系統",
+      "indian": "印度",
+      "h24": "24 小時制",
+      "h12": "12 小時制"
+    }
+  }
+}

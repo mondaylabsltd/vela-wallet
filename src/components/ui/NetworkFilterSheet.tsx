@@ -18,6 +18,7 @@ import { ChainLogo } from '@/components/ChainLogo';
 import { AppModal } from '@/components/ui/AppModal';
 import type { Network } from '@/models/network';
 import { color, createStyles, inter, radius, space, text } from '@/constants/theme';
+import { useTranslation } from 'react-i18next';
 
 // ---------------------------------------------------------------------------
 // Trigger button
@@ -94,12 +95,14 @@ export function NetworkFilterSheet({
     onClose();
   };
 
+  const { t } = useTranslation();
+
   return (
     <AppModal visible={visible} onClose={onClose}>
       <View style={styles.sheet}>
         <View style={styles.sheetHead}>
           <View style={styles.headSpacer} />
-          <Text style={styles.sheetTitle}>Select Chain</Text>
+          <Text style={styles.sheetTitle}>{t('componentsUi.networkFilter.selectChain')}</Text>
           <Pressable onPress={() => setSearching((s) => !s)} hitSlop={8} style={styles.searchToggle}>
             {searching ? <X size={18} color={color.fg.base} strokeWidth={2} /> : <Search size={18} color={color.fg.base} strokeWidth={2} />}
           </Pressable>
@@ -108,7 +111,7 @@ export function NetworkFilterSheet({
         {searching && (
           <TextInput
             style={styles.search}
-            placeholder="Search chains"
+            placeholder={t('componentsUi.networkFilter.searchChains')}
             placeholderTextColor={color.fg.subtle}
             value={query}
             onChangeText={setQuery}
@@ -126,8 +129,8 @@ export function NetworkFilterSheet({
                 <Globe size={20} color={color.fg.muted} strokeWidth={2} />
               </View>
               <View style={styles.rowInfo}>
-                <Text style={styles.rowName}>All Networks</Text>
-                <Text style={styles.rowSub}>Show every chain</Text>
+                <Text style={styles.rowName}>{t('componentsUi.networkFilter.allNetworks')}</Text>
+                <Text style={styles.rowSub}>{t('componentsUi.networkFilter.showEvery')}</Text>
               </View>
               {selectedChainId === null && <Check size={20} color={color.accent.base} strokeWidth={2.6} />}
             </Pressable>

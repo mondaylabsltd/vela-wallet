@@ -1,0 +1,17 @@
+{
+  "history": {
+    "navTitle": "Lịch sử",
+    "loadingText": "Đang tải giao dịch...",
+    "statusFailed": "Thất bại",
+    "filterAll": "Tất cả",
+    "emptyTitle": "Chưa có giao dịch nào",
+    "emptyBody": "Các giao dịch bạn đã gửi sẽ hiển thị tại đây. Bạn cũng có thể xem toàn bộ lịch sử trên block explorer.",
+    "viewOnExplorer": "Xem trên Explorer",
+    "emptyFilter": "Không có giao dịch nào trên mạng này",
+    "txLabelDappTx": "Giao dịch dApp",
+    "txLabelSignMessage": "Ký tin nhắn",
+    "txLabelSignTypedData": "Ký dữ liệu có cấu trúc",
+    "txLabelSent": "Đã gửi {{symbol}}",
+    "txSentSubtitle": "Đến {{toName}} · {{networkName}}"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "Receber",
+    "noAddress": "Sem endereço",
+    "shareGenerating": "Gerando...",
+    "shareButton": "Compartilhar",
+    "listeningForDeposits": "Aguardando depósitos",
+    "warningTitle": "Antes de receber",
+    "warningBody": "Envie ativos apenas em redes compatíveis — transferências em redes não compatíveis podem ser perdidas para sempre.",
+    "warningHint": "Confira as",
+    "warningHintNetworks": "{{count}} redes compatíveis",
+    "warningHintSuffix": "abaixo antes de compartilhar seu endereço.",
+    "warningConfirm": "Entendi",
+    "networksLabel": "Funciona em {{count}} redes EVM",
+    "shareCardHeadline": "Escaneie para me enviar cripto",
+    "shareDialogTitle": "Endereço da carteira {{name}}"
+  }
+}

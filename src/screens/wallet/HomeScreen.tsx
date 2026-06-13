@@ -18,14 +18,16 @@ import {
   Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, Settings, X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import Animated, {
-  Easing, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
+  Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { QRScanner } from '@/components/QRScanner';
 import { ActivityRow } from '@/components/ui/ActivityRow';
+import { AmountText } from '@/components/ui/AmountText';
 import { AppModal } from '@/components/ui/AppModal';
 import { CurrencySheet } from '@/components/ui/CurrencySheet';
 import { NetworkFilterButton, NetworkFilterSheet } from '@/components/ui/NetworkFilterSheet';
@@ -46,7 +48,7 @@ import {
 } from '@/services/activity';
 import type { LocalTransaction } from '@/services/storage';
 import { getAccountBalances, setAccountBalance } from '@/services/balance-cache';
-import { CURRENCIES, getCurrencyCode, getRate, loadCurrency, setCurrency } from '@/services/currency';
+import { currencyMeta, formatFiat, getCurrencyCode, getRate, loadCurrency, setCurrency, shouldShowDecimals } from '@/services/currency';
 import { parseRemoteInjectURL } from '@/services/dapp-transport';
 import { copyToClipboard, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
@@ -59,63 +61,23 @@ const LIVE_POLL_MS = 30 * 1000;
 const DOCK_CLEARANCE = 112;
 
 // ---------------------------------------------------------------------------
-// Animated balance (ported — smoothly tweens between USD values)
+// Balance — fintech "atomic number" cascade: fit-to-width on one line, drop
+// cents when big, fall back to compact notation ($1.23M) before going illegible.
+// All handled by <AmountText/>; here we just feed it the value + display prefs.
 // ---------------------------------------------------------------------------
 
-const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
-
-function fmtMoney(value: number, symbol: string): string {
-  return symbol + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtInt(value: number, symbol: string): string {
-  const full = fmtMoney(value, symbol);
-  const dot = full.indexOf('.');
-  return dot === -1 ? full : full.slice(0, dot);
-}
-function fmtDec(value: number): string {
-  const full = value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const dot = full.indexOf('.');
-  return dot === -1 ? '.00' : full.slice(dot);
-}
-
-function AnimatedBalance({ value, symbol }: { value: number; symbol: string }) {
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.balanceRow}>
-        <Text style={styles.balanceInt}>{fmtInt(value, symbol)}</Text>
-        <Text style={styles.balanceDec}>{fmtDec(value)}</Text>
-      </View>
-    );
-  }
-  return <AnimatedBalanceNative value={value} symbol={symbol} />;
-}
-
-function AnimatedBalanceNative({ value, symbol }: { value: number; symbol: string }) {
-  const displayed = useSharedValue(value);
-  useEffect(() => {
-    displayed.value = withTiming(value, { duration: 800, easing: Easing.out(Easing.quad) });
-  }, [value, displayed]);
-
-  const intProps = useAnimatedProps(() => {
-    'worklet';
-    const v = displayed.value;
-    const full = symbol + Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const dot = full.indexOf('.');
-    return { text: dot === -1 ? full : full.slice(0, dot) } as any;
-  });
-  const decProps = useAnimatedProps(() => {
-    'worklet';
-    const v = displayed.value;
-    const full = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const dot = full.indexOf('.');
-    return { text: dot === -1 ? '.00' : full.slice(full.indexOf('.')) } as any;
-  });
-
+function Balance({ value, symbol, code }: { value: number; symbol: string; code: string }) {
   return (
-    <View style={styles.balanceRow}>
-      <AnimatedTextInput editable={false} underlineColorAndroid="transparent" style={styles.balanceInt} animatedProps={intProps} defaultValue={fmtInt(value, symbol)} />
-      <AnimatedTextInput editable={false} underlineColorAndroid="transparent" style={styles.balanceDec} animatedProps={decProps} defaultValue={fmtDec(value)} />
-    </View>
+    <AmountText
+      value={value}
+      symbol={symbol}
+      size={52}
+      minScale={0.55}
+      showDecimals={shouldShowDecimals(value, code)}
+      style={styles.balanceInt}
+      tailStyle={styles.balanceDec}
+      containerStyle={styles.balanceFill}
+    />
   );
 }
 
@@ -126,6 +88,7 @@ function AnimatedBalanceNative({ value, symbol }: { value: number; symbol: strin
 type Tab = 'activity' | 'connections';
 
 export default function HomeScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { activeAccount, state, dispatch } = useWallet();
   const conn = useDAppConnection();
@@ -143,6 +106,7 @@ export default function HomeScreen() {
   const [showNetSheet, setShowNetSheet] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
+  const [switcherLoading, setSwitcherLoading] = useState(false);
   const [cachedBalances, setCachedBalances] = useState<Map<string, number>>(new Map());
   const [newItemId, setNewItemId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{ amount: string; token: string } | null>(null);
@@ -171,7 +135,7 @@ export default function HomeScreen() {
   const networks = useMemo(() => getAllNetworksSync(), []);
   const selectedNetwork = selectedChainId != null ? networks.find((n) => n.chainId === selectedChainId) ?? null : null;
   const connected = conn.status === 'connected' || conn.status === 'reconnecting';
-  const currency = CURRENCIES.find((c) => c.code === currencyCode) ?? CURRENCIES[0];
+  const currency = currencyMeta(currencyCode);
 
   // --- load voice + currency preferences once ---
   useEffect(() => { loadVoicePreference(); }, []);
@@ -217,6 +181,7 @@ export default function HomeScreen() {
         subtitle: 'from 0xSIMULATED…test',
         amount: `+${amount} ${token}`,
         usd: `$${Number(amount).toFixed(2)}`,
+        usdValue: Number(amount),
         token,
         chainId: 137,
         timestamp: Math.floor(Date.now() / 1000),
@@ -309,14 +274,40 @@ export default function HomeScreen() {
   }, [activity, state.accounts]);
 
   // --- account switcher ---
+  // Sum of all accounts' balances (USD), for the switcher header total.
+  const totalAllUsd = useMemo(
+    () => state.accounts.reduce((s, a) => s + (cachedBalances.get(a.address) ?? 0), 0),
+    [state.accounts, cachedBalances],
+  );
+
+  // Query every account's balance (not just the active one) and update the rows
+  // + total live. fetchTokens is cached (5 min) so reopening won't spam RPCs.
+  const refreshAllBalances = useCallback(async () => {
+    setSwitcherLoading(true);
+    try {
+      await Promise.all(state.accounts.map(async (acc) => {
+        try {
+          const tokens = await fetchTokens(acc.address);
+          const usd = tokens.reduce((s, t) => s + tokenUsdValue(t), 0);
+          setAccountBalance(acc.address, usd);
+          setCachedBalances((prev) => new Map(prev).set(acc.address, usd));
+        } catch { /* per-account best effort */ }
+      }));
+    } finally {
+      setSwitcherLoading(false);
+    }
+  }, [state.accounts]);
+
   const openSwitcher = useCallback(async () => {
     if (state.accounts.length <= 1) { if (address) await copyToClipboard(address); return; }
+    // Paint instantly from cache, then refresh every account in the background.
     if (address) setAccountBalance(address, totalUsd);
     const balances = await getAccountBalances(state.accounts.map((a) => a.address));
     if (address) balances.set(address, totalUsd);
     setCachedBalances(balances);
     setShowSwitcher(true);
-  }, [address, totalUsd, state.accounts]);
+    refreshAllBalances();
+  }, [address, totalUsd, state.accounts, refreshAllBalances]);
 
   // --- scanner ---
   const onScan = useCallback((data: string) => {
@@ -334,7 +325,7 @@ export default function HomeScreen() {
         connectToBridge(bridge);
         router.navigate('/connect');
       } else {
-        showAlert('Invalid QR', 'Please scan a valid Ethereum address or connection URI.');
+        showAlert(t('home.invalidQrTitle'), t('home.invalidQrBody'));
       }
     }
   }, [router, connectToWalletPair, connectToBridge]);
@@ -364,9 +355,9 @@ export default function HomeScreen() {
       <Animated.View style={balanceScaleStyle}>
         <VelaCard elevated style={styles.balanceCard}>
           <View pointerEvents="none" style={styles.balanceBlob} />
-          <Text style={styles.balanceLabel}>Total balance</Text>
+          <Text style={styles.balanceLabel}>{t('home.totalBalance')}</Text>
           <View style={styles.balanceTopRow}>
-            {hidden ? <Text style={styles.balanceHidden}>••••••</Text> : <AnimatedBalance value={totalUsd * rate} symbol={currency.symbol} />}
+            {hidden ? <Text style={styles.balanceHidden}>••••••</Text> : <Balance value={totalUsd * rate} symbol={currency.symbol} code={currencyCode} />}
             <Pressable onPress={() => setHidden((h) => !h)} hitSlop={8} style={styles.eyeBtn}>
               {hidden ? <EyeOff size={22} color={color.fg.muted} strokeWidth={2} /> : <Eye size={22} color={color.fg.muted} strokeWidth={2} />}
             </Pressable>
@@ -377,7 +368,7 @@ export default function HomeScreen() {
               <ChevronDown size={14} color={color.fg.muted} strokeWidth={2.4} />
             </Pressable>
             <Pressable style={styles.manageBtn} onPress={() => router.push('/assets')} hitSlop={6}>
-              <Text style={styles.manageText}>Manage Assets</Text>
+              <Text style={styles.manageText}>{t('home.manageAssets')}</Text>
               <ChevronRight size={18} color={color.fg.muted} strokeWidth={2.6} />
             </Pressable>
           </View>
@@ -389,8 +380,8 @@ export default function HomeScreen() {
       <View style={styles.navRow}>
         <SegmentedToggle<Tab>
           options={[
-            { key: 'activity', label: 'Activity' },
-            { key: 'connections', label: 'Connections', badge: connected ? 1 : 0 },
+            { key: 'activity', label: t('home.tabActivity') },
+            { key: 'connections', label: t('home.tabConnections'), badge: connected ? 1 : 0 },
           ]}
           value={tab}
           onChange={setTab}
@@ -407,7 +398,7 @@ export default function HomeScreen() {
       {tab === 'activity' && (
         <View style={styles.liveRow}>
           <Animated.View style={[styles.liveDot, liveDotStyle]} />
-          <Text style={styles.liveText}>Live · listening for payments</Text>
+          <Text style={styles.liveText}>{t('home.liveIndicator')}</Text>
         </View>
       )}
     </Animated.View>
@@ -419,9 +410,9 @@ export default function HomeScreen() {
         <Inbox size={28} color={color.fg.subtle} strokeWidth={2} />
       </View>
       <Text style={styles.emptyText}>
-        {selectedChainId != null ? 'No activity on this network' : 'No activity yet'}
+        {selectedChainId != null ? t('home.emptyNoActivityNetwork') : t('home.emptyNoActivity')}
       </Text>
-      <Text style={styles.emptySub}>Incoming payments will appear here in real time.</Text>
+      <Text style={styles.emptySub}>{t('home.emptySubtitle')}</Text>
     </View>
   );
 
@@ -459,7 +450,7 @@ export default function HomeScreen() {
                 title={item.title}
                 subtitle={item.subtitle}
                 amount={item.amount}
-                usd={item.usd}
+                fiat={item.usdValue > 0 ? formatFiat(item.usdValue * rate, currencyCode, currency.symbol) : undefined}
                 time={relativeTime(item.timestamp)}
                 alias={item.alias ?? (item.address ? aliasMap.get(item.address.toLowerCase()) : undefined)}
                 chain={chainFor(item.chainId)}
@@ -530,6 +521,8 @@ export default function HomeScreen() {
         visible={detailTx !== null}
         tx={detailTx}
         alias={detailAlias}
+        rate={rate}
+        currency={currency}
         onClose={() => setDetailTx(null)}
       />
 
@@ -537,7 +530,16 @@ export default function HomeScreen() {
       <AppModal visible={showSwitcher} onClose={() => setShowSwitcher(false)}>
         <View style={styles.switcher}>
           <View style={styles.switcherHead}>
-            <Text style={styles.switcherTitle}>Switch Account</Text>
+            <View style={styles.switcherHeadInfo}>
+              <Text style={styles.switcherTitle}>{t('home.switchAccountTitle')}</Text>
+              <View style={styles.switcherTotalRow}>
+                <Text style={styles.switcherTotalLabel}>
+                  {t('home.switcherAccountCount', { count: state.accounts.length })}
+                </Text>
+                <Text style={styles.switcherTotalValue}>{formatFiat(totalAllUsd * rate, currencyCode, currency.symbol)}</Text>
+                {switcherLoading && <ActivityIndicator size="small" color={color.fg.subtle} style={styles.switcherSpinner} />}
+              </View>
+            </View>
             <Pressable onPress={() => setShowSwitcher(false)} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.switcherList}>
@@ -555,11 +557,13 @@ export default function HomeScreen() {
                   >
                     <View style={styles.switcherAvatar}><Text style={styles.switcherAvatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text></View>
                     <View style={styles.switcherInfo}>
-                      <Text style={styles.switcherName}>{account.name}</Text>
+                      <Text style={styles.switcherName} numberOfLines={1}>{account.name}</Text>
                       <Text style={styles.switcherAddr}>{shortAddress(account.address)}</Text>
                     </View>
                     <View style={styles.switcherRight}>
-                      {bal != null && <Text style={styles.switcherBal}>{fmtMoney(bal, '$')}</Text>}
+                      {bal != null
+                        ? <Text style={styles.switcherBal}>{formatFiat(bal * rate, currencyCode, currency.symbol)}</Text>
+                        : switcherLoading ? <ActivityIndicator size="small" color={color.fg.subtle} /> : null}
                       {isActive && <Check size={18} color={color.accent.base} />}
                     </View>
                   </Pressable>
@@ -591,14 +595,15 @@ function ConnectionsView({
   onDisconnect: () => void;
   onConnect: () => void;
 }) {
+  const { t } = useTranslation();
   if (!connected) {
     return (
       <View style={styles.connEmpty}>
         <View style={styles.connEmptyIcon}><Plug size={26} color={color.fg.subtle} strokeWidth={2} /></View>
-        <Text style={styles.connEmptyTitle}>No active connection</Text>
-        <Text style={styles.connEmptySub}>Scan a dApp QR code to connect. Only one connection is active at a time.</Text>
+        <Text style={styles.connEmptyTitle}>{t('home.connEmptyTitle')}</Text>
+        <Text style={styles.connEmptySub}>{t('home.connEmptySub')}</Text>
         <Pressable style={styles.connectBtn} onPress={onConnect}>
-          <Text style={styles.connectBtnText}>Scan to connect</Text>
+          <Text style={styles.connectBtnText}>{t('home.connScanBtn')}</Text>
         </Pressable>
       </View>
     );
@@ -610,20 +615,20 @@ function ConnectionsView({
         <View style={styles.connTop}>
           <View style={styles.connDapp}><Text style={styles.connDappText}>{(dappName?.[0] ?? '?').toUpperCase()}</Text></View>
           <View style={styles.connInfo}>
-            <Text style={styles.connName} numberOfLines={1}>{dappName ?? 'Connected dApp'}</Text>
+            <Text style={styles.connName} numberOfLines={1}>{dappName ?? t('home.connDefaultName')}</Text>
             {dappUrl ? <Text style={styles.connUrl} numberOfLines={1}>{dappUrl}</Text> : null}
           </View>
-          <View style={styles.connStatus}><View style={styles.connDot} /><Text style={styles.connStatusText}>Active</Text></View>
+          <View style={styles.connStatus}><View style={styles.connDot} /><Text style={styles.connStatusText}>{t('home.connActive')}</Text></View>
         </View>
-        <Text style={styles.connNote}>Only one active connection at a time</Text>
+        <Text style={styles.connNote}>{t('home.connNote')}</Text>
         <Pressable style={styles.disconnectBtn} onPress={onDisconnect}>
-          <Text style={styles.disconnectText}>Disconnect</Text>
+          <Text style={styles.disconnectText}>{t('home.connDisconnect')}</Text>
         </Pressable>
       </VelaCard>
 
-      <Text style={styles.connEventsHead}>Connection activity · {events.length}</Text>
+      <Text style={styles.connEventsHead}>{t('home.connEventsHead', { count: events.length })}</Text>
       {events.length === 0 ? (
-        <Text style={styles.connNoEvents}>No requests yet on this connection.</Text>
+        <Text style={styles.connNoEvents}>{t('home.connNoEvents')}</Text>
       ) : (
         events.map((e) => (
           <View key={e.id} style={styles.eventRow}>
@@ -644,6 +649,7 @@ function ConnectionsView({
 // ---------------------------------------------------------------------------
 
 function ReceiptToast({ amount, token, top }: { amount: string; token: string; top: number }) {
+  const { t } = useTranslation();
   const v = useSharedValue(0);
   useEffect(() => {
     v.value = withTiming(1, { duration: 320, easing: Easing.out(Easing.quad) });
@@ -655,7 +661,7 @@ function ReceiptToast({ amount, token, top }: { amount: string; token: string; t
   return (
     <Animated.View pointerEvents="none" style={[styles.toast, { top }, style]}>
       <View style={styles.toastDot} />
-      <Text style={styles.toastText}>{amount} {token} received</Text>
+      <Text style={styles.toastText}>{t('home.toastReceived', { amount, token })}</Text>
     </Animated.View>
   );
 }
@@ -718,9 +724,9 @@ const styles = createStyles(() => ({
   },
   balanceLabel: { fontSize: text.base, ...inter.medium, color: color.fg.muted, letterSpacing: 0.3 },
   balanceTopRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.sm },
-  balanceRow: { flexDirection: 'row', alignItems: 'baseline', flex: 1 },
-  balanceInt: { fontSize: 52, ...inter.bold, fontFamily: font.display, color: color.fg.base, padding: 0, letterSpacing: -1 },
-  balanceDec: { fontSize: 30, ...inter.bold, fontFamily: font.display, color: color.fg.subtle, padding: 0 },
+  balanceFill: { flex: 1 },
+  balanceInt: { fontSize: 52, ...inter.bold, fontFamily: font.display, color: color.fg.base, letterSpacing: -1 },
+  balanceDec: { fontSize: 30, ...inter.bold, fontFamily: font.display, color: color.fg.subtle },
   balanceHidden: { fontSize: 52, ...inter.bold, color: color.fg.base, flex: 1, letterSpacing: 2 },
   eyeBtn: { padding: space.xs },
   balanceBottomRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.xl },
@@ -772,7 +778,12 @@ const styles = createStyles(() => ({
     paddingHorizontal: space['3xl'], paddingVertical: space.xl,
     borderBottomWidth: 1, borderBottomColor: color.border.base,
   },
+  switcherHeadInfo: { flex: 1, gap: 2 },
   switcherTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
+  switcherTotalRow: { flexDirection: 'row', alignItems: 'center' },
+  switcherTotalLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
+  switcherTotalValue: { fontSize: text.sm, ...inter.bold, color: color.fg.base },
+  switcherSpinner: { marginLeft: space.sm },
   switcherList: { padding: space['3xl'], gap: space.lg },
   switcherItem: {
     flexDirection: 'row', alignItems: 'center', gap: space.lg,

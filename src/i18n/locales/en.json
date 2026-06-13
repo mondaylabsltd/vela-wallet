@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "system": "System",
+    "automatic": "Automatic",
+    "error": "Error",
+    "somethingWrong": "Something went wrong",
+    "tryAgain": "Try Again"
+  },
+  "language": {
+    "title": "Language",
+    "pickerTitle": "Language",
+    "pickerSubtitle": "Choose the language used throughout the app.",
+    "followSystem": "Follow System",
+    "english": "English",
+    "chinese": "简体中文"
+  },
+  "settings": {
+    "title": "Settings",
+    "sections": {
+      "account": "Account",
+      "appearance": "Appearance",
+      "payments": "Payments",
+      "localization": "Localization",
+      "advanced": "Advanced",
+      "developer": "Developer"
+    },
+    "account": {
+      "switch": "Switch account"
+    },
+    "appearance": {
+      "themeLight": "Light",
+      "themeDark": "Dark",
+      "themeAuto": "Auto"
+    },
+    "payments": {
+      "voiceTitle": "Voice announcements",
+      "voiceSubtitle": "Speak incoming payments aloud"
+    },
+    "localization": {
+      "autoExample": "Automatic · {{example}}",
+      "numberTitle": "Number format",
+      "numberSubtitle": "How amounts are grouped and the decimal mark shown.",
+      "dateTitle": "Date format",
+      "dateSubtitle": "Order of day / month / year and the separator.",
+      "timeTitle": "Time format",
+      "timeSubtitle": "12-hour or 24-hour clock."
+    },
+    "advanced": {
+      "networksTitle": "Networks",
+      "networksSubtitle": "RPC, Explorer & Bundler URLs",
+      "addNetworkTitle": "Add Network",
+      "addNetworkSubtitle": "Add custom EVM network",
+      "endpointsTitle": "Service Endpoints",
+      "endpointsSubtitle": "Chain data, identity index, Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "Treasury",
+      "treasurySubtitle": "View treasury address & balances",
+      "clearSigningTitle": "Clear Signing Test",
+      "clearSigningSubtitle": "ERC-7730 signing UI preview"
+    },
+    "about": {
+      "title": "About",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "Sign Out",
+      "title": "Sign Out",
+      "desc": "Your wallet data stays on this device. Sign back in anytime with your passkey (Face ID / fingerprint).",
+      "warning": "Your public key hasn't been synced to the server yet. Signing out now may prevent recovery on other devices.",
+      "anyway": "Sign Out Anyway",
+      "cancel": "Cancel"
+    },
+    "formatNote": {
+      "system": "System",
+      "indian": "Indian",
+      "h24": "24-hour",
+      "h12": "12-hour"
+    }
+  }
+}

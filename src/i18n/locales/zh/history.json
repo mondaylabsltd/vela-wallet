@@ -1,0 +1,17 @@
+{
+  "history": {
+    "navTitle": "历史记录",
+    "loadingText": "加载交易中...",
+    "statusFailed": "失败",
+    "filterAll": "全部",
+    "emptyTitle": "暂无交易",
+    "emptyBody": "您的发送记录将显示在这里。您也可以在区块浏览器中查看完整历史。",
+    "viewOnExplorer": "在浏览器中查看",
+    "emptyFilter": "此网络暂无交易",
+    "txLabelDappTx": "dApp 交易",
+    "txLabelSignMessage": "签名消息",
+    "txLabelSignTypedData": "签名结构化数据",
+    "txLabelSent": "已发送 {{symbol}}",
+    "txSentSubtitle": "至 {{toName}} · {{networkName}}"
+  }
+}

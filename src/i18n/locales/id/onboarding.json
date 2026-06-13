@@ -1,0 +1,70 @@
+{
+  "onboarding": {
+    "welcome": {
+      "tagline": "Kunci Anda, koin Anda.\nSemudah satu ketukan.",
+      "createWallet": "Buat Dompet",
+      "alreadyHaveWallet": "Saya sudah punya dompet"
+    },
+    "settings": {
+      "title": "Pengaturan",
+      "sectionAppearance": "TAMPILAN",
+      "themeLabelLight": "Terang",
+      "themeLabelDark": "Gelap",
+      "themeLabelAuto": "Otomatis",
+      "sectionPasskeyIndex": "INDEKS PASSKEY",
+      "passkeyHint": "Layanan ini menyimpan kunci publik passkey Anda untuk masuk lintas perangkat. Vela Wallet tidak pernah dapat mengakses kunci privat passkey Anda.",
+      "endpointUrlLabel": "URL Endpoint",
+      "resetToDefault": "Setel Ulang ke Bawaan",
+      "sectionDebug": "DEBUG",
+      "simulateFailure": "Simulasikan Kegagalan Endpoint",
+      "warningText": "Layanan Indeks Passkey tidak dapat dijangkau. Pembuatan dompet dan proses masuk memerlukan layanan ini. Konfigurasikan endpoint yang dapat dijangkau di bawah."
+    },
+    "create": {
+      "headerDefault": "Buat Dompet",
+      "headerCreated": "Dompet Dibuat",
+      "headerSyncFailed": "Sinkronisasi Lintas Perangkat",
+      "accountNameLabel": "Nama Akun",
+      "accountNamePlaceholder": "Masukkan nama untuk akun Anda",
+      "accountNameHint": "Nama ini disimpan bersama kunci publik Anda secara on-chain untuk masuk lintas perangkat.",
+      "ack0": "Ini adalah dompet self-custody. Kunci privat passkey Anda dikelola oleh pengelola kata sandi perangkat Anda (iCloud Keychain / Google Password Manager). Vela Wallet tidak dapat mengaksesnya atau memulihkannya.",
+      "ack1": "Jika Anda kehilangan perangkat, Anda dapat memulihkan dompet di perangkat baru melalui akun iCloud atau Google Anda.",
+      "ack2": "Jika akun iCloud atau Google Anda disusupi, kendali atas dompet Anda juga bisa ikut disusupi. Lindungi dengan kata sandi yang kuat dan 2FA.",
+      "ack3": "Saya menyetujui ",
+      "ack3PrivacyPolicy": "Kebijakan Privasi",
+      "ack3And": " dan ",
+      "ack3Terms": "Ketentuan Layanan",
+      "ack3Period": ".",
+      "createWalletBtn": "Buat Dompet",
+      "successTitle": "Dompet Anda siap!",
+      "successMessage": "Alamat Anda berlaku di semua {{count}} jaringan yang didukung.",
+      "verifyHint": "Ketuk di bawah untuk memverifikasi identitas Anda berfungsi sebelum menggunakan dompet.",
+      "verifySignInBtn": "Verifikasi & Masuk",
+      "syncFailedTitle": "Sinkronisasi gagal",
+      "syncFailedMessage": "Dompet dibuat, tetapi kunci publik Anda belum tersinkron ke server. Anda tidak akan bisa masuk di perangkat lain sampai masalah ini teratasi.",
+      "syncFailedHint": "Periksa jaringan Anda, atau konfigurasikan endpoint kustom di bawah.",
+      "openSettings": "Buka Pengaturan",
+      "retryUploadBtn": "Coba Unggah Lagi",
+      "statusSyncingKey": "Menyinkronkan kunci publik...",
+      "statusSettingUpIdentity": "Menyiapkan identitas aman...",
+      "statusExtractingKey": "Mengekstrak kunci publik...",
+      "statusComputingAddress": "Menghitung alamat dompet...",
+      "statusVerifyingIdentity": "Memverifikasi identitas...",
+      "statusSetupCancelled": "Penyiapan dibatalkan.",
+      "statusVerifyCancelled": "Verifikasi dibatalkan. Silakan coba lagi.",
+      "alertNotSupportedTitle": "Tidak Didukung",
+      "alertNotSupportedBody": "Autentikasi biometrik tidak tersedia di perangkat ini.",
+      "alertErrorTitle": "Kesalahan"
+    },
+    "login": {
+      "alertNotSupportedTitle": "Tidak Didukung",
+      "alertNotSupportedBody": "Autentikasi biometrik tidak tersedia di perangkat ini.",
+      "alertIncompatibleTitle": "Perangkat Tidak Kompatibel",
+      "alertIncompatibleBody": "Penyedia identitas perangkat Anda tidak kompatibel dengan Vela Wallet. Beralihlah ke Google Password Manager di pengaturan sistem lalu coba lagi.",
+      "alertNotFoundTitle": "Akun Tidak Ditemukan",
+      "alertNotFoundBody": "Tidak ada dompet yang ditemukan untuk identitas ini.\n\nKemungkinan penyebab:\n• Anda belum membuat dompet\n• Identitas Anda belum tersinkron ke perangkat ini (periksa pengaturan iCloud / Google)\n• Server kunci publik tidak dapat dijangkau\n\nCoba buat dompet baru, atau pastikan penyedia identitas Anda (Face ID / sidik jari) tersinkron di seluruh perangkat.",
+      "alertSignInFailedTitle": "Gagal Masuk",
+      "alertSignInFailedBody": "{{message}}\n\nPastikan perangkat Anda telah menyiapkan Face ID, Touch ID, atau sidik jari lalu coba lagi.",
+      "alertIncompatibleBodyCreate": "Penyedia identitas perangkat Anda tidak kompatibel dengan dompet ini. Beralihlah ke Google Password Manager di pengaturan sistem lalu coba lagi."
+    }
+  }
+}

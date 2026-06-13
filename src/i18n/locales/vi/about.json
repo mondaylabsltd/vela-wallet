@@ -1,0 +1,22 @@
+{
+  "about": {
+    "title": "Giới thiệu",
+    "version": "v{{version}} ({{commit}})",
+    "tagline": "Một cách sở hữu crypto đơn giản hơn",
+    "sectionTechnical": "Chi tiết kỹ thuật",
+    "techWalletLabel": "Ví",
+    "techWalletValue": "Safe v1.4.1",
+    "techAuthLabel": "Xác thực",
+    "techAuthValue": "WebAuthn / P-256",
+    "techAccountTypeLabel": "Loại tài khoản",
+    "techAccountTypeValue": "ERC-4337 (Smart Account)",
+    "techSignerLabel": "Mô-đun ký",
+    "techSignerValue": "SafeWebAuthnSharedSigner",
+    "techNetworksLabel": "Mạng lưới",
+    "techNetworksValue": "{{count}} chain EVM",
+    "linkWebsite": "Website",
+    "linkGitHub": "GitHub",
+    "linkSafeWallet": "Safe Wallet",
+    "footer": "Được xây dựng tận tâm. Khóa của bạn, coin của bạn."
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "history": {
+    "navTitle": "履歴",
+    "loadingText": "取引を読み込み中...",
+    "statusFailed": "失敗",
+    "filterAll": "すべて",
+    "emptyTitle": "まだ取引はありません",
+    "emptyBody": "送金した取引はここに表示されます。ブロックエクスプローラーで全履歴を確認することもできます。",
+    "viewOnExplorer": "エクスプローラーで表示",
+    "emptyFilter": "このネットワークに取引はありません",
+    "txLabelDappTx": "dApp の取引",
+    "txLabelSignMessage": "メッセージの署名",
+    "txLabelSignTypedData": "型付きデータの署名",
+    "txLabelSent": "{{symbol}} を送金",
+    "txSentSubtitle": "宛先: {{toName}} · {{networkName}}"
+  }
+}

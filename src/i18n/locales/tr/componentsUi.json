@@ -1,0 +1,92 @@
+{
+  "componentsUi": {
+    "funding": {
+      "title": "Gas Hesabını Etkinleştir",
+      "balance": "Bakiye",
+      "freeTitle": "Ücretsiz Etkinleştirme",
+      "freeBadge": "ÜCRETSİZ",
+      "freeRequesting": "İsteniyor...",
+      "freeDesc": "Yeni kullanıcılar için Vela tarafından sponsorlanır",
+      "selfTitle": "Kendin Etkinleştir",
+      "selfDesc": "Gas hesabını etkinleştirmek için {{symbol}} gönderin",
+      "activationFee": "Etkinleştirme Ücreti",
+      "gasAccount": "Gas Hesabı",
+      "checkBtn": "Gönderdim",
+      "checkingBtn": "Kontrol ediliyor...",
+      "continue": "Devam Et",
+      "cancel": "İptal",
+      "denialDefault": "Ücretsiz etkinleştirme kullanılamıyor.",
+      "denialNonceExceeded": "Ücretsiz kota tükendi.",
+      "denialTreasuryDepleted": "Ücretsiz fon geçici olarak boş.",
+      "denialBalanceTooLow": "Cüzdan bakiyesi hak kazanmak için çok düşük.",
+      "denialNoPasskey": "Ücretsiz etkinleştirme için geçiş anahtarı gerekli.",
+      "denialRateLimited": "Çok fazla istek. Daha sonra deneyin.",
+      "denialTransferFailed": "Transfer başarısız. Tekrar deneyin."
+    },
+    "signing": {
+      "loading": "Yükleniyor...",
+      "signatureRequest": "İmza isteği",
+      "signing": "İmzalanıyor...",
+      "signLabel": "İmzala",
+      "confirmLabel": "Onayla",
+      "confirmIntentLabel": "{{intent}} işlemini onayla",
+      "approve": "Onayla",
+      "dismiss": "Kapat",
+      "reject": "Reddet",
+      "personalSignTag": "personal_sign · Gas ücreti yok",
+      "unlimitedWarning": "Sınırsız — bu sözleşme tüm token'larınızı harcayabilir",
+      "blindTypedWarning": "Bu yapılandırılmış veri bilinen bir tanımlayıcıyla çözümlenemedi. Dikkatlice inceleyin.",
+      "blindDecodeWarning": "Çözümlenemiyor — ERC-7730 tanımlayıcısı yok ({{bytes}} bayt)",
+      "rawCalldataToggle": "Ham calldata · {{bytes}} bayt",
+      "signMessage": "Mesaj İmzala",
+      "signTypedData": "Yapılandırılmış Veri İmzala",
+      "spenderLabel": "Harcayan",
+      "recipientLabel": "Alıcı",
+      "interactingLabel": "Etkileşim kurulan",
+      "unverifiedLabel": "Doğrulanmamış sözleşme",
+      "typeLabel": "Tür",
+      "intentUnknown": "Bilinmeyen",
+      "intentSend": "Gönder",
+      "signingFor": "İmza sahibi"
+    },
+    "currency": {
+      "title": "Görüntüleme para birimi",
+      "searchPlaceholder": "Para birimi ara",
+      "noMatch": "\"{{query}}\" ile eşleşen para birimi yok."
+    },
+    "scanner": {
+      "title": "QR Tara",
+      "hint": "Kamerayı bir QR koduna doğrultun",
+      "permissionText": "QR kodlarını taramak için kamera erişimi gerekli.",
+      "grantPermission": "İzin Ver",
+      "noQrFound": "QR Bulunamadı",
+      "noQrFoundMsg": "Seçilen görselde bir QR kodu bulunamadı.",
+      "error": "Hata",
+      "errorImage": "Görsel işlenemedi.",
+      "errorPicker": "Görsel seçici açılamadı."
+    },
+    "gas": {
+      "estFee": "Tahmini Ücret",
+      "gasPrice": "Gas Fiyatı",
+      "gasPriceUserOp": "Gas Fiyatı (UserOp)",
+      "gasLimit": "Gas Limiti",
+      "walletDeployed": "Cüzdan Dağıtıldı",
+      "deployedYes": "Evet",
+      "deployedNo": "Hayır (ilk işlem)"
+    },
+    "dock": {
+      "receive": "Al",
+      "send": "Gönder"
+    },
+    "networkFilter": {
+      "selectChain": "Zincir Seç",
+      "searchChains": "Zincir ara",
+      "allNetworks": "Tüm Ağlar",
+      "showEvery": "Tüm zincirleri göster"
+    },
+    "chart": {
+      "noDataFor": "{{label}} için veri yok",
+      "tapHint": "Bakiyeyi görmek için bir çubuğa dokunun"
+    }
+  }
+}

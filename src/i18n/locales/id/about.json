@@ -1,0 +1,22 @@
+{
+  "about": {
+    "title": "Tentang",
+    "version": "v{{version}} ({{commit}})",
+    "tagline": "Cara yang lebih sederhana untuk memiliki kripto",
+    "sectionTechnical": "Detail teknis",
+    "techWalletLabel": "Dompet",
+    "techWalletValue": "Safe v1.4.1",
+    "techAuthLabel": "Autentikasi",
+    "techAuthValue": "WebAuthn / P-256",
+    "techAccountTypeLabel": "Tipe akun",
+    "techAccountTypeValue": "ERC-4337 (Smart Account)",
+    "techSignerLabel": "Modul signer",
+    "techSignerValue": "SafeWebAuthnSharedSigner",
+    "techNetworksLabel": "Jaringan",
+    "techNetworksValue": "{{count}} chain EVM",
+    "linkWebsite": "Situs Web",
+    "linkGitHub": "GitHub",
+    "linkSafeWallet": "Safe Wallet",
+    "footer": "Dibuat dengan saksama. Kunci Anda, koin Anda."
+  }
+}

@@ -8,6 +8,7 @@ import { formatBalance } from '@/models/types';
 import type { BalancePoint } from '@/services/balance-history';
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   data: BalancePoint[];
@@ -16,6 +17,7 @@ interface Props {
 
 export function BarChart({ data, symbol }: Props) {
   const [selected, setSelected] = useState<number | null>(null);
+  const { t } = useTranslation();
 
   if (data.length === 0) return null;
 
@@ -34,10 +36,10 @@ export function BarChart({ data, symbol }: Props) {
               <Text style={styles.tooltipDate}>{selectedPoint.label}</Text>
             </>
           ) : (
-            <Text style={styles.tooltipHint}>No data for {selectedPoint.label}</Text>
+            <Text style={styles.tooltipHint}>{t('componentsUi.chart.noDataFor', { label: selectedPoint.label })}</Text>
           )
         ) : (
-          <Text style={styles.tooltipHint}>Tap a bar to see balance</Text>
+          <Text style={styles.tooltipHint}>{t('componentsUi.chart.tapHint')}</Text>
         )}
       </View>
 

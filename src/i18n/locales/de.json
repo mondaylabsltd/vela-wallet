@@ -1,0 +1,82 @@
+{
+  "common": {
+    "cancel": "Abbrechen",
+    "system": "System",
+    "automatic": "Automatisch",
+    "error": "Fehler",
+    "somethingWrong": "Etwas ist schiefgelaufen",
+    "tryAgain": "Erneut versuchen"
+  },
+  "language": {
+    "title": "Sprache",
+    "pickerTitle": "Sprache",
+    "pickerSubtitle": "Wählen Sie die Sprache für die gesamte App.",
+    "followSystem": "System folgen",
+    "english": "English",
+    "chinese": "简体中文"
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "sections": {
+      "account": "Konto",
+      "appearance": "Darstellung",
+      "payments": "Zahlungen",
+      "localization": "Lokalisierung",
+      "advanced": "Erweitert",
+      "developer": "Entwickler"
+    },
+    "account": {
+      "switch": "Konto wechseln"
+    },
+    "appearance": {
+      "themeLight": "Hell",
+      "themeDark": "Dunkel",
+      "themeAuto": "Automatisch"
+    },
+    "payments": {
+      "voiceTitle": "Sprachansagen",
+      "voiceSubtitle": "Eingehende Zahlungen vorlesen"
+    },
+    "localization": {
+      "autoExample": "Automatisch · {{example}}",
+      "numberTitle": "Zahlenformat",
+      "numberSubtitle": "Wie Beträge gruppiert und das Dezimaltrennzeichen dargestellt werden.",
+      "dateTitle": "Datumsformat",
+      "dateSubtitle": "Reihenfolge von Tag / Monat / Jahr und das Trennzeichen.",
+      "timeTitle": "Zeitformat",
+      "timeSubtitle": "12-Stunden- oder 24-Stunden-Format."
+    },
+    "advanced": {
+      "networksTitle": "Netzwerke",
+      "networksSubtitle": "RPC-, Explorer- & Bundler-URLs",
+      "addNetworkTitle": "Netzwerk hinzufügen",
+      "addNetworkSubtitle": "Eigenes EVM-Netzwerk hinzufügen",
+      "endpointsTitle": "Dienst-Endpunkte",
+      "endpointsSubtitle": "Chain-Daten, Identity-Index, Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "Treasury",
+      "treasurySubtitle": "Treasury-Adresse & Guthaben anzeigen",
+      "clearSigningTitle": "Clear-Signing-Test",
+      "clearSigningSubtitle": "Vorschau der ERC-7730-Signatur-Oberfläche"
+    },
+    "about": {
+      "title": "Über",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "Abmelden",
+      "title": "Abmelden",
+      "desc": "Ihre Wallet-Daten bleiben auf diesem Gerät. Melden Sie sich jederzeit wieder mit Ihrem Passkey an (Face ID / Fingerabdruck).",
+      "warning": "Ihr öffentlicher Schlüssel wurde noch nicht mit dem Server synchronisiert. Wenn Sie sich jetzt abmelden, ist eine Wiederherstellung auf anderen Geräten möglicherweise nicht möglich.",
+      "anyway": "Trotzdem abmelden",
+      "cancel": "Abbrechen"
+    },
+    "formatNote": {
+      "system": "System",
+      "indian": "Indisch",
+      "h24": "24-Stunden",
+      "h12": "12-Stunden"
+    }
+  }
+}

@@ -15,6 +15,7 @@
 import { color, createStyles, inter, motion, radius, space, text } from '@/constants/theme';
 import { Download, ScanLine, Send as SendIcon } from 'lucide-react-native';
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -64,6 +65,7 @@ interface WaveDockProps {
 }
 
 export function WaveDock({ onReceive, onScan, onSend }: WaveDockProps) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const scanScale = useSharedValue(1);
   const scanStyle = useAnimatedStyle(() => ({ transform: [{ scale: scanScale.value }] }));
@@ -91,9 +93,9 @@ export function WaveDock({ onReceive, onScan, onSend }: WaveDockProps) {
 
       {/* Two core buttons fill the width, leaving a slot for the Scan */}
       <View style={[styles.row, { bottom: insets.bottom + space.md }]} pointerEvents="box-none">
-        <DockButton label="Receive" icon={Download} onPress={onReceive} variant="primary" />
+        <DockButton label={t('componentsUi.dock.receive')} icon={Download} onPress={onReceive} variant="primary" />
         <View style={styles.scanSlot} pointerEvents="none" />
-        <DockButton label="Send" icon={SendIcon} onPress={onSend} variant="secondary" />
+        <DockButton label={t('componentsUi.dock.send')} icon={SendIcon} onPress={onSend} variant="secondary" />
       </View>
     </View>
   );

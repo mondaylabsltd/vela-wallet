@@ -11,8 +11,10 @@ import { ArrowLeft, ExternalLink } from 'lucide-react-native';
 import React, { useMemo, useRef } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 
 export default function AboutScreen() {
+  const { t } = useTranslation();
   const router = useSafeRouter();
   const networks = useMemo(() => getAllNetworksSync(), []);
   const devTapRef = useRef({ count: 0, lastTap: 0 });
@@ -38,7 +40,7 @@ export default function AboutScreen() {
           <Pressable onPress={() => router.back()} hitSlop={8} style={styles.navBtn}>
             <ArrowLeft size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
-          <Text style={styles.title}>About</Text>
+          <Text style={styles.title}>{t('about.title')}</Text>
           <View style={styles.headerSpacer} />
         </View>
 
@@ -49,35 +51,35 @@ export default function AboutScreen() {
               vel<Text style={styles.logoAccent}>a</Text>
             </Text>
           </Pressable>
-          <Text style={styles.version}>v{APP_VERSION} ({GIT_COMMIT})</Text>
-          <Text style={styles.tagline}>A simpler way to own crypto</Text>
+          <Text style={styles.version}>{t('about.version', { version: APP_VERSION, commit: GIT_COMMIT })}</Text>
+          <Text style={styles.tagline}>{t('about.tagline')}</Text>
         </Animated.View>
 
         {/* Technical */}
         <Animated.View entering={fadeInDown(150, 400)}>
-          <Text style={styles.sectionTitle}>Technical details</Text>
+          <Text style={styles.sectionTitle}>{t('about.sectionTechnical')}</Text>
           <VelaCard style={styles.techCard}>
-            <TechRow label="Wallet" value="Safe v1.4.1" />
-            <TechRow label="Authentication" value="WebAuthn / P-256" />
-            <TechRow label="Account type" value="ERC-4337 (Smart Account)" />
-            <TechRow label="Signer module" value="SafeWebAuthnSharedSigner" />
-            <TechRow label="Networks" value={`${networks.length} EVM chains`} />
+            <TechRow label={t('about.techWalletLabel')} value={t('about.techWalletValue')} />
+            <TechRow label={t('about.techAuthLabel')} value={t('about.techAuthValue')} />
+            <TechRow label={t('about.techAccountTypeLabel')} value={t('about.techAccountTypeValue')} />
+            <TechRow label={t('about.techSignerLabel')} value={t('about.techSignerValue')} />
+            <TechRow label={t('about.techNetworksLabel')} value={t('about.techNetworksValue', { count: networks.length })} />
           </VelaCard>
         </Animated.View>
 
         {/* Links */}
         <Animated.View entering={fadeInDown(200, 400)}>
           <VelaCard style={styles.linksCard}>
-            <LinkRow label="Website" url="https://getvela.app" />
+            <LinkRow label={t('about.linkWebsite')} url="https://getvela.app" />
             <View style={styles.separator} />
-            <LinkRow label="GitHub" url="https://github.com/atshelchin/vela-wallet" />
+            <LinkRow label={t('about.linkGitHub')} url="https://github.com/atshelchin/vela-wallet" />
             <View style={styles.separator} />
-            <LinkRow label="Safe Wallet" url="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1" />
+            <LinkRow label={t('about.linkSafeWallet')} url="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1" />
           </VelaCard>
         </Animated.View>
 
         <Text style={styles.footer}>
-          Built with care. Your keys, your coins.
+          {t('about.footer')}
         </Text>
       </ScrollView>
     </ScreenContainer>

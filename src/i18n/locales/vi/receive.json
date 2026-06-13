@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "Nhận",
+    "noAddress": "Không có địa chỉ",
+    "shareGenerating": "Đang tạo...",
+    "shareButton": "Chia sẻ",
+    "listeningForDeposits": "Đang chờ tiền vào",
+    "warningTitle": "Trước khi nhận",
+    "warningBody": "Chỉ gửi tài sản trên các mạng được hỗ trợ — chuyển khoản trên mạng không hỗ trợ có thể mất vĩnh viễn.",
+    "warningHint": "Kiểm tra",
+    "warningHintNetworks": "{{count}} mạng được hỗ trợ",
+    "warningHintSuffix": "bên dưới trước khi chia sẻ địa chỉ của bạn.",
+    "warningConfirm": "Tôi đã hiểu",
+    "networksLabel": "Hoạt động trên {{count}} mạng EVM",
+    "shareCardHeadline": "Quét để gửi crypto cho tôi",
+    "shareDialogTitle": "Địa chỉ ví {{name}}"
+  }
+}

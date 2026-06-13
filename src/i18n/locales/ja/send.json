@@ -1,0 +1,61 @@
+{
+  "send": {
+    "selectTokenTitle": "トークンを選択",
+    "searchPlaceholder": "トークンを検索...",
+    "loadingTokens": "トークンを読み込み中...",
+    "noMatchingTokens": "該当するトークンはありません",
+    "noTokensWithBalance": "残高のあるトークンはありません",
+
+    "sendTitle": "{{symbol}} を送る",
+    "maxBtn": "全額",
+    "recipientLabel": "送金先",
+    "recipientPlaceholder": "0x... のアドレス",
+    "velaUser": "Vela ユーザー",
+    "lowBalanceWarning": "ネットワーク手数料を支払うための残高が不足しています。送金する前に {{nativeSym}} をウォレットに追加してください。",
+    "preparing": "準備中...",
+    "continueBtn": "次へ",
+
+    "alertInvalidAddressTitle": "無効なアドレス",
+    "alertInvalidAddressBody": "有効な Ethereum アドレス（0x...）を入力してください。",
+    "alertInvalidAmountTitle": "無効な金額",
+    "alertInvalidAmountBody": "0 より大きい有効な金額を入力してください。",
+    "alertInsufficientBalanceTitle": "残高不足",
+    "alertLoadTokensError": "トークンの読み込みに失敗しました。",
+
+    "warnNotEnoughToken": "このアカウントには {{symbol}} の残高が足りません",
+    "warnInsufficientForGas": "金額と Gas 手数料を合わせると {{sym}} が不足します",
+    "warnInsufficientGas": "Gas 手数料を支払う {{sym}} が不足しています",
+    "warnNeedGas": "Gas 手数料の支払いに {{sym}} が必要です",
+
+    "confirmTitle": "確認",
+    "walletFallbackName": "ウォレット",
+    "fromLabel": "送金元",
+    "toLabel": "送金先",
+    "estFeeLabel": "推定手数料",
+    "estimatingFee": "見積もり中...",
+    "gasPriceLabel": "Gas 価格",
+    "gasPriceUserOpLabel": "Gas 価格（UserOp）",
+    "gasLimitLabel": "Gas Limit",
+    "walletDeployedLabel": "ウォレットのデプロイ",
+    "walletDeployedYes": "済み",
+    "walletDeployedNo": "未デプロイ（初回の取引）",
+    "checkingGas": "Gas を確認中...",
+    "confirmSendBtn": "確認して送る",
+
+    "txPreparing": "トランザクションを準備中...",
+    "txSigning": "生体認証を待っています...",
+    "txSubmitting": "ネットワークに送信中...",
+    "txSubmitted": "トランザクションをネットワークに送信しました",
+    "txSlowConfirm": "通常より時間がかかっています。しばらくお待ちください...",
+    "txWaitingConfirm": "ブロックチェーンの承認を待っています...",
+    "txElapsed": "{{elapsed}} 秒経過 — もうすぐ完了します",
+    "txRemaining": "残り約 {{remaining}} 秒",
+    "txTypicalTime": "{{chainName}} の承認には通常約 {{estSecs}} 秒かかります",
+    "txRetryBtn": "再試行",
+
+    "txErrorTimeout": "トランザクションは送信されましたが、承認がタイムアウトしました。後で履歴をご確認ください。",
+    "txErrorBundlerLoop": "Gas アカウントの残高が Bundler に繰り返し拒否されています。後でもう一度試すか、Gas のティアを上げてください。",
+    "txErrorBundlerFund": "Bundler アカウントの Gas が不足しています。設定からチャージしてください。",
+    "txErrorPublicKey": "このアカウントの公開鍵が見つかりません"
+  }
+}

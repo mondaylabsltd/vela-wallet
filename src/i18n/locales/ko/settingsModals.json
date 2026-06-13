@@ -1,0 +1,69 @@
+{
+  "settingsModals": {
+    "network": {
+      "modalTitle": "네트워크",
+      "chainId": "체인 {{chainId}}",
+      "fieldRpcUrl": "RPC URL",
+      "fieldExplorer": "탐색기",
+      "fieldBundler": "BUNDLER",
+      "removeTitle": "네트워크 제거",
+      "removeBody": "이 사용자 지정 네트워크를 제거할까요?",
+      "removeCancel": "취소",
+      "removeConfirm": "제거"
+    },
+    "account": {
+      "modalTitle": "계정",
+      "total": "총 {{amount}}",
+      "createNew": "새 계정 만들기",
+      "signInExisting": "기존 계정으로 로그인"
+    },
+    "endpoints": {
+      "modalTitle": "서비스 엔드포인트",
+      "description": "이 서비스들이 지갑을 구동합니다.\n완전한 자가 수탁을 위해 직접 인스턴스를 배포할 수 있습니다.",
+      "chainDataLabel": "체인 데이터 인덱스",
+      "chainDataHint": "네트워크 정보, 토큰 데이터, 체인 로고를 제공합니다",
+      "passkeyLabel": "패스키 인덱스",
+      "passkeyHint": "기기 간 로그인을 위해 패스키 공개 키를 저장합니다",
+      "bundlerLabel": "BUNDLER 서비스",
+      "bundlerHint": "Vela Bundler 호환 엔드포인트가 필요합니다",
+      "fiatLabel": "법정화폐 환율",
+      "fiatHint": "USD 기준 환율 ({rates:{…}}). 통화 목록을 구성합니다 — 더 넓은 범위를 원하면 교체하세요",
+      "resetToDefaults": "기본값으로 재설정"
+    },
+    "addNetwork": {
+      "modalTitle": "네트워크 추가",
+      "description": "네트워크 이름, 토큰 심볼 또는 체인 ID로 검색하세요.",
+      "searchPlaceholder": "예: Gnosis, ACE, 648...",
+      "chainMeta": "체인 {{chainId}} · {{symbol}}",
+      "searching": "검색 중...",
+      "checkingCompatibility": "호환성 확인 중...",
+      "customRpcTitle": "사용자 지정 RPC (선택)",
+      "customRpcPlaceholder": "https://your-rpc-url...",
+      "recheckWithRpc": "이 RPC로 다시 확인",
+      "bestRpc": "최적 RPC: {{latencyMs}}ms",
+      "compatibilityCheck": "호환성 검사",
+      "unableToVerify": "확인할 수 없음 — RPC 요청 실패",
+      "retry": "재시도",
+      "addNetworkBtn": "네트워크 추가",
+      "incompatibleHint": "이 체인에 필요한 일부 컨트랙트가 아직 배포되지 않았습니다.\nVela Wallet 체인 설정 도구로 배포한 후 돌아와서 다시 확인하세요.",
+      "openChainSetupTool": "체인 설정 도구 열기",
+      "recheck": "다시 확인",
+      "chainIdLabel": "체인 ID: {{chainId}}",
+      "nativeLabel": "기본 토큰: {{symbol}}",
+      "testnet": "테스트넷"
+    },
+    "treasury": {
+      "modalTitle": "트레저리",
+      "addressLabel": "주소 (모든 네트워크)",
+      "balancesLabel": "잔액",
+      "minBalance": "최소 {{amount}}",
+      "unreachable": "Bundler에 연결할 수 없음",
+      "close": "닫기"
+    },
+    "health": {
+      "offline": "오프라인",
+      "httpsRequired": "HTTPS 필요",
+      "invalid": "유효하지 않음"
+    }
+  }
+}

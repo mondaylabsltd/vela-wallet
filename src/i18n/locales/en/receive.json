@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "Receive",
+    "noAddress": "No address",
+    "shareGenerating": "Generating...",
+    "shareButton": "Share",
+    "listeningForDeposits": "Listening for deposits",
+    "warningTitle": "Before you receive",
+    "warningBody": "Only send assets on supported networks — unsupported transfers may be lost permanently.",
+    "warningHint": "Check the",
+    "warningHintNetworks": "{{count}} supported networks",
+    "warningHintSuffix": "below before sharing your address.",
+    "warningConfirm": "I Understand",
+    "networksLabel": "Works on {{count}} EVM networks",
+    "shareCardHeadline": "Scan to Send Me Crypto",
+    "shareDialogTitle": "{{name}} Wallet Address"
+  }
+}

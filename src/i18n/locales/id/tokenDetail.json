@@ -1,0 +1,15 @@
+{
+  "tokenDetail": {
+    "chartTitle": "Saldo 7 Hari",
+    "chartEmpty": "Tidak ada data historis",
+    "send": "Kirim",
+    "receive": "Terima",
+    "labelName": "Nama",
+    "labelContract": "Kontrak",
+    "labelDecimals": "Desimal",
+    "labelPrice": "Harga",
+    "priceValue": "1 {{symbol}} = {{value}}",
+    "labelTransactions": "Transaksi",
+    "viewOnExplorer": "Lihat di Explorer"
+  }
+}

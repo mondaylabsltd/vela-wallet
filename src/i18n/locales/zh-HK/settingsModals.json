@@ -1,0 +1,69 @@
+{
+  "settingsModals": {
+    "network": {
+      "modalTitle": "網絡",
+      "chainId": "Chain {{chainId}}",
+      "fieldRpcUrl": "RPC URL",
+      "fieldExplorer": "瀏覽器",
+      "fieldBundler": "BUNDLER",
+      "removeTitle": "移除網絡",
+      "removeBody": "要移除此自訂網絡嗎？",
+      "removeCancel": "取消",
+      "removeConfirm": "移除"
+    },
+    "account": {
+      "modalTitle": "帳戶",
+      "total": "合共 {{amount}}",
+      "createNew": "建立新帳戶",
+      "signInExisting": "以現有帳戶登入"
+    },
+    "endpoints": {
+      "modalTitle": "服務端點",
+      "description": "這些服務支援你的錢包運作。\n你可自行部署實例，以實現完全自我託管。",
+      "chainDataLabel": "區塊鏈數據索引",
+      "chainDataHint": "提供網絡資訊、代幣數據及區塊鏈標誌",
+      "passkeyLabel": "通行密鑰索引",
+      "passkeyHint": "儲存通行密鑰公鑰，以便跨裝置登入",
+      "bundlerLabel": "BUNDLER 服務",
+      "bundlerHint": "需要相容 Vela Bundler 的端點",
+      "fiatLabel": "法定貨幣匯率",
+      "fiatHint": "以 USD 為基準的匯率（{rates:{…}}）。驅動貨幣列表 — 可更換以擴大覆蓋範圍",
+      "resetToDefaults": "重設為預設值"
+    },
+    "addNetwork": {
+      "modalTitle": "新增網絡",
+      "description": "可按網絡名稱、代幣代號或 Chain ID 搜尋。",
+      "searchPlaceholder": "例如 Gnosis、ACE、648⋯",
+      "chainMeta": "Chain {{chainId}} · {{symbol}}",
+      "searching": "正在搜尋⋯",
+      "checkingCompatibility": "正在檢查相容性⋯",
+      "customRpcTitle": "自訂 RPC（選填）",
+      "customRpcPlaceholder": "https://your-rpc-url...",
+      "recheckWithRpc": "以此 RPC 重新檢查",
+      "bestRpc": "最佳 RPC：{{latencyMs}}ms",
+      "compatibilityCheck": "相容性檢查",
+      "unableToVerify": "無法驗證 — RPC 請求失敗",
+      "retry": "重試",
+      "addNetworkBtn": "新增網絡",
+      "incompatibleHint": "此區塊鏈上尚未部署部分必需的合約。\n請使用 Vela Wallet 區塊鏈設定工具部署，然後返回重新檢查。",
+      "openChainSetupTool": "開啟區塊鏈設定工具",
+      "recheck": "重新檢查",
+      "chainIdLabel": "Chain ID：{{chainId}}",
+      "nativeLabel": "原生代幣：{{symbol}}",
+      "testnet": "測試網"
+    },
+    "treasury": {
+      "modalTitle": "資金庫",
+      "addressLabel": "地址（所有網絡）",
+      "balancesLabel": "餘額",
+      "minBalance": "最低 {{amount}}",
+      "unreachable": "無法連接 bundler",
+      "close": "關閉"
+    },
+    "health": {
+      "offline": "離線",
+      "httpsRequired": "需要 HTTPS",
+      "invalid": "無效"
+    }
+  }
+}

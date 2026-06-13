@@ -1,0 +1,26 @@
+{
+  "home": {
+    "totalBalance": "總餘額",
+    "manageAssets": "管理資產",
+    "tabActivity": "活動",
+    "tabConnections": "連接",
+    "liveIndicator": "即時 · 正在接收付款",
+    "emptyNoActivityNetwork": "此網絡暫無活動",
+    "emptyNoActivity": "暫無活動",
+    "emptySubtitle": "收到的付款會即時顯示於此。",
+    "invalidQrTitle": "QR 無效",
+    "invalidQrBody": "請掃描有效的以太坊地址或連接 URI。",
+    "switchAccountTitle": "切換帳戶",
+    "switcherAccountCount": "{{count}} 個帳戶 · ",
+    "connEmptyTitle": "沒有有效連接",
+    "connEmptySub": "掃描 dApp QR 碼以連接。同一時間只可有一個有效連接。",
+    "connScanBtn": "掃描以連接",
+    "connDefaultName": "已連接的 dApp",
+    "connActive": "有效",
+    "connNote": "同一時間只可有一個有效連接",
+    "connDisconnect": "中斷連接",
+    "connEventsHead": "連接活動 · {{count}}",
+    "connNoEvents": "此連接暫無請求。",
+    "toastReceived": "已收到 {{amount}} {{token}}"
+  }
+}

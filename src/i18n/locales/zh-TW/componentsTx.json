@@ -1,0 +1,42 @@
+{
+  "componentsTx": {
+    "receipt": {
+      "title": "交易收據",
+      "canvasTitle": "交易收據",
+      "from": "從",
+      "to": "至",
+      "network": "網路",
+      "time": "時間",
+      "txHash": "交易雜湊",
+      "scanHint": "掃描即可在區塊鏈瀏覽器查看",
+      "footerBrand": "VELA WALLET",
+      "footerUrl": "getvela.app",
+      "explorer": "區塊鏈瀏覽器",
+      "share": "分享",
+      "done": "完成",
+      "copiedTitle": "已複製",
+      "copiedImageBody": "收據圖片已複製到剪貼簿。",
+      "copiedLinkBody": "區塊鏈瀏覽器連結已複製。"
+    },
+    "detail": {
+      "received": "已收到",
+      "sent": "已發送",
+      "from": "從",
+      "to": "至",
+      "sectionTitle": "交易明細",
+      "labelDate": "日期",
+      "labelStatus": "狀態",
+      "labelFrom": "從",
+      "labelTo": "至",
+      "labelOperation": "操作",
+      "labelChain": "鏈",
+      "labelHash": "雜湊",
+      "statusFailed": "失敗",
+      "statusSucceeded": "成功",
+      "opContractInteraction": "合約互動",
+      "opSignature": "簽章",
+      "opTypedDataSignature": "型別資料簽章",
+      "opTransfer": "轉帳"
+    }
+  }
+}

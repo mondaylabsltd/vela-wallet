@@ -1,0 +1,42 @@
+{
+  "componentsTx": {
+    "receipt": {
+      "title": "Transaktionsbeleg",
+      "canvasTitle": "TRANSAKTIONSBELEG",
+      "from": "Von",
+      "to": "An",
+      "network": "Netzwerk",
+      "time": "Zeit",
+      "txHash": "Tx-Hash",
+      "scanHint": "Scannen, um im Explorer anzusehen",
+      "footerBrand": "VELA WALLET",
+      "footerUrl": "getvela.app",
+      "explorer": "Explorer",
+      "share": "Teilen",
+      "done": "Fertig",
+      "copiedTitle": "Kopiert",
+      "copiedImageBody": "Belegbild in die Zwischenablage kopiert.",
+      "copiedLinkBody": "Explorer-Link kopiert."
+    },
+    "detail": {
+      "received": "Empfangen",
+      "sent": "Gesendet",
+      "from": "Von",
+      "to": "An",
+      "sectionTitle": "Transaktionsdetails",
+      "labelDate": "Datum",
+      "labelStatus": "Status",
+      "labelFrom": "Von",
+      "labelTo": "An",
+      "labelOperation": "Vorgang",
+      "labelChain": "Chain",
+      "labelHash": "Hash",
+      "statusFailed": "Fehlgeschlagen",
+      "statusSucceeded": "Erfolgreich",
+      "opContractInteraction": "Contract-Interaktion",
+      "opSignature": "Signatur",
+      "opTypedDataSignature": "Signatur typisierter Daten",
+      "opTransfer": "Transfer"
+    }
+  }
+}

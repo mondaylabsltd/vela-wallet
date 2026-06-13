@@ -1,0 +1,92 @@
+{
+  "componentsUi": {
+    "funding": {
+      "title": "Gas-Konto aktivieren",
+      "balance": "Guthaben",
+      "freeTitle": "Kostenlose Aktivierung",
+      "freeBadge": "GRATIS",
+      "freeRequesting": "Wird angefordert ...",
+      "freeDesc": "Von Vela für neue Nutzer gesponsert",
+      "selfTitle": "Selbst aktivieren",
+      "selfDesc": "Senden Sie {{symbol}}, um das Gas-Konto zu aktivieren",
+      "activationFee": "Aktivierungsgebühr",
+      "gasAccount": "Gas-Konto",
+      "checkBtn": "Ich habe gesendet",
+      "checkingBtn": "Wird geprüft ...",
+      "continue": "Weiter",
+      "cancel": "Abbrechen",
+      "denialDefault": "Kostenlose Aktivierung nicht verfügbar.",
+      "denialNonceExceeded": "Kostenloses Kontingent aufgebraucht.",
+      "denialTreasuryDepleted": "Kostenlose Mittel vorübergehend erschöpft.",
+      "denialBalanceTooLow": "Wallet-Guthaben zu niedrig zur Qualifikation.",
+      "denialNoPasskey": "Passkey für kostenlose Aktivierung erforderlich.",
+      "denialRateLimited": "Zu viele Anfragen. Versuchen Sie es später.",
+      "denialTransferFailed": "Überweisung fehlgeschlagen. Erneut versuchen."
+    },
+    "signing": {
+      "loading": "Wird geladen ...",
+      "signatureRequest": "Signaturanfrage",
+      "signing": "Wird signiert ...",
+      "signLabel": "Signieren",
+      "confirmLabel": "Bestätigen",
+      "confirmIntentLabel": "{{intent}} bestätigen",
+      "approve": "Genehmigen",
+      "dismiss": "Schließen",
+      "reject": "Ablehnen",
+      "personalSignTag": "personal_sign · Keine Gas-Gebühr",
+      "unlimitedWarning": "Unbegrenzt — dieser Contract kann alle Ihre Token ausgeben",
+      "blindTypedWarning": "Diese typisierten Daten konnten mit keinem bekannten Deskriptor dekodiert werden. Sorgfältig prüfen.",
+      "blindDecodeWarning": "Dekodierung nicht möglich — kein ERC-7730-Deskriptor ({{bytes}} Bytes)",
+      "rawCalldataToggle": "Rohe Calldata · {{bytes}} Bytes",
+      "signMessage": "Nachricht signieren",
+      "signTypedData": "Typisierte Daten signieren",
+      "spenderLabel": "Ausgabeberechtigter",
+      "recipientLabel": "Empfänger",
+      "interactingLabel": "Interaktion mit",
+      "unverifiedLabel": "Nicht verifizierter Contract",
+      "typeLabel": "Typ",
+      "intentUnknown": "Unbekannt",
+      "intentSend": "Senden",
+      "signingFor": "Signieren für"
+    },
+    "currency": {
+      "title": "Anzeigewährung",
+      "searchPlaceholder": "Währung suchen",
+      "noMatch": "Keine Währung passt zu „{{query}}“."
+    },
+    "scanner": {
+      "title": "QR-Code scannen",
+      "hint": "Richten Sie die Kamera auf einen QR-Code",
+      "permissionText": "Für das Scannen von QR-Codes wird Kamerazugriff benötigt.",
+      "grantPermission": "Berechtigung erteilen",
+      "noQrFound": "Kein QR-Code gefunden",
+      "noQrFoundMsg": "Im ausgewählten Bild konnte kein QR-Code gefunden werden.",
+      "error": "Fehler",
+      "errorImage": "Bild konnte nicht verarbeitet werden.",
+      "errorPicker": "Bildauswahl konnte nicht geöffnet werden."
+    },
+    "gas": {
+      "estFee": "Gesch. Gebühr",
+      "gasPrice": "Gas-Preis",
+      "gasPriceUserOp": "Gas-Preis (UserOp)",
+      "gasLimit": "Gas-Limit",
+      "walletDeployed": "Wallet bereitgestellt",
+      "deployedYes": "Ja",
+      "deployedNo": "Nein (erste Tx)"
+    },
+    "dock": {
+      "receive": "Empfangen",
+      "send": "Senden"
+    },
+    "networkFilter": {
+      "selectChain": "Chain auswählen",
+      "searchChains": "Chains suchen",
+      "allNetworks": "Alle Netzwerke",
+      "showEvery": "Jede Chain anzeigen"
+    },
+    "chart": {
+      "noDataFor": "Keine Daten für {{label}}",
+      "tapHint": "Tippen Sie auf einen Balken, um das Guthaben zu sehen"
+    }
+  }
+}

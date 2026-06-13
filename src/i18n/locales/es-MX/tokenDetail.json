@@ -1,0 +1,15 @@
+{
+  "tokenDetail": {
+    "chartTitle": "Saldo de 7 días",
+    "chartEmpty": "No hay datos históricos disponibles",
+    "send": "Enviar",
+    "receive": "Recibir",
+    "labelName": "Nombre",
+    "labelContract": "Contrato",
+    "labelDecimals": "Decimales",
+    "labelPrice": "Precio",
+    "priceValue": "1 {{symbol}} = {{value}}",
+    "labelTransactions": "Transacciones",
+    "viewOnExplorer": "Ver en el explorador"
+  }
+}

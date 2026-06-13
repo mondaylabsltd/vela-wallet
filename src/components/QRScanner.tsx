@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Platform, View, Text, StyleSheet, Pressable, Modal, StatusBar } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
@@ -224,6 +225,7 @@ function NativeCamera({ facing, onBarCodeScanned, active }: {
   onBarCodeScanned: (result: { data: string }) => void;
   active: boolean;
 }) {
+  const { t } = useTranslation();
   const { CameraView, useCameraPermissions } = require('expo-camera');
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -231,9 +233,9 @@ function NativeCamera({ facing, onBarCodeScanned, active }: {
     return (
       <View style={styles.permissionContainer}>
         <Camera size={40} color={color.fg.subtle} />
-        <Text style={styles.permissionText}>Camera access is needed to scan QR codes.</Text>
+        <Text style={styles.permissionText}>{t('componentsUi.scanner.permissionText')}</Text>
         <Pressable style={styles.permissionButton} onPress={requestPermission}>
-          <Text style={styles.permissionButtonText}>Grant Permission</Text>
+          <Text style={styles.permissionButtonText}>{t('componentsUi.scanner.grantPermission')}</Text>
         </Pressable>
       </View>
     );
@@ -271,6 +273,7 @@ function ScanOverlay() {
 // -- Main QRScanner ----------------------------------------------------------
 
 export function QRScanner({ visible, onScan, onClose }: Props) {
+  const { t } = useTranslation();
   const [scanned, setScanned] = useState(false);
   const [facing, setFacing] = useState<'back' | 'front'>('back');
   const insets = useSafeAreaInsets();
@@ -310,10 +313,10 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           await loadZbar();
           const decoded = await decodeUploadedImage(canvas);
           if (decoded) { hapticSuccess(); onScan(parseAddress(decoded)); }
-          else showAlert('No QR Found', 'Could not find a QR code in the selected image.');
+          else showAlert(t('componentsUi.scanner.noQrFound'), t('componentsUi.scanner.noQrFoundMsg'));
         } catch (e: any) {
           console.warn('[QR] pick error:', e?.message);
-          showAlert('Error', 'Failed to process the image.');
+          showAlert(t('componentsUi.scanner.error'), t('componentsUi.scanner.errorImage'));
         }
       };
       input.click();
@@ -342,8 +345,8 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             }
           } catch {}
         }
-        showAlert('No QR Found', 'Could not find a QR code in the selected image.');
-      } catch { showAlert('Error', 'Failed to open image picker.'); }
+        showAlert(t('componentsUi.scanner.noQrFound'), t('componentsUi.scanner.noQrFoundMsg'));
+      } catch { showAlert(t('componentsUi.scanner.error'), t('componentsUi.scanner.errorPicker')); }
     }
   }
 
@@ -361,7 +364,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
         <Pressable onPress={onClose} hitSlop={8} style={styles.headerBtn}>
           <X size={22} color="#fff" strokeWidth={2.5} />
         </Pressable>
-        <Text style={styles.title}>Scan QR</Text>
+        <Text style={styles.title}>{t('componentsUi.scanner.title')}</Text>
         <View style={styles.headerRight}>
           <Pressable onPress={handlePickImage} hitSlop={8} style={styles.headerBtn}>
             <ImagePlus size={20} color="#fff" strokeWidth={2} />
@@ -375,7 +378,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
       </View>
 
       <View style={[styles.footerOverlay, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-        <Text style={styles.hint}>Point camera at a QR code</Text>
+        <Text style={styles.hint}>{t('componentsUi.scanner.hint')}</Text>
       </View>
     </View>
   );

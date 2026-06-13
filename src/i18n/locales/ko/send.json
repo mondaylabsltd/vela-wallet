@@ -1,0 +1,61 @@
+{
+  "send": {
+    "selectTokenTitle": "토큰 선택",
+    "searchPlaceholder": "토큰 검색...",
+    "loadingTokens": "토큰 불러오는 중...",
+    "noMatchingTokens": "일치하는 토큰이 없습니다",
+    "noTokensWithBalance": "잔액이 있는 토큰이 없습니다",
+
+    "sendTitle": "{{symbol}} 보내기",
+    "maxBtn": "최대",
+    "recipientLabel": "받는 사람",
+    "recipientPlaceholder": "0x... 주소",
+    "velaUser": "Vela 사용자",
+    "lowBalanceWarning": "네트워크 수수료를 낼 잔액이 부족합니다. 보내기 전에 {{nativeSym}}을(를) 지갑에 더 추가하세요.",
+    "preparing": "준비 중...",
+    "continueBtn": "계속",
+
+    "alertInvalidAddressTitle": "잘못된 주소",
+    "alertInvalidAddressBody": "올바른 이더리움 주소(0x...)를 입력하세요.",
+    "alertInvalidAmountTitle": "잘못된 금액",
+    "alertInvalidAmountBody": "0보다 큰 올바른 금액을 입력하세요.",
+    "alertInsufficientBalanceTitle": "잔액 부족",
+    "alertLoadTokensError": "토큰을 불러오지 못했습니다.",
+
+    "warnNotEnoughToken": "이 계정에 {{symbol}} 잔액이 부족합니다",
+    "warnInsufficientForGas": "{{sym}} 잔액이 금액 + Gas 수수료를 충당하기에 부족합니다",
+    "warnInsufficientGas": "Gas 수수료를 낼 {{sym}}이(가) 부족합니다",
+    "warnNeedGas": "Gas 수수료를 내려면 {{sym}}이(가) 필요합니다",
+
+    "confirmTitle": "확인",
+    "walletFallbackName": "지갑",
+    "fromLabel": "보내는 곳",
+    "toLabel": "받는 곳",
+    "estFeeLabel": "예상 수수료",
+    "estimatingFee": "추정 중...",
+    "gasPriceLabel": "Gas 가격",
+    "gasPriceUserOpLabel": "Gas 가격 (UserOp)",
+    "gasLimitLabel": "Gas 한도",
+    "walletDeployedLabel": "지갑 배포 여부",
+    "walletDeployedYes": "예",
+    "walletDeployedNo": "아니요 (첫 거래)",
+    "checkingGas": "Gas 확인 중...",
+    "confirmSendBtn": "확인 후 보내기",
+
+    "txPreparing": "거래 준비 중...",
+    "txSigning": "생체 인증 대기 중...",
+    "txSubmitting": "네트워크에 제출 중...",
+    "txSubmitted": "거래가 네트워크에 제출되었습니다",
+    "txSlowConfirm": "평소보다 오래 걸리고 있습니다. 잠시 기다려 주세요...",
+    "txWaitingConfirm": "블록체인 확인 대기 중...",
+    "txElapsed": "{{elapsed}}초 경과 — 거의 다 됐어요",
+    "txRemaining": "약 {{remaining}}초 남음",
+    "txTypicalTime": "{{chainName}}은(는) 보통 약 {{estSecs}}초 안에 확정됩니다",
+    "txRetryBtn": "다시 시도",
+
+    "txErrorTimeout": "거래는 제출되었지만 확인이 시간 초과되었습니다. 나중에 내역을 확인하세요.",
+    "txErrorBundlerLoop": "Gas 계정 잔액이 bundler에서 계속 거부되고 있습니다. 나중에 다시 시도하거나 Gas 등급을 높이세요.",
+    "txErrorBundlerFund": "Bundler 계정에 Gas가 더 필요합니다. 설정에서 충전하세요.",
+    "txErrorPublicKey": "이 계정의 공개 키를 찾을 수 없습니다"
+  }
+}

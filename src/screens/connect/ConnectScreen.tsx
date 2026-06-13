@@ -8,6 +8,7 @@
  *   - Error: Shows error + retry
  */
 import React, { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { View, Text, TextInput, ScrollView, Pressable, Image } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -30,6 +31,7 @@ import {
 import { useRouter } from 'expo-router';
 
 export default function ConnectScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { state, activeAccount } = useWallet();
   const {
@@ -53,7 +55,7 @@ export default function ConnectScreen() {
 
     const parsed = parseRemoteInjectURL(trimmed);
     if (!parsed) {
-      showAlert('Invalid Link', 'Not a valid connection link. Supported: WalletPair URI or Remote Inject URL.');
+      showAlert(t('connect.list.invalidLinkTitle'), t('connect.list.invalidLinkBody'));
       return;
     }
     connectToBridge(parsed);
@@ -75,7 +77,7 @@ export default function ConnectScreen() {
       <ScreenContainer>
         <View style={styles.centered}>
           <Shield size={32} color={color.fg.subtle} />
-          <Text style={styles.emptyText}>Create a wallet first</Text>
+          <Text style={styles.emptyText}>{t('connect.list.noWallet')}</Text>
         </View>
       </ScreenContainer>
     );
@@ -85,7 +87,7 @@ export default function ConnectScreen() {
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <Animated.View entering={fadeIn(0, 300)} style={styles.pageHeader}>
-          <Text style={styles.pageTitle}>Connect</Text>
+          <Text style={styles.pageTitle}>{t('connect.list.pageTitle')}</Text>
           <Pressable onPress={() => router.navigate('/wallet')} hitSlop={8} style={styles.pageClose}>
             <X size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
@@ -99,28 +101,28 @@ export default function ConnectScreen() {
             {/* How it works */}
             <Animated.View entering={fadeInDown(50, 300)}>
               <VelaCard style={styles.guideCard}>
-                <Text style={styles.guideTitle}>Connect to dApps</Text>
+                <Text style={styles.guideTitle}>{t('connect.list.guideTitle')}</Text>
 
                 <View style={styles.steps}>
                   <StepRow
                     number={1}
                     icon={<QrCode size={18} color={color.accent.base} strokeWidth={2} />}
-                    title="Get a pairing URI"
-                    subtitle="From a WalletPair dApp or the browser extension"
+                    title={t('connect.list.step1Title')}
+                    subtitle={t('connect.list.step1Subtitle')}
                   />
                   <View style={styles.stepConnector} />
                   <StepRow
                     number={2}
                     icon={<Lock size={12} color={color.accent.base} strokeWidth={2} />}
-                    title="Verify the 4-digit code"
-                    subtitle="Make sure it matches on both sides"
+                    title={t('connect.list.step2Title')}
+                    subtitle={t('connect.list.step2Subtitle')}
                   />
                   <View style={styles.stepConnector} />
                   <StepRow
                     number={3}
                     icon={<Zap size={18} color={color.accent.base} strokeWidth={2} />}
-                    title="Done"
-                    subtitle="Requests appear here automatically"
+                    title={t('connect.list.step3Title')}
+                    subtitle={t('connect.list.step3Subtitle')}
                   />
                 </View>
               </VelaCard>
@@ -129,7 +131,7 @@ export default function ConnectScreen() {
             {/* Actions */}
             <Animated.View entering={fadeInDown(150, 300)} style={styles.scanSection}>
               <VelaButton
-                title="Scan QR Code"
+                title={t('connect.list.scanQR')}
                 onPress={() => setShowScanner(true)}
                 variant="accent"
               />
@@ -137,7 +139,7 @@ export default function ConnectScreen() {
               {/* Divider */}
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or</Text>
+                <Text style={styles.dividerText}>{t('connect.list.orDivider')}</Text>
                 <View style={styles.dividerLine} />
               </View>
 
@@ -147,7 +149,7 @@ export default function ConnectScreen() {
                   style={styles.linkInput}
                   value={linkInput}
                   onChangeText={setLinkInput}
-                  placeholder="Paste walletpair:?... URI"
+                  placeholder={t('connect.list.pastePlaceholder')}
                   placeholderTextColor={color.fg.subtle}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -174,11 +176,11 @@ export default function ConnectScreen() {
             <VelaCard style={styles.fingerprintCard}>
               <View style={styles.fingerprintHeader}>
                 <Fingerprint size={28} color={color.accent.base} strokeWidth={2} />
-                <Text style={styles.fingerprintTitle}>Verify Connection</Text>
+                <Text style={styles.fingerprintTitle}>{t('connect.list.verifyTitle')}</Text>
               </View>
 
               <Text style={styles.fingerprintHint}>
-                Confirm this code matches what the dApp displays:
+                {t('connect.list.verifyHint')}
               </Text>
 
               <View style={styles.fingerprintCodeRow}>
@@ -204,18 +206,18 @@ export default function ConnectScreen() {
 
               <View style={styles.fingerprintBadge}>
                 <Lock size={12} color={color.success.base} strokeWidth={2.5} />
-                <Text style={styles.fingerprintBadgeText}>End-to-end encrypted</Text>
+                <Text style={styles.fingerprintBadgeText}>{t('connect.list.encryptedBadge')}</Text>
               </View>
 
               <View style={styles.fingerprintActions}>
                 <VelaButton
-                  title="Confirm"
+                  title={t('connect.list.confirm')}
                   onPress={confirmFingerprint}
                   variant="accent"
                   style={styles.fingerprintBtn}
                 />
                 <VelaButton
-                  title="Cancel"
+                  title={t('connect.list.cancel')}
                   onPress={cancelFingerprint}
                   variant="secondary"
                   style={styles.fingerprintBtn}
@@ -233,12 +235,12 @@ export default function ConnectScreen() {
             <View style={styles.waitingIconWrap}>
               <Radio size={32} color={color.accent.base} />
             </View>
-            <Text style={styles.statusText}>Waiting for dApp to accept...</Text>
+            <Text style={styles.statusText}>{t('connect.list.waitingStatus')}</Text>
             <Text style={styles.statusHint}>
-              Go back to the dApp and approve the connection.
+              {t('connect.list.waitingHint')}
             </Text>
             <VelaButton
-              title="Cancel"
+              title={t('connect.list.cancel')}
               onPress={disconnectBridge}
               variant="secondary"
               compact
@@ -257,7 +259,7 @@ export default function ConnectScreen() {
               <View style={styles.connectedHeader}>
                 <View style={[styles.connectedDot, status === 'reconnecting' && styles.reconnectingDot]} />
                 <Text style={styles.connectedTitle}>
-                  {status === 'reconnecting' ? 'Reconnecting...' : 'Connected'}
+                  {status === 'reconnecting' ? t('connect.list.reconnecting') : t('connect.list.connected')}
                 </Text>
                 {connectionType === 'walletpair' && (
                   <View style={styles.encryptedBadge}>
@@ -282,7 +284,7 @@ export default function ConnectScreen() {
                 <View style={styles.infoRow}>
                   <Globe size={14} color={color.fg.muted} strokeWidth={2} />
                   <Text style={styles.infoText} numberOfLines={1}>
-                    {session?.serverUrl ?? 'Remote Bridge'}
+                    {session?.serverUrl ?? t('connect.list.remoteBridge')}
                   </Text>
                 </View>
               )}
@@ -290,7 +292,7 @@ export default function ConnectScreen() {
               <View style={styles.infoRow}>
                 <Smartphone size={14} color={color.fg.muted} strokeWidth={2} />
                 <Text style={styles.infoText}>
-                  {activeAccount?.name ?? 'Wallet'} ({shortAddress(activeAccount?.address ?? state.address)})
+                  {activeAccount?.name ?? t('connect.list.walletFallback')} ({shortAddress(activeAccount?.address ?? state.address)})
                 </Text>
               </View>
 
@@ -300,14 +302,14 @@ export default function ConnectScreen() {
               </View>
 
               <Text style={styles.connectedHint}>
-                Signing requests from dApps will appear automatically.
+                {t('connect.list.signingHint')}
               </Text>
             </VelaCard>
 
             {/* Disconnect */}
             <View style={styles.disconnectSection}>
               <VelaButton
-                title="Disconnect"
+                title={t('connect.list.disconnect')}
                 onPress={disconnectBridge}
                 variant="secondary"
               />
@@ -322,17 +324,17 @@ export default function ConnectScreen() {
           <Animated.View entering={fadeInDown(0, 300)}>
             <VelaCard style={styles.errorCard}>
               <AlertTriangle size={28} color={color.error.base} />
-              <Text style={styles.errorTitle}>Connection Failed</Text>
-              <Text style={styles.errorMessage}>{errorMessage ?? 'Unable to connect to the bridge.'}</Text>
+              <Text style={styles.errorTitle}>{t('connect.list.connFailed')}</Text>
+              <Text style={styles.errorMessage}>{errorMessage ?? t('connect.list.connError')}</Text>
               <VelaButton
-                title="Scan Again"
+                title={t('connect.list.scanAgain')}
                 onPress={() => setShowScanner(true)}
                 variant="accent"
                 style={styles.errorBtn}
               />
               {session && (
                 <VelaButton
-                  title="Retry"
+                  title={t('connect.list.retry')}
                   onPress={() => connectToBridge(session)}
                   variant="secondary"
                   style={styles.retryBtn}

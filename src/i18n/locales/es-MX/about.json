@@ -1,0 +1,22 @@
+{
+  "about": {
+    "title": "Acerca de",
+    "version": "v{{version}} ({{commit}})",
+    "tagline": "Una forma más sencilla de tener cripto",
+    "sectionTechnical": "Detalles técnicos",
+    "techWalletLabel": "Billetera",
+    "techWalletValue": "Safe v1.4.1",
+    "techAuthLabel": "Autenticación",
+    "techAuthValue": "WebAuthn / P-256",
+    "techAccountTypeLabel": "Tipo de cuenta",
+    "techAccountTypeValue": "ERC-4337 (Smart Account)",
+    "techSignerLabel": "Módulo de firma",
+    "techSignerValue": "SafeWebAuthnSharedSigner",
+    "techNetworksLabel": "Redes",
+    "techNetworksValue": "{{count}} cadenas EVM",
+    "linkWebsite": "Sitio web",
+    "linkGitHub": "GitHub",
+    "linkSafeWallet": "Safe Wallet",
+    "footer": "Hecho con cariño. Tus llaves, tus monedas."
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "settingsModals": {
+    "network": {
+      "modalTitle": "Jaringan",
+      "chainId": "Chain {{chainId}}",
+      "fieldRpcUrl": "URL RPC",
+      "fieldExplorer": "EXPLORER",
+      "fieldBundler": "BUNDLER",
+      "removeTitle": "Hapus Jaringan",
+      "removeBody": "Hapus jaringan kustom ini?",
+      "removeCancel": "Batal",
+      "removeConfirm": "Hapus"
+    },
+    "account": {
+      "modalTitle": "Akun",
+      "total": "Total {{amount}}",
+      "createNew": "Buat Akun Baru",
+      "signInExisting": "Masuk dengan Akun yang Ada"
+    },
+    "endpoints": {
+      "modalTitle": "Endpoint Layanan",
+      "description": "Layanan ini menjalankan dompet Anda.\nAnda dapat men-deploy instans sendiri untuk self-custody penuh.",
+      "chainDataLabel": "INDEKS DATA CHAIN",
+      "chainDataHint": "Menyediakan info jaringan, data token, dan logo chain",
+      "passkeyLabel": "INDEKS PASSKEY",
+      "passkeyHint": "Menyimpan kunci publik passkey untuk masuk lintas perangkat",
+      "bundlerLabel": "LAYANAN BUNDLER",
+      "bundlerHint": "Endpoint yang kompatibel dengan Vela Bundler diperlukan",
+      "fiatLabel": "KURS FIAT",
+      "fiatHint": "Kurs berbasis USD ({rates:{…}}). Menentukan daftar mata uang — ganti untuk cakupan yang lebih luas",
+      "resetToDefaults": "Setel Ulang ke Bawaan"
+    },
+    "addNetwork": {
+      "modalTitle": "Tambah Jaringan",
+      "description": "Cari berdasarkan nama jaringan, simbol token, atau Chain ID.",
+      "searchPlaceholder": "mis. Gnosis, ACE, 648...",
+      "chainMeta": "Chain {{chainId}} · {{symbol}}",
+      "searching": "Mencari...",
+      "checkingCompatibility": "Memeriksa kompatibilitas...",
+      "customRpcTitle": "RPC Kustom (opsional)",
+      "customRpcPlaceholder": "https://url-rpc-anda...",
+      "recheckWithRpc": "Periksa ulang dengan RPC ini",
+      "bestRpc": "RPC terbaik: {{latencyMs}}ms",
+      "compatibilityCheck": "Pemeriksaan Kompatibilitas",
+      "unableToVerify": "Tidak dapat memverifikasi — permintaan RPC gagal",
+      "retry": "Coba Lagi",
+      "addNetworkBtn": "Tambah Jaringan",
+      "incompatibleHint": "Beberapa kontrak yang diperlukan belum di-deploy di chain ini.\nGunakan alat Vela Wallet Chain Setup untuk men-deploy-nya, lalu kembali dan periksa ulang.",
+      "openChainSetupTool": "Buka Chain Setup Tool",
+      "recheck": "Periksa ulang",
+      "chainIdLabel": "Chain ID: {{chainId}}",
+      "nativeLabel": "Native: {{symbol}}",
+      "testnet": "Testnet"
+    },
+    "treasury": {
+      "modalTitle": "Treasury",
+      "addressLabel": "Alamat (semua jaringan)",
+      "balancesLabel": "Saldo",
+      "minBalance": "min {{amount}}",
+      "unreachable": "Tidak dapat menjangkau bundler",
+      "close": "Tutup"
+    },
+    "health": {
+      "offline": "Offline",
+      "httpsRequired": "HTTPS diperlukan",
+      "invalid": "Tidak valid"
+    }
+  }
+}

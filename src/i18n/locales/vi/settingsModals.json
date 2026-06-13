@@ -1,0 +1,69 @@
+{
+  "settingsModals": {
+    "network": {
+      "modalTitle": "Mạng lưới",
+      "chainId": "Chain {{chainId}}",
+      "fieldRpcUrl": "URL RPC",
+      "fieldExplorer": "EXPLORER",
+      "fieldBundler": "BUNDLER",
+      "removeTitle": "Xóa mạng",
+      "removeBody": "Xóa mạng tùy chỉnh này?",
+      "removeCancel": "Hủy",
+      "removeConfirm": "Xóa"
+    },
+    "account": {
+      "modalTitle": "Tài khoản",
+      "total": "Tổng {{amount}}",
+      "createNew": "Tạo tài khoản mới",
+      "signInExisting": "Đăng nhập tài khoản hiện có"
+    },
+    "endpoints": {
+      "modalTitle": "Điểm cuối dịch vụ",
+      "description": "Các dịch vụ này vận hành ví của bạn.\nBạn có thể tự triển khai phiên bản của riêng mình để tự lưu ký hoàn toàn.",
+      "chainDataLabel": "CHỈ MỤC DỮ LIỆU CHAIN",
+      "chainDataHint": "Cung cấp thông tin mạng, dữ liệu token và logo chain",
+      "passkeyLabel": "CHỈ MỤC PASSKEY",
+      "passkeyHint": "Lưu khóa công khai của passkey để đăng nhập trên nhiều thiết bị",
+      "bundlerLabel": "DỊCH VỤ BUNDLER",
+      "bundlerHint": "Cần điểm cuối tương thích với Vela Bundler",
+      "fiatLabel": "TỶ GIÁ FIAT",
+      "fiatHint": "Tỷ giá theo USD ({rates:{…}}). Tạo nên danh sách tiền tệ — thay thế để mở rộng phạm vi",
+      "resetToDefaults": "Khôi phục mặc định"
+    },
+    "addNetwork": {
+      "modalTitle": "Thêm mạng",
+      "description": "Tìm theo tên mạng, ký hiệu token hoặc Chain ID.",
+      "searchPlaceholder": "vd. Gnosis, ACE, 648...",
+      "chainMeta": "Chain {{chainId}} · {{symbol}}",
+      "searching": "Đang tìm...",
+      "checkingCompatibility": "Đang kiểm tra tương thích...",
+      "customRpcTitle": "RPC tùy chỉnh (tùy chọn)",
+      "customRpcPlaceholder": "https://url-rpc-cua-ban...",
+      "recheckWithRpc": "Kiểm tra lại với RPC này",
+      "bestRpc": "RPC tốt nhất: {{latencyMs}}ms",
+      "compatibilityCheck": "Kiểm tra tương thích",
+      "unableToVerify": "Không thể xác minh — yêu cầu RPC thất bại",
+      "retry": "Thử lại",
+      "addNetworkBtn": "Thêm mạng",
+      "incompatibleHint": "Một số hợp đồng bắt buộc chưa được triển khai trên chain này.\nDùng công cụ Vela Wallet Chain Setup để triển khai, sau đó quay lại và kiểm tra lại.",
+      "openChainSetupTool": "Mở công cụ Chain Setup",
+      "recheck": "Kiểm tra lại",
+      "chainIdLabel": "Chain ID: {{chainId}}",
+      "nativeLabel": "Token gốc: {{symbol}}",
+      "testnet": "Testnet"
+    },
+    "treasury": {
+      "modalTitle": "Ngân quỹ",
+      "addressLabel": "Địa chỉ (tất cả các mạng)",
+      "balancesLabel": "Số dư",
+      "minBalance": "tối thiểu {{amount}}",
+      "unreachable": "Không kết nối được bundler",
+      "close": "Đóng"
+    },
+    "health": {
+      "offline": "Ngoại tuyến",
+      "httpsRequired": "Cần HTTPS",
+      "invalid": "Không hợp lệ"
+    }
+  }
+}

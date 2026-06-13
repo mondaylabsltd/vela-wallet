@@ -1,0 +1,61 @@
+{
+  "send": {
+    "selectTokenTitle": "選擇代幣",
+    "searchPlaceholder": "搜尋代幣…",
+    "loadingTokens": "載入代幣中…",
+    "noMatchingTokens": "找不到相符的代幣",
+    "noTokensWithBalance": "沒有任何有餘額的代幣",
+
+    "sendTitle": "發送 {{symbol}}",
+    "maxBtn": "最大",
+    "recipientLabel": "收款人",
+    "recipientPlaceholder": "0x… 地址",
+    "velaUser": "Vela 使用者",
+    "lowBalanceWarning": "餘額不足以支付網路手續費。請先在錢包中增加 {{nativeSym}} 再發送。",
+    "preparing": "準備中…",
+    "continueBtn": "繼續",
+
+    "alertInvalidAddressTitle": "地址無效",
+    "alertInvalidAddressBody": "請輸入有效的以太坊地址（0x…）。",
+    "alertInvalidAmountTitle": "金額無效",
+    "alertInvalidAmountBody": "請輸入大於零的有效金額。",
+    "alertInsufficientBalanceTitle": "餘額不足",
+    "alertLoadTokensError": "載入代幣失敗。",
+
+    "warnNotEnoughToken": "此帳戶的 {{symbol}} 不足",
+    "warnInsufficientForGas": "{{sym}} 不足以支付金額 + Gas 費",
+    "warnInsufficientGas": "{{sym}} 不足以支付 Gas 費",
+    "warnNeedGas": "您需要 {{sym}} 來支付 Gas 費",
+
+    "confirmTitle": "確認",
+    "walletFallbackName": "錢包",
+    "fromLabel": "從",
+    "toLabel": "至",
+    "estFeeLabel": "預估手續費",
+    "estimatingFee": "估算中…",
+    "gasPriceLabel": "Gas 價格",
+    "gasPriceUserOpLabel": "Gas 價格（UserOp）",
+    "gasLimitLabel": "Gas 上限",
+    "walletDeployedLabel": "錢包已部署",
+    "walletDeployedYes": "是",
+    "walletDeployedNo": "否（首筆交易）",
+    "checkingGas": "檢查 Gas 中…",
+    "confirmSendBtn": "確認並發送",
+
+    "txPreparing": "準備交易中…",
+    "txSigning": "等待生物辨識…",
+    "txSubmitting": "送出至網路中…",
+    "txSubmitted": "交易已送出至網路",
+    "txSlowConfirm": "比平常久一些，請稍候…",
+    "txWaitingConfirm": "等待區塊鏈確認中…",
+    "txElapsed": "已過 {{elapsed}} 秒 — 快好了",
+    "txRemaining": "約剩 {{remaining}} 秒",
+    "txTypicalTime": "{{chainName}} 通常約 {{estSecs}} 秒內確認",
+    "txRetryBtn": "重試",
+
+    "txErrorTimeout": "交易已送出，但確認逾時。稍後請至記錄查看。",
+    "txErrorBundlerLoop": "Gas 帳戶餘額持續被 Bundler 拒絕。請稍後再試或提高 Gas 等級。",
+    "txErrorBundlerFund": "Bundler 帳戶需要更多 Gas。請至設定為其儲值。",
+    "txErrorPublicKey": "找不到此帳戶的公鑰"
+  }
+}

@@ -9,6 +9,7 @@ import { computeAddress } from '@/services/safe-address';
 import { loadAccounts, saveAccount } from '@/services/storage';
 import { useRouter } from 'expo-router';
 import { showAlert } from '@/services/platform';
+import { useTranslation } from 'react-i18next';
 import React, { useState, useEffect, useRef } from 'react';
 import { CreateWalletScreen } from './CreateWalletScreen';
 import { WelcomeScreen, OnboardingSettingsModal } from './WelcomeScreen';
@@ -38,6 +39,7 @@ async function isPasskeyIndexReachable(url: string): Promise<boolean> {
 }
 
 export default function OnboardingScreen() {
+  const { t } = useTranslation();
   const [step, setStep] = useState<Step>('welcome');
   const [loginLoading, setLoginLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -79,7 +81,7 @@ export default function OnboardingScreen() {
       const supported = await Passkey.isSupported();
       __DEV__ && console.log('[Login] Passkey supported:', supported);
       if (!supported) {
-        showAlert('Not Supported', 'Biometric authentication is not available on this device.');
+        showAlert(t('onboarding.login.alertNotSupportedTitle'), t('onboarding.login.alertNotSupportedBody'));
         return;
       }
 
@@ -94,8 +96,8 @@ export default function OnboardingScreen() {
       __DEV__ && console.log('[Login] Safe compat:', compat.ok, compat.reason ?? '');
       if (!compat.ok) {
         showAlert(
-          'Device Not Compatible',
-          'Your device\'s identity provider is not compatible with Vela Wallet. Please switch to Google Password Manager in system settings and try again.',
+          t('onboarding.login.alertIncompatibleTitle'),
+          t('onboarding.login.alertIncompatibleBody'),
         );
         return;
       }
@@ -159,21 +161,16 @@ export default function OnboardingScreen() {
         const msg = error instanceof Error ? error.message : String(error);
         if (msg.includes('404')) {
           showAlert(
-            'Account Not Found',
-            'No wallet was found for this identity.\n\n' +
-            'Possible reasons:\n' +
-            '• You haven\'t created a wallet yet\n' +
-            '• Your identity hasn\'t synced to this device (check iCloud / Google settings)\n' +
-            '• The public key server is unreachable\n\n' +
-            'Try creating a new wallet, or ensure your identity provider (Face ID / fingerprint) is synced across devices.',
+            t('onboarding.login.alertNotFoundTitle'),
+            t('onboarding.login.alertNotFoundBody'),
           );
         } else if (msg.includes('Network request failed') || msg.includes('fetch') || msg.includes('Connection failed')) {
           setEndpointUnreachable(true);
           setShowSettings(true);
         } else {
           showAlert(
-            'Sign In Failed',
-            msg + '\n\nMake sure your device has Face ID, Touch ID, or fingerprint set up and try again.',
+            t('onboarding.login.alertSignInFailedTitle'),
+            t('onboarding.login.alertSignInFailedBody', { message: msg }),
           );
         }
       }

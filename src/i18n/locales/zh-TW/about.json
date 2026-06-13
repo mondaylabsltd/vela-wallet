@@ -1,0 +1,22 @@
+{
+  "about": {
+    "title": "關於",
+    "version": "v{{version}}（{{commit}}）",
+    "tagline": "讓擁有加密貨幣更簡單",
+    "sectionTechnical": "技術細節",
+    "techWalletLabel": "錢包",
+    "techWalletValue": "Safe v1.4.1",
+    "techAuthLabel": "驗證方式",
+    "techAuthValue": "WebAuthn / P-256",
+    "techAccountTypeLabel": "帳戶類型",
+    "techAccountTypeValue": "ERC-4337（智慧帳戶）",
+    "techSignerLabel": "簽署者模組",
+    "techSignerValue": "SafeWebAuthnSharedSigner",
+    "techNetworksLabel": "網路",
+    "techNetworksValue": "{{count}} 條 EVM 鏈",
+    "linkWebsite": "官方網站",
+    "linkGitHub": "GitHub",
+    "linkSafeWallet": "Safe Wallet",
+    "footer": "用心打造。你的金鑰，你的幣。"
+  }
+}

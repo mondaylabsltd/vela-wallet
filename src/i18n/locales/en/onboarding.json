@@ -1,0 +1,70 @@
+{
+  "onboarding": {
+    "welcome": {
+      "tagline": "Your keys, your coins.\nSimple as a tap.",
+      "createWallet": "Create Wallet",
+      "alreadyHaveWallet": "I already have a wallet"
+    },
+    "settings": {
+      "title": "Settings",
+      "sectionAppearance": "APPEARANCE",
+      "themeLabelLight": "Light",
+      "themeLabelDark": "Dark",
+      "themeLabelAuto": "Auto",
+      "sectionPasskeyIndex": "PASSKEY INDEX",
+      "passkeyHint": "This service stores your passkey's public key for cross-device sign-in. Vela Wallet never has access to your passkey's private key.",
+      "endpointUrlLabel": "Endpoint URL",
+      "resetToDefault": "Reset to Default",
+      "sectionDebug": "DEBUG",
+      "simulateFailure": "Simulate Endpoint Failure",
+      "warningText": "The Passkey Index service is unreachable. Wallet creation and sign-in require this service. Please configure a reachable endpoint below."
+    },
+    "create": {
+      "headerDefault": "Create Wallet",
+      "headerCreated": "Wallet Created",
+      "headerSyncFailed": "Cross-Device Sync",
+      "accountNameLabel": "Account Name",
+      "accountNamePlaceholder": "Enter a name for your account",
+      "accountNameHint": "This name is stored with your public key on-chain for cross-device sign-in.",
+      "ack0": "This is a self-custodial wallet. Your passkey private key is managed by your device's password manager (iCloud Keychain / Google Password Manager). Vela Wallet cannot access or recover it.",
+      "ack1": "If you lose your device, you can restore your wallet on a new device through your iCloud or Google account.",
+      "ack2": "If your iCloud or Google account is compromised, your wallet control may also be compromised. Protect it with a strong password and 2FA.",
+      "ack3": "I agree to the ",
+      "ack3PrivacyPolicy": "Privacy Policy",
+      "ack3And": " and ",
+      "ack3Terms": "Terms of Service",
+      "ack3Period": ".",
+      "createWalletBtn": "Create Wallet",
+      "successTitle": "Your wallet is ready!",
+      "successMessage": "Your address works on all {{count}} supported networks.",
+      "verifyHint": "Tap below to verify your identity works before using the wallet.",
+      "verifySignInBtn": "Verify & Sign in",
+      "syncFailedTitle": "Sync failed",
+      "syncFailedMessage": "Wallet created, but your public key wasn't synced to the server. You won't be able to sign in on other devices until this is resolved.",
+      "syncFailedHint": "Check your network, or configure a custom endpoint below.",
+      "openSettings": "Open Settings",
+      "retryUploadBtn": "Retry Upload",
+      "statusSyncingKey": "Syncing public key...",
+      "statusSettingUpIdentity": "Setting up secure identity...",
+      "statusExtractingKey": "Extracting public key...",
+      "statusComputingAddress": "Computing wallet address...",
+      "statusVerifyingIdentity": "Verifying identity...",
+      "statusSetupCancelled": "Setup was cancelled.",
+      "statusVerifyCancelled": "Verification was cancelled. Please try again.",
+      "alertNotSupportedTitle": "Not Supported",
+      "alertNotSupportedBody": "Biometric authentication is not available on this device.",
+      "alertErrorTitle": "Error"
+    },
+    "login": {
+      "alertNotSupportedTitle": "Not Supported",
+      "alertNotSupportedBody": "Biometric authentication is not available on this device.",
+      "alertIncompatibleTitle": "Device Not Compatible",
+      "alertIncompatibleBody": "Your device's identity provider is not compatible with Vela Wallet. Please switch to Google Password Manager in system settings and try again.",
+      "alertNotFoundTitle": "Account Not Found",
+      "alertNotFoundBody": "No wallet was found for this identity.\n\nPossible reasons:\n• You haven't created a wallet yet\n• Your identity hasn't synced to this device (check iCloud / Google settings)\n• The public key server is unreachable\n\nTry creating a new wallet, or ensure your identity provider (Face ID / fingerprint) is synced across devices.",
+      "alertSignInFailedTitle": "Sign In Failed",
+      "alertSignInFailedBody": "{{message}}\n\nMake sure your device has Face ID, Touch ID, or fingerprint set up and try again.",
+      "alertIncompatibleBodyCreate": "Your device's identity provider is not compatible with this wallet. Please switch to Google Password Manager in system settings and try again."
+    }
+  }
+}

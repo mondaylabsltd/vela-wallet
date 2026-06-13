@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "actionSend": "送る",
+    "actionReceive": "受け取る",
+    "actionHistory": "履歴",
+    "sectionTitle": "資産",
+    "hideZero": "残高0を非表示",
+    "hiddenCount": "{{count}} 件非表示",
+    "addToken": "追加",
+    "searchPlaceholder": "トークンを検索...",
+    "rpcUnavailableSingle": "{{name}} の RPC を利用できません",
+    "rpcUnavailableMultiple": "{{count}} 件のネットワークで RPC を利用できません",
+    "rpcFix": "修復",
+    "emptyTitle": "最初の資産を入金しましょう",
+    "emptySubtext": "ここをタップしてアドレスを表示し、トークンを受け取りましょう",
+    "errorTitle": "エラー",
+    "errorLoadBalances": "トークン残高の読み込みに失敗しました。",
+    "switcherTitle": "アカウントを切り替える",
+    "switcherTotal": "合計 {{amount}}",
+    "rpcFixTitle": "RPC を修復",
+    "rpcFixChainId": "チェーン ID: {{chainId}}",
+    "rpcFixWarning": "このネットワークのすべての RPC エンドポイントに接続できません。動作する RPC URL を入力して接続を復旧してください。",
+    "rpcFixLabel": "RPC URL",
+    "rpcFixSaveBtn": "保存して再試行",
+    "errorSaveRpc": "RPC URL の保存に失敗しました。",
+    "invalidQrTitle": "無効な QR コード",
+    "invalidQrMessage": "有効な Ethereum アドレスまたは接続 URI をスキャンしてください。",
+    "chainFallback": "チェーン {{chainId}}"
+  }
+}

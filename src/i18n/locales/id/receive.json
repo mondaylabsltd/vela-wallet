@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "Terima",
+    "noAddress": "Tidak ada alamat",
+    "shareGenerating": "Membuat...",
+    "shareButton": "Bagikan",
+    "listeningForDeposits": "Memantau deposit",
+    "warningTitle": "Sebelum Anda menerima",
+    "warningBody": "Hanya kirim aset di jaringan yang didukung — transfer yang tidak didukung dapat hilang permanen.",
+    "warningHint": "Periksa",
+    "warningHintNetworks": "{{count}} jaringan yang didukung",
+    "warningHintSuffix": "di bawah sebelum membagikan alamat Anda.",
+    "warningConfirm": "Saya Mengerti",
+    "networksLabel": "Berlaku di {{count}} jaringan EVM",
+    "shareCardHeadline": "Pindai untuk Mengirimi Saya Kripto",
+    "shareDialogTitle": "Alamat Dompet {{name}}"
+  }
+}

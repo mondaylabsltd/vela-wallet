@@ -1,0 +1,70 @@
+{
+  "onboarding": {
+    "welcome": {
+      "tagline": "Ihre Schlüssel, Ihre Coins.\nSo einfach wie ein Tippen.",
+      "createWallet": "Wallet erstellen",
+      "alreadyHaveWallet": "Ich habe bereits eine Wallet"
+    },
+    "settings": {
+      "title": "Einstellungen",
+      "sectionAppearance": "DARSTELLUNG",
+      "themeLabelLight": "Hell",
+      "themeLabelDark": "Dunkel",
+      "themeLabelAuto": "Automatisch",
+      "sectionPasskeyIndex": "PASSKEY-INDEX",
+      "passkeyHint": "Dieser Dienst speichert den öffentlichen Schlüssel Ihres Passkeys für die geräteübergreifende Anmeldung. Vela Wallet hat niemals Zugriff auf den privaten Schlüssel Ihres Passkeys.",
+      "endpointUrlLabel": "Endpunkt-URL",
+      "resetToDefault": "Auf Standard zurücksetzen",
+      "sectionDebug": "DEBUG",
+      "simulateFailure": "Endpunkt-Ausfall simulieren",
+      "warningText": "Der Passkey-Index-Dienst ist nicht erreichbar. Wallet-Erstellung und Anmeldung benötigen diesen Dienst. Bitte konfigurieren Sie unten einen erreichbaren Endpunkt."
+    },
+    "create": {
+      "headerDefault": "Wallet erstellen",
+      "headerCreated": "Wallet erstellt",
+      "headerSyncFailed": "Geräteübergreifende Synchronisierung",
+      "accountNameLabel": "Kontoname",
+      "accountNamePlaceholder": "Geben Sie einen Namen für Ihr Konto ein",
+      "accountNameHint": "Dieser Name wird zusammen mit Ihrem öffentlichen Schlüssel on-chain für die geräteübergreifende Anmeldung gespeichert.",
+      "ack0": "Dies ist eine Wallet mit Selbstverwahrung. Der private Schlüssel Ihres Passkeys wird vom Passwortmanager Ihres Geräts verwaltet (iCloud-Schlüsselbund / Google Passwortmanager). Vela Wallet kann ihn weder einsehen noch wiederherstellen.",
+      "ack1": "Wenn Sie Ihr Gerät verlieren, können Sie Ihre Wallet über Ihr iCloud- oder Google-Konto auf einem neuen Gerät wiederherstellen.",
+      "ack2": "Wenn Ihr iCloud- oder Google-Konto kompromittiert wird, kann auch die Kontrolle über Ihre Wallet gefährdet sein. Schützen Sie es mit einem starken Passwort und 2FA.",
+      "ack3": "Ich stimme der ",
+      "ack3PrivacyPolicy": "Datenschutzerklärung",
+      "ack3And": " und den ",
+      "ack3Terms": "Nutzungsbedingungen",
+      "ack3Period": " zu.",
+      "createWalletBtn": "Wallet erstellen",
+      "successTitle": "Ihre Wallet ist bereit!",
+      "successMessage": "Ihre Adresse funktioniert auf allen {{count}} unterstützten Netzwerken.",
+      "verifyHint": "Tippen Sie unten, um zu prüfen, ob Ihre Identität funktioniert, bevor Sie die Wallet nutzen.",
+      "verifySignInBtn": "Prüfen & anmelden",
+      "syncFailedTitle": "Synchronisierung fehlgeschlagen",
+      "syncFailedMessage": "Wallet erstellt, aber Ihr öffentlicher Schlüssel wurde nicht mit dem Server synchronisiert. Sie können sich auf anderen Geräten erst anmelden, wenn dies behoben ist.",
+      "syncFailedHint": "Prüfen Sie Ihr Netzwerk oder konfigurieren Sie unten einen eigenen Endpunkt.",
+      "openSettings": "Einstellungen öffnen",
+      "retryUploadBtn": "Upload erneut versuchen",
+      "statusSyncingKey": "Öffentlicher Schlüssel wird synchronisiert ...",
+      "statusSettingUpIdentity": "Sichere Identität wird eingerichtet ...",
+      "statusExtractingKey": "Öffentlicher Schlüssel wird extrahiert ...",
+      "statusComputingAddress": "Wallet-Adresse wird berechnet ...",
+      "statusVerifyingIdentity": "Identität wird geprüft ...",
+      "statusSetupCancelled": "Einrichtung wurde abgebrochen.",
+      "statusVerifyCancelled": "Überprüfung wurde abgebrochen. Bitte versuchen Sie es erneut.",
+      "alertNotSupportedTitle": "Nicht unterstützt",
+      "alertNotSupportedBody": "Biometrische Authentifizierung ist auf diesem Gerät nicht verfügbar.",
+      "alertErrorTitle": "Fehler"
+    },
+    "login": {
+      "alertNotSupportedTitle": "Nicht unterstützt",
+      "alertNotSupportedBody": "Biometrische Authentifizierung ist auf diesem Gerät nicht verfügbar.",
+      "alertIncompatibleTitle": "Gerät nicht kompatibel",
+      "alertIncompatibleBody": "Der Identitätsanbieter Ihres Geräts ist nicht mit Vela Wallet kompatibel. Bitte wechseln Sie in den Systemeinstellungen zum Google Passwortmanager und versuchen Sie es erneut.",
+      "alertNotFoundTitle": "Konto nicht gefunden",
+      "alertNotFoundBody": "Für diese Identität wurde keine Wallet gefunden.\n\nMögliche Gründe:\n• Sie haben noch keine Wallet erstellt\n• Ihre Identität wurde nicht mit diesem Gerät synchronisiert (prüfen Sie die iCloud- / Google-Einstellungen)\n• Der Server für öffentliche Schlüssel ist nicht erreichbar\n\nVersuchen Sie, eine neue Wallet zu erstellen, oder stellen Sie sicher, dass Ihr Identitätsanbieter (Face ID / Fingerabdruck) geräteübergreifend synchronisiert ist.",
+      "alertSignInFailedTitle": "Anmeldung fehlgeschlagen",
+      "alertSignInFailedBody": "{{message}}\n\nStellen Sie sicher, dass auf Ihrem Gerät Face ID, Touch ID oder ein Fingerabdruck eingerichtet ist, und versuchen Sie es erneut.",
+      "alertIncompatibleBodyCreate": "Der Identitätsanbieter Ihres Geräts ist nicht mit dieser Wallet kompatibel. Bitte wechseln Sie in den Systemeinstellungen zum Google Passwortmanager und versuchen Sie es erneut."
+    }
+  }
+}

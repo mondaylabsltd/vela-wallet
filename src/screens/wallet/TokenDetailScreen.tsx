@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, View, Text, Pressable, ScrollView } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
+import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { copyToClipboard, openBrowser } from '@/services/platform';
 import { getAllNetworksSync } from '@/models/network';
 import { useWallet } from '@/models/wallet-state';
@@ -20,6 +22,7 @@ import { fetch7DayHistory, type BalancePoint } from '@/services/balance-history'
 import { Copy, Check, ArrowLeft, ExternalLink } from 'lucide-react-native';
 
 export default function TokenDetailScreen() {
+  const { t } = useTranslation();
   const router = useSafeRouter();
   const params = useLocalSearchParams<{
     symbol: string;
@@ -46,8 +49,9 @@ export default function TokenDetailScreen() {
   const chainId = networkToChainId({ network } as APIToken);
   const chain = chainName(chainId);
 
-  const formatUsd = (value: number) =>
-    '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Token fiat values follow the selected display currency + number format.
+  const dc = useDisplayCurrency();
+  const formatUsd = dc.fmt;
 
   const { activeAccount, state } = useWallet();
   const walletAddress = activeAccount?.address ?? state.address;
@@ -125,7 +129,7 @@ export default function TokenDetailScreen() {
         {/* 7-day balance chart */}
         <Animated.View entering={fadeInDown(50, 400)}>
           <VelaCard style={styles.chartCard}>
-            <Text style={styles.chartTitle}>7-Day Balance</Text>
+            <Text style={styles.chartTitle}>{t('tokenDetail.chartTitle')}</Text>
             {historyLoading ? (
               <View style={styles.chartLoading}>
                 <ActivityIndicator size="small" color={color.fg.subtle} />
@@ -133,15 +137,15 @@ export default function TokenDetailScreen() {
             ) : historyData.length > 0 ? (
               <BarChart data={historyData} symbol={symbol} />
             ) : (
-              <Text style={styles.chartEmpty}>No historical data available</Text>
+              <Text style={styles.chartEmpty}>{t('tokenDetail.chartEmpty')}</Text>
             )}
           </VelaCard>
         </Animated.View>
 
         {/* Action buttons */}
         <Animated.View style={styles.buttonRow} entering={fadeInDown(100, 400)}>
-          <VelaButton title="Send" onPress={handleSend} style={styles.actionBtn} />
-          <VelaButton title="Receive" onPress={handleReceive} variant="secondary" style={styles.actionBtn} />
+          <VelaButton title={t('tokenDetail.send')} onPress={handleSend} style={styles.actionBtn} />
+          <VelaButton title={t('tokenDetail.receive')} onPress={handleReceive} variant="secondary" style={styles.actionBtn} />
         </Animated.View>
 
         {/* Details — contract, decimals, unit price */}
@@ -149,7 +153,7 @@ export default function TokenDetailScreen() {
           {tokenName !== symbol && (
             <>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Name</Text>
+                <Text style={styles.detailLabel}>{t('tokenDetail.labelName')}</Text>
                 <Text style={styles.detailValue}>{tokenName}</Text>
               </View>
               <View style={styles.separator} />
@@ -157,7 +161,7 @@ export default function TokenDetailScreen() {
           )}
           {contractAddress && (
             <Pressable onPress={copyContract} style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Contract</Text>
+              <Text style={styles.detailLabel}>{t('tokenDetail.labelContract')}</Text>
               <View style={styles.detailValueRow}>
                 <Text style={styles.detailValue}>{shortAddr(contractAddress)}</Text>
                 {copied ? (
@@ -172,7 +176,7 @@ export default function TokenDetailScreen() {
             <>
               <View style={styles.separator} />
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Decimals</Text>
+                <Text style={styles.detailLabel}>{t('tokenDetail.labelDecimals')}</Text>
                 <Text style={styles.detailValue}>{decimals}</Text>
               </View>
             </>
@@ -181,8 +185,8 @@ export default function TokenDetailScreen() {
             <>
               {contractAddress && <View style={styles.separator} />}
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Price</Text>
-                <Text style={styles.detailValue}>1 {symbol} = {formatUsd(priceUsd)}</Text>
+                <Text style={styles.detailLabel}>{t('tokenDetail.labelPrice')}</Text>
+                <Text style={styles.detailValue}>{t('tokenDetail.priceValue', { symbol, value: formatUsd(priceUsd) })}</Text>
               </View>
             </>
           )}
@@ -198,9 +202,9 @@ export default function TokenDetailScreen() {
               openBrowser(url);
             }}
           >
-            <Text style={styles.detailLabel}>Transactions</Text>
+            <Text style={styles.detailLabel}>{t('tokenDetail.labelTransactions')}</Text>
             <View style={styles.detailValueRow}>
-              <Text style={[styles.detailValue, { color: color.fg.muted }]}>View on Explorer</Text>
+              <Text style={[styles.detailValue, { color: color.fg.muted }]}>{t('tokenDetail.viewOnExplorer')}</Text>
               <ExternalLink size={12} color={color.fg.muted} strokeWidth={2} />
             </View>
           </Pressable>

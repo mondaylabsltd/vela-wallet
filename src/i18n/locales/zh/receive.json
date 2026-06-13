@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "接收",
+    "noAddress": "无地址",
+    "shareGenerating": "生成中...",
+    "shareButton": "分享",
+    "listeningForDeposits": "监听存款中",
+    "warningTitle": "接收前请注意",
+    "warningBody": "请仅在支持的网络上发送资产——不支持的转账可能永久丢失。",
+    "warningHint": "在分享地址前，请查看",
+    "warningHintNetworks": "{{count}} 个支持的网络",
+    "warningHintSuffix": "。",
+    "warningConfirm": "我已了解",
+    "networksLabel": "支持 {{count}} 个 EVM 网络",
+    "shareCardHeadline": "扫码向我转账",
+    "shareDialogTitle": "{{name}} 钱包地址"
+  }
+}

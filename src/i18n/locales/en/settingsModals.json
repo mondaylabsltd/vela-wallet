@@ -1,0 +1,69 @@
+{
+  "settingsModals": {
+    "network": {
+      "modalTitle": "Networks",
+      "chainId": "Chain {{chainId}}",
+      "fieldRpcUrl": "RPC URL",
+      "fieldExplorer": "EXPLORER",
+      "fieldBundler": "BUNDLER",
+      "removeTitle": "Remove Network",
+      "removeBody": "Remove this custom network?",
+      "removeCancel": "Cancel",
+      "removeConfirm": "Remove"
+    },
+    "account": {
+      "modalTitle": "Accounts",
+      "total": "Total {{amount}}",
+      "createNew": "Create New Account",
+      "signInExisting": "Sign In with Existing"
+    },
+    "endpoints": {
+      "modalTitle": "Service Endpoints",
+      "description": "These services power your wallet.\nYou can deploy your own instances for full self-custody.",
+      "chainDataLabel": "CHAIN DATA INDEX",
+      "chainDataHint": "Provides network info, token data, and chain logos",
+      "passkeyLabel": "PASSKEY INDEX",
+      "passkeyHint": "Stores passkey public keys for cross-device sign-in",
+      "bundlerLabel": "BUNDLER SERVICE",
+      "bundlerHint": "Vela Bundler compatible endpoint required",
+      "fiatLabel": "FIAT RATES",
+      "fiatHint": "USD-based rates ({rates:{…}}). Drives the currency list — swap for broader coverage",
+      "resetToDefaults": "Reset to Defaults"
+    },
+    "addNetwork": {
+      "modalTitle": "Add Network",
+      "description": "Search by network name, token symbol, or Chain ID.",
+      "searchPlaceholder": "e.g. Gnosis, ACE, 648...",
+      "chainMeta": "Chain {{chainId}} · {{symbol}}",
+      "searching": "Searching...",
+      "checkingCompatibility": "Checking compatibility...",
+      "customRpcTitle": "Custom RPC (optional)",
+      "customRpcPlaceholder": "https://your-rpc-url...",
+      "recheckWithRpc": "Re-check with this RPC",
+      "bestRpc": "Best RPC: {{latencyMs}}ms",
+      "compatibilityCheck": "Compatibility Check",
+      "unableToVerify": "Unable to verify — RPC request failed",
+      "retry": "Retry",
+      "addNetworkBtn": "Add Network",
+      "incompatibleHint": "Some required contracts are not yet deployed on this chain.\nUse the Vela Wallet Chain Setup tool to deploy them, then come back and re-check.",
+      "openChainSetupTool": "Open Chain Setup Tool",
+      "recheck": "Re-check",
+      "chainIdLabel": "Chain ID: {{chainId}}",
+      "nativeLabel": "Native: {{symbol}}",
+      "testnet": "Testnet"
+    },
+    "treasury": {
+      "modalTitle": "Treasury",
+      "addressLabel": "Address (all networks)",
+      "balancesLabel": "Balances",
+      "minBalance": "min {{amount}}",
+      "unreachable": "Could not reach bundler",
+      "close": "Close"
+    },
+    "health": {
+      "offline": "Offline",
+      "httpsRequired": "HTTPS required",
+      "invalid": "Invalid"
+    }
+  }
+}

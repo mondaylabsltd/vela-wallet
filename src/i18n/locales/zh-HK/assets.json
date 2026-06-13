@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "actionSend": "發送",
+    "actionReceive": "接收",
+    "actionHistory": "記錄",
+    "sectionTitle": "資產",
+    "hideZero": "隱藏零餘額",
+    "hiddenCount": "已隱藏 {{count}} 項",
+    "addToken": "新增",
+    "searchPlaceholder": "搜尋代幣⋯",
+    "rpcUnavailableSingle": "{{name}} RPC 無法使用",
+    "rpcUnavailableMultiple": "{{count}} 個網絡的 RPC 無法使用",
+    "rpcFix": "修復",
+    "emptyTitle": "存入你的首項資產",
+    "emptySubtext": "點按這裡查看你的地址並接收代幣",
+    "errorTitle": "錯誤",
+    "errorLoadBalances": "載入代幣餘額失敗。",
+    "switcherTitle": "切換帳戶",
+    "switcherTotal": "合共 {{amount}}",
+    "rpcFixTitle": "修復 RPC",
+    "rpcFixChainId": "Chain ID：{{chainId}}",
+    "rpcFixWarning": "此網絡的所有 RPC 端點均失效。請輸入可用的 RPC URL 以恢復連接。",
+    "rpcFixLabel": "RPC URL",
+    "rpcFixSaveBtn": "儲存並重試",
+    "errorSaveRpc": "儲存 RPC URL 失敗。",
+    "invalidQrTitle": "QR 無效",
+    "invalidQrMessage": "請掃描有效的以太坊地址或連接 URI。",
+    "chainFallback": "Chain {{chainId}}"
+  }
+}

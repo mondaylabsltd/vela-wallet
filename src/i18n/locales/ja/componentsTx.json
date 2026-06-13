@@ -1,0 +1,42 @@
+{
+  "componentsTx": {
+    "receipt": {
+      "title": "取引明細",
+      "canvasTitle": "取引明細",
+      "from": "送金元",
+      "to": "送金先",
+      "network": "ネットワーク",
+      "time": "日時",
+      "txHash": "取引ハッシュ",
+      "scanHint": "スキャンしてエクスプローラーで表示",
+      "footerBrand": "VELA WALLET",
+      "footerUrl": "getvela.app",
+      "explorer": "エクスプローラー",
+      "share": "共有",
+      "done": "完了",
+      "copiedTitle": "コピーしました",
+      "copiedImageBody": "明細画像をクリップボードにコピーしました。",
+      "copiedLinkBody": "エクスプローラーのリンクをコピーしました。"
+    },
+    "detail": {
+      "received": "受け取り",
+      "sent": "送金",
+      "from": "送金元",
+      "to": "送金先",
+      "sectionTitle": "取引の詳細",
+      "labelDate": "日時",
+      "labelStatus": "ステータス",
+      "labelFrom": "送金元",
+      "labelTo": "送金先",
+      "labelOperation": "操作",
+      "labelChain": "チェーン",
+      "labelHash": "ハッシュ",
+      "statusFailed": "失敗",
+      "statusSucceeded": "成功",
+      "opContractInteraction": "コントラクトの操作",
+      "opSignature": "署名",
+      "opTypedDataSignature": "型付きデータの署名",
+      "opTransfer": "送金"
+    }
+  }
+}
