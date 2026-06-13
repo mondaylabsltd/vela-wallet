@@ -4,6 +4,13 @@ import { Stack } from 'expo-router';
 import React, { Component, useEffect, useState, type ReactNode } from 'react';
 import { Appearance, View, Text, ActivityIndicator, Pressable } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  useFonts,
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+} from '@expo-google-fonts/plus-jakarta-sans';
 import { WalletProvider } from '@/models/wallet-state';
 import { DAppConnectionProvider } from '@/models/dapp-connection';
 import { SigningRequestModal } from '@/components/SigningRequestModal';
@@ -76,6 +83,7 @@ function AppShell() {
               <Stack.Screen name="receive" options={{ presentation: 'modal' }} />
               <Stack.Screen name="token-detail" options={{ presentation: 'modal' }} />
               <Stack.Screen name="add-token" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="assets" options={{ presentation: 'modal' }} />
               <Stack.Screen name="history" options={{ presentation: 'modal' }} />
               <Stack.Screen name="about" options={{ presentation: 'modal' }} />
             </Stack>
@@ -89,6 +97,12 @@ function AppShell() {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+  });
 
   useEffect(() => {
     Promise.all([
@@ -112,7 +126,7 @@ export default function RootLayout() {
     });
   }, []);
 
-  if (!ready) {
+  if (!ready || !fontsLoaded) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="small" color={color.accent.base} />

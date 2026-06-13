@@ -146,11 +146,14 @@ export const weight = {
  *
  * Usage: `style={{ ...inter.semibold, fontSize: text.lg }}`
  */
+// Typeface = Plus Jakarta Sans (loaded via useFonts in app/_layout). The export
+// is still named `inter` to avoid churn across every screen; the families point
+// to the Plus Jakarta weights.
 export const inter = {
-  regular:  { fontFamily: 'Inter-Regular',  fontWeight: weight.regular  },
-  medium:   { fontFamily: 'Inter-Medium',   fontWeight: weight.medium   },
-  semibold: { fontFamily: 'Inter-SemiBold', fontWeight: weight.semibold },
-  bold:     { fontFamily: 'Inter-Bold',     fontWeight: weight.bold     },
+  regular:  { fontFamily: 'PlusJakartaSans_400Regular',  fontWeight: weight.regular  },
+  medium:   { fontFamily: 'PlusJakartaSans_500Medium',   fontWeight: weight.medium   },
+  semibold: { fontFamily: 'PlusJakartaSans_600SemiBold', fontWeight: weight.semibold },
+  bold:     { fontFamily: 'PlusJakartaSans_700Bold',     fontWeight: weight.bold     },
 } as const;
 
 /**
@@ -169,10 +172,10 @@ export const inter = {
  *   700 → Inter-Bold
  */
 export const font = {
-  sans:    'Inter-Regular',
-  display: 'Inter-Bold',
+  sans:    'PlusJakartaSans_400Regular',
+  display: 'PlusJakartaSans_700Bold',
   mono:    Platform.select({ ios: 'Menlo', default: 'monospace' }),
-  numeric: 'Inter-Regular',
+  numeric: 'PlusJakartaSans_400Regular',
 };
 
 /**
@@ -185,10 +188,10 @@ export const font = {
  */
 export function interWeight(w: '400' | '500' | '600' | '700'): string {
   switch (w) {
-    case '400': return 'Inter-Regular';
-    case '500': return 'Inter-Medium';
-    case '600': return 'Inter-SemiBold';
-    case '700': return 'Inter-Bold';
+    case '400': return 'PlusJakartaSans_400Regular';
+    case '500': return 'PlusJakartaSans_500Medium';
+    case '600': return 'PlusJakartaSans_600SemiBold';
+    case '700': return 'PlusJakartaSans_700Bold';
   }
 }
 

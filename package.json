@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/elements": "^2.9.10",
@@ -41,6 +42,7 @@
     "expo-linking": "~55.0.14",
     "expo-router": "~55.0.13",
     "expo-sharing": "~55.0.18",
+    "expo-speech": "~55.0.14",
     "expo-splash-screen": "~55.0.19",
     "expo-status-bar": "~55.0.5",
     "expo-symbols": "~55.0.7",

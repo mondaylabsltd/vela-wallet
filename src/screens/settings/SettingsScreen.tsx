@@ -23,16 +23,18 @@ import { getBundlerServiceURL, hasPendingUploads, loadCustomNetworks, loadNetwor
 import { fetchTokens } from '@/services/wallet-api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, ExternalLink, Info as InfoIcon, Key, LogOut as LogOutIcon, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, X, XCircle } from 'lucide-react-native';
+import { AlertTriangle, Check, CheckCircle2, ChevronDown, ChevronRight, Copy, ExternalLink, Info as InfoIcon, Key, LogOut as LogOutIcon, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, Volume2, X, XCircle } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Pressable,
     ScrollView,
+    Switch,
     Text,
     TextInput,
     View,
 } from 'react-native';
+import { isVoiceEnabled, loadVoicePreference, previewVoice, setVoiceEnabled } from '@/services/voice';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
     runOnJS,
@@ -1195,6 +1197,14 @@ export default function SettingsScreen() {
   const { levelIndex: currentScaleIndex, setIndex: setScaleIndex } = useTextScale();
   const { preference: colorPref, setPreference: setColorPref } = useColorSchemePreference();
 
+  const [voiceOn, setVoiceOn] = useState(isVoiceEnabled());
+  useEffect(() => { loadVoicePreference().then(() => setVoiceOn(isVoiceEnabled())); }, []);
+  const toggleVoice = async (next: boolean) => {
+    setVoiceOn(next);
+    await setVoiceEnabled(next);
+    if (next) previewVoice();
+  };
+
   const accountName = activeAccount?.name ?? 'No Wallet';
   const address = activeAccount?.address ?? state.address;
 
@@ -1213,8 +1223,11 @@ export default function SettingsScreen() {
   return (
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Animated.View entering={fadeIn(0, 300)}>
+        <Animated.View entering={fadeIn(0, 300)} style={styles.screenHeader}>
           <Text style={styles.screenTitle}>Settings</Text>
+          <Pressable onPress={() => router.navigate('/wallet')} hitSlop={8} style={styles.screenClose}>
+            <X size={22} color={color.fg.base} strokeWidth={2} />
+          </Pressable>
         </Animated.View>
 
         {/* Account */}
@@ -1238,6 +1251,29 @@ export default function SettingsScreen() {
             />
             <View style={styles.settingsRowDividerFull} />
             <ThemePicker s={styles} current={colorPref} onChange={setColorPref} />
+          </VelaCard>
+        </Animated.View>
+
+        {/* Payments */}
+        <Animated.View style={styles.sectionContainer} entering={fadeInDown(120, 300)}>
+          <Text style={styles.sectionTitle}>PAYMENTS</Text>
+          <VelaCard>
+            <SettingsRow
+              s={styles}
+              icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Volume2 }}
+              title="Voice announcements"
+              subtitle="Speak incoming payments aloud"
+              showDivider={false}
+              right={
+                <Switch
+                  value={voiceOn}
+                  onValueChange={toggleVoice}
+                  trackColor={{ true: color.accent.base, false: color.border.strong }}
+                  thumbColor={color.fg.inverse}
+                  ios_backgroundColor={color.border.strong}
+                />
+              }
+            />
           </VelaCard>
         </Animated.View>
 
@@ -1346,7 +1382,9 @@ export default function SettingsScreen() {
 
 const styleFactory = () => ({
   scrollContent: { paddingTop: space.md, paddingBottom: space['5xl'] },
-  screenTitle: { fontSize: text['2xl'], ...inter.bold, color: color.fg.base, marginBottom: space['3xl'] },
+  screenHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: space['3xl'] },
+  screenTitle: { fontSize: text['3xl'], ...inter.bold, color: color.fg.base, letterSpacing: -0.5 },
+  screenClose: { width: 40, height: 40, alignItems: 'center' as const, justifyContent: 'center' as const },
   sectionContainer: { marginBottom: space['2xl'] },
   sectionTitle: { fontSize: text.sm, ...inter.semibold, color: color.fg.subtle, letterSpacing: 1.2, textTransform: 'uppercase' as const, marginBottom: space.md, paddingHorizontal: space.sm },
   advancedHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingRight: space.md, marginBottom: space.md },
