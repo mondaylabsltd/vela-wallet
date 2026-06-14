@@ -19,7 +19,7 @@ import {
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
@@ -36,6 +36,7 @@ import { NetworkFilterButton, NetworkFilterSheet } from '@/components/ui/Network
 import { TransactionDetailSheet } from '@/components/ui/TransactionDetailSheet';
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
 import { VelaCard } from '@/components/ui/VelaCard';
+import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { WaveDock } from '@/components/ui/WaveDock';
 
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -154,7 +155,13 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await loadDataRef.current?.(); } finally { setRefreshing(false); }
+    // Hold the branded spinner for a beat so a fast fetch never flickers.
+    try {
+      await Promise.all([
+        loadDataRef.current?.(),
+        new Promise((resolve) => setTimeout(resolve, 650)),
+      ]);
+    } finally { setRefreshing(false); }
   }, []);
 
   // Full "money in" feedback: row glow + haptic + voice + toast + balance pulse.
@@ -466,57 +473,61 @@ export default function HomeScreen() {
           </Pressable>
         </Animated.View>
 
-        {/* Content */}
+        {/* Content — branded pull-to-refresh (gesture-driven, cross-platform) */}
         {tab === 'activity' ? (
-          <FlatList
-            data={filteredActivity}
-            keyExtractor={(item) => item.id}
-            ListHeaderComponent={renderHeader()}
-            ListEmptyComponent={renderActivityEmpty()}
-            renderItem={({ item, index }) => (
-              <ActivityRow
-                direction={item.direction}
-                title={t(item.direction === 'out' ? 'activity.sent' : 'activity.received')}
-                subtitle={item.address
-                  ? t(item.direction === 'out' ? 'activity.toAddr' : 'activity.fromAddr', { addr: shortAddress(item.address) })
-                  : item.subtitle}
-                amount={item.amount}
-                fiat={item.usdValue > 0 ? formatFiat(item.usdValue * rate, currencyCode, currency.symbol) : undefined}
-                time={relativeTime(item.timestamp)}
-                alias={item.alias ?? (item.address ? aliasMap.get(item.address.toLowerCase()) : undefined)}
-                chain={chainFor(item.chainId)}
-                index={index}
-                isNew={item.id === newItemId}
-                onPress={() => openDetail(item.id)}
+          <VelaRefresh refreshing={refreshing} onRefresh={onRefresh}>
+            {(scrollProps) => (
+              <Animated.FlatList
+                {...scrollProps}
+                data={filteredActivity}
+                keyExtractor={(item: ActivityItem) => item.id}
+                ListHeaderComponent={renderHeader()}
+                ListEmptyComponent={renderActivityEmpty()}
+                renderItem={({ item, index }: { item: ActivityItem; index: number }) => (
+                  <ActivityRow
+                    direction={item.direction}
+                    title={t(item.direction === 'out' ? 'activity.sent' : 'activity.received')}
+                    subtitle={item.address
+                      ? t(item.direction === 'out' ? 'activity.toAddr' : 'activity.fromAddr', { addr: shortAddress(item.address) })
+                      : item.subtitle}
+                    amount={item.amount}
+                    fiat={item.usdValue > 0 ? formatFiat(item.usdValue * rate, currencyCode, currency.symbol) : undefined}
+                    time={relativeTime(item.timestamp)}
+                    alias={item.alias ?? (item.address ? aliasMap.get(item.address.toLowerCase()) : undefined)}
+                    chain={chainFor(item.chainId)}
+                    index={index}
+                    isNew={item.id === newItemId}
+                    onPress={() => openDetail(item.id)}
+                  />
+                )}
+                ItemSeparatorComponent={() => <View style={styles.sep} />}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
               />
             )}
-            ItemSeparatorComponent={() => <View style={styles.sep} />}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.accent.base} />
-            }
-          />
+          </VelaRefresh>
         ) : (
-          <ScrollView
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={color.accent.base} />
-            }
-          >
-            {renderHeader()}
-            <ConnectionsView
-              status={conn.status}
-              dappName={conn.dappInfo?.name ?? null}
-              dappUrl={conn.dappInfo?.url ?? null}
-              events={connEvents}
-              onDisconnect={conn.disconnectBridge}
-              onConnect={() => setShowScanner(true)}
-              onPasteConnect={onPasteConnect}
-              onOpenEvent={setEventTx}
-            />
-          </ScrollView>
+          <VelaRefresh refreshing={refreshing} onRefresh={onRefresh}>
+            {(scrollProps) => (
+              <Animated.ScrollView
+                {...scrollProps}
+                contentContainerStyle={styles.listContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {renderHeader()}
+                <ConnectionsView
+                  status={conn.status}
+                  dappName={conn.dappInfo?.name ?? null}
+                  dappUrl={conn.dappInfo?.url ?? null}
+                  events={connEvents}
+                  onDisconnect={conn.disconnectBridge}
+                  onConnect={() => setShowScanner(true)}
+                  onPasteConnect={onPasteConnect}
+                  onOpenEvent={setEventTx}
+                />
+              </Animated.ScrollView>
+            )}
+          </VelaRefresh>
         )}
       </SafeAreaView>
 

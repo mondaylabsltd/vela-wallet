@@ -2,10 +2,8 @@ import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
-  FlatList,
   Pressable,
   ActivityIndicator,
-  RefreshControl,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeRouter } from '@/hooks/use-safe-router';
@@ -13,6 +11,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { AmountText } from '@/components/ui/AmountText';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
@@ -86,7 +85,6 @@ export default function HistoryScreen() {
       setTransactions(filtered);
     } catch {}
     setLoading(false);
-    setRefreshing(false);
   }, [address]);
 
   useFocusEffect(useCallback(() => {
@@ -94,9 +92,12 @@ export default function HistoryScreen() {
     loadData();
   }, [loadData]));
 
-  const onRefresh = useCallback(() => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    loadData();
+    // History reads from local storage (near-instant) — hold the branded
+    // spinner briefly so it never flickers.
+    await Promise.all([loadData(), new Promise((resolve) => setTimeout(resolve, 650))]);
+    setRefreshing(false);
   }, [loadData]);
 
   const filteredTxs = selectedChainId
@@ -311,34 +312,32 @@ export default function HistoryScreen() {
       ) : (
         <>
           {renderChainFilter()}
-          <FlatList
-            data={listData}
-            keyExtractor={(item) => item.key}
-            renderItem={({ item }) =>
-              item.type === 'header'
-                ? renderSectionHeader(item.title)
-                : renderTransaction({ item: item.tx })
-            }
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={onRefresh}
-                tintColor={color.accent.base}
+          <VelaRefresh refreshing={refreshing} onRefresh={onRefresh}>
+            {(scrollProps) => (
+              <Animated.FlatList
+                {...scrollProps}
+                data={listData}
+                keyExtractor={(item: ListItem) => item.key}
+                renderItem={({ item }: { item: ListItem }) =>
+                  item.type === 'header'
+                    ? renderSectionHeader(item.title)
+                    : renderTransaction({ item: item.tx })
+                }
+                initialNumToRender={15}
+                windowSize={5}
+                maxToRenderPerBatch={10}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.listContent}
+                ListEmptyComponent={
+                  filteredTxs.length === 0 && transactions.length > 0 ? (
+                    <View style={styles.emptyFilterContainer}>
+                      <Text style={styles.emptyFilterText}>{t('history.emptyFilter')}</Text>
+                    </View>
+                  ) : null
+                }
               />
-            }
-            initialNumToRender={15}
-            windowSize={5}
-            maxToRenderPerBatch={10}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.listContent}
-            ListEmptyComponent={
-              filteredTxs.length === 0 && transactions.length > 0 ? (
-                <View style={styles.emptyFilterContainer}>
-                  <Text style={styles.emptyFilterText}>{t('history.emptyFilter')}</Text>
-                </View>
-              ) : null
-            }
-          />
+            )}
+          </VelaRefresh>
         </>
       )}
     </ScreenContainer>

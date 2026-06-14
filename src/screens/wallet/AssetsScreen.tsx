@@ -1,4 +1,5 @@
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { TokenRow } from '@/components/ui/TokenRow';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { AppModal } from '@/components/ui/AppModal';
@@ -27,7 +28,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { ArrowDown, ArrowUp, Check, Clock, Copy, Plus, Search, X, AlertTriangle, Wifi, RefreshCw, ScanLine } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -95,13 +96,6 @@ export default function AssetsScreen() {
   const spinStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${spinRotation.value}deg` }],
   }));
-
-  // Web pull-to-refresh state
-  const flatListRef = useRef<FlatList>(null);
-  const pullStartY = useRef<number | null>(null);
-  const pullDistanceRef = useRef(0);
-  const [pullDistance, setPullDistance] = useState(0);
-  const PULL_THRESHOLD = 60;
 
   const loadInFlightRef = useRef(false);
   const [failedChainIds, setFailedChainIds] = useState<number[]>([]);
@@ -171,54 +165,6 @@ export default function AssetsScreen() {
     setRefreshing(true);
     loadTokens(false, true);
   }, [loadTokens]);
-
-  // Web pull-to-refresh: attach native DOM touch listeners
-  useEffect(() => {
-    if (Platform.OS !== 'web' || !flatListRef.current) return;
-    const node = (flatListRef.current as any)?.getScrollableNode?.()
-      ?? (flatListRef.current as any)?._listRef?._scrollRef
-      ?? (flatListRef.current as any);
-    const el: HTMLElement | null = node instanceof HTMLElement ? node : null;
-    if (!el) return;
-
-    const getScrollTop = () => {
-      let target: HTMLElement | null = el;
-      while (target) {
-        if (target.scrollHeight > target.clientHeight) return target.scrollTop;
-        target = target.parentElement;
-      }
-      return 0;
-    };
-
-    const handleTouchStart = (e: TouchEvent) => {
-      if (getScrollTop() <= 0) {
-        pullStartY.current = e.touches[0].clientY;
-      }
-    };
-    const handleTouchMove = (e: TouchEvent) => {
-      if (pullStartY.current === null) return;
-      const dist = Math.max(0, (e.touches[0].clientY - pullStartY.current) * 0.5);
-      pullDistanceRef.current = dist;
-      setPullDistance(dist);
-    };
-    const handleTouchEnd = () => {
-      if (pullDistanceRef.current >= PULL_THRESHOLD) {
-        onRefresh();
-      }
-      pullStartY.current = null;
-      pullDistanceRef.current = 0;
-      setPullDistance(0);
-    };
-
-    el.addEventListener('touchstart', handleTouchStart, { passive: true });
-    el.addEventListener('touchmove', handleTouchMove, { passive: true });
-    el.addEventListener('touchend', handleTouchEnd);
-    return () => {
-      el.removeEventListener('touchstart', handleTouchStart);
-      el.removeEventListener('touchmove', handleTouchMove);
-      el.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [onRefresh]);
 
   const totalUsd = tokens.reduce((sum, t) => sum + tokenUsdValue(t), 0);
 
@@ -297,18 +243,6 @@ export default function AssetsScreen() {
 
   const renderHeader = () => (
     <View style={styles.header}>
-      {/* Web pull-to-refresh indicator */}
-      {Platform.OS === 'web' && pullDistance > 0 && (
-        <View style={styles.webPullIndicator}>
-          <Animated.View style={pullDistance >= PULL_THRESHOLD ? spinStyle : undefined}>
-            <RefreshCw
-              size={18}
-              color={pullDistance >= PULL_THRESHOLD ? color.accent.base : color.fg.subtle}
-              strokeWidth={2.5}
-            />
-          </Animated.View>
-        </View>
-      )}
       {/* Close + account + scan */}
       <Animated.View entering={fadeIn(0, 400)}>
         <View style={styles.headerTopRow}>
@@ -468,38 +402,33 @@ export default function AssetsScreen() {
 
   return (
     <ScreenContainer>
-      <FlatList
-        ref={flatListRef}
-        data={filteredTokens}
-        keyExtractor={(item) => `${item.network}_${item.tokenAddress ?? 'native'}_${item.symbol}`}
-        ListHeaderComponent={renderHeader()}
-        ListEmptyComponent={renderEmpty()}
-        renderItem={({ item, index }) => (
-          <TokenRow
-            symbol={item.symbol}
-            chainLabel={chainName(tokenChainId(item))}
-            logoUrls={tokenLogoURLs(item)}
-            balance={formatTokenAmount(tokenBalanceDouble(item), { compact: true })}
-            usdValue={tokenUsdValue(item) > 0 ? dc.fmt(tokenUsdValue(item)) : undefined}
-            onPress={() => navigateToToken(item)}
-            index={index}
+      <VelaRefresh refreshing={refreshing} onRefresh={onRefresh}>
+        {(scrollProps) => (
+          <Animated.FlatList
+            {...scrollProps}
+            data={filteredTokens}
+            keyExtractor={(item: APIToken) => `${item.network}_${item.tokenAddress ?? 'native'}_${item.symbol}`}
+            ListHeaderComponent={renderHeader()}
+            ListEmptyComponent={renderEmpty()}
+            renderItem={({ item, index }: { item: APIToken; index: number }) => (
+              <TokenRow
+                symbol={item.symbol}
+                chainLabel={chainName(tokenChainId(item))}
+                logoUrls={tokenLogoURLs(item)}
+                balance={formatTokenAmount(tokenBalanceDouble(item), { compact: true })}
+                usdValue={tokenUsdValue(item) > 0 ? dc.fmt(tokenUsdValue(item)) : undefined}
+                onPress={() => navigateToToken(item)}
+                index={index}
+              />
+            )}
+            initialNumToRender={10}
+            windowSize={5}
+            maxToRenderPerBatch={8}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
           />
         )}
-        refreshControl={
-          Platform.OS !== 'web' ? (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={color.accent.base}
-            />
-          ) : undefined
-        }
-        initialNumToRender={10}
-        windowSize={5}
-        maxToRenderPerBatch={8}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      />
+      </VelaRefresh>
 
       {/* Account Switcher */}
       <AppModal visible={showAccountSwitcher} onClose={() => setShowAccountSwitcher(false)}>
@@ -647,11 +576,6 @@ export default function AssetsScreen() {
 const styles = createStyles(() => ({
   listContent: {
     paddingBottom: 100,
-  },
-  webPullIndicator: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: space.lg,
   },
   header: {
     paddingTop: space.xl,
