@@ -35,6 +35,7 @@
       "labelHash": "雜湊",
       "statusFailed": "失敗",
       "statusSucceeded": "成功",
+      "statusPending": "處理中",
       "opContractInteraction": "合約互動",
       "opSignature": "簽章",
       "opTypedDataSignature": "結構化資料簽章",

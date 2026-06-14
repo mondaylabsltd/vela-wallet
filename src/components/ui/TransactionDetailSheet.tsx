@@ -8,9 +8,10 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Check, CheckCircle2, ChevronRight, Copy, ExternalLink, X, XCircle } from 'lucide-react-native';
+import { Check, ChevronRight, Copy, ExternalLink, X } from 'lucide-react-native';
 import { AmountText } from '@/components/ui/AmountText';
 import { AppModal } from '@/components/ui/AppModal';
+import { TxStatusBadge } from '@/components/ui/TxStatusBadge';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { ChainLogo } from '@/components/ChainLogo';
 import { chainName, getAllNetworksSync } from '@/models/network';
@@ -128,16 +129,7 @@ export function TransactionDetailSheet({ visible, tx, alias, rate, currency, onC
               <VelaCard style={styles.details}>
                 <Row label={t('componentsTx.detail.labelDate')} value={formatDateTime(tx.timestamp * 1000)} />
                 <Divider />
-                <Row label={t('componentsTx.detail.labelStatus')} custom={
-                  <View style={styles.statusRow}>
-                    {tx.status === 'failed'
-                      ? <XCircle size={16} color={color.error.base} strokeWidth={2.4} />
-                      : <CheckCircle2 size={16} color={color.success.base} strokeWidth={2.4} />}
-                    <Text style={[styles.statusText, { color: tx.status === 'failed' ? color.error.base : color.success.base }]}>
-                      {tx.status === 'failed' ? t('componentsTx.detail.statusFailed') : t('componentsTx.detail.statusSucceeded')}
-                    </Text>
-                  </View>
-                } />
+                <Row label={t('componentsTx.detail.labelStatus')} custom={<TxStatusBadge status={tx.status} />} />
                 {tx.from ? (<><Divider /><Row label={t('componentsTx.detail.labelFrom')} value={shortAddress(tx.from)} mono onCopy={() => copy('from', tx.from)} copied={copied === 'from'} /></>) : null}
                 {tx.to ? (<><Divider /><Row label={t('componentsTx.detail.labelTo')} value={shortAddress(tx.to)} mono onOpen={() => openBrowser(`${explorer}/address/${tx.to}`)} /></>) : null}
                 <Divider />

@@ -35,6 +35,7 @@
       "labelHash": "Hash",
       "statusFailed": "Failed",
       "statusSucceeded": "Succeeded",
+      "statusPending": "Pending",
       "opContractInteraction": "Contract interaction",
       "opSignature": "Signature",
       "opTypedDataSignature": "Typed-data signature",

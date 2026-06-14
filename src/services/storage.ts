@@ -351,7 +351,7 @@ export interface LocalTransaction {
   decimals: number;
   chainId: number;
   timestamp: number;
-  status: 'confirmed' | 'failed';
+  status: 'pending' | 'confirmed' | 'failed';
   /** Operation type. Defaults to 'send' for backwards compatibility with old records. */
   type?: TransactionType;
   /** dApp name or domain (e.g. "Uniswap", "walletpair.org"). */
@@ -386,6 +386,18 @@ export async function loadTransactions(): Promise<LocalTransaction[]> {
     if (raw) return JSON.parse(raw);
   } catch {}
   return [];
+}
+
+/**
+ * Patch an existing transaction by id — e.g. flip a 'pending' send to 'confirmed'
+ * once its on-chain hash resolves. No-op if the id isn't present.
+ */
+export async function updateTransaction(id: string, patch: Partial<LocalTransaction>): Promise<void> {
+  const txs = await loadTransactions();
+  const idx = txs.findIndex((t) => t.id === id);
+  if (idx === -1) return;
+  txs[idx] = { ...txs[idx], ...patch };
+  await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(txs));
 }
 
 /**

@@ -35,6 +35,7 @@
       "labelHash": "哈希",
       "statusFailed": "失败",
       "statusSucceeded": "成功",
+      "statusPending": "处理中",
       "opContractInteraction": "合约交互",
       "opSignature": "签名",
       "opTypedDataSignature": "结构化数据签名",

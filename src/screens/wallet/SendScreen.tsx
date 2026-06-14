@@ -11,7 +11,7 @@ import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
 import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, GAS_TIER_MULTIPLIERS, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
-import { findAccountByCredentialId, saveTransaction, loadTransactions } from '@/services/storage';
+import { findAccountByCredentialId, saveTransaction, updateTransaction, loadTransactions } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, type FundingNeeded } from '@/services/bundler-service';
 import { AmountText } from '@/components/ui/AmountText';
@@ -515,13 +515,15 @@ export default function SendScreen() {
 
       // Persist the USD value (at send time) so the activity feed can show the
       // fiat amount — without it, non-stablecoin sends (e.g. BNB) render with no
-      // fiat, since there's no price to recover later. Persisted exactly once
-      // (saveTransaction appends; no upsert) when the hash settles.
+      // fiat, since there's no price to recover later.
       const sentUsd = parseFloat(tokenAmount) * (selectedToken.priceUsd ?? 0);
-      const persistSend = (hash: string) => saveTransaction({
+      // Record immediately as 'pending' so it shows in history right away, then
+      // upgrade to 'confirmed' once the on-chain hash lands. If the receipt poll
+      // times out it stays 'pending' — honest, not a false 'confirmed'.
+      const pendingWrite = saveTransaction({
         id: result.userOpHash,
         userOpHash: result.userOpHash,
-        txHash: hash,
+        txHash: '',
         from: activeAccount.address,
         to: recipient,
         toName: recipientIdentity?.name,
@@ -530,16 +532,20 @@ export default function SendScreen() {
         decimals: selectedToken!.decimals,
         chainId,
         timestamp: Math.floor(Date.now() / 1000),
-        status: 'confirmed',
+        status: 'pending',
         type: 'send',
         usd: sentUsd > 0 ? '$' + sentUsd.toFixed(2) : undefined,
       }).catch(() => {});
 
-      // Resolve the on-chain hash in the background; persist with it if it
-      // arrives, otherwise persist hash-less so it still lands in history.
+      // Resolve the on-chain hash in the background and flip the record to
+      // 'confirmed' (awaiting the pending write first so the patch finds it).
       result.waitForTxHash()
-        .then((hash) => { setTxHash(hash); persistSend(hash); })
-        .catch(() => { persistSend(''); });
+        .then(async (hash) => {
+          setTxHash(hash);
+          await pendingWrite;
+          await updateTransaction(result.userOpHash, { txHash: hash, status: 'confirmed' }).catch(() => {});
+        })
+        .catch(() => { /* receipt slow/unavailable — stays 'pending' */ });
 
     } catch (error: any) {
       if (error?.code === 'PASSKEY_CANCELLED') {
