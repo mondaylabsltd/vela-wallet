@@ -78,5 +78,20 @@
       "h24": "24 saat",
       "h12": "12 saat"
     }
+  },
+  "time": {
+    "now": "şimdi",
+    "minutesShort": "{{n}} dk",
+    "hoursShort": "{{n}} sa"
+  },
+  "activity": {
+    "sent": "Gönderildi",
+    "received": "Alındı",
+    "toAddr": "Alıcı: {{addr}}",
+    "fromAddr": "Gönderen: {{addr}}",
+    "signatureRequest": "İmza isteği",
+    "typedDataSignature": "Yapılandırılmış veri imzası",
+    "dappTransaction": "dApp işlemi",
+    "activity": "Etkinlik"
   }
 }

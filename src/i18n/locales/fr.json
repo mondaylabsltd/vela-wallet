@@ -78,5 +78,20 @@
       "h24": "24 heures",
       "h12": "12 heures"
     }
+  },
+  "time": {
+    "now": "à l'instant",
+    "minutesShort": "{{n}} min",
+    "hoursShort": "{{n}} h"
+  },
+  "activity": {
+    "sent": "Envoyé",
+    "received": "Reçu",
+    "toAddr": "à {{addr}}",
+    "fromAddr": "de {{addr}}",
+    "signatureRequest": "Demande de signature",
+    "typedDataSignature": "Signature de données typées",
+    "dappTransaction": "Transaction dApp",
+    "activity": "Activité"
   }
 }

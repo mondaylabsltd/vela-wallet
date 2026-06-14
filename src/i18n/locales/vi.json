@@ -78,5 +78,20 @@
       "h24": "24 giờ",
       "h12": "12 giờ"
     }
+  },
+  "time": {
+    "now": "vừa xong",
+    "minutesShort": "{{n}} phút",
+    "hoursShort": "{{n}} giờ"
+  },
+  "activity": {
+    "sent": "Đã gửi",
+    "received": "Đã nhận",
+    "toAddr": "đến {{addr}}",
+    "fromAddr": "từ {{addr}}",
+    "signatureRequest": "Yêu cầu ký",
+    "typedDataSignature": "Ký dữ liệu có cấu trúc",
+    "dappTransaction": "Giao dịch dApp",
+    "activity": "Hoạt động"
   }
 }

@@ -78,5 +78,20 @@
       "h24": "24時間制",
       "h12": "12時間制"
     }
+  },
+  "time": {
+    "now": "たった今",
+    "minutesShort": "{{n}}分前",
+    "hoursShort": "{{n}}時間前"
+  },
+  "activity": {
+    "sent": "送金",
+    "received": "受取",
+    "toAddr": "{{addr}} へ",
+    "fromAddr": "{{addr}} から",
+    "signatureRequest": "署名リクエスト",
+    "typedDataSignature": "型付きデータの署名",
+    "dappTransaction": "dApp トランザクション",
+    "activity": "アクティビティ"
   }
 }

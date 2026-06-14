@@ -19,6 +19,7 @@ import { tokenChainId, type APIToken } from '@/models/types';
 import { fetchTokens } from '@/services/wallet-api';
 import { fetchIncomingTransfers, type IncomingTransfer } from '@/services/transfer-monitor';
 import { formatTokenAmount, formatDate } from '@/services/locale-format';
+import i18n from '@/i18n';
 
 export interface ActivityItem {
   id: string;
@@ -63,11 +64,16 @@ function compactAmount(n: number): string {
 /** Compact relative time: "now", "2m", "3h", "Mon", "Jun 3". */
 export function relativeTime(tsSeconds: number, nowMs: number = Date.now()): string {
   const diff = Math.max(0, Math.floor(nowMs / 1000) - tsSeconds);
-  if (diff < 45) return 'now';
-  if (diff < 3600) return `${Math.round(diff / 60)}m`;
-  if (diff < 86400) return `${Math.round(diff / 3600)}h`;
+  // Localized via the i18n singleton (relativeTime is called at render, so it
+  // re-evaluates with the current language when the user switches).
+  if (diff < 45) return i18n.t('time.now');
+  if (diff < 3600) return i18n.t('time.minutesShort', { n: Math.round(diff / 60) });
+  if (diff < 86400) return i18n.t('time.hoursShort', { n: Math.round(diff / 3600) });
   const d = new Date(tsSeconds * 1000);
-  if (diff < 7 * 86400) return d.toLocaleDateString('en-US', { weekday: 'short' });
+  if (diff < 7 * 86400) {
+    // Short weekday in the active language; fall back to the locale date preset.
+    try { return d.toLocaleDateString(i18n.language, { weekday: 'short' }); } catch { return formatDate(d); }
+  }
   return formatDate(d);
 }
 
@@ -254,10 +260,11 @@ export async function loadConnectionEvents(address: string): Promise<ConnectionE
 }
 
 function connectionEventLabel(tx: LocalTransaction): string {
+  // tx.intent comes from the dApp (already human-readable) — keep it; localize the fallbacks.
   switch (tx.type) {
-    case 'sign_message': return 'Signature request';
-    case 'sign_typed_data': return tx.intent || 'Typed-data signature';
-    case 'dapp_tx': return tx.intent || 'dApp transaction';
-    default: return 'Activity';
+    case 'sign_message': return i18n.t('activity.signatureRequest');
+    case 'sign_typed_data': return tx.intent || i18n.t('activity.typedDataSignature');
+    case 'dapp_tx': return tx.intent || i18n.t('activity.dappTransaction');
+    default: return i18n.t('activity.activity');
   }
 }

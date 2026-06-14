@@ -78,5 +78,20 @@
       "h24": "24 小時制",
       "h12": "12 小時制"
     }
+  },
+  "time": {
+    "now": "剛剛",
+    "minutesShort": "{{n}}分鐘前",
+    "hoursShort": "{{n}}小時前"
+  },
+  "activity": {
+    "sent": "已發送",
+    "received": "已收到",
+    "toAddr": "至 {{addr}}",
+    "fromAddr": "來自 {{addr}}",
+    "signatureRequest": "簽署請求",
+    "typedDataSignature": "結構化資料簽署",
+    "dappTransaction": "dApp 交易",
+    "activity": "活動"
   }
 }

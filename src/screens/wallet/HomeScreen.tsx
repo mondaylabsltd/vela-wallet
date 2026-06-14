@@ -447,8 +447,10 @@ export default function HomeScreen() {
             renderItem={({ item, index }) => (
               <ActivityRow
                 direction={item.direction}
-                title={item.title}
-                subtitle={item.subtitle}
+                title={t(item.direction === 'out' ? 'activity.sent' : 'activity.received')}
+                subtitle={item.address
+                  ? t(item.direction === 'out' ? 'activity.toAddr' : 'activity.fromAddr', { addr: shortAddress(item.address) })
+                  : item.subtitle}
                 amount={item.amount}
                 fiat={item.usdValue > 0 ? formatFiat(item.usdValue * rate, currencyCode, currency.symbol) : undefined}
                 time={relativeTime(item.timestamp)}

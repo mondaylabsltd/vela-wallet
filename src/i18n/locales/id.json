@@ -78,5 +78,20 @@
       "h24": "24 jam",
       "h12": "12 jam"
     }
+  },
+  "time": {
+    "now": "baru saja",
+    "minutesShort": "{{n}} mnt",
+    "hoursShort": "{{n}} jam"
+  },
+  "activity": {
+    "sent": "Terkirim",
+    "received": "Diterima",
+    "toAddr": "ke {{addr}}",
+    "fromAddr": "dari {{addr}}",
+    "signatureRequest": "Permintaan tanda tangan",
+    "typedDataSignature": "Tanda tangan typed data",
+    "dappTransaction": "Transaksi dApp",
+    "activity": "Aktivitas"
   }
 }
