@@ -11,7 +11,7 @@
       "selfDesc": "Gửi {{symbol}} để kích hoạt tài khoản gas",
       "activationFee": "Phí kích hoạt",
       "gasAccount": "Tài khoản Gas",
-      "checkBtn": "Tôi đã gửi",
+      "checkBtn": "Tôi đã gửi rồi",
       "checkingBtn": "Đang kiểm tra...",
       "continue": "Tiếp tục",
       "cancel": "Hủy",
@@ -71,7 +71,7 @@
       "gasPriceUserOp": "Giá Gas (UserOp)",
       "gasLimit": "Giới hạn Gas",
       "walletDeployed": "Ví đã triển khai",
-      "deployedYes": "Rồi",
+      "deployedYes": "Có",
       "deployedNo": "Chưa (giao dịch đầu tiên)"
     },
     "dock": {

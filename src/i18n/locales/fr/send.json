@@ -5,7 +5,6 @@
     "loadingTokens": "Chargement des tokens...",
     "noMatchingTokens": "Aucun token correspondant",
     "noTokensWithBalance": "Aucun token avec un solde",
-
     "sendTitle": "Envoyer {{symbol}}",
     "maxBtn": "Max",
     "recipientLabel": "Destinataire",
@@ -14,19 +13,16 @@
     "lowBalanceWarning": "Solde insuffisant pour couvrir les frais de réseau. Ajoutez davantage de {{nativeSym}} à votre portefeuille avant d'envoyer.",
     "preparing": "Préparation...",
     "continueBtn": "Continuer",
-
     "alertInvalidAddressTitle": "Adresse invalide",
     "alertInvalidAddressBody": "Veuillez saisir une adresse Ethereum valide (0x...).",
     "alertInvalidAmountTitle": "Montant invalide",
     "alertInvalidAmountBody": "Veuillez saisir un montant valide supérieur à zéro.",
     "alertInsufficientBalanceTitle": "Solde insuffisant",
     "alertLoadTokensError": "Échec du chargement des tokens.",
-
     "warnNotEnoughToken": "Vous n'avez pas assez de {{symbol}} sur ce compte",
     "warnInsufficientForGas": "{{sym}} insuffisant pour couvrir le montant + les frais de Gas",
     "warnInsufficientGas": "{{sym}} insuffisant pour les frais de Gas",
-    "warnNeedGas": "Il vous faut du {{sym}} pour payer les frais de Gas",
-
+    "warnNeedGas": "Vous avez besoin de {{sym}} pour payer les frais de Gas",
     "confirmTitle": "Confirmer",
     "walletFallbackName": "Portefeuille",
     "fromLabel": "De",
@@ -41,7 +37,6 @@
     "walletDeployedNo": "Non (1re tx)",
     "checkingGas": "Vérification du Gas...",
     "confirmSendBtn": "Confirmer et envoyer",
-
     "txPreparing": "Préparation de la transaction...",
     "txSigning": "En attente de la biométrie...",
     "txSubmitting": "Envoi au réseau...",
@@ -52,7 +47,6 @@
     "txRemaining": "~{{remaining}} s restantes",
     "txTypicalTime": "{{chainName}} confirme généralement en ~{{estSecs}} s",
     "txRetryBtn": "Réessayer",
-
     "txErrorTimeout": "Transaction envoyée mais le délai de confirmation a expiré. Vérifiez l'historique plus tard.",
     "txErrorBundlerLoop": "Le solde du compte Gas est sans cesse rejeté par le bundler. Réessayez plus tard ou augmentez le niveau de Gas.",
     "txErrorBundlerFund": "Le compte du bundler a besoin de plus de Gas. Veuillez l'approvisionner dans les Réglages.",

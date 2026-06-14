@@ -2,7 +2,7 @@
   "home": {
     "totalBalance": "总余额",
     "manageAssets": "管理资产",
-    "tabActivity": "动态",
+    "tabActivity": "活动",
     "tabConnections": "连接",
     "liveIndicator": "实时 · 监听收款中",
     "emptyNoActivityNetwork": "该网络暂无交易记录",

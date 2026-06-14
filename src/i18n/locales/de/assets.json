@@ -11,7 +11,7 @@
     "rpcUnavailableSingle": "RPC für {{name}} nicht verfügbar",
     "rpcUnavailableMultiple": "RPC für {{count}} Netzwerke nicht verfügbar",
     "rpcFix": "Beheben",
-    "emptyTitle": "Hinterlegen Sie Ihr erstes Asset",
+    "emptyTitle": "Empfangen Sie Ihr erstes Asset",
     "emptySubtext": "Tippen Sie hier, um Ihre Adresse zu sehen und Token zu empfangen",
     "errorTitle": "Fehler",
     "errorLoadBalances": "Token-Guthaben konnten nicht geladen werden.",

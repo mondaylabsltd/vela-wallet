@@ -2,7 +2,7 @@
   "clearSigning": {
     "title": "Kiểm thử Clear Signing",
     "subtitle": "Các tình huống giao diện ký ERC-7730",
-    "hint": "Chạm vào một tình huống để mở cửa sổ ký với dữ liệu mẫu. Các bộ mô tả clear signing được lấy trực tiếp từ sổ đăng ký ERC-7730.",
+    "hint": "Chạm vào một tình huống để mở cửa sổ ký với dữ liệu mẫu. Các bộ mô tả clear signing được lấy trực tiếp từ kho đăng ký ERC-7730.",
     "scenarioErc20Transfer": "Chuyển ERC-20",
     "scenarioErc20TransferSub": "Clear sign — transfer(address, uint256)",
     "scenarioErc20Approve": "Phê duyệt ERC-20 (Không giới hạn)",

@@ -51,7 +51,7 @@
     "modalSigningFor": "MENANDATANGANI UNTUK",
     "modalTypeLabel": "Tipe",
     "modalUnlimitedWarning": "Tanpa batas — kontrak ini dapat membelanjakan semua token Anda",
-    "modalUndecodedWarning": "Tidak dapat memecahkan kode — tanpa deskriptor ERC-7730 ({{bytes}} byte)",
+    "modalUndecodedWarning": "Tidak dapat mendekode — tanpa deskriptor ERC-7730 ({{bytes}} byte)",
     "modalRawCalldata": "Calldata mentah",
     "modalSignatureRequest": "Permintaan tanda tangan",
     "modalBtnReject": "Tolak",

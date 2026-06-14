@@ -5,28 +5,24 @@
     "loadingTokens": "正在載入代幣⋯",
     "noMatchingTokens": "沒有相符的代幣",
     "noTokensWithBalance": "沒有有餘額的代幣",
-
     "sendTitle": "發送 {{symbol}}",
-    "maxBtn": "全部",
+    "maxBtn": "最高",
     "recipientLabel": "收款人",
     "recipientPlaceholder": "0x⋯ 地址",
     "velaUser": "Vela 用戶",
     "lowBalanceWarning": "餘額不足以支付網絡費用。請先為錢包增加 {{nativeSym}} 再發送。",
     "preparing": "準備中⋯",
     "continueBtn": "繼續",
-
     "alertInvalidAddressTitle": "地址無效",
     "alertInvalidAddressBody": "請輸入有效的以太坊地址（0x⋯）。",
     "alertInvalidAmountTitle": "金額無效",
     "alertInvalidAmountBody": "請輸入大於零的有效金額。",
     "alertInsufficientBalanceTitle": "餘額不足",
     "alertLoadTokensError": "載入代幣失敗。",
-
     "warnNotEnoughToken": "此帳戶的 {{symbol}} 不足",
     "warnInsufficientForGas": "{{sym}} 不足以支付金額及 Gas 費",
     "warnInsufficientGas": "{{sym}} 不足以支付 Gas 費",
     "warnNeedGas": "你需要 {{sym}} 來支付 Gas 費",
-
     "confirmTitle": "確認",
     "walletFallbackName": "錢包",
     "fromLabel": "由",
@@ -41,7 +37,6 @@
     "walletDeployedNo": "否（首次交易）",
     "checkingGas": "正在檢查 Gas⋯",
     "confirmSendBtn": "確認並發送",
-
     "txPreparing": "正在準備交易⋯",
     "txSigning": "正在等待生物辨識⋯",
     "txSubmitting": "正在提交至網絡⋯",
@@ -52,7 +47,6 @@
     "txRemaining": "尚餘約 {{remaining}} 秒",
     "txTypicalTime": "{{chainName}} 一般約 {{estSecs}} 秒內確認",
     "txRetryBtn": "重試",
-
     "txErrorTimeout": "交易已提交，但確認逾時。請稍後查看記錄。",
     "txErrorBundlerLoop": "Gas 帳戶餘額持續被 bundler 拒絕。請稍後重試或提高 Gas 等級。",
     "txErrorBundlerFund": "Bundler 帳戶需要更多 Gas。請於設定中為其注資。",

@@ -9,7 +9,7 @@
     "addToken": "Agregar",
     "searchPlaceholder": "Buscar tokens...",
     "rpcUnavailableSingle": "RPC de {{name}} no disponible",
-    "rpcUnavailableMultiple": "RPC de {{count}} redes no disponible",
+    "rpcUnavailableMultiple": "RPC no disponible en {{count}} redes",
     "rpcFix": "Corregir",
     "emptyTitle": "Deposita tu primer activo",
     "emptySubtext": "Toca aquí para ver tu dirección y recibir tokens",

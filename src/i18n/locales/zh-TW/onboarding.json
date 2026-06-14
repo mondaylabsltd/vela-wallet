@@ -1,7 +1,7 @@
 {
   "onboarding": {
     "welcome": {
-      "tagline": "你的金鑰，你的幣。\n輕輕一點就搞定。",
+      "tagline": "您的金鑰，您的幣。\n輕輕一點就搞定。",
       "createWallet": "建立錢包",
       "alreadyHaveWallet": "我已經有錢包了"
     },
@@ -28,7 +28,7 @@
       "accountNameHint": "此名稱會連同您的公鑰一起記錄在鏈上，用於跨裝置登入。",
       "ack0": "這是一個自我保管錢包。您通行密鑰的私鑰是由裝置的密碼管理工具（iCloud 鑰匙圈／Google 密碼管理工具）保管，Vela Wallet 無法存取或復原。",
       "ack1": "如果您遺失裝置，可以透過 iCloud 或 Google 帳戶在新裝置上復原錢包。",
-      "ack2": "如果您的 iCloud 或 Google 帳戶遭入侵，您的錢包控制權也可能一併失守。請以高強度密碼與兩步驟驗證（2FA）保護。",
+      "ack2": "如果您的 iCloud 或 Google 帳戶遭入侵，您的錢包控制權也可能一併受到威脅。請以高強度密碼與兩步驟驗證（2FA）保護。",
       "ack3": "我同意",
       "ack3PrivacyPolicy": "隱私權政策",
       "ack3And": "與",

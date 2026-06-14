@@ -17,7 +17,7 @@
       "cancel": "取消",
       "denialDefault": "無法使用免費啟用。",
       "denialNonceExceeded": "免費額度已用完。",
-      "denialTreasuryDepleted": "免費資金暫時用罄。",
+      "denialTreasuryDepleted": "免費資金暫時不足。",
       "denialBalanceTooLow": "錢包餘額過低，不符合資格。",
       "denialNoPasskey": "免費啟用需要通行密鑰。",
       "denialRateLimited": "請求過於頻繁，請稍後再試。",

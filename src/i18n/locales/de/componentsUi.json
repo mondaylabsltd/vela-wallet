@@ -11,7 +11,7 @@
       "selfDesc": "Senden Sie {{symbol}}, um das Gas-Konto zu aktivieren",
       "activationFee": "Aktivierungsgebühr",
       "gasAccount": "Gas-Konto",
-      "checkBtn": "Ich habe gesendet",
+      "checkBtn": "Ich habe es gesendet",
       "checkingBtn": "Wird geprüft ...",
       "continue": "Weiter",
       "cancel": "Abbrechen",
@@ -66,7 +66,7 @@
       "errorPicker": "Bildauswahl konnte nicht geöffnet werden."
     },
     "gas": {
-      "estFee": "Gesch. Gebühr",
+      "estFee": "Geschätzte Gebühr",
       "gasPrice": "Gas-Preis",
       "gasPriceUserOp": "Gas-Preis (UserOp)",
       "gasLimit": "Gas-Limit",

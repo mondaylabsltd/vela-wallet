@@ -4,7 +4,7 @@
     "actionReceive": "Recevoir",
     "actionHistory": "Historique",
     "sectionTitle": "Actifs",
-    "hideZero": "Masquer les zéros",
+    "hideZero": "Masquer les soldes nuls",
     "hiddenCount": "{{count}} masqués",
     "addToken": "Ajouter",
     "searchPlaceholder": "Rechercher des tokens...",

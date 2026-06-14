@@ -26,7 +26,7 @@
       "accountNameLabel": "帳戶名稱",
       "accountNamePlaceholder": "為你的帳戶輸入名稱",
       "accountNameHint": "此名稱會連同你的公鑰一起儲存於鏈上，以便跨裝置登入。",
-      "ack0": "這是一個自我託管錢包。你通行密鑰的私鑰由裝置的密碼管理工具（iCloud 鑰匙圈／Google 密碼管理工具）管理。Vela Wallet 無法存取或復原它。",
+      "ack0": "這是一個自我託管的錢包。你通行密鑰的私鑰由裝置的密碼管理工具（iCloud 鑰匙圈／Google 密碼管理工具）管理。Vela Wallet 無法存取或復原它。",
       "ack1": "如遺失裝置，你可透過 iCloud 或 Google 帳戶在新裝置上復原錢包。",
       "ack2": "如你的 iCloud 或 Google 帳戶被入侵，你對錢包的控制權亦可能受影響。請以強密碼及雙重認證保護它。",
       "ack3": "我同意",

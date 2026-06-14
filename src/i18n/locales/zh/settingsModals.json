@@ -13,7 +13,7 @@
     },
     "account": {
       "modalTitle": "账户",
-      "total": "合计 {{amount}}",
+      "total": "总计 {{amount}}",
       "createNew": "创建新账户",
       "signInExisting": "登录已有账户"
     },

@@ -15,7 +15,7 @@
       "pastePlaceholder": "Tempel URI walletpair:?...",
       "verifyTitle": "Verifikasi Koneksi",
       "verifyHint": "Pastikan kode ini cocok dengan yang ditampilkan dApp:",
-      "encryptedBadge": "Terenkripsi ujung ke ujung",
+      "encryptedBadge": "Terenkripsi end-to-end",
       "confirm": "Konfirmasi",
       "cancel": "Batal",
       "waitingStatus": "Menunggu dApp menerima...",

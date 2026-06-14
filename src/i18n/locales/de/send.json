@@ -5,7 +5,6 @@
     "loadingTokens": "Token werden geladen ...",
     "noMatchingTokens": "Keine passenden Token",
     "noTokensWithBalance": "Keine Token mit Guthaben",
-
     "sendTitle": "{{symbol}} senden",
     "maxBtn": "Max.",
     "recipientLabel": "Empfänger",
@@ -14,24 +13,21 @@
     "lowBalanceWarning": "Guthaben reicht nicht für die Netzwerkgebühren. Laden Sie mehr {{nativeSym}} in Ihre Wallet, bevor Sie senden.",
     "preparing": "Wird vorbereitet ...",
     "continueBtn": "Weiter",
-
     "alertInvalidAddressTitle": "Ungültige Adresse",
     "alertInvalidAddressBody": "Bitte geben Sie eine gültige Ethereum-Adresse ein (0x ...).",
     "alertInvalidAmountTitle": "Ungültiger Betrag",
     "alertInvalidAmountBody": "Bitte geben Sie einen gültigen Betrag größer als null ein.",
     "alertInsufficientBalanceTitle": "Unzureichendes Guthaben",
     "alertLoadTokensError": "Token konnten nicht geladen werden.",
-
     "warnNotEnoughToken": "Sie haben nicht genügend {{symbol}} in diesem Konto",
     "warnInsufficientForGas": "{{sym}} reicht nicht für Betrag + Gas-Gebühren",
     "warnInsufficientGas": "{{sym}} reicht nicht für die Gas-Gebühren",
     "warnNeedGas": "Sie benötigen {{sym}}, um die Gas-Gebühren zu zahlen",
-
     "confirmTitle": "Bestätigen",
     "walletFallbackName": "Wallet",
     "fromLabel": "Von",
     "toLabel": "An",
-    "estFeeLabel": "Gesch. Gebühr",
+    "estFeeLabel": "Geschätzte Gebühr",
     "estimatingFee": "Wird geschätzt ...",
     "gasPriceLabel": "Gas-Preis",
     "gasPriceUserOpLabel": "Gas-Preis (UserOp)",
@@ -41,7 +37,6 @@
     "walletDeployedNo": "Nein (erste Tx)",
     "checkingGas": "Gas wird geprüft ...",
     "confirmSendBtn": "Bestätigen & senden",
-
     "txPreparing": "Transaktion wird vorbereitet ...",
     "txSigning": "Warten auf Biometrie ...",
     "txSubmitting": "Wird an das Netzwerk übermittelt ...",
@@ -52,7 +47,6 @@
     "txRemaining": "~{{remaining}} s verbleibend",
     "txTypicalTime": "{{chainName}} bestätigt in der Regel in ~{{estSecs}} s",
     "txRetryBtn": "Erneut versuchen",
-
     "txErrorTimeout": "Transaktion übermittelt, aber Zeitüberschreitung bei der Bestätigung. Prüfen Sie den Verlauf später.",
     "txErrorBundlerLoop": "Das Gas-Konto-Guthaben wird vom Bundler weiterhin abgelehnt. Versuchen Sie es später erneut oder erhöhen Sie die Gas-Stufe.",
     "txErrorBundlerFund": "Das Bundler-Konto benötigt mehr Gas. Bitte füllen Sie es in den Einstellungen auf.",

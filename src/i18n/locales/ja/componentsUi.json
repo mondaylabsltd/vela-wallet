@@ -7,7 +7,7 @@
       "freeBadge": "無料",
       "freeRequesting": "リクエスト中...",
       "freeDesc": "新規ユーザー向けに Vela が負担します",
-      "selfTitle": "自分で有効化",
+      "selfTitle": "手動で有効化",
       "selfDesc": "{{symbol}} を送って Gas アカウントを有効化します",
       "activationFee": "有効化手数料",
       "gasAccount": "Gas アカウント",
@@ -47,7 +47,7 @@
       "typeLabel": "種類",
       "intentUnknown": "不明",
       "intentSend": "送る",
-      "signingFor": "署名の対象"
+      "signingFor": "署名先"
     },
     "currency": {
       "title": "表示通貨",
