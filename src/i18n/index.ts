@@ -143,9 +143,12 @@ export async function loadLanguage(): Promise<void> {
 /** Persist + apply a new preference, returning the language now in effect. */
 export async function setLanguagePreference(pref: LanguagePreference): Promise<AppLanguage> {
   _preference = pref;
+  // Persist FIRST, independent of changeLanguage. If changeLanguage ever rejects
+  // or hangs, the write must still happen — otherwise the choice is lost on the
+  // next launch and the picker silently reverts to "follow system".
+  AsyncStorage.setItem(STORAGE_KEY, pref).catch(() => {});
   const resolved = resolveLanguage(pref);
   await i18n.changeLanguage(resolved);
-  AsyncStorage.setItem(STORAGE_KEY, pref).catch(() => {});
   return resolved;
 }
 

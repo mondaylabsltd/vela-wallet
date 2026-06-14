@@ -45,7 +45,9 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   const setPreference = useCallback((pref: LanguagePreference) => {
     // Update module cache + i18next + persist (fires the react-i18next re-render).
-    setLanguagePreference(pref);
+    // Swallow rejections so a changeLanguage failure never becomes unhandled
+    // (the write already happened inside setLanguagePreference).
+    setLanguagePreference(pref).catch(() => {});
     // Re-render this provider → `resolved` changes → Stack key remounts the tree.
     setPreferenceState(pref);
   }, []);
