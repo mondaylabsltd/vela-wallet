@@ -3,7 +3,7 @@
  * Searchable (by code or name), single-select, applies + closes on tap.
  * Built on AppModal. Theme-driven.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Check, Search, X } from 'lucide-react-native';
@@ -26,11 +26,36 @@ export function CurrencySheet({ visible, selected, onSelect, onClose }: Props) {
   const [currencies, setCurrencies] = useState<Currency[]>(getSupportedCurrenciesSync);
   const pick = (code: string) => { onSelect(code); setQuery(''); onClose(); };
 
+  // Open scrolled to the current selection. We remember the selected row's offset
+  // (measured via onLayout) and re-apply it — both when the row lays out during
+  // the opening window AND after the list fills in (~30 → ~160), which would
+  // otherwise reset the scroll. `openingRef` stops us fighting the user later.
+  const scrollRef = useRef<ScrollView>(null);
+  const selectedYRef = useRef(0);
+  const openingRef = useRef(false);
+  const queryRef = useRef(query);
+  queryRef.current = query;
+
+  const scrollToSelected = useCallback(() => {
+    if (queryRef.current) return; // don't fight an active search
+    scrollRef.current?.scrollTo({ y: Math.max(0, selectedYRef.current - 12), animated: false });
+  }, []);
+
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) { openingRef.current = false; return; }
+    openingRef.current = true;
     setCurrencies(getSupportedCurrenciesSync());
     loadSupportedCurrencies().then(setCurrencies).catch(() => {});
+    const stop = setTimeout(() => { openingRef.current = false; }, 1000);
+    return () => clearTimeout(stop);
   }, [visible]);
+
+  // Re-apply after open and after the list grows (both can land/reset the scroll).
+  useEffect(() => {
+    if (!visible) return;
+    const id = setTimeout(scrollToSelected, 140);
+    return () => clearTimeout(id);
+  }, [visible, currencies, scrollToSelected]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -63,6 +88,7 @@ export function CurrencySheet({ visible, selected, onSelect, onClose }: Props) {
         </View>
 
         <ScrollView
+          ref={scrollRef}
           style={styles.list}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
@@ -73,7 +99,15 @@ export function CurrencySheet({ visible, selected, onSelect, onClose }: Props) {
           ) : filtered.map((c) => {
             const isSel = c.code === selected;
             return (
-              <Pressable key={c.code} style={[styles.row, isSel && styles.rowSel]} onPress={() => pick(c.code)}>
+              <Pressable
+                key={c.code}
+                style={[styles.row, isSel && styles.rowSel]}
+                onPress={() => pick(c.code)}
+                onLayout={isSel ? (e) => {
+                  selectedYRef.current = e.nativeEvent.layout.y;
+                  if (openingRef.current) requestAnimationFrame(scrollToSelected);
+                } : undefined}
+              >
                 <View style={styles.sym}><Text style={styles.symText}>{c.symbol}</Text></View>
                 <View style={styles.info}>
                   <Text style={styles.code}>{c.code}</Text>
@@ -98,7 +132,7 @@ const styles = createStyles(() => ({
     paddingHorizontal: space.lg, paddingVertical: space.md, marginBottom: space.sm,
   },
   searchInput: { flex: 1, fontSize: text.lg, ...inter.medium, color: color.fg.base, padding: 0 },
-  list: { marginTop: space.sm },
+  list: { flex: 1, marginTop: space.sm },
   listContent: { gap: space.md, paddingBottom: space['3xl'] },
   empty: { fontSize: text.base, ...inter.regular, color: color.fg.subtle, textAlign: 'center', paddingVertical: space['3xl'] },
   row: {
