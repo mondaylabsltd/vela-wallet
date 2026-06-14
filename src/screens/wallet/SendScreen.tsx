@@ -22,6 +22,7 @@ import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/rec
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
+import { ZERO_DECIMAL_CODES } from '@/services/currency';
 import { showAlert } from '@/services/platform';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
@@ -113,13 +114,16 @@ function balanceToWei(balance: string, decimals: number): bigint {
   return BigInt('0x' + amountToWeiHex(balance, decimals));
 }
 
-/** Resolve the token amount from user input, handling USD mode.
- *  Truncates to `decimals` to avoid floating-point garbage digits. */
-function resolveTokenAmount(amount: string, inUsd: boolean, priceUsd: number | null | undefined, decimals: number = 18): string {
-  if (!inUsd || !priceUsd || priceUsd <= 0) return amount;
-  const usd = parseFloat(amount || '0');
-  if (usd <= 0) return '0';
-  return (usd / priceUsd).toFixed(decimals).replace(/\.?0+$/, '');
+/** Resolve the token amount from user input, handling fiat-input mode.
+ *  In fiat mode the typed value is in the user's *display currency*, so we divide
+ *  by the token's price in that currency (priceUsd × USD→fiat rate), not by the
+ *  raw USD price. Truncates to `decimals` to avoid floating-point garbage. */
+function resolveTokenAmount(amount: string, inFiat: boolean, priceUsd: number | null | undefined, decimals: number = 18, rate: number = 1): string {
+  if (!inFiat || !priceUsd || priceUsd <= 0) return amount;
+  const fiat = parseFloat(amount || '0');
+  if (fiat <= 0) return '0';
+  const fiatPrice = priceUsd * (rate > 0 ? rate : 1);
+  return (fiat / fiatPrice).toFixed(decimals).replace(/\.?0+$/, '');
 }
 
 /**
@@ -276,7 +280,7 @@ export default function SendScreen() {
       return;
     }
 
-    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals);
+    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
     const amountNum = parseFloat(tokenAmount || '0');
     if (isNaN(amountNum) || amountNum <= 0) {
       setAmountWarning(null);
@@ -326,7 +330,7 @@ export default function SendScreen() {
     }
 
     setAmountWarning(null);
-  }, [amount, inputInUsd, selectedToken, tokens, feeEstimate]);
+  }, [amount, inputInUsd, selectedToken, tokens, feeEstimate, dc.rate]);
 
   // Resolve recipient identity (passkey index → ENS) when a valid address is entered
   useEffect(() => {
@@ -361,7 +365,7 @@ export default function SendScreen() {
       showAlert(t('send.alertInvalidAddressTitle'), t('send.alertInvalidAddressBody'));
       return;
     }
-    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken!.priceUsd, selectedToken!.decimals);
+    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken!.priceUsd, selectedToken!.decimals, dc.rate);
     const amountNum = parseFloat(tokenAmount);
     if (isNaN(amountNum) || amountNum <= 0) {
       showAlert(t('send.alertInvalidAmountTitle'), t('send.alertInvalidAmountBody'));
@@ -516,7 +520,7 @@ export default function SendScreen() {
       };
 
       setTxStatus('submitting');
-      const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals);
+      const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
       const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
 
       const maxFee = feeEstimate?.maxFeePerGas;
@@ -543,6 +547,10 @@ export default function SendScreen() {
         setTxStatus('confirmed');
         clearTokenCache(activeAccount.address);
 
+        // Persist the USD value (at send time) so the activity feed can show the
+        // fiat amount — without it, non-stablecoin sends (e.g. BNB) render with
+        // no fiat, since there's no price to recover later.
+        const sentUsd = parseFloat(tokenAmount) * (selectedToken!.priceUsd ?? 0);
         await saveTransaction({
           id: result.userOpHash,
           userOpHash: result.userOpHash,
@@ -556,6 +564,8 @@ export default function SendScreen() {
           chainId,
           timestamp: Math.floor(Date.now() / 1000),
           status: 'confirmed',
+          type: 'send',
+          usd: sentUsd > 0 ? '$' + sentUsd.toFixed(2) : undefined,
         });
       }).catch(() => {
         // Receipt polling timed out — still submitted, just can't confirm yet
@@ -702,6 +712,9 @@ export default function SendScreen() {
     const balance = tokenBalanceDouble(selectedToken);
     const logos = tokenLogoURLs(selectedToken);
     const chain = chainName(tokenChainId(selectedToken));
+    // Fiat-input mode is denominated in the user's display currency, not USD.
+    const fiatPrice = (selectedToken.priceUsd ?? 0) * dc.rate; // 1 token in display currency
+    const fiatDecimals = ZERO_DECIMAL_CODES.has(dc.code) ? 0 : 2;
 
     return (
       <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -747,7 +760,7 @@ export default function SendScreen() {
                   placeholderTextColor={color.fg.subtle}
                   value={amount}
                   onChangeText={(t) => {
-                    const maxDec = inputInUsd ? 2 : selectedToken.decimals;
+                    const maxDec = inputInUsd ? fiatDecimals : selectedToken.decimals;
                     const sanitized = sanitizeAmountInput(t, maxDec);
                     if (sanitized !== null) setAmount(sanitized);
                   }}
@@ -757,7 +770,7 @@ export default function SendScreen() {
               </View>
               {amount ? (
                 <Text style={[styles.unitLabel, { fontSize: Math.max(amountFontSize(amount) * 0.7, 16) }]}>
-                  {inputInUsd ? 'USD' : selectedToken.symbol}
+                  {inputInUsd ? dc.code : selectedToken.symbol}
                 </Text>
               ) : (
                 <Pressable onPress={handleMaxAmount} hitSlop={8} style={styles.maxBtn}>
@@ -770,11 +783,11 @@ export default function SendScreen() {
               <Pressable
                 onPress={() => {
                   const val = parseFloat(amount || '0');
-                  if (val > 0 && selectedToken.priceUsd) {
+                  if (val > 0 && fiatPrice > 0) {
                     if (inputInUsd) {
-                      setAmount((val / selectedToken.priceUsd).toFixed(selectedToken.decimals).replace(/\.?0+$/, ''));
+                      setAmount((val / fiatPrice).toFixed(selectedToken.decimals).replace(/\.?0+$/, ''));
                     } else {
-                      setAmount((val * selectedToken.priceUsd).toFixed(2));
+                      setAmount((val * fiatPrice).toFixed(fiatDecimals));
                     }
                   }
                   setInputInUsd(!inputInUsd);
@@ -786,11 +799,11 @@ export default function SendScreen() {
                 <Text style={styles.conversionText}>
                   {amount
                     ? inputInUsd
-                      ? `${(parseFloat(amount || '0') / (selectedToken.priceUsd || 1)).toFixed(Math.min(selectedToken.decimals, 8)).replace(/\.?0+$/, '')} ${selectedToken.symbol}`
+                      ? `${(parseFloat(amount || '0') / (fiatPrice || 1)).toFixed(Math.min(selectedToken.decimals, 8)).replace(/\.?0+$/, '')} ${selectedToken.symbol}`
                       : formatUsd(parseFloat(amount || '0') * (selectedToken.priceUsd ?? 0))
                     : inputInUsd
                       ? `0 ${selectedToken.symbol}`
-                      : '$0.00'}
+                      : formatUsd(0)}
                 </Text>
               </Pressable>
             ) : null}
@@ -885,7 +898,7 @@ export default function SendScreen() {
   // Step 3: Confirm
   const renderConfirm = () => {
     if (!selectedToken) return null;
-    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals);
+    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
     const amountNum = parseFloat(tokenAmount || '0');
     const usdAmount = amountNum * (selectedToken.priceUsd ?? 0);
     const logos = tokenLogoURLs(selectedToken);
@@ -1132,12 +1145,12 @@ export default function SendScreen() {
           fromName={activeAccount?.name}
           to={recipient}
           toName={recipientIdentity?.name}
-          amount={resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals)}
+          amount={resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate)}
           symbol={selectedToken.symbol}
           chainId={tokenChainId(selectedToken)}
           txHash={txHash ?? ''}
           logoUrls={tokenLogoURLs(selectedToken)}
-          usdValue={parseFloat(resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals)) * (selectedToken.priceUsd ?? 0)}
+          usdValue={parseFloat(resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate)) * (selectedToken.priceUsd ?? 0)}
           rate={dc.rate}
           currencyCode={dc.code}
           currencySymbol={dc.symbol}
