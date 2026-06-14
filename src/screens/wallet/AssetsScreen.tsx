@@ -10,7 +10,8 @@ import { color, createStyles, font, inter, motion, radius, shadow, space, text }
 import { useTranslation } from 'react-i18next';
 import { chainName, getAllNetworksSync } from '@/models/network';
 import type { Network } from '@/models/network';
-import { formatBalance, shortAddr, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
+import { shortAddr, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
+import { formatTokenAmount } from '@/services/locale-format';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
 import { saveNetworkConfig } from '@/services/storage';
@@ -478,7 +479,7 @@ export default function AssetsScreen() {
             symbol={item.symbol}
             chainLabel={chainName(tokenChainId(item))}
             logoUrls={tokenLogoURLs(item)}
-            balance={formatBalance(tokenBalanceDouble(item))}
+            balance={formatTokenAmount(tokenBalanceDouble(item), { compact: true })}
             usdValue={tokenUsdValue(item) > 0 ? dc.fmt(tokenUsdValue(item)) : undefined}
             onPress={() => navigateToToken(item)}
             index={index}

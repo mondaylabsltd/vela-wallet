@@ -14,13 +14,12 @@ import { AppModal } from '@/components/ui/AppModal';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { ChainLogo } from '@/components/ChainLogo';
 import { chainName, getAllNetworksSync } from '@/models/network';
-import { formatBalance } from '@/models/types';
 import type { LocalTransaction } from '@/services/storage';
 import { shortAddress } from '@/models/wallet-state';
 import { copyToClipboard, openBrowser } from '@/services/platform';
 import { formatFiat, type Currency } from '@/services/currency';
 import { txUsdValue } from '@/services/activity';
-import { formatDateTime } from '@/services/locale-format';
+import { formatDateTime, formatTokenAmount } from '@/services/locale-format';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 
 interface Props {
@@ -65,7 +64,7 @@ export function TransactionDetailSheet({ visible, tx, alias, rate, currency, onC
         const incoming = (tx.type ?? 'send') === 'receive';
         const net = getAllNetworksSync().find((n) => n.chainId === tx.chainId);
         const explorer = net?.explorerURL ?? 'https://etherscan.io';
-        const amt = formatBalance(parseFloat(tx.value || '0'));
+        const amt = formatTokenAmount(parseFloat(tx.value || '0')); // detail = exact, no compact
         const counterparty = incoming ? tx.from : tx.to;
         const usdVal = txUsdValue(tx);
         const fiat = usdVal > 0 ? formatFiat(usdVal * rate, currency.code, currency.symbol) : null;

@@ -163,6 +163,24 @@ export function formatCompact(value: number, key?: NumberFormatKey): string {
   return formatNumber(value, { maximumFractionDigits: abs < 1 ? 4 : 2, key });
 }
 
+/**
+ * Format a crypto/token amount with magnitude-appropriate precision:
+ *   >= 1000 → 2 decimals   ·   >= 1 → 4 decimals   ·   < 1 → 6 (keep tiny tails)
+ *
+ * With `compact: true` (glanceable surfaces — feeds, balances) large amounts are
+ * abbreviated above 1e6, e.g. 12,345,678.9 → "12.3M". Small amounts are NEVER
+ * abbreviated. Detail views pass full precision (no `compact`), matching the
+ * big-tech "glance = compact, detail = exact" split.
+ */
+export function formatTokenAmount(value: number, opts: { compact?: boolean } = {}): string {
+  if (!isFinite(value) || value === 0) return '0';
+  const abs = Math.abs(value);
+  if (opts.compact && abs >= 1e6) return formatCompact(value);
+  if (abs >= 1000) return formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (abs >= 1) return formatNumber(value, { maximumFractionDigits: 4 });
+  return formatNumber(value, { maximumFractionDigits: 6 });
+}
+
 // ---------------------------------------------------------------------------
 // Date & time
 // ---------------------------------------------------------------------------

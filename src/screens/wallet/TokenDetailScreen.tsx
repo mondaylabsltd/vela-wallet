@@ -13,9 +13,11 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenLogo } from '@/components/TokenLogo';
+import { AmountText } from '@/components/ui/AmountText';
 import { BarChart } from '@/components/ui/BarChart';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
-import { formatBalance, shortAddr, tokenChainId as networkToChainId } from '@/models/types';
+import { formatTokenAmount } from '@/services/locale-format';
+import { shortAddr, tokenChainId as networkToChainId } from '@/models/types';
 import type { APIToken } from '@/models/types';
 import { chainName } from '@/models/network';
 import { fetch7DayHistory, type BalancePoint } from '@/services/balance-history';
@@ -113,9 +115,13 @@ export default function TokenDetailScreen() {
                 <Text style={styles.heroChain}>{chain}</Text>
               </View>
               <View style={styles.heroBalance}>
-                <Text style={styles.heroAmount} adjustsFontSizeToFit numberOfLines={1}>
-                  {formatBalance(balance)}
-                </Text>
+                <AmountText
+                  text={formatTokenAmount(balance, { compact: true })}
+                  size={text.xl}
+                  minScale={0.7}
+                  style={styles.heroAmount}
+                  containerStyle={styles.heroAmountBox}
+                />
                 {usdValue > 0 && (
                   <Text style={styles.heroUsd} adjustsFontSizeToFit numberOfLines={1}>
                     {formatUsd(usdValue)}
@@ -264,12 +270,18 @@ const styles = createStyles(() => ({
   heroBalance: {
     alignItems: 'flex-end',
     gap: 2,
+    flexShrink: 1,
+    maxWidth: '58%',
+  },
+  heroAmountBox: {
+    alignSelf: 'stretch',
   },
   heroAmount: {
     fontSize: text.xl,
     ...inter.bold,
     fontFamily: font.display,
     color: color.fg.base,
+    textAlign: 'right',
   },
   heroUsd: {
     fontSize: text.sm,

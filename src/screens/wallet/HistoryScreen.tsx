@@ -13,15 +13,15 @@ import { useFocusEffect } from '@react-navigation/native';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { AmountText } from '@/components/ui/AmountText';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { getAllNetworksSync } from '@/models/network';
 import { loadTransactions, type LocalTransaction } from '@/services/storage';
-import { formatBalance } from '@/models/types';
 import { openBrowser } from '@/services/platform';
-import { formatDate as fmtDateLocale, formatTime as fmtTimeLocale } from '@/services/locale-format';
+import { formatDate as fmtDateLocale, formatTime as fmtTimeLocale, formatTokenAmount } from '@/services/locale-format';
 import {
   ArrowDownLeft, ArrowUpRight, ExternalLink, Check, X,
   FileSignature, FileText, Send, Code,
@@ -135,9 +135,16 @@ export default function HistoryScreen() {
 
         <View style={styles.txValues}>
           {showAmount ? (
-            <Text style={styles.txAmount}>
-              -{formatBalance(parseFloat(item.value))} {item.symbol}
-            </Text>
+            <AmountText
+              text={`-${formatTokenAmount(parseFloat(item.value), { compact: true })}`}
+              unit={item.symbol}
+              size={text.lg}
+              minScale={0.7}
+              tailScale={0.7}
+              style={styles.txAmount}
+              tailStyle={styles.txAmountUnit}
+              containerStyle={styles.txAmountBox}
+            />
           ) : (
             <Text style={[styles.txTime, { fontSize: text.sm }]}>
               {item.dappOrigin || ''}
@@ -462,11 +469,20 @@ const styles = createStyles(() => ({
   txValues: {
     alignItems: 'flex-end',
     gap: 2,
+    flexShrink: 1,
+    maxWidth: '52%',
+  },
+  txAmountBox: {
+    alignSelf: 'stretch',
   },
   txAmount: {
     fontSize: text.lg,
     ...inter.semibold,
     color: color.fg.base,
+    textAlign: 'right',
+  },
+  txAmountUnit: {
+    color: color.fg.muted,
   },
   txTime: {
     fontSize: text.sm,

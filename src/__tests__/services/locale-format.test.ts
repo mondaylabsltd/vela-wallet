@@ -10,6 +10,7 @@ jest.mock('@/services/storage', () => ({
 
 import {
   formatNumber, formatDate, formatTime, formatDateTime, numberSeparators,
+  formatCompact, formatTokenAmount,
 } from '@/services/locale-format';
 
 describe('locale-format: numbers', () => {
@@ -40,6 +41,40 @@ describe('locale-format: numbers', () => {
   it('exposes the current preset separators', () => {
     expect(numberSeparators()).toEqual({ group: ',', decimal: '.' });
     expect(numberSeparators('dot_comma')).toEqual({ group: '.', decimal: ',' });
+  });
+});
+
+describe('locale-format: compact notation', () => {
+  it('abbreviates with K/M/B/T and 2–3 significant figures', () => {
+    expect(formatCompact(1234567.89)).toBe('1.23M');
+    expect(formatCompact(12345678.9)).toBe('12.3M');
+    expect(formatCompact(4.5e9)).toBe('4.5B');
+    expect(formatCompact(123456789012)).toBe('123B');
+    expect(formatCompact(-1500000)).toBe('-1.5M');
+  });
+
+  it('leaves sub-1000 values un-abbreviated', () => {
+    expect(formatCompact(820)).toBe('820');
+    expect(formatCompact(0.5)).toBe('0.5');
+  });
+});
+
+describe('locale-format: token amounts', () => {
+  it('scales precision by magnitude', () => {
+    expect(formatTokenAmount(0)).toBe('0');
+    expect(formatTokenAmount(1234.5678)).toBe('1,234.57'); // >=1000 → 2dp
+    expect(formatTokenAmount(12.3456)).toBe('12.3456');     // >=1   → 4dp
+    expect(formatTokenAmount(0.00004212)).toBe('0.000042'); // <1    → keep tiny tail
+  });
+
+  it('abbreviates only large amounts when compact is requested', () => {
+    expect(formatTokenAmount(12345678.9, { compact: true })).toBe('12.3M');
+    expect(formatTokenAmount(999999, { compact: true })).toBe('999,999.00'); // < 1e6 → full
+    expect(formatTokenAmount(0.5, { compact: true })).toBe('0.5');           // tiny never compacts
+  });
+
+  it('keeps full precision without compact (detail / confirm surfaces)', () => {
+    expect(formatTokenAmount(12345678.9)).toBe('12,345,678.90');
   });
 });
 

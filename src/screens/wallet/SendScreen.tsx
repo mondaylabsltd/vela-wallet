@@ -15,6 +15,7 @@ import { findAccountByCredentialId, saveTransaction, loadTransactions } from '@/
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, type FundingNeeded } from '@/services/bundler-service';
 import { AmountText } from '@/components/ui/AmountText';
+import { formatTokenAmount } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { TransactionReceipt } from '@/components/ui/TransactionReceipt';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
@@ -121,14 +122,15 @@ function resolveTokenAmount(amount: string, inUsd: boolean, priceUsd: number | n
   return (usd / priceUsd).toFixed(decimals).replace(/\.?0+$/, '');
 }
 
-/** Compute font size for the amount display — shrinks as the number gets longer. */
+/**
+ * Font size for the amount the user is typing. Big-tech input pattern (Cash App):
+ * the number stays on one line and shrinks *smoothly* as digits are added — no
+ * visible step jumps, never abbreviated (you must see exactly what you typed).
+ */
 function amountFontSize(value: string): number {
-  const len = value.length || 1;
-  if (len <= 4) return 40;
-  if (len <= 7) return 34;
-  if (len <= 10) return 28;
-  if (len <= 14) return 22;
-  return 17;
+  const len = Math.max(value.length, 1);
+  const size = Math.round(230 / Math.max(len, 5.75)); // ~5.75 chars at the 40px max
+  return Math.max(17, Math.min(40, size));
 }
 
 /** Validate and constrain amount input: max `maxDecimals` decimal places, valid number chars only. */
@@ -679,7 +681,7 @@ export default function SendScreen() {
               symbol={item.symbol}
               chainLabel={chainName(tokenChainId(item))}
               logoUrls={tokenLogoURLs(item)}
-              balance={formatBalance(tokenBalanceDouble(item))}
+              balance={formatTokenAmount(tokenBalanceDouble(item), { compact: true })}
               usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
               onPress={() => { handleSelectToken(item); setTokenSearch(''); }}
               index={index}
@@ -717,7 +719,7 @@ export default function SendScreen() {
               </View>
               <View style={styles.heroBalance}>
                 <AmountText
-                  text={formatBalance(balance)}
+                  text={formatTokenAmount(balance, { compact: true })}
                   size={text.xl}
                   minScale={0.7}
                   style={styles.heroAmount}

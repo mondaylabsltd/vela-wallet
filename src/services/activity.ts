@@ -18,7 +18,7 @@ import { shortAddress } from '@/models/wallet-state';
 import { tokenChainId, type APIToken } from '@/models/types';
 import { fetchTokens } from '@/services/wallet-api';
 import { fetchIncomingTransfers, type IncomingTransfer } from '@/services/transfer-monitor';
-import { formatNumber, formatDate } from '@/services/locale-format';
+import { formatTokenAmount, formatDate } from '@/services/locale-format';
 
 export interface ActivityItem {
   id: string;
@@ -51,10 +51,13 @@ export interface ConnectionEvent {
   timestamp: number;
 }
 
-/** Compact token amount for the feed: thousands-separated, trailing zeros trimmed (1.0000 → "1"). */
+/**
+ * Token amount for the (glanceable) feed: large balances abbreviate
+ * (12,345,678 → "12.3M"); normal/small amounts keep full precision. The detail
+ * sheet shows the exact value — "glance = compact, detail = exact".
+ */
 function compactAmount(n: number): string {
-  if (!isFinite(n)) return '0';
-  return formatNumber(n, { maximumFractionDigits: 4 });
+  return formatTokenAmount(n, { compact: true });
 }
 
 /** Compact relative time: "now", "2m", "3h", "Mon", "Jun 3". */
