@@ -62,6 +62,10 @@
       "clearSigningTitle": "Uji Clear Signing",
       "clearSigningSubtitle": "Pratinjau UI penandatanganan ERC-7730"
     },
+    "feedback": {
+      "title": "Kirim masukan",
+      "subtitle": "Laporkan bug atau bagikan ide"
+    },
     "about": {
       "title": "Tentang",
       "subtitle": "Vela Wallet v{{version}}"

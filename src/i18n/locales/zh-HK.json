@@ -62,6 +62,10 @@
       "clearSigningTitle": "清晰簽署測試",
       "clearSigningSubtitle": "ERC-7730 簽署介面預覽"
     },
+    "feedback": {
+      "title": "意見回饋",
+      "subtitle": "回報問題或提供建議"
+    },
     "about": {
       "title": "關於",
       "subtitle": "Vela Wallet v{{version}}"

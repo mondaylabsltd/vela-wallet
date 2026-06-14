@@ -25,13 +25,14 @@ import { getBundlerServiceURL, getLocalePrefs, hasPendingUploads, loadCustomNetw
 import { fetchTokens } from '@/services/wallet-api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { AlertTriangle, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, Volume2, X, XCircle } from 'lucide-react-native';
+import { AlertTriangle, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, Volume2, X, XCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useLanguagePreference } from '@/i18n/language';
 import { LANGUAGE_NATIVE_NAMES, SUPPORTED_LANGUAGES, type AppLanguage, type LanguagePreference } from '@/i18n';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
+    Platform,
     Pressable,
     ScrollView,
     Switch,
@@ -911,6 +912,9 @@ function ThemePicker({ s, current, onChange }: {
 
 const VELA_REPO_URL = 'https://github.com/atshelchin/vela-wallet';
 
+/** Shipped app version — surfaced in About and attached to bug reports. */
+const APP_VERSION = '1.0.0';
+
 /**
  * Deep-link to the prefilled "translation fix" issue form, scoped to the
  * language the user is actually reading. The `language` query param matches a
@@ -923,6 +927,25 @@ function translationIssueURL(lang: AppLanguage): string {
     'template=translation.yml',
     `title=${encodeURIComponent(`[i18n] ${option}: `)}`,
     `language=${encodeURIComponent(option)}`,
+  ].join('&');
+  return `${VELA_REPO_URL}/issues/new?${query}`;
+}
+
+/**
+ * Deep-link to the prefilled bug-report issue form. Mirrors translationIssueURL:
+ * the `environment` field (id: environment in bug.yml) is pre-populated with the
+ * reporter's app version, platform and language so they don't have to describe
+ * their setup — the single biggest lever on whether a report is actionable.
+ */
+function bugReportURL(language: AppLanguage): string {
+  const environment = [
+    `- App version: ${APP_VERSION}`,
+    `- Platform: ${Platform.OS} ${Platform.Version}`,
+    `- Language: ${LANGUAGE_NATIVE_NAMES[language]} (${language})`,
+  ].join('\n');
+  const query = [
+    'template=bug.yml',
+    `environment=${encodeURIComponent(environment)}`,
   ].join('&');
   return `${VELA_REPO_URL}/issues/new?${query}`;
 }
@@ -1393,6 +1416,16 @@ export default function SettingsScreen() {
           </VelaCard>
         </Animated.View>
 
+        {/* Feedback */}
+        <Animated.View style={styles.sectionContainer} entering={fadeInDown(75, 300)}>
+          <VelaCard>
+            <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: MessageSquare }}
+              title={t('settings.feedback.title')} subtitle={t('settings.feedback.subtitle')}
+              showDivider={false} onPress={() => openURL(bugReportURL(langResolved))}
+              right={<ExternalLink size={16} color={color.fg.subtle} />} />
+          </VelaCard>
+        </Animated.View>
+
         {/* Appearance */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(100, 300)}>
           <Text style={styles.sectionTitle}>{t('settings.sections.appearance')}</Text>
@@ -1517,7 +1550,7 @@ export default function SettingsScreen() {
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(200, 300)}>
           <VelaCard>
             <SettingsRow s={styles} icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
-              title={t('settings.about.title')} subtitle={t('settings.about.subtitle', { version: '1.0.0' })} showDivider={false} onPress={() => router.push('/about')} />
+              title={t('settings.about.title')} subtitle={t('settings.about.subtitle', { version: APP_VERSION })} showDivider={false} onPress={() => router.push('/about')} />
           </VelaCard>
         </Animated.View>
 

@@ -62,6 +62,10 @@
       "clearSigningTitle": "Clear Signing テスト",
       "clearSigningSubtitle": "ERC-7730 署名 UI のプレビュー"
     },
+    "feedback": {
+      "title": "フィードバック",
+      "subtitle": "不具合の報告やご提案"
+    },
     "about": {
       "title": "このアプリについて",
       "subtitle": "Vela Wallet v{{version}}"

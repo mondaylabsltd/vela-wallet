@@ -62,6 +62,10 @@
       "clearSigningTitle": "Teste de Clear Signing",
       "clearSigningSubtitle": "Prévia da interface de assinatura ERC-7730"
     },
+    "feedback": {
+      "title": "Enviar feedback",
+      "subtitle": "Relate um bug ou compartilhe uma ideia"
+    },
     "about": {
       "title": "Sobre",
       "subtitle": "Vela Wallet v{{version}}"

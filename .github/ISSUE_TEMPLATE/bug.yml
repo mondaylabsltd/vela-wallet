@@ -1,0 +1,85 @@
+name: 🐞 Bug report
+description: Something in the app is broken, behaving oddly, or crashed.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make **Vela** better! 🙏 Vela is young, and real-world
+        reports like yours are exactly how the rough edges get found and fixed.
+
+        You don't need to touch any code — just fill in the boxes below:
+
+        1. 🐞 **What went wrong** (what you saw vs. what you expected)
+        2. 🔁 **Steps to reproduce** (so we can see it too)
+        3. 📸 **A screenshot or screen recording** if you have one
+
+        > 💬 **Please write in English if you can** — one maintainer reviews every report,
+        > and English keeps things fast. But a report in any language beats no report at all.
+  - type: textarea
+    id: what
+    attributes:
+      label: 1. 🐞 What happened?
+      description: Describe the problem. What did you see, and what did you expect instead?
+      placeholder: "e.g. I tapped Send, the screen froze, and the transaction never showed up in my activity."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 2. 🔁 Steps to reproduce
+      description: List the exact steps so we can trigger it ourselves.
+      placeholder: |
+        1. Go to …
+        2. Tap …
+        3. See …
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: 3. 📸 Screenshot or screen recording (highly recommended)
+      description: |
+        A picture or short clip is the fastest way for us to understand the issue.
+        **Drag an image into this box, or paste it from your clipboard** — GitHub uploads it for you.
+      placeholder: Drop or paste your screenshot here…
+  - type: dropdown
+    id: area
+    attributes:
+      label: 4. Where in the app did it happen?
+      description: Pick the closest one — it tells us where to look first.
+      options:
+        - Home / balances
+        - Send
+        - Receive
+        - Connect / dApp signing
+        - Settings
+        - Onboarding / sign-in
+        - Other (explain above)
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 5. Environment
+      description: Pre-filled automatically if you came from the app's **Feedback** button. Please leave it as-is.
+      placeholder: |
+        - App version: 1.0.0
+        - Platform: ios 18.0
+        - Language: English (en)
+    validations:
+      required: false
+  - type: checkboxes
+    id: funds
+    attributes:
+      label: Safety check
+      description: This helps us triage.
+      options:
+        - label: This issue involved funds (a transfer, swap, or balance) — not just the UI.
+          required: false
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        Thank you for taking the time. Every report makes Vela more solid. ❤️

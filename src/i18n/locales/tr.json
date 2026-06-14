@@ -62,6 +62,10 @@
       "clearSigningTitle": "Açık İmzalama Testi",
       "clearSigningSubtitle": "ERC-7730 imzalama arayüzü önizlemesi"
     },
+    "feedback": {
+      "title": "Geri bildirim gönder",
+      "subtitle": "Hata bildirin veya fikir paylaşın"
+    },
     "about": {
       "title": "Hakkında",
       "subtitle": "Vela Wallet v{{version}}"

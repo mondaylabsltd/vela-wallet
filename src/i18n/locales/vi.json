@@ -62,6 +62,10 @@
       "clearSigningTitle": "Kiểm thử Clear Signing",
       "clearSigningSubtitle": "Xem trước giao diện ký ERC-7730"
     },
+    "feedback": {
+      "title": "Gửi phản hồi",
+      "subtitle": "Báo lỗi hoặc chia sẻ ý tưởng"
+    },
     "about": {
       "title": "Giới thiệu",
       "subtitle": "Vela Wallet v{{version}}"
