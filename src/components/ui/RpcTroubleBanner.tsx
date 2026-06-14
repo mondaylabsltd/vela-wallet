@@ -12,7 +12,7 @@ import { AppModal } from '@/components/ui/AppModal';
 import { fadeInDown } from '@/constants/entering';
 import { color, createStyles, inter, radius, shadow, space, text } from '@/constants/theme';
 import { getAllNetworksSync, type Network } from '@/models/network';
-import { refreshPool } from '@/services/rpc-pool';
+import { probeRpcChainId, refreshPool } from '@/services/rpc-pool';
 import { openURL, showAlert } from '@/services/platform';
 import { getNetworkConfig, saveNetworkConfig } from '@/services/storage';
 import { buildBugReportURL } from '@/services/feedback';
@@ -64,8 +64,20 @@ export function RpcTroubleBanner({
 
   const handleSave = async () => {
     if (!fixChainId || !fixUrl.trim()) return;
+    const url = fixUrl.trim();
     setSaving(true);
     try {
+      // Validate before saving — a recovery flow that cheerfully stores a dead or
+      // wrong-chain URL (and reports "saved") is worse than no validation at all.
+      const reportedChainId = await probeRpcChainId(url);
+      if (reportedChainId === null) {
+        showAlert(t('assets.errorTitle'), t('assets.rpcFixUnreachable'));
+        return;
+      }
+      if (reportedChainId !== fixChainId) {
+        showAlert(t('assets.errorTitle'), t('assets.rpcFixWrongChain', { expected: fixChainId, actual: reportedChainId }));
+        return;
+      }
       // Preserve any explorer/bundler the user already customized in Settings:
       // saveNetworkConfig replaces the whole entry by chainId, so falling back to
       // the built-in defaults here would silently clobber those overrides.
@@ -73,7 +85,7 @@ export function RpcTroubleBanner({
       const net = getAllNetworksSync().find(n => n.chainId === fixChainId);
       await saveNetworkConfig({
         chainId: fixChainId,
-        rpcURL: fixUrl.trim(),
+        rpcURL: url,
         explorerURL: saved?.explorerURL ?? net?.explorerURL ?? '',
         bundlerURL: saved?.bundlerURL ?? net?.bundlerURL ?? '',
       });

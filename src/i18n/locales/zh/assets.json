@@ -23,6 +23,8 @@
     "rpcFixLabel": "RPC URL",
     "rpcFixSaveBtn": "保存并重试",
     "errorSaveRpc": "保存 RPC URL 失败。",
+    "rpcFixUnreachable": "无法连接该 RPC，请检查 URL 后重试。",
+    "rpcFixWrongChain": "该 RPC 属于其他网络（链 {{actual}}，应为 {{expected}}）。",
     "rpcProvidersTitle": "在哪里获取可靠的 RPC",
     "rpcProvidersHint": "以下为免费节点服务——注册后复制你的 URL，粘贴到上方。",
     "rpcReport": "仍无法解决？反馈给我们",

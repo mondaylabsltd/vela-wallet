@@ -799,6 +799,36 @@ export async function getChainRpcUrl(chainId: number): Promise<string | null> {
   return endpoints[0]?.url ?? null;
 }
 
+/**
+ * Probe a single RPC URL with `eth_chainId` and return the chain id it reports
+ * (decimal), or `null` if it's unreachable / not a valid JSON-RPC endpoint.
+ * Used to validate a user-entered RPC before saving it as an override. Probes
+ * over HTTP because the pool only ever calls endpoints via fetch — a `wss://`
+ * URL that "works" here still couldn't be used by the pool.
+ */
+export async function probeRpcChainId(url: string, timeoutMs = 8_000): Promise<number | null> {
+  if (!url) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (typeof json?.result !== 'string') return null;
+    const id = parseInt(json.result, 16);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Force refresh the endpoint pool for a chain. */
 export async function refreshPool(chainId: number): Promise<void> {
   poolInitAt.delete(chainId);

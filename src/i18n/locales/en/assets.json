@@ -23,6 +23,8 @@
     "rpcFixLabel": "RPC URL",
     "rpcFixSaveBtn": "Save & Retry",
     "errorSaveRpc": "Failed to save RPC URL.",
+    "rpcFixUnreachable": "Couldn't reach that RPC. Check the URL and try again.",
+    "rpcFixWrongChain": "That RPC serves a different network (chain {{actual}}, expected {{expected}}).",
     "rpcProvidersTitle": "Where to get a reliable RPC",
     "rpcProvidersHint": "Free endpoints — sign up, copy your URL, and paste it above.",
     "rpcReport": "Still not working? Report it",
