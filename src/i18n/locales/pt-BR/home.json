@@ -21,6 +21,7 @@
     "connDisconnect": "Desconectar",
     "connEventsHead": "Atividade da conexão · {{count}}",
     "connNoEvents": "Nenhuma solicitação nesta conexão ainda.",
-    "toastReceived": "Você recebeu {{amount}} {{token}}"
+    "toastReceived": "Você recebeu {{amount}} {{token}}",
+    "rescanNativeNote": "Moedas nativas (ETH, BNB, MATIC…) recebidas em algumas redes podem não ser detectadas aqui. Seu saldo continua correto — abra um explorador de blocos para ver o registro completo."
   }
 }

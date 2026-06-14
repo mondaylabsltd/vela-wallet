@@ -19,6 +19,7 @@ import { keccak256 } from '@/services/eth-crypto';
 import { toHex } from '@/services/hex';
 import { decodeCalldata, matchSelector, type DecodedValue } from '@/services/abi-decode';
 import type { TypedData } from '@/services/eip712';
+import { poolRpcCall } from '@/services/rpc-pool';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -45,6 +46,12 @@ export interface ClearSignResult {
   verified: boolean;
   /** Signing type for button/color decisions */
   type: 'transaction' | 'signature';
+  /**
+   * True when the descriptor declared more fields than we could resolve (we show
+   * what decoded, but the user must NOT assume they've seen everything). Drives a
+   * prominent "incomplete" warning + elevated risk.
+   */
+  partial?: boolean;
 }
 
 /** Layout role hint for field rendering. */
@@ -56,8 +63,10 @@ export interface ClearSignField {
   format: string;
   /** For tokenAmount: token address for logo lookup */
   tokenAddress?: string;
-  /** Whether this is a high-risk field (e.g. unlimited approval) */
+  /** Whether this is a high-risk field (e.g. unlimited approval) → danger. */
   warning?: boolean;
+  /** Amount shown with unverified decimals (on-chain lookup failed) → caution, not danger. */
+  unverified?: boolean;
   /** Role hint for layout decisions */
   role?: FieldRole;
   /** Whether this field should be in the collapsed details panel */
@@ -126,6 +135,66 @@ export async function resolveTransaction(
   return resolveCalldataDescriptor(descriptor, data, value, toAddr, chainId, isContractSpecific);
 }
 
+// ---------------------------------------------------------------------------
+// On-chain token decimals — never assume 18 for unknown tokens. A 6-decimal
+// token rendered as 18 would show an amount 1,000,000,000,000x too large in a
+// security surface. We fetch decimals() on-chain and cache it, falling back to
+// 18 + an unverified flag only when the lookup itself fails.
+// ---------------------------------------------------------------------------
+
+const ERC20_DECIMALS_SELECTOR = '0x313ce567';
+const decimalsCache = new Map<string, number>(); // `${chainId}:${addr.toLowerCase()}`
+
+/** How long the signing sheet will wait on decimals() before showing fields. */
+const DECIMALS_WARM_TIMEOUT_MS = 4_000;
+
+/** Prefetch decimals() for any token addresses we don't already know. */
+async function warmTokenDecimals(chainId: number, addrs: string[]): Promise<void> {
+  const unique = [...new Set(addrs.map((a) => a.toLowerCase()))].filter(
+    (a) => KNOWN_DECIMALS[a] === undefined && !decimalsCache.has(`${chainId}:${a}`),
+  );
+  if (unique.length === 0) return;
+  const lookups = Promise.allSettled(
+    unique.map(async (addr) => {
+      try {
+        const res = await poolRpcCall('eth_call', [{ to: addr, data: ERC20_DECIMALS_SELECTOR }, 'latest'], chainId);
+        if (res.result && res.result !== '0x') {
+          const d = Number(BigInt(res.result));
+          if (Number.isInteger(d) && d >= 0 && d <= 36) decimalsCache.set(`${chainId}:${addr}`, d);
+        }
+      } catch { /* leave unknown — guessTokenDecimals flags it */ }
+    }),
+  );
+  // Never let a slow/down RPC stall the signing sheet: cap the wait. Anything
+  // still unresolved falls back to 18 decimals + a warning (the safe path), and
+  // the in-flight lookups still populate the cache for next time.
+  await Promise.race([lookups, new Promise((r) => setTimeout(r, DECIMALS_WARM_TIMEOUT_MS))]);
+}
+
+/** Token addresses referenced by tokenAmount fields, for decimals prefetch. */
+function collectTokenAddrs(fieldDefs: any[], context: any, metadata: any, definitions: any): string[] {
+  const addrs: string[] = [];
+  for (const fd of fieldDefs) {
+    let def = fd;
+    if (fd.$ref && definitions) {
+      const refPath = fd.$ref.replace('$.display.definitions.', '');
+      def = { ...definitions[refPath], ...fd };
+    }
+    if (def.format !== 'tokenAmount') continue;
+    let tokenAddr: string | undefined;
+    if (def.params?.tokenPath) {
+      const r = resolvePath(def.params.tokenPath, context);
+      if (typeof r === 'string') tokenAddr = r;
+    }
+    if (def.params?.token) {
+      const r = resolveMetadataRef(def.params.token, metadata);
+      if (typeof r === 'string') tokenAddr = r;
+    }
+    if (tokenAddr && /^0x[0-9a-fA-F]{40}$/.test(tokenAddr)) addrs.push(tokenAddr);
+  }
+  return addrs;
+}
+
 const ERC_CALLDATA_FALLBACKS = [
   '/erc7730/ercs/calldata-erc20-tokens.json',
   '/erc7730/ercs/calldata-erc721-nfts.json',
@@ -142,14 +211,14 @@ async function tryErcFallbacks(calldata: string): Promise<any | null> {
   return null;
 }
 
-function resolveCalldataDescriptor(
+async function resolveCalldataDescriptor(
   descriptor: any,
   calldata: string,
   value: string | undefined,
   toAddr: string,
   chainId: number,
   isContractSpecific: boolean,
-): ClearSignResult | null {
+): Promise<ClearSignResult | null> {
   const formats = descriptor.display?.formats;
   if (!formats) return null;
 
@@ -165,6 +234,9 @@ function resolveCalldataDescriptor(
   const txContext = { '@': { to: toAddr, value: value ?? '0x0', from: '' } };
   const fullContext = { ...flattenDecoded(decoded), ...txContext };
 
+  // Prefetch on-chain decimals for referenced tokens before formatting.
+  await warmTokenDecimals(chainId, collectTokenAddrs(format.fields ?? [], fullContext, descriptor.metadata, descriptor.display?.definitions));
+
   const fields = resolveFields(
     format.fields ?? [],
     fullContext,
@@ -173,15 +245,19 @@ function resolveCalldataDescriptor(
     chainId,
   );
 
-  // Safety check: if descriptor declared visible fields but we resolved
-  // less than half, the clear sign UI would be misleading — fall back to
-  // blind sign so the user doesn't think they've seen everything.
+  // If NOTHING decoded, there's nothing trustworthy to show → blind sign.
+  // If some-but-not-enough decoded, show what we have but flag it `partial` so
+  // the UI warns loudly instead of implying the user has seen everything.
   const declaredVisible = (format.fields ?? []).filter(
     (f: any) => f.visible !== 'never' && f.label,
   ).length;
-  if (declaredVisible > 0 && fields.length < Math.ceil(declaredVisible / 2)) {
-    console.warn(`[clear-sign] Only resolved ${fields.length}/${declaredVisible} fields for ${matchedSig} — falling back to blind sign`);
+  if (fields.length === 0) {
+    console.warn(`[clear-sign] Resolved 0/${declaredVisible} fields for ${matchedSig} — falling back to blind sign`);
     return null;
+  }
+  const partial = declaredVisible > 0 && fields.length < Math.ceil(declaredVisible / 2);
+  if (partial) {
+    console.warn(`[clear-sign] Only resolved ${fields.length}/${declaredVisible} fields for ${matchedSig} — showing partial`);
   }
 
   const intent = format.intent ?? matchedSig.split('(')[0];
@@ -194,10 +270,11 @@ function resolveCalldataDescriptor(
       : undefined,
     owner: isContractSpecific ? descriptor.metadata?.owner : undefined,
     fields: enrichedFields,
-    risk: assessRisk(intent, enrichedFields, 'transaction'),
+    risk: assessRisk(intent, enrichedFields, 'transaction', partial),
     contractAddress: toAddr,
     verified: isContractSpecific,
     type: 'transaction',
+    partial,
   };
 }
 
@@ -227,7 +304,7 @@ export async function resolveTypedData(
     // EIP-712 descriptors are keyed by typeHash
     const entry = descriptor[typeHash] ?? descriptor['0x' + typeHash];
     if (entry) {
-      resolved = resolveEip712Entry(entry, typedData, chainId);
+      resolved = await resolveEip712Entry(entry, typedData, chainId);
     }
   }
 
@@ -236,18 +313,18 @@ export async function resolveTypedData(
     const permitDesc = await fetchDescriptor('/erc7730/ercs/eip712-erc2612-permit.json');
     if (permitDesc) {
       // Permit files have formats keyed by type signature
-      resolved = resolveEip712Formats(permitDesc, typedData, chainId);
+      resolved = await resolveEip712Formats(permitDesc, typedData, chainId);
     }
   }
 
   return resolved;
 }
 
-function resolveEip712Entry(
+async function resolveEip712Entry(
   entry: any,
   typedData: TypedData,
   chainId: number,
-): ClearSignResult | null {
+): Promise<ClearSignResult | null> {
   const formats = entry.display?.formats;
   if (!formats) return null;
 
@@ -259,6 +336,8 @@ function resolveEip712Entry(
   const format = formats[matchedSig];
   const context = flattenForEip712(typedData.message);
 
+  await warmTokenDecimals(chainId, collectTokenAddrs(format.fields ?? [], context, entry.metadata, entry.display?.definitions));
+
   const fields = resolveFields(
     format.fields ?? [],
     context,
@@ -267,14 +346,15 @@ function resolveEip712Entry(
     chainId,
   );
 
-  // Safety: fall back to blind sign if too many fields failed to resolve
+  // Show partial (with a warning) rather than fully blind, unless nothing decoded.
   const declaredVisible = (format.fields ?? []).filter(
     (f: any) => f.visible !== 'never' && f.label,
   ).length;
-  if (declaredVisible > 0 && fields.length < Math.ceil(declaredVisible / 2)) {
-    console.warn(`[clear-sign] EIP-712: only resolved ${fields.length}/${declaredVisible} fields — falling back`);
+  if (fields.length === 0) {
+    console.warn(`[clear-sign] EIP-712: resolved 0/${declaredVisible} fields — falling back`);
     return null;
   }
+  const partial = declaredVisible > 0 && fields.length < Math.ceil(declaredVisible / 2);
 
   const intent = format.intent ?? typedData.primaryType;
   const enrichedFields = inferFieldRoles(fields, intent);
@@ -285,18 +365,19 @@ function resolveEip712Entry(
     contractName: entry.metadata?.contractName ?? entry.context?.eip712?.domain?.name,
     owner: entry.metadata?.owner,
     fields: enrichedFields,
-    risk: assessRisk(intent, enrichedFields, 'signature'),
+    risk: assessRisk(intent, enrichedFields, 'signature', partial),
     contractAddress: contract,
     verified: true,
     type: 'signature' as const,
+    partial,
   };
 }
 
-function resolveEip712Formats(
+async function resolveEip712Formats(
   descriptor: any,
   typedData: TypedData,
   chainId: number,
-): ClearSignResult | null {
+): Promise<ClearSignResult | null> {
   const formats = descriptor.display?.formats;
   if (!formats) return null;
 
@@ -306,6 +387,8 @@ function resolveEip712Formats(
 
   const format = formats[matchedSig];
   const context = flattenForEip712(typedData.message);
+
+  await warmTokenDecimals(chainId, collectTokenAddrs(format.fields ?? [], context, descriptor.metadata, descriptor.display?.definitions));
 
   const fields = resolveFields(
     format.fields ?? [],
@@ -318,10 +401,11 @@ function resolveEip712Formats(
   const declaredVisible = (format.fields ?? []).filter(
     (f: any) => f.visible !== 'never' && f.label,
   ).length;
-  if (declaredVisible > 0 && fields.length < Math.ceil(declaredVisible / 2)) {
-    console.warn(`[clear-sign] ERC fallback: only resolved ${fields.length}/${declaredVisible} fields — falling back`);
+  if (fields.length === 0) {
+    console.warn(`[clear-sign] ERC fallback: resolved 0/${declaredVisible} fields — falling back`);
     return null;
   }
+  const partial = declaredVisible > 0 && fields.length < Math.ceil(declaredVisible / 2);
 
   const intent = format.intent ?? typedData.primaryType;
   const enrichedFields = inferFieldRoles(fields, intent);
@@ -329,10 +413,11 @@ function resolveEip712Formats(
   return {
     intent,
     fields: enrichedFields,
-    risk: assessRisk(intent, enrichedFields, 'signature'),
+    risk: assessRisk(intent, enrichedFields, 'signature', partial),
     contractAddress: typedData.domain?.verifyingContract?.toLowerCase(),
     verified: false,
     type: 'signature' as const,
+    partial,
   };
 }
 
@@ -475,6 +560,7 @@ interface FormattedField {
   format: string;
   tokenAddress?: string;
   warning?: boolean;
+  unverified?: boolean;
 }
 
 function formatField(
@@ -489,7 +575,7 @@ function formatField(
 
   switch (format) {
     case 'tokenAmount':
-      return formatTokenAmount(rawValue, params, context, metadata);
+      return formatTokenAmount(rawValue, params, context, metadata, chainId);
 
     case 'addressName':
       return formatAddress(rawValue);
@@ -528,6 +614,7 @@ function formatTokenAmount(
   params: any,
   context: any,
   metadata: any,
+  chainId: number,
 ): FormattedField | null {
   const amount = toBigInt(rawValue);
 
@@ -565,8 +652,12 @@ function formatTokenAmount(
     }
   }
 
-  // Use known decimals when possible, fallback to smart detection
-  const decimals = guessTokenDecimals(tokenAddr);
+  // Known decimals → on-chain decimals (prefetched) → 18 + unverified flag.
+  // Never silently assume 18 for an unknown token: a wrong scale here is a
+  // security hazard. But an unresolved lookup is "amount may be off" (caution),
+  // NOT the same as an unlimited approval (danger) — so flag it `unverified`,
+  // which floors risk at caution rather than escalating to danger.
+  const { decimals, verified } = guessTokenDecimals(chainId, tokenAddr);
   const display = formatTokenValue(amount, decimals);
   // Always show a token identifier — known symbol, abbreviated address, or "tokens"
   const symbol = tokenAddr
@@ -578,6 +669,7 @@ function formatTokenAmount(
     value: displayWithSymbol,
     format: 'tokenAmount',
     tokenAddress: tokenAddr ? normalizeAddress(String(tokenAddr)) : undefined,
+    ...(verified ? {} : { unverified: true }),
   };
 }
 
@@ -688,11 +780,14 @@ const KNOWN_DECIMALS: Record<string, number> = {
   '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9': 6,  // USDT (Arbitrum)
 };
 
-function guessTokenDecimals(tokenAddr: string | undefined): number {
-  if (!tokenAddr) return 18;
-  const known = KNOWN_DECIMALS[tokenAddr.toLowerCase()];
-  if (known !== undefined) return known;
-  return 18;
+function guessTokenDecimals(chainId: number, tokenAddr: string | undefined): { decimals: number; verified: boolean } {
+  if (!tokenAddr) return { decimals: 18, verified: true }; // native currency
+  const lc = tokenAddr.toLowerCase();
+  const known = KNOWN_DECIMALS[lc];
+  if (known !== undefined) return { decimals: known, verified: true };
+  const cached = decimalsCache.get(`${chainId}:${lc}`);
+  if (cached !== undefined) return { decimals: cached, verified: true };
+  return { decimals: 18, verified: false }; // unknown — flagged so the UI can warn
 }
 
 /** Well-known ERC-20 token symbols (mainnet addresses, lowercased). */
@@ -788,16 +883,23 @@ function assessRisk(
   intent: string,
   fields: ClearSignField[],
   type: 'transaction' | 'signature',
+  partial = false,
 ): SigningRisk {
   // Any field with a warning (e.g. unlimited approval) → danger
   if (fields.some(f => f.warning)) return 'danger';
 
   const i = intent.toLowerCase();
-  if (/approve|permit|authorize/.test(i)) return 'caution';
-  if (/stake|deposit|claim|supply/.test(i)) return 'safe';
-  if (/swap|send|transfer|buy|exchange/.test(i)) return 'normal';
-  if (/withdraw|redeem|unstake|exit/.test(i)) return 'normal';
-  return 'normal';
+  const base: SigningRisk =
+    /approve|permit|authorize/.test(i) ? 'caution'
+    : /stake|deposit|claim|supply/.test(i) ? 'safe'
+    : 'normal';
+
+  // Incomplete decode OR an unverified amount means the user can't fully trust
+  // what they're signing — never let it read as 'safe'/'normal' (but it's not
+  // 'danger' either); floor it at 'caution'.
+  const uncertain = partial || fields.some(f => f.unverified);
+  if (uncertain && (base === 'safe' || base === 'normal')) return 'caution';
+  return base;
 }
 
 // ---------------------------------------------------------------------------

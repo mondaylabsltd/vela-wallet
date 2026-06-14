@@ -342,7 +342,7 @@ describe('ERC-7730 Clear Signing', () => {
   });
 
   describe('field resolution safety check', () => {
-    it('falls back to null when too many fields fail to resolve', async () => {
+    it('marks the result partial when too many fields fail to resolve', async () => {
       // Create a descriptor with 4 visible fields but only 1 can resolve
       mockDescriptorCache.set('/erc7730/ercs/calldata-erc20-tokens.json', {
         context: { contract: {} },
@@ -367,9 +367,13 @@ describe('ERC-7730 Clear Signing', () => {
         '000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045' +
         '00000000000000000000000000000000000000000000000000000000003b9aca00';
 
-      // Only 2 of 6 visible fields resolve → less than ceil(6/2)=3 → should return null
+      // Only 2 of 6 visible fields resolve → less than ceil(6/2)=3 → show what
+      // decoded but flag `partial` (with elevated risk) instead of blind sign.
       const result = await resolveTransaction('0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', calldata, '0x0', 1);
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.partial).toBe(true);
+      expect(result!.fields.length).toBeGreaterThan(0);
+      expect(result!.risk).toBe('caution');
     });
 
     it('allows clear sign when enough fields resolve', async () => {

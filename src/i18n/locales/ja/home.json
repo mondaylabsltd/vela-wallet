@@ -21,6 +21,7 @@
     "connDisconnect": "切断",
     "connEventsHead": "接続のアクティビティ · {{count}}",
     "connNoEvents": "この接続にはまだリクエストがありません。",
-    "toastReceived": "{{amount}} {{token}} を受け取りました"
+    "toastReceived": "{{amount}} {{token}} を受け取りました",
+    "rescanNativeNote": "一部のネットワークで受け取ったネイティブコイン（ETH、BNB、MATIC など）はここで検出できないことがあります。残高は常に正確です——完全な記録はブロックエクスプローラーでご確認ください。"
   }
 }

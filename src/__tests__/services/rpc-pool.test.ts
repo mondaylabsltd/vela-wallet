@@ -31,12 +31,13 @@ jest.mock('@/services/chain-registry', () => ({
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
-import { poolRpcCall, getFailedRpcChains } from '@/services/rpc-pool';
+import { poolRpcCall, getFailedRpcChains, getLogsRangeCap } from '@/services/rpc-pool';
 
 function makeJsonResponse(body: object, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: { get: (h: string) => (h.toLowerCase() === 'content-type' ? 'application/json' : null) },
     json: async () => body,
   };
 }
@@ -157,6 +158,71 @@ describe('rpc-pool', () => {
       // Execution revert is a valid response - should be returned, not retried
       expect(res.error?.message).toContain('execution reverted');
       expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('getLogsRangeCap', () => {
+    // Returns the stated block-span cap, 0 for "narrow but no usable number",
+    // or null when the error isn't about range/size at all.
+    test('parses the stated block-span cap', () => {
+      expect(getLogsRangeCap({ code: -32000, message: 'eth_getLogs is limited to a 100 range' })).toBe(100);
+      expect(getLogsRangeCap({ code: -32000, message: 'block range too large, max is 2000 blocks' })).toBe(2000);
+      expect(getLogsRangeCap({ code: -32005, message: 'exceeds the maximum block range of 50,000' })).toBe(50000);
+      expect(getLogsRangeCap({ code: -32000, message: 'requested too many blocks; limit is 1000' })).toBe(1000);
+    });
+
+    test('honours k/m suffix on the cap', () => {
+      expect(getLogsRangeCap({ code: -32000, message: 'You can make eth_getLogs requests with up to a 2K block range' })).toBe(2000);
+      expect(getLogsRangeCap({ code: -32000, message: 'max block range is 1M' })).toBe(1_000_000);
+    });
+
+    test('returns 0 for range errors with no usable number', () => {
+      expect(getLogsRangeCap({ code: -32000, message: 'block range is too wide' })).toBe(0);
+      expect(getLogsRangeCap({ code: -32000, message: 'query exceeds max results' })).toBe(0);
+    });
+
+    test('returns 0 for result-count caps (number is a count, not a span)', () => {
+      expect(getLogsRangeCap({ code: -32005, message: 'query returned more than 10000 results' })).toBe(0);
+      expect(getLogsRangeCap({ code: -32000, message: 'too many results, limit 5000' })).toBe(0);
+    });
+
+    test('returns null for non-range errors', () => {
+      expect(getLogsRangeCap({ code: 3, message: 'execution reverted' })).toBeNull();
+      expect(getLogsRangeCap({ code: -32603, message: 'internal error' })).toBeNull();
+      expect(getLogsRangeCap({ code: -32000, message: 'unauthorized: API key required' })).toBeNull();
+      expect(getLogsRangeCap(undefined)).toBeNull();
+      expect(getLogsRangeCap({ code: 0, message: '' })).toBeNull();
+    });
+  });
+
+  describe('poolRpcCall - eth_getLogs range limit', () => {
+    test('returns the range error to caller without failing over', async () => {
+      // A range-limit response must NOT trigger failover (next endpoint has the
+      // same cap) — the caller splits the block range and retries instead.
+      mockFetch.mockResolvedValue(makeJsonResponse({
+        jsonrpc: '2.0', id: 1,
+        error: { code: -32000, message: 'eth_getLogs is limited to a 100 range' },
+      }));
+
+      const res = await poolRpcCall('eth_getLogs', [{ fromBlock: '0x0', toBlock: '0xbb8' }], 1);
+      expect(res.error?.message).toContain('limited to a 100 range');
+      // Single endpoint tried — no failover fan-out.
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    test('a range-limit message on a non-getLogs method still fails over', async () => {
+      // The range short-circuit is gated to eth_getLogs; other methods keep the
+      // existing transient-error failover behaviour (code -32000 → try next).
+      mockFetch
+        .mockResolvedValueOnce(makeJsonResponse({
+          jsonrpc: '2.0', id: 1,
+          error: { code: -32000, message: 'block range too large' },
+        }))
+        .mockResolvedValue(makeJsonResponse({ jsonrpc: '2.0', id: 1, result: '0x7' }));
+
+      const res = await poolRpcCall('eth_call', [{}], 1);
+      expect(res.result).toBe('0x7');
+      expect(mockFetch.mock.calls.length).toBeGreaterThan(1);
     });
   });
 

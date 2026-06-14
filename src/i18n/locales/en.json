@@ -33,7 +33,9 @@
     "appearance": {
       "themeLight": "Light",
       "themeDark": "Dark",
-      "themeAuto": "Auto"
+      "themeAuto": "Auto",
+      "keepAwakeTitle": "Keep screen on",
+      "keepAwakeSubtitle": "Stop the screen from sleeping while the app is open"
     },
     "payments": {
       "voiceTitle": "Voice announcements",

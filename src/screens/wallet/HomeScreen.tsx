@@ -15,7 +15,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import {
-  ArrowRight, Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, Settings, X,
+  AlertTriangle, ArrowRight, Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, RefreshCw, Settings, X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -38,19 +38,21 @@ import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { WaveDock } from '@/components/ui/WaveDock';
+import { RpcTroubleBanner } from '@/components/ui/RpcTroubleBanner';
+import { ActivityRescanSheet } from '@/components/ui/ActivityRescanSheet';
 
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 import { useDAppConnection, type ConnectionStatus } from '@/models/dapp-connection';
 import { getAllNetworksSync, type Network } from '@/models/network';
-import { shortAddr, tokenUsdValue } from '@/models/types';
+import { shortAddr, tokenBalanceDouble, tokenChainId, tokenUsdValue, type APIToken } from '@/models/types';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import {
   loadActivityItems, loadActivityTransactions, loadConnectionEvents, relativeTime, syncReceivedTransfers,
-  type ActivityItem, type ConnectionEvent,
+  type ActivityItem, type ConnectionEvent, type RescanOutcome,
 } from '@/services/activity';
 import type { LocalTransaction } from '@/services/storage';
-import { getAccountBalances, setAccountBalance } from '@/services/balance-cache';
+import { getAccountBalance, getAccountBalances, setAccountBalance } from '@/services/balance-cache';
 import { currencyMeta, formatFiat, getCurrencyCode, getRate, loadCurrency, setCurrency, shouldShowDecimals } from '@/services/currency';
 import { parseRemoteInjectURL } from '@/services/dapp-transport';
 import { copyToClipboard, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
@@ -101,12 +103,19 @@ export default function HomeScreen() {
   const accountName = activeAccount?.name ?? 'Wallet';
 
   const [tab, setTab] = useState<Tab>('activity');
-  const [totalUsd, setTotalUsd] = useState(0);
+  const [tokens, setTokens] = useState<APIToken[]>([]);
+  const [failedChainIds, setFailedChainIds] = useState<number[]>([]);
+  // Chains the manual re-scan couldn't reach. Kept separate from balance
+  // failures so a later balance poll (which replaces failedChainIds) can't
+  // silently clear them before the user acts.
+  const [rescanFailedChainIds, setRescanFailedChainIds] = useState<number[]>([]);
+  const [cachedTotal, setCachedTotal] = useState<number | null>(null);
   const [hidden, setHidden] = useState(false);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [connEvents, setConnEvents] = useState<ConnectionEvent[]>([]);
   const [selectedChainId, setSelectedChainId] = useState<number | null>(null);
   const [showNetSheet, setShowNetSheet] = useState(false);
+  const [showRescan, setShowRescan] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [switcherLoading, setSwitcherLoading] = useState(false);
@@ -125,6 +134,10 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadDataRef = useRef<(() => Promise<void>) | null>(null);
+  // Tracks the live address so a slow in-flight load for a previous account
+  // can't paint stale balances after the user switches accounts.
+  const addressRef = useRef(address);
+  useEffect(() => { addressRef.current = address; }, [address]);
 
   // Balance "money in" pulse (cross-platform via shared value).
   const balancePulse = useSharedValue(0);
@@ -140,6 +153,19 @@ export default function HomeScreen() {
   const selectedNetwork = selectedChainId != null ? networks.find((n) => n.chainId === selectedChainId) ?? null : null;
   const connected = conn.status === 'connected' || conn.status === 'reconnecting';
   const currency = currencyMeta(currencyCode);
+
+  // --- balance: derive from streamed tokens, with cache fallback + partial detection ---
+  // Never show a confidently-wrong smaller number. If a chain's RPC failed or a
+  // held token couldn't be priced, the live sum is incomplete — so we mark it
+  // approximate and prefer the last-known-good cached total over the undercount.
+  const liveTotal = useMemo(() => tokens.reduce((s, t) => s + tokenUsdValue(t), 0), [tokens]);
+  const hasUnpriced = useMemo(() => tokens.some((t) => tokenBalanceDouble(t) > 0 && t.priceUsd == null), [tokens]);
+  const hasLiveData = tokens.length > 0;
+  const balancePartial = failedChainIds.length > 0 || (hasLiveData && hasUnpriced);
+  const displayTotal =
+    !hasLiveData && cachedTotal != null ? cachedTotal
+    : balancePartial && cachedTotal != null ? Math.max(liveTotal, cachedTotal)
+    : liveTotal;
 
   // --- load voice + currency preferences once ---
   useEffect(() => { loadVoicePreference(); }, []);
@@ -228,13 +254,42 @@ export default function HomeScreen() {
     } catch { /* ignore */ }
 
     try {
-      const result = await fetchTokens(address);
-      const usd = result.reduce((s, t) => s + tokenUsdValue(t), 0);
-      setTotalUsd(usd);
-      setAccountBalance(address, usd);
-    } catch { /* ignore */ }
+      // Stream chains as they arrive and merge by chain, so the total never
+      // drops to $0 mid-refresh (slow chains keep their last value).
+      let failed: number[] = [];
+      const result = await fetchTokens(address, {
+        onProgress: (partialTokens) => {
+          if (addressRef.current !== address) return; // account switched mid-load
+          setTokens((prev) => {
+            const fresh = new Set(partialTokens.map((t) => tokenChainId(t)));
+            const kept = prev.filter((t) => !fresh.has(tokenChainId(t)));
+            return [...kept, ...partialTokens].sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
+          });
+        },
+        onFailedChains: (ids) => { failed = ids; },
+      });
+      if (addressRef.current !== address) return; // stale result for a previous account
+      setTokens(result);
+      setFailedChainIds(failed);
+      // Only trust the total as the new "last known good" when it's complete —
+      // no failed chains and every held token priced.
+      const unpriced = result.some((t) => tokenBalanceDouble(t) > 0 && t.priceUsd == null);
+      if (failed.length === 0 && !unpriced) {
+        const usd = result.reduce((s, t) => s + tokenUsdValue(t), 0);
+        setAccountBalance(address, usd);
+        setCachedTotal(usd);
+      }
+    } catch { /* ignore — keep last-known tokens + total */ }
   }, [address, celebrateReceipt]);
   loadDataRef.current = loadData;
+
+  // Manual re-scan finished: reload the feed if anything new landed, and record
+  // any unreachable chains in their own list (unioned into the banner) so a
+  // balance poll can't clear them before the user fixes the RPC.
+  const onRescanResult = useCallback((o: RescanOutcome) => {
+    if (o.found > 0) loadData();
+    setRescanFailedChainIds(o.failedChains);
+  }, [loadData]);
 
   useFocusEffect(useCallback(() => {
     loadData();
@@ -260,8 +315,22 @@ export default function HomeScreen() {
     hadRequest.current = has;
   }, [conn.incomingRequest, loadData]);
 
-  // Reset incoming-detection when the active account changes.
-  useEffect(() => { initializedRef.current = false; setNewItemId(null); setReceipt(null); }, [address]);
+  // Reset incoming-detection + balance state when the active account changes,
+  // then paint the hero instantly from the cached total (never a $0 flash).
+  useEffect(() => {
+    initializedRef.current = false;
+    setNewItemId(null);
+    setReceipt(null);
+    setTokens([]);
+    setFailedChainIds([]);
+    setRescanFailedChainIds([]);
+    setCachedTotal(null);
+    let cancelled = false;
+    if (address) {
+      getAccountBalance(address).then((v) => { if (!cancelled && v != null) setCachedTotal(v); });
+    }
+    return () => { cancelled = true; };
+  }, [address]);
 
   // Resolve counterparty names (own accounts → ENS/.bnb/Vela/etc.), best-effort + cached.
   useEffect(() => {
@@ -321,13 +390,13 @@ export default function HomeScreen() {
   const openSwitcher = useCallback(async () => {
     if (state.accounts.length <= 1) { if (address) await copyToClipboard(address); return; }
     // Paint instantly from cache, then refresh every account in the background.
-    if (address) setAccountBalance(address, totalUsd);
+    if (address) setAccountBalance(address, displayTotal);
     const balances = await getAccountBalances(state.accounts.map((a) => a.address));
-    if (address) balances.set(address, totalUsd);
+    if (address) balances.set(address, displayTotal);
     setCachedBalances(balances);
     setShowSwitcher(true);
     refreshAllBalances();
-  }, [address, totalUsd, state.accounts, refreshAllBalances]);
+  }, [address, displayTotal, state.accounts, refreshAllBalances]);
 
   // --- connect (shared by scanner + pasted URI) ---
   // Returns true if `data` was a recognized pairing link and a connection was
@@ -393,11 +462,22 @@ export default function HomeScreen() {
           <View pointerEvents="none" style={styles.balanceBlob} />
           <Text style={styles.balanceLabel}>{t('home.totalBalance')}</Text>
           <View style={styles.balanceTopRow}>
-            {hidden ? <Text style={styles.balanceHidden}>••••••</Text> : <Balance value={totalUsd * rate} symbol={currency.symbol} code={currencyCode} />}
+            {hidden ? <Text style={styles.balanceHidden}>••••••</Text> : (
+              <>
+                {balancePartial && <Text style={styles.balanceApprox}>≈</Text>}
+                <Balance value={displayTotal * rate} symbol={currency.symbol} code={currencyCode} />
+              </>
+            )}
             <Pressable onPress={() => setHidden((h) => !h)} hitSlop={8} style={styles.eyeBtn}>
               {hidden ? <EyeOff size={22} color={color.fg.muted} strokeWidth={2} /> : <Eye size={22} color={color.fg.muted} strokeWidth={2} />}
             </Pressable>
           </View>
+          {!hidden && balancePartial && (
+            <View style={styles.balanceStaleRow}>
+              <AlertTriangle size={12} color={color.warning.base} strokeWidth={2.5} />
+              <Text style={styles.balanceStaleText}>{t('home.balanceStale')}</Text>
+            </View>
+          )}
           <View style={styles.balanceBottomRow}>
             <Pressable style={styles.currencyChip} onPress={() => setShowCurrency(true)} hitSlop={6}>
               <Text style={styles.currencyText}>{currencyCode}</Text>
@@ -411,6 +491,17 @@ export default function HomeScreen() {
           <Animated.View pointerEvents="none" style={[styles.balanceRing, balanceRingStyle]} />
         </VelaCard>
       </Animated.View>
+
+      {/* RPC failure banner + fix flow (shared with AssetsScreen). Shows both
+          balance-load failures and manual re-scan failures. */}
+      <RpcTroubleBanner
+        chainIds={[...new Set([...failedChainIds, ...rescanFailedChainIds])]}
+        onResolved={(chainId) => {
+          setFailedChainIds((prev) => prev.filter((id) => id !== chainId));
+          setRescanFailedChainIds((prev) => prev.filter((id) => id !== chainId));
+          loadData();
+        }}
+      />
 
       {/* Toggle + network filter */}
       <View style={styles.navRow}>
@@ -430,11 +521,17 @@ export default function HomeScreen() {
         />
       </View>
 
-      {/* Live monitoring indicator */}
+      {/* Live monitoring indicator + manual re-scan */}
       {tab === 'activity' && (
         <View style={styles.liveRow}>
-          <Animated.View style={[styles.liveDot, liveDotStyle]} />
-          <Text style={styles.liveText}>{t('home.liveIndicator')}</Text>
+          <View style={styles.liveLeft}>
+            <Animated.View style={[styles.liveDot, liveDotStyle]} />
+            <Text style={styles.liveText}>{t('home.liveIndicator')}</Text>
+          </View>
+          <Pressable style={styles.rescanBtn} onPress={() => setShowRescan(true)} hitSlop={8}>
+            <RefreshCw size={13} color={color.fg.muted} strokeWidth={2.4} />
+            <Text style={styles.rescanBtnText}>{t('home.rescanButton')}</Text>
+          </Pressable>
         </View>
       )}
     </Animated.View>
@@ -449,6 +546,10 @@ export default function HomeScreen() {
         {selectedChainId != null ? t('home.emptyNoActivityNetwork') : t('home.emptyNoActivity')}
       </Text>
       <Text style={styles.emptySub}>{t('home.emptySubtitle')}</Text>
+      <Pressable style={styles.emptyRescanBtn} onPress={() => setShowRescan(true)}>
+        <RefreshCw size={15} color={color.accent.base} strokeWidth={2.4} />
+        <Text style={styles.emptyRescanText}>{t('home.rescanButton')}</Text>
+      </Pressable>
     </View>
   );
 
@@ -517,10 +618,12 @@ export default function HomeScreen() {
                 {renderHeader()}
                 <ConnectionsView
                   status={conn.status}
+                  reconnectStuck={conn.reconnectStuck}
                   dappName={conn.dappInfo?.name ?? null}
                   dappUrl={conn.dappInfo?.url ?? null}
                   events={connEvents}
                   onDisconnect={conn.disconnectBridge}
+                  onReconnect={conn.reconnect}
                   onConnect={() => setShowScanner(true)}
                   onPasteConnect={onPasteConnect}
                   onOpenEvent={setEventTx}
@@ -557,6 +660,14 @@ export default function HomeScreen() {
         selected={currencyCode}
         onSelect={pickCurrency}
         onClose={() => setShowCurrency(false)}
+      />
+
+      {/* Manual activity re-scan */}
+      <ActivityRescanSheet
+        visible={showRescan}
+        address={address}
+        onClose={() => setShowRescan(false)}
+        onResult={onRescanResult}
       />
 
       {/* Transaction detail */}
@@ -635,13 +746,15 @@ export default function HomeScreen() {
 // ---------------------------------------------------------------------------
 
 function ConnectionsView({
-  status, dappName, dappUrl, events, onDisconnect, onConnect, onPasteConnect, onOpenEvent,
+  status, reconnectStuck, dappName, dappUrl, events, onDisconnect, onReconnect, onConnect, onPasteConnect, onOpenEvent,
 }: {
   status: ConnectionStatus;
+  reconnectStuck: boolean;
   dappName: string | null;
   dappUrl: string | null;
   events: ConnectionEvent[];
   onDisconnect: () => void;
+  onReconnect: () => void;
   onConnect: () => void;
   onPasteConnect: (uri: string) => void;
   onOpenEvent: (tx: LocalTransaction) => void;
@@ -719,7 +832,15 @@ function ConnectionsView({
             </Text>
           </View>
         </View>
-        <Text style={styles.connNote}>{t('home.connNote')}</Text>
+        <Text style={[styles.connNote, reconnectStuck && styles.connNoteWarn]}>
+          {reconnectStuck ? t('home.connReconnectStuck') : t('home.connNote')}
+        </Text>
+        {reconnecting && (
+          <Pressable style={styles.reconnectBtn} onPress={onReconnect}>
+            <RefreshCw size={16} color={color.fg.inverse} strokeWidth={2.4} />
+            <Text style={styles.reconnectText}>{t('home.connReconnectBtn')}</Text>
+          </Pressable>
+        )}
         <Pressable style={styles.disconnectBtn} onPress={onDisconnect}>
           <Text style={styles.disconnectText}>{t('home.connDisconnect')}</Text>
         </Pressable>
@@ -828,7 +949,10 @@ const styles = createStyles(() => ({
   balanceInt: { fontSize: 52, ...inter.bold, fontFamily: font.display, color: color.fg.base, letterSpacing: -1 },
   balanceDec: { fontSize: 30, ...inter.bold, fontFamily: font.display, color: color.fg.subtle },
   balanceHidden: { fontSize: 52, ...inter.bold, color: color.fg.base, flex: 1, letterSpacing: 2 },
+  balanceApprox: { fontSize: 34, ...inter.bold, fontFamily: font.display, color: color.fg.muted, marginRight: space.xs },
   eyeBtn: { padding: space.xs },
+  balanceStaleRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm },
+  balanceStaleText: { flex: 1, fontSize: text.sm, ...inter.medium, color: color.warning.base },
   balanceBottomRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.xl },
   currencyChip: {
     flexDirection: 'row', alignItems: 'center', gap: space.xs,
@@ -853,10 +977,13 @@ const styles = createStyles(() => ({
   // Nav row
   navRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.lg },
 
-  // Live indicator
-  liveRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.lg, paddingHorizontal: space.xs },
+  // Live indicator + re-scan
+  liveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.lg, paddingHorizontal: space.xs },
+  liveLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.success.base },
   liveText: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted, letterSpacing: 0.2 },
+  rescanBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingVertical: space.xs, paddingHorizontal: space.sm },
+  rescanBtnText: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted },
 
   // List
   listContent: { paddingHorizontal: space['3xl'], paddingBottom: DOCK_CLEARANCE },
@@ -870,6 +997,12 @@ const styles = createStyles(() => ({
   },
   emptyText: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
   emptySub: { fontSize: text.base, ...inter.regular, color: color.fg.subtle, textAlign: 'center', paddingHorizontal: space['3xl'], lineHeight: 20 },
+  emptyRescanBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md,
+    paddingVertical: space.md, paddingHorizontal: space.xl,
+    borderRadius: radius.full, borderWidth: 1, borderColor: color.border.base, backgroundColor: color.bg.raised,
+  },
+  emptyRescanText: { fontSize: text.base, ...inter.semibold, color: color.accent.base },
 
   // Account switcher
   switcher: { flex: 1, backgroundColor: color.bg.base },
@@ -913,6 +1046,12 @@ const styles = createStyles(() => ({
   connStatusText: { fontSize: text.sm, ...inter.semibold, color: color.success.base },
   connStatusTextReconnecting: { color: color.warning.base },
   connNote: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, marginTop: space.lg },
+  connNoteWarn: { color: color.warning.base },
+  reconnectBtn: {
+    marginTop: space.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
+    paddingVertical: space.lg, borderRadius: radius.lg, backgroundColor: color.accent.base, ...shadow.sm,
+  },
+  reconnectText: { fontSize: text.base, ...inter.semibold, color: color.fg.inverse },
   disconnectBtn: {
     marginTop: space.lg, alignItems: 'center',
     paddingVertical: space.lg, borderRadius: radius.lg,

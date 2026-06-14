@@ -21,6 +21,7 @@
     "connDisconnect": "Déconnecter",
     "connEventsHead": "Activité de la connexion · {{count}}",
     "connNoEvents": "Aucune requête sur cette connexion pour l'instant.",
-    "toastReceived": "{{amount}} {{token}} reçus"
+    "toastReceived": "{{amount}} {{token}} reçus",
+    "rescanNativeNote": "Les pièces natives (ETH, BNB, MATIC…) reçues sur certains réseaux peuvent ne pas apparaître ici. Votre solde reste correct — ouvrez un explorateur de blocs pour le détail complet."
   }
 }

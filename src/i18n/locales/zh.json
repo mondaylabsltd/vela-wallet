@@ -33,7 +33,9 @@
     "appearance": {
       "themeLight": "浅色",
       "themeDark": "深色",
-      "themeAuto": "自动"
+      "themeAuto": "自动",
+      "keepAwakeTitle": "保持屏幕常亮",
+      "keepAwakeSubtitle": "应用打开时不让屏幕休眠"
     },
     "payments": {
       "voiceTitle": "语音播报",

@@ -35,7 +35,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
 import { ArrowLeft, X, ScanLine, BookUser, AlertCircle, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw, ExternalLink } from 'lucide-react-native';
-import { getAllNetworksSync } from '@/models/network';
 import { openBrowser } from '@/services/platform';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
@@ -43,36 +42,6 @@ type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' |
 
 function isValidAddress(addr: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(addr);
-}
-
-/** Estimated confirmation time (seconds) per chain, accounting for bundler overhead. */
-function estimatedConfirmSecs(chainId: number): number {
-  const net = getAllNetworksSync().find(n => n.chainId === chainId);
-  // L2s are fast (~2-4s block time + bundler overhead), L1s are slower
-  if (net?.isL2) return 15;
-  switch (chainId) {
-    case 1: return 30;   // Ethereum: ~12s block + bundler
-    case 56: return 20;  // BNB: ~3s block + bundler
-    case 100: return 20; // Gnosis: ~5s block + bundler
-    case 43114: return 20; // Avalanche: ~2s block + bundler
-    default: return 25;
-  }
-}
-
-/** Hook that ticks elapsed seconds while active. */
-function useElapsedTimer(active: boolean) {
-  const [elapsed, setElapsed] = useState(0);
-  const startRef = useRef(0);
-  useEffect(() => {
-    if (!active) { setElapsed(0); return; }
-    startRef.current = Date.now();
-    setElapsed(0);
-    const id = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [active]);
-  return elapsed;
 }
 
 function explorerUserOpUrl(chainId: number): string | null {
@@ -217,7 +186,6 @@ export default function SendScreen() {
   const [showContacts, setShowContacts] = useState(false);
   const [amountWarning, setAmountWarning] = useState<string | null>(null);
   const [recipientIdentity, setRecipientIdentity] = useState<RecipientIdentity | null>(null);
-  const confirmingElapsed = useElapsedTimer(txStatus === 'confirming');
 
   // Prefetch account credential + webauthn module while user reviews confirm screen
   const amountInputRef = useRef<TextInput>(null);
@@ -537,41 +505,41 @@ export default function SendScreen() {
         );
       }
 
-      // UserOp submitted — show confirming status immediately
-      setTxStatus('confirming');
+      // Bundler accepted the UserOp — treat the payment as sent right now (we
+      // have the userOpHash). The on-chain tx hash resolves in the background to
+      // light up the explorer link; a slow/failed receipt poll must NOT turn a
+      // submitted payment into an error.
+      setTxStatus('confirmed');
       setSending(false);
+      clearTokenCache(activeAccount.address);
 
-      // Wait for on-chain confirmation in background
-      result.waitForTxHash().then(async (hash) => {
-        setTxHash(hash);
-        setTxStatus('confirmed');
-        clearTokenCache(activeAccount.address);
+      // Persist the USD value (at send time) so the activity feed can show the
+      // fiat amount — without it, non-stablecoin sends (e.g. BNB) render with no
+      // fiat, since there's no price to recover later. Persisted exactly once
+      // (saveTransaction appends; no upsert) when the hash settles.
+      const sentUsd = parseFloat(tokenAmount) * (selectedToken.priceUsd ?? 0);
+      const persistSend = (hash: string) => saveTransaction({
+        id: result.userOpHash,
+        userOpHash: result.userOpHash,
+        txHash: hash,
+        from: activeAccount.address,
+        to: recipient,
+        toName: recipientIdentity?.name,
+        value: tokenAmount,
+        symbol: selectedToken!.symbol,
+        decimals: selectedToken!.decimals,
+        chainId,
+        timestamp: Math.floor(Date.now() / 1000),
+        status: 'confirmed',
+        type: 'send',
+        usd: sentUsd > 0 ? '$' + sentUsd.toFixed(2) : undefined,
+      }).catch(() => {});
 
-        // Persist the USD value (at send time) so the activity feed can show the
-        // fiat amount — without it, non-stablecoin sends (e.g. BNB) render with
-        // no fiat, since there's no price to recover later.
-        const sentUsd = parseFloat(tokenAmount) * (selectedToken!.priceUsd ?? 0);
-        await saveTransaction({
-          id: result.userOpHash,
-          userOpHash: result.userOpHash,
-          txHash: hash,
-          from: activeAccount.address,
-          to: recipient,
-          toName: recipientIdentity?.name,
-          value: tokenAmount,
-          symbol: selectedToken!.symbol,
-          decimals: selectedToken!.decimals,
-          chainId,
-          timestamp: Math.floor(Date.now() / 1000),
-          status: 'confirmed',
-          type: 'send',
-          usd: sentUsd > 0 ? '$' + sentUsd.toFixed(2) : undefined,
-        });
-      }).catch(() => {
-        // Receipt polling timed out — still submitted, just can't confirm yet
-        setTxError(t('send.txErrorTimeout'));
-        setTxStatus('error');
-      });
+      // Resolve the on-chain hash in the background; persist with it if it
+      // arrives, otherwise persist hash-less so it still lands in history.
+      result.waitForTxHash()
+        .then((hash) => { setTxHash(hash); persistSend(hash); })
+        .catch(() => { persistSend(''); });
 
     } catch (error: any) {
       if (error?.code === 'PASSKEY_CANCELLED') {
@@ -1062,45 +1030,6 @@ export default function SendScreen() {
                   )}
                 </View>
               )}
-              {txStatus === 'confirming' && selectedToken && (() => {
-                const chainId = tokenChainId(selectedToken);
-                const estSecs = estimatedConfirmSecs(chainId);
-                const remaining = Math.max(0, estSecs - confirmingElapsed);
-                const progress = Math.min(1, confirmingElapsed / estSecs);
-                const overEstimate = confirmingElapsed > estSecs;
-                const statusMsg = confirmingElapsed < 3
-                  ? t('send.txSubmitted')
-                  : overEstimate
-                    ? t('send.txSlowConfirm')
-                    : t('send.txWaitingConfirm');
-                const timeLabel = overEstimate
-                  ? t('send.txElapsed', { elapsed: confirmingElapsed })
-                  : t('send.txRemaining', { remaining });
-                return (
-                  <View>
-                    <View style={styles.txStatusRow}>
-                      <Animated.View style={styles.txSpinner}>
-                        <ActivityIndicator size="small" color={color.accent.base} />
-                      </Animated.View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.txStatusText}>{statusMsg}</Text>
-                        <Text style={styles.txConfirmTime}>{timeLabel}</Text>
-                      </View>
-                    </View>
-                    {/* Progress bar */}
-                    <View style={styles.txProgressTrack}>
-                      <Animated.View style={[
-                        styles.txProgressFill,
-                        { width: `${Math.max(5, progress * 100)}%` as any },
-                        overEstimate && styles.txProgressFillSlow,
-                      ]} />
-                    </View>
-                    <Text style={styles.txConfirmHint}>
-                      {t('send.txTypicalTime', { chainName: chainName(chainId), estSecs })}
-                    </Text>
-                  </View>
-                );
-              })()}
               {txStatus === 'error' && (
                 <View style={styles.txStatusRow}>
                   <AlertCircle size={20} color={color.error.base} strokeWidth={2.5} />

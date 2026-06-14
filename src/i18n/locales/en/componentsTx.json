@@ -8,6 +8,8 @@
       "network": "Network",
       "time": "Time",
       "txHash": "Tx Hash",
+      "confirming": "Confirming…",
+      "confirmingHint": "Sent! Confirming on-chain — the explorer link will appear shortly.",
       "scanHint": "Scan to view on explorer",
       "footerBrand": "VELA WALLET",
       "footerUrl": "getvela.app",

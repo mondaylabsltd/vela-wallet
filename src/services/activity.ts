@@ -17,7 +17,8 @@ import { chainName, nativeSymbol } from '@/models/network';
 import { shortAddress } from '@/models/wallet-state';
 import { tokenChainId, type APIToken } from '@/models/types';
 import { fetchTokens } from '@/services/wallet-api';
-import { fetchIncomingTransfers, type IncomingTransfer } from '@/services/transfer-monitor';
+import { deepScanChain, fetchIncomingTransfers, type IncomingTransfer } from '@/services/transfer-monitor';
+import { resolveTokenMetadata } from '@/services/token-metadata';
 import { formatTokenAmount, formatDate } from '@/services/locale-format';
 import i18n from '@/i18n';
 
@@ -87,8 +88,21 @@ function formatUsd(n: number): string {
 
 /** Symbols treated as ≈ $1 so stablecoin transfers aren't shown as "$0.00". */
 const STABLE_SYMBOLS = new Set([
-  'USDT', 'USDC', 'USDC.E', 'DAI', 'BUSD', 'TUSD', 'FDUSD', 'USDE', 'PYUSD', 'USDP', 'GUSD', 'LUSD', 'FRAX', 'USDD',
+  'USDT', 'USDT0', 'USDC', 'USDC.E', 'DAI', 'BUSD', 'TUSD', 'FDUSD', 'USDE', 'PYUSD', 'USDP', 'GUSD', 'LUSD', 'FRAX', 'USDD',
 ]);
+
+/**
+ * Normalise a symbol for stablecoin matching: upper-case and fold the Tether
+ * glyph "₮" to "T" so the on-chain symbol "USD₮0" matches "USDT0".
+ */
+function stableKey(symbol: string): string {
+  return (symbol || '').toUpperCase().replace(/₮/g, 'T');
+}
+
+/** True if `symbol` denotes a ≈ $1 stablecoin. */
+function isStable(symbol: string): boolean {
+  return STABLE_SYMBOLS.has(stableKey(symbol));
+}
 
 /**
  * Numeric USD value for a transaction. Prefers the value stored at event time;
@@ -99,7 +113,7 @@ const STABLE_SYMBOLS = new Set([
 export function txUsdValue(tx: LocalTransaction): number {
   const stored = tx.usd ? parseFloat(tx.usd.replace(/[^0-9.]/g, '')) : 0;
   if (isFinite(stored) && stored > 0) return stored;
-  if (STABLE_SYMBOLS.has((tx.symbol || '').toUpperCase())) {
+  if (isStable(tx.symbol || '')) {
     const amt = parseFloat(tx.value || '0');
     return isFinite(amt) && amt > 0 ? amt : 0;
   }
@@ -146,7 +160,13 @@ function incomingToRecord(tx: IncomingTransfer, address: string, index: Map<stri
   const symbol = meta?.symbol ?? (tx.isNative ? nativeSymbol(tx.chainId) : 'tokens');
   const decimals = meta?.decimals ?? 18;
   const amount = Number(tx.value) / 10 ** decimals;
-  const usd = meta?.priceUsd ? formatUsd(amount * meta.priceUsd) : '$0.00';
+  // Prefer a real price; otherwise treat ≈$1 stablecoins as their token amount
+  // (covers on-chain-resolved tokens with no price feed), else unknown ($0.00).
+  const usd = meta?.priceUsd != null
+    ? formatUsd(amount * meta.priceUsd)
+    : isStable(symbol)
+      ? formatUsd(amount)
+      : '$0.00';
   return {
     id: tx.id,
     userOpHash: '',
@@ -162,6 +182,38 @@ function incomingToRecord(tx: IncomingTransfer, address: string, index: Map<stri
     type: 'receive',
     usd,
   };
+}
+
+/**
+ * Fill the lookup with metadata for incoming tokens the user doesn't already
+ * hold. Without this, an unknown token falls back to 18 decimals + "tokens" in
+ * {@link incomingToRecord}, so a 6-decimal stablecoin shows as "+0 tokens".
+ * Resolves real symbol/decimals on-chain (batched per chain, cached) and folds
+ * them into `index`. Best-effort: unresolved tokens keep the conservative
+ * fallback, so a metadata-RPC hiccup never blocks persisting the receipt.
+ */
+async function enrichTokenIndex(
+  incoming: IncomingTransfer[],
+  index: Map<string, TokenMeta>,
+): Promise<void> {
+  const byChain = new Map<number, Set<string>>();
+  for (const tx of incoming) {
+    if (tx.isNative || !tx.token) continue;
+    const addr = tx.token.toLowerCase();
+    if (index.has(`${tx.chainId}:${addr}`)) continue;
+    let set = byChain.get(tx.chainId);
+    if (!set) byChain.set(tx.chainId, (set = new Set()));
+    set.add(addr);
+  }
+  if (byChain.size === 0) return;
+
+  await Promise.all([...byChain].map(async ([chainId, addrs]) => {
+    const metas = await resolveTokenMetadata(chainId, [...addrs]).catch(() => null);
+    if (!metas) return;
+    for (const [addr, meta] of metas) {
+      index.set(`${chainId}:${addr}`, { symbol: meta.symbol, decimals: meta.decimals, priceUsd: null });
+    }
+  }));
 }
 
 /** Map a stored 'receive' record into an incoming ActivityItem. */
@@ -203,11 +255,64 @@ export async function syncReceivedTransfers(address: string): Promise<number> {
     const incoming = await fetchIncomingTransfers(address, chainIds);
     if (incoming.length === 0) return 0;
     const index = buildTokenIndex(tokens);
+    await enrichTokenIndex(incoming, index);
     const records = incoming.map((tx) => incomingToRecord(tx, address, index));
     return await mergeTransactions(records);
   } catch {
     return 0;
   }
+}
+
+export interface RescanOutcome {
+  /** New receipts persisted this scan. */
+  found: number;
+  /** Chains that scanned cleanly. */
+  okChains: number[];
+  /** Chains whose RPC was unreachable (→ explorer / fix-RPC fallback). */
+  failedChains: number[];
+}
+
+/**
+ * On-demand deep re-scan of the last `minutes` for received transfers — the
+ * "I'm missing a payment" recovery path. Re-queries event logs directly per
+ * chain (chunked, RPC-limit-aware) instead of relying on the incremental
+ * checkpoint, persists anything new (de-duped), and reports which chains
+ * couldn't be reached so the UI can offer a fix / explorer fallback.
+ */
+export async function rescanRecentTransfers(
+  address: string,
+  minutes: number,
+  onProgress?: (chainId: number, chunk: number, totalChunks: number) => void,
+): Promise<RescanOutcome> {
+  if (!address) return { found: 0, okChains: [], failedChains: [] };
+  const tokens = await fetchTokens(address).catch(() => [] as APIToken[]);
+  const active = [...new Set(tokens.map(tokenChainId))];
+  const chainIds = active.length ? active : DEFAULT_MONITOR_CHAINS;
+  const index = buildTokenIndex(tokens);
+
+  const okChains: number[] = [];
+  const failedChains: number[] = [];
+  const incoming: IncomingTransfer[] = [];
+
+  const results = await Promise.allSettled(
+    chainIds.map((id) =>
+      deepScanChain(address, id, minutes, (p) => onProgress?.(p.chainId, p.chunk, p.totalChunks)),
+    ),
+  );
+  results.forEach((r, i) => {
+    const id = chainIds[i];
+    if (r.status === 'fulfilled') {
+      okChains.push(id);
+      incoming.push(...r.value);
+    } else {
+      failedChains.push(id);
+    }
+  });
+
+  await enrichTokenIndex(incoming, index);
+  const records = incoming.map((tx) => incomingToRecord(tx, address, index));
+  const found = records.length ? await mergeTransactions(records) : 0;
+  return { found, okChains, failedChains };
 }
 
 /**

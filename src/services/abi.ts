@@ -40,6 +40,8 @@ export const SEL = {
   getEthBalance:    '4d2301cc', // getEthBalance(address)
   balanceOf:        '70a08231', // balanceOf(address)
   decimals:         '313ce567', // decimals()
+  symbol:           '95d89b41', // symbol()
+  name:             '06fdde03', // name()
   quoteV3:          'c6a5026a', // quoteExactInputSingle((address,address,uint256,uint24,uint160))
   getAmountsOut:    '5509a1ac', // getAmountsOut(uint256,(address,address,bool,address)[]) — Aerodrome/Velodrome V2 Router
   latestRoundData:  'feaf968c', // latestRoundData()
@@ -254,6 +256,54 @@ export function decI256(hex: string): bigint {
 /** Decode as uint8 (for `decimals()`). */
 export function decU8(hex: string): number {
   return Number(decU256(hex));
+}
+
+/**
+ * Decode an ABI-encoded `string` return value — the `[offset][length][data]`
+ * layout that most ERC-20 `name()` / `symbol()` calls use. Falls back to a
+ * `bytes32` interpretation for legacy tokens (e.g. MKR) that return a single
+ * fixed 32-byte word, and decodes the bytes as UTF-8 so multibyte symbols
+ * (e.g. "USD₮0") survive intact. Returns '' for short or empty input.
+ */
+export function decString(hex: string): string {
+  const d = hex.startsWith('0x') ? hex.slice(2) : hex;
+  if (d.length < 64) return '';
+  // bytes32-style: a single 32-byte word, no offset/length header.
+  if (d.length < 128) return utf8FromHex(d.slice(0, 64));
+  const len = n64(d, 64);
+  // A real dynamic string declares its byte length in the 2nd word; an
+  // out-of-range value means this isn't offset-encoded → treat head as bytes32.
+  if (len <= 0 || len > 4096 || 128 + len * 2 > d.length) return utf8FromHex(d.slice(0, 64));
+  return utf8FromHex(d.slice(128, 128 + len * 2));
+}
+
+/** Decode a run of hex-encoded bytes as UTF-8, stopping at the first NUL. */
+function utf8FromHex(dataHex: string): string {
+  const bytes: number[] = [];
+  for (let i = 0; i + 1 < dataHex.length; i += 2) {
+    const b = parseInt(dataHex.slice(i, i + 2), 16);
+    if (b === 0) break; // NUL = end of bytes32 padding / C-string terminator
+    bytes.push(b);
+  }
+  let out = '';
+  for (let i = 0; i < bytes.length; ) {
+    const b0 = bytes[i];
+    if (b0 < 0x80) { out += String.fromCharCode(b0); i += 1; }
+    else if (b0 < 0xc0) { i += 1; } // stray continuation byte → skip
+    else if (b0 < 0xe0 && i + 1 < bytes.length) {
+      out += String.fromCharCode(((b0 & 0x1f) << 6) | (bytes[i + 1] & 0x3f));
+      i += 2;
+    } else if (b0 < 0xf0 && i + 2 < bytes.length) {
+      out += String.fromCharCode(((b0 & 0x0f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f));
+      i += 3;
+    } else if (i + 3 < bytes.length) {
+      const cp = ((b0 & 0x07) << 18) | ((bytes[i + 1] & 0x3f) << 12) | ((bytes[i + 2] & 0x3f) << 6) | (bytes[i + 3] & 0x3f);
+      const c = cp - 0x10000;
+      out += String.fromCharCode(0xd800 + (c >> 10), 0xdc00 + (c & 0x3ff));
+      i += 4;
+    } else { i += 1; }
+  }
+  return out.trim();
 }
 
 /**

@@ -336,6 +336,10 @@ export function TransactionReceipt({
   const explorerBase = net?.explorerURL ?? 'https://etherscan.io';
   const explorerUrl = `${explorerBase}/tx/${txHash}`;
   const displayToName = recipientIdentity?.name ?? toName;
+  // The send is already accepted by the bundler when this renders; the on-chain
+  // hash may still be resolving. While pending we hide the (broken) explorer
+  // link / QR and show a "confirming" hint instead.
+  const pending = !txHash;
 
   const canvasLabels: CanvasLabels = {
     canvasTitle: t('componentsTx.receipt.canvasTitle'),
@@ -424,12 +428,18 @@ export function TransactionReceipt({
         <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.to')}</Text><View style={styles.detailValueCol}>{displayToName && <Text style={styles.detailName}>{displayToName}</Text>}<Text style={styles.detailAddr}>{shortAddr(to)}</Text></View></View>
         <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.network')}</Text><Text style={styles.detailValue}>{chain}</Text></View>
         <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.time')}</Text><Text style={styles.detailValue}>{formatDateTime(timestamp)}</Text></View>
-        <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.txHash')}</Text><Text style={styles.detailAddr}>{shortAddr(txHash)}</Text></View>
+        <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.txHash')}</Text>{pending ? <Text style={styles.detailPending}>{t('componentsTx.receipt.confirming')}</Text> : <Text style={styles.detailAddr}>{shortAddr(txHash)}</Text>}</View>
 
-        <View style={styles.qrSection}>
-          <QRCode value={explorerUrl} size={80} />
-          <Text style={styles.qrHint}>{t('componentsTx.receipt.scanHint')}</Text>
-        </View>
+        {pending ? (
+          <View style={styles.confirmingSection}>
+            <Text style={styles.confirmingHint}>{t('componentsTx.receipt.confirmingHint')}</Text>
+          </View>
+        ) : (
+          <View style={styles.qrSection}>
+            <QRCode value={explorerUrl} size={80} />
+            <Text style={styles.qrHint}>{t('componentsTx.receipt.scanHint')}</Text>
+          </View>
+        )}
         <View style={styles.footer}>
           <Image source={LOGO_ASSET} style={styles.footerLogoImg} resizeMode="contain" />
           <Text style={styles.footerLogo}>{t('componentsTx.receipt.footerBrand')}</Text>
@@ -437,12 +447,14 @@ export function TransactionReceipt({
         </View>
       </View>
 
-      {/* Action buttons */}
+      {/* Action buttons — explorer link appears once the on-chain hash resolves */}
       <View style={styles.actions}>
-        <Pressable style={styles.actionBtn} onPress={handleViewExplorer}>
-          <ExternalLink size={18} color={color.fg.muted} strokeWidth={2} />
-          <Text style={styles.actionText}>{t('componentsTx.receipt.explorer')}</Text>
-        </Pressable>
+        {!pending && (
+          <Pressable style={styles.actionBtn} onPress={handleViewExplorer}>
+            <ExternalLink size={18} color={color.fg.muted} strokeWidth={2} />
+            <Text style={styles.actionText}>{t('componentsTx.receipt.explorer')}</Text>
+          </Pressable>
+        )}
         <Pressable style={styles.actionBtn} onPress={handleShare}>
           <Share2 size={18} color={color.fg.muted} strokeWidth={2} />
           <Text style={styles.actionText}>{t('componentsTx.receipt.share')}</Text>
@@ -482,6 +494,9 @@ const styles = createStyles(() => ({
   detailValue: { fontSize: text.sm, ...inter.semibold, color: color.fg.base, textAlign: 'right' as const, flex: 1 },
   qrSection: { alignItems: 'center', marginTop: space.xl, paddingTop: space.lg, borderTopWidth: 1, borderTopColor: color.border.base, gap: space.sm },
   qrHint: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle },
+  detailPending: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle, textAlign: 'right' as const },
+  confirmingSection: { alignItems: 'center', marginTop: space.xl, paddingTop: space.lg, borderTopWidth: 1, borderTopColor: color.border.base },
+  confirmingHint: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, textAlign: 'center' as const },
   footer: { alignItems: 'center', marginTop: space.xl, gap: 4 },
   footerLogoImg: { width: 32, height: 32, borderRadius: 16, marginBottom: 4 },
   footerLogo: { fontSize: text.sm, ...inter.bold, color: color.fg.muted, letterSpacing: 2 },

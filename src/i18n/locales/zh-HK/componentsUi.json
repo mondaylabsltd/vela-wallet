@@ -35,6 +35,8 @@
       "reject": "拒絕",
       "personalSignTag": "personal_sign · 免 Gas 費",
       "unlimitedWarning": "無上限 — 此合約可動用你的全部代幣",
+      "partialWarning": "資訊不完整 — 部分內容無法解碼。批准前請仔細核對。",
+      "unverifiedWarning": "無法喺鏈上核實代幣數量——批准前請再次確認。",
       "blindTypedWarning": "此類型化數據無法以已知描述符解碼。請仔細檢視。",
       "blindDecodeWarning": "無法解碼 — 沒有 ERC-7730 描述符（{{bytes}} 位元組）",
       "rawCalldataToggle": "原始 calldata · {{bytes}} 位元組",

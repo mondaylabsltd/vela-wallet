@@ -97,6 +97,10 @@ interface DAppConnectionContextValue {
   cancelFingerprint: () => void;
   /** Disconnect from the current bridge. */
   disconnectBridge: () => void;
+  /** Force an immediate reconnect of the active session ("Reconnect now"). */
+  reconnect: () => void;
+  /** True once an auto-reconnect has dragged on long enough to prompt the user. */
+  reconnectStuck: boolean;
   /** Approve the current incoming request. Optional maxFeePerGas from gas tier selector. */
   approveRequest: (maxFeeOverride?: bigint) => Promise<void>;
   /** Reject the current incoming request. */
@@ -129,6 +133,8 @@ const DAppConnectionContext = createContext<DAppConnectionContextValue>({
   confirmFingerprint: async () => {},
   cancelFingerprint: () => {},
   disconnectBridge: () => {},
+  reconnect: () => {},
+  reconnectStuck: false,
   approveRequest: async () => {},
   rejectRequest: () => {},
   dismissRequest: () => {},
@@ -162,6 +168,19 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const [connectionType, setConnectionType] = useState<ConnectionType>(null);
   const [pendingFingerprint, setPendingFingerprint] = useState<string | null>(null);
   const [fundingNeeded, setFundingNeeded] = useState<FundingNeeded | null>(null);
+  const [reconnectStuck, setReconnectStuck] = useState(false);
+  // Bumped on each manual "Reconnect now" so the stuck timer re-arms even though
+  // `status` stays 'reconnecting' (a same-value setState wouldn't re-run the effect).
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+
+  // If an auto-reconnect drags on (relay down / session expired), surface a
+  // manual-recovery prompt instead of spinning "Reconnecting…" forever.
+  useEffect(() => {
+    if (status !== 'reconnecting') { setReconnectStuck(false); return; }
+    setReconnectStuck(false);
+    const timer = setTimeout(() => setReconnectStuck(true), 45_000);
+    return () => clearTimeout(timer);
+  }, [status, reconnectNonce]);
 
   const transportRef = useRef<DAppTransport | null>(null);
   /** Holds WalletPairTransport during fingerprint verification (before connect). */
@@ -406,6 +425,16 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     clearWalletPairSession();
   }, [disconnectCurrent]);
 
+  // --- Manual reconnect ("Reconnect now") ---
+  const reconnect = useCallback(() => {
+    const transport = transportRef.current;
+    if (!transport) return;
+    setStatus('reconnecting');
+    setReconnectStuck(false);
+    setReconnectNonce((n) => n + 1); // re-arm the stuck timer even if status was already 'reconnecting'
+    transport.reconnect?.().catch(() => { /* SDK keeps retrying; UI stays reconnecting */ });
+  }, []);
+
   // --- Approve ---
   const approveRequest = useCallback(async (maxFeeOverride?: bigint) => {
     const request = incomingRequest;
@@ -587,7 +616,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     incomingRequest, isSigning, signError, chainId,
     connectionType, pendingFingerprint,
     connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
-    disconnectBridge,
+    disconnectBridge, reconnect, reconnectStuck,
     approveRequest, rejectRequest, dismissRequest, switchChain,
     fundingNeeded, handleFundingComplete, handleFundingCancel,
   }), [
@@ -595,7 +624,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     incomingRequest, isSigning, signError, chainId,
     connectionType, pendingFingerprint,
     connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
-    disconnectBridge,
+    disconnectBridge, reconnect, reconnectStuck,
     approveRequest, rejectRequest, dismissRequest, switchChain,
     fundingNeeded, handleFundingComplete, handleFundingCancel,
   ]);

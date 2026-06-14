@@ -25,14 +25,13 @@ import { getBundlerServiceURL, getLocalePrefs, hasPendingUploads, loadCustomNetw
 import { fetchTokens } from '@/services/wallet-api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { AlertTriangle, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, Volume2, X, XCircle } from 'lucide-react-native';
+import { AlertTriangle, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Smartphone, Sun, Trash2, User as UserIcon, Volume2, X, XCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useLanguagePreference } from '@/i18n/language';
 import { LANGUAGE_NATIVE_NAMES, SUPPORTED_LANGUAGES, type AppLanguage, type LanguagePreference } from '@/i18n';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Platform,
     Pressable,
     ScrollView,
     Switch,
@@ -41,6 +40,8 @@ import {
     View,
 } from 'react-native';
 import { isVoiceEnabled, loadVoicePreference, previewVoice, setVoiceEnabled } from '@/services/voice';
+import { isKeepAwakeEnabled, loadKeepAwakePreference, setKeepAwakeEnabled } from '@/services/screen-wake';
+import { buildBugReportURL } from '@/services/feedback';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
     runOnJS,
@@ -931,25 +932,6 @@ function translationIssueURL(lang: AppLanguage): string {
   return `${VELA_REPO_URL}/issues/new?${query}`;
 }
 
-/**
- * Deep-link to the prefilled bug-report issue form. Mirrors translationIssueURL:
- * the `environment` field (id: environment in bug.yml) is pre-populated with the
- * reporter's app version, platform and language so they don't have to describe
- * their setup — the single biggest lever on whether a report is actionable.
- */
-function bugReportURL(language: AppLanguage): string {
-  const environment = [
-    `- App version: ${APP_VERSION}`,
-    `- Platform: ${Platform.OS} ${Platform.Version}`,
-    `- Language: ${LANGUAGE_NATIVE_NAMES[language]} (${language})`,
-  ].join('\n');
-  const query = [
-    'template=bug.yml',
-    `environment=${encodeURIComponent(environment)}`,
-  ].join('&');
-  return `${VELA_REPO_URL}/issues/new?${query}`;
-}
-
 function LanguagePickerModal({ s, visible, preference, systemLanguage, onSelect, onClose }: {
   s: S; visible: boolean; preference: LanguagePreference; systemLanguage: AppLanguage;
   onSelect: (pref: LanguagePreference) => void; onClose: () => void;
@@ -1378,6 +1360,13 @@ export default function SettingsScreen() {
     if (next) previewVoice();
   };
 
+  const [keepAwakeOn, setKeepAwakeOn] = useState(isKeepAwakeEnabled());
+  useEffect(() => { loadKeepAwakePreference().then(() => setKeepAwakeOn(isKeepAwakeEnabled())); }, []);
+  const toggleKeepAwake = async (next: boolean) => {
+    setKeepAwakeOn(next);
+    await setKeepAwakeEnabled(next);
+  };
+
   const accountName = activeAccount?.name ?? 'No Wallet';
   const address = activeAccount?.address ?? state.address;
 
@@ -1421,7 +1410,7 @@ export default function SettingsScreen() {
           <VelaCard>
             <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: MessageSquare }}
               title={t('settings.feedback.title')} subtitle={t('settings.feedback.subtitle')}
-              showDivider={false} onPress={() => openURL(bugReportURL(langResolved))}
+              showDivider={false} onPress={() => openURL(buildBugReportURL(langResolved))}
               right={<ExternalLink size={16} color={color.fg.subtle} />} />
           </VelaCard>
         </Animated.View>
@@ -1440,6 +1429,23 @@ export default function SettingsScreen() {
             />
             <View style={styles.settingsRowDividerFull} />
             <ThemePicker s={styles} current={colorPref} onChange={setColorPref} />
+            <View style={styles.settingsRowDividerFull} />
+            <SettingsRow
+              s={styles}
+              icon={{ bg: color.info.soft, fg: color.info.base, Icon: Smartphone }}
+              title={t('settings.appearance.keepAwakeTitle')}
+              subtitle={t('settings.appearance.keepAwakeSubtitle')}
+              showDivider={false}
+              right={
+                <Switch
+                  value={keepAwakeOn}
+                  onValueChange={toggleKeepAwake}
+                  trackColor={{ true: color.accent.base, false: color.border.strong }}
+                  thumbColor={color.fg.inverse}
+                  ios_backgroundColor={color.border.strong}
+                />
+              }
+            />
           </VelaCard>
         </Animated.View>
 

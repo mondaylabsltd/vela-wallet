@@ -35,6 +35,8 @@
       "reject": "Reject",
       "personalSignTag": "personal_sign · No gas fee",
       "unlimitedWarning": "Unlimited — this contract can spend all your tokens",
+      "partialWarning": "Incomplete — some details couldn't be decoded. Review carefully before approving.",
+      "unverifiedWarning": "Token amount couldn't be verified on-chain — double-check it before approving.",
       "blindTypedWarning": "This typed data could not be decoded with a known descriptor. Review carefully.",
       "blindDecodeWarning": "Unable to decode — no ERC-7730 descriptor ({{bytes}} bytes)",
       "rawCalldataToggle": "Raw calldata · {{bytes}} bytes",

@@ -21,6 +21,7 @@
     "connDisconnect": "Putuskan",
     "connEventsHead": "Aktivitas koneksi · {{count}}",
     "connNoEvents": "Belum ada permintaan di koneksi ini.",
-    "toastReceived": "{{amount}} {{token}} diterima"
+    "toastReceived": "{{amount}} {{token}} diterima",
+    "rescanNativeNote": "Koin native (ETH, BNB, MATIC…) yang diterima di sebagian jaringan mungkin tidak terdeteksi di sini. Saldo Anda tetap akurat — buka block explorer untuk catatan lengkap."
   }
 }

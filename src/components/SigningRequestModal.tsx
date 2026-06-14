@@ -206,6 +206,21 @@ export function SigningRequestModal() {
 
           {renderContent()}
 
+          {/* Gas fee card — only for eth_sendTransaction */}
+          {isTx && activeAccount?.address && (
+            <GasFeeCard
+              feeEstimate={feeEstimate}
+              estimating={estimatingGas}
+              nativeSymbol={nativeSymbol(chainId)}
+              nativeUsdPrice={0}
+              safeAddress={activeAccount.address}
+              chainId={chainId}
+              gasTier={gasTier}
+              onTierChange={setGasTier}
+              onFeeUpdate={setFeeEstimate}
+            />
+          )}
+
           {/* Error */}
           {signError && (
             <View style={styles.errorCard}>
@@ -235,10 +250,10 @@ export function SigningRequestModal() {
               />
               <VelaButton
                 title={buttonLabel()}
-                onPress={() => approveRequest()}
+                onPress={() => approveRequest(feeEstimate?.maxFeePerGas)}
                 variant={buttonVariant()}
                 loading={isSigning || resolving}
-                disabled={resolving}
+                disabled={resolving || (isTx && estimatingGas)}
                 style={styles.buttonFlex}
               />
             </>
@@ -333,6 +348,22 @@ function ClearSignView({ cs }: {
 
       {/* L1: Intent */}
       <IntentHeader intent={cs.intent} color={rc} />
+
+      {/* Incomplete decode — the user must not assume they've seen everything */}
+      {cs.partial && (
+        <WarningBanner
+          severity="caution"
+          text={t('componentsUi.signing.partialWarning')}
+        />
+      )}
+
+      {/* Amount shown with unverified decimals (on-chain lookup failed) */}
+      {!cs.partial && cs.fields.some(f => f.unverified) && (
+        <WarningBanner
+          severity="caution"
+          text={t('componentsUi.signing.unverifiedWarning')}
+        />
+      )}
 
       {/* L2: Token cards + flow */}
       {isSwapLayout ? (

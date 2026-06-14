@@ -8,6 +8,8 @@
       "network": "網路",
       "time": "時間",
       "txHash": "交易雜湊",
+      "confirming": "確認中…",
+      "confirmingHint": "已發送！正在鏈上確認——區塊鏈瀏覽器連結稍後出現。",
       "scanHint": "掃描即可在區塊鏈瀏覽器查看",
       "footerBrand": "VELA WALLET",
       "footerUrl": "getvela.app",

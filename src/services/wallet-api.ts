@@ -17,6 +17,7 @@ import { tokenUsdValue } from '@/models/types';
 import { getAllNetworksSync, networkId, chainName, nativeSymbol } from '@/models/network';
 import { loadCustomTokens } from './storage';
 import { poolRpcCall, getFailedRpcChains } from './rpc-pool';
+import { priceShouldNull } from './dev/fault-injection';
 import { fetchChainTokens, pickQuoteToken, type ChainTokenData } from './chain-tokens';
 import { fetchChainlinkPrices, resolveChainlinkPrice } from './price-service';
 import {
@@ -450,6 +451,12 @@ async function queryChainAssets(
       priceUsd,
       spam: false,
     });
+  }
+
+  // Dev fault injection: drop prices so held tokens still render but the total
+  // undercounts — reproduces the "balance silently dropped" scenario.
+  if (priceShouldNull(chainId)) {
+    for (const tk of tokens) tk.priceUsd = null;
   }
 
   return tokens;

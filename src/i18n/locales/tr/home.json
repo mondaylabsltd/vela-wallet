@@ -21,6 +21,7 @@
     "connDisconnect": "Bağlantıyı Kes",
     "connEventsHead": "Bağlantı etkinliği · {{count}}",
     "connNoEvents": "Bu bağlantıda henüz istek yok.",
-    "toastReceived": "{{amount}} {{token}} alındı"
+    "toastReceived": "{{amount}} {{token}} alındı",
+    "rescanNativeNote": "Bazı ağlarda alınan yerel coin’ler (ETH, BNB, MATIC…) burada algılanmayabilir. Bakiyeniz yine de doğrudur — tam kayıt için blok gezginini açın."
   }
 }

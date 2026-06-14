@@ -32,6 +32,9 @@ export interface DAppTransport {
   /** Connect to the relay / peer. */
   connect(): Promise<void>;
 
+  /** Force an immediate reconnect (cancels any backoff). Optional per transport. */
+  reconnect?(): Promise<void>;
+
   /** Disconnect and clean up resources. */
   disconnect(): void;
 

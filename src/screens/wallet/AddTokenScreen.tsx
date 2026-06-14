@@ -9,7 +9,7 @@ import { useSafeRouter } from '@/hooks/use-safe-router';
 import type { Network } from '@/models/network';
 import { DEFAULT_NETWORKS, getAllNetworksSync, refreshCustomNetworks } from '@/models/network';
 import type { CompatibilityResult, CustomNetwork, CustomToken } from '@/models/types';
-import { MULTICALL3, decAggregate3, encAggregate3 } from '@/services/abi';
+import { MULTICALL3, SEL, decAggregate3, decString, decU8, encAggregate3 } from '@/services/abi';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { hapticSuccess, openBrowser, showAlert } from '@/services/platform';
@@ -21,42 +21,20 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 
-// Minimal ABI-encoded function selectors for ERC-20 metadata
-const NAME_SELECTOR = '0x06fdde03';
-const SYMBOL_SELECTOR = '0x95d89b41';
-const DECIMALS_SELECTOR = '0x313ce567';
-
-function hexToUtf8(hex: string): string {
-  const stripped = hex.startsWith('0x') ? hex.slice(2) : hex;
-  if (stripped.length < 128) return '';
-  const lengthHex = stripped.slice(64, 128);
-  const strLength = parseInt(lengthHex, 16);
-  const dataHex = stripped.slice(128, 128 + strLength * 2);
-  let result = '';
-  for (let i = 0; i < dataHex.length; i += 2) {
-    const code = parseInt(dataHex.slice(i, i + 2), 16);
-    if (code > 0) result += String.fromCharCode(code);
-  }
-  return result;
-}
-
-function hexToNumber(hex: string): number {
-  const stripped = hex.startsWith('0x') ? hex.slice(2) : hex;
-  return parseInt(stripped, 16);
-}
-
 /**
  * Fetch ERC-20 name, symbol, decimals via a single Multicall3 aggregate3 call.
  * Uses rpcCall which routes through the RPC pool with automatic failover.
+ * Decoding goes through the shared `abi` helpers (`decString` handles both
+ * standard string and legacy bytes32 symbols, with proper UTF-8).
  */
 async function fetchErc20Meta(
   chainId: number,
   tokenAddress: string,
 ): Promise<{ name: string; symbol: string; decimals: number } | null> {
   const encoded = encAggregate3([
-    { target: tokenAddress, allowFailure: true, callData: '0x' + NAME_SELECTOR.replace('0x', '') },
-    { target: tokenAddress, allowFailure: true, callData: '0x' + SYMBOL_SELECTOR.replace('0x', '') },
-    { target: tokenAddress, allowFailure: true, callData: '0x' + DECIMALS_SELECTOR.replace('0x', '') },
+    { target: tokenAddress, allowFailure: true, callData: '0x' + SEL.name },
+    { target: tokenAddress, allowFailure: true, callData: '0x' + SEL.symbol },
+    { target: tokenAddress, allowFailure: true, callData: '0x' + SEL.decimals },
   ]);
 
   const response = await rpcCall('eth_call', [{ to: MULTICALL3, data: encoded }, 'latest'], chainId);
@@ -65,9 +43,9 @@ async function fetchErc20Meta(
   const results = decAggregate3(response.result);
   if (results.length < 3 || !results[0].success || !results[1].success || !results[2].success) return null;
 
-  const name = hexToUtf8(results[0].data);
-  const symbol = hexToUtf8(results[1].data);
-  const decimals = hexToNumber(results[2].data);
+  const name = decString(results[0].data);
+  const symbol = decString(results[1].data);
+  const decimals = decU8(results[2].data);
 
   if (!name || !symbol) return null;
   return { name, symbol, decimals };

@@ -373,8 +373,10 @@ export class WalletPairTransport implements DAppTransport {
     }
   }
 
-  /** Reconnect a restored session. */
+  /** Force an immediate reconnect (also used for the manual "Reconnect now"). */
   async reconnect(): Promise<void> {
+    if (this.session.phase === 'idle' || this.session.phase === 'closed') return;
+    this.emit('reconnecting');
     await this.session.reconnect();
   }
 

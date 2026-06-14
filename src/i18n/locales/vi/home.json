@@ -21,6 +21,7 @@
     "connDisconnect": "Ngắt kết nối",
     "connEventsHead": "Hoạt động kết nối · {{count}}",
     "connNoEvents": "Chưa có yêu cầu nào trên kết nối này.",
-    "toastReceived": "Đã nhận {{amount}} {{token}}"
+    "toastReceived": "Đã nhận {{amount}} {{token}}",
+    "rescanNativeNote": "Đồng gốc (ETH, BNB, MATIC…) nhận trên một số mạng có thể không hiển thị ở đây. Số dư của bạn vẫn chính xác — hãy mở trình khám phá khối để xem đầy đủ."
   }
 }

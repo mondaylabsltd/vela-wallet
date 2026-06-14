@@ -23,6 +23,9 @@
     "rpcFixLabel": "RPC URL",
     "rpcFixSaveBtn": "Save & Retry",
     "errorSaveRpc": "Failed to save RPC URL.",
+    "rpcProvidersTitle": "Where to get a reliable RPC",
+    "rpcProvidersHint": "Free endpoints — sign up, copy your URL, and paste it above.",
+    "rpcReport": "Still not working? Report it",
     "invalidQrTitle": "Invalid QR",
     "invalidQrMessage": "Please scan a valid Ethereum address or connection URI.",
     "chainFallback": "Chain {{chainId}}"

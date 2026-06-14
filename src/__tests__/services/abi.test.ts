@@ -9,10 +9,26 @@ import {
   encAggregate3, decAggregate3,
   encBalanceOf, encDecimals, encGetEthBalance,
   encQuoteV3, encGetAmountsOut, decAmountsOut,
-  encLatestRound, decChainlinkUsd, decU256, decI256, decU8,
+  encLatestRound, decChainlinkUsd, decU256, decI256, decU8, decString,
   SEL,
   type Call3,
 } from '@/services/abi';
+
+/** Encode an ABI `string` return value: [offset=0x20][length][right-padded data]. */
+function encString(s: string): string {
+  const bytes = Array.from(new TextEncoder().encode(s));
+  const dataHex = bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
+  const offset = (32).toString(16).padStart(64, '0');
+  const length = bytes.length.toString(16).padStart(64, '0');
+  return '0x' + offset + length + dataHex.padEnd(Math.ceil(dataHex.length / 64) * 64, '0');
+}
+
+/** Encode a bytes32-style symbol (legacy tokens like MKR): left-aligned, NUL-padded. */
+function encBytes32(s: string): string {
+  const bytes = Array.from(new TextEncoder().encode(s));
+  const dataHex = bytes.map((b) => b.toString(16).padStart(2, '0')).join('');
+  return '0x' + dataHex.padEnd(64, '0');
+}
 
 describe('abi', () => {
   describe('function selectors', () => {
@@ -194,6 +210,34 @@ describe('abi', () => {
   describe('encLatestRound', () => {
     test('is just the selector', () => {
       expect(encLatestRound()).toBe('0x' + SEL.latestRoundData);
+    });
+  });
+
+  describe('decString', () => {
+    test('decodes a standard ABI string (symbol)', () => {
+      expect(decString(encString('USDC'))).toBe('USDC');
+    });
+
+    test('decodes a multibyte UTF-8 symbol (USD₮0)', () => {
+      // The exact case from the bug report — ₮ is U+20AE (3 UTF-8 bytes).
+      expect(decString(encString('USD₮0'))).toBe('USD₮0');
+    });
+
+    test('decodes a legacy bytes32 symbol (no offset/length header)', () => {
+      expect(decString(encBytes32('MKR'))).toBe('MKR');
+    });
+
+    test('stops at the NUL terminator inside a bytes32 word', () => {
+      expect(decString(encBytes32('DAI'))).toBe('DAI');
+    });
+
+    test('returns empty string for short / empty input', () => {
+      expect(decString('0x')).toBe('');
+      expect(decString('0x00')).toBe('');
+    });
+
+    test('trims surrounding whitespace', () => {
+      expect(decString(encString('  WETH '))).toBe('WETH');
     });
   });
 });

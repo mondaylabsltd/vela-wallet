@@ -23,6 +23,9 @@
     "rpcFixLabel": "RPC URL",
     "rpcFixSaveBtn": "保存并重试",
     "errorSaveRpc": "保存 RPC URL 失败。",
+    "rpcProvidersTitle": "在哪里获取可靠的 RPC",
+    "rpcProvidersHint": "以下为免费节点服务——注册后复制你的 URL，粘贴到上方。",
+    "rpcReport": "仍无法解决？反馈给我们",
     "invalidQrTitle": "无效的 QR 码",
     "invalidQrMessage": "请扫描有效的以太坊地址或连接 URI。",
     "chainFallback": "链 {{chainId}}"

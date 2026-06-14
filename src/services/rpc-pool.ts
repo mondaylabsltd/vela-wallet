@@ -13,6 +13,7 @@ import { DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchChainInfo } from './chain-registry';
 import { getBundlerServiceURL, getNetworkConfig, loadServiceEndpoints } from './storage';
+import { rpcLatencyMs, rpcShouldFail } from './dev/fault-injection';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -393,6 +394,55 @@ function isTransientServerError(error: RPCResponse['error']): boolean {
   );
 }
 
+/**
+ * Classify an `eth_getLogs` error as a *range/size limit* (the request spanned
+ * too many blocks, or would return too many results) rather than an endpoint
+ * fault. These are request-specific: the endpoint is healthy but capped, so the
+ * caller should split the block range and retry — failing over (the next
+ * endpoint usually has the same cap) or banning a working endpoint is wrong.
+ *
+ * Returns the endpoint's stated max *block span* when the message includes one
+ * ("...limited to a 100 range" → 100), `0` when it's a range/result error with
+ * no usable block number (caller should just halve), or `null` when it isn't a
+ * range error at all.
+ */
+export function getLogsRangeCap(error: RPCResponse['error']): number | null {
+  if (!error?.message) return null;
+  const msg = error.message.toLowerCase();
+
+  // Result-count caps ("query returned more than 10000 results"): narrow the
+  // span, but the number is a result count not a block span — signal "halve".
+  if (msg.includes('result') &&
+      (msg.includes('more than') || msg.includes('exceed') || msg.includes('limit') || msg.includes('too many'))) {
+    return 0;
+  }
+
+  // Block-span caps, worded many different ways across providers.
+  const isRangeError =
+    msg.includes('block range') ||
+    msg.includes('block height') ||
+    msg.includes('too many blocks') ||
+    msg.includes('range is too') ||
+    msg.includes('range too') ||
+    msg.includes('range limit') ||
+    msg.includes('limited to') ||
+    (msg.includes('range') &&
+      (msg.includes('exceed') || msg.includes('large') || msg.includes('wide') || msg.includes('maximum')));
+  if (!isRangeError) return null;
+
+  // Recover the stated max block span if present (first integer in the message),
+  // honouring a k/m suffix ("up to a 2K block range" → 2000) so we don't shrink
+  // to a needlessly tiny chunk.
+  const m = msg.match(/(\d[\d,_]*)\s*([km])?/);
+  if (m) {
+    let n = parseInt(m[1].replace(/[,_]/g, ''), 10);
+    if (m[2] === 'k') n *= 1_000;
+    else if (m[2] === 'm') n *= 1_000_000;
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+}
+
 function getSortedEndpoints(chainId: number, type: 'rpc' | 'bundler'): EndpointStats[] {
   const pool = (type === 'rpc' ? rpcPools : bundlerPools).get(chainId) ?? [];
   return [...pool].sort((a, b) => endpointScore(b) - endpointScore(a));
@@ -541,6 +591,14 @@ export async function poolRpcCall(
   chainId: number,
   retried = false,
 ): Promise<RPCResponse> {
+  // Dev fault injection (no-op in production / when no faults are set).
+  const injectedLatency = rpcLatencyMs();
+  if (injectedLatency > 0) await new Promise(r => setTimeout(r, injectedLatency));
+  if (rpcShouldFail(chainId)) {
+    rpcFailedChains.add(chainId);
+    throw new Error(`[fault] RPC forced to fail for chain ${chainId}`);
+  }
+
   await ensurePool(chainId);
 
   let endpoints = getSortedEndpoints(chainId, 'rpc');
@@ -564,6 +622,17 @@ export async function poolRpcCall(
     try {
       const response = await tryEndpoint(ep.url, method, params);
       const ms = Date.now() - t0;
+
+      // eth_getLogs range/size-limit: request-specific, not an endpoint fault.
+      // Return it so the caller can split the block range — must come before the
+      // permanent/transient checks since these errors often carry "exceed" or a
+      // -32000 code that would otherwise (wrongly) ban or fail over the endpoint.
+      if (method === 'eth_getLogs' && response.error && getLogsRangeCap(response.error) !== null) {
+        recordSuccess(ep, ms);
+        rpcFailedChains.delete(chainId);
+        console.log(`[RPC] eth_getLogs → ${shorten(ep.url)} ${ms}ms RANGE_LIMIT: ${response.error.message?.slice(0, 60)} → caller splits`);
+        return response;
+      }
 
       // Ban endpoints that require auth/API key and failover to next
       if (response.error && isPermanentRpcError(response.error)) {

@@ -21,6 +21,7 @@
     "connDisconnect": "Trennen",
     "connEventsHead": "Verbindungsaktivität · {{count}}",
     "connNoEvents": "Noch keine Anfragen über diese Verbindung.",
-    "toastReceived": "{{amount}} {{token}} erhalten"
+    "toastReceived": "{{amount}} {{token}} erhalten",
+    "rescanNativeNote": "Native Coins (ETH, BNB, MATIC…), die in einigen Netzwerken empfangen werden, können hier nicht erkannt werden. Dein Guthaben bleibt korrekt – öffne einen Block-Explorer für den vollständigen Eintrag."
   }
 }
