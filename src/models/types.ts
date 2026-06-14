@@ -236,11 +236,12 @@ export interface ServiceEndpoints {
   /** ERC-4337 bundler service URL */
   bundlerServiceURL: string;
   /**
-   * Fiat exchange-rate endpoint. Must return USD-based rates as
-   * `{ rates: { EUR: 0.92, JPY: 155.3, VND: 25400, … } }`. The displayed currency
-   * list is driven by whatever codes this returns — the default covers ~160
-   * currencies (incl. VND). Swap it (e.g. Frankfurter/ECB,
-   * `https://api.frankfurter.dev/v1/latest?base=USD`) in Settings if preferred.
+   * Fiat exchange-rate endpoint returning USD-based rates. Two shapes are
+   * accepted (see `normalizeRates`): Frankfurter v2's array
+   * `[{base:'USD',quote:'EUR',rate:0.92}]` or an object `{rates:{EUR:0.92,…}}`
+   * (open.er-api / v1). The displayed currency list is driven by whatever codes
+   * this returns — the default (Frankfurter v2) covers ~160 currencies incl. VND.
+   * Keep `?base=USD`: without it Frankfurter returns EUR-based rates.
    */
   fiatRatesURL: string;
 }
@@ -272,8 +273,9 @@ export const DEFAULT_SERVICE_ENDPOINTS: ServiceEndpoints = {
   ethereumDataURL: 'https://ethereum-data.awesometools.dev',
   passkeyIndexURL: 'https://p256-index.getvela.app',
   bundlerServiceURL: 'https://vela-bundler.getvela.app',
-  // open.er-api.com: free, no key, CORS-enabled, ~160 currencies incl. VND.
-  fiatRatesURL: 'https://open.er-api.com/v6/latest/USD',
+  // Frankfurter v2: FOSS + self-hostable, no key, ~160 currencies incl. VND.
+  // base=USD is required (default base is EUR).
+  fiatRatesURL: 'https://api.frankfurter.dev/v2/rates?base=USD',
 };
 
 // MARK: - BLE Message Types

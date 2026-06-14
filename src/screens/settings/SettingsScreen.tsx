@@ -389,7 +389,10 @@ async function checkServiceEndpointHealth(
       const latencyMs = Date.now() - start;
       if (!res.ok) return { status: 'unreachable', latencyMs, detail: `HTTP ${res.status}` };
       const data = await res.json();
-      const n = data?.rates && typeof data.rates === 'object' ? Object.keys(data.rates).length : 0;
+      // Accept Frankfurter v2's array shape or an object `{rates:{…}}` (open.er-api / v1).
+      const n = Array.isArray(data)
+        ? data.length
+        : (data?.rates && typeof data.rates === 'object' ? Object.keys(data.rates).length : 0);
       if (!n) return { status: 'invalid_response', latencyMs, detail: 'No rates returned' };
       return { status: 'ok', latencyMs, detail: `${n} currencies` };
     } catch {
