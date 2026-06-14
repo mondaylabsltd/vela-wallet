@@ -68,6 +68,14 @@
       "detailTo": "宛先",
       "detailValue": "金額",
       "detailData": "データ"
+    },
+    "detail": {
+      "labelApp": "アプリ",
+      "contentMessage": "メッセージ",
+      "contentTypedData": "署名データ",
+      "contentCallData": "コールデータ",
+      "contentMissing": "このリクエストの内容は記録されていません。",
+      "offChainNote": "オフチェーン署名 — オンチェーンには何も送信されていません。"
     }
   }
 }

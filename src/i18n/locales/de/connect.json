@@ -68,6 +68,14 @@
       "detailTo": "An",
       "detailValue": "Wert",
       "detailData": "Daten"
+    },
+    "detail": {
+      "labelApp": "App",
+      "contentMessage": "Nachricht",
+      "contentTypedData": "Signierte Daten",
+      "contentCallData": "Call-Daten",
+      "contentMissing": "Für diese Anfrage wurde kein Inhalt gespeichert.",
+      "offChainNote": "Off-Chain-Signatur – es wurde nichts on-chain gesendet."
     }
   }
 }

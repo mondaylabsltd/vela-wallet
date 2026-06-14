@@ -27,7 +27,7 @@ import { isSigningMethod, handleDAppRequest, handleReadOnlyRPC, extractRequestCh
 import { gateReadOnly, readOnlyKey } from '@/services/readonly-rpc-gate';
 import { PasskeyErrorCode } from '@/modules/passkey';
 import { saveTransaction } from '@/services/storage';
-import { nativeSymbol } from '@/models/network';
+import { buildSigningRecord } from '@/services/dapp-history';
 import {
   fetchBundlerAccountInfo,
   clearBundlerCache,
@@ -419,60 +419,19 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       const result = await handleDAppRequest(request, account, account.address, cid, maxFeeOverride);
       transportRef.current?.sendResponse(request.id, result);
 
-      // Record all dApp signing operations to local history
-      const dappOrigin = dappInfo?.name ?? request.origin ?? '';
-      const now = Math.floor(Date.now() / 1000);
-
-      if (request.method === 'eth_sendTransaction' && typeof result === 'string') {
-        const tx = request.params?.[0] as Record<string, string> | undefined;
-        saveTransaction({
-          id: `dapp-${now}-tx`,
-          userOpHash: '',
-          txHash: result,
-          from: account.address,
-          to: tx?.to ?? '',
-          value: tx?.value ?? '0x0',
-          symbol: nativeSymbol(cid),
-          decimals: 18,
-          chainId: cid,
-          timestamp: now,
-          status: 'confirmed',
-          type: 'dapp_tx',
-          dappOrigin,
-        }).catch(e => console.warn('[DAppConnection] Failed to save tx record:', e));
-      } else if (request.method === 'personal_sign') {
-        saveTransaction({
-          id: `dapp-${now}-msg`,
-          userOpHash: '',
-          txHash: '',
-          from: account.address,
-          to: '',
-          value: '0',
-          symbol: '',
-          decimals: 0,
-          chainId: cid,
-          timestamp: now,
-          status: 'confirmed',
-          type: 'sign_message',
-          dappOrigin,
-        }).catch(e => console.warn('[DAppConnection] Failed to save tx record:', e));
-      } else if (request.method.includes('signTypedData')) {
-        saveTransaction({
-          id: `dapp-${now}-typed`,
-          userOpHash: '',
-          txHash: '',
-          from: account.address,
-          to: '',
-          value: '0',
-          symbol: '',
-          decimals: 0,
-          chainId: cid,
-          timestamp: now,
-          status: 'confirmed',
-          type: 'sign_typed_data',
-          dappOrigin,
-        }).catch(e => console.warn('[DAppConnection] Failed to save tx record:', e));
-      }
+      // Record EVERY approved dApp operation to local history (see dapp-history)
+      // so the Connections panel shows it and its detail. Awaited before clearing
+      // the request so the panel's refresh reads up-to-date storage.
+      const record = buildSigningRecord({
+        method: request.method,
+        params: request.params,
+        result,
+        from: account.address,
+        chainId: cid,
+        dappOrigin: dappInfo?.name ?? request.origin ?? '',
+        nowMs: Date.now(),
+      });
+      await saveTransaction(record).catch(e => console.warn('[DAppConnection] Failed to save record:', e));
 
       setIncomingRequest(null);
     } catch (err: any) {

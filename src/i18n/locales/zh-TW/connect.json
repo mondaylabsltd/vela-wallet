@@ -68,6 +68,14 @@
       "detailTo": "至",
       "detailValue": "金額",
       "detailData": "資料"
+    },
+    "detail": {
+      "labelApp": "應用程式",
+      "contentMessage": "訊息",
+      "contentTypedData": "簽署資料",
+      "contentCallData": "呼叫資料",
+      "contentMissing": "此請求的內容未被記錄。",
+      "offChainNote": "鏈下簽署 — 未向鏈上發送任何內容。"
     }
   }
 }

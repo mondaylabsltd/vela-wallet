@@ -360,7 +360,17 @@ export interface LocalTransaction {
   intent?: string;
   /** USD value at the time of the event, pre-formatted (e.g. "$1.00"). Optional. */
   usd?: string;
+  /**
+   * Raw signed content, captured at sign time so the detail view can show
+   * exactly what was authorized. For sign_message it's the decoded message
+   * text; for sign_typed_data the typed-data JSON; for dapp_tx the calldata.
+   * Capped in length to keep history/cloud-sync small. Older records lack it.
+   */
+  signedContent?: string;
 }
+
+/** Cap stored signed payloads so a huge typed-data blob can't bloat history. */
+export const MAX_SIGNED_CONTENT = 8000;
 
 export async function saveTransaction(tx: LocalTransaction): Promise<void> {
   const txs = await loadTransactions();

@@ -68,6 +68,14 @@
       "detailTo": "Alıcı",
       "detailValue": "Değer",
       "detailData": "Veri"
+    },
+    "detail": {
+      "labelApp": "Uygulama",
+      "contentMessage": "Mesaj",
+      "contentTypedData": "İmzalanan veri",
+      "contentCallData": "Çağrı verisi",
+      "contentMissing": "Bu istek için içerik kaydedilmedi.",
+      "offChainNote": "Zincir dışı imza — zincire hiçbir şey gönderilmedi."
     }
   }
 }

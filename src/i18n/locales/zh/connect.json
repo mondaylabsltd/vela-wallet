@@ -68,6 +68,14 @@
       "detailTo": "收款方",
       "detailValue": "金额",
       "detailData": "数据"
+    },
+    "detail": {
+      "labelApp": "应用",
+      "contentMessage": "消息",
+      "contentTypedData": "签名数据",
+      "contentCallData": "调用数据",
+      "contentMissing": "此请求的内容未被记录。",
+      "offChainNote": "链下签名 — 未向链上发送任何内容。"
     }
   }
 }

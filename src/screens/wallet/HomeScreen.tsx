@@ -15,18 +15,20 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import {
-  Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, Settings, X,
+  ArrowRight, Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, Settings, X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Platform, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { QRScanner } from '@/components/QRScanner';
+import { ConnectionFlowStates } from '@/components/ConnectionFlowStates';
 import { ActivityRow } from '@/components/ui/ActivityRow';
+import { ConnectionEventDetailSheet } from '@/components/ui/ConnectionEventDetailSheet';
 import { AmountText } from '@/components/ui/AmountText';
 import { AppModal } from '@/components/ui/AppModal';
 import { CurrencySheet } from '@/components/ui/CurrencySheet';
@@ -38,7 +40,7 @@ import { WaveDock } from '@/components/ui/WaveDock';
 
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
-import { useDAppConnection } from '@/models/dapp-connection';
+import { useDAppConnection, type ConnectionStatus } from '@/models/dapp-connection';
 import { getAllNetworksSync, type Network } from '@/models/network';
 import { shortAddr, tokenUsdValue } from '@/models/types';
 import { shortAddress, useWallet } from '@/models/wallet-state';
@@ -117,6 +119,7 @@ export default function HomeScreen() {
   const [aliasMap, setAliasMap] = useState<Map<string, string>>(new Map());
   const aliasAttempted = useRef<Set<string>>(new Set());
   const [detailTx, setDetailTx] = useState<LocalTransaction | null>(null);
+  const [eventTx, setEventTx] = useState<LocalTransaction | null>(null);
   const txByIdRef = useRef<Map<string, LocalTransaction>>(new Map());
   const insets = useSafeAreaInsets();
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -240,6 +243,16 @@ export default function HomeScreen() {
     return () => clearInterval(timer);
   }, [tab, loadData]);
 
+  // Refresh connection activity the moment a request is handled (approve/reject
+  // both clear incomingRequest). The provider awaits the history write before
+  // clearing, so storage is already up to date when this fires.
+  const hadRequest = useRef(false);
+  useEffect(() => {
+    const has = conn.incomingRequest !== null;
+    if (hadRequest.current && !has) loadData();
+    hadRequest.current = has;
+  }, [conn.incomingRequest, loadData]);
+
   // Reset incoming-detection when the active account changes.
   useEffect(() => { initializedRef.current = false; setNewItemId(null); setReceipt(null); }, [address]);
 
@@ -309,26 +322,42 @@ export default function HomeScreen() {
     refreshAllBalances();
   }, [address, totalUsd, state.accounts, refreshAllBalances]);
 
-  // --- scanner ---
-  const onScan = useCallback((data: string) => {
-    if (/^0x[0-9a-fA-F]{40}$/.test(data)) {
-      setShowScanner(false);
-      router.push(`/send?prefilledRecipient=${data}`);
-    } else if (isWalletPairURI(data)) {
-      setShowScanner(false);
-      connectToWalletPair(data);
-      router.navigate('/connect');
-    } else {
-      const bridge = parseRemoteInjectURL(data);
-      if (bridge) {
-        setShowScanner(false);
-        connectToBridge(bridge);
-        router.navigate('/connect');
-      } else {
-        showAlert(t('home.invalidQrTitle'), t('home.invalidQrBody'));
-      }
+  // --- connect (shared by scanner + pasted URI) ---
+  // Returns true if `data` was a recognized pairing link and a connection was
+  // kicked off. We surface the whole pairing flow (fingerprint → connected)
+  // inline on the Connections tab rather than pushing a separate screen.
+  const connectFromUri = useCallback((data: string): boolean => {
+    const trimmed = data.trim();
+    if (isWalletPairURI(trimmed)) {
+      connectToWalletPair(trimmed);
+      setTab('connections');
+      return true;
     }
-  }, [router, connectToWalletPair, connectToBridge]);
+    const bridge = parseRemoteInjectURL(trimmed);
+    if (bridge) {
+      connectToBridge(bridge);
+      setTab('connections');
+      return true;
+    }
+    return false;
+  }, [connectToWalletPair, connectToBridge]);
+
+  const onScan = useCallback((data: string) => {
+    setShowScanner(false);
+    if (/^0x[0-9a-fA-F]{40}$/.test(data)) {
+      router.push(`/send?prefilledRecipient=${data}`);
+      return;
+    }
+    if (!connectFromUri(data)) {
+      showAlert(t('home.invalidQrTitle'), t('home.invalidQrBody'));
+    }
+  }, [router, connectFromUri]);
+
+  const onPasteConnect = useCallback((uri: string) => {
+    if (!connectFromUri(uri)) {
+      showAlert(t('connect.list.invalidLinkTitle'), t('connect.list.invalidLinkBody'));
+    }
+  }, [connectFromUri]);
 
   const filteredActivity = selectedChainId != null
     ? activity.filter((a) => a.chainId === selectedChainId)
@@ -478,13 +507,14 @@ export default function HomeScreen() {
           >
             {renderHeader()}
             <ConnectionsView
-              connected={connected}
+              status={conn.status}
               dappName={conn.dappInfo?.name ?? null}
               dappUrl={conn.dappInfo?.url ?? null}
-              chainId={conn.chainId}
               events={connEvents}
               onDisconnect={conn.disconnectBridge}
               onConnect={() => setShowScanner(true)}
+              onPasteConnect={onPasteConnect}
+              onOpenEvent={setEventTx}
             />
           </ScrollView>
         )}
@@ -526,6 +556,13 @@ export default function HomeScreen() {
         rate={rate}
         currency={currency}
         onClose={() => setDetailTx(null)}
+      />
+
+      {/* dApp signing-record detail (message / typed-data / transaction) */}
+      <ConnectionEventDetailSheet
+        visible={eventTx !== null}
+        tx={eventTx}
+        onClose={() => setEventTx(null)}
       />
 
       {/* Account switcher */}
@@ -587,18 +624,32 @@ export default function HomeScreen() {
 // ---------------------------------------------------------------------------
 
 function ConnectionsView({
-  connected, dappName, dappUrl, chainId, events, onDisconnect, onConnect,
+  status, dappName, dappUrl, events, onDisconnect, onConnect, onPasteConnect, onOpenEvent,
 }: {
-  connected: boolean;
+  status: ConnectionStatus;
   dappName: string | null;
   dappUrl: string | null;
-  chainId: number;
   events: ConnectionEvent[];
   onDisconnect: () => void;
   onConnect: () => void;
+  onPasteConnect: (uri: string) => void;
+  onOpenEvent: (tx: LocalTransaction) => void;
 }) {
   const { t } = useTranslation();
-  if (!connected) {
+  const [linkInput, setLinkInput] = useState('');
+  const submitPaste = () => {
+    if (!linkInput.trim()) return;
+    onPasteConnect(linkInput);
+    setLinkInput('');
+  };
+
+  // Pairing in progress (fingerprint / waiting) or failed — shown inline so the
+  // user never leaves the Connections panel while connecting.
+  if (status === 'connecting' || status === 'error') {
+    return <ConnectionFlowStates onScanAgain={onConnect} />;
+  }
+
+  if (status === 'disconnected') {
     return (
       <View style={styles.connEmpty}>
         <View style={styles.connEmptyIcon}><Plug size={26} color={color.fg.subtle} strokeWidth={2} /></View>
@@ -607,10 +658,40 @@ function ConnectionsView({
         <Pressable style={styles.connectBtn} onPress={onConnect}>
           <Text style={styles.connectBtnText}>{t('home.connScanBtn')}</Text>
         </Pressable>
+
+        {/* or — paste a pairing URI when scanning isn't handy */}
+        <View style={styles.connOrRow}>
+          <View style={styles.connOrLine} />
+          <Text style={styles.connOrText}>{t('connect.list.orDivider')}</Text>
+          <View style={styles.connOrLine} />
+        </View>
+
+        <View style={styles.connPasteRow}>
+          <TextInput
+            style={styles.connPasteInput}
+            value={linkInput}
+            onChangeText={setLinkInput}
+            placeholder={t('connect.list.pastePlaceholder')}
+            placeholderTextColor={color.fg.subtle}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="go"
+            onSubmitEditing={submitPaste}
+          />
+          <Pressable
+            style={[styles.connPasteBtn, !linkInput.trim() && styles.connPasteBtnDisabled]}
+            onPress={submitPaste}
+            disabled={!linkInput.trim()}
+          >
+            <ArrowRight size={18} color={!linkInput.trim() ? color.fg.subtle : color.fg.inverse} strokeWidth={2.5} />
+          </Pressable>
+        </View>
       </View>
     );
   }
 
+  // Connected / reconnecting — active session + its signing activity.
+  const reconnecting = status === 'reconnecting';
   return (
     <View>
       <VelaCard elevated style={styles.connCard}>
@@ -620,7 +701,12 @@ function ConnectionsView({
             <Text style={styles.connName} numberOfLines={1}>{dappName ?? t('home.connDefaultName')}</Text>
             {dappUrl ? <Text style={styles.connUrl} numberOfLines={1}>{dappUrl}</Text> : null}
           </View>
-          <View style={styles.connStatus}><View style={styles.connDot} /><Text style={styles.connStatusText}>{t('home.connActive')}</Text></View>
+          <View style={styles.connStatus}>
+            <View style={[styles.connDot, reconnecting && styles.connDotReconnecting]} />
+            <Text style={[styles.connStatusText, reconnecting && styles.connStatusTextReconnecting]}>
+              {reconnecting ? t('connect.list.reconnecting') : t('home.connActive')}
+            </Text>
+          </View>
         </View>
         <Text style={styles.connNote}>{t('home.connNote')}</Text>
         <Pressable style={styles.disconnectBtn} onPress={onDisconnect}>
@@ -633,13 +719,14 @@ function ConnectionsView({
         <Text style={styles.connNoEvents}>{t('home.connNoEvents')}</Text>
       ) : (
         events.map((e) => (
-          <View key={e.id} style={styles.eventRow}>
+          <Pressable key={e.id} style={styles.eventRow} onPress={() => onOpenEvent(e.tx)}>
             <View style={styles.eventInfo}>
               <Text style={styles.eventLabel} numberOfLines={1}>{e.label}</Text>
               <Text style={styles.eventSub} numberOfLines={1}>{e.subtitle}</Text>
             </View>
             <Text style={styles.eventTime}>{relativeTime(e.timestamp)}</Text>
-          </View>
+            <ChevronRight size={16} color={color.fg.subtle} strokeWidth={2} />
+          </Pressable>
         ))
       )}
     </View>
@@ -811,7 +898,9 @@ const styles = createStyles(() => ({
   connUrl: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
   connStatus: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   connDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: color.success.base },
+  connDotReconnecting: { backgroundColor: color.warning.base, opacity: 0.8 },
   connStatusText: { fontSize: text.sm, ...inter.semibold, color: color.success.base },
+  connStatusTextReconnecting: { color: color.warning.base },
   connNote: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, marginTop: space.lg },
   disconnectBtn: {
     marginTop: space.lg, alignItems: 'center',
@@ -836,4 +925,16 @@ const styles = createStyles(() => ({
   connEmptySub: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center', lineHeight: 20, paddingHorizontal: space.xl },
   connectBtn: { marginTop: space.md, backgroundColor: color.accent.base, borderRadius: radius.lg, paddingVertical: space.lg, paddingHorizontal: space['3xl'] },
   connectBtnText: { fontSize: text.base, ...inter.semibold, color: color.fg.inverse },
+  connOrRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg, alignSelf: 'stretch', paddingHorizontal: space.xl, marginTop: space.md },
+  connOrLine: { flex: 1, height: 1, backgroundColor: color.border.base },
+  connOrText: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
+  connPasteRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, alignSelf: 'stretch', paddingHorizontal: space.xl },
+  connPasteInput: {
+    flex: 1, fontSize: text.sm, fontWeight: '500', fontFamily: font.mono,
+    color: color.fg.base, padding: space.lg,
+    backgroundColor: color.bg.sunken, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: color.border.base,
+  },
+  connPasteBtn: { width: 44, height: 44, borderRadius: radius.lg, backgroundColor: color.accent.base, alignItems: 'center', justifyContent: 'center' },
+  connPasteBtnDisabled: { backgroundColor: color.bg.sunken },
 }));

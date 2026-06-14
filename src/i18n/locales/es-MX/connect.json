@@ -68,6 +68,14 @@
       "detailTo": "Para",
       "detailValue": "Valor",
       "detailData": "Datos"
+    },
+    "detail": {
+      "labelApp": "App",
+      "contentMessage": "Mensaje",
+      "contentTypedData": "Datos firmados",
+      "contentCallData": "Datos de llamada",
+      "contentMissing": "No se registró el contenido de esta solicitud.",
+      "offChainNote": "Firma fuera de cadena: no se envió nada on-chain."
     }
   }
 }

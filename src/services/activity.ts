@@ -50,6 +50,8 @@ export interface ConnectionEvent {
   label: string;
   subtitle: string;
   timestamp: number;
+  /** Source record — powers the tap-through detail sheet. */
+  tx: LocalTransaction;
 }
 
 /**
@@ -255,6 +257,7 @@ export async function loadConnectionEvents(address: string): Promise<ConnectionE
       label: connectionEventLabel(t),
       subtitle: [t.dappOrigin, chainName(t.chainId)].filter(Boolean).join(' · '),
       timestamp: t.timestamp,
+      tx: t,
     }))
     .sort((a, b) => b.timestamp - a.timestamp);
 }

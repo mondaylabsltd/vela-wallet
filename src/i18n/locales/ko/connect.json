@@ -68,6 +68,14 @@
       "detailTo": "받는 곳",
       "detailValue": "값",
       "detailData": "데이터"
+    },
+    "detail": {
+      "labelApp": "앱",
+      "contentMessage": "메시지",
+      "contentTypedData": "서명 데이터",
+      "contentCallData": "콜 데이터",
+      "contentMissing": "이 요청의 내용은 기록되지 않았습니다.",
+      "offChainNote": "오프체인 서명 — 온체인으로 전송된 내용은 없습니다."
     }
   }
 }

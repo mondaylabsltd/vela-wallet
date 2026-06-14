@@ -68,6 +68,14 @@
       "detailTo": "To",
       "detailValue": "Value",
       "detailData": "Data"
+    },
+    "detail": {
+      "labelApp": "App",
+      "contentMessage": "Message",
+      "contentTypedData": "Signed data",
+      "contentCallData": "Call data",
+      "contentMissing": "Content wasn’t recorded for this request.",
+      "offChainNote": "Off-chain signature — nothing was sent on-chain."
     }
   }
 }

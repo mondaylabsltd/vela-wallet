@@ -16,6 +16,7 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { QRScanner } from '@/components/QRScanner';
+import { ConnectionFlowStates } from '@/components/ConnectionFlowStates';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { chainName } from '@/models/network';
@@ -24,9 +25,9 @@ import { isWalletPairURI } from '@/services/walletpair-transport';
 import { showAlert } from '@/services/platform';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 import {
-  Radio, QrCode, Shield, AlertTriangle,
+  QrCode, Shield,
   Globe, Zap, Smartphone,
-  ArrowRight, Link, Lock, Fingerprint, X,
+  ArrowRight, Link, Lock, X,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 
@@ -35,10 +36,8 @@ export default function ConnectScreen() {
   const router = useRouter();
   const { state, activeAccount } = useWallet();
   const {
-    status, errorMessage, session, chainId, dappInfo,
-    connectionType, pendingFingerprint,
-    connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
-    disconnectBridge,
+    status, session, chainId, dappInfo, connectionType,
+    connectToBridge, connectToWalletPair, disconnectBridge,
   } = useDAppConnection();
 
   const [showScanner, setShowScanner] = useState(false);
@@ -169,85 +168,9 @@ export default function ConnectScreen() {
         )}
 
         {/* ================================================================= */}
-        {/* Connecting — fingerprint verification (WalletPair) */}
+        {/* Connecting (fingerprint / waiting) + Error — shared inline states */}
         {/* ================================================================= */}
-        {status === 'connecting' && pendingFingerprint && (
-          <Animated.View entering={fadeInDown(50, 300)}>
-            <VelaCard style={styles.fingerprintCard}>
-              <View style={styles.fingerprintHeader}>
-                <Fingerprint size={28} color={color.accent.base} strokeWidth={2} />
-                <Text style={styles.fingerprintTitle}>{t('connect.list.verifyTitle')}</Text>
-              </View>
-
-              <Text style={styles.fingerprintHint}>
-                {t('connect.list.verifyHint')}
-              </Text>
-
-              <View style={styles.fingerprintCodeRow}>
-                {pendingFingerprint.split('').map((digit, i) => (
-                  <View key={i} style={styles.fingerprintDigitBox}>
-                    <Text style={styles.fingerprintDigit}>{digit}</Text>
-                  </View>
-                ))}
-              </View>
-
-              {dappInfo && (
-                <View style={styles.fingerprintDapp}>
-                  {dappInfo.icon ? (
-                    <Image source={{ uri: dappInfo.icon }} style={styles.dappIcon} />
-                  ) : (
-                    <Globe size={14} color={color.fg.muted} strokeWidth={2} />
-                  )}
-                  <Text style={styles.fingerprintDappText} numberOfLines={1}>
-                    {dappInfo.name}
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.fingerprintBadge}>
-                <Lock size={12} color={color.success.base} strokeWidth={2.5} />
-                <Text style={styles.fingerprintBadgeText}>{t('connect.list.encryptedBadge')}</Text>
-              </View>
-
-              <View style={styles.fingerprintActions}>
-                <VelaButton
-                  title={t('connect.list.confirm')}
-                  onPress={confirmFingerprint}
-                  variant="accent"
-                  style={styles.fingerprintBtn}
-                />
-                <VelaButton
-                  title={t('connect.list.cancel')}
-                  onPress={cancelFingerprint}
-                  variant="secondary"
-                  style={styles.fingerprintBtn}
-                />
-              </View>
-            </VelaCard>
-          </Animated.View>
-        )}
-
-        {/* ================================================================= */}
-        {/* Connecting — waiting for dApp to accept */}
-        {/* ================================================================= */}
-        {status === 'connecting' && !pendingFingerprint && (
-          <Animated.View entering={fadeIn(0, 300)} style={styles.centered}>
-            <View style={styles.waitingIconWrap}>
-              <Radio size={32} color={color.accent.base} />
-            </View>
-            <Text style={styles.statusText}>{t('connect.list.waitingStatus')}</Text>
-            <Text style={styles.statusHint}>
-              {t('connect.list.waitingHint')}
-            </Text>
-            <VelaButton
-              title={t('connect.list.cancel')}
-              onPress={disconnectBridge}
-              variant="secondary"
-              compact
-              style={styles.cancelBtn}
-            />
-          </Animated.View>
-        )}
+        <ConnectionFlowStates onScanAgain={() => setShowScanner(true)} />
 
         {/* ================================================================= */}
         {/* Connected */}
@@ -316,33 +239,6 @@ export default function ConnectScreen() {
             </View>
           </Animated.View>
         )}
-
-        {/* ================================================================= */}
-        {/* Error */}
-        {/* ================================================================= */}
-        {status === 'error' && (
-          <Animated.View entering={fadeInDown(0, 300)}>
-            <VelaCard style={styles.errorCard}>
-              <AlertTriangle size={28} color={color.error.base} />
-              <Text style={styles.errorTitle}>{t('connect.list.connFailed')}</Text>
-              <Text style={styles.errorMessage}>{errorMessage ?? t('connect.list.connError')}</Text>
-              <VelaButton
-                title={t('connect.list.scanAgain')}
-                onPress={() => setShowScanner(true)}
-                variant="accent"
-                style={styles.errorBtn}
-              />
-              {session && (
-                <VelaButton
-                  title={t('connect.list.retry')}
-                  onPress={() => connectToBridge(session)}
-                  variant="secondary"
-                  style={styles.retryBtn}
-                />
-              )}
-            </VelaCard>
-          </Animated.View>
-        )}
       </ScrollView>
 
       {/* QR Scanner modal */}
@@ -409,8 +305,6 @@ const styles = createStyles(() => ({
     gap: space.lg,
   },
   emptyText: { fontSize: text.lg, ...inter.regular, color: color.fg.muted },
-  statusText: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
-  statusHint: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center' },
 
   // Guide card
   guideCard: { padding: space['2xl'], gap: space.lg },
@@ -497,44 +391,6 @@ const styles = createStyles(() => ({
     fontSize: text.base, ...inter.semibold, color: color.accent.base,
   },
 
-  // Fingerprint verification
-  fingerprintCard: { padding: space['2xl'], gap: space.lg, alignItems: 'center' },
-  fingerprintHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  fingerprintTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
-  fingerprintHint: {
-    fontSize: text.base, ...inter.regular, color: color.fg.muted,
-    textAlign: 'center', lineHeight: 20,
-  },
-  fingerprintCodeRow: {
-    flexDirection: 'row', gap: space.lg,
-    marginVertical: space.xl,
-  },
-  fingerprintDigitBox: {
-    width: 52, height: 64, borderRadius: radius.lg,
-    backgroundColor: color.bg.sunken,
-    borderWidth: 1, borderColor: color.border.base,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  fingerprintDigit: {
-    fontSize: 28, fontWeight: '700' as const, fontFamily: font.mono,
-    color: color.fg.base,
-  },
-  fingerprintDapp: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  fingerprintDappText: {
-    fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono,
-    color: color.fg.subtle,
-  },
-  fingerprintBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: space.md, paddingVertical: 4,
-    backgroundColor: color.success.soft, borderRadius: radius.full,
-  },
-  fingerprintBadgeText: {
-    fontSize: text.xs, ...inter.semibold, color: color.success.base,
-  },
-  fingerprintActions: { width: '100%', gap: space.md, marginTop: space.md },
-  fingerprintBtn: { width: '100%' },
-
   // Connected card
   connectedCard: { padding: space['2xl'], gap: space.lg },
   connectedHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
@@ -568,20 +424,5 @@ const styles = createStyles(() => ({
 
   disconnectSection: { marginTop: space['2xl'] },
 
-  // Error card
-  errorCard: { padding: space['2xl'], alignItems: 'center', gap: space.md },
-  errorTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
-  errorMessage: {
-    fontSize: text.base, ...inter.regular, color: color.fg.muted,
-    textAlign: 'center', lineHeight: 20,
-  },
   dappIcon: { width: 14, height: 14, borderRadius: 3 },
-  waitingIconWrap: {
-    width: 64, height: 64, borderRadius: 32,
-    backgroundColor: color.accent.base + '12',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  cancelBtn: { marginTop: space.lg },
-  errorBtn: { width: '100%', marginTop: space.md },
-  retryBtn: { width: '100%' },
 }));

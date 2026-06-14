@@ -68,6 +68,14 @@
       "detailTo": "Ke",
       "detailValue": "Nilai",
       "detailData": "Data"
+    },
+    "detail": {
+      "labelApp": "Aplikasi",
+      "contentMessage": "Pesan",
+      "contentTypedData": "Data yang ditandatangani",
+      "contentCallData": "Data panggilan",
+      "contentMissing": "Konten untuk permintaan ini tidak tercatat.",
+      "offChainNote": "Tanda tangan off-chain — tidak ada yang dikirim ke on-chain."
     }
   }
 }
