@@ -100,6 +100,11 @@ async function scanChain(address: string, chainId: number): Promise<IncomingTran
       // Standard ERC-20 Transfer: topics = [sig, from, to], data = value.
       const topics: string[] = log.topics ?? [];
       if (topics.length < 3) continue;
+      // Never trust the RPC's topic filter alone: only accept logs whose
+      // recipient (topics[2]) is actually this wallet. A buggy/caching/malicious
+      // endpoint in the failover pool could otherwise surface transfers
+      // addressed to someone else as if we'd received them (fake "Received").
+      if ((topics[2] ?? '').toLowerCase() !== addressTopic(address)) continue;
       const fromAddr = '0x' + topics[1].slice(26);
       const value = BigInt(log.data && log.data !== '0x' ? log.data : '0x0');
       if (value === 0n) continue;
