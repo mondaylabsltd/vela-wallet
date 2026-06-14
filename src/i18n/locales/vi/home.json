@@ -22,6 +22,19 @@
     "connEventsHead": "Hoạt động kết nối · {{count}}",
     "connNoEvents": "Chưa có yêu cầu nào trên kết nối này.",
     "toastReceived": "Đã nhận {{amount}} {{token}}",
-    "rescanNativeNote": "Đồng gốc (ETH, BNB, MATIC…) nhận trên một số mạng có thể không hiển thị ở đây. Số dư của bạn vẫn chính xác — hãy mở trình khám phá khối để xem đầy đủ."
+    "rescanButton": "Quét lại",
+    "rescanTitle": "Quét lại hoạt động gần đây",
+    "rescanSubtitle": "Thiếu một khoản thanh toán? Truy vấn trực tiếp blockchain để tìm các giao dịch gần đây.",
+    "rescanWindow10m": "10 phút qua",
+    "rescanWindow1h": "1 giờ qua",
+    "rescanWindow6h": "6 giờ qua",
+    "rescanScanning": "Đang quét {{window}}…",
+    "rescanFound": "Đã tìm thấy {{count}} khoản thanh toán mới.",
+    "rescanNone": "Không tìm thấy khoản thanh toán mới nào trong {{window}}.",
+    "rescanFailed": "Không thể kết nối {{names}}. Hãy sửa RPC từ biểu ngữ trang chủ, hoặc kiểm tra trình khám phá khối.",
+    "rescanAgain": "Quét lại lần nữa",
+    "rescanClose": "Xong",
+    "rescanNativeNote": "Đồng gốc (ETH, BNB, MATIC…) nhận trên một số mạng có thể không hiển thị ở đây. Số dư của bạn vẫn chính xác — hãy mở trình khám phá khối để xem đầy đủ.",
+    "rescanExplorerTitle": "Kiểm tra trực tiếp trên trình khám phá khối"
   }
 }

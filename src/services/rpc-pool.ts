@@ -802,6 +802,9 @@ export async function getChainRpcUrl(chainId: number): Promise<string | null> {
 /** Force refresh the endpoint pool for a chain. */
 export async function refreshPool(chainId: number): Promise<void> {
   poolInitAt.delete(chainId);
+  // Drop the cached "fastest RPC" winner — it may point at the endpoint the user
+  // just replaced, and it's handed to the bundler via X-Rpc-Url for up to an hour.
+  fastestRpcCache.delete(chainId);
   await initPool(chainId);
 }
 

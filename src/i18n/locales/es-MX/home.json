@@ -22,6 +22,19 @@
     "connEventsHead": "Actividad de la conexión · {{count}}",
     "connNoEvents": "Aún no hay solicitudes en esta conexión.",
     "toastReceived": "Recibiste {{amount}} {{token}}",
-    "rescanNativeNote": "Las monedas nativas (ETH, BNB, MATIC…) recibidas en algunas redes pueden no detectarse aquí. Tu saldo sigue siendo correcto: abre un explorador de bloques para ver el registro completo."
+    "rescanButton": "Reescanear",
+    "rescanTitle": "Reescanear actividad reciente",
+    "rescanSubtitle": "¿Te falta un pago? Consulta directamente la blockchain para ver transferencias recientes.",
+    "rescanWindow10m": "Últimos 10 minutos",
+    "rescanWindow1h": "Última hora",
+    "rescanWindow6h": "Últimas 6 horas",
+    "rescanScanning": "Escaneando {{window}}…",
+    "rescanFound": "Se encontraron {{count}} pagos nuevos.",
+    "rescanNone": "No se encontraron pagos nuevos en {{window}}.",
+    "rescanFailed": "No se pudo conectar con {{names}}. Corrige su RPC desde el banner de inicio o consulta un explorador de bloques.",
+    "rescanAgain": "Escanear de nuevo",
+    "rescanClose": "Listo",
+    "rescanNativeNote": "Las monedas nativas (ETH, BNB, MATIC…) recibidas en algunas redes pueden no detectarse aquí. Tu saldo sigue siendo correcto: abre un explorador de bloques para ver el registro completo.",
+    "rescanExplorerTitle": "Consulta directamente en un explorador de bloques"
   }
 }

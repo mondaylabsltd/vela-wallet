@@ -22,6 +22,19 @@
     "connEventsHead": "연결 활동 · {{count}}",
     "connNoEvents": "이 연결에 아직 요청이 없습니다.",
     "toastReceived": "{{amount}} {{token}} 받음",
-    "rescanNativeNote": "일부 네트워크에서 받은 기본 코인(ETH, BNB, MATIC 등)은 여기에서 감지되지 않을 수 있습니다. 잔액은 항상 정확합니다 — 전체 내역은 블록 탐색기에서 확인하세요."
+    "rescanButton": "다시 스캔",
+    "rescanTitle": "최근 활동 다시 스캔",
+    "rescanSubtitle": "입금이 보이지 않나요? 블록체인에 직접 조회해 최근 전송을 확인합니다.",
+    "rescanWindow10m": "최근 10분",
+    "rescanWindow1h": "최근 1시간",
+    "rescanWindow6h": "최근 6시간",
+    "rescanScanning": "{{window}} 스캔 중…",
+    "rescanFound": "새 입금 {{count}}건을 찾았습니다.",
+    "rescanNone": "{{window}}에 새 입금이 없습니다.",
+    "rescanFailed": "{{names}}에 연결할 수 없습니다. 홈 배너에서 RPC를 수정하거나 블록 탐색기를 확인하세요.",
+    "rescanAgain": "다시 스캔하기",
+    "rescanClose": "완료",
+    "rescanNativeNote": "일부 네트워크에서 받은 기본 코인(ETH, BNB, MATIC 등)은 여기에서 감지되지 않을 수 있습니다. 잔액은 항상 정확합니다 — 전체 내역은 블록 탐색기에서 확인하세요.",
+    "rescanExplorerTitle": "블록 탐색기에서 직접 확인"
   }
 }

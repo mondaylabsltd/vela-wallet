@@ -103,12 +103,24 @@ function AppShell() {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     PlusJakartaSans_400Regular,
     PlusJakartaSans_500Medium,
     PlusJakartaSans_600SemiBold,
     PlusJakartaSans_700Bold,
   });
+  // A wallet must always boot. Font loading can fail or hang indefinitely —
+  // e.g. a web host that serves HTML instead of the .ttf files, or a flaky
+  // network — and useFonts() never resolves. Release the gate after a short
+  // grace period so we fall back to the system font instead of spinning forever.
+  const [fontTimedOut, setFontTimedOut] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setFontTimedOut(true), 3000);
+    return () => clearTimeout(t);
+  }, []);
+  useEffect(() => {
+    if (fontError) console.warn('[fonts] load failed, using system fallback:', fontError);
+  }, [fontError]);
 
   useEffect(() => {
     if (__DEV__) installFaultConsole();
@@ -131,16 +143,27 @@ export default function RootLayout() {
       loadKeepAwakePreference(),
       // Apply the stored UI language before the first render.
       loadLanguage(),
-    ]).then(() => setReady(true));
+    ])
+      .then(() => setReady(true))
+      .catch((e) => {
+        // A failed init task (storage/config/network) must not strand the
+        // user on the splash. Boot with defaults and let screens recover.
+        console.warn('[boot] init task failed, continuing with defaults:', e);
+        setReady(true);
+      });
 
-    hasPendingUploads().then((has) => {
-      if (has) {
-        retryPendingUploads().catch(() => {});
-      }
-    });
+    hasPendingUploads()
+      .then((has) => {
+        if (has) {
+          retryPendingUploads().catch(() => {});
+        }
+      })
+      .catch(() => {});
   }, []);
 
-  if (!ready || !fontsLoaded) {
+  // Fonts are non-blocking: proceed once loaded, failed, or past the grace period.
+  const fontsSettled = fontsLoaded || !!fontError || fontTimedOut;
+  if (!ready || !fontsSettled) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="small" color={color.accent.base} />

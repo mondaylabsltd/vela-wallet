@@ -22,6 +22,19 @@
     "connEventsHead": "Aktivitas koneksi · {{count}}",
     "connNoEvents": "Belum ada permintaan di koneksi ini.",
     "toastReceived": "{{amount}} {{token}} diterima",
-    "rescanNativeNote": "Koin native (ETH, BNB, MATIC…) yang diterima di sebagian jaringan mungkin tidak terdeteksi di sini. Saldo Anda tetap akurat — buka block explorer untuk catatan lengkap."
+    "rescanButton": "Pindai ulang",
+    "rescanTitle": "Pindai ulang aktivitas terbaru",
+    "rescanSubtitle": "Ada pembayaran yang hilang? Kueri langsung ke blockchain untuk transfer terbaru.",
+    "rescanWindow10m": "10 menit terakhir",
+    "rescanWindow1h": "1 jam terakhir",
+    "rescanWindow6h": "6 jam terakhir",
+    "rescanScanning": "Memindai {{window}}…",
+    "rescanFound": "Ditemukan {{count}} pembayaran baru.",
+    "rescanNone": "Tidak ada pembayaran baru dalam {{window}}.",
+    "rescanFailed": "Tidak dapat menjangkau {{names}}. Perbaiki RPC-nya dari banner beranda, atau periksa block explorer.",
+    "rescanAgain": "Pindai lagi",
+    "rescanClose": "Selesai",
+    "rescanNativeNote": "Koin native (ETH, BNB, MATIC…) yang diterima di sebagian jaringan mungkin tidak terdeteksi di sini. Saldo Anda tetap akurat — buka block explorer untuk catatan lengkap.",
+    "rescanExplorerTitle": "Cek langsung di block explorer"
   }
 }

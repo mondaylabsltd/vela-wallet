@@ -22,6 +22,19 @@
     "connEventsHead": "Verbindungsaktivität · {{count}}",
     "connNoEvents": "Noch keine Anfragen über diese Verbindung.",
     "toastReceived": "{{amount}} {{token}} erhalten",
-    "rescanNativeNote": "Native Coins (ETH, BNB, MATIC…), die in einigen Netzwerken empfangen werden, können hier nicht erkannt werden. Dein Guthaben bleibt korrekt – öffne einen Block-Explorer für den vollständigen Eintrag."
+    "rescanButton": "Erneut scannen",
+    "rescanTitle": "Letzte Aktivität erneut scannen",
+    "rescanSubtitle": "Fehlt eine Zahlung? Frage die Blockchain direkt nach aktuellen Transfers ab.",
+    "rescanWindow10m": "Letzte 10 Minuten",
+    "rescanWindow1h": "Letzte Stunde",
+    "rescanWindow6h": "Letzte 6 Stunden",
+    "rescanScanning": "{{window}} wird gescannt…",
+    "rescanFound": "{{count}} neue Zahlung(en) gefunden.",
+    "rescanNone": "Keine neuen Zahlungen in {{window}} gefunden.",
+    "rescanFailed": "{{names}} nicht erreichbar. Korrigiere den RPC über das Startseiten-Banner oder prüfe einen Block-Explorer.",
+    "rescanAgain": "Noch einmal scannen",
+    "rescanClose": "Fertig",
+    "rescanNativeNote": "Native Coins (ETH, BNB, MATIC…), die in einigen Netzwerken empfangen werden, können hier nicht erkannt werden. Dein Guthaben bleibt korrekt – öffne einen Block-Explorer für den vollständigen Eintrag.",
+    "rescanExplorerTitle": "Direkt im Block-Explorer prüfen"
   }
 }

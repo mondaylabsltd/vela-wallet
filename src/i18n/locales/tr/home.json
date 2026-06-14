@@ -22,6 +22,19 @@
     "connEventsHead": "Bağlantı etkinliği · {{count}}",
     "connNoEvents": "Bu bağlantıda henüz istek yok.",
     "toastReceived": "{{amount}} {{token}} alındı",
-    "rescanNativeNote": "Bazı ağlarda alınan yerel coin’ler (ETH, BNB, MATIC…) burada algılanmayabilir. Bakiyeniz yine de doğrudur — tam kayıt için blok gezginini açın."
+    "rescanButton": "Yeniden tara",
+    "rescanTitle": "Son etkinliği yeniden tara",
+    "rescanSubtitle": "Bir ödeme mi eksik? Son transferler için doğrudan blok zincirini sorgula.",
+    "rescanWindow10m": "Son 10 dakika",
+    "rescanWindow1h": "Son 1 saat",
+    "rescanWindow6h": "Son 6 saat",
+    "rescanScanning": "{{window}} taranıyor…",
+    "rescanFound": "{{count}} yeni ödeme bulundu.",
+    "rescanNone": "{{window}} içinde yeni ödeme bulunamadı.",
+    "rescanFailed": "{{names}} ağına ulaşılamadı. RPC’yi ana ekran başlığından düzeltin veya bir blok gezginini kontrol edin.",
+    "rescanAgain": "Tekrar tara",
+    "rescanClose": "Bitti",
+    "rescanNativeNote": "Bazı ağlarda alınan yerel coin’ler (ETH, BNB, MATIC…) burada algılanmayabilir. Bakiyeniz yine de doğrudur — tam kayıt için blok gezginini açın.",
+    "rescanExplorerTitle": "Doğrudan blok gezgininde kontrol et"
   }
 }

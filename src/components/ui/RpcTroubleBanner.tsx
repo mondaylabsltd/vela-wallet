@@ -14,7 +14,7 @@ import { color, createStyles, inter, radius, shadow, space, text } from '@/const
 import { getAllNetworksSync, type Network } from '@/models/network';
 import { refreshPool } from '@/services/rpc-pool';
 import { openURL, showAlert } from '@/services/platform';
-import { saveNetworkConfig } from '@/services/storage';
+import { getNetworkConfig, saveNetworkConfig } from '@/services/storage';
 import { buildBugReportURL } from '@/services/feedback';
 import type { AppLanguage } from '@/i18n';
 import { AlertTriangle, ExternalLink, Wifi, X } from 'lucide-react-native';
@@ -52,22 +52,30 @@ export function RpcTroubleBanner({
 
   if (failedNetworks.length === 0) return null;
 
-  const openFix = (chainId: number) => {
-    const net = getAllNetworksSync().find(n => n.chainId === chainId);
+  const openFix = async (chainId: number) => {
+    // Pre-fill the user's *saved* override, not the built-in default. The default
+    // is the endpoint that's currently failing, so re-showing it just makes a
+    // prior fix look like it didn't stick — and invites re-saving the broken URL.
+    // No override yet => leave empty so the placeholder guides them.
+    const saved = await getNetworkConfig(chainId);
     setFixChainId(chainId);
-    setFixUrl(net?.rpcURL ?? '');
+    setFixUrl(saved?.rpcURL ?? '');
   };
 
   const handleSave = async () => {
     if (!fixChainId || !fixUrl.trim()) return;
     setSaving(true);
     try {
+      // Preserve any explorer/bundler the user already customized in Settings:
+      // saveNetworkConfig replaces the whole entry by chainId, so falling back to
+      // the built-in defaults here would silently clobber those overrides.
+      const saved = await getNetworkConfig(fixChainId);
       const net = getAllNetworksSync().find(n => n.chainId === fixChainId);
       await saveNetworkConfig({
         chainId: fixChainId,
         rpcURL: fixUrl.trim(),
-        explorerURL: net?.explorerURL ?? '',
-        bundlerURL: net?.bundlerURL ?? '',
+        explorerURL: saved?.explorerURL ?? net?.explorerURL ?? '',
+        bundlerURL: saved?.bundlerURL ?? net?.bundlerURL ?? '',
       });
       await refreshPool(fixChainId);
       const fixed = fixChainId;

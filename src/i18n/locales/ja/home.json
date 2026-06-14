@@ -22,6 +22,19 @@
     "connEventsHead": "接続のアクティビティ · {{count}}",
     "connNoEvents": "この接続にはまだリクエストがありません。",
     "toastReceived": "{{amount}} {{token}} を受け取りました",
-    "rescanNativeNote": "一部のネットワークで受け取ったネイティブコイン（ETH、BNB、MATIC など）はここで検出できないことがあります。残高は常に正確です——完全な記録はブロックエクスプローラーでご確認ください。"
+    "rescanButton": "再スキャン",
+    "rescanTitle": "最近のアクティビティを再スキャン",
+    "rescanSubtitle": "入金が見当たりませんか？ブロックチェーンに直接問い合わせて最近の送金を確認します。",
+    "rescanWindow10m": "過去10分",
+    "rescanWindow1h": "過去1時間",
+    "rescanWindow6h": "過去6時間",
+    "rescanScanning": "{{window}}をスキャン中…",
+    "rescanFound": "新しい入金が{{count}}件見つかりました。",
+    "rescanNone": "{{window}}に新しい入金は見つかりませんでした。",
+    "rescanFailed": "{{names}}に接続できませんでした。ホームのバナーからRPCを修正するか、ブロックエクスプローラーで確認してください。",
+    "rescanAgain": "もう一度スキャン",
+    "rescanClose": "完了",
+    "rescanNativeNote": "一部のネットワークで受け取ったネイティブコイン（ETH、BNB、MATIC など）はここで検出できないことがあります。残高は常に正確です——完全な記録はブロックエクスプローラーでご確認ください。",
+    "rescanExplorerTitle": "ブロックエクスプローラーで直接確認"
   }
 }
