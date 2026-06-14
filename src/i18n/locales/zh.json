@@ -13,7 +13,9 @@
     "pickerSubtitle": "选择应用中使用的语言。",
     "followSystem": "跟随系统",
     "english": "English",
-    "chinese": "简体中文"
+    "chinese": "简体中文",
+    "contributeNote": "发现某处翻译不准确？欢迎反馈帮我们改进——感谢你让 Vela 变得更好。",
+    "contributeCta": "在 GitHub 提交建议"
   },
   "settings": {
     "title": "设置",

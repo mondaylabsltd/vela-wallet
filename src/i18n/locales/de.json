@@ -13,7 +13,9 @@
     "pickerSubtitle": "Wählen Sie die Sprache für die gesamte App.",
     "followSystem": "System folgen",
     "english": "English",
-    "chinese": "简体中文"
+    "chinese": "简体中文",
+    "contributeNote": "Eine Übersetzung wirkt falsch? Hilf uns, sie zu verbessern — danke, dass du Vela besser machst.",
+    "contributeCta": "Korrektur auf GitHub vorschlagen"
   },
   "settings": {
     "title": "Einstellungen",

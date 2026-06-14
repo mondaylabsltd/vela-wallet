@@ -13,7 +13,9 @@
     "pickerSubtitle": "Pilih bahasa yang digunakan di seluruh aplikasi.",
     "followSystem": "Ikuti Sistem",
     "english": "English",
-    "chinese": "简体中文"
+    "chinese": "简体中文",
+    "contributeNote": "Menemukan terjemahan yang kurang tepat? Bantu kami memperbaikinya — terima kasih sudah membuat Vela lebih baik.",
+    "contributeCta": "Sarankan perbaikan di GitHub"
   },
   "settings": {
     "title": "Pengaturan",

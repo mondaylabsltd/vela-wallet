@@ -13,7 +13,9 @@
     "pickerSubtitle": "Chọn ngôn ngữ dùng trong toàn bộ ứng dụng.",
     "followSystem": "Theo hệ thống",
     "english": "English",
-    "chinese": "简体中文"
+    "chinese": "简体中文",
+    "contributeNote": "Thấy bản dịch chưa chính xác? Hãy báo cho chúng tôi để cải thiện — cảm ơn bạn đã giúp Vela tốt hơn.",
+    "contributeCta": "Đề xuất chỉnh sửa trên GitHub"
   },
   "settings": {
     "title": "Cài đặt",

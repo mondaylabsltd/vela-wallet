@@ -909,6 +909,24 @@ function ThemePicker({ s, current, onChange }: {
 // Language Picker — Follow System / English / 简体中文 (instant, no restart)
 // ---------------------------------------------------------------------------
 
+const VELA_REPO_URL = 'https://github.com/atshelchin/vela-wallet';
+
+/**
+ * Deep-link to the prefilled "translation fix" issue form, scoped to the
+ * language the user is actually reading. The `language` query param matches a
+ * dropdown option in .github/ISSUE_TEMPLATE/translation.yml verbatim, so the
+ * form opens with that language already selected.
+ */
+function translationIssueURL(lang: AppLanguage): string {
+  const option = `${LANGUAGE_NATIVE_NAMES[lang]} (${lang})`;
+  const query = [
+    'template=translation.yml',
+    `title=${encodeURIComponent(`[i18n] ${option}: `)}`,
+    `language=${encodeURIComponent(option)}`,
+  ].join('&');
+  return `${VELA_REPO_URL}/issues/new?${query}`;
+}
+
 function LanguagePickerModal({ s, visible, preference, systemLanguage, onSelect, onClose }: {
   s: S; visible: boolean; preference: LanguagePreference; systemLanguage: AppLanguage;
   onSelect: (pref: LanguagePreference) => void; onClose: () => void;
@@ -920,6 +938,8 @@ function LanguagePickerModal({ s, visible, preference, systemLanguage, onSelect,
     // Each language is listed by its endonym (shown in its own script).
     ...SUPPORTED_LANGUAGES.map((code) => ({ key: code, label: LANGUAGE_NATIVE_NAMES[code] })),
   ];
+  // The language the user is actually reading — what a translation report is about.
+  const effectiveLang: AppLanguage = preference === 'auto' ? systemLanguage : preference;
   return (
     <AppModal visible={visible} onClose={onClose}>
       <View style={s.modalContainer}>
@@ -941,6 +961,13 @@ function LanguagePickerModal({ s, visible, preference, systemLanguage, onSelect,
               </Pressable>
             );
           })}
+          <Pressable style={s.langContribute} onPress={() => openURL(translationIssueURL(effectiveLang))}>
+            <Text style={s.langContributeNote}>{t('language.contributeNote')}</Text>
+            <View style={s.langContributeCtaRow}>
+              <Text style={s.langContributeCta}>{t('language.contributeCta')}</Text>
+              <ExternalLink size={14} color={color.accent.base} strokeWidth={2.4} />
+            </View>
+          </Pressable>
         </ScrollView>
       </View>
     </AppModal>
@@ -1574,6 +1601,12 @@ const styleFactory = () => ({
   fmtRowInfo: { flex: 1, gap: 2 },
   fmtExample: { fontSize: text.lg, ...inter.semibold, color: color.fg.base, fontFamily: font.mono },
   fmtNote: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
+
+  // Language picker — "help us translate" footer below the language list
+  langContribute: { marginTop: space.lg, paddingHorizontal: space.sm, paddingVertical: space.md, gap: space.sm },
+  langContributeNote: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, lineHeight: 20 },
+  langContributeCtaRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
+  langContributeCta: { fontSize: text.sm, ...inter.medium, color: color.accent.base },
 
   // Logout
   logoutButton: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, paddingVertical: space.xl, backgroundColor: color.bg.raised, borderRadius: radius.xl, borderWidth: 1, borderColor: color.border.base, gap: space.md, ...shadow.sm },

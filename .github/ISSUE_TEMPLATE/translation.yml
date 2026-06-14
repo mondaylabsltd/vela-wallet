@@ -1,0 +1,133 @@
+name: 🌐 Translation fix
+description: Report an inaccurate or awkward translation, or suggest better wording.
+title: "[i18n] "
+labels: ["i18n", "translation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make **Vela** read well in your language! 🙏
+
+        You don't need to touch any code — just fill in the boxes below. It takes about a minute:
+
+        1. 📸 **Add a screenshot** of where you saw the text
+        2. 📍 **Tell us where** it appears (which screen / button)
+        3. ❌ **Paste the current text** (what it says now)
+        4. ✅ **Write your suggestion** (what it should say)
+        5. 💬 **Say why** your version is better
+
+        > 💬 **Please write your notes in English if you can.** One maintainer reviews every
+        > language, so English keeps reviews fast. Your **suggested translation** should of
+        > course stay in the target language — that's exactly what we need.
+
+        Every fix counts — even a single word. ❤️
+  - type: dropdown
+    id: language
+    attributes:
+      label: 1. Language
+      description: Which language has the issue? (Pre-filled if you came from the app's language screen.)
+      options:
+        - English (en)
+        - 简体中文 (zh)
+        - 繁體中文（台灣） (zh-TW)
+        - 繁體中文（香港） (zh-HK)
+        - 日本語 (ja)
+        - 한국어 (ko)
+        - Tiếng Việt (vi)
+        - Bahasa Indonesia (id)
+        - Türkçe (tr)
+        - Español (México) (es-MX)
+        - Português (Brasil) (pt-BR)
+        - Français (fr)
+        - Deutsch (de)
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: 2. 📸 Screenshot (highly recommended)
+      description: |
+        A picture is the fastest way for us to find the exact text and fix it.
+        **Drag an image into this box, or paste it from your clipboard** — GitHub uploads it for you.
+        Bonus: circle or point an arrow at the wrong text if you can.
+      placeholder: Drop or paste your screenshot here…
+  - type: input
+    id: location
+    attributes:
+      label: 3. 📍 Where did you see it?
+      description: Which screen, and which element (button, title, message…). This tells us which file to open.
+      placeholder: "e.g. Receive screen → page title   ·   Settings → Language → footer link"
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: 4. ❌ Current text (what the app shows NOW)
+      description: |
+        Copy it exactly — character for character, including any punctuation.
+        Tip: in the app you can usually tap-and-hold to select and copy the text.
+      placeholder: |
+        Example (한국어):
+        받기
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: suggested
+    attributes:
+      label: 5. ✅ Suggested text (what it SHOULD say)
+      description: Your more accurate or more natural translation. If the length matters (e.g. it must fit a button), keep it short.
+      placeholder: |
+        Example (한국어):
+        입금
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: problem_type
+    attributes:
+      label: 6. What's wrong with the current text?
+      description: Pick the closest one — add details in the next box.
+      options:
+        - Wrong meaning / mistranslation
+        - Awkward or unnatural wording
+        - Grammar or spelling mistake
+        - Text is too long (cut off or overflowing the screen)
+        - Inconsistent with a term used elsewhere in the app
+        - Still untranslated (shows English or another language)
+        - Other (explain below)
+    validations:
+      required: true
+  - type: textarea
+    id: reason
+    attributes:
+      label: 7. 💬 Why is your version better? (optional but helpful)
+      description: "A short reason helps us trust the change. Please write in English if you can."
+      placeholder: |
+        e.g. "받기 means 'to receive/accept' generally, but for deposits 입금 is the
+        standard banking term users expect here."
+  - type: input
+    id: key
+    attributes:
+      label: Translation key (optional — for advanced users)
+      description: If you opened the code and found the exact key, paste its path so we can jump straight to it.
+      placeholder: "e.g. receive.title   ·   language.contributeCta"
+  - type: checkboxes
+    id: pr
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd be happy to open a pull request with this fix myself.
+          required: false
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ### 🛠️ Want to fix it yourself? (optional)
+
+        Translations are plain JSON files — no build step needed:
+        - **Shared strings** → `src/i18n/locales/<lang>.json`
+        - **Per-screen strings** → `src/i18n/locales/<lang>/<screen>.json`
+
+        Find the English value under `src/i18n/locales/en…`, copy the **key** next to it,
+        then edit that same key in **your language's** file and open a PR. Thank you! ❤️
