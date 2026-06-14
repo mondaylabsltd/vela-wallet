@@ -46,7 +46,7 @@
     "modalValueLabel": "金額",
     "modalUnverifiedContract": "未検証のコントラクト",
     "modalRecipient": "受取人",
-    "modalSpender": "支出者",
+    "modalSpender": "使用者",
     "modalInteractingWith": "やり取りする相手",
     "modalSigningFor": "署名の対象",
     "modalTypeLabel": "種類",

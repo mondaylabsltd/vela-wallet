@@ -25,7 +25,7 @@
       "headerSyncFailed": "Đồng bộ đa thiết bị",
       "accountNameLabel": "Tên tài khoản",
       "accountNamePlaceholder": "Nhập tên cho tài khoản của bạn",
-      "accountNameHint": "Tên này được lưu cùng khóa công khai của bạn on-chain để đăng nhập trên nhiều thiết bị.",
+      "accountNameHint": "Tên này được lưu trên chuỗi (on-chain) cùng khóa công khai của bạn để đăng nhập trên nhiều thiết bị.",
       "ack0": "Đây là ví tự lưu ký. Khóa riêng tư của passkey do trình quản lý mật khẩu trên thiết bị của bạn quản lý (iCloud Keychain / Google Password Manager). Vela Wallet không thể truy cập hay khôi phục khóa đó.",
       "ack1": "Nếu mất thiết bị, bạn có thể khôi phục ví trên thiết bị mới thông qua tài khoản iCloud hoặc Google của mình.",
       "ack2": "Nếu tài khoản iCloud hoặc Google của bạn bị xâm phạm, quyền kiểm soát ví cũng có thể bị xâm phạm. Hãy bảo vệ bằng mật khẩu mạnh và 2FA.",

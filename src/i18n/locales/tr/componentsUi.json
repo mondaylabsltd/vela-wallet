@@ -6,7 +6,7 @@
       "freeTitle": "Ücretsiz Etkinleştirme",
       "freeBadge": "ÜCRETSİZ",
       "freeRequesting": "İsteniyor...",
-      "freeDesc": "Yeni kullanıcılar için Vela tarafından sponsorlanır",
+      "freeDesc": "Yeni kullanıcılar için Vela tarafından karşılanır",
       "selfTitle": "Kendin Etkinleştir",
       "selfDesc": "Gas hesabını etkinleştirmek için {{symbol}} gönderin",
       "activationFee": "Etkinleştirme Ücreti",
@@ -18,7 +18,7 @@
       "denialDefault": "Ücretsiz etkinleştirme kullanılamıyor.",
       "denialNonceExceeded": "Ücretsiz kota tükendi.",
       "denialTreasuryDepleted": "Ücretsiz fon geçici olarak boş.",
-      "denialBalanceTooLow": "Cüzdan bakiyesi hak kazanmak için çok düşük.",
+      "denialBalanceTooLow": "Ücretsiz etkinleştirme için bakiyeniz yetersiz.",
       "denialNoPasskey": "Ücretsiz etkinleştirme için geçiş anahtarı gerekli.",
       "denialRateLimited": "Çok fazla istek. Daha sonra deneyin.",
       "denialTransferFailed": "Transfer başarısız. Tekrar deneyin."
@@ -47,7 +47,7 @@
       "typeLabel": "Tür",
       "intentUnknown": "Bilinmeyen",
       "intentSend": "Gönder",
-      "signingFor": "İmza sahibi"
+      "signingFor": "İmzalanan hesap"
     },
     "currency": {
       "title": "Görüntüleme para birimi",

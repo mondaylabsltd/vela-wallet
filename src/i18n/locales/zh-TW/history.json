@@ -10,7 +10,7 @@
     "emptyFilter": "此網路上沒有任何交易",
     "txLabelDappTx": "dApp 交易",
     "txLabelSignMessage": "簽署訊息",
-    "txLabelSignTypedData": "簽署型別資料",
+    "txLabelSignTypedData": "簽署結構化資料",
     "txLabelSent": "已發送 {{symbol}}",
     "txSentSubtitle": "至 {{toName}} · {{networkName}}"
   }

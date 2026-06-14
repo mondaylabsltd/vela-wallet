@@ -31,7 +31,7 @@
       "scanAgain": "重新扫描",
       "retry": "重试",
       "invalidLinkTitle": "无效链接",
-      "invalidLinkBody": "不是有效的连接链接。支持：WalletPair URI 或 Remote Inject URL。"
+      "invalidLinkBody": "不是有效的连接链接。支持：WalletPair URI 或 远程注入链接。"
     },
     "dapp": {
       "noWallet": "请先创建钱包",

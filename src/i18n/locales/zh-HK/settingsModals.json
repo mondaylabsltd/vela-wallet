@@ -4,7 +4,7 @@
       "modalTitle": "網絡",
       "chainId": "Chain {{chainId}}",
       "fieldRpcUrl": "RPC URL",
-      "fieldExplorer": "瀏覽器",
+      "fieldExplorer": "區塊鏈瀏覽器",
       "fieldBundler": "BUNDLER",
       "removeTitle": "移除網絡",
       "removeBody": "要移除此自訂網絡嗎？",

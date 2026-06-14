@@ -4,7 +4,7 @@
     "actionReceive": "Recibir",
     "actionHistory": "Historial",
     "sectionTitle": "Activos",
-    "hideZero": "Ocultar en cero",
+    "hideZero": "Ocultar vacíos",
     "hiddenCount": "{{count}} ocultos",
     "addToken": "Agregar",
     "searchPlaceholder": "Buscar tokens...",

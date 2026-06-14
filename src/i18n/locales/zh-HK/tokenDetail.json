@@ -10,6 +10,6 @@
     "labelPrice": "價格",
     "priceValue": "1 {{symbol}} = {{value}}",
     "labelTransactions": "交易",
-    "viewOnExplorer": "在瀏覽器中查看"
+    "viewOnExplorer": "在區塊鏈瀏覽器中查看"
   }
 }

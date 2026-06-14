@@ -60,7 +60,7 @@
       "sendTx": "거래 보내기",
       "signMsg": "메시지 서명",
       "signTyped": "타입 데이터 서명",
-      "sendTxDesc": "이 앱이 당신의 지갑에서 거래를 보내려고 합니다.",
+      "sendTxDesc": "이 앱이 내 지갑에서 거래를 보내려고 합니다.",
       "signMsgDesc": "이 앱이 메시지 서명을 요청합니다.",
       "signTypedDesc": "이 앱이 구조화된 데이터 서명을 요청합니다.",
       "signDesc": "이 앱이 서명을 요청합니다.",

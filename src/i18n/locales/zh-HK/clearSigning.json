@@ -2,7 +2,7 @@
   "clearSigning": {
     "title": "清晰簽署測試",
     "subtitle": "ERC-7730 簽署介面情境",
-    "hint": "點按一個情境，以模擬數據開啟簽署視窗。清晰簽署描述符會即時從 ERC-7730 登記庫擷取。",
+    "hint": "點按一個情境，以模擬數據開啟簽署視窗。清晰簽署描述符會即時從 ERC-7730 登記處擷取。",
     "scenarioErc20Transfer": "ERC-20 轉帳",
     "scenarioErc20TransferSub": "清晰簽署 — transfer(address, uint256)",
     "scenarioErc20Approve": "ERC-20 授權（無上限）",

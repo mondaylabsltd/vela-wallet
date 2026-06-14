@@ -1,13 +1,13 @@
 {
   "onboarding": {
     "welcome": {
-      "tagline": "당신의 키, 당신의 코인.\n탭 한 번처럼 간단하게.",
+      "tagline": "내 키, 내 코인.\n탭 한 번이면 충분해요.",
       "createWallet": "지갑 만들기",
       "alreadyHaveWallet": "이미 지갑이 있어요"
     },
     "settings": {
       "title": "설정",
-      "sectionAppearance": "화면",
+      "sectionAppearance": "테마",
       "themeLabelLight": "라이트",
       "themeLabelDark": "다크",
       "themeLabelAuto": "자동",
@@ -26,7 +26,7 @@
       "accountNameLabel": "계정 이름",
       "accountNamePlaceholder": "계정 이름을 입력하세요",
       "accountNameHint": "이 이름은 기기 간 로그인을 위해 공개 키와 함께 온체인에 저장됩니다.",
-      "ack0": "이것은 자가 수탁형 지갑입니다. 패스키 개인 키는 기기의 비밀번호 관리자(iCloud 키체인 / Google 비밀번호 관리자)가 관리합니다. Vela Wallet은 이를 접근하거나 복구할 수 없습니다.",
+      "ack0": "이것은 자가 수탁형 지갑입니다. 패스키 개인 키는 기기의 비밀번호 관리자(iCloud 키체인 / Google 비밀번호 관리자)가 관리합니다. Vela Wallet은 이 키에 접근하거나 복구할 수 없습니다.",
       "ack1": "기기를 분실해도 iCloud 또는 Google 계정을 통해 새 기기에서 지갑을 복원할 수 있습니다.",
       "ack2": "iCloud 또는 Google 계정이 침해되면 지갑 제어권도 침해될 수 있습니다. 강력한 비밀번호와 2단계 인증으로 보호하세요.",
       "ack3": "다음에 동의합니다: ",
@@ -36,7 +36,7 @@
       "ack3Period": ".",
       "createWalletBtn": "지갑 만들기",
       "successTitle": "지갑이 준비되었습니다!",
-      "successMessage": "당신의 주소는 지원되는 {{count}}개 네트워크 모두에서 작동합니다.",
+      "successMessage": "주소는 지원되는 {{count}}개 네트워크 모두에서 작동합니다.",
       "verifyHint": "지갑을 사용하기 전에 아래를 눌러 신원이 정상 작동하는지 확인하세요.",
       "verifySignInBtn": "확인 후 로그인",
       "syncFailedTitle": "동기화 실패",

@@ -1,14 +1,14 @@
 {
   "componentsUi": {
     "funding": {
-      "title": "Activer le compte de Gas",
+      "title": "Activer le compte Gas",
       "balance": "Solde",
       "freeTitle": "Activation gratuite",
-      "freeBadge": "GRATUIT",
+      "freeBadge": "OFFERT",
       "freeRequesting": "Demande en cours...",
-      "freeDesc": "Offerte par Vela aux nouveaux utilisateurs",
+      "freeDesc": "Offert par Vela aux nouveaux utilisateurs",
       "selfTitle": "Activer soi-même",
-      "selfDesc": "Envoyez des {{symbol}} pour activer le compte de Gas",
+      "selfDesc": "Envoyez des {{symbol}} pour activer le compte Gas",
       "activationFee": "Frais d'activation",
       "gasAccount": "Compte de Gas",
       "checkBtn": "C'est envoyé",
@@ -40,7 +40,7 @@
       "rawCalldataToggle": "Calldata brut · {{bytes}} octets",
       "signMessage": "Signer un message",
       "signTypedData": "Signer des données typées",
-      "spenderLabel": "Dépensier",
+      "spenderLabel": "Adresse autorisée",
       "recipientLabel": "Destinataire",
       "interactingLabel": "Interaction avec",
       "unverifiedLabel": "Contrat non vérifié",

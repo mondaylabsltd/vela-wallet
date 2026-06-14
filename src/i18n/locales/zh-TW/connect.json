@@ -59,7 +59,7 @@
       "blePermBody": "需要藍牙權限。",
       "sendTx": "發送交易",
       "signMsg": "簽署訊息",
-      "signTyped": "簽署型別資料",
+      "signTyped": "簽署結構化資料",
       "sendTxDesc": "此應用程式想從您的錢包發送一筆交易。",
       "signMsgDesc": "此應用程式想請您簽署一則訊息。",
       "signTypedDesc": "此應用程式想請您簽署結構化資料。",

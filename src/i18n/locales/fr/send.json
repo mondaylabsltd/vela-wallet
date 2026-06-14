@@ -54,7 +54,7 @@
     "txRetryBtn": "Réessayer",
 
     "txErrorTimeout": "Transaction envoyée mais le délai de confirmation a expiré. Vérifiez l'historique plus tard.",
-    "txErrorBundlerLoop": "Le solde du compte de Gas est sans cesse rejeté par le bundler. Réessayez plus tard ou augmentez le niveau de Gas.",
+    "txErrorBundlerLoop": "Le solde du compte Gas est sans cesse rejeté par le bundler. Réessayez plus tard ou augmentez le niveau de Gas.",
     "txErrorBundlerFund": "Le compte du bundler a besoin de plus de Gas. Veuillez l'approvisionner dans les Réglages.",
     "txErrorPublicKey": "Clé publique introuvable pour ce compte"
   }

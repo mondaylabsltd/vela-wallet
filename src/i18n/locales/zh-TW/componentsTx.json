@@ -35,7 +35,7 @@
       "statusSucceeded": "成功",
       "opContractInteraction": "合約互動",
       "opSignature": "簽章",
-      "opTypedDataSignature": "型別資料簽章",
+      "opTypedDataSignature": "結構化資料簽章",
       "opTransfer": "轉帳"
     }
   }

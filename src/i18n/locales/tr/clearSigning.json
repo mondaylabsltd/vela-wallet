@@ -48,7 +48,7 @@
     "modalRecipient": "ALICI",
     "modalSpender": "HARCAYAN",
     "modalInteractingWith": "ETKİLEŞİM KURULAN",
-    "modalSigningFor": "İMZA SAHİBİ",
+    "modalSigningFor": "İMZALANAN HESAP",
     "modalTypeLabel": "Tür",
     "modalUnlimitedWarning": "Sınırsız — bu sözleşme tüm token'larınızı harcayabilir",
     "modalUndecodedWarning": "Çözümlenemiyor — ERC-7730 tanımlayıcısı yok ({{bytes}} bayt)",

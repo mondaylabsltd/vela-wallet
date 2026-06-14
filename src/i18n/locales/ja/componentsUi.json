@@ -40,7 +40,7 @@
       "rawCalldataToggle": "生の calldata · {{bytes}} バイト",
       "signMessage": "メッセージに署名",
       "signTypedData": "型付きデータに署名",
-      "spenderLabel": "支出者",
+      "spenderLabel": "使用者",
       "recipientLabel": "受取人",
       "interactingLabel": "やり取りする相手",
       "unverifiedLabel": "未検証のコントラクト",

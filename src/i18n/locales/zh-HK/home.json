@@ -4,7 +4,7 @@
     "manageAssets": "管理資產",
     "tabActivity": "活動",
     "tabConnections": "連接",
-    "liveIndicator": "即時 · 正在接收付款",
+    "liveIndicator": "即時 · 正在等候付款",
     "emptyNoActivityNetwork": "此網絡暫無活動",
     "emptyNoActivity": "暫無活動",
     "emptySubtitle": "收到的付款會即時顯示於此。",

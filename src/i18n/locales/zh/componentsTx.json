@@ -35,7 +35,7 @@
       "statusSucceeded": "成功",
       "opContractInteraction": "合约交互",
       "opSignature": "签名",
-      "opTypedDataSignature": "类型化数据签名",
+      "opTypedDataSignature": "结构化数据签名",
       "opTransfer": "转账"
     }
   }

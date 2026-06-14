@@ -15,14 +15,14 @@
       "modalTitle": "账户",
       "total": "合计 {{amount}}",
       "createNew": "创建新账户",
-      "signInExisting": "导入已有账户"
+      "signInExisting": "登录已有账户"
     },
     "endpoints": {
       "modalTitle": "服务节点",
       "description": "这些服务为您的钱包提供支持。\n您可以自行部署以实现完全自托管。",
       "chainDataLabel": "链数据索引",
       "chainDataHint": "提供网络信息、代币数据和链图标",
-      "passkeyLabel": "PASSKEY 索引",
+      "passkeyLabel": "通行密钥索引",
       "passkeyHint": "存储通行密钥公钥，用于跨设备登录",
       "bundlerLabel": "打包器服务",
       "bundlerHint": "需要兼容 Vela Bundler 的节点",

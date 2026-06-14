@@ -20,7 +20,7 @@
     "endpoints": {
       "modalTitle": "服務端點",
       "description": "這些服務驅動著您的錢包。\n您可以部署自己的執行個體，達到完全自我保管。",
-      "chainDataLabel": "鏈上資料索引",
+      "chainDataLabel": "鏈資料索引",
       "chainDataHint": "提供網路資訊、代幣資料與鏈標誌",
       "passkeyLabel": "通行密鑰索引",
       "passkeyHint": "儲存通行密鑰公鑰，用於跨裝置登入",

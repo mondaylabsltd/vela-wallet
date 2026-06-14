@@ -46,7 +46,7 @@
     "modalValueLabel": "Valeur",
     "modalUnverifiedContract": "CONTRAT NON VÉRIFIÉ",
     "modalRecipient": "DESTINATAIRE",
-    "modalSpender": "DÉPENSIER",
+    "modalSpender": "ADRESSE AUTORISÉE",
     "modalInteractingWith": "INTERACTION AVEC",
     "modalSigningFor": "SIGNATURE POUR",
     "modalTypeLabel": "Type",

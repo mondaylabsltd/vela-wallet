@@ -19,7 +19,7 @@
     },
     "endpoints": {
       "modalTitle": "Servis Uç Noktaları",
-      "description": "Bu servisler cüzdanınıza güç verir.\nTam kendi kontrolünüz için kendi örneklerinizi dağıtabilirsiniz.",
+      "description": "Bu servisler cüzdanınızın çalışmasını sağlar.",
       "chainDataLabel": "ZİNCİR VERİ DİZİNİ",
       "chainDataHint": "Ağ bilgisi, token verisi ve zincir logoları sağlar",
       "passkeyLabel": "PASSKEY DİZİNİ",

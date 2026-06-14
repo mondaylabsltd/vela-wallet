@@ -50,7 +50,7 @@
     "modalInteractingWith": "상호작용 대상",
     "modalSigningFor": "서명 대상",
     "modalTypeLabel": "유형",
-    "modalUnlimitedWarning": "무제한 — 이 컨트랙트가 당신의 모든 토큰을 사용할 수 있습니다",
+    "modalUnlimitedWarning": "무제한 — 이 컨트랙트가 보유한 모든 토큰을 사용할 수 있습니다",
     "modalUndecodedWarning": "디코딩할 수 없음 — ERC-7730 디스크립터 없음 ({{bytes}} 바이트)",
     "modalRawCalldata": "원시 calldata",
     "modalSignatureRequest": "서명 요청",

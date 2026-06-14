@@ -9,7 +9,7 @@
     "viewOnExplorer": "Xem trên Explorer",
     "emptyFilter": "Không có giao dịch nào trên mạng này",
     "txLabelDappTx": "Giao dịch dApp",
-    "txLabelSignMessage": "Ký tin nhắn",
+    "txLabelSignMessage": "Ký thông điệp",
     "txLabelSignTypedData": "Ký dữ liệu có cấu trúc",
     "txLabelSent": "Đã gửi {{symbol}}",
     "txSentSubtitle": "Đến {{toName}} · {{networkName}}"

@@ -1,7 +1,7 @@
 {
   "onboarding": {
     "welcome": {
-      "tagline": "你的密钥，你的资产。\n轻触即可完成。",
+      "tagline": "您的密钥，您的资产。\n轻触即可完成。",
       "createWallet": "创建钱包",
       "alreadyHaveWallet": "我已有钱包"
     },

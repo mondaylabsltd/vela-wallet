@@ -6,7 +6,7 @@
     "filterAll": "全部",
     "emptyTitle": "暫無交易",
     "emptyBody": "你發送的交易會顯示於此。你亦可在區塊鏈瀏覽器查看完整記錄。",
-    "viewOnExplorer": "在瀏覽器中查看",
+    "viewOnExplorer": "在區塊鏈瀏覽器中查看",
     "emptyFilter": "此網絡暫無交易",
     "txLabelDappTx": "dApp 交易",
     "txLabelSignMessage": "簽署訊息",

@@ -21,6 +21,6 @@
     "connDisconnect": "Desconectar",
     "connEventsHead": "Atividade da conexão · {{count}}",
     "connNoEvents": "Nenhuma solicitação nesta conexão ainda.",
-    "toastReceived": "{{amount}} {{token}} recebidos"
+    "toastReceived": "Você recebeu {{amount}} {{token}}"
   }
 }

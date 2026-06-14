@@ -46,7 +46,7 @@
     "modalValueLabel": "Wert",
     "modalUnverifiedContract": "NICHT VERIFIZIERTER CONTRACT",
     "modalRecipient": "EMPFÄNGER",
-    "modalSpender": "AUSGABEBERECHTIGTER",
+    "modalSpender": "Spender",
     "modalInteractingWith": "INTERAKTION MIT",
     "modalSigningFor": "SIGNIEREN FÜR",
     "modalTypeLabel": "Typ",
