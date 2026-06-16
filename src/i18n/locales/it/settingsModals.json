@@ -1,0 +1,69 @@
+{
+  "settingsModals": {
+    "network": {
+      "modalTitle": "Reti",
+      "chainId": "Rete {{chainId}}",
+      "fieldRpcUrl": "URL RPC",
+      "fieldExplorer": "EXPLORER",
+      "fieldBundler": "BUNDLER",
+      "removeTitle": "Rimuovi rete",
+      "removeBody": "Rimuovere questa rete personalizzata?",
+      "removeCancel": "Annulla",
+      "removeConfirm": "Rimuovi"
+    },
+    "account": {
+      "modalTitle": "Account",
+      "total": "Totale {{amount}}",
+      "createNew": "Crea un nuovo account",
+      "signInExisting": "Accedi con uno esistente"
+    },
+    "endpoints": {
+      "modalTitle": "Endpoint dei servizi",
+      "description": "Questi servizi fanno funzionare il tuo wallet.\nPuoi distribuire le tue istanze per una self-custody completa.",
+      "chainDataLabel": "INDICE DATI DELLE RETI",
+      "chainDataHint": "Fornisce informazioni sulle reti, dati dei token e logo delle reti",
+      "passkeyLabel": "INDICE PASSKEY",
+      "passkeyHint": "Memorizza le chiavi pubbliche delle passkey per l'accesso da più dispositivi",
+      "bundlerLabel": "SERVIZIO BUNDLER",
+      "bundlerHint": "È richiesto un endpoint compatibile con Vela Bundler",
+      "fiatLabel": "TASSI FIAT",
+      "fiatHint": "Tassi basati su USD ({rates:{…}}). Genera l'elenco delle valute — sostituiscilo per una copertura più ampia",
+      "resetToDefaults": "Ripristina i valori predefiniti"
+    },
+    "addNetwork": {
+      "modalTitle": "Aggiungi rete",
+      "description": "Cerca per nome della rete, simbolo del token o Chain ID.",
+      "searchPlaceholder": "es. Gnosis, ACE, 648…",
+      "chainMeta": "Rete {{chainId}} · {{symbol}}",
+      "searching": "Ricerca…",
+      "checkingCompatibility": "Verifica della compatibilità…",
+      "customRpcTitle": "RPC personalizzato (facoltativo)",
+      "customRpcPlaceholder": "https://il-tuo-url-rpc…",
+      "recheckWithRpc": "Ricontrolla con questo RPC",
+      "bestRpc": "RPC migliore: {{latencyMs}} ms",
+      "compatibilityCheck": "Verifica di compatibilità",
+      "unableToVerify": "Impossibile verificare — richiesta RPC non riuscita",
+      "retry": "Riprova",
+      "addNetworkBtn": "Aggiungi rete",
+      "incompatibleHint": "Alcuni contratti necessari non sono ancora stati distribuiti su questa rete.\nDistribuiscili con lo strumento Vela Wallet Chain Setup, poi torna e ricontrolla.",
+      "openChainSetupTool": "Apri Chain Setup Tool",
+      "recheck": "Ricontrolla",
+      "chainIdLabel": "Chain ID: {{chainId}}",
+      "nativeLabel": "Nativo: {{symbol}}",
+      "testnet": "Testnet"
+    },
+    "treasury": {
+      "modalTitle": "Treasury",
+      "addressLabel": "Indirizzo (tutte le reti)",
+      "balancesLabel": "Saldi",
+      "minBalance": "min {{amount}}",
+      "unreachable": "Impossibile raggiungere il bundler",
+      "close": "Chiudi"
+    },
+    "health": {
+      "offline": "Offline",
+      "httpsRequired": "HTTPS richiesto",
+      "invalid": "Non valido"
+    }
+  }
+}

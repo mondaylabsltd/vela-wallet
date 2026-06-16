@@ -36,13 +36,15 @@ export type AppLanguage =
   | 'es-MX'   // Spanish (Mexico)
   | 'pt-BR'   // Portuguese (Brazil)
   | 'fr'
-  | 'de';
+  | 'de'
+  | 'ru'      // Russian (Russia)
+  | 'it';     // Italian (Italy)
 /** What the user picks: a concrete locale or "follow the system". */
 export type LanguagePreference = 'auto' | AppLanguage;
 
 /** Order shown in the picker (most-prominent first). */
 export const SUPPORTED_LANGUAGES: AppLanguage[] = [
-  'en', 'zh', 'zh-TW', 'zh-HK', 'ja', 'ko', 'vi', 'id', 'tr', 'es-MX', 'pt-BR', 'fr', 'de',
+  'en', 'zh', 'zh-TW', 'zh-HK', 'ja', 'ko', 'vi', 'id', 'tr', 'es-MX', 'pt-BR', 'fr', 'de', 'ru', 'it',
 ];
 export const FALLBACK_LANGUAGE: AppLanguage = 'en';
 
@@ -61,6 +63,8 @@ export const LANGUAGE_NATIVE_NAMES: Record<AppLanguage, string> = {
   'pt-BR': 'Português (Brasil)',
   'fr': 'Français',
   'de': 'Deutsch',
+  'ru': 'Русский',
+  'it': 'Italiano',
 };
 
 // ---------------------------------------------------------------------------
@@ -100,6 +104,8 @@ export function detectSystemLanguage(): AppLanguage {
       if (code === 'pt') return 'pt-BR'; // only Portuguese variant shipped
       if (code === 'fr') return 'fr';
       if (code === 'de') return 'de';
+      if (code === 'ru') return 'ru';
+      if (code === 'it') return 'it';
       if (code === 'en') return 'en';
     }
   } catch {

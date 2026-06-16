@@ -1,0 +1,70 @@
+{
+  "onboarding": {
+    "welcome": {
+      "tagline": "Le tue chiavi, le tue monete.\nSemplice come un tocco.",
+      "createWallet": "Crea wallet",
+      "alreadyHaveWallet": "Ho già un wallet"
+    },
+    "settings": {
+      "title": "Impostazioni",
+      "sectionAppearance": "ASPETTO",
+      "themeLabelLight": "Chiaro",
+      "themeLabelDark": "Scuro",
+      "themeLabelAuto": "Auto",
+      "sectionPasskeyIndex": "INDICE PASSKEY",
+      "passkeyHint": "Questo servizio memorizza la chiave pubblica della tua passkey per l'accesso da più dispositivi. Vela Wallet non ha mai accesso alla chiave privata della tua passkey.",
+      "endpointUrlLabel": "URL dell'endpoint",
+      "resetToDefault": "Ripristina i valori predefiniti",
+      "sectionDebug": "DEBUG",
+      "simulateFailure": "Simula un errore dell'endpoint",
+      "warningText": "Il servizio Indice passkey non è raggiungibile. La creazione del wallet e l'accesso richiedono questo servizio. Configura un endpoint raggiungibile qui sotto."
+    },
+    "create": {
+      "headerDefault": "Crea wallet",
+      "headerCreated": "Wallet creato",
+      "headerSyncFailed": "Sincronizzazione tra dispositivi",
+      "accountNameLabel": "Nome dell'account",
+      "accountNamePlaceholder": "Inserisci un nome per il tuo account",
+      "accountNameHint": "Questo nome viene memorizzato on-chain insieme alla tua chiave pubblica per l'accesso da più dispositivi.",
+      "ack0": "Questo è un wallet non-custodial. La chiave privata della tua passkey è gestita dal gestore di password del tuo dispositivo (Portachiavi iCloud / Gestore delle password di Google). Vela Wallet non può accedervi né recuperarla.",
+      "ack1": "Se perdi il dispositivo, puoi ripristinare il wallet su un nuovo dispositivo tramite il tuo account iCloud o Google.",
+      "ack2": "Se il tuo account iCloud o Google viene compromesso, anche il controllo del wallet potrebbe esserlo. Proteggilo con una password forte e l'autenticazione a due fattori.",
+      "ack3": "Accetto ",
+      "ack3PrivacyPolicy": "l'Informativa sulla privacy",
+      "ack3And": " e ",
+      "ack3Terms": "i Termini di servizio",
+      "ack3Period": ".",
+      "createWalletBtn": "Crea wallet",
+      "successTitle": "Il tuo wallet è pronto!",
+      "successMessage": "Il tuo indirizzo funziona su tutte le {{count}} reti supportate.",
+      "verifyHint": "Tocca qui sotto per verificare che la tua identità funzioni prima di usare il wallet.",
+      "verifySignInBtn": "Verifica e accedi",
+      "syncFailedTitle": "Sincronizzazione non riuscita",
+      "syncFailedMessage": "Wallet creato, ma la tua chiave pubblica non è stata sincronizzata con il server. Non potrai accedere su altri dispositivi finché non viene risolto.",
+      "syncFailedHint": "Controlla la tua connessione o configura un endpoint personalizzato qui sotto.",
+      "openSettings": "Apri le impostazioni",
+      "retryUploadBtn": "Riprova il caricamento",
+      "statusSyncingKey": "Sincronizzazione della chiave pubblica…",
+      "statusSettingUpIdentity": "Configurazione dell'identità sicura…",
+      "statusExtractingKey": "Estrazione della chiave pubblica…",
+      "statusComputingAddress": "Calcolo dell'indirizzo del wallet…",
+      "statusVerifyingIdentity": "Verifica dell'identità…",
+      "statusSetupCancelled": "Configurazione annullata.",
+      "statusVerifyCancelled": "Verifica annullata. Riprova.",
+      "alertNotSupportedTitle": "Non supportato",
+      "alertNotSupportedBody": "L'autenticazione biometrica non è disponibile su questo dispositivo.",
+      "alertErrorTitle": "Errore"
+    },
+    "login": {
+      "alertNotSupportedTitle": "Non supportato",
+      "alertNotSupportedBody": "L'autenticazione biometrica non è disponibile su questo dispositivo.",
+      "alertIncompatibleTitle": "Dispositivo non compatibile",
+      "alertIncompatibleBody": "Il provider di identità del tuo dispositivo non è compatibile con Vela Wallet. Passa a Gestore delle password di Google nelle impostazioni di sistema e riprova.",
+      "alertNotFoundTitle": "Account non trovato",
+      "alertNotFoundBody": "Nessun wallet trovato per questa identità.\n\nPossibili motivi:\n• Non hai ancora creato un wallet\n• La tua identità non si è sincronizzata su questo dispositivo (controlla le impostazioni iCloud / Google)\n• Il server delle chiavi pubbliche non è raggiungibile\n\nProva a creare un nuovo wallet o assicurati che il tuo provider di identità (Face ID / impronta digitale) sia sincronizzato su tutti i dispositivi.",
+      "alertSignInFailedTitle": "Accesso non riuscito",
+      "alertSignInFailedBody": "{{message}}\n\nAssicurati che sul dispositivo siano configurati Face ID, Touch ID o l'impronta digitale e riprova.",
+      "alertIncompatibleBodyCreate": "Il provider di identità del tuo dispositivo non è compatibile con questo wallet. Passa a Gestore delle password di Google nelle impostazioni di sistema e riprova."
+    }
+  }
+}

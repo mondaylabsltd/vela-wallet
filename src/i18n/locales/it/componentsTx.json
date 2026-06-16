@@ -1,0 +1,45 @@
+{
+  "componentsTx": {
+    "receipt": {
+      "title": "Ricevuta della transazione",
+      "canvasTitle": "RICEVUTA DELLA TRANSAZIONE",
+      "from": "Da",
+      "to": "A",
+      "network": "Rete",
+      "time": "Ora",
+      "txHash": "Hash della transazione",
+      "confirming": "Conferma in corso…",
+      "confirmingHint": "Inviata! Conferma on-chain in corso — il link all'explorer apparirà a breve.",
+      "scanHint": "Scansiona per vedere sull'explorer",
+      "footerBrand": "VELA WALLET",
+      "footerUrl": "getvela.app",
+      "explorer": "Explorer",
+      "share": "Condividi",
+      "done": "Fatto",
+      "copiedTitle": "Copiato",
+      "copiedImageBody": "Immagine della ricevuta copiata negli appunti.",
+      "copiedLinkBody": "Link all'explorer copiato."
+    },
+    "detail": {
+      "received": "Ricevuto",
+      "sent": "Inviato",
+      "from": "Da",
+      "to": "A",
+      "sectionTitle": "Dettagli della transazione",
+      "labelDate": "Data",
+      "labelStatus": "Stato",
+      "labelFrom": "Da",
+      "labelTo": "A",
+      "labelOperation": "Operazione",
+      "labelChain": "Rete",
+      "labelHash": "Hash",
+      "statusFailed": "Non riuscita",
+      "statusSucceeded": "Riuscita",
+      "statusPending": "In attesa",
+      "opContractInteraction": "Interazione con il contratto",
+      "opSignature": "Firma",
+      "opTypedDataSignature": "Firma di dati tipizzati",
+      "opTransfer": "Trasferimento"
+    }
+  }
+}

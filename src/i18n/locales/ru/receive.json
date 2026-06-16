@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "Получить",
+    "noAddress": "Нет адреса",
+    "shareGenerating": "Создание…",
+    "shareButton": "Поделиться",
+    "listeningForDeposits": "Ожидание поступлений",
+    "warningTitle": "Перед получением",
+    "warningBody": "Отправляйте активы только в поддерживаемых сетях — переводы в неподдерживаемых сетях могут быть потеряны навсегда.",
+    "warningHint": "Проверьте",
+    "warningHintNetworks": "{{count}} поддерживаемых сетей",
+    "warningHintSuffix": "ниже, прежде чем делиться адресом.",
+    "warningConfirm": "Понятно",
+    "networksLabel": "Работает в {{count}} сетях EVM",
+    "shareCardHeadline": "Отсканируйте, чтобы отправить мне крипто",
+    "shareDialogTitle": "Адрес кошелька {{name}}"
+  }
+}

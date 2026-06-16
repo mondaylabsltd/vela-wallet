@@ -1,0 +1,94 @@
+{
+  "componentsUi": {
+    "funding": {
+      "title": "Attiva l'account gas",
+      "balance": "Saldo",
+      "freeTitle": "Attivazione gratuita",
+      "freeBadge": "GRATIS",
+      "freeRequesting": "Richiesta…",
+      "freeDesc": "Offerta da Vela per i nuovi utenti",
+      "selfTitle": "Attiva da solo",
+      "selfDesc": "Invia {{symbol}} per attivare l'account gas",
+      "activationFee": "Commissione di attivazione",
+      "gasAccount": "Account gas",
+      "checkBtn": "L'ho inviato",
+      "checkingBtn": "Verifica…",
+      "continue": "Continua",
+      "cancel": "Annulla",
+      "denialDefault": "Attivazione gratuita non disponibile.",
+      "denialNonceExceeded": "Quota gratuita esaurita.",
+      "denialTreasuryDepleted": "Il fondo gratuito è temporaneamente vuoto.",
+      "denialBalanceTooLow": "Saldo del wallet troppo basso per qualificarti.",
+      "denialNoPasskey": "Per l'attivazione gratuita serve una passkey.",
+      "denialRateLimited": "Troppe richieste. Riprova più tardi.",
+      "denialTransferFailed": "Trasferimento non riuscito. Riprova."
+    },
+    "signing": {
+      "loading": "Caricamento…",
+      "signatureRequest": "Richiesta di firma",
+      "signing": "Firma in corso…",
+      "signLabel": "Firma",
+      "confirmLabel": "Conferma",
+      "confirmIntentLabel": "Conferma: {{intent}}",
+      "approve": "Approva",
+      "dismiss": "Ignora",
+      "reject": "Rifiuta",
+      "personalSignTag": "personal_sign · Nessuna commissione di gas",
+      "unlimitedWarning": "Illimitato — questo contratto può spendere tutti i tuoi token",
+      "partialWarning": "Dati incompleti — alcuni dettagli non sono stati decodificati. Controlla con attenzione prima di approvare.",
+      "unverifiedWarning": "Impossibile verificare on-chain l'importo del token — ricontrollalo prima di approvare.",
+      "blindTypedWarning": "Impossibile decodificare questi dati tipizzati con un descrittore noto. Controlla con attenzione.",
+      "blindDecodeWarning": "Impossibile decodificare — nessun descrittore ERC-7730 ({{bytes}} byte)",
+      "rawCalldataToggle": "Calldata grezzo · {{bytes}} byte",
+      "signMessage": "Firma il messaggio",
+      "signTypedData": "Firma i dati tipizzati",
+      "spenderLabel": "Autorizzato a spendere",
+      "recipientLabel": "Destinatario",
+      "interactingLabel": "Interazione con",
+      "unverifiedLabel": "Contratto non verificato",
+      "typeLabel": "Tipo",
+      "intentUnknown": "Sconosciuto",
+      "intentSend": "Invia",
+      "signingFor": "Firma per"
+    },
+    "currency": {
+      "title": "Valuta di visualizzazione",
+      "searchPlaceholder": "Cerca valuta",
+      "noMatch": "Nessuna valuta corrisponde a «{{query}}»."
+    },
+    "scanner": {
+      "title": "Scansiona QR",
+      "hint": "Inquadra un codice QR con la fotocamera",
+      "permissionText": "Per scansionare i codici QR serve l'accesso alla fotocamera.",
+      "grantPermission": "Concedi l'autorizzazione",
+      "noQrFound": "Nessun QR trovato",
+      "noQrFoundMsg": "Impossibile trovare un codice QR nell'immagine selezionata.",
+      "error": "Errore",
+      "errorImage": "Impossibile elaborare l'immagine.",
+      "errorPicker": "Impossibile aprire il selettore di immagini."
+    },
+    "gas": {
+      "estFee": "Comm. stimata",
+      "gasPrice": "Prezzo del gas",
+      "gasPriceUserOp": "Prezzo del gas (UserOp)",
+      "gasLimit": "Limite di gas",
+      "walletDeployed": "Wallet distribuito",
+      "deployedYes": "Sì",
+      "deployedNo": "No (prima transazione)"
+    },
+    "dock": {
+      "receive": "Ricevi",
+      "send": "Invia"
+    },
+    "networkFilter": {
+      "selectChain": "Seleziona rete",
+      "searchChains": "Cerca reti",
+      "allNetworks": "Tutte le reti",
+      "showEvery": "Mostra tutte le reti"
+    },
+    "chart": {
+      "noDataFor": "Nessun dato per {{label}}",
+      "tapHint": "Tocca una barra per vedere il saldo"
+    }
+  }
+}

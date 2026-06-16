@@ -1,0 +1,17 @@
+{
+  "history": {
+    "navTitle": "История",
+    "loadingText": "Загрузка транзакций…",
+    "statusFailed": "Не удалась",
+    "filterAll": "Все",
+    "emptyTitle": "Пока нет транзакций",
+    "emptyBody": "Здесь будут появляться отправленные вами транзакции. Полную историю также можно посмотреть в обозревателе блоков.",
+    "viewOnExplorer": "Открыть в обозревателе",
+    "emptyFilter": "В этой сети нет транзакций",
+    "txLabelDappTx": "Транзакция dApp",
+    "txLabelSignMessage": "Подписать сообщение",
+    "txLabelSignTypedData": "Подписать типизированные данные",
+    "txLabelSent": "Отправлено {{symbol}}",
+    "txSentSubtitle": "Кому: {{toName}} · {{networkName}}"
+  }
+}

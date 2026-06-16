@@ -1,0 +1,61 @@
+{
+  "send": {
+    "selectTokenTitle": "Выберите токен",
+    "searchPlaceholder": "Поиск токенов…",
+    "loadingTokens": "Загрузка токенов…",
+    "noMatchingTokens": "Токены не найдены",
+    "noTokensWithBalance": "Нет токенов с балансом",
+
+    "sendTitle": "Отправить {{symbol}}",
+    "maxBtn": "Макс.",
+    "recipientLabel": "Получатель",
+    "recipientPlaceholder": "Адрес 0x…",
+    "velaUser": "Пользователь Vela",
+    "lowBalanceWarning": "Недостаточно средств для оплаты сетевой комиссии. Добавьте {{nativeSym}} в кошелёк перед отправкой.",
+    "preparing": "Подготовка…",
+    "continueBtn": "Продолжить",
+
+    "alertInvalidAddressTitle": "Неверный адрес",
+    "alertInvalidAddressBody": "Введите корректный адрес Ethereum (0x…).",
+    "alertInvalidAmountTitle": "Неверная сумма",
+    "alertInvalidAmountBody": "Введите корректную сумму больше нуля.",
+    "alertInsufficientBalanceTitle": "Недостаточно средств",
+    "alertLoadTokensError": "Не удалось загрузить токены.",
+
+    "warnNotEnoughToken": "На этом аккаунте недостаточно {{symbol}}",
+    "warnInsufficientForGas": "Недостаточно {{sym}} для покрытия суммы и комиссии за газ",
+    "warnInsufficientGas": "Недостаточно {{sym}} для оплаты комиссии за газ",
+    "warnNeedGas": "Для оплаты комиссии за газ нужен {{sym}}",
+
+    "confirmTitle": "Подтверждение",
+    "walletFallbackName": "Кошелёк",
+    "fromLabel": "Откуда",
+    "toLabel": "Куда",
+    "estFeeLabel": "Прибл. комиссия",
+    "estimatingFee": "Расчёт…",
+    "gasPriceLabel": "Цена газа",
+    "gasPriceUserOpLabel": "Цена газа (UserOp)",
+    "gasLimitLabel": "Лимит газа",
+    "walletDeployedLabel": "Кошелёк развёрнут",
+    "walletDeployedYes": "Да",
+    "walletDeployedNo": "Нет (первая транзакция)",
+    "checkingGas": "Проверка газа…",
+    "confirmSendBtn": "Подтвердить и отправить",
+
+    "txPreparing": "Подготовка транзакции…",
+    "txSigning": "Ожидание биометрии…",
+    "txSubmitting": "Отправка в сеть…",
+    "txSubmitted": "Транзакция отправлена в сеть",
+    "txSlowConfirm": "Это занимает больше времени, чем обычно, подождите…",
+    "txWaitingConfirm": "Ожидание подтверждения в блокчейне…",
+    "txElapsed": "Прошло {{elapsed}} с — почти готово",
+    "txRemaining": "Осталось ~{{remaining}} с",
+    "txTypicalTime": "{{chainName}} обычно подтверждает примерно за {{estSecs}} с",
+    "txRetryBtn": "Повторить",
+
+    "txErrorTimeout": "Транзакция отправлена, но истекло время ожидания подтверждения. Проверьте историю позже.",
+    "txErrorBundlerLoop": "Bundler продолжает отклонять баланс газового аккаунта. Повторите позже или повысьте уровень газа.",
+    "txErrorBundlerFund": "Аккаунту Bundler нужно больше газа. Пополните его в настройках.",
+    "txErrorPublicKey": "Открытый ключ для этого аккаунта не найден"
+  }
+}

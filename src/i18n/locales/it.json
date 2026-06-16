@@ -1,0 +1,105 @@
+{
+  "common": {
+    "cancel": "Annulla",
+    "system": "Sistema",
+    "automatic": "Automatico",
+    "error": "Errore",
+    "somethingWrong": "Qualcosa è andato storto",
+    "tryAgain": "Riprova"
+  },
+  "language": {
+    "title": "Lingua",
+    "pickerTitle": "Lingua",
+    "pickerSubtitle": "Scegli la lingua usata in tutta l'app.",
+    "followSystem": "Come il sistema",
+    "english": "English",
+    "chinese": "简体中文",
+    "contributeNote": "Hai notato una traduzione che non suona bene? Aiutaci a correggerla — grazie per rendere Vela migliore.",
+    "contributeCta": "Proponi una correzione su GitHub"
+  },
+  "settings": {
+    "title": "Impostazioni",
+    "sections": {
+      "account": "Account",
+      "appearance": "Aspetto",
+      "payments": "Pagamenti",
+      "localization": "Lingua e formati",
+      "advanced": "Avanzate",
+      "developer": "Sviluppatore"
+    },
+    "account": {
+      "switch": "Cambia account"
+    },
+    "appearance": {
+      "themeLight": "Chiaro",
+      "themeDark": "Scuro",
+      "themeAuto": "Auto",
+      "keepAwakeTitle": "Tieni lo schermo acceso",
+      "keepAwakeSubtitle": "Impedisce allo schermo di spegnersi mentre l'app è aperta"
+    },
+    "payments": {
+      "voiceTitle": "Annunci vocali",
+      "voiceSubtitle": "Annuncia ad alta voce i pagamenti in arrivo"
+    },
+    "localization": {
+      "autoExample": "Automatico · {{example}}",
+      "numberTitle": "Formato dei numeri",
+      "numberSubtitle": "Come vengono raggruppati gli importi e quale separatore decimale viene mostrato.",
+      "dateTitle": "Formato della data",
+      "dateSubtitle": "Ordine di giorno / mese / anno e separatore.",
+      "timeTitle": "Formato dell'ora",
+      "timeSubtitle": "Orologio a 12 o 24 ore."
+    },
+    "advanced": {
+      "networksTitle": "Reti",
+      "networksSubtitle": "URL di RPC, explorer e Bundler",
+      "addNetworkTitle": "Aggiungi rete",
+      "addNetworkSubtitle": "Aggiungi una rete EVM personalizzata",
+      "endpointsTitle": "Endpoint dei servizi",
+      "endpointsSubtitle": "Dati delle reti, indice delle identità, Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "Treasury",
+      "treasurySubtitle": "Mostra indirizzo e saldi della Treasury",
+      "clearSigningTitle": "Test Clear Signing",
+      "clearSigningSubtitle": "Anteprima dell'interfaccia di firma ERC-7730"
+    },
+    "feedback": {
+      "title": "Invia un feedback",
+      "subtitle": "Segnala un bug o proponi un'idea"
+    },
+    "about": {
+      "title": "Informazioni",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "Esci",
+      "title": "Esci",
+      "desc": "I dati del tuo wallet restano su questo dispositivo. Puoi accedere di nuovo in qualsiasi momento con la tua passkey (Face ID / impronta digitale).",
+      "warning": "La tua chiave pubblica non è ancora stata sincronizzata con il server. Se esci ora, il recupero su altri dispositivi potrebbe non essere possibile.",
+      "anyway": "Esci comunque",
+      "cancel": "Annulla"
+    },
+    "formatNote": {
+      "system": "Sistema",
+      "indian": "Indiano",
+      "h24": "24 ore",
+      "h12": "12 ore"
+    }
+  },
+  "time": {
+    "now": "adesso",
+    "minutesShort": "{{n}} min",
+    "hoursShort": "{{n}} h"
+  },
+  "activity": {
+    "sent": "Inviato",
+    "received": "Ricevuto",
+    "toAddr": "a {{addr}}",
+    "fromAddr": "da {{addr}}",
+    "signatureRequest": "Richiesta di firma",
+    "typedDataSignature": "Firma di dati tipizzati",
+    "dappTransaction": "Transazione dApp",
+    "activity": "Attività"
+  }
+}

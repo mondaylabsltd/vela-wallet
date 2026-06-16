@@ -1,0 +1,69 @@
+{
+  "settingsModals": {
+    "network": {
+      "modalTitle": "Сети",
+      "chainId": "Сеть {{chainId}}",
+      "fieldRpcUrl": "RPC URL",
+      "fieldExplorer": "ОБОЗРЕВАТЕЛЬ",
+      "fieldBundler": "BUNDLER",
+      "removeTitle": "Удалить сеть",
+      "removeBody": "Удалить эту пользовательскую сеть?",
+      "removeCancel": "Отмена",
+      "removeConfirm": "Удалить"
+    },
+    "account": {
+      "modalTitle": "Аккаунты",
+      "total": "Всего {{amount}}",
+      "createNew": "Создать новый аккаунт",
+      "signInExisting": "Войти в существующий"
+    },
+    "endpoints": {
+      "modalTitle": "Сервисные эндпоинты",
+      "description": "Эти сервисы обеспечивают работу вашего кошелька.\nВы можете развернуть собственные экземпляры для полного самостоятельного хранения.",
+      "chainDataLabel": "ИНДЕКС ДАННЫХ СЕТЕЙ",
+      "chainDataHint": "Предоставляет информацию о сетях, данные токенов и логотипы сетей",
+      "passkeyLabel": "ИНДЕКС PASSKEY",
+      "passkeyHint": "Хранит открытые ключи passkey для входа с разных устройств",
+      "bundlerLabel": "СЕРВИС BUNDLER",
+      "bundlerHint": "Требуется эндпоинт, совместимый с Vela Bundler",
+      "fiatLabel": "КУРСЫ ВАЛЮТ",
+      "fiatHint": "Курсы на основе USD ({rates:{…}}). Формирует список валют — замените для более широкого охвата",
+      "resetToDefaults": "Сбросить к стандартным"
+    },
+    "addNetwork": {
+      "modalTitle": "Добавить сеть",
+      "description": "Ищите по названию сети, символу токена или ID сети.",
+      "searchPlaceholder": "например, Gnosis, ACE, 648…",
+      "chainMeta": "Сеть {{chainId}} · {{symbol}}",
+      "searching": "Поиск…",
+      "checkingCompatibility": "Проверка совместимости…",
+      "customRpcTitle": "Свой RPC (необязательно)",
+      "customRpcPlaceholder": "https://адрес-вашего-rpc…",
+      "recheckWithRpc": "Перепроверить с этим RPC",
+      "bestRpc": "Лучший RPC: {{latencyMs}} мс",
+      "compatibilityCheck": "Проверка совместимости",
+      "unableToVerify": "Не удалось проверить — запрос к RPC не выполнен",
+      "retry": "Повторить",
+      "addNetworkBtn": "Добавить сеть",
+      "incompatibleHint": "Некоторые необходимые контракты ещё не развёрнуты в этой сети.\nРазверните их с помощью инструмента Vela Wallet Chain Setup, затем вернитесь и перепроверьте.",
+      "openChainSetupTool": "Открыть Chain Setup Tool",
+      "recheck": "Перепроверить",
+      "chainIdLabel": "ID сети: {{chainId}}",
+      "nativeLabel": "Нативный токен: {{symbol}}",
+      "testnet": "Тестовая сеть"
+    },
+    "treasury": {
+      "modalTitle": "Treasury",
+      "addressLabel": "Адрес (все сети)",
+      "balancesLabel": "Балансы",
+      "minBalance": "мин. {{amount}}",
+      "unreachable": "Не удалось связаться с Bundler",
+      "close": "Закрыть"
+    },
+    "health": {
+      "offline": "Не в сети",
+      "httpsRequired": "Требуется HTTPS",
+      "invalid": "Недействительно"
+    }
+  }
+}

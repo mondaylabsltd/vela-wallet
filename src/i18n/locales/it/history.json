@@ -1,0 +1,17 @@
+{
+  "history": {
+    "navTitle": "Cronologia",
+    "loadingText": "Caricamento delle transazioni…",
+    "statusFailed": "Non riuscita",
+    "filterAll": "Tutte",
+    "emptyTitle": "Ancora nessuna transazione",
+    "emptyBody": "Le transazioni che invii appariranno qui. Puoi anche vedere la cronologia completa sul block explorer.",
+    "viewOnExplorer": "Apri nell'explorer",
+    "emptyFilter": "Nessuna transazione su questa rete",
+    "txLabelDappTx": "Transazione dApp",
+    "txLabelSignMessage": "Firma messaggio",
+    "txLabelSignTypedData": "Firma dati tipizzati",
+    "txLabelSent": "Inviato {{symbol}}",
+    "txSentSubtitle": "A {{toName}} · {{networkName}}"
+  }
+}

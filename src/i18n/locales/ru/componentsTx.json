@@ -1,0 +1,45 @@
+{
+  "componentsTx": {
+    "receipt": {
+      "title": "Квитанция о транзакции",
+      "canvasTitle": "КВИТАНЦИЯ О ТРАНЗАКЦИИ",
+      "from": "От",
+      "to": "Кому",
+      "network": "Сеть",
+      "time": "Время",
+      "txHash": "Хеш транзакции",
+      "confirming": "Подтверждается…",
+      "confirmingHint": "Отправлено! Подтверждается в сети — ссылка на обозреватель скоро появится.",
+      "scanHint": "Отсканируйте, чтобы открыть в обозревателе",
+      "footerBrand": "VELA WALLET",
+      "footerUrl": "getvela.app",
+      "explorer": "Обозреватель",
+      "share": "Поделиться",
+      "done": "Готово",
+      "copiedTitle": "Скопировано",
+      "copiedImageBody": "Изображение квитанции скопировано в буфер обмена.",
+      "copiedLinkBody": "Ссылка на обозреватель скопирована."
+    },
+    "detail": {
+      "received": "Получено",
+      "sent": "Отправлено",
+      "from": "От",
+      "to": "Кому",
+      "sectionTitle": "Детали транзакции",
+      "labelDate": "Дата",
+      "labelStatus": "Статус",
+      "labelFrom": "От",
+      "labelTo": "Кому",
+      "labelOperation": "Операция",
+      "labelChain": "Сеть",
+      "labelHash": "Хеш",
+      "statusFailed": "Не удалась",
+      "statusSucceeded": "Выполнена",
+      "statusPending": "В обработке",
+      "opContractInteraction": "Взаимодействие с контрактом",
+      "opSignature": "Подпись",
+      "opTypedDataSignature": "Подпись типизированных данных",
+      "opTransfer": "Перевод"
+    }
+  }
+}

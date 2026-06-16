@@ -201,6 +201,36 @@ import deClearSigning from './locales/de/clearSigning.json';
 import deComponentsTx from './locales/de/componentsTx.json';
 import deComponentsUi from './locales/de/componentsUi.json';
 import deSettingsModals from './locales/de/settingsModals.json';
+import ruCore from './locales/ru.json';
+import ruHome from './locales/ru/home.json';
+import ruSend from './locales/ru/send.json';
+import ruReceive from './locales/ru/receive.json';
+import ruAssets from './locales/ru/assets.json';
+import ruAddToken from './locales/ru/addToken.json';
+import ruTokenDetail from './locales/ru/tokenDetail.json';
+import ruHistory from './locales/ru/history.json';
+import ruOnboarding from './locales/ru/onboarding.json';
+import ruConnect from './locales/ru/connect.json';
+import ruAbout from './locales/ru/about.json';
+import ruClearSigning from './locales/ru/clearSigning.json';
+import ruComponentsTx from './locales/ru/componentsTx.json';
+import ruComponentsUi from './locales/ru/componentsUi.json';
+import ruSettingsModals from './locales/ru/settingsModals.json';
+import itCore from './locales/it.json';
+import itHome from './locales/it/home.json';
+import itSend from './locales/it/send.json';
+import itReceive from './locales/it/receive.json';
+import itAssets from './locales/it/assets.json';
+import itAddToken from './locales/it/addToken.json';
+import itTokenDetail from './locales/it/tokenDetail.json';
+import itHistory from './locales/it/history.json';
+import itOnboarding from './locales/it/onboarding.json';
+import itConnect from './locales/it/connect.json';
+import itAbout from './locales/it/about.json';
+import itClearSigning from './locales/it/clearSigning.json';
+import itComponentsTx from './locales/it/componentsTx.json';
+import itComponentsUi from './locales/it/componentsUi.json';
+import itSettingsModals from './locales/it/settingsModals.json';
 
 export const en = {
   ...enCore,
@@ -436,6 +466,42 @@ const de = {
   ...deSettingsModals,
 };
 
+const ru = {
+  ...ruCore,
+  ...ruHome,
+  ...ruSend,
+  ...ruReceive,
+  ...ruAssets,
+  ...ruAddToken,
+  ...ruTokenDetail,
+  ...ruHistory,
+  ...ruOnboarding,
+  ...ruConnect,
+  ...ruAbout,
+  ...ruClearSigning,
+  ...ruComponentsTx,
+  ...ruComponentsUi,
+  ...ruSettingsModals,
+};
+
+const it = {
+  ...itCore,
+  ...itHome,
+  ...itSend,
+  ...itReceive,
+  ...itAssets,
+  ...itAddToken,
+  ...itTokenDetail,
+  ...itHistory,
+  ...itOnboarding,
+  ...itConnect,
+  ...itAbout,
+  ...itClearSigning,
+  ...itComponentsTx,
+  ...itComponentsUi,
+  ...itSettingsModals,
+};
+
 export const resources = {
   "en": { translation: en },
   "zh": { translation: zh },
@@ -450,4 +516,6 @@ export const resources = {
   "pt-BR": { translation: ptBR },
   "fr": { translation: fr },
   "de": { translation: de },
+  "ru": { translation: ru },
+  "it": { translation: it },
 };

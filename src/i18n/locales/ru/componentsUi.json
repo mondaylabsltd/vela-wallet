@@ -1,0 +1,94 @@
+{
+  "componentsUi": {
+    "funding": {
+      "title": "Активировать газовый аккаунт",
+      "balance": "Баланс",
+      "freeTitle": "Бесплатная активация",
+      "freeBadge": "БЕСПЛАТНО",
+      "freeRequesting": "Запрос…",
+      "freeDesc": "Спонсируется Vela для новых пользователей",
+      "selfTitle": "Активировать самостоятельно",
+      "selfDesc": "Отправьте {{symbol}}, чтобы активировать газовый аккаунт",
+      "activationFee": "Комиссия за активацию",
+      "gasAccount": "Газовый аккаунт",
+      "checkBtn": "Я отправил",
+      "checkingBtn": "Проверка…",
+      "continue": "Продолжить",
+      "cancel": "Отмена",
+      "denialDefault": "Бесплатная активация недоступна.",
+      "denialNonceExceeded": "Бесплатная квота исчерпана.",
+      "denialTreasuryDepleted": "Фонд бесплатных активаций временно пуст.",
+      "denialBalanceTooLow": "Баланс кошелька слишком мал для участия.",
+      "denialNoPasskey": "Для бесплатной активации нужен passkey.",
+      "denialRateLimited": "Слишком много запросов. Попробуйте позже.",
+      "denialTransferFailed": "Не удалось выполнить перевод. Попробуйте снова."
+    },
+    "signing": {
+      "loading": "Загрузка…",
+      "signatureRequest": "Запрос подписи",
+      "signing": "Подписание…",
+      "signLabel": "Подписать",
+      "confirmLabel": "Подтвердить",
+      "confirmIntentLabel": "Подтвердить: {{intent}}",
+      "approve": "Одобрить",
+      "dismiss": "Закрыть",
+      "reject": "Отклонить",
+      "personalSignTag": "personal_sign · Без комиссии за газ",
+      "unlimitedWarning": "Без лимита — этот контракт может потратить все ваши токены",
+      "partialWarning": "Неполные данные — часть деталей не удалось декодировать. Внимательно проверьте перед одобрением.",
+      "unverifiedWarning": "Сумму токенов не удалось проверить в сети — перепроверьте перед одобрением.",
+      "blindTypedWarning": "Эти типизированные данные не удалось декодировать с известным дескриптором. Проверьте внимательно.",
+      "blindDecodeWarning": "Не удалось декодировать — нет дескриптора ERC-7730 ({{bytes}} байт)",
+      "rawCalldataToggle": "Сырые calldata · {{bytes}} байт",
+      "signMessage": "Подписать сообщение",
+      "signTypedData": "Подписать типизированные данные",
+      "spenderLabel": "Распорядитель",
+      "recipientLabel": "Получатель",
+      "interactingLabel": "Взаимодействие с",
+      "unverifiedLabel": "Непроверенный контракт",
+      "typeLabel": "Тип",
+      "intentUnknown": "Неизвестно",
+      "intentSend": "Отправить",
+      "signingFor": "Подпись для"
+    },
+    "currency": {
+      "title": "Валюта отображения",
+      "searchPlaceholder": "Поиск валюты",
+      "noMatch": "Нет валют по запросу «{{query}}»."
+    },
+    "scanner": {
+      "title": "Сканировать QR",
+      "hint": "Наведите камеру на QR-код",
+      "permissionText": "Для сканирования QR-кодов нужен доступ к камере.",
+      "grantPermission": "Предоставить доступ",
+      "noQrFound": "QR-код не найден",
+      "noQrFoundMsg": "На выбранном изображении не удалось найти QR-код.",
+      "error": "Ошибка",
+      "errorImage": "Не удалось обработать изображение.",
+      "errorPicker": "Не удалось открыть выбор изображений."
+    },
+    "gas": {
+      "estFee": "Прибл. комиссия",
+      "gasPrice": "Цена газа",
+      "gasPriceUserOp": "Цена газа (UserOp)",
+      "gasLimit": "Лимит газа",
+      "walletDeployed": "Кошелёк развёрнут",
+      "deployedYes": "Да",
+      "deployedNo": "Нет (первая транзакция)"
+    },
+    "dock": {
+      "receive": "Получить",
+      "send": "Отправить"
+    },
+    "networkFilter": {
+      "selectChain": "Выберите сеть",
+      "searchChains": "Поиск сетей",
+      "allNetworks": "Все сети",
+      "showEvery": "Показать все сети"
+    },
+    "chart": {
+      "noDataFor": "Нет данных за {{label}}",
+      "tapHint": "Нажмите на столбец, чтобы увидеть баланс"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "receive": {
+    "title": "Ricevi",
+    "noAddress": "Nessun indirizzo",
+    "shareGenerating": "Generazione…",
+    "shareButton": "Condividi",
+    "listeningForDeposits": "In ascolto dei depositi",
+    "warningTitle": "Prima di ricevere",
+    "warningBody": "Invia asset solo sulle reti supportate — i trasferimenti su reti non supportate potrebbero andare persi per sempre.",
+    "warningHint": "Controlla le",
+    "warningHintNetworks": "{{count}} reti supportate",
+    "warningHintSuffix": "qui sotto prima di condividere il tuo indirizzo.",
+    "warningConfirm": "Ho capito",
+    "networksLabel": "Funziona su {{count}} reti EVM",
+    "shareCardHeadline": "Scansiona per inviarmi crypto",
+    "shareDialogTitle": "Indirizzo wallet di {{name}}"
+  }
+}

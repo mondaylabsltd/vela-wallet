@@ -1,0 +1,22 @@
+{
+  "about": {
+    "title": "О приложении",
+    "version": "v{{version}} ({{commit}})",
+    "tagline": "Владеть криптовалютой стало проще",
+    "sectionTechnical": "Технические детали",
+    "techWalletLabel": "Кошелёк",
+    "techWalletValue": "Safe v1.4.1",
+    "techAuthLabel": "Аутентификация",
+    "techAuthValue": "WebAuthn / P-256",
+    "techAccountTypeLabel": "Тип аккаунта",
+    "techAccountTypeValue": "ERC-4337 (смарт-аккаунт)",
+    "techSignerLabel": "Модуль подписи",
+    "techSignerValue": "SafeWebAuthnSharedSigner",
+    "techNetworksLabel": "Сети",
+    "techNetworksValue": "{{count}} сетей EVM",
+    "linkWebsite": "Сайт",
+    "linkGitHub": "GitHub",
+    "linkSafeWallet": "Safe Wallet",
+    "footer": "Сделано с заботой. Ваши ключи — ваши монеты."
+  }
+}

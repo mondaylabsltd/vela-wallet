@@ -1,0 +1,61 @@
+{
+  "send": {
+    "selectTokenTitle": "Seleziona token",
+    "searchPlaceholder": "Cerca token…",
+    "loadingTokens": "Caricamento token…",
+    "noMatchingTokens": "Nessun token corrispondente",
+    "noTokensWithBalance": "Nessun token con saldo",
+
+    "sendTitle": "Invia {{symbol}}",
+    "maxBtn": "Max",
+    "recipientLabel": "Destinatario",
+    "recipientPlaceholder": "Indirizzo 0x…",
+    "velaUser": "Utente Vela",
+    "lowBalanceWarning": "Saldo insufficiente per coprire le commissioni di rete. Aggiungi {{nativeSym}} al tuo wallet prima di inviare.",
+    "preparing": "Preparazione…",
+    "continueBtn": "Continua",
+
+    "alertInvalidAddressTitle": "Indirizzo non valido",
+    "alertInvalidAddressBody": "Inserisci un indirizzo Ethereum valido (0x…).",
+    "alertInvalidAmountTitle": "Importo non valido",
+    "alertInvalidAmountBody": "Inserisci un importo valido maggiore di zero.",
+    "alertInsufficientBalanceTitle": "Saldo insufficiente",
+    "alertLoadTokensError": "Impossibile caricare i token.",
+
+    "warnNotEnoughToken": "Non hai abbastanza {{symbol}} in questo account",
+    "warnInsufficientForGas": "{{sym}} insufficiente per coprire importo + commissioni di gas",
+    "warnInsufficientGas": "{{sym}} insufficiente per le commissioni di gas",
+    "warnNeedGas": "Ti serve {{sym}} per pagare le commissioni di gas",
+
+    "confirmTitle": "Conferma",
+    "walletFallbackName": "Wallet",
+    "fromLabel": "Da",
+    "toLabel": "A",
+    "estFeeLabel": "Comm. stimata",
+    "estimatingFee": "Stima…",
+    "gasPriceLabel": "Prezzo del gas",
+    "gasPriceUserOpLabel": "Prezzo del gas (UserOp)",
+    "gasLimitLabel": "Limite di gas",
+    "walletDeployedLabel": "Wallet distribuito",
+    "walletDeployedYes": "Sì",
+    "walletDeployedNo": "No (prima transazione)",
+    "checkingGas": "Controllo del gas…",
+    "confirmSendBtn": "Conferma e invia",
+
+    "txPreparing": "Preparazione della transazione…",
+    "txSigning": "In attesa della biometria…",
+    "txSubmitting": "Invio alla rete…",
+    "txSubmitted": "Transazione inviata alla rete",
+    "txSlowConfirm": "Ci sta mettendo più del solito, attendi…",
+    "txWaitingConfirm": "In attesa della conferma sulla blockchain…",
+    "txElapsed": "{{elapsed}} s trascorsi — ci siamo quasi",
+    "txRemaining": "~{{remaining}} s rimanenti",
+    "txTypicalTime": "{{chainName}} di solito conferma in ~{{estSecs}} s",
+    "txRetryBtn": "Riprova",
+
+    "txErrorTimeout": "Transazione inviata ma la conferma è scaduta. Controlla la cronologia più tardi.",
+    "txErrorBundlerLoop": "Il saldo dell'account gas continua a essere rifiutato dal bundler. Riprova più tardi o aumenta il livello di gas.",
+    "txErrorBundlerFund": "All'account del bundler serve più gas. Ricaricalo nelle impostazioni.",
+    "txErrorPublicKey": "Chiave pubblica non trovata per questo account"
+  }
+}

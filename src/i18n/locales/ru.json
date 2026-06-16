@@ -1,0 +1,105 @@
+{
+  "common": {
+    "cancel": "Отмена",
+    "system": "Система",
+    "automatic": "Автоматически",
+    "error": "Ошибка",
+    "somethingWrong": "Что-то пошло не так",
+    "tryAgain": "Повторить"
+  },
+  "language": {
+    "title": "Язык",
+    "pickerTitle": "Язык",
+    "pickerSubtitle": "Выберите язык интерфейса приложения.",
+    "followSystem": "Как в системе",
+    "english": "English",
+    "chinese": "简体中文",
+    "contributeNote": "Заметили неудачную формулировку на своём языке? Помогите нам её исправить — спасибо, что делаете Vela лучше.",
+    "contributeCta": "Предложить исправление на GitHub"
+  },
+  "settings": {
+    "title": "Настройки",
+    "sections": {
+      "account": "Аккаунт",
+      "appearance": "Оформление",
+      "payments": "Платежи",
+      "localization": "Регион и форматы",
+      "advanced": "Дополнительно",
+      "developer": "Для разработчиков"
+    },
+    "account": {
+      "switch": "Сменить аккаунт"
+    },
+    "appearance": {
+      "themeLight": "Светлая",
+      "themeDark": "Тёмная",
+      "themeAuto": "Авто",
+      "keepAwakeTitle": "Не гасить экран",
+      "keepAwakeSubtitle": "Экран не будет выключаться, пока открыто приложение"
+    },
+    "payments": {
+      "voiceTitle": "Голосовые уведомления",
+      "voiceSubtitle": "Объявлять входящие платежи вслух"
+    },
+    "localization": {
+      "autoExample": "Автоматически · {{example}}",
+      "numberTitle": "Формат чисел",
+      "numberSubtitle": "Как группируются суммы и какой знак отделяет дробную часть.",
+      "dateTitle": "Формат даты",
+      "dateSubtitle": "Порядок дня, месяца и года и разделитель.",
+      "timeTitle": "Формат времени",
+      "timeSubtitle": "12- или 24-часовой формат."
+    },
+    "advanced": {
+      "networksTitle": "Сети",
+      "networksSubtitle": "URL для RPC, обозревателя и Bundler",
+      "addNetworkTitle": "Добавить сеть",
+      "addNetworkSubtitle": "Добавить свою EVM-сеть",
+      "endpointsTitle": "Сервисные эндпоинты",
+      "endpointsSubtitle": "Данные сетей, индекс идентификаторов, Bundler"
+    },
+    "developer": {
+      "treasuryTitle": "Treasury",
+      "treasurySubtitle": "Адрес и балансы Treasury",
+      "clearSigningTitle": "Тест Clear Signing",
+      "clearSigningSubtitle": "Превью интерфейса подписи ERC-7730"
+    },
+    "feedback": {
+      "title": "Отправить отзыв",
+      "subtitle": "Сообщить об ошибке или поделиться идеей"
+    },
+    "about": {
+      "title": "О приложении",
+      "subtitle": "Vela Wallet v{{version}}"
+    },
+    "signOut": {
+      "button": "Выйти",
+      "title": "Выйти",
+      "desc": "Данные кошелька останутся на этом устройстве. Вы сможете снова войти в любой момент с помощью passkey (Face ID / отпечаток пальца).",
+      "warning": "Ваш открытый ключ ещё не синхронизирован с сервером. Если выйти сейчас, восстановление на других устройствах может стать невозможным.",
+      "anyway": "Всё равно выйти",
+      "cancel": "Отмена"
+    },
+    "formatNote": {
+      "system": "Система",
+      "indian": "Индийский",
+      "h24": "24-часовой",
+      "h12": "12-часовой"
+    }
+  },
+  "time": {
+    "now": "сейчас",
+    "minutesShort": "{{n}} мин",
+    "hoursShort": "{{n}} ч"
+  },
+  "activity": {
+    "sent": "Отправлено",
+    "received": "Получено",
+    "toAddr": "на {{addr}}",
+    "fromAddr": "от {{addr}}",
+    "signatureRequest": "Запрос подписи",
+    "typedDataSignature": "Подпись типизированных данных",
+    "dappTransaction": "Транзакция dApp",
+    "activity": "Активность"
+  }
+}
