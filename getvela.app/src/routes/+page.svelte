@@ -720,11 +720,11 @@
 				toward the next thing to click.
 			</p>
 			<p>
-				Vela holds ETH and ERC-20s. When you want to use a dApp, you connect to the one
-				<em>you</em> choose through
+				Vela holds ETH and ERC-20s. When you want to use a dApp, you connect to the one you choose
+				through
 				<a href="https://walletpair.org/" target="_blank" rel="noopener">WalletPair</a>.
 			</p>
-			<p class="does-less-beat">That's the whole product.</p>
+			<p>That's the whole product.</p>
 			<p>
 				Because every extra feature inside a wallet is more code to trust and more UI standing
 				between you and your money. Vela stays small on purpose: fewer paths to attack, fewer moving
@@ -762,7 +762,7 @@
 				had to trust, no custom networks, no way to host it ourselves. And the quiet problem was the biggest
 				one — if the service disappeared, the wallet disappeared with it.
 			</p>
-			<p class="why-beat">So we built the version we wanted to depend on.</p>
+			<p>So we built the version we wanted to depend on.</p>
 			<p>
 				Vela is <strong>a passkey wallet you can fully own.</strong> Your passkey stays where your
 				device already protects it — iCloud Keychain or Google Password Manager. When you sign a
