@@ -674,7 +674,7 @@
 				>
 				<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener"
 					>100% open source</a
-				> — app + all services
+				> — app + all our services
 			</div>
 		</div>
 	</div>
@@ -786,7 +786,7 @@
 						></tr
 					>
 					<tr
-						><td>Self-host the bundler &amp; all services</td><td class="yes">Yes</td><td class="no"
+						><td>Self-host the bundler &amp; our services</td><td class="yes">Yes</td><td class="no"
 							>No</td
 						><td class="no">No</td><td class="no">No</td><td class="no">No</td></tr
 					>
@@ -823,6 +823,10 @@
 				</tbody>
 			</table>
 		</div>
+		<p class="compare-note">
+			You can self-host everything Vela builds. A few data sources (some chains' history, long-tail
+			prices, threat scanning) come from third-party providers — swap in your own node or key.
+		</p>
 	</div>
 </section>
 
@@ -947,15 +951,18 @@
 				<div class="bm-card">
 					<h4>Web wallet</h4>
 					<div class="bm-price">Free</div>
-					<p>Full-featured web wallet. No time limit, no feature gates.</p>
+					<p>
+						Full-featured web wallet — free, open source, self-hostable. No install, no seed phrase
+						— just authenticate and go.
+					</p>
 				</div>
 				<div class="bm-card">
 					<h4>Mobile app</h4>
-					<div class="bm-price">Pay once — fund the project</div>
+					<div class="bm-price">Funds the project</div>
 					<p>
-						A one-time purchase on the App Store and Google Play, priced by region. Not a
-						subscription, not a data grab — just how a tiny team keeps the lights on. The web wallet
-						stays free forever.
+						The mobile app is a paid download, priced by region — it's how a small, independent team
+						funds building Vela in the open. It's open source too, so you can always build it from
+						source and install it on your own phone for free.
 					</p>
 				</div>
 				<div class="bm-card">
@@ -972,8 +979,8 @@
 			</div>
 
 			<p class="bm-note">
-				Funded by the people who use it — not by selling your data or your attention. Don't want to
-				pay? Self-host the app, run your own bundler, and owe us nothing.
+				Funded by the people who use it. Don't want to pay? Use the web wallet free, self-host the
+				services, run your own bundler — and owe us nothing.
 			</p>
 		</div>
 	</div>
@@ -1150,7 +1157,7 @@
 					/><path d="M7 7.5h.01M7 16.5h.01" stroke-linecap="round" /></svg
 				>
 				<h4>Self-hostable</h4>
-				<p>Run your own bundler and services — or compile it all.</p>
+				<p>Run your own bundler and services.</p>
 			</li>
 			<li class="notify-card">
 				<svg
@@ -1161,13 +1168,13 @@
 					stroke="currentColor"
 					stroke-width="2"
 					><path
-						d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.4 5.2A9.7 9.7 0 0112 5c5 0 9 4.5 9 7a11 11 0 01-2.2 3.2M6 6.2A11 11 0 003 12c0 2.5 4 7 9 7 1 0 1.9-.1 2.8-.4"
+						d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
 						stroke-linecap="round"
 						stroke-linejoin="round"
 					/></svg
 				>
-				<h4>No tracking</h4>
-				<p>No email, no fingerprinting, no ad networks.</p>
+				<h4>Battle-tested</h4>
+				<p>Your account is an audited, unmodified Safe v1.4.1.</p>
 			</li>
 			<li class="notify-card">
 				<svg
@@ -1184,17 +1191,15 @@
 					/></svg
 				>
 				<h4>No seed phrase</h4>
-				<p>Sign with a passkey. Nothing to write down or lose.</p>
+				<p>Sign with a passkey. Nothing to write down.</p>
 			</li>
 		</ul>
 
 		<div class="notify-divider"><span>mobile apps coming soon</span></div>
 
 		<p class="notify-email-desc">
-			No email capture, no spam. Follow <a
-				href="https://x.com/realvelawallet"
-				target="_blank"
-				rel="noopener">@realvelawallet</a
+			Follow <a href="https://x.com/realvelawallet" target="_blank" rel="noopener"
+				>@realvelawallet</a
 			> and we'll post the moment iOS &amp; Android go live.
 		</p>
 
@@ -2207,6 +2212,14 @@
 		max-width: 960px;
 		margin: 0 auto;
 		overflow-x: auto;
+	}
+	.compare-note {
+		max-width: 640px;
+		margin: 18px auto 0;
+		text-align: center;
+		font-size: 0.8rem;
+		line-height: 1.6;
+		color: var(--text-tertiary);
 	}
 	.compare-table {
 		width: 100%;
