@@ -110,19 +110,29 @@ recipient, amount, or any other field without invalidating the signature.
 
 ### Bundler and gas model
 
-- Each Safe gets a **dedicated relayer account** (gas account) per chain,
-  activated by a **non-refundable** deposit. It tops itself up from EntryPoint gas
-  refunds.
-- Gas is paid **from your own wallet's balance** — there is **no paymaster** and
-  no third party sponsoring (or gating) your transactions.
-- The relayer fee is a transparent markup over on-chain gas price
-  (`maxFeePerGas = gasPrice × 1.6`), shown in full before you confirm.
-- That gas account can still run down over time, so it may need **re-activating
-  again later** — it isn't strictly a one-time deposit.
+- Gas is paid **from your own wallet's balance** in the network's native token.
+  There is **no paymaster** and no third party sponsoring — or gating — your
+  transactions.
+- The **bundler is the single source of truth for the gas price.** It quotes the
+  price from live chain conditions; the wallet uses that quote and never marks it
+  up on its own.
+- Vela's relayer fee is deliberately simple and stated plainly: it is set to
+  **roughly the network fee itself**. In other words you pay about **twice the raw
+  on-chain cost** — one part to the chain's validators, one part to the relayer
+  that runs the infrastructure and keeps your gas account funded. It is a single
+  configurable number, defined here and applied in one place.
+- The wallet **shows the split before you confirm** — the on-chain network fee and
+  Vela's relayer fee, side by side — so you always see exactly what the relayer
+  charges. No hidden markup.
+- Each Safe has a **dedicated relayer account** (gas account) per chain, activated
+  by a **non-refundable** deposit. It can run down over time, so it may need
+  **re-activating again later** — it isn't strictly a one-time deposit.
 
 The bundler is a **liveness** dependency, not a **custody** one: it can delay or
 decline to relay, but it can never alter, forge, or steal. It is open source and
-you can run your own. See [networks & fees](/docs/networks-and-fees).
+you can run your own — and because the price is **quoted and shown** rather than
+hidden, even a self-hosted or third-party bundler's fee is always visible to you
+before you sign. See [networks & fees](/docs/networks-and-fees).
 
 ### Clear signing (ERC-7730)
 
@@ -219,10 +229,14 @@ speculate on. Gas is paid in each network's native asset.
 ## Audit status and limitations
 
 The **Safe contracts** at the core of every Vela account are independently
-audited and battle-tested. Vela's **own integration** around them has **not yet
-undergone an independent third-party audit** — one is planned. Until then, treat
-Vela as alpha software and use amounts you are comfortable putting into something
-this young.
+audited and battle-tested. Vela's **own integration** around them has **not
+undergone an independent third-party audit**, and none is currently scheduled — a
+professional audit is a goal for when the project can fund one, not a commitment
+with a date. Until then, the integration's review is informal: the code is open
+source, and it relies on capable, interested members of the community reading it
+and on AI-assisted review. That helps, but it is not equivalent to a professional
+audit. Treat Vela as alpha software and use amounts you are comfortable putting
+into something this young.
 
 ## References
 

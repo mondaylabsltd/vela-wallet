@@ -20,7 +20,7 @@
 				<h3>Resources</h3>
 				<a href={resolve('/docs')}>Docs</a>
 				<a href={resolve('/docs/whitepaper')}>Whitepaper</a>
-				<a href={resolve('/docs/roadmap')}>Roadmap</a>
+				<a href={resolve('/roadmap')}>Roadmap</a>
 				<a href={resolve('/blog')}>Blog</a>
 				<a href={resolve('/about')}>About</a>
 			</div>

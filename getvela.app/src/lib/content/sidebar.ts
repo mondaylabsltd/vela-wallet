@@ -42,7 +42,6 @@ export const sidebar: SidebarGroup[] = [
 		title: 'Reference',
 		items: [
 			{ slug: 'whitepaper', title: 'Whitepaper' },
-			{ slug: 'roadmap', title: 'Roadmap' },
 			{ slug: 'faq', title: 'FAQ' }
 		]
 	}

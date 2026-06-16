@@ -24,8 +24,8 @@ people use something for a long time. That's the distance between "works" and
 That's my one ask. While we're in alpha, use amounts you'd be comfortable putting
 into any new piece of software — not because I expect something to go wrong, but
 because that's simply the rational way to treat anything this young. As Vela
-matures and gets independently audited, that calculus changes. For now, start
-small and scale up as your own confidence grows.
+matures — more time in production, more eyes on the code — that calculus changes.
+For now, start small and scale up as your own confidence grows.
 
 ## You hold the keys — and the responsibility
 
@@ -39,13 +39,22 @@ if you lose both your device and your cloud-synced passkey, with no other copy, 
 account can't be recovered. So keep your platform's passkey backup turned on. The
 [recovery doc](/docs/recovery) explains exactly how it works.
 
-## We haven't been audited yet, and I won't pretend otherwise
+## No third-party audit — and I won't pretend one is scheduled
 
 Every Vela wallet is a [Safe](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1)
 smart account, and Safe's contracts are independently audited and secure billions
-in value. But Vela's own integration around them hasn't had a third-party audit
-yet. One is planned. Until it's done, "alpha" is the honest label, and I'd rather
-say so plainly than dress it up.
+in value. Vela's own integration around them has **not** had a third-party
+security audit — and I won't imply one is booked when it isn't. A professional
+audit is something I want to fund as the project can support it; today it is not
+on the calendar.
+
+What reviews Vela's code right now is less formal, and I'd rather be precise about
+it than oversell it. The code is open, and the eyes on it are whoever is capable
+and willing to look — early users reading the source, contributors testing the
+integration, and increasingly people running it through AI tools to review. I
+rely on that, and it genuinely helps. It is **not** a substitute for a
+professional audit, and I won't dress it up as one. Weigh the security of your
+funds accordingly. That gap is exactly why "alpha" is the honest label.
 
 ## The best thing you can do: don't trust me — verify
 

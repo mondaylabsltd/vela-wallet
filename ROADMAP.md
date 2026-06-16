@@ -1,10 +1,10 @@
 # Vela Wallet — Roadmap
 
-The roadmap now lives in the docs and is rendered at
-**<https://getvela.app/docs/roadmap>**.
+The roadmap is published as a visual timeline at
+**<https://getvela.app/roadmap>**.
 
-Canonical source (Markdown, in this repo):
-[`getvela.app/src/content/docs/roadmap.md`](getvela.app/src/content/docs/roadmap.md)
+Source (in this repo):
+[`getvela.app/src/routes/roadmap/+page.svelte`](getvela.app/src/routes/roadmap/+page.svelte)
 
-It tracks what's recently shipped, what's in progress, and what's next —
+It shows what's shipped (since April 2026), what's in progress, and what's next —
 directions, not deadlines. Vela is in alpha.

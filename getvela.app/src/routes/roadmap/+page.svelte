@@ -1,13 +1,85 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
+
+	type Status = 'now' | 'next' | 'later';
+	const upcoming: { status: Status; label: string; title: string; body: string }[] = [
+		{
+			status: 'now',
+			label: 'In progress',
+			title: 'See every coin you receive',
+			body: 'A plain native-coin deposit — or coins that arrive through an internal call (an exchange withdrawal, a router, a multisig) — emits no on-chain log, so it can’t show in your activity on most networks today. We’re building a transfer service that traces blocks to surface these, so every deposit appears, on every chain.'
+		},
+		{
+			status: 'now',
+			label: 'In progress',
+			title: 'Wider clear-signing coverage',
+			body: 'More contracts and chains shown as human-readable intent, so fewer transactions fall back to blind signing.'
+		},
+		{
+			status: 'next',
+			label: 'Next',
+			title: 'Native iOS & Android apps',
+			body: 'Vela runs on the web today; the mobile builds share the same code and are in real-device testing ahead of an App Store and Google Play release.'
+		},
+		{
+			status: 'next',
+			label: 'Next',
+			title: 'Sync across all your devices',
+			body: 'Your accounts and networks already follow you. Next: your language, currency and formatting, plus one-tap restore of your whole setup on a new device — and a saved address book so you stop re-pasting addresses.'
+		},
+		{
+			status: 'later',
+			label: 'Exploring',
+			title: 'Reach further',
+			body: 'DApp Connect from the desktop without your phone, more EVM networks (including a signing path for chains without the P-256 precompile), and an independent security audit of Vela’s Safe + WebAuthn integration.'
+		}
+	];
+
+	const shipped: { date: string; title: string; body: string }[] = [
+		{
+			date: 'Jun 2026',
+			title: 'Localization & everyday polish',
+			body: '13-language support with instant switching (Russian and Italian added), local currency and locale-aware formatting, a dynamic amount display, branded pull-to-refresh, pending-until-confirmed sends, and one-tap in-app feedback.'
+		},
+		{
+			date: 'Jun 13, 2026',
+			title: 'Payment-first home',
+			body: 'The home screen rebuilt around your activity and balances.'
+		},
+		{
+			date: 'Jun 9, 2026',
+			title: 'Clear Signing (ERC-7730)',
+			body: 'Transactions show what they actually do — amount, recipient, intent — in plain language instead of raw hex, with a preview harness and tests.'
+		},
+		{
+			date: 'Jun 4, 2026',
+			title: 'WalletPair dApp connect',
+			body: 'End-to-end-encrypted pairing so you can sign for desktop dApps from your wallet.'
+		},
+		{
+			date: 'May 28, 2026',
+			title: 'dApp signing flow',
+			body: 'Connection infrastructure and the signing-request experience.'
+		},
+		{
+			date: 'May 2026',
+			title: 'The core wallet experience',
+			body: 'A real design system, gas-tier selection and a redesigned confirm screen, a fullscreen QR scanner, and rebuilt receive, token, add-token and deposit screens.'
+		},
+		{
+			date: 'Apr 22, 2026',
+			title: 'Vela is born',
+			body: 'The wallet launches on iOS, Android and Web — Safe smart accounts (ERC-4337), passkey sign-in, and no seed phrase, from day one.'
+		}
+	];
 </script>
 
 <svelte:head>
 	<title>Roadmap — Vela Wallet</title>
 	<meta
 		name="description"
-		content="Where Vela Wallet is headed — recently shipped, in progress, and what's next. Directions, not deadlines."
+		content="What Vela has shipped since April 2026 and what's coming next — built in the open. Directions, not deadlines."
 	/>
 </svelte:head>
 
@@ -22,117 +94,35 @@
 
 <main class="container">
 	<h1>Roadmap</h1>
-	<p class="updated">Directions, not deadlines · Last updated June 16, 2026</p>
-
-	<p class="intro">
-		Vela is in alpha and shipping constantly. This is where it's headed. We build in the open —
-		every change lands in the
-		<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener"
-			>public repo</a
-		>
-		first. Plans below are directional and may change. If something matters to you,
+	<p class="lede">
+		Vela has shipped continuously since April 2026, in the open. Here's the trail so far and where
+		it's headed — directions, not deadlines. Want something on it?
 		<a href="https://github.com/atshelchin/vela-wallet/issues" target="_blank" rel="noopener"
-			>open an issue</a
+			>Open an issue</a
 		>.
 	</p>
 
-	<section>
-		<div class="phase-head">
-			<span class="pill pill-shipped">Recently shipped</span>
-		</div>
-		<ul class="shipped">
-			<li>
-				<strong>Clear Signing</strong> — transactions show what they actually do (amount, recipient, intent)
-				in plain language instead of raw hex, powered by ERC-7730 descriptors.
+	<h2 class="phase-title">Up next</h2>
+	<ol class="track">
+		{#each upcoming as item (item.title)}
+			<li class="node {item.status}">
+				<span class="badge {item.status}">{item.label}</span>
+				<h3>{item.title}</h3>
+				<p>{item.body}</p>
 			</li>
-			<li>
-				<strong>Payment-first home</strong> — the home screen rebuilt around your activity and balances.
-			</li>
-			<li>
-				<strong>13-language app</strong> — instant language switching, with Russian and Italian most recently
-				added.
-			</li>
-			<li>
-				<strong>Local currency &amp; formatting</strong> — choose your fiat currency and a configurable
-				rates source; amounts, dates, and numbers follow your locale.
-			</li>
-			<li>
-				<strong>Pull-to-refresh (VelaRefresh)</strong> — a branded, gesture-driven refresh across the
-				app.
-			</li>
-			<li>
-				<strong>Clearer sends</strong> — transactions show a pending state until they are confirmed on-chain.
-			</li>
-			<li>
-				<strong>DApp Connect maturity</strong> — inline pairing, batched calls (EIP-5792), and silent
-				reconnect over WalletPair.
-			</li>
-			<li>
-				<strong>One-tap feedback</strong> — a Feedback entry in Settings opens a prefilled GitHub report.
-			</li>
-		</ul>
-	</section>
+		{/each}
+	</ol>
 
-	<section>
-		<div class="phase-head">
-			<span class="pill pill-now">Now</span>
-			<span class="phase-sub">Actively building</span>
-		</div>
-		<ul>
-			<li>
-				<strong>Wider clear-signing coverage</strong> — more contracts and chains rendered in plain language,
-				fewer blind-sign fallbacks.
+	<h2 class="phase-title shipped-title">Shipped</h2>
+	<ol class="track">
+		{#each shipped as item (item.title)}
+			<li class="node ship">
+				<span class="when">{item.date}</span>
+				<h3>{item.title}</h3>
+				<p>{item.body}</p>
 			</li>
-			<li>
-				<strong>Home &amp; activity polish</strong> — continued refinement of the payment-first layout.
-			</li>
-		</ul>
-	</section>
-
-	<section>
-		<div class="phase-head">
-			<span class="pill pill-next">Next</span>
-			<span class="phase-sub">Planned</span>
-		</div>
-		<ul>
-			<li>
-				<strong>More recovery options</strong> — additional ways to recover an account beyond cloud-synced
-				passkeys.
-			</li>
-			<li>
-				<strong>DApp Connect on web</strong> — desktop pairing currently relies on mobile Bluetooth; bringing
-				it to the web build.
-			</li>
-		</ul>
-	</section>
-
-	<section>
-		<div class="phase-head">
-			<span class="pill pill-later">Later</span>
-			<span class="phase-sub">Exploring</span>
-		</div>
-		<ul>
-			<li>
-				<strong>Independent security audit</strong> — a third-party review of Vela's Safe + WebAuthn integration.
-				The Safe contracts themselves are already audited and battle-tested.
-			</li>
-			<li><strong>More networks</strong> — additional EVM chains based on demand.</li>
-		</ul>
-	</section>
-
-	<section class="cta-block">
-		<h2>Want something on this list?</h2>
-		<p>Vela is built around what early users actually need. Tell us what's missing.</p>
-		<div class="cta-row">
-			<a
-				class="btn"
-				href="https://github.com/atshelchin/vela-wallet/issues"
-				target="_blank"
-				rel="noopener">Open an issue</a
-			>
-			<a class="btn btn-ghost" href={resolve('/docs/whitepaper')}>Read the whitepaper</a>
-		</div>
-	</section>
+		{/each}
+	</ol>
 </main>
 
 <SiteFooter />
@@ -148,7 +138,6 @@
 		--text-tertiary: #6b6862;
 		--accent: #e8572a;
 		--green: #2d8e5f;
-		--blue: #5b8def;
 		--max-w: 1400px;
 	}
 
@@ -182,160 +171,145 @@
 	}
 
 	main.container {
-		max-width: 760px;
+		max-width: 720px;
 		margin: 0 auto;
-		padding: 120px 24px 80px;
+		padding: 120px 24px 72px;
 	}
 
 	h1 {
 		font-size: 2rem;
 		font-weight: 700;
-		margin-bottom: 8px;
+		margin-bottom: 12px;
 		letter-spacing: -0.02em;
 	}
-	.updated {
+	.lede {
 		color: var(--text-secondary);
-		font-size: 0.85rem;
-		margin-bottom: 28px;
-	}
-	.intro {
-		color: var(--text-secondary);
-		line-height: 1.75;
+		line-height: 1.7;
 		font-size: 0.98rem;
-		margin-bottom: 48px;
-		padding-bottom: 32px;
-		border-bottom: 1px solid var(--border);
+		margin-bottom: 44px;
 	}
-	.intro a {
+	.lede a {
 		color: var(--text);
 		text-decoration: underline;
 		text-underline-offset: 2px;
 	}
-	.intro a:hover {
+	.lede a:hover {
 		color: var(--accent);
 	}
 
-	section {
-		margin-bottom: 40px;
-	}
-	.phase-head {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		margin-bottom: 16px;
-	}
-	.pill {
-		display: inline-flex;
-		align-items: center;
-		padding: 4px 12px;
-		border-radius: 999px;
+	.phase-title {
 		font-size: 0.78rem;
 		font-weight: 600;
-		letter-spacing: 0.01em;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--text-tertiary);
+		margin-bottom: 24px;
+	}
+	.shipped-title {
+		margin-top: 16px;
+	}
+
+	.track {
+		list-style: none;
+		position: relative;
+		margin: 0 0 48px;
+		padding: 0;
+	}
+	.track::before {
+		content: '';
+		position: absolute;
+		left: 6px;
+		top: 8px;
+		bottom: 8px;
+		width: 2px;
+		background: var(--border);
+	}
+	.node {
+		position: relative;
+		padding: 0 0 30px 34px;
+	}
+	.node:last-child {
+		padding-bottom: 0;
+	}
+	.node::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 3px;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: var(--bg);
+		border: 2px solid var(--border);
+		box-sizing: border-box;
+	}
+	.node.ship::before {
+		background: var(--green);
+		border-color: var(--green);
+	}
+	.node.now::before {
+		background: var(--accent);
+		border-color: var(--accent);
+		box-shadow: 0 0 0 4px rgba(232, 87, 42, 0.15);
+		animation: pulse 2s ease-in-out infinite;
+	}
+	.node.next::before {
+		background: var(--bg);
+		border-color: var(--accent);
+	}
+	.node.later::before {
+		background: var(--bg);
+		border-color: var(--text-tertiary);
+	}
+	@keyframes pulse {
+		0%,
+		100% {
+			box-shadow: 0 0 0 4px rgba(232, 87, 42, 0.15);
+		}
+		50% {
+			box-shadow: 0 0 0 7px rgba(232, 87, 42, 0.05);
+		}
+	}
+
+	.node h3 {
+		font-size: 1.05rem;
+		font-weight: 600;
+		color: var(--text);
+		margin: 6px 0 6px;
+		letter-spacing: -0.01em;
+	}
+	.node p {
+		color: var(--text-secondary);
+		font-size: 0.93rem;
+		line-height: 1.65;
+	}
+
+	.badge {
+		display: inline-block;
+		font-size: 0.68rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		padding: 2px 9px;
+		border-radius: 999px;
 		border: 1px solid var(--border);
 	}
-	.pill-shipped {
-		color: var(--green);
-		border-color: rgba(45, 142, 95, 0.4);
-		background: rgba(45, 142, 95, 0.08);
-	}
-	.pill-now {
+	.badge.now {
 		color: var(--accent);
 		border-color: rgba(232, 87, 42, 0.4);
 		background: rgba(232, 87, 42, 0.08);
 	}
-	.pill-next {
-		color: var(--blue);
-		border-color: rgba(91, 141, 239, 0.4);
-		background: rgba(91, 141, 239, 0.08);
-	}
-	.pill-later {
-		color: var(--text-tertiary);
-		background: var(--bg-raised);
-	}
-	.phase-sub {
-		color: var(--text-tertiary);
-		font-size: 0.85rem;
-	}
-
-	ul {
-		list-style: none;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-	}
-	li {
+	.badge.next {
 		color: var(--text-secondary);
-		font-size: 0.95rem;
-		line-height: 1.7;
-		padding-left: 22px;
-		position: relative;
 	}
-	li strong {
-		color: var(--text);
+	.badge.later {
+		color: var(--text-tertiary);
+	}
+	.when {
+		font-size: 0.78rem;
 		font-weight: 600;
-	}
-	li::before {
-		content: '';
-		position: absolute;
-		left: 0;
-		top: 9px;
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: var(--accent);
-	}
-	.shipped li::before {
-		background: var(--green);
-	}
-
-	.cta-block {
-		margin-top: 56px;
-		padding: 32px;
-		border: 1px solid var(--border);
-		border-radius: 16px;
-		background: var(--bg-card);
-		text-align: center;
-	}
-	.cta-block h2 {
-		font-size: 1.2rem;
-		font-weight: 600;
-		margin-bottom: 8px;
-	}
-	.cta-block p {
-		color: var(--text-secondary);
-		font-size: 0.95rem;
-		margin-bottom: 20px;
-	}
-	.cta-row {
-		display: flex;
-		gap: 12px;
-		justify-content: center;
-		flex-wrap: wrap;
-	}
-	.btn {
-		display: inline-block;
-		padding: 11px 22px;
-		border-radius: 10px;
-		font-size: 0.88rem;
-		font-weight: 600;
-		background: var(--accent);
-		color: #fff;
-		transition: all 0.15s;
-	}
-	.btn:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 4px 16px rgba(232, 87, 42, 0.3);
-	}
-	.btn-ghost {
-		background: transparent;
-		color: var(--text);
-		border: 1px solid var(--border);
-	}
-	.btn-ghost:hover {
-		border-color: var(--text-tertiary);
-		box-shadow: none;
+		color: var(--text-tertiary);
+		font-variant-numeric: tabular-nums;
 	}
 
 	@media (max-width: 768px) {

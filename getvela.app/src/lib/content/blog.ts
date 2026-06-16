@@ -34,6 +34,18 @@ function estimateReadingMinutes(raw: string): number {
 	return Math.max(1, Math.round(words / 200));
 }
 
+/**
+ * Normalize a frontmatter date to the documented `YYYY-MM-DD` form. YAML parses
+ * an unquoted `date: 2026-06-12` as a Date, which mdsvex then serializes to a
+ * full ISO timestamp ("2026-06-12T00:00:00.000Z"). Downstream code (formatDate,
+ * the RSS feed) anchors the date by appending `T00:00:00Z`, which turns that
+ * already-complete timestamp into an invalid string. Trimming to the date stem
+ * here keeps `meta.date` consistent however the frontmatter was written.
+ */
+function toIsoDate(value: string): string {
+	return String(value).slice(0, 10);
+}
+
 const allPosts: BlogPost[] = Object.entries(modules)
 	.filter(([path, mod]) => {
 		// A post with broken/missing frontmatter compiles without `metadata`.
@@ -50,7 +62,7 @@ const allPosts: BlogPost[] = Object.entries(modules)
 	})
 	.map(([path, mod]) => ({
 		slug: slugFromPath(path),
-		meta: mod.metadata,
+		meta: { ...mod.metadata, date: toIsoDate(mod.metadata.date) },
 		component: mod.default,
 		readingMinutes: estimateReadingMinutes(sources[path] ?? '')
 	}));

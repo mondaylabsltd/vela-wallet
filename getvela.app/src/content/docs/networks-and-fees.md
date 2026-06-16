@@ -1,6 +1,6 @@
 ---
 title: Networks & fees
-description: The 8 networks Vela supports, how account-abstraction gas fees and the relayer work, and how Vela picks RPC endpoints.
+description: The 8 networks Vela supports, how account-abstraction gas fees work, who runs the bundler and collects the fees, when you self-fund gas-account activation, and how Vela picks RPC endpoints.
 ---
 
 <script>
@@ -42,27 +42,66 @@ recovery. That's separate from which network you transact on.
 ## How fees work (account abstraction)
 
 Vela uses **ERC-4337 account abstraction**, so a transaction isn't broadcast by
-you directly — it's a **UserOperation** submitted by a **bundler**. A few things
-follow from that:
+you directly — it's a **UserOperation** handed to a **bundler**, which submits it
+on-chain and is reimbursed for the gas. A few things follow from that:
 
 - **Gas is paid from your own wallet's balance** in the network's native token
-  (ETH, BNB, xDAI…). There is **no paymaster** and no third party sponsoring — or
-  gating — your transactions.
+  (ETH, BNB, xDAI…). There's no ERC-4337 **paymaster** sponsoring — or gating —
+  each transaction. (Vela may sponsor the one-time *gas-account activation* for
+  new users; that's separate, and covered below.)
 - The **relayer fee is a transparent markup** over the on-chain gas price, shown
   in full on the confirmation screen before you sign. You can pick a speed tier
   (Slow / Standard / Rapid / Fast).
 - The confirm screen breaks the fee down: on-chain gas price, UserOp gas price,
   gas limit, the fee in the native token, and the fee in your display currency.
 
-<Callout type="warning" title="Activating a network's gas account">
-Each network uses a dedicated **gas account** (relayer) for your wallet.
-Activating it takes a small, **non-refundable** deposit (Vela may sponsor this for
-new users). It's designed to top itself up from gas refunds — but that account
-can still run down over time, so you may need to **re-activate it again later**
-when it's depleted. It isn't strictly a one-time payment. The relayer address can
-also change on a service upgrade, which needs a fresh activation. Aside from
-activation, each transaction's gas comes out of your own wallet balance.
+## Who runs the bundler — and who gets the fees
+
+Every network points at a bundler. By default that's **Vela's own bundler**, but
+you can point any network at a third-party ERC-4337 bundler — **Pimlico**,
+**Alchemy**, or your own self-hosted one — under *Settings → Networks → (network)
+→ BUNDLER*. (Vela's backend is open source, so you can run the whole bundler
+service yourself too.)
+
+Whoever operates the bundler for a network **collects that network's fees** — both
+the relayer markup on every transaction and, for Vela's bundler, the gas-account
+activation deposit. So the choice decides where your fees go:
+
+- **Stay on Vela's bundler** → activation deposit and relayer markup fund Vela's
+  service.
+- **Point a network at Pimlico / Alchemy / your own** → you transact under *their*
+  pricing and pay *them* directly (typically via your own API key in the bundler
+  URL). Vela takes no cut on networks you route elsewhere.
+
+<Callout type="warning" title="Only Vela's bundler uses a gas account">
+The **gas-account activation** step is specific to Vela's bundler — it funds a
+dedicated relayer account for your wallet on each network. **Third-party bundlers
+(Pimlico, Alchemy) don't use it**: they meter and bill gas their own way, so on a
+network routed to them you never see the activation screen.
 </Callout>
+
+### Activating the gas account (Vela bundler)
+
+On Vela's bundler, your first transaction on each network **activates a dedicated
+gas account**. The app offers **Free Activation** — *sponsored by Vela for new
+users* — and falls back to **Self Activate**, where you send a small amount of the
+native token to the gas-account address shown in the app.
+
+**You pay the activation fee yourself** whenever free sponsorship isn't offered —
+namely when:
+
+- **Vela's treasury for that network is empty or low** — the free fund is
+  temporarily depleted on that chain.
+- **You've used up the free quota** — sponsorship is capped per wallet, so beyond
+  the first few it's self-funded.
+- **Vela's bundler doesn't fund that network at all** — e.g. **custom or test
+  networks you added yourself**, which Vela holds no treasury for. (Route these to
+  your own or a third-party bundler if you'd rather skip activation entirely.)
+
+The activation deposit is **non-refundable** — it's the relayer's starting balance
+and tops itself up from gas refunds over time, though it can still run down and
+need **re-activating** later. The relayer address can also change on a service
+upgrade, which needs a fresh activation.
 
 Because the fee is always paid in the **native** token, you need a small native
 balance to send anything — including to move an ERC-20. If a send is blocked for
