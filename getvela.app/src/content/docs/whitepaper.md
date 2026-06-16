@@ -110,14 +110,15 @@ recipient, amount, or any other field without invalidating the signature.
 
 ### Bundler and gas model
 
-- Each Safe gets a **dedicated relayer account** per chain. You fund it once; it
-  then sustains itself from EntryPoint gas refunds.
+- Each Safe gets a **dedicated relayer account** (gas account) per chain,
+  activated by a **non-refundable** deposit. It tops itself up from EntryPoint gas
+  refunds.
 - Gas is paid **from your own wallet's balance** — there is **no paymaster** and
   no third party sponsoring (or gating) your transactions.
 - The relayer fee is a transparent markup over on-chain gas price
   (`maxFeePerGas = gasPrice × 1.6`), shown in full before you confirm.
-- The first transaction on each network needs a **one-time, non-refundable**
-  relayer deposit.
+- That gas account can still run down over time, so it may need **re-activating
+  again later** — it isn't strictly a one-time deposit.
 
 The bundler is a **liveness** dependency, not a **custody** one: it can delay or
 decline to relay, but it can never alter, forge, or steal. It is open source and
@@ -170,12 +171,13 @@ Base, Avalanche, and Gnosis — plus custom networks via configurable RPC endpoi
 Your passkey is backed up by your OS provider; on a new device, signing in with
 the same Apple or Google account restores it, and your wallet reappears.
 
-<Callout type="warning" title="No social recovery yet">
-If you lose <strong>both</strong> your device <strong>and</strong> your
-cloud-synced passkey, with no other copy, the account cannot currently be
-recovered — there is no social recovery or guardian mechanism today. Keep your OS
-passkey backup enabled. More recovery options are on the
-<a href="/docs/roadmap">roadmap</a>.
+<Callout type="warning" title="Your platform passkey backup is your recovery">
+Vela's recovery is your passkey, synced by iCloud Keychain or Google Password
+Manager. By design there is no seed phrase, no social recovery, and no guardian —
+nothing Vela could lose, leak, or be compelled to act on. The flip side is real:
+if you lose <strong>both</strong> your device <strong>and</strong> your
+cloud-synced passkey, with no other copy, the account cannot be recovered. Keep
+your platform's passkey backup enabled and its account secured.
 </Callout>
 
 The full recovery model, including the honest limits, is in

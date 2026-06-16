@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import type { Snippet } from 'svelte';
-	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
-	import { sidebar, DOCS_INDEX_SLUG } from '$lib/content/sidebar';
+	import SiteHeader from '$lib/components/SiteHeader.svelte';
+	import { DOCS_INDEX_SLUG, sidebar } from '$lib/content/sidebar';
+	import type { Snippet } from 'svelte';
 
 	let { children }: { children: Snippet } = $props();
 
@@ -69,7 +69,7 @@
 		padding: 0 24px;
 		display: grid;
 		grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-		gap: 48px;
+		gap: 24px;
 		align-items: start;
 	}
 	.sidebar {

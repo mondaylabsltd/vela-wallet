@@ -20,8 +20,8 @@ blog is about.
 Three kinds of posts, roughly:
 
 - **Build notes** — the engineering decisions, the dead ends, the trade-offs.
-  Why passkeys instead of seed phrases. Why Gnosis Chain to start. How recovery
-  works without a custodian.
+  Why passkeys instead of seed phrases. Why every wallet is a Safe smart account.
+  How recovery works without a custodian.
 - **Release notes** — what shipped, what changed, what's next. Short and honest.
 - **The longer story** — the why behind the project. Who it's for, and what we
   think a wallet should feel like in 2026.

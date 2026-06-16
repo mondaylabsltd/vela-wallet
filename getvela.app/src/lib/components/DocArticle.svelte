@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import { getAdjacentDocs, getDocEditUrl } from '$lib/content/docs';
+	import { DOCS_INDEX_SLUG } from '$lib/content/sidebar';
 	import type { Snippet } from 'svelte';
 	import Prose from './Prose.svelte';
 	import Toc from './Toc.svelte';
-	import { getAdjacentDocs, getDocEditUrl } from '$lib/content/docs';
-	import { DOCS_INDEX_SLUG } from '$lib/content/sidebar';
 
 	let { slug, children }: { slug: string; children: Snippet } = $props();
 
@@ -71,7 +71,7 @@
 	.doc-layout {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) var(--toc-w);
-		gap: 48px;
+		gap: 24px;
 		align-items: start;
 	}
 	.doc-body {

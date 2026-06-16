@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
+	import { seoConfig } from '$lib/seo';
 
 	// Analytics helper
 	interface RybbitWindow extends Window {
@@ -199,6 +200,47 @@
 	];
 	const chainLogo = (chainId: number) =>
 		`https://ethereum-data.awesometools.dev/chainlogos/eip155-${chainId}.png`;
+
+	// Structured data on the root page binds the "Vela Wallet" brand entity to
+	// getvela.app. It feeds Google the canonical site name (so results read
+	// "Vela Wallet", not "getvela.app") and the organization behind it — the
+	// signals that make us eligible for branded-query sitelinks. No SearchAction:
+	// Google deprecated the sitelinks searchbox in 2024.
+	const structuredData = [
+		{
+			'@context': 'https://schema.org',
+			'@type': 'Organization',
+			'@id': `${seoConfig.domain}/#organization`,
+			name: seoConfig.siteName,
+			legalName: 'MONDAY LABS LTD',
+			url: seoConfig.domain,
+			logo: `${seoConfig.domain}/vela-logo.png`,
+			description:
+				'An open-source, self-hostable Ethereum wallet for ETH and ERC-20 tokens. Sign with a passkey — no seed phrase, no hardware key, no lock-in.',
+			sameAs: [
+				'https://github.com/atshelchin/vela-wallet',
+				'https://x.com/realvelawallet',
+				'https://t.me/velawallet'
+			]
+		},
+		{
+			'@context': 'https://schema.org',
+			'@type': 'WebSite',
+			'@id': `${seoConfig.domain}/#website`,
+			name: seoConfig.siteName,
+			url: seoConfig.domain,
+			publisher: { '@id': `${seoConfig.domain}/#organization` }
+		}
+	];
+	// Serialize the structured data into a JSON-LD script block for the document
+	// head. The closing tag is split across two string literals ("</scr" + "ipt>")
+	// so the complete closing-script token never appears literally anywhere in this
+	// module's source — if it did, the Svelte parser would read it as the end of the
+	// component's own script block and orphan everything after it. Every less-than
+	// char in the JSON payload is escaped so the data can never break out of the tag.
+	const structuredDataHtml =
+		`<script type="application/ld+json">${JSON.stringify(structuredData).replace(/</g, '\\u003c')}</scr` +
+		`ipt>`;
 </script>
 
 <svelte:head>
@@ -216,6 +258,8 @@
 	<meta property="og:url" content="https://getvela.app" />
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:image" content="https://getvela.app/getvela-app-preview.png" />
+	<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+	{@html structuredDataHtml}
 </svelte:head>
 
 <!-- Nav -->
@@ -227,7 +271,7 @@
 				<span>Vela Wallet</span>
 			</a>
 			<a
-				href={resolve('/alpha')}
+				href={resolve('/blog/vela-is-in-alpha')}
 				class="logo-tag"
 				data-rybbit-event="cta_click"
 				data-rybbit-prop-location="logo-tag"
@@ -237,14 +281,13 @@
 			</a>
 		</div>
 		<div class="nav-links">
-		
 			<a href="#why">Why Vela</a>
 			<a href="#how-it-works">How it works</a>
 			<a href="#pricing">Pricing</a>
 			<a href="#faq">FAQ</a>
 
 			<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a>
-				<a
+			<a
 				href="https://wallet.getvela.app/onboarding"
 				target="_blank"
 				rel="noopener"
@@ -1295,7 +1338,7 @@
 				href="https://x.com/realvelawallet"
 				target="_blank"
 				rel="noopener"
-				class="btn btn-primary btn-social"
+				class="btn btn-outline btn-social"
 				data-rybbit-event="social_click"
 				data-rybbit-prop-network="x">Follow on X</a
 			>
@@ -1330,7 +1373,7 @@
 		--green: #2d8e5f;
 		--green-soft: rgba(45, 142, 95, 0.1);
 		--radius: 14px;
-		--max-w: 1200px;
+		--max-w: 1400px;
 	}
 
 	/* ── Base ── */

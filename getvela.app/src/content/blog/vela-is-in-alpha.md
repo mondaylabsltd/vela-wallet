@@ -33,11 +33,11 @@ Vela is fully self-custodial. We never hold your keys and **cannot move, freeze,
 or recover your funds**. Your wallet is a passkey on your device, backed up by
 iCloud Keychain or Google Password Manager.
 
-That cuts both ways. Today there is no social recovery: if you lose both your
-device and your cloud-synced passkey, with no other copy, the account cannot be
-recovered. So keep your platform's passkey backup turned on. More recovery
-options are on the [roadmap](/docs/roadmap), and the [recovery doc](/docs/recovery)
-explains exactly how it works today.
+That cuts both ways. By design there's no seed phrase and no social recovery — and
+so no guardian we could lose, leak, or be forced to act on. The flip side is real:
+if you lose both your device and your cloud-synced passkey, with no other copy, the
+account can't be recovered. So keep your platform's passkey backup turned on. The
+[recovery doc](/docs/recovery) explains exactly how it works.
 
 ## We haven't been audited yet, and I won't pretend otherwise
 

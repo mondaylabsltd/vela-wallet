@@ -1,34 +1,60 @@
 ---
 title: Create your wallet
-description: Create a self-custodial Vela wallet in under a minute using a passkey — no seed phrase.
+description: Create a self-custodial Vela wallet in under a minute with a passkey — no seed phrase. Your wallet is a Safe smart account with the same address on every network.
 ---
+
+<script>
+	import Callout from '$lib/components/Callout.svelte';
+</script>
 
 # Create your wallet
 
-Creating a wallet takes about a minute and a single biometric prompt.
+Creating a wallet takes about a minute and a single biometric prompt. Open the
+web wallet at [wallet.getvela.app](https://wallet.getvela.app/onboarding?mode=create)
+and choose **Create a wallet**.
 
 ## Steps
 
-1. Open Vela and choose **Create wallet**.
-2. Pick a **name** for the wallet. This is stored alongside your passkey's public
-   key so you can recognize the account when you sign in on another device. It is
-   public, so don't use anything you'd rather keep private.
-3. When prompted, **authenticate with your passkey** — Face ID, Touch ID, or your
-   device's equivalent. This creates the signing key inside your device's secure
-   hardware.
-4. That's it. You'll land on your wallet, ready to receive tokens.
+1. **Name your wallet.** Pick a name so you can recognize the account later and
+   when signing in on another device. It's stored next to your public key, so
+   treat it as public — don't put anything private in it.
+2. **Acknowledge the basics.** A short checklist confirms you understand that
+   Vela is self-custodial and still alpha software, with links to the
+   [privacy policy](/privacy) and [terms](/terms).
+3. **Create your passkey.** When prompted, authenticate with **Face ID, Touch ID,
+   or your fingerprint**. This creates a WebAuthn (P-256) credential in your
+   device's secure hardware. There is no seed phrase step, because there is no
+   seed phrase.
+4. **Done.** Vela shows your wallet address and you're in. You can verify it and
+   sign in to land on your wallet.
 
-There is no seed phrase step, because there is no seed phrase. The key that
-controls your wallet is the passkey you just created.
+## What your wallet actually is
 
-## What just happened
+This is the part most wallets don't explain — and it matters for how Vela works.
 
-- A key pair was generated in your device's secure element.
-- The **public** key (and the name you chose) was published to Vela's passkey
-  index so the account can be found again on a new device. The
-  [recovery doc](/docs/recovery) covers this in detail.
-- The **private** key never left your device and never will. Not even your OS
-  shows it to you; you only ever *use* it, with your face or fingerprint.
+Your Vela wallet is a **Safe smart account** (a smart contract), not a plain
+"externally owned account." Your passkey is the account's owner; an
+ERC-4337 setup lets you operate it with just your face or fingerprint.
+
+<Callout type="info" title="Your address is the same on every network">
+Vela derives your address from your passkey's public key, so it's identical on
+Ethereum, Base, Arbitrum, Gnosis, and every other supported network. You can give
+out one address everywhere.
+</Callout>
+
+A useful consequence: the address is **counterfactual**. It's computed before
+anything is deployed on-chain, so **you can receive funds at it before your
+wallet contract exists**. The contract deploys itself — paid from its own balance
+— the first time you send a transaction on a given network.
+
+## What just happened to your keys
+
+- A **passkey key pair** was generated inside your device's secure hardware.
+- The **private key never leaves** that hardware, and it's synced by your OS
+  (iCloud Keychain or Google Password Manager) — Vela never sees it.
+- The **public key and your chosen name** are published to Vela's Passkey Index
+  (a contract on Gnosis Chain) so your account can be found again on a new device.
+  See [recovery & sign-in](/docs/recovery).
 
 ## Next steps
 

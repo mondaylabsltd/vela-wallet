@@ -100,8 +100,8 @@
 				in each network's native asset.
 			</li>
 			<li>
-				<strong>One-time relayer deposit.</strong> Your first transaction on each network requires a small,
-				one-time, non-refundable deposit to fund the gas relayer.
+				<strong>Relayer activation deposit.</strong> Each network's gas relayer is activated with a small,
+				non-refundable deposit. It can run down over time, so it may need re-activating again later.
 			</li>
 			<li>
 				<strong>Things will change.</strong> Interfaces, the relayer model, and recovery mechanisms are
@@ -127,7 +127,7 @@
 		--text-secondary: #9a9790;
 		--text-tertiary: #6b6862;
 		--accent: #e8572a;
-		--max-w: 1200px;
+		--max-w: 1400px;
 	}
 
 	nav {
