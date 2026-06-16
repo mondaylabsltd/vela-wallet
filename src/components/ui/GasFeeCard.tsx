@@ -121,14 +121,15 @@ export function GasFeeCard({
 
       {/* Expanded gas details */}
       {expanded && feeEstimate && (() => {
-        const bundlerGwei = Number(feeEstimate.bundlerGasPrice) / 1e9;
+        const networkGwei = Number(feeEstimate.networkFeePerGas) / 1e9;
+        const relayerGwei = Number(feeEstimate.relayerFeePerGas) / 1e9;
         const userOpGwei = Number(feeEstimate.maxFeePerGas) / 1e9;
 
         return (
           <VelaCard style={styles.gasCard}>
             {/* Tier selector */}
             <View style={styles.tierRow}>
-              {(['slow', 'standard', 'rapid', 'fast'] as GasTier[]).map((t) => (
+              {(['slow', 'standard', 'fast'] as GasTier[]).map((t) => (
                 <Pressable
                   key={t}
                   style={[styles.tierBtn, gasTier === t && styles.tierBtnActive]}
@@ -148,9 +149,11 @@ export function GasFeeCard({
               </Pressable>
             </View>
             <View style={styles.separator} />
-            <DetailRow label={t('componentsUi.gas.gasPrice')} value={`${bundlerGwei.toFixed(4)} Gwei`} />
+            <DetailRow label={t('componentsUi.gas.networkFee')} value={`${networkGwei.toFixed(4)} Gwei`} />
             <View style={styles.separator} />
-            <DetailRow label={t('componentsUi.gas.gasPriceUserOp')} value={`${userOpGwei.toFixed(4)} Gwei`} />
+            <DetailRow label={t('componentsUi.gas.relayerFee')} value={`${relayerGwei.toFixed(4)} Gwei`} />
+            <View style={styles.separator} />
+            <DetailRow label={t('componentsUi.gas.youPay')} value={`${userOpGwei.toFixed(4)} Gwei`} />
             <View style={styles.separator} />
             <DetailRow label={t('componentsUi.gas.gasLimit')} value={feeEstimate.totalGas.toLocaleString()} />
             <View style={styles.separator} />

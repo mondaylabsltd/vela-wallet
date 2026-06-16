@@ -233,12 +233,13 @@ export const GAS_TIER_MULTIPLIERS: Record<GasTier, { num: bigint; den: bigint; l
 };
 
 /**
- * Bundler profit margin percentage (fixed, independent of speed tier).
- * Must match WALLET_GAS_MARGIN_PERCENT on the bundler side.
- * E.g. 50 → 1.5x markup → 50% margin.
- * Bundler derives outerGasPrice = userOpGasPrice / (1 + BUNDLER_MARGIN_PERCENT / 100).
+ * Local-fallback relayer margin, used by calcMaxFeePerGas ONLY when the bundler
+ * can't quote a price (pimlico_getUserOperationGasPrice). The bundler is the
+ * source of truth; this must match its WALLET_GAS_MARGIN_PERCENT (default 100)
+ * so a fallback op isn't under-priced and rejected.
+ * E.g. 100 → 2x markup → relayer fee ≈ network fee.
  */
-const BUNDLER_MARGIN_PERCENT = 50;
+const BUNDLER_MARGIN_PERCENT = 100;
 const BUNDLER_MARGIN_NUM = BigInt(100 + BUNDLER_MARGIN_PERCENT);  // 150
 const BUNDLER_MARGIN_DEN = 100n;
 
@@ -246,9 +247,13 @@ const BUNDLER_MARGIN_DEN = 100n;
 export interface TransactionFeeEstimate {
   /** Total estimated cost in wei (totalGas × maxFeePerGas). */
   totalWei: bigint;
-  /** UserOp maxFeePerGas = gasPrice × speedTier × BUNDLER_MARGIN. */
+  /** What the user pays per gas — quoted by the bundler (single source of truth). */
   maxFeePerGas: bigint;
-  /** Intended outer tx gas price = gasPrice × speedTier. */
+  /** Per-gas on-chain network cost (the part that goes to validators). */
+  networkFeePerGas: bigint;
+  /** Per-gas Vela relayer fee (maxFeePerGas − networkFeePerGas). */
+  relayerFeePerGas: bigint;
+  /** Intended outer tx gas price (≈ networkFeePerGas). */
   bundlerGasPrice: bigint;
   /** Total gas units (verification + call + preVerification). */
   totalGas: bigint;
@@ -256,6 +261,8 @@ export interface TransactionFeeEstimate {
   deployed: boolean;
   /** Which tier was used for this estimate. */
   tier: GasTier;
+  /** True when the price came from the bundler quote (vs a local fallback). */
+  quoted: boolean;
 }
 
 /** Fetch fresh on-chain gas price (bypasses cache). */
@@ -271,17 +278,35 @@ export async function estimateTransactionFee(
   chainId: number,
   tier: GasTier = 'standard',
 ): Promise<TransactionFeeEstimate> {
-  const [deployed, { gasPrice }] = await Promise.all([
+  // The bundler is the single source of truth for the price. getBundlerGasQuote
+  // throws GasQuoteTooHighError (propagated here = refuse) if the quote is abusive,
+  // and returns null only when the bundler can't quote (then we fall back locally).
+  const [deployed, { gasPrice }, quote] = await Promise.all([
     isDeployed(from, chainId),
     getGasPrices(chainId),
+    getBundlerGasQuote(chainId, tier),
   ]);
 
-  // maxFeePerGas = gasPrice × speedTier × BUNDLER_MARGIN
-  const userOpMaxFee = calcMaxFeePerGas(gasPrice, tier);
-  // bundlerGasPrice = gasPrice × speedTier (what bundler pays on-chain for this tier)
-  const m = GAS_TIER_MULTIPLIERS[tier];
-  let bundlerGasPrice = (gasPrice * m.num) / m.den;
-  if (bundlerGasPrice < 1n) bundlerGasPrice = 1n;
+  let userOpMaxFee: bigint;
+  let networkFeePerGas: bigint;
+  let relayerFeePerGas: bigint;
+  let bundlerGasPrice: bigint;
+  const quoted = quote !== null;
+
+  if (quote) {
+    userOpMaxFee = quote.maxFeePerGas;
+    networkFeePerGas = quote.networkFeePerGas;
+    relayerFeePerGas = quote.relayerFeePerGas;
+    bundlerGasPrice = quote.networkFeePerGas;
+  } else {
+    // Local fallback: bundler doesn't support pimlico_getUserOperationGasPrice.
+    userOpMaxFee = calcMaxFeePerGas(gasPrice, tier);
+    const m = GAS_TIER_MULTIPLIERS[tier];
+    bundlerGasPrice = (gasPrice * m.num) / m.den;
+    if (bundlerGasPrice < 1n) bundlerGasPrice = 1n;
+    networkFeePerGas = bundlerGasPrice;
+    relayerFeePerGas = userOpMaxFee > bundlerGasPrice ? userOpMaxFee - bundlerGasPrice : 0n;
+  }
 
   // Try to get accurate gas estimates from the bundler. This catches high-gas chains
   // (e.g. Monad) where actual gas usage is 3-10x higher than the static defaults below.
@@ -335,7 +360,17 @@ export async function estimateTransactionFee(
 
   const totalWei = totalGas * userOpMaxFee;
 
-  return { totalWei, maxFeePerGas: userOpMaxFee, bundlerGasPrice, totalGas, deployed, tier };
+  return {
+    totalWei,
+    maxFeePerGas: userOpMaxFee,
+    networkFeePerGas,
+    relayerFeePerGas,
+    bundlerGasPrice,
+    totalGas,
+    deployed,
+    tier,
+    quoted,
+  };
 }
 
 /** Format wei to a human-readable ETH-like string. */
@@ -1001,6 +1036,90 @@ export function calcMaxFeePerGas(gasPrice: bigint, tier: GasTier = 'standard'): 
   let maxFee = (gasPrice * m.num * BUNDLER_MARGIN_NUM) / (m.den * BUNDLER_MARGIN_DEN);
   if (maxFee < 1n) maxFee = 1n;
   return maxFee;
+}
+
+/**
+ * Hard client-side cap: refuse any bundler quote above this multiple of the
+ * chain's own gas price. The relayer policy is ~2× the on-chain cost; 3× leaves
+ * headroom for base-fee volatility between our query and the bundler's, while
+ * still blocking an abusive or misconfigured (e.g. third-party) bundler.
+ */
+export const MAX_QUOTE_VS_CHAIN_MULTIPLE = 3n;
+
+/** Thrown when a bundler quotes a gas price above the client-side sanity cap. */
+export class GasQuoteTooHighError extends Error {
+  constructor(quoted: bigint, chainGasPrice: bigint) {
+    super(
+      `The relayer quoted an abnormally high gas price ` +
+        `(${(Number(quoted) / Number(chainGasPrice || 1n)).toFixed(1)}× the network rate). ` +
+        `For your safety, Vela won't submit this transaction. Try again, or switch bundler.`,
+    );
+    this.name = 'GasQuoteTooHighError';
+  }
+}
+
+export interface GasQuoteTier {
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+  networkFeePerGas: bigint;
+  relayerFeePerGas: bigint;
+}
+
+/**
+ * Ask the bundler for the authoritative gas price (pimlico_getUserOperationGasPrice).
+ * The bundler is the single source of truth for the price; the wallet uses its
+ * quote and displays it — it never marks the price up on its own.
+ *
+ * Returns null when the bundler doesn't support the method (older / generic
+ * bundler) so the caller can fall back to a local estimate. Throws
+ * GasQuoteTooHighError when the quote exceeds the client-side sanity cap — that
+ * is a refusal, not a fallback, so an abusive bundler can't overcharge silently.
+ */
+export async function getBundlerGasQuote(
+  chainId: number,
+  tier: GasTier = 'standard',
+): Promise<GasQuoteTier | null> {
+  let resp;
+  let chainGasPrice: bigint;
+  try {
+    const [r, gp] = await Promise.all([
+      rpcCall('pimlico_getUserOperationGasPrice', [], chainId),
+      getGasPrices(chainId),
+    ]);
+    resp = r;
+    chainGasPrice = gp.gasPrice;
+  } catch (err) {
+    console.log(
+      '[Gas] Bundler gas-price quote unavailable, using local estimate:',
+      err instanceof Error ? err.message : String(err),
+    );
+    return null;
+  }
+
+  const t = resp.result?.[tier];
+  if (resp.error || !t?.maxFeePerGas) return null;
+
+  const maxFeePerGas = parseHexUInt64(t.maxFeePerGas as string);
+  const maxPriorityFeePerGas = parseHexUInt64((t.maxPriorityFeePerGas ?? t.maxFeePerGas) as string);
+  // Vela extension fields; derive them if a generic bundler omits them.
+  const networkFeePerGas = t.networkFeePerGas
+    ? parseHexUInt64(t.networkFeePerGas as string)
+    : chainGasPrice;
+  const relayerFeePerGas = t.relayerFeePerGas
+    ? parseHexUInt64(t.relayerFeePerGas as string)
+    : maxFeePerGas > networkFeePerGas
+      ? maxFeePerGas - networkFeePerGas
+      : 0n;
+
+  // Client-side hard cap — refuse, don't silently fall back.
+  if (chainGasPrice > 0n && maxFeePerGas > chainGasPrice * MAX_QUOTE_VS_CHAIN_MULTIPLE) {
+    console.warn(
+      `[Gas] Bundler quote ${maxFeePerGas} exceeds ${MAX_QUOTE_VS_CHAIN_MULTIPLE}× chain price ${chainGasPrice} — refusing.`,
+    );
+    throw new GasQuoteTooHighError(maxFeePerGas, chainGasPrice);
+  }
+
+  return { maxFeePerGas, maxPriorityFeePerGas, networkFeePerGas, relayerFeePerGas };
 }
 
 async function estimateGas(

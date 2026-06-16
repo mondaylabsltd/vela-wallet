@@ -40,12 +40,14 @@ tokens and ERC-20s. Your address is the same on all of them. See
 ## How much does it cost?
 
 The wallet is free and Vela has **no token**. You pay network **gas**, in each
-network's native token, out of your own wallet balance — plus a transparent
-relayer markup shown in full before you confirm. Each network also needs a small,
-**non-refundable deposit to activate its gas relayer account** (Vela may sponsor
-this for new users); because that account can run down, you may have to top it up
-again later — it isn't strictly one-time. Details in
-[networks & fees](/docs/networks-and-fees).
+network's native token, out of your own wallet balance, plus a relayer fee set to
+**roughly the network fee itself** — so about **2× the on-chain cost**, shown as a
+clear *network fee / relayer fee / total* split before you confirm (the price is
+quoted by the bundler, and the wallet refuses anything above ~3× the network
+rate). Each network also needs a small, **non-refundable deposit to activate its
+gas relayer account** (Vela may sponsor this for new users); because that account
+can run down, you may have to top it up again later — it isn't strictly one-time.
+Details in [networks & fees](/docs/networks-and-fees).
 
 ## What can Vela (the company) see or do?
 

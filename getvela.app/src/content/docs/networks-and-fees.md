@@ -49,11 +49,18 @@ on-chain and is reimbursed for the gas. A few things follow from that:
   (ETH, BNB, xDAI…). There's no ERC-4337 **paymaster** sponsoring — or gating —
   each transaction. (Vela may sponsor the one-time *gas-account activation* for
   new users; that's separate, and covered below.)
-- The **relayer fee is a transparent markup** over the on-chain gas price, shown
-  in full on the confirmation screen before you sign. You can pick a speed tier
-  (Slow / Standard / Rapid / Fast).
-- The confirm screen breaks the fee down: on-chain gas price, UserOp gas price,
-  gas limit, the fee in the native token, and the fee in your display currency.
+- The **bundler quotes the gas price** — it is the single source of truth, and the
+  wallet uses that quote rather than marking the price up on its own. You can pick a
+  speed tier (Slow / Standard / Fast); the tier changes how fast your transaction is
+  included, not the fee policy.
+- Vela's **relayer fee is set to roughly the network fee itself** — so you pay about
+  **twice the raw on-chain cost**: one part to the chain's validators, one to the
+  relayer that runs the infrastructure.
+- The confirm screen **breaks the fee down honestly**: the on-chain *network fee*,
+  the *Vela relayer fee*, and what *you pay* in total — plus the gas limit and the
+  amount in your display currency. As a safety check, the wallet **refuses any quote
+  above ~3× the network rate**, so a misbehaving or third-party bundler can't
+  overcharge you.
 
 ## Who runs the bundler — and who gets the fees
 

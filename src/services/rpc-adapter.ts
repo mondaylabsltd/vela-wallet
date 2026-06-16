@@ -20,6 +20,7 @@ const BUNDLER_METHODS = new Set([
   'eth_estimateUserOperationGas',
   'eth_getUserOperationReceipt',
   'eth_getUserOperationByHash',
+  'pimlico_getUserOperationGasPrice',
 ]);
 
 // ---------------------------------------------------------------------------
