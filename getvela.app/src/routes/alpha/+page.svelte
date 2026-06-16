@@ -55,7 +55,7 @@
 		<p>
 			Keep that backup enabled. Today there is <strong>no social recovery</strong>: if you lose both
 			your device and your cloud-synced passkey, and you have no other copy, the account cannot be
-			recovered. More recovery options are on the <a href={resolve('/roadmap')}>roadmap</a>.
+			recovered. More recovery options are on the <a href={resolve('/docs/roadmap')}>roadmap</a>.
 		</p>
 	</section>
 
@@ -240,9 +240,9 @@
 		font-weight: 600;
 	}
 	a {
-		color: var(--accent);
-		text-decoration: underline;
-		text-underline-offset: 2px;
+		/* color: var(--accent); */
+		/* text-decoration: underline; */
+		/* text-underline-offset: 2px; */
 	}
 
 	ul {

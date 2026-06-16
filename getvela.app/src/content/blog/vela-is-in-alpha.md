@@ -36,7 +36,7 @@ iCloud Keychain or Google Password Manager.
 That cuts both ways. Today there is no social recovery: if you lose both your
 device and your cloud-synced passkey, with no other copy, the account cannot be
 recovered. So keep your platform's passkey backup turned on. More recovery
-options are on the [roadmap](/roadmap), and the [recovery doc](/docs/recovery)
+options are on the [roadmap](/docs/roadmap), and the [recovery doc](/docs/recovery)
 explains exactly how it works today.
 
 ## We haven't been audited yet, and I won't pretend otherwise

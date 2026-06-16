@@ -175,7 +175,7 @@ If you lose <strong>both</strong> your device <strong>and</strong> your
 cloud-synced passkey, with no other copy, the account cannot currently be
 recovered — there is no social recovery or guardian mechanism today. Keep your OS
 passkey backup enabled. More recovery options are on the
-<a href="/roadmap">roadmap</a>.
+<a href="/docs/roadmap">roadmap</a>.
 </Callout>
 
 The full recovery model, including the honest limits, is in

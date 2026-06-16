@@ -11,27 +11,37 @@
 				<img src="/vela-logo.png" alt="Vela" width="24" height="24" />
 				<span>Vela Wallet</span>
 			</div>
-			<p class="copy">&copy; {year} MONDAY LABS LTD</p>
 			<p class="tagline">Your keys. Your face. No seed phrase.</p>
+			<p class="copy">&copy; {year} MONDAY LABS LTD</p>
 		</div>
 
 		<nav class="cols" aria-label="Footer">
 			<div class="col">
-				<h3>Product</h3>
-				<a href="https://wallet.getvela.app/onboarding" target="_blank" rel="noopener">Open app</a>
+				<h3>Resources</h3>
 				<a href={resolve('/docs')}>Docs</a>
-				<a href={resolve('/roadmap')}>Roadmap</a>
+				<a href={resolve('/docs/whitepaper')}>Whitepaper</a>
+				<a href={resolve('/docs/roadmap')}>Roadmap</a>
+				<a href={resolve('/blog')}>Blog</a>
+				<a href={resolve('/about')}>About</a>
 			</div>
 			<div class="col">
-				<h3>Company</h3>
-				<a href={resolve('/about')}>About</a>
-				<a href={resolve('/blog')}>Blog</a>
-				<a href={resolve('/docs/whitepaper')}>Whitepaper</a>
-				<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a
+				<h3>Infrastructure</h3>
+				<a href="https://walletpair.org/" target="_blank" rel="noopener">WalletPair</a>
+				<a href="https://github.com/atshelchin/vela-bundler" target="_blank" rel="noopener"
+					>Vela Bundler</a
 				>
+				<a href="https://ethereum-data.awesometools.dev/" target="_blank" rel="noopener"
+					>Chain Data Index</a
+				>
+				<a href="https://webauthnp256-publickey-index.biubiu.tools/" target="_blank" rel="noopener"
+					>Passkey Index</a
+				>
+				<a href="https://frankfurter.dev/" target="_blank" rel="noopener">Fiat Rates</a>
 			</div>
 			<div class="col">
 				<h3>Community</h3>
+				<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a
+				>
 				<a href="https://x.com/realvelawallet" target="_blank" rel="noopener">X / Twitter</a>
 				<a href="https://t.me/velawallet" target="_blank" rel="noopener">Telegram</a>
 				<a href={resolve('/blog/rss.xml')}>RSS</a>
@@ -73,14 +83,14 @@
 	.brand img {
 		border-radius: 6px;
 	}
+	.tagline {
+		margin-top: 14px;
+		color: var(--text-muted);
+		font-size: 0.85rem;
+	}
 	.copy {
 		margin-top: 14px;
 		color: var(--text-secondary);
-		font-size: 0.85rem;
-	}
-	.tagline {
-		margin-top: 6px;
-		color: var(--text-muted);
 		font-size: 0.85rem;
 	}
 	.cols {
