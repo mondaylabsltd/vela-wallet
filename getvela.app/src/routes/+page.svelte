@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import SiteFooter from '$lib/components/SiteFooter.svelte';
 
 	// Analytics helper
 	interface RybbitWindow extends Window {
@@ -220,30 +221,36 @@
 <!-- Nav -->
 <nav>
 	<div class="nav-inner">
-		<a href={resolve('/')} class="logo">
-			<img src="/vela-logo.png" alt="Vela Wallet" width="28" height="28" />
-			<span>vela</span>
-		</a>
-		<div class="nav-links">
+		<div class="brand">
+			<a href={resolve('/')} class="logo">
+				<img src="/vela-logo.png" alt="Vela Wallet" width="28" height="28" />
+				<span>Vela Wallet</span>
+			</a>
 			<a
+				href={resolve('/alpha')}
+				class="logo-tag"
+				data-rybbit-event="cta_click"
+				data-rybbit-prop-location="logo-tag"
+			>
+				<span class="logo-tag-dot"></span>
+				Alpha
+			</a>
+		</div>
+		<div class="nav-links">
+		
+			<a href="#why">Why Vela</a>
+			<a href="#how-it-works">How it works</a>
+			<a href="#pricing">Pricing</a>
+			<a href="#faq">FAQ</a>
+
+			<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a>
+				<a
 				href="https://wallet.getvela.app/onboarding"
 				target="_blank"
 				rel="noopener"
 				data-rybbit-event="cta_click"
 				data-rybbit-prop-location="nav-signin">Sign in</a
 			>
-			<a
-				href="https://wallet.getvela.app/onboarding?mode=create"
-				target="_blank"
-				rel="noopener"
-				data-rybbit-event="cta_click"
-				data-rybbit-prop-location="nav">Create wallet</a
-			>
-			<a href="#why">Why Vela</a>
-			<a href="#how-it-works">How it works</a>
-			<a href="#pricing">Pricing</a>
-			<a href="#faq">FAQ</a>
-			<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a>
 		</div>
 	</div>
 </nav>
@@ -1305,24 +1312,7 @@
 </section>
 
 <!-- Footer -->
-<footer>
-	<div class="container footer-inner">
-		<div class="footer-left">
-			<div class="footer-brand">
-				<img src="/vela-logo.png" alt="Vela" width="24" height="24" />
-				<span>Vela Wallet</span>
-			</div>
-			<p class="footer-copy">&copy; {new Date().getFullYear()} MONDAY LABS LTD</p>
-		</div>
-		<div class="footer-links">
-			<a href={resolve('/privacy')}>Privacy</a>
-			<a href={resolve('/terms')}>Terms</a>
-			<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a>
-			<a href="https://x.com/realvelawallet" target="_blank" rel="noopener">X</a>
-			<a href="https://t.me/velawallet" target="_blank" rel="noopener">Telegram</a>
-		</div>
-	</div>
-</footer>
+<SiteFooter />
 
 <style>
 	/* ── Palette ── */
@@ -1460,6 +1450,41 @@
 	}
 	.hero-signin:hover {
 		color: var(--text);
+	}
+
+	.brand {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.logo-tag {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 3px 9px;
+		border-radius: 999px;
+		font-size: 0.68rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-secondary);
+		background: var(--bg-raised);
+		border: 1px solid var(--border);
+		transition:
+			color 0.15s,
+			border-color 0.15s;
+	}
+	.logo-tag:hover {
+		color: var(--text);
+		border-color: var(--text-tertiary);
+	}
+	.logo-tag-dot {
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		background: var(--accent);
+		box-shadow: 0 0 6px rgba(232, 87, 42, 0.5);
+		animation: pulse-dot 2s ease-in-out infinite;
 	}
 
 	/* ── Scroll Hint ── */
@@ -2111,7 +2136,7 @@
 		color: var(--text-secondary);
 		font-size: 0.9rem;
 		line-height: 1.6;
-		max-width: 580px;
+		max-width: 720px;
 		margin: 0 auto 20px;
 	}
 	.trust-tagline a {
@@ -2578,48 +2603,6 @@
 		margin-bottom: 16px;
 	}
 
-	/* ── Footer ── */
-	footer {
-		padding: 28px 0;
-		border-top: 1px solid var(--border);
-	}
-	.footer-inner {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-	.footer-left {
-		display: flex;
-		align-items: center;
-		gap: 16px;
-	}
-	.footer-brand {
-		display: flex;
-		align-items: center;
-		gap: 7px;
-		font-weight: 600;
-		font-size: 0.85rem;
-	}
-	.footer-brand img {
-		border-radius: 5px;
-	}
-	.footer-copy {
-		color: var(--text-tertiary);
-		font-size: 0.75rem;
-	}
-	.footer-links {
-		display: flex;
-		gap: 18px;
-	}
-	.footer-links a {
-		color: var(--text-tertiary);
-		font-size: 0.78rem;
-		transition: color 0.15s;
-	}
-	.footer-links a:hover {
-		color: var(--text);
-	}
-
 	/* ── Responsive ── */
 	@media (max-width: 768px) {
 		.hero {
@@ -2694,15 +2677,6 @@
 		}
 		.notify-social .btn-social {
 			width: 100%;
-		}
-		.footer-inner {
-			flex-direction: column;
-			gap: 14px;
-			text-align: center;
-		}
-		.footer-left {
-			flex-direction: column;
-			gap: 6px;
 		}
 	}
 </style>

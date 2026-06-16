@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
+	import SiteFooter from '$lib/components/SiteFooter.svelte';
 </script>
 
 <svelte:head>
@@ -130,19 +131,7 @@
 	</section>
 </main>
 
-<footer>
-	<div class="container footer-inner">
-		<div class="footer-brand">
-			<img src="/vela-logo.png" alt="Vela" width="32" height="32" />
-			<span>Vela Wallet</span>
-		</div>
-		<div class="footer-links">
-			<a href={resolve('/privacy')}>Privacy</a>
-			<a href={resolve('/terms')}>Terms</a>
-		</div>
-		<p class="footer-copy">&copy; {new Date().getFullYear()} Vela Wallet. All rights reserved.</p>
-	</div>
-</footer>
+<SiteFooter />
 
 <style>
 	:root {
@@ -246,57 +235,13 @@
 	}
 
 	a {
-		color: var(--accent);
-		text-decoration: underline;
-	}
-
-	footer {
-		padding: 40px 0;
-		border-top: 1px solid var(--border);
-	}
-	.footer-inner {
-		/* max-width: 1080px; */
-		max-width: var(--max-w);
-		margin: 0 auto;
-		padding: 0 24px;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-	.footer-brand {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		font-weight: 600;
-	}
-	.footer-brand img {
-		border-radius: 6px;
-	}
-	.footer-links {
-		display: flex;
-		gap: 24px;
-	}
-	.footer-links a {
-		color: var(--text-secondary);
-		font-size: 0.85rem;
-		text-decoration: none;
-	}
-	.footer-links a:hover {
-		color: var(--text);
-	}
-	.footer-copy {
-		color: var(--text-secondary);
-		font-size: 0.85rem;
+		/* color: var(--accent); */
+		/* text-decoration: underline; */
 	}
 
 	@media (max-width: 768px) {
 		h1 {
 			font-size: 1.5rem;
-		}
-		.footer-inner {
-			flex-direction: column;
-			gap: 16px;
-			text-align: center;
 		}
 	}
 </style>
