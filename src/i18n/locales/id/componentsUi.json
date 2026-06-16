@@ -35,6 +35,8 @@
       "reject": "Tolak",
       "personalSignTag": "personal_sign · Tanpa biaya gas",
       "unlimitedWarning": "Tanpa batas — kontrak ini dapat membelanjakan semua token Anda",
+      "partialWarning": "Tidak lengkap — sebagian detail tidak dapat dipecahkan. Tinjau dengan cermat sebelum menyetujui.",
+      "unverifiedWarning": "Jumlah token tidak dapat diverifikasi on-chain — periksa ulang sebelum menyetujui.",
       "blindTypedWarning": "Typed data ini tidak dapat dipecahkan dengan deskriptor yang dikenal. Tinjau dengan cermat.",
       "blindDecodeWarning": "Tidak dapat mendekode — tanpa deskriptor ERC-7730 ({{bytes}} byte)",
       "rawCalldataToggle": "Calldata mentah · {{bytes}} byte",

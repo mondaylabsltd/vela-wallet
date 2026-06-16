@@ -1,6 +1,7 @@
 {
   "home": {
     "totalBalance": "총 잔액",
+    "balanceStale": "마지막으로 확인된 합계를 표시합니다 — 일부 잔액을 업데이트하지 못했습니다.",
     "manageAssets": "자산 관리",
     "tabActivity": "활동",
     "tabConnections": "연결",
@@ -19,6 +20,8 @@
     "connActive": "활성",
     "connNote": "한 번에 하나의 연결만 활성화됩니다",
     "connDisconnect": "연결 해제",
+    "connReconnectBtn": "지금 재연결",
+    "connReconnectStuck": "재연결하지 못했습니다. 다시 시도하거나 연결을 해제하고 다시 페어링하세요.",
     "connEventsHead": "연결 활동 · {{count}}",
     "connNoEvents": "이 연결에 아직 요청이 없습니다.",
     "toastReceived": "{{amount}} {{token}} 받음",

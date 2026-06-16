@@ -33,7 +33,9 @@
     "appearance": {
       "themeLight": "Hell",
       "themeDark": "Dunkel",
-      "themeAuto": "Automatisch"
+      "themeAuto": "Automatisch",
+      "keepAwakeTitle": "Bildschirm anlassen",
+      "keepAwakeSubtitle": "Verhindert, dass sich der Bildschirm ausschaltet, während die App geöffnet ist"
     },
     "payments": {
       "voiceTitle": "Sprachansagen",

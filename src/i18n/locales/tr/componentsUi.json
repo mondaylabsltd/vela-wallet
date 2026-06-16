@@ -35,6 +35,8 @@
       "reject": "Reddet",
       "personalSignTag": "personal_sign · Gas ücreti yok",
       "unlimitedWarning": "Sınırsız — bu sözleşme tüm token'larınızı harcayabilir",
+      "partialWarning": "Eksik — bazı ayrıntılar çözümlenemedi. Onaylamadan önce dikkatlice inceleyin.",
+      "unverifiedWarning": "Token miktarı zincir üzerinde doğrulanamadı — onaylamadan önce tekrar kontrol edin.",
       "blindTypedWarning": "Bu yapılandırılmış veri bilinen bir tanımlayıcıyla çözümlenemedi. Dikkatlice inceleyin.",
       "blindDecodeWarning": "Çözümlenemiyor — ERC-7730 tanımlayıcısı yok ({{bytes}} bayt)",
       "rawCalldataToggle": "Ham calldata · {{bytes}} bayt",

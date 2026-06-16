@@ -33,7 +33,9 @@
     "appearance": {
       "themeLight": "ライト",
       "themeDark": "ダーク",
-      "themeAuto": "自動"
+      "themeAuto": "自動",
+      "keepAwakeTitle": "画面をオンのままにする",
+      "keepAwakeSubtitle": "アプリを開いている間、画面が消えないようにします"
     },
     "payments": {
       "voiceTitle": "音声アナウンス",

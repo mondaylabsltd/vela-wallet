@@ -33,7 +33,9 @@
     "appearance": {
       "themeLight": "Açık",
       "themeDark": "Koyu",
-      "themeAuto": "Otomatik"
+      "themeAuto": "Otomatik",
+      "keepAwakeTitle": "Ekranı açık tut",
+      "keepAwakeSubtitle": "Uygulama açıkken ekranın kapanmasını önler"
     },
     "payments": {
       "voiceTitle": "Sesli bildirimler",

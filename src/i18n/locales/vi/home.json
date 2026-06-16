@@ -1,6 +1,7 @@
 {
   "home": {
     "totalBalance": "Tổng số dư",
+    "balanceStale": "Đang hiển thị tổng số dư gần nhất — một số số dư không thể cập nhật.",
     "manageAssets": "Quản lý tài sản",
     "tabActivity": "Hoạt động",
     "tabConnections": "Kết nối",
@@ -19,6 +20,8 @@
     "connActive": "Đang hoạt động",
     "connNote": "Mỗi lần chỉ một kết nối hoạt động",
     "connDisconnect": "Ngắt kết nối",
+    "connReconnectBtn": "Kết nối lại ngay",
+    "connReconnectStuck": "Không thể kết nối lại. Hãy thử lại, hoặc ngắt kết nối và ghép nối lại.",
     "connEventsHead": "Hoạt động kết nối · {{count}}",
     "connNoEvents": "Chưa có yêu cầu nào trên kết nối này.",
     "toastReceived": "Đã nhận {{amount}} {{token}}",

@@ -1,6 +1,7 @@
 {
   "home": {
     "totalBalance": "Gesamtguthaben",
+    "balanceStale": "Letzter bekannter Gesamtstand wird angezeigt — einige Guthaben konnten nicht aktualisiert werden.",
     "manageAssets": "Assets verwalten",
     "tabActivity": "Aktivität",
     "tabConnections": "Verbindungen",
@@ -19,6 +20,8 @@
     "connActive": "Aktiv",
     "connNote": "Immer nur eine aktive Verbindung",
     "connDisconnect": "Trennen",
+    "connReconnectBtn": "Jetzt neu verbinden",
+    "connReconnectStuck": "Neu verbinden fehlgeschlagen. Versuche es erneut oder trenne die Verbindung und koppele neu.",
     "connEventsHead": "Verbindungsaktivität · {{count}}",
     "connNoEvents": "Noch keine Anfragen über diese Verbindung.",
     "toastReceived": "{{amount}} {{token}} erhalten",

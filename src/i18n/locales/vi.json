@@ -33,7 +33,9 @@
     "appearance": {
       "themeLight": "Sáng",
       "themeDark": "Tối",
-      "themeAuto": "Tự động"
+      "themeAuto": "Tự động",
+      "keepAwakeTitle": "Giữ màn hình luôn bật",
+      "keepAwakeSubtitle": "Ngăn màn hình tắt khi ứng dụng đang mở"
     },
     "payments": {
       "voiceTitle": "Thông báo bằng giọng nói",

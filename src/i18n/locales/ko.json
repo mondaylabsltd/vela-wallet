@@ -33,7 +33,9 @@
     "appearance": {
       "themeLight": "라이트",
       "themeDark": "다크",
-      "themeAuto": "자동"
+      "themeAuto": "자동",
+      "keepAwakeTitle": "화면 켜짐 유지",
+      "keepAwakeSubtitle": "앱이 열려 있는 동안 화면이 꺼지지 않도록 합니다"
     },
     "payments": {
       "voiceTitle": "음성 알림",

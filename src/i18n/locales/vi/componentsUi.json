@@ -35,6 +35,8 @@
       "reject": "Từ chối",
       "personalSignTag": "personal_sign · Không tốn phí gas",
       "unlimitedWarning": "Không giới hạn — hợp đồng này có thể chi tiêu toàn bộ token của bạn",
+      "partialWarning": "Không đầy đủ — một số chi tiết không thể giải mã. Hãy xem xét kỹ trước khi phê duyệt.",
+      "unverifiedWarning": "Không thể xác minh số lượng token on-chain — hãy kiểm tra lại trước khi phê duyệt.",
       "blindTypedWarning": "Không thể giải mã dữ liệu có cấu trúc này bằng một bộ mô tả đã biết. Hãy xem xét kỹ.",
       "blindDecodeWarning": "Không thể giải mã — không có bộ mô tả ERC-7730 ({{bytes}} byte)",
       "rawCalldataToggle": "Calldata thô · {{bytes}} byte",

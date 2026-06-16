@@ -33,7 +33,9 @@
     "appearance": {
       "themeLight": "Terang",
       "themeDark": "Gelap",
-      "themeAuto": "Otomatis"
+      "themeAuto": "Otomatis",
+      "keepAwakeTitle": "Biarkan layar tetap menyala",
+      "keepAwakeSubtitle": "Mencegah layar mati saat aplikasi terbuka"
     },
     "payments": {
       "voiceTitle": "Pengumuman suara",

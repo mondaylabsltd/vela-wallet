@@ -35,6 +35,8 @@
       "reject": "Ablehnen",
       "personalSignTag": "personal_sign · Keine Gas-Gebühr",
       "unlimitedWarning": "Unbegrenzt — dieser Contract kann alle Ihre Token ausgeben",
+      "partialWarning": "Unvollständig — einige Details konnten nicht dekodiert werden. Vor dem Genehmigen sorgfältig prüfen.",
+      "unverifiedWarning": "Die Token-Menge konnte nicht on-chain verifiziert werden — vor dem Genehmigen genau prüfen.",
       "blindTypedWarning": "Diese typisierten Daten konnten mit keinem bekannten Deskriptor dekodiert werden. Sorgfältig prüfen.",
       "blindDecodeWarning": "Dekodierung nicht möglich — kein ERC-7730-Deskriptor ({{bytes}} Bytes)",
       "rawCalldataToggle": "Rohe Calldata · {{bytes}} Bytes",

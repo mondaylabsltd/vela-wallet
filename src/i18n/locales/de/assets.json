@@ -23,6 +23,11 @@
     "rpcFixLabel": "RPC-URL",
     "rpcFixSaveBtn": "Speichern & erneut versuchen",
     "errorSaveRpc": "RPC-URL konnte nicht gespeichert werden.",
+    "rpcFixUnreachable": "Dieser RPC konnte nicht erreicht werden. Prüfen Sie die URL und versuchen Sie es erneut.",
+    "rpcFixWrongChain": "Dieser RPC bedient ein anderes Netzwerk (Chain {{actual}}, erwartet {{expected}}).",
+    "rpcProvidersTitle": "Wo Sie einen zuverlässigen RPC bekommen",
+    "rpcProvidersHint": "Kostenlose Endpunkte — registrieren Sie sich, kopieren Sie Ihre URL und fügen Sie sie oben ein.",
+    "rpcReport": "Funktioniert immer noch nicht? Melden",
     "invalidQrTitle": "Ungültiger QR-Code",
     "invalidQrMessage": "Bitte scannen Sie eine gültige Ethereum-Adresse oder Verbindungs-URI.",
     "chainFallback": "Chain {{chainId}}"

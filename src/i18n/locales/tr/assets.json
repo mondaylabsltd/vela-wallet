@@ -23,6 +23,11 @@
     "rpcFixLabel": "RPC URL",
     "rpcFixSaveBtn": "Kaydet ve Yeniden Dene",
     "errorSaveRpc": "RPC URL kaydedilemedi.",
+    "rpcFixUnreachable": "Bu RPC'ye ulaşılamadı. URL'yi kontrol edip tekrar deneyin.",
+    "rpcFixWrongChain": "Bu RPC farklı bir ağa hizmet veriyor (zincir {{actual}}, beklenen {{expected}}).",
+    "rpcProvidersTitle": "Güvenilir bir RPC nereden alınır",
+    "rpcProvidersHint": "Ücretsiz uç noktalar — kaydolun, URL'nizi kopyalayıp yukarıya yapıştırın.",
+    "rpcReport": "Hâlâ çalışmıyor mu? Bildirin",
     "invalidQrTitle": "Geçersiz QR",
     "invalidQrMessage": "Lütfen geçerli bir Ethereum adresi veya bağlantı URI'si okutun.",
     "chainFallback": "Zincir {{chainId}}"

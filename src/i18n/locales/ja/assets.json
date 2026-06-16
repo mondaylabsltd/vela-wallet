@@ -23,6 +23,11 @@
     "rpcFixLabel": "RPC URL",
     "rpcFixSaveBtn": "保存して再試行",
     "errorSaveRpc": "RPC URL の保存に失敗しました。",
+    "rpcFixUnreachable": "その RPC に接続できませんでした。URL を確認して再試行してください。",
+    "rpcFixWrongChain": "その RPC は別のネットワークに接続されています（チェーン {{actual}}、期待値 {{expected}}）。",
+    "rpcProvidersTitle": "信頼できる RPC の入手先",
+    "rpcProvidersHint": "無料のエンドポイント — 登録して URL をコピーし、上に貼り付けてください。",
+    "rpcReport": "まだ動作しませんか？報告する",
     "invalidQrTitle": "無効な QR コード",
     "invalidQrMessage": "有効な Ethereum アドレスまたは接続 URI をスキャンしてください。",
     "chainFallback": "チェーン {{chainId}}"

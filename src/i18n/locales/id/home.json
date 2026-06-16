@@ -1,6 +1,7 @@
 {
   "home": {
     "totalBalance": "Total saldo",
+    "balanceStale": "Menampilkan total terakhir yang diketahui — sebagian saldo tidak dapat diperbarui.",
     "manageAssets": "Kelola Aset",
     "tabActivity": "Aktivitas",
     "tabConnections": "Koneksi",
@@ -19,6 +20,8 @@
     "connActive": "Aktif",
     "connNote": "Hanya satu koneksi aktif dalam satu waktu",
     "connDisconnect": "Putuskan",
+    "connReconnectBtn": "Sambungkan ulang sekarang",
+    "connReconnectStuck": "Tidak dapat menyambung ulang. Coba lagi, atau putuskan dan pasangkan ulang.",
     "connEventsHead": "Aktivitas koneksi · {{count}}",
     "connNoEvents": "Belum ada permintaan di koneksi ini.",
     "toastReceived": "{{amount}} {{token}} diterima",

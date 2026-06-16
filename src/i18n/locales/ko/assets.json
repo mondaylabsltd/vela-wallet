@@ -23,6 +23,11 @@
     "rpcFixLabel": "RPC URL",
     "rpcFixSaveBtn": "저장 후 재시도",
     "errorSaveRpc": "RPC URL을 저장하지 못했습니다.",
+    "rpcFixUnreachable": "해당 RPC에 연결하지 못했습니다. URL을 확인하고 다시 시도하세요.",
+    "rpcFixWrongChain": "해당 RPC는 다른 네트워크를 제공합니다(체인 {{actual}}, 예상 {{expected}}).",
+    "rpcProvidersTitle": "신뢰할 수 있는 RPC를 구하는 방법",
+    "rpcProvidersHint": "무료 엔드포인트 — 가입한 뒤 URL을 복사해서 위에 붙여넣으세요.",
+    "rpcReport": "여전히 안 되나요? 신고하기",
     "invalidQrTitle": "잘못된 QR",
     "invalidQrMessage": "올바른 이더리움 주소 또는 연결 URI를 스캔하세요.",
     "chainFallback": "체인 {{chainId}}"

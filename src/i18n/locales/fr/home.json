@@ -1,6 +1,7 @@
 {
   "home": {
     "totalBalance": "Solde total",
+    "balanceStale": "Affichage de votre dernier total connu — certains soldes n'ont pas pu être mis à jour.",
     "manageAssets": "Gérer les actifs",
     "tabActivity": "Activité",
     "tabConnections": "Connexions",
@@ -19,6 +20,8 @@
     "connActive": "Active",
     "connNote": "Une seule connexion active à la fois",
     "connDisconnect": "Déconnecter",
+    "connReconnectBtn": "Reconnecter maintenant",
+    "connReconnectStuck": "Reconnexion impossible. Réessayez, ou déconnectez et réappairez.",
     "connEventsHead": "Activité de la connexion · {{count}}",
     "connNoEvents": "Aucune requête sur cette connexion pour l'instant.",
     "toastReceived": "{{amount}} {{token}} reçus",

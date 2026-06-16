@@ -23,6 +23,11 @@
     "rpcFixLabel": "URL RPC",
     "rpcFixSaveBtn": "Simpan & Coba Lagi",
     "errorSaveRpc": "Gagal menyimpan URL RPC.",
+    "rpcFixUnreachable": "Tidak dapat menjangkau RPC tersebut. Periksa URL dan coba lagi.",
+    "rpcFixWrongChain": "RPC tersebut melayani jaringan yang berbeda (chain {{actual}}, seharusnya {{expected}}).",
+    "rpcProvidersTitle": "Tempat mendapatkan RPC yang andal",
+    "rpcProvidersHint": "Endpoint gratis — daftar, salin URL Anda, lalu tempel di atas.",
+    "rpcReport": "Masih tidak berfungsi? Laporkan",
     "invalidQrTitle": "QR Tidak Valid",
     "invalidQrMessage": "Pindai alamat Ethereum atau URI koneksi yang valid.",
     "chainFallback": "Chain {{chainId}}"

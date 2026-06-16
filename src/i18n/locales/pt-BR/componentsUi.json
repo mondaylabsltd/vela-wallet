@@ -35,6 +35,8 @@
       "reject": "Rejeitar",
       "personalSignTag": "personal_sign · Sem taxa de gas",
       "unlimitedWarning": "Ilimitado — este contrato pode gastar todos os seus tokens",
+      "partialWarning": "Incompleto — não foi possível decodificar alguns detalhes. Revise com atenção antes de aprovar.",
+      "unverifiedWarning": "Não foi possível verificar on-chain a quantidade do token — confira novamente antes de aprovar.",
       "blindTypedWarning": "Não foi possível decodificar estes dados tipados com um descritor conhecido. Revise com atenção.",
       "blindDecodeWarning": "Não foi possível decodificar — sem descritor ERC-7730 ({{bytes}} bytes)",
       "rawCalldataToggle": "Calldata bruto · {{bytes}} bytes",

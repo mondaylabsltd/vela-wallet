@@ -1,6 +1,7 @@
 {
   "home": {
     "totalBalance": "合計残高",
+    "balanceStale": "最後に確認できた合計を表示しています — 一部の残高は更新できませんでした。",
     "manageAssets": "資産を管理",
     "tabActivity": "アクティビティ",
     "tabConnections": "接続",
@@ -19,6 +20,8 @@
     "connActive": "有効",
     "connNote": "同時に有効にできる接続は1つだけです",
     "connDisconnect": "切断",
+    "connReconnectBtn": "今すぐ再接続",
+    "connReconnectStuck": "再接続できませんでした。もう一度試すか、切断して再度ペアリングしてください。",
     "connEventsHead": "接続のアクティビティ · {{count}}",
     "connNoEvents": "この接続にはまだリクエストがありません。",
     "toastReceived": "{{amount}} {{token}} を受け取りました",
