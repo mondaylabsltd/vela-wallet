@@ -42,9 +42,14 @@ export type AppLanguage =
 /** What the user picks: a concrete locale or "follow the system". */
 export type LanguagePreference = 'auto' | AppLanguage;
 
-/** Order shown in the picker (most-prominent first). */
+/** Order shown in the picker: English first, then grouped by region. */
 export const SUPPORTED_LANGUAGES: AppLanguage[] = [
-  'en', 'zh', 'zh-TW', 'zh-HK', 'ja', 'ko', 'vi', 'id', 'tr', 'es-MX', 'pt-BR', 'fr', 'de', 'ru', 'it',
+  'en',                                 // default / lingua franca
+  'zh', 'zh-TW', 'zh-HK', 'ja', 'ko',   // East Asia
+  'vi', 'id',                           // Southeast Asia
+  'tr', 'ru',                           // Eurasia
+  'es-MX', 'pt-BR',                     // Latin America
+  'fr', 'it', 'de',                     // Western Europe
 ];
 export const FALLBACK_LANGUAGE: AppLanguage = 'en';
 
@@ -59,12 +64,12 @@ export const LANGUAGE_NATIVE_NAMES: Record<AppLanguage, string> = {
   'vi': 'Tiếng Việt',
   'id': 'Bahasa Indonesia',
   'tr': 'Türkçe',
+  'ru': 'Русский',
   'es-MX': 'Español (México)',
   'pt-BR': 'Português (Brasil)',
   'fr': 'Français',
-  'de': 'Deutsch',
-  'ru': 'Русский',
   'it': 'Italiano',
+  'de': 'Deutsch',
 };
 
 // ---------------------------------------------------------------------------
