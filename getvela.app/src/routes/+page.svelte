@@ -215,6 +215,13 @@
 				target="_blank"
 				rel="noopener"
 				data-rybbit-event="cta_click"
+				data-rybbit-prop-location="nav-signin">Sign in</a
+			>
+			<a
+				href="https://wallet.getvela.app/"
+				target="_blank"
+				rel="noopener"
+				data-rybbit-event="cta_click"
 				data-rybbit-prop-location="nav">Create wallet</a
 			>
 			<a href="#why">Why Vela</a>
@@ -243,6 +250,14 @@
 					class="btn btn-primary"
 					data-rybbit-event="cta_click"
 					data-rybbit-prop-location="hero">Create a wallet — no seed phrase</a
+				>
+				<a
+					href="https://wallet.getvela.app/"
+					target="_blank"
+					rel="noopener"
+					class="hero-signin"
+					data-rybbit-event="cta_click"
+					data-rybbit-prop-location="hero-signin">Already have a wallet? Sign in</a
 				>
 			</div>
 		</div>
@@ -1370,6 +1385,16 @@
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 14px;
+	}
+	.hero-signin {
+		font-size: 0.85rem;
+		color: var(--text-secondary);
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		transition: color 0.15s;
+	}
+	.hero-signin:hover {
+		color: var(--text);
 	}
 
 	/* ── Scroll Hint ── */
