@@ -183,6 +183,21 @@
 			clearInterval(rpcRefreshInterval);
 		};
 	});
+
+	// Built-in networks (mirrors the wallet's DEFAULT_NETWORKS). Logos are the
+	// same source the wallet itself uses, so they always match in-app.
+	const NETWORKS = [
+		{ name: 'Ethereum', chainId: 1 },
+		{ name: 'BNB Chain', chainId: 56 },
+		{ name: 'Polygon', chainId: 137 },
+		{ name: 'Arbitrum', chainId: 42161 },
+		{ name: 'Optimism', chainId: 10 },
+		{ name: 'Base', chainId: 8453 },
+		{ name: 'Avalanche', chainId: 43114 },
+		{ name: 'Gnosis', chainId: 100 }
+	];
+	const chainLogo = (chainId: number) =>
+		`https://ethereum-data.awesometools.dev/chainlogos/eip155-${chainId}.png`;
 </script>
 
 <svelte:head>
@@ -639,20 +654,24 @@
 			>, every wallet is on-chain, every claim is checkable.
 		</p>
 		<div class="trust-row">
-			{#if displayCount > 0}
-				<div class="trust-chip">
-					<span class="live-dot"></span>
-					<a
-						href="https://gnosisscan.io/address/0xdd93420bd49baabdff4a363ddd300622ae87e9c3#readContract#F14"
-						target="_blank"
-						rel="noopener"
-					>
-						<span class="stat-number">{displayCount.toLocaleString()}</span>
-					</a>
-
-					wallets created on-chain
-				</div>
-			{/if}
+			<div class="trust-chip">
+				<svg
+					width="14"
+					height="14"
+					fill="none"
+					viewBox="0 0 24 24"
+					stroke="currentColor"
+					stroke-width="2"
+					><path
+						d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					/></svg
+				>
+				<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener"
+					>100% open source</a
+				> — app + all our services
+			</div>
 			<div class="trust-chip">
 				<svg
 					width="14"
@@ -673,24 +692,20 @@
 					rel="noopener">Safe v1.4.1</a
 				> — audited, unmodified
 			</div>
-			<div class="trust-chip">
-				<svg
-					width="14"
-					height="14"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2"
-					><path
-						d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-					/></svg
-				>
-				<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener"
-					>100% open source</a
-				> — app + all our services
-			</div>
+			{#if displayCount > 0}
+				<div class="trust-chip">
+					<span class="live-dot"></span>
+					<a
+						href="https://gnosisscan.io/address/0xdd93420bd49baabdff4a363ddd300622ae87e9c3#readContract#F14"
+						target="_blank"
+						rel="noopener"
+					>
+						<span class="stat-number">{displayCount.toLocaleString()}</span>
+					</a>
+
+					wallets created on-chain
+				</div>
+			{/if}
 		</div>
 	</div>
 </section>
@@ -948,6 +963,32 @@
 					</tr>
 				</tbody>
 			</table>
+
+			<div class="tech-networks">
+				<div class="network-row">
+					{#each NETWORKS as net (net.chainId)}
+						<span class="network-chip">
+							<img
+								class="network-logo"
+								src={chainLogo(net.chainId)}
+								alt=""
+								width="22"
+								height="22"
+								loading="lazy"
+							/>
+							{net.name}
+						</span>
+					{/each}
+				</div>
+				<p class="network-note">
+					Custom networks need more than EVM compatibility — the chain must have the RIP-7212 P256
+					precompile and Vela's Safe + ERC-4337 contracts deployed. Vela checks this when you add
+					one, and the
+					<a href="https://biubiu.tools/apps/vela-wallet-chain-setup" target="_blank" rel="noopener"
+						>Chain Setup tool</a
+					> can deploy them on chains that don't — including your own local testnet.
+				</p>
+			</div>
 		</div>
 	</div>
 </section>
@@ -1528,12 +1569,16 @@
 		background: var(--bg);
 		border-radius: 26px;
 		padding: 0 16px 0;
-		display: flex;
-		flex-direction: column;
+		/* Status bar (row 1), animated step stack (row 2), dots (row 3).
+		   All steps share row 2, so the screen height is fixed at the tallest
+		   step and never changes as the animation cycles — no layout shift. */
+		display: grid;
+		grid-template-columns: 1fr;
 		overflow: hidden;
 	}
 	/* Status bar + Dynamic Island */
 	.mockup-statusbar {
+		grid-area: 1 / 1;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -1567,13 +1612,17 @@
 	}
 	/* ── Mockup Steps (animated flow) ── */
 	.mockup-step {
-		display: none;
+		grid-area: 2 / 1;
+		display: flex;
 		flex-direction: column;
 		padding: 0 4px 16px;
 		opacity: 0;
+		visibility: hidden;
 	}
 	.mockup-step.active {
-		display: flex;
+		opacity: 1;
+		visibility: visible;
+		z-index: 1;
 		animation: step-fade 0.25s ease forwards;
 	}
 	@keyframes step-fade {
@@ -1587,6 +1636,7 @@
 
 	/* Progress dots */
 	.mockup-dots {
+		grid-area: 3 / 1;
 		display: flex;
 		justify-content: center;
 		gap: 6px;
@@ -2078,6 +2128,40 @@
 		color: var(--accent);
 	}
 
+	/* ── Networks (inside Technical details) ── */
+	.tech-networks {
+		margin-top: 20px;
+		padding-top: 20px;
+		border-top: 1px solid var(--border);
+	}
+	.network-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 12px 18px;
+	}
+	.network-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 0.82rem;
+		font-weight: 500;
+		color: var(--text);
+		white-space: nowrap;
+	}
+	.network-logo {
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		background: var(--border);
+	}
+	.network-note {
+		margin-top: 16px;
+		color: var(--text-tertiary);
+		font-size: 0.8rem;
+		line-height: 1.65;
+	}
+
 	/* ── Does Less ── */
 	.does-less {
 		margin-top: 12px;
@@ -2543,6 +2627,9 @@
 		}
 		.trust-chip {
 			font-size: 0.72rem;
+		}
+		.network-chip {
+			font-size: 0.8rem;
 		}
 		.why-content {
 			text-align: left;
