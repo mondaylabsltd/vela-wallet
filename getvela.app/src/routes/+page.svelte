@@ -716,14 +716,19 @@
 		<div class="does-less-content">
 			<h2>A wallet that does less — on purpose.</h2>
 			<p>
-				No NFT gallery. No built-in swaps. No DeFi dashboard. No dApp-browser casino. Vela holds ETH
-				and ERC-20s, and connects to the dApps <em>you</em> choose through
-				<a href="https://walletpair.org/" target="_blank" rel="noopener">WalletPair</a>. That's the
-				whole product.
+				No NFT gallery. No built-in swaps. No DeFi dashboard. No in-app dApp browser pulling you
+				toward the next thing to click.
 			</p>
 			<p>
-				Less surface area means less to attack, less to audit, and less standing between you and
-				your money.
+				Vela holds ETH and ERC-20s. When you want to use a dApp, you connect to the one
+				<em>you</em> choose through
+				<a href="https://walletpair.org/" target="_blank" rel="noopener">WalletPair</a>.
+			</p>
+			<p class="does-less-beat">That's the whole product.</p>
+			<p>
+				Because every extra feature inside a wallet is more code to trust and more UI standing
+				between you and your money. Vela stays small on purpose: fewer paths to attack, fewer moving
+				parts to audit, and fewer chances to make a bad click.
 			</p>
 		</div>
 	</div>
@@ -735,45 +740,61 @@
 		<div class="why-content">
 			<h2>Why we built Vela</h2>
 			<p>
-				Seed phrases are hard to live with. Not "I got hacked" hard — quietly, constantly hard.
-				Where do you keep 12 words so they survive a house fire, a stolen phone, and your own
-				forgetfulness? Most people end up with a screenshot in their camera roll. That's not
-				security. That's a liability.
+				We didn't set out to build another wallet. We started with a question we could never answer
+				cleanly:
+			</p>
+			<p class="why-beat">Where are you supposed to keep twelve words?</p>
+			<p>
+				Put them in Notes and you're one stolen phone away from trouble. Write them on paper, and
+				now you're thinking about fire, water, moving apartments, roommates, trash bags, and whether
+				future-you will remember where "the safe place" was. The honest answer, for a lot of people,
+				is a screenshot in the camera roll. Everyone knows it's wrong. They do it anyway — because
+				the "right" answer is too hard to live with.
 			</p>
 			<p>
-				Passkey wallets fix this. We used <a
+				Then passkeys changed what a wallet could feel like. We used <a
 					href="https://account.base.app"
 					target="_blank"
 					rel="noopener">Base Account</a
-				> daily — loved the UX, loved signing with Face ID. But we kept hitting walls: a recovery key
-				generated in the browser that you just had to trust. No custom networks. No self-hosting. And
-				if the service shuts down, your wallet goes with it.
+				> every day, and signing with Face ID felt obvious in a way seed phrases never did — less like
+				handling hazardous material, more like using the rest of the internet. But the more we used it,
+				the more we hit edges we couldn't ignore: a recovery key generated in a browser that you just
+				had to trust, no custom networks, no way to host it ourselves. And the quiet problem was the biggest
+				one — if the service disappeared, the wallet disappeared with it.
 			</p>
+			<p class="why-beat">So we built the version we wanted to depend on.</p>
 			<p>
-				So we built Vela — <strong>a passkey wallet you can fully own.</strong>
-				Your passkey lives in iCloud Keychain or Google Password Manager. When you sign a transaction,
-				the app sends a challenge to your device — your device signs it and sends back just the signature.
-				The private key never leaves. Most wallets have a moment where your secret is exposed: a seed
-				phrase in memory, a recovery key in a browser tab. Vela has no such moment.
+				Vela is <strong>a passkey wallet you can fully own.</strong> Your passkey stays where your
+				device already protects it — iCloud Keychain or Google Password Manager. When you sign a
+				transaction, Vela sends a challenge to your device; your device signs it and sends back just
+				the signature. The private key never leaves. Most wallets still have a dangerous moment,
+				even if it's brief: words on a screen, a seed phrase in memory, a recovery key sitting in a
+				browser tab. Vela is designed so that moment never exists.
 				<strong
 					>We can't access your keys. Not "we promise not to" — we architecturally can't.</strong
 				>
 			</p>
 			<p>
-				Open source, so you can verify every line. Self-hostable, so you're never dependent on us.
-				Built on unmodified <a
+				We made Vela open source so you can check that for yourself, and self-hostable so your
+				wallet never depends on our company staying online. And we built on unmodified <a
 					href="https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1"
 					target="_blank"
 					rel="noopener">Safe contracts</a
-				> — the same ones that already secure billions across the ecosystem.
+				> because the boring, battle-tested path is the right one when people's money is involved — the
+				same contracts already securing billions on-chain.
 			</p>
 			<p>
-				<strong>The trade-off:</strong> your wallet security depends on your Apple or Google account,
-				because that's where your passkey lives. Lose access to that account, or delete the passkey, and
-				there's no way back — no backup seed, no support ticket, no reset. But every self-custodial wallet
-				has this trade-off. The question is what you're guarding. A seed phrase can be copied, screenshotted,
-				and phished. A passkey is bound to a domain — there's no secret to type, no words to reveal, and
-				no fake site that can trick you into handing it over.
+				There's still a trade-off. With Vela, your Apple or Google account matters, because that's
+				where your passkey lives. Lose that account, or delete the passkey, and there's no seed
+				phrase, no support reset, no back door. But every self-custodial wallet asks you to choose
+				which risk you'd rather live with. A seed phrase can be copied, screenshotted, phished, or
+				typed into the wrong site at 1 a.m. A passkey is different: there are no words to reveal, no
+				secret to paste, and no fake site that can trick you into handing it over. Your device signs
+				for the real domain, or it does not sign.
+			</p>
+			<p>
+				That's why we built Vela — a wallet with no seed phrase to hide, no recovery key to trust,
+				and no company you have to hope will stay around forever.
 			</p>
 		</div>
 	</div>
@@ -847,7 +868,8 @@
 					<tr
 						><td>No seed phrase or recovery key</td><td class="yes">None</td><td class="no"
 							>Seed phrase</td
-						><td class="no">Seed phrase</td><td class="no">Recovery key</td><td class="warn">Email / social recovery</td
+						><td class="no">Seed phrase</td><td class="no">Recovery key</td><td class="warn"
+							>Email / social recovery</td
 						></tr
 					>
 				</tbody>
@@ -2186,6 +2208,13 @@
 	.does-less-content p:last-child {
 		margin-bottom: 0;
 	}
+	.does-less-content .does-less-beat {
+		color: var(--text);
+		font-size: 1.15rem;
+		font-weight: 400;
+		line-height: 1.5;
+		margin: 20px 0;
+	}
 	.does-less-content em {
 		color: var(--text);
 		font-style: italic;
@@ -2216,6 +2245,13 @@
 	}
 	.why-content strong {
 		color: var(--text);
+	}
+	.why-content .why-beat {
+		color: var(--text);
+		font-size: 1.05rem;
+		font-weight: 400;
+		line-height: 1.5;
+		margin: 20px 0;
 	}
 
 	/* ── How It Works (Pillars) ── */
