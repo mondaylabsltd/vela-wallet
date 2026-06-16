@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { resolve } from '$app/paths';
 	import SiteHeader from '$lib/components/SiteHeader.svelte';
 	import SiteFooter from '$lib/components/SiteFooter.svelte';
 	import Seo from '$lib/components/Seo.svelte';
@@ -30,9 +29,10 @@
 			role: 'Founder & Engineer',
 			bio: 'Builds Vela end to end — the wallet, the contracts, and this site. Writing about the process as it happens.',
 			initials: 'S',
+			avatar: '/shelchin-avatar.jpg',
 			links: [
 				{ label: 'GitHub', href: 'https://github.com/atshelchin' },
-				{ label: 'X', href: 'https://x.com/realvelawallet' }
+				{ label: 'X', href: 'https://x.com/atshelchin' }
 			]
 		}
 	];
@@ -71,56 +71,23 @@
 
 <main>
 	<section class="hero">
-		<p class="eyebrow">About Vela</p>
-		<h1>A wallet you can trust because you can verify it.</h1>
+		<p class="eyebrow">About</p>
+		<h1>Who builds Vela.</h1>
 		<p class="lede">
-			Vela is a self-custodial wallet for ETH and ERC-20 tokens with no seed phrase. We're a small
-			team building it in the open — code, decisions, and mistakes included.
+			Vela is built in the open — the wallet, the smart contracts, and this very site. No faceless
+			company behind it: just real code you can read, and a real person you can reach.
 		</p>
-	</section>
-
-	<section class="story">
-		<h2>Why we built Vela</h2>
-		<p>
-			Self-custody is supposed to mean freedom: no company between you and your money. In practice,
-			it has meant handing normal people a twelve-word secret and telling them to guard it
-			perfectly, forever. Most people can't, and a staggering amount of crypto has been lost to
-			exactly that.
-		</p>
-		<p>
-			We thought the trade-off was wrong. You shouldn't have to choose between real ownership and a
-			wallet you can actually use safely. So we built Vela around passkeys — the same hardware-backed
-			security that protects Apple Pay and your phone's unlock — and removed the seed phrase
-			entirely.
-		</p>
-		<p>
-			The result is a wallet where signing a transaction feels like unlocking your phone, your keys
-			never leave your device's secure hardware, and there's nothing for a scammer to phish out of
-			you.
-		</p>
-	</section>
-
-	<section class="values">
-		<h2>What we believe</h2>
-		<div class="value-grid">
-			{#each values as value (value.title)}
-				<div class="value-card">
-					<h3>{value.title}</h3>
-					<p>{value.body}</p>
-				</div>
-			{/each}
-		</div>
 	</section>
 
 	<section class="team">
-		<h2>The team</h2>
-		<p class="team-intro">
-			Vela is built by a small, hands-on team. We answer for our own work — find us on GitHub or X.
-		</p>
 		<div class="team-grid">
 			{#each team as member (member.name)}
 				<div class="member">
-					<div class="avatar" aria-hidden="true">{member.initials}</div>
+					{#if member.avatar}
+						<img class="avatar" src={member.avatar} alt={member.name} width="72" height="72" loading="lazy" />
+					{:else}
+						<div class="avatar" aria-hidden="true">{member.initials}</div>
+					{/if}
 					<div class="member-body">
 						<h3>{member.name}</h3>
 						<p class="role">{member.role}</p>
@@ -136,37 +103,16 @@
 		</div>
 	</section>
 
-	<section class="opensource">
-		<div class="os-card">
-			<h2>Built in the open</h2>
-			<p>
-				Vela is open source. The wallet, the smart contracts, and this website are public — so you
-				don't have to take our word for any of it. Read the code, open an issue, or follow the
-				build on the blog.
-			</p>
-			<div class="os-links">
-				<a class="btn primary" href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">
-					View on GitHub
-				</a>
-				<a class="btn" href={resolve('/blog')}>Read the blog</a>
-				<a class="btn" href={resolve('/docs')}>Read the docs</a>
-			</div>
+	<section class="values">
+		<h2>What we believe</h2>
+		<div class="value-grid">
+			{#each values as value (value.title)}
+				<div class="value-card">
+					<h3>{value.title}</h3>
+					<p>{value.body}</p>
+				</div>
+			{/each}
 		</div>
-	</section>
-
-	<section class="cta">
-		<h2>Your keys. Your face. No seed phrase.</h2>
-		<p>Create a self-custodial wallet in under a minute.</p>
-		<a
-			class="btn primary lg"
-			href="https://wallet.getvela.app/onboarding?mode=create"
-			target="_blank"
-			rel="noopener"
-			data-rybbit-event="cta_click"
-			data-rybbit-prop-location="about"
-		>
-			Create wallet
-		</a>
 	</section>
 </main>
 
@@ -218,14 +164,6 @@
 		max-width: 56ch;
 	}
 
-	.story p {
-		font-size: 1.05rem;
-		line-height: 1.75;
-		color: var(--text-secondary);
-		margin-bottom: 1.1em;
-		max-width: 64ch;
-	}
-
 	.value-grid {
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
@@ -248,11 +186,6 @@
 		line-height: 1.6;
 	}
 
-	.team-intro {
-		color: var(--text-secondary);
-		margin-bottom: 28px;
-		max-width: 56ch;
-	}
 	.team-grid {
 		display: grid;
 		grid-template-columns: 1fr;
@@ -268,12 +201,13 @@
 	}
 	.avatar {
 		flex-shrink: 0;
-		width: 56px;
-		height: 56px;
+		width: 72px;
+		height: 72px;
 		border-radius: 50%;
+		object-fit: cover;
 		display: grid;
 		place-items: center;
-		font-size: 1.4rem;
+		font-size: 1.6rem;
 		font-weight: 700;
 		color: #fff;
 		background: linear-gradient(135deg, var(--accent), #b8431f);
@@ -309,65 +243,6 @@
 		border-color: var(--accent);
 	}
 
-	.os-card {
-		padding: 36px;
-		border: 1px solid var(--border-accent);
-		border-radius: var(--radius);
-		background: var(--accent-soft);
-	}
-	.os-card p {
-		color: var(--text-secondary);
-		font-size: 1.02rem;
-		line-height: 1.65;
-		max-width: 60ch;
-		margin-bottom: 22px;
-	}
-	.os-links {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 12px;
-	}
-
-	.btn {
-		display: inline-block;
-		padding: 10px 20px;
-		border-radius: var(--radius-sm);
-		border: 1px solid var(--border-strong);
-		background: var(--bg-raised);
-		color: var(--text);
-		font-weight: 600;
-		font-size: 0.92rem;
-		transition:
-			border-color 0.15s ease,
-			background 0.15s ease;
-	}
-	.btn:hover {
-		border-color: var(--text-muted);
-	}
-	.btn.primary {
-		background: var(--accent);
-		border-color: var(--accent);
-		color: #fff;
-	}
-	.btn.primary:hover {
-		background: var(--accent-hover);
-		border-color: var(--accent-hover);
-	}
-	.btn.lg {
-		padding: 14px 30px;
-		font-size: 1rem;
-	}
-
-	.cta {
-		text-align: center;
-		padding: 72px 0 88px;
-	}
-	.cta p {
-		color: var(--text-secondary);
-		margin-bottom: 28px;
-		font-size: 1.05rem;
-	}
-
 	@media (max-width: 640px) {
 		.hero {
 			padding-top: 48px;
@@ -384,9 +259,6 @@
 		.member {
 			flex-direction: column;
 			gap: 14px;
-		}
-		.os-card {
-			padding: 24px;
 		}
 	}
 </style>
