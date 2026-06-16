@@ -7,7 +7,7 @@ import { fromHex } from '@/services/hex';
 import * as PublicKeyIndex from '@/services/public-key-index';
 import { computeAddress } from '@/services/safe-address';
 import { loadAccounts, saveAccount } from '@/services/storage';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { showAlert } from '@/services/platform';
 import { useTranslation } from 'react-i18next';
 import React, { useState, useEffect, useRef } from 'react';
@@ -40,7 +40,11 @@ async function isPasskeyIndexReachable(url: string): Promise<boolean> {
 
 export default function OnboardingScreen() {
   const { t } = useTranslation();
-  const [step, setStep] = useState<Step>('welcome');
+  // Deep-link: /onboarding?mode=create jumps straight to the create form.
+  // Any other value (or none, incl. ?mode=signin) stays on the welcome screen,
+  // which has the "I already have a wallet" sign-in button.
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const [step, setStep] = useState<Step>(mode === 'create' ? 'create' : 'welcome');
   const [loginLoading, setLoginLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [endpointUnreachable, setEndpointUnreachable] = useState(false);

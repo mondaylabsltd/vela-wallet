@@ -211,14 +211,14 @@
 		</a>
 		<div class="nav-links">
 			<a
-				href="https://wallet.getvela.app/"
+				href="https://wallet.getvela.app/onboarding"
 				target="_blank"
 				rel="noopener"
 				data-rybbit-event="cta_click"
 				data-rybbit-prop-location="nav-signin">Sign in</a
 			>
 			<a
-				href="https://wallet.getvela.app/"
+				href="https://wallet.getvela.app/onboarding?mode=create"
 				target="_blank"
 				rel="noopener"
 				data-rybbit-event="cta_click"
@@ -244,7 +244,7 @@
 			</p>
 			<div class="hero-cta">
 				<a
-					href="https://wallet.getvela.app/"
+					href="https://wallet.getvela.app/onboarding?mode=create"
 					target="_blank"
 					rel="noopener"
 					class="btn btn-primary"
@@ -252,7 +252,7 @@
 					data-rybbit-prop-location="hero">Create a wallet — no seed phrase</a
 				>
 				<a
-					href="https://wallet.getvela.app/"
+					href="https://wallet.getvela.app/onboarding"
 					target="_blank"
 					rel="noopener"
 					class="hero-signin"
@@ -1129,7 +1129,7 @@
 			The web wallet is live and free. No install, no seed phrase — just authenticate and go.
 		</p>
 		<a
-			href="https://wallet.getvela.app/"
+			href="https://wallet.getvela.app/onboarding?mode=create"
 			target="_blank"
 			rel="noopener"
 			class="btn btn-primary btn-cta-main"
