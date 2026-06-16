@@ -802,7 +802,7 @@
 							>Apple / Google Password Manager</td
 						><td class="warn">In the app</td><td class="warn">In the app</td><td class="yes"
 							>Apple / Google Password Manager</td
-						><td class="yes">Secure enclave</td></tr
+						><td class="yes">Apple / Google Password Manager</td></tr
 					>
 					<tr
 						><td>Key ever exposed to the app?</td><td class="yes">No</td><td class="warn">Yes</td
