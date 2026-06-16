@@ -802,11 +802,11 @@
 							>Apple / Google Password Manager</td
 						><td class="warn">In the app</td><td class="warn">In the app</td><td class="yes"
 							>Apple / Google Password Manager</td
-						><td class="warn">In the app</td></tr
+						><td class="yes">Secure enclave</td></tr
 					>
 					<tr
 						><td>Key ever exposed to the app?</td><td class="yes">No</td><td class="warn">Yes</td
-						><td class="warn">Yes</td><td class="yes">No</td><td class="warn">Yes</td></tr
+						><td class="warn">Yes</td><td class="yes">No</td><td class="yes">No</td></tr
 					>
 					<tr
 						><td>Fully open source (app + backend)</td><td class="yes">All of it</td><td
@@ -847,7 +847,7 @@
 					<tr
 						><td>No seed phrase or recovery key</td><td class="yes">None</td><td class="no"
 							>Seed phrase</td
-						><td class="no">Seed phrase</td><td class="no">Recovery key</td><td class="yes">None</td
+						><td class="no">Seed phrase</td><td class="no">Recovery key</td><td class="warn">Email / social recovery</td
 						></tr
 					>
 				</tbody>
@@ -1090,8 +1090,10 @@
 			<details>
 				<summary>What if I lose my phone?</summary>
 				<p>
-					Your passkey syncs through iCloud Keychain (iOS) or Google Password Manager (Android). Get
-					a new phone, sign in with the same Apple/Google account, and your wallet is right there.
+					Your passkey is backed up through iCloud Keychain (iOS) or Google Password Manager
+					(Android) — as long as that sync is turned on. With it on, get a new phone, sign in with
+					the same Apple/Google account, and your wallet is right there. If you've turned that sync
+					off, your passkey stays on your old phone only, and losing the device means losing access.
 				</p>
 			</details>
 			<details>
