@@ -368,7 +368,13 @@ function isPermanentRpcError(error: RPCResponse['error']): boolean {
     msg.includes('forbidden') ||
     msg.includes('payment required') ||
     msg.includes('exceeded') ||
-    msg.includes('subscription')
+    msg.includes('subscription') ||
+    // Restricted public nodes that reject our topic-only getLogs and demand a
+    // contract address / paid plan (e.g. publicnode BSC: "Please specify an
+    // address … order a dedicated full node"). They can never serve this query,
+    // so ban + fail over to a working endpoint instead of failing the chain.
+    msg.includes('specify an address') ||
+    msg.includes('dedicated full node')
   );
 }
 

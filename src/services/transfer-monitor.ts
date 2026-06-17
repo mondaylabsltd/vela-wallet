@@ -24,6 +24,8 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { poolRpcCall, getLogsRangeCap } from '@/services/rpc-pool';
+import { fetchChainTokens } from '@/services/chain-tokens';
+import { loadCustomTokens } from '@/services/storage';
 
 /** keccak256("Transfer(address,address,uint256)") */
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
@@ -34,37 +36,22 @@ const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
  * clients, so we match a small set and treat everything else as ERC-20.
  */
 const NATIVE_LOG_ADDRESSES = new Set<string>([
+  '0xfffffffffffffffffffffffffffffffffffffffe', // EIP-7708 native-transfer log emitter
   '0x0000000000000000000000000000000000000000',
   '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
 ]);
 
-/** Block window for the very first scan (no stored checkpoint yet). */
-const INITIAL_LOOKBACK = 3000;
-/** Max block span per query — keeps us under public-RPC getLogs limits. */
-const MAX_RANGE = 3000;
-
 /**
- * Approx block time per chain (ms), used to translate a re-scan time window into
- * a block count. Deliberately on the low side so we cover *at least* the asked
- * window (an extra chunk or two is cheap; missing a recent payment is not).
+ * Incremental monitor window, in blocks: the last N blocks, polled every ~10s
+ * while the user watches Activity, in a single `eth_getLogs` (probe + at most one
+ * capped retry on a strict endpoint) — never a checkpoint-driven catch-up that
+ * can fan a wide span out into many calls and trip public-RPC rate limits.
+ *
+ * Overlapping windows are fine: receipts are de-duped downstream by their stable
+ * id, so there's no checkpoint to maintain. The trade-off is no catch-up after a
+ * long background — anything older than the window is reflected in balances.
  */
-const BLOCK_TIME_MS: Record<number, number> = {
-  1: 12_000, 56: 1_500, 137: 2_000, 42161: 250, 10: 2_000, 8453: 2_000, 43114: 2_000, 100: 5_000,
-};
-const DEFAULT_BLOCK_TIME_MS = 2_500;
-/**
- * Cap on getLogs chunks per chain for a deep re-scan, so a long window on a
- * fast chain can't fan out into hundreds of calls and trip rate limits. When a
- * window exceeds this, we keep the most *recent* portion (what "I missed a
- * payment" needs) and drop the oldest.
- */
-const MAX_RESCAN_CHUNKS = 25;
-
-export interface DeepScanProgress {
-  chainId: number;
-  chunk: number;
-  totalChunks: number;
-}
+const LIVE_SCAN_BLOCKS = 100;
 
 export interface IncomingTransfer {
   /** Stable id: `${chainId}-${txHash}-${logIndex}`. */
@@ -95,89 +82,49 @@ function hexToNumber(hex: string): number {
   return parseInt(hex, 16);
 }
 
-/** Max recursion when splitting a too-wide getLogs range (1 → 2 → 4 … chunks). */
-const MAX_SPLIT_DEPTH = 8;
-
 /**
- * Fetch ERC-20 + EIP-7708 native `Transfer` logs for `[from, to]` on one chain,
- * automatically shrinking the block span when an endpoint rejects the request
- * for being too wide ("…limited to a 100 range", "block range too large", "more
- * than N results", …). The generous {@link MAX_RANGE} default is kept for fast
- * endpoints; only strict ones pay the extra round-trips. When the error states a
- * max span we split into chunks of that size; otherwise we halve and recurse.
+ * Scan the most-recent `lookback` blocks of one chain for incoming transfers,
+ * bounded to AT MOST TWO `eth_getLogs`: probe the window, and if the endpoint
+ * caps the span (e.g. Monad → "limited to a 100 range"), retry ONCE for just the
+ * most-recent `cap` blocks. We never fan the window out into many chunks — that
+ * is exactly what trips public-RPC rate limits. There is no checkpoint: windows
+ * overlap between polls and receipts are de-duped downstream by their stable id.
  *
- * Throws on any *non-range* error (network down, all endpoints failed) so callers
- * can mark the chain failed — same contract as the previous single call.
+ * Throws on a non-range / unreachable error so the caller can decide whether to
+ * surface the chain as failed.
  */
-async function getTransferLogs(
-  address: string,
-  chainId: number,
-  from: number,
-  to: number,
-  depth = 0,
-): Promise<any[]> {
-  if (from > to) return [];
+export async function scanRecentTransfers(address: string, chainId: number, lookback: number, contracts?: string[]): Promise<IncomingTransfer[]> {
+  const bn = await poolRpcCall('eth_blockNumber', [], chainId);
+  if (bn.error || typeof bn.result !== 'string') throw new Error('eth_blockNumber failed');
+  const latest = hexToNumber(bn.result);
+  if (!Number.isFinite(latest) || latest <= 0) throw new Error('invalid block number');
 
-  const res = await poolRpcCall('eth_getLogs', [{
-    fromBlock: '0x' + from.toString(16),
-    toBlock: '0x' + to.toString(16),
-    topics: [TRANSFER_TOPIC, null, addressTopic(address)],
-  }], chainId);
-
+  let from = Math.max(0, latest - lookback);
+  let res = await poolRpcCall('eth_getLogs', [transferLogsFilter(address, from, latest, contracts)], chainId);
   if (res.error) {
     const cap = getLogsRangeCap(res.error);
-    const span = to - from + 1;
-    // Not a range error, can't shrink further, or too deep → surface it.
-    if (cap === null || span <= 1 || depth >= MAX_SPLIT_DEPTH) {
-      throw new Error(res.error.message || 'eth_getLogs failed');
-    }
-    // Split by the server's stated cap when given (guaranteeing real shrinkage),
-    // else halve. Recurse so a still-too-wide chunk shrinks again.
-    const chunk = Math.max(1, cap > 0 ? Math.min(cap, span - 1) : Math.floor(span / 2));
-    const out: any[] = [];
-    for (let lo = from; lo <= to; lo += chunk) {
-      const hi = Math.min(lo + chunk - 1, to);
-      out.push(...await getTransferLogs(address, chainId, lo, hi, depth + 1));
-    }
-    return out;
+    if (cap === null) throw new Error(res.error.message || 'eth_getLogs failed');
+    // Span cap (or result cap with no number → stay conservative): scan just the
+    // most-recent `span` blocks in one more call instead of chunking the window.
+    const span = cap > 0 ? cap : 100;
+    from = Math.max(0, latest - (span - 1));
+    res = await poolRpcCall('eth_getLogs', [transferLogsFilter(address, from, latest, contracts)], chainId);
+    if (res.error) throw new Error(res.error.message || 'eth_getLogs failed');
   }
 
-  return Array.isArray(res.result) ? res.result : [];
-}
-
-/** Scan one chain for incoming transfers since the last checkpoint. */
-async function scanChain(address: string, chainId: number): Promise<IncomingTransfer[]> {
-  // Latest block (anchor + checkpoint).
-  const bn = await poolRpcCall('eth_blockNumber', [], chainId);
-  if (bn.error || typeof bn.result !== 'string') return [];
-  const latest = hexToNumber(bn.result);
-  if (!Number.isFinite(latest) || latest <= 0) return [];
-
-  const storedRaw = await AsyncStorage.getItem(lastScanKey(chainId, address)).catch(() => null);
-  const stored = storedRaw ? parseInt(storedRaw, 10) : null;
-  const from = stored != null
-    ? Math.max(stored + 1, latest - MAX_RANGE)
-    : Math.max(0, latest - INITIAL_LOOKBACK);
-
-  // Always advance the checkpoint, even when nothing new is found.
-  const advance = () => AsyncStorage.setItem(lastScanKey(chainId, address), String(latest)).catch(() => {});
-
-  if (from > latest) { await advance(); return []; }
-
-  let rawLogs: any[];
-  try {
-    rawLogs = await getTransferLogs(address, chainId, from, latest);
-  } catch {
-    // Endpoint(s) unreachable — advance anyway (incremental poll retries next tick).
-    await advance();
-    return [];
-  }
-
-  await advance();
-
-  const out = decodeTransferLogs(rawLogs, address, chainId);
+  const out = decodeTransferLogs(Array.isArray(res.result) ? res.result : [], address, chainId);
   await resolveTimestamps(out, chainId);
   return out;
+}
+
+/** Incremental monitor: the last {@link LIVE_SCAN_BLOCKS} blocks, polled while
+ *  the user watches Activity. A failing chain just yields nothing this tick. */
+async function scanChain(address: string, chainId: number, contracts: string[]): Promise<IncomingTransfer[]> {
+  try {
+    return await scanRecentTransfers(address, chainId, LIVE_SCAN_BLOCKS, contracts);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -233,59 +180,57 @@ async function resolveTimestamps(transfers: IncomingTransfer[], chainId: number)
 }
 
 /**
- * Deep historical re-scan of a time window on one chain (chunked `eth_getLogs`).
- * Unlike the incremental `scanChain`, this ignores the checkpoint and queries
- * back `minutes` worth of blocks, so a user who missed a payment can pull recent
- * transfers on demand. Throws if the chain is unreachable or a chunk errors, so
- * the caller can report that chain as failed (→ explorer / fix-RPC fallback).
- *
- * Note: only covers log-emitting transfers (ERC-20 + EIP-7708 native). Plain
- * native sends emit no log, so those remain explorer-only.
+ * The Transfer-event getLogs filter (token → `address`) for a block span.
+ * When `contracts` is given, the query is restricted to those emitter addresses
+ * (the trusted-token allowlist), so scam/airdrop tokens that emit fake Transfer
+ * events to spam the wallet are never matched — and fewer logs come back.
  */
-export async function deepScanChain(
-  address: string,
-  chainId: number,
-  minutes: number,
-  onProgress?: (p: DeepScanProgress) => void,
-): Promise<IncomingTransfer[]> {
-  const bn = await poolRpcCall('eth_blockNumber', [], chainId);
-  if (bn.error || typeof bn.result !== 'string') throw new Error('eth_blockNumber failed');
-  const latest = hexToNumber(bn.result);
-  if (!Number.isFinite(latest) || latest <= 0) throw new Error('invalid block number');
+function transferLogsFilter(address: string, from: number, to: number, contracts?: string[]) {
+  const filter: Record<string, unknown> = {
+    fromBlock: '0x' + from.toString(16),
+    toBlock: '0x' + to.toString(16),
+    topics: [TRANSFER_TOPIC, null, addressTopic(address)],
+  };
+  if (contracts && contracts.length) filter.address = contracts;
+  return filter;
+}
 
-  const blockTime = BLOCK_TIME_MS[chainId] ?? DEFAULT_BLOCK_TIME_MS;
-  const wanted = Math.ceil((minutes * 60 * 1000) / blockTime);
-  const capped = Math.min(wanted, MAX_RESCAN_CHUNKS * (MAX_RANGE + 1));
-  const from = Math.max(0, latest - capped);
-
-  // Split [from, latest] into <= MAX_RANGE chunks (most-recent kept on cap).
-  const ranges: [number, number][] = [];
-  for (let start = from; start <= latest; start += MAX_RANGE + 1) {
-    ranges.push([start, Math.min(start + MAX_RANGE, latest)]);
-  }
-
-  const out: IncomingTransfer[] = [];
-  let done = 0;
-  for (const [lo, hi] of ranges) {
-    // Throws on a hard error → caller marks the chain failed (explorer fallback).
-    // A too-wide chunk is split transparently, so progress stays MAX_RANGE-grained.
-    const chunkLogs = await getTransferLogs(address, chainId, lo, hi);
-    out.push(...decodeTransferLogs(chunkLogs, address, chainId));
-    onProgress?.({ chainId, chunk: ++done, totalChunks: ranges.length });
-  }
-
-  await resolveTimestamps(out, chainId);
-  return out;
+/**
+ * The contract addresses whose Transfer logs we trust, per chain: known
+ * stablecoins (per chain, from the token registry) + the user's manually-added
+ * tokens + the native (EIP-7708) log sentinels. `eth_getLogs` is restricted to
+ * these, so scam/airdrop tokens spamming fake Transfer events never reach the
+ * feed — and the query returns far fewer logs. All lower-cased.
+ *
+ * Note: tokens the user holds but never added and that aren't a known stablecoin
+ * are intentionally NOT watched — listening to them is exactly how spam slips in.
+ */
+async function transferAllowlist(chainIds: number[]): Promise<Map<number, string[]>> {
+  const custom = await loadCustomTokens().catch(() => []);
+  const map = new Map<number, string[]>();
+  await Promise.all(chainIds.map(async (chainId) => {
+    const set = new Set<string>(NATIVE_LOG_ADDRESSES);
+    const data = await fetchChainTokens(chainId).catch(() => null);
+    data?.stables.forEach((s) => { if (s.contract) set.add(s.contract.toLowerCase()); });
+    custom.filter((t) => t.chainId === chainId).forEach((t) => {
+      if (t.contractAddress) set.add(t.contractAddress.toLowerCase());
+    });
+    map.set(chainId, [...set]);
+  }));
+  return map;
 }
 
 /**
  * Fetch incoming transfers across the given chains. Each chain is scanned
- * independently; a failing chain yields no items rather than failing the batch.
- * Results are newest-first.
+ * independently (restricted to its trusted-token allowlist); a failing chain
+ * yields no items rather than failing the batch. Results are newest-first.
  */
 export async function fetchIncomingTransfers(address: string, chainIds: number[]): Promise<IncomingTransfer[]> {
   if (!address) return [];
-  const results = await Promise.allSettled(chainIds.map((id) => scanChain(address, id)));
+  const allow = await transferAllowlist(chainIds);
+  const results = await Promise.allSettled(
+    chainIds.map((id) => scanChain(address, id, allow.get(id) ?? [...NATIVE_LOG_ADDRESSES])),
+  );
   const all: IncomingTransfer[] = [];
   for (const r of results) {
     if (r.status === 'fulfilled') all.push(...r.value);

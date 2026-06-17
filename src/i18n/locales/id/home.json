@@ -1,8 +1,8 @@
 {
   "home": {
     "totalBalance": "Total saldo",
-    "balanceStale": "Menampilkan total terakhir yang diketahui — sebagian saldo tidak dapat diperbarui.",
-    "manageAssets": "Kelola Aset",
+    "balanceStale": "Sebagian saldo masih diperbarui.",
+    "statement": "Mutasi",
     "tabActivity": "Aktivitas",
     "tabConnections": "Koneksi",
     "liveIndicator": "Live · memantau pembayaran",
@@ -31,6 +31,7 @@
     "rescanWindow10m": "10 menit terakhir",
     "rescanWindow1h": "1 jam terakhir",
     "rescanWindow6h": "6 jam terakhir",
+    "rescanWindowRecent": "~1.000 blok terakhir",
     "rescanScanning": "Memindai {{window}}…",
     "rescanFound": "Ditemukan {{count}} pembayaran baru.",
     "rescanNone": "Tidak ada pembayaran baru dalam {{window}}.",

@@ -1,8 +1,8 @@
 {
   "home": {
     "totalBalance": "Toplam bakiye",
-    "balanceStale": "Bilinen son toplamınız gösteriliyor — bazı bakiyeler güncellenemedi.",
-    "manageAssets": "Varlıkları Yönet",
+    "balanceStale": "Bazı bakiyeler hâlâ güncelleniyor.",
+    "statement": "Ekstre",
     "tabActivity": "Etkinlik",
     "tabConnections": "Bağlantılar",
     "liveIndicator": "Canlı · ödemeler dinleniyor",
@@ -31,6 +31,7 @@
     "rescanWindow10m": "Son 10 dakika",
     "rescanWindow1h": "Son 1 saat",
     "rescanWindow6h": "Son 6 saat",
+    "rescanWindowRecent": "Son ~1.000 blok",
     "rescanScanning": "{{window}} taranıyor…",
     "rescanFound": "{{count}} yeni ödeme bulundu.",
     "rescanNone": "{{window}} içinde yeni ödeme bulunamadı.",

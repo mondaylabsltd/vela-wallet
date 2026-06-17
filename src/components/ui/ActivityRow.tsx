@@ -11,11 +11,10 @@ import React, { useEffect } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react-native';
-import { AmountText } from '@/components/ui/AmountText';
 import { ChainLogo } from '@/components/ChainLogo';
 import { fadeInDown } from '@/constants/entering';
 import type { Network } from '@/models/network';
-import { color, createStyles, inter, motion, radius, shadow, space, text } from '@/constants/theme';
+import { color, createStyles, font, inter, motion, radius, shadow, space, text } from '@/constants/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -27,15 +26,13 @@ export interface ActivityRowProps {
   /** Value in the user's display currency, shown under the amount (e.g. "AR$1,428.20"). */
   fiat?: string;
   time: string;
-  /** Resolved name for the counterparty (shown under the address). */
-  alias?: string;
   chain?: Network | null;
   onPress?: () => void;
   index?: number;
   isNew?: boolean;
 }
 
-export function ActivityRow({ direction, title, subtitle, amount, fiat, time, alias, chain, onPress, index = 0, isNew }: ActivityRowProps) {
+export function ActivityRow({ direction, title, subtitle, amount, fiat, time, chain, onPress, index = 0, isNew }: ActivityRowProps) {
   const incoming = direction === 'in';
   const scale = useSharedValue(1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -52,6 +49,13 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, al
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value }));
 
   const Arrow = incoming ? ArrowDownLeft : ArrowUpRight;
+
+  // Split "−0,001193 ETH" → number + ticker. Fitting only the NUMBER to the box
+  // (the ticker is subordinated) keeps the figure a consistent size row-to-row;
+  // including the ticker made short amounts large and long ones shrink.
+  const sp = amount.lastIndexOf(' ');
+  const numberPart = sp > 0 ? amount.slice(0, sp) : amount;
+  const ticker = sp > 0 ? amount.slice(sp + 1) : '';
 
   return (
     <Animated.View entering={fadeInDown(index * 40, 300)}>
@@ -75,19 +79,22 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, al
         <View style={styles.info}>
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
           <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
-          {alias ? <Text style={styles.alias} numberOfLines={1}>{alias}</Text> : null}
+          {time ? <Text style={styles.time} numberOfLines={1}>{time}</Text> : null}
         </View>
 
         <View style={styles.right}>
-          <AmountText
-            text={amount}
-            size={text.xl}
-            minScale={0.7}
+          {/* Fixed font size — every figure renders identically; only a rare
+              over-long amount shrinks (down to 85%) so it never overflows. */}
+          <Text
             style={[styles.amount, incoming && styles.amountIn]}
-            containerStyle={styles.amountBox}
-          />
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
+            {numberPart}
+            {ticker ? <Text style={styles.ticker}> {ticker}</Text> : null}
+          </Text>
           {fiat ? <Text style={styles.fiat} numberOfLines={1}>{fiat}</Text> : null}
-          <Text style={styles.time}>{time}</Text>
         </View>
       </AnimatedPressable>
     </Animated.View>
@@ -136,32 +143,32 @@ const styles = createStyles(() => ({
   },
   info: {
     flex: 1,
-    gap: 2,
+    minWidth: 0,
+    gap: 3,
   },
+  // Direction label is supporting context now (arrow + amount color/sign carry
+  // it) — keep it calm so the amount and counterparty lead the eye.
   title: {
-    fontSize: text.xl,
-    ...inter.bold,
-    color: color.fg.base,
-  },
-  subtitle: {
     fontSize: text.base,
-    ...inter.regular,
+    ...inter.semibold,
     color: color.fg.muted,
   },
-  alias: {
+  subtitle: {
     fontSize: text.sm,
-    ...inter.semibold,
-    color: color.accent.base,
-    marginTop: 1,
+    ...inter.medium,
+    fontFamily: font.mono,
+    color: color.fg.muted,
+  },
+  time: {
+    fontSize: text.xs,
+    ...inter.regular,
+    color: color.fg.subtle,
   },
   right: {
     alignItems: 'flex-end',
     gap: 2,
-    flexShrink: 1,
-    maxWidth: '52%', // reserve the title's space; long amounts shrink instead
-  },
-  amountBox: {
-    alignSelf: 'stretch', // fill the (capped) column so AmountText can measure + shrink
+    flexShrink: 0,
+    maxWidth: '55%', // content-sized; only a pathologically long amount hits this cap
   },
   amount: {
     fontSize: text.xl,
@@ -172,11 +179,10 @@ const styles = createStyles(() => ({
   amountIn: {
     color: color.success.base,
   },
-  time: {
+  ticker: {
     fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.subtle,
-    marginTop: 1,
+    ...inter.semibold,
+    color: color.fg.muted,
   },
   fiat: {
     fontSize: text.sm,

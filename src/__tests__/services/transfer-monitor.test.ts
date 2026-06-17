@@ -1,11 +1,12 @@
 /**
- * Behavioural tests for transfer-monitor's adaptive getLogs range-splitting.
+ * Behavioural tests for transfer-monitor's bounded recent-window scanner.
  *
- * When an endpoint rejects a wide block span ("…limited to a 100 range"),
- * `deepScanChain` must transparently split into chunks within the stated cap
- * (or halve when no number is given) and still return every decoded transfer —
- * while surfacing genuine (non-range) errors so the caller can mark the chain
- * failed. `poolRpcCall` is mocked but the real `getLogsRangeCap` is exercised.
+ * `scanRecentTransfers` queries the last N blocks in a single `eth_getLogs`, and
+ * when an endpoint caps the span ("…limited to a 100 range") it retries EXACTLY
+ * ONCE for the most-recent `cap` blocks — never fanning out into many chunks
+ * (which is what trips RPC rate limits). Genuine (non-range) errors propagate so
+ * the caller can mark the chain failed. `poolRpcCall` is mocked but the real
+ * `getLogsRangeCap` is exercised.
  */
 
 // Mocks required for the real rpc-pool module tree to load under jest (same set
@@ -31,7 +32,7 @@ jest.mock('@/services/rpc-pool', () => ({
   poolRpcCall: (...args: any[]) => mockPoolRpcCall(...args),
 }));
 
-import { deepScanChain } from '@/services/transfer-monitor';
+import { scanRecentTransfers } from '@/services/transfer-monitor';
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const ADDR = '0x1111111111111111111111111111111111111111';
@@ -81,64 +82,77 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-describe('transfer-monitor deepScanChain — adaptive getLogs splitting', () => {
-  test('splits a too-wide span into <= stated-cap chunks and returns all transfers', async () => {
-    // Arbitrum (250ms blocks) × 10min → ~2400-block window in one outer chunk,
-    // far above the 100 cap, forcing a split.
-    mockPoolRpcCall.mockImplementation(logsMock(100, 'eth_getLogs is limited to a 100 range'));
+function getLogsParams(): any[] {
+  return mockPoolRpcCall.mock.calls
+    .filter((c: any) => c[0] === 'eth_getLogs')
+    .map((c: any) => c[1][0]);
+}
+const toBlockOf = (p: any) => parseInt(p.toBlock, 16);
+const spanOfFilter = (p: any) => parseInt(p.toBlock, 16) - parseInt(p.fromBlock, 16) + 1;
 
-    const out = await deepScanChain(ADDR, 42161, 10);
+describe('transfer-monitor scanRecentTransfers — bounded recent-window scan', () => {
+  test('scans the window in a single getLogs when the endpoint accepts the span', async () => {
+    // Generous cap (≥ the ~1000-block window) → one call, no retry.
+    mockPoolRpcCall.mockImplementation(logsMock(5000, 'unused'));
 
-    const spans = getLogsSpans();
-    // One wide call errored; it was split into 25 sub-calls each within the cap.
-    expect(spans.filter((s) => s > 100)).toHaveLength(1);
-    expect(spans.filter((s) => s <= 100)).toHaveLength(25);
-    expect(Math.max(...spans.filter((s) => s <= 100))).toBeLessThanOrEqual(100);
-    // Every chunk yielded one transfer → all recovered, none dropped.
-    expect(out).toHaveLength(25);
+    const out = await scanRecentTransfers(ADDR, 42161, 1000);
+
+    expect(getLogsSpans()).toHaveLength(1);
+    expect(out).toHaveLength(1);
     expect(out.every((t) => t.from.toLowerCase() === SENDER.toLowerCase())).toBe(true);
   });
 
-  test('halves repeatedly when the error states no number, until under the real cap', async () => {
-    // Server gives a range error with no usable number → caller halves. Real cap
-    // is 100, so halving must converge (every successful call within 100 blocks).
-    mockPoolRpcCall.mockImplementation(logsMock(100, 'block range is too wide'));
+  test('retries ONCE for the most-recent cap blocks when the span is capped — no fan-out', async () => {
+    // Monad-style 100-block cap. The probe is rejected; we must do exactly one
+    // more call covering only the last 100 blocks (ending at latest), never 11.
+    mockPoolRpcCall.mockImplementation(logsMock(100, 'eth_getLogs is limited to a 100 range'));
 
-    const out = await deepScanChain(ADDR, 42161, 10);
+    const out = await scanRecentTransfers(ADDR, 42161, 1000);
 
-    const okSpans = getLogsSpans().filter((s) => s <= 100);
-    expect(out.length).toBeGreaterThan(0);
-    expect(okSpans.length).toBeGreaterThan(0);
-    expect(Math.max(...okSpans)).toBeLessThanOrEqual(100);
-    // Splitting actually happened (some calls exceeded the cap and were rejected).
-    expect(getLogsSpans().some((s) => s > 100)).toBe(true);
+    const calls = getLogsParams();
+    expect(calls).toHaveLength(2); // probe + one capped retry, nothing more
+    expect(spanOfFilter(calls[0])).toBe(1001); // probed the full window
+    expect(spanOfFilter(calls[1])).toBe(100); // retried at exactly the cap
+    expect(toBlockOf(calls[1])).toBe(LATEST); // most-recent blocks, not the oldest
+    expect(out).toHaveLength(1);
   });
 
   test('propagates a genuine non-range error so the caller can fail the chain', async () => {
-    // Ethereum (12s blocks) × 10min → ~50-block window, a single sub-cap call
-    // that returns a real error which must NOT be swallowed by the split path.
+    // The first getLogs returns a real (non-range) error → surfaced, not retried.
     mockPoolRpcCall.mockImplementation(async (method: string) => {
       if (method === 'eth_blockNumber') return { result: hex(LATEST) };
       if (method === 'eth_getLogs') return { error: { code: -32603, message: 'internal error' } };
       return { result: null };
     });
 
-    await expect(deepScanChain(ADDR, 1, 10)).rejects.toThrow('internal error');
+    await expect(scanRecentTransfers(ADDR, 1, 1000)).rejects.toThrow('internal error');
+    expect(getLogsSpans()).toHaveLength(1); // no retry on a non-range error
   });
 
-  test('honours a k-suffixed cap ("up to a 2K block range") without over-splitting', async () => {
-    // 2K cap ≥ the ~2400 window after one halve-free split, so we expect a small
-    // number of chunks, not hundreds — proves the suffix is parsed as 2000.
+  test('restricts getLogs to the trusted-contract allowlist (anti-scam)', async () => {
+    // The address filter is what keeps scam/airdrop Transfer spam out of the feed.
+    mockPoolRpcCall.mockImplementation(logsMock(5000, 'unused'));
+    const allow = [
+      '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    ];
+
+    await scanRecentTransfers(ADDR, 42161, 1000, allow);
+
+    expect(getLogsParams()[0].address).toEqual(allow);
+  });
+
+  test('honours a k-suffixed cap ("up to a 1K block range") when retrying', async () => {
+    // Proves "1K" is parsed as 1000, not 1: the retry span must be 1000.
     mockPoolRpcCall.mockImplementation(
-      logsMock(2000, 'You can make eth_getLogs requests with up to a 2K block range'),
+      logsMock(1000, 'You can make eth_getLogs requests with up to a 1K block range'),
     );
 
-    const out = await deepScanChain(ADDR, 42161, 10);
+    const out = await scanRecentTransfers(ADDR, 42161, 1000);
 
-    const okSpans = getLogsSpans().filter((s) => s <= 2000);
-    expect(out.length).toBeGreaterThan(0);
-    expect(Math.max(...okSpans)).toBeLessThanOrEqual(2000);
-    // 2400-block window at a 2000 cap → 2 chunks, not 24 (which a cap of 2 implies).
-    expect(okSpans.length).toBeLessThanOrEqual(3);
+    const calls = getLogsParams();
+    expect(calls).toHaveLength(2);
+    expect(spanOfFilter(calls[1])).toBe(1000); // retried at 1000, not 1
+    expect(out).toHaveLength(1);
   });
 });

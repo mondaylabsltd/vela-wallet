@@ -17,7 +17,7 @@ import { chainName, nativeSymbol } from '@/models/network';
 import { shortAddress } from '@/models/wallet-state';
 import { tokenChainId, type APIToken } from '@/models/types';
 import { fetchTokens } from '@/services/wallet-api';
-import { deepScanChain, fetchIncomingTransfers, type IncomingTransfer } from '@/services/transfer-monitor';
+import { fetchIncomingTransfers, type IncomingTransfer } from '@/services/transfer-monitor';
 import { resolveTokenMetadata } from '@/services/token-metadata';
 import { formatTokenAmount, formatDate } from '@/services/locale-format';
 import i18n from '@/i18n';
@@ -100,7 +100,7 @@ function stableKey(symbol: string): string {
 }
 
 /** True if `symbol` denotes a ≈ $1 stablecoin. */
-function isStable(symbol: string): boolean {
+export function isStable(symbol: string): boolean {
   return STABLE_SYMBOLS.has(stableKey(symbol));
 }
 
@@ -261,58 +261,6 @@ export async function syncReceivedTransfers(address: string): Promise<number> {
   } catch {
     return 0;
   }
-}
-
-export interface RescanOutcome {
-  /** New receipts persisted this scan. */
-  found: number;
-  /** Chains that scanned cleanly. */
-  okChains: number[];
-  /** Chains whose RPC was unreachable (→ explorer / fix-RPC fallback). */
-  failedChains: number[];
-}
-
-/**
- * On-demand deep re-scan of the last `minutes` for received transfers — the
- * "I'm missing a payment" recovery path. Re-queries event logs directly per
- * chain (chunked, RPC-limit-aware) instead of relying on the incremental
- * checkpoint, persists anything new (de-duped), and reports which chains
- * couldn't be reached so the UI can offer a fix / explorer fallback.
- */
-export async function rescanRecentTransfers(
-  address: string,
-  minutes: number,
-  onProgress?: (chainId: number, chunk: number, totalChunks: number) => void,
-): Promise<RescanOutcome> {
-  if (!address) return { found: 0, okChains: [], failedChains: [] };
-  const tokens = await fetchTokens(address).catch(() => [] as APIToken[]);
-  const active = [...new Set(tokens.map(tokenChainId))];
-  const chainIds = active.length ? active : DEFAULT_MONITOR_CHAINS;
-  const index = buildTokenIndex(tokens);
-
-  const okChains: number[] = [];
-  const failedChains: number[] = [];
-  const incoming: IncomingTransfer[] = [];
-
-  const results = await Promise.allSettled(
-    chainIds.map((id) =>
-      deepScanChain(address, id, minutes, (p) => onProgress?.(p.chainId, p.chunk, p.totalChunks)),
-    ),
-  );
-  results.forEach((r, i) => {
-    const id = chainIds[i];
-    if (r.status === 'fulfilled') {
-      okChains.push(id);
-      incoming.push(...r.value);
-    } else {
-      failedChains.push(id);
-    }
-  });
-
-  await enrichTokenIndex(incoming, index);
-  const records = incoming.map((tx) => incomingToRecord(tx, address, index));
-  const found = records.length ? await mergeTransactions(records) : 0;
-  return { found, okChains, failedChains };
 }
 
 /**

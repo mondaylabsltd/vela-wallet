@@ -1,8 +1,8 @@
 {
   "home": {
     "totalBalance": "총 잔액",
-    "balanceStale": "마지막으로 확인된 합계를 표시합니다 — 일부 잔액을 업데이트하지 못했습니다.",
-    "manageAssets": "자산 관리",
+    "balanceStale": "일부 잔액을 업데이트하는 중입니다.",
+    "statement": "거래 내역",
     "tabActivity": "활동",
     "tabConnections": "연결",
     "liveIndicator": "실시간 · 입금 대기 중",
@@ -31,6 +31,7 @@
     "rescanWindow10m": "최근 10분",
     "rescanWindow1h": "최근 1시간",
     "rescanWindow6h": "최근 6시간",
+    "rescanWindowRecent": "최근 약 1,000블록",
     "rescanScanning": "{{window}} 스캔 중…",
     "rescanFound": "새 입금 {{count}}건을 찾았습니다.",
     "rescanNone": "{{window}}에 새 입금이 없습니다.",

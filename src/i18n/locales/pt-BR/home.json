@@ -1,8 +1,8 @@
 {
   "home": {
     "totalBalance": "Saldo total",
-    "balanceStale": "Mostrando seu último total conhecido — alguns saldos não puderam ser atualizados.",
-    "manageAssets": "Gerenciar ativos",
+    "balanceStale": "Alguns saldos ainda estão sendo atualizados.",
+    "statement": "Extrato",
     "tabActivity": "Atividade",
     "tabConnections": "Conexões",
     "liveIndicator": "Ao vivo · aguardando pagamentos",
@@ -31,6 +31,7 @@
     "rescanWindow10m": "Últimos 10 minutos",
     "rescanWindow1h": "Última hora",
     "rescanWindow6h": "Últimas 6 horas",
+    "rescanWindowRecent": "Últimos ~1.000 blocos",
     "rescanScanning": "Escaneando {{window}}…",
     "rescanFound": "{{count}} novo(s) pagamento(s) encontrado(s).",
     "rescanNone": "Nenhum pagamento novo encontrado em {{window}}.",

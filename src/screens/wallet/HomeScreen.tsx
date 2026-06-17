@@ -2,7 +2,7 @@
  * HomeScreen (layout A) — payment-first, activity-first single screen.
  *
  *   Header:   account selector · settings (gear)
- *   Balance:  total · hide · currency · Manage Assets → AssetsScreen
+ *   Balance:  total · hide · currency · Statement → blockscan.com/address
  *   Content:  [ Activity | Connections ] toggle + Network filter
  *               · Activity   = value-transfer feed (received / sent)
  *               · Connections = single active dApp connection + its events
@@ -15,13 +15,13 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import {
-  AlertTriangle, ArrowRight, Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, RefreshCw, Settings, X,
+  ArrowRight, Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, RefreshCw, Settings, X,
 } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
-  Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
+  Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -39,7 +39,6 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { WaveDock } from '@/components/ui/WaveDock';
 import { RpcTroubleBanner } from '@/components/ui/RpcTroubleBanner';
-import { ActivityRescanSheet } from '@/components/ui/ActivityRescanSheet';
 
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
@@ -49,20 +48,20 @@ import { shortAddr, tokenBalanceDouble, tokenChainId, tokenUsdValue, type APITok
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import {
   loadActivityItems, loadActivityTransactions, loadConnectionEvents, relativeTime, syncReceivedTransfers,
-  type ActivityItem, type ConnectionEvent, type RescanOutcome,
+  type ActivityItem, type ConnectionEvent,
 } from '@/services/activity';
 import { useLocalePrefs } from '@/services/locale-format';
 import type { LocalTransaction } from '@/services/storage';
 import { getAccountBalance, getAccountBalances, setAccountBalance } from '@/services/balance-cache';
 import { currencyMeta, formatFiat, getCurrencyCode, getRate, loadCurrency, setCurrency, shouldShowDecimals } from '@/services/currency';
 import { parseRemoteInjectURL } from '@/services/dapp-transport';
-import { copyToClipboard, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
+import { copyToClipboard, hapticSuccess, isAppActive, openURL, showAlert } from '@/services/platform';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
 import { fetchTokens } from '@/services/wallet-api';
 import { isWalletPairURI } from '@/services/walletpair-transport';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
-const LIVE_POLL_MS = 30 * 1000;
+const LIVE_POLL_MS = 10 * 1000;
 const DOCK_CLEARANCE = 112;
 
 // ---------------------------------------------------------------------------
@@ -105,17 +104,12 @@ export default function HomeScreen() {
   const [tab, setTab] = useState<Tab>('activity');
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [failedChainIds, setFailedChainIds] = useState<number[]>([]);
-  // Chains the manual re-scan couldn't reach. Kept separate from balance
-  // failures so a later balance poll (which replaces failedChainIds) can't
-  // silently clear them before the user acts.
-  const [rescanFailedChainIds, setRescanFailedChainIds] = useState<number[]>([]);
   const [cachedTotal, setCachedTotal] = useState<number | null>(null);
   const [hidden, setHidden] = useState(false);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [connEvents, setConnEvents] = useState<ConnectionEvent[]>([]);
   const [selectedChainId, setSelectedChainId] = useState<number | null>(null);
   const [showNetSheet, setShowNetSheet] = useState(false);
-  const [showRescan, setShowRescan] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [switcherLoading, setSwitcherLoading] = useState(false);
@@ -143,11 +137,6 @@ export default function HomeScreen() {
   const balancePulse = useSharedValue(0);
   const balanceScaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + balancePulse.value * 0.03 }] }));
   const balanceRingStyle = useAnimatedStyle(() => ({ opacity: balancePulse.value }));
-
-  // "Live" indicator pulse.
-  const livePulse = useSharedValue(1);
-  useEffect(() => { livePulse.value = withRepeat(withTiming(0.3, { duration: 850, easing: Easing.inOut(Easing.quad) }), -1, true); }, [livePulse]);
-  const liveDotStyle = useAnimatedStyle(() => ({ opacity: livePulse.value }));
 
   const networks = useMemo(() => getAllNetworksSync(), []);
   const selectedNetwork = selectedChainId != null ? networks.find((n) => n.chainId === selectedChainId) ?? null : null;
@@ -305,14 +294,6 @@ export default function HomeScreen() {
   }, [address, celebrateReceipt]);
   loadDataRef.current = loadData;
 
-  // Manual re-scan finished: reload the feed if anything new landed, and record
-  // any unreachable chains in their own list (unioned into the banner) so a
-  // balance poll can't clear them before the user fixes the RPC.
-  const onRescanResult = useCallback((o: RescanOutcome) => {
-    if (o.found > 0) loadData();
-    setRescanFailedChainIds(o.failedChains);
-  }, [loadData]);
-
   useFocusEffect(useCallback(() => {
     loadData();
     const timer = setInterval(() => { if (isAppActive()) loadData(); }, AUTO_REFRESH_MS);
@@ -345,7 +326,6 @@ export default function HomeScreen() {
     setReceipt(null);
     setTokens([]);
     setFailedChainIds([]);
-    setRescanFailedChainIds([]);
     setCachedTotal(null);
     let cancelled = false;
     if (address) {
@@ -485,28 +465,19 @@ export default function HomeScreen() {
           <Text style={styles.balanceLabel}>{t('home.totalBalance')}</Text>
           <View style={styles.balanceTopRow}>
             {hidden ? <Text style={styles.balanceHidden}>••••••</Text> : (
-              <>
-                {balancePartial && <Text style={styles.balanceApprox}>≈</Text>}
-                <Balance value={displayTotal * rate} symbol={currency.symbol} code={currencyCode} />
-              </>
+              <Balance value={displayTotal * rate} symbol={currency.symbol} code={currencyCode} />
             )}
             <Pressable onPress={() => setHidden((h) => !h)} hitSlop={8} style={styles.eyeBtn}>
               {hidden ? <EyeOff size={22} color={color.fg.muted} strokeWidth={2} /> : <Eye size={22} color={color.fg.muted} strokeWidth={2} />}
             </Pressable>
           </View>
-          {!hidden && balancePartial && (
-            <View style={styles.balanceStaleRow}>
-              <AlertTriangle size={12} color={color.warning.base} strokeWidth={2.5} />
-              <Text style={styles.balanceStaleText}>{t('home.balanceStale')}</Text>
-            </View>
-          )}
           <View style={styles.balanceBottomRow}>
             <Pressable style={styles.currencyChip} onPress={() => setShowCurrency(true)} hitSlop={6}>
               <Text style={styles.currencyText}>{currencyCode}</Text>
               <ChevronDown size={14} color={color.fg.muted} strokeWidth={2.4} />
             </Pressable>
-            <Pressable style={styles.manageBtn} onPress={() => router.push('/assets')} hitSlop={6}>
-              <Text style={styles.manageText}>{t('home.manageAssets')}</Text>
+            <Pressable style={styles.manageBtn} onPress={() => { if (address) openURL(`https://blockscan.com/address/${address}`); }} hitSlop={6}>
+              <Text style={styles.manageText}>{t('home.statement')}</Text>
               <ChevronRight size={18} color={color.fg.muted} strokeWidth={2.6} />
             </Pressable>
           </View>
@@ -514,13 +485,11 @@ export default function HomeScreen() {
         </VelaCard>
       </Animated.View>
 
-      {/* RPC failure banner + fix flow (shared with AssetsScreen). Shows both
-          balance-load failures and manual re-scan failures. */}
+      {/* RPC failure banner + fix flow (shared with AssetsScreen). */}
       <RpcTroubleBanner
-        chainIds={[...new Set([...failedChainIds, ...rescanFailedChainIds])]}
+        chainIds={failedChainIds}
         onResolved={(chainId) => {
           setFailedChainIds((prev) => prev.filter((id) => id !== chainId));
-          setRescanFailedChainIds((prev) => prev.filter((id) => id !== chainId));
           loadData();
         }}
       />
@@ -542,16 +511,6 @@ export default function HomeScreen() {
           onClear={() => setSelectedChainId(null)}
         />
       </View>
-
-      {/* Manual deep re-scan ("I'm missing a payment" recovery) */}
-      {tab === 'activity' && (
-        <View style={styles.liveRow}>
-          <Pressable style={styles.rescanBtn} onPress={() => setShowRescan(true)} hitSlop={8}>
-            <RefreshCw size={13} color={color.fg.muted} strokeWidth={2.4} />
-            <Text style={styles.rescanBtnText}>{t('home.rescanButton')}</Text>
-          </Pressable>
-        </View>
-      )}
     </Animated.View>
   );
 
@@ -564,10 +523,6 @@ export default function HomeScreen() {
         {selectedChainId != null ? t('home.emptyNoActivityNetwork') : t('home.emptyNoActivity')}
       </Text>
       <Text style={styles.emptySub}>{t('home.emptySubtitle')}</Text>
-      <Pressable style={styles.emptyRescanBtn} onPress={() => setShowRescan(true)}>
-        <RefreshCw size={15} color={color.accent.base} strokeWidth={2.4} />
-        <Text style={styles.emptyRescanText}>{t('home.rescanButton')}</Text>
-      </Pressable>
     </View>
   );
 
@@ -675,14 +630,6 @@ export default function HomeScreen() {
         selected={currencyCode}
         onSelect={pickCurrency}
         onClose={() => setShowCurrency(false)}
-      />
-
-      {/* Manual activity re-scan */}
-      <ActivityRescanSheet
-        visible={showRescan}
-        address={address}
-        onClose={() => setShowRescan(false)}
-        onResult={onRescanResult}
       />
 
       {/* Transaction detail */}
@@ -964,10 +911,7 @@ const styles = createStyles(() => ({
   balanceInt: { fontSize: 52, ...inter.bold, fontFamily: font.display, color: color.fg.base, letterSpacing: -1 },
   balanceDec: { fontSize: 30, ...inter.bold, fontFamily: font.display, color: color.fg.subtle },
   balanceHidden: { fontSize: 52, ...inter.bold, color: color.fg.base, flex: 1, letterSpacing: 2 },
-  balanceApprox: { fontSize: 34, ...inter.bold, fontFamily: font.display, color: color.fg.muted, marginRight: space.xs },
   eyeBtn: { padding: space.xs },
-  balanceStaleRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.sm },
-  balanceStaleText: { flex: 1, fontSize: text.sm, ...inter.medium, color: color.warning.base },
   balanceBottomRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.xl },
   currencyChip: {
     flexDirection: 'row', alignItems: 'center', gap: space.xs,
@@ -992,14 +936,6 @@ const styles = createStyles(() => ({
   // Nav row
   navRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.lg },
 
-  // Live indicator + re-scan
-  liveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.lg, paddingHorizontal: space.xs },
-  liveLeft: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.success.base },
-  liveText: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted, letterSpacing: 0.2 },
-  rescanBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingVertical: space.xs, paddingHorizontal: space.sm },
-  rescanBtnText: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted },
-
   // List
   listContent: { paddingHorizontal: space['3xl'], paddingBottom: DOCK_CLEARANCE },
   sep: { height: space.lg },
@@ -1012,12 +948,6 @@ const styles = createStyles(() => ({
   },
   emptyText: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
   emptySub: { fontSize: text.base, ...inter.regular, color: color.fg.subtle, textAlign: 'center', paddingHorizontal: space['3xl'], lineHeight: 20 },
-  emptyRescanBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md,
-    paddingVertical: space.md, paddingHorizontal: space.xl,
-    borderRadius: radius.full, borderWidth: 1, borderColor: color.border.base, backgroundColor: color.bg.raised,
-  },
-  emptyRescanText: { fontSize: text.base, ...inter.semibold, color: color.accent.base },
 
   // Account switcher
   switcher: { flex: 1, backgroundColor: color.bg.base },

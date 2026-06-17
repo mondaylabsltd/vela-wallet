@@ -1,8 +1,8 @@
 {
   "home": {
     "totalBalance": "合計残高",
-    "balanceStale": "最後に確認できた合計を表示しています — 一部の残高は更新できませんでした。",
-    "manageAssets": "資産を管理",
+    "balanceStale": "一部の残高を更新中です。",
+    "statement": "取引明細",
     "tabActivity": "アクティビティ",
     "tabConnections": "接続",
     "liveIndicator": "ライブ · 入金を待機中",
@@ -31,6 +31,7 @@
     "rescanWindow10m": "過去10分",
     "rescanWindow1h": "過去1時間",
     "rescanWindow6h": "過去6時間",
+    "rescanWindowRecent": "直近約1,000ブロック",
     "rescanScanning": "{{window}}をスキャン中…",
     "rescanFound": "新しい入金が{{count}}件見つかりました。",
     "rescanNone": "{{window}}に新しい入金は見つかりませんでした。",

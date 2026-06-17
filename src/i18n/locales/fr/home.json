@@ -1,8 +1,8 @@
 {
   "home": {
     "totalBalance": "Solde total",
-    "balanceStale": "Affichage de votre dernier total connu — certains soldes n'ont pas pu être mis à jour.",
-    "manageAssets": "Gérer les actifs",
+    "balanceStale": "Certains soldes sont encore en cours de mise à jour.",
+    "statement": "Relevé",
     "tabActivity": "Activité",
     "tabConnections": "Connexions",
     "liveIndicator": "En direct · à l'écoute des paiements",
@@ -31,6 +31,7 @@
     "rescanWindow10m": "10 dernières minutes",
     "rescanWindow1h": "Dernière heure",
     "rescanWindow6h": "6 dernières heures",
+    "rescanWindowRecent": "~1 000 derniers blocs",
     "rescanScanning": "Analyse de {{window}}…",
     "rescanFound": "{{count}} nouveau(x) paiement(s) trouvé(s).",
     "rescanNone": "Aucun nouveau paiement trouvé sur {{window}}.",

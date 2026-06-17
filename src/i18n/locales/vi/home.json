@@ -1,8 +1,8 @@
 {
   "home": {
     "totalBalance": "Tổng số dư",
-    "balanceStale": "Đang hiển thị tổng số dư gần nhất — một số số dư không thể cập nhật.",
-    "manageAssets": "Quản lý tài sản",
+    "balanceStale": "Một số số dư vẫn đang cập nhật.",
+    "statement": "Sao kê",
     "tabActivity": "Hoạt động",
     "tabConnections": "Kết nối",
     "liveIndicator": "Trực tiếp · đang chờ thanh toán",
@@ -31,6 +31,7 @@
     "rescanWindow10m": "10 phút qua",
     "rescanWindow1h": "1 giờ qua",
     "rescanWindow6h": "6 giờ qua",
+    "rescanWindowRecent": "~1.000 khối gần nhất",
     "rescanScanning": "Đang quét {{window}}…",
     "rescanFound": "Đã tìm thấy {{count}} khoản thanh toán mới.",
     "rescanNone": "Không tìm thấy khoản thanh toán mới nào trong {{window}}.",

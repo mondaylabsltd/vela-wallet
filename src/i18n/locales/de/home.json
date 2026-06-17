@@ -1,8 +1,8 @@
 {
   "home": {
     "totalBalance": "Gesamtguthaben",
-    "balanceStale": "Letzter bekannter Gesamtstand wird angezeigt — einige Guthaben konnten nicht aktualisiert werden.",
-    "manageAssets": "Assets verwalten",
+    "balanceStale": "Einige Guthaben werden noch aktualisiert.",
+    "statement": "Kontoauszug",
     "tabActivity": "Aktivität",
     "tabConnections": "Verbindungen",
     "liveIndicator": "Live · wartet auf Zahlungen",
@@ -31,6 +31,7 @@
     "rescanWindow10m": "Letzte 10 Minuten",
     "rescanWindow1h": "Letzte Stunde",
     "rescanWindow6h": "Letzte 6 Stunden",
+    "rescanWindowRecent": "Letzte ~1.000 Blöcke",
     "rescanScanning": "{{window}} wird gescannt…",
     "rescanFound": "{{count}} neue Zahlung(en) gefunden.",
     "rescanNone": "Keine neuen Zahlungen in {{window}} gefunden.",
