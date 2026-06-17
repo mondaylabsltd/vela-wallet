@@ -117,10 +117,15 @@ async function checkEndpointHealth(url: string, type: 'rpc' | 'explorer' | 'bund
       // Any HTTP response means the server is reachable
       return { status: 'ok', latencyMs: Date.now() - start };
     } else {
-      // Explorer: GET the URL, follow redirects, accept any 2xx/3xx
-      const res = await fetch(url, { method: 'GET', signal: controller.signal, redirect: 'follow' });
+      // Explorer: it's a website, not a JSON API — it sends no CORS headers (and
+      // usually sits behind Cloudflare), so on web a normal fetch is blocked and
+      // every explorer falsely reads "offline". Use no-cors: the opaque response
+      // can't be inspected, but the request still goes out, so "resolved without
+      // throwing" == host reachable. That's the only honest liveness signal we can
+      // get for a cross-origin site, and it matches the bundler check above.
+      await fetch(url, { method: 'GET', mode: 'no-cors', signal: controller.signal, redirect: 'follow' });
       clearTimeout(timeout);
-      return { status: res.ok ? 'ok' : 'error', latencyMs: Date.now() - start };
+      return { status: 'ok', latencyMs: Date.now() - start };
     }
   } catch {
     clearTimeout(timeout);
