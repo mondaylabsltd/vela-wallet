@@ -1,6 +1,7 @@
 import { TokenLogo } from '@/components/TokenLogo';
 import { fadeIn } from '@/constants/entering';
 import { color, createStyles, font, inter, motion, radius, space, text } from '@/constants/theme';
+import type { Network } from '@/models/network';
 import React, { useCallback } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
@@ -14,6 +15,8 @@ interface Props {
   chainLabel: string;
   logoUrl?: string | null;
   logoUrls?: string[];
+  /** Network whose logo is badged onto the token logo's bottom-right corner. */
+  chain?: Network | null;
   balance: string;
   usdValue?: string;
   onPress: () => void;
@@ -22,7 +25,7 @@ interface Props {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, balance, usdValue, onPress, index = 0 }: Props) {
+export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, balance, usdValue, onPress, index = 0 }: Props) {
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -45,7 +48,7 @@ export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, balance, usdVa
         onPressOut={handlePressOut}
         style={[styles.container, animatedStyle]}
       >
-        <TokenLogo symbol={symbol} logoUrl={logoUrl} logoUrls={logoUrls} size={40} />
+        <TokenLogo symbol={symbol} logoUrl={logoUrl} logoUrls={logoUrls} chain={chain} size={40} />
         <View style={styles.info}>
           <Text style={styles.symbol} numberOfLines={1}>{symbol}</Text>
           <Text style={styles.chain}>{chainLabel}</Text>

@@ -5,6 +5,12 @@
     "loadingTokens": "Loading tokens...",
     "noMatchingTokens": "No matching tokens",
     "noTokensWithBalance": "No tokens with balance",
+    "filterAll": "All",
+    "filterStable": "Stablecoins",
+    "filterGas": "Gas",
+    "filterOther": "Other",
+    "addTokenBtn": "Add Token",
+    "tokenCount": "{{n}} tokens",
 
     "sendTitle": "Send {{symbol}}",
     "maxBtn": "Max",

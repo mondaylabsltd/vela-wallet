@@ -5,7 +5,10 @@ import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenRow } from '@/components/ui/TokenRow';
 import { color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
-import { chainName, nativeSymbol } from '@/models/network';
+import { chainName, getAllNetworksSync, nativeSymbol, tokenBadgeNetwork } from '@/models/network';
+import { NetworkFilterButton, NetworkFilterSheet } from '@/components/ui/NetworkFilterSheet';
+import { AddTokenSheet } from '@/components/ui/AddTokenSheet';
+import { isStable } from '@/services/activity';
 import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
@@ -34,7 +37,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, ScanLine, BookUser, AlertCircle, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, X, ScanLine, BookUser, AlertCircle, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Plus } from 'lucide-react-native';
 import { openBrowser } from '@/services/platform';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
@@ -42,6 +45,16 @@ type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' |
 
 function isValidAddress(addr: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(addr);
+}
+
+/** Quick filter buckets for the token picker. Mutually exclusive + exhaustive. */
+type TokenCategory = 'all' | 'stable' | 'gas' | 'other';
+
+function tokenMatchesCategory(tok: APIToken, cat: TokenCategory): boolean {
+  if (cat === 'all') return true;
+  if (cat === 'gas') return isNativeToken(tok); // native coin = the chain's gas token
+  if (cat === 'stable') return !isNativeToken(tok) && isStable(tok.symbol);
+  return !isNativeToken(tok) && !isStable(tok.symbol); // 'other'
 }
 
 function explorerUserOpUrl(chainId: number): string | null {
@@ -172,6 +185,10 @@ export default function SendScreen() {
   const [sending, setSending] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [tokenSearch, setTokenSearch] = useState('');
+  const [tokenCategory, setTokenCategory] = useState<TokenCategory>('all');
+  const [tokenChainFilter, setTokenChainFilter] = useState<number | null>(null);
+  const [showNetSheet, setShowNetSheet] = useState(false);
+  const [showAddToken, setShowAddToken] = useState(false);
   const [feeEstimate, setFeeEstimate] = useState<TransactionFeeEstimate | null>(null);
   const [estimatingGas, setEstimatingGas] = useState(false);
   const [fundingNeeded, setFundingNeeded] = useState<FundingNeeded | null>(null);
@@ -628,13 +645,31 @@ export default function SendScreen() {
     }
   };
 
-  // Step 1: Select Token
-  const filteredTokens = tokenSearch
-    ? tokens.filter((t) => {
-        const q = tokenSearch.toLowerCase();
-        return t.symbol.toLowerCase().includes(q) || t.name.toLowerCase().includes(q) || t.network.toLowerCase().includes(q);
-      })
-    : tokens;
+  // Step 1: Select Token — combine category, network, and text filters.
+  const networks = getAllNetworksSync();
+  const selectedTokenNetwork = tokenChainFilter != null ? networks.find((n) => n.chainId === tokenChainFilter) ?? null : null;
+  const hasActiveFilter = !!tokenSearch || tokenCategory !== 'all' || tokenChainFilter != null;
+  const q = tokenSearch.trim().toLowerCase();
+  const filteredTokens = tokens.filter((tok) => {
+    if (tokenChainFilter != null && tokenChainId(tok) !== tokenChainFilter) return false;
+    if (!tokenMatchesCategory(tok, tokenCategory)) return false;
+    if (q && !(tok.symbol.toLowerCase().includes(q) || tok.name.toLowerCase().includes(q) || tok.network.toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  const TOKEN_CATEGORIES: { key: TokenCategory; label: string }[] = [
+    { key: 'all', label: t('send.filterAll') },
+    { key: 'stable', label: t('send.filterStable') },
+    { key: 'gas', label: t('send.filterGas') },
+    { key: 'other', label: t('send.filterOther') },
+  ];
+
+  const addTokenButton = (
+    <Pressable style={styles.addTokenRow} onPress={() => setShowAddToken(true)}>
+      <Plus size={18} color={color.accent.base} strokeWidth={2.5} />
+      <Text style={styles.addTokenText}>{t('send.addTokenBtn')}</Text>
+    </Pressable>
+  );
 
   const renderSelectToken = () => (
     <Animated.View style={styles.stepContainer} entering={fadeInDown(0, 300)}>
@@ -651,11 +686,39 @@ export default function SendScreen() {
           autoCorrect={false}
         />
       </View>
+
+      {/* Category chips + network filter (reused from Home). */}
+      <View style={styles.filterRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.chipScroll}
+          contentContainerStyle={styles.chipRow}
+          keyboardShouldPersistTaps="handled"
+        >
+          {TOKEN_CATEGORIES.map((c) => {
+            const active = tokenCategory === c.key;
+            return (
+              <Pressable key={c.key} onPress={() => setTokenCategory(c.key)} style={[styles.chip, active && styles.chipActive]}>
+                <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>{c.label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        <NetworkFilterButton
+          networks={networks}
+          selected={selectedTokenNetwork}
+          onPress={() => setShowNetSheet(true)}
+          onClear={() => setTokenChainFilter(null)}
+        />
+      </View>
+
       {loading ? (
         <Text style={styles.loadingText}>{t('send.loadingTokens')}</Text>
       ) : filteredTokens.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>{tokenSearch ? t('send.noMatchingTokens') : t('send.noTokensWithBalance')}</Text>
+          <Text style={styles.emptyText}>{hasActiveFilter ? t('send.noMatchingTokens') : t('send.noTokensWithBalance')}</Text>
+          {addTokenButton}
         </View>
       ) : (
         <FlatList
@@ -666,18 +729,33 @@ export default function SendScreen() {
               symbol={item.symbol}
               chainLabel={chainName(tokenChainId(item))}
               logoUrls={tokenLogoURLs(item)}
+              chain={tokenBadgeNetwork(item)}
               balance={formatTokenAmount(tokenBalanceDouble(item), { compact: true })}
               usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
               onPress={() => { handleSelectToken(item); setTokenSearch(''); }}
               index={index}
             />
           )}
+          ListFooterComponent={addTokenButton}
           initialNumToRender={10}
           windowSize={5}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         />
       )}
+
+      <NetworkFilterSheet
+        visible={showNetSheet}
+        networks={networks}
+        selectedChainId={tokenChainFilter}
+        onSelect={setTokenChainFilter}
+        onClose={() => setShowNetSheet(false)}
+        subtitleForChain={(n) => {
+          const c = tokens.filter((tk) => tokenChainId(tk) === n.chainId).length;
+          return c > 0 ? t('send.tokenCount', { n: c }) : undefined;
+        }}
+      />
+      <AddTokenSheet visible={showAddToken} onClose={() => setShowAddToken(false)} />
     </Animated.View>
   );
 
@@ -700,7 +778,7 @@ export default function SendScreen() {
           <Pressable onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); }}>
           <VelaCard style={styles.heroCard}>
             <View style={styles.heroRow}>
-              <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} size={44} />
+              <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={44} />
               <View style={styles.heroIdentity}>
                 <Text style={styles.heroSymbol}>{selectedToken.symbol}</Text>
                 <Text style={styles.heroChain}>{chain}</Text>
@@ -907,7 +985,7 @@ export default function SendScreen() {
                 <View style={styles.transferLine} />
               </View>
               <View style={styles.transferToken}>
-                <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} size={36} />
+                <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={36} />
                 <View style={styles.transferTokenIdentity}>
                   <Text style={styles.transferTokenSymbol}>{selectedToken.symbol}</Text>
                   <Text style={styles.transferTokenChain}>{chain}</Text>
@@ -1213,7 +1291,7 @@ const styles = createStyles(() => ({
     borderColor: color.border.base,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
-    marginBottom: space.xl,
+    marginBottom: space.md,
   },
   searchInput: {
     flex: 1,
@@ -1223,6 +1301,63 @@ const styles = createStyles(() => ({
     padding: 0,
     outlineStyle: 'none',
   } as any,
+
+  // Category + network filters
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginBottom: space.xl,
+  },
+  chipScroll: {
+    flex: 1,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingRight: space.sm,
+  },
+  chip: {
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    borderRadius: radius.full,
+    backgroundColor: color.bg.sunken,
+    borderWidth: 1,
+    borderColor: color.border.base,
+  },
+  chipActive: {
+    backgroundColor: color.accent.soft,
+    borderColor: color.accent.base,
+  },
+  chipText: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.fg.muted,
+  },
+  chipTextActive: {
+    color: color.accent.base,
+  },
+
+  // Add-token affordance (footer + empty state)
+  addTokenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    paddingVertical: space.xl,
+    marginTop: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: color.border.base,
+    borderStyle: 'dashed',
+    backgroundColor: color.bg.raised,
+  },
+  addTokenText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.accent.base,
+  },
 
   // Hero card (matches TokenDetailScreen)
   heroCard: {

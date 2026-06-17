@@ -7,7 +7,8 @@
 // Custom network support
 // ---------------------------------------------------------------------------
 
-import type { CustomNetwork } from '@/models/types';
+import type { APIToken, CustomNetwork } from '@/models/types';
+import { nativeCoinLogoChainId, tokenBadgeChainId } from '@/models/types';
 import { loadCustomNetworks } from '@/services/storage';
 
 export interface Network {
@@ -92,6 +93,32 @@ export function chainName(chainId: number): string {
   return DEFAULT_NETWORKS.find(n => n.chainId === chainId)?.displayName
     ?? _customNetworkCache.find(n => n.chainId === chainId)?.displayName
     ?? `Chain ${chainId}`;
+}
+
+/** Lookup a full network (default or custom) by chain ID; null if unknown. */
+export function networkForChainId(chainId: number): Network | null {
+  const def = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
+  if (def) return def;
+  const custom = _customNetworkCache.find(n => n.chainId === chainId);
+  return custom ? customToNetwork(custom) : null;
+}
+
+/**
+ * The network to badge a token's logo with, or null when no badge is needed.
+ * A native coin shown on its own logo chain (ETH on Ethereum) returns null so
+ * the badge doesn't merely duplicate the main logo; everything else badges the
+ * chain it sits on. `isNative` lets call sites that only have a symbol+chainId
+ * (not a full APIToken) reuse the same rule.
+ */
+export function badgeNetworkFor(symbol: string, chainId: number, isNative: boolean): Network | null {
+  if (isNative && nativeCoinLogoChainId(symbol, chainId) === chainId) return null;
+  return networkForChainId(chainId);
+}
+
+/** Convenience wrapper of {@link badgeNetworkFor} for a full APIToken. */
+export function tokenBadgeNetwork(t: APIToken): Network | null {
+  const cid = tokenBadgeChainId(t);
+  return cid != null ? networkForChainId(cid) : null;
 }
 
 /** Lookup native token symbol by chain ID. */

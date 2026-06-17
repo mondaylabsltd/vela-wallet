@@ -19,7 +19,7 @@ import { color, text, inter, space, radius, font, shadow, createStyles } from '@
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { shortAddr, tokenChainId as networkToChainId } from '@/models/types';
 import type { APIToken } from '@/models/types';
-import { chainName } from '@/models/network';
+import { badgeNetworkFor, chainName } from '@/models/network';
 import { fetch7DayHistory, type BalancePoint } from '@/services/balance-history';
 import { Copy, Check, ArrowLeft, ExternalLink } from 'lucide-react-native';
 
@@ -110,7 +110,7 @@ export default function TokenDetailScreen() {
         <Animated.View entering={fadeIn(0, 400)}>
           <VelaCard elevated style={styles.heroCard}>
             <View style={styles.heroRow}>
-              <TokenLogo symbol={symbol} logoUrls={logoUrls} size={44} />
+              <TokenLogo symbol={symbol} logoUrls={logoUrls} chain={badgeNetworkFor(symbol, chainId, !contractAddress)} size={44} />
               <View style={styles.heroIdentity}>
                 <Text style={styles.heroSymbol}>{symbol}</Text>
                 <Text style={styles.heroChain}>{chain}</Text>

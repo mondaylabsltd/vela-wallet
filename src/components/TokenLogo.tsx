@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, Image } from 'react-native';
-import { color, inter, createStyles } from '@/constants/theme';
+import { color, inter, radius, createStyles } from '@/constants/theme';
+import { ChainLogo } from '@/components/ChainLogo';
+import type { Network } from '@/models/network';
 
 interface Props {
   symbol: string;
@@ -10,6 +12,12 @@ interface Props {
   size?: number;
   bgColor?: string;
   textColor?: string;
+  /**
+   * When set, overlays the network's logo as a small badge in the bottom-right
+   * corner — disambiguates same-symbol tokens across chains (USDT on Arbitrum vs
+   * Polygon) and labels which chain a native coin sits on (ETH on Base).
+   */
+  chain?: Network | null;
 }
 
 function stringToColor(str: string): string {
@@ -40,7 +48,7 @@ function LetterFallback({ symbol, size, bg, fg }: { symbol: string; size: number
   );
 }
 
-export function TokenLogo({ symbol, logoUrl, logoUrls, size = 40, bgColor, textColor }: Props) {
+export function TokenLogo({ symbol, logoUrl, logoUrls, size = 40, bgColor, textColor, chain }: Props) {
   const bg = bgColor ?? stringToBgColor(symbol);
   const fg = textColor ?? stringToColor(symbol);
 
@@ -60,22 +68,48 @@ export function TokenLogo({ symbol, logoUrl, logoUrls, size = 40, bgColor, textC
 
   const activeUrl = candidates[urlIndex];
 
-  if (!activeUrl) {
-    return <LetterFallback symbol={symbol} size={size} bg={bg} fg={fg} />;
-  }
-
-  return (
+  const logo = activeUrl ? (
     <Image
       source={{ uri: activeUrl }}
       style={[styles.image, { width: size, height: size, borderRadius: size / 2 }]}
       onError={() => setUrlIndex(i => i + 1)}
     />
+  ) : (
+    <LetterFallback symbol={symbol} size={size} bg={bg} fg={fg} />
+  );
+
+  if (!chain) return logo;
+
+  // Badge ~45% of the logo, ringed in the surrounding background so the small
+  // network mark reads as separate from the token logo behind it.
+  const badgeSize = Math.round(size * 0.45);
+  return (
+    <View style={{ width: size, height: size }}>
+      {logo}
+      <View style={styles.badge}>
+        <ChainLogo
+          label={chain.iconLabel}
+          color={chain.iconColor}
+          bgColor={chain.iconBg}
+          logoURL={chain.logoURL}
+          size={badgeSize}
+        />
+      </View>
+    </View>
   );
 }
 
 const styles = createStyles(() => ({
   image: {
     backgroundColor: color.bg.sunken,
+  },
+  badge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    borderRadius: radius.full,
+    borderWidth: 2,
+    borderColor: color.bg.base,
   },
   fallback: {
     alignItems: 'center',

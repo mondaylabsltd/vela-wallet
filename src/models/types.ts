@@ -87,6 +87,38 @@ export function tokenChainId(t: APIToken): number {
   }
 }
 
+/**
+ * The chain whose logo represents a native coin. A native coin's logo is the
+ * COIN's identity, not the chain it currently sits on: ether is native on
+ * Ethereum, Arbitrum, Optimism and Base, but on all of them the coin is ETH —
+ * so its logo is always Ethereum's (eip155-1), never the L2's. The same holds
+ * for BNB on opBNB, POL on other Polygon chains, etc. Native coins unique to a
+ * single chain (or a custom chain's own coin) fall back to that chain's logo.
+ */
+export function nativeCoinLogoChainId(symbol: string, fallbackChainId: number): number {
+  switch (symbol.toUpperCase()) {
+    case 'ETH': return 1;
+    case 'BNB': return 56;
+    case 'POL': case 'MATIC': return 137;
+    case 'AVAX': return 43114;
+    case 'XDAI': return 100;
+    default: return fallbackChainId;
+  }
+}
+
+/**
+ * The chain a token's logo should be badged with, or null when a badge would
+ * merely duplicate the main logo — i.e. a native coin shown on its own logo
+ * chain (ETH on Ethereum, BNB on BNB Chain). ERC-20s, and native coins sitting
+ * on a *different* chain than their logo (ETH on Base), always badge, since the
+ * badge then adds real information.
+ */
+export function tokenBadgeChainId(t: APIToken): number | null {
+  const cid = tokenChainId(t);
+  if (isNativeToken(t) && nativeCoinLogoChainId(t.symbol, cid) === cid) return null;
+  return cid;
+}
+
 export function tokenLogoURL(t: APIToken): string | null {
   return tokenLogoURLs(t)[0] ?? null;
 }
@@ -100,7 +132,8 @@ export function tokenLogoURLs(t: APIToken): string[] {
   if (t.logo && t.logo.length > 0) return [t.logo];
   const cid = tokenChainId(t);
   if (isNativeToken(t)) {
-    return [`${getEthereumDataURL()}/chainlogos/eip155-${cid}.png`];
+    const logoChain = nativeCoinLogoChainId(t.symbol, cid);
+    return [`${getEthereumDataURL()}/chainlogos/eip155-${logoChain}.png`];
   }
   if (t.tokenAddress) {
     const base = `${getEthereumDataURL()}/assets/eip155-${cid}`;
