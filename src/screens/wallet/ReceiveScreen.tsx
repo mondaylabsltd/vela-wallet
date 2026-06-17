@@ -5,295 +5,22 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
-import type { Network } from '@/models/network';
 import { chainName, getAllNetworksSync } from '@/models/network';
 import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
+import { copyToClipboard, hapticLight, hapticSuccess, isAppActive } from '@/services/platform';
 import { fetchTokens } from '@/services/wallet-api';
-import { copyToClipboard, hapticSuccess, hapticLight, isAppActive } from '@/services/platform';
-import { ArrowLeft, Check, Copy, Share2, ShieldAlert } from 'lucide-react-native';
-import QRCodeLib from 'qrcode';
+import { ArrowLeft, Check, Copy, ShieldAlert } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withSequence,
-  withTiming,
-} from 'react-native-reanimated';
-
-// ── Share card helpers ──
-const LOGO_ASSET = require('@/../assets/images/icon.png');
-
-/** Truncate network name so it fits in a chip */
-function truncateName(name: string, maxLen: number): string {
-  return name.length > maxLen ? name.slice(0, maxLen - 1).trimEnd() + '…' : name;
-}
-
-function resolveAssetUri(asset: any): string {
-  if (typeof asset === 'string') return asset;
-  if (typeof asset === 'number') {
-    // Metro bundled numeric ID — use resolveAssetSource
-    const resolved = Image.resolveAssetSource(asset);
-    return resolved?.uri ?? '';
-  }
-  return asset?.uri ?? asset?.default ?? '';
-}
-
-async function renderShareCardToCanvas(
-  address: string,
-  walletName: string,
-  networks: Network[],
-  strings: { headline: string; networksLabel: string },
-): Promise<Blob> {
-  const W = 750;
-  const PAD = 80;
-  const contentW = W - PAD * 2;
-  const qrSize = 340;
-  const qrPad = 36;
-  const qrContainerSize = qrSize + qrPad * 2;
-  const chipH = 44;
-  const chipGap = 12;
-  const chipsPerRow = 2;
-  const networkRows = Math.ceil(networks.length / chipsPerRow);
-  const networksH = networkRows * chipH + (networkRows - 1) * chipGap;
-  const logoSize = 48;
-
-  const H = PAD
-    + 46 + 12                              // title + gap
-    + 28 + 6 + 24 + 40                    // wallet name + gap + address + gap
-    + qrContainerSize + 40                 // QR container + gap
-    + 1 + 32                               // divider + gap
-    + 22 + 16                              // "Works on" label + gap
-    + networksH + 48                       // chips + gap
-    + logoSize + 24 + 28 + 20             // footer
-    + PAD;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
-
-  // — Background —
-  ctx.fillStyle = color.bg.raised;
-  ctx.fillRect(0, 0, W, H);
-
-  // — Preload logo —
-  let logoImg: HTMLImageElement | null = null;
-  const logoSources = [
-    resolveAssetUri(LOGO_ASSET),
-    '/assets/assets/images/icon.png',
-    '/assets/images/icon.png',
-  ].filter(s => s && s !== '[object Object]');
-  for (const src of logoSources) {
-    try { logoImg = await loadImageRobust(src); break; } catch {}
-  }
-
-  let y = PAD;
-
-  // — Title —
-  ctx.fillStyle = color.fg.base;
-  ctx.font = 'bold 40px Inter, system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(strings.headline, W / 2, y + 34);
-  y += 46 + 12;
-
-  // — Wallet name —
-  ctx.fillStyle = color.fg.base;
-  ctx.font = '600 28px Inter, system-ui, sans-serif';
-  ctx.fillText(walletName, W / 2, y + 22);
-  y += 28 + 6;
-
-  // — Short address —
-  const shortAddr = `${address.slice(0, 6)}···${address.slice(-4)}`;
-  ctx.fillStyle = color.fg.subtle;
-  ctx.font = '400 24px "SF Mono", "Fira Code", monospace';
-  ctx.fillText(shortAddr, W / 2, y + 18);
-  y += 24 + 40;
-
-  // — QR container with subtle border —
-  const qcX = (W - qrContainerSize) / 2;
-  ctx.strokeStyle = color.border.base;
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, qcX, y, qrContainerSize, qrContainerSize, 24);
-  ctx.stroke();
-
-  // QR code inside container
-  const qrModules = QRCodeLib.create(address, { errorCorrectionLevel: 'M' }).modules;
-  const moduleCount = qrModules.size;
-  const moduleSize = qrSize / moduleCount;
-  const qrX = qcX + qrPad;
-  const qrY = y + qrPad;
-  ctx.fillStyle = color.fg.base;
-  for (let row = 0; row < moduleCount; row++) {
-    for (let col = 0; col < moduleCount; col++) {
-      if (qrModules.data[row * moduleCount + col] === 1) {
-        ctx.fillRect(qrX + col * moduleSize, qrY + row * moduleSize, moduleSize + 0.5, moduleSize + 0.5);
-      }
-    }
-  }
-  y += qrContainerSize + 40;
-
-  // — Divider —
-  ctx.fillStyle = color.border.base;
-  ctx.fillRect(PAD, y, contentW, 1);
-  y += 1 + 32;
-
-  // — "Works on X networks" label —
-  ctx.fillStyle = color.fg.subtle;
-  ctx.font = '500 22px Inter, system-ui, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(strings.networksLabel, PAD, y + 18);
-  y += 22 + 16;
-
-  // — Network chips (2-column grid, justified) —
-  const chipW = (contentW - chipGap) / 2;
-  const logoImages = await Promise.all(
-    networks.map(n => loadImage(n.logoURL).catch(() => null)),
-  );
-
-  for (let i = 0; i < networks.length; i++) {
-    const col = i % chipsPerRow;
-    const row = Math.floor(i / chipsPerRow);
-    const cx = PAD + col * (chipW + chipGap);
-    const cy = y + row * (chipH + chipGap);
-    const n = networks[i];
-
-    ctx.fillStyle = color.bg.sunken;
-    roundRect(ctx, cx, cy, chipW, chipH, chipH / 2);
-    ctx.fill();
-
-    const cLogoSize = 24;
-    const cLogoX = cx + 14;
-    const cLogoY = cy + (chipH - cLogoSize) / 2;
-    const img = logoImages[i];
-    if (img) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cLogoX + cLogoSize / 2, cLogoY + cLogoSize / 2, cLogoSize / 2, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(img, cLogoX, cLogoY, cLogoSize, cLogoSize);
-      ctx.restore();
-    } else {
-      ctx.fillStyle = n.iconBg;
-      ctx.beginPath();
-      ctx.arc(cLogoX + cLogoSize / 2, cLogoY + cLogoSize / 2, cLogoSize / 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = n.iconColor;
-      ctx.font = `bold ${cLogoSize * 0.4}px Inter, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText(n.iconLabel, cLogoX + cLogoSize / 2, cLogoY + cLogoSize / 2 + 4);
-    }
-
-    // Name — truncate to fit
-    const textX = cLogoX + cLogoSize + 8;
-    const maxTextX = cx + chipW - 16;
-    ctx.font = '600 20px Inter, system-ui, sans-serif';
-    const maxTextW = maxTextX - textX;
-    let label = n.displayName;
-    while (ctx.measureText(label).width > maxTextW && label.length > 2) {
-      label = label.slice(0, -1);
-    }
-    if (label !== n.displayName) label = label.trimEnd() + '…';
-    ctx.fillStyle = color.fg.muted;
-    ctx.textAlign = 'left';
-    ctx.fillText(label, textX, cy + chipH / 2 + 7);
-  }
-  y += networksH + 48;
-
-  // — Footer —
-  if (logoImg) {
-    const flx = (W - logoSize) / 2;
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(flx + logoSize / 2, y + logoSize / 2, logoSize / 2, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.drawImage(logoImg, flx, y, logoSize, logoSize);
-    ctx.restore();
-  }
-  y += logoSize + 24;
-  ctx.fillStyle = color.fg.base;
-  ctx.font = '600 24px Inter, system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('Vela Wallet', W / 2, y);
-  y += 28;
-  ctx.fillStyle = color.fg.subtle;
-  ctx.font = '400 20px Inter, system-ui, sans-serif';
-  ctx.fillText('getvela.app', W / 2, y);
-
-  return new Promise((resolve) => canvas.toBlob(resolve as BlobCallback, 'image/png', 1));
-}
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-/** Load image with fetch+blob fallback to avoid CORS/taint issues on web */
-async function loadImageRobust(src: string): Promise<HTMLImageElement> {
-  // Try direct first
-  try { return await loadImage(src); } catch {}
-  // Fetch as blob — works for same-origin assets that fail CORS canvas tainting
-  const resp = await fetch(src);
-  const blob = await resp.blob();
-  const blobUrl = URL.createObjectURL(blob);
-  try {
-    const img = await loadImage(blobUrl);
-    return img;
-  } finally {
-    URL.revokeObjectURL(blobUrl);
-  }
-}
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 // Aggressive polling: 3s for first 1 min, then 60s for next 4 min, then stop
 const FAST_INTERVAL_MS = 3_000;
 const SLOW_INTERVAL_MS = 60_000;
 const FAST_PHASE_MS = 1 * 60_000;
 const TOTAL_LISTEN_MS = 5 * 60_000;
-
-function PulsingDot() {
-  const opacity = useSharedValue(1);
-
-  useEffect(() => {
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(0.3, { duration: 800 }),
-        withTiming(1, { duration: 800 }),
-      ),
-      -1,
-      false,
-    );
-  }, [opacity]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
-
-  return (
-    <Animated.View style={[styles.listeningDot, animatedStyle]} />
-  );
-}
 
 export default function ReceiveScreen() {
   const { t } = useTranslation();
@@ -303,22 +30,17 @@ export default function ReceiveScreen() {
   const accountName = activeAccount?.name ?? 'Wallet';
   const networks = getAllNetworksSync();
 
-  const [isListening, setIsListening] = useState(false);
   const [depositDetected, setDepositDetected] = useState(false);
   interface DepositEntry { time: string; items: { symbol: string; amount: string; network: string; usd: string | null }[] }
   const [deposits, setDeposits] = useState<DepositEntry[]>([]);
   const previousTokens = useRef<APIToken[] | null>(null);
   const [copied, setCopied] = useState(false);
-  const [sharing, setSharing] = useState(false);
   const [warningDismissed, setWarningDismissed] = useState(false);
-  const previousBalance = useRef<number | null>(null);
-  const shareCardRef = useRef<View>(null);
 
-  // Deposit detection polling — 3s fast, then 60s slow
+  // Deposit detection polling — quietly watches for incoming transfers while
+  // this screen is open and surfaces them as they land (no persistent status).
   useEffect(() => {
     if (!address) return;
-    setIsListening(true);
-    previousBalance.current = null;
     previousTokens.current = null;
     const startTime = Date.now();
     let timerId: ReturnType<typeof setTimeout>;
@@ -329,26 +51,26 @@ export default function ReceiveScreen() {
         const tokens = await fetchTokens(address, { forceRefresh: true });
 
         if (previousTokens.current !== null) {
-          // Guard: if this fetch returned fewer tokens than baseline,
-          // a chain likely failed — skip comparison to avoid false positives
+          // Guard: a smaller token set than baseline means a chain likely
+          // failed — skip comparison to avoid false positives.
           if (tokens.length < previousTokens.current.length) {
             scheduleNext();
             return;
           }
 
-          // Diff: find tokens whose balance increased vs baseline
-          const prevMap = new Map(previousTokens.current.map(t => [tokenId(t), tokenBalanceDouble(t)]));
+          // Diff: find tokens whose balance increased vs baseline.
+          const prevMap = new Map(previousTokens.current.map(tk => [tokenId(tk), tokenBalanceDouble(tk)]));
           const changes: DepositEntry['items'] = [];
-          for (const t of tokens) {
-            const prevBal = prevMap.get(tokenId(t)) ?? 0;
-            const curBal = tokenBalanceDouble(t);
+          for (const tk of tokens) {
+            const prevBal = prevMap.get(tokenId(tk)) ?? 0;
+            const curBal = tokenBalanceDouble(tk);
             if (curBal > prevBal) {
               const diff = curBal - prevBal;
               changes.push({
-                symbol: t.symbol,
+                symbol: tk.symbol,
                 amount: formatBalance(diff),
-                network: chainName(tokenChainId(t)),
-                usd: t.priceUsd ? `$${(diff * t.priceUsd).toFixed(2)}` : null,
+                network: chainName(tokenChainId(tk)),
+                usd: tk.priceUsd ? `$${(diff * tk.priceUsd).toFixed(2)}` : null,
               });
             }
           }
@@ -358,12 +80,10 @@ export default function ReceiveScreen() {
             setDepositDetected(true);
             setDeposits(prev => [{ time, items: changes }, ...prev]);
             hapticSuccess();
-            // Only update baseline when deposit detected
             previousTokens.current = tokens;
           }
-          // No change or balance decreased: keep baseline unchanged
         } else {
-          // First fetch — record initial baseline
+          // First fetch — record initial baseline.
           previousTokens.current = tokens;
         }
       } catch {}
@@ -373,16 +93,13 @@ export default function ReceiveScreen() {
 
     const scheduleNext = () => {
       const elapsed = Date.now() - startTime;
-      if (elapsed >= TOTAL_LISTEN_MS) {
-        setIsListening(false);
-        return;
-      }
+      if (elapsed >= TOTAL_LISTEN_MS) return;
       const interval = elapsed < FAST_PHASE_MS ? FAST_INTERVAL_MS : SLOW_INTERVAL_MS;
       timerId = setTimeout(checkDeposit, interval);
     };
 
     checkDeposit();
-    return () => { clearTimeout(timerId); setIsListening(false); };
+    return () => { clearTimeout(timerId); };
   }, [address]);
 
   const copyAddress = useCallback(async () => {
@@ -392,40 +109,6 @@ export default function ReceiveScreen() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [address]);
-
-  const shareAsImage = useCallback(async () => {
-    if (sharing) return;
-    setSharing(true);
-    try {
-      if (Platform.OS === 'web') {
-        const canvasStrings = {
-          headline: t('receive.shareCardHeadline'),
-          networksLabel: t('receive.networksLabel', { count: networks.length }),
-        };
-        const blob = await renderShareCardToCanvas(address!, accountName, networks, canvasStrings);
-        const file = new File([blob], `${accountName}-address.png`, { type: 'image/png' });
-        if (navigator.share && navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file] });
-        } else {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${accountName}-address.png`;
-          a.click();
-          URL.revokeObjectURL(url);
-        }
-      } else {
-        if (!shareCardRef.current) return;
-        const { captureRef } = await import('react-native-view-shot');
-        const Sharing = await import('expo-sharing');
-        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: t('receive.shareDialogTitle', { name: accountName }) });
-      }
-    } catch (e) {
-      console.warn('Share failed:', e);
-    }
-    setSharing(false);
-  }, [address, accountName, sharing, networks]);
 
   const truncatedAddress = address
     ? `${address.slice(0, 8)}...${address.slice(-6)}`
@@ -447,17 +130,6 @@ export default function ReceiveScreen() {
         <Animated.View entering={fadeInDown(100, 400)}>
           <View style={styles.qrCardWrap}>
             <VelaCard elevated style={styles.qrCard}>
-              {/* Identity */}
-              <Text style={styles.walletName}>{accountName}</Text>
-              <Pressable onPress={warningDismissed ? copyAddress : undefined} style={styles.addressRow}>
-                <Text style={styles.addressText} numberOfLines={1}>{truncatedAddress}</Text>
-                {copied ? (
-                  <Check size={14} color={color.success.base} strokeWidth={2.5} />
-                ) : (
-                  <Copy size={14} color={color.fg.subtle} strokeWidth={1.8} />
-                )}
-              </Pressable>
-
               {/* QR */}
               <View style={styles.qrBorder}>
                 {address ? (
@@ -469,25 +141,23 @@ export default function ReceiveScreen() {
                 )}
               </View>
 
-              {/* Share */}
+              {/* Identity — below the QR */}
+              <Text style={styles.walletName}>{accountName}</Text>
+
+              {/* Big, easy-to-tap copy button */}
               <Pressable
-                onPress={warningDismissed ? shareAsImage : undefined}
-                style={styles.shareBtn}
-                disabled={sharing || !warningDismissed}
+                onPress={warningDismissed ? copyAddress : undefined}
+                style={[styles.copyBtn, copied && styles.copyBtnCopied]}
               >
-                <Share2 size={16} color={color.fg.base} strokeWidth={2} />
-                <Text style={styles.shareBtnText}>
-                  {sharing ? t('receive.shareGenerating') : t('receive.shareButton')}
-                </Text>
+                <Text style={[styles.copyAddr, copied && styles.copyAddrCopied]} numberOfLines={1}>{truncatedAddress}</Text>
+                {copied ? (
+                  <Check size={18} color={color.success.base} strokeWidth={2.5} />
+                ) : (
+                  <Copy size={18} color={color.fg.muted} strokeWidth={2} />
+                )}
               </Pressable>
 
-              {/* Status */}
-              {isListening && !depositDetected && warningDismissed && (
-                <Animated.View style={styles.listeningRow} entering={fadeIn(0, 300)}>
-                  <PulsingDot />
-                  <Text style={styles.listeningText}>{t('receive.listeningForDeposits')}</Text>
-                </Animated.View>
-              )}
+              {/* Deposit detected — surfaced as it lands */}
               {depositDetected && deposits.length > 0 && (
                 <Animated.View style={styles.depositBox} entering={fadeIn(0, 300)}>
                   {deposits.map((entry, i) => (
@@ -519,11 +189,6 @@ export default function ReceiveScreen() {
                   <Text style={styles.warningText}>
                     {t('receive.warningBody')}
                   </Text>
-                  <Text style={styles.warningHint}>
-                    {t('receive.warningHint')}{' '}
-                    <Text style={styles.warningHintBold}>{t('receive.warningHintNetworks', { count: networks.length })}</Text>
-                    {' '}{t('receive.warningHintSuffix')}
-                  </Text>
                   <Pressable style={styles.warningBtn} onPress={() => setWarningDismissed(true)}>
                     <Text style={styles.warningBtnText}>{t('receive.warningConfirm')}</Text>
                   </Pressable>
@@ -553,57 +218,9 @@ export default function ReceiveScreen() {
           </View>
         </Animated.View>
       </ScrollView>
-
-      {/* Hidden share card for native image capture (web uses Canvas) */}
-      {Platform.OS !== 'web' && (
-        <View style={styles.shareCardWrapper} pointerEvents="none">
-          <View ref={shareCardRef} style={styles.shareCard} collapsable={false}>
-            <Text style={styles.shareCardHeadline}>{t('receive.shareCardHeadline')}</Text>
-            <Text style={styles.shareCardName}>{accountName}</Text>
-            <Text style={styles.shareCardAddr}>
-              {address ? `${address.slice(0, 6)}···${address.slice(-4)}` : ''}
-            </Text>
-
-            <View style={styles.shareCardQRContainer}>
-              {address && <QRCode value={address} size={170} />}
-            </View>
-
-            <View style={styles.shareCardDivider} />
-
-            <Text style={styles.shareCardNetworksSub}>
-              {t('receive.networksLabel', { count: networks.length })}
-            </Text>
-
-            <View style={styles.shareCardNetworkGrid}>
-              {networks.map((network) => (
-                <View key={network.id} style={styles.shareCardNetworkChip}>
-                  <ChainLogo
-                    label={network.iconLabel}
-                    color={network.iconColor}
-                    bgColor={network.iconBg}
-                    logoURL={network.logoURL}
-                    size={12}
-                  />
-                  <Text style={styles.shareCardNetworkName} numberOfLines={1}>
-                    {truncateName(network.displayName, 10)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.shareCardFooter}>
-              <Image source={require('@/../assets/images/icon.png')} style={styles.shareCardFooterLogo} />
-              <Text style={styles.shareCardBrand}>Vela Wallet</Text>
-              <Text style={styles.shareCardUrl}>getvela.app</Text>
-            </View>
-          </View>
-        </View>
-      )}
     </ScreenContainer>
   );
 }
-
-const SHARE_CARD_W = 375;
 
 const styles = createStyles(() => ({
   content: {
@@ -675,17 +292,6 @@ const styles = createStyles(() => ({
     textAlign: 'center',
     lineHeight: 22,
   },
-  warningHint: {
-    fontSize: text.base,
-    ...inter.regular,
-    color: color.fg.subtle,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  warningHintBold: {
-    ...inter.semibold,
-    color: color.fg.base,
-  },
   warningBtn: {
     backgroundColor: color.accent.base,
     borderRadius: radius.lg,
@@ -704,35 +310,17 @@ const styles = createStyles(() => ({
   // QR Card
   qrCard: {
     padding: space['3xl'],
-    paddingTop: space['4xl'],
+    paddingTop: space['3xl'],
     paddingBottom: space['2xl'],
     alignItems: 'center',
-  },
-  walletName: {
-    fontSize: text['2xl'],
-    ...inter.bold,
-    color: color.fg.base,
-    marginBottom: space.xs,
-  },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    alignSelf: 'center',
-    marginBottom: space['3xl'],
-  },
-  addressText: {
-    fontSize: text.sm,
-    ...inter.regular,
-    fontFamily: font.mono,
-    color: color.fg.subtle,
   },
   qrBorder: {
     borderWidth: 1,
     borderColor: color.border.base,
     borderRadius: radius.xl,
     padding: space['2xl'],
-    marginBottom: space['2xl'],
+    marginBottom: space.xl,
+    backgroundColor: "#FFFFFF"
   },
   qrPlaceholder: {
     width: 200,
@@ -746,59 +334,43 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     color: color.fg.subtle,
   },
+  walletName: {
+    fontSize: text['2xl'],
+    ...inter.bold,
+    color: color.fg.base,
+    marginBottom: space.lg,
+  },
 
-  // Share button — inside the card
-  shareBtn: {
+  // Copy button — full-width, large tap target
+  copyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     gap: space.md,
-    paddingVertical: space.md,
-    paddingHorizontal: space['2xl'],
-    borderRadius: radius.full,
+    alignSelf: 'stretch',
+    paddingVertical: space.lg,
+    paddingHorizontal: space.xl,
+    borderRadius: radius.lg,
     backgroundColor: color.bg.sunken,
-    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: color.border.base,
   },
-  shareBtnText: {
-    fontSize: text.sm,
-    ...inter.semibold,
+  copyBtnCopied: {
+    backgroundColor: color.success.soft,
+    borderColor: color.success.base,
+  },
+  copyAddr: {
+    flex: 1,
+    fontSize: text.base,
+    ...inter.medium,
+    fontFamily: font.mono,
     color: color.fg.base,
   },
+  copyAddrCopied: {
+    color: color.success.base,
+  },
 
-  // Status
-  listeningRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    marginTop: space.lg,
-  },
-  listeningDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: color.success.base,
-  },
-  listeningText: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.success.base,
-  },
-  depositAlert: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    backgroundColor: color.success.soft,
-    paddingHorizontal: space.xl,
-    paddingVertical: space.lg,
-    borderRadius: radius.lg,
-    marginTop: space.lg,
-    width: '100%',
-  },
-  depositText: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.success.base,
-  },
+  // Deposit detection
   depositBox: {
     backgroundColor: color.success.soft,
     borderRadius: radius.lg,
@@ -880,103 +452,5 @@ const styles = createStyles(() => ({
     ...inter.semibold,
     color: color.fg.base,
     flexShrink: 1,
-  },
-
-  // ── Hidden share card (rendered off-screen for capture) ──
-  shareCardWrapper: {
-    position: 'absolute',
-    left: -9999,
-    top: 0,
-  },
-  shareCard: {
-    width: SHARE_CARD_W,
-    backgroundColor: color.bg.raised,
-    padding: 40,
-    alignItems: 'center',
-  },
-  shareCardHeadline: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: color.fg.base,
-    marginBottom: 6,
-  },
-  shareCardName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: color.fg.base,
-    marginBottom: 3,
-  },
-  shareCardAddr: {
-    fontSize: 12,
-    fontFamily: font.mono,
-    fontWeight: '400',
-    color: color.fg.subtle,
-    marginBottom: 20,
-  },
-  shareCardQRContainer: {
-    borderWidth: 0.75,
-    borderColor: color.border.base,
-    borderRadius: 12,
-    padding: 18,
-    marginBottom: 20,
-  },
-  shareCardDivider: {
-    height: 1,
-    backgroundColor: color.border.base,
-    width: '100%',
-    marginBottom: 14,
-  },
-  shareCardNetworksSub: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: color.fg.subtle,
-    marginBottom: 8,
-    alignSelf: 'flex-start',
-  },
-  shareCardNetworkGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 6,
-    width: '100%',
-    marginBottom: 20,
-  },
-  shareCardNetworkChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: color.bg.sunken,
-    borderRadius: 11,
-    paddingHorizontal: 7,
-    width: '48.5%',
-    height: 22,
-  },
-  shareCardNetworkName: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: color.fg.muted,
-    flexShrink: 1,
-  },
-  shareCardFooter: {
-    alignItems: 'center',
-  },
-  shareCardFooterLogo: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginBottom: 5,
-  },
-  shareCardBrand: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: color.fg.base,
-    marginBottom: 2,
-    textAlign: 'center',
-  },
-  shareCardUrl: {
-    fontSize: 10,
-    fontWeight: '400',
-    color: color.fg.subtle,
-    textAlign: 'center',
   },
 }));

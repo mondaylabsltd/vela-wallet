@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
-import { View, StyleSheet } from 'react-native';
 import QRCodeLib from 'qrcode';
+import React, { useMemo } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 interface Props {
   value: string;
