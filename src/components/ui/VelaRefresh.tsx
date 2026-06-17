@@ -109,8 +109,75 @@ export function VelaRefresh({ refreshing, onRefresh, children, style, enabled = 
 
   const fireRefresh = () => onRefresh();
 
+  // Web: the Pan above can't win the vertical drag from the browser's native
+  // scroll on Android Chrome (the scroller's `touch-action: pan-y` makes Chrome
+  // claim the gesture and fire `pointercancel`), so it never engages — only iOS
+  // Safari is lax enough for the Pan to fire. So on web the Pan is disabled and
+  // we drive the pull from raw touch events instead. They coexist with native
+  // scroll because we only `preventDefault` while actively pulling down at the
+  // very top; any other drag falls through to the list's own scrolling.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    // Attach to the scrollable DOM node itself: touches bubble through it and
+    // `preventDefault` here cancels its native scroll for the pull. (A ref on the
+    // clip View is unreliable — GestureDetector may override a ref on its child.)
+    const target: any = scrollRef.current?.getScrollableNode?.();
+    if (!target || typeof target.addEventListener !== 'function') return;
+
+    const atTop = () => (target.scrollTop ?? 0) <= 0;
+
+    let startY = 0;
+    let pulling = false;
+
+    const settle = () => {
+      if (!pulling) return;
+      pulling = false;
+      armed.value = false;
+      if (busy.value) return;
+      if (pull.value >= TRIGGER) {
+        pull.value = withSpring(REST, SPRING);
+        onRefresh();
+      } else {
+        pull.value = withSpring(0, SPRING);
+      }
+    };
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length === 1) startY = e.touches[0].clientY;
+      pulling = false;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (busy.value || !enabled || e.touches.length !== 1) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy > 0 && atTop()) {
+        e.preventDefault(); // own the pull; blocks native overscroll / pull-to-refresh
+        pulling = true;
+        const next = dy < TRIGGER ? dy : TRIGGER + (dy - TRIGGER) * OVERPULL;
+        pull.value = next;
+        if (next >= TRIGGER && !armed.value) { armed.value = true; hapticLight(); }
+        else if (next < TRIGGER && armed.value) { armed.value = false; }
+      } else if (pulling) {
+        // dragged back below the trigger / off the top — release to the list
+        pulling = false;
+        armed.value = false;
+        pull.value = withSpring(0, SPRING);
+      }
+    };
+
+    target.addEventListener('touchstart', onStart, { passive: true });
+    target.addEventListener('touchmove', onMove, { passive: false });
+    target.addEventListener('touchend', settle, { passive: true });
+    target.addEventListener('touchcancel', settle, { passive: true });
+    return () => {
+      target.removeEventListener('touchstart', onStart);
+      target.removeEventListener('touchmove', onMove);
+      target.removeEventListener('touchend', settle);
+      target.removeEventListener('touchcancel', settle);
+    };
+  }, [enabled, onRefresh, pull, armed, busy]);
+
   const pan = Gesture.Pan()
-    .enabled(enabled)
+    .enabled(enabled && Platform.OS !== 'web')
     .simultaneousWithExternalGesture(scrollRef)
     // Engage on a downward drag; bail to the scroll view on an upward drag.
     .activeOffsetY(12)
