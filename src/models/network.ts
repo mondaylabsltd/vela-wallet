@@ -3,6 +3,13 @@
  * Matches iOS WalletState.swift Network struct.
  */
 
+// ---------------------------------------------------------------------------
+// Custom network support
+// ---------------------------------------------------------------------------
+
+import type { CustomNetwork } from '@/models/types';
+import { loadCustomNetworks } from '@/services/storage';
+
 export interface Network {
   id: string;
   displayName: string;
@@ -26,7 +33,7 @@ export const DEFAULT_NETWORKS: Network[] = [
     id: 'ethereum', displayName: 'Ethereum', chainId: 1,
     iconLabel: 'ETH', iconColor: '#627EEA', iconBg: '#EEF0F8',
     logoURL: `${CHAIN_LOGO_BASE}/eip155-1.png`, isL2: false,
-    rpcURL: 'https://eth.llamarpc.com', explorerURL: 'https://etherscan.io',
+    rpcURL: 'https://ethereum-rpc.publicnode.com', explorerURL: 'https://etherscan.io',
     bundlerURL: 'https://vela-bundler.getvela.app/1',
   },
   {
@@ -40,7 +47,7 @@ export const DEFAULT_NETWORKS: Network[] = [
     id: 'polygon', displayName: 'Polygon', chainId: 137,
     iconLabel: 'POL', iconColor: '#8247E5', iconBg: '#F0EAFF',
     logoURL: `${CHAIN_LOGO_BASE}/eip155-137.png`, isL2: true,
-    rpcURL: 'https://polygon.drpc.org', explorerURL: 'https://polygonscan.com',
+    rpcURL: 'https://polygon-bor-rpc.publicnode.com', explorerURL: 'https://polygonscan.com',
     bundlerURL: 'https://vela-bundler.getvela.app/137',
   },
   {
@@ -116,13 +123,6 @@ export function networkId(chainId: number): string {
     default: return `chain-${chainId}`;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Custom network support
-// ---------------------------------------------------------------------------
-
-import type { CustomNetwork } from '@/models/types';
-import { loadCustomNetworks } from '@/services/storage';
 
 /** In-memory cache of custom networks for synchronous lookups. */
 let _customNetworkCache: CustomNetwork[] = [];
