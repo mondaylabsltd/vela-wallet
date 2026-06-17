@@ -1373,6 +1373,7 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'stretch', // full width in both the list footer and the centered empty state
     gap: space.sm,
     paddingVertical: space.xl,
     marginTop: space.lg,

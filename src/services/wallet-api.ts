@@ -165,20 +165,29 @@ async function fetchAllChainTokens(
       .filter(t => includeZeroBalance || parseFloat(t.balance) > 0)
       .sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
 
+  // Cap each chain so one dead/slow RPC can't hold the whole fetch (a chain
+  // with no healthy endpoint can otherwise burn ~60s on sequential failover).
+  // A capped-out chain contributes nothing this round and is retried next time.
+  const PER_CHAIN_TIMEOUT_MS = 18_000;
   await Promise.allSettled(
-    networks.map(net =>
-      queryChainAssets(
+    networks.map(net => {
+      const chainTokensP = queryChainAssets(
         address,
         net.chainId,
         customTokens.filter(ct => ct.chainId === net.chainId),
         clPrices,
-      ).then(chainTokens => {
+      ).catch(() => [] as APIToken[]);
+      const bounded = Promise.race([
+        chainTokensP,
+        new Promise<APIToken[]>(resolve => setTimeout(() => resolve([]), PER_CHAIN_TIMEOUT_MS)),
+      ]);
+      return bounded.then(chainTokens => {
         if (chainTokens.length > 0) {
           accumulated.push(...chainTokens);
           onProgress?.(sortAndFilter());
         }
-      }),
-    ),
+      });
+    }),
   );
 
   // Report chains where all RPC endpoints failed

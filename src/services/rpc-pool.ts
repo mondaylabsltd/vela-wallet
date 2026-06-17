@@ -21,7 +21,8 @@ import { rpcLatencyMs, rpcShouldFail } from './dev/fault-injection';
 
 interface EndpointStats {
   url: string;
-  source: 'user' | 'builtin' | 'default' | 'public';
+  /** 'fallback' = the rest of the chain-index RPC list, tried last. */
+  source: 'user' | 'builtin' | 'default' | 'public' | 'fallback';
   avgLatencyMs: number;
   consecutiveFailures: number;
   lastFailureAt: number;
@@ -154,7 +155,9 @@ const getBuiltinBundler = () => getBundlerServiceURL();
 /** Reliable public RPCs per chain (curated, known to work without auth). */
 const PUBLIC_RPCS: Record<number, string[]> = {
   1:     ['https://ethereum-rpc.publicnode.com', 'https://1rpc.io/eth'],
-  56:    ['https://bsc-rpc.publicnode.com', 'https://1rpc.io/bnb'],
+  // 1rpc.io/bnb was dropped — it shares a global rate limit and returns -32001
+  // "usage limit" under load. These three are CORS-enabled and reliable.
+  56:    ['https://bsc-rpc.publicnode.com', 'https://bsc.drpc.org', 'https://bsc.meowrpc.com'],
   137:   ['https://polygon-bor-rpc.publicnode.com', 'https://1rpc.io/matic'],
   42161: ['https://arbitrum-one-rpc.publicnode.com', 'https://1rpc.io/arb'],
   10:    ['https://optimism-rpc.publicnode.com', 'https://1rpc.io/op'],
@@ -247,6 +250,14 @@ async function collectRpcUrls(chainId: number): Promise<{ url: string; source: E
     entries.push({ url, source });
   };
 
+  // Chain index (configurable ethereum-data service, eip155-{id}.json) —
+  // fetched once and reused for both the primary and the deep-fallback tiers.
+  let indexRpcs: string[] = [];
+  try {
+    const info = await fetchChainInfo(chainId);
+    indexRpcs = info?.rpcUrls ?? [];
+  } catch { /* ignore */ }
+
   // 1. User-configured
   try {
     const config = await getNetworkConfig(chainId);
@@ -256,13 +267,8 @@ async function collectRpcUrls(chainId: number): Promise<{ url: string; source: E
     }
   } catch { /* ignore */ }
 
-  // 2. Built-in from ethereum-data API
-  try {
-    const info = await fetchChainInfo(chainId);
-    if (info?.rpcUrls) {
-      for (const url of info.rpcUrls.slice(0, 5)) add(url, 'builtin');
-    }
-  } catch { /* ignore */ }
+  // 2. Built-in — first few from the chain index
+  indexRpcs.slice(0, 5).forEach(url => add(url, 'builtin'));
 
   // 3. Network default
   const defaultNet = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
@@ -272,8 +278,13 @@ async function collectRpcUrls(chainId: number): Promise<{ url: string; source: E
   const customNet = getAllNetworksSync().find(n => n.chainId === chainId);
   if (customNet?.rpcURL) add(customNet.rpcURL, 'default');
 
-  // 4. Public fallback (curated reliable RPCs)
+  // 4. Public fallback (curated reliable, CORS-friendly RPCs)
   for (const url of PUBLIC_RPCS[chainId] ?? []) add(url, 'public');
+
+  // 5. Deep fallback — the rest of the chain index (~15-20 RPCs/chain). Lowest
+  //    priority, so it's only reached when everything above is rate-limited or
+  //    banned. Bad/non-CORS entries get scored down or banned on first use.
+  indexRpcs.slice(5, 20).forEach(url => add(url, 'fallback'));
 
   return entries;
 }
@@ -318,10 +329,11 @@ async function collectBundlerUrls(chainId: number): Promise<{ url: string; sourc
 // ---------------------------------------------------------------------------
 
 const SOURCE_PRIORITY: Record<string, number> = {
-  user:    10000,
-  builtin: 1000,
-  default: 500,
-  public:  100,
+  user:     10000,
+  builtin:  1000,
+  default:  500,
+  public:   100,
+  fallback: 10,   // chain-index extras — only when everything else is exhausted
 };
 
 function endpointScore(stats: EndpointStats): number {
@@ -482,6 +494,13 @@ function recordFailure(stats: EndpointStats): void {
 
 /** Per-request timeout (ms). Prevents a hanging server from blocking failover. */
 const REQUEST_TIMEOUT_MS = 15_000;
+/**
+ * Shorter timeout for read RPCs (balances / eth_call / chainId). A hung node
+ * fails over to the next endpoint in 8s instead of 15s, halving the worst-case
+ * wait when a chain's RPC is down (e.g. BSC). Bundler ops keep the longer
+ * REQUEST_TIMEOUT_MS — UserOp submission can legitimately be slow.
+ */
+const RPC_READ_TIMEOUT_MS = 8_000;
 
 /** Custom error to flag HTTP-level permanent failures (401, 403, 404). */
 class HttpBanError extends Error {
@@ -493,9 +512,10 @@ async function tryEndpoint(
   method: string,
   params: any[],
   extraHeaders?: Record<string, string>,
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
 ): Promise<RPCResponse> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(url, {
@@ -626,7 +646,7 @@ export async function poolRpcCall(
   for (const ep of endpoints) {
     const t0 = Date.now();
     try {
-      const response = await tryEndpoint(ep.url, method, params);
+      const response = await tryEndpoint(ep.url, method, params, undefined, RPC_READ_TIMEOUT_MS);
       const ms = Date.now() - t0;
 
       // eth_getLogs range/size-limit: request-specific, not an endpoint fault.
