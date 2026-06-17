@@ -4,6 +4,15 @@ input, textarea, [contenteditable] {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Let the custom pull-to-refresh (VelaRefresh) own the top overscroll: disable
+   the browser's native pull-to-refresh and scroll-chaining. The RN prop
+   overScrollMode="never" only covers native Android — on web (notably Android
+   Chrome) the browser otherwise eats the downward pull, so VelaRefresh never
+   engages and no refresh indicator appears (iOS Safari has no such gesture). */
+html, body {
+  overscroll-behavior: none;
+}
+
 /* Prevent iOS Safari auto-zoom on input focus (requires fontSize >= 16px).
    Exclude amount-input which uses dynamic fontSize (already >= 17px). */
 @supports (-webkit-touch-callout: none) {

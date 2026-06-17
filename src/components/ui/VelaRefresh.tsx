@@ -11,9 +11,11 @@
  *   · spring-back release
  *
  * Cross-platform consistency: native overscroll is disabled (`bounces=false`,
- * `overScrollMode="never"`) so this component fully owns the top overscroll
- * region. The Pan runs *simultaneously* with the list's own scroll and only
- * engages a pull when the list is already at the top — so normal scrolling is
+ * `overScrollMode="never"`; on web the equivalent is `overscroll-behavior: none`
+ * on html/body in global.css — without it Android Chrome's native pull-to-refresh
+ * eats the gesture and this never engages) so this component fully owns the top
+ * overscroll region. The Pan runs *simultaneously* with the list's own scroll and
+ * only engages a pull when the list is already at the top — so normal scrolling is
  * untouched.
  *
  * Usage — the child is a render-prop that must spread `scrollProps` onto an
