@@ -9,8 +9,20 @@
  * `Intl.*.formatToParts` (when available) and map them to a preset; if `Intl`
  * is missing or locked to en-US, we degrade to sensible defaults.
  */
-import type { NumberFormatKey, DateFormatKey, TimeFormatKey } from '@/models/types';
-import { getLocalePrefs } from '@/services/storage';
+import { useSyncExternalStore } from 'react';
+import type { NumberFormatKey, DateFormatKey, TimeFormatKey, LocalePrefs } from '@/models/types';
+import { getLocalePrefs, subscribeLocalePrefs } from '@/services/storage';
+
+/**
+ * Subscribe a component to number/date/time format changes. Returns the current
+ * prefs, but most callers ignore the value — the point is to re-render when the
+ * user picks a new format in Settings, so the `format*` helpers (which read the
+ * prefs cache directly) produce fresh output. Call it in any component that
+ * renders a formatted number, date, or time.
+ */
+export function useLocalePrefs(): LocalePrefs {
+  return useSyncExternalStore(subscribeLocalePrefs, getLocalePrefs, getLocalePrefs);
+}
 
 // ---------------------------------------------------------------------------
 // Presets

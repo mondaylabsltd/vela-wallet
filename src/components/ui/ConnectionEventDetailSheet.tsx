@@ -23,7 +23,7 @@ import { chainName, getAllNetworksSync } from '@/models/network';
 import type { LocalTransaction } from '@/services/storage';
 import { shortAddress } from '@/models/wallet-state';
 import { copyToClipboard, openBrowser } from '@/services/platform';
-import { formatDateTime, formatTokenAmount } from '@/services/locale-format';
+import { formatDateTime, formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 
 interface Props {
@@ -62,6 +62,7 @@ function formatTxValue(value: string | undefined, symbol: string): string {
 
 export function ConnectionEventDetailSheet({ visible, tx, onClose }: Props) {
   const { t } = useTranslation();
+  useLocalePrefs(); // re-render when number/date/time format changes
   const [copied, setCopied] = useState<string | null>(null);
 
   const copy = (key: string, value: string) => {

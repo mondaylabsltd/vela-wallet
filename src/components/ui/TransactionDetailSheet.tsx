@@ -20,7 +20,7 @@ import { shortAddress } from '@/models/wallet-state';
 import { copyToClipboard, openBrowser } from '@/services/platform';
 import { formatFiat, type Currency } from '@/services/currency';
 import { txUsdValue } from '@/services/activity';
-import { formatDateTime, formatTokenAmount } from '@/services/locale-format';
+import { formatDateTime, formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 
 interface Props {
@@ -51,6 +51,7 @@ function operationLabelKey(tx: LocalTransaction): string {
 
 export function TransactionDetailSheet({ visible, tx, alias, rate, currency, onClose }: Props) {
   const { t } = useTranslation();
+  useLocalePrefs(); // re-render when number/date/time format changes
   const [copied, setCopied] = useState<string | null>(null);
 
   const copy = (key: string, value: string) => {

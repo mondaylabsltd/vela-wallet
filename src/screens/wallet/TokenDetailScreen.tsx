@@ -16,7 +16,7 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { AmountText } from '@/components/ui/AmountText';
 import { BarChart } from '@/components/ui/BarChart';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
-import { formatTokenAmount } from '@/services/locale-format';
+import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { shortAddr, tokenChainId as networkToChainId } from '@/models/types';
 import type { APIToken } from '@/models/types';
 import { chainName } from '@/models/network';
@@ -25,6 +25,7 @@ import { Copy, Check, ArrowLeft, ExternalLink } from 'lucide-react-native';
 
 export default function TokenDetailScreen() {
   const { t } = useTranslation();
+  useLocalePrefs(); // re-render when the number format changes
   const router = useSafeRouter();
   const params = useLocalSearchParams<{
     symbol: string;

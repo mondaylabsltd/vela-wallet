@@ -215,11 +215,35 @@ export function getFiatRatesURL(): string {
 /** In-memory cache — initialised by `loadLocalePrefs()` at startup. */
 let _localePrefsCache: LocalePrefs = { ...DEFAULT_LOCALE_PREFS };
 
+/**
+ * Subscribers notified whenever the prefs change. Number/date/time formatting is
+ * read synchronously from the cache during render, so without this nothing tells
+ * the already-mounted screens to re-render — a format change only showed up after
+ * a reload. `useLocalePrefs()` (locale-format) bridges this to React.
+ *
+ * Anchored on `globalThis` so Fast Refresh re-evaluating this module during
+ * development doesn't swap in a fresh empty set and orphan already-mounted
+ * subscribers (which makes live format changes silently require a reload).
+ * Inert in production — the module is only evaluated once.
+ */
+const _globalStore = globalThis as unknown as { __velaLocaleListeners?: Set<() => void> };
+const _localeListeners: Set<() => void> = (_globalStore.__velaLocaleListeners ??= new Set<() => void>());
+
+export function subscribeLocalePrefs(listener: () => void): () => void {
+  _localeListeners.add(listener);
+  return () => { _localeListeners.delete(listener); };
+}
+
+function notifyLocaleListeners(): void {
+  for (const l of _localeListeners) l();
+}
+
 export async function loadLocalePrefs(): Promise<LocalePrefs> {
   try {
     const raw = await AsyncStorage.getItem(KEYS.localePrefs);
     if (raw) {
       _localePrefsCache = { ...DEFAULT_LOCALE_PREFS, ...JSON.parse(raw) };
+      notifyLocaleListeners();
       return _localePrefsCache;
     }
   } catch {}
@@ -227,7 +251,10 @@ export async function loadLocalePrefs(): Promise<LocalePrefs> {
 }
 
 export async function saveLocalePrefs(prefs: LocalePrefs): Promise<void> {
+  // New object identity on every save so useSyncExternalStore sees a fresh
+  // snapshot; notify synchronously so the UI updates before the disk write.
   _localePrefsCache = { ...prefs };
+  notifyLocaleListeners();
   await AsyncStorage.setItem(KEYS.localePrefs, JSON.stringify(prefs));
 }
 

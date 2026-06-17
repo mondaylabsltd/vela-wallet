@@ -20,7 +20,7 @@ import { useWallet, shortAddress } from '@/models/wallet-state';
 import { getAllNetworksSync } from '@/models/network';
 import { loadTransactions, type LocalTransaction } from '@/services/storage';
 import { openBrowser } from '@/services/platform';
-import { formatDate as fmtDateLocale, formatTime as fmtTimeLocale, formatTokenAmount } from '@/services/locale-format';
+import { formatDate as fmtDateLocale, formatTime as fmtTimeLocale, formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import {
   ArrowDownLeft, ArrowUpRight, ExternalLink, Check, X,
   FileSignature, FileText, Send, Code,
@@ -68,6 +68,7 @@ function groupByDate(txs: LocalTransaction[]): TransactionGroup[] {
 
 export default function HistoryScreen() {
   const { t } = useTranslation();
+  useLocalePrefs(); // re-render so groupByDate / formatTime / amounts re-derive on format change
   const router = useSafeRouter();
   const { activeAccount, state } = useWallet();
   const address = activeAccount?.address ?? state.address;

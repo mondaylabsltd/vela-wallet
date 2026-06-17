@@ -12,7 +12,7 @@ import { color, createStyles, font, inter, motion, radius, shadow, space, text }
 import { useTranslation } from 'react-i18next';
 import { chainName } from '@/models/network';
 import { shortAddr, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
-import { formatTokenAmount } from '@/services/locale-format';
+import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
 import { setAccountBalance, getAccountBalance, getAccountBalances } from '@/services/balance-cache';
@@ -64,6 +64,7 @@ function ActionButton({ label, icon: Icon, onPress, accent }: { label: string; i
 export default function AssetsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
+  useLocalePrefs(); // re-render when the number format changes
   const { activeAccount, state, dispatch } = useWallet();
   const { connectToWalletPair, connectToBridge } = useDAppConnection();
   const dc = useDisplayCurrency();

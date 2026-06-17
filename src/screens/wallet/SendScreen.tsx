@@ -15,7 +15,7 @@ import { findAccountByCredentialId, saveTransaction, updateTransaction, loadTran
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, type FundingNeeded } from '@/services/bundler-service';
 import { AmountText } from '@/components/ui/AmountText';
-import { formatTokenAmount } from '@/services/locale-format';
+import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { TransactionReceipt } from '@/components/ui/TransactionReceipt';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
@@ -154,6 +154,7 @@ function StepIndicator({ current }: { current: Step }) {
 
 export default function SendScreen() {
   const { t } = useTranslation();
+  useLocalePrefs(); // re-render when the number format changes
   const router = useSafeRouter();
   const params = useLocalSearchParams<{ preselectedSymbol?: string; preselectedNetwork?: string; prefilledRecipient?: string }>();
   const { activeAccount, state } = useWallet();

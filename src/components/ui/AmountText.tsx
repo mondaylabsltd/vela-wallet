@@ -22,7 +22,7 @@
 import React, { useState } from 'react';
 import { LayoutChangeEvent, StyleProp, Text, TextStyle, View, ViewStyle } from 'react-native';
 
-import { formatCompact, formatNumber, numberSeparators } from '@/services/locale-format';
+import { formatCompact, formatNumber, numberSeparators, useLocalePrefs } from '@/services/locale-format';
 
 // Average glyph advance for the bold display face, in em. Deliberately a touch
 // generous so the width estimate never overflows; adjustsFontSizeToFit trims any
@@ -120,6 +120,7 @@ function resolve(p: AmountTextProps, width: number): Resolved {
 }
 
 export function AmountText(props: AmountTextProps) {
+  useLocalePrefs(); // re-render when the number format changes (value-mode formatting)
   const { style, tailStyle, containerStyle, maxLines = 1, minScale = 0.6 } = props;
   const [width, setWidth] = useState(0);
 

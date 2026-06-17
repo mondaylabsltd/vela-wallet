@@ -11,7 +11,7 @@ import { color, createStyles, font, inter, radius, space, text } from '@/constan
 import { chainName, getAllNetworksSync } from '@/models/network';
 import { formatBalance, shortAddr } from '@/models/types';
 import { formatFiat } from '@/services/currency';
-import { formatDateTime } from '@/services/locale-format';
+import { formatDateTime, useLocalePrefs } from '@/services/locale-format';
 import { copyToClipboard, hapticSuccess, openBrowser, showAlert } from '@/services/platform';
 import type { RecipientIdentity } from '@/services/recipient-identity';
 import { ExternalLink, Share2 } from 'lucide-react-native';
@@ -329,6 +329,7 @@ export function TransactionReceipt({
   txHash, logoUrls, usdValue, rate, currencyCode, currencySymbol, timestamp, recipientIdentity, onDone,
 }: Props) {
   const { t } = useTranslation();
+  useLocalePrefs(); // re-render when number/date/time format changes
   const receiptRef = useRef<View>(null);
   const fiatPrefs = { rate, currencyCode, currencySymbol };
   const chain = chainName(chainId);
