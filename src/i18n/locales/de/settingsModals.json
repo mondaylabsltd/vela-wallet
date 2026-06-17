@@ -27,7 +27,7 @@
       "bundlerLabel": "BUNDLER-DIENST",
       "bundlerHint": "Ein Vela-Bundler-kompatibler Endpunkt ist erforderlich",
       "fiatLabel": "FIAT-KURSE",
-      "fiatHint": "USD-basierte Kurse ({rates:{…}}). Steuert die Währungsliste — austauschbar für breitere Abdeckung",
+      "fiatHint": "USD-basierte Wechselkurse für die Währungsliste — austauschbar für breitere Abdeckung.",
       "resetToDefaults": "Auf Standard zurücksetzen"
     },
     "addNetwork": {

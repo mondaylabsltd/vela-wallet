@@ -27,7 +27,7 @@
       "bundlerLabel": "SERVICE BUNDLER",
       "bundlerHint": "Un point d'accès compatible Vela Bundler est requis",
       "fiatLabel": "TAUX FIAT",
-      "fiatHint": "Taux basés sur l'USD ({rates:{…}}). Alimente la liste des devises — remplacez-le pour une couverture plus large",
+      "fiatHint": "Taux de change en USD qui alimentent la liste des devises — remplaçable pour une couverture plus large.",
       "resetToDefaults": "Réinitialiser par défaut"
     },
     "addNetwork": {

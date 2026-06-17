@@ -27,7 +27,7 @@
       "bundlerLabel": "DỊCH VỤ BUNDLER",
       "bundlerHint": "Cần điểm cuối tương thích với Vela Bundler",
       "fiatLabel": "TỶ GIÁ FIAT",
-      "fiatHint": "Tỷ giá theo USD ({rates:{…}}). Tạo nên danh sách tiền tệ — thay thế để mở rộng phạm vi",
+      "fiatHint": "Tỷ giá theo USD tạo nên danh sách tiền tệ — có thể thay bằng nguồn phủ rộng hơn.",
       "resetToDefaults": "Khôi phục mặc định"
     },
     "addNetwork": {

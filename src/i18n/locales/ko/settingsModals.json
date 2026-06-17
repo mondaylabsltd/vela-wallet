@@ -27,7 +27,7 @@
       "bundlerLabel": "BUNDLER 서비스",
       "bundlerHint": "Vela Bundler 호환 엔드포인트가 필요합니다",
       "fiatLabel": "법정화폐 환율",
-      "fiatHint": "USD 기준 환율 ({rates:{…}}). 통화 목록을 구성합니다 — 더 넓은 범위를 원하면 교체하세요",
+      "fiatHint": "USD 기준 환율로 통화 목록을 구성합니다 — 더 넓은 범위의 소스로 교체 가능.",
       "resetToDefaults": "기본값으로 재설정"
     },
     "addNetwork": {

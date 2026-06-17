@@ -27,7 +27,7 @@
       "bundlerLabel": "LAYANAN BUNDLER",
       "bundlerHint": "Endpoint yang kompatibel dengan Vela Bundler diperlukan",
       "fiatLabel": "KURS FIAT",
-      "fiatHint": "Kurs berbasis USD ({rates:{…}}). Menentukan daftar mata uang — ganti untuk cakupan yang lebih luas",
+      "fiatHint": "Kurs berbasis USD yang menentukan daftar mata uang — ganti untuk cakupan lebih luas.",
       "resetToDefaults": "Setel Ulang ke Bawaan"
     },
     "addNetwork": {

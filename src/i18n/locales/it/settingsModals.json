@@ -27,7 +27,7 @@
       "bundlerLabel": "SERVIZIO BUNDLER",
       "bundlerHint": "È richiesto un endpoint compatibile con Vela Bundler",
       "fiatLabel": "TASSI FIAT",
-      "fiatHint": "Tassi basati su USD ({rates:{…}}). Genera l'elenco delle valute — sostituiscilo per una copertura più ampia",
+      "fiatHint": "Tassi di cambio in USD che definiscono l’elenco delle valute — sostituibile per una copertura più ampia.",
       "resetToDefaults": "Ripristina i valori predefiniti"
     },
     "addNetwork": {

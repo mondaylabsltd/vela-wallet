@@ -27,7 +27,7 @@
       "bundlerLabel": "打包器服务",
       "bundlerHint": "需要兼容 Vela Bundler 的节点",
       "fiatLabel": "法币汇率",
-      "fiatHint": "以 USD 为基础的汇率 ({rates:{…}})，驱动货币列表——可替换为覆盖更广的服务",
+      "fiatHint": "以 USD 为基准的汇率,决定可选货币列表——可替换为覆盖更广的源。",
       "resetToDefaults": "恢复默认"
     },
     "addNetwork": {

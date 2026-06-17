@@ -27,7 +27,7 @@
       "bundlerLabel": "SERVICIO DE BUNDLER",
       "bundlerHint": "Se requiere un endpoint compatible con Vela Bundler",
       "fiatLabel": "TIPOS DE CAMBIO FIAT",
-      "fiatHint": "Tipos de cambio basados en USD ({rates:{…}}). Alimenta la lista de monedas — cámbialo para una cobertura más amplia",
+      "fiatHint": "Tipos de cambio en USD que definen la lista de monedas — cámbialo para mayor cobertura.",
       "resetToDefaults": "Restablecer a los valores predeterminados"
     },
     "addNetwork": {

@@ -27,7 +27,7 @@
       "bundlerLabel": "BUNDLER SERVİSİ",
       "bundlerHint": "Vela Bundler uyumlu bir uç nokta gereklidir",
       "fiatLabel": "FİAT KURLARI",
-      "fiatHint": "USD tabanlı kurlar ({rates:{…}}). Para birimi listesini besler — daha geniş kapsam için değiştirin",
+      "fiatHint": "Para birimi listesini belirleyen USD tabanlı döviz kurları — daha geniş kapsam için değiştirilebilir.",
       "resetToDefaults": "Varsayılanlara Sıfırla"
     },
     "addNetwork": {

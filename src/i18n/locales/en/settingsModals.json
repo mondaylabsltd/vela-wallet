@@ -27,7 +27,7 @@
       "bundlerLabel": "BUNDLER SERVICE",
       "bundlerHint": "Vela Bundler compatible endpoint required",
       "fiatLabel": "FIAT RATES",
-      "fiatHint": "USD-based rates ({rates:{…}}). Drives the currency list — swap for broader coverage",
+      "fiatHint": "USD-based exchange rates that drive the currency list — swap for wider coverage.",
       "resetToDefaults": "Reset to Defaults"
     },
     "addNetwork": {

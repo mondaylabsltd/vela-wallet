@@ -27,7 +27,7 @@
       "bundlerLabel": "SERVIÇO DE BUNDLER",
       "bundlerHint": "É necessário um endpoint compatível com o Vela Bundler",
       "fiatLabel": "COTAÇÕES FIAT",
-      "fiatHint": "Cotações baseadas em USD ({rates:{…}}). Alimenta a lista de moedas — troque por uma cobertura mais ampla",
+      "fiatHint": "Taxas de câmbio baseadas em USD que definem a lista de moedas — substituível por uma cobertura mais ampla.",
       "resetToDefaults": "Restaurar padrões"
     },
     "addNetwork": {

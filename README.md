@@ -114,7 +114,7 @@ Runs on **iOS**, **Android**, and **Web** from a single codebase.
 
 ## Self-Deploy Service Endpoints
 
-Vela Wallet relies on three backend services. Default instances are provided, but you can deploy your own for full self-custody.
+Vela Wallet relies on four backend endpoints. Default instances are provided, but you can deploy your own for full self-custody.
 
 Configure custom endpoints in **Settings > Advanced > Service Endpoints**.
 
@@ -123,12 +123,15 @@ Configure custom endpoints in **Settings > Advanced > Service Endpoints**.
 | **Chain Data Index** | Network info, token data, chain logos | [atshelchin/ethereum-data](https://github.com/atshelchin/ethereum-data) |
 | **Passkey Index** | Public key storage for cross-device recovery | [atshelchin/webauthnp256-publickey-index.biubiu.tools](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools) |
 | **Bundler Service** | ERC-4337 transaction bundler | [atshelchin/vela-bundler](https://github.com/atshelchin/vela-bundler) |
+| **Exchange-Rate Source** | USD-based fiat rates that drive the currency list | [Frankfurter](https://frankfurter.dev) (FOSS, self-hostable via Docker) |
 
-Each service exposes a `/api/health` endpoint for status verification. The wallet validates all three checks before accepting a custom endpoint:
+The first three are Vela services that each expose a `/api/health` endpoint. The wallet validates three checks before accepting a custom endpoint for them:
 
 1. **HTTPS** — only secure connections accepted
 2. **Reachable** — server responds within 10 seconds
 3. **Valid response** — `/api/health` returns the correct `service` identifier and `status: "ok"`
+
+The **Exchange-Rate Source** is any USD-based FX API — the default is Frankfurter's public instance, `https://api.frankfurter.dev/v2/rates?base=USD`. It's validated by returning a parseable USD-based rate set (not `/api/health`). Frankfurter is open source and self-hostable with Docker — see [frankfurter.dev](https://frankfurter.dev). Pin the base to USD (`?base=USD`), or every conversion is silently wrong. For the response shapes Vela accepts, the Chainlink fallback, and a porting guide, see [docs/fiat-price.md](docs/fiat-price.md).
 
 ## Gas & Fee Model
 
