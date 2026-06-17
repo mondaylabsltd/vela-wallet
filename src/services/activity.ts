@@ -6,7 +6,7 @@
  *   - Connection events = dApp signing / tx-request events (shown under Connections).
  *
  * The feed reads from the LOCAL transaction store, which is the durable source of
- * truth (and cloud-syncs). Outgoing transfers are written by the Send flow;
+ * truth. Outgoing transfers are written by the Send flow;
  * incoming transfers are discovered by the RPC transfer-monitor and PERSISTED
  * here (`syncReceivedTransfers`) so they survive the monitor's incremental block
  * checkpoint advancing past them.

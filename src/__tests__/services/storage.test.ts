@@ -1,8 +1,7 @@
 /**
  * Tests for storage layer logic.
  *
- * Tests the dual-write merge logic and key management.
- * Mocks AsyncStorage and CloudSync to test in isolation.
+ * Mocks AsyncStorage to test the local persistence layer in isolation.
  */
 
 // Mock AsyncStorage
@@ -16,15 +15,6 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   },
 }));
 
-// Mock CloudSync
-const mockCloudStorage = new Map<string, any>();
-jest.mock('@/modules/cloud-sync', () => ({
-  get: jest.fn(async (key: string) => mockCloudStorage.get(key) ?? null),
-  save: jest.fn(async (key: string, value: any) => { mockCloudStorage.set(key, value); }),
-  remove: jest.fn(async (key: string) => { mockCloudStorage.delete(key); }),
-  syncNow: jest.fn(async () => {}),
-}));
-
 import {
   saveAccount,
   loadAccounts,
@@ -35,7 +25,6 @@ import {
   loadCustomTokens,
   removeCustomToken,
   clearAll,
-  pushAllToCloud,
 } from '@/services/storage';
 import type { StoredAccount } from '@/models/types';
 
@@ -49,7 +38,6 @@ const makeAccount = (id: string, name: string = 'Test'): StoredAccount => ({
 
 beforeEach(() => {
   mockStorage.clear();
-  mockCloudStorage.clear();
   jest.clearAllMocks();
 });
 
@@ -91,48 +79,19 @@ describe('storage - accounts', () => {
   });
 });
 
-describe('storage - merge logic', () => {
-  test('merges cloud-only items into local', async () => {
-    // Simulate: local has account A, cloud has account A + B
-    const acctA = makeAccount('a', 'Local A');
-    const acctB = makeAccount('b', 'Cloud B');
-    mockStorage.set('vela.accounts', JSON.stringify([acctA]));
-    mockCloudStorage.set('vela.accounts', [acctA, acctB]);
-
-    const loaded = await loadAccounts();
-    expect(loaded).toHaveLength(2);
-    // Local A should win (it's in both), Cloud B should be added
-    expect(loaded.find(a => a.id === 'a')?.name).toBe('Local A');
-    expect(loaded.find(a => a.id === 'b')?.name).toBe('Cloud B');
-  });
-
-  test('local wins when both have same id', async () => {
-    const localAcct = makeAccount('shared', 'Local Version');
-    const cloudAcct = makeAccount('shared', 'Cloud Version');
-    mockStorage.set('vela.accounts', JSON.stringify([localAcct]));
-    mockCloudStorage.set('vela.accounts', [cloudAcct]);
-
-    const loaded = await loadAccounts();
-    expect(loaded).toHaveLength(1);
-    expect(loaded[0].name).toBe('Local Version');
-  });
-
-  test('returns cloud data when local is empty', async () => {
-    const acct = makeAccount('cloud-only');
-    mockCloudStorage.set('vela.accounts', [acct]);
-
-    const loaded = await loadAccounts();
-    expect(loaded).toHaveLength(1);
-    expect(loaded[0].id).toBe('cloud-only');
-  });
-
-  test('returns local data when cloud is unavailable', async () => {
+describe('storage - load', () => {
+  test('returns stored local data', async () => {
     const acct = makeAccount('local-only');
     mockStorage.set('vela.accounts', JSON.stringify([acct]));
 
     const loaded = await loadAccounts();
     expect(loaded).toHaveLength(1);
     expect(loaded[0].id).toBe('local-only');
+  });
+
+  test('returns empty array when nothing is stored', async () => {
+    const loaded = await loadAccounts();
+    expect(loaded).toEqual([]);
   });
 
   test('handles corrupted local JSON gracefully', async () => {
@@ -215,7 +174,7 @@ describe('storage - custom tokens', () => {
 });
 
 describe('storage - clearAll', () => {
-  test('clears all local and cloud storage', async () => {
+  test('clears all local storage', async () => {
     await saveAccount(makeAccount('test'));
     await saveTransaction({
       id: 'tx1', userOpHash: '0x1', txHash: '0x1',

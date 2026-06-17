@@ -6,15 +6,12 @@
  * successfully yet never appeared in the Connections panel. buildSigningRecord
  * must produce a record for ANY method isSigningMethod() accepts.
  */
-// Break the react-native import chain (dapp-history → network → storage → cloud-sync,
+// Break the react-native import chain (dapp-history → network → storage,
 // and use-dapp-signing → passkey). Mirrors the dapp-signing test's mock set.
 jest.mock('react-native', () => ({}));
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
   default: { getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() },
-}));
-jest.mock('@/modules/cloud-sync', () => ({
-  get: jest.fn(), save: jest.fn(), remove: jest.fn(), syncNow: jest.fn(),
 }));
 jest.mock('@/modules/passkey', () => ({}));
 

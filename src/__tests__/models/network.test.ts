@@ -8,10 +8,6 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
   default: { getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() },
 }));
-jest.mock('@/modules/cloud-sync', () => ({
-  get: jest.fn(), save: jest.fn(), remove: jest.fn(), syncNow: jest.fn(),
-}));
-
 import { chainName, nativeSymbol, networkId, DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
 
 describe('network', () => {

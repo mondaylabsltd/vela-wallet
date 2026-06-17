@@ -1,16 +1,10 @@
 /**
- * Local + cloud persistence layer.
+ * Local persistence layer (AsyncStorage).
  *
- * Writes to both AsyncStorage (fast, local) and CloudSync (cross-device).
- * Reads prefer CloudSync data when available, falling back to local.
- *
- * This dual-write strategy ensures:
- *   1. Instant local reads (no network latency)
- *   2. Cross-device availability (via iCloud / Google backup)
- *   3. Graceful degradation when cloud is unavailable
+ * All wallet data lives on-device only. Reads and writes go straight to
+ * AsyncStorage — no network, no cross-device sync.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as CloudSync from '@/modules/cloud-sync';
 import type { StoredAccount, PendingUpload, CustomToken, NetworkConfig, ServiceEndpoints, PriceSource, CustomNetwork, LocalePrefs } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS, DEFAULT_LOCALE_PREFS } from '@/models/types';
 
@@ -28,78 +22,21 @@ const KEYS = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Generic dual-write helpers
+// Generic array helpers
 // ---------------------------------------------------------------------------
 
 async function loadArray<T>(key: string): Promise<T[]> {
-  // Load from both sources and merge — never let cloud overwrite newer local data
-  let localItems: T[] = [];
-  let cloudItems: T[] = [];
-
-  // Local (always available)
   try {
     const raw = await AsyncStorage.getItem(key);
-    if (raw) {
-      localItems = JSON.parse(raw);
-      console.log(`[Storage] Local hit for "${key}":`, localItems.length, 'items');
-    } else {
-      console.log(`[Storage] Local miss for "${key}"`);
-    }
+    if (raw) return JSON.parse(raw);
   } catch {
     console.log(`[Storage] Local parse error for "${key}"`);
   }
-
-  // Cloud (may be stale or unavailable)
-  try {
-    const data = await CloudSync.get<T[]>(key);
-    if (data != null && Array.isArray(data)) {
-      cloudItems = data;
-      console.log(`[Storage] Cloud hit for "${key}":`, cloudItems.length, 'items');
-    } else {
-      console.log(`[Storage] Cloud miss for "${key}"`);
-    }
-  } catch (err) {
-    console.log(`[Storage] Cloud unavailable for "${key}":`, err instanceof Error ? err.message : String(err));
-  }
-
-  // Merge: local wins for duplicates, cloud adds items not in local
-  if (cloudItems.length === 0) return localItems;
-  if (localItems.length === 0) return cloudItems;
-
-  // If items have no id field, can't merge by id — prefer the longer array
-  const first = localItems[0] as any;
-  const hasIds = first && typeof first === 'object' && 'id' in first && first.id;
-  if (!hasIds) {
-    return localItems.length >= cloudItems.length ? localItems : cloudItems;
-  }
-
-  const localIds = new Set(localItems.map(item => (item as any).id as string));
-  const merged = [...localItems];
-  for (const cloudItem of cloudItems) {
-    const cid = (cloudItem as any).id as string;
-    if (cid && !localIds.has(cid)) {
-      merged.push(cloudItem);
-      console.log(`[Storage] Merged cloud-only item into "${key}":`, cid.slice(0, 12));
-    }
-  }
-
-  // Persist merged result to both stores
-  if (merged.length > localItems.length) {
-    const json = JSON.stringify(merged);
-    await AsyncStorage.setItem(key, json);
-    CloudSync.save(key, merged).catch(() => {});
-    console.log(`[Storage] Persisted merged "${key}":`, merged.length, 'items');
-  }
-
-  return merged;
+  return [];
 }
 
 async function saveArray<T>(key: string, items: T[]): Promise<void> {
-  const json = JSON.stringify(items);
-  // Write local first (fast, always available)
-  await AsyncStorage.setItem(key, json);
-  // Write cloud (best-effort, non-blocking)
-  CloudSync.save(key, items).catch(() => {});
+  await AsyncStorage.setItem(key, JSON.stringify(items));
 }
 
 // ---------------------------------------------------------------------------
@@ -364,7 +301,7 @@ export interface LocalTransaction {
    * Raw signed content, captured at sign time so the detail view can show
    * exactly what was authorized. For sign_message it's the decoded message
    * text; for sign_typed_data the typed-data JSON; for dapp_tx the calldata.
-   * Capped in length to keep history/cloud-sync small. Older records lack it.
+   * Capped in length to keep stored history small. Older records lack it.
    */
   signedContent?: string;
 }
@@ -423,45 +360,7 @@ export async function mergeTransactions(incoming: LocalTransaction[]): Promise<n
 // ---------------------------------------------------------------------------
 
 export async function clearAll(): Promise<void> {
-  // Clear local
   for (const key of Object.values(KEYS)) {
     await AsyncStorage.removeItem(key);
-  }
-  // Clear cloud (best-effort)
-  for (const key of Object.values(KEYS)) {
-    CloudSync.remove(key).catch(() => {});
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Sync utilities
-// ---------------------------------------------------------------------------
-
-/** Force a full sync cycle: push all local data to cloud. */
-export async function pushAllToCloud(): Promise<void> {
-  for (const key of Object.values(KEYS)) {
-    const raw = await AsyncStorage.getItem(key);
-    if (raw) {
-      try {
-        await CloudSync.save(key, JSON.parse(raw));
-      } catch {
-        // Skip keys that fail
-      }
-    }
-  }
-  await CloudSync.syncNow().catch(() => {});
-}
-
-/** Pull all cloud data to local storage. */
-export async function pullAllFromCloud(): Promise<void> {
-  for (const key of Object.values(KEYS)) {
-    try {
-      const data = await CloudSync.get(key);
-      if (data != null) {
-        await AsyncStorage.setItem(key, JSON.stringify(data));
-      }
-    } catch {
-      // Skip keys that fail
-    }
   }
 }

@@ -15,9 +15,6 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
   default: { getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() },
 }));
-jest.mock('@/modules/cloud-sync', () => ({
-  get: jest.fn(), save: jest.fn(), remove: jest.fn(), syncNow: jest.fn(),
-}));
 jest.mock('@/modules/passkey', () => ({}));
 
 const findAccountMock = jest.fn();

@@ -19,12 +19,6 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
     removeItem: jest.fn(async () => {}),
   },
 }));
-jest.mock('@/modules/cloud-sync', () => ({
-  get: jest.fn(async () => null),
-  save: jest.fn(async () => {}),
-  remove: jest.fn(async () => {}),
-  syncNow: jest.fn(async () => {}),
-}));
 jest.mock('@/services/chain-registry', () => ({
   fetchChainInfo: jest.fn(async () => null),
 }));

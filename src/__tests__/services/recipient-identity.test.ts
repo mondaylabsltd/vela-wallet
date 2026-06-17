@@ -16,10 +16,6 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
     setItem: jest.fn(() => Promise.resolve()),
   },
 }));
-jest.mock('@/modules/cloud-sync', () => ({
-  get: jest.fn(), save: jest.fn(), remove: jest.fn(), syncNow: jest.fn(),
-}));
-
 // Mock the passkey index to avoid hitting that API
 jest.mock('@/services/public-key-index', () => ({
   queryByWalletRef: jest.fn(() => Promise.resolve(null)),

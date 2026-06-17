@@ -1,6 +1,5 @@
 import type { StoredAccount } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
-import * as CloudSync from '@/modules/cloud-sync';
 import * as Passkey from '@/modules/passkey';
 import { PasskeyError, PasskeyErrorCode } from '@/modules/passkey';
 import { fromHex } from '@/services/hex';
@@ -123,18 +122,6 @@ export default function OnboardingScreen() {
       }
       __DEV__ && console.log('[Login] Not found locally');
 
-      // 3. Try CloudSync (iCloud / Google backup)
-      __DEV__ && console.log('[Login] Trying CloudSync...');
-      const cloudAccount = await tryCloudSync(assertion.credentialId);
-      if (cloudAccount) {
-        __DEV__ && console.log('[Login] Found in CloudSync:', cloudAccount.name, cloudAccount.address);
-        await saveAccount(cloudAccount);
-        dispatch({ type: 'ADD_ACCOUNT', account: cloudAccount });
-        router.replace('/(tabs)/wallet');
-        return;
-      }
-      __DEV__ && console.log('[Login] Not found in CloudSync');
-
       // 4. Try public key index server
       const rpId = Passkey.getRelyingPartyId();
       __DEV__ && console.log('[Login] Querying server: rpId=', rpId, 'credentialId=', assertion.credentialId);
@@ -210,17 +197,6 @@ export default function OnboardingScreen() {
       <OnboardingSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} unreachable={endpointUnreachable} />
     </>
   );
-}
-
-/** Try to find the account in cloud-synced storage (iCloud / Google backup). */
-async function tryCloudSync(credentialId: string): Promise<StoredAccount | null> {
-  try {
-    const cloudAccounts = await CloudSync.get<StoredAccount[]>('vela.accounts');
-    if (!cloudAccounts || !Array.isArray(cloudAccounts)) return null;
-    return cloudAccounts.find(a => a.id === credentialId) ?? null;
-  } catch {
-    return null;
-  }
 }
 
 /** Decode username from the assertion's userIdHex field. */

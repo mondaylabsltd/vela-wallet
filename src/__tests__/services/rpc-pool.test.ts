@@ -15,13 +15,6 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
     removeItem: jest.fn(async () => {}),
   },
 }));
-jest.mock('@/modules/cloud-sync', () => ({
-  get: jest.fn(async () => null),
-  save: jest.fn(async () => {}),
-  remove: jest.fn(async () => {}),
-  syncNow: jest.fn(async () => {}),
-}));
-
 // Mock chain-registry so pool init doesn't make real HTTP calls
 jest.mock('@/services/chain-registry', () => ({
   fetchChainInfo: jest.fn(async () => null),
