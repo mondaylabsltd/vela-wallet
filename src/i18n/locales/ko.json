@@ -22,7 +22,6 @@
     "sections": {
       "account": "계정",
       "appearance": "테마",
-      "payments": "결제",
       "localization": "지역 설정",
       "advanced": "고급",
       "developer": "개발자"
@@ -33,13 +32,7 @@
     "appearance": {
       "themeLight": "라이트",
       "themeDark": "다크",
-      "themeAuto": "자동",
-      "keepAwakeTitle": "화면 켜짐 유지",
-      "keepAwakeSubtitle": "앱이 열려 있는 동안 화면이 꺼지지 않도록 합니다"
-    },
-    "payments": {
-      "voiceTitle": "음성 알림",
-      "voiceSubtitle": "입금 내역을 음성으로 안내"
+      "themeAuto": "자동"
     },
     "localization": {
       "autoExample": "자동 · {{example}}",

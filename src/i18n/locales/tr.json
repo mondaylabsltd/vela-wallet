@@ -22,7 +22,6 @@
     "sections": {
       "account": "Hesap",
       "appearance": "Görünüm",
-      "payments": "Ödemeler",
       "localization": "Yerelleştirme",
       "advanced": "Gelişmiş",
       "developer": "Geliştirici"
@@ -33,13 +32,7 @@
     "appearance": {
       "themeLight": "Açık",
       "themeDark": "Koyu",
-      "themeAuto": "Otomatik",
-      "keepAwakeTitle": "Ekranı açık tut",
-      "keepAwakeSubtitle": "Uygulama açıkken ekranın kapanmasını önler"
-    },
-    "payments": {
-      "voiceTitle": "Sesli bildirimler",
-      "voiceSubtitle": "Gelen ödemeleri sesli olarak duyur"
+      "themeAuto": "Otomatik"
     },
     "localization": {
       "autoExample": "Otomatik · {{example}}",

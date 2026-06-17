@@ -1,16 +1,16 @@
 /**
  * HomeScreen (layout A) — payment-first, activity-first single screen.
  *
- *   Header:   account selector · voice toggle · settings (gear)
+ *   Header:   account selector · settings (gear)
  *   Balance:  total · hide · currency · Manage Assets → AssetsScreen
  *   Content:  [ Activity | Connections ] toggle + Network filter
  *               · Activity   = value-transfer feed (received / sent)
  *               · Connections = single active dApp connection + its events
  *   Dock:     Receive · Scan · Send  (WaveDock, full-bleed)
  *
- * Incoming payments play a voice announcement + haptic + row glow. The Activity
- * feed currently uses the interim local-tx adapter; the RPC received-transfer
- * monitor plugs into the same `ActivityItem` shape later.
+ * Incoming payments play a haptic + row glow. The Activity feed currently uses
+ * the interim local-tx adapter; the RPC received-transfer monitor plugs into the
+ * same `ActivityItem` shape later.
  */
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
@@ -51,13 +51,13 @@ import {
   loadActivityItems, loadActivityTransactions, loadConnectionEvents, relativeTime, syncReceivedTransfers,
   type ActivityItem, type ConnectionEvent, type RescanOutcome,
 } from '@/services/activity';
+import { useLocalePrefs } from '@/services/locale-format';
 import type { LocalTransaction } from '@/services/storage';
 import { getAccountBalance, getAccountBalances, setAccountBalance } from '@/services/balance-cache';
 import { currencyMeta, formatFiat, getCurrencyCode, getRate, loadCurrency, setCurrency, shouldShowDecimals } from '@/services/currency';
 import { parseRemoteInjectURL } from '@/services/dapp-transport';
 import { copyToClipboard, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
-import { announcePayment, loadVoicePreference } from '@/services/voice';
 import { fetchTokens } from '@/services/wallet-api';
 import { isWalletPairURI } from '@/services/walletpair-transport';
 
@@ -167,11 +167,19 @@ export default function HomeScreen() {
     : balancePartial && cachedTotal != null ? Math.max(liveTotal, cachedTotal)
     : liveTotal;
 
-  // --- load voice + currency preferences once ---
-  useEffect(() => { loadVoicePreference(); }, []);
+  // --- load currency preference once ---
   useEffect(() => {
     loadCurrency().then((code) => { setCurrencyCode(code); getRate(code).then(setRate); });
   }, []);
+
+  // The feed's amount strings are formatted at load time and cached in state, so
+  // a number-format change doesn't re-run the adapter. Re-derive the feed when
+  // the format changes (other surfaces re-render via useLocalePrefs directly).
+  const localePrefs = useLocalePrefs();
+  useEffect(() => {
+    const addr = addressRef.current;
+    if (addr) loadActivityItems(addr).then(setActivity).catch(() => {});
+  }, [localePrefs]);
 
   const pickCurrency = useCallback(async (code: string) => {
     await setCurrency(code);
@@ -190,12 +198,10 @@ export default function HomeScreen() {
     } finally { setRefreshing(false); }
   }, []);
 
-  // Full "money in" feedback: row glow + haptic + voice + toast + balance pulse.
+  // Full "money in" feedback: row glow + haptic + toast + balance pulse.
   const celebrateReceipt = useCallback((item: ActivityItem) => {
     setNewItemId(item.id);
     hapticSuccess();
-    const amt = item.amount.replace(/^[+\-]/, '').split(' ')[0] ?? '';
-    announcePayment(amt, item.token);
     setReceipt({ amount: item.amount.replace(/^\+/, ''), token: item.token });
     balancePulse.value = withSequence(
       withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) }),
@@ -206,7 +212,7 @@ export default function HomeScreen() {
   }, [balancePulse]);
 
   // Dev helper (web): call `velaSimulateReceipt(100, 'USDT')` in the console to
-  // feel the full "money in" effect (toast + balance pulse + row glow + voice).
+  // feel the full "money in" effect (toast + balance pulse + row glow).
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     (globalThis as any).velaSimulateReceipt = (amount: number | string = 1, token = 'USDT') => {
@@ -232,25 +238,41 @@ export default function HomeScreen() {
   const initializedRef = useRef(false);
   const loadData = useCallback(async () => {
     if (!address) return;
+
+    // 1. Paint the feed instantly from the on-device store (no network). It's
+    //    cached locally, so it must appear the moment the screen loads — never
+    //    blank behind the slow multi-chain receipt scan in step 2.
     try {
-      // Discover + persist new receipts first; newCount > 0 means a real new one.
-      const newCount = await syncReceivedTransfers(address).catch(() => 0);
       const [items, events, rawTxs] = await Promise.all([
         loadActivityItems(address),
         loadConnectionEvents(address),
         loadActivityTransactions(address),
       ]);
-
-      // Skip the initial load (don't celebrate the existing backlog).
-      const newestIn = items.find((i) => i.direction === 'in');
-      if (initializedRef.current && newCount > 0 && newestIn) {
-        celebrateReceipt(newestIn);
-      }
-      initializedRef.current = true;
-
+      if (addressRef.current !== address) return; // account switched mid-load
       txByIdRef.current = new Map(rawTxs.map((t) => [t.id, t]));
       setActivity(items);
       setConnEvents(events);
+    } catch { /* ignore — keep the last-known feed */ }
+
+    // 2. Discover + persist new receipts in the background, then re-read the feed
+    //    only when something actually landed (newCount > 0) so the list doesn't
+    //    flicker. Don't celebrate the existing backlog on the first pass.
+    try {
+      const newCount = await syncReceivedTransfers(address).catch(() => 0);
+      if (addressRef.current !== address) return; // stale result for a previous account
+      const firstPass = !initializedRef.current;
+      initializedRef.current = true;
+      if (newCount > 0) {
+        const [items, rawTxs] = await Promise.all([
+          loadActivityItems(address),
+          loadActivityTransactions(address),
+        ]);
+        if (addressRef.current !== address) return;
+        txByIdRef.current = new Map(rawTxs.map((t) => [t.id, t]));
+        const newestIn = items.find((i) => i.direction === 'in');
+        if (!firstPass && newestIn) celebrateReceipt(newestIn);
+        setActivity(items);
+      }
     } catch { /* ignore */ }
 
     try {
@@ -521,13 +543,9 @@ export default function HomeScreen() {
         />
       </View>
 
-      {/* Live monitoring indicator + manual re-scan */}
+      {/* Manual deep re-scan ("I'm missing a payment" recovery) */}
       {tab === 'activity' && (
         <View style={styles.liveRow}>
-          <View style={styles.liveLeft}>
-            <Animated.View style={[styles.liveDot, liveDotStyle]} />
-            <Text style={styles.liveText}>{t('home.liveIndicator')}</Text>
-          </View>
           <Pressable style={styles.rescanBtn} onPress={() => setShowRescan(true)} hitSlop={8}>
             <RefreshCw size={13} color={color.fg.muted} strokeWidth={2.4} />
             <Text style={styles.rescanBtnText}>{t('home.rescanButton')}</Text>
@@ -588,13 +606,10 @@ export default function HomeScreen() {
                   <ActivityRow
                     direction={item.direction}
                     title={t(item.direction === 'out' ? 'activity.sent' : 'activity.received')}
-                    subtitle={item.address
-                      ? t(item.direction === 'out' ? 'activity.toAddr' : 'activity.fromAddr', { addr: shortAddress(item.address) })
-                      : item.subtitle}
+                    subtitle={item.address ? shortAddress(item.address) : item.subtitle}
                     amount={item.amount}
                     fiat={item.usdValue > 0 ? formatFiat(item.usdValue * rate, currencyCode, currency.symbol) : undefined}
                     time={relativeTime(item.timestamp)}
-                    alias={item.alias ?? (item.address ? aliasMap.get(item.address.toLowerCase()) : undefined)}
                     chain={chainFor(item.chainId)}
                     index={index}
                     isNew={item.id === newItemId}

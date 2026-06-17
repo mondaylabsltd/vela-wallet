@@ -22,7 +22,6 @@
     "sections": {
       "account": "Tài khoản",
       "appearance": "Giao diện",
-      "payments": "Thanh toán",
       "localization": "Bản địa hóa",
       "advanced": "Nâng cao",
       "developer": "Nhà phát triển"
@@ -33,13 +32,7 @@
     "appearance": {
       "themeLight": "Sáng",
       "themeDark": "Tối",
-      "themeAuto": "Tự động",
-      "keepAwakeTitle": "Giữ màn hình luôn bật",
-      "keepAwakeSubtitle": "Ngăn màn hình tắt khi ứng dụng đang mở"
-    },
-    "payments": {
-      "voiceTitle": "Thông báo bằng giọng nói",
-      "voiceSubtitle": "Đọc to các khoản thanh toán nhận được"
+      "themeAuto": "Tự động"
     },
     "localization": {
       "autoExample": "Tự động · {{example}}",

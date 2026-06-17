@@ -22,7 +22,6 @@
     "sections": {
       "account": "Conta",
       "appearance": "Aparência",
-      "payments": "Pagamentos",
       "localization": "Localização",
       "advanced": "Avançado",
       "developer": "Desenvolvedor"
@@ -33,13 +32,7 @@
     "appearance": {
       "themeLight": "Claro",
       "themeDark": "Escuro",
-      "themeAuto": "Automático",
-      "keepAwakeTitle": "Manter a tela ligada",
-      "keepAwakeSubtitle": "Impede que a tela apague enquanto o app está aberto"
-    },
-    "payments": {
-      "voiceTitle": "Anúncios por voz",
-      "voiceSubtitle": "Anuncia pagamentos recebidos em voz alta"
+      "themeAuto": "Automático"
     },
     "localization": {
       "autoExample": "Automático · {{example}}",

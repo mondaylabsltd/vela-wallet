@@ -17,7 +17,6 @@ import { SigningRequestModal } from '@/components/SigningRequestModal';
 import { AlertProvider } from '@/components/ui/AppAlert';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { installFaultConsole } from '@/services/dev/fault-injection';
-import { loadKeepAwakePreference } from '@/services/screen-wake';
 import { hasPendingUploads, loadLocalePrefs, loadServiceEndpoints } from '@/services/storage';
 import i18n, { loadLanguage } from '@/i18n';
 import { LanguageProvider, useLanguagePreference } from '@/i18n/language';
@@ -139,8 +138,6 @@ export default function RootLayout() {
       // Warm config caches so saved fiat endpoint + format prefs apply at launch.
       loadServiceEndpoints(),
       loadLocalePrefs(),
-      // Re-apply the "keep screen on" preference at launch.
-      loadKeepAwakePreference(),
       // Apply the stored UI language before the first render.
       loadLanguage(),
     ])

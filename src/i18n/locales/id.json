@@ -22,7 +22,6 @@
     "sections": {
       "account": "Akun",
       "appearance": "Tampilan",
-      "payments": "Pembayaran",
       "localization": "Pelokalan",
       "advanced": "Lanjutan",
       "developer": "Developer"
@@ -33,13 +32,7 @@
     "appearance": {
       "themeLight": "Terang",
       "themeDark": "Gelap",
-      "themeAuto": "Otomatis",
-      "keepAwakeTitle": "Biarkan layar tetap menyala",
-      "keepAwakeSubtitle": "Mencegah layar mati saat aplikasi terbuka"
-    },
-    "payments": {
-      "voiceTitle": "Pengumuman suara",
-      "voiceSubtitle": "Bacakan pembayaran masuk dengan suara"
+      "themeAuto": "Otomatis"
     },
     "localization": {
       "autoExample": "Otomatis · {{example}}",

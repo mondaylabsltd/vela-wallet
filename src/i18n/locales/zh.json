@@ -22,7 +22,6 @@
     "sections": {
       "account": "账户",
       "appearance": "外观",
-      "payments": "支付",
       "localization": "区域格式",
       "advanced": "高级",
       "developer": "开发者"
@@ -33,13 +32,7 @@
     "appearance": {
       "themeLight": "浅色",
       "themeDark": "深色",
-      "themeAuto": "自动",
-      "keepAwakeTitle": "保持屏幕常亮",
-      "keepAwakeSubtitle": "应用打开时不让屏幕休眠"
-    },
-    "payments": {
-      "voiceTitle": "语音播报",
-      "voiceSubtitle": "收款时朗读到账提醒"
+      "themeAuto": "自动"
     },
     "localization": {
       "autoExample": "自动 · {{example}}",

@@ -22,7 +22,6 @@
     "sections": {
       "account": "Аккаунт",
       "appearance": "Оформление",
-      "payments": "Платежи",
       "localization": "Регион и форматы",
       "advanced": "Дополнительно",
       "developer": "Для разработчиков"
@@ -33,13 +32,7 @@
     "appearance": {
       "themeLight": "Светлая",
       "themeDark": "Тёмная",
-      "themeAuto": "Авто",
-      "keepAwakeTitle": "Не гасить экран",
-      "keepAwakeSubtitle": "Экран не будет выключаться, пока открыто приложение"
-    },
-    "payments": {
-      "voiceTitle": "Голосовые уведомления",
-      "voiceSubtitle": "Объявлять входящие платежи вслух"
+      "themeAuto": "Авто"
     },
     "localization": {
       "autoExample": "Автоматически · {{example}}",

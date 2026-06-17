@@ -22,7 +22,6 @@
     "sections": {
       "account": "アカウント",
       "appearance": "外観",
-      "payments": "支払い",
       "localization": "地域と言語",
       "advanced": "詳細設定",
       "developer": "開発者向け"
@@ -33,13 +32,7 @@
     "appearance": {
       "themeLight": "ライト",
       "themeDark": "ダーク",
-      "themeAuto": "自動",
-      "keepAwakeTitle": "画面をオンのままにする",
-      "keepAwakeSubtitle": "アプリを開いている間、画面が消えないようにします"
-    },
-    "payments": {
-      "voiceTitle": "音声アナウンス",
-      "voiceSubtitle": "入金を音声で読み上げます"
+      "themeAuto": "自動"
     },
     "localization": {
       "autoExample": "自動 · {{example}}",

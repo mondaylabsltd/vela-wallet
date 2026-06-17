@@ -25,7 +25,7 @@ import { getBundlerServiceURL, getLocalePrefs, hasPendingUploads, loadCustomNetw
 import { fetchTokens } from '@/services/wallet-api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { AlertTriangle, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Smartphone, Sun, Trash2, User as UserIcon, Volume2, X, XCircle } from 'lucide-react-native';
+import { AlertTriangle, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, X, XCircle } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useLanguagePreference } from '@/i18n/language';
 import { LANGUAGE_NATIVE_NAMES, SUPPORTED_LANGUAGES, type AppLanguage, type LanguagePreference } from '@/i18n';
@@ -34,13 +34,10 @@ import {
     ActivityIndicator,
     Pressable,
     ScrollView,
-    Switch,
     Text,
     TextInput,
     View,
 } from 'react-native';
-import { isVoiceEnabled, loadVoicePreference, previewVoice, setVoiceEnabled } from '@/services/voice';
-import { isKeepAwakeEnabled, loadKeepAwakePreference, setKeepAwakeEnabled } from '@/services/screen-wake';
 import { buildBugReportURL } from '@/services/feedback';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -166,27 +163,44 @@ function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
   const [expanded, setExpanded] = useState(false);
   const [rpcURL, setRpcURL] = useState(savedConfig?.rpcURL ?? network.rpcURL);
   const [explorerURL, setExplorerURL] = useState(savedConfig?.explorerURL ?? network.explorerURL);
-  const [bundlerURL, setBundlerURL] = useState(savedConfig?.bundlerURL ?? network.bundlerURL);
-  const [healths, setHealths] = useState<[EndpointHealth, EndpointHealth, EndpointHealth]>([
-    { status: 'checking' }, { status: 'checking' }, { status: 'checking' },
+  const [healths, setHealths] = useState<[EndpointHealth, EndpointHealth]>([
+    { status: 'checking' }, { status: 'checking' },
   ]);
 
+  // Re-seed the inputs whenever the saved config arrives or changes. The parent
+  // loads savedConfig asynchronously, so on the first render it can still be
+  // undefined — and the fallback (the built-in default) now differs from a saved
+  // URL only by its query string. Without this sync a saved
+  // "…publicnode.com/?apikey=X" rendered as the bare default, so the user's key
+  // appeared to vanish on every reload (localStorage still held it).
+  useEffect(() => {
+    setRpcURL(savedConfig?.rpcURL ?? network.rpcURL);
+    setExplorerURL(savedConfig?.explorerURL ?? network.explorerURL);
+  }, [savedConfig?.rpcURL, savedConfig?.explorerURL, network.rpcURL, network.explorerURL]);
+
+  // The bundler isn't editable per-network: the one configured in Service
+  // Endpoints applies to every chain (the pool appends `/<chainId>`). Preserve
+  // whatever was already saved so we never clobber a custom network's bundler.
   const handleSave = useCallback(() => {
-    onSave({ chainId: network.chainId, rpcURL, explorerURL, bundlerURL });
-  }, [network.chainId, rpcURL, explorerURL, bundlerURL, onSave]);
+    onSave({
+      chainId: network.chainId,
+      rpcURL,
+      explorerURL,
+      bundlerURL: savedConfig?.bundlerURL ?? network.bundlerURL,
+    });
+  }, [network.chainId, network.bundlerURL, rpcURL, explorerURL, savedConfig?.bundlerURL, onSave]);
 
   // Run health checks when expanded
   useEffect(() => {
     if (!expanded) return;
-    setHealths([{ status: 'checking' }, { status: 'checking' }, { status: 'checking' }]);
-    const urls = [rpcURL, explorerURL, bundlerURL];
-    const types: ('rpc' | 'explorer' | 'bundler')[] = ['rpc', 'explorer', 'bundler'];
-    urls.forEach((url, i) => {
-      checkEndpointHealth(url, types[i]).then(h => {
+    setHealths([{ status: 'checking' }, { status: 'checking' }]);
+    const fields: [string, 'rpc' | 'explorer'][] = [[rpcURL, 'rpc'], [explorerURL, 'explorer']];
+    fields.forEach(([url, type], i) => {
+      checkEndpointHealth(url, type).then(h => {
         setHealths(prev => { const next = [...prev] as typeof prev; next[i] = h; return next; });
       });
     });
-  }, [expanded, rpcURL, explorerURL, bundlerURL]);
+  }, [expanded, rpcURL, explorerURL]);
 
   return (
     <VelaCard style={s.networkCard}>
@@ -207,20 +221,17 @@ function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
         <View style={s.networkFields}>
           <View style={s.dividerFull} />
           {([
-            ['settingsModals.network.fieldRpcUrl', 'settingsModals.network.fieldRpcUrl'],
-            ['settingsModals.network.fieldExplorer', 'settingsModals.network.fieldExplorer'],
-            ['settingsModals.network.fieldBundler', 'settingsModals.network.fieldBundler'],
-          ] as const).map(([labelKey], i) => {
+            ['settingsModals.network.fieldRpcUrl', rpcURL, setRpcURL],
+            ['settingsModals.network.fieldExplorer', explorerURL, setExplorerURL],
+          ] as const).map(([labelKey, val, setter], i) => {
             const label = t(labelKey);
-            const vals = [rpcURL, explorerURL, bundlerURL];
-            const setters = [setRpcURL, setExplorerURL, setBundlerURL];
             return (
               <View key={labelKey} style={s.configField}>
                 <View style={s.configLabelRow}>
                   <Text style={s.configLabel}>{label}</Text>
                   <HealthBadge health={healths[i]} />
                 </View>
-                <TextInput style={s.configInput} value={vals[i]} onChangeText={setters[i]} onBlur={handleSave}
+                <TextInput style={s.configInput} value={val} onChangeText={setter} onBlur={handleSave}
                   autoCapitalize="none" autoCorrect={false} placeholder={label} placeholderTextColor={color.fg.subtle} />
               </View>
             );
@@ -1357,21 +1368,6 @@ export default function SettingsScreen() {
   const { preference: langPref, resolved: langResolved, systemLanguage, setPreference: setLangPref } = useLanguagePreference();
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
 
-  const [voiceOn, setVoiceOn] = useState(isVoiceEnabled());
-  useEffect(() => { loadVoicePreference().then(() => setVoiceOn(isVoiceEnabled())); }, []);
-  const toggleVoice = async (next: boolean) => {
-    setVoiceOn(next);
-    await setVoiceEnabled(next);
-    if (next) previewVoice();
-  };
-
-  const [keepAwakeOn, setKeepAwakeOn] = useState(isKeepAwakeEnabled());
-  useEffect(() => { loadKeepAwakePreference().then(() => setKeepAwakeOn(isKeepAwakeEnabled())); }, []);
-  const toggleKeepAwake = async (next: boolean) => {
-    setKeepAwakeOn(next);
-    await setKeepAwakeEnabled(next);
-  };
-
   const accountName = activeAccount?.name ?? 'No Wallet';
   const address = activeAccount?.address ?? state.address;
 
@@ -1434,46 +1430,6 @@ export default function SettingsScreen() {
             />
             <View style={styles.settingsRowDividerFull} />
             <ThemePicker s={styles} current={colorPref} onChange={setColorPref} />
-            <View style={styles.settingsRowDividerFull} />
-            <SettingsRow
-              s={styles}
-              icon={{ bg: color.info.soft, fg: color.info.base, Icon: Smartphone }}
-              title={t('settings.appearance.keepAwakeTitle')}
-              subtitle={t('settings.appearance.keepAwakeSubtitle')}
-              showDivider={false}
-              right={
-                <Switch
-                  value={keepAwakeOn}
-                  onValueChange={toggleKeepAwake}
-                  trackColor={{ true: color.accent.base, false: color.border.strong }}
-                  thumbColor={color.fg.inverse}
-                  ios_backgroundColor={color.border.strong}
-                />
-              }
-            />
-          </VelaCard>
-        </Animated.View>
-
-        {/* Payments */}
-        <Animated.View style={styles.sectionContainer} entering={fadeInDown(120, 300)}>
-          <Text style={styles.sectionTitle}>{t('settings.sections.payments')}</Text>
-          <VelaCard>
-            <SettingsRow
-              s={styles}
-              icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Volume2 }}
-              title={t('settings.payments.voiceTitle')}
-              subtitle={t('settings.payments.voiceSubtitle')}
-              showDivider={false}
-              right={
-                <Switch
-                  value={voiceOn}
-                  onValueChange={toggleVoice}
-                  trackColor={{ true: color.accent.base, false: color.border.strong }}
-                  thumbColor={color.fg.inverse}
-                  ios_backgroundColor={color.border.strong}
-                />
-              }
-            />
           </VelaCard>
         </Animated.View>
 

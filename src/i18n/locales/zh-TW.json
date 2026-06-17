@@ -22,7 +22,6 @@
     "sections": {
       "account": "帳戶",
       "appearance": "外觀",
-      "payments": "收付款",
       "localization": "在地化",
       "advanced": "進階",
       "developer": "開發者"
@@ -33,13 +32,7 @@
     "appearance": {
       "themeLight": "淺色",
       "themeDark": "深色",
-      "themeAuto": "自動",
-      "keepAwakeTitle": "保持螢幕常亮",
-      "keepAwakeSubtitle": "應用程式開啟時不讓螢幕休眠"
-    },
-    "payments": {
-      "voiceTitle": "語音播報",
-      "voiceSubtitle": "以語音念出收到的款項"
+      "themeAuto": "自動"
     },
     "localization": {
       "autoExample": "自動 · {{example}}",
