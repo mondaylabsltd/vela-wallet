@@ -1,5 +1,10 @@
 {
   "send": {
+    "filterStable": "ステーブルコイン",
+    "filterGas": "ガス",
+    "filterOther": "その他",
+    "addTokenBtn": "トークンを追加",
+    "tokenCount": "{{n}} 件のトークン",
     "selectTokenTitle": "トークンを選択",
     "searchPlaceholder": "トークンを検索...",
     "loadingTokens": "トークンを読み込み中...",

@@ -1,5 +1,10 @@
 {
   "send": {
+    "filterStable": "穩定幣",
+    "filterGas": "Gas 幣",
+    "filterOther": "其他",
+    "addTokenBtn": "新增代幣",
+    "tokenCount": "{{n}} 個代幣",
     "selectTokenTitle": "選擇代幣",
     "searchPlaceholder": "搜尋代幣…",
     "loadingTokens": "載入代幣中…",

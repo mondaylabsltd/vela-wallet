@@ -15,15 +15,15 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 import { DEFAULT_NETWORKS, getAllNetworksSync, refreshCustomNetworks } from '@/models/network';
-import type { CompatibilityResult, CustomNetwork } from '@/models/types';
+import type { CompatibilityResult, CustomNetwork, CustomToken } from '@/models/types';
 import { MULTICALL3, SEL, decAggregate3, decString, decU8, encAggregate3 } from '@/services/abi';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { hapticSuccess, openBrowser, showAlert } from '@/services/platform';
 import { rpcCall } from '@/services/rpc-adapter';
-import { loadCustomNetworks, loadCustomTokens, saveCustomNetwork, saveCustomToken, getBundlerServiceURL } from '@/services/storage';
-import { Check, Globe, ScanLine, Search, X } from 'lucide-react-native';
-import React, { useState } from 'react';
+import { loadCustomNetworks, loadCustomTokens, removeCustomToken, saveCustomNetwork, saveCustomToken, getBundlerServiceURL } from '@/services/storage';
+import { Check, Globe, ScanLine, Trash2, X } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -60,7 +60,7 @@ async function fetchErc20Meta(
 
 type Tab = 'erc20' | 'network';
 
-export function AddTokenPanel({ onAdded }: { onAdded?: () => void }) {
+export function AddTokenPanel({ onChanged }: { onChanged?: () => void }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('erc20');
 
@@ -71,6 +71,18 @@ export function AddTokenPanel({ onAdded }: { onAdded?: () => void }) {
   const [saving, setSaving] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [addedTokenIds, setAddedTokenIds] = useState<Set<string>>(new Set());
+
+  // Already-added custom tokens (manage + delete).
+  const [customTokens, setCustomTokens] = useState<CustomToken[]>([]);
+  const refreshCustom = () => { loadCustomTokens().then(setCustomTokens).catch(() => {}); };
+  useEffect(() => { refreshCustom(); }, []);
+
+  const handleDelete = async (id: string) => {
+    await removeCustomToken(id);
+    hapticSuccess();
+    refreshCustom();
+    onChanged?.();
+  };
 
   // Network state
   const [netQuery, setNetQuery] = useState('');
@@ -147,7 +159,7 @@ export function AddTokenPanel({ onAdded }: { onAdded?: () => void }) {
       hapticSuccess();
       setNetError(null);
       setNetChainInfo({ ...netChainInfo, _added: true });
-      onAdded?.();
+      onChanged?.();
     } catch {
       showAlert(t('addToken.errorTitle'), t('addToken.errorAddNetwork'));
     }
@@ -208,7 +220,8 @@ export function AddTokenPanel({ onAdded }: { onAdded?: () => void }) {
       });
       hapticSuccess();
       setAddedTokenIds(prev => new Set(prev).add(tokenId));
-      onAdded?.();
+      refreshCustom();
+      onChanged?.();
     } catch {
       showAlert(t('addToken.errorTitle'), t('addToken.errorSaveToken'));
     } finally {
@@ -453,6 +466,24 @@ export function AddTokenPanel({ onAdded }: { onAdded?: () => void }) {
             </VelaCard>
           </Animated.View>
         ))}
+
+        {/* Already-added custom tokens — manage / remove */}
+        {customTokens.length > 0 && (
+          <View style={styles.customSection}>
+            <Text style={styles.fieldLabel}>{t('addToken.addedTokensLabel')}</Text>
+            {customTokens.map((ct) => (
+              <View key={ct.id} style={styles.customRow}>
+                <View style={styles.customInfo}>
+                  <Text style={styles.customSymbol} numberOfLines={1}>{ct.symbol}</Text>
+                  <Text style={styles.customMeta} numberOfLines={1}>{ct.name} · {ct.networkName}</Text>
+                </View>
+                <Pressable onPress={() => handleDelete(ct.id)} hitSlop={8} style={styles.deleteBtn}>
+                  <Trash2 size={18} color={color.error.base} strokeWidth={2} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
           </>
         )}
       </ScrollView>
@@ -684,5 +715,44 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     ...inter.semibold,
     color: color.success.base,
+  },
+
+  // Manage added custom tokens
+  customSection: {
+    marginTop: space['3xl'],
+  },
+  customRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.lg,
+    backgroundColor: color.bg.raised,
+    borderWidth: 1,
+    borderColor: color.border.base,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.lg,
+    marginBottom: space.md,
+  },
+  customInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  customSymbol: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.fg.base,
+  },
+  customMeta: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.muted,
+  },
+  deleteBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: color.error.soft,
   },
 }));

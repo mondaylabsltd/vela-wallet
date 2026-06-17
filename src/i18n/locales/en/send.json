@@ -5,7 +5,6 @@
     "loadingTokens": "Loading tokens...",
     "noMatchingTokens": "No matching tokens",
     "noTokensWithBalance": "No tokens with balance",
-    "filterAll": "All",
     "filterStable": "Stablecoins",
     "filterGas": "Gas",
     "filterOther": "Other",

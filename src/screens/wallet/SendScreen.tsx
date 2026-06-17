@@ -26,7 +26,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { ZERO_DECIMAL_CODES } from '@/services/currency';
-import { showAlert } from '@/services/platform';
+import { showAlert, copyToClipboard, openBrowser } from '@/services/platform';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
@@ -37,8 +37,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, ScanLine, BookUser, AlertCircle, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Plus } from 'lucide-react-native';
-import { openBrowser } from '@/services/platform';
+import { ArrowLeft, X, ScanLine, BookUser, AlertCircle, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Plus, Copy, Check } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
@@ -185,10 +184,11 @@ export default function SendScreen() {
   const [sending, setSending] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [tokenSearch, setTokenSearch] = useState('');
-  const [tokenCategory, setTokenCategory] = useState<TokenCategory>('all');
+  const [tokenCategory, setTokenCategory] = useState<TokenCategory>('stable');
   const [tokenChainFilter, setTokenChainFilter] = useState<number | null>(null);
   const [showNetSheet, setShowNetSheet] = useState(false);
   const [showAddToken, setShowAddToken] = useState(false);
+  const [copiedContract, setCopiedContract] = useState(false);
   const [feeEstimate, setFeeEstimate] = useState<TransactionFeeEstimate | null>(null);
   const [estimatingGas, setEstimatingGas] = useState(false);
   const [fundingNeeded, setFundingNeeded] = useState<FundingNeeded | null>(null);
@@ -258,6 +258,20 @@ export default function SendScreen() {
       setRecentRecipients(recents);
     });
   }, [address, params.preselectedSymbol, params.preselectedNetwork]);
+
+  // Re-pull balances after the user adds/removes a custom token in the sheet,
+  // so it shows up (or disappears) without a manual page refresh.
+  const refreshTokens = () => {
+    if (!address) return;
+    clearTokenCache(address);
+    fetchTokens(address)
+      .then((result) => {
+        const nonZero = result.filter((tk) => tokenBalanceDouble(tk) > 0);
+        nonZero.sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
+        setTokens(nonZero);
+      })
+      .catch(() => {});
+  };
 
   // Compute real-time amount warnings
   useEffect(() => {
@@ -657,8 +671,8 @@ export default function SendScreen() {
     return true;
   });
 
-  const TOKEN_CATEGORIES: { key: TokenCategory; label: string }[] = [
-    { key: 'all', label: t('send.filterAll') },
+  // No explicit "All" chip — an unselected state means "show everything".
+  const TOKEN_CATEGORIES: { key: Exclude<TokenCategory, 'all'>; label: string }[] = [
     { key: 'stable', label: t('send.filterStable') },
     { key: 'gas', label: t('send.filterGas') },
     { key: 'other', label: t('send.filterOther') },
@@ -699,7 +713,7 @@ export default function SendScreen() {
           {TOKEN_CATEGORIES.map((c) => {
             const active = tokenCategory === c.key;
             return (
-              <Pressable key={c.key} onPress={() => setTokenCategory(c.key)} style={[styles.chip, active && styles.chipActive]}>
+              <Pressable key={c.key} onPress={() => setTokenCategory(active ? 'all' : c.key)} style={[styles.chip, active && styles.chipActive]}>
                 <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>{c.label}</Text>
               </Pressable>
             );
@@ -755,7 +769,7 @@ export default function SendScreen() {
           return c > 0 ? t('send.tokenCount', { n: c }) : undefined;
         }}
       />
-      <AddTokenSheet visible={showAddToken} onClose={() => setShowAddToken(false)} />
+      <AddTokenSheet visible={showAddToken} onClose={() => setShowAddToken(false)} onChanged={refreshTokens} />
     </Animated.View>
   );
 
@@ -774,10 +788,9 @@ export default function SendScreen() {
         <Animated.View entering={fadeInDown(0, 300)}>
           <Text style={styles.stepTitle}>{t('send.sendTitle', { symbol: selectedToken.symbol })}</Text>
 
-          {/* Hero card — tap to switch token */}
-          <Pressable onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); }}>
+          {/* Hero card — tap the row to switch token; ERC-20s show a copyable contract address. */}
           <VelaCard style={styles.heroCard}>
-            <View style={styles.heroRow}>
+            <Pressable style={styles.heroRow} onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); }}>
               <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={44} />
               <View style={styles.heroIdentity}>
                 <Text style={styles.heroSymbol}>{selectedToken.symbol}</Text>
@@ -797,9 +810,25 @@ export default function SendScreen() {
                   </Text>
                 )}
               </View>
-            </View>
+            </Pressable>
+            {!isNativeToken(selectedToken) && selectedToken.tokenAddress ? (
+              <Pressable
+                style={styles.contractRow}
+                onPress={() => {
+                  copyToClipboard(selectedToken.tokenAddress!);
+                  setCopiedContract(true);
+                  setTimeout(() => setCopiedContract(false), 1500);
+                }}
+                hitSlop={6}
+              >
+                <Text style={styles.contractLabel}>{t('addToken.tokenAddressLabel')}</Text>
+                <Text style={styles.contractAddr} numberOfLines={1}>{shortAddr(selectedToken.tokenAddress)}</Text>
+                {copiedContract
+                  ? <Check size={14} color={color.success.base} strokeWidth={2.5} />
+                  : <Copy size={14} color={color.fg.subtle} strokeWidth={2} />}
+              </Pressable>
+            ) : null}
           </VelaCard>
-          </Pressable>
 
           {/* Amount — large display with inline unit */}
           <Pressable style={styles.amountWrap} onPress={() => amountInputRef.current?.focus()}>
@@ -1382,6 +1411,29 @@ const styles = createStyles(() => ({
     fontSize: text.sm,
     ...inter.medium,
     color: color.fg.subtle,
+  },
+  // ERC-20 contract address (tap to copy)
+  contractRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginTop: space.lg,
+    paddingTop: space.lg,
+    borderTopWidth: 1,
+    borderTopColor: color.border.base,
+  },
+  contractLabel: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.subtle,
+  },
+  contractAddr: {
+    flex: 1,
+    fontSize: text.sm,
+    ...inter.medium,
+    fontFamily: font.mono,
+    color: color.fg.muted,
+    textAlign: 'right',
   },
   heroBalance: {
     alignItems: 'flex-end',

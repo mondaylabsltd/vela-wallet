@@ -1,5 +1,10 @@
 {
   "send": {
+    "filterStable": "스테이블코인",
+    "filterGas": "가스",
+    "filterOther": "기타",
+    "addTokenBtn": "토큰 추가",
+    "tokenCount": "토큰 {{n}}개",
     "selectTokenTitle": "토큰 선택",
     "searchPlaceholder": "토큰 검색...",
     "loadingTokens": "토큰 불러오는 중...",

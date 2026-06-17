@@ -1,5 +1,10 @@
 {
   "send": {
+    "filterStable": "Стейблкоины",
+    "filterGas": "Газ",
+    "filterOther": "Другие",
+    "addTokenBtn": "Добавить токен",
+    "tokenCount": "{{n}} токенов",
     "selectTokenTitle": "Выберите токен",
     "searchPlaceholder": "Поиск токенов…",
     "loadingTokens": "Загрузка токенов…",

@@ -1,5 +1,6 @@
 {
   "addToken": {
+    "addedTokensLabel": "Добавленные токены",
     "navTitle": "Добавить токен",
     "tabErc20": "Токен ERC-20",
     "tabNative": "Нативный токен",

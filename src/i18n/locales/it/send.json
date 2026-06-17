@@ -1,5 +1,10 @@
 {
   "send": {
+    "filterStable": "Stablecoin",
+    "filterGas": "Gas",
+    "filterOther": "Altri",
+    "addTokenBtn": "Aggiungi token",
+    "tokenCount": "{{n}} token",
     "selectTokenTitle": "Seleziona token",
     "searchPlaceholder": "Cerca token…",
     "loadingTokens": "Caricamento token…",

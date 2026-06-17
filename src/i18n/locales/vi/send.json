@@ -1,5 +1,10 @@
 {
   "send": {
+    "filterStable": "Stablecoin",
+    "filterGas": "Gas",
+    "filterOther": "Khác",
+    "addTokenBtn": "Thêm token",
+    "tokenCount": "{{n}} token",
     "selectTokenTitle": "Chọn token",
     "searchPlaceholder": "Tìm token...",
     "loadingTokens": "Đang tải token...",

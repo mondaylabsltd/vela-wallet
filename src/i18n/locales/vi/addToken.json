@@ -1,5 +1,6 @@
 {
   "addToken": {
+    "addedTokensLabel": "Token đã thêm",
     "navTitle": "Thêm token",
     "tabErc20": "Token ERC-20",
     "tabNative": "Token gốc",

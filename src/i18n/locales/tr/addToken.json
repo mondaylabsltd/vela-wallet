@@ -1,5 +1,6 @@
 {
   "addToken": {
+    "addedTokensLabel": "Eklenen Tokenlar",
     "navTitle": "Token Ekle",
     "tabErc20": "ERC-20 Token",
     "tabNative": "Yerel Token",

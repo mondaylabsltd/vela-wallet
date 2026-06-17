@@ -1,5 +1,6 @@
 {
   "addToken": {
+    "addedTokensLabel": "추가된 토큰",
     "navTitle": "토큰 추가",
     "tabErc20": "ERC-20 토큰",
     "tabNative": "기본 토큰",

@@ -1,5 +1,10 @@
 {
   "send": {
+    "filterStable": "Stablecoin",
+    "filterGas": "Gas",
+    "filterOther": "Lainnya",
+    "addTokenBtn": "Tambah Token",
+    "tokenCount": "{{n}} token",
     "selectTokenTitle": "Pilih Token",
     "searchPlaceholder": "Cari token...",
     "loadingTokens": "Memuat token...",

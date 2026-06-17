@@ -1,5 +1,6 @@
 {
   "addToken": {
+    "addedTokensLabel": "已添加的代币",
     "navTitle": "添加代币",
     "tabErc20": "ERC-20 代币",
     "tabNative": "原生代币",

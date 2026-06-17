@@ -5,7 +5,6 @@
     "loadingTokens": "加载代币中...",
     "noMatchingTokens": "无匹配代币",
     "noTokensWithBalance": "暂无余额代币",
-    "filterAll": "全部",
     "filterStable": "稳定币",
     "filterGas": "Gas 币",
     "filterOther": "其他",

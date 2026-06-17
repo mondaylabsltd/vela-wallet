@@ -16,11 +16,11 @@ import { useTranslation } from 'react-i18next';
 interface Props {
   visible: boolean;
   onClose: () => void;
-  /** Fires after a token or network is saved (e.g. to refresh a list). */
-  onAdded?: () => void;
+  /** Fires after a token/network is added or removed (e.g. to refresh a list). */
+  onChanged?: () => void;
 }
 
-export function AddTokenSheet({ visible, onClose, onAdded }: Props) {
+export function AddTokenSheet({ visible, onClose, onChanged }: Props) {
   const { t } = useTranslation();
   return (
     <AppModal visible={visible} onClose={onClose}>
@@ -32,7 +32,7 @@ export function AddTokenSheet({ visible, onClose, onAdded }: Props) {
             <X size={18} color={color.fg.base} strokeWidth={2} />
           </Pressable>
         </View>
-        <AddTokenPanel onAdded={onAdded} />
+        <AddTokenPanel onChanged={onChanged} />
       </View>
     </AppModal>
   );
