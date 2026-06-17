@@ -11,12 +11,12 @@ import { ChainLogo } from '@/components/ChainLogo';
 import { AppModal } from '@/components/ui/AppModal';
 import { fadeInDown } from '@/constants/entering';
 import { color, createStyles, inter, radius, shadow, space, text } from '@/constants/theme';
-import { getAllNetworksSync, type Network } from '@/models/network';
-import { probeRpcChainId, refreshPool } from '@/services/rpc-pool';
-import { openURL, showAlert } from '@/services/platform';
-import { getNetworkConfig, saveNetworkConfig } from '@/services/storage';
-import { buildBugReportURL } from '@/services/feedback';
 import type { AppLanguage } from '@/i18n';
+import { getAllNetworksSync, type Network } from '@/models/network';
+import { buildBugReportURL } from '@/services/feedback';
+import { openURL, showAlert } from '@/services/platform';
+import { probeRpcChainId, refreshPool } from '@/services/rpc-pool';
+import { getNetworkConfig, saveNetworkConfig } from '@/services/storage';
 import { AlertTriangle, ExternalLink, Wifi, X } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -25,11 +25,9 @@ import Animated from 'react-native-reanimated';
 
 /** Reputable RPC providers with free tiers, plus Chainlist for browsing. */
 const RPC_PROVIDERS: { name: string; url: string }[] = [
-  { name: 'dRPC', url: 'https://drpc.org' },
   { name: 'Alchemy', url: 'https://www.alchemy.com' },
-  { name: 'Ankr', url: 'https://www.ankr.com/rpc' },
-  { name: '1RPC', url: 'https://1rpc.io' },
-  { name: 'PublicNode', url: 'https://publicnode.com' },
+  { name: 'QuickNode', url: 'https://www.quicknode.com' },
+  { name: 'dRPC', url: 'https://drpc.org' },
   { name: 'Chainlist', url: 'https://chainlist.org' },
 ];
 
