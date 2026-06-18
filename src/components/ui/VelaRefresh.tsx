@@ -85,6 +85,7 @@ interface VelaRefreshProps {
 
 export function VelaRefresh({ refreshing, onRefresh, children, style, enabled = true }: VelaRefreshProps) {
   const scrollRef = useRef<any>(null);
+  const rootRef = useRef<any>(null);
 
   const pull = useSharedValue(0);
   const scrollY = useSharedValue(0);
@@ -109,72 +110,85 @@ export function VelaRefresh({ refreshing, onRefresh, children, style, enabled = 
 
   const fireRefresh = () => onRefresh();
 
-  // Web: the Pan above can't win the vertical drag from the browser's native
-  // scroll on Android Chrome (the scroller's `touch-action: pan-y` makes Chrome
-  // claim the gesture and fire `pointercancel`), so it never engages — only iOS
-  // Safari is lax enough for the Pan to fire. So on web the Pan is disabled and
-  // we drive the pull from raw touch events instead. They coexist with native
-  // scroll because we only `preventDefault` while actively pulling down at the
-  // very top; any other drag falls through to the list's own scrolling.
+  // Web: the gesture-handler Pan can't win the vertical drag from the browser's
+  // native scroll on Android Chrome (the scroller's `touch-action: pan-y` makes
+  // Chrome claim the gesture and fire `pointercancel`), so the Pan is disabled on
+  // web (below) and we drive the pull from raw touch events instead. They coexist
+  // with native scroll because we only `preventDefault` while actively pulling
+  // down at the very top; any other drag falls through to the list's scrolling.
+  //
+  // Robustness: listeners are bound ONCE to the always-present root wrapper (not
+  // the scroll node, which can be remounted while loading) and read the latest
+  // props via refs — so a changing `onRefresh`/`enabled` or a re-rendered list
+  // never silently detaches them (the cause of "works once, then dead").
+  const onRefreshRef = useRef(onRefresh);
+  onRefreshRef.current = onRefresh;
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    // Attach to the scrollable DOM node itself: touches bubble through it and
-    // `preventDefault` here cancels its native scroll for the pull. (A ref on the
-    // clip View is unreliable — GestureDetector may override a ref on its child.)
-    const target: any = scrollRef.current?.getScrollableNode?.();
-    if (!target || typeof target.addEventListener !== 'function') return;
+    const root: any = rootRef.current;
+    if (!root || typeof root.addEventListener !== 'function') return;
 
-    const atTop = () => (target.scrollTop ?? 0) <= 0;
+    // Live scroll position, looked up lazily so a late/remounted list still works.
+    const atTop = () => {
+      const sn: any = scrollRef.current?.getScrollableNode?.();
+      return sn ? (sn.scrollTop ?? 0) <= 0 : scrollY.value <= 1;
+    };
 
     let startY = 0;
-    let pulling = false;
+    let active = false; // a pull is being driven this gesture
 
-    const settle = () => {
-      if (!pulling) return;
-      pulling = false;
+    const onStart = (e: TouchEvent) => {
+      active = false;
+      if (busy.value || !enabledRef.current || e.touches.length !== 1) return;
+      if (!atTop()) return; // only arm when starting from the very top
+      startY = e.touches[0].clientY;
+      active = true;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!active || busy.value) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy > 0 && atTop()) {
+        e.preventDefault(); // own the pull; blocks native overscroll / pull-to-refresh
+        const next = dy < TRIGGER ? dy : TRIGGER + (dy - TRIGGER) * OVERPULL;
+        pull.value = next;
+        if (next >= TRIGGER && !armed.value) { armed.value = true; hapticLight(); }
+        else if (next < TRIGGER && armed.value) armed.value = false;
+      } else {
+        // reversed / scrolled off the top — hand the gesture back to native scroll
+        active = false;
+        armed.value = false;
+        if (pull.value !== 0) pull.value = withSpring(0, SPRING);
+      }
+    };
+    const onEnd = () => {
+      if (!active) return;
+      active = false;
       armed.value = false;
       if (busy.value) return;
       if (pull.value >= TRIGGER) {
         pull.value = withSpring(REST, SPRING);
-        onRefresh();
-      } else {
+        onRefreshRef.current();
+      } else if (pull.value !== 0) {
         pull.value = withSpring(0, SPRING);
       }
     };
 
-    const onStart = (e: TouchEvent) => {
-      if (e.touches.length === 1) startY = e.touches[0].clientY;
-      pulling = false;
-    };
-    const onMove = (e: TouchEvent) => {
-      if (busy.value || !enabled || e.touches.length !== 1) return;
-      const dy = e.touches[0].clientY - startY;
-      if (dy > 0 && atTop()) {
-        e.preventDefault(); // own the pull; blocks native overscroll / pull-to-refresh
-        pulling = true;
-        const next = dy < TRIGGER ? dy : TRIGGER + (dy - TRIGGER) * OVERPULL;
-        pull.value = next;
-        if (next >= TRIGGER && !armed.value) { armed.value = true; hapticLight(); }
-        else if (next < TRIGGER && armed.value) { armed.value = false; }
-      } else if (pulling) {
-        // dragged back below the trigger / off the top — release to the list
-        pulling = false;
-        armed.value = false;
-        pull.value = withSpring(0, SPRING);
-      }
-    };
-
-    target.addEventListener('touchstart', onStart, { passive: true });
-    target.addEventListener('touchmove', onMove, { passive: false });
-    target.addEventListener('touchend', settle, { passive: true });
-    target.addEventListener('touchcancel', settle, { passive: true });
+    root.addEventListener('touchstart', onStart, { passive: true });
+    root.addEventListener('touchmove', onMove, { passive: false });
+    root.addEventListener('touchend', onEnd, { passive: true });
+    root.addEventListener('touchcancel', onEnd, { passive: true });
     return () => {
-      target.removeEventListener('touchstart', onStart);
-      target.removeEventListener('touchmove', onMove);
-      target.removeEventListener('touchend', settle);
-      target.removeEventListener('touchcancel', settle);
+      root.removeEventListener('touchstart', onStart);
+      root.removeEventListener('touchmove', onMove);
+      root.removeEventListener('touchend', onEnd);
+      root.removeEventListener('touchcancel', onEnd);
     };
-  }, [enabled, onRefresh, pull, armed, busy]);
+    // Bound once; latest props are read through refs above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pan = Gesture.Pan()
     .enabled(enabled && Platform.OS !== 'web')
@@ -238,16 +252,21 @@ export function VelaRefresh({ refreshing, onRefresh, children, style, enabled = 
   };
 
   return (
-    <GestureDetector gesture={pan}>
-      <View style={[styles.clip, style]}>
-        <Animated.View pointerEvents="none" style={[styles.band, bandStyle]}>
-          <RefreshIndicator pull={pull} refreshing={refreshing} />
-        </Animated.View>
-        <Animated.View style={[styles.fill, listStyle]}>
-          {children(scrollProps)}
-        </Animated.View>
-      </View>
-    </GestureDetector>
+    // Stable outer wrapper (not managed by GestureDetector) — the web touch
+    // listeners bind to its DOM node, which always exists for the lifetime of the
+    // component even if the inner list mounts/unmounts.
+    <View ref={rootRef} style={styles.root}>
+      <GestureDetector gesture={pan}>
+        <View style={[styles.clip, style]}>
+          <Animated.View pointerEvents="none" style={[styles.band, bandStyle]}>
+            <RefreshIndicator pull={pull} refreshing={refreshing} />
+          </Animated.View>
+          <Animated.View style={[styles.fill, listStyle]}>
+            {children(scrollProps)}
+          </Animated.View>
+        </View>
+      </GestureDetector>
+    </View>
   );
 }
 
@@ -308,6 +327,7 @@ function RefreshIndicator({ pull, refreshing }: { pull: SharedValue<number>; ref
 }
 
 const styles = createStyles(() => ({
+  root: { flex: 1 },
   clip: { flex: 1, overflow: 'hidden' },
   fill: { flex: 1 },
   band: {
