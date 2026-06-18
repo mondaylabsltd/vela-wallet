@@ -66,7 +66,7 @@ export function TransactionDetailSheet({ visible, tx, alias, rate, currency, onC
         const incoming = (tx.type ?? 'send') === 'receive';
         const net = getAllNetworksSync().find((n) => n.chainId === tx.chainId);
         const explorer = net?.explorerURL ?? 'https://etherscan.io';
-        const amt = formatTokenAmount(parseFloat(tx.value || '0')); // detail = exact, no compact
+        const amt = formatTokenAmount(parseFloat(tx.value || '0'), { compact: true }); // match the feed
         const counterparty = incoming ? tx.from : tx.to;
         const usdVal = txUsdValue(tx);
         const fiat = usdVal > 0 ? formatFiat(usdVal * rate, currency.code, currency.symbol) : null;

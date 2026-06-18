@@ -179,10 +179,10 @@ export function formatCompact(value: number, key?: NumberFormatKey): string {
  * Format a crypto/token amount with magnitude-appropriate precision:
  *   >= 1000 → 2 decimals   ·   >= 1 → 4 decimals   ·   < 1 → 6 (keep tiny tails)
  *
- * With `compact: true` (glanceable surfaces — feeds, balances) large amounts are
- * abbreviated above 1e6, e.g. 12,345,678.9 → "12.3M". Small amounts are NEVER
- * abbreviated. Detail views pass full precision (no `compact`), matching the
- * big-tech "glance = compact, detail = exact" split.
+ * `compact: true` (glanceable surfaces — feeds, balances, and the detail hero so
+ * it stays consistent with the feed): large amounts abbreviate above 1e6
+ * (12,345,678.9 → "12.3M") and the fractional part is capped at 4 digits so the
+ * figure stays scannable (the exact on-chain value lives behind the tx hash).
  */
 export function formatTokenAmount(value: number, opts: { compact?: boolean } = {}): string {
   if (!isFinite(value) || value === 0) return '0';
@@ -190,7 +190,12 @@ export function formatTokenAmount(value: number, opts: { compact?: boolean } = {
   if (opts.compact && abs >= 1e6) return formatCompact(value);
   if (abs >= 1000) return formatNumber(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (abs >= 1) return formatNumber(value, { maximumFractionDigits: 4 });
-  return formatNumber(value, { maximumFractionDigits: 6 });
+  // <1: the default keeps a 6-digit tail. The glanceable feed caps at 4 — but not
+  // if that would round a tiny non-zero amount down to "0", in which case it keeps
+  // the finer 6-digit tail so dust still reads as non-zero (never a stray "+0").
+  if (!opts.compact) return formatNumber(value, { maximumFractionDigits: 6 });
+  const capped = formatNumber(value, { maximumFractionDigits: 4 });
+  return capped === '0' ? formatNumber(value, { maximumFractionDigits: 6 }) : capped;
 }
 
 // ---------------------------------------------------------------------------

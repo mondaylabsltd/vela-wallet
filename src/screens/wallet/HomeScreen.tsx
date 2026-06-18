@@ -191,7 +191,11 @@ export default function HomeScreen() {
   const celebrateReceipt = useCallback((item: ActivityItem) => {
     setNewItemId(item.id);
     hapticSuccess();
-    setReceipt({ amount: item.amount.replace(/^\+/, ''), token: item.token });
+    // item.amount already ends with the symbol (e.g. "+4.84M SNDRA"); strip it so
+    // the toast — which appends {{token}} itself — doesn't show the symbol twice.
+    const amt = item.amount.replace(/^\+/, '').trim();
+    const sp = amt.lastIndexOf(' ');
+    setReceipt({ amount: sp > 0 ? amt.slice(0, sp) : amt, token: item.token });
     balancePulse.value = withSequence(
       withTiming(1, { duration: 220, easing: Easing.out(Easing.quad) }),
       withTiming(0, { duration: 1000 }),
@@ -561,7 +565,16 @@ export default function HomeScreen() {
                   <ActivityRow
                     direction={item.direction}
                     title={t(item.direction === 'out' ? 'activity.sent' : 'activity.received')}
-                    subtitle={item.address ? shortAddress(item.address) : item.subtitle}
+                    subtitle={
+                      item.address
+                        ? t(item.direction === 'out' ? 'activity.toAddr' : 'activity.fromAddr', {
+                            // Prefer a resolved alias (ENS/.bnb/Vela/own-account), then the
+                            // stored name, falling back to the short address. aliasMap is state,
+                            // so the row re-renders to the name once it resolves.
+                            addr: aliasMap.get(item.address.toLowerCase()) ?? item.alias ?? shortAddress(item.address),
+                          })
+                        : item.subtitle
+                    }
                     amount={item.amount}
                     fiat={item.usdValue > 0 ? formatFiat(item.usdValue * rate, currencyCode, currency.symbol) : undefined}
                     time={relativeTime(item.timestamp)}

@@ -57,7 +57,7 @@ export interface ConnectionEvent {
 
 /**
  * Token amount for the (glanceable) feed: large balances abbreviate
- * (12,345,678 → "12.3M"); normal/small amounts keep full precision. The detail
+ * (12,345,678 → "12.3M") and the fraction is capped at 4 digits. The detail
  * sheet shows the exact value — "glance = compact, detail = exact".
  */
 function compactAmount(n: number): string {
@@ -256,7 +256,15 @@ export async function syncReceivedTransfers(address: string): Promise<number> {
     if (incoming.length === 0) return 0;
     const index = buildTokenIndex(tokens);
     await enrichTokenIndex(incoming, index);
-    const records = incoming.map((tx) => incomingToRecord(tx, address, index));
+    // Skip non-native tokens whose metadata we couldn't resolve: persisting them
+    // would store a misleading "+0 tokens" (the 18-decimal fallback zeroes out a
+    // real 6-decimal amount). They remain in the recent-blocks scan window and
+    // are retried next sync once metadata resolves; genuine spam with no readable
+    // symbol/decimals simply never clutters the feed.
+    const records = incoming
+      .filter((tx) => tx.isNative || index.has(`${tx.chainId}:${(tx.token ?? '').toLowerCase()}`))
+      .map((tx) => incomingToRecord(tx, address, index));
+    if (records.length === 0) return 0;
     return await mergeTransactions(records);
   } catch {
     return 0;

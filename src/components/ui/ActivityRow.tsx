@@ -1,9 +1,14 @@
 /**
  * ActivityRow — one entry in the payment-first Activity feed.
  *
- * Neutral avatar + direction arrow (in = success/down-left, out = muted/up-right),
- * a small chain badge, title/subtitle, and amount/time. Incoming rows can play a
- * brief "just arrived" success-glow when `isNew` is set.
+ * Two columns: a neutral avatar (direction arrow + small chain badge) and a
+ * content block of three lines:
+ *   1. title ............... amount     (label left, figure right)
+ *   2. counterparty ........ fiat       (address/alias left, value right)
+ *   3. time
+ * Putting the amount on the title's line — not in its own column — frees the
+ * full row width for the counterparty address, so it never gets tail-clipped by
+ * a long figure. Incoming rows can play a brief "just arrived" glow when `isNew`.
  *
  * Theme-driven (light/dark). Spring press + staggered entrance per the design system.
  */
@@ -76,25 +81,29 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
           )}
         </View>
 
-        <View style={styles.info}>
-          <Text style={styles.title} numberOfLines={1}>{title}</Text>
-          <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
-          {time ? <Text style={styles.time} numberOfLines={1}>{time}</Text> : null}
-        </View>
+        <View style={styles.content}>
+          {/* Line 1: title ↔ amount */}
+          <View style={styles.line}>
+            <Text style={styles.title} numberOfLines={1}>{title}</Text>
+            <Text
+              style={[styles.amount, incoming && styles.amountIn]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
+              {numberPart}
+              {ticker ? <Text style={styles.ticker}> {ticker}</Text> : null}
+            </Text>
+          </View>
 
-        <View style={styles.right}>
-          {/* Fixed font size — every figure renders identically; only a rare
-              over-long amount shrinks (down to 85%) so it never overflows. */}
-          <Text
-            style={[styles.amount, incoming && styles.amountIn]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.85}
-          >
-            {numberPart}
-            {ticker ? <Text style={styles.ticker}> {ticker}</Text> : null}
-          </Text>
-          {fiat ? <Text style={styles.fiat} numberOfLines={1}>{fiat}</Text> : null}
+          {/* Line 2: counterparty (address/alias) ↔ fiat */}
+          <View style={styles.line}>
+            <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>
+            {fiat ? <Text style={styles.fiat} numberOfLines={1}>{fiat}</Text> : null}
+          </View>
+
+          {/* Line 3: time */}
+          {time ? <Text style={styles.time} numberOfLines={1}>{time}</Text> : null}
         </View>
       </AnimatedPressable>
     </Animated.View>
@@ -104,7 +113,7 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
 const styles = createStyles(() => ({
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: space.lg,
     backgroundColor: color.bg.raised,
     borderRadius: radius.xl,
@@ -141,40 +150,31 @@ const styles = createStyles(() => ({
     borderWidth: 2,
     borderColor: color.bg.raised,
   },
-  info: {
+  content: {
     flex: 1,
     minWidth: 0,
     gap: 3,
   },
-  // Direction label is supporting context now (arrow + amount color/sign carry
-  // it) — keep it calm so the amount and counterparty lead the eye.
+  line: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+  },
+  // Direction label is supporting context (the arrow + amount color/sign carry
+  // it) — kept calm so the amount and counterparty lead the eye.
   title: {
     fontSize: text.base,
     ...inter.semibold,
     color: color.fg.muted,
-  },
-  subtitle: {
-    fontSize: text.sm,
-    ...inter.medium,
-    fontFamily: font.mono,
-    color: color.fg.muted,
-  },
-  time: {
-    fontSize: text.xs,
-    ...inter.regular,
-    color: color.fg.subtle,
-  },
-  right: {
-    alignItems: 'flex-end',
-    gap: 2,
-    flexShrink: 0,
-    maxWidth: '55%', // content-sized; only a pathologically long amount hits this cap
+    flexShrink: 1,
   },
   amount: {
     fontSize: text.xl,
     ...inter.bold,
     color: color.fg.base,
     textAlign: 'right',
+    flexShrink: 1,
   },
   amountIn: {
     color: color.success.base,
@@ -184,9 +184,26 @@ const styles = createStyles(() => ({
     ...inter.semibold,
     color: color.fg.muted,
   },
+  // The counterparty owns the second line and only shares it with the short
+  // fiat value, so the (fixed-width mono) address has room and isn't clipped.
+  subtitle: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: text.sm,
+    ...inter.medium,
+    fontFamily: font.mono,
+    color: color.fg.muted,
+  },
   fiat: {
+    flexShrink: 0,
     fontSize: text.sm,
     ...inter.medium,
     color: color.fg.muted,
+  },
+  time: {
+    fontSize: text.xs,
+    ...inter.regular,
+    color: color.fg.subtle,
   },
 }));
