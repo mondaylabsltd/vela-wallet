@@ -43,5 +43,6 @@ app-example
 /android
 images-de
 .claude
-.VSCodeCountere2e/screenshots/
+.VSCodeCounter
+e2e/screenshots/
 test-results/
