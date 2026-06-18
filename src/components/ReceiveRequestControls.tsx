@@ -13,7 +13,7 @@ import { TokenSelector } from '@/components/ui/TokenSelector';
 import { color, createStyles, inter, radius, space, text } from '@/constants/theme';
 import { chainName, networkForChainId, tokenBadgeNetwork } from '@/models/network';
 import { tokenChainId, tokenLogoURLs, type APIToken } from '@/models/types';
-import { buildEIP681 } from '@/services/eip681';
+import { buildEIP681, buildPayLink } from '@/services/eip681';
 import { hapticLight } from '@/services/platform';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { ChevronDown } from 'lucide-react-native';
@@ -25,7 +25,7 @@ interface Props {
   /** The receiving address (the request's beneficiary). */
   recipient: string;
   /** Called whenever the built request changes. */
-  onChange: (req: { qrValue: string; summary: string }) => void;
+  onChange: (req: { qrValue: string; summary: string; payLink: string }) => void;
 }
 
 /** Default asset shown before anything is picked / loaded: native ETH on Ethereum. */
@@ -68,14 +68,18 @@ export function ReceiveRequestControls({ recipient, onChange }: Props) {
   };
   useEffect(() => { loadTokens(); }, [recipient]);
 
-  // Rebuild the URI + summary whenever any input changes.
+  // Rebuild the URI + summary + public link whenever any input changes.
   useEffect(() => {
     const qrValue = buildEIP681({ recipient, chainId, tokenAddress: asset.tokenAddress, decimals: asset.decimals, amount });
+    const payLink = buildPayLink({
+      recipient, chainId, tokenAddress: asset.tokenAddress, amount,
+      symbol: asset.symbol, decimals: asset.decimals, networkName,
+    });
     const hasAmount = !!amount && parseFloat(amount) > 0;
     const summary = hasAmount
       ? t('receive.request.summaryAmount', { amount, symbol: asset.symbol, network: networkName })
       : t('receive.request.summaryOpen', { symbol: asset.symbol, network: networkName });
-    onChange({ qrValue, summary });
+    onChange({ qrValue, summary, payLink });
   }, [recipient, asset, amount, networkName]);
 
   const pickAsset = (tok: APIToken) => {

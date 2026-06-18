@@ -1,6 +1,7 @@
 import { ChainLogo } from '@/components/ChainLogo';
 import { QRCode } from '@/components/QRCode';
 import { ReceiveRequestControls } from '@/components/ReceiveRequestControls';
+import { ReceiveShareCard, type ShareCardModel } from '@/components/ReceiveShareCard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -10,12 +11,12 @@ import { chainName, getAllNetworksSync } from '@/models/network';
 import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import { copyToClipboard, hapticLight, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
-import { saveReceiveCard, shareReceiveCard, type ShareCardData } from '@/services/share-card';
+import { saveReceiveCard, shareReceiveCard } from '@/services/share-card';
 import { fetchTokens } from '@/services/wallet-api';
 import { ArrowLeft, Check, Copy, Download, Share2, ShieldAlert } from 'lucide-react-native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 // Aggressive polling: 3s for first 1 min, then 60s for next 4 min, then stop
@@ -41,7 +42,7 @@ export default function ReceiveScreen() {
 
   // Address vs EIP-681 payment-request mode.
   const [mode, setMode] = useState<'address' | 'request'>('address');
-  const [request, setRequest] = useState<{ qrValue: string; summary: string }>({ qrValue: '', summary: '' });
+  const [request, setRequest] = useState<{ qrValue: string; summary: string; payLink: string }>({ qrValue: '', summary: '', payLink: '' });
   const [savingImage, setSavingImage] = useState(false);
   const cardRef = useRef<View>(null);
 
@@ -114,37 +115,54 @@ export default function ReceiveScreen() {
   }, [address]);
 
   const copyValue = useCallback(async () => {
-    const value = isRequest ? request.qrValue : address;
+    // In request mode we copy the public payment LINK (a web page that bridges
+    // to the Vela web wallet / other wallets), not the raw ethereum: URI.
+    const value = isRequest ? request.payLink : address;
     if (!value) return;
     await copyToClipboard(value);
     hapticLight();
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [isRequest, request.qrValue, address]);
+  }, [isRequest, request.payLink, address]);
 
   const truncatedAddress = address
     ? `${address.slice(0, 8)}...${address.slice(-6)}`
     : '';
 
-  const shareCardData = useCallback((): ShareCardData => ({
-    name: accountName,
-    qrValue: qrValue || '',
-    summary: isRequest ? request.summary : t('receive.shareAddressSummary'),
-    fileName: `vela-${isRequest ? 'request' : 'address'}-${(address || '').slice(0, 10)}`,
-  }), [accountName, qrValue, isRequest, request.summary, address, t]);
+  // The branded card model for the current mode — drives both the off-screen
+  // native capture target and the web canvas.
+  const shareModel = useMemo<ShareCardModel>(() => (
+    isRequest
+      ? {
+          variant: 'request',
+          name: accountName,
+          qrValue: request.qrValue || address || '',
+          address: address || '',
+          summary: request.summary,
+        }
+      : {
+          variant: 'address',
+          name: accountName,
+          qrValue: address || '',
+          address: address || '',
+          networks: networks.map((n) => ({ label: n.iconLabel, name: n.displayName, color: n.iconColor, bg: n.iconBg, logoURL: n.logoURL })),
+        }
+  ), [isRequest, accountName, request.qrValue, request.summary, address, networks]);
+
+  const shareFileName = `vela-${isRequest ? 'request' : 'address'}-${(address || '').slice(0, 10)}`;
 
   const onShareImage = useCallback(async () => {
     try {
-      await shareReceiveCard(cardRef, shareCardData());
+      await shareReceiveCard(cardRef, shareModel, shareFileName);
     } catch {
       showAlert(t('common.error'), t('receive.request.shareError'));
     }
-  }, [shareCardData, t]);
+  }, [shareModel, shareFileName, t]);
 
   const onSaveImage = useCallback(async () => {
     setSavingImage(true);
     try {
-      const result = await saveReceiveCard(cardRef, shareCardData());
+      const result = await saveReceiveCard(cardRef, shareModel, shareFileName);
       if (result === 'saved') showAlert(t('receive.request.savedTitle'), t('receive.request.savedBody'));
       else if (result === 'denied') showAlert(t('receive.request.permTitle'), t('receive.request.permBody'));
     } catch {
@@ -152,7 +170,21 @@ export default function ReceiveScreen() {
     } finally {
       setSavingImage(false);
     }
-  }, [shareCardData, t]);
+  }, [shareModel, shareFileName, t]);
+
+  // Reusable Share + Save buttons (both modes).
+  const shareButtons = (
+    <View style={styles.shareRow}>
+      <Pressable style={styles.shareBtn} onPress={onShareImage}>
+        <Share2 size={18} color={color.fg.inverse} strokeWidth={2.2} />
+        <Text style={styles.shareBtnText}>{t('receive.request.share')}</Text>
+      </Pressable>
+      <Pressable style={styles.saveBtn} onPress={onSaveImage} disabled={savingImage}>
+        <Download size={18} color={color.fg.base} strokeWidth={2.2} />
+        <Text style={styles.saveBtnText}>{t('receive.request.save')}</Text>
+      </Pressable>
+    </View>
+  );
 
   return (
     <ScreenContainer>
@@ -183,7 +215,7 @@ export default function ReceiveScreen() {
 
         {/* QR Card */}
         <Animated.View entering={fadeInDown(100, 400)}>
-          <View ref={cardRef} collapsable={false} style={styles.qrCardWrap}>
+          <View style={styles.qrCardWrap}>
             <VelaCard elevated style={styles.qrCard}>
               {/* QR */}
               <View style={styles.qrBorder}>
@@ -264,20 +296,10 @@ export default function ReceiveScreen() {
           /* Request builder + share/save */
           <Animated.View entering={fadeInDown(200, 400)}>
             {address ? <ReceiveRequestControls recipient={address} onChange={setRequest} /> : null}
-
-            <View style={styles.shareRow}>
-              <Pressable style={styles.shareBtn} onPress={onShareImage}>
-                <Share2 size={18} color={color.fg.inverse} strokeWidth={2.2} />
-                <Text style={styles.shareBtnText}>{t('receive.request.share')}</Text>
-              </Pressable>
-              <Pressable style={styles.saveBtn} onPress={onSaveImage} disabled={savingImage}>
-                <Download size={18} color={color.fg.base} strokeWidth={2.2} />
-                <Text style={styles.saveBtnText}>{t('receive.request.save')}</Text>
-              </Pressable>
-            </View>
+            {shareButtons}
           </Animated.View>
         ) : (
-          /* Supported networks */
+          /* Supported networks + share/save */
           <Animated.View entering={fadeInDown(200, 400)}>
             <Text style={styles.sectionLabel}>{t('receive.networksLabel', { count: networks.length })}</Text>
 
@@ -295,9 +317,17 @@ export default function ReceiveScreen() {
                 </View>
               ))}
             </View>
+            {shareButtons}
           </Animated.View>
         )}
       </ScrollView>
+
+      {/* Off-screen branded card — the capture target for native share/save. */}
+      {Platform.OS !== 'web' && (
+        <View ref={cardRef} collapsable={false} style={styles.offscreen} pointerEvents="none">
+          <ReceiveShareCard model={shareModel} />
+        </View>
+      )}
     </ScreenContainer>
   );
 }
@@ -305,6 +335,12 @@ export default function ReceiveScreen() {
 const styles = createStyles(() => ({
   content: {
     paddingBottom: 100,
+  },
+  // Rendered off-screen purely so react-native-view-shot can capture it.
+  offscreen: {
+    position: 'absolute',
+    left: -10000,
+    top: 0,
   },
   header: {
     flexDirection: 'row',

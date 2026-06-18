@@ -41,6 +41,22 @@
       "permTitle": "Permission needed",
       "permBody": "Allow photo access to save the image.",
       "shareError": "Couldn't share the image."
+    },
+    "pay": {
+      "title": "Payment request",
+      "open": "Open in Vela Wallet",
+      "other": "Pay with another wallet",
+      "scanHint": "Scan with an EIP-681 wallet",
+      "openApp": "Open in wallet app",
+      "manualNote": "Or enter these details by hand:",
+      "recipient": "Recipient",
+      "network": "Network",
+      "token": "Token",
+      "native": "{{symbol}} (native coin)",
+      "amount": "Amount",
+      "anyAmount": "Any amount",
+      "invalidTitle": "Invalid payment link",
+      "invalidBody": "This link is missing a valid recipient or network. Ask the sender for a new one."
     }
   }
 }

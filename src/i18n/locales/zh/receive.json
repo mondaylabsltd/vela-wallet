@@ -41,6 +41,22 @@
       "permTitle": "需要权限",
       "permBody": "请允许访问相册以保存图片。",
       "shareError": "无法分享图片。"
+    },
+    "pay": {
+      "title": "收款请求",
+      "open": "用 Vela 钱包打开",
+      "other": "用其他钱包支付",
+      "scanHint": "用支持 EIP-681 的钱包扫码",
+      "openApp": "在钱包应用中打开",
+      "manualNote": "或手动填入以下信息：",
+      "recipient": "收款地址",
+      "network": "网络",
+      "token": "代币",
+      "native": "{{symbol}}（原生代币）",
+      "amount": "金额",
+      "anyAmount": "任意金额",
+      "invalidTitle": "无效的收款链接",
+      "invalidBody": "此链接缺少有效的收款地址或网络，请向发送方索取新链接。"
     }
   }
 }

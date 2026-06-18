@@ -41,6 +41,22 @@
       "permTitle": "需要權限",
       "permBody": "請允許存取相簿以儲存圖片。",
       "shareError": "無法分享圖片。"
+    },
+    "pay": {
+      "title": "收款請求",
+      "open": "用 Vela 錢包開啟",
+      "other": "用其他錢包支付",
+      "scanHint": "用支援 EIP-681 的錢包掃描",
+      "openApp": "在錢包應用中開啟",
+      "manualNote": "或手動填入以下資訊：",
+      "recipient": "收款地址",
+      "network": "網路",
+      "token": "代幣",
+      "native": "{{symbol}}（原生代幣）",
+      "amount": "金額",
+      "anyAmount": "任意金額",
+      "invalidTitle": "無效的收款連結",
+      "invalidBody": "此連結缺少有效的收款地址或網路，請向發送方索取新連結。"
     }
   }
 }

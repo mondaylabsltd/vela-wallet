@@ -156,6 +156,55 @@ export function parseEIP681(input: string): EIP681Request | null {
   };
 }
 
+/** Public fallback host for payment links when there's no web origin (native app). */
+export const PAY_LINK_FALLBACK = 'https://getvela.app/pay';
+
+/**
+ * The base for payment links. On the web we use the *current* origin's /pay
+ * route, so a self-hosted wallet (e.g. mydomain.com) produces links that point
+ * back to its own deployment. On native (no `window`) we fall back to the
+ * public hosted page.
+ */
+export function payLinkBase(): string {
+  try {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}/pay`;
+    }
+  } catch {
+    /* not a browser */
+  }
+  return PAY_LINK_FALLBACK;
+}
+
+export interface PayLinkArgs {
+  recipient: string;
+  chainId: number;
+  tokenAddress?: string | null;
+  /** Human-readable decimal amount; omitted/zero → open amount. */
+  amount?: string;
+  /** Display hints so the landing page needs no RPC. */
+  symbol: string;
+  decimals: number;
+  networkName: string;
+  baseUrl?: string;
+}
+
+/**
+ * Build a public, shareable payment-link URL — a web page (default getvela.app/pay)
+ * that bridges to the Vela web wallet, to other EIP-681 wallets, or to manual entry.
+ * The EIP-681 fields are carried as URL-encoded query params.
+ */
+export function buildPayLink(a: PayLinkArgs): string {
+  const base = a.baseUrl ?? payLinkBase();
+  const parts = [`to=${encodeURIComponent(a.recipient)}`, `chain=${a.chainId}`];
+  if (a.tokenAddress) parts.push(`token=${encodeURIComponent(a.tokenAddress)}`);
+  if (a.amount && parseFloat(a.amount) > 0) parts.push(`amount=${encodeURIComponent(a.amount)}`);
+  parts.push(`sym=${encodeURIComponent(a.symbol)}`);
+  parts.push(`dec=${a.decimals}`);
+  if (a.networkName) parts.push(`net=${encodeURIComponent(a.networkName)}`);
+  return `${base}?${parts.join('&')}`;
+}
+
 function parseQuery(query: string): Record<string, string> {
   const out: Record<string, string> = {};
   if (!query) return out;
