@@ -21,6 +21,7 @@ import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { copyToClipboard, hapticLight, hapticSuccess, openURL, showAlert } from '@/services/platform';
 import { getBuiltinBundlerUrl, invalidateAllPools, poolRpcCall, refreshPool } from '@/services/rpc-pool';
+import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from '@/services/tempo';
 import { getBundlerServiceURL, getLocalePrefs, hasPendingUploads, loadCustomNetworks, loadLocalePrefs, loadNetworkConfigs, loadServiceEndpoints, removeCustomNetwork, saveCustomNetwork, saveLocalePrefs, saveNetworkConfig, saveServiceEndpoints } from '@/services/storage';
 import { fetchTokens } from '@/services/wallet-api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1129,8 +1130,8 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
     for (const net of networks) {
       fetchTreasuryBalance(addr, net.chainId).then(result => {
         const price = nativePrices.get(net.chainId);
-        const ethValue = Number(result.wei) / 1e18;
-        const usd = price ? ethValue * price : null;
+        // Tempo returns a direct USD (pathUSD) value; native chains derive it from price.
+        const usd = result.usd ?? (price ? (Number(result.wei) / 1e18) * price : null);
         setBalances(prev => prev.map(b =>
           b.chainId === net.chainId ? { ...b, balance: result.formatted, wei: result.wei, recommended: result.recommendedFormatted, recommendedWei: result.recommendedWei, usd, loading: false } : b
         ));
@@ -1303,9 +1304,26 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
 
 /** Fetch treasury balance and recommended minimum using the RPC pool. */
 async function fetchTreasuryBalance(address: string, chainId: number): Promise<{
-  formatted: string; wei: bigint; recommendedFormatted: string; recommendedWei: bigint;
+  formatted: string; wei: bigint; recommendedFormatted: string; recommendedWei: bigint; usd?: number | null;
 }> {
   try {
+    // Tempo has no native coin — eth_getBalance returns a meaningless sentinel.
+    // Show the treasury's pathUSD (fee-token) balance instead. pathUSD is the same
+    // address (0x20c0…0000, 6 decimals) on Tempo mainnet and testnet.
+    if (isTempoChain(chainId)) {
+      const data = '0x70a08231000000000000000000000000' + address.toLowerCase().replace(/^0x/, '');
+      const balRes = await poolRpcCall('eth_call', [{ to: TEMPO_DEFAULT_FEE_TOKEN, data }, 'latest'], chainId);
+      const wei = BigInt((balRes.result as string) ?? '0x0'); // pathUSD, 6 decimals
+      const recommendedWei = 5_000_000n; // ~5 pathUSD float to seed gas fronting
+      return {
+        formatted: formatPathUsd(wei),
+        wei,
+        recommendedFormatted: formatPathUsd(recommendedWei),
+        recommendedWei,
+        usd: Number(wei) / 1e6, // pathUSD ≈ $1
+      };
+    }
+
     const [balRes, gasPriceRes] = await Promise.all([
       poolRpcCall('eth_getBalance', [address, 'latest'], chainId),
       poolRpcCall('eth_gasPrice', [], chainId),
@@ -1323,6 +1341,14 @@ async function fetchTreasuryBalance(address: string, chainId: number): Promise<{
   } catch {
     return { formatted: 'error', wei: 0n, recommendedFormatted: '?', recommendedWei: 0n };
   }
+}
+
+/** Format a 6-decimal pathUSD balance for the treasury view. */
+function formatPathUsd(units: bigint): string {
+  const v = Number(units) / 1e6;
+  if (v === 0) return '0';
+  if (v < 0.01) return v.toFixed(4);
+  return v.toFixed(2);
 }
 
 function formatEth(wei: bigint): string {

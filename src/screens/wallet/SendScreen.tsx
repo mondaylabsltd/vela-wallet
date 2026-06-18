@@ -14,6 +14,7 @@ import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
 import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, GAS_TIER_MULTIPLIERS, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
+import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
 import { findAccountByCredentialId, saveTransaction, updateTransaction, loadTransactions } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, type FundingNeeded } from '@/services/bundler-service';
@@ -396,6 +397,36 @@ export default function SendScreen() {
       const tokenBal = tokenBalanceDouble(selectedToken);
       if (amountNum > tokenBal) {
         setAmountWarning(t('send.warnNotEnoughToken', { symbol: selectedToken.symbol }));
+        return;
+      }
+      if (isTempoChain(chainId)) {
+        // Tempo has no native coin: gas is paid in pathUSD (the canonical fee token).
+        // The sent-token amount is checked above; here ensure pathUSD covers the fee.
+        if (feeEstimate) {
+          // feeEstimate.totalWei is attodollars (USD×1e-18) → pathUSD units (6 dec).
+          const feePathUsd = feeEstimate.totalWei / 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS);
+          const sendingPathUsd =
+            selectedToken.tokenAddress?.toLowerCase() === TEMPO_DEFAULT_FEE_TOKEN.toLowerCase();
+          if (sendingPathUsd) {
+            const balWei = balanceToWei(selectedToken.balance, selectedToken.decimals);
+            const amountWei = BigInt('0x' + amountToWeiHex(tokenAmount, selectedToken.decimals));
+            if (amountWei + feePathUsd > balWei) {
+              setAmountWarning(t('send.warnInsufficientForGas', { sym: 'pathUSD' }));
+              return;
+            }
+          } else {
+            const pathUsd = tokens.find(
+              tk => tk.tokenAddress?.toLowerCase() === TEMPO_DEFAULT_FEE_TOKEN.toLowerCase() &&
+                tokenChainId(tk) === chainId,
+            );
+            const pathBalWei = pathUsd ? balanceToWei(pathUsd.balance, pathUsd.decimals) : 0n;
+            if (pathBalWei < feePathUsd) {
+              setAmountWarning(t('send.warnNeedGas', { sym: 'pathUSD' }));
+              return;
+            }
+          }
+        }
+        setAmountWarning(null);
         return;
       }
       // Check native token balance for gas
@@ -1047,6 +1078,10 @@ export default function SendScreen() {
           {gasExpanded && feeEstimate && (() => {
             const bundlerGwei = Number(feeEstimate.bundlerGasPrice) / 1e9;
             const userOpGwei = Number(feeEstimate.maxFeePerGas) / 1e9;
+            const tempo = isTempoChain(tokenChainId(selectedToken));
+            // Tempo: the "gas price" is attodollars/gas (USD-denominated, protocol-fixed),
+            // not Gwei of a native coin. Show a USD rate; hide the meaningless speed tiers.
+            const tempoGasUsdPer1M = Number(feeEstimate.bundlerGasPrice) / 1e12;
 
             const handleRefreshGas = async () => {
               if (!activeAccount || !selectedToken || refreshingGas) return;
@@ -1070,31 +1105,42 @@ export default function SendScreen() {
 
             return (
               <VelaCard style={styles.gasCard}>
-                {/* Tier selector */}
-                <View style={styles.tierRow}>
-                  {(['slow', 'standard', 'rapid', 'fast'] as GasTier[]).map((t) => (
-                    <Pressable
-                      key={t}
-                      style={[styles.tierBtn, gasTier === t && styles.tierBtnActive]}
-                      onPress={() => handleTierChange(t)}
-                    >
-                      <Text style={[styles.tierBtnText, gasTier === t && styles.tierBtnTextActive]}>
-                        {GAS_TIER_MULTIPLIERS[t].label}
-                      </Text>
-                    </Pressable>
-                  ))}
-                  <Pressable onPress={handleRefreshGas} hitSlop={8} style={styles.tierRefresh}>
-                    {refreshingGas ? (
-                      <ActivityIndicator size={14} color={color.fg.muted} />
-                    ) : (
-                      <RefreshCw size={14} color={color.fg.muted} strokeWidth={2} />
-                    )}
-                  </Pressable>
-                </View>
-                <View style={styles.confirmSeparator} />
-                <ConfirmRow label={t('send.gasPriceLabel')} value={`${bundlerGwei.toFixed(4)} Gwei`} />
-                <View style={styles.confirmSeparator} />
-                <ConfirmRow label={t('send.gasPriceUserOpLabel')} value={`${userOpGwei.toFixed(4)} Gwei`} />
+                {/* Speed tiers — hidden on Tempo: gas price is a fixed protocol rate with
+                    no priority-fee market, so the tiers do nothing. */}
+                {!tempo && (
+                  <>
+                    <View style={styles.tierRow}>
+                      {(['slow', 'standard', 'rapid', 'fast'] as GasTier[]).map((t) => (
+                        <Pressable
+                          key={t}
+                          style={[styles.tierBtn, gasTier === t && styles.tierBtnActive]}
+                          onPress={() => handleTierChange(t)}
+                        >
+                          <Text style={[styles.tierBtnText, gasTier === t && styles.tierBtnTextActive]}>
+                            {GAS_TIER_MULTIPLIERS[t].label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                      <Pressable onPress={handleRefreshGas} hitSlop={8} style={styles.tierRefresh}>
+                        {refreshingGas ? (
+                          <ActivityIndicator size={14} color={color.fg.muted} />
+                        ) : (
+                          <RefreshCw size={14} color={color.fg.muted} strokeWidth={2} />
+                        )}
+                      </Pressable>
+                    </View>
+                    <View style={styles.confirmSeparator} />
+                  </>
+                )}
+                {tempo ? (
+                  <ConfirmRow label={t('send.gasPriceLabel')} value={`$${tempoGasUsdPer1M.toFixed(2)} / 1M gas`} />
+                ) : (
+                  <>
+                    <ConfirmRow label={t('send.gasPriceLabel')} value={`${bundlerGwei.toFixed(4)} Gwei`} />
+                    <View style={styles.confirmSeparator} />
+                    <ConfirmRow label={t('send.gasPriceUserOpLabel')} value={`${userOpGwei.toFixed(4)} Gwei`} />
+                  </>
+                )}
                 <View style={styles.confirmSeparator} />
                 <ConfirmRow label={t('send.gasLimitLabel')} value={feeEstimate.totalGas.toLocaleString()} />
                 <View style={styles.confirmSeparator} />

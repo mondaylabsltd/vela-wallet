@@ -31,6 +31,12 @@ export interface ChainMeta {
   isL2: boolean;
   rpcURL: string;
   explorerURL: string;
+  /**
+   * How gas is settled on this chain. Defaults to `'native'` (standard ERC-4337:
+   * UserOp paid in the native coin via EntryPoint). `'tempo'` marks chains with
+   * no native coin where gas is paid in a USD stablecoin — see services/tempo.ts.
+   */
+  gasModel?: 'native' | 'tempo';
 }
 
 export const CHAINS: ChainMeta[] = [
@@ -89,11 +95,14 @@ export const CHAINS: ChainMeta[] = [
     rpcURL: 'https://mainnet.unichain.org', explorerURL: 'https://uniscan.xyz',
   },
   {
-    // Tempo's native gas token is a USD stablecoin (chainlist: symbol "USD"), not ETH.
+    // Tempo has NO native gas coin: gas is paid in USD stablecoins (TIP-20).
+    // gasModel 'tempo' routes sends through services/tempo.ts (maxFee=0 UserOp +
+    // bundler 0x76 + batched stablecoin reimbursement). See that module.
     id: 'tempo', displayName: 'Tempo', chainId: 4217,
     apiNetworkId: 'tempo-mainnet', nativeSymbol: 'USD',
     iconLabel: 'USD', iconColor: '#0B0B0B', iconBg: '#ECECEC', isL2: false,
     rpcURL: 'https://rpc.mainnet.tempo.xyz', explorerURL: 'https://explore.tempo.xyz',
+    gasModel: 'tempo',
   },
   {
     id: 'monad', displayName: 'Monad', chainId: 143,

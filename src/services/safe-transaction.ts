@@ -29,6 +29,14 @@ import {
 
 import { derSignatureToRaw } from './attestation-parser';
 import { rpcCall } from './rpc-adapter';
+import { fetchBundlerAccountInfo } from './bundler-service';
+import {
+  isTempoChain,
+  tempoReimbursement,
+  TEMPO_DEFAULT_FEE_TOKEN,
+  TEMPO_FEE_TOKEN_DECIMALS,
+  TEMPO_VERIFICATION_GAS_UNDEPLOYED,
+} from './tempo';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -95,6 +103,11 @@ export async function sendNative(
   signFn: SignFn,
   maxFeeOverride?: bigint,
 ): Promise<SubmitResult> {
+  if (isTempoChain(chainId)) {
+    // Tempo has no native coin; a native send is unusual but routed for consistency
+    // (gas is paid in the default stablecoin, not the value being moved).
+    return sendUserOpTempo(from, [{ to, value: valueWei, data: new Uint8Array(0) }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
+  }
   const callData = buildExecuteCallData(to, valueWei, new Uint8Array(0));
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
@@ -117,6 +130,14 @@ export async function sendERC20(
     abiEncodeUint256Hex(amountWei),
   );
 
+  if (isTempoChain(chainId)) {
+    // Gas is paid in pathUSD (the canonical Tempo fee token). Tempo requires the gas
+    // payer to PRE-HOLD the fee token (a 0-balance account can't submit), so standardising
+    // on one token keeps the bundler gas account to a single float; the Safe needs a small
+    // pathUSD balance, like ETH for gas. See services/tempo.ts.
+    return sendUserOpTempo(from, [{ to: tokenAddress, value: '0', data: transferData }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
+  }
+
   const callData = buildExecuteCallData(tokenAddress, '0', transferData);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
@@ -132,6 +153,10 @@ export async function sendContractCall(
   signFn: SignFn,
   maxFeeOverride?: bigint,
 ): Promise<SubmitResult> {
+  if (isTempoChain(chainId)) {
+    // dApp / contract call: pay gas in the default stablecoin (pathUSD).
+    return sendUserOpTempo(from, [{ to, value: valueWei, data }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
+  }
   const callData = buildExecuteCallData(to, valueWei, data);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
@@ -144,52 +169,17 @@ export async function sendBatchCalls(
   publicKeyHex: string,
   signFn: SignFn,
 ): Promise<SubmitResult> {
-  // Encode each call for MultiSend: operation(1) + to(20) + value(32) + dataLen(32) + data
-  const encodedTxs = calls.map(c => {
-    const dataBytes = c.data && c.data !== '0x'
-      ? fromHex(stripHexPrefix(c.data))
-      : new Uint8Array(0);
-    const valueClean = stripHexPrefix(c.value) || '0';
-    // operation 0 = CALL
-    const toBytes = fromHex(stripHexPrefix(c.to));
-    const operationByte = new Uint8Array([0]);
-    const value = abiEncodeUint256Hex(valueClean);
-    const lenBytes = abiEncodeUint256(dataBytes.length);
-    return concatBytes(operationByte, toBytes, value, lenBytes, dataBytes);
-  });
-  const packed = concatBytes(...encodedTxs);
+  const byteCalls: MultiSendCall[] = calls.map(c => ({
+    to: c.to,
+    value: c.value,
+    data: c.data && c.data !== '0x' ? fromHex(stripHexPrefix(c.data)) : new Uint8Array(0),
+  }));
 
-  // multiSend(bytes)
-  const multiSendSelector = functionSelector('multiSend(bytes)');
-  const paddingLen = (32 - (packed.length % 32)) % 32;
-  const multiSendPayload = concatBytes(
-    multiSendSelector,
-    abiEncodeUint256(32),              // offset
-    abiEncodeUint256(packed.length),   // length
-    packed,
-    new Uint8Array(paddingLen),        // padding
-  );
+  if (isTempoChain(chainId)) {
+    return sendUserOpTempo(from, byteCalls, TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
+  }
 
-  // executeUserOp with DELEGATECALL to MultiSend
-  const selector = functionSelector('executeUserOp(address,uint256,bytes,uint8)');
-  const toEncoded = abiEncodeAddress(MULTI_SEND);
-  const valueEncoded = abiEncodeUint256(0n);
-  const dataOffset = abiEncodeUint256(128n); // 4 * 32
-  const operation = abiEncodeUint256(1n);    // DELEGATECALL
-  const dataLen = abiEncodeUint256(BigInt(multiSendPayload.length));
-  const dataPaddingLen = (32 - (multiSendPayload.length % 32)) % 32;
-
-  const callData = concatBytes(
-    selector,
-    toEncoded,
-    valueEncoded,
-    dataOffset,
-    operation,
-    dataLen,
-    multiSendPayload,
-    new Uint8Array(dataPaddingLen),
-  );
-
+  const callData = buildMultiSendExecuteCallData(byteCalls);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn);
 }
 
@@ -272,12 +262,78 @@ export async function refreshGasPrice(chainId: number): Promise<bigint> {
   return gasPrice;
 }
 
+/**
+ * Fee estimate for Tempo, denominated in the fee-token for display. The UserOp itself
+ * pays 0 gas; the user is charged the stablecoin reimbursement baked into the batch.
+ * `totalWei` is that reimbursement scaled to attodollars (USD×1e-18) so the existing
+ * USD display path (totalWei / 1e18) renders it correctly. Divide totalWei by 1e12 to
+ * recover the fee-token amount (6 dec) for a balance check.
+ */
+async function estimateTempoFee(
+  from: string,
+  chainId: number,
+  tier: GasTier,
+): Promise<TransactionFeeEstimate> {
+  const [deployed, { gasPrice }] = await Promise.all([
+    isDeployed(from, chainId),
+    getGasPrices(chainId),
+  ]);
+
+  // Use the SAME undeployed verification gas as sendUserOpTempo (Tempo deploy ~3.9M),
+  // so the displayed fee matches what's actually reimbursed.
+  const undeployedVgas = TEMPO_VERIFICATION_GAS_UNDEPLOYED;
+  let totalGas: bigint;
+  try {
+    const verificationGas = deployed ? VERIFICATION_GAS_DEPLOYED : undeployedVgas;
+    const dummyOp: UserOperation = {
+      sender: from,
+      nonce: '0x0',
+      initCode: new Uint8Array(0),
+      callData: buildExecuteCallData(from, '0', new Uint8Array(68)),
+      verificationGasLimit: verificationGas,
+      callGasLimit: CALL_GAS_LIMIT,
+      preVerificationGas: PRE_VERIFICATION_GAS,
+      maxFeePerGas: 0n,
+      maxPriorityFeePerGas: 0n,
+      paymasterAndData: new Uint8Array(0),
+      signature: buildDummySignature(),
+    };
+    const est = await estimateGas(dummyOp, chainId);
+    const vgl = deployed
+      ? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
+      : bigintMax((est.verificationGasLimit * 15n) / 10n, undeployedVgas);
+    const cgl = bigintMax((est.callGasLimit * 15n) / 10n, 100_000n);
+    const pvg = est.preVerificationGas + 10_000n;
+    totalGas = vgl + cgl + pvg;
+  } catch {
+    totalGas = (deployed ? VERIFICATION_GAS_DEPLOYED : undeployedVgas) + CALL_GAS_LIMIT + PRE_VERIFICATION_GAS;
+  }
+
+  const reimbursement = tempoReimbursement(totalGas, gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
+  const totalWei = reimbursement * 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS);
+
+  return {
+    totalWei,
+    maxFeePerGas: gasPrice,
+    networkFeePerGas: gasPrice,
+    relayerFeePerGas: 0n,
+    bundlerGasPrice: gasPrice,
+    totalGas,
+    deployed,
+    tier,
+    quoted: false,
+  };
+}
+
 /** Estimate the total gas fee in wei for a transaction. */
 export async function estimateTransactionFee(
   from: string,
   chainId: number,
   tier: GasTier = 'standard',
 ): Promise<TransactionFeeEstimate> {
+  // Tempo pays gas in a stablecoin, not the native coin — separate model.
+  if (isTempoChain(chainId)) return estimateTempoFee(from, chainId, tier);
+
   // The bundler is the single source of truth for the price. getBundlerGasQuote
   // throws GasQuoteTooHighError (propagated here = refuse) if the quote is abusive,
   // and returns null only when the bundler can't quote (then we fall back locally).
@@ -538,6 +594,125 @@ async function sendUserOp(
 }
 
 // ---------------------------------------------------------------------------
+// Tempo UserOp Flow (no native coin — gas paid in a stablecoin)
+// ---------------------------------------------------------------------------
+
+/**
+ * Send a UserOperation on Tempo. Tempo has no native coin, so:
+ *   - the UserOp is signed with maxFeePerGas = maxPriorityFeePerGas = 0 (EntryPoint's
+ *     native prefund/refund becomes a no-op — avoids AA21), and
+ *   - a `feeToken.transfer(bundlerEOA, reimbursement)` call is batched in so the
+ *     bundler — which submits handleOps inside a 0x76 paying gas in `feeToken` — is
+ *     repaid in-band. The bundler verifies the reimbursement covers its cost.
+ *
+ * Same Safe + passkey + EntryPoint + cross-chain address as every other chain; only
+ * gas settlement differs. See services/tempo.ts.
+ */
+async function sendUserOpTempo(
+  safeAddress: string,
+  innerCalls: MultiSendCall[],
+  feeToken: string,
+  chainId: number,
+  publicKeyHex: string,
+  signFn: SignFn,
+): Promise<SubmitResult> {
+  await verifyChainReady(chainId);
+
+  // The bundler's per-Safe EOA pays the outer 0x76 gas and is the reimbursement
+  // recipient. Resolve it first so the batched transfer targets the right address.
+  const info = await fetchBundlerAccountInfo(chainId, safeAddress);
+  const feeCollector = info?.depositAddress;
+  if (!feeCollector || !/^0x[0-9a-fA-F]{40}$/.test(feeCollector)) {
+    throw new Error('The Tempo gas relayer is unavailable right now. Please try again.');
+  }
+
+  _gasPriceCache.delete(chainId);
+  const [deployed, nonceResult, gasPrices] = await Promise.all([
+    isDeployed(safeAddress, chainId),
+    getNonce(safeAddress, chainId).catch(() => '0x0'),
+    getGasPrices(chainId),
+  ]);
+
+  const initCode: Uint8Array = deployed ? new Uint8Array(0) : buildInitCode(publicKeyHex);
+  const nonce: string = deployed ? nonceResult : '0x0';
+
+  // Build the batch with a placeholder reimbursement (the transfer VALUE doesn't
+  // affect gas), estimate, then bake the real amount derived from that estimate.
+  const buildBatch = (reimbursement: bigint): Uint8Array =>
+    buildMultiSendExecuteCallData([
+      ...innerCalls,
+      { to: feeToken, value: '0', data: encodeErc20Transfer(feeCollector, reimbursement) },
+    ]);
+
+  const userOp: UserOperation = {
+    sender: safeAddress,
+    nonce,
+    initCode,
+    callData: buildBatch(1n),
+    verificationGasLimit: deployed ? VERIFICATION_GAS_DEPLOYED : TEMPO_VERIFICATION_GAS_UNDEPLOYED,
+    callGasLimit: CALL_GAS_LIMIT,
+    preVerificationGas: PRE_VERIFICATION_GAS,
+    maxFeePerGas: 0n, // Tempo: zero native gas accounting (avoids AA21)
+    maxPriorityFeePerGas: 0n,
+    paymasterAndData: new Uint8Array(0),
+    signature: buildDummySignature(),
+  };
+
+  try {
+    const est = await estimateGas(userOp, chainId);
+    userOp.verificationGasLimit = deployed
+      ? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
+      : bigintMax((est.verificationGasLimit * 15n) / 10n, TEMPO_VERIFICATION_GAS_UNDEPLOYED);
+    userOp.callGasLimit = bigintMax((est.callGasLimit * 15n) / 10n, 100_000n);
+    userOp.preVerificationGas = est.preVerificationGas + 10_000n;
+  } catch (err) {
+    console.error('[Tempo] Gas estimation failed, using defaults:', err instanceof Error ? err.message : String(err));
+  }
+
+  const totalGas = userOp.verificationGasLimit + userOp.callGasLimit + userOp.preVerificationGas;
+  const reimbursement = tempoReimbursement(totalGas, gasPrices.gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
+  userOp.callData = buildBatch(reimbursement);
+  console.log(`[Tempo] feeToken=${feeToken} reimbursement=${reimbursement} totalGas=${totalGas} collector=${feeCollector}`);
+
+  // Sign the SafeOp (over the FINAL callData) and submit, telling the bundler which
+  // stablecoin to charge for the outer 0x76.
+  const safeOpHash = calculateSafeOpHash(userOp, chainId);
+  const assertion = await signFn(safeOpHash);
+  const rawSig = derSignatureToRaw(assertion.signature);
+  if (!rawSig) {
+    throw new Error('Failed to create signature: DER to raw conversion failed');
+  }
+  const clientDataFields = extractClientDataFields(assertion.clientDataJSON);
+  userOp.signature = buildUserOpSignature(
+    assertion.authenticatorData,
+    clientDataFields,
+    rawSig.slice(0, 32),
+    rawSig.slice(32),
+  );
+
+  let userOpHash: string;
+  try {
+    userOpHash = await submitUserOp(userOp, chainId, { feeToken });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const existingHashMatch = errMsg.match(/\[existingHash:(0x[0-9a-fA-F]+)\]/);
+    if (existingHashMatch) {
+      return {
+        userOpHash: existingHashMatch[1],
+        waitForTxHash: () => waitForReceipt(existingHashMatch[1], chainId, 60_000),
+      };
+    }
+    throw err;
+  }
+
+  incrementNonceCache(safeAddress, chainId);
+  return {
+    userOpHash,
+    waitForTxHash: () => waitForReceipt(userOpHash, chainId),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // CallData
 // ---------------------------------------------------------------------------
 
@@ -567,6 +742,65 @@ function buildExecuteCallData(
     dataLen,
     data,
     dataPadding,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MultiSend batching (shared by sendBatchCalls and the Tempo path)
+// ---------------------------------------------------------------------------
+
+/** A single call for MultiSend batching. `value` is a hex string (0x optional). */
+interface MultiSendCall {
+  to: string;
+  value: string;
+  data: Uint8Array;
+}
+
+/**
+ * Encode Safe.executeUserOp(MultiSend, 0, multiSend(packedCalls), DELEGATECALL),
+ * batching N sub-calls atomically. Each sub-call is a CALL (operation 0).
+ */
+function buildMultiSendExecuteCallData(calls: MultiSendCall[]): Uint8Array {
+  const encodedTxs = calls.map(c => {
+    const valueClean = stripHexPrefix(c.value) || '0';
+    const toBytes = fromHex(stripHexPrefix(c.to));
+    const operationByte = new Uint8Array([0]); // CALL
+    const value = abiEncodeUint256Hex(valueClean);
+    const lenBytes = abiEncodeUint256(c.data.length);
+    return concatBytes(operationByte, toBytes, value, lenBytes, c.data);
+  });
+  const packed = concatBytes(...encodedTxs);
+
+  const multiSendSelector = functionSelector('multiSend(bytes)');
+  const msPadding = (32 - (packed.length % 32)) % 32;
+  const multiSendPayload = concatBytes(
+    multiSendSelector,
+    abiEncodeUint256(32),              // offset
+    abiEncodeUint256(packed.length),   // length
+    packed,
+    new Uint8Array(msPadding),         // padding
+  );
+
+  const selector = functionSelector('executeUserOp(address,uint256,bytes,uint8)');
+  const dataPadding = (32 - (multiSendPayload.length % 32)) % 32;
+  return concatBytes(
+    selector,
+    abiEncodeAddress(MULTI_SEND),
+    abiEncodeUint256(0n),
+    abiEncodeUint256(128n),  // data offset (4 * 32)
+    abiEncodeUint256(1n),    // DELEGATECALL
+    abiEncodeUint256(BigInt(multiSendPayload.length)),
+    multiSendPayload,
+    new Uint8Array(dataPadding),
+  );
+}
+
+/** Encode ERC-20 transfer(address,uint256) calldata. */
+function encodeErc20Transfer(to: string, amount: bigint): Uint8Array {
+  return concatBytes(
+    functionSelector('transfer(address,uint256)'),
+    abiEncodeAddress(to),
+    abiEncodeUint256Hex(amount.toString(16)),
   );
 }
 
@@ -1156,8 +1390,9 @@ async function estimateGas(
 async function submitUserOp(
   userOp: UserOperation,
   chainId: number,
+  extra?: Record<string, string>,
 ): Promise<string> {
-  const dict = userOpToDict(userOp);
+  const dict = userOpToDict(userOp, extra);
   console.log('[UserOp] Submitting:', JSON.stringify({
     sender: dict.sender,
     nonce: dict.nonce,
@@ -1239,7 +1474,10 @@ async function waitForReceipt(
  * Convert UserOperation to JSON-RPC format.
  * ERC-4337 v0.7 uses individual fields + factory/factoryData split.
  */
-function userOpToDict(userOp: UserOperation): Record<string, string> {
+function userOpToDict(
+  userOp: UserOperation,
+  extra?: Record<string, string>,
+): Record<string, string> {
   const dict: Record<string, string> = {
     sender: userOp.sender,
     nonce: userOp.nonce,
@@ -1265,6 +1503,10 @@ function userOpToDict(userOp: UserOperation): Record<string, string> {
     dict.paymasterVerificationGasLimit = '0x0';
     dict.paymasterPostOpGasLimit = '0x0';
   }
+
+  // Vela extension fields (e.g. Tempo `feeToken`). The bundler reads these and
+  // strips them before building the standard PackedUserOperation.
+  if (extra) Object.assign(dict, extra);
 
   return dict;
 }
