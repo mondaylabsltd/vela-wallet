@@ -65,7 +65,7 @@
       "signTypedDesc": "此应用想让您签名结构化数据。",
       "signDesc": "此应用正在请求签名。",
       "structuredData": "结构化数据",
-      "detailTo": "收款方",
+      "detailTo": "接收方",
       "detailValue": "金额",
       "detailData": "数据"
     },

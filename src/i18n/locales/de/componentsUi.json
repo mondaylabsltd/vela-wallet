@@ -18,10 +18,10 @@
       "denialDefault": "Kostenlose Aktivierung nicht verfügbar.",
       "denialNonceExceeded": "Kostenloses Kontingent aufgebraucht.",
       "denialTreasuryDepleted": "Förderbudget vorübergehend aufgebraucht.",
-      "denialBalanceTooLow": "Wallet-Guthaben zu niedrig zur Qualifikation.",
+      "denialBalanceTooLow": "Wallet-Guthaben zu niedrig für die kostenlose Aktivierung.",
       "denialNoPasskey": "Passkey für kostenlose Aktivierung erforderlich.",
       "denialRateLimited": "Zu viele Anfragen. Versuchen Sie es später.",
-      "denialTransferFailed": "Überweisung fehlgeschlagen. Erneut versuchen."
+      "denialTransferFailed": "Transfer fehlgeschlagen. Erneut versuchen."
     },
     "signing": {
       "loading": "Wird geladen ...",
@@ -71,6 +71,9 @@
       "estFee": "Geschätzte Gebühr",
       "gasPrice": "Gas-Preis",
       "gasPriceUserOp": "Gas-Preis (UserOp)",
+      "networkFee": "Netzwerkgebühr",
+      "relayerFee": "Vela-Relayer-Gebühr",
+      "youPay": "Sie zahlen",
       "gasLimit": "Gas-Limit",
       "walletDeployed": "Wallet bereitgestellt",
       "deployedYes": "Ja",

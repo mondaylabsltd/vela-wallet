@@ -19,7 +19,7 @@
     },
     "endpoints": {
       "modalTitle": "Endpoint dei servizi",
-      "description": "Questi servizi fanno funzionare il tuo wallet.\nPuoi distribuire le tue istanze per una self-custody completa.",
+      "description": "Questi servizi fanno funzionare il tuo wallet.\nPuoi eseguire il deploy delle tue istanze per una self-custody completa.",
       "chainDataLabel": "INDICE DATI DELLE RETI",
       "chainDataHint": "Fornisce informazioni sulle reti, dati dei token e logo delle reti",
       "passkeyLabel": "INDICE PASSKEY",
@@ -45,7 +45,7 @@
       "unableToVerify": "Impossibile verificare — richiesta RPC non riuscita",
       "retry": "Riprova",
       "addNetworkBtn": "Aggiungi rete",
-      "incompatibleHint": "Alcuni contratti necessari non sono ancora stati distribuiti su questa rete.\nDistribuiscili con lo strumento Vela Wallet Chain Setup, poi torna e ricontrolla.",
+      "incompatibleHint": "Alcuni contratti necessari non sono ancora stati deployati su questa rete.\nEseguine il deploy con lo strumento Vela Wallet Chain Setup, poi torna e ricontrolla.",
       "openChainSetupTool": "Apri Chain Setup Tool",
       "recheck": "Ricontrolla",
       "chainIdLabel": "Chain ID: {{chainId}}",

@@ -61,6 +61,16 @@
     "txErrorTimeout": "La transacción se envió, pero se agotó el tiempo de confirmación. Revisa el historial más tarde.",
     "txErrorBundlerLoop": "El bundler sigue rechazando el saldo de la cuenta de gas. Inténtalo más tarde o sube el nivel de gas.",
     "txErrorBundlerFund": "La cuenta del bundler necesita más gas. Fondéala en Ajustes.",
-    "txErrorPublicKey": "No se encontró la llave pública de esta cuenta"
+    "txErrorPublicKey": "No se encontró la llave pública de esta cuenta",
+    "lock": {
+      "netTitle": "Red no compatible",
+      "netBody": "Esta solicitud de pago está en una red que Vela aún no admite (cadena {{chainId}}).",
+      "addNetwork": "Agregar esta red",
+      "netNotFound": "No se encontró esa red.",
+      "netNotCompatible": "Esa red aún no es compatible con las cuentas inteligentes de Vela.",
+      "netAddError": "No se pudo agregar la red. Inténtalo de nuevo.",
+      "tokenTitle": "Token desconocido",
+      "tokenBody": "No se pudo reconocer el token de esta solicitud de pago en esta red."
+    }
   }
 }

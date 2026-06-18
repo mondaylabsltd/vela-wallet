@@ -37,7 +37,7 @@
     "localization": {
       "autoExample": "Automático · {{example}}",
       "numberTitle": "Formato de número",
-      "numberSubtitle": "Como os valores são agrupados e qual marca decimal é exibida.",
+      "numberSubtitle": "Como os valores são agrupados e qual separador decimal é exibido.",
       "dateTitle": "Formato de data",
       "dateSubtitle": "Ordem de dia / mês / ano e o separador.",
       "timeTitle": "Formato de hora",

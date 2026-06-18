@@ -73,9 +73,9 @@
       "labelApp": "App",
       "contentMessage": "Message",
       "contentTypedData": "Données signées",
-      "contentCallData": "Données d’appel",
-      "contentMissing": "Le contenu de cette demande n’a pas été enregistré.",
-      "offChainNote": "Signature hors chaîne — rien n’a été envoyé on-chain."
+      "contentCallData": "Données d'appel",
+      "contentMissing": "Le contenu de cette demande n'a pas été enregistré.",
+      "offChainNote": "Signature hors chaîne — rien n'a été envoyé on-chain."
     }
   }
 }

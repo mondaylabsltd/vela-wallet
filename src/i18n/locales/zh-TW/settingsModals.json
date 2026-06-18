@@ -27,7 +27,7 @@
       "bundlerLabel": "BUNDLER 服務",
       "bundlerHint": "需要與 Vela Bundler 相容的端點",
       "fiatLabel": "法幣匯率",
-      "fiatHint": "以 USD 為基準的匯率,決定可選貨幣清單——可替換為涵蓋更廣的來源。",
+      "fiatHint": "以 USD 為基準的匯率，決定可選貨幣清單——可替換為涵蓋更廣的匯率來源。",
       "resetToDefaults": "重設為預設值"
     },
     "addNetwork": {

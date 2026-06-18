@@ -69,9 +69,12 @@
     },
     "gas": {
       "estFee": "Taxa estimada",
-      "gasPrice": "Preço do Gas",
-      "gasPriceUserOp": "Preço do Gas (UserOp)",
-      "gasLimit": "Limite de Gas",
+      "gasPrice": "Preço do gas",
+      "gasPriceUserOp": "Preço do gas (UserOp)",
+      "networkFee": "Taxa de rede",
+      "relayerFee": "Taxa do relayer Vela",
+      "youPay": "Você paga",
+      "gasLimit": "Limite de gas",
       "walletDeployed": "Carteira implantada",
       "deployedYes": "Sim",
       "deployedNo": "Não (primeira tx)"

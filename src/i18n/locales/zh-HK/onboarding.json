@@ -37,7 +37,7 @@
       "createWalletBtn": "建立錢包",
       "successTitle": "你的錢包已就緒！",
       "successMessage": "你的地址適用於全部 {{count}} 個支援網絡。",
-      "verifyHint": "點按下方，在使用錢包前先驗證你的身分是否可用。",
+      "verifyHint": "點按下方，在使用錢包前先驗證你的身份是否可用。",
       "verifySignInBtn": "驗證並登入",
       "syncFailedTitle": "同步失敗",
       "syncFailedMessage": "錢包已建立，但你的公鑰未能同步至伺服器。在此問題解決前，你將無法在其他裝置上登入。",
@@ -45,10 +45,10 @@
       "openSettings": "開啟設定",
       "retryUploadBtn": "重試上載",
       "statusSyncingKey": "正在同步公鑰⋯",
-      "statusSettingUpIdentity": "正在設定安全身分⋯",
+      "statusSettingUpIdentity": "正在設定安全身份⋯",
       "statusExtractingKey": "正在擷取公鑰⋯",
       "statusComputingAddress": "正在計算錢包地址⋯",
-      "statusVerifyingIdentity": "正在驗證身分⋯",
+      "statusVerifyingIdentity": "正在驗證身份⋯",
       "statusSetupCancelled": "設定已取消。",
       "statusVerifyCancelled": "驗證已取消。請重試。",
       "alertNotSupportedTitle": "不支援",
@@ -58,13 +58,13 @@
     "login": {
       "alertNotSupportedTitle": "不支援",
       "alertNotSupportedBody": "此裝置不支援生物辨識認證。",
-      "alertIncompatibleTitle": "裝置不相容",
-      "alertIncompatibleBody": "你裝置的身分提供者與 Vela Wallet 不相容。請於系統設定中切換至 Google 密碼管理工具後重試。",
+      "alertIncompatibleTitle": "裝置不兼容",
+      "alertIncompatibleBody": "你裝置的身份提供者與 Vela Wallet 不兼容。請於系統設定中切換至 Google 密碼管理工具後重試。",
       "alertNotFoundTitle": "找不到帳戶",
-      "alertNotFoundBody": "找不到此身分對應的錢包。\n\n可能原因：\n• 你尚未建立錢包\n• 你的身分尚未同步至此裝置（請檢查 iCloud／Google 設定）\n• 無法連接公鑰伺服器\n\n請嘗試建立新錢包，或確保你的身分提供者（Face ID／指紋）已在各裝置間同步。",
+      "alertNotFoundBody": "找不到此身份對應的錢包。\n\n可能原因：\n• 你尚未建立錢包\n• 你的身份尚未同步至此裝置（請檢查 iCloud／Google 設定）\n• 無法連接公鑰伺服器\n\n請嘗試建立新錢包，或確保你的身份提供者（Face ID／指紋）已在各裝置間同步。",
       "alertSignInFailedTitle": "登入失敗",
       "alertSignInFailedBody": "{{message}}\n\n請確保你的裝置已設定 Face ID、Touch ID 或指紋後重試。",
-      "alertIncompatibleBodyCreate": "你裝置的身分提供者與此錢包不相容。請於系統設定中切換至 Google 密碼管理工具後重試。"
+      "alertIncompatibleBodyCreate": "你裝置的身份提供者與此錢包不兼容。請於系統設定中切換至 Google 密碼管理工具後重試。"
     }
   }
 }

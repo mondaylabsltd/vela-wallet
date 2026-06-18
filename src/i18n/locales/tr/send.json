@@ -61,6 +61,16 @@
     "txErrorTimeout": "İşlem gönderildi ancak onay zaman aşımına uğradı. Geçmişi daha sonra kontrol edin.",
     "txErrorBundlerLoop": "Gas hesabı bakiyesi bundler tarafından sürekli reddediliyor. Daha sonra tekrar deneyin veya gas kademesini yükseltin.",
     "txErrorBundlerFund": "Bundler hesabının daha fazla gas'a ihtiyacı var. Lütfen Ayarlar'dan fonlayın.",
-    "txErrorPublicKey": "Bu hesap için açık anahtar bulunamadı"
+    "txErrorPublicKey": "Bu hesap için açık anahtar bulunamadı",
+    "lock": {
+      "netTitle": "Ağ desteklenmiyor",
+      "netBody": "Bu ödeme isteği Vela'nın henüz desteklemediği bir ağda (zincir {{chainId}}).",
+      "addNetwork": "Bu ağı ekle",
+      "netNotFound": "O ağı bulamadık.",
+      "netNotCompatible": "O ağ henüz Vela akıllı hesaplarıyla uyumlu değil.",
+      "netAddError": "Ağ eklenemedi. Lütfen tekrar deneyin.",
+      "tokenTitle": "Bilinmeyen token",
+      "tokenBody": "Bu ödeme isteğindeki token'ı bu ağda tanıyamadık."
+    }
   }
 }

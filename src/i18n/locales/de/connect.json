@@ -75,7 +75,7 @@
       "contentTypedData": "Signierte Daten",
       "contentCallData": "Call-Daten",
       "contentMissing": "Für diese Anfrage wurde kein Inhalt gespeichert.",
-      "offChainNote": "Off-Chain-Signatur – es wurde nichts on-chain gesendet."
+      "offChainNote": "Off-Chain-Signatur — es wurde nichts on-chain gesendet."
     }
   }
 }

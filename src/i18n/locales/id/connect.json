@@ -73,7 +73,7 @@
       "labelApp": "Aplikasi",
       "contentMessage": "Pesan",
       "contentTypedData": "Data yang ditandatangani",
-      "contentCallData": "Data panggilan",
+      "contentCallData": "Calldata",
       "contentMissing": "Konten untuk permintaan ini tidak tercatat.",
       "offChainNote": "Tanda tangan off-chain — tidak ada yang dikirim ke on-chain."
     }

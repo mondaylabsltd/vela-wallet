@@ -55,6 +55,16 @@
     "txErrorTimeout": "Transaksi dikirim tetapi konfirmasi melebihi waktu tunggu. Periksa riwayat nanti.",
     "txErrorBundlerLoop": "Saldo akun gas terus ditolak oleh bundler. Coba lagi nanti atau naikkan tingkat gas.",
     "txErrorBundlerFund": "Akun bundler butuh lebih banyak gas. Isi dananya di Pengaturan.",
-    "txErrorPublicKey": "Kunci publik untuk akun ini tidak ditemukan"
+    "txErrorPublicKey": "Kunci publik untuk akun ini tidak ditemukan",
+    "lock": {
+      "netTitle": "Jaringan tidak didukung",
+      "netBody": "Permintaan pembayaran ini berada di jaringan yang belum didukung Vela (chain {{chainId}}).",
+      "addNetwork": "Tambah jaringan ini",
+      "netNotFound": "Kami tidak dapat menemukan jaringan itu.",
+      "netNotCompatible": "Jaringan itu belum kompatibel dengan akun pintar Vela.",
+      "netAddError": "Gagal menambahkan jaringan. Silakan coba lagi.",
+      "tokenTitle": "Token tidak dikenal",
+      "tokenBody": "Kami tidak dapat mengenali token dalam permintaan pembayaran ini di jaringan ini."
+    }
   }
 }

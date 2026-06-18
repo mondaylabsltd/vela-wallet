@@ -19,7 +19,7 @@
       "denialNonceExceeded": "免费额度已用完。",
       "denialTreasuryDepleted": "免费名额暂时用完。",
       "denialBalanceTooLow": "钱包余额不足，不符合资格。",
-      "denialNoPasskey": "需要通行密钥",
+      "denialNoPasskey": "免费激活需要通行密钥。",
       "denialRateLimited": "请求次数过多，请稍后重试。",
       "denialTransferFailed": "转账失败，请重试。"
     },
@@ -71,6 +71,9 @@
       "estFee": "预估费用",
       "gasPrice": "Gas 价格",
       "gasPriceUserOp": "Gas 价格 (UserOp)",
+      "networkFee": "网络费",
+      "relayerFee": "Vela 中继费",
+      "youPay": "实付",
       "gasLimit": "Gas 上限",
       "walletDeployed": "钱包已部署",
       "deployedYes": "是",

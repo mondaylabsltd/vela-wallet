@@ -1,6 +1,6 @@
 {
   "addToken": {
-    "addedTokensLabel": "Eklenen Tokenlar",
+    "addedTokensLabel": "Eklenen Token'lar",
     "navTitle": "Token Ekle",
     "tabErc20": "ERC-20 Token",
     "tabNative": "Yerel Token",
@@ -17,7 +17,7 @@
     "labelChainId": "Zincir ID",
     "labelNativeToken": "Yerel Token",
     "labelDecimals": "Ondalık",
-    "labelExplorer": "Gezgin",
+    "labelExplorer": "Blok Gezgini",
     "labelExplorerLink": "Görüntüle ↗",
     "labelSymbol": "Sembol",
     "labelNetwork": "Ağ",

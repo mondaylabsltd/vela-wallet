@@ -10,7 +10,7 @@
     "chainId": "Rete {{chainId}}",
     "checkingCompat": "Verifica della compatibilità…",
     "compatTitle": "Verifica di compatibilità",
-    "deployContracts": "Distribuisci i contratti mancanti ↗",
+    "deployContracts": "Esegui il deploy dei contratti mancanti ↗",
     "netPickerSearchPlaceholder": "Cerca rete…",
     "netPickerEmpty": "Nessuna rete corrisponde a «{{query}}»",
     "labelName": "Nome",

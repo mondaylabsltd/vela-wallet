@@ -10,7 +10,7 @@
     "emptyFilter": "이 네트워크에 거래가 없습니다",
     "txLabelDappTx": "dApp 거래",
     "txLabelSignMessage": "메시지 서명",
-    "txLabelSignTypedData": "타입 데이터 서명",
+    "txLabelSignTypedData": "구조화된 데이터 서명",
     "txLabelSent": "{{symbol}} 보냄",
     "txSentSubtitle": "받는 곳: {{toName}} · {{networkName}}"
   }

@@ -13,7 +13,7 @@
     "techSignerLabel": "Модуль подписи",
     "techSignerValue": "SafeWebAuthnSharedSigner",
     "techNetworksLabel": "Сети",
-    "techNetworksValue": "{{count}} сетей EVM",
+    "techNetworksValue": "Сетей EVM: {{count}}",
     "linkWebsite": "Сайт",
     "linkGitHub": "GitHub",
     "linkSafeWallet": "Safe Wallet",

@@ -5,7 +5,7 @@
     "statement": "Sao kê",
     "tabActivity": "Hoạt động",
     "tabConnections": "Kết nối",
-    "liveIndicator": "Trực tiếp · đang chờ thanh toán",
+    "liveIndicator": "Trực tiếp · đang theo dõi khoản nhận",
     "emptyNoActivityNetwork": "Chưa có hoạt động trên mạng này",
     "emptyNoActivity": "Chưa có hoạt động nào",
     "emptySubtitle": "Các khoản thanh toán nhận được sẽ hiển thị tại đây theo thời gian thực.",
@@ -35,10 +35,10 @@
     "rescanScanning": "Đang quét {{window}}…",
     "rescanFound": "Đã tìm thấy {{count}} khoản thanh toán mới.",
     "rescanNone": "Không tìm thấy khoản thanh toán mới nào trong {{window}}.",
-    "rescanFailed": "Không thể kết nối {{names}}. Hãy sửa RPC từ biểu ngữ trang chủ, hoặc kiểm tra trình khám phá khối.",
+    "rescanFailed": "Không thể kết nối {{names}}. Hãy sửa RPC từ thanh thông báo ở màn hình chính, hoặc kiểm tra block explorer.",
     "rescanAgain": "Quét lại lần nữa",
     "rescanClose": "Xong",
-    "rescanNativeNote": "Đồng gốc (ETH, BNB, MATIC…) nhận trên một số mạng có thể không hiển thị ở đây. Số dư của bạn vẫn chính xác — hãy mở trình khám phá khối để xem đầy đủ.",
-    "rescanExplorerTitle": "Kiểm tra trực tiếp trên trình khám phá khối"
+    "rescanNativeNote": "Coin gốc (ETH, BNB, MATIC…) nhận trên một số mạng có thể không hiển thị ở đây. Số dư của bạn vẫn chính xác — hãy mở block explorer để xem đầy đủ.",
+    "rescanExplorerTitle": "Kiểm tra trực tiếp trên block explorer"
   }
 }

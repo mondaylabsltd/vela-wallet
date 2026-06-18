@@ -37,7 +37,7 @@
       "createWalletBtn": "Buat Dompet",
       "successTitle": "Dompet Anda siap!",
       "successMessage": "Alamat Anda berlaku di semua {{count}} jaringan yang didukung.",
-      "verifyHint": "Ketuk di bawah untuk memverifikasi identitas Anda berfungsi sebelum menggunakan dompet.",
+      "verifyHint": "Ketuk di bawah untuk memastikan identitas Anda berfungsi sebelum menggunakan dompet.",
       "verifySignInBtn": "Verifikasi & Masuk",
       "syncFailedTitle": "Sinkronisasi gagal",
       "syncFailedMessage": "Dompet dibuat, tetapi kunci publik Anda belum tersinkron ke server. Anda tidak akan bisa masuk di perangkat lain sampai masalah ini teratasi.",

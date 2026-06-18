@@ -8,8 +8,8 @@
     "netSearchPlaceholder": "名稱或 chain ID（例如 Avalanche、43114）",
     "netSearching": "正在搜尋⋯",
     "chainId": "Chain {{chainId}}",
-    "checkingCompat": "正在檢查相容性⋯",
-    "compatTitle": "相容性檢查",
+    "checkingCompat": "正在檢查兼容性⋯",
+    "compatTitle": "兼容性檢查",
     "deployContracts": "部署缺少的合約 ↗",
     "netPickerSearchPlaceholder": "搜尋網絡⋯",
     "netPickerEmpty": "沒有網絡符合「{{query}}」",
@@ -22,7 +22,7 @@
     "labelSymbol": "代號",
     "labelNetwork": "網絡",
     "labelRpcUrl": "RPC URL",
-    "compatible": "相容",
+    "compatible": "兼容",
     "networkAdded": "已新增網絡",
     "addNetworkBtn": "新增網絡",
     "tokenAddressLabel": "代幣地址",
@@ -37,6 +37,6 @@
     "errorAddNetwork": "新增網絡失敗。",
     "errorAlreadyAdded": "此網絡已新增",
     "errorChainNotFound": "找不到區塊鏈資料",
-    "errorNotCompatible": "與 Vela Wallet 不相容"
+    "errorNotCompatible": "與 Vela Wallet 不兼容"
   }
 }

@@ -14,7 +14,7 @@
     "scenarioEip712Permit": "EIP-712 Permit2",
     "scenarioEip712PermitSub": "Типизированные данные — одобрение токена без газа",
     "scenarioEip712Unknown": "EIP-712 неизвестный",
-    "scenarioEip712UnknownSub": "Типизированные данные — нет дескриптора (вслепую)",
+    "scenarioEip712UnknownSub": "Типизированные данные — нет дескриптора (слепая подпись)",
     "scenarioBlindTx": "Слепая транзакция",
     "scenarioBlindTxSub": "Неизвестный контракт — нет дескриптора",
     "scenario1inchSwap": "Обмен 1inch",

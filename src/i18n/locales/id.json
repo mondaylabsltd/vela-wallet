@@ -81,7 +81,7 @@
     }
   },
   "time": {
-    "now": "baru saja",
+    "now": "sekarang",
     "minutesShort": "{{n}} mnt",
     "hoursShort": "{{n}} jam"
   },

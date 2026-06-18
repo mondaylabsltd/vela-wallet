@@ -21,13 +21,13 @@
     "connNote": "Immer nur eine aktive Verbindung",
     "connDisconnect": "Trennen",
     "connReconnectBtn": "Jetzt neu verbinden",
-    "connReconnectStuck": "Neu verbinden fehlgeschlagen. Versuche es erneut oder trenne die Verbindung und koppele neu.",
+    "connReconnectStuck": "Erneute Verbindung fehlgeschlagen. Versuchen Sie es erneut oder trennen Sie die Verbindung und koppeln Sie neu.",
     "connEventsHead": "Verbindungsaktivität · {{count}}",
     "connNoEvents": "Noch keine Anfragen über diese Verbindung.",
     "toastReceived": "{{amount}} {{token}} erhalten",
     "rescanButton": "Erneut scannen",
     "rescanTitle": "Letzte Aktivität erneut scannen",
-    "rescanSubtitle": "Fehlt eine Zahlung? Frage die Blockchain direkt nach aktuellen Transfers ab.",
+    "rescanSubtitle": "Fehlt eine Zahlung? Fragen Sie die Blockchain direkt nach aktuellen Transfers ab.",
     "rescanWindow10m": "Letzte 10 Minuten",
     "rescanWindow1h": "Letzte Stunde",
     "rescanWindow6h": "Letzte 6 Stunden",
@@ -35,10 +35,10 @@
     "rescanScanning": "{{window}} wird gescannt…",
     "rescanFound": "{{count}} neue Zahlung(en) gefunden.",
     "rescanNone": "Keine neuen Zahlungen in {{window}} gefunden.",
-    "rescanFailed": "{{names}} nicht erreichbar. Korrigiere den RPC über das Startseiten-Banner oder prüfe einen Block-Explorer.",
+    "rescanFailed": "{{names}} nicht erreichbar. Korrigieren Sie den RPC über das Startseiten-Banner oder prüfen Sie einen Block-Explorer.",
     "rescanAgain": "Noch einmal scannen",
     "rescanClose": "Fertig",
-    "rescanNativeNote": "Native Coins (ETH, BNB, MATIC…), die in einigen Netzwerken empfangen werden, können hier nicht erkannt werden. Dein Guthaben bleibt korrekt – öffne einen Block-Explorer für den vollständigen Eintrag.",
+    "rescanNativeNote": "Native Coins (ETH, BNB, MATIC…), die in einigen Netzwerken empfangen werden, können hier nicht erkannt werden. Ihr Guthaben bleibt korrekt — öffnen Sie einen Block-Explorer für den vollständigen Eintrag.",
     "rescanExplorerTitle": "Direkt im Block-Explorer prüfen"
   }
 }

@@ -89,7 +89,7 @@
     "sent": "보냄",
     "received": "받음",
     "toAddr": "받는 곳: {{addr}}",
-    "fromAddr": "보낸 곳: {{addr}}",
+    "fromAddr": "보내는 곳: {{addr}}",
     "signatureRequest": "서명 요청",
     "typedDataSignature": "타입 데이터 서명",
     "dappTransaction": "dApp 거래",

@@ -10,15 +10,15 @@
       "txHash": "İşlem Hash'i",
       "confirming": "Onaylanıyor…",
       "confirmingHint": "Gönderildi! Zincir üzerinde onaylanıyor — gezgin bağlantısı birazdan görünecek.",
-      "scanHint": "Gezginde görüntülemek için tara",
+      "scanHint": "Blok Gezgininde görüntülemek için tara",
       "footerBrand": "VELA WALLET",
       "footerUrl": "getvela.app",
-      "explorer": "Gezgin",
+      "explorer": "Blok Gezgini",
       "share": "Paylaş",
       "done": "Tamam",
       "copiedTitle": "Kopyalandı",
       "copiedImageBody": "Makbuz görseli panoya kopyalandı.",
-      "copiedLinkBody": "Gezgin linki kopyalandı."
+      "copiedLinkBody": "Blok Gezgini linki kopyalandı."
     },
     "detail": {
       "received": "Alındı",

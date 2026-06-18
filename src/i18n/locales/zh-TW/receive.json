@@ -52,7 +52,7 @@
       "scanHintAddress": "任意錢包均可掃描 — 需自行選擇網路、代幣和金額",
       "qrEip681": "收款請求",
       "qrAddress": "地址",
-      "openApp": "在錢包應用中開啟",
+      "openApp": "在錢包 App 中開啟",
       "manualNote": "或手動填入以下資訊：",
       "recipient": "收款地址",
       "network": "網路",

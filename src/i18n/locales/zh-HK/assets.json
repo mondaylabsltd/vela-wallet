@@ -25,9 +25,9 @@
     "errorSaveRpc": "儲存 RPC URL 失敗。",
     "rpcFixUnreachable": "無法連接該 RPC，請檢查網址後重試。",
     "rpcFixWrongChain": "該 RPC 屬於其他網絡（鏈 {{actual}}，應為 {{expected}}）。",
-    "rpcProvidersTitle": "喺邊度攞可靠嘅 RPC",
-    "rpcProvidersHint": "以下為免費節點服務——註冊後複製你嘅 URL，貼上方。",
-    "rpcReport": "仍然搞唔掂？回報俾我哋",
+    "rpcProvidersTitle": "在哪裡取得可靠的 RPC",
+    "rpcProvidersHint": "以下為免費節點服務——註冊後複製你的 URL，再貼到上方。",
+    "rpcReport": "仍然無法使用？回報給我們",
     "invalidQrTitle": "QR 無效",
     "invalidQrMessage": "請掃描有效的以太坊地址或連接 URI。",
     "chainFallback": "Chain {{chainId}}"

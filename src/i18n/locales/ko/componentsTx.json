@@ -38,7 +38,7 @@
       "statusPending": "대기 중",
       "opContractInteraction": "컨트랙트 상호작용",
       "opSignature": "서명",
-      "opTypedDataSignature": "타입 데이터 서명",
+      "opTypedDataSignature": "구조화된 데이터 서명",
       "opTransfer": "전송"
     }
   }

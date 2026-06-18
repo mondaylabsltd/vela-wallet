@@ -38,9 +38,9 @@
     "toLabel": "Para",
     "estFeeLabel": "Taxa estimada",
     "estimatingFee": "Estimando...",
-    "gasPriceLabel": "Preço do Gas",
-    "gasPriceUserOpLabel": "Preço do Gas (UserOp)",
-    "gasLimitLabel": "Limite de Gas",
+    "gasPriceLabel": "Preço do gas",
+    "gasPriceUserOpLabel": "Preço do gas (UserOp)",
+    "gasLimitLabel": "Limite de gas",
     "walletDeployedLabel": "Carteira implantada",
     "walletDeployedYes": "Sim",
     "walletDeployedNo": "Não (primeira tx)",
@@ -61,6 +61,16 @@
     "txErrorTimeout": "Transação enviada, mas a confirmação expirou. Verifique o histórico mais tarde.",
     "txErrorBundlerLoop": "O saldo da conta de gas continua sendo rejeitado pelo bundler. Tente de novo mais tarde ou aumente o nível de gas.",
     "txErrorBundlerFund": "A conta do bundler precisa de mais gas. Adicione fundos nas Configurações.",
-    "txErrorPublicKey": "Chave pública não encontrada para esta conta"
+    "txErrorPublicKey": "Chave pública não encontrada para esta conta",
+    "lock": {
+      "netTitle": "Rede não compatível",
+      "netBody": "Esta solicitação de pagamento está em uma rede que a Vela ainda não suporta (chain {{chainId}}).",
+      "addNetwork": "Adicionar esta rede",
+      "netNotFound": "Não foi possível encontrar esta rede.",
+      "netNotCompatible": "Esta rede ainda não é compatível com as contas inteligentes da Vela.",
+      "netAddError": "Não foi possível adicionar a rede. Tente de novo.",
+      "tokenTitle": "Token desconhecido",
+      "tokenBody": "Não foi possível reconhecer o token desta solicitação de pagamento nesta rede."
+    }
   }
 }

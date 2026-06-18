@@ -55,6 +55,16 @@
     "txErrorTimeout": "交易已提交，但確認逾時。請稍後查看記錄。",
     "txErrorBundlerLoop": "Gas 帳戶餘額持續被 bundler 拒絕。請稍後重試或提高 Gas 等級。",
     "txErrorBundlerFund": "Bundler 帳戶需要更多 Gas。請於設定中為其注資。",
-    "txErrorPublicKey": "找不到此帳戶的公鑰"
+    "txErrorPublicKey": "找不到此帳戶的公鑰",
+    "lock": {
+      "netTitle": "不支援此網絡",
+      "netBody": "此付款請求所在的網絡 Vela 尚未支援（鏈 ID {{chainId}}）。",
+      "addNetwork": "新增此網絡",
+      "netNotFound": "找不到此網絡。",
+      "netNotCompatible": "此網絡尚未兼容 Vela 智能帳戶。",
+      "netAddError": "新增網絡失敗，請再試一次。",
+      "tokenTitle": "未知代幣",
+      "tokenBody": "無法辨識此付款請求中該網絡上的代幣。"
+    }
   }
 }

@@ -28,9 +28,9 @@
     "alertLoadTokensError": "토큰을 불러오지 못했습니다.",
 
     "warnNotEnoughToken": "이 계정에 {{symbol}} 잔액이 부족합니다",
-    "warnInsufficientForGas": "{{sym}} 잔액이 금액 + Gas 수수료를 충당하기에 부족합니다",
-    "warnInsufficientGas": "Gas 수수료를 낼 {{sym}}이(가) 부족합니다",
-    "warnNeedGas": "Gas 수수료를 내려면 {{sym}}이(가) 필요합니다",
+    "warnInsufficientForGas": "{{sym}} 잔액이 금액 + 가스 수수료를 충당하기에 부족합니다",
+    "warnInsufficientGas": "가스 수수료를 낼 {{sym}}이(가) 부족합니다",
+    "warnNeedGas": "가스 수수료를 내려면 {{sym}}이(가) 필요합니다",
 
     "confirmTitle": "확인",
     "walletFallbackName": "지갑",
@@ -38,13 +38,13 @@
     "toLabel": "받는 곳",
     "estFeeLabel": "예상 수수료",
     "estimatingFee": "추정 중...",
-    "gasPriceLabel": "Gas 가격",
-    "gasPriceUserOpLabel": "Gas 가격 (UserOp)",
-    "gasLimitLabel": "Gas 한도",
+    "gasPriceLabel": "가스 가격",
+    "gasPriceUserOpLabel": "가스 가격 (UserOp)",
+    "gasLimitLabel": "가스 한도",
     "walletDeployedLabel": "지갑 배포 여부",
     "walletDeployedYes": "예",
     "walletDeployedNo": "아니요 (첫 거래)",
-    "checkingGas": "Gas 확인 중...",
+    "checkingGas": "가스 확인 중...",
     "confirmSendBtn": "확인 후 보내기",
 
     "txPreparing": "거래 준비 중...",
@@ -59,8 +59,18 @@
     "txRetryBtn": "다시 시도",
 
     "txErrorTimeout": "거래는 제출되었지만 확인이 시간 초과되었습니다. 나중에 내역을 확인하세요.",
-    "txErrorBundlerLoop": "Gas 계정 잔액이 bundler에서 계속 거부되고 있습니다. 나중에 다시 시도하거나 Gas 등급을 높이세요.",
-    "txErrorBundlerFund": "Bundler 계정에 Gas가 더 필요합니다. 설정에서 충전하세요.",
-    "txErrorPublicKey": "이 계정의 공개 키를 찾을 수 없습니다"
+    "txErrorBundlerLoop": "가스 계정 잔액이 bundler에서 계속 거부되고 있습니다. 나중에 다시 시도하거나 가스 등급을 높이세요.",
+    "txErrorBundlerFund": "Bundler 계정에 가스가 더 필요합니다. 설정에서 충전하세요.",
+    "txErrorPublicKey": "이 계정의 공개 키를 찾을 수 없습니다",
+    "lock": {
+      "netTitle": "지원되지 않는 네트워크",
+      "netBody": "이 결제 요청은 Vela가 아직 지원하지 않는 네트워크(체인 {{chainId}})에 있습니다.",
+      "addNetwork": "이 네트워크 추가",
+      "netNotFound": "해당 네트워크를 찾을 수 없습니다.",
+      "netNotCompatible": "해당 네트워크는 아직 Vela 스마트 계정과 호환되지 않습니다.",
+      "netAddError": "네트워크를 추가하지 못했습니다. 다시 시도하세요.",
+      "tokenTitle": "알 수 없는 토큰",
+      "tokenBody": "이 네트워크에서 해당 결제 요청의 토큰을 인식할 수 없습니다."
+    }
   }
 }

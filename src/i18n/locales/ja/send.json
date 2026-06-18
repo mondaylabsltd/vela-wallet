@@ -61,6 +61,16 @@
     "txErrorTimeout": "トランザクションは送信されましたが、承認がタイムアウトしました。後で履歴をご確認ください。",
     "txErrorBundlerLoop": "Gas アカウントの残高が Bundler に繰り返し拒否されています。後でもう一度試すか、Gas のティアを上げてください。",
     "txErrorBundlerFund": "Bundler アカウントの Gas が不足しています。設定からチャージしてください。",
-    "txErrorPublicKey": "このアカウントの公開鍵が見つかりません"
+    "txErrorPublicKey": "このアカウントの公開鍵が見つかりません",
+    "lock": {
+      "netTitle": "非対応のネットワーク",
+      "netBody": "この支払いリクエストは Vela がまだ対応していないネットワーク上にあります（チェーン {{chainId}}）。",
+      "addNetwork": "このネットワークを追加",
+      "netNotFound": "そのネットワークが見つかりませんでした。",
+      "netNotCompatible": "そのネットワークはまだ Vela スマートアカウントと互換性がありません。",
+      "netAddError": "ネットワークを追加できませんでした。もう一度お試しください。",
+      "tokenTitle": "不明なトークン",
+      "tokenBody": "このネットワーク上で、この支払いリクエストのトークンを認識できませんでした。"
+    }
   }
 }

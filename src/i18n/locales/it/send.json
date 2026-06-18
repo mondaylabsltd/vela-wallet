@@ -37,11 +37,11 @@
     "fromLabel": "Da",
     "toLabel": "A",
     "estFeeLabel": "Comm. stimata",
-    "estimatingFee": "Stima…",
+    "estimatingFee": "Stima in corso…",
     "gasPriceLabel": "Prezzo del gas",
     "gasPriceUserOpLabel": "Prezzo del gas (UserOp)",
     "gasLimitLabel": "Limite di gas",
-    "walletDeployedLabel": "Wallet distribuito",
+    "walletDeployedLabel": "Wallet deployato",
     "walletDeployedYes": "Sì",
     "walletDeployedNo": "No (prima transazione)",
     "checkingGas": "Controllo del gas…",
@@ -51,7 +51,7 @@
     "txSigning": "In attesa della biometria…",
     "txSubmitting": "Invio alla rete…",
     "txSubmitted": "Transazione inviata alla rete",
-    "txSlowConfirm": "Ci sta mettendo più del solito, attendi…",
+    "txSlowConfirm": "Sta richiedendo più tempo del solito, attendi…",
     "txWaitingConfirm": "In attesa della conferma sulla blockchain…",
     "txElapsed": "{{elapsed}} s trascorsi — ci siamo quasi",
     "txRemaining": "~{{remaining}} s rimanenti",
@@ -61,6 +61,16 @@
     "txErrorTimeout": "Transazione inviata ma la conferma è scaduta. Controlla la cronologia più tardi.",
     "txErrorBundlerLoop": "Il saldo dell'account gas continua a essere rifiutato dal bundler. Riprova più tardi o aumenta il livello di gas.",
     "txErrorBundlerFund": "All'account del bundler serve più gas. Ricaricalo nelle impostazioni.",
-    "txErrorPublicKey": "Chiave pubblica non trovata per questo account"
+    "txErrorPublicKey": "Chiave pubblica non trovata per questo account",
+    "lock": {
+      "netTitle": "Rete non supportata",
+      "netBody": "Questa richiesta di pagamento è su una rete che Vela non supporta ancora (chain {{chainId}}).",
+      "addNetwork": "Aggiungi questa rete",
+      "netNotFound": "Impossibile trovare quella rete.",
+      "netNotCompatible": "Quella rete non è ancora compatibile con gli smart account di Vela.",
+      "netAddError": "Impossibile aggiungere la rete. Riprova.",
+      "tokenTitle": "Token sconosciuto",
+      "tokenBody": "Impossibile riconoscere il token di questa richiesta di pagamento su questa rete."
+    }
   }
 }

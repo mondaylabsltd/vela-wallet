@@ -11,7 +11,7 @@
     "txLabelDappTx": "Transaksi dApp",
     "txLabelSignMessage": "Tanda Tangani Pesan",
     "txLabelSignTypedData": "Tanda Tangani Typed Data",
-    "txLabelSent": "Mengirim {{symbol}}",
+    "txLabelSent": "Terkirim {{symbol}}",
     "txSentSubtitle": "Ke {{toName}} · {{networkName}}"
   }
 }

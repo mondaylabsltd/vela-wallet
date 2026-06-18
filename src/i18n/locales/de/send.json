@@ -55,6 +55,16 @@
     "txErrorTimeout": "Transaktion übermittelt, aber Zeitüberschreitung bei der Bestätigung. Prüfen Sie den Verlauf später.",
     "txErrorBundlerLoop": "Das Gas-Konto-Guthaben wird vom Bundler weiterhin abgelehnt. Versuchen Sie es später erneut oder erhöhen Sie die Gas-Stufe.",
     "txErrorBundlerFund": "Das Bundler-Konto benötigt mehr Gas. Bitte füllen Sie es in den Einstellungen auf.",
-    "txErrorPublicKey": "Kein öffentlicher Schlüssel für dieses Konto gefunden"
+    "txErrorPublicKey": "Kein öffentlicher Schlüssel für dieses Konto gefunden",
+    "lock": {
+      "netTitle": "Netzwerk nicht unterstützt",
+      "netBody": "Diese Zahlungsanfrage befindet sich auf einem Netzwerk, das Vela noch nicht unterstützt (Chain {{chainId}}).",
+      "addNetwork": "Dieses Netzwerk hinzufügen",
+      "netNotFound": "Dieses Netzwerk konnte nicht gefunden werden.",
+      "netNotCompatible": "Dieses Netzwerk ist noch nicht mit Vela Smart Accounts kompatibel.",
+      "netAddError": "Das Netzwerk konnte nicht hinzugefügt werden. Bitte versuchen Sie es erneut.",
+      "tokenTitle": "Unbekanntes Token",
+      "tokenBody": "Das Token in dieser Zahlungsanfrage konnte in diesem Netzwerk nicht erkannt werden."
+    }
   }
 }

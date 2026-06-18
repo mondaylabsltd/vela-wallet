@@ -22,8 +22,8 @@
 
     "alertInvalidAddressTitle": "Địa chỉ không hợp lệ",
     "alertInvalidAddressBody": "Vui lòng nhập một địa chỉ Ethereum hợp lệ (0x...).",
-    "alertInvalidAmountTitle": "Số tiền không hợp lệ",
-    "alertInvalidAmountBody": "Vui lòng nhập một số tiền hợp lệ lớn hơn 0.",
+    "alertInvalidAmountTitle": "Số lượng không hợp lệ",
+    "alertInvalidAmountBody": "Vui lòng nhập một số lượng hợp lệ lớn hơn 0.",
     "alertInsufficientBalanceTitle": "Số dư không đủ",
     "alertLoadTokensError": "Không tải được token.",
 
@@ -61,6 +61,16 @@
     "txErrorTimeout": "Giao dịch đã gửi nhưng hết thời gian chờ xác nhận. Kiểm tra lại trong lịch sử sau.",
     "txErrorBundlerLoop": "Số dư tài khoản gas liên tục bị bundler từ chối. Hãy thử lại sau hoặc tăng mức gas.",
     "txErrorBundlerFund": "Tài khoản bundler cần thêm gas. Vui lòng nạp trong Cài đặt.",
-    "txErrorPublicKey": "Không tìm thấy khóa công khai cho tài khoản này"
+    "txErrorPublicKey": "Không tìm thấy khóa công khai cho tài khoản này",
+    "lock": {
+      "netTitle": "Mạng không được hỗ trợ",
+      "netBody": "Yêu cầu thanh toán này nằm trên một mạng mà Vela chưa hỗ trợ (chain {{chainId}}).",
+      "addNetwork": "Thêm mạng này",
+      "netNotFound": "Chúng tôi không tìm thấy mạng đó.",
+      "netNotCompatible": "Mạng đó chưa tương thích với tài khoản thông minh Vela.",
+      "netAddError": "Không thêm được mạng. Vui lòng thử lại.",
+      "tokenTitle": "Token không xác định",
+      "tokenBody": "Chúng tôi không nhận diện được token trong yêu cầu thanh toán này trên mạng này."
+    }
   }
 }
