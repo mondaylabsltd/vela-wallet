@@ -337,7 +337,10 @@ export interface LocalTransaction {
 export const MAX_SIGNED_CONTENT = 8000;
 
 export async function saveTransaction(tx: LocalTransaction): Promise<void> {
-  const txs = await loadTransactions();
+  // De-dupe by id: a resubmitted UserOp (e.g. two identical sends sharing a
+  // nonce) yields the same userOpHash, which is the record id — without this it
+  // would persist twice and surface as a React duplicate-key warning in the feed.
+  const txs = (await loadTransactions()).filter((t) => t.id !== tx.id);
   txs.unshift(tx); // newest first
   // Keep max 200 transactions
   if (txs.length > 200) txs.length = 200;

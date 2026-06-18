@@ -231,6 +231,9 @@ function decodeString(hex: string): string | null {
  */
 export async function resolveRecipientIdentity(address: string): Promise<RecipientIdentity | null> {
   if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return null;
+  // The zero address is a mint/burn counterparty (e.g. EIP-7708 native events),
+  // not a real recipient — it has no identity and would 404 the passkey index.
+  if (/^0x0{40}$/.test(address)) return null;
 
   // 1. Cache
   const cached = await getCache(address);
