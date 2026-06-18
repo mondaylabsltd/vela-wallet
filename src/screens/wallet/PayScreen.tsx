@@ -52,6 +52,7 @@ export default function PayScreen() {
     decimals: isNative ? 18 : decimals, logo: null, name: symbol,
     tokenAddress: token || null, priceUsd: null, spam: false,
   }), [chainId, networkName, symbol, decimals, isNative, token]);
+  const badge = useMemo(() => tokenBadgeNetwork(apiToken), [apiToken]);
 
   const eip681 = buildEIP681({ recipient: to, chainId, tokenAddress: token || null, decimals, amount });
   const amountBase = amount ? toBaseUnits(amount, decimals).toString() : '';
@@ -95,13 +96,17 @@ export default function PayScreen() {
         </View>
 
         <VelaCard elevated style={styles.card}>
-          <TokenLogo symbol={symbol} logoUrls={tokenLogoURLs(apiToken)} chain={tokenBadgeNetwork(apiToken)} size={56} />
+          <TokenLogo symbol={symbol} logoUrls={tokenLogoURLs(apiToken)} chain={badge} size={56} />
           <Text style={styles.eyebrow}>{t('receive.pay.title')}</Text>
           <Text style={styles.headline}>{headline}</Text>
-          <View style={styles.networkRow}>
-            {network && <ChainLogo label={network.iconLabel} color={network.iconColor} bgColor={network.iconBg} logoURL={network.logoURL} size={16} />}
-            <Text style={styles.network}>{networkName}</Text>
-          </View>
+          {/* The token logo already badges the chain; only spell the network out
+              when there's no badge (a native coin on its own chain). */}
+          {!badge && (
+            <View style={styles.networkRow}>
+              {network && <ChainLogo label={network.iconLabel} color={network.iconColor} bgColor={network.iconBg} logoURL={network.logoURL} size={16} />}
+              <Text style={styles.network}>{networkName}</Text>
+            </View>
+          )}
 
           <Pressable style={styles.addrRow} onPress={() => copy('to', to)}>
             <Text style={styles.addr} numberOfLines={1}>{short(to)}</Text>

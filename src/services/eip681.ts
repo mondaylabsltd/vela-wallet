@@ -157,7 +157,7 @@ export function parseEIP681(input: string): EIP681Request | null {
 }
 
 /** Public fallback host for payment links when there's no web origin (native app). */
-export const PAY_LINK_FALLBACK = 'https://getvela.app/pay';
+export const PAY_LINK_FALLBACK = 'https://wallet.getvela.app/pay';
 
 /**
  * The base for payment links. On the web we use the *current* origin's /pay
