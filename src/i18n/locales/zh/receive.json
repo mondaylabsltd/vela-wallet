@@ -36,8 +36,10 @@
       "summaryOpen": "任意数量的 {{symbol}} · {{network}}",
       "share": "分享",
       "save": "保存",
+      "saveImage": "保存图片",
       "savedTitle": "已保存",
       "savedBody": "收款二维码已保存到相册。",
+      "downloadedBody": "图片已下载到本地。",
       "permTitle": "需要权限",
       "permBody": "请允许访问相册以保存图片。",
       "shareError": "无法分享图片。"

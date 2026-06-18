@@ -11,9 +11,9 @@ import { chainName, getAllNetworksSync } from '@/models/network';
 import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import { copyToClipboard, hapticLight, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
-import { saveReceiveCard, shareReceiveCard } from '@/services/share-card';
+import { saveReceiveCard } from '@/services/share-card';
 import { fetchTokens } from '@/services/wallet-api';
-import { ArrowLeft, Check, Copy, Download, Share2, ShieldAlert } from 'lucide-react-native';
+import { ArrowLeft, Check, Copy, Download, ShieldAlert } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
@@ -151,19 +151,12 @@ export default function ReceiveScreen() {
 
   const shareFileName = `vela-${isRequest ? 'request' : 'address'}-${(address || '').slice(0, 10)}`;
 
-  const onShareImage = useCallback(async () => {
-    try {
-      await shareReceiveCard(cardRef, shareModel, shareFileName);
-    } catch {
-      showAlert(t('common.error'), t('receive.request.shareError'));
-    }
-  }, [shareModel, shareFileName, t]);
-
   const onSaveImage = useCallback(async () => {
     setSavingImage(true);
     try {
       const result = await saveReceiveCard(cardRef, shareModel, shareFileName);
       if (result === 'saved') showAlert(t('receive.request.savedTitle'), t('receive.request.savedBody'));
+      else if (result === 'downloaded') showAlert(t('receive.request.savedTitle'), t('receive.request.downloadedBody'));
       else if (result === 'denied') showAlert(t('receive.request.permTitle'), t('receive.request.permBody'));
     } catch {
       showAlert(t('common.error'), t('receive.request.shareError'));
@@ -172,18 +165,13 @@ export default function ReceiveScreen() {
     }
   }, [shareModel, shareFileName, t]);
 
-  // Reusable Share + Save buttons (both modes).
-  const shareButtons = (
-    <View style={styles.shareRow}>
-      <Pressable style={styles.shareBtn} onPress={onShareImage}>
-        <Share2 size={18} color={color.fg.inverse} strokeWidth={2.2} />
-        <Text style={styles.shareBtnText}>{t('receive.request.share')}</Text>
-      </Pressable>
-      <Pressable style={styles.saveBtn} onPress={onSaveImage} disabled={savingImage}>
-        <Download size={18} color={color.fg.base} strokeWidth={2.2} />
-        <Text style={styles.saveBtnText}>{t('receive.request.save')}</Text>
-      </Pressable>
-    </View>
+  // Save-image button — sits right under the copy button inside the QR card,
+  // so it serves both Address and Request modes.
+  const saveButton = (
+    <Pressable style={styles.saveBtn} onPress={onSaveImage} disabled={savingImage || !warningDismissed}>
+      <Download size={17} color={color.accent.base} strokeWidth={2.2} />
+      <Text style={styles.saveBtnText}>{t('receive.request.saveImage')}</Text>
+    </Pressable>
   );
 
   return (
@@ -251,6 +239,9 @@ export default function ReceiveScreen() {
                 )}
               </Pressable>
 
+              {/* Save the QR card as an image (both modes) */}
+              {saveButton}
+
               {/* Deposit detected — surfaced as it lands */}
               {depositDetected && deposits.length > 0 && (
                 <Animated.View style={styles.depositBox} entering={fadeIn(0, 300)}>
@@ -293,13 +284,12 @@ export default function ReceiveScreen() {
         </Animated.View>
 
         {isRequest ? (
-          /* Request builder + share/save */
+          /* Request builder */
           <Animated.View entering={fadeInDown(200, 400)}>
             {address ? <ReceiveRequestControls recipient={address} onChange={setRequest} /> : null}
-            {shareButtons}
           </Animated.View>
         ) : (
-          /* Supported networks + share/save */
+          /* Supported networks */
           <Animated.View entering={fadeInDown(200, 400)}>
             <Text style={styles.sectionLabel}>{t('receive.networksLabel', { count: networks.length })}</Text>
 
@@ -317,7 +307,6 @@ export default function ReceiveScreen() {
                 </View>
               ))}
             </View>
-            {shareButtons}
           </Animated.View>
         )}
       </ScrollView>
@@ -390,43 +379,22 @@ const styles = createStyles(() => ({
     fontFamily: undefined,
     textAlign: 'center',
   },
-  shareRow: {
-    flexDirection: 'row',
-    gap: space.md,
-    marginTop: space.xl,
-    marginBottom: space['4xl'],
-  },
-  shareBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.sm,
-    backgroundColor: color.accent.base,
-    borderRadius: radius.lg,
-    paddingVertical: space.lg,
-  },
-  shareBtnText: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.fg.inverse,
-  },
+  // Save-image button — a friendly accent pill right under the copy button.
   saveBtn: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.sm,
-    backgroundColor: color.bg.raised,
-    borderWidth: 1,
-    borderColor: color.border.base,
+    alignSelf: 'stretch',
+    marginTop: space.md,
+    paddingVertical: space.md,
     borderRadius: radius.lg,
-    paddingVertical: space.lg,
+    backgroundColor: color.accent.soft,
   },
   saveBtnText: {
-    fontSize: text.base,
+    fontSize: text.sm,
     ...inter.semibold,
-    color: color.fg.base,
+    color: color.accent.base,
   },
   navBtn: {
     width: 40,

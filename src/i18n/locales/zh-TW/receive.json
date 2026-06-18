@@ -36,8 +36,10 @@
       "summaryOpen": "任意數量的 {{symbol}} · {{network}}",
       "share": "分享",
       "save": "儲存",
+      "saveImage": "儲存圖片",
       "savedTitle": "已儲存",
       "savedBody": "收款 QR code 已儲存到相簿。",
+      "downloadedBody": "圖片已下載到本機。",
       "permTitle": "需要權限",
       "permBody": "請允許存取相簿以儲存圖片。",
       "shareError": "無法分享圖片。"

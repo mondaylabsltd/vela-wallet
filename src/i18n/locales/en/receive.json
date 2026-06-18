@@ -36,8 +36,10 @@
       "summaryOpen": "Any amount of {{symbol}} · {{network}}",
       "share": "Share",
       "save": "Save",
+      "saveImage": "Save image",
       "savedTitle": "Saved",
       "savedBody": "The payment QR was saved to your photos.",
+      "downloadedBody": "Image downloaded to your device.",
       "permTitle": "Permission needed",
       "permBody": "Allow photo access to save the image.",
       "shareError": "Couldn't share the image."

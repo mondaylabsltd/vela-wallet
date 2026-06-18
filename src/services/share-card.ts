@@ -8,12 +8,11 @@
  * Keep the two visually in sync.
  */
 import type { ShareCardModel, ShareNetwork } from '@/components/ReceiveShareCard';
+import { VELA_LOGO_DATA_URI } from '@/constants/vela-logo-uri';
 import { hapticSuccess } from '@/services/platform';
 import QRCodeLib from 'qrcode';
 import type { RefObject } from 'react';
-import { Image, Platform } from 'react-native';
-
-const LOGO = require('../../assets/images/icon.png');
+import { Platform } from 'react-native';
 
 export type SaveResult = 'saved' | 'downloaded' | 'denied' | 'unsupported';
 
@@ -129,10 +128,12 @@ async function composeCardCanvas(model: ShareCardModel): Promise<Blob> {
   const isRequest = model.variant === 'request';
   const networks = !isRequest ? (model.networks ?? []) : [];
 
-  // Preload imagery in parallel.
-  const logoSrc = Image.resolveAssetSource(LOGO)?.uri ?? '';
+  // Preload imagery in parallel. The Vela mark is an embedded data URI (a
+  // bundled asset can be served cross-origin, which would taint the canvas and
+  // break toBlob); chain logos are fetched as blobs (CORS-enabled) for the same
+  // reason, falling back to a colored badge.
   const [logo, ...netImgs] = await Promise.all([
-    logoSrc ? loadImageEl(logoSrc, false) : Promise.resolve(null),
+    loadImageEl(VELA_LOGO_DATA_URI, false),
     ...networks.map((n) => (n.logoURL ? loadViaFetch(n.logoURL) : Promise.resolve(null))),
   ]);
   if (document.fonts?.ready) { try { await document.fonts.ready; } catch { /* ignore */ } }
