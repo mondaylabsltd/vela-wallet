@@ -13,6 +13,7 @@
 import { nativeSymbol } from '@/models/network';
 import { getBuiltinBundlerUrl, getChainRpcUrl, isUsingBuiltinBundler, poolRpcCall } from './rpc-pool';
 import { loadServiceEndpoints } from './storage';
+import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from './tempo';
 
 /** Timeout for bundler REST API calls. */
 const FETCH_TIMEOUT_MS = 10_000;
@@ -130,6 +131,8 @@ export async function checkBundlerFunding(
   // based on treasury balance, nonce limits, and Safe wallet balance.
   return {
     reason: 'deposit_needed',
+    // Sponsorship works on every chain: Tempo sponsors a pathUSD float to the gas
+    // account via a 0x76; other chains transfer native from the treasury.
     sponsorshipAvailable: true,
     depositAddress: info.depositAddress,
     safeAddress,
@@ -231,13 +234,33 @@ export async function fetchBundlerAccountInfo(
 
     const data = await res.json();
 
+    let onchainBalance = parseBigIntHex(data.onchainBalance);
+    let spendableBalance = parseBigIntHex(data.spendableBalance);
+    let nativeSym = nativeSymbol(chainId);
+
+    // Tempo has no native coin: eth_getBalance is a sentinel. Report the gas account's
+    // pathUSD balance instead, scaled to 18 decimals so the wei-based funding UI renders
+    // the correct USD value.
+    if (isTempoChain(chainId) && data.activeDepositAddress) {
+      try {
+        const callData =
+          '0x70a08231000000000000000000000000' +
+          String(data.activeDepositAddress).slice(2).toLowerCase();
+        const balRes = await poolRpcCall('eth_call', [{ to: TEMPO_DEFAULT_FEE_TOKEN, data: callData }, 'latest'], chainId);
+        const path6 = parseBigIntHex(balRes.result); // pathUSD, 6 decimals
+        onchainBalance = path6 * 10n ** 12n; // -> 18-dec USD representation
+        spendableBalance = onchainBalance;
+        nativeSym = 'pathUSD';
+      } catch { /* keep native fallback */ }
+    }
+
     const info: BundlerAccountInfo = {
       chainId,
       depositAddress: data.activeDepositAddress ?? '',
-      onchainBalance: parseBigIntHex(data.onchainBalance),
-      spendableBalance: parseBigIntHex(data.spendableBalance),
+      onchainBalance,
+      spendableBalance,
       status: data.status ?? 'UNKNOWN',
-      nativeSym: nativeSymbol(chainId),
+      nativeSym,
     };
 
     infoCache.set(key, { info, at: Date.now() });

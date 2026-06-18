@@ -14,6 +14,7 @@ import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { chainName, getAllNetworksSync, tokenBadgeNetwork } from '@/models/network';
 import { isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
 import { isStable } from '@/services/activity';
+import { isTempoFeeToken } from '@/services/tempo';
 import { formatTokenAmount } from '@/services/locale-format';
 import { Plus, Search } from 'lucide-react-native';
 import React, { useState } from 'react';
@@ -25,9 +26,12 @@ export type TokenCategory = 'all' | 'stable' | 'gas' | 'other';
 
 export function tokenMatchesCategory(tok: APIToken, cat: TokenCategory): boolean {
   if (cat === 'all') return true;
-  if (cat === 'gas') return isNativeToken(tok); // native coin = the chain's gas token
-  if (cat === 'stable') return !isNativeToken(tok) && isStable(tok.symbol);
-  return !isNativeToken(tok) && !isStable(tok.symbol); // 'other'
+  // The "gas" token is the chain's native coin — or pathUSD on Tempo, which has no
+  // native coin and pays gas in that stablecoin instead.
+  const isGasTok = isNativeToken(tok) || isTempoFeeToken(tokenChainId(tok), tok.tokenAddress);
+  if (cat === 'gas') return isGasTok;
+  if (cat === 'stable') return !isGasTok && isStable(tok.symbol);
+  return !isGasTok && !isStable(tok.symbol); // 'other'
 }
 
 interface Props {
