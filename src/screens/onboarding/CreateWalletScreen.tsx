@@ -62,14 +62,26 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
     publicKeyHex: string;
     name: string;
   }): Promise<boolean> {
-    try {
-      setStatus(t('onboarding.create.statusSyncingKey'));
-      await uploadPublicKey(params);
-      return true;
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : String(err));
-      return false;
+    // Auto-retry transient sync failures. The index server's on-chain queue can
+    // briefly fail (e.g. a 5xx under load); a quick retry almost always succeeds.
+    // uploadPublicKey is idempotent — createRecord dedupes server-side and the
+    // pending record is only cleared on success — so re-running it is safe.
+    const maxAttempts = 3;
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        setStatus(t('onboarding.create.statusSyncingKey'));
+        await uploadPublicKey(params);
+        return true;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * attempt)); // 1s, then 2s
+        }
+      }
     }
+    setUploadError(lastErr instanceof Error ? lastErr.message : String(lastErr));
+    return false;
   }
 
   async function handleCreate() {
