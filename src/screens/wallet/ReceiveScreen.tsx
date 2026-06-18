@@ -11,7 +11,7 @@ import { chainName, getAllNetworksSync } from '@/models/network';
 import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import { copyToClipboard, hapticLight, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
-import { saveReceiveCard } from '@/services/share-card';
+import { composeShareBlob, saveReceiveCard } from '@/services/share-card';
 import { fetchTokens } from '@/services/wallet-api';
 import { ArrowLeft, Check, Copy, Download, ShieldAlert } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -45,6 +45,9 @@ export default function ReceiveScreen() {
   const [request, setRequest] = useState<{ qrValue: string; summary: string; payLink: string }>({ qrValue: '', summary: '', payLink: '' });
   const [savingImage, setSavingImage] = useState(false);
   const cardRef = useRef<View>(null);
+  // Web only: the most recent pre-rendered share image, so Save can hand it to
+  // the OS share sheet synchronously (iOS drops the tap gesture after an await).
+  const shareBlobRef = useRef<{ model: ShareCardModel; blob: Blob } | null>(null);
 
   const isRequest = mode === 'request';
   const qrValue = isRequest ? (request.qrValue || address) : address;
@@ -151,13 +154,28 @@ export default function ReceiveScreen() {
 
   const shareFileName = `vela-${isRequest ? 'request' : 'address'}-${(address || '').slice(0, 10)}`;
 
+  // Pre-render the share image (web) shortly after the card settles, so Save can
+  // pass it to the OS share sheet without an await stealing the tap gesture.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    let cancelled = false;
+    const id = setTimeout(() => {
+      composeShareBlob(shareModel)
+        .then((blob) => { if (!cancelled) shareBlobRef.current = { model: shareModel, blob }; })
+        .catch(() => {});
+    }, 400);
+    return () => { cancelled = true; clearTimeout(id); };
+  }, [shareModel]);
+
   const onSaveImage = useCallback(async () => {
     setSavingImage(true);
     try {
-      const result = await saveReceiveCard(cardRef, shareModel, shareFileName);
+      const precomposed = shareBlobRef.current?.model === shareModel ? shareBlobRef.current.blob : undefined;
+      const result = await saveReceiveCard(cardRef, shareModel, shareFileName, precomposed);
       if (result === 'saved') showAlert(t('receive.request.savedTitle'), t('receive.request.savedBody'));
       else if (result === 'downloaded') showAlert(t('receive.request.savedTitle'), t('receive.request.downloadedBody'));
       else if (result === 'denied') showAlert(t('receive.request.permTitle'), t('receive.request.permBody'));
+      // 'shared' → the OS share sheet was the feedback; no alert needed.
     } catch {
       showAlert(t('common.error'), t('receive.request.shareError'));
     } finally {

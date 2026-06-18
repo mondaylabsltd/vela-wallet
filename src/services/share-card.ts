@@ -14,7 +14,7 @@ import QRCodeLib from 'qrcode';
 import type { RefObject } from 'react';
 import { Platform } from 'react-native';
 
-export type SaveResult = 'saved' | 'downloaded' | 'denied' | 'unsupported';
+export type SaveResult = 'saved' | 'shared' | 'downloaded' | 'denied' | 'unsupported';
 
 async function captureNative(ref: RefObject<unknown>): Promise<string | null> {
   const { captureRef } = await import('react-native-view-shot');
@@ -22,36 +22,42 @@ async function captureNative(ref: RefObject<unknown>): Promise<string | null> {
   return captureRef(ref as never, { format: 'png', quality: 1, result: 'tmpfile' });
 }
 
-export async function shareReceiveCard(ref: RefObject<unknown>, model: ShareCardModel, fileName: string): Promise<void> {
+/** Compose the branded card to a PNG blob (web). Exposed so the host can
+ *  pre-render it and hand it to the share sheet synchronously (see below). */
+export function composeShareBlob(model: ShareCardModel): Promise<Blob> {
+  return composeCardCanvas(model);
+}
+
+/**
+ * Save / share the receive card.
+ *
+ * Native: write straight to the photo library (expo-media-library).
+ * Web: there is no API to write to Photos, so we open the OS share sheet
+ * (`navigator.share`) — on iOS that offers "Save Image" (→ Photos) and sharing
+ * to any app, which is what users expect. `navigator.share` must run inside the
+ * tap gesture, and composing the canvas is async and would consume it, so the
+ * host pre-composes the blob and passes it in `precomposed`; only then is the
+ * share call synchronous. We fall back to a file download where Web Share with
+ * files isn't supported (e.g. desktop Chrome).
+ */
+export async function saveReceiveCard(
+  ref: RefObject<unknown>,
+  model: ShareCardModel,
+  fileName: string,
+  precomposed?: Blob | null,
+): Promise<SaveResult> {
   if (Platform.OS === 'web') {
-    const blob = await composeCardCanvas(model);
+    const blob = precomposed ?? (await composeCardCanvas(model));
     const file = new File([blob], `${fileName}.png`, { type: 'image/png' });
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
       try {
         await navigator.share({ files: [file] });
-        return;
+        return 'shared';
       } catch {
-        // User cancelled, or the gesture lapsed during async work — fall back
-        // to a download rather than failing silently.
+        // Cancelled, or the gesture lapsed — fall back to a download.
       }
     }
     downloadBlob(blob, file.name);
-    hapticSuccess();
-    return;
-  }
-
-  const uri = await captureNative(ref);
-  if (!uri) return;
-  const Sharing = await import('expo-sharing');
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: model.summary ?? model.name });
-  }
-}
-
-export async function saveReceiveCard(ref: RefObject<unknown>, model: ShareCardModel, fileName: string): Promise<SaveResult> {
-  if (Platform.OS === 'web') {
-    const blob = await composeCardCanvas(model);
-    downloadBlob(blob, `${fileName}.png`);
     hapticSuccess();
     return 'downloaded';
   }
