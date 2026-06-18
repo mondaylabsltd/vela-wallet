@@ -151,22 +151,24 @@ const styles = createStyles(() => ({
   netGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
+    rowGap: 8,
   },
   netChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 7,
+    width: '48.5%',
     backgroundColor: '#F5F3EF',
     borderRadius: radius.full,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
   },
   netName: {
     fontSize: text.xs,
     ...inter.semibold,
     color: '#16161A',
+    flexShrink: 1,
   },
   footer: {
     fontSize: text.sm,

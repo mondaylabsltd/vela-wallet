@@ -4,7 +4,8 @@
  * Native: screenshot the off-screen <ReceiveShareCard> (a dedicated branded
  * layout, not the live UI) via react-native-view-shot, then share / save.
  * Web: draw an equivalent branded image on a Canvas (the RN tree doesn't
- * screenshot reliably on web). Keep the two visually in sync.
+ * screenshot reliably on web) — with the real Vela mark and real chain logos.
+ * Keep the two visually in sync.
  */
 import type { ShareCardModel, ShareNetwork } from '@/components/ReceiveShareCard';
 import { hapticSuccess } from '@/services/platform';
@@ -61,7 +62,9 @@ export async function saveReceiveCard(ref: RefObject<unknown>, model: ShareCardM
   return 'saved';
 }
 
-// -- Web canvas composition --------------------------------------------------
+// ===========================================================================
+// Web canvas composition
+// ===========================================================================
 
 function downloadBlob(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -75,189 +78,225 @@ function downloadBlob(blob: Blob, fileName: string) {
 const SANS = "Inter, -apple-system, system-ui, sans-serif";
 const MONO = "ui-monospace, Menlo, monospace";
 const INK = '#16161A';
-const MUTED = '#8A8A96';
+const SUBTLE = '#9A968D';
 const ACCENT = '#E8572A';
+const CHIP_BG = '#F4F2EE';
+const BORDER = '#ECEBE4';
 
-async function loadLogo(): Promise<HTMLImageElement | null> {
-  try {
-    const src = Image.resolveAssetSource(LOGO)?.uri;
-    if (!src) return null;
+function loadImageEl(src: string, cors: boolean): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
     const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(); img.src = src; });
+    if (cors) img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+/** Fetch a (possibly cross-origin) image as a blob first, so drawing it never taints the canvas. */
+async function loadViaFetch(url: string): Promise<HTMLImageElement | null> {
+  try {
+    const r = await fetch(url, { mode: 'cors' });
+    if (!r.ok) return null;
+    const obj = URL.createObjectURL(await r.blob());
+    const img = await loadImageEl(obj, false);
+    URL.revokeObjectURL(obj);
     return img;
   } catch {
     return null;
   }
 }
 
-function shortAddr(a: string): string {
-  return a ? `${a.slice(0, 10)}…${a.slice(-8)}` : '';
-}
-
-/** Greedy-wrap network chips into centered rows; returns the rows + each chip's width. */
-function layoutNetworks(ctx: CanvasRenderingContext2D, nets: ShareNetwork[], contentW: number) {
-  ctx.font = `600 13px ${SANS}`;
-  const padX = 12, dot = 16, dotGap = 6, gap = 8;
-  const chips = nets.map((n) => ({ n, w: padX + dot + dotGap + ctx.measureText(n.name).width + padX }));
-  const rows: { chips: typeof chips; width: number }[] = [];
-  let i = 0;
-  while (i < chips.length) {
-    const row: typeof chips = [];
-    let w = 0;
-    while (i < chips.length && (row.length === 0 || w + gap + chips[i].w <= contentW)) {
-      if (row.length) w += gap;
-      w += chips[i].w;
-      row.push(chips[i]);
-      i++;
-    }
-    rows.push({ chips: row, width: w });
-  }
-  return { rows, chipH: 30, gap };
-}
-
 async function composeCardCanvas(model: ShareCardModel): Promise<Blob> {
-  const S = 3; // retina scale for crisp text
-  const W = 360;
-  const PAD = 28;
+  const S = 3; // retina
+  const M = 24; // outer margin (so the card casts a soft shadow)
+  const W = 384; // card width
+  const PAD = 32;
   const contentW = W - PAD * 2;
   const isRequest = model.variant === 'request';
   const networks = !isRequest ? (model.networks ?? []) : [];
 
-  // Measure network rows up front (height is dynamic for the address card).
-  const measure = document.createElement('canvas').getContext('2d')!;
-  const net = networks.length ? layoutNetworks(measure, networks, contentW) : null;
-  const netHeight = net ? 26 /*label*/ + net.rows.length * (net.chipH + net.gap) : 0;
+  // Preload imagery in parallel.
+  const logoSrc = Image.resolveAssetSource(LOGO)?.uri ?? '';
+  const [logo, ...netImgs] = await Promise.all([
+    logoSrc ? loadImageEl(logoSrc, false) : Promise.resolve(null),
+    ...networks.map((n) => (n.logoURL ? loadViaFetch(n.logoURL) : Promise.resolve(null))),
+  ]);
+  if (document.fonts?.ready) { try { await document.fonts.ready; } catch { /* ignore */ } }
 
-  const qrTop = 24 + 30 /*brand*/ + 18;
-  const qrBox = 196 + 36; // qr + inner padding
-  const nameTop = qrTop + qrBox + 22;
-  const bodyTop = nameTop + 34;
-  const bodyHeight = isRequest
-    ? 26 /*summary*/ + 22 /*addr*/
-    : 22 /*addr*/ + 16 + netHeight;
-  const H = bodyTop + bodyHeight + 22 /*gap*/ + 18 /*footer*/ + 24;
+  // --- layout metrics ---
+  const QR = 206;
+  const qrBox = QR + 36;
+  const headerH = 30;
+  const gapHeaderQr = 24;
+  const gapQrName = 22;
+  const nameH = 30;
+
+  const cols = 2, colGap = 10, chipH = 42, rowGap = 8;
+  const rows = Math.ceil(networks.length / cols);
+  const gridH = networks.length ? rows * chipH + (rows - 1) * rowGap : 0;
+
+  const bodyH = isRequest
+    ? 28 /*summary*/ + 22 /*addr*/
+    : 22 /*addr*/ + 24 /*divider+label*/ + 14 + gridH;
+
+  const cardH = PAD + headerH + gapHeaderQr + qrBox + gapQrName + nameH + 14 + bodyH + 28 /*footer*/ + PAD;
+  const W2 = W + M * 2;
+  const H2 = cardH + M * 2;
 
   const canvas = document.createElement('canvas');
-  canvas.width = W * S;
-  canvas.height = H * S;
+  canvas.width = W2 * S;
+  canvas.height = H2 * S;
   const ctx = canvas.getContext('2d')!;
   ctx.scale(S, S);
 
-  // Card background
-  ctx.fillStyle = '#FFFFFF';
-  roundRect(ctx, 0, 0, W, H, 28);
-  ctx.fill();
+  // Soft neutral backdrop
+  ctx.fillStyle = '#F2F1ED';
+  ctx.fillRect(0, 0, W2, H2);
 
-  // Brand header
-  const cx = W / 2;
-  const logo = await loadLogo();
+  // Card with a soft drop shadow
+  ctx.save();
+  ctx.shadowColor = 'rgba(20,18,12,0.10)';
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 10;
+  roundRect(ctx, M, M, W, cardH, 30);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+  ctx.restore();
+
+  const cx = M + W / 2;
+  let y = M + PAD;
+
+  // --- brand header ---
   ctx.textBaseline = 'middle';
-  const brandText = 'Vela Wallet';
-  ctx.font = `700 16px ${SANS}`;
-  const btw = ctx.measureText(brandText).width;
-  const logoSize = 22;
-  const brandW = (logo ? logoSize + 8 : 0) + btw;
+  ctx.font = `800 17px ${SANS}`;
+  const brand = 'Vela Wallet';
+  const btw = ctx.measureText(brand).width;
+  const lsz = 26;
+  const brandW = lsz + 9 + btw;
   let bx = cx - brandW / 2;
-  const by = 24 + 12;
-  if (logo) {
-    roundRect(ctx, bx, by - logoSize / 2, logoSize, logoSize, 6);
-    ctx.save();
-    ctx.clip();
-    ctx.drawImage(logo, bx, by - logoSize / 2, logoSize, logoSize);
-    ctx.restore();
-    bx += logoSize + 8;
-  }
+  const by = y + headerH / 2;
+  if (logo) drawRoundedImage(ctx, logo, bx, by - lsz / 2, lsz, 7);
+  else { roundRect(ctx, bx, by - lsz / 2, lsz, lsz, 7); ctx.fillStyle = INK; ctx.fill(); }
   ctx.fillStyle = INK;
   ctx.textAlign = 'left';
-  ctx.fillText(brandText, bx, by);
+  ctx.fillText(brand, bx + lsz + 9, by + 0.5);
+  y += headerH + gapHeaderQr;
 
-  // QR
+  // --- QR ---
   const qrCanvas = document.createElement('canvas');
-  await QRCodeLib.toCanvas(qrCanvas, model.qrValue || model.address, { width: 196, margin: 0, errorCorrectionLevel: 'M', color: { dark: '#000000', light: '#FFFFFF' } });
-  const qrX = cx - 196 / 2;
-  ctx.strokeStyle = '#ECEBE4';
+  await QRCodeLib.toCanvas(qrCanvas, model.qrValue || model.address, { width: QR, margin: 0, errorCorrectionLevel: 'M', color: { dark: '#16161A', light: '#FFFFFF' } });
+  const qrX = cx - QR / 2;
+  ctx.strokeStyle = BORDER;
   ctx.lineWidth = 1;
-  roundRect(ctx, qrX - 18, qrTop, 196 + 36, 196 + 36, 16);
+  roundRect(ctx, qrX - 18, y, qrBox, qrBox, 20);
   ctx.stroke();
-  ctx.drawImage(qrCanvas, qrX, qrTop + 18, 196, 196);
+  ctx.drawImage(qrCanvas, qrX, y + 18, QR, QR);
+  y += qrBox + gapQrName;
 
-  // Name
+  // --- name ---
   ctx.textAlign = 'center';
   ctx.fillStyle = INK;
-  ctx.font = `700 22px ${SANS}`;
-  ctx.fillText(model.name, cx, nameTop + 14);
+  ctx.font = `700 23px ${SANS}`;
+  ctx.fillText(model.name, cx, y + nameH / 2);
+  y += nameH + 14;
 
-  // Body
-  let y = bodyTop;
+  // --- body ---
   if (isRequest) {
     if (model.summary) {
       ctx.fillStyle = ACCENT;
       ctx.font = `600 16px ${SANS}`;
-      ctx.fillText(model.summary, cx, y + 6);
-      y += 26;
+      ctx.fillText(model.summary, cx, y + 8);
+      y += 28;
     }
-    ctx.fillStyle = MUTED;
+    ctx.fillStyle = SUBTLE;
     ctx.font = `500 13px ${MONO}`;
     ctx.fillText(shortAddr(model.address), cx, y + 6);
   } else {
-    ctx.fillStyle = MUTED;
+    ctx.fillStyle = SUBTLE;
     ctx.font = `500 13px ${MONO}`;
     ctx.fillText(shortAddr(model.address), cx, y + 6);
-    y += 22 + 16;
-    if (net) {
-      ctx.fillStyle = '#B0ADA5';
-      ctx.font = `500 12px ${SANS}`;
-      ctx.fillText(`${networks.length} supported networks`, cx, y);
-      y += 24;
-      drawNetworkRows(ctx, net, cx, y);
-    }
+    y += 22;
+    // label
+    ctx.fillStyle = SUBTLE;
+    ctx.font = `500 12px ${SANS}`;
+    ctx.fillText(`${networks.length} supported networks`, cx, y + 12);
+    y += 24 + 6;
+    // 2-column grid
+    const colW = (contentW - colGap) / 2;
+    networks.forEach((n, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = M + PAD + col * (colW + colGap);
+      const cy = y + row * (chipH + rowGap);
+      roundRect(ctx, x, cy, colW, chipH, chipH / 2);
+      ctx.fillStyle = CHIP_BG;
+      ctx.fill();
+      const iconSize = 22;
+      const ix = x + 12;
+      const iy = cy + (chipH - iconSize) / 2;
+      const img = netImgs[i];
+      if (img) drawCircleImage(ctx, img, ix, iy, iconSize);
+      else drawBadge(ctx, n, ix, iy, iconSize);
+      ctx.fillStyle = INK;
+      ctx.font = `600 13.5px ${SANS}`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(clip(ctx, n.name, colW - iconSize - 28), ix + iconSize + 9, cy + chipH / 2 + 0.5);
+    });
+    y += gridH;
   }
 
-  // Footer
-  ctx.fillStyle = '#B5B5BE';
+  // --- footer ---
+  ctx.fillStyle = '#B7B4AC';
   ctx.font = `600 13px ${SANS}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.fillText('getvela.app', cx, H - 22);
+  ctx.fillText('getvela.app', cx, M + cardH - PAD + 6);
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png', 1);
   });
 }
 
-function drawNetworkRows(ctx: CanvasRenderingContext2D, net: ReturnType<typeof layoutNetworks>, cx: number, startY: number) {
-  const { rows, chipH, gap } = net;
-  const padX = 12, dot = 16, dotGap = 6;
-  let y = startY;
-  for (const row of rows) {
-    let x = cx - row.width / 2;
-    for (const c of row.chips) {
-      roundRect(ctx, x, y, c.w, chipH, chipH / 2);
-      ctx.fillStyle = '#F5F3EF';
-      ctx.fill();
-      // colored badge
-      const dcx = x + padX + dot / 2;
-      const dcy = y + chipH / 2;
-      ctx.beginPath();
-      ctx.arc(dcx, dcy, dot / 2, 0, Math.PI * 2);
-      ctx.fillStyle = c.n.bg;
-      ctx.fill();
-      ctx.fillStyle = c.n.color;
-      ctx.font = `700 7px ${SANS}`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(c.n.label.slice(0, 4), dcx, dcy + 0.5);
-      // name
-      ctx.fillStyle = INK;
-      ctx.font = `600 13px ${SANS}`;
-      ctx.textAlign = 'left';
-      ctx.fillText(c.n.name, x + padX + dot + dotGap, dcy);
-      x += c.w + gap;
-    }
-    y += chipH + gap;
-  }
+function shortAddr(a: string): string {
+  return a ? `${a.slice(0, 10)}…${a.slice(-8)}` : '';
+}
+
+function clip(ctx: CanvasRenderingContext2D, s: string, maxW: number): string {
+  if (ctx.measureText(s).width <= maxW) return s;
+  let out = s;
+  while (out.length > 1 && ctx.measureText(out + '…').width > maxW) out = out.slice(0, -1);
+  return out + '…';
+}
+
+function drawBadge(ctx: CanvasRenderingContext2D, n: ShareNetwork, x: number, y: number, size: number) {
+  ctx.beginPath();
+  ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+  ctx.fillStyle = n.bg;
+  ctx.fill();
+  ctx.fillStyle = n.color;
+  ctx.font = `700 ${Math.round(size * 0.36)}px ${SANS}`;
   ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(n.label.slice(0, 4), x + size / 2, y + size / 2 + 0.5);
+}
+
+function drawCircleImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, size: number) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.drawImage(img, x, y, size, size);
+  ctx.restore();
+}
+
+function drawRoundedImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, size: number, r: number) {
+  ctx.save();
+  roundRect(ctx, x, y, size, size, r);
+  ctx.clip();
+  ctx.drawImage(img, x, y, size, size);
+  ctx.restore();
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {

@@ -4,19 +4,23 @@
  * Opened from a shared payment link on a Vela deployment (the hosted web wallet
  * or a self-hosted one). It reads the EIP-681 fields from the query and offers
  * three paths: continue in this Vela wallet (locked Send), pay with any other
- * EIP-681 wallet (ethereum: link + QR), or copy the details to enter by hand.
+ * wallet (EIP-681 *or* plain-address QR), or copy the details to enter by hand.
  */
+import { ChainLogo } from '@/components/ChainLogo';
 import { QRCode } from '@/components/QRCode';
+import { TokenLogo } from '@/components/TokenLogo';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
+import { networkForChainId, networkId, tokenBadgeNetwork } from '@/models/network';
+import { tokenLogoURLs, type APIToken } from '@/models/types';
 import { buildEIP681, toBaseUnits } from '@/services/eip681';
 import { copyToClipboard, hapticLight, openURL } from '@/services/platform';
 import { Check, Copy } from 'lucide-react-native';
 import { useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -41,10 +45,19 @@ export default function PayScreen() {
   const valid = /^0x[0-9a-fA-F]{40}$/.test(to) && Number.isFinite(chainId);
   const isNative = !token;
 
+  const network = useMemo(() => (Number.isFinite(chainId) ? networkForChainId(chainId) : null), [chainId]);
+  // Synthetic token just for its logo + chain badge.
+  const apiToken = useMemo<APIToken>(() => ({
+    network: networkId(chainId), chainName: networkName, symbol, balance: '0',
+    decimals: isNative ? 18 : decimals, logo: null, name: symbol,
+    tokenAddress: token || null, priceUsd: null, spam: false,
+  }), [chainId, networkName, symbol, decimals, isNative, token]);
+
   const eip681 = buildEIP681({ recipient: to, chainId, tokenAddress: token || null, decimals, amount });
   const amountBase = amount ? toBaseUnits(amount, decimals).toString() : '';
 
   const [showOther, setShowOther] = useState(false);
+  const [qrMode, setQrMode] = useState<'eip681' | 'address'>('eip681');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const copy = async (key: string, value: string) => {
     await copyToClipboard(value);
@@ -82,9 +95,13 @@ export default function PayScreen() {
         </View>
 
         <VelaCard elevated style={styles.card}>
+          <TokenLogo symbol={symbol} logoUrls={tokenLogoURLs(apiToken)} chain={tokenBadgeNetwork(apiToken)} size={56} />
           <Text style={styles.eyebrow}>{t('receive.pay.title')}</Text>
           <Text style={styles.headline}>{headline}</Text>
-          <Text style={styles.network}>{networkName}</Text>
+          <View style={styles.networkRow}>
+            {network && <ChainLogo label={network.iconLabel} color={network.iconColor} bgColor={network.iconBg} logoURL={network.logoURL} size={16} />}
+            <Text style={styles.network}>{networkName}</Text>
+          </View>
 
           <Pressable style={styles.addrRow} onPress={() => copy('to', to)}>
             <Text style={styles.addr} numberOfLines={1}>{short(to)}</Text>
@@ -99,20 +116,38 @@ export default function PayScreen() {
 
         {showOther && (
           <VelaCard style={styles.card}>
-            <View style={styles.qrBox}>
-              <QRCode value={eip681} size={180} />
+            {/* QR mode: full EIP-681 request vs plain address for non-681 wallets */}
+            <View style={styles.seg}>
+              {(['eip681', 'address'] as const).map((m) => (
+                <Pressable key={m} style={[styles.segBtn, qrMode === m && styles.segBtnActive]} onPress={() => setQrMode(m)}>
+                  <Text style={[styles.segText, qrMode === m && styles.segTextActive]}>
+                    {t(m === 'eip681' ? 'receive.pay.qrEip681' : 'receive.pay.qrAddress')}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
-            <Text style={styles.scanHint}>{t('receive.pay.scanHint')}</Text>
-            <Pressable style={styles.openWalletBtn} onPress={() => openURL(eip681)}>
-              <Text style={styles.openWalletText}>{t('receive.pay.openApp')}</Text>
-            </Pressable>
+
+            <View style={styles.qrBox}>
+              <QRCode value={qrMode === 'eip681' ? eip681 : to} size={180} />
+            </View>
+            <Text style={styles.scanHint}>{t(qrMode === 'eip681' ? 'receive.pay.scanHint' : 'receive.pay.scanHintAddress')}</Text>
+
+            {qrMode === 'eip681' && (
+              <Pressable style={styles.openWalletBtn} onPress={() => openURL(eip681)}>
+                <Text style={styles.openWalletText}>{t('receive.pay.openApp')}</Text>
+              </Pressable>
+            )}
 
             <Text style={styles.manualNote}>{t('receive.pay.manualNote')}</Text>
             <DetailRow label={t('receive.pay.recipient')} value={short(to)} onCopy={() => copy('m-to', to)} copied={copiedKey === 'm-to'} />
-            <DetailRow label={t('receive.pay.network')} value={`${networkName} (${chainId})`} />
+            <DetailRow
+              label={t('receive.pay.network')}
+              value={`${networkName} (${chainId})`}
+              icon={network ? <ChainLogo label={network.iconLabel} color={network.iconColor} bgColor={network.iconBg} logoURL={network.logoURL} size={18} /> : undefined}
+            />
             {isNative
-              ? <DetailRow label={t('receive.pay.token')} value={t('receive.pay.native', { symbol })} />
-              : <DetailRow label={t('receive.pay.token')} value={`${symbol} · ${short(token)}`} onCopy={() => copy('m-token', token)} copied={copiedKey === 'm-token'} />}
+              ? <DetailRow label={t('receive.pay.token')} value={t('receive.pay.native', { symbol })} icon={<TokenLogo symbol={symbol} logoUrls={tokenLogoURLs(apiToken)} size={18} />} />
+              : <DetailRow label={t('receive.pay.token')} value={`${symbol} · ${short(token)}`} onCopy={() => copy('m-token', token)} copied={copiedKey === 'm-token'} icon={<TokenLogo symbol={symbol} logoUrls={tokenLogoURLs(apiToken)} size={18} />} />}
             <DetailRow label={t('receive.pay.amount')} value={amount ? `${amount} ${symbol}` : t('receive.pay.anyAmount')} />
           </VelaCard>
         )}
@@ -121,18 +156,21 @@ export default function PayScreen() {
   );
 }
 
-function DetailRow({ label, value, onCopy, copied }: { label: string; value: string; onCopy?: () => void; copied?: boolean }) {
+function DetailRow({ label, value, onCopy, copied, icon }: { label: string; value: string; onCopy?: () => void; copied?: boolean; icon?: React.ReactNode }) {
   return (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
-      {onCopy ? (
-        <Pressable style={styles.detailValueBtn} onPress={onCopy} hitSlop={6}>
+      <View style={styles.detailRight}>
+        {icon}
+        {onCopy ? (
+          <Pressable style={styles.detailValueBtn} onPress={onCopy} hitSlop={6}>
+            <Text style={styles.detailValue} numberOfLines={1}>{value}</Text>
+            {copied ? <Check size={13} color={color.success.base} strokeWidth={2.5} /> : <Copy size={13} color={color.fg.subtle} strokeWidth={2} />}
+          </Pressable>
+        ) : (
           <Text style={styles.detailValue} numberOfLines={1}>{value}</Text>
-          {copied ? <Check size={13} color={color.success.base} strokeWidth={2.5} /> : <Copy size={13} color={color.fg.subtle} strokeWidth={2} />}
-        </Pressable>
-      ) : (
-        <Text style={styles.detailValue} numberOfLines={1}>{value}</Text>
-      )}
+        )}
+      </View>
     </View>
   );
 }
@@ -146,9 +184,10 @@ const styles = createStyles(() => ({
   logo: { width: 24, height: 24, borderRadius: 6 },
   brandName: { fontSize: text.base, ...inter.bold, color: color.fg.base },
   card: { padding: space['2xl'], alignItems: 'center' },
-  eyebrow: { fontSize: text.xs, ...inter.semibold, color: color.fg.subtle, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: space.sm },
+  eyebrow: { fontSize: text.xs, ...inter.semibold, color: color.fg.subtle, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: space.lg, marginBottom: space.xs },
   headline: { fontSize: text['3xl'], ...inter.bold, color: color.fg.base, textAlign: 'center' },
-  network: { fontSize: text.base, ...inter.semibold, color: color.accent.base, marginTop: 2 },
+  networkRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: space.xs },
+  network: { fontSize: text.base, ...inter.semibold, color: color.accent.base },
   addrRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md,
     alignSelf: 'stretch', marginTop: space.xl, paddingVertical: space.md, paddingHorizontal: space.lg,
@@ -158,13 +197,20 @@ const styles = createStyles(() => ({
   openBtn: { alignSelf: 'stretch', marginTop: space.xl },
   otherBtn: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: space.lg, marginTop: space.sm },
   otherBtnText: { fontSize: text.base, ...inter.semibold, color: color.fg.muted },
+  // QR mode segmented toggle
+  seg: { flexDirection: 'row', alignSelf: 'stretch', backgroundColor: color.bg.sunken, borderRadius: radius.full, padding: 4, marginBottom: space.lg },
+  segBtn: { flex: 1, alignItems: 'center', paddingVertical: space.sm, borderRadius: radius.full },
+  segBtnActive: { backgroundColor: color.bg.raised },
+  segText: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted },
+  segTextActive: { color: color.fg.base },
   qrBox: { borderWidth: 1, borderColor: color.border.base, borderRadius: radius.xl, padding: space.lg, backgroundColor: '#FFFFFF', marginBottom: space.md },
-  scanHint: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, marginBottom: space.lg },
+  scanHint: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, marginBottom: space.lg, textAlign: 'center' },
   openWalletBtn: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: space.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border.strong, backgroundColor: color.bg.raised },
   openWalletText: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
   manualNote: { alignSelf: 'stretch', fontSize: text.sm, ...inter.regular, color: color.fg.subtle, marginTop: space.xl, marginBottom: space.md },
   detailRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md, alignSelf: 'stretch', paddingVertical: space.md, borderTopWidth: 1, borderTopColor: color.border.base },
   detailLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
+  detailRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1 },
   detailValueBtn: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1 },
   detailValue: { fontSize: text.sm, ...inter.semibold, color: color.fg.base, flexShrink: 1 },
 }));
