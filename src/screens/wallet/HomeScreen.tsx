@@ -562,7 +562,9 @@ export default function HomeScreen() {
               <Text style={styles.accountName} numberOfLines={1}>{accountName}</Text>
               <Text style={styles.accountAddr} numberOfLines={1}>{shortAddr(address)}</Text>
             </View>
-            <ChevronDown size={16} color={color.fg.subtle} strokeWidth={2.4} />
+            {state.accounts.length > 1 && (
+              <ChevronDown size={16} color={color.fg.subtle} strokeWidth={2.4} />
+            )}
           </Pressable>
           <Pressable style={styles.iconBtn} onPress={() => router.navigate('/settings')} hitSlop={6}>
             <Settings size={22} color={color.fg.base} strokeWidth={2} />
