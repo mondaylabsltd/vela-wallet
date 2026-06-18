@@ -79,6 +79,7 @@ function addressToBytes32(address: string): string {
 
 /** Query a public key record by wallet address (walletRef). Returns null if not found. */
 export async function queryByWalletRef(address: string): Promise<PublicKeyRecord | null> {
+  if (/^0x0+$/.test(address)) return null; // zero address has no index entry — skip the doomed 404
   const baseUrl = await getBaseUrl();
   const walletRef = addressToBytes32(address);
   const url = `${baseUrl}/api/query?walletRef=${encodeURIComponent(walletRef)}`;

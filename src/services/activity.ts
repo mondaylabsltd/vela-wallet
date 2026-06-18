@@ -282,13 +282,18 @@ export async function loadActivityItems(address: string): Promise<ActivityItem[]
   const lc = address.toLowerCase();
   const txs = await loadTransactions().catch(() => [] as LocalTransaction[]);
   const items: ActivityItem[] = [];
+  // `item.id` is the FlatList key (HomeScreen). Guard against any legacy
+  // duplicate-id records already in the store so a row can't render twice.
+  const seen = new Set<string>();
   for (const t of txs) {
+    if (seen.has(t.id)) continue;
     const type = t.type ?? 'send';
-    if (type === 'receive' && t.to.toLowerCase() === lc) {
-      items.push(receiveRecordToActivity(t));
-    } else if (type === 'send' && t.from.toLowerCase() === lc) {
-      items.push(sendTxToActivity(t));
-    }
+    let item: ActivityItem | null = null;
+    if (type === 'receive' && t.to.toLowerCase() === lc) item = receiveRecordToActivity(t);
+    else if (type === 'send' && t.from.toLowerCase() === lc) item = sendTxToActivity(t);
+    if (!item) continue;
+    seen.add(t.id);
+    items.push(item);
   }
   return items.sort((a, b) => b.timestamp - a.timestamp);
 }

@@ -137,6 +137,24 @@ describe('storage - transactions', () => {
     expect(txs[1].id).toBe('tx1');
   });
 
+  test('de-dupes by id: a resubmitted UserOp keeps a single record (latest wins)', async () => {
+    // Two identical sends sharing a nonce yield the same userOpHash (= record
+    // id). Without de-dup this persisted twice and surfaced as a React
+    // duplicate-key warning in the Activity feed.
+    const base = {
+      userOpHash: '0xhash', txHash: '',
+      from: '0x1', to: '0x2', value: '1', symbol: 'USDC.e',
+      decimals: 6, chainId: 1, timestamp: 1000, type: 'send' as const,
+    };
+    await saveTransaction({ ...base, id: '0xhash', status: 'pending' });
+    await saveTransaction({ ...base, id: '0xhash', status: 'confirmed', txHash: '0xreceipt' });
+
+    const txs = await loadTransactions();
+    expect(txs).toHaveLength(1);
+    expect(txs[0].status).toBe('confirmed'); // newest write wins
+    expect(txs[0].txHash).toBe('0xreceipt');
+  });
+
   test('enforces max 200 transactions', async () => {
     // Pre-fill with 200 transactions
     const existing = Array.from({ length: 200 }, (_, i) => ({
