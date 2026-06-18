@@ -105,6 +105,8 @@ export function resolveChainlinkPrice(
   prices: Record<string, number>,
 ): number | null {
   const upper = nativeSym.toUpperCase();
+  // Stablecoin-denominated native gas (e.g. Tempo's "USD") is pegged to $1.
+  if (upper === 'USD') return 1;
   return prices[upper] ?? prices[SYMBOL_ALIAS[upper] ?? ''] ?? null;
 }
 

@@ -21,8 +21,9 @@ understand the security model behind it.
 - **A Safe smart account.** Each wallet is a [Safe](https://github.com/safe-fndn/safe-smart-account)
   smart contract operated with ERC-4337 account abstraction — which is what lets
   you sign with a passkey and read every transaction before you approve it.
-- **8 networks, one address.** Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
-  Base, Avalanche, and Gnosis — plus custom networks — all at the same address.
+- **12 networks, one address.** Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
+  Base, Avalanche, Gnosis, Unichain, Tempo, Monad, and World Chain — plus custom
+  networks — all at the same address.
 - **No blind signing.** Transactions are decoded into human-readable intent
   (ERC-7730); unknown calls are flagged, not hidden.
 - **Open source.** The wallet and all its services are

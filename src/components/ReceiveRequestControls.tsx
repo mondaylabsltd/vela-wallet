@@ -124,7 +124,7 @@ export function ReceiveRequestControls({ recipient, onChange }: Props) {
             onSelect={pickAsset}
             onAddChanged={() => loadTokens(true)}
             hideTotals
-            defaultCategory="all"
+            defaultCategory="stable"
           />
         </View>
       </AppModal>

@@ -1,6 +1,6 @@
 ---
 title: Networks & fees
-description: The 8 networks Vela supports, how account-abstraction gas fees work, who runs the bundler and collects the fees, when you self-fund gas-account activation, and how Vela picks RPC endpoints.
+description: The 12 networks Vela supports, how account-abstraction gas fees work, who runs the bundler and collects the fees, when you self-fund gas-account activation, and how Vela picks RPC endpoints.
 ---
 
 <script>
@@ -11,7 +11,7 @@ description: The 8 networks Vela supports, how account-abstraction gas fees work
 
 ## Supported networks
 
-Vela ships with **8 EVM networks** built in:
+Vela ships with **12 EVM networks** built in:
 
 | Network | Native fee token |
 | ------- | ---------------- |
@@ -23,6 +23,10 @@ Vela ships with **8 EVM networks** built in:
 | Base | ETH |
 | Avalanche | AVAX |
 | Gnosis | xDAI |
+| Unichain | ETH |
+| Tempo | USD |
+| Monad | MON |
+| World Chain | ETH |
 
 Your wallet has the **same address on all of them**, so there's one address to
 share everywhere.
@@ -34,7 +38,7 @@ signature precompile that verifies your passkey on-chain. Vela checks this
 automatically before letting you add a network.
 
 <Callout type="info" title="Why Gnosis shows up a lot">
-Beyond being one of the 8 networks, Gnosis Chain hosts Vela's **Passkey Index** —
+Beyond being one of the 12 networks, Gnosis Chain hosts Vela's **Passkey Index** —
 the contract that stores your public key and account name for cross-device
 recovery. That's separate from which network you transact on.
 </Callout>

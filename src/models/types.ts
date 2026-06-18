@@ -2,6 +2,7 @@
  * Core data models shared across the app.
  * Matches iOS WalletState.swift, WalletAPIService.swift models.
  */
+import { apiNetworkToChainId } from '@/models/chains';
 import { checksumAddress } from '@/services/eth-crypto';
 import { getEthereumDataURL } from '@/services/storage';
 
@@ -69,22 +70,9 @@ export function tokenUsdValue(t: APIToken): number {
 }
 
 export function tokenChainId(t: APIToken): number {
-  switch (t.network) {
-    case 'eth-mainnet': return 1;
-    case 'arb-mainnet': return 42161;
-    case 'base-mainnet': return 8453;
-    case 'opt-mainnet': return 10;
-    case 'matic-mainnet': return 137;
-    case 'bnb-mainnet': return 56;
-    case 'avax-mainnet': return 43114;
-    case 'gnosis-mainnet': return 100;
-    default: {
-      // Support custom networks with "chain-{chainId}" format
-      const match = t.network.match(/^chain-(\d+)$/);
-      if (match) return parseInt(match[1], 10);
-      return 1;
-    }
-  }
+  // Inverse of networkId() (models/network.ts); both derive from CHAINS, so a
+  // newly added chain works in both directions from a single table entry.
+  return apiNetworkToChainId(t.network);
 }
 
 /**

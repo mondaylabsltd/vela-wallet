@@ -56,12 +56,23 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
   const hasActiveFilter = !!search || category !== 'all' || chainFilter != null;
   const q = search.trim().toLowerCase();
 
-  const filtered = tokens.filter((tok) => {
-    if (chainFilter != null && tokenChainId(tok) !== chainFilter) return false;
-    if (!tokenMatchesCategory(tok, category)) return false;
-    if (q && !(tok.symbol.toLowerCase().includes(q) || tok.name.toLowerCase().includes(q) || tok.network.toLowerCase().includes(q))) return false;
-    return true;
-  });
+  const filtered = tokens
+    .filter((tok) => {
+      if (chainFilter != null && tokenChainId(tok) !== chainFilter) return false;
+      if (!tokenMatchesCategory(tok, category)) return false;
+      if (q && !(tok.symbol.toLowerCase().includes(q) || tok.name.toLowerCase().includes(q) || tok.network.toLowerCase().includes(q))) return false;
+      return true;
+    })
+    // Sort by USD value desc, then token amount desc. This keeps zero-value /
+    // zero-balance tokens below anything worth more, so an empty token never
+    // sits above one the user actually holds.
+    .sort((a, b) => {
+      const usd = tokenUsdValue(b) - tokenUsdValue(a);
+      if (usd !== 0) return usd;
+      const amt = tokenBalanceDouble(b) - tokenBalanceDouble(a);
+      if (amt !== 0) return amt;
+      return a.symbol.localeCompare(b.symbol);
+    });
   const filteredTotal = filtered.reduce((s, tok) => s + tokenUsdValue(tok), 0);
 
   const CATEGORIES: { key: Exclude<TokenCategory, 'all'>; label: string }[] = [

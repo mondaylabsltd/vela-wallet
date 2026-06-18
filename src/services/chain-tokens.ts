@@ -85,6 +85,21 @@ const BUILTIN_DEX: Record<number, DexInfo> = {
     dex: 'SushiSwap', protocol: 'uniswap-v3',
     contracts: { factory: '0xf78031CBCA409F2FB6876BDFDBc1b2df24cF9bEf', quoterV2: '0xb1E835Dc2785b52265711e17fCCb0fd018226a6e' },
   },
+  // Unichain — Uniswap V3 (canonical deploy addresses)
+  130: {
+    dex: 'Uniswap', protocol: 'uniswap-v3',
+    contracts: { factory: '0x1F98431c8aD98523631AE4a59f267346ea31F984', quoterV2: '0x61fFE014bA17989E743c5F6cB21bF9697530B21e' },
+  },
+  // Monad — Uniswap V3 (canonical deploy addresses)
+  143: {
+    dex: 'Uniswap', protocol: 'uniswap-v3',
+    contracts: { factory: '0x1F98431c8aD98523631AE4a59f267346ea31F984', quoterV2: '0x61fFE014bA17989E743c5F6cB21bF9697530B21e' },
+  },
+  // World Chain — Uniswap V3 (canonical deploy addresses)
+  480: {
+    dex: 'Uniswap', protocol: 'uniswap-v3',
+    contracts: { factory: '0x1F98431c8aD98523631AE4a59f267346ea31F984', quoterV2: '0x61fFE014bA17989E743c5F6cB21bF9697530B21e' },
+  },
 };
 
 // ---------------------------------------------------------------------------

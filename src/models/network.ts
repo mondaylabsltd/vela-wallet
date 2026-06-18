@@ -7,6 +7,7 @@
 // Custom network support
 // ---------------------------------------------------------------------------
 
+import { CHAINS, chainIdToApiNetwork, chainMeta } from '@/models/chains';
 import type { APIToken, CustomNetwork } from '@/models/types';
 import { nativeCoinLogoChainId, tokenBadgeChainId } from '@/models/types';
 import { loadCustomNetworks } from '@/services/storage';
@@ -28,65 +29,27 @@ export interface Network {
 
 /** Base URL for chain logos from ethereum-data.awesometools.dev */
 const CHAIN_LOGO_BASE = 'https://ethereum-data.awesometools.dev/chainlogos';
+/** Base URL of Vela's per-chain ERC-4337 bundler. */
+const BUNDLER_BASE = 'https://vela-bundler.getvela.app';
 
-export const DEFAULT_NETWORKS: Network[] = [
-  {
-    id: 'ethereum', displayName: 'Ethereum', chainId: 1,
-    iconLabel: 'ETH', iconColor: '#627EEA', iconBg: '#EEF0F8',
-    logoURL: `${CHAIN_LOGO_BASE}/eip155-1.png`, isL2: false,
-    rpcURL: 'https://ethereum-rpc.publicnode.com', explorerURL: 'https://etherscan.io',
-    bundlerURL: 'https://vela-bundler.getvela.app/1',
-  },
-  {
-    id: 'bnb', displayName: 'BNB Chain', chainId: 56,
-    iconLabel: 'BNB', iconColor: '#F0B90B', iconBg: '#FFF8E1',
-    logoURL: `${CHAIN_LOGO_BASE}/eip155-56.png`, isL2: false,
-    rpcURL: 'https://bsc-dataseed.binance.org', explorerURL: 'https://bscscan.com',
-    bundlerURL: 'https://vela-bundler.getvela.app/56',
-  },
-  {
-    id: 'polygon', displayName: 'Polygon', chainId: 137,
-    iconLabel: 'POL', iconColor: '#8247E5', iconBg: '#F0EAFF',
-    logoURL: `${CHAIN_LOGO_BASE}/eip155-137.png`, isL2: true,
-    rpcURL: 'https://polygon-bor-rpc.publicnode.com', explorerURL: 'https://polygonscan.com',
-    bundlerURL: 'https://vela-bundler.getvela.app/137',
-  },
-  {
-    id: 'arbitrum', displayName: 'Arbitrum', chainId: 42161,
-    iconLabel: 'ARB', iconColor: '#28A0F0', iconBg: '#E8F4FD',
-    logoURL: `${CHAIN_LOGO_BASE}/eip155-42161.png`, isL2: true,
-    rpcURL: 'https://arb1.arbitrum.io/rpc', explorerURL: 'https://arbiscan.io',
-    bundlerURL: 'https://vela-bundler.getvela.app/42161',
-  },
-  {
-    id: 'optimism', displayName: 'Optimism', chainId: 10,
-    iconLabel: 'OP', iconColor: '#FF0420', iconBg: '#FFECEC',
-    logoURL: `${CHAIN_LOGO_BASE}/eip155-10.png`, isL2: true,
-    rpcURL: 'https://mainnet.optimism.io', explorerURL: 'https://optimistic.etherscan.io',
-    bundlerURL: 'https://vela-bundler.getvela.app/10',
-  },
-  {
-    id: 'base', displayName: 'Base', chainId: 8453,
-    iconLabel: 'BASE', iconColor: '#0052FF', iconBg: '#E8EEFF',
-    logoURL: `${CHAIN_LOGO_BASE}/eip155-8453.png`, isL2: true,
-    rpcURL: 'https://mainnet.base.org', explorerURL: 'https://basescan.org',
-    bundlerURL: 'https://vela-bundler.getvela.app/8453',
-  },
-  {
-    id: 'avalanche', displayName: 'Avalanche', chainId: 43114,
-    iconLabel: 'AVAX', iconColor: '#E84142', iconBg: '#FFF0F0',
-    logoURL: `${CHAIN_LOGO_BASE}/eip155-43114.png`, isL2: false,
-    rpcURL: 'https://api.avax.network/ext/bc/C/rpc', explorerURL: 'https://snowtrace.io',
-    bundlerURL: 'https://vela-bundler.getvela.app/43114',
-  },
-  {
-    id: 'gnosis', displayName: 'Gnosis', chainId: 100,
-    iconLabel: 'xDAI', iconColor: '#04795B', iconBg: '#E8F5F0',
-    logoURL: `${CHAIN_LOGO_BASE}/eip155-100.png`, isL2: false,
-    rpcURL: 'https://rpc.gnosischain.com', explorerURL: 'https://gnosisscan.io',
-    bundlerURL: 'https://vela-bundler.getvela.app/100',
-  },
-];
+/**
+ * Built-in networks, derived from the canonical {@link CHAINS} table so chainId,
+ * api id and native symbol can never drift apart. logoURL and bundlerURL follow
+ * a fixed per-chain URL shape. To add a network, add one entry to CHAINS.
+ */
+export const DEFAULT_NETWORKS: Network[] = CHAINS.map((c) => ({
+  id: c.id,
+  displayName: c.displayName,
+  chainId: c.chainId,
+  iconLabel: c.iconLabel,
+  iconColor: c.iconColor,
+  iconBg: c.iconBg,
+  logoURL: `${CHAIN_LOGO_BASE}/eip155-${c.chainId}.png`,
+  isL2: c.isL2,
+  rpcURL: c.rpcURL,
+  explorerURL: c.explorerURL,
+  bundlerURL: `${BUNDLER_BASE}/${c.chainId}`,
+}));
 
 /** Lookup chain display name by ID. */
 export function chainName(chainId: number): string {
@@ -121,34 +84,20 @@ export function tokenBadgeNetwork(t: APIToken): Network | null {
   return cid != null ? networkForChainId(cid) : null;
 }
 
-/** Lookup native token symbol by chain ID. */
+/** Lookup native token symbol by chain ID (falls back to custom networks). */
 export function nativeSymbol(chainId: number): string {
-  switch (chainId) {
-    case 1: case 42161: case 10: case 8453: return 'ETH';
-    case 56: return 'BNB';
-    case 137: return 'POL';
-    case 43114: return 'AVAX';
-    case 100: return 'xDAI';
-    default: {
-      const custom = _customNetworkCache.find(n => n.chainId === chainId);
-      return custom?.nativeSymbol ?? 'ETH';
-    }
-  }
+  const meta = chainMeta(chainId);
+  if (meta) return meta.nativeSymbol;
+  const custom = _customNetworkCache.find(n => n.chainId === chainId);
+  return custom?.nativeSymbol ?? 'ETH';
 }
 
-/** Lookup network API identifier by chain ID. */
+/**
+ * Lookup network API identifier by chain ID. Inverse of `tokenChainId`
+ * (models/types.ts); both are derived from CHAINS so they stay in sync.
+ */
 export function networkId(chainId: number): string {
-  switch (chainId) {
-    case 1: return 'eth-mainnet';
-    case 56: return 'bnb-mainnet';
-    case 137: return 'matic-mainnet';
-    case 42161: return 'arb-mainnet';
-    case 10: return 'opt-mainnet';
-    case 8453: return 'base-mainnet';
-    case 43114: return 'avax-mainnet';
-    case 100: return 'gnosis-mainnet';
-    default: return `chain-${chainId}`;
-  }
+  return chainIdToApiNetwork(chainId);
 }
 
 /** In-memory cache of custom networks for synchronous lookups. */

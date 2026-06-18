@@ -144,8 +144,9 @@ blind-sign warning rather than pretending to understand the call.
 
 ### Networks
 
-Vela supports 8 EVM networks — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
-Base, Avalanche, and Gnosis — plus custom networks via configurable RPC endpoints.
+Vela supports 12 EVM networks — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism,
+Base, Avalanche, Gnosis, Unichain, Tempo, Monad, and World Chain — plus custom
+networks via configurable RPC endpoints.
 
 ## Security model
 

@@ -32,9 +32,9 @@ sign in on a new device with the same account and your wallet comes back. See
 
 ## Which networks and tokens are supported?
 
-Vela ships with **8 EVM networks** — Ethereum, BNB Chain, Polygon, Arbitrum,
-Optimism, Base, Avalanche, and Gnosis — plus custom networks, holding native
-tokens and ERC-20s. Your address is the same on all of them. See
+Vela ships with **12 EVM networks** — Ethereum, BNB Chain, Polygon, Arbitrum,
+Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, and World Chain —
+plus custom networks, holding native tokens and ERC-20s. Your address is the same on all of them. See
 [networks & fees](/docs/networks-and-fees).
 
 ## How much does it cost?

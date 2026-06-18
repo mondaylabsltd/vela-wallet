@@ -9,6 +9,8 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   default: { getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() },
 }));
 import { chainName, nativeSymbol, networkId, DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
+import { CHAINS } from '@/models/chains';
+import { tokenChainId, type APIToken } from '@/models/types';
 
 describe('network', () => {
   describe('chainName', () => {
@@ -63,9 +65,44 @@ describe('network', () => {
     });
   });
 
+  // Guards against the drift bug where adding a chain to one map but not the
+  // other made tokens resolve to the wrong chain (e.g. WLD shown as Ethereum).
+  describe('networkId <-> tokenChainId are inverse', () => {
+    test('round-trips for every built-in chain', () => {
+      for (const c of CHAINS) {
+        expect(networkId(c.chainId)).toBe(c.apiNetworkId);
+        expect(tokenChainId({ network: c.apiNetworkId } as APIToken)).toBe(c.chainId);
+        expect(tokenChainId({ network: networkId(c.chainId) } as APIToken)).toBe(c.chainId);
+      }
+    });
+
+    test('round-trips custom chain-{id} networks', () => {
+      expect(networkId(31337)).toBe('chain-31337');
+      expect(tokenChainId({ network: 'chain-31337' } as APIToken)).toBe(31337);
+      expect(tokenChainId({ network: networkId(424242) } as APIToken)).toBe(424242);
+    });
+
+    test('unknown network id falls back to Ethereum', () => {
+      expect(tokenChainId({ network: 'totally-unknown' } as APIToken)).toBe(1);
+    });
+  });
+
+  describe('DEFAULT_NETWORKS derives from CHAINS', () => {
+    test('one entry per CHAINS row, same order and ids', () => {
+      expect(DEFAULT_NETWORKS.map(n => n.chainId)).toEqual(CHAINS.map(c => c.chainId));
+      expect(DEFAULT_NETWORKS.map(n => n.id)).toEqual(CHAINS.map(c => c.id));
+    });
+
+    test('nativeSymbol matches the CHAINS table', () => {
+      for (const c of CHAINS) {
+        expect(nativeSymbol(c.chainId)).toBe(c.nativeSymbol);
+      }
+    });
+  });
+
   describe('DEFAULT_NETWORKS', () => {
-    test('has 8 default networks', () => {
-      expect(DEFAULT_NETWORKS).toHaveLength(8);
+    test('has 12 default networks', () => {
+      expect(DEFAULT_NETWORKS).toHaveLength(12);
     });
 
     test('all networks have required fields', () => {

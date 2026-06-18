@@ -196,7 +196,11 @@
 		{ name: 'Optimism', chainId: 10 },
 		{ name: 'Base', chainId: 8453 },
 		{ name: 'Avalanche', chainId: 43114 },
-		{ name: 'Gnosis', chainId: 100 }
+		{ name: 'Gnosis', chainId: 100 },
+		{ name: 'Unichain', chainId: 130 },
+		{ name: 'Monad', chainId: 143 },
+		{ name: 'World Chain', chainId: 480 },
+		{ name: 'Tempo', chainId: 4217 }
 	];
 	const chainLogo = (chainId: number) =>
 		`https://ethereum-data.awesometools.dev/chainlogos/eip155-${chainId}.png`;
@@ -1023,7 +1027,7 @@
 					</tr>
 					<tr>
 						<td>Networks</td>
-						<td>8 EVM chains (+ custom)</td>
+						<td>12 EVM chains (+ custom)</td>
 					</tr>
 					<tr>
 						<td>Source code</td>

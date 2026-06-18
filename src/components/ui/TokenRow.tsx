@@ -68,19 +68,17 @@ export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, contrac
         <TokenLogo symbol={symbol} logoUrl={logoUrl} logoUrls={logoUrls} chain={chain} size={40} />
         <View style={styles.info}>
           <Text style={styles.symbol} numberOfLines={1}>{symbol}</Text>
-          <View style={styles.subRow}>
-            <Text style={styles.chain} numberOfLines={1}>{chainLabel}</Text>
-            {contractAddress ? (
-              <Pressable onPress={copyAddress} hitSlop={8} style={styles.addrChip}>
-                <Text style={[styles.addr, copied && styles.addrCopied]} numberOfLines={1}>
-                  {copied ? 'Copied' : shortAddr}
-                </Text>
-                {copied
-                  ? <Check size={11} color={color.success.base} strokeWidth={2.6} />
-                  : <Copy size={11} color={color.fg.subtle} strokeWidth={2} />}
-              </Pressable>
-            ) : null}
-          </View>
+          <Text style={styles.chain} numberOfLines={1}>{chainLabel}</Text>
+          {contractAddress ? (
+            <Pressable onPress={copyAddress} hitSlop={8} style={styles.addrChip}>
+              <Text style={[styles.addr, copied && styles.addrCopied]} numberOfLines={1}>
+                {copied ? 'Copied' : shortAddr}
+              </Text>
+              {copied
+                ? <Check size={11} color={color.success.base} strokeWidth={2.6} />
+                : <Copy size={11} color={color.fg.subtle} strokeWidth={2} />}
+            </Pressable>
+          ) : null}
         </View>
         <View style={styles.values}>
           <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
@@ -104,18 +102,12 @@ const styles = createStyles(() => ({
   },
   info: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   symbol: {
     fontSize: text.lg,
     ...inter.semibold,
     color: color.fg.base,
-  },
-  subRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
-    flexShrink: 1,
   },
   chain: {
     fontSize: text.sm,
@@ -126,12 +118,14 @@ const styles = createStyles(() => ({
   addrChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     gap: 4,
+    marginTop: 1,
     paddingHorizontal: space.sm,
     paddingVertical: 2,
     borderRadius: radius.full,
     backgroundColor: color.bg.sunken,
-    flexShrink: 1,
+    maxWidth: '100%',
   },
   addr: {
     fontSize: text.xs,
