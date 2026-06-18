@@ -87,3 +87,37 @@ test.describe('Locked Send — pay-link / scan result + exceptions', () => {
     await page.screenshot({ path: 'e2e/screenshots/send-insufficient-balance.png', fullPage: true });
   });
 });
+
+test.describe('Receive — Save uses the OS share sheet on web', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript((me) => {
+      localStorage.setItem(
+        'vela.accounts',
+        JSON.stringify([{ id: 'e2e', name: 'E2E', address: me, createdAt: '2026-01-01T00:00:00.000Z' }]),
+      );
+      localStorage.setItem('vela.activeAccountIndex', '0');
+      // Record share-sheet invocations so we can assert Save routes to it.
+      (window as unknown as { __shared: string[][] }).__shared = [];
+      (navigator as unknown as { canShare: () => boolean }).canShare = () => true;
+      (navigator as unknown as { share: (d: { files?: File[] }) => Promise<void> }).share = async (d) => {
+        (window as unknown as { __shared: string[][] }).__shared.push((d.files || []).map((f) => f.type));
+      };
+    }, ME);
+    await page.route('**/*', (route) => {
+      const h = new URL(route.request().url()).hostname;
+      if (h === 'localhost' || h === '127.0.0.1') route.continue();
+      else route.abort();
+    });
+  });
+
+  test('Save invokes navigator.share with a PNG (→ iOS "Save Image" to Photos)', async ({ page }) => {
+    await page.goto('/receive');
+    await page.getByText('I Understand').click({ timeout: 40_000 });
+    await page.waitForTimeout(1500); // let the share image pre-render
+    await page.getByText('Save image').click();
+    await page.waitForTimeout(600);
+    const shared = await page.evaluate(() => (window as unknown as { __shared: string[][] }).__shared);
+    expect(shared.length).toBeGreaterThan(0);
+    expect(shared[0]).toContain('image/png');
+  });
+});
