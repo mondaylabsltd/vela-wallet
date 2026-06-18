@@ -28,8 +28,13 @@ export async function shareReceiveCard(ref: RefObject<unknown>, model: ShareCard
     const blob = await composeCardCanvas(model);
     const file = new File([blob], `${fileName}.png`, { type: 'image/png' });
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file] });
-      return;
+      try {
+        await navigator.share({ files: [file] });
+        return;
+      } catch {
+        // User cancelled, or the gesture lapsed during async work — fall back
+        // to a download rather than failing silently.
+      }
     }
     downloadBlob(blob, file.name);
     hapticSuccess();
@@ -71,8 +76,13 @@ function downloadBlob(blob: Blob, fileName: string) {
   const link = document.createElement('a');
   link.download = fileName;
   link.href = url;
+  link.rel = 'noopener';
+  // Safari / Firefox only fire the download when the anchor is in the DOM, and
+  // revoking the URL immediately can cancel the download — defer it.
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 const SANS = "Inter, -apple-system, system-ui, sans-serif";
@@ -96,7 +106,10 @@ function loadImageEl(src: string, cors: boolean): Promise<HTMLImageElement | nul
 /** Fetch a (possibly cross-origin) image as a blob first, so drawing it never taints the canvas. */
 async function loadViaFetch(url: string): Promise<HTMLImageElement | null> {
   try {
-    const r = await fetch(url, { mode: 'cors' });
+    // Bound the wait so a slow/blocked logo can never hang share/save.
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(url, { mode: 'cors', signal: ctrl.signal }).finally(() => clearTimeout(timer));
     if (!r.ok) return null;
     const obj = URL.createObjectURL(await r.blob());
     const img = await loadImageEl(obj, false);
