@@ -670,6 +670,8 @@ export default function SendScreen() {
     if (q && !(tok.symbol.toLowerCase().includes(q) || tok.name.toLowerCase().includes(q) || tok.network.toLowerCase().includes(q))) return false;
     return true;
   });
+  // Count + total for the current filters (category + network + search all apply).
+  const filteredTotal = filteredTokens.reduce((s, tok) => s + tokenUsdValue(tok), 0);
 
   // No explicit "All" chip — an unselected state means "show everything".
   const TOKEN_CATEGORIES: { key: Exclude<TokenCategory, 'all'>; label: string }[] = [
@@ -726,6 +728,14 @@ export default function SendScreen() {
           onClear={() => setTokenChainFilter(null)}
         />
       </View>
+
+      {/* Summary of what's shown — count + total for the active filters. */}
+      {!loading && filteredTokens.length > 0 && (
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryCount}>{t('send.tokenCount', { n: filteredTokens.length })}</Text>
+          <Text style={styles.summaryTotal}>{formatUsd(filteredTotal)}</Text>
+        </View>
+      )}
 
       {loading ? (
         <Text style={styles.loadingText}>{t('send.loadingTokens')}</Text>
@@ -1366,6 +1376,26 @@ const styles = createStyles(() => ({
   },
   chipTextActive: {
     color: color.accent.base,
+  },
+
+  // Count + total summary above the list
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: space.sm,
+    marginBottom: space.md,
+  },
+  summaryCount: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.muted,
+  },
+  summaryTotal: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    fontFamily: font.numeric,
+    color: color.fg.base,
   },
 
   // Add-token affordance (footer + empty state)
