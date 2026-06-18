@@ -61,6 +61,17 @@
     "txErrorTimeout": "Transaction submitted but confirmation timed out. Check history later.",
     "txErrorBundlerLoop": "Gas account balance keeps being rejected by the bundler. Try again later or increase gas tier.",
     "txErrorBundlerFund": "Bundler account needs more gas. Please fund it in Settings.",
-    "txErrorPublicKey": "Public key not found for this account"
+    "txErrorPublicKey": "Public key not found for this account",
+
+    "lock": {
+      "netTitle": "Network not supported",
+      "netBody": "This payment request is on a network Vela doesn't support yet (chain {{chainId}}).",
+      "addNetwork": "Add this network",
+      "netNotFound": "We couldn't find that network.",
+      "netNotCompatible": "That network isn't compatible with Vela smart accounts yet.",
+      "netAddError": "Couldn't add the network. Please try again.",
+      "tokenTitle": "Unknown token",
+      "tokenBody": "We couldn't recognize the token in this payment request on this network."
+    }
   }
 }

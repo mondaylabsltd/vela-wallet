@@ -13,6 +13,34 @@
     "warningConfirm": "I Understand",
     "networksLabel": "Works on {{count}} EVM networks",
     "shareCardHeadline": "Scan to Send Me Crypto",
-    "shareDialogTitle": "{{name}} Wallet Address"
+    "shareDialogTitle": "{{name}} Wallet Address",
+    "modeAddress": "Address",
+    "modeRequest": "Request",
+    "copied": "Copied!",
+    "copyRequestLink": "Copy payment link",
+    "shareAddressSummary": "My wallet address",
+    "request": {
+      "network": "Network",
+      "token": "Token",
+      "amount": "Amount",
+      "amountPlaceholder": "0.00",
+      "amountHint": "Leave blank to let the sender choose the amount",
+      "nativeToken": "{{symbol}} (native)",
+      "selectNetwork": "Select network",
+      "selectToken": "Select token",
+      "tokenSearchPlaceholder": "Search or paste a token address",
+      "addByContract": "Add token by address",
+      "tokenNotFound": "Couldn't find that token on this network",
+      "noTokens": "No tokens found",
+      "summaryAmount": "Request {{amount}} {{symbol}} · {{network}}",
+      "summaryOpen": "Any amount of {{symbol}} · {{network}}",
+      "share": "Share",
+      "save": "Save",
+      "savedTitle": "Saved",
+      "savedBody": "The payment QR was saved to your photos.",
+      "permTitle": "Permission needed",
+      "permBody": "Allow photo access to save the image.",
+      "shareError": "Couldn't share the image."
+    }
   }
 }

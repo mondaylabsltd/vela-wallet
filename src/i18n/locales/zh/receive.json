@@ -13,6 +13,34 @@
     "warningConfirm": "我已了解",
     "networksLabel": "支持 {{count}} 个 EVM 网络",
     "shareCardHeadline": "扫码向我转账",
-    "shareDialogTitle": "{{name}} 钱包地址"
+    "shareDialogTitle": "{{name}} 钱包地址",
+    "modeAddress": "地址",
+    "modeRequest": "收款请求",
+    "copied": "已复制！",
+    "copyRequestLink": "复制收款链接",
+    "shareAddressSummary": "我的钱包地址",
+    "request": {
+      "network": "网络",
+      "token": "代币",
+      "amount": "金额",
+      "amountPlaceholder": "0.00",
+      "amountHint": "留空则由付款方自行输入金额",
+      "nativeToken": "{{symbol}}（原生代币）",
+      "selectNetwork": "选择网络",
+      "selectToken": "选择代币",
+      "tokenSearchPlaceholder": "搜索或粘贴代币地址",
+      "addByContract": "通过地址添加代币",
+      "tokenNotFound": "在该网络上未找到此代币",
+      "noTokens": "未找到代币",
+      "summaryAmount": "请求 {{amount}} {{symbol}} · {{network}}",
+      "summaryOpen": "任意数量的 {{symbol}} · {{network}}",
+      "share": "分享",
+      "save": "保存",
+      "savedTitle": "已保存",
+      "savedBody": "收款二维码已保存到相册。",
+      "permTitle": "需要权限",
+      "permBody": "请允许访问相册以保存图片。",
+      "shareError": "无法分享图片。"
+    }
   }
 }

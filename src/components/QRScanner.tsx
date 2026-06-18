@@ -134,14 +134,9 @@ async function decodeUploadedImage(canvas: HTMLCanvasElement): Promise<string | 
 
 interface Props {
   visible: boolean;
+  /** The raw decoded QR string (trimmed). Callers parse it (address, EIP-681, walletpair, …). */
   onScan: (data: string) => void;
   onClose: () => void;
-}
-
-function parseAddress(data: string): string {
-  let a = data.trim();
-  if (a.startsWith('ethereum:')) a = a.replace('ethereum:', '').split('?')[0].split('@')[0];
-  return a;
 }
 
 // -- Scan line animation (native only) ---------------------------------------
@@ -284,7 +279,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
     if (scanned) return;
     setScanned(true);
     hapticSuccess();
-    onScan(parseAddress(data));
+    onScan(data.trim());
     setTimeout(() => setScanned(false), 2000);
   }
 
@@ -312,7 +307,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
 
           await loadZbar();
           const decoded = await decodeUploadedImage(canvas);
-          if (decoded) { hapticSuccess(); onScan(parseAddress(decoded)); }
+          if (decoded) { hapticSuccess(); onScan(decoded.trim()); }
           else showAlert(t('componentsUi.scanner.noQrFound'), t('componentsUi.scanner.noQrFoundMsg'));
         } catch (e: any) {
           console.warn('[QR] pick error:', e?.message);
@@ -331,7 +326,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           const ExpoCamera = await import('expo-camera');
           const barcodes = await ExpoCamera.scanFromURLAsync(asset.uri, ['qr']);
           if (barcodes.length > 0 && barcodes[0].data) {
-            hapticSuccess(); onScan(parseAddress(barcodes[0].data)); return;
+            hapticSuccess(); onScan(barcodes[0].data.trim()); return;
           }
         } catch {}
 
@@ -341,7 +336,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
             const imageData = decodeBase64Image(asset.base64, asset.width, asset.height);
             if (imageData) {
               const code = jsQR(imageData.data as any, imageData.width, imageData.height, JSQR_OPTS);
-              if (code?.data) { hapticSuccess(); onScan(parseAddress(code.data)); return; }
+              if (code?.data) { hapticSuccess(); onScan(code.data.trim()); return; }
             }
           } catch {}
         }

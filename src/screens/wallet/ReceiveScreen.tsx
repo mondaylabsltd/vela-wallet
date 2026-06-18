@@ -1,16 +1,18 @@
 import { ChainLogo } from '@/components/ChainLogo';
 import { QRCode } from '@/components/QRCode';
+import { ReceiveRequestControls } from '@/components/ReceiveRequestControls';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { fadeIn, fadeInDown } from '@/constants/entering';
-import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
+import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { chainName, getAllNetworksSync } from '@/models/network';
 import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
-import { copyToClipboard, hapticLight, hapticSuccess, isAppActive } from '@/services/platform';
+import { copyToClipboard, hapticLight, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
+import { saveReceiveCard, shareReceiveCard, type ShareCardData } from '@/services/share-card';
 import { fetchTokens } from '@/services/wallet-api';
-import { ArrowLeft, Check, Copy, ShieldAlert } from 'lucide-react-native';
+import { ArrowLeft, Check, Copy, Download, Share2, ShieldAlert } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -36,6 +38,15 @@ export default function ReceiveScreen() {
   const previousTokens = useRef<APIToken[] | null>(null);
   const [copied, setCopied] = useState(false);
   const [warningDismissed, setWarningDismissed] = useState(false);
+
+  // Address vs EIP-681 payment-request mode.
+  const [mode, setMode] = useState<'address' | 'request'>('address');
+  const [request, setRequest] = useState<{ qrValue: string; summary: string }>({ qrValue: '', summary: '' });
+  const [savingImage, setSavingImage] = useState(false);
+  const cardRef = useRef<View>(null);
+
+  const isRequest = mode === 'request';
+  const qrValue = isRequest ? (request.qrValue || address) : address;
 
   // Deposit detection polling — quietly watches for incoming transfers while
   // this screen is open and surfaces them as they land (no persistent status).
@@ -102,17 +113,46 @@ export default function ReceiveScreen() {
     return () => { clearTimeout(timerId); };
   }, [address]);
 
-  const copyAddress = useCallback(async () => {
-    if (!address) return;
-    await copyToClipboard(address);
+  const copyValue = useCallback(async () => {
+    const value = isRequest ? request.qrValue : address;
+    if (!value) return;
+    await copyToClipboard(value);
     hapticLight();
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [address]);
+  }, [isRequest, request.qrValue, address]);
 
   const truncatedAddress = address
     ? `${address.slice(0, 8)}...${address.slice(-6)}`
     : '';
+
+  const shareCardData = useCallback((): ShareCardData => ({
+    name: accountName,
+    qrValue: qrValue || '',
+    summary: isRequest ? request.summary : t('receive.shareAddressSummary'),
+    fileName: `vela-${isRequest ? 'request' : 'address'}-${(address || '').slice(0, 10)}`,
+  }), [accountName, qrValue, isRequest, request.summary, address, t]);
+
+  const onShareImage = useCallback(async () => {
+    try {
+      await shareReceiveCard(cardRef, shareCardData());
+    } catch {
+      showAlert(t('common.error'), t('receive.request.shareError'));
+    }
+  }, [shareCardData, t]);
+
+  const onSaveImage = useCallback(async () => {
+    setSavingImage(true);
+    try {
+      const result = await saveReceiveCard(cardRef, shareCardData());
+      if (result === 'saved') showAlert(t('receive.request.savedTitle'), t('receive.request.savedBody'));
+      else if (result === 'denied') showAlert(t('receive.request.permTitle'), t('receive.request.permBody'));
+    } catch {
+      showAlert(t('common.error'), t('receive.request.shareError'));
+    } finally {
+      setSavingImage(false);
+    }
+  }, [shareCardData, t]);
 
   return (
     <ScreenContainer>
@@ -126,14 +166,29 @@ export default function ReceiveScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
+        {/* Mode toggle: plain address vs EIP-681 payment request */}
+        <View style={styles.segWrap}>
+          {(['address', 'request'] as const).map((m) => (
+            <Pressable
+              key={m}
+              style={[styles.segBtn, mode === m && styles.segBtnActive]}
+              onPress={() => { hapticLight(); setMode(m); }}
+            >
+              <Text style={[styles.segText, mode === m && styles.segTextActive]}>
+                {t(m === 'address' ? 'receive.modeAddress' : 'receive.modeRequest')}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
         {/* QR Card */}
         <Animated.View entering={fadeInDown(100, 400)}>
-          <View style={styles.qrCardWrap}>
+          <View ref={cardRef} collapsable={false} style={styles.qrCardWrap}>
             <VelaCard elevated style={styles.qrCard}>
               {/* QR */}
               <View style={styles.qrBorder}>
-                {address ? (
-                  <QRCode value={address} size={200} />
+                {qrValue ? (
+                  <QRCode value={qrValue} size={200} />
                 ) : (
                   <View style={styles.qrPlaceholder}>
                     <Text style={styles.qrPlaceholderText}>{t('receive.noAddress')}</Text>
@@ -144,12 +199,19 @@ export default function ReceiveScreen() {
               {/* Identity — below the QR */}
               <Text style={styles.walletName}>{accountName}</Text>
 
-              {/* Big, easy-to-tap copy button */}
+              {/* In request mode, show the human-readable summary above the copy button */}
+              {isRequest && !!request.summary && (
+                <Text style={styles.requestSummary} numberOfLines={2}>{request.summary}</Text>
+              )}
+
+              {/* Big, easy-to-tap copy button — copies the address or the EIP-681 URI */}
               <Pressable
-                onPress={warningDismissed ? copyAddress : undefined}
+                onPress={warningDismissed ? copyValue : undefined}
                 style={[styles.copyBtn, copied && styles.copyBtnCopied]}
               >
-                <Text style={[styles.copyAddr, copied && styles.copyAddrCopied]} numberOfLines={1}>{truncatedAddress}</Text>
+                <Text style={[styles.copyAddr, isRequest && styles.copyAddrRequest, copied && styles.copyAddrCopied]} numberOfLines={1}>
+                  {copied ? t('receive.copied') : (isRequest ? t('receive.copyRequestLink') : truncatedAddress)}
+                </Text>
                 {copied ? (
                   <Check size={18} color={color.success.base} strokeWidth={2.5} />
                 ) : (
@@ -198,25 +260,43 @@ export default function ReceiveScreen() {
           </View>
         </Animated.View>
 
-        {/* Networks */}
-        <Animated.View entering={fadeInDown(200, 400)}>
-          <Text style={styles.sectionLabel}>{t('receive.networksLabel', { count: networks.length })}</Text>
+        {isRequest ? (
+          /* Request builder + share/save */
+          <Animated.View entering={fadeInDown(200, 400)}>
+            {address ? <ReceiveRequestControls recipient={address} onChange={setRequest} /> : null}
 
-          <View style={styles.networkGrid}>
-            {networks.map((network) => (
-              <View key={network.id} style={styles.networkChip}>
-                <ChainLogo
-                  label={network.iconLabel}
-                  color={network.iconColor}
-                  bgColor={network.iconBg}
-                  logoURL={network.logoURL}
-                  size={22}
-                />
-                <Text style={styles.networkChipName} numberOfLines={1}>{network.displayName}</Text>
-              </View>
-            ))}
-          </View>
-        </Animated.View>
+            <View style={styles.shareRow}>
+              <Pressable style={styles.shareBtn} onPress={onShareImage}>
+                <Share2 size={18} color={color.fg.inverse} strokeWidth={2.2} />
+                <Text style={styles.shareBtnText}>{t('receive.request.share')}</Text>
+              </Pressable>
+              <Pressable style={styles.saveBtn} onPress={onSaveImage} disabled={savingImage}>
+                <Download size={18} color={color.fg.base} strokeWidth={2.2} />
+                <Text style={styles.saveBtnText}>{t('receive.request.save')}</Text>
+              </Pressable>
+            </View>
+          </Animated.View>
+        ) : (
+          /* Supported networks */
+          <Animated.View entering={fadeInDown(200, 400)}>
+            <Text style={styles.sectionLabel}>{t('receive.networksLabel', { count: networks.length })}</Text>
+
+            <View style={styles.networkGrid}>
+              {networks.map((network) => (
+                <View key={network.id} style={styles.networkChip}>
+                  <ChainLogo
+                    label={network.iconLabel}
+                    color={network.iconColor}
+                    bgColor={network.iconBg}
+                    logoURL={network.logoURL}
+                    size={22}
+                  />
+                  <Text style={styles.networkChipName} numberOfLines={1}>{network.displayName}</Text>
+                </View>
+              ))}
+            </View>
+          </Animated.View>
+        )}
       </ScrollView>
     </ScreenContainer>
   );
@@ -232,6 +312,85 @@ const styles = createStyles(() => ({
     justifyContent: 'space-between',
     paddingVertical: space.lg,
     marginBottom: space.md,
+  },
+
+  // Mode toggle
+  segWrap: {
+    flexDirection: 'row',
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.full,
+    padding: 4,
+    marginBottom: space.xl,
+  },
+  segBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: space.md,
+    borderRadius: radius.full,
+  },
+  segBtnActive: {
+    backgroundColor: color.bg.raised,
+    ...shadow.sm,
+  },
+  segText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.fg.muted,
+  },
+  segTextActive: {
+    color: color.fg.base,
+  },
+
+  // Request summary + share/save
+  requestSummary: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.accent.base,
+    textAlign: 'center',
+    marginBottom: space.md,
+  },
+  copyAddrRequest: {
+    fontFamily: undefined,
+    textAlign: 'center',
+  },
+  shareRow: {
+    flexDirection: 'row',
+    gap: space.md,
+    marginTop: space.xl,
+    marginBottom: space['4xl'],
+  },
+  shareBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    backgroundColor: color.accent.base,
+    borderRadius: radius.lg,
+    paddingVertical: space.lg,
+  },
+  shareBtnText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.fg.inverse,
+  },
+  saveBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    backgroundColor: color.bg.raised,
+    borderWidth: 1,
+    borderColor: color.border.base,
+    borderRadius: radius.lg,
+    paddingVertical: space.lg,
+  },
+  saveBtnText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.fg.base,
   },
   navBtn: {
     width: 40,

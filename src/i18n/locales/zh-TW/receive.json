@@ -13,6 +13,34 @@
     "warningConfirm": "我了解",
     "networksLabel": "可在 {{count}} 個 EVM 網路上使用",
     "shareCardHeadline": "掃描即可向我發送加密貨幣",
-    "shareDialogTitle": "{{name}} 錢包地址"
+    "shareDialogTitle": "{{name}} 錢包地址",
+    "modeAddress": "地址",
+    "modeRequest": "收款請求",
+    "copied": "已複製！",
+    "copyRequestLink": "複製收款連結",
+    "shareAddressSummary": "我的錢包地址",
+    "request": {
+      "network": "網路",
+      "token": "代幣",
+      "amount": "金額",
+      "amountPlaceholder": "0.00",
+      "amountHint": "留空則由付款方自行輸入金額",
+      "nativeToken": "{{symbol}}（原生代幣）",
+      "selectNetwork": "選擇網路",
+      "selectToken": "選擇代幣",
+      "tokenSearchPlaceholder": "搜尋或貼上代幣地址",
+      "addByContract": "透過地址新增代幣",
+      "tokenNotFound": "在此網路上找不到此代幣",
+      "noTokens": "找不到代幣",
+      "summaryAmount": "請求 {{amount}} {{symbol}} · {{network}}",
+      "summaryOpen": "任意數量的 {{symbol}} · {{network}}",
+      "share": "分享",
+      "save": "儲存",
+      "savedTitle": "已儲存",
+      "savedBody": "收款 QR code 已儲存到相簿。",
+      "permTitle": "需要權限",
+      "permBody": "請允許存取相簿以儲存圖片。",
+      "shareError": "無法分享圖片。"
+    }
   }
 }

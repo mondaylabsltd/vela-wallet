@@ -65,6 +65,14 @@
       "expo-sharing",
       "expo-camera",
       "expo-image-picker",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Vela Wallet saves your receive QR code to your photo library.",
+          "savePhotosPermission": "Vela Wallet saves your receive QR code to your photo library.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ],
       "expo-localization"
     ],
     "experiments": {

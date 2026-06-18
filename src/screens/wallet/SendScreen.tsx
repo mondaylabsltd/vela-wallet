@@ -3,12 +3,12 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
-import { TokenRow } from '@/components/ui/TokenRow';
+import { TokenSelector } from '@/components/ui/TokenSelector';
 import { color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
-import { chainName, getAllNetworksSync, nativeSymbol, tokenBadgeNetwork } from '@/models/network';
-import { NetworkFilterButton, NetworkFilterSheet } from '@/components/ui/NetworkFilterSheet';
-import { AddTokenSheet } from '@/components/ui/AddTokenSheet';
-import { isStable } from '@/services/activity';
+import { chainName, nativeSymbol, networkForChainId, networkId, tokenBadgeNetwork } from '@/models/network';
+import { addCustomNetworkByChainId } from '@/services/add-network';
+import { parseEIP681, fromBaseUnits } from '@/services/eip681';
+import { resolveTokenMetadata } from '@/services/token-metadata';
 import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
@@ -29,7 +29,7 @@ import { ZERO_DECIMAL_CODES } from '@/services/currency';
 import { showAlert, copyToClipboard, openBrowser } from '@/services/platform';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   withSpring,
@@ -37,23 +37,13 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, ScanLine, BookUser, AlertCircle, ArrowUpDown, Search, ChevronDown, ChevronUp, RefreshCw, ExternalLink, Plus, Copy, Check } from 'lucide-react-native';
+import { ArrowLeft, X, ScanLine, BookUser, AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Copy, Check, Globe } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
 
 function isValidAddress(addr: string): boolean {
   return /^0x[0-9a-fA-F]{40}$/.test(addr);
-}
-
-/** Quick filter buckets for the token picker. Mutually exclusive + exhaustive. */
-type TokenCategory = 'all' | 'stable' | 'gas' | 'other';
-
-function tokenMatchesCategory(tok: APIToken, cat: TokenCategory): boolean {
-  if (cat === 'all') return true;
-  if (cat === 'gas') return isNativeToken(tok); // native coin = the chain's gas token
-  if (cat === 'stable') return !isNativeToken(tok) && isStable(tok.symbol);
-  return !isNativeToken(tok) && !isStable(tok.symbol); // 'other'
 }
 
 function explorerUserOpUrl(chainId: number): string | null {
@@ -93,6 +83,17 @@ function amountToWeiHex(amount: string, decimals: number): string {
 /** Convert a human-readable balance string (e.g. "0.0113") to BigInt wei. */
 function balanceToWei(balance: string, decimals: number): bigint {
   return BigInt('0x' + amountToWeiHex(balance, decimals));
+}
+
+/** A zero-balance native token for a chain the user holds nothing on (locked EIP-681 send). */
+function synthNativeToken(chainId: number): APIToken {
+  const sym = nativeSymbol(chainId);
+  return { network: networkId(chainId), chainName: chainName(chainId), symbol: sym, balance: '0', decimals: 18, logo: null, name: sym, tokenAddress: null, priceUsd: null, spam: false };
+}
+
+/** A zero-balance ERC-20 placeholder built from resolved metadata (locked EIP-681 send). */
+function synthErc20Token(chainId: number, address: string, symbol: string, decimals: number): APIToken {
+  return { network: networkId(chainId), chainName: chainName(chainId), symbol, balance: '0', decimals, logo: null, name: symbol, tokenAddress: address, priceUsd: null, spam: false };
 }
 
 /** Resolve the token amount from user input, handling fiat-input mode.
@@ -168,7 +169,20 @@ export default function SendScreen() {
   const { t } = useTranslation();
   useLocalePrefs(); // re-render when the number format changes
   const router = useSafeRouter();
-  const params = useLocalSearchParams<{ preselectedSymbol?: string; preselectedNetwork?: string; prefilledRecipient?: string }>();
+  const params = useLocalSearchParams<{
+    preselectedSymbol?: string;
+    preselectedNetwork?: string;
+    prefilledRecipient?: string;
+    // EIP-681 scan: lock the whole request (recipient + chain + token + amount).
+    prefilledChainId?: string;
+    prefilledTokenAddress?: string;
+    prefilledAmountBase?: string;
+    locked?: string;
+  }>();
+  const locked = params.locked === '1';
+  // The amount is only fixed when the request actually specified one; an
+  // "open" request (token but no amount) still lets the sender choose.
+  const amountLocked = locked && !!params.prefilledAmountBase;
   const { activeAccount, state } = useWallet();
   const address = activeAccount?.address ?? state.address;
   const dc = useDisplayCurrency();
@@ -176,6 +190,17 @@ export default function SendScreen() {
 
   const hasPreselection = !!(params.prefilledRecipient || (params.preselectedSymbol && params.preselectedNetwork));
   const [step, setStep] = useState<Step>(hasPreselection ? 'enter-details' : 'select-token');
+
+  // EIP-681 locked-request resolution + the exceptions it can hit.
+  type LockError =
+    | { kind: 'network'; chainId: number }
+    | { kind: 'token' }
+    | null;
+  const [lockError, setLockError] = useState<LockError>(null);
+  const [lockRetry, setLockRetry] = useState(0);
+  const [resolvingLock, setResolvingLock] = useState(locked);
+  const [addingNetwork, setAddingNetwork] = useState(false);
+  const [addNetworkMsg, setAddNetworkMsg] = useState<string | null>(null);
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedToken, setSelectedToken] = useState<APIToken | null>(null);
@@ -183,11 +208,6 @@ export default function SendScreen() {
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
-  const [tokenSearch, setTokenSearch] = useState('');
-  const [tokenCategory, setTokenCategory] = useState<TokenCategory>('stable');
-  const [tokenChainFilter, setTokenChainFilter] = useState<number | null>(null);
-  const [showNetSheet, setShowNetSheet] = useState(false);
-  const [showAddToken, setShowAddToken] = useState(false);
   const [copiedContract, setCopiedContract] = useState(false);
   const [feeEstimate, setFeeEstimate] = useState<TransactionFeeEstimate | null>(null);
   const [estimatingGas, setEstimatingGas] = useState(false);
@@ -210,6 +230,64 @@ export default function SendScreen() {
   const prefetchedAccount = useRef<{ publicKeyHex: string } | null>(null);
   const webauthnModuleRef = useRef<typeof import('@/services/webauthn-verify') | null>(null);
 
+  // Resolve a locked EIP-681 request against the loaded token list. Sets the
+  // exact token (held, or a synthetic zero-balance placeholder), recipient and
+  // amount — or surfaces an unsupported-network / unknown-token exception.
+  const resolveLockedRequest = async (allTokens: APIToken[]) => {
+    setResolvingLock(true);
+    try {
+      const chainId = parseInt(params.prefilledChainId ?? '', 10);
+      if (!Number.isFinite(chainId)) { setLockError(null); return; }
+      if (!networkForChainId(chainId)) { setLockError({ kind: 'network', chainId }); return; }
+
+      const wantAddr = params.prefilledTokenAddress?.toLowerCase();
+      let tok: APIToken | null = allTokens.find((tk) =>
+        tokenChainId(tk) === chainId &&
+        (wantAddr ? (!isNativeToken(tk) && tk.tokenAddress?.toLowerCase() === wantAddr) : isNativeToken(tk))
+      ) ?? null;
+
+      if (!tok) {
+        if (!wantAddr) {
+          tok = synthNativeToken(chainId);
+        } else {
+          const meta = await resolveTokenMetadata(chainId, [wantAddr]);
+          const m = meta.get(wantAddr);
+          if (!m) { setLockError({ kind: 'token' }); return; }
+          tok = synthErc20Token(chainId, params.prefilledTokenAddress!, m.symbol, m.decimals);
+        }
+      }
+
+      setLockError(null);
+      setSelectedToken(tok);
+      setRecipient(params.prefilledRecipient ?? '');
+      if (params.prefilledAmountBase) {
+        try { setAmount(fromBaseUnits(BigInt(params.prefilledAmountBase), tok.decimals)); } catch {}
+      }
+      setStep('enter-details');
+    } finally {
+      setResolvingLock(false);
+    }
+  };
+
+  // "Add this network" recovery when a scanned request names an unsupported chain.
+  const handleAddNetwork = async (chainId: number) => {
+    setAddingNetwork(true);
+    setAddNetworkMsg(null);
+    try {
+      const result = await addCustomNetworkByChainId(chainId);
+      if (result.ok) {
+        setLockError(null);
+        setLockRetry((n) => n + 1); // re-run resolution now that the chain exists
+      } else {
+        setAddNetworkMsg(result.reason === 'not-found' ? t('send.lock.netNotFound') : (result.error || t('send.lock.netNotCompatible')));
+      }
+    } catch {
+      setAddNetworkMsg(t('send.lock.netAddError'));
+    } finally {
+      setAddingNetwork(false);
+    }
+  };
+
   useEffect(() => {
     if (!address) return;
     setLoading(true);
@@ -225,6 +303,13 @@ export default function SendScreen() {
         const nonZero = result.filter((t) => tokenBalanceDouble(t) > 0);
         nonZero.sort((a, b) => tokenUsdValue(b) - tokenUsdValue(a));
         setTokens(nonZero);
+
+        if (locked) {
+          // Match against the full list (incl. zero-balance known tokens) for
+          // the exact requested token; fall back to a synthetic placeholder.
+          resolveLockedRequest(result);
+          return;
+        }
 
         if (params.preselectedSymbol && params.preselectedNetwork) {
           const match = nonZero.find(
@@ -257,7 +342,7 @@ export default function SendScreen() {
       }
       setRecentRecipients(recents);
     });
-  }, [address, params.preselectedSymbol, params.preselectedNetwork]);
+  }, [address, params.preselectedSymbol, params.preselectedNetwork, lockRetry]);
 
   // Re-pull balances after the user adds/removes a custom token in the sheet,
   // so it shows up (or disappears) without a manual page refresh.
@@ -659,127 +744,16 @@ export default function SendScreen() {
     }
   };
 
-  // Step 1: Select Token — combine category, network, and text filters.
-  const networks = getAllNetworksSync();
-  const selectedTokenNetwork = tokenChainFilter != null ? networks.find((n) => n.chainId === tokenChainFilter) ?? null : null;
-  const hasActiveFilter = !!tokenSearch || tokenCategory !== 'all' || tokenChainFilter != null;
-  const q = tokenSearch.trim().toLowerCase();
-  const filteredTokens = tokens.filter((tok) => {
-    if (tokenChainFilter != null && tokenChainId(tok) !== tokenChainFilter) return false;
-    if (!tokenMatchesCategory(tok, tokenCategory)) return false;
-    if (q && !(tok.symbol.toLowerCase().includes(q) || tok.name.toLowerCase().includes(q) || tok.network.toLowerCase().includes(q))) return false;
-    return true;
-  });
-  // Count + total for the current filters (category + network + search all apply).
-  const filteredTotal = filteredTokens.reduce((s, tok) => s + tokenUsdValue(tok), 0);
-
-  // No explicit "All" chip — an unselected state means "show everything".
-  const TOKEN_CATEGORIES: { key: Exclude<TokenCategory, 'all'>; label: string }[] = [
-    { key: 'stable', label: t('send.filterStable') },
-    { key: 'gas', label: t('send.filterGas') },
-    { key: 'other', label: t('send.filterOther') },
-  ];
-
-  const addTokenButton = (
-    <Pressable style={styles.addTokenRow} onPress={() => setShowAddToken(true)}>
-      <Plus size={18} color={color.accent.base} strokeWidth={2.5} />
-      <Text style={styles.addTokenText}>{t('send.addTokenBtn')}</Text>
-    </Pressable>
-  );
-
+  // Step 1: Select Token — delegated to the shared TokenSelector.
   const renderSelectToken = () => (
     <Animated.View style={styles.stepContainer} entering={fadeInDown(0, 300)}>
       <Text style={styles.stepTitle}>{t('send.selectTokenTitle')}</Text>
-      <View style={styles.searchWrap}>
-        <Search size={16} color={color.fg.subtle} strokeWidth={2} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder={t('send.searchPlaceholder')}
-          placeholderTextColor={color.fg.subtle}
-          value={tokenSearch}
-          onChangeText={setTokenSearch}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      </View>
-
-      {/* Category chips + network filter (reused from Home). */}
-      <View style={styles.filterRow}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.chipScroll}
-          contentContainerStyle={styles.chipRow}
-          keyboardShouldPersistTaps="handled"
-        >
-          {TOKEN_CATEGORIES.map((c) => {
-            const active = tokenCategory === c.key;
-            return (
-              <Pressable key={c.key} onPress={() => setTokenCategory(active ? 'all' : c.key)} style={[styles.chip, active && styles.chipActive]}>
-                <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>{c.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-        <NetworkFilterButton
-          networks={networks}
-          selected={selectedTokenNetwork}
-          onPress={() => setShowNetSheet(true)}
-          onClear={() => setTokenChainFilter(null)}
-        />
-      </View>
-
-      {/* Summary of what's shown — count + total for the active filters. */}
-      {!loading && filteredTokens.length > 0 && (
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryCount}>{t('send.tokenCount', { n: filteredTokens.length })}</Text>
-          <Text style={styles.summaryTotal}>{formatUsd(filteredTotal)}</Text>
-        </View>
-      )}
-
-      {loading ? (
-        <Text style={styles.loadingText}>{t('send.loadingTokens')}</Text>
-      ) : filteredTokens.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>{hasActiveFilter ? t('send.noMatchingTokens') : t('send.noTokensWithBalance')}</Text>
-          {addTokenButton}
-        </View>
-      ) : (
-        <FlatList
-          data={filteredTokens}
-          keyExtractor={(item) => `${item.network}_${item.tokenAddress ?? 'native'}_${item.symbol}`}
-          renderItem={({ item, index }) => (
-            <TokenRow
-              symbol={item.symbol}
-              chainLabel={chainName(tokenChainId(item))}
-              logoUrls={tokenLogoURLs(item)}
-              chain={tokenBadgeNetwork(item)}
-              balance={formatTokenAmount(tokenBalanceDouble(item), { compact: true })}
-              usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
-              onPress={() => { handleSelectToken(item); setTokenSearch(''); }}
-              index={index}
-            />
-          )}
-          ListFooterComponent={addTokenButton}
-          initialNumToRender={10}
-          windowSize={5}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        />
-      )}
-
-      <NetworkFilterSheet
-        visible={showNetSheet}
-        networks={networks}
-        selectedChainId={tokenChainFilter}
-        onSelect={setTokenChainFilter}
-        onClose={() => setShowNetSheet(false)}
-        subtitleForChain={(n) => {
-          const c = tokens.filter((tk) => tokenChainId(tk) === n.chainId).length;
-          return c > 0 ? t('send.tokenCount', { n: c }) : undefined;
-        }}
+      <TokenSelector
+        tokens={tokens}
+        loading={loading}
+        onSelect={handleSelectToken}
+        onAddChanged={refreshTokens}
       />
-      <AddTokenSheet visible={showAddToken} onClose={() => setShowAddToken(false)} onChanged={refreshTokens} />
     </Animated.View>
   );
 
@@ -800,7 +774,7 @@ export default function SendScreen() {
 
           {/* Hero card — tap the row to switch token; ERC-20s show a copyable contract address. */}
           <VelaCard style={styles.heroCard}>
-            <Pressable style={styles.heroRow} onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); }}>
+            <Pressable style={styles.heroRow} disabled={locked} onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); }}>
               <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={44} />
               <View style={styles.heroIdentity}>
                 <Text style={styles.heroSymbol}>{selectedToken.symbol}</Text>
@@ -841,7 +815,7 @@ export default function SendScreen() {
           </VelaCard>
 
           {/* Amount — large display with inline unit */}
-          <Pressable style={styles.amountWrap} onPress={() => amountInputRef.current?.focus()}>
+          <Pressable style={styles.amountWrap} onPress={() => { if (!amountLocked) amountInputRef.current?.focus(); }}>
             <View style={styles.amountTopRow}>
               <View style={styles.amountInputWrap}>
                 <TextInput
@@ -851,6 +825,7 @@ export default function SendScreen() {
                   placeholder="0"
                   placeholderTextColor={color.fg.subtle}
                   value={amount}
+                  editable={!amountLocked}
                   onChangeText={(t) => {
                     const maxDec = inputInUsd ? fiatDecimals : selectedToken.decimals;
                     const sanitized = sanitizeAmountInput(t, maxDec);
@@ -860,8 +835,8 @@ export default function SendScreen() {
                   selectionColor={color.fg.muted}
                 />
               </View>
-              {amount ? (
-                <Text style={[styles.unitLabel, { fontSize: Math.max(amountFontSize(amount) * 0.7, 16) }]}>
+              {amount || amountLocked ? (
+                <Text style={[styles.unitLabel, { fontSize: Math.max(amountFontSize(amount || '0') * 0.7, 16) }]}>
                   {inputInUsd ? dc.code : selectedToken.symbol}
                 </Text>
               ) : (
@@ -907,9 +882,11 @@ export default function SendScreen() {
           {/* Recipient */}
           <View style={styles.fieldLabelRow}>
             <Text style={styles.fieldLabel}>{t('send.recipientLabel')}</Text>
-            <Pressable onPress={() => setShowScanner(true)} hitSlop={8} style={styles.fieldLabelAction}>
-              <ScanLine size={15} color={color.fg.subtle} strokeWidth={2} />
-            </Pressable>
+            {!locked && (
+              <Pressable onPress={() => setShowScanner(true)} hitSlop={8} style={styles.fieldLabelAction}>
+                <ScanLine size={15} color={color.fg.subtle} strokeWidth={2} />
+              </Pressable>
+            )}
           </View>
           <View style={styles.inputWrap}>
             <TextInput
@@ -980,7 +957,7 @@ export default function SendScreen() {
             onPress={handleContinue}
             loading={estimatingGas}
             style={styles.continueBtn}
-            disabled={!recipient || !amount || estimatingGas || fundingNeeded?.reason === 'wallet_balance_too_low'}
+            disabled={!recipient || !amount || estimatingGas || fundingNeeded?.reason === 'wallet_balance_too_low' || (locked && !!amountWarning)}
           />
         </Animated.View>
       </ScrollView>
@@ -1177,6 +1154,40 @@ export default function SendScreen() {
     );
   };
 
+  // Exception screen for a scanned EIP-681 request Vela can't fulfil as-is.
+  const renderLockError = () => {
+    if (!lockError) return null;
+    if (lockError.kind === 'network') {
+      return (
+        <View style={styles.lockErrorWrap}>
+          <View style={styles.lockErrorIcon}><Globe size={30} color={color.accent.base} strokeWidth={2} /></View>
+          <Text style={styles.lockErrorTitle}>{t('send.lock.netTitle')}</Text>
+          <Text style={styles.lockErrorBody}>{t('send.lock.netBody', { chainId: lockError.chainId })}</Text>
+          {addNetworkMsg ? <Text style={styles.lockErrorMsg}>{addNetworkMsg}</Text> : null}
+          <VelaButton
+            title={t('send.lock.addNetwork')}
+            onPress={() => handleAddNetwork(lockError.chainId)}
+            loading={addingNetwork}
+            style={styles.lockErrorBtn}
+          />
+          <Pressable onPress={() => router.back()} hitSlop={8}>
+            <Text style={styles.lockErrorCancel}>{t('common.cancel')}</Text>
+          </Pressable>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.lockErrorWrap}>
+        <View style={styles.lockErrorIcon}><AlertCircle size={30} color={color.accent.base} strokeWidth={2} /></View>
+        <Text style={styles.lockErrorTitle}>{t('send.lock.tokenTitle')}</Text>
+        <Text style={styles.lockErrorBody}>{t('send.lock.tokenBody')}</Text>
+        <Pressable onPress={() => router.back()} hitSlop={8}>
+          <Text style={styles.lockErrorCancel}>{t('common.cancel')}</Text>
+        </Pressable>
+      </View>
+    );
+  };
+
   return (
     <ScreenContainer>
       {/* Nav bar */}
@@ -1192,7 +1203,11 @@ export default function SendScreen() {
       </View>
 
       {/* Transaction confirmed — full-screen receipt replaces everything */}
-      {txStatus === 'confirmed' && selectedToken ? (
+      {lockError ? (
+        renderLockError()
+      ) : (locked && resolvingLock && !selectedToken) ? (
+        <View style={styles.lockLoading}><ActivityIndicator color={color.accent.base} /></View>
+      ) : txStatus === 'confirmed' && selectedToken ? (
         <TransactionReceipt
           from={activeAccount?.address ?? ''}
           fromName={activeAccount?.name}
@@ -1221,9 +1236,22 @@ export default function SendScreen() {
 
       <QRScanner
         visible={showScanner}
-        onScan={(addr) => {
-          setRecipient(addr);
+        onScan={(data) => {
           setShowScanner(false);
+          // A full EIP-681 request re-opens Send locked; otherwise just take the address.
+          const req = parseEIP681(data);
+          if (req && req.chainId != null) {
+            const p: Record<string, string> = {
+              prefilledRecipient: req.recipient,
+              prefilledChainId: String(req.chainId),
+              locked: '1',
+            };
+            if (req.tokenAddress) p.prefilledTokenAddress = req.tokenAddress;
+            if (req.amountBaseUnits != null) p.prefilledAmountBase = req.amountBaseUnits.toString();
+            router.replace({ pathname: '/send', params: p });
+            return;
+          }
+          setRecipient(req?.recipient ?? data);
         }}
         onClose={() => setShowScanner(false)}
       />
@@ -1933,5 +1961,57 @@ const styles = createStyles(() => ({
     ...inter.regular,
     color: color.fg.subtle,
     marginTop: space.sm,
+  },
+
+  // EIP-681 lock states
+  lockLoading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockErrorWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space['3xl'],
+    gap: space.lg,
+  },
+  lockErrorIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: color.accent.soft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: space.sm,
+  },
+  lockErrorTitle: {
+    fontSize: text.xl,
+    ...inter.bold,
+    color: color.fg.base,
+    textAlign: 'center',
+  },
+  lockErrorBody: {
+    fontSize: text.base,
+    ...inter.regular,
+    color: color.fg.subtle,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  lockErrorMsg: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.error.base,
+    textAlign: 'center',
+  },
+  lockErrorBtn: {
+    alignSelf: 'stretch',
+    marginTop: space.md,
+  },
+  lockErrorCancel: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.fg.muted,
+    padding: space.md,
   },
 }));

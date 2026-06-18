@@ -15,13 +15,14 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 import { DEFAULT_NETWORKS, getAllNetworksSync, refreshCustomNetworks } from '@/models/network';
-import type { CompatibilityResult, CustomNetwork, CustomToken } from '@/models/types';
+import type { CompatibilityResult, CustomToken } from '@/models/types';
+import { chainInfoToCustomNetwork } from '@/services/add-network';
 import { MULTICALL3, SEL, decAggregate3, decString, decU8, encAggregate3 } from '@/services/abi';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { hapticSuccess, openBrowser, showAlert } from '@/services/platform';
 import { rpcCall } from '@/services/rpc-adapter';
-import { loadCustomNetworks, loadCustomTokens, removeCustomToken, saveCustomNetwork, saveCustomToken, getBundlerServiceURL } from '@/services/storage';
+import { loadCustomNetworks, loadCustomTokens, removeCustomToken, saveCustomNetwork, saveCustomToken } from '@/services/storage';
 import { Check, Globe, ScanLine, Trash2, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -139,21 +140,7 @@ export function AddTokenPanel({ onChanged }: { onChanged?: () => void }) {
     if (!netChainInfo || !netCompat?.compatible) return;
     setNetSaving(true);
     try {
-      const network: CustomNetwork = {
-        id: `custom-${netChainInfo.chainId}`,
-        displayName: netChainInfo.name,
-        chainId: netChainInfo.chainId,
-        iconLabel: (netChainInfo.nativeCurrency?.symbol ?? 'ETH').slice(0, 4),
-        iconColor: '#888888',
-        iconBg: '#F0F0F0',
-        logoURL: netChainInfo.logoURL ?? '',
-        isL2: false,
-        rpcURL: netCompat.bestRpcUrl ?? netChainInfo.rpcUrl ?? '',
-        explorerURL: netChainInfo.explorerUrl ?? '',
-        bundlerURL: `${getBundlerServiceURL()}/${netChainInfo.chainId}`,
-        nativeSymbol: netChainInfo.nativeCurrency?.symbol ?? 'ETH',
-        addedAt: new Date().toISOString(),
-      };
+      const network = chainInfoToCustomNetwork(netChainInfo, netCompat.bestRpcUrl);
       await saveCustomNetwork(network);
       await refreshCustomNetworks();
       hapticSuccess();

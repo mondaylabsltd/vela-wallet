@@ -2,7 +2,9 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { fadeIn } from '@/constants/entering';
 import { color, createStyles, font, inter, motion, radius, space, text } from '@/constants/theme';
 import type { Network } from '@/models/network';
-import React, { useCallback } from 'react';
+import { copyToClipboard, hapticLight } from '@/services/platform';
+import { Check, Copy } from 'lucide-react-native';
+import React, { useCallback, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -17,6 +19,8 @@ interface Props {
   logoUrls?: string[];
   /** Network whose logo is badged onto the token logo's bottom-right corner. */
   chain?: Network | null;
+  /** ERC-20 contract address — shown (tappable to copy) to disambiguate same-named tokens. */
+  contractAddress?: string | null;
   balance: string;
   usdValue?: string;
   onPress: () => void;
@@ -25,8 +29,9 @@ interface Props {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, balance, usdValue, onPress, index = 0 }: Props) {
+export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, contractAddress, balance, usdValue, onPress, index = 0 }: Props) {
   const scale = useSharedValue(1);
+  const [copied, setCopied] = useState(false);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -40,6 +45,18 @@ export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, balance
     scale.value = withSpring(1, motion.spring);
   }, [scale]);
 
+  const copyAddress = useCallback(async () => {
+    if (!contractAddress) return;
+    await copyToClipboard(contractAddress);
+    hapticLight();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }, [contractAddress]);
+
+  const shortAddr = contractAddress
+    ? `${contractAddress.slice(0, 6)}…${contractAddress.slice(-4)}`
+    : '';
+
   return (
     <Animated.View entering={fadeIn(index * 40, 300)}>
       <AnimatedPressable
@@ -51,7 +68,19 @@ export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, balance
         <TokenLogo symbol={symbol} logoUrl={logoUrl} logoUrls={logoUrls} chain={chain} size={40} />
         <View style={styles.info}>
           <Text style={styles.symbol} numberOfLines={1}>{symbol}</Text>
-          <Text style={styles.chain}>{chainLabel}</Text>
+          <View style={styles.subRow}>
+            <Text style={styles.chain} numberOfLines={1}>{chainLabel}</Text>
+            {contractAddress ? (
+              <Pressable onPress={copyAddress} hitSlop={8} style={styles.addrChip}>
+                <Text style={[styles.addr, copied && styles.addrCopied]} numberOfLines={1}>
+                  {copied ? 'Copied' : shortAddr}
+                </Text>
+                {copied
+                  ? <Check size={11} color={color.success.base} strokeWidth={2.6} />
+                  : <Copy size={11} color={color.fg.subtle} strokeWidth={2} />}
+              </Pressable>
+            ) : null}
+          </View>
         </View>
         <View style={styles.values}>
           <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
@@ -82,10 +111,37 @@ const styles = createStyles(() => ({
     ...inter.semibold,
     color: color.fg.base,
   },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    flexShrink: 1,
+  },
   chain: {
     fontSize: text.sm,
     ...inter.regular,
     color: color.fg.subtle,
+    flexShrink: 0,
+  },
+  addrChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: space.sm,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    backgroundColor: color.bg.sunken,
+    flexShrink: 1,
+  },
+  addr: {
+    fontSize: text.xs,
+    ...inter.medium,
+    fontFamily: font.mono,
+    color: color.fg.muted,
+    flexShrink: 1,
+  },
+  addrCopied: {
+    color: color.success.base,
   },
   values: {
     alignItems: 'flex-end',

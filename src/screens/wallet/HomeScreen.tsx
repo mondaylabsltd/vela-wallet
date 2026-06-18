@@ -55,6 +55,7 @@ import type { LocalTransaction } from '@/services/storage';
 import { getAccountBalance, getAccountBalances, setAccountBalance } from '@/services/balance-cache';
 import { currencyMeta, formatFiat, getCurrencyCode, getRate, loadCurrency, setCurrency, shouldShowDecimals } from '@/services/currency';
 import { parseRemoteInjectURL } from '@/services/dapp-transport';
+import { parseEIP681 } from '@/services/eip681';
 import { copyToClipboard, hapticSuccess, isAppActive, openURL, showAlert } from '@/services/platform';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
 import { fetchTokens } from '@/services/wallet-api';
@@ -426,8 +427,25 @@ export default function HomeScreen() {
 
   const onScan = useCallback((data: string) => {
     setShowScanner(false);
-    if (/^0x[0-9a-fA-F]{40}$/.test(data)) {
-      router.push(`/send?prefilledRecipient=${data}`);
+
+    // EIP-681 payment request → open Send pre-filled and locked. We need a chain
+    // to lock onto; a chainless request degrades to a plain recipient prefill.
+    const req = parseEIP681(data);
+    if (req && req.chainId != null) {
+      const params: Record<string, string> = {
+        prefilledRecipient: req.recipient,
+        prefilledChainId: String(req.chainId),
+        locked: '1',
+      };
+      if (req.tokenAddress) params.prefilledTokenAddress = req.tokenAddress;
+      if (req.amountBaseUnits != null) params.prefilledAmountBase = req.amountBaseUnits.toString();
+      router.push({ pathname: '/send', params });
+      return;
+    }
+
+    const addr = req?.recipient ?? data;
+    if (/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+      router.push(`/send?prefilledRecipient=${addr}`);
       return;
     }
     if (!connectFromUri(data)) {
