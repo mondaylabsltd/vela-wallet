@@ -17,6 +17,17 @@
       "createNew": "Create New Account",
       "signInExisting": "Sign In with Existing"
     },
+    "rpcProviders": {
+      "modalTitle": "RPC Providers",
+      "description": "Add an API key to route supported networks through your own provider. Priority: per-network RPC, then your providers, then Vela built-in, then the chain index.",
+      "getKey": "Get a key",
+      "test": "Test",
+      "notSet": "Not set",
+      "checkKey": "Check key",
+      "activeNetworks": "{{count}} networks",
+      "supportsCount": "Supports {{count}} of {{total}} networks",
+      "unavailable": "Unavailable"
+    },
     "endpoints": {
       "modalTitle": "Service Endpoints",
       "description": "These services power your wallet.\nYou can deploy your own instances for full self-custody.",

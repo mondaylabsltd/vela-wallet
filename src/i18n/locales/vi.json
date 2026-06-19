@@ -46,6 +46,8 @@
     "advanced": {
       "networksTitle": "Mạng lưới",
       "networksSubtitle": "URL của RPC, Explorer và Bundler",
+      "rpcProvidersTitle": "Nhà cung cấp RPC",
+      "rpcProvidersSubtitle": "Khóa Alchemy, dRPC, Ankr",
       "addNetworkTitle": "Thêm mạng",
       "addNetworkSubtitle": "Thêm mạng EVM tùy chỉnh",
       "endpointsTitle": "Điểm cuối dịch vụ",

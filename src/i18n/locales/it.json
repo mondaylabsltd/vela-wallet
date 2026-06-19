@@ -46,6 +46,8 @@
     "advanced": {
       "networksTitle": "Reti",
       "networksSubtitle": "URL di RPC, explorer e Bundler",
+      "rpcProvidersTitle": "Provider RPC",
+      "rpcProvidersSubtitle": "Chiavi Alchemy, dRPC, Ankr",
       "addNetworkTitle": "Aggiungi rete",
       "addNetworkSubtitle": "Aggiungi una rete EVM personalizzata",
       "endpointsTitle": "Endpoint dei servizi",

@@ -17,6 +17,17 @@
       "createNew": "Crea un nuovo account",
       "signInExisting": "Accedi con uno esistente"
     },
+    "rpcProviders": {
+      "modalTitle": "Provider RPC",
+      "description": "Aggiungi una chiave API per instradare le reti supportate tramite il tuo provider. Priorità: RPC per singola rete, poi i tuoi provider, quindi l’integrato Vela e infine l’indice delle catene.",
+      "getKey": "Ottieni una chiave",
+      "test": "Prova",
+      "notSet": "Non impostato",
+      "checkKey": "Controlla la chiave",
+      "activeNetworks": "{{count}} reti",
+      "supportsCount": "Supporta {{count}} di {{total}} reti",
+      "unavailable": "Non disponibile"
+    },
     "endpoints": {
       "modalTitle": "Endpoint dei servizi",
       "description": "Questi servizi fanno funzionare il tuo wallet.\nPuoi eseguire il deploy delle tue istanze per una self-custody completa.",

@@ -17,6 +17,17 @@
       "createNew": "Criar nova conta",
       "signInExisting": "Entrar com conta existente"
     },
+    "rpcProviders": {
+      "modalTitle": "Provedores RPC",
+      "description": "Adicione uma chave de API para rotear as redes compatíveis pelo seu próprio provedor. Prioridade: RPC por rede, depois seus provedores, em seguida o integrado da Vela e por fim o índice de redes.",
+      "getKey": "Obter uma chave",
+      "test": "Testar",
+      "notSet": "Não definido",
+      "checkKey": "Verifique a chave",
+      "activeNetworks": "{{count}} redes",
+      "supportsCount": "Suporta {{count}} de {{total}} redes",
+      "unavailable": "Indisponível"
+    },
     "endpoints": {
       "modalTitle": "Endpoints de serviço",
       "description": "Estes serviços mantêm sua carteira funcionando.\nVocê pode implantar suas próprias instâncias para self-custody total.",

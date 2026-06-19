@@ -17,6 +17,17 @@
       "createNew": "Tạo tài khoản mới",
       "signInExisting": "Đăng nhập tài khoản hiện có"
     },
+    "rpcProviders": {
+      "modalTitle": "Nhà cung cấp RPC",
+      "description": "Thêm khóa API để định tuyến các mạng được hỗ trợ qua nhà cung cấp của riêng bạn. Ưu tiên: RPC theo từng mạng, rồi đến nhà cung cấp của bạn, sau đó là tích hợp sẵn của Vela, cuối cùng là chỉ mục chuỗi.",
+      "getKey": "Lấy khóa",
+      "test": "Kiểm tra",
+      "notSet": "Chưa đặt",
+      "checkKey": "Kiểm tra khóa",
+      "activeNetworks": "{{count}} mạng",
+      "supportsCount": "Hỗ trợ {{count}}/{{total}} mạng",
+      "unavailable": "Không khả dụng"
+    },
     "endpoints": {
       "modalTitle": "Điểm cuối dịch vụ",
       "description": "Các dịch vụ này vận hành ví của bạn.\nBạn có thể tự triển khai phiên bản của riêng mình để tự lưu ký hoàn toàn.",

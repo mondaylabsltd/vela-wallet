@@ -17,6 +17,17 @@
       "createNew": "建立新帳戶",
       "signInExisting": "以現有帳戶登入"
     },
+    "rpcProviders": {
+      "modalTitle": "RPC 供應商",
+      "description": "填入 API 金鑰，即可讓支援的網絡透過你自己的供應商存取 RPC。優先順序：各網絡單獨設定的 RPC，其次是你的供應商，然後是 Vela 內建，最後是鏈索引。",
+      "getKey": "取得金鑰",
+      "test": "測試",
+      "notSet": "未設定",
+      "checkKey": "檢查金鑰",
+      "activeNetworks": "{{count}} 個網絡",
+      "supportsCount": "支援 {{total}} 個網絡中的 {{count}} 個",
+      "unavailable": "無法使用"
+    },
     "endpoints": {
       "modalTitle": "服務端點",
       "description": "這些服務支援你的錢包運作。\n你可自行部署實例，以實現完全自我託管。",

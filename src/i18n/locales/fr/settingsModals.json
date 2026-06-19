@@ -17,6 +17,17 @@
       "createNew": "Créer un nouveau compte",
       "signInExisting": "Se connecter avec un compte existant"
     },
+    "rpcProviders": {
+      "modalTitle": "Fournisseurs RPC",
+      "description": "Ajoutez une clé API pour acheminer les réseaux pris en charge via votre propre fournisseur. Priorité : RPC par réseau, puis vos fournisseurs, ensuite l’intégré Vela, et enfin l’index des chaînes.",
+      "getKey": "Obtenir une clé",
+      "test": "Tester",
+      "notSet": "Non défini",
+      "checkKey": "Vérifiez la clé",
+      "activeNetworks": "{{count}} réseaux",
+      "supportsCount": "Prend en charge {{count}} réseaux sur {{total}}",
+      "unavailable": "Indisponible"
+    },
     "endpoints": {
       "modalTitle": "Points d'accès des services",
       "description": "Ces services font fonctionner votre portefeuille.\nVous pouvez déployer vos propres instances pour une auto-conservation totale.",

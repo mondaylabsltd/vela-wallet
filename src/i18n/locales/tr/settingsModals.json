@@ -17,6 +17,17 @@
       "createNew": "Yeni Hesap Oluştur",
       "signInExisting": "Mevcut Hesapla Giriş Yap"
     },
+    "rpcProviders": {
+      "modalTitle": "RPC Sağlayıcıları",
+      "description": "Desteklenen ağları kendi sağlayıcınız üzerinden yönlendirmek için bir API anahtarı ekleyin. Öncelik: ağa özel RPC, ardından sağlayıcılarınız, sonra Vela yerleşik, en son zincir dizini.",
+      "getKey": "Anahtar al",
+      "test": "Test",
+      "notSet": "Ayarlanmadı",
+      "checkKey": "Anahtarı kontrol et",
+      "activeNetworks": "{{count}} ağ",
+      "supportsCount": "{{total}} ağdan {{count}} tanesini destekliyor",
+      "unavailable": "Kullanılamıyor"
+    },
     "endpoints": {
       "modalTitle": "Servis Uç Noktaları",
       "description": "Bu servisler cüzdanınızın çalışmasını sağlar.",

@@ -17,6 +17,17 @@
       "createNew": "Buat Akun Baru",
       "signInExisting": "Masuk dengan Akun yang Ada"
     },
+    "rpcProviders": {
+      "modalTitle": "Penyedia RPC",
+      "description": "Tambahkan kunci API untuk mengarahkan jaringan yang didukung melalui penyedia Anda sendiri. Prioritas: RPC per jaringan, lalu penyedia Anda, kemudian bawaan Vela, terakhir indeks chain.",
+      "getKey": "Dapatkan kunci",
+      "test": "Uji",
+      "notSet": "Belum diatur",
+      "checkKey": "Periksa kunci",
+      "activeNetworks": "{{count}} jaringan",
+      "supportsCount": "Mendukung {{count}} dari {{total}} jaringan",
+      "unavailable": "Tidak tersedia"
+    },
     "endpoints": {
       "modalTitle": "Endpoint Layanan",
       "description": "Layanan ini menjalankan dompet Anda.\nAnda dapat men-deploy instans sendiri untuk self-custody penuh.",

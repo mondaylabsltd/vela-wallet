@@ -46,6 +46,8 @@
     "advanced": {
       "networksTitle": "네트워크",
       "networksSubtitle": "RPC, 탐색기 및 Bundler URL",
+      "rpcProvidersTitle": "RPC 공급자",
+      "rpcProvidersSubtitle": "Alchemy, dRPC, Ankr 키",
       "addNetworkTitle": "네트워크 추가",
       "addNetworkSubtitle": "사용자 지정 EVM 네트워크 추가",
       "endpointsTitle": "서비스 엔드포인트",

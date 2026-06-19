@@ -46,6 +46,8 @@
     "advanced": {
       "networksTitle": "Redes",
       "networksSubtitle": "URLs de RPC, Explorer e Bundler",
+      "rpcProvidersTitle": "Provedores RPC",
+      "rpcProvidersSubtitle": "Chaves de Alchemy, dRPC, Ankr",
       "addNetworkTitle": "Adicionar rede",
       "addNetworkSubtitle": "Adicione uma rede EVM personalizada",
       "endpointsTitle": "Endpoints de serviço",

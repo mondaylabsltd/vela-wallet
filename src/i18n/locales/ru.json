@@ -46,6 +46,8 @@
     "advanced": {
       "networksTitle": "Сети",
       "networksSubtitle": "URL для RPC, обозревателя и Bundler",
+      "rpcProvidersTitle": "RPC-провайдеры",
+      "rpcProvidersSubtitle": "Ключи Alchemy, dRPC, Ankr",
       "addNetworkTitle": "Добавить сеть",
       "addNetworkSubtitle": "Добавить свою EVM-сеть",
       "endpointsTitle": "Сервисные эндпоинты",

@@ -17,6 +17,17 @@
       "createNew": "새 계정 만들기",
       "signInExisting": "기존 계정으로 로그인"
     },
+    "rpcProviders": {
+      "modalTitle": "RPC 공급자",
+      "description": "API 키를 입력하면 지원되는 네트워크를 직접 운영하는 공급자를 통해 사용할 수 있습니다. 우선순위: 네트워크별 RPC, 그다음 공급자, 그다음 Vela 기본 제공, 마지막으로 체인 인덱스.",
+      "getKey": "키 발급받기",
+      "test": "테스트",
+      "notSet": "미설정",
+      "checkKey": "키 확인",
+      "activeNetworks": "네트워크 {{count}}개",
+      "supportsCount": "네트워크 {{total}}개 중 {{count}}개 지원",
+      "unavailable": "사용 불가"
+    },
     "endpoints": {
       "modalTitle": "서비스 엔드포인트",
       "description": "이 서비스들이 지갑을 구동합니다.\n완전한 자가 수탁을 위해 직접 인스턴스를 배포할 수 있습니다.",

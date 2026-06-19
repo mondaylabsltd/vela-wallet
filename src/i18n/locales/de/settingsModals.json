@@ -17,6 +17,17 @@
       "createNew": "Neues Konto erstellen",
       "signInExisting": "Mit vorhandenem anmelden"
     },
+    "rpcProviders": {
+      "modalTitle": "RPC-Anbieter",
+      "description": "Füge einen API-Schlüssel hinzu, um unterstützte Netzwerke über deinen eigenen Anbieter zu leiten. Priorität: netzwerkspezifischer RPC, dann deine Anbieter, danach Vela-intern und zuletzt der Chain-Index.",
+      "getKey": "Schlüssel holen",
+      "test": "Testen",
+      "notSet": "Nicht festgelegt",
+      "checkKey": "Schlüssel prüfen",
+      "activeNetworks": "{{count}} Netzwerke",
+      "supportsCount": "Unterstützt {{count}} von {{total}} Netzwerken",
+      "unavailable": "Nicht verfügbar"
+    },
     "endpoints": {
       "modalTitle": "Dienst-Endpunkte",
       "description": "Diese Dienste betreiben Ihre Wallet.\nSie können eigene Instanzen für vollständige Selbstverwahrung bereitstellen.",

@@ -46,6 +46,8 @@
     "advanced": {
       "networksTitle": "Jaringan",
       "networksSubtitle": "URL RPC, Explorer & Bundler",
+      "rpcProvidersTitle": "Penyedia RPC",
+      "rpcProvidersSubtitle": "Kunci Alchemy, dRPC, Ankr",
       "addNetworkTitle": "Tambah Jaringan",
       "addNetworkSubtitle": "Tambahkan jaringan EVM kustom",
       "endpointsTitle": "Endpoint Layanan",

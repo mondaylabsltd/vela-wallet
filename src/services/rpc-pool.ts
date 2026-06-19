@@ -2,7 +2,8 @@
  * RPC & Bundler endpoint pool with automatic load balancing and failover.
  *
  * Endpoints are collected from multiple sources per chain:
- *   RPC:     user-configured > built-in (ethereum-data API) > network default > public fallback
+ *   RPC:     user override > provider keys (Alchemy/dRPC/Ankr) > Vela built-in
+ *            (CHAINS default + curated public) > ethereum-data chain index
  *   Bundler: user-configured > built-in (vela-bundler.getvela.app)
  *
  * Each endpoint tracks latency and failure stats. Calls are routed to the
@@ -12,7 +13,8 @@
 import { DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchChainInfo } from './chain-registry';
-import { getBundlerServiceURL, getNetworkConfig, loadServiceEndpoints } from './storage';
+import { getBundlerServiceURL, getNetworkConfig, getRpcProviderKeys, loadServiceEndpoints } from './storage';
+import { buildProviderRpcUrl, PROVIDER_ORDER } from './rpc-providers';
 import { rpcLatencyMs, rpcShouldFail } from './dev/fault-injection';
 
 // ---------------------------------------------------------------------------
@@ -21,8 +23,16 @@ import { rpcLatencyMs, rpcShouldFail } from './dev/fault-injection';
 
 interface EndpointStats {
   url: string;
-  /** 'fallback' = the rest of the chain-index RPC list, tried last. */
-  source: 'user' | 'builtin' | 'default' | 'public' | 'fallback';
+  /**
+   * Priority tier (see SOURCE_PRIORITY):
+   *   user     = per-network override
+   *   provider = configured key (Alchemy/dRPC/Ankr)
+   *   default  = Vela built-in (CHAINS table)
+   *   public   = Vela curated public fallback
+   *   builtin  = ethereum-data chain-index (first few)
+   *   fallback = the rest of the chain-index list, tried last
+   */
+  source: 'user' | 'provider' | 'builtin' | 'default' | 'public' | 'fallback';
   avgLatencyMs: number;
   consecutiveFailures: number;
   lastFailureAt: number;
@@ -258,7 +268,7 @@ async function collectRpcUrls(chainId: number): Promise<{ url: string; source: E
     indexRpcs = info?.rpcUrls ?? [];
   } catch { /* ignore */ }
 
-  // 1. User-configured
+  // 1. User-configured per-network override (highest)
   try {
     const config = await getNetworkConfig(chainId);
     const defaultNet = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
@@ -267,10 +277,20 @@ async function collectRpcUrls(chainId: number): Promise<{ url: string; source: E
     }
   } catch { /* ignore */ }
 
-  // 2. Built-in — first few from the chain index
-  indexRpcs.slice(0, 5).forEach(url => add(url, 'builtin'));
+  // 2. Third-party provider keys (Alchemy/dRPC/Ankr). One global key per
+  //    provider unlocks every network it serves. Added in PROVIDER_ORDER so that
+  //    order is the cold-start tiebreak; measured latency takes over once known.
+  try {
+    const providerKeys = getRpcProviderKeys();
+    for (const id of PROVIDER_ORDER) {
+      const key = providerKeys[id];
+      if (!key) continue;
+      const url = buildProviderRpcUrl(id, chainId, key);
+      if (url) add(url, 'provider');
+    }
+  } catch { /* ignore */ }
 
-  // 3. Network default
+  // 3. Network default — Vela built-in (CHAINS table)
   const defaultNet = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
   if (defaultNet?.rpcURL) add(defaultNet.rpcURL, 'default');
 
@@ -281,7 +301,10 @@ async function collectRpcUrls(chainId: number): Promise<{ url: string; source: E
   // 4. Public fallback (curated reliable, CORS-friendly RPCs)
   for (const url of PUBLIC_RPCS[chainId] ?? []) add(url, 'public');
 
-  // 5. Deep fallback — the rest of the chain index (~15-20 RPCs/chain). Lowest
+  // 5. ethereum-data chain index — first few entries.
+  indexRpcs.slice(0, 5).forEach(url => add(url, 'builtin'));
+
+  // 6. Deep fallback — the rest of the chain index (~15-20 RPCs/chain). Lowest
   //    priority, so it's only reached when everything above is rate-limited or
   //    banned. Bad/non-CORS entries get scored down or banned on first use.
   indexRpcs.slice(5, 20).forEach(url => add(url, 'fallback'));
@@ -329,11 +352,12 @@ async function collectBundlerUrls(chainId: number): Promise<{ url: string; sourc
 // ---------------------------------------------------------------------------
 
 const SOURCE_PRIORITY: Record<string, number> = {
-  user:     10000,
-  builtin:  1000,
-  default:  500,
-  public:   100,
-  fallback: 10,   // chain-index extras — only when everything else is exhausted
+  user:     10000, // per-network override
+  provider:  9000, // configured key (Alchemy/dRPC/Ankr)
+  default:   1000, // Vela built-in (CHAINS table)
+  public:     500, // Vela curated public fallback
+  builtin:    100, // ethereum-data chain-index (first few)
+  fallback:    10, // chain-index extras — only when everything else is exhausted
 };
 
 function endpointScore(stats: EndpointStats): number {

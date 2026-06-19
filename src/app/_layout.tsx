@@ -17,7 +17,7 @@ import { SigningRequestModal } from '@/components/SigningRequestModal';
 import { AlertProvider } from '@/components/ui/AppAlert';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { installFaultConsole } from '@/services/dev/fault-injection';
-import { hasPendingUploads, loadLocalePrefs, loadServiceEndpoints } from '@/services/storage';
+import { hasPendingUploads, loadLocalePrefs, loadRpcProviders, loadServiceEndpoints } from '@/services/storage';
 import i18n, { loadLanguage } from '@/i18n';
 import { LanguageProvider, useLanguagePreference } from '@/i18n/language';
 import { loadTextScale, TextScaleProvider } from '@/constants/text-scale';
@@ -137,6 +137,8 @@ export default function RootLayout() {
       refreshCustomNetworks(),
       // Warm config caches so saved fiat endpoint + format prefs apply at launch.
       loadServiceEndpoints(),
+      // Warm provider-key cache so the RPC pool can read it synchronously.
+      loadRpcProviders(),
       loadLocalePrefs(),
       // Apply the stored UI language before the first render.
       loadLanguage(),

@@ -17,6 +17,17 @@
       "createNew": "创建新账户",
       "signInExisting": "登录已有账户"
     },
+    "rpcProviders": {
+      "modalTitle": "RPC 供应商",
+      "description": "填入 API 密钥，即可让支持的网络通过你自己的供应商访问 RPC。优先级：各网络单独设置的 RPC，其次是你的供应商，然后是 Vela 内置，最后是链索引。",
+      "getKey": "获取密钥",
+      "test": "测试",
+      "notSet": "未设置",
+      "checkKey": "检查密钥",
+      "activeNetworks": "{{count}} 个网络",
+      "supportsCount": "支持 {{total}} 个网络中的 {{count}} 个",
+      "unavailable": "不可用"
+    },
     "endpoints": {
       "modalTitle": "服务节点",
       "description": "这些服务为您的钱包提供支持。\n您可以自行部署以实现完全自托管。",

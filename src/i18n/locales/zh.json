@@ -46,6 +46,8 @@
     "advanced": {
       "networksTitle": "网络",
       "networksSubtitle": "RPC、区块浏览器与打包器地址",
+      "rpcProvidersTitle": "RPC 供应商",
+      "rpcProvidersSubtitle": "Alchemy、dRPC、Ankr 密钥",
       "addNetworkTitle": "添加网络",
       "addNetworkSubtitle": "添加自定义 EVM 网络",
       "endpointsTitle": "服务节点",

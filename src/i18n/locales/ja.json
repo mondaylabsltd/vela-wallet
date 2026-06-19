@@ -46,6 +46,8 @@
     "advanced": {
       "networksTitle": "ネットワーク",
       "networksSubtitle": "RPC・エクスプローラー・Bundler の URL",
+      "rpcProvidersTitle": "RPC プロバイダー",
+      "rpcProvidersSubtitle": "Alchemy・dRPC・Ankr のキー",
       "addNetworkTitle": "ネットワークを追加",
       "addNetworkSubtitle": "カスタム EVM ネットワークを追加",
       "endpointsTitle": "サービスエンドポイント",

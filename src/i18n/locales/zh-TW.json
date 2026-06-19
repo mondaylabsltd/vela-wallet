@@ -46,6 +46,8 @@
     "advanced": {
       "networksTitle": "網路",
       "networksSubtitle": "RPC、區塊鏈瀏覽器與 Bundler 網址",
+      "rpcProvidersTitle": "RPC 供應商",
+      "rpcProvidersSubtitle": "Alchemy、dRPC、Ankr 金鑰",
       "addNetworkTitle": "新增網路",
       "addNetworkSubtitle": "新增自訂 EVM 網路",
       "endpointsTitle": "服務端點",

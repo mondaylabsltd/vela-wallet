@@ -17,6 +17,17 @@
       "createNew": "Crear cuenta nueva",
       "signInExisting": "Iniciar sesión con una existente"
     },
+    "rpcProviders": {
+      "modalTitle": "Proveedores RPC",
+      "description": "Agrega una clave de API para enrutar las redes compatibles a través de tu propio proveedor. Prioridad: RPC por red, luego tus proveedores, después lo integrado de Vela y por último el índice de cadenas.",
+      "getKey": "Obtener una clave",
+      "test": "Probar",
+      "notSet": "Sin configurar",
+      "checkKey": "Revisa la clave",
+      "activeNetworks": "{{count}} redes",
+      "supportsCount": "Admite {{count}} de {{total}} redes",
+      "unavailable": "No disponible"
+    },
     "endpoints": {
       "modalTitle": "Endpoints de servicio",
       "description": "Estos servicios hacen funcionar tu billetera.\nPuedes desplegar tus propias instancias para una autocustodia total.",

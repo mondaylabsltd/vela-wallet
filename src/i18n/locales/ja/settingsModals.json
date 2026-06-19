@@ -17,6 +17,17 @@
       "createNew": "新しいアカウントを作成",
       "signInExisting": "既存のアカウントでサインイン"
     },
+    "rpcProviders": {
+      "modalTitle": "RPC プロバイダー",
+      "description": "API キーを入力すると、対応ネットワークをご自身のプロバイダー経由で利用できます。優先順位：ネットワークごとの個別 RPC、次にプロバイダー、続いて Vela 内蔵、最後にチェーンインデックス。",
+      "getKey": "キーを取得",
+      "test": "テスト",
+      "notSet": "未設定",
+      "checkKey": "キーを確認",
+      "activeNetworks": "{{count}} ネットワーク",
+      "supportsCount": "{{total}} 件中 {{count}} 件のネットワークに対応",
+      "unavailable": "利用不可"
+    },
     "endpoints": {
       "modalTitle": "サービスエンドポイント",
       "description": "これらのサービスがウォレットを支えています。\n完全なセルフカストディのために、自分のインスタンスをデプロイすることもできます。",

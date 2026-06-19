@@ -46,6 +46,8 @@
     "advanced": {
       "networksTitle": "Ağlar",
       "networksSubtitle": "RPC, Gezgin ve Bundler URL'leri",
+      "rpcProvidersTitle": "RPC Sağlayıcıları",
+      "rpcProvidersSubtitle": "Alchemy, dRPC, Ankr anahtarları",
       "addNetworkTitle": "Ağ Ekle",
       "addNetworkSubtitle": "Özel EVM ağı ekle",
       "endpointsTitle": "Servis Uç Noktaları",

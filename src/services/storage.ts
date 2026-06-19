@@ -7,6 +7,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { StoredAccount, PendingUpload, CustomToken, NetworkConfig, ServiceEndpoints, PriceSource, CustomNetwork, LocalePrefs } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS, DEFAULT_LOCALE_PREFS } from '@/models/types';
+import type { RpcProviderKeys } from '@/services/rpc-providers';
 
 const KEYS = {
   accounts: 'vela.accounts',
@@ -19,6 +20,7 @@ const KEYS = {
   priceSource: 'vela.priceSource',
   customNetworks: 'vela.customNetworks',
   localePrefs: 'vela.localePrefs',
+  rpcProviders: 'vela.rpcProviders',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -277,6 +279,63 @@ export async function loadPriceSource(): Promise<PriceSource> {
 
 export async function savePriceSource(source: PriceSource): Promise<void> {
   await AsyncStorage.setItem(KEYS.priceSource, source);
+}
+
+// ---------------------------------------------------------------------------
+// RPC Provider Keys (Alchemy / dRPC / Ankr)
+// ---------------------------------------------------------------------------
+
+/**
+ * In-memory cache of the per-provider API keys, populated by
+ * `loadRpcProviders()` at startup. The RPC pool reads it synchronously while
+ * building each chain's endpoint list (see services/rpc-pool.ts), so it must be
+ * available without an await.
+ *
+ * Keys are stored as plaintext, consistent with how per-network RPC overrides
+ * already persist URLs that can embed credentials (`?apikey=`).
+ */
+let _rpcProvidersCache: RpcProviderKeys = {};
+
+const _rpcProviderStore = globalThis as unknown as { __velaRpcProviderListeners?: Set<() => void> };
+const _rpcProviderListeners: Set<() => void> = (_rpcProviderStore.__velaRpcProviderListeners ??= new Set<() => void>());
+
+export function subscribeRpcProviders(listener: () => void): () => void {
+  _rpcProviderListeners.add(listener);
+  return () => { _rpcProviderListeners.delete(listener); };
+}
+
+function notifyRpcProviderListeners(): void {
+  for (const l of _rpcProviderListeners) l();
+}
+
+export async function loadRpcProviders(): Promise<RpcProviderKeys> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.rpcProviders);
+    if (raw) {
+      _rpcProvidersCache = JSON.parse(raw);
+      notifyRpcProviderListeners();
+    }
+  } catch {}
+  return _rpcProvidersCache;
+}
+
+export async function saveRpcProviders(keys: RpcProviderKeys): Promise<void> {
+  // Drop empty entries so a cleared key fully removes the provider.
+  const cleaned: RpcProviderKeys = {};
+  for (const [id, key] of Object.entries(keys)) {
+    const trimmed = (key ?? '').trim();
+    if (trimmed) cleaned[id as keyof RpcProviderKeys] = trimmed;
+  }
+  // Fresh object identity so useSyncExternalStore sees a new snapshot; notify
+  // synchronously so the UI updates before the disk write resolves.
+  _rpcProvidersCache = cleaned;
+  notifyRpcProviderListeners();
+  await AsyncStorage.setItem(KEYS.rpcProviders, JSON.stringify(cleaned));
+}
+
+/** Synchronous getter (cache populated by `loadRpcProviders()` at startup). */
+export function getRpcProviderKeys(): RpcProviderKeys {
+  return _rpcProvidersCache;
 }
 
 // ---------------------------------------------------------------------------
