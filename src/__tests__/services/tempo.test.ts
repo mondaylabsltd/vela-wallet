@@ -3,10 +3,16 @@ import {
   attoToTokenUnits,
   tempoFeeTokenUnits,
   tempoReimbursement,
+  tempoCallGasLimit,
+  tempoExpectedGas,
   TEMPO_DEFAULT_FEE_TOKEN,
   TEMPO_FEE_TOKEN_DECIMALS,
   TEMPO_BASE_FEE_ATTO,
   TEMPO_OUTER_OVERHEAD_GAS,
+  TEMPO_CALL_GAS_PER_SUBCALL,
+  TEMPO_DEPLOYED_GAS_EST,
+  TEMPO_DEPLOY_GAS_EST,
+  TEMPO_PER_SUBCALL_GAS_EST,
 } from '@/services/tempo';
 
 describe('tempo gas model', () => {
@@ -53,13 +59,42 @@ describe('tempo gas model', () => {
     });
   });
 
+  describe('tempoExpectedGas', () => {
+    it('prices a deployed simple send (2 sub-calls) near the measured ~420k on-chain gas', () => {
+      const gas = tempoExpectedGas(true, 2);
+      expect(gas).toBe(TEMPO_DEPLOYED_GAS_EST + 2n * TEMPO_PER_SUBCALL_GAS_EST);
+      // Sanity: within a reasonable band of the real ~420k so the 2× charge ≈ 2× actual.
+      expect(gas).toBeGreaterThan(380_000n);
+      expect(gas).toBeLessThan(520_000n);
+    });
+    it('includes the Safe-deploy cost for an undeployed sender', () => {
+      expect(tempoExpectedGas(false, 2)).toBeGreaterThan(TEMPO_DEPLOY_GAS_EST);
+    });
+  });
+
   describe('tempoReimbursement', () => {
-    it('applies the 1.25× safety margin over the raw fee', () => {
-      const raw = tempoFeeTokenUnits(50_000n, TEMPO_BASE_FEE_ATTO, 6);
-      expect(tempoReimbursement(50_000n, TEMPO_BASE_FEE_ATTO, 6)).toBe((raw * 5n) / 4n);
+    it('charges 2× (100% margin) the realistic cost — NOT the padded limits', () => {
+      const gas = 500_000n;
+      const raw = attoToTokenUnits(gas * TEMPO_BASE_FEE_ATTO, 6);
+      expect(tempoReimbursement(gas, TEMPO_BASE_FEE_ATTO, 6)).toBe(raw * 2n);
     });
     it('is never zero (transfer must move a non-zero amount)', () => {
       expect(tempoReimbursement(0n, 0n, 6)).toBeGreaterThan(0n);
+    });
+  });
+
+  describe('tempoCallGasLimit', () => {
+    it('scales the callGasLimit floor per sub-call (TIP-20 transfers meter ~308k each)', () => {
+      // A simple send = 1 user transfer + 1 reimbursement transfer = 2 sub-calls.
+      expect(tempoCallGasLimit(2)).toBe(2n * TEMPO_CALL_GAS_PER_SUBCALL);
+      expect(tempoCallGasLimit(3)).toBe(3n * TEMPO_CALL_GAS_PER_SUBCALL);
+    });
+    it('comfortably exceeds the measured ~308k cost of a single TIP-20 transfer', () => {
+      // Regression: the old 100k floor caused the atomic batch to revert "out of gas".
+      expect(tempoCallGasLimit(1)).toBeGreaterThan(308_000n);
+    });
+    it('never returns 0 (at least one sub-call budget)', () => {
+      expect(tempoCallGasLimit(0)).toBe(TEMPO_CALL_GAS_PER_SUBCALL);
     });
   });
 

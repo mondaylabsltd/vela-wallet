@@ -812,6 +812,26 @@ export async function isUsingBuiltinBundler(chainId: number): Promise<boolean> {
   return externalEndpoints.length === 0;
 }
 
+/**
+ * REST base URL of the bundler the pool would submit `eth_sendUserOperation` to for
+ * `chainId` — i.e. its highest-scored, non-banned endpoint. The pool stores bundler
+ * JSON-RPC URLs as `${base}/${chainId}`; strip that suffix to get the REST base that
+ * `/v1/account` and `/v1/sponsor` live under. Falls back to the built-in URL.
+ *
+ * Account-info and sponsorship MUST resolve through the SAME bundler that signs the
+ * bundle. Tempo's in-band gas reimbursement is paid to that bundler's per-Safe EOA,
+ * derived from its operator secret; reading the deposit address from a different
+ * bundler (e.g. the built-in default while a per-network override submits elsewhere)
+ * makes the wallet reimburse the wrong EOA and the submitting bundler rejects it
+ * (`reimbursed=0`).
+ */
+export async function getActiveBundlerBaseUrl(chainId: number): Promise<string> {
+  await ensurePool(chainId);
+  const top = getSortedEndpoints(chainId, 'bundler').find(e => !e.banned);
+  if (!top) return getBuiltinBundlerUrl();
+  return top.url.replace(new RegExp(`/${chainId}/?$`), '');
+}
+
 /** Get the built-in bundler base URL (for REST API calls). */
 export function getBuiltinBundlerUrl(): string {
   return getBuiltinBundler();

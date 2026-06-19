@@ -64,17 +64,53 @@ export const TEMPO_BASE_FEE_ATTO = 20_000_000_000n;
 export const TEMPO_OUTER_OVERHEAD_GAS = 150_000n;
 
 /**
+ * callGasLimit budget per inner sub-call in a Tempo MultiSend batch. The 0x20c0… TIP-20
+ * tokens are extraordinarily gas-heavy: a single `transfer` meters ~308k on-chain (vs
+ * ~50k for a vanilla ERC-20). A batch always carries the reimbursement transfer on top
+ * of the user's calls, and the bundler's eth_estimateUserOperationGas under-reports
+ * (handleOps swallows the inner OOG, so the estimate settles where the inner op failed),
+ * so this floor — not the estimate — keeps the atomic batch from reverting "out of gas".
+ * 380k = measured ~308k + headroom for cold/first-time recipients and MultiSend's 63/64.
+ */
+export const TEMPO_CALL_GAS_PER_SUBCALL = 380_000n;
+
+/** callGasLimit floor for a Tempo batch of `subCalls` inner calls (incl. reimbursement). */
+export function tempoCallGasLimit(subCalls: number): bigint {
+  return BigInt(Math.max(subCalls, 1)) * TEMPO_CALL_GAS_PER_SUBCALL;
+}
+
+/**
  * Verification gas for an UNDEPLOYED Safe on Tempo. The Safe deploy (initCode) meters
  * to ~3.9M gas on Tempo — far above the 2M used on EVM chains — so we provision more.
  * Must stay ≤ the bundler's Tempo verification cap (TEMPO_MAX_VERIFICATION_GAS = 8M).
  */
 export const TEMPO_VERIFICATION_GAS_UNDEPLOYED = 6_000_000n;
 
-/** Safety margin on the baked-in reimbursement (1.5×) so a slightly-low estimate
- *  isn't rejected by the bundler. Tempo gas price is protocol-fixed (not volatile),
- *  so the only variance is the gas-units estimate, which is already padded 1.5×. */
-export const TEMPO_FEE_MARGIN_NUM = 5n;
-export const TEMPO_FEE_MARGIN_DEN = 4n;
+/**
+ * Reimbursement margin: charge ~2× the bundler's REAL cost (100% markup). The 2× both
+ * gives the bundler a healthy margin AND absorbs estimate error — the op still pays for
+ * itself as long as the real gas is ≤ 2× the estimate below. Crucially the charge is
+ * priced off `tempoExpectedGas` (realistic), NOT the padded UserOp gas LIMITS, so the
+ * user isn't billed for the safety headroom baked into callGasLimit/verificationGasLimit.
+ */
+export const TEMPO_FEE_MARGIN_NUM = 2n;
+export const TEMPO_FEE_MARGIN_DEN = 1n;
+
+/**
+ * Realistic gas a Tempo 0x76 actually burns — used ONLY to PRICE the reimbursement, not
+ * to set the UserOp gas fields (those stay padded for OOG safety). Measured on Tempo
+ * mainnet: a deployed Safe's verification + preVerification ≈ 250k, the Safe deploy
+ * (initCode) ≈ 3.9–4.1M, and one in-batch TIP-20 transfer ≈ 90–120k.
+ */
+export const TEMPO_DEPLOYED_GAS_EST = 250_000n;
+export const TEMPO_DEPLOY_GAS_EST = 4_100_000n;
+export const TEMPO_PER_SUBCALL_GAS_EST = 95_000n;
+
+/** Realistic total gas for a batch of `subCalls` inner calls (incl. the reimbursement). */
+export function tempoExpectedGas(deployed: boolean, subCalls: number): bigint {
+  const fixed = deployed ? TEMPO_DEPLOYED_GAS_EST : TEMPO_DEPLOY_GAS_EST;
+  return fixed + BigInt(Math.max(subCalls, 1)) * TEMPO_PER_SUBCALL_GAS_EST;
+}
 
 /**
  * Convert an attodollar amount (USD×1e-18) to a fee-token's smallest units:
@@ -105,15 +141,17 @@ export function tempoFeeTokenUnits(
 
 /**
  * Stablecoin amount to reimburse the bundler, baked into the UserOp as a batched
- * transfer. = raw fee-token cost × safety margin. Always ≥ 1 so the transfer is
- * never a no-op the bundler would reject.
+ * transfer. `expectedGas` should be the REALISTIC gas (see `tempoExpectedGas`), not the
+ * padded UserOp limits. = realistic cost × margin. Always ≥ 1 so the transfer is never a
+ * no-op the bundler would reject.
  */
 export function tempoReimbursement(
-  totalGas: bigint,
+  expectedGas: bigint,
   gasPriceAtto: bigint,
   decimals: number = TEMPO_FEE_TOKEN_DECIMALS,
 ): bigint {
-  const base = tempoFeeTokenUnits(totalGas, gasPriceAtto, decimals);
+  const price = gasPriceAtto > 0n ? gasPriceAtto : TEMPO_BASE_FEE_ATTO;
+  const base = attoToTokenUnits(expectedGas * price, decimals);
   const withMargin = (base * TEMPO_FEE_MARGIN_NUM) / TEMPO_FEE_MARGIN_DEN;
   return withMargin > 0n ? withMargin : 1n;
 }

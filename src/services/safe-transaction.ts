@@ -33,6 +33,8 @@ import { fetchBundlerAccountInfo } from './bundler-service';
 import {
   isTempoChain,
   tempoReimbursement,
+  tempoCallGasLimit,
+  tempoExpectedGas,
   TEMPO_DEFAULT_FEE_TOKEN,
   TEMPO_FEE_TOKEN_DECIMALS,
   TEMPO_VERIFICATION_GAS_UNDEPLOYED,
@@ -279,37 +281,11 @@ async function estimateTempoFee(
     getGasPrices(chainId),
   ]);
 
-  // Use the SAME undeployed verification gas as sendUserOpTempo (Tempo deploy ~3.9M),
-  // so the displayed fee matches what's actually reimbursed.
-  const undeployedVgas = TEMPO_VERIFICATION_GAS_UNDEPLOYED;
-  let totalGas: bigint;
-  try {
-    const verificationGas = deployed ? VERIFICATION_GAS_DEPLOYED : undeployedVgas;
-    const dummyOp: UserOperation = {
-      sender: from,
-      nonce: '0x0',
-      initCode: new Uint8Array(0),
-      callData: buildExecuteCallData(from, '0', new Uint8Array(68)),
-      verificationGasLimit: verificationGas,
-      callGasLimit: CALL_GAS_LIMIT,
-      preVerificationGas: PRE_VERIFICATION_GAS,
-      maxFeePerGas: 0n,
-      maxPriorityFeePerGas: 0n,
-      paymasterAndData: new Uint8Array(0),
-      signature: buildDummySignature(),
-    };
-    const est = await estimateGas(dummyOp, chainId);
-    const vgl = deployed
-      ? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
-      : bigintMax((est.verificationGasLimit * 15n) / 10n, undeployedVgas);
-    const cgl = bigintMax((est.callGasLimit * 15n) / 10n, 100_000n);
-    const pvg = est.preVerificationGas + 10_000n;
-    totalGas = vgl + cgl + pvg;
-  } catch {
-    totalGas = (deployed ? VERIFICATION_GAS_DEPLOYED : undeployedVgas) + CALL_GAS_LIMIT + PRE_VERIFICATION_GAS;
-  }
-
-  const reimbursement = tempoReimbursement(totalGas, gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
+  // Mirror sendUserOpTempo's pricing: the displayed fee is the reimbursement, priced off
+  // the REALISTIC gas (tempoExpectedGas) for a simple send (1 transfer + 1 reimbursement
+  // = 2 sub-calls), NOT the padded UserOp limits. Keeps the quote == what's charged.
+  const expectedGas = tempoExpectedGas(deployed, 2);
+  const reimbursement = tempoReimbursement(expectedGas, gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
   const totalWei = reimbursement * 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS);
 
   return {
@@ -318,7 +294,7 @@ async function estimateTempoFee(
     networkFeePerGas: gasPrice,
     relayerFeePerGas: 0n,
     bundlerGasPrice: gasPrice,
-    totalGas,
+    totalGas: expectedGas,
     deployed,
     tier,
     quoted: false,
@@ -644,13 +620,19 @@ async function sendUserOpTempo(
       { to: feeToken, value: '0', data: encodeErc20Transfer(feeCollector, reimbursement) },
     ]);
 
+  // The MultiSend batch executes innerCalls + the appended reimbursement transfer.
+  // Floor callGasLimit per sub-call: TIP-20 transfers meter high and the bundler's
+  // estimate under-reports (handleOps swallows the inner OOG), so a 100k floor lets
+  // the atomic batch run out of gas and revert. See services/tempo.ts.
+  const callGasFloor = tempoCallGasLimit(innerCalls.length + 1);
+
   const userOp: UserOperation = {
     sender: safeAddress,
     nonce,
     initCode,
     callData: buildBatch(1n),
     verificationGasLimit: deployed ? VERIFICATION_GAS_DEPLOYED : TEMPO_VERIFICATION_GAS_UNDEPLOYED,
-    callGasLimit: CALL_GAS_LIMIT,
+    callGasLimit: callGasFloor,
     preVerificationGas: PRE_VERIFICATION_GAS,
     maxFeePerGas: 0n, // Tempo: zero native gas accounting (avoids AA21)
     maxPriorityFeePerGas: 0n,
@@ -663,16 +645,19 @@ async function sendUserOpTempo(
     userOp.verificationGasLimit = deployed
       ? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
       : bigintMax((est.verificationGasLimit * 15n) / 10n, TEMPO_VERIFICATION_GAS_UNDEPLOYED);
-    userOp.callGasLimit = bigintMax((est.callGasLimit * 15n) / 10n, 100_000n);
+    userOp.callGasLimit = bigintMax((est.callGasLimit * 15n) / 10n, callGasFloor);
     userOp.preVerificationGas = est.preVerificationGas + 10_000n;
   } catch (err) {
     console.error('[Tempo] Gas estimation failed, using defaults:', err instanceof Error ? err.message : String(err));
   }
 
-  const totalGas = userOp.verificationGasLimit + userOp.callGasLimit + userOp.preVerificationGas;
-  const reimbursement = tempoReimbursement(totalGas, gasPrices.gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
+  // Price the reimbursement off the REALISTIC gas the 0x76 will burn — NOT the padded
+  // UserOp limits (callGasLimit/verificationGasLimit stay high for OOG safety, but the
+  // user shouldn't pay 2–4× for that headroom). The batch runs innerCalls + 1 transfer.
+  const expectedGas = tempoExpectedGas(deployed, innerCalls.length + 1);
+  const reimbursement = tempoReimbursement(expectedGas, gasPrices.gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
   userOp.callData = buildBatch(reimbursement);
-  console.log(`[Tempo] feeToken=${feeToken} reimbursement=${reimbursement} totalGas=${totalGas} collector=${feeCollector}`);
+  console.log(`[Tempo] feeToken=${feeToken} reimbursement=${reimbursement} expectedGas=${expectedGas} collector=${feeCollector}`);
 
   // Sign the SafeOp (over the FINAL callData) and submit, telling the bundler which
   // stablecoin to charge for the outer 0x76.

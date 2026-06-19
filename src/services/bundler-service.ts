@@ -11,7 +11,7 @@
  */
 
 import { nativeSymbol } from '@/models/network';
-import { getBuiltinBundlerUrl, getChainRpcUrl, isUsingBuiltinBundler, poolRpcCall } from './rpc-pool';
+import { getActiveBundlerBaseUrl, getChainRpcUrl, isUsingBuiltinBundler, poolRpcCall } from './rpc-pool';
 import { loadServiceEndpoints } from './storage';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from './tempo';
 
@@ -170,7 +170,10 @@ async function requestSponsorship(
 ): Promise<{ sponsored: boolean; reason?: string }> {
   try {
     await ensureEndpoints();
-    const baseUrl = getBuiltinBundlerUrl();
+    // Sponsor the gas account on the SAME bundler that will sign the bundle (see
+    // getActiveBundlerBaseUrl) — a per-network bundler override must not sponsor one
+    // bundler's EOA while submitting to another.
+    const baseUrl = await getActiveBundlerBaseUrl(chainId);
     const url = `${baseUrl}/v1/sponsor/${chainId}/${safeAddress.toLowerCase()}`;
 
     const chainRpc = await getChainRpcUrl(chainId);
@@ -214,7 +217,11 @@ export async function fetchBundlerAccountInfo(
   if (cached && Date.now() - cached.at < INFO_CACHE_TTL) return cached.info;
 
   try {
-    const baseUrl = getBuiltinBundlerUrl();
+    // Resolve the deposit address from the SAME bundler the pool submits to — NOT
+    // always the built-in one. On Tempo the reimbursement is paid to this bundler's
+    // per-Safe EOA; reading it from a different bundler makes the submitting bundler
+    // reject the op (reimbursed=0). See getActiveBundlerBaseUrl.
+    const baseUrl = await getActiveBundlerBaseUrl(chainId);
     const url = `${baseUrl}/v1/account/${chainId}/${safeAddress.toLowerCase()}`;
 
     // Pass chain RPC URL so the bundler can reach non-registry chains (e.g. 31337)
