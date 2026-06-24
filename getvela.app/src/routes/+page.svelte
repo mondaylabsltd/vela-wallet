@@ -222,7 +222,7 @@
 			description:
 				'An open-source, self-hostable Ethereum wallet for ETH and ERC-20 tokens. Sign with a passkey — no seed phrase, no hardware key, no lock-in.',
 			sameAs: [
-				'https://github.com/atshelchin/vela-wallet',
+				'https://github.com/mondaylabsltd/vela-wallet',
 				'https://x.com/realvelawallet',
 				'https://t.me/velawallet'
 			]
@@ -290,7 +290,7 @@
 			<a href="#pricing">Pricing</a>
 			<a href="#faq">FAQ</a>
 
-			<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a>
+			<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener">GitHub</a>
 			<a
 				href="https://wallet.getvela.app/onboarding"
 				target="_blank"
@@ -702,7 +702,7 @@
 	<div class="container">
 		<p class="trust-tagline">
 			Don't trust us — verify. Every line is on <a
-				href="https://github.com/atshelchin/vela-wallet"
+				href="https://github.com/mondaylabsltd/vela-wallet"
 				target="_blank"
 				rel="noopener">GitHub</a
 			>, every wallet is on-chain, every claim is checkable.
@@ -722,7 +722,7 @@
 						stroke-linejoin="round"
 					/></svg
 				>
-				<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener"
+				<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
 					>100% open source</a
 				> — app + all our services
 			</div>
@@ -1032,7 +1032,7 @@
 					<tr>
 						<td>Source code</td>
 						<td
-							><a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener"
+							><a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
 								>GitHub</a
 							></td
 						>
@@ -1103,7 +1103,7 @@
 					<p>
 						Transactions go through an ERC-4337 bundler. You pay network gas plus a small service
 						fee. You can skip the fee entirely by running a compatible
-						<a href="https://github.com/atshelchin/vela-bundler" target="_blank" rel="noopener"
+						<a href="https://github.com/mondaylabsltd/vela-bundler" target="_blank" rel="noopener"
 							>self-hosted bundler</a
 						>.
 					</p>
@@ -1206,7 +1206,7 @@
 					is Vela-specific and bound to the getvela.app domain, you keep signing through Vela's own
 					open-source code — your self-hosted instance plus the
 					<a
-						href="https://github.com/atshelchin/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys"
+						href="https://github.com/mondaylabsltd/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys"
 						target="_blank"
 						rel="noopener">recovery extension</a
 					> — not a generic Safe app.
@@ -1218,7 +1218,7 @@
 					Your funds stay on-chain regardless. Since passkeys are tied to a domain, Vela provides an
 					open-source
 					<a
-						href="https://github.com/atshelchin/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys"
+						href="https://github.com/mondaylabsltd/vela-wallet#webauthn-proxy-extension-domain-recovery--dev-passkeys"
 						target="_blank"
 						rel="noopener">recovery extension</a
 					>
@@ -1230,7 +1230,7 @@
 				<p>
 					The Safe contracts and Safe WebAuthn signer module that Vela uses have been audited.
 					Vela's own app code hasn't been independently audited yet — all source code is <a
-						href="https://github.com/atshelchin/vela-wallet"
+						href="https://github.com/mondaylabsltd/vela-wallet"
 						target="_blank"
 						rel="noopener">public</a
 					> for review.

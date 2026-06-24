@@ -133,7 +133,7 @@
 		<p>
 			Vela Wallet is fully open source. You can audit the code, verify our claims, and self-host all
 			backend services. See <a
-				href="https://github.com/atshelchin/vela-wallet"
+				href="https://github.com/mondaylabsltd/vela-wallet"
 				target="_blank"
 				rel="noopener">our GitHub repository</a
 			>.
@@ -144,7 +144,7 @@
 		<h2>Contact</h2>
 		<p>
 			If you have questions about this privacy policy, open an issue on
-			<a href="https://github.com/atshelchin/vela-wallet/issues" target="_blank" rel="noopener"
+			<a href="https://github.com/mondaylabsltd/vela-wallet/issues" target="_blank" rel="noopener"
 				>GitHub</a
 			>.
 		</p>

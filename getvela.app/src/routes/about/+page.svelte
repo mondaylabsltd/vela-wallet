@@ -52,7 +52,7 @@
 			url: seoConfig.domain,
 			logo: `${seoConfig.domain}/vela-logo.png`,
 			sameAs: [
-				'https://github.com/atshelchin/vela-wallet',
+				'https://github.com/mondaylabsltd/vela-wallet',
 				'https://x.com/realvelawallet',
 				'https://t.me/velawallet'
 			]

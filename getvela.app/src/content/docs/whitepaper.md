@@ -220,7 +220,7 @@ cookieless, self-hosted analytics. See the [privacy policy](/privacy).
 Everything is **MIT-licensed and open source** — the app and all three backend
 services (chain data, passkey index, bundler), which you can **self-host**
 (Settings → Advanced → Service Endpoints). Read the code at
-[github.com/atshelchin/vela-wallet](https://github.com/atshelchin/vela-wallet).
+[github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet).
 
 ## No token
 

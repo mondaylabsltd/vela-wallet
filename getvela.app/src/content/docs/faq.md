@@ -59,10 +59,10 @@ authoritative version.
 ## Is Vela open source?
 
 Yes — the wallet and all three backend services (chain data, passkey index,
-bundler) are [public on GitHub](https://github.com/atshelchin/vela-wallet) under
+bundler) are [public on GitHub](https://github.com/mondaylabsltd/vela-wallet) under
 the MIT license, and you can self-host them.
 
 ## I have a question that's not here.
 
-Open an issue on [GitHub](https://github.com/atshelchin/vela-wallet) or reach us
+Open an issue on [GitHub](https://github.com/mondaylabsltd/vela-wallet) or reach us
 on [X](https://x.com/realvelawallet) or [Telegram](https://t.me/velawallet).

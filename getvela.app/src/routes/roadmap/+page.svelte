@@ -97,7 +97,7 @@
 	<p class="lede">
 		Vela has shipped continuously since April 2026, in the open. Here's the trail so far and where
 		it's headed — directions, not deadlines. Want something on it?
-		<a href="https://github.com/atshelchin/vela-wallet/issues" target="_blank" rel="noopener"
+		<a href="https://github.com/mondaylabsltd/vela-wallet/issues" target="_blank" rel="noopener"
 			>Open an issue</a
 		>.
 	</p>

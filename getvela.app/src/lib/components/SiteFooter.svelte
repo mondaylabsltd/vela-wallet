@@ -27,7 +27,7 @@
 			<div class="col">
 				<h3>Infrastructure</h3>
 				<a href="https://walletpair.org/" target="_blank" rel="noopener">WalletPair</a>
-				<a href="https://github.com/atshelchin/vela-bundler" target="_blank" rel="noopener"
+				<a href="https://github.com/mondaylabsltd/vela-bundler" target="_blank" rel="noopener"
 					>Vela Bundler</a
 				>
 				<a href="https://ethereum-data.awesometools.dev/" target="_blank" rel="noopener"
@@ -40,7 +40,7 @@
 			</div>
 			<div class="col">
 				<h3>Community</h3>
-				<a href="https://github.com/atshelchin/vela-wallet" target="_blank" rel="noopener">GitHub</a
+				<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener">GitHub</a
 				>
 				<a href="https://x.com/realvelawallet" target="_blank" rel="noopener">X / Twitter</a>
 				<a href="https://t.me/velawallet" target="_blank" rel="noopener">Telegram</a>

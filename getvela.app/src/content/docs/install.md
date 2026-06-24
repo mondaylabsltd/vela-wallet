@@ -40,6 +40,6 @@ you're on the real thing. The only official addresses are:
 
 If anything sends you somewhere else to "install Vela," stop and check against
 these. The code is public at
-[github.com/atshelchin/vela-wallet](https://github.com/atshelchin/vela-wallet).
+[github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet).
 
 Next: [create your wallet](/docs/create-wallet).

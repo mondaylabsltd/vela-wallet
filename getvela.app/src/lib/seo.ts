@@ -7,7 +7,7 @@ export const seoConfig = {
 	// `repoBranch` is the default branch; `repoAppDir` is the path from the repo
 	// root to this SvelteKit app. If the site ever moves to its own repo, update
 	// these three values and every edit link follows.
-	github: 'https://github.com/atshelchin/vela-wallet',
+	github: 'https://github.com/mondaylabsltd/vela-wallet',
 	repoBranch: 'main',
 	repoAppDir: 'getvela.app'
 };
