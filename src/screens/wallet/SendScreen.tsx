@@ -13,11 +13,11 @@ import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenC
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
-import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, GAS_TIER_MULTIPLIERS, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
+import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, rawBundlerGasCost, GAS_TIER_MULTIPLIERS, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
 import { findAccountByCredentialId, saveTransaction, updateTransaction, loadTransactions } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
-import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, type FundingNeeded } from '@/services/bundler-service';
+import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, parseBundlerUnderfunded, type FundingNeeded } from '@/services/bundler-service';
 import { AmountText } from '@/components/ui/AmountText';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
@@ -522,10 +522,8 @@ export default function SendScreen() {
           const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
           setFeeEstimate(fee);
 
-          // Divide out tier markup: fee.totalWei uses userOpMaxFee (gasPrice × tier),
-          // but the bundler's balance check uses raw chain gasPrice.
-          const m = GAS_TIER_MULTIPLIERS[gasTier];
-          const bundlerCost = fee ? (fee.totalWei * m.den) / m.num : undefined;
+          // Compare against the bundler's raw gas cost (tier markup removed).
+          const bundlerCost = fee ? rawBundlerGasCost(fee) : undefined;
           return checkBundlerFunding(chainId, activeAccount!.address, bundlerCost);
         };
         const timeout = new Promise<null>(r => setTimeout(() => r(null), 15_000));
@@ -696,12 +694,15 @@ export default function SendScreen() {
         .catch(() => { /* receipt slow/unavailable — stays 'pending' */ });
 
     } catch (error: any) {
+      // Wording-tolerant detection — the bundler has reworded this error before
+      // (legacy "...bundler EOA" → current "...bundler gas account ... Deposit to:").
+      const underfunded = parseBundlerUnderfunded(error?.message);
       if (error?.code === 'PASSKEY_CANCELLED') {
         setTxStatus('idle');
-      } else if (error?.message?.includes('Insufficient balance on dedicated bundler EOA')) {
-        // Bundler explicitly says EOA balance is insufficient — show funding modal.
-        // Parse the server's actual required balance from the error message to avoid
-        // threshold mismatch (client estimate vs server's gas price) causing an infinite loop.
+      } else if (underfunded) {
+        // Bundler says the gas account balance is insufficient — show funding modal.
+        // Prefer the server's actual required balance to avoid a threshold mismatch
+        // (client estimate vs server's gas price) causing an infinite loop.
         fundingRetryCount.current += 1;
         if (fundingRetryCount.current > 3) {
           // Break infinite loop — show error instead of modal
@@ -714,33 +715,34 @@ export default function SendScreen() {
             const chainId = tokenChainId(selectedToken!);
             clearBundlerCache(chainId, activeAccount!.address);
             const info = await fetchBundlerAccountInfo(chainId, activeAccount!.address);
-            if (info) {
-              // Try to parse server's required balance: "...required: 123456..."
-              const requiredMatch = error.message.match(/required:\s*(\d+)/);
+            // Prefer live account info; fall back to values parsed from the error.
+            const depositAddress = info?.depositAddress || underfunded.depositAddress;
+            if (depositAddress) {
+              const currentBalance = info?.spendableBalance ?? underfunded.spendableWei ?? 0n;
               let thresholdWei: bigint;
-              if (requiredMatch) {
-                thresholdWei = BigInt(requiredMatch[1]);
+              if (underfunded.requiredWei != null) {
+                thresholdWei = underfunded.requiredWei;
               } else {
                 const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId, gasTier);
-                // Divide out tier markup to match server's raw gasPrice calculation
-                const tm = GAS_TIER_MULTIPLIERS[gasTier];
-                thresholdWei = (fee.totalWei * tm.den) / tm.num;
+                // Match the server's raw gasPrice calculation (tier markup removed)
+                thresholdWei = rawBundlerGasCost(fee);
               }
-              const deficit = thresholdWei - info.spendableBalance;
+              const deficit = thresholdWei - currentBalance;
               const base = deficit > 0n ? deficit : thresholdWei;
               const recommendedWei = (base * 12n) / 10n;
+              const nativeSym = info?.nativeSym ?? (underfunded.asset === 'pathUSD' ? 'pathUSD' : nativeSymbol(chainId));
               setFundingNeeded({
                 reason: 'deposit_needed',
                 sponsorshipAvailable: true,
-                depositAddress: info.depositAddress,
+                depositAddress,
                 safeAddress: activeAccount!.address,
                 chainId,
-                nativeSym: info.nativeSym,
+                nativeSym,
                 thresholdWei,
                 recommendedWei,
-                currentBalance: info.spendableBalance,
+                currentBalance,
                 recommendedFormatted: formatWei(recommendedWei),
-                currentFormatted: formatWei(info.spendableBalance),
+                currentFormatted: formatWei(currentBalance),
               });
               return;
             }

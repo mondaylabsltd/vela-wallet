@@ -34,6 +34,7 @@ import { ChainLogo } from '@/components/ChainLogo';
 import { TokenLogo } from '@/components/TokenLogo';
 import {
   estimateTransactionFee,
+  rawBundlerGasCost,
   type GasTier,
   type TransactionFeeEstimate,
 } from '@/services/safe-transaction';
@@ -250,7 +251,11 @@ export function SigningRequestModal() {
               />
               <VelaButton
                 title={buttonLabel()}
-                onPress={() => approveRequest(feeEstimate?.maxFeePerGas)}
+                onPress={() => approveRequest({
+                  maxFeePerGas: feeEstimate?.maxFeePerGas,
+                  // Raw bundler cost (tier markup removed) drives the funding pre-check.
+                  bundlerCostWei: feeEstimate ? rawBundlerGasCost(feeEstimate) : undefined,
+                })}
                 variant={buttonVariant()}
                 loading={isSigning || resolving}
                 disabled={resolving || (isTx && estimatingGas)}

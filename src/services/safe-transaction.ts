@@ -257,6 +257,18 @@ export interface TransactionFeeEstimate {
   quoted: boolean;
 }
 
+/**
+ * The bundler's gas-account balance check uses the raw chain gasPrice, but a fee
+ * estimate's `totalWei` bakes in the user-facing tier markup (gasPrice × tier).
+ * Divide the markup back out so a funding pre-check compares against what the
+ * bundler will actually require — otherwise we'd over-prompt for funding.
+ * Shared by the Send flow and the dApp signing flow.
+ */
+export function rawBundlerGasCost(fee: TransactionFeeEstimate): bigint {
+  const m = GAS_TIER_MULTIPLIERS[fee.tier];
+  return (fee.totalWei * m.den) / m.num;
+}
+
 /** Fetch fresh on-chain gas price (bypasses cache). */
 export async function refreshGasPrice(chainId: number): Promise<bigint> {
   _gasPriceCache.delete(chainId);

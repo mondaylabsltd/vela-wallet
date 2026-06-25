@@ -325,3 +325,51 @@ export function formatWei(wei: bigint): string {
   if (eth < 1) return eth.toFixed(4);
   return eth.toFixed(3);
 }
+
+// ---------------------------------------------------------------------------
+// Underfunded-error detection
+// ---------------------------------------------------------------------------
+
+export interface BundlerUnderfunded {
+  /** Gas account's current spendable balance (wei), if the message reported it. */
+  spendableWei?: bigint;
+  /** Balance the bundler needs to proceed (wei), if the message reported it. */
+  requiredWei?: bigint;
+  /** Address to deposit gas funds to, parsed straight from the message. */
+  depositAddress?: string;
+  /** What the gas account is denominated in: 'pathUSD' on Tempo, else native. */
+  asset: 'native' | 'pathUSD';
+}
+
+/**
+ * Detect the bundler "gas account underfunded" error and pull out its parts.
+ *
+ * The bundler has worded this two ways over time — the legacy
+ * "...dedicated bundler EOA" and the current
+ * "Insufficient native balance on dedicated bundler gas account.
+ *  Spendable: X, required: Y. Deposit to: 0x..." (pathUSD on Tempo).
+ *
+ * Match on the stable signal rather than one exact phrase, so a future wording
+ * tweak doesn't silently drop us back to dumping a raw error at the user. The
+ * deposit address + required amount are parsed out so callers can open the
+ * funding modal even when a follow-up account lookup fails.
+ */
+export function parseBundlerUnderfunded(msg: string | undefined | null): BundlerUnderfunded | null {
+  if (!msg) return null;
+  const isUnderfunded =
+    /dedicated bundler (gas account|EOA)/i.test(msg) ||
+    (/Deposit to:\s*0x/i.test(msg) && /required:/i.test(msg));
+  if (!isUnderfunded) return null;
+
+  const big = (re: RegExp): bigint | undefined => {
+    const m = msg.match(re);
+    return m ? BigInt(m[1]) : undefined;
+  };
+  const dep = msg.match(/Deposit to:\s*(0x[0-9a-fA-F]{40})/i);
+  return {
+    spendableWei: big(/Spendable:\s*(\d+)/i),
+    requiredWei: big(/required:\s*(\d+)/i),
+    depositAddress: dep ? dep[1] : undefined,
+    asset: /pathUSD/i.test(msg) ? 'pathUSD' : 'native',
+  };
+}

@@ -31,8 +31,12 @@ import { buildSigningRecord } from '@/services/dapp-history';
 import {
   fetchBundlerAccountInfo,
   clearBundlerCache,
+  checkBundlerFunding,
+  parseBundlerUnderfunded,
+  formatWei,
   type FundingNeeded,
 } from '@/services/bundler-service';
+import { nativeSymbol } from '@/models/network';
 import type { BLEIncomingRequest } from '@/models/types';
 
 // ---------------------------------------------------------------------------
@@ -101,8 +105,12 @@ interface DAppConnectionContextValue {
   reconnect: () => void;
   /** True once an auto-reconnect has dragged on long enough to prompt the user. */
   reconnectStuck: boolean;
-  /** Approve the current incoming request. Optional maxFeePerGas from gas tier selector. */
-  approveRequest: (maxFeeOverride?: bigint) => Promise<void>;
+  /**
+   * Approve the current incoming request. For transactions the modal passes the
+   * selected tier's maxFeePerGas plus the raw bundler gas cost, used for a
+   * proactive gas-account funding pre-check (see approveRequest).
+   */
+  approveRequest: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint }) => Promise<void>;
   /** Reject the current incoming request. */
   rejectRequest: () => void;
   /** Dismiss the modal after an error (response already sent). */
@@ -436,16 +444,34 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // --- Approve ---
-  const approveRequest = useCallback(async (maxFeeOverride?: bigint) => {
+  const approveRequest = useCallback(async (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint }) => {
     const request = incomingRequest;
     const account = activeAccountRef.current;
     if (!request || !account) return;
 
+    const cid = chainIdRef.current;
+
+    // Proactive gas-account pre-check — mirror the Send flow so the top-up modal
+    // appears BEFORE the passkey prompt + submit, not after a failed UserOp. Raced
+    // with a timeout so a slow RPC can't hang approval; on timeout/error we fall
+    // through to submit and the post-submit catch below is the safety net.
+    if (request.method === 'eth_sendTransaction') {
+      try {
+        const funding = await Promise.race([
+          checkBundlerFunding(cid, account.address, opts?.bundlerCostWei),
+          new Promise<FundingNeeded | null>(resolve => setTimeout(() => resolve(null), 15_000)),
+        ]);
+        if (funding) {
+          setFundingNeeded(funding); // keep request pending; retried after funding
+          return;
+        }
+      } catch { /* proceed to submit */ }
+    }
+
     setIsSigning(true);
     setSignError(null);
     try {
-      const cid = chainIdRef.current;
-      const result = await handleDAppRequest(request, account, account.address, cid, maxFeeOverride);
+      const result = await handleDAppRequest(request, account, account.address, cid, opts?.maxFeePerGas);
       transportRef.current?.sendResponse(request.id, result);
 
       // Record EVERY approved dApp operation to local history (see dapp-history)
@@ -472,33 +498,39 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
 
       const msg = err.message ?? 'Signing failed';
 
-      // Bundler EOA underfunded — show funding modal instead of error
-      if (msg.includes('Insufficient balance on dedicated bundler EOA')) {
+      // Gas account underfunded — open the funding modal instead of dumping the
+      // raw "Deposit to: 0x… required: …" error at the user (mirrors the Send
+      // flow's top-up UX). Detection is wording-tolerant; the deposit address and
+      // amounts are read from the bundler's message so we can still show the modal
+      // even if the follow-up account lookup fails.
+      const underfunded = parseBundlerUnderfunded(msg);
+      if (underfunded) {
         console.log('[DAppConnection] Bundler needs funding, showing modal');
         setIsSigning(false);
         try {
-          const cid = chainIdRef.current;
           const addr = account.address;
           clearBundlerCache(cid, addr);
           const info = await fetchBundlerAccountInfo(cid, addr);
-          if (info) {
-            const requiredMatch = msg.match(/required:\s*(\d+)/);
-            const thresholdWei = requiredMatch ? BigInt(requiredMatch[1]) : info.spendableBalance + 100_000_000_000_000n;
-            const deficit = thresholdWei > info.spendableBalance ? thresholdWei - info.spendableBalance : thresholdWei;
+          // Prefer live account info; fall back to the values parsed from the error.
+          const depositAddress = info?.depositAddress || underfunded.depositAddress;
+          if (depositAddress) {
+            const currentBalance = info?.spendableBalance ?? underfunded.spendableWei ?? 0n;
+            const thresholdWei = underfunded.requiredWei ?? currentBalance + 100_000_000_000_000n;
+            const deficit = thresholdWei > currentBalance ? thresholdWei - currentBalance : thresholdWei;
             const recommendedWei = (deficit * 12n) / 10n;
-            const formatWei = (w: bigint) => { const e = Number(w) / 1e18; return e < 0.000001 ? '< 0.000001' : e < 0.001 ? e.toFixed(6) : e < 1 ? e.toFixed(4) : e.toFixed(3); };
+            const nativeSym = info?.nativeSym ?? (underfunded.asset === 'pathUSD' ? 'pathUSD' : nativeSymbol(cid));
             setFundingNeeded({
               reason: 'deposit_needed',
               sponsorshipAvailable: true,
-              depositAddress: info.depositAddress,
+              depositAddress,
               safeAddress: addr,
               chainId: cid,
-              nativeSym: info.nativeSym,
+              nativeSym,
               thresholdWei,
               recommendedWei,
-              currentBalance: info.spendableBalance,
+              currentBalance,
               recommendedFormatted: formatWei(recommendedWei),
-              currentFormatted: formatWei(info.spendableBalance),
+              currentFormatted: formatWei(currentBalance),
             });
             return; // Don't send error to dApp — keep request pending
           }
@@ -531,6 +563,10 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   // --- Bundler funding complete → retry the pending request ---
   const handleFundingComplete = useCallback(() => {
     setFundingNeeded(null);
+    // Drop the cached (stale, underfunded) balance so the pre-check on retry reads
+    // the freshly-funded amount instead of re-prompting.
+    const account = activeAccountRef.current;
+    if (account) clearBundlerCache(chainIdRef.current, account.address);
     // Retry approve — the request is still in incomingRequest
     approveRequest();
   }, [approveRequest]);
