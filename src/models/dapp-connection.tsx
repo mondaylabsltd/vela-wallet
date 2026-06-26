@@ -85,6 +85,8 @@ interface DAppConnectionContextValue {
   isSigning: boolean;
   /** Last signing error message. */
   signError: string | null;
+  /** UserOp hash once a tx is submitted, while awaiting the on-chain receipt. */
+  pendingOpHash: string | null;
   /** Current chain ID for the bridge connection. */
   chainId: number;
   /** Which transport is active. */
@@ -133,6 +135,7 @@ const DAppConnectionContext = createContext<DAppConnectionContextValue>({
   incomingRequest: null,
   isSigning: false,
   signError: null,
+  pendingOpHash: null,
   chainId: 1,
   connectionType: null,
   pendingFingerprint: null,
@@ -172,6 +175,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const [incomingRequest, setIncomingRequest] = useState<BLEIncomingRequest | null>(null);
   const [isSigning, setIsSigning] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
+  const [pendingOpHash, setPendingOpHash] = useState<string | null>(null);
   const [chainId, setChainId] = useState(1);
   const [connectionType, setConnectionType] = useState<ConnectionType>(null);
   const [pendingFingerprint, setPendingFingerprint] = useState<string | null>(null);
@@ -470,8 +474,14 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
 
     setIsSigning(true);
     setSignError(null);
+    setPendingOpHash(null);
     try {
-      const result = await handleDAppRequest(request, account, account.address, cid, opts?.maxFeePerGas);
+      const result = await handleDAppRequest(
+        request, account, account.address, cid, opts?.maxFeePerGas,
+        // Surface the hash the moment the op is submitted so the modal can show
+        // "submitted, waiting for confirmation" instead of a silent spinner.
+        (hash) => setPendingOpHash(hash),
+      );
       transportRef.current?.sendResponse(request.id, result);
 
       // Record EVERY approved dApp operation to local history (see dapp-history)
@@ -489,6 +499,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       await saveTransaction(record).catch(e => console.warn('[DAppConnection] Failed to save record:', e));
 
       setIncomingRequest(null);
+      setPendingOpHash(null);
     } catch (err: any) {
       if (err?.code === PasskeyErrorCode.CANCELLED) {
         // User cancelled passkey prompt — keep modal open, don't send error
@@ -552,12 +563,14 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     transportRef.current?.sendResponse(incomingRequest.id, undefined, { code: 4001, message: 'User rejected' });
     setIncomingRequest(null);
     setSignError(null);
+    setPendingOpHash(null);
   }, [incomingRequest]);
 
   // --- Dismiss (after error, response already sent) ---
   const dismissRequest = useCallback(() => {
     setIncomingRequest(null);
     setSignError(null);
+    setPendingOpHash(null);
   }, []);
 
   // --- Bundler funding complete → retry the pending request ---
@@ -649,7 +662,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
 
   const value = React.useMemo(() => ({
     status, errorMessage, session, dappInfo,
-    incomingRequest, isSigning, signError, chainId,
+    incomingRequest, isSigning, signError, pendingOpHash, chainId,
     connectionType, pendingFingerprint,
     connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
     disconnectBridge, reconnect, reconnectStuck,
@@ -657,7 +670,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     fundingNeeded, handleFundingComplete, handleFundingCancel,
   }), [
     status, errorMessage, session, dappInfo,
-    incomingRequest, isSigning, signError, chainId,
+    incomingRequest, isSigning, signError, pendingOpHash, chainId,
     connectionType, pendingFingerprint,
     connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
     disconnectBridge, reconnect, reconnectStuck,

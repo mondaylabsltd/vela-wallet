@@ -25,6 +25,8 @@
     },
     "signing": {
       "loading": "Loading...",
+      "gasEstimateFailed": "Couldn't estimate the gas fee — submitting may fail or time out. Tap the fee above to retry.",
+      "submitted": "Submitted — waiting for confirmation",
       "signatureRequest": "Signature request",
       "signing": "Signing...",
       "signLabel": "Sign",
@@ -69,6 +71,8 @@
     },
     "gas": {
       "estFee": "Est. Fee",
+      "estimating": "Estimating...",
+      "estimateFailed": "Tap to retry",
       "gasPrice": "Gas Price",
       "gasPriceUserOp": "Gas Price (UserOp)",
       "networkFee": "Network fee",

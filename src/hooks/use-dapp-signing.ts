@@ -223,6 +223,7 @@ export async function handleSendTransaction(
   safeAddress: string,
   chainId: number,
   maxFeeOverride?: bigint,
+  onSubmitted?: (userOpHash: string) => void,
 ): Promise<string> {
   const txDict = request.params[0] as Record<string, string>;
   const effectiveChainId = resolveChainId(chainId, txDict.chainId);
@@ -273,6 +274,9 @@ export async function handleSendTransaction(
     txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn, maxFeeOverride);
   }
 
+  // Op is signed + accepted by the bundler here; the receipt wait can take a while.
+  // Report the hash so the UI can show "submitted, waiting" instead of a blank spin.
+  onSubmitted?.(txResult.userOpHash);
   return await txResult.waitForTxHash();
 }
 
@@ -307,11 +311,12 @@ export async function handleDAppRequest(
   safeAddress: string,
   chainId: number,
   maxFeeOverride?: bigint,
+  onSubmitted?: (userOpHash: string) => void,
 ): Promise<any> {
   const { method } = request;
 
   if (method === 'eth_sendTransaction') {
-    return handleSendTransaction(request, account, safeAddress, chainId, maxFeeOverride);
+    return handleSendTransaction(request, account, safeAddress, chainId, maxFeeOverride, onSubmitted);
   } else if (method === 'wallet_sendCalls') {
     return handleSendCalls(request, account, safeAddress, chainId);
   } else if (method === 'personal_sign') {

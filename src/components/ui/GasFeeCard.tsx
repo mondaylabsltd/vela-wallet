@@ -97,25 +97,35 @@ export function GasFeeCard({
 
   const { t } = useTranslation();
 
+  // Estimation finished with no result — a dead-end unless we offer a retry.
+  // (The expanded view with its refresh button needs a feeEstimate to open.)
+  const failed = !estimating && !refreshing && !feeEstimate;
+
   return (
     <>
-      {/* Collapsed toggle row */}
-      <Pressable onPress={() => setExpanded(!expanded)} style={styles.toggleRow}>
+      {/* Collapsed toggle row — tap to expand, or to retry when estimation failed */}
+      <Pressable onPress={failed ? handleRefresh : () => setExpanded(!expanded)} style={styles.toggleRow}>
         <Text style={styles.toggleLabel}>{t('componentsUi.gas.estFee')}</Text>
         <View style={styles.toggleRight}>
           <View style={styles.toggleValues}>
-            <Text style={styles.toggleValue}>
-              {estimating ? 'Estimating...' : feeEstimate ? `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}` : '—'}
+            <Text style={[styles.toggleValue, failed && styles.toggleValueFailed]}>
+              {estimating || refreshing
+                ? t('componentsUi.gas.estimating')
+                : feeEstimate
+                  ? `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}`
+                  : t('componentsUi.gas.estimateFailed')}
             </Text>
-            {!estimating && feeUsd > 0.001 && (
+            {!estimating && !failed && feeUsd > 0.001 && (
               <Text style={styles.toggleSub}>≈ {formatUsd(feeUsd)}</Text>
             )}
           </View>
-          {feeEstimate && !estimating && (
+          {failed ? (
+            <RefreshCw size={16} color={color.warning.base} strokeWidth={2} />
+          ) : feeEstimate && !estimating ? (
             expanded
               ? <ChevronUp size={16} color={color.fg.subtle} strokeWidth={2} />
               : <ChevronDown size={16} color={color.fg.subtle} strokeWidth={2} />
-          )}
+          ) : null}
         </View>
       </Pressable>
 
@@ -204,6 +214,9 @@ const styles = createStyles(() => ({
     fontSize: text.sm,
     ...inter.semibold,
     color: color.fg.base,
+  },
+  toggleValueFailed: {
+    color: color.warning.base,
   },
   toggleSub: {
     fontSize: text.xs,

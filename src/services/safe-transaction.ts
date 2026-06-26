@@ -1460,7 +1460,14 @@ async function waitForReceipt(
     interval = Math.min(interval + 500, 3000);
   }
 
-  throw new Error('Transaction timed out waiting for confirmation');
+  // Submitted and accepted by the bundler, but no on-chain receipt in time. The op
+  // is NOT lost — it may still land (or the bundler's gas account couldn't fund the
+  // bundle). Say so, and surface the hash, instead of implying outright failure.
+  const shortOp = `${userOpHash.slice(0, 10)}…`;
+  throw new Error(
+    `Transaction submitted (${shortOp}) but not confirmed within ${Math.round(timeout / 1000)}s. ` +
+    `It may still land on-chain — check the explorer before retrying.`,
+  );
 }
 
 // ---------------------------------------------------------------------------

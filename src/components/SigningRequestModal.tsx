@@ -13,7 +13,7 @@
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, Image, Pressable,
+  View, Text, ScrollView, Image, Pressable, ActivityIndicator,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
@@ -71,7 +71,7 @@ function riskColor(risk: SigningRisk): string {
 export function SigningRequestModal() {
   const { t } = useTranslation();
   const {
-    incomingRequest, isSigning, signError, chainId, dappInfo,
+    incomingRequest, isSigning, signError, pendingOpHash, chainId, dappInfo,
     approveRequest, rejectRequest, dismissRequest,
     fundingNeeded, handleFundingComplete, handleFundingCancel,
   } = useDAppConnection();
@@ -84,6 +84,9 @@ export function SigningRequestModal() {
   const [gasTier, setGasTier] = useState<GasTier>('standard');
   const [feeEstimate, setFeeEstimate] = useState<TransactionFeeEstimate | null>(null);
   const [estimatingGas, setEstimatingGas] = useState(false);
+  // Explicit flag (vs inferring from null feeEstimate) so the confirm guard doesn't
+  // flicker in the frame before estimation starts.
+  const [gasEstimateFailed, setGasEstimateFailed] = useState(false);
 
   // Resolve clear signing + estimate gas when a new request comes in
   useEffect(() => {
@@ -91,6 +94,7 @@ export function SigningRequestModal() {
       setClearSign(null);
       setFeeEstimate(null);
       setGasTier('standard');
+      setGasEstimateFailed(false);
       return;
     }
 
@@ -106,9 +110,10 @@ export function SigningRequestModal() {
       // Estimate gas fee in parallel
       if (activeAccount?.address) {
         setEstimatingGas(true);
+        setGasEstimateFailed(false);
         estimateTransactionFee(activeAccount.address, chainId, 'standard')
-          .then(setFeeEstimate)
-          .catch(() => setFeeEstimate(null))
+          .then((f) => { setFeeEstimate(f); setGasEstimateFailed(false); })
+          .catch(() => { setFeeEstimate(null); setGasEstimateFailed(true); })
           .finally(() => setEstimatingGas(false));
       }
     } else if (method.includes('signTypedData') && params) {
@@ -218,8 +223,27 @@ export function SigningRequestModal() {
               chainId={chainId}
               gasTier={gasTier}
               onTierChange={setGasTier}
-              onFeeUpdate={setFeeEstimate}
+              onFeeUpdate={(f) => { setFeeEstimate(f); setGasEstimateFailed(false); }}
             />
+          )}
+
+          {/* Gas estimation failed — block the blind submit that would otherwise
+              hang for 2 min on the bundler. Retry lives in the gas card above. */}
+          {gasEstimateFailed && !isSigning && (
+            <WarningBanner
+              severity="caution"
+              text={t('componentsUi.signing.gasEstimateFailed')}
+            />
+          )}
+
+          {/* Submitted — show the hash + "waiting" instead of a silent spinner. */}
+          {isSigning && pendingOpHash && (
+            <View style={styles.pendingCard}>
+              <ActivityIndicator size="small" color={color.info.base} />
+              <Text style={styles.pendingText}>
+                {t('componentsUi.signing.submitted')} · {pendingOpHash.slice(0, 10)}…{pendingOpHash.slice(-6)}
+              </Text>
+            </View>
           )}
 
           {/* Error */}
@@ -258,7 +282,7 @@ export function SigningRequestModal() {
                 })}
                 variant={buttonVariant()}
                 loading={isSigning || resolving}
-                disabled={resolving || (isTx && estimatingGas)}
+                disabled={resolving || (isTx && (estimatingGas || gasEstimateFailed))}
                 style={styles.buttonFlex}
               />
             </>
@@ -1099,6 +1123,22 @@ const styles = createStyles(() => ({
     marginBottom: space.lg,
   },
   errorText: { fontSize: text.sm, ...inter.regular, color: color.error.base, flex: 1 },
+
+  // ===== Pending (submitted, awaiting receipt) =====
+  pendingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingVertical: space.lg,
+    paddingHorizontal: space.xl,
+    backgroundColor: color.info.soft,
+    borderRadius: radius.lg,
+    marginBottom: space.lg,
+  },
+  pendingText: {
+    fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono,
+    color: color.info.base, flex: 1,
+  },
 
   // ===== Buttons =====
   buttonRow: {

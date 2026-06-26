@@ -25,6 +25,8 @@
     },
     "signing": {
       "loading": "載入中…",
+      "gasEstimateFailed": "無法估算 gas 費用 — 直接提交可能失敗或逾時。請點擊上方費用重試。",
+      "submitted": "已提交 — 等待鏈上確認",
       "signatureRequest": "簽章請求",
       "signing": "簽署中…",
       "signLabel": "簽署",
@@ -69,6 +71,8 @@
     },
     "gas": {
       "estFee": "預估手續費",
+      "estimating": "估算中…",
+      "estimateFailed": "點擊重試",
       "gasPrice": "Gas 價格",
       "gasPriceUserOp": "Gas 價格（UserOp）",
       "networkFee": "網路費",
