@@ -124,7 +124,8 @@
       "collectionLabel": "NFT 系列",
       "expired": "此授權簽章已過期",
       "noExpiry": "此授權永不過期",
-      "expiresLabel": "過期時間"
+      "expiresLabel": "過期時間",
+      "chooseAction": "請選擇「撤銷」或「授權」以繼續。"
     }
   }
 }

@@ -21,7 +21,7 @@ import { AppModal } from '@/components/ui/AppModal';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet } from '@/models/wallet-state';
-import { shortAddr } from '@/models/types';
+import { shortAddr, type BLEIncomingRequest } from '@/models/types';
 import { chainName, nativeSymbol, DEFAULT_NETWORKS } from '@/models/network';
 import {
   resolveTransaction, resolveTypedData,
@@ -74,14 +74,41 @@ function riskColor(risk: SigningRisk): string {
 // Main component
 // ---------------------------------------------------------------------------
 
-export function SigningRequestModal() {
+/**
+ * SigningSheet — the single presentational signing surface.
+ *
+ * The ONE rendering path for signing (a security UI must not be duplicated). The
+ * production modal and the Clear-Signing test harness both render this with the
+ * same data; only the action callbacks + signing-state differ. It owns the
+ * read-only data fetching (descriptor resolution, gas estimate, token metadata,
+ * approval detection) and all presentation; it never touches the dApp transport.
+ */
+export interface SigningSheetProps {
+  request: BLEIncomingRequest;
+  chainId: number;
+  account: { address?: string; name?: string } | null;
+  dappInfo: { name?: string; url?: string; icon?: string } | null;
+  isSigning: boolean;
+  signError: string | null;
+  pendingOpHash: string | null;
+  onApprove: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[] }) => void;
+  onReject: () => void;
+  onDismiss: () => void;
+}
+
+export function SigningSheet({
+  request: incomingRequest,
+  chainId,
+  account: activeAccount,
+  dappInfo,
+  isSigning,
+  signError,
+  pendingOpHash,
+  onApprove,
+  onReject,
+  onDismiss,
+}: SigningSheetProps) {
   const { t } = useTranslation();
-  const {
-    incomingRequest, isSigning, signError, pendingOpHash, chainId, dappInfo,
-    approveRequest, rejectRequest, dismissRequest,
-    fundingNeeded, handleFundingComplete, handleFundingCancel,
-  } = useDAppConnection();
-  const { activeAccount } = useWallet();
 
   const [clearSign, setClearSign] = useState<ClearSignResult | null>(null);
   const [resolving, setResolving] = useState(false);
@@ -257,8 +284,6 @@ export function SigningRequestModal() {
   const buttonVariant = (): 'accent' | 'secondary' => 'accent';
 
   return (
-    <>
-    <AppModal visible={true} onClose={signError ? dismissRequest : rejectRequest}>
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
           {/* dApp banner — always shown */}
@@ -322,7 +347,7 @@ export function SigningRequestModal() {
           {signError ? (
             <VelaButton
               title={t('componentsUi.signing.dismiss')}
-              onPress={dismissRequest}
+              onPress={onDismiss}
               variant="secondary"
               style={styles.buttonFlex}
             />
@@ -330,7 +355,7 @@ export function SigningRequestModal() {
             <>
               <VelaButton
                 title={t('componentsUi.signing.reject')}
-                onPress={rejectRequest}
+                onPress={onReject}
                 variant="secondary"
                 disabled={isSigning}
                 style={styles.buttonFlex}
@@ -346,7 +371,7 @@ export function SigningRequestModal() {
                     try { paramsOverride = rewriteApprovalParams(method, params, approval, approveChoice); }
                     catch { paramsOverride = undefined; }
                   }
-                  approveRequest({
+                  onApprove({
                     maxFeePerGas: feeEstimate?.maxFeePerGas,
                     // Raw bundler cost (tier markup removed) drives the funding pre-check.
                     bundlerCostWei: feeEstimate ? rawBundlerGasCost(feeEstimate) : undefined,
@@ -366,17 +391,48 @@ export function SigningRequestModal() {
           )}
         </View>
       </View>
-    </AppModal>
+  );
+}
 
-    {/* Bundler gas account funding modal — overlays the signing modal */}
-    {fundingNeeded && (
-      <BundlerFundingModal
-        visible={true}
-        funding={fundingNeeded}
-        onFunded={handleFundingComplete}
-        onCancel={handleFundingCancel}
-      />
-    )}
+// ===========================================================================
+// Production wrapper — wires the dApp connection context to <SigningSheet>
+// ===========================================================================
+
+export function SigningRequestModal() {
+  const {
+    incomingRequest, isSigning, signError, pendingOpHash, chainId, dappInfo,
+    approveRequest, rejectRequest, dismissRequest,
+    fundingNeeded, handleFundingComplete, handleFundingCancel,
+  } = useDAppConnection();
+  const { activeAccount } = useWallet();
+
+  if (!incomingRequest) return null;
+
+  return (
+    <>
+      <AppModal visible={true} onClose={signError ? dismissRequest : rejectRequest}>
+        <SigningSheet
+          request={incomingRequest}
+          chainId={chainId}
+          account={activeAccount ?? null}
+          dappInfo={dappInfo}
+          isSigning={isSigning}
+          signError={signError}
+          pendingOpHash={pendingOpHash}
+          onApprove={approveRequest}
+          onReject={rejectRequest}
+          onDismiss={dismissRequest}
+        />
+      </AppModal>
+
+      {fundingNeeded && (
+        <BundlerFundingModal
+          visible={true}
+          funding={fundingNeeded}
+          onFunded={handleFundingComplete}
+          onCancel={handleFundingCancel}
+        />
+      )}
     </>
   );
 }

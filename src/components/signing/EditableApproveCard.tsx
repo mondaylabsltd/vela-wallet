@@ -13,7 +13,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ShieldCheck, Pencil } from 'lucide-react-native';
-import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { TokenLogo } from '@/components/TokenLogo';
 import {
   type DetectedApproval,
@@ -95,7 +95,8 @@ function AmountCard({
         </Text>
       </View>
 
-      {/* The value — display or live custom input */}
+      {/* The value — display or live custom input. The token symbol lives in the
+          header (and the summary line), so the number stands alone here. */}
       {mode === 'custom' ? (
         <View style={styles.inputRow}>
           <TextInput
@@ -109,7 +110,6 @@ function AmountCard({
             autoFocus={!requestedFinite}
             selectionColor={accent}
           />
-          <Text style={styles.amountUnit}>{symbol}</Text>
         </View>
       ) : (
         <Pressable style={styles.valueRow} onPress={() => setMode('custom')}>
@@ -223,7 +223,7 @@ function BooleanGrantCard({ approval, spenderLabel, onChange }: Props) {
       </Pressable>
 
       {selected === null && (
-        <Text style={styles.summary}>{t('componentsUi.signingApprove.choosePrompt')}</Text>
+        <Text style={styles.summary}>{t('componentsUi.signingApprove.chooseAction')}</Text>
       )}
     </View>
   );
@@ -276,7 +276,6 @@ const styles = createStyles(() => ({
   amountInput: {
     flex: 1, fontSize: text['3xl'], ...inter.bold, letterSpacing: -0.5, padding: 0,
   },
-  amountUnit: { fontSize: text.lg, ...inter.semibold, color: color.fg.muted },
   usd: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, marginTop: -space.xs },
 
   presets: { flexDirection: 'row', gap: space.sm, marginTop: space.xs },

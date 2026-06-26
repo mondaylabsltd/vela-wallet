@@ -124,7 +124,8 @@
       "collectionLabel": "Collection",
       "expired": "This permit has already expired",
       "noExpiry": "This approval never expires",
-      "expiresLabel": "Expires"
+      "expiresLabel": "Expires",
+      "chooseAction": "Choose Revoke or Grant to continue."
     }
   }
 }
