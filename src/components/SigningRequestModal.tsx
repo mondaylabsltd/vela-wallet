@@ -11,7 +11,7 @@
  *   L2 — Substance: token cards with amounts, recipients, flow arrows
  *   L3 — Context: contract info, chain, details (collapsed)
  */
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, ScrollView, Image, Pressable, ActivityIndicator,
 } from 'react-native';
@@ -107,11 +107,14 @@ export function SigningRequestModal() {
         .catch(() => setClearSign(null))
         .finally(() => setResolving(false));
 
-      // Estimate gas fee in parallel
+      // Estimate gas fee in parallel — against the REAL tx so the displayed fee and
+      // the funding pre-check reflect this contract call/deploy, not a dummy transfer.
       if (activeAccount?.address) {
         setEstimatingGas(true);
         setGasEstimateFailed(false);
-        estimateTransactionFee(activeAccount.address, chainId, 'standard')
+        estimateTransactionFee(activeAccount.address, chainId, 'standard', {
+          to: params[0].to, value: params[0].value, data: params[0].data,
+        })
           .then((f) => { setFeeEstimate(f); setGasEstimateFailed(false); })
           .catch(() => { setFeeEstimate(null); setGasEstimateFailed(true); })
           .finally(() => setEstimatingGas(false));
@@ -133,6 +136,12 @@ export function SigningRequestModal() {
       setClearSign(null);
     }
   }, [incomingRequest, chainId, activeAccount?.address]);
+
+  // Real tx for accurate gas estimation in the fee card (re-runs on tier change/refresh).
+  const txForEstimate = useMemo(() => {
+    const p = incomingRequest?.method === 'eth_sendTransaction' ? incomingRequest.params?.[0] : undefined;
+    return p ? { to: p.to, value: p.value, data: p.data } : undefined;
+  }, [incomingRequest]);
 
   if (!incomingRequest) return null;
 
@@ -222,6 +231,7 @@ export function SigningRequestModal() {
               safeAddress={activeAccount.address}
               chainId={chainId}
               gasTier={gasTier}
+              tx={txForEstimate}
               onTierChange={setGasTier}
               onFeeUpdate={(f) => { setFeeEstimate(f); setGasEstimateFailed(false); }}
             />

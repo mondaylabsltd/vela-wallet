@@ -56,6 +56,9 @@ interface GasFeeCardProps {
   chainId: number;
   /** Current gas tier. */
   gasTier: GasTier;
+  /** The real tx being signed — passed so tier-change/refresh re-estimates the
+   *  actual call (dApp tx), not a dummy transfer. Omit for simple transfers. */
+  tx?: { to: string; value?: string; data?: string };
   /** Called when user changes tier. Parent should re-estimate and update feeEstimate. */
   onTierChange: (tier: GasTier) => void;
   /** Called when fee estimate is updated (after refresh or tier change). */
@@ -68,7 +71,7 @@ interface GasFeeCardProps {
 
 export function GasFeeCard({
   feeEstimate, estimating, nativeSymbol: sym, nativeUsdPrice,
-  safeAddress, chainId, gasTier, onTierChange, onFeeUpdate,
+  safeAddress, chainId, gasTier, tx, onTierChange, onFeeUpdate,
 }: GasFeeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -81,19 +84,19 @@ export function GasFeeCard({
     setRefreshing(true);
     try {
       await refreshGasPrice(chainId);
-      const fee = await estimateTransactionFee(safeAddress, chainId, gasTier);
+      const fee = await estimateTransactionFee(safeAddress, chainId, gasTier, tx);
       onFeeUpdate(fee);
     } catch { /* ignore */ }
     setRefreshing(false);
-  }, [chainId, safeAddress, gasTier, refreshing, onFeeUpdate]);
+  }, [chainId, safeAddress, gasTier, tx, refreshing, onFeeUpdate]);
 
   const handleTierChange = useCallback(async (tier: GasTier) => {
     onTierChange(tier);
     try {
-      const fee = await estimateTransactionFee(safeAddress, chainId, tier);
+      const fee = await estimateTransactionFee(safeAddress, chainId, tier, tx);
       onFeeUpdate(fee);
     } catch { /* ignore */ }
-  }, [safeAddress, chainId, onTierChange, onFeeUpdate]);
+  }, [safeAddress, chainId, tx, onTierChange, onFeeUpdate]);
 
   const { t } = useTranslation();
 

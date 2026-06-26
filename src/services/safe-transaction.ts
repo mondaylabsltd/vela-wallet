@@ -49,6 +49,11 @@ const VERIFICATION_GAS_DEPLOYED = 300_000n;
 const VERIFICATION_GAS_UNDEPLOYED = 2_000_000n;
 const CALL_GAS_LIMIT = 200_000n;  // 200k — simple transfers; bundler estimation may increase
 const PRE_VERIFICATION_GAS = 100_000n; // 100k — must exceed bundler's calculated preVerificationGas
+// Above this callData size the static defaults can't be trusted (a deploy's
+// preVerificationGas scales with calldata; its callGasLimit is unknown). If live
+// estimation fails for such an op we refuse rather than submit a doomed one.
+// Simple transfers are ~160-260 bytes, so this only catches real contract calls.
+const ESTIMATION_REQUIRED_CALLDATA = 1024;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -318,6 +323,10 @@ export async function estimateTransactionFee(
   from: string,
   chainId: number,
   tier: GasTier = 'standard',
+  // The actual call being made (dApp tx). When omitted (simple transfers) a small
+  // dummy is used. Passing the real tx makes the estimate accurate for contract
+  // calls and deploys, whose callGasLimit/preVerificationGas dwarf a transfer's.
+  tx?: { to: string; value?: string; data?: string },
 ): Promise<TransactionFeeEstimate> {
   // Tempo pays gas in a stablecoin, not the native coin — separate model.
   if (isTempoChain(chainId)) return estimateTempoFee(from, chainId, tier);
@@ -352,19 +361,28 @@ export async function estimateTransactionFee(
     relayerFeePerGas = userOpMaxFee > bundlerGasPrice ? userOpMaxFee - bundlerGasPrice : 0n;
   }
 
+  // Estimate against the REAL call when we have it (dApp tx); otherwise a minimal
+  // ERC-20-sized dummy. Built identically to sendContractCall so the displayed
+  // estimate matches what's actually submitted.
+  const estCallData = tx?.to
+    ? buildExecuteCallData(
+        tx.to,
+        stripHexPrefix(tx.value ?? '0') || '0',
+        tx.data && tx.data !== '0x' ? fromHex(stripHexPrefix(tx.data)) : new Uint8Array(0),
+      )
+    : buildExecuteCallData(from, '0', new Uint8Array(68));
+
   // Try to get accurate gas estimates from the bundler. This catches high-gas chains
   // (e.g. Monad) where actual gas usage is 3-10x higher than the static defaults below.
   let totalGas: bigint | null = null;
   try {
     const verificationGas = deployed ? VERIFICATION_GAS_DEPLOYED : VERIFICATION_GAS_UNDEPLOYED;
     const dummySig = buildDummySignature();
-    // Minimal ERC-20 transfer callData for estimation
-    const dummyCallData = buildExecuteCallData(from, '0', new Uint8Array(68));
     const dummyOp: UserOperation = {
       sender: from,
       nonce: '0x0',
       initCode: new Uint8Array(0),
-      callData: dummyCallData,
+      callData: estCallData,
       verificationGasLimit: verificationGas,
       callGasLimit: CALL_GAS_LIMIT,
       preVerificationGas: PRE_VERIFICATION_GAS,
@@ -382,6 +400,13 @@ export async function estimateTransactionFee(
     totalGas = estVgl + estCgl + estPvg;
     console.log(`[FeeEstimate] Bundler gas: vgl=${estVgl} cgl=${estCgl} pvg=${estPvg} total=${totalGas}`);
   } catch (err) {
+    // For a large/complex op the static fallback would show a misleading number and
+    // the submit would be refused anyway (see sendUserOp). Surface the failure so the
+    // confirm UI shows "couldn't estimate" + retry instead of a wrong fee. Small ops
+    // keep the static fallback — it's accurate enough for transfers.
+    if (estCallData.length > ESTIMATION_REQUIRED_CALLDATA) {
+      throw err instanceof Error ? err : new Error('Gas estimation failed');
+    }
     console.log(`[FeeEstimate] Bundler estimation unavailable, using defaults:`, err instanceof Error ? err.message : String(err));
   }
 
@@ -517,7 +542,15 @@ async function sendUserOp(
       );
       userOp.preVerificationGas = estimated.preVerificationGas + 10_000n;
     } catch (err) {
-      console.error('[UserOp] Gas estimation failed, using defaults:', err instanceof Error ? err.message : String(err));
+      console.error('[UserOp] Gas estimation failed:', err instanceof Error ? err.message : String(err));
+      // For a large/complex op the static defaults below can't cover the real
+      // callGasLimit/preVerificationGas — submitting anyway yields an op the bundler
+      // accepts but can't land, i.e. a silent 2-minute receipt timeout. Refuse so the
+      // user gets an immediate, retryable error. Small ops keep the known-good defaults.
+      if (callData.length > ESTIMATION_REQUIRED_CALLDATA) {
+        throw new Error('Could not estimate gas for this transaction. The network may be busy — please try again.');
+      }
+      console.error('[UserOp] Falling back to default gas limits (small calldata).');
     }
   }
   console.log('[UserOp] Final gas:', {
