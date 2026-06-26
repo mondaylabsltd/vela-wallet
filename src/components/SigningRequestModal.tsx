@@ -30,6 +30,12 @@ import {
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { GasFeeCard } from '@/components/ui/GasFeeCard';
+import { EditableApproveCard } from '@/components/signing/EditableApproveCard';
+import {
+  detectApproval, rewriteApprovalParams,
+  type DetectedApproval, type ApprovalChoice,
+} from '@/services/approval-guard';
+import { resolveTokenMetadata } from '@/services/token-metadata';
 import { ChainLogo } from '@/components/ChainLogo';
 import { TokenLogo } from '@/components/TokenLogo';
 import {
@@ -87,6 +93,32 @@ export function SigningRequestModal() {
   // Explicit flag (vs inferring from null feeEstimate) so the confirm guard doesn't
   // flicker in the frame before estimation starts.
   const [gasEstimateFailed, setGasEstimateFailed] = useState(false);
+
+  // --- Editable approval (the never-unlimited mandate) ---
+  // Detected straight off the raw request, independent of any descriptor.
+  const approval = useMemo<DetectedApproval | null>(
+    () => (incomingRequest ? detectApproval(incomingRequest.method, incomingRequest.params) : null),
+    [incomingRequest],
+  );
+  const [approveChoice, setApproveChoice] = useState<ApprovalChoice | null>(null);
+  const [approveTokenMeta, setApproveTokenMeta] = useState<{ symbol: string; decimals: number; verified: boolean } | null>(null);
+
+  // Resolve the approved token's symbol/decimals (on-chain via Multicall3, cached).
+  useEffect(() => {
+    setApproveChoice(null);
+    const tokenAddr = approval?.tokenAddress;
+    if (!tokenAddr) { setApproveTokenMeta(null); return; }
+    let cancelled = false;
+    const fallback = { symbol: `${tokenAddr.slice(0, 6)}…`, decimals: 18, verified: false };
+    resolveTokenMetadata(chainId, [tokenAddr])
+      .then((map) => {
+        if (cancelled) return;
+        const m = map.get(tokenAddr.toLowerCase());
+        setApproveTokenMeta(m ? { symbol: m.symbol, decimals: m.decimals, verified: true } : fallback);
+      })
+      .catch(() => { if (!cancelled) setApproveTokenMeta(fallback); });
+    return () => { cancelled = true; };
+  }, [approval?.tokenAddress, chainId]);
 
   // Resolve clear signing + estimate gas when a new request comes in
   useEffect(() => {
@@ -160,6 +192,21 @@ export function SigningRequestModal() {
 
   // Choose which view to render — wait for descriptor resolution before showing content
   const renderContent = () => {
+    // Editable approval takes precedence — detection is instant (no descriptor),
+    // and the spending-cap editor is the primary content for these requests.
+    if (approval?.editable) {
+      return (
+        <ApprovalView
+          approval={approval}
+          meta={approveTokenMeta}
+          choice={approveChoice}
+          onChange={setApproveChoice}
+          chainId={chainId}
+          clearSign={clearSign}
+          requestId={incomingRequest.id}
+        />
+      );
+    }
     // While loading descriptor, show loading state (prevents blind→clear flash)
     if (resolving) {
       return (
@@ -191,6 +238,11 @@ export function SigningRequestModal() {
   // Button config — keep label short (max ~15 chars)
   const buttonLabel = (): string => {
     if (isSigning) return t('componentsUi.signing.signing');
+    if (approval?.editable) {
+      return approveChoice?.type === 'revoke'
+        ? t('componentsUi.signingApprove.verbRevoke')
+        : t('componentsUi.signingApprove.verbApprove');
+    }
     if (clearSign) {
       if (clearSign.type === 'signature') return t('componentsUi.signing.signLabel');
       const i = clearSign.intent;
@@ -199,7 +251,7 @@ export function SigningRequestModal() {
       return t('componentsUi.signing.confirmIntentLabel', { intent: i.charAt(0).toUpperCase() + i.slice(1) });
     }
     if (isPersonalSign || isTypedData) return t('componentsUi.signing.signLabel');
-    return t('componentsUi.signing.approve');
+    return t('componentsUi.signingApprove.verbApprove');
   };
 
   const buttonVariant = (): 'accent' | 'secondary' => 'accent';
@@ -285,14 +337,29 @@ export function SigningRequestModal() {
               />
               <VelaButton
                 title={buttonLabel()}
-                onPress={() => approveRequest({
-                  maxFeePerGas: feeEstimate?.maxFeePerGas,
-                  // Raw bundler cost (tier markup removed) drives the funding pre-check.
-                  bundlerCostWei: feeEstimate ? rawBundlerGasCost(feeEstimate) : undefined,
-                })}
+                onPress={() => {
+                  // For an edited approval, re-encode to the chosen finite amount
+                  // BEFORE submit. The independent guard re-checks at the submit
+                  // chokepoint, so a rewrite failure fails closed (never unbounded).
+                  let paramsOverride: any[] | undefined;
+                  if (approval?.editable && approveChoice) {
+                    try { paramsOverride = rewriteApprovalParams(method, params, approval, approveChoice); }
+                    catch { paramsOverride = undefined; }
+                  }
+                  approveRequest({
+                    maxFeePerGas: feeEstimate?.maxFeePerGas,
+                    // Raw bundler cost (tier markup removed) drives the funding pre-check.
+                    bundlerCostWei: feeEstimate ? rawBundlerGasCost(feeEstimate) : undefined,
+                    paramsOverride,
+                  });
+                }}
                 variant={buttonVariant()}
                 loading={isSigning || resolving}
-                disabled={resolving || (isTx && (estimatingGas || gasEstimateFailed))}
+                disabled={
+                  resolving
+                  || (isTx && (estimatingGas || gasEstimateFailed))
+                  || (!!approval?.editable && !approveChoice)
+                }
                 style={styles.buttonFlex}
               />
             </>
@@ -469,6 +536,82 @@ function ClearSignView({ cs }: {
           address={cs.contractAddress}
           verified={cs.verified}
         />
+      )}
+    </View>
+  );
+}
+
+// ===========================================================================
+// Approval View — the editable, never-unlimited spending-cap surface
+// ===========================================================================
+
+function ApprovalView({ approval, meta, choice, onChange, chainId, clearSign, requestId }: {
+  approval: DetectedApproval;
+  meta: { symbol: string; decimals: number; verified: boolean } | null;
+  choice: ApprovalChoice | null;
+  onChange: (c: ApprovalChoice | null) => void;
+  chainId: number;
+  clearSign: ClearSignResult | null;
+  requestId: string;
+}) {
+  const { t } = useTranslation();
+  const isNft = approval.kind === 'setApprovalForAll';
+
+  const verb = approval.isReducing
+    ? t('componentsUi.signingApprove.verbRevoke')
+    : isNft && approval.isUnbounded
+      ? t('componentsUi.signingApprove.verbApproveAll')
+      : t('componentsUi.signingApprove.verbApprove');
+  const verbColor = approval.isReducing
+    ? color.success.base
+    : approval.isUnbounded
+      ? color.error.base
+      : color.warning.base;
+
+  // Expiry classification (UI-side; the pure resolver injects `now` for tests).
+  const deadlineSec = approval.deadline ? Number(approval.deadline) : 0;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const expired = deadlineSec > 0 && deadlineSec < nowSec;
+
+  const symbol = meta?.symbol ?? '…';
+  const decimals = meta?.decimals ?? 18;
+  const logoUrl = approval.tokenAddress
+    ? `https://ethereum-data.awesometools.dev/tokenlogos/${approval.tokenAddress}.png`
+    : undefined;
+
+  return (
+    <View>
+      <IntentHeader intent={verb} color={verbColor} />
+
+      <EditableApproveCard
+        key={requestId}
+        approval={approval}
+        symbol={symbol}
+        decimals={decimals}
+        decimalsVerified={meta?.verified ?? false}
+        logoUrl={logoUrl}
+        spenderLabel={clearSign?.contractName ?? shortAddr(approval.spender)}
+        choice={choice}
+        onChange={onChange}
+      />
+
+      <ContractBar
+        label={isNft ? t('componentsUi.signingApprove.operatorLabel') : t('componentsUi.signingApprove.spenderLabel')}
+        address={approval.spender}
+        verified={false}
+      />
+
+      {approval.tokenAddress && (
+        <ContractBar
+          label={isNft ? t('componentsUi.signingApprove.collectionLabel') : t('componentsUi.signingApprove.tokenLabel')}
+          name={clearSign?.contractName ?? (meta?.verified ? meta.symbol : undefined)}
+          address={approval.tokenAddress}
+          verified={clearSign?.verified ?? false}
+        />
+      )}
+
+      {expired && (
+        <WarningBanner severity="caution" text={t('componentsUi.signingApprove.expired')} />
       )}
     </View>
   );

@@ -32,7 +32,6 @@
       "signLabel": "簽署",
       "confirmLabel": "確認",
       "confirmIntentLabel": "確認{{intent}}",
-      "approve": "批准",
       "dismiss": "關閉",
       "reject": "拒絕",
       "personalSignTag": "personal_sign · 免 Gas 費",
@@ -96,6 +95,36 @@
     "chart": {
       "noDataFor": "{{label}} 沒有數據",
       "tapHint": "點按長條以查看餘額"
+    },
+    "signingApprove": {
+      "spendingCap": "授權上限",
+      "reduceBy": "減少",
+      "requested": "請求額度",
+      "custom": "自訂",
+      "revoke": "撤銷",
+      "revokeValue": "撤銷 (0)",
+      "invalidAmount": "請輸入有效金額",
+      "unlimitedDisabled": "為保護你嘅資產，已停用無限授權",
+      "capSummary": "{{spender}} 最多可花費 {{amount}}。",
+      "revokeSummary": "{{spender}} 將無法再花費此代幣。",
+      "choosePrompt": "請設定一個有限嘅金額以繼續。",
+      "decimalsUnverified": "代幣精度無法驗證 — 請仔細核對金額。",
+      "allNfts": "全部 NFT",
+      "fullBalance": "全部餘額",
+      "setApprovalAllWarn": "呢個會容許 {{operator}} 轉移此系列中嘅每一個 NFT。如可能，請只授權單個 NFT。",
+      "daiWarn": "呢個會授予 {{spender}} 存取你此代幣全部餘額嘅權限。",
+      "revokeAccess": "撤銷存取權限",
+      "grantAllAnyway": "仍要授權全部",
+      "verbApprove": "授權",
+      "verbApproveAll": "授權全部",
+      "verbRevoke": "撤銷",
+      "spenderLabel": "被授權方",
+      "operatorLabel": "操作者",
+      "tokenLabel": "代幣",
+      "collectionLabel": "NFT 系列",
+      "expired": "此授權簽章已過期",
+      "noExpiry": "此授權永不過期",
+      "expiresLabel": "過期時間"
     }
   }
 }

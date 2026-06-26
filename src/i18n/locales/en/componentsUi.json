@@ -32,7 +32,6 @@
       "signLabel": "Sign",
       "confirmLabel": "Confirm",
       "confirmIntentLabel": "Confirm {{intent}}",
-      "approve": "Approve",
       "dismiss": "Dismiss",
       "reject": "Reject",
       "personalSignTag": "personal_sign · No gas fee",
@@ -96,6 +95,36 @@
     "chart": {
       "noDataFor": "No data for {{label}}",
       "tapHint": "Tap a bar to see balance"
+    },
+    "signingApprove": {
+      "spendingCap": "Spending cap",
+      "reduceBy": "Reduce by",
+      "requested": "Requested",
+      "custom": "Custom",
+      "revoke": "Revoke",
+      "revokeValue": "Revoke (0)",
+      "invalidAmount": "Enter a valid amount",
+      "unlimitedDisabled": "Unlimited approvals are disabled for your safety",
+      "capSummary": "{{spender}} can spend up to {{amount}}.",
+      "revokeSummary": "{{spender}} will no longer be able to spend this token.",
+      "choosePrompt": "Set a finite amount to continue.",
+      "decimalsUnverified": "Token decimals couldn’t be verified — double-check the amount.",
+      "allNfts": "All NFTs",
+      "fullBalance": "Full balance",
+      "setApprovalAllWarn": "This lets {{operator}} transfer every NFT in this collection. Grant access to a single item instead when you can.",
+      "daiWarn": "This grants {{spender}} access to your entire balance of this token.",
+      "revokeAccess": "Revoke access",
+      "grantAllAnyway": "Grant access to all",
+      "verbApprove": "Approve",
+      "verbApproveAll": "Approve All",
+      "verbRevoke": "Revoke",
+      "spenderLabel": "Spender",
+      "operatorLabel": "Operator",
+      "tokenLabel": "Token",
+      "collectionLabel": "Collection",
+      "expired": "This permit has already expired",
+      "noExpiry": "This approval never expires",
+      "expiresLabel": "Expires"
     }
   }
 }

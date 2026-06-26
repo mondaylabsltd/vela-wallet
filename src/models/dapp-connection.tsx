@@ -109,10 +109,10 @@ interface DAppConnectionContextValue {
   reconnectStuck: boolean;
   /**
    * Approve the current incoming request. For transactions the modal passes the
-   * selected tier's maxFeePerGas plus the raw bundler gas cost, used for a
-   * proactive gas-account funding pre-check (see approveRequest).
+   * selected tier's maxFeePerGas plus the raw bundler gas cost (for the funding
+   * pre-check) and, for edited approvals, the rewritten (capped) params.
    */
-  approveRequest: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint }) => Promise<void>;
+  approveRequest: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[] }) => Promise<void>;
   /** Reject the current incoming request. */
   rejectRequest: () => void;
   /** Dismiss the modal after an error (response already sent). */
@@ -197,6 +197,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const transportRef = useRef<DAppTransport | null>(null);
   /** Holds WalletPairTransport during fingerprint verification (before connect). */
   const pendingWpTransportRef = useRef<WalletPairTransport | null>(null);
+  const lastApproveOptsRef = useRef<{ maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[] } | undefined>(undefined);
   const addressRef = useRef(address);
   const chainIdRef = useRef(chainId);
   const accountNameRef = useRef(accountName);
@@ -448,10 +449,17 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // --- Approve ---
-  const approveRequest = useCallback(async (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint }) => {
-    const request = incomingRequest;
+  const approveRequest = useCallback(async (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[] }) => {
+    const base = incomingRequest;
     const account = activeAccountRef.current;
-    if (!request || !account) return;
+    if (!base || !account) return;
+
+    // The modal may hand us rewritten params (e.g. an approval capped to a finite
+    // amount). Sign/submit/record THOSE, never the original unbounded request.
+    const request = opts?.paramsOverride ? { ...base, params: opts.paramsOverride } : base;
+
+    // Remember opts so a funding-driven retry resubmits the SAME (capped) request.
+    lastApproveOptsRef.current = opts;
 
     const cid = chainIdRef.current;
 
@@ -580,8 +588,9 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     // the freshly-funded amount instead of re-prompting.
     const account = activeAccountRef.current;
     if (account) clearBundlerCache(chainIdRef.current, account.address);
-    // Retry approve — the request is still in incomingRequest
-    approveRequest();
+    // Retry approve with the SAME opts (esp. the capped paramsOverride) so funding
+    // never resubmits the original (possibly unbounded) request.
+    approveRequest(lastApproveOptsRef.current);
   }, [approveRequest]);
 
   // --- Bundler funding cancelled → reject the pending request ---

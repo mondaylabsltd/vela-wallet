@@ -140,7 +140,7 @@ export function RpcProvidersModal({ visible, onClose }: { visible: boolean; onCl
               <VelaCard key={id} style={s.card}>
                 <View style={s.cardHead}>
                   <Text style={s.providerLabel}>{meta.label}</Text>
-                  <ProviderStatus s={s} t={t} hasKey={hasKey} test={test} okCount={okCount} />
+                  <ProviderStatus s={s} hasKey={hasKey} test={test} okCount={okCount} />
                 </View>
 
                 <View style={s.inputRow}>
@@ -196,7 +196,7 @@ export function RpcProvidersModal({ visible, onClose }: { visible: boolean; onCl
                           <View key={r.chainId} style={s.netRow}>
                             <ChainLogo label={r.logoLabel} color={r.logoColor} bgColor={r.logoBg} size={22} />
                             <Text style={s.netName}>{r.name}</Text>
-                            <LatencyBadge s={s} t={t} ok={r.ok} latencyMs={r.latencyMs} />
+                            <LatencyBadge s={s} ok={r.ok} latencyMs={r.latencyMs} />
                           </View>
                         ))}
                       </View>
@@ -212,9 +212,12 @@ export function RpcProvidersModal({ visible, onClose }: { visible: boolean; onCl
   );
 }
 
-function ProviderStatus({ s, t, hasKey, test, okCount }: {
-  s: S; t: ReturnType<typeof useTranslation>['t']; hasKey: boolean; test?: TestState; okCount: number;
+function ProviderStatus({ s, hasKey, test, okCount }: {
+  s: S; hasKey: boolean; test?: TestState; okCount: number;
 }) {
+  // useTranslation() inside (vs a `t` prop) keeps the large typed-key union from
+  // being re-instantiated at the prop boundary — that trips TS2589 as keys grow.
+  const { t } = useTranslation();
   if (!hasKey) {
     return <Text style={s.statusMuted}>{t('settingsModals.rpcProviders.notSet', { defaultValue: 'Not set' })}</Text>;
   }
@@ -233,9 +236,10 @@ function ProviderStatus({ s, t, hasKey, test, okCount }: {
   );
 }
 
-function LatencyBadge({ s, t, ok, latencyMs }: {
-  s: S; t: ReturnType<typeof useTranslation>['t']; ok: boolean; latencyMs: number;
+function LatencyBadge({ s, ok, latencyMs }: {
+  s: S; ok: boolean; latencyMs: number;
 }) {
+  const { t } = useTranslation();
   if (!ok) {
     return (
       <View style={s.latBadge}>
