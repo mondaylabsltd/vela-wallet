@@ -14,9 +14,9 @@ import { formatFiat } from '@/services/currency';
 import { formatDateTime, useLocalePrefs } from '@/services/locale-format';
 import { copyToClipboard, hapticSuccess, openBrowser, showAlert } from '@/services/platform';
 import type { RecipientIdentity } from '@/services/recipient-identity';
-import { ExternalLink, Share2 } from 'lucide-react-native';
+import { ExternalLink, Share2, BookmarkPlus, Check } from 'lucide-react-native';
 import QRCodeLib from 'qrcode';
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 
@@ -42,6 +42,8 @@ interface Props {
   timestamp: Date;
   recipientIdentity?: RecipientIdentity | null;
   onDone: () => void;
+  /** Offer a "Save to contacts" action (omitted when the recipient is already saved). */
+  onSaveContact?: () => void;
 }
 
 /** Format a USD value into the receipt's display currency. */
@@ -326,11 +328,12 @@ async function renderReceiptToCanvas(props: Props, labels: CanvasLabels): Promis
 
 export function TransactionReceipt({
   from, fromName, to, toName, amount, symbol, chainId,
-  txHash, logoUrls, usdValue, rate, currencyCode, currencySymbol, timestamp, recipientIdentity, onDone,
+  txHash, logoUrls, usdValue, rate, currencyCode, currencySymbol, timestamp, recipientIdentity, onDone, onSaveContact,
 }: Props) {
   const { t } = useTranslation();
   useLocalePrefs(); // re-render when number/date/time format changes
   const receiptRef = useRef<View>(null);
+  const [contactSaved, setContactSaved] = useState(false);
   const fiatPrefs = { rate, currencyCode, currencySymbol };
   const chain = chainName(chainId);
   const net = getAllNetworksSync().find(n => n.chainId === chainId);
@@ -460,6 +463,20 @@ export function TransactionReceipt({
           <Share2 size={18} color={color.fg.muted} strokeWidth={2} />
           <Text style={styles.actionText}>{t('componentsTx.receipt.share')}</Text>
         </Pressable>
+        {onSaveContact && (
+          <Pressable
+            style={styles.actionBtn}
+            disabled={contactSaved}
+            onPress={() => { onSaveContact(); setContactSaved(true); }}
+          >
+            {contactSaved
+              ? <Check size={18} color={color.success.base} strokeWidth={2} />
+              : <BookmarkPlus size={18} color={color.fg.muted} strokeWidth={2} />}
+            <Text style={styles.actionText}>
+              {contactSaved ? t('contacts.saved') : t('contacts.saveToContacts')}
+            </Text>
+          </Pressable>
+        )}
       </View>
 
       <Pressable style={styles.doneBtn} onPress={onDone}>

@@ -21,6 +21,7 @@ import {
   fetchBundlerAccountInfo,
   clearBundlerCache,
   requestGasSponsorship,
+  recommendedFundingWei,
   type FundingNeeded,
 } from '@/services/bundler-service';
 
@@ -118,10 +119,9 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
   // On cheap chains (Gnosis, BSC), the actual deficit can be < 0.000001 — useless to display.
   // Show at least 0.001 (enough for hundreds of txs on cheap chains).
   const MIN_DISPLAY_WEI = 100_000_000_000_000n; // 0.0001
-  const deficit = funding.thresholdWei > funding.currentBalance
-    ? funding.thresholdWei - funding.currentBalance
-    : 0n;
-  const rawAmount = deficit > 0n ? (deficit * 12n) / 10n : funding.recommendedWei;
+  const rawAmount = funding.thresholdWei > funding.currentBalance
+    ? recommendedFundingWei(funding.thresholdWei, funding.currentBalance)
+    : funding.recommendedWei;
   const displayAmount = rawAmount < MIN_DISPLAY_WEI ? MIN_DISPLAY_WEI : rawAmount;
   const activationAmount = formatWei(displayAmount);
 

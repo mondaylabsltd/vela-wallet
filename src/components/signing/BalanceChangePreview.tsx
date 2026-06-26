@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ShieldCheck, ArrowDownLeft, ArrowUpRight } from 'lucide-react-native';
 import { TokenLogo } from '@/components/TokenLogo';
 import { shortAddr } from '@/models/types';
-import { nativeSymbol } from '@/models/network';
+import { nativeSymbol, nativeCoinLogoURL } from '@/models/network';
 import { formatTokenAmount } from '@/services/sim-assets';
 import type { AssetChange, AssetSimResult } from '@/services/tx-simulation';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
@@ -84,18 +84,22 @@ export function BalanceChangePreview({ result, chainId }: {
       <View style={styles.card}>
         <Text style={styles.title}>{t('componentsUi.signing.balanceChangesTitle')}</Text>
         {ordered.map((c, i) => (
-          <ChangeRow key={`${c.kind}:${c.token ?? 'native'}:${i}`} change={c} />
+          <ChangeRow key={`${c.kind}:${c.token ?? 'native'}:${i}`} change={c} chainId={chainId} />
         ))}
       </View>
     </>
   );
 }
 
-function ChangeRow({ change }: { change: AssetChange }) {
+function ChangeRow({ change, chainId }: { change: AssetChange; chainId: number }) {
   const { t } = useTranslation();
   const received = change.delta > 0n;
   const tint = received ? color.success.base : color.fg.base;
-  const logoUrl = change.token ? `${TOKEN_LOGO_BASE}${change.token}.png` : undefined;
+  // Native coins get the real coin logo (ETH on Base → Ethereum's), ERC-20s the
+  // token logo; a bare letter avatar was the old "E" placeholder.
+  const logoUrl = change.kind === 'native'
+    ? nativeCoinLogoURL(chainId)
+    : change.token ? `${TOKEN_LOGO_BASE}${change.token}.png` : undefined;
 
   return (
     <View style={styles.row}>

@@ -23,7 +23,7 @@ import { HoldToConfirmButton } from '@/components/ui/HoldToConfirmButton';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet } from '@/models/wallet-state';
 import { shortAddr, tokenLogoURLsByAddress, type BLEIncomingRequest } from '@/models/types';
-import { chainName, nativeSymbol, networkForChainId, DEFAULT_NETWORKS } from '@/models/network';
+import { chainName, nativeSymbol, nativeCoinLogoURL, networkForChainId, DEFAULT_NETWORKS } from '@/models/network';
 import { openURL } from '@/services/platform';
 import {
   resolveTransaction, resolveTypedData,
@@ -1071,7 +1071,7 @@ function BlindTransactionView({ tx, chainId }: {
       {/* Value card */}
       {value !== `0 ${sym}` && (
         <TokenCard
-          field={{ label: 'Value', value, format: 'amount', role: 'send-amount' }}
+          field={{ label: t('componentsUi.signing.valueLabel'), value, format: 'amount', role: 'send-amount' }}
           variant={hasData ? 'danger' : 'send'}
         />
       )}
@@ -1198,17 +1198,23 @@ function TokenCard({ field, variant }: {
     danger: { backgroundColor: color.error.soft },
   };
 
-  // Extract symbol from value string (e.g. "1,500" from "1,500 USDC" is the amount)
-  // The value from clear-signing is just the number, label has context
-  const symbol = field.tokenAddress ? guessTokenSymbol(field.tokenAddress) : undefined;
-  // Per-chain logo (checksummed + lowercase fallback) — not a mainnet-only guess.
   const chainId = React.useContext(SigningChainContext);
+  // A `amount`-format field with no token address is the chain's native coin
+  // (e.g. a plain ETH send) — show the real coin symbol + logo, not a "?".
+  const isNative = !field.tokenAddress && field.format === 'amount';
+  const symbol = field.tokenAddress
+    ? guessTokenSymbol(field.tokenAddress)
+    : isNative ? nativeSymbol(chainId) : undefined;
+  // Per-chain logo (checksummed + lowercase fallback) — not a mainnet-only guess.
+  const logoUrls = field.tokenAddress
+    ? tokenLogoURLsByAddress(chainId, field.tokenAddress)
+    : isNative ? [nativeCoinLogoURL(chainId)] : undefined;
 
   return (
     <View style={[styles.tokenCard, bgMap[variant]]}>
       <TokenLogo
         symbol={symbol ?? '?'}
-        logoUrls={field.tokenAddress ? tokenLogoURLsByAddress(chainId, field.tokenAddress) : undefined}
+        logoUrls={logoUrls}
         size={40}
       />
       <View style={styles.tokenInfo}>

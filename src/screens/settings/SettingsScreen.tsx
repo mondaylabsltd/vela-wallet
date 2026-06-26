@@ -27,7 +27,8 @@ import { fetchTokens } from '@/services/wallet-api';
 import { RpcProvidersModal } from './RpcProvidersModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { AlertTriangle, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, X, XCircle, Zap } from 'lucide-react-native';
+import { AlertTriangle, BookUser, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, X, XCircle, Zap } from 'lucide-react-native';
+import { ContactsManager } from '@/components/contacts/ContactsManager';
 import { useTranslation } from 'react-i18next';
 import { useLanguagePreference } from '@/i18n/language';
 import { LANGUAGE_NATIVE_NAMES, SUPPORTED_LANGUAGES, type AppLanguage, type LanguagePreference } from '@/i18n';
@@ -1370,6 +1371,7 @@ export default function SettingsScreen() {
   const { state, dispatch, activeAccount } = useWallet();
   const router = useRouter();
   const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
   const [showNetworkEditor, setShowNetworkEditor] = useState(false);
   const [showEndpointEditor, setShowEndpointEditor] = useState(false);
   const [showAddNetwork, setShowAddNetwork] = useState(false);
@@ -1431,6 +1433,15 @@ export default function SettingsScreen() {
             <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: UserIcon }}
               title={accountName} subtitle={address ? shortAddress(address) : t('settings.account.switch')}
               showDivider={false} onPress={() => setShowAccountSwitcher(true)} />
+          </VelaCard>
+        </Animated.View>
+
+        {/* Contacts */}
+        <Animated.View style={styles.sectionContainer} entering={fadeInDown(60, 300)}>
+          <VelaCard>
+            <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: BookUser }}
+              title={t('contacts.title')} subtitle={t('contacts.manageSubtitle')}
+              showDivider={false} onPress={() => setShowContacts(true)} />
           </VelaCard>
         </Animated.View>
 
@@ -1564,6 +1575,7 @@ export default function SettingsScreen() {
       <LanguagePickerModal s={styles} visible={showLanguagePicker} preference={langPref}
         systemLanguage={systemLanguage} onSelect={setLangPref} onClose={() => setShowLanguagePicker(false)} />
       <AccountSwitcherModal s={styles} visible={showAccountSwitcher} onClose={() => setShowAccountSwitcher(false)} />
+      <ContactsManager visible={showContacts} onClose={() => setShowContacts(false)} />
       <NetworkEditorModal s={styles} visible={showNetworkEditor} onClose={() => setShowNetworkEditor(false)} />
       <EndpointEditorModal s={styles} visible={showEndpointEditor} onClose={() => setShowEndpointEditor(false)} />
       <AddNetworkModal s={styles} visible={showAddNetwork} onClose={() => setShowAddNetwork(false)} onAdded={() => {}} />

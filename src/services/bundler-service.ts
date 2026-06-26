@@ -70,6 +70,13 @@ export interface FundingNeeded {
 const RECOMMENDED_GAS_UNITS = 2_000_000n;
 /** Minimum balance threshold — below this, prompt funding. */
 const MIN_BALANCE_WEI = BigInt('100000000000000'); // 0.0001 ETH
+/**
+ * Volatility buffer on the recommended deposit amount (150% = +50%). Absorbs
+ * gas-price spikes between the user funding the gas account and the bundle
+ * executing. Mirrors the bundler's server-side SPONSOR_VOLATILITY_BUFFER_BPS so
+ * the self-funding path and the treasury-sponsored path leave the same headroom.
+ */
+const FUNDING_BUFFER_BPS = 15_000n;
 
 // ---------------------------------------------------------------------------
 // Cache
@@ -89,6 +96,19 @@ async function ensureEndpoints(): Promise<void> {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/**
+ * Recommended deposit to lift the gas account to `thresholdWei`, plus the
+ * volatility buffer (FUNDING_BUFFER_BPS). When the balance is already at/above
+ * threshold the deficit is zero, so we buffer the full threshold instead — a
+ * meaningful top-up rather than ~0. Single source of truth for the deposit math
+ * shared by every funding entry point (Send, dApp request, funding modal).
+ */
+export function recommendedFundingWei(thresholdWei: bigint, currentBalance: bigint): bigint {
+  const deficit = thresholdWei > currentBalance ? thresholdWei - currentBalance : 0n;
+  const base = deficit > 0n ? deficit : thresholdWei;
+  return (base * FUNDING_BUFFER_BPS) / 10_000n;
+}
 
 /**
  * Check if the bundler needs funding before sending a transaction.
@@ -123,9 +143,7 @@ export async function checkBundlerFunding(
   // Balance insufficient — return info for the funding modal.
   // Sponsorship is NOT attempted here; the modal lets the user explicitly
   // request it so they understand what's happening.
-  const deficit = threshold - info.spendableBalance;
-  const base = deficit > 0n ? deficit : threshold;
-  const recommendedWei = (base * 12n) / 10n;
+  const recommendedWei = recommendedFundingWei(threshold, info.spendableBalance);
 
   // Sponsorship is always available — the bundler decides whether to sponsor
   // based on treasury balance, nonce limits, and Safe wallet balance.

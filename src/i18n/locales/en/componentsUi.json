@@ -50,6 +50,7 @@
       "typeLabel": "Type",
       "intentUnknown": "Unknown",
       "intentSend": "Send",
+      "valueLabel": "Value",
       "signingFor": "Signing for",
       "bestEffortWarning": "Decoded from the function signature — not a verified descriptor. Review the details carefully.",
       "simWillSucceed": "Simulation passed — expected to succeed",

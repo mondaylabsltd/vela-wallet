@@ -50,6 +50,7 @@
       "typeLabel": "类型",
       "intentUnknown": "未知",
       "intentSend": "发送",
+      "valueLabel": "金额",
       "signingFor": "签名对象",
       "bestEffortWarning": "根据函数签名解析得出 — 非经过验证的描述符，请仔细核对细节。",
       "simWillSucceed": "模拟通过 — 预计可成功",

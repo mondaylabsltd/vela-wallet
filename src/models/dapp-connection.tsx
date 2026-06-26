@@ -33,6 +33,7 @@ import {
   clearBundlerCache,
   checkBundlerFunding,
   parseBundlerUnderfunded,
+  recommendedFundingWei,
   formatWei,
   type FundingNeeded,
 } from '@/services/bundler-service';
@@ -535,8 +536,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           if (depositAddress) {
             const currentBalance = info?.spendableBalance ?? underfunded.spendableWei ?? 0n;
             const thresholdWei = underfunded.requiredWei ?? currentBalance + 100_000_000_000_000n;
-            const deficit = thresholdWei > currentBalance ? thresholdWei - currentBalance : thresholdWei;
-            const recommendedWei = (deficit * 12n) / 10n;
+            const recommendedWei = recommendedFundingWei(thresholdWei, currentBalance);
             const nativeSym = info?.nativeSym ?? (underfunded.asset === 'pathUSD' ? 'pathUSD' : nativeSymbol(cid));
             setFundingNeeded({
               reason: 'deposit_needed',

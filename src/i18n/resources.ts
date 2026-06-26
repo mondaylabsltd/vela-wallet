@@ -21,6 +21,7 @@ import enClearSigning from './locales/en/clearSigning.json';
 import enComponentsTx from './locales/en/componentsTx.json';
 import enComponentsUi from './locales/en/componentsUi.json';
 import enSettingsModals from './locales/en/settingsModals.json';
+import enContacts from './locales/en/contacts.json';
 import zhCore from './locales/zh.json';
 import zhHome from './locales/zh/home.json';
 import zhSend from './locales/zh/send.json';
@@ -36,6 +37,7 @@ import zhClearSigning from './locales/zh/clearSigning.json';
 import zhComponentsTx from './locales/zh/componentsTx.json';
 import zhComponentsUi from './locales/zh/componentsUi.json';
 import zhSettingsModals from './locales/zh/settingsModals.json';
+import zhContacts from './locales/zh/contacts.json';
 import zhTWCore from './locales/zh-TW.json';
 import zhTWHome from './locales/zh-TW/home.json';
 import zhTWSend from './locales/zh-TW/send.json';
@@ -248,6 +250,7 @@ export const en = {
   ...enComponentsTx,
   ...enComponentsUi,
   ...enSettingsModals,
+  ...enContacts,
 };
 
 const zh = {
@@ -266,6 +269,7 @@ const zh = {
   ...zhComponentsTx,
   ...zhComponentsUi,
   ...zhSettingsModals,
+  ...zhContacts,
 };
 
 const zhTW = {

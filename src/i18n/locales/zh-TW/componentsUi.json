@@ -50,6 +50,7 @@
       "typeLabel": "類型",
       "intentUnknown": "未知",
       "intentSend": "發送",
+      "valueLabel": "金額",
       "signingFor": "簽署對象",
       "bestEffortWarning": "根據函式簽章解析得出 — 非經過驗證的描述符，請仔細核對細節。",
       "simWillSucceed": "模擬通過 — 預計可成功",

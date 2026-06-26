@@ -93,6 +93,17 @@ export function nativeSymbol(chainId: number): string {
 }
 
 /**
+ * Logo URL for a chain's native coin, by the COIN's identity not the chain it
+ * sits on (ETH on Base → Ethereum's logo, not Base's). Mirrors the native-coin
+ * branch of `tokenLogoURLs` so surfaces that only have a chainId (the signing
+ * sheet, balance-change rows) can show a real coin logo instead of a "?".
+ */
+export function nativeCoinLogoURL(chainId: number): string {
+  const logoChain = nativeCoinLogoChainId(nativeSymbol(chainId), chainId);
+  return `${CHAIN_LOGO_BASE}/eip155-${logoChain}.png`;
+}
+
+/**
  * Lookup network API identifier by chain ID. Inverse of `tokenChainId`
  * (models/types.ts); both are derived from CHAINS so they stay in sync.
  */

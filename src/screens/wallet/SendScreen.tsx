@@ -17,9 +17,11 @@ import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetch
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
 import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
 import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
-import { findAccountByCredentialId, saveTransaction, updateTransaction, loadTransactions } from '@/services/storage';
+import { findAccountByCredentialId, saveTransaction, updateTransaction } from '@/services/storage';
+import { ContactPicker } from '@/components/contacts/ContactPicker';
+import { saveContact } from '@/services/contacts';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
-import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, parseBundlerUnderfunded, type FundingNeeded } from '@/services/bundler-service';
+import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, parseBundlerUnderfunded, recommendedFundingWei, type FundingNeeded } from '@/services/bundler-service';
 import { AmountText } from '@/components/ui/AmountText';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
@@ -230,8 +232,7 @@ export default function SendScreen() {
   const [gasExpanded, setGasExpanded] = useState(false);
   const [gasTier, setGasTier] = useState<GasTier>('standard');
   const [refreshingGas, setRefreshingGas] = useState(false);
-  const [recentRecipients, setRecentRecipients] = useState<string[]>([]);
-  const [showContacts, setShowContacts] = useState(false);
+  const [showContactPicker, setShowContactPicker] = useState(false);
   const [amountWarning, setAmountWarning] = useState<string | null>(null);
   const [recipientIdentity, setRecipientIdentity] = useState<RecipientIdentity | null>(null);
   // Balance-change simulation for the confirm step (null = unknown / not run).
@@ -340,20 +341,6 @@ export default function SendScreen() {
       })
       .catch(() => showAlert(t('common.error'), t('send.alertLoadTokensError')))
       .finally(() => setLoading(false));
-
-    // Load recent recipients from transaction history
-    loadTransactions().then(txs => {
-      const seen = new Set<string>();
-      const recents: string[] = [];
-      for (const tx of txs) {
-        if (tx.from.toLowerCase() === address.toLowerCase() && !seen.has(tx.to.toLowerCase())) {
-          seen.add(tx.to.toLowerCase());
-          recents.push(tx.to);
-          if (recents.length >= 10) break;
-        }
-      }
-      setRecentRecipients(recents);
-    });
   }, [address, params.preselectedSymbol, params.preselectedNetwork, lockRetry]);
 
   // Re-pull balances after the user adds/removes a custom token in the sheet,
@@ -764,9 +751,7 @@ export default function SendScreen() {
                 // Match the server's raw gasPrice calculation (tier markup removed)
                 thresholdWei = rawBundlerGasCost(fee);
               }
-              const deficit = thresholdWei - currentBalance;
-              const base = deficit > 0n ? deficit : thresholdWei;
-              const recommendedWei = (base * 12n) / 10n;
+              const recommendedWei = recommendedFundingWei(thresholdWei, currentBalance);
               const nativeSym = info?.nativeSym ?? (underfunded.asset === 'pathUSD' ? 'pathUSD' : nativeSymbol(chainId));
               setFundingNeeded({
                 reason: 'deposit_needed',
@@ -964,7 +949,7 @@ export default function SendScreen() {
               placeholder={t('send.recipientPlaceholder')}
               placeholderTextColor={color.fg.subtle}
               value={recipient}
-              onChangeText={(t) => { setRecipient(t); setShowContacts(false); }}
+              onChangeText={(t) => setRecipient(t)}
               autoCapitalize="none"
               autoCorrect={false}
               editable={!params.prefilledRecipient}
@@ -972,9 +957,9 @@ export default function SendScreen() {
               blurOnSubmit
               returnKeyType="done"
             />
-            {recentRecipients.length > 0 && (
+            {!params.prefilledRecipient && (
               <View style={styles.inputIcons}>
-                <Pressable onPress={() => setShowContacts(!showContacts)} hitSlop={6}>
+                <Pressable onPress={() => setShowContactPicker(true)} hitSlop={6}>
                   <BookUser size={18} color={color.fg.subtle} strokeWidth={2} />
                 </Pressable>
               </View>
@@ -994,25 +979,6 @@ export default function SendScreen() {
             </View>
           )}
 
-          {/* Recent recipients dropdown */}
-          {showContacts && recentRecipients.length > 0 && (
-            <VelaCard style={styles.contactsCard}>
-              {recentRecipients.map((addr, i) => (
-                <React.Fragment key={addr}>
-                  {i > 0 && <View style={styles.contactSep} />}
-                  <Pressable
-                    style={styles.contactRow}
-                    onPress={() => {
-                      setRecipient(addr);
-                      setShowContacts(false);
-                    }}
-                  >
-                    <Text style={styles.contactAddr}>{shortAddr(addr)}</Text>
-                  </Pressable>
-                </React.Fragment>
-              ))}
-            </VelaCard>
-          )}
 
           {fundingNeeded?.reason === 'wallet_balance_too_low' && (
             <View style={styles.lowBalanceWarning}>
@@ -1314,6 +1280,7 @@ export default function SendScreen() {
           timestamp={new Date()}
           recipientIdentity={recipientIdentity}
           onDone={() => router.back()}
+          onSaveContact={() => saveContact({ address: recipient, name: recipientIdentity?.name, resolvedName: recipientIdentity?.name })}
         />
       ) : (
         <>
@@ -1353,6 +1320,13 @@ export default function SendScreen() {
           onCancel={() => { setFundingNeeded(null); fundingRetryCount.current = 0; }}
         />
       )}
+
+      <ContactPicker
+        visible={showContactPicker}
+        onClose={() => setShowContactPicker(false)}
+        onSelect={(addr) => setRecipient(addr)}
+        myAddress={address}
+      />
     </ScreenContainer>
   );
 }
