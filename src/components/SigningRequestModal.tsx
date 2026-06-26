@@ -38,6 +38,7 @@ import {
 } from '@/services/approval-guard';
 import { resolveTokenMetadata } from '@/services/token-metadata';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
+import { simulateCall, type SimResult } from '@/services/tx-simulation';
 import { ChainLogo } from '@/components/ChainLogo';
 import { TokenLogo } from '@/components/TokenLogo';
 import {
@@ -138,6 +139,9 @@ export function SigningSheet({
   const [approveChoice, setApproveChoice] = useState<ApprovalChoice | null>(null);
   const [approveTokenMeta, setApproveTokenMeta] = useState<{ symbol: string; decimals: number; verified: boolean } | null>(null);
 
+  // Client-side revert pre-check (null = unknown / not run).
+  const [sim, setSim] = useState<SimResult | null>(null);
+
   // Resolve the approved token's symbol/decimals (on-chain via Multicall3, cached).
   useEffect(() => {
     setApproveChoice(null);
@@ -162,10 +166,12 @@ export function SigningSheet({
       setFeeEstimate(null);
       setGasTier('standard');
       setGasEstimateFailed(false);
+      setSim(null);
       return;
     }
 
     const { method, params } = incomingRequest;
+    setSim(null);
 
     if (method === 'eth_sendTransaction' && params?.[0]) {
       setResolving(true);
@@ -185,6 +191,11 @@ export function SigningSheet({
           .then((f) => { setFeeEstimate(f); setGasEstimateFailed(false); })
           .catch(() => { setFeeEstimate(null); setGasEstimateFailed(true); })
           .finally(() => setEstimatingGas(false));
+
+        // Revert pre-check — eth_call the inner Safe→target call against live state.
+        simulateCall(activeAccount.address, params[0].to, params[0].data, params[0].value, chainId)
+          .then(setSim)
+          .catch(() => setSim(null));
       }
     } else if (method.includes('signTypedData') && params) {
       setResolving(true);
@@ -306,6 +317,25 @@ export function SigningSheet({
           />
 
           {renderContent()}
+
+          {/* Revert pre-check — "this is expected to fail / succeed". A failing
+              sim is loud (you'd still pay gas); a passing one is a quiet ✓. */}
+          {isTx && sim && !sim.ok && (
+            <View style={styles.simFailCard}>
+              <AlertTriangle size={16} color={color.error.base} strokeWidth={2} />
+              <Text style={styles.simFailText}>
+                {sim.revertReason
+                  ? t('componentsUi.signing.simWillFailReason', { reason: sim.revertReason })
+                  : t('componentsUi.signing.simWillFail')}
+              </Text>
+            </View>
+          )}
+          {isTx && sim?.ok && (
+            <View style={styles.simOkRow}>
+              <ShieldCheck size={13} color={color.success.base} strokeWidth={2} />
+              <Text style={styles.simOkText}>{t('componentsUi.signing.simWillSucceed')}</Text>
+            </View>
+          )}
 
           {/* Gas fee card — only for eth_sendTransaction */}
           {isTx && activeAccount?.address && (
@@ -1387,6 +1417,20 @@ const styles = createStyles(() => ({
     marginBottom: space.lg,
   },
   errorText: { fontSize: text.sm, ...inter.regular, color: color.error.base, flex: 1 },
+
+  // ===== Simulation pre-check =====
+  simFailCard: {
+    flexDirection: 'row', alignItems: 'center', gap: space.md,
+    paddingVertical: space.lg, paddingHorizontal: space.xl,
+    backgroundColor: color.error.soft, borderWidth: 1, borderColor: color.error.base,
+    borderRadius: radius.xl, marginVertical: space.md,
+  },
+  simFailText: { fontSize: text.sm, ...inter.semibold, color: color.error.base, flex: 1, lineHeight: 18 },
+  simOkRow: {
+    flexDirection: 'row', alignItems: 'center', gap: space.sm,
+    paddingVertical: space.sm, paddingHorizontal: space.sm, marginBottom: space.xs,
+  },
+  simOkText: { fontSize: text.xs, ...inter.medium, color: color.success.base },
 
   // ===== Pending (submitted, awaiting receipt) =====
   pendingCard: {

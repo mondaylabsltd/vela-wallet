@@ -51,7 +51,10 @@
       "intentUnknown": "未知",
       "intentSend": "发送",
       "signingFor": "签名对象",
-      "bestEffortWarning": "根据函数签名解析得出 — 非经过验证的描述符，请仔细核对细节。"
+      "bestEffortWarning": "根据函数签名解析得出 — 非经过验证的描述符，请仔细核对细节。",
+      "simWillSucceed": "模拟通过 — 预计可成功",
+      "simWillFail": "这笔交易预计会失败 — 但仍会扣除 gas。",
+      "simWillFailReason": "预计会失败：{{reason}} — 但仍会扣除 gas。"
     },
     "currency": {
       "title": "显示货币",
