@@ -258,7 +258,8 @@ export function SigningSheet({
     return p ? { to: p.to, value: p.value, data: p.data } : undefined;
   }, [incomingRequest]);
 
-  // Resolve each leg of an EIP-5792 batch (intent + approval flag per call).
+  // Resolve each leg of an EIP-5792 batch (intent + approval flag per call), and
+  // simulate the whole bundle for a net balance-change preview.
   useEffect(() => {
     if (incomingRequest?.method !== 'wallet_sendCalls') { setBatch(null); return; }
     const calls = incomingRequest.params?.[0]?.calls;
@@ -273,8 +274,18 @@ export function SigningSheet({
       .then((items) => { if (!cancelled) setBatch(items); })
       .catch(() => { if (!cancelled) setBatch(null); })
       .finally(() => { if (!cancelled) setResolving(false); });
+
+    // Net balance changes across all legs (executed sequentially, shared state —
+    // e.g. approve + swap nets to −USDC / +WETH), plus the revert + underfunded
+    // pre-checks. The engine already accepts the full calls array.
+    if (activeAccount?.address) {
+      const simCalls = calls.map((c: any) => ({ to: c.to, data: c.data, value: c.value }));
+      simulateAssetChanges(activeAccount.address, simCalls, chainId)
+        .then((r) => { if (!cancelled) setSim(r); })
+        .catch(() => { if (!cancelled) setSim(null); });
+    }
     return () => { cancelled = true; };
-  }, [incomingRequest, chainId]);
+  }, [incomingRequest, chainId, activeAccount?.address]);
 
   if (!incomingRequest) return null;
 
@@ -432,7 +443,7 @@ export function SigningSheet({
 
           {/* Simulation summary — revert pre-check + net balance changes, one
               render path shared with Send's confirm step. */}
-          {isTx && <BalanceChangePreview result={sim} chainId={chainId} />}
+          {(isTx || isBatch) && <BalanceChangePreview result={sim} chainId={chainId} />}
 
           {/* Gas fee card — only for eth_sendTransaction */}
           {isTx && activeAccount?.address && (
