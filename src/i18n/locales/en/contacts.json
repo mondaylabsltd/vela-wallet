@@ -30,6 +30,7 @@
     "invalidAddress": "Enter a valid address",
     "sends_one": "{{count}} send",
     "sends_other": "{{count}} sends",
-    "savedTag": "Saved"
+    "savedTag": "Saved",
+    "savedContact": "Saved contact"
   }
 }

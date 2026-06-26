@@ -30,6 +30,7 @@
     "invalidAddress": "请输入有效地址",
     "sends_one": "{{count}} 笔转账",
     "sends_other": "{{count}} 笔转账",
-    "savedTag": "已保存"
+    "savedTag": "已保存",
+    "savedContact": "已保存联系人"
   }
 }

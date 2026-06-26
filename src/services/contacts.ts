@@ -128,6 +128,13 @@ export async function isSavedContact(address: string): Promise<boolean> {
   return (await loadSaved()).some((x) => x.address === address.toLowerCase());
 }
 
+/** The user's saved contact for an address, or null. The anti-poisoning signal:
+ *  a recipient you previously saved (and named) is one you've vouched for. */
+export async function getSavedContact(address: string): Promise<Contact | null> {
+  if (!ADDR_RE.test(address ?? '')) return null;
+  return (await loadSaved()).find((x) => x.address === address.toLowerCase()) ?? null;
+}
+
 /**
  * The unified address book: saved contacts merged with live suggestions derived
  * from send history. Saved entries win on identity/name; recency and txCount are

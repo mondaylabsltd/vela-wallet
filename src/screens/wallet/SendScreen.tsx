@@ -19,6 +19,7 @@ import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulat
 import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
 import { findAccountByCredentialId, saveTransaction, updateTransaction } from '@/services/storage';
 import { ContactPicker } from '@/components/contacts/ContactPicker';
+import { KnownContactBadge } from '@/components/contacts/KnownContactBadge';
 import { saveContact } from '@/services/contacts';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, parseBundlerUnderfunded, recommendedFundingWei, type FundingNeeded } from '@/services/bundler-service';
@@ -978,6 +979,9 @@ export default function SendScreen() {
               </Text>
             </View>
           )}
+          <View style={{ marginTop: space.sm, paddingLeft: space.sm }}>
+            <KnownContactBadge address={recipient} />
+          </View>
 
 
           {fundingNeeded?.reason === 'wallet_balance_too_low' && (
@@ -1058,6 +1062,9 @@ export default function SendScreen() {
                 <Text style={styles.transferName}>{recipientIdentity.name}</Text>
               )}
               <Text style={styles.transferAddr}>{shortAddr(recipient)}</Text>
+              <View style={{ marginTop: space.sm }}>
+                <KnownContactBadge address={recipient} compact />
+              </View>
             </View>
           </VelaCard>
 
