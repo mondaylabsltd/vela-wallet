@@ -22,7 +22,8 @@ import { VelaButton } from '@/components/ui/VelaButton';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet } from '@/models/wallet-state';
 import { shortAddr, type BLEIncomingRequest } from '@/models/types';
-import { chainName, nativeSymbol, DEFAULT_NETWORKS } from '@/models/network';
+import { chainName, nativeSymbol, networkForChainId, DEFAULT_NETWORKS } from '@/models/network';
+import { openURL } from '@/services/platform';
 import {
   resolveTransaction, resolveTypedData,
   type ClearSignResult, type ClearSignField, type SigningRisk,
@@ -36,6 +37,7 @@ import {
   type DetectedApproval, type ApprovalChoice,
 } from '@/services/approval-guard';
 import { resolveTokenMetadata } from '@/services/token-metadata';
+import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
 import { ChainLogo } from '@/components/ChainLogo';
 import { TokenLogo } from '@/components/TokenLogo';
 import {
@@ -46,8 +48,11 @@ import {
 } from '@/services/safe-transaction';
 import {
   Shield, AlertTriangle, Copy, ChevronDown, Check,
-  ArrowDown, ShieldAlert, ShieldCheck, Pen,
+  ArrowDown, ShieldAlert, ShieldCheck, Pen, ExternalLink,
 } from 'lucide-react-native';
+
+/** Chain id for the active signing sheet — lets leaf rows build explorer links. */
+const SigningChainContext = React.createContext<number>(1);
 
 // ---------------------------------------------------------------------------
 // Risk → color mapping
@@ -62,12 +67,15 @@ function riskColors(): Record<SigningRisk, string> {
   };
 }
 
-function signatureColor(): string {
-  return color.info.base;
-}
-
-function riskColor(risk: SigningRisk): string {
-  return riskColors()[risk];
+/**
+ * Intent-header color. Restrained on purpose: color = meaning. Benign actions
+ * (send, sign, deploy) read in neutral ink; only caution (amber) and danger
+ * (red) get a hue, so a colored headline always signals real risk.
+ */
+function intentColor(risk: SigningRisk): string {
+  if (risk === 'danger') return color.error.base;
+  if (risk === 'caution') return color.warning.base;
+  return color.fg.base;
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +292,7 @@ export function SigningSheet({
   const buttonVariant = (): 'accent' | 'secondary' => 'accent';
 
   return (
+      <SigningChainContext.Provider value={chainId}>
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
           {/* dApp banner — always shown */}
@@ -391,6 +400,7 @@ export function SigningSheet({
           )}
         </View>
       </View>
+      </SigningChainContext.Provider>
   );
 }
 
@@ -490,7 +500,7 @@ function ClearSignView({ cs }: {
   cs: ClearSignResult;
 }) {
   const { t } = useTranslation();
-  const rc = riskColor(cs.risk);
+  const rc = intentColor(cs.risk);
 
   // Separate fields by role
   const sendAmounts = cs.fields.filter(f => f.role === 'send-amount');
@@ -686,7 +696,7 @@ function MessageSignView({ hexMsg }: {
   return (
     <View>
       {/* context shown in dApp banner */}
-      <IntentHeader intent={t('componentsUi.signing.signMessage')} color={signatureColor()} />
+      <IntentHeader intent={t('componentsUi.signing.signMessage')} color={color.fg.base} />
 
       <View style={styles.msgBubble}>
         <View style={styles.msgTag}>
@@ -712,7 +722,7 @@ function BlindTypedDataView({ params }: {
   return (
     <View>
       {/* context shown in dApp banner */}
-      <IntentHeader intent={t('componentsUi.signing.signTypedData')} color="#d4890a" />
+      <IntentHeader intent={t('componentsUi.signing.signTypedData')} color={color.warning.base} />
 
       {/* Domain info */}
       {domain && (
@@ -768,7 +778,7 @@ function BlindTransactionView({ tx, chainId }: {
       {/* context shown in dApp banner */}
       <IntentHeader
         intent={hasData ? t('componentsUi.signing.intentUnknown') : t('componentsUi.signing.intentSend')}
-        color={hasData ? '#d43a2a' : '#E8572A'}
+        color={hasData ? color.error.base : color.fg.base}
       />
 
       {/* Value card */}
@@ -844,10 +854,11 @@ function TokenCard({ field, variant }: {
   field: ClearSignField;
   variant: 'send' | 'receive' | 'caution' | 'danger';
 }) {
-  // Use theme tokens for dark mode support
+  // Calm by default: benign amounts sit on a neutral card; color is reserved for
+  // caution/danger so a tinted card always means "pay attention".
   const bgMap = {
-    send: { backgroundColor: color.accent.soft },
-    receive: { backgroundColor: color.info.soft },
+    send: { backgroundColor: color.bg.sunken },
+    receive: { backgroundColor: color.bg.sunken },
     caution: { backgroundColor: color.warning.soft },
     danger: { backgroundColor: color.error.soft },
   };
@@ -912,6 +923,23 @@ function ContractBar({ label, name, address, verified, warning }: {
   warning?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  // Resolve an on-chain name (ENS / Basename / SPACE ID) when the descriptor
+  // didn't supply one — turns a raw hex address into a recognizable identity and
+  // helps catch address-poisoning. Cached in the service; descriptor name wins.
+  const [ident, setIdent] = useState<RecipientIdentity | null>(null);
+  useEffect(() => {
+    setIdent(null);
+    if (name || !address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return;
+    let cancelled = false;
+    resolveRecipientIdentity(address).then((r) => { if (!cancelled) setIdent(r); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [address, name]);
+  const shownName = name ?? ident?.name;
+
+  const chainId = React.useContext(SigningChainContext);
+  const explorer = networkForChainId(chainId)?.explorerURL;
+  const isFullAddr = !!address && /^0x[0-9a-fA-F]{40}$/.test(address);
+  const explorerUrl = explorer && isFullAddr ? `${explorer.replace(/\/$/, '')}/address/${address}` : undefined;
 
   const handleCopy = useCallback(async () => {
     if (!address) return;
@@ -925,7 +953,14 @@ function ContractBar({ label, name, address, verified, warning }: {
       <View style={styles.contractInfo}>
         <Text style={styles.contractLabel}>{label}</Text>
         <View style={styles.contractAddrRow}>
-          {name && <Text style={styles.contractName} numberOfLines={1}>{name}</Text>}
+          {/* Verified descriptor name keeps the trust-green; a resolved ENS / raw
+              address stays neutral so color always means "verified". */}
+          {shownName && (
+            <Text style={[styles.contractName, !verified && styles.contractNameNeutral]} numberOfLines={1}>
+              {shownName}
+            </Text>
+          )}
+          {!name && ident && <Text style={styles.sourceTag}>{ident.source}</Text>}
           {address && (
             <Text style={styles.contractAddr}>{shortAddr(address)}</Text>
           )}
@@ -937,6 +972,12 @@ function ContractBar({ label, name, address, verified, warning }: {
             ? <Check size={12} color={color.success.base} strokeWidth={2.5} />
             : <Copy size={12} color={color.fg.muted} strokeWidth={2} />
           }
+        </Pressable>
+      )}
+      {/* Jump out to the block explorer to audit the contract / address. */}
+      {explorerUrl && (
+        <Pressable onPress={() => openURL(explorerUrl)} hitSlop={8} style={styles.copyBtn}>
+          <ExternalLink size={12} color={color.fg.muted} strokeWidth={2} />
         </Pressable>
       )}
       {verified && (
@@ -1180,6 +1221,13 @@ const styles = createStyles(() => ({
   },
   contractName: {
     fontSize: text.sm, ...inter.semibold, color: color.success.base,
+  },
+  contractNameNeutral: { color: color.fg.base },
+  sourceTag: {
+    fontSize: 9, ...inter.semibold, color: color.fg.subtle,
+    backgroundColor: color.bg.sunken, overflow: 'hidden',
+    paddingHorizontal: 5, paddingVertical: 1, borderRadius: radius.sm,
+    textTransform: 'uppercase', letterSpacing: 0.3,
   },
   contractAddr: {
     fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono,
