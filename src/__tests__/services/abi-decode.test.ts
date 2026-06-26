@@ -220,3 +220,57 @@ describe('decodeCalldata', () => {
     expect(result!._value).toBe(0n);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Nested tuples & dynamic offsets (the baseOffset fix)
+// ---------------------------------------------------------------------------
+
+describe('nested tuples + dynamic offsets', () => {
+  const wNum = (n: bigint | number) => BigInt(n).toString(16).padStart(64, '0');
+  const wAddr = (a: string) => a.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+  const wBytes = (hexNo0x: string) => wNum(hexNo0x.length / 2) + hexNo0x.padEnd(Math.ceil(hexNo0x.length / 64) * 64, '0');
+  const sel = (sig: string) => '0x' + computeSelector(sig);
+  const A = '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
+
+  it('decodes a STATIC tuple in place', () => {
+    const sig = 'register((address owner,uint256 id) info)';
+    const cd = sel(sig) + wAddr(A) + wNum(7n);
+    const d = decodeCalldata(cd, sig)! as any;
+    expect(d.info.owner).toBe(A);
+    expect(d.info.id).toBe(7n);
+  });
+
+  it('decodes a tuple with a DYNAMIC field (Uniswap exactInput shape)', () => {
+    // The pre-fix decoder resolved the tuple\'s inner offsets from byte 0 instead
+    // of the tuple\'s start, yielding garbage for recipient/amounts/path.
+    const sig = 'exactInput((bytes path,address recipient,uint256 amountIn,uint256 amountOutMinimum) params)';
+    const path = 'aabbccddeeff';
+    const data =
+      wNum(0x20n) +        // top-level: offset to the (dynamic) tuple
+      wNum(0x80n) +        // tuple.path offset, RELATIVE to the tuple start
+      wAddr(A) +           // tuple.recipient
+      wNum(1_000_000n) +   // tuple.amountIn
+      wNum(999n) +         // tuple.amountOutMinimum
+      wBytes(path);        // tuple.path tail
+    const d = decodeCalldata(sel(sig) + data, sig)! as any;
+    expect(d.params.recipient).toBe(A);
+    expect(d.params.amountIn).toBe(1_000_000n);
+    expect(d.params.amountOutMinimum).toBe(999n);
+    expect(d.params.path).toBe('0x' + path);
+  });
+
+  it('decodes a dynamic address[] array', () => {
+    const sig = 'route(address[] hops)';
+    const B = '0x1111111111111111111111111111111111111111';
+    const cd = sel(sig) + wNum(0x20n) + wNum(2n) + wAddr(A) + wAddr(B);
+    const d = decodeCalldata(cd, sig)! as any;
+    expect(d.hops).toEqual([A, B]);
+  });
+
+  it('decodes a string (dynamic) param', () => {
+    const sig = 'greet(string name)';
+    const cd = sel(sig) + wNum(0x20n) + wBytes(Buffer.from('hello', 'utf8').toString('hex'));
+    const d = decodeCalldata(cd, sig)! as any;
+    expect(d.name).toBe('hello');
+  });
+});

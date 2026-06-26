@@ -197,20 +197,22 @@ function decodeTupleParams(
   baseOffset: number,
 ): DecodeResult {
   const result: Record<string, DecodedValue> = {};
-  let headPos = 0;
+  let headPos = 0; // position within THIS tuple's head, relative to baseOffset
 
   for (const param of params) {
+    const key = param.name || `_${params.indexOf(param)}`;
     const dyn = isDynamic(param.type, param.components);
     if (dyn) {
-      // Read offset pointer from head
-      const offset = Number(readUint(data, headPos)) * 2; // bytes → hex chars
-      const { value } = decodeType(data, param, offset);
-      const key = param.name || `_${params.indexOf(param)}`;
+      // The head word is a pointer to the tail, relative to the tuple's own
+      // start (baseOffset). For a top-level call baseOffset is 0; for a nested
+      // tuple it's the tuple's offset — without it, nested dynamic fields
+      // (exactInput path, Permit2 details, swap structs) decode to garbage.
+      const offset = Number(readUint(data, baseOffset + headPos)) * 2; // bytes → hex chars
+      const { value } = decodeType(data, param, baseOffset + offset);
       result[key] = value;
       headPos += 64;
     } else {
-      const { value, consumed } = decodeType(data, param, headPos);
-      const key = param.name || `_${params.indexOf(param)}`;
+      const { value, consumed } = decodeType(data, param, baseOffset + headPos);
       result[key] = value;
       headPos += consumed;
     }
