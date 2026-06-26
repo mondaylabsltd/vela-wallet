@@ -388,4 +388,34 @@ describe('ERC-7730 Clear Signing', () => {
       expect(result).not.toBeNull();
     });
   });
+
+  describe('local protocol descriptors (no ERC-7730 server descriptor)', () => {
+    const UNIV2 = '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D';
+    const pad = (h: string) => h.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+    // swapExactTokensForTokens(1000 USDC, ≥0.5 WETH, [USDC,WETH], to, deadline)
+    const SWAP = '0x38ed1739'
+      + pad((1000000000n).toString(16))          // amountIn 1e9 (1000 USDC, 6dp)
+      + pad((500000000000000000n).toString(16))  // amountOutMin 0.5e18 (0.5 WETH)
+      + pad('a0')                                 // path offset (5 head words)
+      + pad('d8da6bf26964af9d7eed9e03e53415d37aa96045') // to
+      + pad((1750000000).toString(16))           // deadline
+      + pad('2')                                  // path length
+      + pad('a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48') // USDC
+      + pad('c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2');  // WETH
+
+    it('renders a Uniswap V2 swap richly without a network descriptor', async () => {
+      clearDescriptorCache();
+      const r = await resolveTransaction(UNIV2, SWAP, '0x0', 1);
+      expect(r).not.toBeNull();
+      expect(r!.intent).toBe('Swap');
+      expect(r!.contractName).toBe('Uniswap V2 Router');
+      expect(r!.verified).toBe(true);
+      const send = r!.fields.find((f) => f.role === 'send-amount');
+      const recv = r!.fields.find((f) => f.role === 'receive-amount');
+      expect(send!.value).toContain('USDC');
+      expect(send!.value).toContain('1,000');
+      expect(recv!.value).toContain('WETH');
+      expect(recv!.value).toContain('0.5');
+    });
+  });
 });

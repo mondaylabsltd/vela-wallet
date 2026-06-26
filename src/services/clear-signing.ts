@@ -19,6 +19,7 @@ import { keccak256, create2Address } from '@/services/eth-crypto';
 import { toHex, fromHex } from '@/services/hex';
 import { decodeCalldata, matchSelector, parseSignature, type AbiParam, type DecodedValue } from '@/services/abi-decode';
 import { lookupSelector } from '@/services/selector-registry';
+import { localDescriptor, knownContract } from '@/services/local-descriptors';
 import type { TypedData } from '@/services/eip712';
 import { poolRpcCall } from '@/services/rpc-pool';
 
@@ -178,6 +179,14 @@ export async function resolveTransaction(
 
   const toAddr = to.toLowerCase();
 
+  // 0. Built-in descriptors for top protocols not (yet) in the ERC-7730 registry.
+  // Tried first so widely-used dApps render richly without a network round-trip.
+  const local = localDescriptor(toAddr);
+  if (local) {
+    const r = await resolveCalldataDescriptor(local, data, value, toAddr, chainId, true);
+    if (r) return r; // local descriptor lacks this selector → fall through
+  }
+
   // 1. Try contract-specific descriptor (filenames are lowercase on the server)
   let descriptor = await fetchDescriptor(`/erc7730/calldata/eip155-${chainId}/${toAddr}.json`);
   let isContractSpecific = !!descriptor;
@@ -299,8 +308,12 @@ async function resolveBySelector(calldata: string, toAddr: string): Promise<Clea
     }
     if (!decoded) continue;
 
+    // Even on a best-effort decode, name the contract if it's a known protocol.
+    const known = knownContract(toAddr);
     return {
       intent: humanizeFnName(parsed.name),
+      contractName: known?.name,
+      owner: known?.owner,
       fields: buildBestEffortFields(decoded, parsed.params),
       risk: 'caution', // decoded but unverified — never reads as safe
       contractAddress: toAddr,
@@ -692,6 +705,11 @@ function resolvePath(path: string | undefined, context: any): DecodedValue | und
     // Handle array iteration "[]"
     if (part === '[]') {
       if (Array.isArray(current)) return current.map(String).join(', ');
+      continue;
+    }
+    // Array index, incl. negative (e.g. swap "path.0" / "path.-1" for in/out token)
+    if (Array.isArray(current) && /^-?\d+$/.test(part)) {
+      current = current.at(Number(part));
       continue;
     }
     current = current[part];
