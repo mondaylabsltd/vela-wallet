@@ -151,13 +151,31 @@ describe('clear-signing harness scenarios', () => {
     expect(() => tokenLogoURLsByAddress(1, amount!.tokenAddress ?? '')).not.toThrow();
   });
 
-  it('ERC-20 transfer resolves as a token amount', async () => {
+  it('ERC-20 transfer resolves the exact amount (1,000 USDC ≈ $1,000.00)', async () => {
     const s = CLEAR_SIGNING_SCENARIOS.find((x) => x.id === 'erc20-transfer')!;
     const tx = s.request.params[0];
     const r = await resolveTransaction(tx.to, tx.data, tx.value, 1);
     expect(r!.intent).toBe('Send');
-    const amount = r!.fields.find((f) => f.role === 'send-amount');
-    expect(amount!.value).toContain('USDC');
+    const amount = r!.fields.find((f) => f.role === 'send-amount')!;
+    // Regression: a malformed (over-padded) amount word once rendered "3.9062".
+    expect(amount.value).toBe('1,000 USDC');
+    expect(amount.usd).toBe('$1,000.00');
+  });
+
+  it('every scenario calldata is ABI word-aligned (selector + N×32 bytes)', () => {
+    const bad: string[] = [];
+    const check = (id: string, data?: string) => {
+      if (!data || data === '0x') return;
+      const body = data.slice(2 + 8); // strip 0x + 4-byte selector
+      if (body.length % 64 !== 0) bad.push(`${id} (body ${body.length} hex, rem ${body.length % 64})`);
+    };
+    for (const s of CLEAR_SIGNING_SCENARIOS) {
+      if (s.request.method === 'eth_sendTransaction') check(s.id, s.request.params[0].data);
+      if (s.request.method === 'wallet_sendCalls') {
+        (s.request.params[0].calls ?? []).forEach((c: any, i: number) => check(`${s.id}#${i}`, c.data));
+      }
+    }
+    expect(bad).toEqual([]);
   });
 
   it('NFT transferFrom resolves as an NFT (ERC-165 = erc721), not a token amount', async () => {

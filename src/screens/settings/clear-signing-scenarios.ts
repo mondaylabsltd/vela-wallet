@@ -24,7 +24,8 @@ export const CLEAR_SIGNING_SCENARIOS: ClearSigningScenario[] = [
       method: 'eth_sendTransaction',
       params: [{
         to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
-        data: '0xa9059cbb000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa9604500000000000000000000000000000000000000000000000000000000003b9aca00',
+        // transfer(vitalik, 1000 USDC) — 1e9 @ 6 decimals
+        data: '0xa9059cbb000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045000000000000000000000000000000000000000000000000000000003b9aca00',
         value: '0x0',
       }],
       origin: 'clear-signing-test',

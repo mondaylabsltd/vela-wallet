@@ -148,7 +148,7 @@ describe('ERC-7730 Clear Signing', () => {
       // transfer(address, uint256) = 0xa9059cbb
       const calldata = '0xa9059cbb' +
         '000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045' + // to
-        '00000000000000000000000000000000000000000000000000000000003b9aca00'; // value
+        '000000000000000000000000000000000000000000000000000000003b9aca00'; // value
 
       const result = await resolveTransaction(
         '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
@@ -211,7 +211,7 @@ describe('ERC-7730 Clear Signing', () => {
 
       const calldata = '0xa9059cbb' +
         '000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045' +
-        '00000000000000000000000000000000000000000000000000000000003b9aca00';
+        '000000000000000000000000000000000000000000000000000000003b9aca00';
 
       const result = await resolveTransaction(
         '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
@@ -233,7 +233,7 @@ describe('ERC-7730 Clear Signing', () => {
 
       const calldata = '0xa9059cbb' +
         '000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045' +
-        '00000000000000000000000000000000000000000000000000000000003b9aca00';
+        '000000000000000000000000000000000000000000000000000000003b9aca00';
 
       const result = await resolveTransaction(
         '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
@@ -348,7 +348,7 @@ describe('ERC-7730 Clear Signing', () => {
 
       const calldata = '0xa9059cbb' +
         '000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045' +
-        '00000000000000000000000000000000000000000000000000000000003b9aca00';
+        '000000000000000000000000000000000000000000000000000000003b9aca00';
 
       const result = await resolveTransaction('0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', calldata, '0x0', 1);
       expect(result!.risk).toBe('normal');
@@ -380,7 +380,7 @@ describe('ERC-7730 Clear Signing', () => {
 
       const calldata = '0xa9059cbb' +
         '000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045' +
-        '00000000000000000000000000000000000000000000000000000000003b9aca00';
+        '000000000000000000000000000000000000000000000000000000003b9aca00';
 
       // Only 2 of 6 visible fields resolve → less than ceil(6/2)=3 → show what
       // decoded but flag `partial` (with elevated risk) instead of blind sign.
@@ -396,7 +396,7 @@ describe('ERC-7730 Clear Signing', () => {
 
       const calldata = '0xa9059cbb' +
         '000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045' +
-        '00000000000000000000000000000000000000000000000000000000003b9aca00';
+        '000000000000000000000000000000000000000000000000000000003b9aca00';
 
       // 2 of 2 visible fields resolve → 2 >= ceil(2/2)=1 → should succeed
       const result = await resolveTransaction('0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', calldata, '0x0', 1);
