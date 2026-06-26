@@ -1043,8 +1043,7 @@ const styles = createStyles(() => ({
   },
   intentText: {
     fontSize: text['5xl'],
-    fontWeight: '800' as const,
-    fontFamily: 'Inter-Bold',
+    ...inter.bold,
     textAlign: 'center',
     letterSpacing: -1,
   },
@@ -1062,8 +1061,7 @@ const styles = createStyles(() => ({
   tokenInfo: { flex: 1 },
   tokenAmount: {
     fontSize: text['3xl'],
-    fontWeight: '800' as const,
-    fontFamily: 'Inter-Bold',
+    ...inter.bold,
     color: color.fg.base,
     letterSpacing: -0.5,
   },

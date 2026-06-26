@@ -15,8 +15,8 @@
  *   3. If no match → blind sign (return null)
  */
 import { getEthereumDataURL } from '@/services/storage';
-import { keccak256 } from '@/services/eth-crypto';
-import { toHex } from '@/services/hex';
+import { keccak256, create2Address } from '@/services/eth-crypto';
+import { toHex, fromHex } from '@/services/hex';
 import { decodeCalldata, matchSelector, type DecodedValue } from '@/services/abi-decode';
 import type { TypedData } from '@/services/eip712';
 import { poolRpcCall } from '@/services/rpc-pool';
@@ -100,6 +100,50 @@ async function fetchDescriptor(path: string): Promise<any | null> {
 }
 
 // ---------------------------------------------------------------------------
+// Contract deployment detection (CREATE2 / raw create)
+// ---------------------------------------------------------------------------
+
+/** Canonical CREATE2 factories most tooling deploys through. */
+const CREATE2_DEPLOYERS = new Set([
+  '0x4e59b44847b379578588920ca78fbf26c0b4956c', // Arachnid deterministic deployer
+]);
+
+/** Build a calm "Deploy contract" result (with predicted address when CREATE2). */
+function buildDeployResult(to: string | undefined, data: string): ClearSignResult {
+  let predicted: string | undefined;
+  try {
+    if (to && CREATE2_DEPLOYERS.has(to.toLowerCase())) {
+      const hex = data.startsWith('0x') ? data.slice(2) : data;
+      if (hex.length >= 64) {
+        const salt = fromHex(hex.slice(0, 64));
+        const initCode = fromHex(hex.slice(64));
+        predicted = create2Address(to, salt, keccak256(initCode));
+      }
+    }
+  } catch { /* leave predicted undefined */ }
+
+  const fields: ClearSignField[] = [];
+  if (predicted) {
+    fields.push({
+      label: 'New contract',
+      value: `${predicted.slice(0, 8)}...${predicted.slice(-6)}`,
+      format: 'addressName',
+      role: 'generic',
+    });
+  }
+
+  return {
+    intent: 'Deploy contract',
+    contractName: to ? 'CREATE2 Deployer' : undefined,
+    fields,
+    risk: 'normal',
+    contractAddress: to ? to.toLowerCase() : undefined,
+    verified: false,
+    type: 'transaction',
+  };
+}
+
+// ---------------------------------------------------------------------------
 // eth_sendTransaction clear signing
 // ---------------------------------------------------------------------------
 
@@ -117,7 +161,13 @@ export async function resolveTransaction(
     // Plain ETH transfer — no calldata
     return null; // Let the modal show its native transfer UI
   }
-  if (!to) return null;
+
+  // Contract deployment — render calmly as "Deploy contract" instead of a scary
+  // red "Unknown". Covers a raw create (no `to`) and the canonical CREATE2
+  // deployers most tooling uses. No assets leave the wallet.
+  if (!to || CREATE2_DEPLOYERS.has(to.toLowerCase())) {
+    return buildDeployResult(to, data);
+  }
 
   const toAddr = to.toLowerCase();
 
@@ -334,7 +384,11 @@ async function resolveEip712Entry(
   if (!matchedSig) return null;
 
   const format = formats[matchedSig];
-  const context = flattenForEip712(typedData.message);
+  // EIP-712 has no transaction-level `@` namespace, but ERC-2612 descriptors
+  // reference the token via `@.to`. Bind it to the verifying contract so the
+  // permit amount resolves with the right decimals (else it renders "0 tokens").
+  const vc = typedData.domain?.verifyingContract;
+  const context = { ...flattenForEip712(typedData.message), '@': { to: vc, verifyingContract: vc, from: '' } };
 
   await warmTokenDecimals(chainId, collectTokenAddrs(format.fields ?? [], context, entry.metadata, entry.display?.definitions));
 
@@ -386,7 +440,11 @@ async function resolveEip712Formats(
   if (!matchedSig) return null;
 
   const format = formats[matchedSig];
-  const context = flattenForEip712(typedData.message);
+  // EIP-712 has no transaction-level `@` namespace, but ERC-2612 descriptors
+  // reference the token via `@.to`. Bind it to the verifying contract so the
+  // permit amount resolves with the right decimals (else it renders "0 tokens").
+  const vc = typedData.domain?.verifyingContract;
+  const context = { ...flattenForEip712(typedData.message), '@': { to: vc, verifyingContract: vc, from: '' } };
 
   await warmTokenDecimals(chainId, collectTokenAddrs(format.fields ?? [], context, descriptor.metadata, descriptor.display?.definitions));
 
@@ -639,6 +697,11 @@ function formatTokenAmount(
   if (params?.token) {
     const resolved = resolveMetadataRef(params.token, metadata);
     if (typeof resolved === 'string') tokenAddr = resolved;
+  }
+  // ERC-2612/permit fallback: the token IS the EIP-712 verifying contract.
+  if (!tokenAddr) {
+    const vc = context?.['@']?.verifyingContract;
+    if (typeof vc === 'string' && /^0x[0-9a-fA-F]{40}$/.test(vc)) tokenAddr = vc;
   }
 
   // Check native currency

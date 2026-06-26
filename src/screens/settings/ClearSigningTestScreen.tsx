@@ -869,7 +869,7 @@ const ms = createStyles(() => ({
   dappAccountLine: { fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.muted, paddingLeft: space.sm },
 
   intent: { alignItems: 'center', paddingTop: space.lg, paddingBottom: space['2xl'] },
-  intentText: { fontSize: text['5xl'], fontWeight: '800' as const, fontFamily: 'Inter-Bold', letterSpacing: -1 },
+  intentText: { fontSize: text['5xl'], ...inter.bold, letterSpacing: -1 },
 
   tokenCard: {
     flexDirection: 'row', alignItems: 'center', gap: space.xl,
@@ -877,7 +877,7 @@ const ms = createStyles(() => ({
     borderRadius: radius['2xl'], marginVertical: space.sm,
   },
   tokenInfo: { flex: 1 },
-  tokenAmt: { fontSize: text['3xl'], fontWeight: '800' as const, fontFamily: 'Inter-Bold', color: color.fg.base, letterSpacing: -0.5 },
+  tokenAmt: { fontSize: text['3xl'], ...inter.bold, color: color.fg.base, letterSpacing: -0.5 },
   tokenLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, marginTop: space.xs },
 
   flowArrow: { alignItems: 'center', marginVertical: -space.sm, zIndex: 1 },
