@@ -521,6 +521,15 @@ function ClearSignView({ cs }: {
       {/* L1: Intent */}
       <IntentHeader intent={cs.intent} color={rc} />
 
+      {/* Best-effort decode (recovered from a 4-byte selector DB, no verified
+          descriptor) — show what it does, but be honest it isn't verified. */}
+      {cs.bestEffort && (
+        <WarningBanner
+          severity="caution"
+          text={t('componentsUi.signing.bestEffortWarning')}
+        />
+      )}
+
       {/* Incomplete decode — the user must not assume they've seen everything */}
       {cs.partial && (
         <WarningBanner

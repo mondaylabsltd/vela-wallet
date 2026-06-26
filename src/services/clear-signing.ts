@@ -17,7 +17,8 @@
 import { getEthereumDataURL } from '@/services/storage';
 import { keccak256, create2Address } from '@/services/eth-crypto';
 import { toHex, fromHex } from '@/services/hex';
-import { decodeCalldata, matchSelector, type DecodedValue } from '@/services/abi-decode';
+import { decodeCalldata, matchSelector, parseSignature, type AbiParam, type DecodedValue } from '@/services/abi-decode';
+import { lookupSelector } from '@/services/selector-registry';
 import type { TypedData } from '@/services/eip712';
 import { poolRpcCall } from '@/services/rpc-pool';
 
@@ -52,6 +53,12 @@ export interface ClearSignResult {
    * prominent "incomplete" warning + elevated risk.
    */
   partial?: boolean;
+  /**
+   * True when there was no ERC-7730 descriptor, but we recovered the function via
+   * a 4-byte selector database and decoded it generically. Honest "best effort,
+   * not verified" — drives a caution banner instead of a blind-sign.
+   */
+  bestEffort?: boolean;
 }
 
 /** Layout role hint for field rendering. */
@@ -180,7 +187,13 @@ export async function resolveTransaction(
     descriptor = await tryErcFallbacks(data);
   }
 
-  if (!descriptor) return null;
+  if (!descriptor) {
+    // 3. No descriptor — DON'T blind-sign lazily. Recover the function from a
+    // 4-byte selector database and decode it generically (best-effort).
+    const best = await resolveBySelector(data, toAddr);
+    if (best) return best;
+    return null; // genuinely couldn't decode → caller shows blind-sign + risk
+  }
 
   return resolveCalldataDescriptor(descriptor, data, value, toAddr, chainId, isContractSpecific);
 }
@@ -259,6 +272,95 @@ async function tryErcFallbacks(calldata: string): Promise<any | null> {
     if (matchSelector(calldata, sigs)) return desc;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Best-effort decode via 4-byte selector databases (no descriptor)
+// ---------------------------------------------------------------------------
+
+/**
+ * Recover the function from a selector database and decode the calldata
+ * generically. Returns a best-effort result (verified=false, bestEffort=true)
+ * so the user sees *what the call does* with a clear "not verified" caveat,
+ * instead of a blind sign. Returns null only when nothing decodes.
+ */
+async function resolveBySelector(calldata: string, toAddr: string): Promise<ClearSignResult | null> {
+  const candidates = await lookupSelector(calldata.slice(0, 10));
+  if (candidates.length === 0) return null;
+
+  for (const sig of candidates) {
+    let decoded: Record<string, DecodedValue> | null = null;
+    let parsed: { name: string; params: AbiParam[] };
+    try {
+      parsed = parseSignature(sig);
+      decoded = decodeCalldata(calldata, sig);
+    } catch {
+      continue;
+    }
+    if (!decoded) continue;
+
+    return {
+      intent: humanizeFnName(parsed.name),
+      fields: buildBestEffortFields(decoded, parsed.params),
+      risk: 'caution', // decoded but unverified — never reads as safe
+      contractAddress: toAddr,
+      verified: false,
+      type: 'transaction',
+      bestEffort: true,
+    };
+  }
+  return null;
+}
+
+/** "swapExactTokensForTokens" → "Swap exact tokens for tokens". */
+function humanizeFnName(name: string): string {
+  const spaced = name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .trim();
+  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase() : name;
+}
+
+/** Build display fields from a generically-decoded calldata map. */
+function buildBestEffortFields(decoded: Record<string, DecodedValue>, params: AbiParam[]): ClearSignField[] {
+  const fields: ClearSignField[] = [];
+  params.forEach((p, i) => {
+    const key = p.name || `_${i}`;
+    const raw = decoded[key];
+    if (raw === undefined) return;
+    fields.push({
+      label: p.name || prettyType(p.type),
+      value: formatGenericValue(raw, p.type),
+      format: 'raw',
+      role: 'generic',
+    });
+  });
+  return fields;
+}
+
+function prettyType(type: string): string {
+  if (/^address/.test(type)) return type.endsWith('[]') ? 'Addresses' : 'Address';
+  if (/^uint|^int/.test(type)) return 'Amount';
+  if (type === 'bool') return 'Flag';
+  if (type === 'bytes' || /^bytes/.test(type)) return 'Data';
+  if (type === 'string') return 'Text';
+  return type;
+}
+
+function shortHex(s: string): string {
+  return s.length > 22 ? `${s.slice(0, 10)}…${s.slice(-6)}` : s;
+}
+
+function formatGenericValue(v: DecodedValue, type: string): string {
+  if (Array.isArray(v)) {
+    const items = v.slice(0, 4).map((x) => formatGenericValue(x as DecodedValue, type.replace(/\[\]$/, '')));
+    return `[${items.join(', ')}${v.length > 4 ? `, +${v.length - 4}` : ''}]`;
+  }
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (typeof v === 'bigint') return formatWithCommas(v.toString());
+  const s = String(v);
+  if (/^0x[0-9a-fA-F]{40}$/.test(s)) return `${s.slice(0, 8)}…${s.slice(-6)}`; // address
+  return shortHex(s);
 }
 
 async function resolveCalldataDescriptor(

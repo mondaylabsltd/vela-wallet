@@ -50,7 +50,8 @@
       "typeLabel": "Type",
       "intentUnknown": "Unknown",
       "intentSend": "Send",
-      "signingFor": "Signing for"
+      "signingFor": "Signing for",
+      "bestEffortWarning": "Decoded from the function signature — not a verified descriptor. Review the details carefully."
     },
     "currency": {
       "title": "Display currency",

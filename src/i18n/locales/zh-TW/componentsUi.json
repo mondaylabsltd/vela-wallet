@@ -50,7 +50,8 @@
       "typeLabel": "類型",
       "intentUnknown": "未知",
       "intentSend": "發送",
-      "signingFor": "簽署對象"
+      "signingFor": "簽署對象",
+      "bestEffortWarning": "根據函式簽章解析得出 — 非經過驗證的描述符，請仔細核對細節。"
     },
     "currency": {
       "title": "顯示貨幣",
