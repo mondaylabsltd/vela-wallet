@@ -984,12 +984,27 @@ function formatTokenAmount(
     }
   }
 
+  // A token reference must be a real 20-byte address. Descriptors sometimes carry
+  // a placeholder (the generic ERC-4626 descriptor uses `underlyingToken: "0x0"`)
+  // and a path can resolve to a non-address — such a value can't identify or
+  // scale the token, and would otherwise crash the logo lookup. Treat it as an
+  // unidentified token: show the amount, flag it `unverified`, no bogus
+  // symbol/logo. Never emit a malformed tokenAddress downstream.
+  let tokenInvalid = false;
+  if (tokenAddr !== undefined) {
+    const norm = tokenAddr.startsWith('0x') ? tokenAddr : `0x${tokenAddr}`;
+    if (/^0x[0-9a-fA-F]{40}$/.test(norm)) tokenAddr = norm.toLowerCase();
+    else { tokenAddr = undefined; tokenInvalid = true; }
+  }
+
   // Known decimals → on-chain decimals (prefetched) → 18 + unverified flag.
   // Never silently assume 18 for an unknown token: a wrong scale here is a
   // security hazard. But an unresolved lookup is "amount may be off" (caution),
   // NOT the same as an unlimited approval (danger) — so flag it `unverified`,
   // which floors risk at caution rather than escalating to danger.
-  const { decimals, verified } = guessTokenDecimals(chainId, tokenAddr);
+  const guess = guessTokenDecimals(chainId, tokenAddr);
+  const decimals = guess.decimals;
+  const verified = guess.verified && !tokenInvalid;
   const display = formatTokenValue(amount, decimals);
   // Always show a token identifier — known symbol, abbreviated address, or "tokens"
   const symbol = tokenAddr
@@ -1007,7 +1022,7 @@ function formatTokenAmount(
   return {
     value: displayWithSymbol,
     format: 'tokenAmount',
-    tokenAddress: tokenAddr ? normalizeAddress(String(tokenAddr)) : undefined,
+    tokenAddress: tokenAddr, // normalized + validated above (or undefined)
     ...(verified ? {} : { unverified: true }),
     ...(usd ? { usd } : {}),
   };
@@ -1173,11 +1188,6 @@ function formatTokenValue(raw: bigint, decimals: number): string {
 
 function formatWithCommas(n: string): string {
   return n.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-function normalizeAddress(addr: string): string {
-  if (!addr.startsWith('0x')) return '0x' + addr;
-  return addr;
 }
 
 function truncateHex(s: string): string {

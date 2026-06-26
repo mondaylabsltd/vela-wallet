@@ -136,7 +136,10 @@ export function tokenLogoURLs(t: APIToken): string[] {
  * Polygon/Base token resolves its logo correctly instead of assuming mainnet.
  */
 export function tokenLogoURLsByAddress(chainId: number, tokenAddress: string): string[] {
-  if (!tokenAddress) return [];
+  // Only a well-formed 20-byte address yields a logo URL. Never throw: this runs
+  // inside the signing sheet's render, and checksumAddress() rejects a malformed
+  // value — a logo lookup must never crash a security surface.
+  if (!/^0x[0-9a-fA-F]{40}$/.test(tokenAddress ?? '')) return [];
   const base = `${getEthereumDataURL()}/assets/eip155-${chainId}`;
   const cs = checksumAddress(tokenAddress);
   const lc = tokenAddress.toLowerCase();
