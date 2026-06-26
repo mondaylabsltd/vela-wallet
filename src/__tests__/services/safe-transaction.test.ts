@@ -56,25 +56,27 @@ describe('safe-transaction', () => {
     });
   });
 
-  // --- calcMaxFeePerGas: margin = tier - 1, clamped to [1.1x, 2.0x] ---
+  // --- calcMaxFeePerGas: maxFee = gasPrice × speedTier × BUNDLER_MARGIN (2.0×) ---
+  // BUNDLER_MARGIN_PERCENT = 100 → 2× markup → relayer fee ≈ network fee, i.e. the
+  // margin over the outer gas price (gasPrice × tier) is a constant 100% for every tier.
 
   describe('calcMaxFeePerGas', () => {
     const gasPrice = 10_000_000_000n; // 10 gwei
 
-    test('standard tier: gasPrice × 1.2 × 2.5 = 30 gwei', () => {
-      expect(calcMaxFeePerGas(gasPrice, 'standard')).toBe(30_000_000_000n);
+    test('standard tier: gasPrice × 1.2 × 2.0 = 24 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'standard')).toBe(24_000_000_000n);
     });
 
-    test('slow tier: gasPrice × 1.1 × 2.5 = 27.5 gwei', () => {
-      expect(calcMaxFeePerGas(gasPrice, 'slow')).toBe(27_500_000_000n);
+    test('slow tier: gasPrice × 1.1 × 2.0 = 22 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'slow')).toBe(22_000_000_000n);
     });
 
-    test('rapid tier: gasPrice × 1.5 × 2.5 = 37.5 gwei', () => {
-      expect(calcMaxFeePerGas(gasPrice, 'rapid')).toBe(37_500_000_000n);
+    test('rapid tier: gasPrice × 1.5 × 2.0 = 30 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'rapid')).toBe(30_000_000_000n);
     });
 
-    test('fast tier: gasPrice × 2.0 × 2.5 = 50 gwei', () => {
-      expect(calcMaxFeePerGas(gasPrice, 'fast')).toBe(50_000_000_000n);
+    test('fast tier: gasPrice × 2.0 × 2.0 = 40 gwei', () => {
+      expect(calcMaxFeePerGas(gasPrice, 'fast')).toBe(40_000_000_000n);
     });
 
     test('default tier is standard', () => {
@@ -85,15 +87,15 @@ describe('safe-transaction', () => {
       expect(calcMaxFeePerGas(0n)).toBe(1n);
     });
 
-    test('margin is constant 150% across all tiers', () => {
-      // margin = BUNDLER_MARGIN - 1 = 2.5 - 1 = 1.5, for ALL tiers
+    test('margin is constant 100% across all tiers', () => {
+      // maxFee = outerGasPrice × 2.0, so margin = 2.0 - 1 = 1.0, for ALL tiers
       const tiers: GasTier[] = ['slow', 'standard', 'rapid', 'fast'];
       for (const tier of tiers) {
         const m = GAS_TIER_MULTIPLIERS[tier];
         const outerGasPrice = (gasPrice * m.num) / m.den; // gasPrice × speedTier
         const maxFee = calcMaxFeePerGas(gasPrice, tier);
         const margin = Number(maxFee - outerGasPrice) / Number(outerGasPrice);
-        expect(margin).toBeCloseTo(1.5, 5); // always 150%
+        expect(margin).toBeCloseTo(1.0, 5); // always 100%
       }
     });
 
