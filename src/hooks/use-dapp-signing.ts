@@ -11,6 +11,7 @@ import { fromHex, stripHexPrefix, toHex } from '@/services/hex';
 import * as PublicKeyIndex from '@/services/public-key-index';
 import { rpcCall } from '@/services/rpc-adapter';
 import { sendContractCall, sendNative, buildEip1271Signature, extractClientDataFields, computeSafeMessageHash } from '@/services/safe-transaction';
+import { enforceNoUnlimited } from '@/services/approval-guard';
 import { findAccountByCredentialId } from '@/services/storage';
 import { SAFE_PROXY_RUNTIME_CODE } from '@/services/safe-address';
 import { getAllNetworksSync } from '@/models/network';
@@ -315,6 +316,11 @@ export async function handleDAppRequest(
 ): Promise<any> {
   const { method } = request;
 
+  // Final, descriptor-independent safety net: never sign or submit a request that
+  // would grant an unbounded allowance. The UI caps approvals up-front, but this
+  // guard catches anything that bypassed it (incl. shapes no descriptor decodes).
+  enforceNoUnlimited(method, request.params);
+
   if (method === 'eth_sendTransaction') {
     return handleSendTransaction(request, account, safeAddress, chainId, maxFeeOverride, onSubmitted);
   } else if (method === 'wallet_sendCalls') {
@@ -354,6 +360,12 @@ export async function handleSendCalls(
 
   const calls = payload.calls ?? [];
   if (calls.length === 0) throw new Error('No calls provided');
+
+  // A batch must not smuggle an unbounded approval past the per-tx guard — check
+  // every leg as if it were a standalone transaction.
+  for (const c of calls) {
+    enforceNoUnlimited('eth_sendTransaction', [{ to: c.to, data: c.data, value: c.value }]);
+  }
 
   // Get public key
   let publicKeyHex: string | undefined;
