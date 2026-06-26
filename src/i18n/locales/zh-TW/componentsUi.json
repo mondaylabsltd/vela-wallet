@@ -54,7 +54,11 @@
       "bestEffortWarning": "根據函式簽章解析得出 — 非經過驗證的描述符，請仔細核對細節。",
       "simWillSucceed": "模擬通過 — 預計可成功",
       "simWillFail": "這筆交易預計會失敗 — 但仍會扣除 gas。",
-      "simWillFailReason": "預計會失敗：{{reason}} — 但仍會扣除 gas。"
+      "simWillFailReason": "預計會失敗：{{reason}} — 但仍會扣除 gas。",
+      "balanceChangesTitle": "餘額變化",
+      "balanceNoAssetsMove": "沒有資產離開你的錢包",
+      "balanceUnverifiedToken": "未驗證代幣",
+      "balanceUnderfundedNative": "{{symbol}} 餘額不足以支付這筆轉帳 — 預計會在鏈上失敗。"
     },
     "currency": {
       "title": "顯示貨幣",

@@ -19,9 +19,10 @@ import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
 import { AppModal } from '@/components/ui/AppModal';
 import { VelaButton } from '@/components/ui/VelaButton';
+import { HoldToConfirmButton } from '@/components/ui/HoldToConfirmButton';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet } from '@/models/wallet-state';
-import { shortAddr, type BLEIncomingRequest } from '@/models/types';
+import { shortAddr, tokenLogoURLsByAddress, type BLEIncomingRequest } from '@/models/types';
 import { chainName, nativeSymbol, networkForChainId, DEFAULT_NETWORKS } from '@/models/network';
 import { openURL } from '@/services/platform';
 import {
@@ -38,7 +39,14 @@ import {
 } from '@/services/approval-guard';
 import { resolveTokenMetadata } from '@/services/token-metadata';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
-import { simulateCall, type SimResult } from '@/services/tx-simulation';
+import { resolveRecipientRisk, type RecipientRisk } from '@/services/recipient-risk';
+import { parseSiwe, checkSiweDomainBinding, siweHost, type SiweBinding } from '@/services/siwe';
+import { readErc20Allowance } from '@/services/token-reads';
+import { knownTokenSymbol } from '@/services/tokens';
+import { fetchChainlinkPrices, resolveChainlinkPrice } from '@/services/price-service';
+import { formatTokenAmount as formatRawTokenAmount } from '@/services/approval-guard';
+import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
+import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
 import { ChainLogo } from '@/components/ChainLogo';
 import { TokenLogo } from '@/components/TokenLogo';
 import {
@@ -92,6 +100,13 @@ function intentColor(risk: SigningRisk): string {
  * read-only data fetching (descriptor resolution, gas estimate, token metadata,
  * approval detection) and all presentation; it never touches the dApp transport.
  */
+/** One resolved leg of an EIP-5792 batch (wallet_sendCalls). */
+interface BatchItem {
+  to: string;
+  clearSign: ClearSignResult | null;
+  approval: DetectedApproval | null;
+}
+
 export interface SigningSheetProps {
   request: BLEIncomingRequest;
   chainId: number;
@@ -130,6 +145,16 @@ export function SigningSheet({
   // flicker in the frame before estimation starts.
   const [gasEstimateFailed, setGasEstimateFailed] = useState(false);
 
+  // Native-token USD price (Chainlink, cached 3min) → fiat line on the gas card.
+  const [nativeUsdPrice, setNativeUsdPrice] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    fetchChainlinkPrices()
+      .then((prices) => { if (!cancelled) setNativeUsdPrice(resolveChainlinkPrice(nativeSymbol(chainId), prices) ?? 0); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [chainId]);
+
   // --- Editable approval (the never-unlimited mandate) ---
   // Detected straight off the raw request, independent of any descriptor.
   const approval = useMemo<DetectedApproval | null>(
@@ -139,8 +164,12 @@ export function SigningSheet({
   const [approveChoice, setApproveChoice] = useState<ApprovalChoice | null>(null);
   const [approveTokenMeta, setApproveTokenMeta] = useState<{ symbol: string; decimals: number; verified: boolean } | null>(null);
 
-  // Client-side revert pre-check (null = unknown / not run).
-  const [sim, setSim] = useState<SimResult | null>(null);
+  // Client-side simulation: revert pre-check + net balance changes (null = unknown / not run).
+  const [sim, setSim] = useState<AssetSimResult | null>(null);
+
+  // EIP-5792 batch (wallet_sendCalls): each leg resolved + approval-checked, so the
+  // user sees a per-call breakdown instead of blind-signing the whole bundle.
+  const [batch, setBatch] = useState<BatchItem[] | null>(null);
 
   // Resolve the approved token's symbol/decimals (on-chain via Multicall3, cached).
   useEffect(() => {
@@ -171,6 +200,9 @@ export function SigningSheet({
     }
 
     const { method, params } = incomingRequest;
+    // Guard the async simulation so a slower previous request can't overwrite
+    // the current one's state after it's been replaced.
+    let cancelled = false;
     setSim(null);
 
     if (method === 'eth_sendTransaction' && params?.[0]) {
@@ -192,10 +224,14 @@ export function SigningSheet({
           .catch(() => { setFeeEstimate(null); setGasEstimateFailed(true); })
           .finally(() => setEstimatingGas(false));
 
-        // Revert pre-check — eth_call the inner Safe→target call against live state.
-        simulateCall(activeAccount.address, params[0].to, params[0].data, params[0].value, chainId)
-          .then(setSim)
-          .catch(() => setSim(null));
+        // Simulate the inner Safe→target call: revert pre-check + net balance changes.
+        simulateAssetChanges(
+          activeAccount.address,
+          [{ to: params[0].to, data: params[0].data, value: params[0].value }],
+          chainId,
+        )
+          .then((r) => { if (!cancelled) setSim(r); })
+          .catch(() => { if (!cancelled) setSim(null); });
       }
     } else if (method.includes('signTypedData') && params) {
       setResolving(true);
@@ -213,6 +249,7 @@ export function SigningSheet({
     } else {
       setClearSign(null);
     }
+    return () => { cancelled = true; };
   }, [incomingRequest, chainId, activeAccount?.address]);
 
   // Real tx for accurate gas estimation in the fee card (re-runs on tier change/refresh).
@@ -221,12 +258,32 @@ export function SigningSheet({
     return p ? { to: p.to, value: p.value, data: p.data } : undefined;
   }, [incomingRequest]);
 
+  // Resolve each leg of an EIP-5792 batch (intent + approval flag per call).
+  useEffect(() => {
+    if (incomingRequest?.method !== 'wallet_sendCalls') { setBatch(null); return; }
+    const calls = incomingRequest.params?.[0]?.calls;
+    if (!Array.isArray(calls) || calls.length === 0) { setBatch(null); return; }
+    let cancelled = false;
+    setResolving(true);
+    Promise.all(calls.map(async (c: any): Promise<BatchItem> => {
+      const cs = await resolveTransaction(c.to, c.data, c.value, chainId).catch(() => null);
+      const approval = detectApproval('eth_sendTransaction', [{ to: c.to, data: c.data, value: c.value }]);
+      return { to: c.to ?? '', clearSign: cs, approval };
+    }))
+      .then((items) => { if (!cancelled) setBatch(items); })
+      .catch(() => { if (!cancelled) setBatch(null); })
+      .finally(() => { if (!cancelled) setResolving(false); });
+    return () => { cancelled = true; };
+  }, [incomingRequest, chainId]);
+
   if (!incomingRequest) return null;
 
   const { method, params } = incomingRequest;
   const isPersonalSign = method === 'personal_sign';
+  const isEthSign = method === 'eth_sign';
   const isTypedData = method.includes('signTypedData');
   const isTx = method === 'eth_sendTransaction';
+  const isBatch = method === 'wallet_sendCalls';
 
   // Derive display info
   const displayOrigin = dappInfo?.name ?? incomingRequest.origin ?? 'dApp';
@@ -248,6 +305,7 @@ export function SigningSheet({
           choice={approveChoice}
           onChange={setApproveChoice}
           chainId={chainId}
+          walletAddress={addr}
           clearSign={clearSign}
           requestId={incomingRequest.id}
         />
@@ -264,8 +322,19 @@ export function SigningSheet({
     if (clearSign) {
       return <ClearSignView cs={clearSign} />;
     }
+    // EIP-5792 batch — list each call instead of blind-signing the bundle.
+    if (isBatch && batch) {
+      return <BatchCallsView items={batch} />;
+    }
+    // eth_sign signs an OPAQUE 32-byte hash — the classic blind-sign trap. It gets
+    // its own hard-warning surface, never the calm personal_sign message view.
+    if (isEthSign && params) {
+      // eth_sign(address, data) → data is params[1]; fall back to params[0] only
+      // for a malformed single-param request.
+      return <EthSignDangerView dataHex={params.length > 1 ? params[1] : params[0]} />;
+    }
     if (isPersonalSign && params?.[0]) {
-      return <MessageSignView hexMsg={params[0]} />;
+      return <MessageSignView hexMsg={params[0]} requestOrigin={dappInfo?.url ?? incomingRequest.origin} />;
     }
     if (isTypedData && params) {
       return <BlindTypedDataView params={params} />;
@@ -297,10 +366,49 @@ export function SigningSheet({
       return t('componentsUi.signing.confirmIntentLabel', { intent: i.charAt(0).toUpperCase() + i.slice(1) });
     }
     if (isPersonalSign || isTypedData) return t('componentsUi.signing.signLabel');
+    if (isBatch) return t('componentsUi.signing.confirmLabel');
     return t('componentsUi.signingApprove.verbApprove');
   };
 
   const buttonVariant = (): 'accent' | 'secondary' => 'accent';
+
+  // Danger actions must not be one tap from a normal transfer: an unlimited/
+  // grant-all approval or an opaque eth_sign requires a deliberate press-and-hold.
+  // This covers single requests AND every leg of an EIP-5792 batch / a
+  // non-editable unbounded approval (e.g. permit2-batch), which would otherwise
+  // slip through the gate even though the submit guard rejects them.
+  const isGrantingApproval = (a: DetectedApproval | null | undefined) =>
+    !!a?.isUnbounded && !a.isReducing && !a.isBooleanGrant;
+  const batchHasDanger =
+    isBatch && (batch?.some((it) => isGrantingApproval(it.approval) || it.clearSign?.risk === 'danger') ?? false);
+  const requiresHold =
+    isEthSign ||
+    clearSign?.risk === 'danger' ||
+    (!!approval?.editable && approveChoice?.type === 'grant') ||
+    isGrantingApproval(approval) ||
+    batchHasDanger;
+
+  const confirm = () => {
+    // For an edited approval, re-encode to the chosen finite amount BEFORE submit.
+    // The independent guard re-checks at the submit chokepoint, so a rewrite
+    // failure fails closed (never unbounded).
+    let paramsOverride: any[] | undefined;
+    if (approval?.editable && approveChoice) {
+      try { paramsOverride = rewriteApprovalParams(method, params, approval, approveChoice); }
+      catch { paramsOverride = undefined; }
+    }
+    onApprove({
+      maxFeePerGas: feeEstimate?.maxFeePerGas,
+      // Raw bundler cost (tier markup removed) drives the funding pre-check.
+      bundlerCostWei: feeEstimate ? rawBundlerGasCost(feeEstimate) : undefined,
+      paramsOverride,
+    });
+  };
+
+  const confirmDisabled =
+    resolving
+    || (isTx && (estimatingGas || gasEstimateFailed))
+    || (!!approval?.editable && !approveChoice);
 
   return (
       <SigningChainContext.Provider value={chainId}>
@@ -318,24 +426,13 @@ export function SigningSheet({
 
           {renderContent()}
 
-          {/* Revert pre-check — "this is expected to fail / succeed". A failing
-              sim is loud (you'd still pay gas); a passing one is a quiet ✓. */}
-          {isTx && sim && !sim.ok && (
-            <View style={styles.simFailCard}>
-              <AlertTriangle size={16} color={color.error.base} strokeWidth={2} />
-              <Text style={styles.simFailText}>
-                {sim.revertReason
-                  ? t('componentsUi.signing.simWillFailReason', { reason: sim.revertReason })
-                  : t('componentsUi.signing.simWillFail')}
-              </Text>
-            </View>
-          )}
-          {isTx && sim?.ok && (
-            <View style={styles.simOkRow}>
-              <ShieldCheck size={13} color={color.success.base} strokeWidth={2} />
-              <Text style={styles.simOkText}>{t('componentsUi.signing.simWillSucceed')}</Text>
-            </View>
-          )}
+          {/* Advanced — full untruncated payload + any detail-only fields, for
+              power users who want to verify exactly what's being signed. */}
+          <AdvancedPanel method={method} params={params} clearSign={clearSign} />
+
+          {/* Simulation summary — revert pre-check + net balance changes, one
+              render path shared with Send's confirm step. */}
+          {isTx && <BalanceChangePreview result={sim} chainId={chainId} />}
 
           {/* Gas fee card — only for eth_sendTransaction */}
           {isTx && activeAccount?.address && (
@@ -343,7 +440,7 @@ export function SigningSheet({
               feeEstimate={feeEstimate}
               estimating={estimatingGas}
               nativeSymbol={nativeSymbol(chainId)}
-              nativeUsdPrice={0}
+              nativeUsdPrice={nativeUsdPrice}
               safeAddress={activeAccount.address}
               chainId={chainId}
               gasTier={gasTier}
@@ -399,33 +496,25 @@ export function SigningSheet({
                 disabled={isSigning}
                 style={styles.buttonFlex}
               />
-              <VelaButton
-                title={buttonLabel()}
-                onPress={() => {
-                  // For an edited approval, re-encode to the chosen finite amount
-                  // BEFORE submit. The independent guard re-checks at the submit
-                  // chokepoint, so a rewrite failure fails closed (never unbounded).
-                  let paramsOverride: any[] | undefined;
-                  if (approval?.editable && approveChoice) {
-                    try { paramsOverride = rewriteApprovalParams(method, params, approval, approveChoice); }
-                    catch { paramsOverride = undefined; }
-                  }
-                  onApprove({
-                    maxFeePerGas: feeEstimate?.maxFeePerGas,
-                    // Raw bundler cost (tier markup removed) drives the funding pre-check.
-                    bundlerCostWei: feeEstimate ? rawBundlerGasCost(feeEstimate) : undefined,
-                    paramsOverride,
-                  });
-                }}
-                variant={buttonVariant()}
-                loading={isSigning || resolving}
-                disabled={
-                  resolving
-                  || (isTx && (estimatingGas || gasEstimateFailed))
-                  || (!!approval?.editable && !approveChoice)
-                }
-                style={styles.buttonFlex}
-              />
+              {requiresHold ? (
+                <HoldToConfirmButton
+                  title={buttonLabel()}
+                  hint={t('componentsUi.signing.holdToConfirm')}
+                  onConfirm={confirm}
+                  loading={isSigning || resolving}
+                  disabled={confirmDisabled}
+                  style={styles.buttonFlex}
+                />
+              ) : (
+                <VelaButton
+                  title={buttonLabel()}
+                  onPress={confirm}
+                  variant={buttonVariant()}
+                  loading={isSigning || resolving}
+                  disabled={confirmDisabled}
+                  style={styles.buttonFlex}
+                />
+              )}
             </>
           )}
         </View>
@@ -543,6 +632,12 @@ function ClearSignView({ cs }: {
   const isSwapLayout = sendAmounts.length > 0 && receiveAmounts.length > 0;
   const hasRecipient = recipients.length > 0 || spenders.length > 0;
 
+  // Sending a token TO its own contract address burns it irreversibly — a classic
+  // costly fat-finger. Flag when a recipient equals the contract being called.
+  const sendingToTokenContract =
+    !!cs.contractAddress &&
+    recipients.some(f => f.address && f.address === cs.contractAddress);
+
   return (
     <View>
       {/* Context: chain + account */}
@@ -610,11 +705,28 @@ function ClearSignView({ cs }: {
         <ContractBar
           key={`re${i}`}
           label={t('componentsUi.signing.recipientLabel')}
-          name={f.value}
-          address={undefined}
+          name={f.address ? undefined : f.value}
+          address={f.address}
           verified={false}
+          riskCheck
         />
       ))}
+
+      {/* Sending a token to its own contract → irreversible loss. */}
+      {sendingToTokenContract && (
+        <WarningBanner
+          severity="danger"
+          text={t('componentsUi.signing.tokenToContractWarning')}
+        />
+      )}
+
+      {/* An already-expired deadline (swap/permit) — the tx will revert. */}
+      {cs.fields.some(f => f.expired) && (
+        <WarningBanner
+          severity="caution"
+          text={t('componentsUi.signing.expiredWarning')}
+        />
+      )}
 
       {/* Warning for unlimited approvals etc. */}
       {cs.fields.some(f => f.warning) && (
@@ -650,17 +762,35 @@ function ClearSignView({ cs }: {
 // Approval View — the editable, never-unlimited spending-cap surface
 // ===========================================================================
 
-function ApprovalView({ approval, meta, choice, onChange, chainId, clearSign, requestId }: {
+function ApprovalView({ approval, meta, choice, onChange, chainId, walletAddress, clearSign, requestId }: {
   approval: DetectedApproval;
   meta: { symbol: string; decimals: number; verified: boolean } | null;
   choice: ApprovalChoice | null;
   onChange: (c: ApprovalChoice | null) => void;
   chainId: number;
+  walletAddress?: string;
   clearSign: ClearSignResult | null;
   requestId: string;
 }) {
   const { t } = useTranslation();
   const isNft = approval.kind === 'setApprovalForAll';
+
+  // increaseAllowance adds to the EXISTING allowance — showing only the increment
+  // is dangerously incomplete. Read the current on-chain allowance so we can show
+  // the resulting total (current + increment). On a slow/failed read we still warn
+  // the increment ADDS to an existing allowance rather than hiding the row.
+  const [currentAllowance, setCurrentAllowance] = useState<bigint | null>(null);
+  const [allowanceResolved, setAllowanceResolved] = useState(false);
+  useEffect(() => {
+    setCurrentAllowance(null);
+    setAllowanceResolved(false);
+    if (approval.kind !== 'increaseAllowance' || !walletAddress || !approval.tokenAddress) return;
+    let cancelled = false;
+    readErc20Allowance(chainId, approval.tokenAddress, walletAddress, approval.spender)
+      .then((a) => { if (!cancelled) { setCurrentAllowance(a); setAllowanceResolved(true); } })
+      .catch(() => { if (!cancelled) setAllowanceResolved(true); });
+    return () => { cancelled = true; };
+  }, [approval.kind, approval.tokenAddress, approval.spender, walletAddress, chainId]);
 
   const verb = approval.isReducing
     ? t('componentsUi.signingApprove.verbRevoke')
@@ -680,8 +810,8 @@ function ApprovalView({ approval, meta, choice, onChange, chainId, clearSign, re
 
   const symbol = meta?.symbol ?? '…';
   const decimals = meta?.decimals ?? 18;
-  const logoUrl = approval.tokenAddress
-    ? `https://ethereum-data.awesometools.dev/tokenlogos/${approval.tokenAddress}.png`
+  const logoUrls = approval.tokenAddress
+    ? tokenLogoURLsByAddress(chainId, approval.tokenAddress)
     : undefined;
 
   return (
@@ -694,11 +824,34 @@ function ApprovalView({ approval, meta, choice, onChange, chainId, clearSign, re
         symbol={symbol}
         decimals={decimals}
         decimalsVerified={meta?.verified ?? false}
-        logoUrl={logoUrl}
+        logoUrls={logoUrls}
         spenderLabel={clearSign?.contractName ?? shortAddr(approval.spender)}
         choice={choice}
         onChange={onChange}
       />
+
+      {/* increaseAllowance: the chosen value is an INCREMENT — surface the
+          resulting total so "increase by 100" can't read as "cap at 100". When the
+          current allowance couldn't be read, still say the increment ADDS to it. */}
+      {approval.kind === 'increaseAllowance' && allowanceResolved && (() => {
+        const increment = choice?.type === 'amount' ? choice.amountRaw : (approval.amountRaw ?? 0n);
+        const dec = meta?.decimals ?? 18;
+        const sym = meta?.symbol ?? '';
+        return (
+          <View style={styles.allowanceTotalRow}>
+            <Text style={styles.allowanceTotalLabel}>{t('componentsUi.signingApprove.resultingTotal')}</Text>
+            {currentAllowance !== null ? (
+              <Text style={styles.allowanceTotalValue}>
+                {`${formatRawTokenAmount(currentAllowance, dec)} + ${formatRawTokenAmount(increment, dec)} = ${formatRawTokenAmount(currentAllowance + increment, dec)} ${sym}`}
+              </Text>
+            ) : (
+              <Text style={styles.allowanceTotalUnknown}>
+                {t('componentsUi.signingApprove.resultingTotalUnknown', { amount: `${formatRawTokenAmount(increment, dec)} ${sym}` })}
+              </Text>
+            )}
+          </View>
+        );
+      })()}
 
       <ContractBar
         label={isNft ? t('componentsUi.signingApprove.operatorLabel') : t('componentsUi.signingApprove.spenderLabel')}
@@ -726,11 +879,59 @@ function ApprovalView({ approval, meta, choice, onChange, chainId, clearSign, re
 // Message Sign View (personal_sign)
 // ===========================================================================
 
-function MessageSignView({ hexMsg }: {
+function MessageSignView({ hexMsg, requestOrigin }: {
   hexMsg: string;
+  requestOrigin?: string;
 }) {
   const { t } = useTranslation();
   const decoded = decodePersonalMessage(hexMsg);
+
+  // Sign-In with Ethereum: bind the domain inside the message to the request
+  // origin. A mismatch is the canonical phishing pattern.
+  const siwe = useMemo(() => parseSiwe(decoded), [decoded]);
+  const binding: SiweBinding | null = useMemo(
+    () => (siwe ? checkSiweDomainBinding(siwe.domain, requestOrigin) : null),
+    [siwe, requestOrigin],
+  );
+
+  if (siwe) {
+    return (
+      <View>
+        <IntentHeader
+          intent={t('componentsUi.signing.signInIntent')}
+          color={binding === 'mismatch' ? color.error.base : color.fg.base}
+        />
+
+        <View style={styles.genericFields}>
+          <View style={styles.genRow}>
+            <Text style={styles.genLabel}>{t('componentsUi.signing.siweDomain')}</Text>
+            <Text style={[styles.genValue, binding === 'mismatch' && { color: riskColors().danger }]} numberOfLines={1}>
+              {siweHost(siwe.domain) ?? siwe.domain}
+            </Text>
+          </View>
+          {!!siwe.statement && (
+            <View style={styles.genRow}>
+              <Text style={styles.genLabel}>{t('componentsUi.signing.siweStatement')}</Text>
+              <Text style={styles.genValue} numberOfLines={3}>{siwe.statement}</Text>
+            </View>
+          )}
+        </View>
+
+        {binding === 'mismatch' && (
+          <WarningBanner
+            severity="danger"
+            text={t('componentsUi.signing.siweMismatch', { domain: siwe.domain, origin: hostLabel(requestOrigin) })}
+          />
+        )}
+        {binding === 'ok' && (
+          <View style={styles.siweOkRow}>
+            <ShieldCheck size={13} color={color.success.base} strokeWidth={2} />
+            <Text style={styles.siweOkText}>{t('componentsUi.signing.siweOk', { domain: siwe.domain })}</Text>
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <View>
@@ -744,6 +945,42 @@ function MessageSignView({ hexMsg }: {
         </View>
         <Text style={styles.msgText}>{decoded}</Text>
       </View>
+    </View>
+  );
+}
+
+/** Short host label for messages ("app.uniswap.org"). */
+function hostLabel(value: string | undefined): string {
+  if (!value) return '—';
+  try {
+    const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+    return new URL(withScheme).host;
+  } catch {
+    return value;
+  }
+}
+
+// ===========================================================================
+// eth_sign Danger View — opaque-hash blind signing
+// ===========================================================================
+
+function EthSignDangerView({ dataHex }: { dataHex: string }) {
+  const { t } = useTranslation();
+  const hash = typeof dataHex === 'string' ? dataHex : String(dataHex ?? '');
+  return (
+    <View>
+      <IntentHeader intent={t('componentsUi.signing.ethSignIntent')} color={color.error.base} />
+
+      <View style={styles.ethSignCard}>
+        <View style={styles.ethSignHeader}>
+          <ShieldAlert size={16} color={color.error.base} strokeWidth={2} />
+          <Text style={styles.ethSignTitle}>{t('componentsUi.signing.ethSignTitle')}</Text>
+        </View>
+        <Text style={styles.ethSignBody}>{t('componentsUi.signing.ethSignBody')}</Text>
+        <Text style={styles.ethSignHash} numberOfLines={2}>{hash}</Text>
+      </View>
+
+      <WarningBanner severity="danger" text={t('componentsUi.signing.ethSignWarning')} />
     </View>
   );
 }
@@ -876,6 +1113,54 @@ function BlindTransactionView({ tx, chainId }: {
 }
 
 // ===========================================================================
+// Batch View (EIP-5792 wallet_sendCalls) — per-call breakdown
+// ===========================================================================
+
+/** First meaningful amount/recipient line for a batch leg. */
+function batchSummary(it: BatchItem): string | undefined {
+  const f = it.clearSign?.fields.find(
+    (x) => x.role === 'send-amount' || x.role === 'receive-amount' || x.format === 'tokenAmount' || x.format === 'amount',
+  );
+  return f?.value;
+}
+
+function BatchCallsView({ items }: { items: BatchItem[] }) {
+  const { t } = useTranslation();
+  const anyUnlimited = items.some((it) => it.approval?.isUnbounded && !it.approval.isReducing && !it.approval.isBooleanGrant);
+
+  return (
+    <View>
+      <IntentHeader intent={t('componentsUi.signing.batchIntent')} color={color.fg.base} />
+      <Text style={styles.batchSub}>{t('componentsUi.signing.batchSubtitle', { count: items.length })}</Text>
+
+      {items.map((it, i) => {
+        const unlimited = !!it.approval?.isUnbounded && !it.approval.isReducing && !it.approval.isBooleanGrant;
+        const title = it.clearSign?.intent
+          ?? (it.approval ? t('componentsUi.signingApprove.verbApprove') : t('componentsUi.signing.batchCall'));
+        const summary = batchSummary(it);
+        return (
+          <View key={i} style={[styles.batchRow, unlimited && styles.batchRowDanger]}>
+            <View style={styles.batchNum}>
+              <Text style={styles.batchNumText}>{i + 1}</Text>
+            </View>
+            <View style={styles.batchInfo}>
+              <Text style={styles.batchTitle} numberOfLines={1}>{title}</Text>
+              {!!summary && <Text style={styles.batchDetail} numberOfLines={1}>{summary}</Text>}
+              <Text style={styles.batchAddr} numberOfLines={1}>{it.to ? shortAddr(it.to) : '—'}</Text>
+            </View>
+            {unlimited && <ShieldAlert size={14} color={riskColors().danger} strokeWidth={2} />}
+          </View>
+        );
+      })}
+
+      {anyUnlimited && (
+        <WarningBanner severity="danger" text={t('componentsUi.signing.unlimitedWarning')} />
+      )}
+    </View>
+  );
+}
+
+// ===========================================================================
 // Shared sub-components
 // ===========================================================================
 
@@ -905,17 +1190,22 @@ function TokenCard({ field, variant }: {
   // Extract symbol from value string (e.g. "1,500" from "1,500 USDC" is the amount)
   // The value from clear-signing is just the number, label has context
   const symbol = field.tokenAddress ? guessTokenSymbol(field.tokenAddress) : undefined;
+  // Per-chain logo (checksummed + lowercase fallback) — not a mainnet-only guess.
+  const chainId = React.useContext(SigningChainContext);
 
   return (
     <View style={[styles.tokenCard, bgMap[variant]]}>
       <TokenLogo
         symbol={symbol ?? '?'}
-        logoUrl={field.tokenAddress ? `https://ethereum-data.awesometools.dev/tokenlogos/${field.tokenAddress}.png` : undefined}
+        logoUrls={field.tokenAddress ? tokenLogoURLsByAddress(chainId, field.tokenAddress) : undefined}
         size={40}
       />
       <View style={styles.tokenInfo}>
         <Text style={styles.tokenAmount} numberOfLines={1}>{field.value}</Text>
-        <Text style={styles.tokenLabel}>{field.label}</Text>
+        <View style={styles.tokenSubRow}>
+          <Text style={styles.tokenLabel}>{field.label}</Text>
+          {!!field.usd && <Text style={styles.tokenUsd}>≈ {field.usd}</Text>}
+        </View>
       </View>
       {field.warning && (
         <View style={styles.tokenWarning}>
@@ -926,18 +1216,9 @@ function TokenCard({ field, variant }: {
   );
 }
 
-/** Guess token symbol from known addresses. */
+/** Guess token symbol from the shared known-token table, with an address fallback. */
 function guessTokenSymbol(addr: string): string {
-  const SYMBOLS: Record<string, string> = {
-    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',
-    '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
-    '0x6b175474e89094c44da98b954eedeac495271d0f': 'DAI',
-    '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 'WETH',
-    '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'WBTC',
-    '0x514910771af9ca656af840dff83e8264ecf986ca': 'LINK',
-    '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'UNI',
-  };
-  return SYMBOLS[addr.toLowerCase()] ?? addr.slice(2, 6).toUpperCase();
+  return knownTokenSymbol(addr) ?? addr.slice(2, 6).toUpperCase();
 }
 
 function FlowArrow({ danger }: { danger?: boolean }) {
@@ -954,13 +1235,16 @@ function FlowArrow({ danger }: { danger?: boolean }) {
   );
 }
 
-function ContractBar({ label, name, address, verified, warning }: {
+function ContractBar({ label, name, address, verified, warning, riskCheck }: {
   label: string;
   name?: string;
   address?: string;
   verified: boolean;
   warning?: boolean;
+  /** Resolve recipient-risk signals (first-interaction + contract/EOA). */
+  riskCheck?: boolean;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   // Resolve an on-chain name (ENS / Basename / SPACE ID) when the descriptor
   // didn't supply one — turns a raw hex address into a recognizable identity and
@@ -976,6 +1260,17 @@ function ContractBar({ label, name, address, verified, warning }: {
   const shownName = name ?? ident?.name;
 
   const chainId = React.useContext(SigningChainContext);
+
+  // Recipient-risk: "first time" (address-poisoning defense) + contract/EOA.
+  const [risk, setRisk] = useState<RecipientRisk | null>(null);
+  useEffect(() => {
+    setRisk(null);
+    if (!riskCheck || !address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return;
+    let cancelled = false;
+    resolveRecipientRisk(chainId, address).then((r) => { if (!cancelled) setRisk(r); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [riskCheck, address, chainId]);
+
   const explorer = networkForChainId(chainId)?.explorerURL;
   const isFullAddr = !!address && /^0x[0-9a-fA-F]{40}$/.test(address);
   const explorerUrl = explorer && isFullAddr ? `${explorer.replace(/\/$/, '')}/address/${address}` : undefined;
@@ -1002,6 +1297,15 @@ function ContractBar({ label, name, address, verified, warning }: {
           {!name && ident && <Text style={styles.sourceTag}>{ident.source}</Text>}
           {address && (
             <Text style={styles.contractAddr}>{shortAddr(address)}</Text>
+          )}
+          {/* First-ever interaction with this address → address-poisoning hint. */}
+          {risk?.firstInteraction && (
+            <Text style={[styles.riskTag, styles.riskTagWarn]}>{t('componentsUi.signing.firstTimeTag')}</Text>
+          )}
+          {/* Contract vs wallet — a contract recipient for a plain transfer is
+              worth a glance (could be unintended). */}
+          {risk?.isContract === true && (
+            <Text style={styles.riskTag}>{t('componentsUi.signing.contractTag')}</Text>
           )}
         </View>
       </View>
@@ -1055,11 +1359,80 @@ function GenericFieldRow({ field }: { field: ClearSignField }) {
     <View style={[styles.genRow, field.warning && styles.genRowWarning]}>
       <Text style={styles.genLabel}>{field.label}</Text>
       <Text
-        style={[styles.genValue, field.warning && { color: riskColors().danger }]}
+        style={[
+          styles.genValue,
+          field.warning && { color: riskColors().danger },
+          field.expired && { color: riskColors().caution },
+        ]}
         numberOfLines={2}
       >
         {field.value}
       </Text>
+    </View>
+  );
+}
+
+// ===========================================================================
+// Advanced panel — full untruncated payload + detail-only fields
+// ===========================================================================
+
+function AdvancedPanel({ method, params, clearSign }: {
+  method: string;
+  params: any[];
+  clearSign: ClearSignResult | null;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+
+  // The exact bytes/JSON being signed — untruncated, so a power user can verify.
+  const raw = useMemo(() => {
+    try {
+      if (method === 'eth_sendTransaction') {
+        const tx = params?.[0] ?? {};
+        return [
+          tx.to ? `to: ${tx.to}` : null,
+          tx.value && tx.value !== '0x0' ? `value: ${tx.value}` : null,
+          tx.data && tx.data !== '0x' ? `data: ${tx.data}` : null,
+        ].filter(Boolean).join('\n\n');
+      }
+      if (method.includes('signTypedData')) {
+        const rawData = params?.[1] ?? params?.[0];
+        const obj = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+        return JSON.stringify(obj, null, 2);
+      }
+      if (method === 'personal_sign') return String(params?.[0] ?? '');
+      if (method === 'eth_sign') return String((params?.length > 1 ? params[1] : params?.[0]) ?? '');
+      return '';
+    } catch { return ''; }
+  }, [method, params]);
+
+  const detailFields = clearSign?.fields.filter((f) => f.detail) ?? [];
+  if (!raw && detailFields.length === 0) return null;
+
+  return (
+    <View>
+      <Pressable style={styles.detailsToggle} onPress={() => setOpen((o) => !o)}>
+        <Text style={styles.detailsToggleText}>{t('componentsUi.signing.advancedToggle')}</Text>
+        <ChevronDown
+          size={12} color={color.fg.subtle} strokeWidth={2}
+          style={open ? { transform: [{ rotate: '180deg' }] } : undefined}
+        />
+      </Pressable>
+      {open && (
+        <View style={styles.advancedBody}>
+          {detailFields.map((f, i) => (
+            <View key={i} style={styles.genRow}>
+              <Text style={styles.genLabel}>{f.label}</Text>
+              <Text style={styles.genValue} numberOfLines={4}>{f.value}</Text>
+            </View>
+          ))}
+          {!!raw && (
+            <ScrollView style={styles.advancedRaw} nestedScrollEnabled>
+              <Text style={styles.rawText} selectable>{raw}</Text>
+            </ScrollView>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -1418,20 +1791,6 @@ const styles = createStyles(() => ({
   },
   errorText: { fontSize: text.sm, ...inter.regular, color: color.error.base, flex: 1 },
 
-  // ===== Simulation pre-check =====
-  simFailCard: {
-    flexDirection: 'row', alignItems: 'center', gap: space.md,
-    paddingVertical: space.lg, paddingHorizontal: space.xl,
-    backgroundColor: color.error.soft, borderWidth: 1, borderColor: color.error.base,
-    borderRadius: radius.xl, marginVertical: space.md,
-  },
-  simFailText: { fontSize: text.sm, ...inter.semibold, color: color.error.base, flex: 1, lineHeight: 18 },
-  simOkRow: {
-    flexDirection: 'row', alignItems: 'center', gap: space.sm,
-    paddingVertical: space.sm, paddingHorizontal: space.sm, marginBottom: space.xs,
-  },
-  simOkText: { fontSize: text.xs, ...inter.medium, color: color.success.base },
-
   // ===== Pending (submitted, awaiting receipt) =====
   pendingCard: {
     flexDirection: 'row',
@@ -1457,4 +1816,91 @@ const styles = createStyles(() => ({
     marginTop: space.sm,
   },
   buttonFlex: { flex: 1 },
+
+  // ===== Batch (EIP-5792) breakdown =====
+  batchSub: {
+    fontSize: text.sm, ...inter.regular, color: color.fg.muted,
+    textAlign: 'center', marginTop: -space.md, marginBottom: space.lg,
+  },
+  batchRow: {
+    flexDirection: 'row', alignItems: 'center', gap: space.lg,
+    paddingVertical: space.lg, paddingHorizontal: space.xl,
+    backgroundColor: color.bg.sunken, borderRadius: radius.xl, marginVertical: space.sm,
+  },
+  batchRowDanger: { borderWidth: 1, borderColor: color.error.base },
+  batchNum: {
+    width: 24, height: 24, borderRadius: 12, backgroundColor: color.bg.raised,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  batchNumText: { fontSize: text.xs, ...inter.bold, color: color.fg.muted },
+  batchInfo: { flex: 1, gap: 1 },
+  batchTitle: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
+  batchDetail: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
+  batchAddr: { fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.subtle },
+
+  // ===== Advanced panel =====
+  advancedBody: { gap: space.sm, marginBottom: space.md },
+  advancedRaw: {
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
+    padding: space.lg,
+    maxHeight: 180,
+  },
+
+  // ===== Token-card USD line =====
+  tokenSubRow: {
+    flexDirection: 'row', alignItems: 'center', gap: space.sm,
+    marginTop: space.xs, flexWrap: 'wrap',
+  },
+  tokenUsd: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
+
+  // ===== SIWE verified-domain confirmation row =====
+  siweOkRow: {
+    flexDirection: 'row', alignItems: 'center', gap: space.sm,
+    paddingVertical: space.sm, paddingHorizontal: space.sm, marginBottom: space.xs,
+  },
+  siweOkText: { fontSize: text.xs, ...inter.medium, color: color.success.base },
+
+  // ===== Recipient-risk tags (first-time / contract) =====
+  riskTag: {
+    fontSize: 9, ...inter.semibold, color: color.fg.subtle,
+    backgroundColor: color.bg.raised, overflow: 'hidden',
+    paddingHorizontal: 5, paddingVertical: 1, borderRadius: radius.sm,
+    textTransform: 'uppercase', letterSpacing: 0.3,
+  },
+  riskTagWarn: {
+    color: color.warning.base, backgroundColor: color.warning.soft,
+  },
+
+  // ===== increaseAllowance resulting total =====
+  allowanceTotalRow: {
+    paddingVertical: space.md, paddingHorizontal: space.xl,
+    backgroundColor: color.bg.sunken, borderRadius: radius.lg,
+    marginVertical: space.sm, gap: 2,
+  },
+  allowanceTotalLabel: {
+    fontSize: 10, ...inter.semibold, color: color.fg.subtle,
+    textTransform: 'uppercase' as const, letterSpacing: 0.3,
+  },
+  allowanceTotalValue: {
+    fontSize: text.sm, ...inter.semibold, color: color.fg.base, fontFamily: font.mono,
+  },
+  allowanceTotalUnknown: {
+    fontSize: text.sm, ...inter.medium, color: color.warning.base, lineHeight: 18,
+  },
+
+  // ===== eth_sign danger surface =====
+  ethSignCard: {
+    backgroundColor: color.error.soft, borderRadius: radius['2xl'],
+    padding: space['2xl'], marginVertical: space.md, gap: space.md,
+    borderWidth: 1, borderColor: color.error.base + '40',
+  },
+  ethSignHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  ethSignTitle: { fontSize: text.base, ...inter.bold, color: color.error.base },
+  ethSignBody: { fontSize: text.sm, ...inter.regular, color: color.fg.base, lineHeight: 19 },
+  ethSignHash: {
+    fontSize: 11, fontFamily: font.mono, fontWeight: '400' as const,
+    color: color.fg.muted, backgroundColor: color.bg.sunken,
+    padding: space.md, borderRadius: radius.md,
+  },
 }));

@@ -13,7 +13,7 @@
  */
 
 import type { APIToken, CustomToken } from '@/models/types';
-import { tokenUsdValue } from '@/models/types';
+import { tokenUsdValue, tokenChainId, isNativeToken } from '@/models/types';
 import { getAllNetworksSync, networkId, chainName, nativeSymbol } from '@/models/network';
 import { loadCustomTokens } from './storage';
 import { poolRpcCall, getFailedRpcChains } from './rpc-pool';
@@ -129,6 +129,25 @@ export async function fetchTokens(
 export function clearTokenCache(address?: string): void {
   if (address) tokenCache.delete(address.trim().toLowerCase());
   else tokenCache.clear();
+}
+
+/**
+ * Synchronously read the ERC-20 token addresses the user is known to hold on a
+ * chain, from the in-memory token cache (lowercased). Empty when the cache is
+ * cold — never triggers a fetch. Used by transaction simulation to trust a
+ * *received* token the user already holds (a real token, not a spoofed one).
+ */
+export function getCachedHeldTokens(address: string | undefined, chainId: number): string[] {
+  if (!address) return [];
+  const entry = tokenCache.get(address.trim().toLowerCase());
+  if (!entry?.tokens?.length) return [];
+  const out: string[] = [];
+  for (const t of entry.tokens) {
+    if (tokenChainId(t) === chainId && !isNativeToken(t) && t.tokenAddress) {
+      out.push(t.tokenAddress.toLowerCase());
+    }
+  }
+  return out;
 }
 
 /** Fetch USD to target currency exchange rate (unchanged). */

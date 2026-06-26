@@ -54,7 +54,29 @@
       "bestEffortWarning": "Decoded from the function signature — not a verified descriptor. Review the details carefully.",
       "simWillSucceed": "Simulation passed — expected to succeed",
       "simWillFail": "This transaction is expected to fail — you’d still pay gas.",
-      "simWillFailReason": "Expected to fail: {{reason}} — you’d still pay gas."
+      "simWillFailReason": "Expected to fail: {{reason}} — you’d still pay gas.",
+      "balanceChangesTitle": "Balance changes",
+      "balanceNoAssetsMove": "No assets leave your wallet",
+      "balanceUnverifiedToken": "Unverified token",
+      "balanceUnderfundedNative": "Not enough {{symbol}} to cover this transfer — it's expected to fail on-chain.",
+      "tokenToContractWarning": "This sends tokens to the token's own contract — they'd be lost forever.",
+      "expiredWarning": "The deadline on this transaction has already passed — it's expected to fail.",
+      "signInIntent": "Sign in",
+      "siweDomain": "Site",
+      "siweStatement": "Statement",
+      "siweMismatch": "This sign-in is for {{domain}} but the request came from {{origin}}. Likely a phishing attempt — reject it.",
+      "siweOk": "Verified sign-in to {{domain}}",
+      "ethSignIntent": "Blind signature",
+      "ethSignTitle": "eth_sign — raw hash",
+      "ethSignBody": "This signs an opaque hash. A malicious site can hide a token transfer or approval behind it. Only continue if you fully trust this site and know exactly what you're signing.",
+      "ethSignWarning": "Unverifiable request — most legitimate apps never use eth_sign. Reject unless you're certain.",
+      "firstTimeTag": "First time",
+      "contractTag": "Contract",
+      "holdToConfirm": "Hold to confirm",
+      "advancedToggle": "Advanced — view raw data",
+      "batchIntent": "Batch",
+      "batchSubtitle": "{{count}} transactions, signed together",
+      "batchCall": "Contract call"
     },
     "currency": {
       "title": "Display currency",
@@ -129,7 +151,9 @@
       "expired": "This permit has already expired",
       "noExpiry": "This approval never expires",
       "expiresLabel": "Expires",
-      "chooseAction": "Choose Revoke or Grant to continue."
+      "chooseAction": "Choose Revoke or Grant to continue.",
+      "resultingTotal": "New total allowance",
+      "resultingTotalUnknown": "Adds {{amount}} on top of your current allowance (couldn't read the current amount)"
     }
   }
 }

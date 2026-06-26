@@ -28,7 +28,8 @@ interface Props {
   symbol: string;
   decimals: number;
   decimalsVerified: boolean;
-  logoUrl?: string;
+  /** Per-chain logo URLs (checksummed first, lowercase fallback). */
+  logoUrls?: string[];
   /** Resolved spender name or short address, for the plain-language line. */
   spenderLabel: string;
   /** Token USD price for the ≈$ line (omit to hide it). */
@@ -50,7 +51,7 @@ export function EditableApproveCard(props: Props) {
 // ---------------------------------------------------------------------------
 
 function AmountCard({
-  approval, symbol, decimals, decimalsVerified, logoUrl, spenderLabel, usdPrice, onChange,
+  approval, symbol, decimals, decimalsVerified, logoUrls, spenderLabel, usdPrice, onChange,
 }: Props) {
   const { t } = useTranslation();
   const requested = approval.amountRaw ?? 0n;
@@ -88,7 +89,7 @@ function AmountCard({
     <View style={[styles.card, isReducing && styles.cardSafe]}>
       {/* Token header */}
       <View style={styles.header}>
-        <TokenLogo symbol={symbol} logoUrl={logoUrl} size={28} />
+        <TokenLogo symbol={symbol} logoUrls={logoUrls} size={28} />
         <Text style={styles.symbol}>{symbol}</Text>
         <Text style={styles.capLabel}>
           {isReducing ? t('componentsUi.signingApprove.reduceBy') : t('componentsUi.signingApprove.spendingCap')}

@@ -11,6 +11,16 @@ jest.mock('@/services/storage', () => ({
   getEthereumDataURL: () => 'https://ethereum-data.awesometools.dev',
 }));
 
+// Mock the RPC pool so on-chain reads (ERC-165 supportsInterface, decimals()) are
+// deterministic and never hit the network. Default: reject → callers fall back
+// (decimals→18+unverified, token-standard→erc20). Individual tests override.
+const mockPoolRpcCall = jest.fn(async (_method: string, _params: any[], _chainId: number): Promise<any> => {
+  throw new Error('no rpc');
+});
+jest.mock('@/services/rpc-pool', () => ({
+  poolRpcCall: (...args: any[]) => (mockPoolRpcCall as any)(...args),
+}));
+
 // Mock fetch globally
 const originalFetch = global.fetch;
 beforeAll(() => {
@@ -31,6 +41,7 @@ import {
   resolveTransaction,
   resolveTypedData,
   clearDescriptorCache,
+  clearTokenStandardCache,
   type ClearSignResult,
   type SigningRisk,
 } from '@/services/clear-signing';
@@ -95,6 +106,9 @@ describe('ERC-7730 Clear Signing', () => {
   beforeEach(() => {
     mockDescriptorCache.clear();
     clearDescriptorCache();
+    clearTokenStandardCache();
+    mockPoolRpcCall.mockReset();
+    mockPoolRpcCall.mockRejectedValue(new Error('no rpc'));
   });
 
   describe('resolveTransaction', () => {
@@ -343,8 +357,9 @@ describe('ERC-7730 Clear Signing', () => {
 
   describe('field resolution safety check', () => {
     it('marks the result partial when too many fields fail to resolve', async () => {
-      // Create a descriptor with 4 visible fields but only 1 can resolve
-      mockDescriptorCache.set('/erc7730/ercs/calldata-erc20-tokens.json', {
+      // Contract-specific descriptor (tried before the generic interface path) with
+      // 6 visible fields but only 2 can resolve.
+      mockDescriptorCache.set('/erc7730/calldata/eip155-1/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.json', {
         context: { contract: {} },
         display: {
           formats: {
@@ -416,6 +431,152 @@ describe('ERC-7730 Clear Signing', () => {
       expect(send!.value).toContain('1,000');
       expect(recv!.value).toContain('WETH');
       expect(recv!.value).toContain('0.5');
+    });
+  });
+
+  describe('ERC-20/721/1155 selector disambiguation (ERC-165)', () => {
+    const pad = (h: string) => h.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+    const FROM = '0xaf5e8917831ef08a64e18b2cde9f8f5d32c7b3e1';
+    const TO = '0xd8da6bf26964af9d7eed9e03e53415d37aa96045';
+    const USDT = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+    const BAYC = '0xBC4CA0EdA7647A8aB7C2061c2E118A18a936f13D';
+
+    // transferFrom(from, to, value/tokenId) = 0x23b872dd
+    const transferFrom = (third: bigint) =>
+      '0x23b872dd' + pad(FROM) + pad(TO) + pad(third.toString(16));
+
+    /** Make supportsInterface(0x<id>) answer true for the given interface id. */
+    const supportsInterface = (trueId: string) => {
+      mockPoolRpcCall.mockImplementation(async (_m: string, params: any[]) => {
+        const data: string = params?.[0]?.data ?? '';
+        if (data.includes('01ffc9a7')) {
+          const yes = data.includes(trueId);
+          return { result: '0x' + (yes ? '1' : '0').padStart(64, '0') };
+        }
+        throw new Error('no rpc'); // decimals() etc. → fall back
+      });
+    };
+
+    it('renders ERC-20 transferFrom as a token amount (no ERC-165)', async () => {
+      // USDT doesn't implement ERC-165 → default erc20. 100 USDT (6dp).
+      const r = await resolveTransaction(USDT, transferFrom(100000000n), '0x0', 1);
+      expect(r).not.toBeNull();
+      expect(r!.intent).toBe('Transfer');
+      const amount = r!.fields.find((f) => f.role === 'send-amount');
+      expect(amount!.value).toContain('USDT');
+      expect(amount!.value).toContain('100');
+      // Stablecoin → cheap ≈$ valuation (peg $1), no price engine.
+      expect(amount!.usd).toBe('$100.00');
+    });
+
+    it('renders ERC-721 transferFrom as an NFT token id (ERC-165 = 0x80ac58cd)', async () => {
+      supportsInterface('80ac58cd');
+      // tokenId 6529 (0x1981) must render as "#6,529", NOT a token amount.
+      const r = await resolveTransaction(BAYC, transferFrom(6529n), '0x0', 1);
+      expect(r).not.toBeNull();
+      expect(r!.intent).toBe('Transfer NFT');
+      const tokenId = r!.fields.find((f) => f.label === 'Token ID');
+      expect(tokenId!.value).toBe('#6,529');
+      // Must NOT be misread as a fungible amount.
+      expect(r!.fields.some((f) => f.role === 'send-amount')).toBe(false);
+    });
+
+    it('renders ERC-721 safeTransferFrom(...,bytes) as NFT without an ERC-165 probe', async () => {
+      // 0xb88d4fde is ERC-721-only — no on-chain call needed.
+      const data = '0xb88d4fde' + pad(FROM) + pad(TO) + pad((42n).toString(16)) + pad('a0') + pad('0');
+      const r = await resolveTransaction(BAYC, data, '0x0', 1);
+      expect(r).not.toBeNull();
+      expect(r!.intent).toBe('Transfer NFT');
+      expect(mockPoolRpcCall).not.toHaveBeenCalled();
+    });
+
+    it('renders ERC-1155 safeTransferFrom with quantity', async () => {
+      // safeTransferFrom(from,to,id,amount,data) = 0xf242432a (1155-only selector).
+      const data = '0xf242432a' + pad(FROM) + pad(TO) + pad((7n).toString(16)) +
+        pad((3n).toString(16)) + pad('a0') + pad('0');
+      const r = await resolveTransaction(BAYC, data, '0x0', 1);
+      expect(r).not.toBeNull();
+      expect(r!.intent).toBe('Transfer NFT');
+      const id = r!.fields.find((f) => f.label === 'Token ID');
+      const qty = r!.fields.find((f) => f.label === 'Quantity');
+      expect(id!.value).toBe('#7');
+      expect(qty!.value).toBe('3');
+    });
+  });
+
+  describe('Wave 2 protocol descriptors (local, no server descriptor)', () => {
+    const V3_ROUTER02 = '0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45';
+    const V3_EXACT_INPUT_SINGLE = '0x04e45aaf000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200000000000000000000000000000000000000000000000000000000000001f4000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045000000000000000000000000000000000000000000000000000000003b9aca000000000000000000000000000000000000000000000000000429d069189e00000000000000000000000000000000000000000000000000000000000000000000';
+    const V3_EXACT_INPUT = '0xb858183f00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000080000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045000000000000000000000000000000000000000000000000000000003b9aca000000000000000000000000000000000000000000000000000429d069189e0000000000000000000000000000000000000000000000000000000000000000002ba0b86991c6218b36c1d19d4a2e9eb0ce3606eb480001f4c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2000000000000000000000000000000000000000000';
+
+    it('Uniswap V3 exactInputSingle (static tuple)', async () => {
+      const r = await resolveTransaction(V3_ROUTER02, V3_EXACT_INPUT_SINGLE, '0x0', 1);
+      expect(r).not.toBeNull();
+      expect(r!.intent).toBe('Swap');
+      expect(r!.contractName).toBe('Uniswap V3 Router');
+      const send = r!.fields.find((f) => f.role === 'send-amount');
+      const recv = r!.fields.find((f) => f.role === 'receive-amount');
+      expect(send!.value).toContain('1,000');
+      expect(send!.value).toContain('USDC');
+      expect(recv!.value).toContain('0.3');
+      expect(recv!.value).toContain('WETH');
+    });
+
+    it('Uniswap V3 exactInput (tokens encoded in bytes path)', async () => {
+      const r = await resolveTransaction(V3_ROUTER02, V3_EXACT_INPUT, '0x0', 1);
+      expect(r).not.toBeNull();
+      expect(r!.intent).toBe('Swap');
+      const send = r!.fields.find((f) => f.role === 'send-amount');
+      const recv = r!.fields.find((f) => f.role === 'receive-amount');
+      // tokenIn = path[0:20] = USDC; tokenOut = path[-20:] = WETH
+      expect(send!.value).toContain('USDC');
+      expect(recv!.value).toContain('WETH');
+    });
+
+    it('Lido stake (submit — amount is msg.value)', async () => {
+      const r = await resolveTransaction(
+        '0xae7ab96520de3a18e5e111b5eaab095312d7fe84',
+        '0xa1903eab0000000000000000000000000000000000000000000000000000000000000000',
+        '0xde0b6b3a7640000', // 1 ETH
+        1,
+      );
+      expect(r).not.toBeNull();
+      expect(r!.intent).toBe('Stake');
+      expect(r!.fields[0].value).toContain('1');
+    });
+
+    it('wstETH wrap (token = stETH via metadata constant)', async () => {
+      const r = await resolveTransaction(
+        '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0',
+        '0xea598cb00000000000000000000000000000000000000000000000000de0b6b3a7640000',
+        '0x0',
+        1,
+      );
+      expect(r).not.toBeNull();
+      expect(r!.intent).toBe('Wrap');
+      expect(r!.fields[0].value).toContain('stETH');
+      expect(r!.fields[0].value).toContain('1');
+    });
+
+    it('1inch V5 swap (SwapDescription tuple)', async () => {
+      const data = '0x12aa3caf0000000000000000000000001111111254eeb25477b68fb85ed929f73a960582000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000001111111254eeb25477b68fb85ed929f73a960582000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045000000000000000000000000000000000000000000000000000000003b9aca000000000000000000000000000000000000000000000000000429d069189e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
+      const r = await resolveTransaction('0x1111111254eeb25477b68fb85ed929f73a960582', data, '0x0', 1);
+      expect(r).not.toBeNull();
+      expect(r!.intent).toBe('Swap');
+      expect(r!.contractName).toBe('1inch Router');
+      const send = r!.fields.find((f) => f.role === 'send-amount');
+      expect(send!.value).toContain('1,000');
+      expect(send!.value).toContain('USDC');
+    });
+
+    it('Seaport fulfillBasicOrder (NFT buy)', async () => {
+      const data = '0xfb0f3ee10000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000de0b6b3a764000000000000000000000000000022222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000bc4ca0eda7647a8ab7c2061c2e118a18a936f13d000000000000000000000000000000000000000000000000000000000000002a00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000713fb300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000240000000000000000000000000000000000000000000000000000000000000026000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000';
+      const r = await resolveTransaction('0x00000000000000adc04c56bf30ac9d3c0aaf14dc', data, '0x0', 1);
+      expect(r).not.toBeNull();
+      expect(r!.intent).toBe('Buy NFT');
+      expect(r!.contractName).toBe('Seaport');
+      const tokenId = r!.fields.find((f) => f.label === 'Token ID');
+      expect(tokenId!.value).toBe('#42');
     });
   });
 });

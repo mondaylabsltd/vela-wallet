@@ -17,6 +17,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { poolRpcCall } from '@/services/rpc-pool';
 import { MULTICALL3, SEL, encAggregate3, decAggregate3, decString, decU8, type Call3 } from '@/services/abi';
+import { knownToken } from '@/services/tokens';
 
 export interface TokenMetadata {
   symbol: string;
@@ -51,7 +52,16 @@ export async function resolveTokenMetadata(
   addresses: string[],
 ): Promise<Map<string, TokenMetadata>> {
   const out = new Map<string, TokenMetadata>();
-  const want = [...new Set(addresses.map((a) => a?.toLowerCase()).filter(Boolean) as string[])];
+  const all = [...new Set(addresses.map((a) => a?.toLowerCase()).filter(Boolean) as string[])];
+  if (all.length === 0) return out;
+
+  // 0) Static well-known tokens (shared table) — no RPC, no cache lookup needed.
+  const want: string[] = [];
+  for (const a of all) {
+    const k = knownToken(a);
+    if (k) out.set(a, { symbol: k.symbol, decimals: k.decimals });
+    else want.push(a);
+  }
   if (want.length === 0) return out;
 
   // 1) In-memory cache (covers repeat scans within the session).

@@ -15,6 +15,8 @@ import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
 import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, rawBundlerGasCost, GAS_TIER_MULTIPLIERS, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
+import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
+import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
 import { findAccountByCredentialId, saveTransaction, updateTransaction, loadTransactions } from '@/services/storage';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, parseBundlerUnderfunded, type FundingNeeded } from '@/services/bundler-service';
@@ -84,6 +86,13 @@ function amountToWeiHex(amount: string, decimals: number): string {
 /** Convert a human-readable balance string (e.g. "0.0113") to BigInt wei. */
 function balanceToWei(balance: string, decimals: number): bigint {
   return BigInt('0x' + amountToWeiHex(balance, decimals));
+}
+
+/** ERC-20 `transfer(address,uint256)` calldata, for the balance-change pre-check. */
+function encErc20Transfer(to: string, amountHex: string): string {
+  const a = to.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+  const amt = amountHex.replace(/^0x/, '').padStart(64, '0');
+  return '0xa9059cbb' + a + amt;
 }
 
 /** A zero-balance native token for a chain the user holds nothing on (locked EIP-681 send). */
@@ -225,6 +234,8 @@ export default function SendScreen() {
   const [showContacts, setShowContacts] = useState(false);
   const [amountWarning, setAmountWarning] = useState<string | null>(null);
   const [recipientIdentity, setRecipientIdentity] = useState<RecipientIdentity | null>(null);
+  // Balance-change simulation for the confirm step (null = unknown / not run).
+  const [sim, setSim] = useState<AssetSimResult | null>(null);
 
   // Prefetch account credential + webauthn module while user reviews confirm screen
   const amountInputRef = useRef<TextInput>(null);
@@ -459,6 +470,32 @@ export default function SendScreen() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [recipient]);
+
+  // Simulate the send (revert pre-check + net balance changes) once the user
+  // reaches the confirm step — same surface the dApp signing sheet shows.
+  // Best-effort: any failure leaves `sim` null and confirm shows nothing extra.
+  useEffect(() => {
+    if (step !== 'confirm' || !selectedToken || !activeAccount || !isValidAddress(recipient)) {
+      setSim(null);
+      return;
+    }
+    let cancelled = false;
+    setSim(null);
+    try {
+      const chainId = tokenChainId(selectedToken);
+      const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
+      const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
+      const call = isNativeToken(selectedToken)
+        ? { to: recipient, value: '0x' + weiHex }
+        : { to: selectedToken.tokenAddress!, data: encErc20Transfer(recipient, weiHex) };
+      simulateAssetChanges(activeAccount.address, [call], chainId)
+        .then((r) => { if (!cancelled) setSim(r); })
+        .catch(() => { if (!cancelled) setSim(null); });
+    } catch {
+      /* malformed amount → no sim */
+    }
+    return () => { cancelled = true; };
+  }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate]);
 
   const handleSelectToken = (token: APIToken) => {
     setSelectedToken(token);
@@ -1057,6 +1094,10 @@ export default function SendScreen() {
               <Text style={styles.transferAddr}>{shortAddr(recipient)}</Text>
             </View>
           </VelaCard>
+
+          {/* Simulation — revert pre-check + net balance changes (shared render
+              path with the dApp signing sheet). */}
+          <BalanceChangePreview result={sim} chainId={tokenChainId(selectedToken)} />
 
           {/* Gas Details — collapsed by default, fee shown in toggle row */}
           <Pressable onPress={() => setGasExpanded(!gasExpanded)} style={styles.gasToggleRow}>

@@ -124,14 +124,25 @@ export function tokenLogoURLs(t: APIToken): string[] {
     return [`${getEthereumDataURL()}/chainlogos/eip155-${logoChain}.png`];
   }
   if (t.tokenAddress) {
-    const base = `${getEthereumDataURL()}/assets/eip155-${cid}`;
-    const cs = checksumAddress(t.tokenAddress);
-    const lc = t.tokenAddress.toLowerCase();
-    const urls = [`${base}/${cs}/logo.png`];
-    if (lc !== cs) urls.push(`${base}/${lc}/logo.png`);
-    return urls;
+    return tokenLogoURLsByAddress(cid, t.tokenAddress);
   }
   return [];
+}
+
+/**
+ * Per-chain logo URLs for a raw (chainId, address) pair — for surfaces that have
+ * an address but no APIToken (e.g. the signing sheet). Mirrors `tokenLogoURLs`:
+ * checksummed first, lowercase fallback. Keyed by the token's OWN chain, so a
+ * Polygon/Base token resolves its logo correctly instead of assuming mainnet.
+ */
+export function tokenLogoURLsByAddress(chainId: number, tokenAddress: string): string[] {
+  if (!tokenAddress) return [];
+  const base = `${getEthereumDataURL()}/assets/eip155-${chainId}`;
+  const cs = checksumAddress(tokenAddress);
+  const lc = tokenAddress.toLowerCase();
+  const urls = [`${base}/${cs}/logo.png`];
+  if (lc !== cs) urls.push(`${base}/${lc}/logo.png`);
+  return urls;
 }
 
 // MARK: - API NFT

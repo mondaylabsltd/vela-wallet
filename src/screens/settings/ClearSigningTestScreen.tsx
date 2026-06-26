@@ -211,8 +211,9 @@ const SCENARIOS: {
       id: 'test-1inch',
       method: 'eth_sendTransaction',
       params: [{
-        to: '0x111111125421cA6dc452d289314280a0f8842A65',
-        data: '0x12aa3caf000000000000000000000000111111125421ca6dc452d289314280a0f8842a65000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200000000000000000000000000000000000000000000000000000000003b9aca000000000000000000000000000000000000000000000000000de0b6b3a7640000',
+        to: '0x1111111254EEB25477B68fb85Ed929f73A960582', // 1inch Router V5
+        // swap(executor, SwapDescription{USDC→WETH, 1000 USDC, ≥0.3 WETH, recipient}, permit, data)
+        data: '0x12aa3caf0000000000000000000000001111111254eeb25477b68fb85ed929f73a960582000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000001111111254eeb25477b68fb85ed929f73a960582000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045000000000000000000000000000000000000000000000000000000003b9aca000000000000000000000000000000000000000000000000000429d069189e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
         value: '0x0',
       }],
       origin: 'clear-signing-test',
@@ -366,6 +367,119 @@ const SCENARIOS: {
         to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
         // approve(address,uint256) with 500 USDC (500 * 1e6 = 0x1DCD6500)
         data: '0x095ea7b30000000000000000000000003fc91a3afd70395cd496c647d5a6cc9d4b2b7fad000000000000000000000000000000000000000000000000000000001dcd6500',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+
+  // --- eth_sign raw hash (blind-sign trap) ---
+  {
+    id: 'eth-sign',
+    labelKey: 'clearSigning.scenarioEthSign',
+    subtitleKey: 'clearSigning.scenarioEthSignSub',
+    icon: <ShieldAlert size={18} color="#d43a2a" strokeWidth={2} />,
+    iconBg: '#FEF2F2',
+    request: {
+      id: 'test-eth-sign',
+      method: 'eth_sign',
+      params: [
+        '0xaF5e8917831Ef08A64e18b2Cde9f8f5D32C7b3e1',
+        '0x9c22ff5f21f0b81b113e63f7db6da94fedef11b2119b4088b89664fb9a3cb658',
+      ],
+      origin: 'clear-signing-test',
+    },
+  },
+
+  // --- SIWE bound to a different domain (phishing) ---
+  {
+    id: 'siwe-phish',
+    labelKey: 'clearSigning.scenarioSiwePhish',
+    subtitleKey: 'clearSigning.scenarioSiwePhishSub',
+    icon: <Pen size={18} color="#d43a2a" strokeWidth={2} />,
+    iconBg: '#FEF2F2',
+    request: {
+      id: 'test-siwe-phish',
+      method: 'personal_sign',
+      params: [
+        '0x' + Array.from(new TextEncoder().encode(
+          'app.uniswap.org wants you to sign in with your Ethereum account:\n' +
+          '0xaF5e8917831Ef08A64e18b2Cde9f8f5D32C7b3e1\n\n' +
+          'Sign in to Uniswap\n\n' +
+          'URI: https://app.uniswap.org\nVersion: 1\nChain ID: 1\nNonce: 8a3b9f2c\nIssued At: 2026-06-01T00:00:00.000Z'
+        )).map(b => b.toString(16).padStart(2, '0')).join(''),
+        '0xaF5e8917831Ef08A64e18b2Cde9f8f5D32C7b3e1',
+      ],
+      origin: 'clear-signing-test',
+    },
+  },
+
+  // --- increaseAllowance (increment semantics) ---
+  {
+    id: 'increase-allowance',
+    labelKey: 'clearSigning.scenarioIncreaseAllowance',
+    subtitleKey: 'clearSigning.scenarioIncreaseAllowanceSub',
+    icon: <CheckCircle size={18} color="#d4890a" strokeWidth={2} />,
+    iconBg: '#FFF8F0',
+    request: {
+      id: 'test-increase-allowance',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+        // increaseAllowance(address,uint256) = 0x39509351, +100 USDC (0x05F5E100)
+        data: '0x395093510000000000000000000000003fc91a3afd70395cd496c647d5a6cc9d4b2b7fad0000000000000000000000000000000000000000000000000000000005f5e100',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+
+  // --- EIP-5792 batch (wallet_sendCalls) ---
+  {
+    id: 'batch-calls',
+    labelKey: 'clearSigning.scenarioBatch',
+    subtitleKey: 'clearSigning.scenarioBatchSub',
+    icon: <Zap size={18} color="#6c5ce7" strokeWidth={2} />,
+    iconBg: '#EEF0FF',
+    request: {
+      id: 'test-batch-calls',
+      method: 'wallet_sendCalls',
+      params: [{
+        chainId: '0x1',
+        from: '0xaF5e8917831Ef08A64e18b2Cde9f8f5D32C7b3e1',
+        calls: [
+          {
+            // approve(spender, 500 USDC)
+            to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+            data: '0x095ea7b30000000000000000000000003fc91a3afd70395cd496c647d5a6cc9d4b2b7fad000000000000000000000000000000000000000000000000000000001dcd6500',
+            value: '0x0',
+          },
+          {
+            // transfer(recipient, 100 USDC)
+            to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+            data: '0xa9059cbb000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa960450000000000000000000000000000000000000000000000000000000005f5e100',
+            value: '0x0',
+          },
+        ],
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+
+  // --- Expired swap deadline ---
+  {
+    id: 'expired-swap',
+    labelKey: 'clearSigning.scenarioExpiredSwap',
+    subtitleKey: 'clearSigning.scenarioExpiredSwapSub',
+    icon: <ArrowRightLeft size={18} color="#d4890a" strokeWidth={2} />,
+    iconBg: '#FFF8F0',
+    request: {
+      id: 'test-expired-swap',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2 Router
+        // swapExactTokensForTokens(1000 USDC, ≥0.5 WETH, [USDC,WETH], to, deadline=1700000000 / 2023-11-14)
+        data: '0x38ed1739000000000000000000000000000000000000000000000000000000003b9aca0000000000000000000000000000000000000000000000000006f05b59d3b2000000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045000000000000000000000000000000000000000000000000000000006553f1000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
         value: '0x0',
       }],
       origin: 'clear-signing-test',

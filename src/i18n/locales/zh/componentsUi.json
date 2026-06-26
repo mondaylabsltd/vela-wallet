@@ -54,7 +54,11 @@
       "bestEffortWarning": "根据函数签名解析得出 — 非经过验证的描述符，请仔细核对细节。",
       "simWillSucceed": "模拟通过 — 预计可成功",
       "simWillFail": "这笔交易预计会失败 — 但仍会扣除 gas。",
-      "simWillFailReason": "预计会失败：{{reason}} — 但仍会扣除 gas。"
+      "simWillFailReason": "预计会失败：{{reason}} — 但仍会扣除 gas。",
+      "balanceChangesTitle": "余额变化",
+      "balanceNoAssetsMove": "没有资产离开你的钱包",
+      "balanceUnverifiedToken": "未验证代币",
+      "balanceUnderfundedNative": "{{symbol}} 余额不足以支付这笔转账 — 预计会在链上失败。"
     },
     "currency": {
       "title": "显示货币",

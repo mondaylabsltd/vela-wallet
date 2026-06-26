@@ -136,6 +136,14 @@ describe('approval-guard', () => {
       const d = detectApproval(...args(txReq(USDC, setApprovalForAllCalldata(SPENDER, false))));
       expect(d).toMatchObject({ isBooleanGrant: true, isUnbounded: false, isReducing: true });
     });
+    test('Permit2 on-chain approve (unlimited uint160)', () => {
+      // approve(address token, address spender, uint160 amount, uint48 expiration)
+      const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+      const cd = '0x87517c45' + addrWord(USDC) + addrWord(SPENDER) + amtWord(MAX_U160) + amtWord(1750000000n);
+      const d = detectApproval(...args(txReq(PERMIT2, cd)));
+      // token is the FIRST arg, not the tx `to` (the Permit2 contract).
+      expect(d).toMatchObject({ kind: 'permit2-single', tokenAddress: USDC.toLowerCase(), spender: SPENDER.toLowerCase(), amountBits: 160, isUnbounded: true, editable: true });
+    });
     test('non-approval calldata → null', () => {
       // transfer(address,uint256)
       const transfer = '0xa9059cbb' + addrWord(SPENDER) + amtWord(1000n);
@@ -269,6 +277,12 @@ describe('approval-guard', () => {
     });
     test('throws on unlimited Permit2 single', () => {
       const req = permit2Single(MAX_U160.toString());
+      expect(() => enforceNoUnlimited(req.method, req.params)).toThrow(UnlimitedApprovalError);
+    });
+    test('throws on unlimited Permit2 on-chain approve (calldata)', () => {
+      const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3';
+      const cd = '0x87517c45' + addrWord(USDC) + addrWord(SPENDER) + amtWord(MAX_U160) + amtWord(1750000000n);
+      const req = txReq(PERMIT2, cd);
       expect(() => enforceNoUnlimited(req.method, req.params)).toThrow(UnlimitedApprovalError);
     });
     test('allows a finite approve', () => {

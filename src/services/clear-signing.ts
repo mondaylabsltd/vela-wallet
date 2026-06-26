@@ -19,7 +19,8 @@ import { keccak256, create2Address } from '@/services/eth-crypto';
 import { toHex, fromHex } from '@/services/hex';
 import { decodeCalldata, matchSelector, parseSignature, type AbiParam, type DecodedValue } from '@/services/abi-decode';
 import { lookupSelector } from '@/services/selector-registry';
-import { localDescriptor, knownContract } from '@/services/local-descriptors';
+import { localDescriptor, knownContract, interfaceDescriptor, INTERFACE_IDS, type TokenStandard } from '@/services/local-descriptors';
+import { knownTokenSymbol, knownTokenDecimals } from '@/services/tokens';
 import type { TypedData } from '@/services/eip712';
 import { poolRpcCall } from '@/services/rpc-pool';
 
@@ -79,6 +80,12 @@ export interface ClearSignField {
   role?: FieldRole;
   /** Whether this field should be in the collapsed details panel */
   detail?: boolean;
+  /** A date field whose timestamp is already in the past → caution. */
+  expired?: boolean;
+  /** Full lowercased address for addressName fields (identity/risk lookups). */
+  address?: string;
+  /** Pre-formatted USD valuation (e.g. "$1,000.00"), when cheaply known. */
+  usd?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,6 +159,129 @@ function buildDeployResult(to: string | undefined, data: string): ClearSignResul
 }
 
 // ---------------------------------------------------------------------------
+// ERC-165 token-standard detection (ERC-20 vs ERC-721 vs ERC-1155)
+//
+// `transferFrom` / `approve` share a selector across ERC-20 and ERC-721, and
+// `setApprovalForAll` is NFT-only — so a wrong guess renders an *amount* as a
+// *tokenId* or vice versa on a security surface. We probe ERC-165
+// `supportsInterface` on-chain and cache the verdict. ERC-20s typically don't
+// implement ERC-165, so a revert/empty answer correctly resolves to ERC-20.
+// ---------------------------------------------------------------------------
+
+const SUPPORTS_INTERFACE_SELECTOR = '0x01ffc9a7'; // supportsInterface(bytes4)
+const INTERFACE_DETECT_TIMEOUT_MS = 3_000;
+const tokenStandardCache = new Map<string, TokenStandard>(); // `${chainId}:${addr}`
+
+/** Reset the ERC-165 standard cache (tests). */
+export function clearTokenStandardCache(): void {
+  tokenStandardCache.clear();
+}
+
+/**
+ * Returns true/false for a definitive ERC-165 answer (result word or a revert),
+ * or null when the chain was UNREACHABLE — the caller must not treat null the
+ * same as false, or a transient RPC outage would permanently cache "erc20" and
+ * later mis-render a real NFT's tokenId as a fungible amount.
+ */
+async function callSupportsInterface(chainId: number, addr: string, interfaceId4: string): Promise<boolean | null> {
+  // bytes4 occupies the high-order bytes of the word: id || 28 zero bytes.
+  const data = SUPPORTS_INTERFACE_SELECTOR + interfaceId4 + '0'.repeat(56);
+  try {
+    const res = await poolRpcCall('eth_call', [{ to: addr, data }, 'latest'], chainId);
+    if (res?.error) return false; // reverts → not ERC-165 (e.g. a plain ERC-20)
+    if (typeof res?.result === 'string' && res.result.length >= 66) {
+      return BigInt(res.result) === 1n;
+    }
+    return null; // empty/garbage result → unknown
+  } catch {
+    return null; // RPC unreachable → unknown (NOT "unsupported")
+  }
+}
+
+/**
+ * Detect a token's standard via ERC-165. Falls back to ERC-20 (the common case)
+ * on timeout or when the chain is unreachable — but only CACHES a definitive
+ * verdict, so neither a slow first render nor a transient RPC failure poisons
+ * later renders. Re-probes until it gets a real answer.
+ */
+async function detectTokenStandard(chainId: number, addr: string): Promise<TokenStandard> {
+  const key = `${chainId}:${addr.toLowerCase()}`;
+  const cached = tokenStandardCache.get(key);
+  if (cached) return cached;
+
+  const probe = (async (): Promise<TokenStandard> => {
+    const [is721, is1155] = await Promise.all([
+      callSupportsInterface(chainId, addr, INTERFACE_IDS.erc721),
+      callSupportsInterface(chainId, addr, INTERFACE_IDS.erc1155),
+    ]);
+    if (is1155 === true) { tokenStandardCache.set(key, 'erc1155'); return 'erc1155'; }
+    if (is721 === true) { tokenStandardCache.set(key, 'erc721'); return 'erc721'; }
+    // Only cache "not an NFT" when BOTH probes definitively said false. If either
+    // is null (RPC unreachable), render as ERC-20 now but DON'T cache — re-probe.
+    if (is721 === false && is1155 === false) { tokenStandardCache.set(key, 'erc20'); return 'erc20'; }
+    return 'erc20';
+  })();
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<TokenStandard>((r) => {
+    timer = setTimeout(() => r('erc20'), INTERFACE_DETECT_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([probe, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer); // never leak the fallback timer
+  }
+}
+
+// Standard token-method selectors. transferFrom/approve collide ERC-20↔ERC-721;
+// setApprovalForAll is NFT-only; the 5-arg safeTransferFrom/safeBatch are 1155.
+const SEL_TRANSFER = '0xa9059cbb';
+const SEL_TRANSFER_FROM = '0x23b872dd';
+const SEL_APPROVE = '0x095ea7b3';
+const SEL_SAFE_TRANSFER_721 = '0x42842e0e';      // safeTransferFrom(addr,addr,uint256)
+const SEL_SAFE_TRANSFER_721_DATA = '0xb88d4fde'; // safeTransferFrom(addr,addr,uint256,bytes)
+const SEL_SET_APPROVAL_ALL = '0xa22cb465';
+const SEL_SAFE_TRANSFER_1155 = '0xf242432a';     // safeTransferFrom(addr,addr,uint256,uint256,bytes)
+const SEL_SAFE_BATCH_1155 = '0x2eb2c2d6';        // safeBatchTransferFrom(...)
+
+const TOKEN_STD_SELECTORS = new Set([
+  SEL_TRANSFER, SEL_TRANSFER_FROM, SEL_APPROVE,
+  SEL_SAFE_TRANSFER_721, SEL_SAFE_TRANSFER_721_DATA, SEL_SET_APPROVAL_ALL,
+  SEL_SAFE_TRANSFER_1155, SEL_SAFE_BATCH_1155,
+]);
+
+function selectorOf(data: string): string {
+  return '0x' + (data.startsWith('0x') ? data.slice(2) : data).slice(0, 8).toLowerCase();
+}
+
+/**
+ * Resolve a standard token method against the right interface descriptor,
+ * disambiguating shared selectors via ERC-165. Replaces the (incomplete) ERC
+ * fallbacks for these selectors, which mis-route a shared selector.
+ */
+async function resolveTokenStandard(
+  selector: string,
+  data: string,
+  value: string | undefined,
+  toAddr: string,
+  chainId: number,
+): Promise<ClearSignResult | null> {
+  let kind: TokenStandard;
+  if (selector === SEL_SAFE_TRANSFER_1155 || selector === SEL_SAFE_BATCH_1155) {
+    kind = 'erc1155';
+  } else if (selector === SEL_SAFE_TRANSFER_721 || selector === SEL_SAFE_TRANSFER_721_DATA) {
+    kind = 'erc721';
+  } else if (selector === SEL_TRANSFER) {
+    kind = 'erc20'; // ERC-20 only — never an NFT
+  } else {
+    // transferFrom / approve / setApprovalForAll — query the chain.
+    kind = await detectTokenStandard(chainId, toAddr);
+    if (selector === SEL_SET_APPROVAL_ALL && kind === 'erc20') kind = 'erc721'; // NFT-only method
+  }
+  return resolveCalldataDescriptor(interfaceDescriptor(kind), data, value, toAddr, chainId, false);
+}
+
+// ---------------------------------------------------------------------------
 // eth_sendTransaction clear signing
 // ---------------------------------------------------------------------------
 
@@ -187,24 +317,34 @@ export async function resolveTransaction(
     if (r) return r; // local descriptor lacks this selector → fall through
   }
 
-  // 1. Try contract-specific descriptor (filenames are lowercase on the server)
-  let descriptor = await fetchDescriptor(`/erc7730/calldata/eip155-${chainId}/${toAddr}.json`);
-  let isContractSpecific = !!descriptor;
-
-  // 2. Fallback to ERC standards
-  if (!descriptor) {
-    descriptor = await tryErcFallbacks(data);
+  // 1. Contract-specific descriptor (filenames are lowercase on the server) —
+  // richest source, wins over the generic interface descriptors below.
+  const descriptor = await fetchDescriptor(`/erc7730/calldata/eip155-${chainId}/${toAddr}.json`);
+  if (descriptor) {
+    const r = await resolveCalldataDescriptor(descriptor, data, value, toAddr, chainId, true);
+    if (r) return r;
   }
 
-  if (!descriptor) {
-    // 3. No descriptor — DON'T blind-sign lazily. Recover the function from a
-    // 4-byte selector database and decode it generically (best-effort).
-    const best = await resolveBySelector(data, toAddr);
-    if (best) return best;
-    return null; // genuinely couldn't decode → caller shows blind-sign + risk
+  // 2. Standard token methods (transfer/transferFrom/approve/safe*/setApprovalForAll)
+  // — resolve locally with the ERC-165-disambiguated interface descriptor. Must
+  // precede the ERC fallbacks, which mis-route the shared transferFrom/approve.
+  const selector = selectorOf(data);
+  if (TOKEN_STD_SELECTORS.has(selector)) {
+    const r = await resolveTokenStandard(selector, data, value, toAddr, chainId);
+    if (r) return r;
   }
 
-  return resolveCalldataDescriptor(descriptor, data, value, toAddr, chainId, isContractSpecific);
+  // 3. Other ERC standards (ERC-4626 vaults, etc.)
+  const ercDescriptor = await tryErcFallbacks(data);
+  if (ercDescriptor) {
+    return resolveCalldataDescriptor(ercDescriptor, data, value, toAddr, chainId, false);
+  }
+
+  // 4. No descriptor — DON'T blind-sign lazily. Recover the function from a
+  // 4-byte selector database and decode it generically (best-effort).
+  const best = await resolveBySelector(data, toAddr);
+  if (best) return best;
+  return null; // genuinely couldn't decode → caller shows blind-sign + risk
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +363,7 @@ const DECIMALS_WARM_TIMEOUT_MS = 4_000;
 /** Prefetch decimals() for any token addresses we don't already know. */
 async function warmTokenDecimals(chainId: number, addrs: string[]): Promise<void> {
   const unique = [...new Set(addrs.map((a) => a.toLowerCase()))].filter(
-    (a) => KNOWN_DECIMALS[a] === undefined && !decimalsCache.has(`${chainId}:${a}`),
+    (a) => knownTokenDecimals(a) === undefined && !decimalsCache.has(`${chainId}:${a}`),
   );
   if (unique.length === 0) return;
   const lookups = Promise.allSettled(
@@ -239,8 +379,14 @@ async function warmTokenDecimals(chainId: number, addrs: string[]): Promise<void
   );
   // Never let a slow/down RPC stall the signing sheet: cap the wait. Anything
   // still unresolved falls back to 18 decimals + a warning (the safe path), and
-  // the in-flight lookups still populate the cache for next time.
-  await Promise.race([lookups, new Promise((r) => setTimeout(r, DECIMALS_WARM_TIMEOUT_MS))]);
+  // the in-flight lookups still populate the cache for next time. Clear the timer
+  // once the lookups settle so it never dangles past the await.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([lookups, new Promise((r) => { timer = setTimeout(r, DECIMALS_WARM_TIMEOUT_MS); })]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /** Token addresses referenced by tokenAmount fields, for decimals prefetch. */
@@ -739,6 +885,9 @@ interface FormattedField {
   tokenAddress?: string;
   warning?: boolean;
   unverified?: boolean;
+  expired?: boolean;
+  address?: string;
+  usd?: string;
 }
 
 function formatField(
@@ -774,7 +923,7 @@ function formatField(
       return formatEnum(rawValue, params, metadata);
 
     case 'nftName':
-      return { value: String(rawValue ?? 'NFT'), format };
+      return formatNftName(rawValue);
 
     case 'unit':
       return formatUnit(rawValue, params);
@@ -848,12 +997,34 @@ function formatTokenAmount(
     : 'tokens';
   const displayWithSymbol = `${display} ${symbol}`;
 
+  // Cheap, exact USD for stablecoins (≈ $1) — covers the common case (approve /
+  // transfer / swap of USDC/USDT/DAI) with zero network cost. Other ERC-20s need
+  // a price engine and are intentionally left without a ≈$ line.
+  const usd = verified && symbol && STABLE_SYMBOLS.has(symbol)
+    ? formatUsdValue(amount, decimals)
+    : undefined;
+
   return {
     value: displayWithSymbol,
     format: 'tokenAmount',
     tokenAddress: tokenAddr ? normalizeAddress(String(tokenAddr)) : undefined,
     ...(verified ? {} : { unverified: true }),
+    ...(usd ? { usd } : {}),
   };
+}
+
+/** USD pegged stablecoins we can value at ~$1 with no price lookup. */
+const STABLE_SYMBOLS = new Set(['USDC', 'USDT', 'DAI', 'USDC.e', 'USD₮0', 'BUSD', 'TUSD', 'USDP', 'FRAX', 'LUSD', 'GUSD', 'PYUSD']);
+
+/** Format raw stablecoin base units as a "$1,234.56" string (peg = $1, rounded). */
+function formatUsdValue(raw: bigint, decimals: number): string {
+  const base = 10n ** BigInt(decimals);
+  let whole = raw / base;
+  const frac = raw % base;
+  // Round (not truncate) to cents, carrying into the whole part on overflow.
+  let cents = Number((frac * 100n + base / 2n) / base);
+  if (cents >= 100) { whole += 1n; cents -= 100; }
+  return `$${formatWithCommas(whole.toString())}.${cents.toString().padStart(2, '0')}`;
 }
 
 function formatAddress(rawValue: DecodedValue | undefined): FormattedField | null {
@@ -863,6 +1034,7 @@ function formatAddress(rawValue: DecodedValue | undefined): FormattedField | nul
   return {
     value: `${addr.slice(0, 8)}...${addr.slice(-6)}`,
     format: 'addressName',
+    ...(/^0x[0-9a-fA-F]{40}$/.test(addr) ? { address: addr.toLowerCase() } : {}),
   };
 }
 
@@ -878,12 +1050,32 @@ function formatRaw(rawValue: DecodedValue | undefined): FormattedField | null {
   return { value: truncateHex(s), format: 'raw' };
 }
 
+/** NFT token id → "#1234" (a bare id reads better with the hash prefix). */
+function formatNftName(rawValue: DecodedValue | undefined): FormattedField | null {
+  if (rawValue === undefined || rawValue === null) return { value: 'NFT', format: 'nftName' };
+  const s = String(rawValue);
+  // Numeric token ids get a "#" prefix; anything else (a name) passes through.
+  return { value: /^\d+$/.test(s) ? `#${formatWithCommas(s)}` : s, format: 'nftName' };
+}
+
+// Year ~2100 in unix seconds — anything beyond is a "no deadline" sentinel
+// (uint48-max for Permit2, uint128/uint256-max elsewhere), not a real date.
+const NO_DEADLINE_THRESHOLD = 4_102_444_800;
+
 function formatDate(rawValue: DecodedValue | undefined, params: any): FormattedField | null {
   const ts = Number(toBigInt(rawValue));
   if (ts === 0) return null;
+  // "No expiry" sentinels (Permit2 uint48-max etc.) overflow JS Date and render
+  // a useless "Invalid Date" — omit the field instead.
+  if (ts >= NO_DEADLINE_THRESHOLD || !Number.isFinite(ts)) return null;
+  // A real deadline in the past means this tx/permit is already dead — flag it.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const expired = ts > 1_000_000_000 && ts < nowSec;
   try {
     const date = new Date(ts * 1000);
-    return { value: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }), format: 'date' };
+    if (!Number.isFinite(date.getTime())) return null;
+    const formatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return { value: expired ? `${formatted} (expired)` : formatted, format: 'date', ...(expired ? { expired: true } : {}) };
   } catch {
     return { value: String(ts), format: 'date' };
   }
@@ -946,67 +1138,27 @@ function formatWeiAmount(wei: bigint): string {
   return eth.toFixed(8).replace(/\.?0+$/, '');
 }
 
-/** Well-known ERC-20 token decimals (mainnet addresses, lowercased). */
-const KNOWN_DECIMALS: Record<string, number> = {
-  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 6,  // USDC
-  '0xdac17f958d2ee523a2206206994597c13d831ec7': 6,  // USDT
-  '0x6b175474e89094c44da98b954eedeac495271d0f': 18, // DAI
-  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 18, // WETH
-  '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 8,  // WBTC
-  '0x514910771af9ca656af840dff83e8264ecf986ca': 18, // LINK
-  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 18, // UNI
-  // Polygon
-  '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359': 6,  // USDC (Polygon)
-  '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 6,  // USDC.e (Polygon)
-  // Arbitrum
-  '0xaf88d065e77c8cc2239327c5edb3a432268e5831': 6,  // USDC (Arbitrum)
-  '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9': 6,  // USDT (Arbitrum)
-};
-
 function guessTokenDecimals(chainId: number, tokenAddr: string | undefined): { decimals: number; verified: boolean } {
   if (!tokenAddr) return { decimals: 18, verified: true }; // native currency
   const lc = tokenAddr.toLowerCase();
-  const known = KNOWN_DECIMALS[lc];
+  const known = knownTokenDecimals(lc);
   if (known !== undefined) return { decimals: known, verified: true };
   const cached = decimalsCache.get(`${chainId}:${lc}`);
   if (cached !== undefined) return { decimals: cached, verified: true };
   return { decimals: 18, verified: false }; // unknown — flagged so the UI can warn
 }
 
-/** Well-known ERC-20 token symbols (mainnet addresses, lowercased). */
-const KNOWN_SYMBOLS: Record<string, string> = {
-  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',
-  '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
-  '0x6b175474e89094c44da98b954eedeac495271d0f': 'DAI',
-  '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': 'WETH',
-  '0x2260fac5e5542a773aa44fbcfedf7c193bc2c599': 'WBTC',
-  '0x514910771af9ca656af840dff83e8264ecf986ca': 'LINK',
-  '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984': 'UNI',
-  '0xae7ab96520de3a18e5e111b5eaab095312d7fe84': 'stETH',
-  '0xbe9895146f7af43049ca1c1ae358b0541ea49704': 'cbETH',
-  '0xae78736cd615f374d3085123a210448e74fc6393': 'rETH',
-  '0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0': 'wstETH',
-  '0x5a98fcbea516cf06857215779fd812ca3bef1b32': 'LDO',
-  '0xd533a949740bb3306d119cc777fa900ba034cd52': 'CRV',
-  '0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9': 'AAVE',
-  '0xc00e94cb662c3520282e6f5717214004a7f26888': 'COMP',
-  '0x9f8f72aa9304c8b593d555f12ef6589cc3a579a2': 'MKR',
-  '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359': 'USDC',
-  '0x2791bca1f2de4661ed88a30c99a7a9449aa84174': 'USDC.e',
-  '0xaf88d065e77c8cc2239327c5edb3a432268e5831': 'USDC',
-  '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9': 'USDT',
-};
-
 function guessTokenSymbol(tokenAddr: string | undefined): string | undefined {
-  if (!tokenAddr) return undefined;
-  return KNOWN_SYMBOLS[tokenAddr.toLowerCase()];
+  return knownTokenSymbol(tokenAddr);
 }
 
 function formatTokenValue(raw: bigint, decimals: number): string {
   if (raw === 0n) return '0';
-  const divisor = 10 ** decimals;
-  const whole = raw / BigInt(divisor);
-  const frac = raw % BigInt(divisor);
+  // BigInt exponent — 10 ** decimals as a JS number loses integer precision for
+  // decimals ≥ 23 (token decimals run up to 36), corrupting the displayed amount.
+  const divisor = 10n ** BigInt(decimals);
+  const whole = raw / divisor;
+  const frac = raw % divisor;
 
   if (frac === 0n) {
     return formatWithCommas(whole.toString());
@@ -1077,10 +1229,10 @@ function assessRisk(
     : /stake|deposit|claim|supply/.test(i) ? 'safe'
     : 'normal';
 
-  // Incomplete decode OR an unverified amount means the user can't fully trust
-  // what they're signing — never let it read as 'safe'/'normal' (but it's not
-  // 'danger' either); floor it at 'caution'.
-  const uncertain = partial || fields.some(f => f.unverified);
+  // Incomplete decode, an unverified amount, or an already-expired deadline means
+  // the user can't fully trust what they're signing — never let it read as
+  // 'safe'/'normal' (but it's not 'danger' either); floor it at 'caution'.
+  const uncertain = partial || fields.some(f => f.unverified || f.expired);
   if (uncertain && (base === 'safe' || base === 'normal')) return 'caution';
   return base;
 }

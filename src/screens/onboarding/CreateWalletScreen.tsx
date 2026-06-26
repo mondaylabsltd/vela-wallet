@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
-import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -523,7 +523,7 @@ const styles = createStyles(() => ({
     fontSize: text.sm,
     ...inter.medium,
     color: color.fg.base,
-    fontFamily: 'monospace',
+    fontFamily: font.mono,
   },
   verifyHint: {
     fontSize: text.sm,

@@ -22,7 +22,7 @@
  * separates "a big finite number the user chose" from "unlimited".
  */
 import { functionSelector, abiEncodeUint256 } from '@/services/eth-crypto';
-import { fromHex, toHex, stripHexPrefix } from '@/services/hex';
+import { toHex, stripHexPrefix } from '@/services/hex';
 
 // ---------------------------------------------------------------------------
 // Caps
@@ -55,6 +55,7 @@ const SELECTORS = {
   increaseAllowance: sel('increaseAllowance(address,uint256)'),
   decreaseAllowance: sel('decreaseAllowance(address,uint256)'),
   setApprovalForAll: sel('setApprovalForAll(address,bool)'),
+  permit2Approve: sel('approve(address,address,uint160,uint48)'), // 0x87517c45 (Permit2 on-chain approve)
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -174,6 +175,20 @@ function detectCalldataApproval(to: string | undefined, data: string | undefined
       kind: 'decreaseAllowance', tokenAddress: to?.toLowerCase(), spender, amountRaw, amountBits: 256,
       isUnbounded: false, isBooleanGrant: false, isReducing: true,
       editable: true, locus: { type: 'calldata-word', wordIndex: 1 },
+    };
+  }
+
+  if (selector === SELECTORS.permit2Approve) {
+    // Permit2 on-chain approve(token, spender, uint160 amount, uint48 expiration).
+    // The token is the FIRST arg (not the tx `to`, which is the Permit2 contract),
+    // and the amount is a uint160 — same unlimited sentinel width as PermitSingle.
+    const token = addrFromWord(word(0));
+    const spender = addrFromWord(word(1));
+    const amountRaw = bigFromWord(word(2));
+    return {
+      kind: 'permit2-single', tokenAddress: token, spender, amountRaw, amountBits: 160,
+      isUnbounded: isUnboundedAmount(amountRaw, 160), isBooleanGrant: false, isReducing: amountRaw === 0n,
+      editable: true, deadline: bigFromWord(word(3)), locus: { type: 'calldata-word', wordIndex: 2 },
     };
   }
 
