@@ -390,6 +390,15 @@ export interface LocalTransaction {
    * Capped in length to keep stored history small. Older records lack it.
    */
   signedContent?: string;
+  /**
+   * The original dApp request (method + params), captured so the exact signing
+   * panel can be re-rendered read-only from history (Connections → tap → replay).
+   * Capped; `requestTruncated` marks when a large payload (e.g. a deploy's
+   * bytecode) was clipped. Older records lack it (they fall back to the metadata
+   * detail view instead of a full replay).
+   */
+  signedRequest?: { method: string; params: unknown[] };
+  requestTruncated?: boolean;
 }
 
 /** Cap stored signed payloads so a huge typed-data blob can't bloat history. */
@@ -442,6 +451,28 @@ export async function mergeTransactions(incoming: LocalTransaction[]): Promise<n
   if (merged.length > 200) merged.length = 200;
   await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(merged));
   return fresh.length;
+}
+
+/** Remove a single transaction by id (e.g. swipe-to-delete in Connections). */
+export async function deleteTransaction(id: string): Promise<void> {
+  const txs = await loadTransactions();
+  const next = txs.filter((t) => t.id !== id);
+  if (next.length === txs.length) return;
+  await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(next));
+}
+
+/**
+ * Clear all dApp connection-activity records (signatures + dApp txs) for an
+ * address. Leaves value-transfer history (send / receive) untouched.
+ */
+export async function deleteConnectionEvents(address: string): Promise<void> {
+  const lc = address.toLowerCase();
+  const dappTypes = new Set<TransactionType>(['dapp_tx', 'sign_message', 'sign_typed_data']);
+  const txs = await loadTransactions();
+  const next = txs.filter(
+    (t) => !(t.from.toLowerCase() === lc && dappTypes.has((t.type ?? 'send') as TransactionType)),
+  );
+  await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(next));
 }
 
 // ---------------------------------------------------------------------------

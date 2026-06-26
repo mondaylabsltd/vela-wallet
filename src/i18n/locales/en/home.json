@@ -39,6 +39,15 @@
     "connReconnectStuck": "Couldn't reconnect. Try again, or disconnect and re-pair.",
     "connEventsHead": "Connection activity · {{count}}",
     "connNoEvents": "No requests yet on this connection.",
+    "connClear": "Clear",
+    "connClearTitle": "Clear connection activity?",
+    "connClearBody": "Removes all signing records for this connection from this device. On-chain transactions aren't affected.",
+    "connClearConfirm": "Clear",
+    "connDelete": "Delete",
+    "connPending": "Processing",
+    "connFailed": "Failed",
+    "assetsSheetTitle": "Your assets",
+    "cancel": "Cancel",
     "toastReceived": "{{amount}} {{token}} received"
   }
 }

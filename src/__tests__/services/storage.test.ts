@@ -21,10 +21,13 @@ import {
   findAccountByCredentialId,
   saveTransaction,
   loadTransactions,
+  deleteTransaction,
+  deleteConnectionEvents,
   saveCustomToken,
   loadCustomTokens,
   removeCustomToken,
   clearAll,
+  type LocalTransaction,
 } from '@/services/storage';
 import type { StoredAccount } from '@/models/types';
 
@@ -173,6 +176,42 @@ describe('storage - transactions', () => {
     const txs = await loadTransactions();
     expect(txs.length).toBeLessThanOrEqual(200);
     expect(txs[0].id).toBe('newest');
+  });
+});
+
+describe('storage - connection-activity deletion', () => {
+  const ME = '0xme';
+  const OTHER = '0xother';
+  const dappTx = (id: string, from: string, type: LocalTransaction['type']): LocalTransaction => ({
+    id, userOpHash: '', txHash: '', from, to: '', value: '0', symbol: '',
+    decimals: 0, chainId: 1, timestamp: 1000, status: 'confirmed', type,
+  });
+
+  test('deleteTransaction removes one record by id, leaves the rest', async () => {
+    await saveTransaction(dappTx('a', ME, 'dapp_tx'));
+    await saveTransaction(dappTx('b', ME, 'sign_message'));
+    await deleteTransaction('a');
+    const txs = await loadTransactions();
+    expect(txs.map((t) => t.id)).toEqual(['b']);
+  });
+
+  test('deleteTransaction is a no-op for an unknown id', async () => {
+    await saveTransaction(dappTx('a', ME, 'dapp_tx'));
+    await deleteTransaction('missing');
+    expect(await loadTransactions()).toHaveLength(1);
+  });
+
+  test('deleteConnectionEvents clears only this address’ dApp records', async () => {
+    await saveTransaction(dappTx('mine-tx', ME, 'dapp_tx'));
+    await saveTransaction(dappTx('mine-sig', ME, 'sign_typed_data'));
+    await saveTransaction(dappTx('theirs', OTHER, 'dapp_tx'));
+    // A value transfer for ME must survive — it isn't connection activity.
+    await saveTransaction({ ...dappTx('mine-send', ME, 'send'), to: '0x2', value: '1', symbol: 'ETH', decimals: 18 });
+
+    await deleteConnectionEvents(ME);
+
+    const ids = (await loadTransactions()).map((t) => t.id).sort();
+    expect(ids).toEqual(['mine-send', 'theirs']);
   });
 });
 

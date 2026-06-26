@@ -16,6 +16,61 @@ function cap(s: string | undefined): string | undefined {
   return s.length > MAX_SIGNED_CONTENT ? `${s.slice(0, MAX_SIGNED_CONTENT)}…` : s;
 }
 
+/**
+ * Budget for the stored original request (method + params) used to re-render the
+ * signing panel from history. Larger than MAX_SIGNED_CONTENT because params carry
+ * the full tx object; still bounded so a deploy's bytecode can't bloat the store.
+ */
+const MAX_REPLAY_REQUEST = 24000;
+
+/** Clip every string value in a structure to `capLen` chars (deep, immutable). */
+function clipStrings(v: unknown, capLen: number): unknown {
+  if (typeof v === 'string') return v.length > capLen ? v.slice(0, capLen) : v;
+  if (Array.isArray(v)) return v.map((x) => clipStrings(x, capLen));
+  if (v && typeof v === 'object') {
+    const o: Record<string, unknown> = {};
+    for (const k of Object.keys(v as Record<string, unknown>)) o[k] = clipStrings((v as Record<string, unknown>)[k], capLen);
+    return o;
+  }
+  return v;
+}
+
+/**
+ * Capture the original request so its signing panel can be replayed read-only.
+ * The serialized payload is bounded by MAX_REPLAY_REQUEST so a deploy's bytecode —
+ * or a fat EIP-5792 batch of many medium calls — can't bloat history. When over
+ * budget, string values (typically calldata) are progressively clipped until the
+ * TOTAL fits, and `truncated` is set; the panel still resolves the intent + the
+ * surviving calldata prefix (selector + early params), flagged as truncated.
+ */
+export function capRequest(
+  method: string,
+  params: unknown[] | undefined,
+): { signedRequest: { method: string; params: unknown[] }; requestTruncated: boolean } {
+  const safeParams = Array.isArray(params) ? params : [];
+  const sizeOf = (p: unknown[]) => JSON.stringify({ method, params: p }).length;
+
+  try {
+    if (sizeOf(safeParams) <= MAX_REPLAY_REQUEST) {
+      return { signedRequest: { method, params: safeParams }, requestTruncated: false };
+    }
+  } catch {
+    // Non-serializable params — store nothing replayable rather than throw.
+    return { signedRequest: { method, params: [] }, requestTruncated: true };
+  }
+
+  // Over budget — clip strings progressively (a near-budget cap preserves a single
+  // large field; tighter caps bound a many-field batch) until the TOTAL fits.
+  for (const capLen of [MAX_REPLAY_REQUEST - 2000, 8000, 2000, 500, 0]) {
+    const clipped = clipStrings(safeParams, capLen) as unknown[];
+    if (sizeOf(clipped) <= MAX_REPLAY_REQUEST) {
+      return { signedRequest: { method, params: clipped }, requestTruncated: true };
+    }
+  }
+  // Pathological field COUNT (structure alone exceeds budget) — drop the params.
+  return { signedRequest: { method, params: [] }, requestTruncated: true };
+}
+
 /** Decode a hex message to readable text; keep hex if it decoded to binary. */
 export function decodeSignMessage(raw: unknown): string | undefined {
   if (typeof raw !== 'string') return undefined;
@@ -68,6 +123,14 @@ export interface SigningRecordInput {
   dappOrigin: string;
   /** Millisecond timestamp; drives both the unique id and the display time. */
   nowMs: number;
+  /**
+   * Lifecycle status. Defaults to 'confirmed'. A tx is first recorded 'pending'
+   * the moment it's submitted (so closing the sheet can't lose it), then patched
+   * to 'confirmed'/'failed' once the on-chain receipt resolves.
+   */
+  status?: 'pending' | 'confirmed' | 'failed';
+  /** UserOp hash, kept on the pending record so receipt polling can resume. */
+  userOpHash?: string;
 }
 
 /**
@@ -77,12 +140,13 @@ export interface SigningRecordInput {
  * recipient/value/hash; everything else is a signature.
  */
 export function buildSigningRecord(input: SigningRecordInput): LocalTransaction {
-  const { method, params, result, from, chainId, dappOrigin, nowMs } = input;
+  const { method, params, result, from, chainId, dappOrigin, nowMs, status = 'confirmed', userOpHash = '' } = input;
   const now = Math.floor(nowMs / 1000);
   const signedContent = extractSignedContent(method, params);
+  const { signedRequest, requestTruncated } = capRequest(method, params);
   const base = {
-    userOpHash: '', from, chainId, timestamp: now,
-    status: 'confirmed' as const, dappOrigin, signedContent,
+    userOpHash, from, chainId, timestamp: now,
+    status, dappOrigin, signedContent, signedRequest, requestTruncated,
   };
 
   if (method === 'eth_sendTransaction' || method === 'wallet_sendCalls') {

@@ -27,6 +27,8 @@
       "loading": "Loading...",
       "gasEstimateFailed": "Couldn't estimate the gas fee — submitting may fail or time out. Tap the fee above to retry.",
       "submitted": "Submitted — waiting for confirmation",
+      "historicalNote": "A past signature — exactly what you approved.",
+      "close": "Close",
       "signatureRequest": "Signature request",
       "signing": "Signing...",
       "signLabel": "Sign",

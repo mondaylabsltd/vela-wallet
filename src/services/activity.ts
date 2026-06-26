@@ -51,6 +51,8 @@ export interface ConnectionEvent {
   label: string;
   subtitle: string;
   timestamp: number;
+  /** Lifecycle of the underlying record — drives the pending/failed row badge. */
+  status: LocalTransaction['status'];
   /** Source record — powers the tap-through detail sheet. */
   tx: LocalTransaction;
 }
@@ -323,6 +325,7 @@ export async function loadConnectionEvents(address: string): Promise<ConnectionE
       label: connectionEventLabel(t),
       subtitle: [t.dappOrigin, chainName(t.chainId)].filter(Boolean).join(' · '),
       timestamp: t.timestamp,
+      status: t.status,
       tx: t,
     }))
     .sort((a, b) => b.timestamp - a.timestamp);

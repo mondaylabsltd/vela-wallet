@@ -26,8 +26,9 @@ import {
 import { isSigningMethod, handleDAppRequest, handleReadOnlyRPC, extractRequestChainId, assertChainSupported, INSTANT_READONLY_METHODS } from '@/hooks/use-dapp-signing';
 import { gateReadOnly, readOnlyKey } from '@/services/readonly-rpc-gate';
 import { PasskeyErrorCode } from '@/modules/passkey';
-import { saveTransaction } from '@/services/storage';
+import { saveTransaction, updateTransaction, loadTransactions } from '@/services/storage';
 import { buildSigningRecord } from '@/services/dapp-history';
+import { waitForReceipt } from '@/services/safe-transaction';
 import {
   fetchBundlerAccountInfo,
   clearBundlerCache,
@@ -484,28 +485,56 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     setIsSigning(true);
     setSignError(null);
     setPendingOpHash(null);
+    // For eth_sendTransaction, the op is recorded 'pending' the moment the bundler
+    // accepts it (in onSubmitted) — BEFORE the long on-chain receipt wait — so the
+    // Connections panel shows it immediately and closing the sheet (or reloading
+    // the page) can't lose its status. We patch it to confirmed/failed below.
+    let pendingRecordId: string | null = null;
+    let pendingSave: Promise<void> = Promise.resolve();
+    const recordOrigin = dappInfo?.name ?? request.origin ?? '';
     try {
       const result = await handleDAppRequest(
         request, account, account.address, cid, opts?.maxFeePerGas,
         // Surface the hash the moment the op is submitted so the modal can show
-        // "submitted, waiting for confirmation" instead of a silent spinner.
-        (hash) => setPendingOpHash(hash),
+        // "submitted, waiting for confirmation" — and persist it so the pending
+        // state survives the sheet closing.
+        (hash) => {
+          setPendingOpHash(hash);
+          const pending = buildSigningRecord({
+            method: request.method, params: request.params, result: '',
+            from: account.address, chainId: cid, dappOrigin: recordOrigin,
+            nowMs: Date.now(), status: 'pending', userOpHash: hash,
+          });
+          pendingRecordId = pending.id;
+          pendingSave = saveTransaction(pending).catch(e => console.warn('[DAppConnection] Failed to save pending record:', e));
+        },
       );
       transportRef.current?.sendResponse(request.id, result);
 
       // Record EVERY approved dApp operation to local history (see dapp-history)
       // so the Connections panel shows it and its detail. Awaited before clearing
       // the request so the panel's refresh reads up-to-date storage.
-      const record = buildSigningRecord({
-        method: request.method,
-        params: request.params,
-        result,
-        from: account.address,
-        chainId: cid,
-        dappOrigin: dappInfo?.name ?? request.origin ?? '',
-        nowMs: Date.now(),
-      });
-      await saveTransaction(record).catch(e => console.warn('[DAppConnection] Failed to save record:', e));
+      if (pendingRecordId) {
+        // Wait for the pending write to land, then flip it to confirmed in place
+        // (same id) — never a second record, never a lost pending→confirmed race.
+        await pendingSave;
+        await updateTransaction(pendingRecordId, {
+          status: 'confirmed',
+          txHash: typeof result === 'string' ? result : '',
+        }).catch(e => console.warn('[DAppConnection] Failed to confirm record:', e));
+      } else {
+        // Signatures and batches (no receipt wait) — record on completion.
+        const record = buildSigningRecord({
+          method: request.method,
+          params: request.params,
+          result,
+          from: account.address,
+          chainId: cid,
+          dappOrigin: recordOrigin,
+          nowMs: Date.now(),
+        });
+        await saveTransaction(record).catch(e => console.warn('[DAppConnection] Failed to save record:', e));
+      }
 
       setIncomingRequest(null);
       setPendingOpHash(null);
@@ -557,6 +586,14 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       }
 
       console.error('[DAppConnection] Request failed:', msg);
+      // A terminal failure after the op was already submitted (e.g. dropped from
+      // the mempool / no receipt in time) — flip its persisted record to 'failed'
+      // so it doesn't linger as 'pending' forever in the Connections panel.
+      if (pendingRecordId) {
+        pendingSave
+          .then(() => updateTransaction(pendingRecordId!, { status: 'failed' }))
+          .catch(() => {});
+      }
       setSignError(msg);
       transportRef.current?.sendResponse(request.id, undefined, { code: -32603, message: msg });
       // Keep modal open so user can see the error — they dismiss manually
@@ -667,6 +704,27 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       transportRef.current?.disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.hasWallet, state.isLoading]);
+
+  // --- Resume in-flight dApp txs left 'pending' (sheet closed / page reloaded
+  //     mid-confirmation) so their status still resolves instead of showing as
+  //     forever-pending in the Connections panel. ---
+  const resumedRef = useRef(false);
+  useEffect(() => {
+    if (resumedRef.current || !state.hasWallet || state.isLoading) return;
+    resumedRef.current = true;
+    (async () => {
+      const txs = await loadTransactions().catch(() => []);
+      const cutoff = Math.floor(Date.now() / 1000) - 24 * 3600; // ignore ancient stuck ops
+      const pending = txs.filter(
+        (t) => t.status === 'pending' && (t.type ?? '') === 'dapp_tx' && !!t.userOpHash && t.timestamp >= cutoff,
+      );
+      for (const t of pending) {
+        waitForReceipt(t.userOpHash, t.chainId)
+          .then((txHash) => updateTransaction(t.id, { status: 'confirmed', txHash }))
+          .catch(() => { /* still unconfirmed or dropped — leave for the user to clear */ });
+      }
+    })();
   }, [state.hasWallet, state.isLoading]);
 
   const value = React.useMemo(() => ({

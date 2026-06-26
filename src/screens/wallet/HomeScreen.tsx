@@ -15,8 +15,9 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import {
-  ArrowRight, Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, RefreshCw, Settings, X,
+  ArrowRight, Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, RefreshCw, Settings, Trash2, X,
 } from 'lucide-react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -35,6 +36,8 @@ import { CurrencySheet } from '@/components/ui/CurrencySheet';
 import { NetworkFilterButton, NetworkFilterSheet } from '@/components/ui/NetworkFilterSheet';
 import { TransactionDetailSheet } from '@/components/ui/TransactionDetailSheet';
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
+import { SigningReplaySheet } from '@/components/ui/SigningReplaySheet';
+import { TokenSelector } from '@/components/ui/TokenSelector';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { WaveDock } from '@/components/ui/WaveDock';
@@ -51,7 +54,7 @@ import {
   type ActivityItem, type ConnectionEvent,
 } from '@/services/activity';
 import { useLocalePrefs } from '@/services/locale-format';
-import type { LocalTransaction } from '@/services/storage';
+import { deleteConnectionEvents, deleteTransaction, type LocalTransaction } from '@/services/storage';
 import { getAccountBalance, getAccountBalances, setAccountBalance } from '@/services/balance-cache';
 import { currencyMeta, formatFiat, getCurrencyCode, getRate, loadCurrency, setCurrency, shouldShowDecimals } from '@/services/currency';
 import { parseRemoteInjectURL } from '@/services/dapp-transport';
@@ -121,6 +124,7 @@ export default function HomeScreen() {
   const [currencyCode, setCurrencyCode] = useState(getCurrencyCode());
   const [rate, setRate] = useState(1);
   const [showCurrency, setShowCurrency] = useState(false);
+  const [showAssets, setShowAssets] = useState(false);
   const [aliasMap, setAliasMap] = useState<Map<string, string>>(new Map());
   const aliasAttempted = useRef<Set<string>>(new Set());
   const [detailTx, setDetailTx] = useState<LocalTransaction | null>(null);
@@ -470,6 +474,31 @@ export default function HomeScreen() {
     if (t) setDetailTx(t);
   };
 
+  // Tap a token in the balance-hero asset sheet → open Send pre-filled to it.
+  const openAssetForSend = useCallback((token: APIToken) => {
+    setShowAssets(false);
+    router.push({ pathname: '/send', params: { preselectedSymbol: token.symbol, preselectedNetwork: token.network } });
+  }, [router]);
+
+  // Connection-activity clear (whole list) + per-row delete. Both prune the
+  // underlying records; on-chain transactions are untouched.
+  const clearConnEvents = useCallback(() => {
+    if (!address) return;
+    showAlert(t('home.connClearTitle'), t('home.connClearBody'), [
+      { text: t('home.cancel'), style: 'cancel' },
+      {
+        text: t('home.connClearConfirm'),
+        style: 'destructive',
+        onPress: () => { deleteConnectionEvents(address); setConnEvents([]); },
+      },
+    ]);
+  }, [address, t]);
+
+  const deleteConnEvent = useCallback((id: string) => {
+    deleteTransaction(id);
+    setConnEvents((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
   // Resolved alias for the open detail tx's counterparty.
   const detailAlias = (() => {
     if (!detailTx) return undefined;
@@ -480,15 +509,19 @@ export default function HomeScreen() {
   // --- renderers ---
   const renderHeader = () => (
     <Animated.View entering={fadeInDown(60, 400)}>
-      {/* Balance */}
+      {/* Balance — hidden on the Connections tab so its list gets the vertical room */}
+      {tab === 'activity' && (
       <Animated.View style={balanceScaleStyle}>
         <VelaCard elevated style={styles.balanceCard}>
           <View pointerEvents="none" style={styles.balanceBlob} />
           <Text style={styles.balanceLabel}>{t('home.totalBalance')}</Text>
           <View style={styles.balanceTopRow}>
-            {hidden ? <Text style={styles.balanceHidden}>••••••</Text> : (
-              <Balance value={displayTotal * rate} symbol={currency.symbol} code={currencyCode} />
-            )}
+            {/* Tap the balance to see the assets behind it (reuses the Send picker). */}
+            <Pressable style={styles.balanceFill} onPress={() => setShowAssets(true)} disabled={hidden} hitSlop={4}>
+              {hidden ? <Text style={styles.balanceHidden}>••••••</Text> : (
+                <Balance value={displayTotal * rate} symbol={currency.symbol} code={currencyCode} />
+              )}
+            </Pressable>
             <Pressable onPress={() => setHidden((h) => !h)} hitSlop={8} style={styles.eyeBtn}>
               {hidden ? <EyeOff size={22} color={color.fg.muted} strokeWidth={2} /> : <Eye size={22} color={color.fg.muted} strokeWidth={2} />}
             </Pressable>
@@ -506,6 +539,7 @@ export default function HomeScreen() {
           <Animated.View pointerEvents="none" style={[styles.balanceRing, balanceRingStyle]} />
         </VelaCard>
       </Animated.View>
+      )}
 
       {/* RPC failure banner + fix flow (shared with AssetsScreen). */}
       <RpcTroubleBanner
@@ -630,6 +664,8 @@ export default function HomeScreen() {
                   onConnect={() => setShowScanner(true)}
                   onPasteConnect={onPasteConnect}
                   onOpenEvent={setEventTx}
+                  onClearEvents={clearConnEvents}
+                  onDeleteEvent={deleteConnEvent}
                 />
               </Animated.ScrollView>
             )}
@@ -675,9 +711,32 @@ export default function HomeScreen() {
         onClose={() => setDetailTx(null)}
       />
 
-      {/* dApp signing-record detail (message / typed-data / transaction) */}
+      {/* Balance-hero assets — reuses the Send token picker (tap a token → Send). */}
+      <AppModal visible={showAssets} onClose={() => setShowAssets(false)}>
+        <View style={styles.assetsSheet}>
+          <View style={styles.assetsHead}>
+            <Text style={styles.assetsTitle}>{t('home.assetsSheetTitle')}</Text>
+            <Pressable onPress={() => setShowAssets(false)} hitSlop={8}>
+              <X size={22} color={color.fg.base} strokeWidth={2} />
+            </Pressable>
+          </View>
+          <View style={styles.assetsBody}>
+            {/* Overview of everything behind the balance → default to all tokens. */}
+            <TokenSelector tokens={tokens} onSelect={openAssetForSend} onAddChanged={loadData} defaultCategory="all" />
+          </View>
+        </View>
+      </AppModal>
+
+      {/* dApp signing-record detail. Records that captured their original request
+          replay the FULL signing panel (read-only); older ones fall back to the
+          metadata detail sheet. */}
+      <SigningReplaySheet
+        visible={eventTx !== null && !!eventTx?.signedRequest}
+        tx={eventTx}
+        onClose={() => setEventTx(null)}
+      />
       <ConnectionEventDetailSheet
-        visible={eventTx !== null}
+        visible={eventTx !== null && !eventTx?.signedRequest}
         tx={eventTx}
         onClose={() => setEventTx(null)}
       />
@@ -741,7 +800,7 @@ export default function HomeScreen() {
 // ---------------------------------------------------------------------------
 
 function ConnectionsView({
-  status, reconnectStuck, dappName, dappUrl, events, onDisconnect, onReconnect, onConnect, onPasteConnect, onOpenEvent,
+  status, reconnectStuck, dappName, dappUrl, events, onDisconnect, onReconnect, onConnect, onPasteConnect, onOpenEvent, onClearEvents, onDeleteEvent,
 }: {
   status: ConnectionStatus;
   reconnectStuck: boolean;
@@ -753,6 +812,8 @@ function ConnectionsView({
   onConnect: () => void;
   onPasteConnect: (uri: string) => void;
   onOpenEvent: (tx: LocalTransaction) => void;
+  onClearEvents: () => void;
+  onDeleteEvent: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const [linkInput, setLinkInput] = useState('');
@@ -841,19 +902,45 @@ function ConnectionsView({
         </Pressable>
       </VelaCard>
 
-      <Text style={styles.connEventsHead}>{t('home.connEventsHead', { count: events.length })}</Text>
+      <View style={styles.connEventsHeadRow}>
+        <Text style={styles.connEventsHead}>{t('home.connEventsHead', { count: events.length })}</Text>
+        {events.length > 0 && (
+          <Pressable style={styles.connClearBtn} onPress={onClearEvents} hitSlop={8}>
+            <Trash2 size={13} color={color.fg.subtle} strokeWidth={2} />
+            <Text style={styles.connClearText}>{t('home.connClear')}</Text>
+          </Pressable>
+        )}
+      </View>
       {events.length === 0 ? (
         <Text style={styles.connNoEvents}>{t('home.connNoEvents')}</Text>
       ) : (
         events.map((e) => (
-          <Pressable key={e.id} style={styles.eventRow} onPress={() => onOpenEvent(e.tx)}>
-            <View style={styles.eventInfo}>
-              <Text style={styles.eventLabel} numberOfLines={1}>{e.label}</Text>
-              <Text style={styles.eventSub} numberOfLines={1}>{e.subtitle}</Text>
-            </View>
-            <Text style={styles.eventTime}>{relativeTime(e.timestamp)}</Text>
-            <ChevronRight size={16} color={color.fg.subtle} strokeWidth={2} />
-          </Pressable>
+          <Swipeable
+            key={e.id}
+            overshootRight={false}
+            renderRightActions={() => (
+              <Pressable style={styles.eventDelete} onPress={() => onDeleteEvent(e.id)}>
+                <Trash2 size={18} color={color.fg.inverse} strokeWidth={2.2} />
+                <Text style={styles.eventDeleteText}>{t('home.connDelete')}</Text>
+              </Pressable>
+            )}
+          >
+            <Pressable style={styles.eventRow} onPress={() => onOpenEvent(e.tx)}>
+              <View style={styles.eventInfo}>
+                <Text style={styles.eventLabel} numberOfLines={1}>{e.label}</Text>
+                <Text style={styles.eventSub} numberOfLines={1}>{e.subtitle}</Text>
+              </View>
+              {e.status !== 'confirmed' && (
+                <View style={[styles.eventPill, e.status === 'failed' ? styles.eventPillFailed : styles.eventPillPending]}>
+                  <Text style={[styles.eventPillText, e.status === 'failed' ? styles.eventPillTextFailed : styles.eventPillTextPending]}>
+                    {t(e.status === 'failed' ? 'home.connFailed' : 'home.connPending')}
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.eventTime}>{relativeTime(e.timestamp)}</Text>
+              <ChevronRight size={16} color={color.fg.subtle} strokeWidth={2} />
+            </Pressable>
+          </Swipeable>
         ))
       )}
     </View>
@@ -1036,16 +1123,41 @@ const styles = createStyles(() => ({
     borderWidth: 1, borderColor: color.border.base, backgroundColor: color.bg.raised,
   },
   disconnectText: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
-  connEventsHead: { fontSize: text.sm, ...inter.semibold, color: color.fg.subtle, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: space.md },
+  connEventsHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.md },
+  connEventsHead: { fontSize: text.sm, ...inter.semibold, color: color.fg.subtle, textTransform: 'uppercase', letterSpacing: 0.8 },
+  connClearBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, paddingVertical: space.xs, paddingHorizontal: space.sm },
+  connClearText: { fontSize: text.sm, ...inter.semibold, color: color.fg.subtle },
   connNoEvents: { fontSize: text.base, ...inter.regular, color: color.fg.subtle },
   eventRow: {
     flexDirection: 'row', alignItems: 'center', gap: space.lg,
     paddingVertical: space.lg, borderBottomWidth: 1, borderBottomColor: color.border.base,
+    backgroundColor: color.bg.base,
   },
   eventInfo: { flex: 1, gap: 2 },
   eventLabel: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
   eventSub: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
   eventTime: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle },
+  eventDelete: {
+    backgroundColor: color.error.base, flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: space.xs, paddingHorizontal: space.xl,
+  },
+  eventDeleteText: { fontSize: text.sm, ...inter.semibold, color: color.fg.inverse },
+  eventPill: { paddingHorizontal: space.sm, paddingVertical: 2, borderRadius: radius.full },
+  eventPillPending: { backgroundColor: color.info.soft },
+  eventPillFailed: { backgroundColor: color.error.soft },
+  eventPillText: { fontSize: text.xs, ...inter.semibold },
+  eventPillTextPending: { color: color.info.base },
+  eventPillTextFailed: { color: color.error.base },
+
+  // Balance-hero asset sheet (Req C)
+  assetsSheet: { flex: 1, backgroundColor: color.bg.base },
+  assetsHead: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: space['3xl'], paddingVertical: space.xl,
+    borderBottomWidth: 1, borderBottomColor: color.border.base,
+  },
+  assetsTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
+  assetsBody: { flex: 1, paddingHorizontal: space['3xl'], paddingTop: space.lg },
 
   connEmpty: { alignItems: 'center', paddingTop: space['4xl'], gap: space.md },
   connEmptyIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: color.bg.sunken, alignItems: 'center', justifyContent: 'center' },

@@ -15,7 +15,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 jest.mock('@/modules/passkey', () => ({}));
 
-import { buildSigningRecord, decodeSignMessage, extractSignedContent } from '@/services/dapp-history';
+import { buildSigningRecord, capRequest, decodeSignMessage, extractSignedContent } from '@/services/dapp-history';
 import { isSigningMethod } from '@/hooks/use-dapp-signing';
 
 const FROM = '0x1111111111111111111111111111111111111111';
@@ -111,9 +111,63 @@ describe('buildSigningRecord — contract with isSigningMethod', () => {
     expect(r.id).toMatch(/^dapp-\d+-/);
   });
 
+  it('captures the original request so the panel can be replayed', () => {
+    const r = rec('eth_sendTransaction', [{ to: '0xabc', value: '0x2', data: '0xdead' }], '0xhash');
+    expect(r.signedRequest).toEqual({ method: 'eth_sendTransaction', params: [{ to: '0xabc', value: '0x2', data: '0xdead' }] });
+    expect(r.requestTruncated).toBe(false);
+  });
+
+  it('records as pending with the userOp hash when submitted', () => {
+    const r = buildSigningRecord({
+      method: 'eth_sendTransaction', params: [{ to: '0xabc', value: '0x1', data: '0x' }],
+      result: '', from: FROM, chainId: 1, dappOrigin: 'test.app', nowMs: 1000,
+      status: 'pending', userOpHash: '0xuserop',
+    });
+    expect(r.status).toBe('pending');
+    expect(r.userOpHash).toBe('0xuserop');
+    expect(r.txHash).toBe(''); // no on-chain hash yet
+  });
+
   it('gives every record a collision-free id across timestamps', () => {
     const a = buildSigningRecord({ method: 'personal_sign', params: [HELLO_HEX], result: '', from: FROM, chainId: 1, dappOrigin: '', nowMs: 1000 });
     const b = buildSigningRecord({ method: 'personal_sign', params: [HELLO_HEX], result: '', from: FROM, chainId: 1, dappOrigin: '', nowMs: 2000 });
     expect(a.id).not.toBe(b.id);
+  });
+});
+
+describe('capRequest — replay payload capture', () => {
+  it('stores method + params verbatim when small', () => {
+    const { signedRequest, requestTruncated } = capRequest('personal_sign', ['0x48656c6c6f', FROM]);
+    expect(signedRequest).toEqual({ method: 'personal_sign', params: ['0x48656c6c6f', FROM] });
+    expect(requestTruncated).toBe(false);
+  });
+
+  it('clips an oversized calldata (e.g. a deploy) and keeps the TOTAL within budget', () => {
+    const huge = '0x' + 'ab'.repeat(20000); // ~40k chars, over the budget
+    const { signedRequest, requestTruncated } = capRequest('eth_sendTransaction', [{ to: '0xdep', data: huge }]);
+    expect(requestTruncated).toBe(true);
+    const clippedData = (signedRequest.params[0] as { data: string }).data;
+    expect(clippedData.length).toBeLessThan(huge.length);
+    // The function selector (first bytes) survives, so the intent still resolves.
+    expect(clippedData.startsWith('0xabab')).toBe(true);
+    // The invariant that matters: the stored payload never exceeds the budget.
+    expect(JSON.stringify(signedRequest).length).toBeLessThanOrEqual(24000);
+  });
+
+  it('bounds the total even when many medium strings each fit (fat batch)', () => {
+    // 30 sub-budget calldata strings (~10k each) sum to ~300k — none individually
+    // over budget, so a per-string-only cap would store the lot. The total must
+    // still be clamped.
+    const calls = Array.from({ length: 30 }, () => ({ data: '0x' + 'cd'.repeat(5000) }));
+    const { signedRequest, requestTruncated } = capRequest('wallet_sendCalls', [{ calls }]);
+    expect(requestTruncated).toBe(true);
+    expect(JSON.stringify(signedRequest).length).toBeLessThanOrEqual(24000);
+  });
+
+  it('tolerates non-serializable params without throwing', () => {
+    const circular: any = {}; circular.self = circular;
+    const { signedRequest, requestTruncated } = capRequest('eth_sendTransaction', [circular]);
+    expect(requestTruncated).toBe(true);
+    expect(signedRequest.params).toEqual([]);
   });
 });

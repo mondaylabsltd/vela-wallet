@@ -39,6 +39,15 @@
     "connReconnectStuck": "无法重连。请重试，或断开后重新配对。",
     "connEventsHead": "连接活动 · {{count}}",
     "connNoEvents": "该连接暂无请求记录。",
+    "connClear": "清空",
+    "connClearTitle": "清空连接活动？",
+    "connClearBody": "将从本机移除该连接的所有签名记录。链上交易不受影响。",
+    "connClearConfirm": "清空",
+    "connDelete": "删除",
+    "connPending": "处理中",
+    "connFailed": "失败",
+    "assetsSheetTitle": "你的资产",
+    "cancel": "取消",
     "toastReceived": "已收到 {{amount}} {{token}}"
   }
 }

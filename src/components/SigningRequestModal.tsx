@@ -119,6 +119,13 @@ export interface SigningSheetProps {
   onApprove: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[] }) => void;
   onReject: () => void;
   onDismiss: () => void;
+  /**
+   * Read-only replay: re-render a PAST signature exactly as it was shown, with no
+   * approve/reject and no live-only work (gas estimate, simulation, funding). Used
+   * by the Connections panel to "look back at what I signed" (and to re-open an
+   * in-flight op's status after the sheet was closed). Defaults to false.
+   */
+  readOnly?: boolean;
 }
 
 export function SigningSheet({
@@ -132,6 +139,7 @@ export function SigningSheet({
   onApprove,
   onReject,
   onDismiss,
+  readOnly = false,
 }: SigningSheetProps) {
   const { t } = useTranslation();
 
@@ -215,7 +223,8 @@ export function SigningSheet({
 
       // Estimate gas fee in parallel — against the REAL tx so the displayed fee and
       // the funding pre-check reflect this contract call/deploy, not a dummy transfer.
-      if (activeAccount?.address) {
+      // Skipped in read-only replay: a historical signature isn't about to be sent.
+      if (activeAccount?.address && !readOnly) {
         setEstimatingGas(true);
         setGasEstimateFailed(false);
         estimateTransactionFee(activeAccount.address, chainId, 'standard', {
@@ -251,7 +260,7 @@ export function SigningSheet({
       setClearSign(null);
     }
     return () => { cancelled = true; };
-  }, [incomingRequest, chainId, activeAccount?.address]);
+  }, [incomingRequest, chainId, activeAccount?.address, readOnly]);
 
   // Real tx for accurate gas estimation in the fee card (re-runs on tier change/refresh).
   const txForEstimate = useMemo(() => {
@@ -278,15 +287,16 @@ export function SigningSheet({
 
     // Net balance changes across all legs (executed sequentially, shared state —
     // e.g. approve + swap nets to −USDC / +WETH), plus the revert + underfunded
-    // pre-checks. The engine already accepts the full calls array.
-    if (activeAccount?.address) {
+    // pre-checks. The engine already accepts the full calls array. Skipped in
+    // read-only replay (a historical batch isn't being simulated for submission).
+    if (activeAccount?.address && !readOnly) {
       const simCalls = calls.map((c: any) => ({ to: c.to, data: c.data, value: c.value }));
       simulateAssetChanges(activeAccount.address, simCalls, chainId)
         .then((r) => { if (!cancelled) setSim(r); })
         .catch(() => { if (!cancelled) setSim(null); });
     }
     return () => { cancelled = true; };
-  }, [incomingRequest, chainId, activeAccount?.address]);
+  }, [incomingRequest, chainId, activeAccount?.address, readOnly]);
 
   if (!incomingRequest) return null;
 
@@ -436,6 +446,14 @@ export function SigningSheet({
             accountAddress={addr}
           />
 
+          {/* Read-only replay banner — "you're looking back at a past signature". */}
+          {readOnly && !pendingOpHash && (
+            <View style={styles.historyNote}>
+              <Pen size={15} color={color.fg.muted} strokeWidth={2} />
+              <Text style={styles.historyNoteText}>{t('componentsUi.signing.historicalNote')}</Text>
+            </View>
+          )}
+
           {renderContent()}
 
           {/* Advanced — full untruncated payload + any detail-only fields, for
@@ -443,11 +461,11 @@ export function SigningSheet({
           <AdvancedPanel method={method} params={params} clearSign={clearSign} />
 
           {/* Simulation summary — revert pre-check + net balance changes, one
-              render path shared with Send's confirm step. */}
-          {(isTx || isBatch) && <BalanceChangePreview result={sim} chainId={chainId} />}
+              render path shared with Send's confirm step. Live-only (skipped on replay). */}
+          {!readOnly && (isTx || isBatch) && <BalanceChangePreview result={sim} chainId={chainId} />}
 
-          {/* Gas fee card — only for eth_sendTransaction */}
-          {isTx && activeAccount?.address && (
+          {/* Gas fee card — only for eth_sendTransaction, and only live (not replay) */}
+          {isTx && activeAccount?.address && !readOnly && (
             <GasFeeCard
               feeEstimate={feeEstimate}
               estimating={estimatingGas}
@@ -464,15 +482,16 @@ export function SigningSheet({
 
           {/* Gas estimation failed — block the blind submit that would otherwise
               hang for 2 min on the bundler. Retry lives in the gas card above. */}
-          {gasEstimateFailed && !isSigning && (
+          {gasEstimateFailed && !isSigning && !readOnly && (
             <WarningBanner
               severity="caution"
               text={t('componentsUi.signing.gasEstimateFailed')}
             />
           )}
 
-          {/* Submitted — show the hash + "waiting" instead of a silent spinner. */}
-          {isSigning && pendingOpHash && (
+          {/* Submitted — show the hash + "waiting" instead of a silent spinner.
+              Also shown on replay of an op still awaiting its on-chain receipt. */}
+          {pendingOpHash && (isSigning || readOnly) && (
             <View style={styles.pendingCard}>
               <ActivityIndicator size="small" color={color.info.base} />
               <Text style={styles.pendingText}>
@@ -492,7 +511,14 @@ export function SigningSheet({
 
         {/* Buttons */}
         <View style={styles.buttonRow}>
-          {signError ? (
+          {readOnly ? (
+            <VelaButton
+              title={t('componentsUi.signing.close')}
+              onPress={onDismiss}
+              variant="secondary"
+              style={styles.buttonFlex}
+            />
+          ) : signError ? (
             <VelaButton
               title={t('componentsUi.signing.dismiss')}
               onPress={onDismiss}
@@ -551,7 +577,9 @@ export function SigningRequestModal() {
 
   return (
     <>
-      <AppModal visible={true} onClose={signError ? dismissRequest : rejectRequest}>
+      {/* Closing AFTER submit (pendingOpHash set) must not reject — the op is
+          already in-flight and will complete + record; only dismiss the sheet. */}
+      <AppModal visible={true} onClose={signError || pendingOpHash ? dismissRequest : rejectRequest}>
         <SigningSheet
           request={incomingRequest}
           chainId={chainId}
@@ -1824,6 +1852,21 @@ const styles = createStyles(() => ({
   pendingText: {
     fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono,
     color: color.info.base, flex: 1,
+  },
+
+  // Read-only replay banner
+  historyNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
+    marginBottom: space.lg,
+  },
+  historyNoteText: {
+    fontSize: text.sm, ...inter.medium, color: color.fg.muted, flex: 1,
   },
 
   // ===== Buttons =====

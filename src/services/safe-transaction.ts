@@ -1462,7 +1462,7 @@ async function submitUserOp(
   throw new Error('Bundler unavailable after retries');
 }
 
-async function waitForReceipt(
+export async function waitForReceipt(
   userOpHash: string,
   chainId: number,
   timeout: number = 120_000,
