@@ -49,7 +49,30 @@
       "typeLabel": "Tür",
       "intentUnknown": "Bilinmeyen",
       "intentSend": "Gönder",
-      "signingFor": "İmzalanan hesap"
+      "signingFor": "İmzalanan hesap",
+      "tokenToContractWarning": "Bu, token'ları token'ın kendi sözleşmesine gönderir — sonsuza dek kaybolurlar.",
+      "expiredWarning": "Bu işlemin son tarihi çoktan geçmiş — başarısız olması bekleniyor.",
+      "signInIntent": "Oturum aç",
+      "siweDomain": "Site",
+      "siweStatement": "Açıklama",
+      "siweMismatch": "Bu oturum açma {{domain}} için ama istek {{origin}} adresinden geldi. Büyük olasılıkla bir kimlik avı denemesi — reddedin.",
+      "siweOk": "{{domain}} oturum açma işlemi doğrulandı",
+      "ethSignIntent": "Kör imza",
+      "ethSignTitle": "eth_sign — ham hash",
+      "ethSignBody": "Bu, anlaşılması mümkün olmayan bir hash imzalar. Kötü niyetli bir site bunun arkasına bir token transferi veya onayı gizleyebilir. Yalnızca bu siteye tamamen güveniyorsanız ve neyi imzaladığınızı tam olarak biliyorsanız devam edin.",
+      "ethSignWarning": "Doğrulanamayan istek — meşru uygulamaların çoğu eth_sign kullanmaz. Emin değilseniz reddedin.",
+      "firstTimeTag": "İlk kez",
+      "contractTag": "Sözleşme",
+      "holdToConfirm": "Onaylamak için basılı tutun",
+      "advancedToggle": "Gelişmiş — ham veriyi görüntüle",
+      "batchIntent": "Toplu",
+      "batchSubtitle": "{{count}} işlem, birlikte imzalanır",
+      "batchCall": "Sözleşme çağrısı",
+      "balanceUnderfundedNative": "Bu transferi karşılamaya yetecek {{symbol}} yok — zincir üzerinde başarısız olması bekleniyor."
+    },
+    "signingApprove": {
+      "resultingTotal": "Yeni toplam izin",
+      "resultingTotalUnknown": "Mevcut izninizin üzerine {{amount}} ekler (mevcut miktar okunamadı)"
     },
     "currency": {
       "title": "Görüntüleme para birimi",

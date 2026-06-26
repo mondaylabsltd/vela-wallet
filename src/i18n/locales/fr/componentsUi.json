@@ -49,7 +49,30 @@
       "typeLabel": "Type",
       "intentUnknown": "Inconnu",
       "intentSend": "Envoyer",
-      "signingFor": "Signature pour"
+      "signingFor": "Signature pour",
+      "tokenToContractWarning": "Ceci envoie des tokens vers le contrat du token lui-même — ils seraient perdus à jamais.",
+      "expiredWarning": "L'échéance de cette transaction est déjà passée — elle devrait échouer.",
+      "signInIntent": "Connexion",
+      "siweDomain": "Site",
+      "siweStatement": "Déclaration",
+      "siweMismatch": "Cette connexion concerne {{domain}}, mais la demande provient de {{origin}}. Il s'agit probablement d'une tentative de hameçonnage — refusez-la.",
+      "siweOk": "Connexion à {{domain}} vérifiée",
+      "ethSignIntent": "Signature à l'aveugle",
+      "ethSignTitle": "eth_sign — hash brut",
+      "ethSignBody": "Ceci signe un hash opaque. Un site malveillant peut y dissimuler un transfert ou une approbation de tokens. Ne continuez que si vous avez pleinement confiance en ce site et savez exactement ce que vous signez.",
+      "ethSignWarning": "Demande invérifiable — la plupart des applications légitimes n'utilisent jamais eth_sign. Refusez, sauf si vous êtes certain.",
+      "firstTimeTag": "Première fois",
+      "contractTag": "Contrat",
+      "holdToConfirm": "Maintenez pour confirmer",
+      "advancedToggle": "Avancé — voir les données brutes",
+      "batchIntent": "Lot",
+      "batchSubtitle": "{{count}} transactions, signées ensemble",
+      "batchCall": "Appel de contrat",
+      "balanceUnderfundedNative": "Solde {{symbol}} insuffisant pour couvrir ce transfert — il devrait échouer on-chain."
+    },
+    "signingApprove": {
+      "resultingTotal": "Nouvelle autorisation totale",
+      "resultingTotalUnknown": "Ajoute {{amount}} à votre autorisation actuelle (impossible de lire le montant actuel)"
     },
     "currency": {
       "title": "Devise d'affichage",

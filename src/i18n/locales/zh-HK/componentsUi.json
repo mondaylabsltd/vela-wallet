@@ -58,7 +58,25 @@
       "balanceChangesTitle": "餘額變化",
       "balanceNoAssetsMove": "冇資產會離開你個錢包",
       "balanceUnverifiedToken": "未驗證代幣",
-      "balanceUnderfundedNative": "{{symbol}} 餘額唔夠俾呢筆轉帳 — 預計會喺鏈上失敗。"
+      "balanceUnderfundedNative": "{{symbol}} 餘額唔夠俾呢筆轉帳 — 預計會喺鏈上失敗。",
+      "tokenToContractWarning": "呢筆係將代幣發送去代幣本身嘅合約 — 啲幣會永久損失。",
+      "expiredWarning": "呢筆交易嘅限期已過 — 預計會失敗。",
+      "signInIntent": "登入",
+      "siweDomain": "網站",
+      "siweStatement": "聲明",
+      "siweMismatch": "呢個登入係用於 {{domain}}，但請求來自 {{origin}}。好可能係釣魚攻擊 — 請拒絕。",
+      "siweOk": "已驗證登入 {{domain}}",
+      "ethSignIntent": "盲簽",
+      "ethSignTitle": "eth_sign — 原始雜湊",
+      "ethSignBody": "呢個會簽署一個不透明嘅雜湊。惡意網站可以喺背後收埋代幣轉移或授權。除非你完全信任呢個網站，並清楚知道自己喺度簽乜嘢，否則請勿繼續。",
+      "ethSignWarning": "無法核實嘅請求 — 絕大多數正當應用都唔會用 eth_sign。除非你十分肯定，否則請拒絕。",
+      "firstTimeTag": "首次",
+      "contractTag": "合約",
+      "holdToConfirm": "長㩒以確認",
+      "advancedToggle": "進階 — 查看原始數據",
+      "batchIntent": "批次",
+      "batchSubtitle": "{{count}} 筆交易，一併簽署",
+      "batchCall": "合約調用"
     },
     "currency": {
       "title": "顯示貨幣",
@@ -133,7 +151,9 @@
       "expired": "此授權簽章已過期",
       "noExpiry": "此授權永不過期",
       "expiresLabel": "過期時間",
-      "chooseAction": "請揀「撤銷」或「授權」以繼續。"
+      "chooseAction": "請揀「撤銷」或「授權」以繼續。",
+      "resultingTotal": "授權後總額度",
+      "resultingTotalUnknown": "喺你現有額度之上再增加 {{amount}}（無法讀取目前額度）"
     }
   }
 }

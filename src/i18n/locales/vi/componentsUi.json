@@ -49,7 +49,30 @@
       "typeLabel": "Loại",
       "intentUnknown": "Không xác định",
       "intentSend": "Gửi",
-      "signingFor": "Đang ký cho"
+      "signingFor": "Đang ký cho",
+      "tokenToContractWarning": "Giao dịch này gửi token đến chính hợp đồng của token đó — chúng sẽ mất vĩnh viễn.",
+      "expiredWarning": "Hạn chót của giao dịch này đã trôi qua — nhiều khả năng sẽ thất bại.",
+      "signInIntent": "Đăng nhập",
+      "siweDomain": "Trang web",
+      "siweStatement": "Nội dung",
+      "siweMismatch": "Lượt đăng nhập này dành cho {{domain}} nhưng yêu cầu lại đến từ {{origin}}. Rất có thể là lừa đảo — hãy từ chối.",
+      "siweOk": "Đã xác minh đăng nhập vào {{domain}}",
+      "ethSignIntent": "Chữ ký mù",
+      "ethSignTitle": "eth_sign — hash thô",
+      "ethSignBody": "Thao tác này ký một hash mờ. Một trang web độc hại có thể giấu một lệnh chuyển token hoặc cấp quyền phía sau nó. Chỉ tiếp tục nếu bạn hoàn toàn tin tưởng trang web này và biết chính xác mình đang ký gì.",
+      "ethSignWarning": "Yêu cầu không thể xác minh — hầu hết các ứng dụng hợp pháp không bao giờ dùng eth_sign. Hãy từ chối trừ khi bạn chắc chắn.",
+      "firstTimeTag": "Lần đầu",
+      "contractTag": "Hợp đồng",
+      "holdToConfirm": "Giữ để xác nhận",
+      "advancedToggle": "Nâng cao — xem dữ liệu thô",
+      "batchIntent": "Gộp",
+      "batchSubtitle": "{{count}} giao dịch, ký cùng lúc",
+      "batchCall": "Gọi hợp đồng",
+      "balanceUnderfundedNative": "Không đủ {{symbol}} để thực hiện lần chuyển này — nhiều khả năng sẽ thất bại on-chain."
+    },
+    "signingApprove": {
+      "resultingTotal": "Tổng hạn mức mới",
+      "resultingTotalUnknown": "Cộng thêm {{amount}} vào hạn mức hiện tại của bạn (không đọc được số lượng hiện tại)"
     },
     "currency": {
       "title": "Tiền tệ hiển thị",

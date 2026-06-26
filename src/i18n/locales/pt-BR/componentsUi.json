@@ -49,7 +49,30 @@
       "typeLabel": "Tipo",
       "intentUnknown": "Desconhecido",
       "intentSend": "Enviar",
-      "signingFor": "Assinando para"
+      "signingFor": "Assinando para",
+      "tokenToContractWarning": "Isto envia tokens para o próprio contrato do token — eles seriam perdidos para sempre.",
+      "expiredWarning": "O prazo desta transação já expirou — ela deve falhar.",
+      "signInIntent": "Entrar",
+      "siweDomain": "Site",
+      "siweStatement": "Declaração",
+      "siweMismatch": "Este login é para {{domain}}, mas a solicitação veio de {{origin}}. Provável tentativa de phishing — rejeite.",
+      "siweOk": "Login verificado em {{domain}}",
+      "ethSignIntent": "Assinatura cega",
+      "ethSignTitle": "eth_sign — hash bruto",
+      "ethSignBody": "Isto assina um hash opaco. Um site malicioso pode esconder uma transferência ou aprovação de tokens por trás dele. Só continue se confiar totalmente neste site e souber exatamente o que está assinando.",
+      "ethSignWarning": "Solicitação não verificável — apps legítimos quase nunca usam eth_sign. Rejeite, a menos que tenha certeza.",
+      "firstTimeTag": "Primeira vez",
+      "contractTag": "Contrato",
+      "holdToConfirm": "Segure para confirmar",
+      "advancedToggle": "Avançado — ver dados brutos",
+      "batchIntent": "Lote",
+      "batchSubtitle": "{{count}} transações, assinadas juntas",
+      "batchCall": "Chamada de contrato",
+      "balanceUnderfundedNative": "{{symbol}} insuficiente para cobrir esta transferência — ela deve falhar on-chain."
+    },
+    "signingApprove": {
+      "resultingTotal": "Novo limite total",
+      "resultingTotalUnknown": "Adiciona {{amount}} ao seu limite atual (não foi possível ler o valor atual)"
     },
     "currency": {
       "title": "Moeda de exibição",

@@ -58,7 +58,25 @@
       "balanceChangesTitle": "余额变化",
       "balanceNoAssetsMove": "没有资产离开你的钱包",
       "balanceUnverifiedToken": "未验证代币",
-      "balanceUnderfundedNative": "{{symbol}} 余额不足以支付这笔转账 — 预计会在链上失败。"
+      "balanceUnderfundedNative": "{{symbol}} 余额不足以支付这笔转账 — 预计会在链上失败。",
+      "tokenToContractWarning": "这是把代币转给该代币自己的合约 — 转出后将永久无法找回。",
+      "expiredWarning": "这笔交易的截止时间已过 — 预计会失败。",
+      "signInIntent": "登录",
+      "siweDomain": "站点",
+      "siweStatement": "声明",
+      "siweMismatch": "此登录请求面向 {{domain}}，但实际发起方是 {{origin}}。很可能是钓鱼攻击 — 请拒绝。",
+      "siweOk": "已验证登录到 {{domain}}",
+      "ethSignIntent": "盲签",
+      "ethSignTitle": "eth_sign — 原始哈希",
+      "ethSignBody": "这会对一段无法识别的哈希进行签名。恶意站点可能借此隐藏一笔代币转账或授权。只有在你完全信任该站点、且清楚自己正在签署什么时，才可继续。",
+      "ethSignWarning": "无法核实的请求 — 正规应用几乎从不使用 eth_sign。除非你十分确定，否则请拒绝。",
+      "firstTimeTag": "首次交互",
+      "contractTag": "合约",
+      "holdToConfirm": "长按确认",
+      "advancedToggle": "高级 — 查看原始数据",
+      "batchIntent": "批量",
+      "batchSubtitle": "{{count}} 笔交易，一并签名",
+      "batchCall": "合约调用"
     },
     "currency": {
       "title": "显示货币",
@@ -133,7 +151,9 @@
       "expired": "该授权签名已过期",
       "noExpiry": "该授权永不过期",
       "expiresLabel": "过期时间",
-      "chooseAction": "请选择「撤销」或「授权」以继续。"
+      "chooseAction": "请选择「撤销」或「授权」以继续。",
+      "resultingTotal": "授权后总额度",
+      "resultingTotalUnknown": "在你当前的额度之上再增加 {{amount}}（无法读取当前额度）"
     }
   }
 }

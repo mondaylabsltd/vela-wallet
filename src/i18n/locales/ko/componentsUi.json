@@ -49,7 +49,30 @@
       "typeLabel": "유형",
       "intentUnknown": "알 수 없음",
       "intentSend": "보내기",
-      "signingFor": "서명 대상"
+      "signingFor": "서명 대상",
+      "tokenToContractWarning": "토큰을 해당 토큰의 컨트랙트 자체로 보냅니다 — 영영 사라집니다.",
+      "expiredWarning": "이 거래의 마감 시각이 이미 지났습니다 — 실패할 것으로 보입니다.",
+      "signInIntent": "로그인",
+      "siweDomain": "사이트",
+      "siweStatement": "안내문",
+      "siweMismatch": "이 로그인은 {{domain}}용이지만 요청은 {{origin}}에서 왔습니다. 피싱일 가능성이 높으니 거부하세요.",
+      "siweOk": "{{domain}} 로그인이 확인되었습니다",
+      "ethSignIntent": "블라인드 서명",
+      "ethSignTitle": "eth_sign — 원시 해시",
+      "ethSignBody": "이것은 알 수 없는 해시에 서명합니다. 악성 사이트는 그 뒤에 토큰 전송이나 승인을 숨길 수 있습니다. 이 사이트를 완전히 신뢰하고 무엇에 서명하는지 정확히 알 때만 진행하세요.",
+      "ethSignWarning": "확인할 수 없는 요청입니다 — 정상적인 앱은 대부분 eth_sign을 사용하지 않습니다. 확신이 없다면 거부하세요.",
+      "firstTimeTag": "첫 거래",
+      "contractTag": "컨트랙트",
+      "holdToConfirm": "길게 눌러 확인",
+      "advancedToggle": "고급 — 원시 데이터 보기",
+      "batchIntent": "일괄 처리",
+      "batchSubtitle": "거래 {{count}}건을 함께 서명",
+      "batchCall": "컨트랙트 호출",
+      "balanceUnderfundedNative": "이 전송에 필요한 {{symbol}}이(가) 부족합니다 — 온체인에서 실패할 것으로 보입니다."
+    },
+    "signingApprove": {
+      "resultingTotal": "새 총 승인 한도",
+      "resultingTotalUnknown": "현재 승인 한도에 {{amount}}을(를) 추가합니다 (현재 금액을 읽을 수 없었습니다)"
     },
     "currency": {
       "title": "표시 통화",

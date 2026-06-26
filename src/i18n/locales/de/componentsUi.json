@@ -49,7 +49,30 @@
       "typeLabel": "Typ",
       "intentUnknown": "Unbekannt",
       "intentSend": "Senden",
-      "signingFor": "Signieren für"
+      "signingFor": "Signieren für",
+      "tokenToContractWarning": "Hier werden Token an den eigenen Contract des Tokens gesendet — sie gingen unwiederbringlich verloren.",
+      "expiredWarning": "Die Frist für diese Transaktion ist bereits abgelaufen — sie wird voraussichtlich fehlschlagen.",
+      "signInIntent": "Anmelden",
+      "siweDomain": "Seite",
+      "siweStatement": "Erklärung",
+      "siweMismatch": "Diese Anmeldung ist für {{domain}}, doch die Anfrage kam von {{origin}}. Wahrscheinlich ein Phishing-Versuch — lehnen Sie sie ab.",
+      "siweOk": "Anmeldung bei {{domain}} verifiziert",
+      "ethSignIntent": "Blindsignatur",
+      "ethSignTitle": "eth_sign — roher Hash",
+      "ethSignBody": "Hiermit wird ein undurchsichtiger Hash signiert. Eine bösartige Seite kann dahinter einen Token-Transfer oder eine Genehmigung verstecken. Fahren Sie nur fort, wenn Sie dieser Seite voll vertrauen und genau wissen, was Sie signieren.",
+      "ethSignWarning": "Nicht überprüfbare Anfrage — die meisten seriösen Apps verwenden eth_sign nie. Lehnen Sie ab, sofern Sie nicht sicher sind.",
+      "firstTimeTag": "Erstes Mal",
+      "contractTag": "Contract",
+      "holdToConfirm": "Zum Bestätigen halten",
+      "advancedToggle": "Erweitert — Rohdaten anzeigen",
+      "batchIntent": "Stapel",
+      "batchSubtitle": "{{count}} Transaktionen, gemeinsam signiert",
+      "batchCall": "Contract-Aufruf",
+      "balanceUnderfundedNative": "Nicht genügend {{symbol}}, um diesen Transfer zu decken — er wird voraussichtlich on-chain fehlschlagen."
+    },
+    "signingApprove": {
+      "resultingTotal": "Neue Gesamtfreigabe",
+      "resultingTotalUnknown": "Erhöht Ihre aktuelle Freigabe um {{amount}} (der aktuelle Betrag konnte nicht ausgelesen werden)"
     },
     "currency": {
       "title": "Anzeigewährung",

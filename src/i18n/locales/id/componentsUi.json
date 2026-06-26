@@ -49,7 +49,30 @@
       "typeLabel": "Tipe",
       "intentUnknown": "Tidak dikenal",
       "intentSend": "Kirim",
-      "signingFor": "Menandatangani untuk"
+      "signingFor": "Menandatangani untuk",
+      "tokenToContractWarning": "Ini mengirim token ke kontrak token itu sendiri — token akan hilang selamanya.",
+      "expiredWarning": "Batas waktu transaksi ini sudah lewat — kemungkinan besar akan gagal.",
+      "signInIntent": "Masuk",
+      "siweDomain": "Situs",
+      "siweStatement": "Pernyataan",
+      "siweMismatch": "Proses masuk ini untuk {{domain}}, tetapi permintaan datang dari {{origin}}. Kemungkinan upaya phishing — tolak permintaan ini.",
+      "siweOk": "Proses masuk ke {{domain}} terverifikasi",
+      "ethSignIntent": "Tanda tangan buta",
+      "ethSignTitle": "eth_sign — hash mentah",
+      "ethSignBody": "Ini menandatangani hash yang tidak transparan. Situs jahat bisa menyembunyikan transfer atau persetujuan token di baliknya. Lanjutkan hanya jika Anda sepenuhnya memercayai situs ini dan tahu persis apa yang Anda tanda tangani.",
+      "ethSignWarning": "Permintaan tidak dapat diverifikasi — hampir semua aplikasi tepercaya tidak pernah memakai eth_sign. Tolak kecuali Anda benar-benar yakin.",
+      "firstTimeTag": "Pertama kali",
+      "contractTag": "Kontrak",
+      "holdToConfirm": "Tahan untuk konfirmasi",
+      "advancedToggle": "Lanjutan — lihat data mentah",
+      "batchIntent": "Batch",
+      "batchSubtitle": "{{count}} transaksi, ditandatangani bersamaan",
+      "batchCall": "Panggilan kontrak",
+      "balanceUnderfundedNative": "{{symbol}} tidak cukup untuk menutup transfer ini — kemungkinan besar akan gagal on-chain."
+    },
+    "signingApprove": {
+      "resultingTotal": "Total tunjangan baru",
+      "resultingTotalUnknown": "Menambah {{amount}} di atas tunjangan Anda saat ini (jumlah saat ini tidak dapat dibaca)"
     },
     "currency": {
       "title": "Mata uang tampilan",

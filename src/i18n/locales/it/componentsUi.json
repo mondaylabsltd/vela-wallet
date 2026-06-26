@@ -49,7 +49,30 @@
       "typeLabel": "Tipo",
       "intentUnknown": "Sconosciuto",
       "intentSend": "Invia",
-      "signingFor": "Firma per"
+      "signingFor": "Firma per",
+      "tokenToContractWarning": "Questo invia i token al contratto del token stesso: andrebbero persi per sempre.",
+      "expiredWarning": "La scadenza di questa transazione è già passata: ci si aspetta che fallisca.",
+      "signInIntent": "Accedi",
+      "siweDomain": "Sito",
+      "siweStatement": "Dichiarazione",
+      "siweMismatch": "Questo accesso è per {{domain}}, ma la richiesta proviene da {{origin}}. Probabile tentativo di phishing: rifiutalo.",
+      "siweOk": "Accesso verificato a {{domain}}",
+      "ethSignIntent": "Firma cieca",
+      "ethSignTitle": "eth_sign — hash grezzo",
+      "ethSignBody": "Questo firma un hash opaco. Un sito malevolo può nascondervi un trasferimento di token o un'approvazione. Continua solo se ti fidi pienamente di questo sito e sai esattamente cosa stai firmando.",
+      "ethSignWarning": "Richiesta non verificabile: quasi nessuna app legittima usa eth_sign. Rifiuta, a meno che tu non sia certo.",
+      "firstTimeTag": "Prima volta",
+      "contractTag": "Contratto",
+      "holdToConfirm": "Tieni premuto per confermare",
+      "advancedToggle": "Avanzate — mostra i dati grezzi",
+      "batchIntent": "Gruppo",
+      "batchSubtitle": "{{count}} transazioni, firmate insieme",
+      "batchCall": "Chiamata al contratto",
+      "balanceUnderfundedNative": "{{symbol}} non sufficienti per coprire questo trasferimento: ci si aspetta che fallisca on-chain."
+    },
+    "signingApprove": {
+      "resultingTotal": "Nuovo limite totale",
+      "resultingTotalUnknown": "Aggiunge {{amount}} all'autorizzazione attuale (impossibile leggere l'importo corrente)"
     },
     "currency": {
       "title": "Valuta di visualizzazione",

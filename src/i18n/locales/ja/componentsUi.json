@@ -49,7 +49,30 @@
       "typeLabel": "種類",
       "intentUnknown": "不明",
       "intentSend": "送る",
-      "signingFor": "署名先"
+      "signingFor": "署名先",
+      "tokenToContractWarning": "トークンをそのトークン自身のコントラクトに送ろうとしています — 送ると二度と取り戻せません。",
+      "expiredWarning": "この取引の期限はすでに過ぎています — 失敗する見込みです。",
+      "signInIntent": "サインイン",
+      "siweDomain": "サイト",
+      "siweStatement": "ステートメント",
+      "siweMismatch": "このサインインは {{domain}} 向けですが、リクエストは {{origin}} から届いています。フィッシングの可能性が高いため、拒否してください。",
+      "siweOk": "{{domain}} へのサインインを確認しました",
+      "ethSignIntent": "ブラインド署名",
+      "ethSignTitle": "eth_sign — 生のハッシュ",
+      "ethSignBody": "これは中身の見えないハッシュに署名します。悪意のあるサイトが、トークンの送金や承認をその裏に隠している可能性があります。このサイトを完全に信頼し、何に署名するかを正確に把握している場合のみ続行してください。",
+      "ethSignWarning": "検証できないリクエストです — 正規のアプリが eth_sign を使うことはほとんどありません。確信がない限り拒否してください。",
+      "firstTimeTag": "初めて",
+      "contractTag": "コントラクト",
+      "holdToConfirm": "長押しで確認",
+      "advancedToggle": "詳細 — 生データを表示",
+      "batchIntent": "バッチ",
+      "batchSubtitle": "{{count}} 件の取引をまとめて署名",
+      "batchCall": "コントラクト呼び出し",
+      "balanceUnderfundedNative": "この送金に必要な {{symbol}} が不足しています — オンチェーンで失敗する見込みです。"
+    },
+    "signingApprove": {
+      "resultingTotal": "新しい承認上限",
+      "resultingTotalUnknown": "現在の承認上限に {{amount}} を上乗せします（現在の上限を読み取れませんでした）"
     },
     "currency": {
       "title": "表示通貨",
