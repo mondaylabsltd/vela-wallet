@@ -18,6 +18,7 @@ export const GET: RequestHandler = () => {
 	const staticPages: UrlEntry[] = [
 		{ path: '/', changefreq: 'weekly', priority: '1.0' },
 		{ path: '/about', changefreq: 'monthly', priority: '0.7' },
+		{ path: '/roadmap', changefreq: 'monthly', priority: '0.6' },
 		{ path: '/blog', changefreq: 'weekly', priority: '0.8' },
 		{ path: '/docs', changefreq: 'weekly', priority: '0.8' },
 		{ path: '/privacy', changefreq: 'yearly', priority: '0.3' },
