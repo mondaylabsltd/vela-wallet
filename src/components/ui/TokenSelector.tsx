@@ -16,7 +16,7 @@ import { isNativeToken, tokenBalanceDouble, tokenChainId, tokenId, tokenLogoURLs
 import { isStable } from '@/services/activity';
 import { isTempoFeeToken } from '@/services/tempo';
 import { formatTokenAmount } from '@/services/locale-format';
-import { Plus, Search } from 'lucide-react-native';
+import { Check, Plus, Search } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
@@ -51,21 +51,30 @@ interface Props {
   multiSelect?: {
     selectedIds: Set<string>;
     onToggle: (token: APIToken) => void;
-    onSelectAllValuable: (visible: APIToken[]) => void;
+    /** Master "select all" — host decides select-all vs clear from the visible list. */
+    onToggleAll: (visible: APIToken[]) => void;
+    /** Whether the master checkbox reads as checked for the current visible list. */
+    isAllSelected: (visible: APIToken[]) => boolean;
+    /** Network filter changed — host clears the selection (a batch is one chain). */
+    onNetworkChange: (chainId: number | null) => void;
     onConfirm: () => void;
     confirmLabel: string;
     selectAllLabel: string;
+    /** Shown (instead of checkboxes) until a specific network is chosen. */
+    pickNetworkHint: string;
   };
+  /** Seed the network filter on mount (e.g. restoring a sweep after going back). */
+  initialChainId?: number | null;
 }
 
-export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTotals, defaultCategory = 'stable', multiSelect }: Props) {
+export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTotals, defaultCategory = 'stable', multiSelect, initialChainId = null }: Props) {
   const { t } = useTranslation();
   const formatUsd = useDisplayCurrency().fmt;
   const networks = getAllNetworksSync();
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<TokenCategory>(defaultCategory);
-  const [chainFilter, setChainFilter] = useState<number | null>(null);
+  const [chainFilter, setChainFilter] = useState<number | null>(initialChainId);
   const [showNetSheet, setShowNetSheet] = useState(false);
   const [showAddToken, setShowAddToken] = useState(false);
 
@@ -91,8 +100,12 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
       return a.symbol.localeCompare(b.symbol);
     });
   const filteredTotal = filtered.reduce((s, tok) => s + tokenUsdValue(tok), 0);
+  // Sweep multi-select only switches on once a specific network is chosen — a
+  // single batch UserOp is one chain, so "all networks" can't be swept at once.
+  const sweepActive = !!multiSelect && chainFilter != null;
 
-  const CATEGORIES: { key: Exclude<TokenCategory, 'all'>; label: string }[] = [
+  const CATEGORIES: { key: TokenCategory; label: string }[] = [
+    { key: 'all', label: t('send.filterAll', { defaultValue: 'All' }) },
     { key: 'stable', label: t('send.filterStable') },
     { key: 'gas', label: t('send.filterGas') },
     { key: 'other', label: t('send.filterOther') },
@@ -131,7 +144,7 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
           {CATEGORIES.map((c) => {
             const active = category === c.key;
             return (
-              <Pressable key={c.key} onPress={() => setCategory(active ? 'all' : c.key)} style={[styles.chip, active && styles.chipActive]}>
+              <Pressable key={c.key} onPress={() => setCategory(c.key)} style={[styles.chip, active && styles.chipActive]}>
                 <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>{c.label}</Text>
               </Pressable>
             );
@@ -141,12 +154,19 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
           networks={networks}
           selected={selectedNetwork}
           onPress={() => setShowNetSheet(true)}
-          onClear={() => setChainFilter(null)}
+          onClear={() => { setChainFilter(null); multiSelect?.onNetworkChange(null); }}
         />
       </View>
 
-      {multiSelect && (
-        <Pressable onPress={() => multiSelect.onSelectAllValuable(filtered)} style={styles.sweepAllChip}>
+      {/* Sweep: pick a network first, then a master "select all" appears. */}
+      {multiSelect && !sweepActive && (
+        <Text style={styles.sweepHint}>{multiSelect.pickNetworkHint}</Text>
+      )}
+      {sweepActive && multiSelect && (
+        <Pressable onPress={() => multiSelect.onToggleAll(filtered)} style={styles.sweepAllRow}>
+          <View style={[styles.sweepAllCheck, multiSelect.isAllSelected(filtered) && styles.sweepAllCheckOn]}>
+            {multiSelect.isAllSelected(filtered) && <Check size={13} color={color.bg.base} strokeWidth={3} />}
+          </View>
           <Text style={styles.sweepAllText}>{multiSelect.selectAllLabel}</Text>
         </Pressable>
       )}
@@ -178,8 +198,8 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
               contractAddress={item.tokenAddress}
               balance={formatTokenAmount(tokenBalanceDouble(item), { compact: true })}
               usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
-              onPress={multiSelect ? () => multiSelect.onToggle(item) : () => { onSelect(item); setSearch(''); }}
-              selected={multiSelect ? multiSelect.selectedIds.has(tokenId(item)) : undefined}
+              onPress={sweepActive ? () => multiSelect!.onToggle(item) : multiSelect ? () => {} : () => { onSelect(item); setSearch(''); }}
+              selected={sweepActive ? multiSelect!.selectedIds.has(tokenId(item)) : undefined}
               index={index}
             />
           )}
@@ -195,7 +215,7 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
         visible={showNetSheet}
         networks={networks}
         selectedChainId={chainFilter}
-        onSelect={setChainFilter}
+        onSelect={(id) => { setChainFilter(id); multiSelect?.onNetworkChange(id); }}
         onClose={() => setShowNetSheet(false)}
         subtitleForChain={(n) => {
           const c = tokens.filter((tk) => tokenChainId(tk) === n.chainId).length;
@@ -204,7 +224,7 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
       />
       <AddTokenSheet visible={showAddToken} onClose={() => setShowAddToken(false)} onChanged={onAddChanged} />
 
-      {multiSelect && (
+      {sweepActive && multiSelect && (
         <Pressable
           onPress={multiSelect.onConfirm}
           disabled={multiSelect.selectedIds.size === 0}
@@ -219,17 +239,25 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
 
 const styles = createStyles(() => ({
   container: { flex: 1 },
-  sweepAllChip: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-    borderRadius: radius.full,
-    backgroundColor: color.accent.soft,
-    borderWidth: 1,
-    borderColor: color.accent.base,
-    marginBottom: space.md,
+  sweepAllRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.md,
+    marginBottom: space.sm,
   },
-  sweepAllText: { fontSize: text.sm, ...inter.semibold, color: color.accent.base },
+  sweepAllCheck: {
+    width: 22, height: 22, borderRadius: 11, borderWidth: 2,
+    borderColor: color.border.strong, alignItems: 'center', justifyContent: 'center',
+  },
+  sweepAllCheckOn: { backgroundColor: color.accent.base, borderColor: color.accent.base },
+  sweepAllText: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
+  sweepHint: {
+    fontSize: text.sm, ...inter.medium, color: color.accent.base,
+    backgroundColor: color.accent.soft, borderRadius: radius.lg,
+    paddingHorizontal: space.lg, paddingVertical: space.md, marginBottom: space.sm,
+  },
   sweepConfirm: {
     alignItems: 'center',
     justifyContent: 'center',

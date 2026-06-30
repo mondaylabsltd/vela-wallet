@@ -577,38 +577,39 @@ export default function SendScreen() {
   };
 
   // ── ② sweep-mode (多币一人 / 清空) helpers ───────────────────────────────────
+  // Sweep is gated on a chosen network (the picker only enables checkboxes once a
+  // network is selected), so selection is always single-chain — no chain juggling.
   const sweepTokensList = tokens.filter((tk) => sweepSelected.has(tokenId(tk)));
 
-  // A batch UserOp is single-chain — toggling a token on a new chain restarts the
-  // selection on that chain; clearing the last token resets the chain lock.
   const toggleSweepToken = (tk: APIToken) => {
-    const id = tokenId(tk);
-    const chain = tokenChainId(tk);
     setSweepSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        if (next.size === 0) setSweepChainId(null);
-        return next;
-      }
-      if (sweepChainId != null && chain !== sweepChainId) {
-        setSweepChainId(chain);
-        return new Set([id]);
-      }
-      setSweepChainId(chain);
-      next.add(id);
+      const id = tokenId(tk);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
 
-  // "全选有价值代币" — all held/priced/non-spam tokens on a single chain.
-  const selectAllValuableSweep = (visible: APIToken[]) => {
+  // Master "全选" — all held/priced/non-spam tokens in the current (chain-scoped) view.
+  const isAllSweepSelected = (visible: APIToken[]) => {
+    const valuable = selectAllValuable(visible);
+    return valuable.length > 0 && valuable.every((tk) => sweepSelected.has(tokenId(tk)));
+  };
+  const toggleAllSweep = (visible: APIToken[]) => {
     const valuable = selectAllValuable(visible);
     if (valuable.length === 0) return;
-    const chain = sweepChainId ?? tokenChainId(valuable[0]);
-    const onChain = valuable.filter((tk) => tokenChainId(tk) === chain);
-    setSweepChainId(chain);
-    setSweepSelected(new Set(onChain.map((tk) => tokenId(tk))));
+    setSweepSelected((prev) => {
+      const allOn = valuable.every((tk) => prev.has(tokenId(tk)));
+      const next = new Set(prev);
+      valuable.forEach((tk) => (allOn ? next.delete(tokenId(tk)) : next.add(tokenId(tk))));
+      return next;
+    });
+  };
+
+  // Network filter changed in the picker — a batch is one chain, so clear and re-lock.
+  const onSweepNetworkChange = (chainId: number | null) => {
+    setSweepSelected(new Set());
+    setSweepChainId(chainId);
   };
 
   // Selected → advance to enter-recipient. The first token carries chain/gas context.
@@ -1005,17 +1006,25 @@ export default function SendScreen() {
         </Pressable>
       </View>
       <TokenSelector
+        key={sweepMode ? 'sweep' : 'browse'}
         tokens={tokens}
         loading={loading}
         onSelect={handleSelectToken}
         onAddChanged={refreshTokens}
+        defaultCategory={sweepMode ? 'all' : 'stable'}
+        initialChainId={sweepMode ? sweepChainId : null}
         multiSelect={sweepMode ? {
           selectedIds: sweepSelected,
           onToggle: toggleSweepToken,
-          onSelectAllValuable: selectAllValuableSweep,
+          onToggleAll: toggleAllSweep,
+          isAllSelected: isAllSweepSelected,
+          onNetworkChange: onSweepNetworkChange,
           onConfirm: startSweepConfirm,
-          confirmLabel: t('send.sweepContinue', { n: sweepSelected.size, defaultValue: `Empty ${sweepSelected.size} token(s) →` }),
+          confirmLabel: sweepChainId != null
+            ? t('send.sweepContinueChain', { chain: chainName(sweepChainId), n: sweepSelected.size, defaultValue: `Empty ${sweepSelected.size} on ${chainName(sweepChainId)} →` })
+            : t('send.sweepContinue', { n: sweepSelected.size, defaultValue: `Empty ${sweepSelected.size} token(s) →` }),
           selectAllLabel: t('send.selectAllValuable', { defaultValue: 'Select all valuable' }),
+          pickNetworkHint: t('send.sweepPickNetwork', { defaultValue: 'Pick a network above to empty (one network at a time)' }),
         } : undefined}
       />
     </Animated.View>
