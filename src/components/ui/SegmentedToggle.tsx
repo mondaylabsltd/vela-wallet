@@ -2,11 +2,14 @@
  * SegmentedToggle — a compact two-or-more segment switch (e.g. Activity | Connections).
  *
  * Generic over the option key type. Optional numeric badge per segment.
- * Theme-driven (light/dark). The active segment lifts onto a raised surface.
+ * Theme-driven (light/dark). A single raised pill slides between segments with a
+ * spring (iOS-segmented-control feel) and a selection haptic fires on change.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { color, createStyles, inter, radius, shadow, space, text } from '@/constants/theme';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import { color, createStyles, inter, motion, radius, shadow, space, text } from '@/constants/theme';
+import { hapticSelection } from '@/services/platform';
 
 export interface SegmentOption<T extends string> {
   key: T;
@@ -20,16 +23,53 @@ interface Props<T extends string> {
   onChange: (key: T) => void;
 }
 
+/** Track padding + inter-segment gap (kept in sync with the styles below). */
+const PAD = space.sm;
+const GAP = space.sm;
+
 export function SegmentedToggle<T extends string>({ options, value, onChange }: Props<T>) {
+  const [trackW, setTrackW] = useState(0);
+  const n = options.length;
+  const segW = trackW > 0 ? (trackW - PAD * 2 - GAP * (n - 1)) / n : 0;
+  const activeIndex = Math.max(0, options.findIndex((o) => o.key === value));
+
+  const tx = useSharedValue(0);
+  const ready = useSharedValue(false);
+
+  // Slide the pill to the active segment. First measured position is set without
+  // animation; subsequent changes spring.
+  useEffect(() => {
+    if (segW <= 0) return;
+    const target = PAD + activeIndex * (segW + GAP);
+    if (!ready.value) {
+      tx.value = target;
+      ready.value = true;
+    } else {
+      tx.value = withSpring(target, motion.spring);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex, segW]);
+
+  const pillStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));
+
   return (
-    <View style={styles.track}>
+    <View style={styles.track} onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
+      {segW > 0 && (
+        <Animated.View style={[styles.pill, { width: segW }, pillStyle]} pointerEvents="none" />
+      )}
       {options.map((opt) => {
         const active = opt.key === value;
         return (
           <Pressable
             key={opt.key}
-            style={[styles.segment, active && styles.segmentActive]}
-            onPress={() => onChange(opt.key)}
+            style={styles.segment}
+            onPress={() => {
+              if (opt.key !== value) hapticSelection();
+              onChange(opt.key);
+            }}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={opt.label}
           >
             <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>{opt.label}</Text>
             {opt.badge != null && opt.badge > 0 && (
@@ -49,9 +89,19 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     backgroundColor: color.bg.sunken,
     borderRadius: radius.lg,
-    padding: space.sm,
-    gap: space.sm,
+    padding: PAD,
+    gap: GAP,
     flex: 1,
+  },
+  // The single sliding indicator behind the labels (replaces per-segment bg).
+  pill: {
+    position: 'absolute',
+    left: 0,
+    top: PAD,
+    bottom: PAD,
+    borderRadius: radius.md,
+    backgroundColor: color.bg.raised,
+    ...shadow.sm,
   },
   segment: {
     flex: 1,
@@ -61,10 +111,6 @@ const styles = createStyles(() => ({
     gap: space.sm,
     paddingVertical: space.md,
     borderRadius: radius.md,
-  },
-  segmentActive: {
-    backgroundColor: color.bg.raised,
-    ...shadow.sm,
   },
   label: {
     fontSize: text.base,

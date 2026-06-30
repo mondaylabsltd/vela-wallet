@@ -26,6 +26,11 @@
       "accountNameLabel": "Account Name",
       "accountNamePlaceholder": "Enter a name for your account",
       "accountNameHint": "This name is stored with your public key on-chain for cross-device sign-in.",
+      "reassure": {
+        "title": "No seed phrase to lose",
+        "point1": "Your key is created and held by Face ID / fingerprint — never typed, never shown.",
+        "point2": "It syncs via iCloud Keychain or Google Password Manager — sign in on a new device to restore."
+      },
       "ack0": "This is a self-custodial wallet. Your passkey private key is managed by your device's password manager (iCloud Keychain / Google Password Manager). Vela Wallet cannot access or recover it.",
       "ack1": "If you lose your device, you can restore your wallet on a new device through your iCloud or Google account.",
       "ack2": "If your iCloud or Google account is compromised, your wallet control may also be compromised. Protect it with a strong password and 2FA.",
