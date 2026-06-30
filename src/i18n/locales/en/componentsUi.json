@@ -102,7 +102,8 @@
       "advancedToggle": "Advanced — view raw data",
       "batchIntent": "Batch",
       "batchSubtitle": "{{count}} transactions, signed together",
-      "batchCall": "Contract call"
+      "batchCall": "Contract call",
+      "balanceSelfTransfer": "To your own address · balance won't change"
     },
     "currency": {
       "title": "Display currency",

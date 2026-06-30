@@ -60,6 +60,16 @@
     "modalBtnApprove": "Genehmigen",
     "modalBtnConfirmIntent": "{{intent}} bestätigen",
     "alertSignedTitle": "Signiert!",
-    "alertSignedBody": "Dies ist ein Test — es wurde keine echte Signatur erstellt."
+    "alertSignedBody": "Dies ist ein Test — es wurde keine echte Signatur erstellt.",
+    "scenarioEthSign": "eth_sign (roher Hash)",
+    "scenarioEthSignSub": "Blindsignatur-Falle — sollte deutlich warnen",
+    "scenarioSiwePhish": "SIWE-Domain stimmt nicht überein",
+    "scenarioSiwePhishSub": "Anmeldung an eine andere Domain gebunden — Phishing",
+    "scenarioIncreaseAllowance": "increaseAllowance",
+    "scenarioIncreaseAllowanceSub": "Inkrement-Semantik — resultierende Gesamtsumme anzeigen",
+    "scenarioExpiredSwap": "Abgelaufene Swap-Frist",
+    "scenarioExpiredSwapSub": "Frist bereits abgelaufen — markieren",
+    "scenarioBatch": "EIP-5792-Stapel",
+    "scenarioBatchSub": "wallet_sendCalls — Aufschlüsselung pro Aufruf"
   }
 }

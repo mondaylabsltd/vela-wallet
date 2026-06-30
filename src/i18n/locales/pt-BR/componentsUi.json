@@ -21,7 +21,8 @@
       "denialBalanceTooLow": "Saldo da carteira baixo demais para qualificar.",
       "denialNoPasskey": "Passkey necessária para a ativação gratuita.",
       "denialRateLimited": "Muitas solicitações. Tente mais tarde.",
-      "denialTransferFailed": "Falha na transferência. Tente de novo."
+      "denialTransferFailed": "Falha na transferência. Tente de novo.",
+      "denialPendingUnknown": "Não foi possível confirmar a ativação — verificando seu saldo abaixo. Se ele não atualizar em instantes, ative por conta própria."
     },
     "signing": {
       "loading": "Carregando...",
@@ -68,11 +69,53 @@
       "batchIntent": "Lote",
       "batchSubtitle": "{{count}} transações, assinadas juntas",
       "batchCall": "Chamada de contrato",
-      "balanceUnderfundedNative": "{{symbol}} insuficiente para cobrir esta transferência — ela deve falhar on-chain."
+      "balanceUnderfundedNative": "{{symbol}} insuficiente para cobrir esta transferência — ela deve falhar on-chain.",
+      "gasEstimateFailed": "Não foi possível estimar a taxa de gas — o envio pode falhar ou expirar. Toque na taxa acima para tentar de novo.",
+      "submitted": "Enviada — aguardando confirmação",
+      "historicalNote": "Uma assinatura anterior — exatamente o que você aprovou.",
+      "close": "Fechar",
+      "valueLabel": "Valor",
+      "bestEffortWarning": "Decodificado a partir da assinatura da função — não é um descritor verificado. Revise os detalhes com atenção.",
+      "simWillSucceed": "Simulação aprovada — deve ser bem-sucedida",
+      "simWillFail": "Esta transação deve falhar — você ainda pagaria o gas.",
+      "simWillFailReason": "Deve falhar: {{reason}} — você ainda pagaria o gas.",
+      "balanceChangesTitle": "Mudanças no saldo",
+      "balanceNoAssetsMove": "Nenhum ativo sai da sua carteira",
+      "balanceUnverifiedToken": "Token não verificado",
+      "balanceSelfTransfer": "Para seu próprio endereço · o saldo não muda"
     },
     "signingApprove": {
       "resultingTotal": "Novo limite total",
-      "resultingTotalUnknown": "Adiciona {{amount}} ao seu limite atual (não foi possível ler o valor atual)"
+      "resultingTotalUnknown": "Adiciona {{amount}} ao seu limite atual (não foi possível ler o valor atual)",
+      "spendingCap": "Limite de gasto",
+      "reduceBy": "Reduzir em",
+      "requested": "Solicitado",
+      "custom": "Personalizado",
+      "revoke": "Revogar",
+      "revokeValue": "Revogar (0)",
+      "invalidAmount": "Informe um valor válido",
+      "unlimitedDisabled": "Aprovações ilimitadas estão desativadas para a sua segurança",
+      "capSummary": "{{spender}} pode gastar até {{amount}}.",
+      "revokeSummary": "{{spender}} não poderá mais gastar este token.",
+      "choosePrompt": "Defina um valor finito para continuar.",
+      "decimalsUnverified": "Não foi possível verificar as casas decimais do token — confira o valor.",
+      "allNfts": "Todos os NFTs",
+      "fullBalance": "Saldo total",
+      "setApprovalAllWarn": "Isto permite que {{operator}} transfira todos os NFTs desta coleção. Quando possível, conceda acesso a um único item.",
+      "daiWarn": "Isto concede a {{spender}} acesso a todo o seu saldo deste token.",
+      "revokeAccess": "Revogar acesso",
+      "grantAllAnyway": "Conceder acesso a todos",
+      "verbApprove": "Aprovar",
+      "verbApproveAll": "Aprovar todos",
+      "verbRevoke": "Revogar",
+      "spenderLabel": "Autorizado",
+      "operatorLabel": "Operador",
+      "tokenLabel": "Token",
+      "collectionLabel": "Coleção",
+      "expired": "Esta permissão já expirou",
+      "noExpiry": "Esta aprovação nunca expira",
+      "expiresLabel": "Expira",
+      "chooseAction": "Escolha Revogar ou Conceder para continuar."
     },
     "currency": {
       "title": "Moeda de exibição",
@@ -100,7 +143,9 @@
       "gasLimit": "Limite de gas",
       "walletDeployed": "Carteira implantada",
       "deployedYes": "Sim",
-      "deployedNo": "Não (primeira tx)"
+      "deployedNo": "Não (primeira tx)",
+      "estimating": "Estimando...",
+      "estimateFailed": "Toque para tentar de novo"
     },
     "dock": {
       "receive": "Receber",
@@ -115,6 +160,28 @@
     "chart": {
       "noDataFor": "Sem dados para {{label}}",
       "tapHint": "Toque em uma barra para ver o saldo"
+    },
+    "bugReport": {
+      "title": "Relatar um problema",
+      "subtitle": "Conte o que deu errado — vai direto para o nosso rastreador de problemas.",
+      "whatLabel": "O que aconteceu?",
+      "whatPlaceholder": "ex.: toquei em Enviar e a tela travou.",
+      "stepsLabel": "Passos para reproduzir (opcional)",
+      "stepsPlaceholder": "1. Acesse…\n2. Toque em…\n3. Veja…",
+      "previewToggle": "O que será enviado",
+      "consent": "Só enviamos o que você vê aqui — nunca suas chaves, frase de recuperação ou saldos.",
+      "send": "Enviar relatório",
+      "sending": "Enviando…",
+      "cancel": "Cancelar",
+      "successTitle": "Obrigado — problema relatado!",
+      "successBodyNew": "Registrado como issue #{{number}}. Você pode acompanhá-la quando quiser.",
+      "successBodyDeduped": "Adicionado a um relatório já existente (#{{number}}). Obrigado pelo reforço!",
+      "viewIssue": "Ver relatório",
+      "fallbackTitle": "Abrir no GitHub",
+      "fallbackBody": "Não conseguimos enviar automaticamente, mas já preenchemos um formulário do GitHub com os detalhes.",
+      "openGithub": "Abrir formulário do GitHub",
+      "openGithubForm": "Prefere o GitHub? Abrir o formulário de issue →",
+      "done": "Concluído"
     }
   }
 }

@@ -21,7 +21,8 @@
       "denialBalanceTooLow": "Ücretsiz etkinleştirme için bakiyeniz yetersiz.",
       "denialNoPasskey": "Ücretsiz etkinleştirme için geçiş anahtarı gerekli.",
       "denialRateLimited": "Çok fazla istek. Daha sonra deneyin.",
-      "denialTransferFailed": "Transfer başarısız. Tekrar deneyin."
+      "denialTransferFailed": "Transfer başarısız. Tekrar deneyin.",
+      "denialPendingUnknown": "Etkinleştirme doğrulanamadı — aşağıda bakiyen kontrol ediliyor. Kısa süre içinde güncellenmezse manuel olarak fon yükle."
     },
     "signing": {
       "loading": "Yükleniyor...",
@@ -68,11 +69,53 @@
       "batchIntent": "Toplu",
       "batchSubtitle": "{{count}} işlem, birlikte imzalanır",
       "batchCall": "Sözleşme çağrısı",
-      "balanceUnderfundedNative": "Bu transferi karşılamaya yetecek {{symbol}} yok — zincir üzerinde başarısız olması bekleniyor."
+      "balanceUnderfundedNative": "Bu transferi karşılamaya yetecek {{symbol}} yok — zincir üzerinde başarısız olması bekleniyor.",
+      "gasEstimateFailed": "Gas ücreti tahmin edilemedi — gönderim başarısız olabilir veya zaman aşımına uğrayabilir. Yeniden denemek için yukarıdaki ücrete dokun.",
+      "submitted": "Gönderildi — onay bekleniyor",
+      "historicalNote": "Geçmiş bir imza — tam olarak onayladığın şey.",
+      "close": "Kapat",
+      "valueLabel": "Değer",
+      "bestEffortWarning": "Fonksiyon imzasından çözümlendi — doğrulanmış bir tanımlayıcı değil. Ayrıntıları dikkatlice incele.",
+      "simWillSucceed": "Simülasyon geçti — başarılı olması bekleniyor",
+      "simWillFail": "Bu işlemin başarısız olması bekleniyor — gas ücretini yine de ödersin.",
+      "simWillFailReason": "Başarısız olması bekleniyor: {{reason}} — gas ücretini yine de ödersin.",
+      "balanceChangesTitle": "Bakiye değişiklikleri",
+      "balanceNoAssetsMove": "Cüzdanından hiçbir varlık çıkmıyor",
+      "balanceUnverifiedToken": "Doğrulanmamış token",
+      "balanceSelfTransfer": "Kendi adresinize · bakiye değişmez"
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",
-      "resultingTotalUnknown": "Mevcut izninizin üzerine {{amount}} ekler (mevcut miktar okunamadı)"
+      "resultingTotalUnknown": "Mevcut izninizin üzerine {{amount}} ekler (mevcut miktar okunamadı)",
+      "spendingCap": "Harcama limiti",
+      "reduceBy": "Şu kadar azalt",
+      "requested": "İstenen",
+      "custom": "Özel",
+      "revoke": "İptal et",
+      "revokeValue": "İptal et (0)",
+      "invalidAmount": "Geçerli bir tutar gir",
+      "unlimitedDisabled": "Güvenliğin için sınırsız onaylar devre dışı",
+      "capSummary": "{{spender}} en fazla {{amount}} harcayabilir.",
+      "revokeSummary": "{{spender}} artık bu token'ı harcayamayacak.",
+      "choosePrompt": "Devam etmek için sınırlı bir tutar belirle.",
+      "decimalsUnverified": "Token ondalık sayısı doğrulanamadı — tutarı tekrar kontrol et.",
+      "allNfts": "Tüm NFT'ler",
+      "fullBalance": "Tüm bakiye",
+      "setApprovalAllWarn": "Bu, {{operator}} hesabının bu koleksiyondaki her NFT'yi transfer etmesine izin verir. Mümkün olduğunda tek bir öğeye erişim ver.",
+      "daiWarn": "Bu, {{spender}} hesabına bu token'daki tüm bakiyene erişim verir.",
+      "revokeAccess": "Erişimi iptal et",
+      "grantAllAnyway": "Yine de tümüne erişim ver",
+      "verbApprove": "Onayla",
+      "verbApproveAll": "Tümünü Onayla",
+      "verbRevoke": "İptal Et",
+      "spenderLabel": "Harcayan",
+      "operatorLabel": "Operatör",
+      "tokenLabel": "Token",
+      "collectionLabel": "Koleksiyon",
+      "expired": "Bu izin çoktan sona ermiş",
+      "noExpiry": "Bu onayın süresi hiç dolmaz",
+      "expiresLabel": "Sona erme",
+      "chooseAction": "Devam etmek için İptal Et veya Erişim Ver'i seç."
     },
     "currency": {
       "title": "Görüntüleme para birimi",
@@ -100,7 +143,9 @@
       "gasLimit": "Gas Limiti",
       "walletDeployed": "Cüzdan Dağıtıldı",
       "deployedYes": "Evet",
-      "deployedNo": "Hayır (ilk işlem)"
+      "deployedNo": "Hayır (ilk işlem)",
+      "estimating": "Tahmin ediliyor...",
+      "estimateFailed": "Yeniden denemek için dokun"
     },
     "dock": {
       "receive": "Al",
@@ -115,6 +160,28 @@
     "chart": {
       "noDataFor": "{{label}} için veri yok",
       "tapHint": "Bakiyeyi görmek için bir çubuğa dokunun"
+    },
+    "bugReport": {
+      "title": "Sorun bildir",
+      "subtitle": "Neyin ters gittiğini anlat — doğrudan sorun takip sistemimize iletilir.",
+      "whatLabel": "Ne oldu?",
+      "whatPlaceholder": "ör. Gönder'e dokundum ve ekran dondu.",
+      "stepsLabel": "Yeniden oluşturma adımları (isteğe bağlı)",
+      "stepsPlaceholder": "1. Şuraya git…\n2. Şuna dokun…\n3. Şunu gör…",
+      "previewToggle": "Gönderilecekler",
+      "consent": "Yalnızca burada gördüğün gönderilir — asla anahtarların, kurtarma ifaden veya bakiyelerin değil.",
+      "send": "Raporu gönder",
+      "sending": "Gönderiliyor…",
+      "cancel": "İptal",
+      "successTitle": "Teşekkürler — bildirildi!",
+      "successBodyNew": "#{{number}} numaralı sorun olarak kaydedildi. Dilediğin zaman takip edebilirsin.",
+      "successBodyDeduped": "Mevcut bir rapora (#{{number}}) eklendi. Ek bilgi için teşekkürler!",
+      "viewIssue": "Raporu görüntüle",
+      "fallbackTitle": "Bunun yerine GitHub'da aç",
+      "fallbackBody": "Otomatik olarak gönderemedik, ama ayrıntıları içeren bir GitHub formunu senin için doldurduk.",
+      "openGithub": "GitHub formunu aç",
+      "openGithubForm": "GitHub'ı mı tercih edersin? Sorun formunu aç →",
+      "done": "Bitti"
     }
   }
 }

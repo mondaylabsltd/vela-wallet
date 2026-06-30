@@ -21,7 +21,8 @@
       "denialBalanceTooLow": "钱包余额不足，不符合资格。",
       "denialNoPasskey": "免费激活需要通行密钥。",
       "denialRateLimited": "请求次数过多，请稍后重试。",
-      "denialTransferFailed": "转账失败，请重试。"
+      "denialTransferFailed": "转账失败，请重试。",
+      "denialPendingUnknown": "无法确认激活状态 — 正在下方查询你的余额。若稍后仍未更新，请手动充值。"
     },
     "signing": {
       "loading": "加载中...",
@@ -79,7 +80,8 @@
       "advancedToggle": "高级 — 查看原始数据",
       "batchIntent": "批量",
       "batchSubtitle": "{{count}} 笔交易，一并签名",
-      "batchCall": "合约调用"
+      "batchCall": "合约调用",
+      "balanceSelfTransfer": "转给你自己 · 余额不会变化"
     },
     "currency": {
       "title": "显示货币",
@@ -157,6 +159,28 @@
       "chooseAction": "请选择「撤销」或「授权」以继续。",
       "resultingTotal": "授权后总额度",
       "resultingTotalUnknown": "在你当前的额度之上再增加 {{amount}}（无法读取当前额度）"
+    },
+    "bugReport": {
+      "title": "反馈问题",
+      "subtitle": "告诉我们出了什么问题 — 它会直接提交到我们的问题跟踪系统。",
+      "whatLabel": "发生了什么？",
+      "whatPlaceholder": "例如：我点了「发送」，屏幕就卡住了。",
+      "stepsLabel": "复现步骤（可选）",
+      "stepsPlaceholder": "1. 打开…\n2. 点击…\n3. 看到…",
+      "previewToggle": "将要发送的内容",
+      "consent": "仅发送你在此看到的内容 — 绝不会包含你的密钥、助记词或余额。",
+      "send": "发送反馈",
+      "sending": "发送中…",
+      "cancel": "取消",
+      "successTitle": "感谢 — 已反馈！",
+      "successBodyNew": "已记录为问题 #{{number}}，你随时可以跟进。",
+      "successBodyDeduped": "已合并到一份现有反馈（#{{number}}）。感谢你提供的补充信息！",
+      "viewIssue": "查看反馈",
+      "fallbackTitle": "改在 GitHub 上打开",
+      "fallbackBody": "我们无法自动提交，但已为你预填好一份带有详情的 GitHub 表单。",
+      "openGithub": "打开 GitHub 表单",
+      "openGithubForm": "更想用 GitHub？打开问题表单 →",
+      "done": "完成"
     }
   }
 }

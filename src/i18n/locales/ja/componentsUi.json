@@ -21,7 +21,8 @@
       "denialBalanceTooLow": "ウォレットの残高が少なく、条件を満たしません。",
       "denialNoPasskey": "無料での有効化にはパスキーが必要です。",
       "denialRateLimited": "リクエストが多すぎます。後でお試しください。",
-      "denialTransferFailed": "送金に失敗しました。もう一度お試しください。"
+      "denialTransferFailed": "送金に失敗しました。もう一度お試しください。",
+      "denialPendingUnknown": "有効化を確認できませんでした — 下に表示される残高を確認しています。すぐに更新されない場合は、手動で送金してください。"
     },
     "signing": {
       "loading": "読み込み中...",
@@ -68,11 +69,53 @@
       "batchIntent": "バッチ",
       "batchSubtitle": "{{count}} 件の取引をまとめて署名",
       "batchCall": "コントラクト呼び出し",
-      "balanceUnderfundedNative": "この送金に必要な {{symbol}} が不足しています — オンチェーンで失敗する見込みです。"
+      "balanceUnderfundedNative": "この送金に必要な {{symbol}} が不足しています — オンチェーンで失敗する見込みです。",
+      "gasEstimateFailed": "Gas 手数料を見積もれませんでした — 送信しても失敗するか、タイムアウトする可能性があります。上の手数料をタップして再試行してください。",
+      "submitted": "送信しました — 確認を待っています",
+      "historicalNote": "過去の署名 — あなたが承認した内容そのものです。",
+      "close": "閉じる",
+      "valueLabel": "金額",
+      "bestEffortWarning": "関数シグネチャからデコードした内容です — 検証済みのディスクリプターではありません。詳細を慎重にご確認ください。",
+      "simWillSucceed": "シミュレーション成功 — 成功する見込みです",
+      "simWillFail": "この取引は失敗する見込みです — それでも Gas 手数料はかかります。",
+      "simWillFailReason": "失敗する見込み：{{reason}} — それでも Gas 手数料はかかります。",
+      "balanceChangesTitle": "残高の変化",
+      "balanceNoAssetsMove": "ウォレットから資産は出ていきません",
+      "balanceUnverifiedToken": "未検証のトークン",
+      "balanceSelfTransfer": "自分のアドレスへ送金 · 残高は変わりません"
     },
     "signingApprove": {
       "resultingTotal": "新しい承認上限",
-      "resultingTotalUnknown": "現在の承認上限に {{amount}} を上乗せします（現在の上限を読み取れませんでした）"
+      "resultingTotalUnknown": "現在の承認上限に {{amount}} を上乗せします（現在の上限を読み取れませんでした）",
+      "spendingCap": "利用上限",
+      "reduceBy": "減らす量",
+      "requested": "リクエスト額",
+      "custom": "カスタム",
+      "revoke": "取り消す",
+      "revokeValue": "取り消す（0）",
+      "invalidAmount": "有効な金額を入力してください",
+      "unlimitedDisabled": "安全のため、無制限の承認は無効になっています",
+      "capSummary": "{{spender}} は最大 {{amount}} まで使用できます。",
+      "revokeSummary": "{{spender}} はこのトークンを使用できなくなります。",
+      "choosePrompt": "続けるには上限額を指定してください。",
+      "decimalsUnverified": "トークンの小数点桁数を検証できませんでした — 金額をもう一度ご確認ください。",
+      "allNfts": "すべての NFT",
+      "fullBalance": "残高すべて",
+      "setApprovalAllWarn": "これにより {{operator}} はこのコレクション内のすべての NFT を移転できます。可能であれば、代わりに単一のアイテムへのアクセスのみを許可してください。",
+      "daiWarn": "これにより {{spender}} にこのトークンの残高すべてへのアクセスを許可します。",
+      "revokeAccess": "アクセスを取り消す",
+      "grantAllAnyway": "すべてにアクセスを許可",
+      "verbApprove": "承認",
+      "verbApproveAll": "すべて承認",
+      "verbRevoke": "取り消す",
+      "spenderLabel": "承認先",
+      "operatorLabel": "オペレーター",
+      "tokenLabel": "トークン",
+      "collectionLabel": "コレクション",
+      "expired": "この承認（permit）はすでに期限切れです",
+      "noExpiry": "この承認に期限はありません",
+      "expiresLabel": "有効期限",
+      "chooseAction": "続けるには「取り消す」か「許可」を選択してください。"
     },
     "currency": {
       "title": "表示通貨",
@@ -100,7 +143,9 @@
       "gasLimit": "Gas Limit",
       "walletDeployed": "ウォレットのデプロイ",
       "deployedYes": "済み",
-      "deployedNo": "未デプロイ（初回の取引）"
+      "deployedNo": "未デプロイ（初回の取引）",
+      "estimating": "見積もり中...",
+      "estimateFailed": "タップして再試行"
     },
     "dock": {
       "receive": "受け取る",
@@ -115,6 +160,28 @@
     "chart": {
       "noDataFor": "{{label}} のデータはありません",
       "tapHint": "バーをタップして残高を表示"
+    },
+    "bugReport": {
+      "title": "問題を報告",
+      "subtitle": "不具合の内容をお知らせください — 内容はそのまま課題トラッカーに送信されます。",
+      "whatLabel": "何が起きましたか？",
+      "whatPlaceholder": "例：送るをタップしたら画面が固まった。",
+      "stepsLabel": "再現手順（任意）",
+      "stepsPlaceholder": "1. ○○を開く…\n2. ○○をタップ…\n3. ○○が表示される…",
+      "previewToggle": "送信される内容",
+      "consent": "ここに表示されている内容のみが送信されます — 鍵・リカバリーフレーズ・残高が送られることはありません。",
+      "send": "報告を送信",
+      "sending": "送信中…",
+      "cancel": "キャンセル",
+      "successTitle": "ありがとうございます — 報告しました！",
+      "successBodyNew": "課題 #{{number}} として記録しました。いつでも進捗を確認できます。",
+      "successBodyDeduped": "既存の報告（#{{number}}）に追加しました。追加の情報をありがとうございます！",
+      "viewIssue": "報告を表示",
+      "fallbackTitle": "代わりに GitHub で開く",
+      "fallbackBody": "自動で送信できませんでしたが、詳細を入力済みの GitHub フォームをご用意しました。",
+      "openGithub": "GitHub フォームを開く",
+      "openGithubForm": "GitHub をお使いですか？課題フォームを開く →",
+      "done": "完了"
     }
   }
 }

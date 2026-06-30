@@ -39,6 +39,15 @@
     "connReconnectStuck": "無法重新連接。請重試，或中斷後重新配對。",
     "connEventsHead": "連接活動 · {{count}}",
     "connNoEvents": "此連接暫無請求。",
-    "toastReceived": "已收到 {{amount}} {{token}}"
+    "toastReceived": "已收到 {{amount}} {{token}}",
+    "connClear": "清除",
+    "connClearTitle": "清除連接活動？",
+    "connClearBody": "會從此裝置移除此連接的所有簽署紀錄。鏈上交易不受影響。",
+    "connClearConfirm": "清除",
+    "connDelete": "刪除",
+    "connPending": "處理中",
+    "connFailed": "失敗",
+    "assetsSheetTitle": "你的資產",
+    "cancel": "取消"
   }
 }

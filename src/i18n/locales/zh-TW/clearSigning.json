@@ -60,6 +60,16 @@
     "modalBtnApprove": "核准",
     "modalBtnConfirmIntent": "確認{{intent}}",
     "alertSignedTitle": "已簽署！",
-    "alertSignedBody": "這只是測試 — 並未產生任何實際簽章。"
+    "alertSignedBody": "這只是測試 — 並未產生任何實際簽章。",
+    "scenarioEthSign": "eth_sign（原始雜湊）",
+    "scenarioEthSignSub": "盲簽陷阱 — 應顯示強烈警告",
+    "scenarioSiwePhish": "SIWE 網域不符",
+    "scenarioSiwePhishSub": "登入綁定到不同網域 — 釣魚攻擊",
+    "scenarioIncreaseAllowance": "increaseAllowance",
+    "scenarioIncreaseAllowanceSub": "遞增語意 — 顯示結果總額",
+    "scenarioExpiredSwap": "兌換期限已過",
+    "scenarioExpiredSwapSub": "期限已過 — 標示提醒",
+    "scenarioBatch": "EIP-5792 批次",
+    "scenarioBatchSub": "wallet_sendCalls — 逐筆呼叫明細"
   }
 }

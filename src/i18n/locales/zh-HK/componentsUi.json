@@ -21,7 +21,8 @@
       "denialBalanceTooLow": "錢包餘額過低，未符合資格。",
       "denialNoPasskey": "免費啟用需要通行密鑰。",
       "denialRateLimited": "請求過於頻密。請稍後重試。",
-      "denialTransferFailed": "轉帳失敗。請重試。"
+      "denialTransferFailed": "轉帳失敗。請重試。",
+      "denialPendingUnknown": "無法確認啟用狀態 — 正在下方檢查你的餘額。若稍後仍未更新，請自行充值。"
     },
     "signing": {
       "loading": "正在載入⋯",
@@ -37,7 +38,7 @@
       "personalSignTag": "personal_sign · 免 Gas 費",
       "unlimitedWarning": "無上限 — 此合約可動用你的全部代幣",
       "partialWarning": "資訊不完整 — 部分內容無法解碼。批准前請仔細核對。",
-      "unverifiedWarning": "無法喺鏈上核實代幣數量——批准前請再次確認。",
+      "unverifiedWarning": "無法在鏈上核實代幣數量 — 批准前請再次確認。",
       "blindTypedWarning": "此類型化數據無法以已知描述符解碼。請仔細檢視。",
       "blindDecodeWarning": "無法解碼 — 沒有 ERC-7730 描述符（{{bytes}} 位元組）",
       "rawCalldataToggle": "原始 calldata · {{bytes}} 位元組",
@@ -61,7 +62,7 @@
       "balanceUnverifiedToken": "未驗證代幣",
       "balanceUnderfundedNative": "{{symbol}} 餘額不足以支付此轉帳 — 預計會在鏈上失敗。",
       "tokenToContractWarning": "此操作會將代幣發送至代幣本身的合約 — 代幣將永久損失。",
-      "expiredWarning": "呢筆交易嘅限期已過 — 預計會失敗。",
+      "expiredWarning": "此交易的限期已過 — 預計會失敗。",
       "signInIntent": "登入",
       "siweDomain": "網站",
       "siweStatement": "聲明",
@@ -77,7 +78,10 @@
       "advancedToggle": "進階 — 查看原始數據",
       "batchIntent": "批次",
       "batchSubtitle": "{{count}} 筆交易，一併簽署",
-      "batchCall": "合約調用"
+      "batchCall": "合約調用",
+      "historicalNote": "過往的簽署紀錄 — 正是你當時批准的內容。",
+      "close": "關閉",
+      "balanceSelfTransfer": "轉給你自己 · 餘額不會變動"
     },
     "currency": {
       "title": "顯示貨幣",
@@ -131,14 +135,14 @@
       "revoke": "撤銷",
       "revokeValue": "撤銷 (0)",
       "invalidAmount": "請輸入有效金額",
-      "unlimitedDisabled": "為保護你嘅資產，已停用無限授權",
+      "unlimitedDisabled": "為保護你的資產，已停用無限授權",
       "capSummary": "{{spender}} 最多可花費 {{amount}}。",
       "revokeSummary": "{{spender}} 將無法再花費此代幣。",
       "choosePrompt": "請設定一個有限的金額以繼續。",
       "decimalsUnverified": "代幣精度無法驗證 — 請仔細核對金額。",
       "allNfts": "全部 NFT",
       "fullBalance": "全部餘額",
-      "setApprovalAllWarn": "呢個會容許 {{operator}} 轉移此系列中嘅每一個 NFT。如可能，請只授權單個 NFT。",
+      "setApprovalAllWarn": "此操作會容許 {{operator}} 轉移此系列中的每一個 NFT。如可能，請只授權單個 NFT。",
       "daiWarn": "此操作會授予 {{spender}} 存取你此代幣全部餘額的權限。",
       "revokeAccess": "撤銷存取權限",
       "grantAllAnyway": "仍要授權全部",
@@ -155,6 +159,28 @@
       "chooseAction": "請揀「撤銷」或「授權」以繼續。",
       "resultingTotal": "授權後總額度",
       "resultingTotalUnknown": "在你現有額度之上再增加 {{amount}}（無法讀取目前額度）"
+    },
+    "bugReport": {
+      "title": "回報問題",
+      "subtitle": "告訴我們出了甚麼問題 — 內容會直接送到我們的問題追蹤系統。",
+      "whatLabel": "發生了甚麼事？",
+      "whatPlaceholder": "例如：我點按「發送」後畫面就卡住了。",
+      "stepsLabel": "重現步驟（選填）",
+      "stepsPlaceholder": "1. 前往⋯\n2. 點按⋯\n3. 看到⋯",
+      "previewToggle": "將會傳送的內容",
+      "consent": "只會傳送你在此看到的內容 — 絕不會傳送你的密鑰、助記詞或餘額。",
+      "send": "傳送回報",
+      "sending": "正在傳送⋯",
+      "cancel": "取消",
+      "successTitle": "多謝 — 已回報！",
+      "successBodyNew": "已記錄為問題 #{{number}}。你隨時可以追蹤進度。",
+      "successBodyDeduped": "已併入現有的回報（#{{number}}）。多謝你提供更多線索！",
+      "viewIssue": "查看回報",
+      "fallbackTitle": "改於 GitHub 開啟",
+      "fallbackBody": "我們無法自動提交，但已為你預先填好一張 GitHub 表單。",
+      "openGithub": "開啟 GitHub 表單",
+      "openGithubForm": "想用 GitHub？開啟問題表單 →",
+      "done": "完成"
     }
   }
 }

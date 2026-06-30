@@ -21,7 +21,8 @@
       "denialBalanceTooLow": "Wallet-Guthaben zu niedrig für die kostenlose Aktivierung.",
       "denialNoPasskey": "Passkey für kostenlose Aktivierung erforderlich.",
       "denialRateLimited": "Zu viele Anfragen. Versuchen Sie es später.",
-      "denialTransferFailed": "Transfer fehlgeschlagen. Erneut versuchen."
+      "denialTransferFailed": "Transfer fehlgeschlagen. Erneut versuchen.",
+      "denialPendingUnknown": "Aktivierung konnte nicht bestätigt werden — Ihr Guthaben wird unten geprüft. Wird es nicht bald aktualisiert, aktivieren Sie manuell."
     },
     "signing": {
       "loading": "Wird geladen ...",
@@ -68,11 +69,53 @@
       "batchIntent": "Stapel",
       "batchSubtitle": "{{count}} Transaktionen, gemeinsam signiert",
       "batchCall": "Contract-Aufruf",
-      "balanceUnderfundedNative": "Nicht genügend {{symbol}}, um diesen Transfer zu decken — er wird voraussichtlich on-chain fehlschlagen."
+      "balanceUnderfundedNative": "Nicht genügend {{symbol}}, um diesen Transfer zu decken — er wird voraussichtlich on-chain fehlschlagen.",
+      "gasEstimateFailed": "Die Gas-Gebühr konnte nicht geschätzt werden — das Senden kann fehlschlagen oder eine Zeitüberschreitung verursachen. Tippen Sie oben auf die Gebühr, um es erneut zu versuchen.",
+      "submitted": "Gesendet — wartet auf Bestätigung",
+      "historicalNote": "Eine frühere Signatur — genau das, was Sie genehmigt haben.",
+      "close": "Schließen",
+      "valueLabel": "Wert",
+      "bestEffortWarning": "Aus der Funktionssignatur dekodiert — kein verifizierter Deskriptor. Prüfen Sie die Details sorgfältig.",
+      "simWillSucceed": "Simulation bestanden — sollte erfolgreich sein",
+      "simWillFail": "Diese Transaktion wird voraussichtlich fehlschlagen — Sie zahlen trotzdem Gas.",
+      "simWillFailReason": "Voraussichtlicher Fehlschlag: {{reason}} — Sie zahlen trotzdem Gas.",
+      "balanceChangesTitle": "Guthabenänderungen",
+      "balanceNoAssetsMove": "Es verlassen keine Assets Ihre Wallet",
+      "balanceUnverifiedToken": "Nicht verifizierter Token",
+      "balanceSelfTransfer": "An deine eigene Adresse · Guthaben bleibt gleich"
     },
     "signingApprove": {
       "resultingTotal": "Neue Gesamtfreigabe",
-      "resultingTotalUnknown": "Erhöht Ihre aktuelle Freigabe um {{amount}} (der aktuelle Betrag konnte nicht ausgelesen werden)"
+      "resultingTotalUnknown": "Erhöht Ihre aktuelle Freigabe um {{amount}} (der aktuelle Betrag konnte nicht ausgelesen werden)",
+      "spendingCap": "Ausgabelimit",
+      "reduceBy": "Reduzieren um",
+      "requested": "Angefordert",
+      "custom": "Eigener Betrag",
+      "revoke": "Widerrufen",
+      "revokeValue": "Widerrufen (0)",
+      "invalidAmount": "Geben Sie einen gültigen Betrag ein",
+      "unlimitedDisabled": "Unbegrenzte Freigaben sind zu Ihrer Sicherheit deaktiviert",
+      "capSummary": "{{spender}} kann bis zu {{amount}} ausgeben.",
+      "revokeSummary": "{{spender}} kann diesen Token nicht mehr ausgeben.",
+      "choosePrompt": "Legen Sie einen begrenzten Betrag fest, um fortzufahren.",
+      "decimalsUnverified": "Die Token-Dezimalstellen konnten nicht verifiziert werden — prüfen Sie den Betrag genau.",
+      "allNfts": "Alle NFTs",
+      "fullBalance": "Gesamtes Guthaben",
+      "setApprovalAllWarn": "Dies erlaubt {{operator}}, jedes NFT in dieser Collection zu übertragen. Gewähren Sie nach Möglichkeit stattdessen Zugriff auf ein einzelnes Objekt.",
+      "daiWarn": "Dies gewährt {{spender}} Zugriff auf Ihr gesamtes Guthaben dieses Tokens.",
+      "revokeAccess": "Zugriff widerrufen",
+      "grantAllAnyway": "Zugriff auf alle gewähren",
+      "verbApprove": "Genehmigen",
+      "verbApproveAll": "Alle genehmigen",
+      "verbRevoke": "Widerrufen",
+      "spenderLabel": "Spender",
+      "operatorLabel": "Operator",
+      "tokenLabel": "Token",
+      "collectionLabel": "Collection",
+      "expired": "Dieser Permit ist bereits abgelaufen",
+      "noExpiry": "Diese Freigabe läuft nie ab",
+      "expiresLabel": "Läuft ab",
+      "chooseAction": "Wählen Sie Widerrufen oder Gewähren, um fortzufahren."
     },
     "currency": {
       "title": "Anzeigewährung",
@@ -100,7 +143,9 @@
       "gasLimit": "Gas-Limit",
       "walletDeployed": "Wallet bereitgestellt",
       "deployedYes": "Ja",
-      "deployedNo": "Nein (erste Tx)"
+      "deployedNo": "Nein (erste Tx)",
+      "estimating": "Wird geschätzt …",
+      "estimateFailed": "Zum erneuten Versuch tippen"
     },
     "dock": {
       "receive": "Empfangen",
@@ -115,6 +160,28 @@
     "chart": {
       "noDataFor": "Keine Daten für {{label}}",
       "tapHint": "Tippen Sie auf einen Balken, um das Guthaben zu sehen"
+    },
+    "bugReport": {
+      "title": "Problem melden",
+      "subtitle": "Sagen Sie uns, was schiefgelaufen ist — es geht direkt an unseren Issue-Tracker.",
+      "whatLabel": "Was ist passiert?",
+      "whatPlaceholder": "z. B. Ich habe auf Senden getippt und der Bildschirm ist eingefroren.",
+      "stepsLabel": "Schritte zum Nachstellen (optional)",
+      "stepsPlaceholder": "1. Gehen Sie zu …\n2. Tippen Sie auf …\n3. Sehen Sie …",
+      "previewToggle": "Was gesendet wird",
+      "consent": "Es wird nur gesendet, was Sie hier sehen — niemals Ihre Schlüssel, Ihre Seed-Phrase oder Ihre Guthaben.",
+      "send": "Meldung senden",
+      "sending": "Wird gesendet …",
+      "cancel": "Abbrechen",
+      "successTitle": "Danke — gemeldet!",
+      "successBodyNew": "Als Issue #{{number}} erfasst. Sie können es jederzeit verfolgen.",
+      "successBodyDeduped": "Zu einer bestehenden Meldung (#{{number}}) hinzugefügt. Danke für den zusätzlichen Hinweis!",
+      "viewIssue": "Meldung ansehen",
+      "fallbackTitle": "Stattdessen auf GitHub öffnen",
+      "fallbackBody": "Das automatische Senden hat nicht geklappt, aber wir haben ein GitHub-Formular mit den Details vorausgefüllt.",
+      "openGithub": "GitHub-Formular öffnen",
+      "openGithubForm": "Lieber GitHub? Issue-Formular öffnen →",
+      "done": "Fertig"
     }
   }
 }

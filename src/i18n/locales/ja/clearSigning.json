@@ -60,6 +60,16 @@
     "modalBtnApprove": "承認",
     "modalBtnConfirmIntent": "{{intent}}を確認",
     "alertSignedTitle": "署名しました！",
-    "alertSignedBody": "これはテストです — 実際の署名は作成されていません。"
+    "alertSignedBody": "これはテストです — 実際の署名は作成されていません。",
+    "scenarioEthSign": "eth_sign（生のハッシュ）",
+    "scenarioEthSignSub": "ブラインド署名の罠 — 強い警告を表示すべき",
+    "scenarioSiwePhish": "SIWE ドメインの不一致",
+    "scenarioSiwePhishSub": "別のドメインに紐づくサインイン — フィッシング",
+    "scenarioIncreaseAllowance": "increaseAllowance",
+    "scenarioIncreaseAllowanceSub": "加算方式 — 加算後の合計を表示",
+    "scenarioExpiredSwap": "スワップ期限切れ",
+    "scenarioExpiredSwapSub": "期限がすでに過ぎている — フラグを立てる",
+    "scenarioBatch": "EIP-5792 バッチ",
+    "scenarioBatchSub": "wallet_sendCalls — 呼び出しごとの内訳"
   }
 }

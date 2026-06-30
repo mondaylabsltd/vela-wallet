@@ -21,7 +21,8 @@
       "denialBalanceTooLow": "지갑 잔액이 너무 적어 자격이 되지 않습니다.",
       "denialNoPasskey": "무료 활성화에는 패스키가 필요합니다.",
       "denialRateLimited": "요청이 너무 많습니다. 잠시 후 다시 시도하세요.",
-      "denialTransferFailed": "전송에 실패했습니다. 다시 시도하세요."
+      "denialTransferFailed": "전송에 실패했습니다. 다시 시도하세요.",
+      "denialPendingUnknown": "활성화를 확인할 수 없습니다 — 아래에서 잔액을 확인하고 있습니다. 곧 업데이트되지 않으면 직접 충전하세요."
     },
     "signing": {
       "loading": "불러오는 중...",
@@ -68,11 +69,53 @@
       "batchIntent": "일괄 처리",
       "batchSubtitle": "거래 {{count}}건을 함께 서명",
       "batchCall": "컨트랙트 호출",
-      "balanceUnderfundedNative": "이 전송에 필요한 {{symbol}}이(가) 부족합니다 — 온체인에서 실패할 것으로 보입니다."
+      "balanceUnderfundedNative": "이 전송에 필요한 {{symbol}}이(가) 부족합니다 — 온체인에서 실패할 것으로 보입니다.",
+      "gasEstimateFailed": "가스 수수료를 예상하지 못했습니다 — 제출이 실패하거나 시간 초과될 수 있습니다. 위 수수료를 눌러 다시 시도하세요.",
+      "submitted": "제출됨 — 확인을 기다리는 중",
+      "historicalNote": "지난 서명 — 승인하신 내용 그대로입니다.",
+      "close": "닫기",
+      "valueLabel": "값",
+      "bestEffortWarning": "함수 시그니처로 디코딩한 정보입니다 — 검증된 디스크립터가 아닙니다. 세부 정보를 신중히 검토하세요.",
+      "simWillSucceed": "시뮬레이션 통과 — 성공할 것으로 보입니다",
+      "simWillFail": "이 거래는 실패할 것으로 보입니다 — 그래도 가스는 지불됩니다.",
+      "simWillFailReason": "실패할 것으로 보입니다: {{reason}} — 그래도 가스는 지불됩니다.",
+      "balanceChangesTitle": "잔액 변동",
+      "balanceNoAssetsMove": "지갑에서 빠져나가는 자산이 없습니다",
+      "balanceUnverifiedToken": "검증되지 않은 토큰",
+      "balanceSelfTransfer": "내 주소로 전송 · 잔액이 변하지 않습니다"
     },
     "signingApprove": {
       "resultingTotal": "새 총 승인 한도",
-      "resultingTotalUnknown": "현재 승인 한도에 {{amount}}을(를) 추가합니다 (현재 금액을 읽을 수 없었습니다)"
+      "resultingTotalUnknown": "현재 승인 한도에 {{amount}}을(를) 추가합니다 (현재 금액을 읽을 수 없었습니다)",
+      "spendingCap": "지출 한도",
+      "reduceBy": "줄일 금액",
+      "requested": "요청됨",
+      "custom": "직접 입력",
+      "revoke": "철회",
+      "revokeValue": "철회 (0)",
+      "invalidAmount": "올바른 금액을 입력하세요",
+      "unlimitedDisabled": "안전을 위해 무제한 승인은 비활성화되어 있습니다",
+      "capSummary": "{{spender}}이(가) 최대 {{amount}}까지 사용할 수 있습니다.",
+      "revokeSummary": "{{spender}}이(가) 더 이상 이 토큰을 사용할 수 없게 됩니다.",
+      "choosePrompt": "계속하려면 한정된 금액을 설정하세요.",
+      "decimalsUnverified": "토큰 소수 자릿수를 확인할 수 없습니다 — 금액을 다시 확인하세요.",
+      "allNfts": "모든 NFT",
+      "fullBalance": "전체 잔액",
+      "setApprovalAllWarn": "이렇게 하면 {{operator}}이(가) 이 컬렉션의 모든 NFT를 전송할 수 있습니다. 가능하면 개별 항목에만 권한을 부여하세요.",
+      "daiWarn": "이렇게 하면 {{spender}}이(가) 이 토큰의 전체 잔액에 접근할 수 있습니다.",
+      "revokeAccess": "접근 권한 철회",
+      "grantAllAnyway": "전체 접근 권한 부여",
+      "verbApprove": "승인",
+      "verbApproveAll": "전체 승인",
+      "verbRevoke": "철회",
+      "spenderLabel": "지출 권한 대상",
+      "operatorLabel": "운영자",
+      "tokenLabel": "토큰",
+      "collectionLabel": "컬렉션",
+      "expired": "이 승인은 이미 만료되었습니다",
+      "noExpiry": "이 승인은 만료되지 않습니다",
+      "expiresLabel": "만료",
+      "chooseAction": "계속하려면 철회 또는 부여를 선택하세요."
     },
     "currency": {
       "title": "표시 통화",
@@ -100,7 +143,9 @@
       "gasLimit": "가스 한도",
       "walletDeployed": "지갑 배포 여부",
       "deployedYes": "예",
-      "deployedNo": "아니요 (첫 거래)"
+      "deployedNo": "아니요 (첫 거래)",
+      "estimating": "예상하는 중...",
+      "estimateFailed": "눌러서 다시 시도"
     },
     "dock": {
       "receive": "받기",
@@ -115,6 +160,28 @@
     "chart": {
       "noDataFor": "{{label}}에 대한 데이터가 없습니다",
       "tapHint": "막대를 눌러 잔액을 확인하세요"
+    },
+    "bugReport": {
+      "title": "문제 신고",
+      "subtitle": "무엇이 잘못됐는지 알려주세요 — 바로 이슈 트래커로 전달됩니다.",
+      "whatLabel": "무슨 일이 있었나요?",
+      "whatPlaceholder": "예: 보내기를 눌렀더니 화면이 멈췄어요.",
+      "stepsLabel": "재현 단계 (선택)",
+      "stepsPlaceholder": "1. 이동…\n2. 누르기…\n3. 확인…",
+      "previewToggle": "전송될 내용",
+      "consent": "여기 보이는 내용만 전송됩니다 — 키, 시드 문구, 잔액은 절대 보내지 않습니다.",
+      "send": "신고 보내기",
+      "sending": "보내는 중…",
+      "cancel": "취소",
+      "successTitle": "감사합니다 — 신고되었어요!",
+      "successBodyNew": "이슈 #{{number}}(으)로 등록되었습니다. 언제든 진행 상황을 확인할 수 있어요.",
+      "successBodyDeduped": "기존 신고(#{{number}})에 추가되었습니다. 추가 정보 감사합니다!",
+      "viewIssue": "신고 보기",
+      "fallbackTitle": "대신 GitHub에서 열기",
+      "fallbackBody": "자동으로 제출하지 못했지만, 세부 정보를 채운 GitHub 양식을 준비해 두었습니다.",
+      "openGithub": "GitHub 양식 열기",
+      "openGithubForm": "GitHub가 더 편한가요? 이슈 양식 열기 →",
+      "done": "완료"
     }
   }
 }

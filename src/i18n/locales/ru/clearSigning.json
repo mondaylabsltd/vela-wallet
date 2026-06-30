@@ -60,6 +60,16 @@
     "modalBtnApprove": "Одобрить",
     "modalBtnConfirmIntent": "Подтвердить: {{intent}}",
     "alertSignedTitle": "Подписано!",
-    "alertSignedBody": "Это тест — реальная подпись не создавалась."
+    "alertSignedBody": "Это тест — реальная подпись не создавалась.",
+    "scenarioEthSign": "eth_sign (необработанный хеш)",
+    "scenarioEthSignSub": "Ловушка слепой подписи — должно быть жёсткое предупреждение",
+    "scenarioSiwePhish": "Несовпадение домена SIWE",
+    "scenarioSiwePhishSub": "Вход привязан к другому домену — фишинг",
+    "scenarioIncreaseAllowance": "increaseAllowance",
+    "scenarioIncreaseAllowanceSub": "Семантика приращения — показать итоговую сумму",
+    "scenarioExpiredSwap": "Истёкший срок обмена",
+    "scenarioExpiredSwapSub": "Срок уже прошёл — отметить это",
+    "scenarioBatch": "Пакет EIP-5792",
+    "scenarioBatchSub": "wallet_sendCalls — разбивка по каждому вызову"
   }
 }

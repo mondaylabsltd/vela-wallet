@@ -21,7 +21,8 @@
       "denialBalanceTooLow": "Số dư ví quá thấp để đủ điều kiện.",
       "denialNoPasskey": "Cần passkey để kích hoạt miễn phí.",
       "denialRateLimited": "Quá nhiều yêu cầu. Hãy thử lại sau.",
-      "denialTransferFailed": "Chuyển khoản thất bại. Hãy thử lại."
+      "denialTransferFailed": "Chuyển khoản thất bại. Hãy thử lại.",
+      "denialPendingUnknown": "Không xác nhận được việc kích hoạt — đang kiểm tra số dư của bạn bên dưới. Nếu chưa cập nhật sớm, hãy nạp thủ công."
     },
     "signing": {
       "loading": "Đang tải...",
@@ -68,11 +69,53 @@
       "batchIntent": "Gộp",
       "batchSubtitle": "{{count}} giao dịch, ký cùng lúc",
       "batchCall": "Gọi hợp đồng",
-      "balanceUnderfundedNative": "Không đủ {{symbol}} để thực hiện lần chuyển này — nhiều khả năng sẽ thất bại on-chain."
+      "balanceUnderfundedNative": "Không đủ {{symbol}} để thực hiện lần chuyển này — nhiều khả năng sẽ thất bại on-chain.",
+      "gasEstimateFailed": "Không ước tính được phí gas — việc gửi có thể thất bại hoặc hết thời gian chờ. Chạm vào mức phí ở trên để thử lại.",
+      "submitted": "Đã gửi — đang chờ xác nhận",
+      "historicalNote": "Một chữ ký trong quá khứ — đúng những gì bạn đã phê duyệt.",
+      "close": "Đóng",
+      "valueLabel": "Giá trị",
+      "bestEffortWarning": "Được giải mã từ chữ ký hàm — không phải bộ mô tả đã xác minh. Hãy xem xét kỹ các chi tiết.",
+      "simWillSucceed": "Mô phỏng thành công — dự kiến sẽ thành công",
+      "simWillFail": "Giao dịch này dự kiến sẽ thất bại — bạn vẫn phải trả phí gas.",
+      "simWillFailReason": "Dự kiến thất bại: {{reason}} — bạn vẫn phải trả phí gas.",
+      "balanceChangesTitle": "Thay đổi số dư",
+      "balanceNoAssetsMove": "Không có tài sản nào rời khỏi ví của bạn",
+      "balanceUnverifiedToken": "Token chưa xác minh",
+      "balanceSelfTransfer": "Đến chính địa chỉ của bạn · số dư không đổi"
     },
     "signingApprove": {
       "resultingTotal": "Tổng hạn mức mới",
-      "resultingTotalUnknown": "Cộng thêm {{amount}} vào hạn mức hiện tại của bạn (không đọc được số lượng hiện tại)"
+      "resultingTotalUnknown": "Cộng thêm {{amount}} vào hạn mức hiện tại của bạn (không đọc được số lượng hiện tại)",
+      "spendingCap": "Hạn mức chi",
+      "reduceBy": "Giảm bớt",
+      "requested": "Được yêu cầu",
+      "custom": "Tùy chỉnh",
+      "revoke": "Thu hồi",
+      "revokeValue": "Thu hồi (0)",
+      "invalidAmount": "Nhập một số lượng hợp lệ",
+      "unlimitedDisabled": "Phê duyệt không giới hạn đã bị tắt để bảo vệ bạn",
+      "capSummary": "{{spender}} có thể chi tối đa {{amount}}.",
+      "revokeSummary": "{{spender}} sẽ không còn chi được token này nữa.",
+      "choosePrompt": "Đặt một số lượng hữu hạn để tiếp tục.",
+      "decimalsUnverified": "Không xác minh được số thập phân của token — hãy kiểm tra lại số lượng.",
+      "allNfts": "Tất cả NFT",
+      "fullBalance": "Toàn bộ số dư",
+      "setApprovalAllWarn": "Thao tác này cho phép {{operator}} chuyển mọi NFT trong bộ sưu tập này. Khi có thể, hãy chỉ cấp quyền cho một vật phẩm duy nhất.",
+      "daiWarn": "Thao tác này cấp cho {{spender}} quyền truy cập toàn bộ số dư token này của bạn.",
+      "revokeAccess": "Thu hồi quyền truy cập",
+      "grantAllAnyway": "Cấp quyền cho tất cả",
+      "verbApprove": "Phê duyệt",
+      "verbApproveAll": "Phê duyệt tất cả",
+      "verbRevoke": "Thu hồi",
+      "spenderLabel": "Bên được cấp quyền chi",
+      "operatorLabel": "Bên vận hành",
+      "tokenLabel": "Token",
+      "collectionLabel": "Bộ sưu tập",
+      "expired": "Quyền cấp này đã hết hạn",
+      "noExpiry": "Quyền phê duyệt này không bao giờ hết hạn",
+      "expiresLabel": "Hết hạn",
+      "chooseAction": "Chọn Thu hồi hoặc Cấp quyền để tiếp tục."
     },
     "currency": {
       "title": "Tiền tệ hiển thị",
@@ -100,7 +143,9 @@
       "gasLimit": "Giới hạn Gas",
       "walletDeployed": "Ví đã triển khai",
       "deployedYes": "Có",
-      "deployedNo": "Chưa (giao dịch đầu tiên)"
+      "deployedNo": "Chưa (giao dịch đầu tiên)",
+      "estimating": "Đang ước tính...",
+      "estimateFailed": "Chạm để thử lại"
     },
     "dock": {
       "receive": "Nhận",
@@ -115,6 +160,28 @@
     "chart": {
       "noDataFor": "Không có dữ liệu cho {{label}}",
       "tapHint": "Chạm vào một cột để xem số dư"
+    },
+    "bugReport": {
+      "title": "Báo lỗi",
+      "subtitle": "Cho chúng tôi biết chuyện gì đã xảy ra — báo cáo sẽ được gửi thẳng đến hệ thống theo dõi lỗi.",
+      "whatLabel": "Chuyện gì đã xảy ra?",
+      "whatPlaceholder": "ví dụ: Tôi chạm Gửi thì màn hình bị đứng.",
+      "stepsLabel": "Các bước tái hiện (tùy chọn)",
+      "stepsPlaceholder": "1. Vào…\n2. Chạm…\n3. Thấy…",
+      "previewToggle": "Nội dung sẽ được gửi",
+      "consent": "Chỉ những gì bạn thấy ở đây được gửi đi — không bao giờ gồm khóa, cụm từ khôi phục hay số dư của bạn.",
+      "send": "Gửi báo cáo",
+      "sending": "Đang gửi…",
+      "cancel": "Hủy",
+      "successTitle": "Cảm ơn — đã báo lỗi!",
+      "successBodyNew": "Đã ghi nhận thành vấn đề #{{number}}. Bạn có thể theo dõi bất cứ lúc nào.",
+      "successBodyDeduped": "Đã thêm vào một báo cáo hiện có (#{{number}}). Cảm ơn thông tin bổ sung của bạn!",
+      "viewIssue": "Xem báo cáo",
+      "fallbackTitle": "Mở trên GitHub thay vì gửi tự động",
+      "fallbackBody": "Chúng tôi không gửi tự động được, nhưng đã điền sẵn một biểu mẫu GitHub với các chi tiết.",
+      "openGithub": "Mở biểu mẫu GitHub",
+      "openGithubForm": "Thích dùng GitHub? Mở biểu mẫu báo lỗi →",
+      "done": "Xong"
     }
   }
 }

@@ -39,6 +39,15 @@
     "rescanAgain": "Pindai lagi",
     "rescanClose": "Selesai",
     "rescanNativeNote": "Koin native (ETH, BNB, MATIC…) yang diterima di sebagian jaringan mungkin tidak terdeteksi di sini. Saldo Anda tetap akurat — buka block explorer untuk catatan lengkap.",
-    "rescanExplorerTitle": "Cek langsung di block explorer"
+    "rescanExplorerTitle": "Cek langsung di block explorer",
+    "connClear": "Bersihkan",
+    "connClearTitle": "Bersihkan aktivitas koneksi?",
+    "connClearBody": "Menghapus semua catatan penandatanganan koneksi ini dari perangkat ini. Transaksi on-chain tidak terpengaruh.",
+    "connClearConfirm": "Bersihkan",
+    "connDelete": "Hapus",
+    "connPending": "Memproses",
+    "connFailed": "Gagal",
+    "assetsSheetTitle": "Aset Anda",
+    "cancel": "Batal"
   }
 }

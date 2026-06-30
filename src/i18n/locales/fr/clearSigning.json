@@ -60,6 +60,16 @@
     "modalBtnApprove": "Approuver",
     "modalBtnConfirmIntent": "Confirmer {{intent}}",
     "alertSignedTitle": "Signé !",
-    "alertSignedBody": "Ceci est un test — aucune signature réelle n'a été créée."
+    "alertSignedBody": "Ceci est un test — aucune signature réelle n'a été créée.",
+    "scenarioEthSign": "eth_sign (hash brut)",
+    "scenarioEthSignSub": "Piège de signature à l'aveugle — avertissement strict attendu",
+    "scenarioSiwePhish": "Domaine SIWE incohérent",
+    "scenarioSiwePhishSub": "Connexion liée à un autre domaine — hameçonnage",
+    "scenarioIncreaseAllowance": "increaseAllowance",
+    "scenarioIncreaseAllowanceSub": "Sémantique d'incrément — afficher le total obtenu",
+    "scenarioExpiredSwap": "Échéance de swap dépassée",
+    "scenarioExpiredSwapSub": "Échéance déjà passée — la signaler",
+    "scenarioBatch": "Lot EIP-5792",
+    "scenarioBatchSub": "wallet_sendCalls — détail par appel"
   }
 }

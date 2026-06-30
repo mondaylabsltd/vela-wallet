@@ -39,6 +39,15 @@
     "connReconnectStuck": "Не удалось переподключиться. Повторите попытку или отключитесь и выполните сопряжение заново.",
     "connEventsHead": "Активность подключения · {{count}}",
     "connNoEvents": "По этому подключению ещё нет запросов.",
-    "toastReceived": "Получено {{amount}} {{token}}"
+    "toastReceived": "Получено {{amount}} {{token}}",
+    "connClear": "Очистить",
+    "connClearTitle": "Очистить активность подключения?",
+    "connClearBody": "Удаляет все записи о подписях для этого подключения с этого устройства. Транзакции в блокчейне это не затрагивает.",
+    "connClearConfirm": "Очистить",
+    "connDelete": "Удалить",
+    "connPending": "Обработка",
+    "connFailed": "Не удалось",
+    "assetsSheetTitle": "Ваши активы",
+    "cancel": "Отмена"
   }
 }

@@ -25,9 +25,13 @@ import { color, text, inter, space, radius, createStyles } from '@/constants/the
 
 const TOKEN_LOGO_BASE = 'https://ethereum-data.awesometools.dev/tokenlogos/';
 
-export function BalanceChangePreview({ result, chainId }: {
+export function BalanceChangePreview({ result, chainId, selfTransfer }: {
   result: AssetSimResult | null;
   chainId: number;
+  /** Recipient == sender. A self-send nets to zero, so say so honestly instead
+      of the generic "no assets leave your wallet" (which reads as nonsense when
+      you're clearly sending a token to yourself). */
+  selfTransfer?: boolean;
 }) {
   const { t } = useTranslation();
   if (!result) return null;
@@ -64,7 +68,9 @@ export function BalanceChangePreview({ result, chainId }: {
   // unless it's underfunded (then the banner is the whole message).
   if (!hasChanges) {
     if (underfunded) return underfunded;
-    const msg = changes // [] = engine ran and confirmed no movement; null = degraded
+    const msg = selfTransfer // sending to your own address — net zero, but be explicit
+      ? t('componentsUi.signing.balanceSelfTransfer')
+      : changes // [] = engine ran and confirmed no movement; null = degraded
       ? t('componentsUi.signing.balanceNoAssetsMove')
       : t('componentsUi.signing.simWillSucceed');
     return (

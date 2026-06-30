@@ -21,7 +21,8 @@
       "denialBalanceTooLow": "Saldo dompet terlalu rendah untuk memenuhi syarat.",
       "denialNoPasskey": "Passkey diperlukan untuk aktivasi gratis.",
       "denialRateLimited": "Terlalu banyak permintaan. Coba lagi nanti.",
-      "denialTransferFailed": "Transfer gagal. Coba lagi."
+      "denialTransferFailed": "Transfer gagal. Coba lagi.",
+      "denialPendingUnknown": "Aktivasi tidak dapat dikonfirmasi — saldo Anda sedang diperiksa di bawah. Jika tidak diperbarui segera, isi dana secara manual."
     },
     "signing": {
       "loading": "Memuat...",
@@ -68,11 +69,53 @@
       "batchIntent": "Batch",
       "batchSubtitle": "{{count}} transaksi, ditandatangani bersamaan",
       "batchCall": "Panggilan kontrak",
-      "balanceUnderfundedNative": "{{symbol}} tidak cukup untuk menutup transfer ini — kemungkinan besar akan gagal on-chain."
+      "balanceUnderfundedNative": "{{symbol}} tidak cukup untuk menutup transfer ini — kemungkinan besar akan gagal on-chain.",
+      "gasEstimateFailed": "Biaya gas tidak dapat diperkirakan — pengiriman bisa gagal atau habis waktu. Ketuk biaya di atas untuk mencoba lagi.",
+      "submitted": "Terkirim — menunggu konfirmasi",
+      "historicalNote": "Tanda tangan sebelumnya — persis seperti yang Anda setujui.",
+      "close": "Tutup",
+      "valueLabel": "Nilai",
+      "bestEffortWarning": "Didekode dari signature fungsi — bukan deskriptor terverifikasi. Tinjau detailnya dengan cermat.",
+      "simWillSucceed": "Simulasi lolos — diperkirakan berhasil",
+      "simWillFail": "Transaksi ini diperkirakan gagal — Anda tetap membayar gas.",
+      "simWillFailReason": "Diperkirakan gagal: {{reason}} — Anda tetap membayar gas.",
+      "balanceChangesTitle": "Perubahan saldo",
+      "balanceNoAssetsMove": "Tidak ada aset yang keluar dari dompet Anda",
+      "balanceUnverifiedToken": "Token belum diverifikasi",
+      "balanceSelfTransfer": "Ke alamat Anda sendiri · saldo tidak berubah"
     },
     "signingApprove": {
       "resultingTotal": "Total tunjangan baru",
-      "resultingTotalUnknown": "Menambah {{amount}} di atas tunjangan Anda saat ini (jumlah saat ini tidak dapat dibaca)"
+      "resultingTotalUnknown": "Menambah {{amount}} di atas tunjangan Anda saat ini (jumlah saat ini tidak dapat dibaca)",
+      "spendingCap": "Batas belanja",
+      "reduceBy": "Kurangi sebesar",
+      "requested": "Diminta",
+      "custom": "Kustom",
+      "revoke": "Cabut",
+      "revokeValue": "Cabut (0)",
+      "invalidAmount": "Masukkan jumlah yang valid",
+      "unlimitedDisabled": "Persetujuan tanpa batas dinonaktifkan demi keamanan Anda",
+      "capSummary": "{{spender}} dapat membelanjakan hingga {{amount}}.",
+      "revokeSummary": "{{spender}} tidak akan lagi dapat membelanjakan token ini.",
+      "choosePrompt": "Tetapkan jumlah terbatas untuk melanjutkan.",
+      "decimalsUnverified": "Desimal token tidak dapat diverifikasi — periksa ulang jumlahnya.",
+      "allNfts": "Semua NFT",
+      "fullBalance": "Seluruh saldo",
+      "setApprovalAllWarn": "Ini memungkinkan {{operator}} mentransfer setiap NFT di koleksi ini. Bila bisa, berikan akses ke satu item saja.",
+      "daiWarn": "Ini memberi {{spender}} akses ke seluruh saldo token ini milik Anda.",
+      "revokeAccess": "Cabut akses",
+      "grantAllAnyway": "Berikan akses ke semua",
+      "verbApprove": "Setujui",
+      "verbApproveAll": "Setujui Semua",
+      "verbRevoke": "Cabut",
+      "spenderLabel": "Spender",
+      "operatorLabel": "Operator",
+      "tokenLabel": "Token",
+      "collectionLabel": "Koleksi",
+      "expired": "Permit ini sudah kedaluwarsa",
+      "noExpiry": "Persetujuan ini tidak pernah kedaluwarsa",
+      "expiresLabel": "Kedaluwarsa",
+      "chooseAction": "Pilih Cabut atau Berikan untuk melanjutkan."
     },
     "currency": {
       "title": "Mata uang tampilan",
@@ -100,7 +143,9 @@
       "gasLimit": "Batas Gas",
       "walletDeployed": "Dompet Terdeploy",
       "deployedYes": "Ya",
-      "deployedNo": "Belum (tx pertama)"
+      "deployedNo": "Belum (tx pertama)",
+      "estimating": "Memperkirakan...",
+      "estimateFailed": "Ketuk untuk coba lagi"
     },
     "dock": {
       "receive": "Terima",
@@ -115,6 +160,28 @@
     "chart": {
       "noDataFor": "Tidak ada data untuk {{label}}",
       "tapHint": "Ketuk sebuah batang untuk melihat saldo"
+    },
+    "bugReport": {
+      "title": "Laporkan masalah",
+      "subtitle": "Beri tahu kami apa yang salah — langsung masuk ke pelacak masalah kami.",
+      "whatLabel": "Apa yang terjadi?",
+      "whatPlaceholder": "mis. Saya ketuk Kirim lalu layar membeku.",
+      "stepsLabel": "Langkah untuk mereproduksi (opsional)",
+      "stepsPlaceholder": "1. Buka…\n2. Ketuk…\n3. Lihat…",
+      "previewToggle": "Yang akan dikirim",
+      "consent": "Hanya yang Anda lihat di sini yang dikirim — bukan kunci, frasa pemulihan, atau saldo Anda.",
+      "send": "Kirim laporan",
+      "sending": "Mengirim…",
+      "cancel": "Batal",
+      "successTitle": "Terima kasih — sudah dilaporkan!",
+      "successBodyNew": "Dicatat sebagai isu #{{number}}. Anda bisa memantaunya kapan saja.",
+      "successBodyDeduped": "Ditambahkan ke laporan yang sudah ada (#{{number}}). Terima kasih atas informasi tambahannya!",
+      "viewIssue": "Lihat laporan",
+      "fallbackTitle": "Buka di GitHub saja",
+      "fallbackBody": "Kami tidak dapat mengirimnya otomatis, tapi kami sudah mengisi formulir GitHub dengan detailnya.",
+      "openGithub": "Buka formulir GitHub",
+      "openGithubForm": "Lebih suka GitHub? Buka formulir isu →",
+      "done": "Selesai"
     }
   }
 }

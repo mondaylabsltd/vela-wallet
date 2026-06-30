@@ -39,6 +39,15 @@
     "connReconnectStuck": "Riconnessione non riuscita. Riprova, oppure disconnetti ed esegui di nuovo l'abbinamento.",
     "connEventsHead": "Attività della connessione · {{count}}",
     "connNoEvents": "Ancora nessuna richiesta su questa connessione.",
-    "toastReceived": "Ricevuti {{amount}} {{token}}"
+    "toastReceived": "Ricevuti {{amount}} {{token}}",
+    "connClear": "Cancella",
+    "connClearTitle": "Cancellare l'attività della connessione?",
+    "connClearBody": "Rimuove da questo dispositivo tutti i registri di firma di questa connessione. Le transazioni on-chain non vengono toccate.",
+    "connClearConfirm": "Cancella",
+    "connDelete": "Elimina",
+    "connPending": "In elaborazione",
+    "connFailed": "Non riuscita",
+    "assetsSheetTitle": "I tuoi asset",
+    "cancel": "Annulla"
   }
 }

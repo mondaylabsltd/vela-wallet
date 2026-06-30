@@ -39,6 +39,15 @@
     "rescanAgain": "Scanner à nouveau",
     "rescanClose": "Terminé",
     "rescanNativeNote": "Les pièces natives (ETH, BNB, MATIC…) reçues sur certains réseaux peuvent ne pas apparaître ici. Votre solde reste correct — ouvrez un explorateur de blocs pour le détail complet.",
-    "rescanExplorerTitle": "Vérifier directement sur un explorateur de blocs"
+    "rescanExplorerTitle": "Vérifier directement sur un explorateur de blocs",
+    "connClear": "Effacer",
+    "connClearTitle": "Effacer l'activité de la connexion ?",
+    "connClearBody": "Supprime de cet appareil tous les enregistrements de signature de cette connexion. Les transactions on-chain ne sont pas affectées.",
+    "connClearConfirm": "Effacer",
+    "connDelete": "Supprimer",
+    "connPending": "En cours",
+    "connFailed": "Échec",
+    "assetsSheetTitle": "Vos actifs",
+    "cancel": "Annuler"
   }
 }

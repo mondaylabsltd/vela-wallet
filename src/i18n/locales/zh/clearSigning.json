@@ -60,6 +60,16 @@
     "modalBtnApprove": "批准",
     "modalBtnConfirmIntent": "确认 {{intent}}",
     "alertSignedTitle": "已签名！",
-    "alertSignedBody": "这是测试 — 未创建实际签名。"
+    "alertSignedBody": "这是测试 — 未创建实际签名。",
+    "scenarioEthSign": "eth_sign（原始哈希）",
+    "scenarioEthSignSub": "盲签陷阱 — 应触发强警告",
+    "scenarioSiwePhish": "SIWE 域名不匹配",
+    "scenarioSiwePhishSub": "登录请求绑定到了其他域名 — 钓鱼",
+    "scenarioIncreaseAllowance": "increaseAllowance",
+    "scenarioIncreaseAllowanceSub": "增量语义 — 显示授权后总额",
+    "scenarioExpiredSwap": "兑换截止时间已过",
+    "scenarioExpiredSwapSub": "截止时间已过 — 应标记提示",
+    "scenarioBatch": "EIP-5792 批量",
+    "scenarioBatchSub": "wallet_sendCalls — 逐笔明细"
   }
 }

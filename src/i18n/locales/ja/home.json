@@ -39,6 +39,15 @@
     "rescanAgain": "もう一度スキャン",
     "rescanClose": "完了",
     "rescanNativeNote": "一部のネットワークで受け取ったネイティブコイン（ETH、BNB、MATIC など）はここで検出されないことがあります。ただし残高は正確です。完全な記録はブロックエクスプローラーで確認してください。",
-    "rescanExplorerTitle": "ブロックエクスプローラーで直接確認"
+    "rescanExplorerTitle": "ブロックエクスプローラーで直接確認",
+    "connClear": "消去",
+    "connClearTitle": "接続のアクティビティを消去しますか？",
+    "connClearBody": "この端末から、この接続のすべての署名記録を削除します。オンチェーンの取引には影響しません。",
+    "connClearConfirm": "消去",
+    "connDelete": "削除",
+    "connPending": "処理中",
+    "connFailed": "失敗",
+    "assetsSheetTitle": "保有資産",
+    "cancel": "キャンセル"
   }
 }

@@ -60,6 +60,16 @@
     "modalBtnApprove": "Setujui",
     "modalBtnConfirmIntent": "Konfirmasi {{intent}}",
     "alertSignedTitle": "Ditandatangani!",
-    "alertSignedBody": "Ini hanya uji coba — tidak ada tanda tangan yang benar-benar dibuat."
+    "alertSignedBody": "Ini hanya uji coba — tidak ada tanda tangan yang benar-benar dibuat.",
+    "scenarioEthSign": "eth_sign (hash mentah)",
+    "scenarioEthSignSub": "Jebakan blind sign — harus diperingatkan keras",
+    "scenarioSiwePhish": "Domain SIWE tidak cocok",
+    "scenarioSiwePhishSub": "Login terikat ke domain berbeda — phishing",
+    "scenarioIncreaseAllowance": "increaseAllowance",
+    "scenarioIncreaseAllowanceSub": "Semantik penambahan — tampilkan total hasilnya",
+    "scenarioExpiredSwap": "Batas waktu swap kedaluwarsa",
+    "scenarioExpiredSwapSub": "Batas waktu sudah lewat — tandai",
+    "scenarioBatch": "Batch EIP-5792",
+    "scenarioBatchSub": "wallet_sendCalls — rincian per panggilan"
   }
 }

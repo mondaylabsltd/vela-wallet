@@ -60,6 +60,16 @@
     "modalBtnApprove": "Phê duyệt",
     "modalBtnConfirmIntent": "Xác nhận {{intent}}",
     "alertSignedTitle": "Đã ký!",
-    "alertSignedBody": "Đây là bản kiểm thử — không có chữ ký thực nào được tạo."
+    "alertSignedBody": "Đây là bản kiểm thử — không có chữ ký thực nào được tạo.",
+    "scenarioEthSign": "eth_sign (raw hash)",
+    "scenarioEthSignSub": "Bẫy ký mù — phải cảnh báo nghiêm trọng",
+    "scenarioSiwePhish": "SIWE sai trang web",
+    "scenarioSiwePhishSub": "Đăng nhập gắn với một trang web khác — lừa đảo",
+    "scenarioIncreaseAllowance": "increaseAllowance",
+    "scenarioIncreaseAllowanceSub": "Ngữ nghĩa cộng dồn — hiển thị tổng sau khi cộng",
+    "scenarioExpiredSwap": "Hạn chót hoán đổi đã quá hạn",
+    "scenarioExpiredSwapSub": "Hạn chót đã trôi qua — hãy đánh dấu",
+    "scenarioBatch": "Gộp EIP-5792",
+    "scenarioBatchSub": "wallet_sendCalls — chi tiết từng lệnh gọi"
   }
 }

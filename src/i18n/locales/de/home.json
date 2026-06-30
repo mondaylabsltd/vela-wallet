@@ -39,6 +39,15 @@
     "rescanAgain": "Noch einmal scannen",
     "rescanClose": "Fertig",
     "rescanNativeNote": "Native Coins (ETH, BNB, MATIC…), die in einigen Netzwerken empfangen werden, können hier nicht erkannt werden. Ihr Guthaben bleibt korrekt — öffnen Sie einen Block-Explorer für den vollständigen Eintrag.",
-    "rescanExplorerTitle": "Direkt im Block-Explorer prüfen"
+    "rescanExplorerTitle": "Direkt im Block-Explorer prüfen",
+    "connClear": "Leeren",
+    "connClearTitle": "Verbindungsaktivität leeren?",
+    "connClearBody": "Entfernt alle Signaturaufzeichnungen dieser Verbindung von diesem Gerät. On-chain-Transaktionen sind nicht betroffen.",
+    "connClearConfirm": "Leeren",
+    "connDelete": "Löschen",
+    "connPending": "Wird verarbeitet",
+    "connFailed": "Fehlgeschlagen",
+    "assetsSheetTitle": "Ihre Assets",
+    "cancel": "Abbrechen"
   }
 }

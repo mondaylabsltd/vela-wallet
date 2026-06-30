@@ -53,6 +53,7 @@ import zhTWClearSigning from './locales/zh-TW/clearSigning.json';
 import zhTWComponentsTx from './locales/zh-TW/componentsTx.json';
 import zhTWComponentsUi from './locales/zh-TW/componentsUi.json';
 import zhTWSettingsModals from './locales/zh-TW/settingsModals.json';
+import zhTWContacts from './locales/zh-TW/contacts.json';
 import zhHKCore from './locales/zh-HK.json';
 import zhHKHome from './locales/zh-HK/home.json';
 import zhHKSend from './locales/zh-HK/send.json';
@@ -68,6 +69,7 @@ import zhHKClearSigning from './locales/zh-HK/clearSigning.json';
 import zhHKComponentsTx from './locales/zh-HK/componentsTx.json';
 import zhHKComponentsUi from './locales/zh-HK/componentsUi.json';
 import zhHKSettingsModals from './locales/zh-HK/settingsModals.json';
+import zhHKContacts from './locales/zh-HK/contacts.json';
 import jaCore from './locales/ja.json';
 import jaHome from './locales/ja/home.json';
 import jaSend from './locales/ja/send.json';
@@ -83,6 +85,7 @@ import jaClearSigning from './locales/ja/clearSigning.json';
 import jaComponentsTx from './locales/ja/componentsTx.json';
 import jaComponentsUi from './locales/ja/componentsUi.json';
 import jaSettingsModals from './locales/ja/settingsModals.json';
+import jaContacts from './locales/ja/contacts.json';
 import koCore from './locales/ko.json';
 import koHome from './locales/ko/home.json';
 import koSend from './locales/ko/send.json';
@@ -98,6 +101,7 @@ import koClearSigning from './locales/ko/clearSigning.json';
 import koComponentsTx from './locales/ko/componentsTx.json';
 import koComponentsUi from './locales/ko/componentsUi.json';
 import koSettingsModals from './locales/ko/settingsModals.json';
+import koContacts from './locales/ko/contacts.json';
 import viCore from './locales/vi.json';
 import viHome from './locales/vi/home.json';
 import viSend from './locales/vi/send.json';
@@ -113,6 +117,7 @@ import viClearSigning from './locales/vi/clearSigning.json';
 import viComponentsTx from './locales/vi/componentsTx.json';
 import viComponentsUi from './locales/vi/componentsUi.json';
 import viSettingsModals from './locales/vi/settingsModals.json';
+import viContacts from './locales/vi/contacts.json';
 import idCore from './locales/id.json';
 import idHome from './locales/id/home.json';
 import idSend from './locales/id/send.json';
@@ -128,6 +133,7 @@ import idClearSigning from './locales/id/clearSigning.json';
 import idComponentsTx from './locales/id/componentsTx.json';
 import idComponentsUi from './locales/id/componentsUi.json';
 import idSettingsModals from './locales/id/settingsModals.json';
+import idContacts from './locales/id/contacts.json';
 import trCore from './locales/tr.json';
 import trHome from './locales/tr/home.json';
 import trSend from './locales/tr/send.json';
@@ -143,6 +149,7 @@ import trClearSigning from './locales/tr/clearSigning.json';
 import trComponentsTx from './locales/tr/componentsTx.json';
 import trComponentsUi from './locales/tr/componentsUi.json';
 import trSettingsModals from './locales/tr/settingsModals.json';
+import trContacts from './locales/tr/contacts.json';
 import esMXCore from './locales/es-MX.json';
 import esMXHome from './locales/es-MX/home.json';
 import esMXSend from './locales/es-MX/send.json';
@@ -158,6 +165,7 @@ import esMXClearSigning from './locales/es-MX/clearSigning.json';
 import esMXComponentsTx from './locales/es-MX/componentsTx.json';
 import esMXComponentsUi from './locales/es-MX/componentsUi.json';
 import esMXSettingsModals from './locales/es-MX/settingsModals.json';
+import esMXContacts from './locales/es-MX/contacts.json';
 import ptBRCore from './locales/pt-BR.json';
 import ptBRHome from './locales/pt-BR/home.json';
 import ptBRSend from './locales/pt-BR/send.json';
@@ -173,6 +181,7 @@ import ptBRClearSigning from './locales/pt-BR/clearSigning.json';
 import ptBRComponentsTx from './locales/pt-BR/componentsTx.json';
 import ptBRComponentsUi from './locales/pt-BR/componentsUi.json';
 import ptBRSettingsModals from './locales/pt-BR/settingsModals.json';
+import ptBRContacts from './locales/pt-BR/contacts.json';
 import frCore from './locales/fr.json';
 import frHome from './locales/fr/home.json';
 import frSend from './locales/fr/send.json';
@@ -188,6 +197,7 @@ import frClearSigning from './locales/fr/clearSigning.json';
 import frComponentsTx from './locales/fr/componentsTx.json';
 import frComponentsUi from './locales/fr/componentsUi.json';
 import frSettingsModals from './locales/fr/settingsModals.json';
+import frContacts from './locales/fr/contacts.json';
 import deCore from './locales/de.json';
 import deHome from './locales/de/home.json';
 import deSend from './locales/de/send.json';
@@ -203,6 +213,7 @@ import deClearSigning from './locales/de/clearSigning.json';
 import deComponentsTx from './locales/de/componentsTx.json';
 import deComponentsUi from './locales/de/componentsUi.json';
 import deSettingsModals from './locales/de/settingsModals.json';
+import deContacts from './locales/de/contacts.json';
 import ruCore from './locales/ru.json';
 import ruHome from './locales/ru/home.json';
 import ruSend from './locales/ru/send.json';
@@ -218,6 +229,7 @@ import ruClearSigning from './locales/ru/clearSigning.json';
 import ruComponentsTx from './locales/ru/componentsTx.json';
 import ruComponentsUi from './locales/ru/componentsUi.json';
 import ruSettingsModals from './locales/ru/settingsModals.json';
+import ruContacts from './locales/ru/contacts.json';
 import itCore from './locales/it.json';
 import itHome from './locales/it/home.json';
 import itSend from './locales/it/send.json';
@@ -233,6 +245,7 @@ import itClearSigning from './locales/it/clearSigning.json';
 import itComponentsTx from './locales/it/componentsTx.json';
 import itComponentsUi from './locales/it/componentsUi.json';
 import itSettingsModals from './locales/it/settingsModals.json';
+import itContacts from './locales/it/contacts.json';
 
 export const en = {
   ...enCore,
@@ -288,6 +301,7 @@ const zhTW = {
   ...zhTWComponentsTx,
   ...zhTWComponentsUi,
   ...zhTWSettingsModals,
+  ...zhTWContacts,
 };
 
 const zhHK = {
@@ -306,6 +320,7 @@ const zhHK = {
   ...zhHKComponentsTx,
   ...zhHKComponentsUi,
   ...zhHKSettingsModals,
+  ...zhHKContacts,
 };
 
 const ja = {
@@ -324,6 +339,7 @@ const ja = {
   ...jaComponentsTx,
   ...jaComponentsUi,
   ...jaSettingsModals,
+  ...jaContacts,
 };
 
 const ko = {
@@ -342,6 +358,7 @@ const ko = {
   ...koComponentsTx,
   ...koComponentsUi,
   ...koSettingsModals,
+  ...koContacts,
 };
 
 const vi = {
@@ -360,6 +377,7 @@ const vi = {
   ...viComponentsTx,
   ...viComponentsUi,
   ...viSettingsModals,
+  ...viContacts,
 };
 
 const id = {
@@ -378,6 +396,7 @@ const id = {
   ...idComponentsTx,
   ...idComponentsUi,
   ...idSettingsModals,
+  ...idContacts,
 };
 
 const tr = {
@@ -396,6 +415,7 @@ const tr = {
   ...trComponentsTx,
   ...trComponentsUi,
   ...trSettingsModals,
+  ...trContacts,
 };
 
 const esMX = {
@@ -414,6 +434,7 @@ const esMX = {
   ...esMXComponentsTx,
   ...esMXComponentsUi,
   ...esMXSettingsModals,
+  ...esMXContacts,
 };
 
 const ptBR = {
@@ -432,6 +453,7 @@ const ptBR = {
   ...ptBRComponentsTx,
   ...ptBRComponentsUi,
   ...ptBRSettingsModals,
+  ...ptBRContacts,
 };
 
 const fr = {
@@ -450,6 +472,7 @@ const fr = {
   ...frComponentsTx,
   ...frComponentsUi,
   ...frSettingsModals,
+  ...frContacts,
 };
 
 const de = {
@@ -468,6 +491,7 @@ const de = {
   ...deComponentsTx,
   ...deComponentsUi,
   ...deSettingsModals,
+  ...deContacts,
 };
 
 const ru = {
@@ -486,6 +510,7 @@ const ru = {
   ...ruComponentsTx,
   ...ruComponentsUi,
   ...ruSettingsModals,
+  ...ruContacts,
 };
 
 const it = {
@@ -504,6 +529,7 @@ const it = {
   ...itComponentsTx,
   ...itComponentsUi,
   ...itSettingsModals,
+  ...itContacts,
 };
 
 export const resources = {

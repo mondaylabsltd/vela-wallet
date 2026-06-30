@@ -9,7 +9,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Search, X, Star, BookmarkPlus } from 'lucide-react-native';
+import { Search, X, Star, BookmarkPlus, ScanLine, ChevronRight } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import { shortAddr } from '@/models/types';
@@ -22,10 +22,13 @@ import { hapticLight } from '@/services/platform';
 
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 
-export function ContactPicker({ visible, onClose, onSelect, myAddress }: {
+export function ContactPicker({ visible, onClose, onSelect, onScan, myAddress }: {
   visible: boolean;
   onClose: () => void;
   onSelect: (address: string, name?: string) => void;
+  /** Optional QR-scan entry, shown as a prominent action at the top of the
+      sheet. Tapping it closes the picker and hands off to the scanner. */
+  onScan?: () => void;
   myAddress?: string;
 }) {
   const { t } = useTranslation();
@@ -86,6 +89,16 @@ export function ContactPicker({ visible, onClose, onSelect, myAddress }: {
             </Pressable>
           )}
         </View>
+
+        {onScan && (
+          <Pressable style={styles.scanRow} onPress={() => { hapticLight(); onClose(); onScan(); }}>
+            <View style={styles.scanIcon}>
+              <ScanLine size={20} color={color.accent.base} strokeWidth={2} />
+            </View>
+            <Text style={styles.scanText}>{t('contacts.scanToAdd')}</Text>
+            <ChevronRight size={18} color={color.fg.subtle} strokeWidth={2} />
+          </Pressable>
+        )}
 
         <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {/* Use a freshly typed address right away */}
@@ -180,6 +193,18 @@ const styles = createStyles(() => ({
     paddingHorizontal: space.xl, paddingVertical: space.lg, marginBottom: space.lg,
   },
   searchInput: { flex: 1, fontSize: text.lg, ...inter.regular, color: color.fg.base, padding: 0 },
+
+  scanRow: {
+    flexDirection: 'row', alignItems: 'center', gap: space.lg,
+    paddingVertical: space.md, paddingHorizontal: space.lg,
+    backgroundColor: color.accent.soft, borderRadius: radius.xl, marginBottom: space.lg,
+  },
+  scanIcon: {
+    width: 40, height: 40, borderRadius: radius.lg,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: color.bg.base,
+  },
+  scanText: { flex: 1, fontSize: text.lg, ...inter.semibold, color: color.fg.base },
 
   scroll: { flex: 1 },
   section: { marginBottom: space.xl },

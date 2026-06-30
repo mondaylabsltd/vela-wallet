@@ -31,6 +31,7 @@
     "sends_one": "{{count}} 笔转账",
     "sends_other": "{{count}} 笔转账",
     "savedTag": "已保存",
-    "savedContact": "已保存联系人"
+    "savedContact": "已保存联系人",
+    "scanToAdd": "扫码添加地址"
   }
 }

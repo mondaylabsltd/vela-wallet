@@ -60,6 +60,16 @@
     "modalBtnApprove": "승인",
     "modalBtnConfirmIntent": "{{intent}} 확인",
     "alertSignedTitle": "서명됨!",
-    "alertSignedBody": "이것은 테스트입니다 — 실제 서명은 생성되지 않았습니다."
+    "alertSignedBody": "이것은 테스트입니다 — 실제 서명은 생성되지 않았습니다.",
+    "scenarioEthSign": "eth_sign (raw hash)",
+    "scenarioEthSignSub": "블라인드 서명 함정 — 강력 경고가 떠야 함",
+    "scenarioSiwePhish": "SIWE 도메인 불일치",
+    "scenarioSiwePhishSub": "다른 도메인에 묶인 로그인 — 피싱",
+    "scenarioIncreaseAllowance": "increaseAllowance",
+    "scenarioIncreaseAllowanceSub": "증가 방식 — 적용 후 총액 표시",
+    "scenarioExpiredSwap": "만료된 스왑 마감 시각",
+    "scenarioExpiredSwapSub": "마감 시각이 이미 지남 — 표시 처리",
+    "scenarioBatch": "EIP-5792 일괄 처리",
+    "scenarioBatchSub": "wallet_sendCalls — 호출별 상세 내역"
   }
 }

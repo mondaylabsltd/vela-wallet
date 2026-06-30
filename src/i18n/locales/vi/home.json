@@ -39,6 +39,15 @@
     "rescanAgain": "Quét lại lần nữa",
     "rescanClose": "Xong",
     "rescanNativeNote": "Coin gốc (ETH, BNB, MATIC…) nhận trên một số mạng có thể không hiển thị ở đây. Số dư của bạn vẫn chính xác — hãy mở block explorer để xem đầy đủ.",
-    "rescanExplorerTitle": "Kiểm tra trực tiếp trên block explorer"
+    "rescanExplorerTitle": "Kiểm tra trực tiếp trên block explorer",
+    "connClear": "Xóa",
+    "connClearTitle": "Xóa hoạt động kết nối?",
+    "connClearBody": "Xóa tất cả bản ghi ký của kết nối này khỏi thiết bị này. Các giao dịch on-chain không bị ảnh hưởng.",
+    "connClearConfirm": "Xóa",
+    "connDelete": "Xóa",
+    "connPending": "Đang xử lý",
+    "connFailed": "Thất bại",
+    "assetsSheetTitle": "Tài sản của bạn",
+    "cancel": "Hủy"
   }
 }

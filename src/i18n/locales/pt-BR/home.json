@@ -39,6 +39,15 @@
     "rescanAgain": "Escanear novamente",
     "rescanClose": "Concluído",
     "rescanNativeNote": "Moedas nativas (ETH, BNB, MATIC…) recebidas em algumas redes podem não ser detectadas aqui. Seu saldo continua correto — abra um explorador de blocos para ver o registro completo.",
-    "rescanExplorerTitle": "Confira diretamente em um explorador de blocos"
+    "rescanExplorerTitle": "Confira diretamente em um explorador de blocos",
+    "connClear": "Limpar",
+    "connClearTitle": "Limpar atividade da conexão?",
+    "connClearBody": "Remove deste dispositivo todos os registros de assinatura desta conexão. As transações on-chain não são afetadas.",
+    "connClearConfirm": "Limpar",
+    "connDelete": "Excluir",
+    "connPending": "Processando",
+    "connFailed": "Falhou",
+    "assetsSheetTitle": "Seus ativos",
+    "cancel": "Cancelar"
   }
 }

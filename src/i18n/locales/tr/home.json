@@ -39,6 +39,15 @@
     "rescanAgain": "Tekrar tara",
     "rescanClose": "Bitti",
     "rescanNativeNote": "Bazı ağlarda alınan yerel coin’ler (ETH, BNB, MATIC…) burada algılanmayabilir. Bakiyeniz yine de doğrudur — tam kayıt için blok gezginini açın.",
-    "rescanExplorerTitle": "Doğrudan blok gezgininde kontrol et"
+    "rescanExplorerTitle": "Doğrudan blok gezgininde kontrol et",
+    "connClear": "Temizle",
+    "connClearTitle": "Bağlantı etkinliği temizlensin mi?",
+    "connClearBody": "Bu bağlantıya ait tüm imzalama kayıtlarını bu cihazdan kaldırır. Zincir üzerindeki işlemler etkilenmez.",
+    "connClearConfirm": "Temizle",
+    "connDelete": "Sil",
+    "connPending": "İşleniyor",
+    "connFailed": "Başarısız",
+    "assetsSheetTitle": "Varlıkların",
+    "cancel": "İptal"
   }
 }

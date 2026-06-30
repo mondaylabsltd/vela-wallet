@@ -60,6 +60,16 @@
     "modalBtnApprove": "Onayla",
     "modalBtnConfirmIntent": "{{intent}} işlemini onayla",
     "alertSignedTitle": "İmzalandı!",
-    "alertSignedBody": "Bu bir testtir — gerçek bir imza oluşturulmadı."
+    "alertSignedBody": "Bu bir testtir — gerçek bir imza oluşturulmadı.",
+    "scenarioEthSign": "eth_sign (ham hash)",
+    "scenarioEthSignSub": "Kör imza tuzağı — kesin uyarı vermeli",
+    "scenarioSiwePhish": "SIWE alan adı uyuşmazlığı",
+    "scenarioSiwePhishSub": "Oturum açma farklı bir alan adına bağlı — kimlik avı",
+    "scenarioIncreaseAllowance": "increaseAllowance",
+    "scenarioIncreaseAllowanceSub": "Artırma mantığı — ortaya çıkan toplamı göster",
+    "scenarioExpiredSwap": "Süresi geçmiş swap son tarihi",
+    "scenarioExpiredSwapSub": "Son tarih çoktan geçmiş — işaretle",
+    "scenarioBatch": "EIP-5792 toplu işlem",
+    "scenarioBatchSub": "wallet_sendCalls — çağrı başına döküm"
   }
 }

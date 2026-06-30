@@ -1081,7 +1081,11 @@ export default function SendScreen() {
 
           {/* Simulation — revert pre-check + net balance changes (shared render
               path with the dApp signing sheet). */}
-          <BalanceChangePreview result={sim} chainId={tokenChainId(selectedToken)} />
+          <BalanceChangePreview
+            result={sim}
+            chainId={tokenChainId(selectedToken)}
+            selfTransfer={!!activeAccount && recipient.toLowerCase() === activeAccount.address.toLowerCase()}
+          />
 
           {/* Gas Details — collapsed by default, fee shown in toggle row */}
           <Pressable onPress={() => setGasExpanded(!gasExpanded)} style={styles.gasToggleRow}>
