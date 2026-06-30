@@ -76,6 +76,7 @@
     "removeRecipient": "Xóa",
     "alertInsufficientBalanceBody": "Tổng vượt quá số dư của bạn.",
     "recipientPickAria": "Chọn người nhận hoặc quét",
-    "multiSendNoFundsAfterGas": "Không đủ để trả gas sau khi dự trữ."
+    "multiSendNoFundsAfterGas": "Không đủ để trả gas sau khi dự trữ.",
+    "gasReserved": "đã giữ gas"
   }
 }

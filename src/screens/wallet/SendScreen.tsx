@@ -370,6 +370,9 @@ export default function SendScreen() {
               fetchBundlerAccountInfo(chainId, activeAccount.address).catch(() => {});
               findAccountByCredentialId(activeAccount.id).then((s) => { prefetchedAccount.current = s ?? null; });
               import('@/services/webauthn-verify').then((m) => { webauthnModuleRef.current = m; });
+              estimateTransactionFee(activeAccount.address, chainId, gasTier)
+                .then((f) => { if (mountedRef.current) setFeeEstimate(f); })
+                .catch(() => {});
             }
           }
           return;
@@ -635,6 +638,11 @@ export default function SendScreen() {
       fetchBundlerAccountInfo(chainId, activeAccount.address).catch(() => {});
       findAccountByCredentialId(activeAccount.id).then((s) => { prefetchedAccount.current = s ?? null; });
       import('@/services/webauthn-verify').then((m) => { webauthnModuleRef.current = m; });
+      // Warm a gas estimate so the detail list can show the native line net of
+      // its reserve right away (not just at confirm).
+      estimateTransactionFee(activeAccount.address, chainId, gasTier)
+        .then((f) => { if (mountedRef.current) setFeeEstimate(f); })
+        .catch(() => {});
     }
   };
 
@@ -1242,28 +1250,46 @@ export default function SendScreen() {
             />
           )}
 
-          {/* ② multi-token send — the selected tokens (full balance) + one recipient. */}
-          {multiSelectMode && (<>
+          {/* ② multi-token send — exact amounts sent (native net of its gas reserve). */}
+          {multiSelectMode && (() => {
+            const cid = tokenChainId(selectedToken);
+            const specs = multiTokenSpecs(cid);
+            // Amount actually sent per token: ERC-20 = full balance; native = balance
+            // minus its gas reserve (0 if the native line was dropped).
+            const amountOf = (tk: APIToken) => {
+              const addr = isNativeToken(tk) ? null : tk.tokenAddress;
+              const spec = specs.find((s) => s.tokenAddress === addr);
+              return spec ? parseFloat(spec.amount) : 0;
+            };
+            const total = pickedTokens.reduce((s, tk) => s + amountOf(tk) * (tk.priceUsd ?? 0), 0);
+            return (<>
             <VelaCard style={styles.multiCard}>
               <View style={styles.mtSummary}>
                 <Text style={styles.mtSummaryTitle}>
-                  {t('send.multiSendSummary', { n: pickedTokens.length, chain: chainName(tokenChainId(selectedToken)) })}
+                  {t('send.multiSendSummary', { n: pickedTokens.length, chain: chainName(cid) })}
                 </Text>
-                <Text style={styles.mtSummaryUsd}>{formatUsd(pickedTokens.reduce((s, tk) => s + tokenUsdValue(tk), 0))}</Text>
+                <Text style={styles.mtSummaryUsd}>{formatUsd(total)}</Text>
               </View>
-              {pickedTokens.map((tk) => (
-                <View key={tokenId(tk)} style={[styles.mtRow, styles.mtRowBorder]}>
-                  <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={32} />
-                  <View style={styles.mtInfo}>
-                    <Text style={styles.mtSym}>{tk.symbol}</Text>
-                    <Text style={styles.mtChain}>{chainName(tokenChainId(tk))}</Text>
+              {pickedTokens.map((tk) => {
+                const amt = amountOf(tk);
+                const usd = amt * (tk.priceUsd ?? 0);
+                const reserved = isNativeToken(tk) && amt < tokenBalanceDouble(tk);
+                return (
+                  <View key={tokenId(tk)} style={[styles.mtRow, styles.mtRowBorder]}>
+                    <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={32} />
+                    <View style={styles.mtInfo}>
+                      <Text style={styles.mtSym}>{tk.symbol}</Text>
+                      <Text style={styles.mtChain}>
+                        {chainName(tokenChainId(tk))}{reserved ? ` · ${t('send.gasReserved')}` : ''}
+                      </Text>
+                    </View>
+                    <View style={styles.mtVals}>
+                      <Text style={styles.mtBal}>{formatTokenAmount(amt, { compact: true })}</Text>
+                      {usd > 0 && <Text style={styles.mtUsd}>{formatUsd(usd)}</Text>}
+                    </View>
                   </View>
-                  <View style={styles.mtVals}>
-                    <Text style={styles.mtBal}>{formatTokenAmount(tokenBalanceDouble(tk), { compact: true })}</Text>
-                    {tokenUsdValue(tk) > 0 && <Text style={styles.mtUsd}>{formatUsd(tokenUsdValue(tk))}</Text>}
-                  </View>
-                </View>
-              ))}
+                );
+              })}
             </VelaCard>
 
             <View style={[styles.fieldLabelRow, { marginTop: space.xl }]}>
@@ -1292,7 +1318,8 @@ export default function SendScreen() {
             <View style={{ marginTop: space.sm, paddingLeft: space.sm }}>
               <KnownContactBadge address={recipient} />
             </View>
-          </>)}
+          </>);
+          })()}
 
           {fundingNeeded?.reason === 'wallet_balance_too_low' && (
             <View style={styles.lowBalanceWarning}>
@@ -1370,23 +1397,40 @@ export default function SendScreen() {
                   </View>
                 </View>
               ) : (
-                <View style={styles.mtConfirmList}>
-                  {pickedTokens.map((tk) => (
-                    <View key={tokenId(tk)} style={styles.transferToken}>
-                      <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={36} />
-                      <View style={styles.transferTokenIdentity}>
-                        <Text style={styles.transferTokenSymbol}>{tk.symbol}</Text>
-                        <Text style={styles.transferTokenChain}>{chainName(tokenChainId(tk))}</Text>
-                      </View>
-                      <View style={styles.transferTokenValues}>
-                        <Text style={styles.transferTokenAmount}>{formatBalance(tokenBalanceDouble(tk))}</Text>
-                        {tokenUsdValue(tk) > 0 && (
-                          <Text style={styles.transferTokenSub}>≈ {formatUsd(tokenUsdValue(tk))}</Text>
-                        )}
-                      </View>
+                (() => {
+                  const specs = multiTokenSpecs(tokenChainId(selectedToken));
+                  const amountOf = (tk: APIToken) => {
+                    const addr = isNativeToken(tk) ? null : tk.tokenAddress;
+                    const spec = specs.find((s) => s.tokenAddress === addr);
+                    return spec ? parseFloat(spec.amount) : 0;
+                  };
+                  return (
+                    <View style={styles.mtConfirmList}>
+                      {pickedTokens.map((tk) => {
+                        const amt = amountOf(tk);
+                        const usd = amt * (tk.priceUsd ?? 0);
+                        const reserved = isNativeToken(tk) && amt < tokenBalanceDouble(tk);
+                        return (
+                          <View key={tokenId(tk)} style={styles.transferToken}>
+                            <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={36} />
+                            <View style={styles.transferTokenIdentity}>
+                              <Text style={styles.transferTokenSymbol}>{tk.symbol}</Text>
+                              <Text style={styles.transferTokenChain}>
+                                {chainName(tokenChainId(tk))}{reserved ? ` · ${t('send.gasReserved')}` : ''}
+                              </Text>
+                            </View>
+                            <View style={styles.transferTokenValues}>
+                              <Text style={styles.transferTokenAmount}>{formatBalance(amt)}</Text>
+                              {usd > 0 && (
+                                <Text style={styles.transferTokenSub}>≈ {formatUsd(usd)}</Text>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
                     </View>
-                  ))}
-                </View>
+                  );
+                })()
               )}
             </View>
 

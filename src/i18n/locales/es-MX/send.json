@@ -76,6 +76,7 @@
     "removeRecipient": "Quitar",
     "alertInsufficientBalanceBody": "El total supera tu saldo.",
     "recipientPickAria": "Elegir destinatario o escanear",
-    "multiSendNoFundsAfterGas": "No alcanza para el gas tras la reserva."
+    "multiSendNoFundsAfterGas": "No alcanza para el gas tras la reserva.",
+    "gasReserved": "gas reservado"
   }
 }
