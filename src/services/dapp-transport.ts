@@ -5,6 +5,8 @@
  * Implementations: SSE+POST (remote-inject), WebSocket, BLE.
  */
 
+import { classifyNetError, fetchWithTimeout, NET_TIMEOUTS } from './net';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -98,12 +100,24 @@ export class RemoteInjectTransport implements DAppTransport {
       this.eventSource = es;
       let resolved = false;
 
+      // Open deadline: a TCP-level connection that opens but never authenticates
+      // (server hung after accept, NAT black-hole) would otherwise leave this
+      // promise pending forever, freezing the connect UI. Bound it.
+      const openTimer = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        es.close();
+        this.eventSource = null;
+        reject(new Error('Bridge connection timed out'));
+      }, NET_TIMEOUTS.sseOpen);
+
       es.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
           // The server sends { type: 'ready' } once the SSE stream is authenticated
           if (msg.type === 'ready' && !resolved) {
             resolved = true;
+            clearTimeout(openTimer);
             this._connected = true;
             this.emit('connected', 'Remote Bridge');
             resolve();
@@ -117,6 +131,7 @@ export class RemoteInjectTransport implements DAppTransport {
         if (!resolved) {
           // Failed to connect — SSE rejected (403, 404, etc.)
           resolved = true;
+          clearTimeout(openTimer);
           es.close();
           this.eventSource = null;
           reject(new Error('Failed to connect to bridge'));
@@ -145,7 +160,11 @@ export class RemoteInjectTransport implements DAppTransport {
     const msg: any = { type: 'response', id };
     if (error) msg.error = error;
     else msg.result = result ?? null;
-    this.postMessage(msg).catch(() => {});
+    // Best-effort delivery, but never silent: if the relay POST fails the dApp is
+    // left waiting, so surface it for diagnosis instead of swallowing entirely.
+    this.postMessage(msg).catch((e) =>
+      console.warn(`[DApp] failed to deliver response ${id}: ${classifyNetError(e)}`),
+    );
   }
 
   pushWalletInfo(info: WalletInfo): void {
@@ -153,13 +172,17 @@ export class RemoteInjectTransport implements DAppTransport {
       type: 'connect',
       address: info.address,
       chainId: info.chainId,
-    }).catch(() => {});
+    }).catch((e) => console.warn(`[DApp] failed to push wallet info: ${classifyNetError(e)}`));
   }
 
   async fetchDAppInfo(): Promise<DAppInfo | null> {
     const { serverUrl, sessionId, nonce, secret } = this.session;
     try {
-      const res = await fetch(`${serverUrl}/session/${sessionId}?n=${nonce}&k=${secret}`);
+      const res = await fetchWithTimeout(
+        `${serverUrl}/session/${sessionId}?n=${nonce}&k=${secret}`,
+        {},
+        { timeoutMs: NET_TIMEOUTS.dappPost },
+      );
       if (!res.ok) return null;
       const data = await res.json();
       if (data.metadata?.name && data.metadata?.url) {
@@ -214,11 +237,15 @@ export class RemoteInjectTransport implements DAppTransport {
   private async postMessage(body: any): Promise<void> {
     const { serverUrl, sessionId, nonce, secret } = this.session;
     const url = `${serverUrl}/message?session=${sessionId}&role=mobile&n=${nonce}&k=${secret}`;
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    await fetchWithTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      { timeoutMs: NET_TIMEOUTS.dappPost },
+    );
   }
 }
 

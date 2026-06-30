@@ -226,6 +226,11 @@ export default function SendScreen() {
   const [estimatingGas, setEstimatingGas] = useState(false);
   const [fundingNeeded, setFundingNeeded] = useState<FundingNeeded | null>(null);
   const fundingRetryCount = useRef(0);
+  // Guards UI state updates that run after an `await` in the submit flow, so a
+  // user who navigates away mid-send doesn't trigger updates on an unmounted
+  // screen. Persistence (DB writes) still runs regardless — only UI is gated.
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
   const [txStatus, setTxStatus] = useState<TxStatus>('idle');
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
@@ -712,11 +717,13 @@ export default function SendScreen() {
       // 'confirmed' (awaiting the pending write first so the patch finds it).
       result.waitForTxHash()
         .then(async (hash) => {
-          setTxHash(hash);
+          if (mountedRef.current) setTxHash(hash);
+          // Persist the confirmation regardless of mount state — the record must
+          // flip to 'confirmed' even if the user already left the screen.
           await pendingWrite;
           await updateTransaction(result.userOpHash, { txHash: hash, status: 'confirmed' }).catch(() => {});
         })
-        .catch(() => { /* receipt slow/unavailable — stays 'pending' */ });
+        .catch(() => { /* receipt slow/unavailable — stays 'pending', reconciled on next view */ });
 
     } catch (error: any) {
       // Wording-tolerant detection — the bundler has reworded this error before
@@ -740,6 +747,8 @@ export default function SendScreen() {
             const chainId = tokenChainId(selectedToken!);
             clearBundlerCache(chainId, activeAccount!.address);
             const info = await fetchBundlerAccountInfo(chainId, activeAccount!.address);
+            // User navigated away during the account lookup — don't touch UI state.
+            if (!mountedRef.current) return;
             // Prefer live account info; fall back to values parsed from the error.
             const depositAddress = info?.depositAddress || underfunded.depositAddress;
             if (depositAddress) {

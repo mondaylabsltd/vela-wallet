@@ -17,6 +17,7 @@ import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import { getAccountBalances } from '@/services/balance-cache';
 import { clearBundlerCache } from '@/services/bundler-service';
+import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { copyToClipboard, hapticLight, hapticSuccess, openURL, showAlert } from '@/services/platform';
@@ -29,6 +30,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { AlertTriangle, BookUser, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, X, XCircle, Zap } from 'lucide-react-native';
 import { ContactsManager } from '@/components/contacts/ContactsManager';
+import { BugReportModal } from '@/components/ui/BugReportModal';
 import { useTranslation } from 'react-i18next';
 import { useLanguagePreference } from '@/i18n/language';
 import { LANGUAGE_NATIVE_NAMES, SUPPORTED_LANGUAGES, type AppLanguage, type LanguagePreference } from '@/i18n';
@@ -41,7 +43,6 @@ import {
     TextInput,
     View,
 } from 'react-native';
-import { buildBugReportURL } from '@/services/feedback';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
     runOnJS,
@@ -930,7 +931,7 @@ function ThemePicker({ s, current, onChange }: {
 // Language Picker — Follow System / English / 简体中文 (instant, no restart)
 // ---------------------------------------------------------------------------
 
-const VELA_REPO_URL = 'https://github.com/atshelchin/vela-wallet';
+const VELA_REPO_URL = 'https://github.com/mondaylabsltd/vela-wallet';
 
 /** Shipped app version — surfaced in About and attached to bug reports. */
 const APP_VERSION = '1.0.0';
@@ -1150,7 +1151,11 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
         // Ensure user-configured endpoints are loaded before reading bundler URL
         const endpoints = await loadServiceEndpoints();
         const baseUrl = endpoints.bundlerServiceURL || getBuiltinBundlerUrl();
-        const res = await fetch(`${baseUrl}/v1/treasury`, { headers: { 'Accept': 'application/json' } });
+        const res = await fetchWithTimeout(
+          `${baseUrl}/v1/treasury`,
+          { headers: { 'Accept': 'application/json' } },
+          { timeoutMs: NET_TIMEOUTS.bundlerRest },
+        );
         if (!res.ok) throw new Error('Failed to fetch treasury');
         const data = await res.json();
         if (cancelled) return;
@@ -1372,6 +1377,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
+  const [showBugReport, setShowBugReport] = useState(false);
   const [showNetworkEditor, setShowNetworkEditor] = useState(false);
   const [showEndpointEditor, setShowEndpointEditor] = useState(false);
   const [showAddNetwork, setShowAddNetwork] = useState(false);
@@ -1450,7 +1456,7 @@ export default function SettingsScreen() {
           <VelaCard>
             <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: MessageSquare }}
               title={t('settings.feedback.title')} subtitle={t('settings.feedback.subtitle')}
-              showDivider={false} onPress={() => openURL(buildBugReportURL(langResolved))}
+              showDivider={false} onPress={() => setShowBugReport(true)}
               right={<ExternalLink size={16} color={color.fg.subtle} />} />
           </VelaCard>
         </Animated.View>
@@ -1576,6 +1582,7 @@ export default function SettingsScreen() {
         systemLanguage={systemLanguage} onSelect={setLangPref} onClose={() => setShowLanguagePicker(false)} />
       <AccountSwitcherModal s={styles} visible={showAccountSwitcher} onClose={() => setShowAccountSwitcher(false)} />
       <ContactsManager visible={showContacts} onClose={() => setShowContacts(false)} />
+      <BugReportModal visible={showBugReport} language={langResolved} onClose={() => setShowBugReport(false)} />
       <NetworkEditorModal s={styles} visible={showNetworkEditor} onClose={() => setShowNetworkEditor(false)} />
       <EndpointEditorModal s={styles} visible={showEndpointEditor} onClose={() => setShowEndpointEditor(false)} />
       <AddNetworkModal s={styles} visible={showAddNetwork} onClose={() => setShowAddNetwork(false)} onAdded={() => {}} />

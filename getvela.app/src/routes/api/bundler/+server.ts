@@ -7,6 +7,7 @@
  */
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
+import { fetchWithTimeout, safeHost, UPSTREAM_TIMEOUTS } from '$lib/server/net';
 
 // ─── Config ───
 
@@ -130,23 +131,30 @@ export const POST: RequestHandler = async ({ request }) => {
 		targetUrl = `https://${slug}.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
 	}
 
-	console.log(`[bundler] ${method} → ${targetUrl.replace(/[?=].*/, '...')}`);
+	// Log host only — the API key lives in the URL path (Alchemy) or query
+	// (Pimlico), so never log targetUrl itself.
+	console.log(`[bundler] ${method} → ${safeHost(targetUrl)}`);
 
 	try {
-		const res = await fetch(targetUrl, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				jsonrpc: '2.0',
-				id: Date.now(),
-				method,
-				params: body.params ?? []
-			})
-		});
+		const res = await fetchWithTimeout(
+			targetUrl,
+			{
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					jsonrpc: '2.0',
+					id: Date.now(),
+					method,
+					params: body.params ?? []
+				})
+			},
+			UPSTREAM_TIMEOUTS.bundler
+		);
 
 		if (!res.ok) {
-			const text = await res.text().catch(() => '');
-			console.error(`[bundler] ${method} → ${res.status}: ${text}`);
+			// Cap the upstream body in our logs and never echo it to the client.
+			const text = (await res.text().catch(() => '')).slice(0, 200);
+			console.error(`[bundler] ${method} → ${res.status} (${safeHost(targetUrl)}): ${text}`);
 			return jsonRpcError(`Provider returned ${res.status}`, 502);
 		}
 
@@ -155,11 +163,11 @@ export const POST: RequestHandler = async ({ request }) => {
 			headers: { 'Content-Type': 'application/json' }
 		});
 	} catch (err) {
-		const msg = err instanceof Error ? err.message : String(err);
-		const cause = err instanceof Error && err.cause ? ` cause: ${err.cause}` : '';
-		console.error(`[bundler] ${method} failed: ${msg}${cause}`);
-		console.error(`[bundler] targetUrl: ${targetUrl}`);
-		return jsonRpcError(`Request failed: ${msg}`, 502);
+		// A TimeoutError (DOMException) means the provider didn't respond in time.
+		const timedOut = err instanceof Error && err.name === 'TimeoutError';
+		console.error(`[bundler] ${method} failed (${safeHost(targetUrl)}): ${timedOut ? 'timeout' : 'network error'}`);
+		// Stable, safe message — don't leak upstream internals/stack to the client.
+		return jsonRpcError(timedOut ? 'Provider timed out' : 'Provider request failed', 502);
 	}
 };
 

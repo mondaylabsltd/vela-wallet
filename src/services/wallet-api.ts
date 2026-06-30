@@ -16,6 +16,7 @@ import type { APIToken, CustomToken } from '@/models/types';
 import { tokenUsdValue, tokenChainId, isNativeToken } from '@/models/types';
 import { getAllNetworksSync, networkId, chainName, nativeSymbol } from '@/models/network';
 import { loadCustomTokens } from './storage';
+import { fetchWithTimeout, NET_TIMEOUTS } from './net';
 import { poolRpcCall, getFailedRpcChains } from './rpc-pool';
 import { priceShouldNull } from './dev/fault-injection';
 import { fetchChainTokens, pickQuoteToken, type ChainTokenData } from './chain-tokens';
@@ -153,7 +154,7 @@ export function getCachedHeldTokens(address: string | undefined, chainId: number
 /** Fetch USD to target currency exchange rate (unchanged). */
 export async function fetchExchangeRate(currency = 'CNY'): Promise<number> {
   const url = `https://getvela.app/api/exchange-rate?currency=${encodeURIComponent(currency)}`;
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url, {}, { timeoutMs: NET_TIMEOUTS.fiatRates });
   if (!response.ok) throw new APIError(`/exchange-rate failed: HTTP ${response.status}`);
   const data: { currency: string; rate: number } = await response.json();
   return data.rate;

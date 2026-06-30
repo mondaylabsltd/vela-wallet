@@ -6,6 +6,7 @@
  */
 
 import { getEthereumDataURL } from './storage';
+import { fetchWithTimeout, NET_TIMEOUTS } from './net';
 const CACHE_TTL = 30 * 60 * 1000; // 30 min
 
 // ---------------------------------------------------------------------------
@@ -112,7 +113,7 @@ export async function fetchChainTokens(chainId: number): Promise<ChainTokenData 
   if (cached && Date.now() - cached.at < CACHE_TTL) return cached.data;
 
   try {
-    const res = await fetch(`${getEthereumDataURL()}/chains/eip155-${chainId}.json`);
+    const res = await fetchWithTimeout(`${getEthereumDataURL()}/chains/eip155-${chainId}.json`, {}, { timeoutMs: NET_TIMEOUTS.ethereumData });
     if (!res.ok) return null;
 
     const raw = await res.json();

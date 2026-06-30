@@ -16,6 +16,8 @@ import { fetchChainInfo } from './chain-registry';
 import { getBundlerServiceURL, getNetworkConfig, getRpcProviderKeys, loadServiceEndpoints } from './storage';
 import { buildProviderRpcUrl, PROVIDER_ORDER } from './rpc-providers';
 import { rpcLatencyMs, rpcShouldFail } from './dev/fault-injection';
+import { NET_TIMEOUTS, backoffWithJitter } from './net';
+import { recordNet } from './metrics';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -517,14 +519,14 @@ function recordFailure(stats: EndpointStats): void {
 // ---------------------------------------------------------------------------
 
 /** Per-request timeout (ms). Prevents a hanging server from blocking failover. */
-const REQUEST_TIMEOUT_MS = 15_000;
+const REQUEST_TIMEOUT_MS = NET_TIMEOUTS.bundlerRpc;
 /**
  * Shorter timeout for read RPCs (balances / eth_call / chainId). A hung node
  * fails over to the next endpoint in 8s instead of 15s, halving the worst-case
  * wait when a chain's RPC is down (e.g. BSC). Bundler ops keep the longer
  * REQUEST_TIMEOUT_MS — UserOp submission can legitimately be slow.
  */
-const RPC_READ_TIMEOUT_MS = 8_000;
+const RPC_READ_TIMEOUT_MS = NET_TIMEOUTS.rpcRead;
 
 /** Custom error to flag HTTP-level permanent failures (401, 403, 404). */
 class HttpBanError extends Error {
@@ -571,7 +573,7 @@ async function tryEndpoint(
 // ---------------------------------------------------------------------------
 
 /** Ping timeout per endpoint — short since we race all in parallel. */
-const PING_TIMEOUT_MS = 3_000;
+const PING_TIMEOUT_MS = NET_TIMEOUTS.rpcPing;
 
 /** Cache the winning URL per chain for 60s to avoid pinging every bundler call. */
 const fastestRpcCache = new Map<number, { url: string; ts: number }>();
@@ -679,6 +681,7 @@ export async function poolRpcCall(
       // -32000 code that would otherwise (wrongly) ban or fail over the endpoint.
       if (method === 'eth_getLogs' && response.error && getLogsRangeCap(response.error) !== null) {
         recordSuccess(ep, ms);
+        recordNet('rpc', 'success');
         rpcFailedChains.delete(chainId);
         console.log(`[RPC] eth_getLogs → ${shorten(ep.url)} ${ms}ms RANGE_LIMIT: ${response.error.message?.slice(0, 60)} → caller splits`);
         return response;
@@ -702,6 +705,7 @@ export async function poolRpcCall(
       }
 
       recordSuccess(ep, ms);
+      recordNet('rpc', 'success');
       rpcFailedChains.delete(chainId);
       console.log(`[RPC] ${method} → ${shorten(ep.url)} ${ms}ms ${response.error ? 'ERR:' + response.error.message?.slice(0, 60) : 'OK'}`);
       return response;
@@ -719,15 +723,20 @@ export async function poolRpcCall(
     }
   }
 
-  // All endpoints failed on first pass — retry once after a short delay
-  // to recover from transient network glitches (CDN 502s, DNS hiccups).
+  // All endpoints failed on first pass — retry once after a short, JITTERED delay
+  // to recover from transient network glitches (CDN 502s, DNS hiccups). Jitter
+  // (vs a fixed 1s) de-synchronises many clients retrying after a shared outage so
+  // they don't thunder-herd the endpoints the instant they recover.
   if (!retried) {
-    console.warn(`[RPC] All endpoints failed for chain ${chainId}, retrying in 1s...`);
-    await new Promise(r => setTimeout(r, 1000));
+    recordNet('rpc', 'retry');
+    const delay = backoffWithJitter(0, 1000, 1000); // ~0–1000ms full jitter
+    console.warn(`[RPC] All endpoints failed for chain ${chainId}, retrying in ${delay}ms...`);
+    await new Promise(r => setTimeout(r, delay));
     return poolRpcCall(method, params, chainId, true);
   }
 
   rpcFailedChains.add(chainId);
+  recordNet('rpc', 'final_failure', { note: `all endpoints failed: ${method} chain ${chainId}` });
   throw new Error(`All RPC endpoints failed for chain ${chainId}`);
 }
 
@@ -785,6 +794,7 @@ export async function poolBundlerCall(
       }
 
       recordSuccess(ep, ms);
+      recordNet('bundler', 'success');
       console.log(`[Bundler] ${method} → ${shorten(ep.url)} ${ms}ms ${response.error ? 'ERR:' + response.error.message?.slice(0, 80) : 'OK'}`);
       return response;
     } catch (err) {
@@ -802,11 +812,14 @@ export async function poolBundlerCall(
   }
 
   if (!retried) {
-    console.warn(`[Bundler] All endpoints failed for chain ${chainId}, retrying in 1s...`);
-    await new Promise(r => setTimeout(r, 1000));
+    recordNet('bundler', 'retry');
+    const delay = backoffWithJitter(0, 1000, 1000); // ~0–1000ms full jitter (de-sync retry storms)
+    console.warn(`[Bundler] All endpoints failed for chain ${chainId}, retrying in ${delay}ms...`);
+    await new Promise(r => setTimeout(r, delay));
     return poolBundlerCall(method, params, chainId, true);
   }
 
+  recordNet('bundler', 'final_failure', { note: `all endpoints failed: ${method} chain ${chainId}` });
   throw new Error(`All bundler endpoints failed for chain ${chainId}`);
 }
 

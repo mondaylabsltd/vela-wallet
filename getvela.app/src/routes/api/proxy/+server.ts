@@ -1,5 +1,6 @@
 import { dev } from '$app/environment';
 import type { RequestHandler } from './$types';
+import { fetchWithConnectTimeout, UPSTREAM_TIMEOUTS } from '$lib/server/net';
 
 const BLOCKED_HOSTS = ['localhost', '127.0.0.1', '[::1]', '0.0.0.0'];
 const BLOCKED_TLDS = ['.local', '.internal', '.localhost'];
@@ -47,7 +48,10 @@ export const GET: RequestHandler = async ({ url }) => {
 	}
 
 	try {
-		const upstream = await fetch(targetUrl);
+		// Connect-phase timeout only: a target that accepts the connection but never
+		// sends headers is a DoS vector, so bound that. Once headers arrive the timer
+		// is cleared so a legitimate long-lived SSE stream isn't killed mid-flight.
+		const upstream = await fetchWithConnectTimeout(targetUrl, {}, UPSTREAM_TIMEOUTS.proxy);
 
 		const contentType = upstream.headers.get('content-type') || '';
 

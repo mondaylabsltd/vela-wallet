@@ -41,6 +41,17 @@ import { SAFE_PROXY_RUNTIME_CODE } from './safe-address';
 const STORAGE_KEY = 'vela.walletpairSession';
 
 /**
+ * SDK-operation deadlines (not fetch timeouts — those live in net.ts). The relay
+ * can silently drop a join or stay unreachable, so we bound those states rather
+ * than letting the connect promise hang or the UI spin "reconnecting" forever.
+ */
+const CONFIRM_JOIN_TIMEOUT_MS = 30_000;
+/** Max time to stay in the transient "reconnecting" state before surfacing a
+ *  recoverable error. The session is kept (SDK may still recover / user can
+ *  manually reconnect) — we just stop pretending it's about to come back. */
+const RECONNECT_MAX_MS = 60_000;
+
+/**
  * Read-only JSON-RPC methods the wallet will forward to its own RPC when a dApp
  * routes them over the channel (spec §9.6 Tier 2). They are declared explicitly
  * in capabilities.methods so the session-layer allowlist (protocol §7.1) admits
@@ -55,6 +66,22 @@ const READ_ONLY_RPC_METHODS = [
   'eth_newBlockFilter', 'eth_getFilterChanges', 'eth_uninstallFilter',
   'eth_sendRawTransaction', 'eth_syncing',
 ];
+
+/**
+ * Race a promise against a deadline. On timeout, rejects with `message` — used to
+ * bound SDK operations (confirmJoin) that would otherwise hang on a silent relay.
+ * The underlying SDK operation is not cancelled (no AbortSignal in the SDK API);
+ * we just stop awaiting it so the UI isn't frozen.
+ */
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
 
 /** Wallet capabilities advertised to dApps. */
 function buildCapabilities(): Capabilities {
@@ -236,6 +263,8 @@ export class WalletPairTransport implements DAppTransport {
   private appStateSub: { remove(): void } | null = null;
   /** Epoch ms when the app last went to background (null while foregrounded). */
   private backgroundedAt: number | null = null;
+  /** Bounds the transient "reconnecting" state so it can't spin forever. */
+  private reconnectDeadline: ReturnType<typeof setTimeout> | null = null;
 
   private constructor(session: WalletSession, dappInfo: DAppInfo) {
     this.session = session;
@@ -365,7 +394,13 @@ export class WalletPairTransport implements DAppTransport {
   async connect(): Promise<void> {
     console.log('[WalletPair] confirmJoin starting...');
     try {
-      await this.session.confirmJoin();
+      // Bound confirmJoin: if the relay silently drops the join (CF hibernation,
+      // dropped packet) the SDK promise can hang forever, freezing the connect UI.
+      await withTimeout(
+        this.session.confirmJoin(),
+        CONFIRM_JOIN_TIMEOUT_MS,
+        'WalletPair connection timed out — check the dApp and try a fresh pairing QR.',
+      );
       console.log('[WalletPair] confirmJoin resolved, phase:', this.session.phase);
     } catch (err) {
       console.log('[WalletPair] confirmJoin failed:', err);
@@ -383,6 +418,7 @@ export class WalletPairTransport implements DAppTransport {
   disconnect(): void {
     this._connected = false;
     this.stopHeartbeat();
+    this.clearReconnectDeadline();
     this.teardownAppStateRecovery();
     this.session.destroy();
     this.emit('disconnected');
@@ -390,15 +426,23 @@ export class WalletPairTransport implements DAppTransport {
   }
 
   sendResponse(id: string, result?: any, error?: { code: number; message: string }): void {
-    if (error) {
-      // Drop the tracked method on the reject path too — wrapResult (which clears
-      // it on success) is never reached for errors, so otherwise the entry leaks.
+    // Guard the channel calls: if the relay/socket is gone, approve/reject can
+    // throw — that must not bubble into use-dapp-signing and break the UI. The
+    // dApp will time out on its side; we log so the failure is diagnosable.
+    try {
+      if (error) {
+        // Drop the tracked method on the reject path too — wrapResult (which clears
+        // it on success) is never reached for errors, so otherwise the entry leaks.
+        this.requestMethodMap.delete(id);
+        this.session.reject(id, String(error.code), error.message);
+      } else {
+        // Wrap result in WalletPair EVM sub-protocol format.
+        // The dApp's EIP-1193 provider unwraps these via mapResponse().
+        this.session.approve(id, this.wrapResult(id, result));
+      }
+    } catch (e) {
       this.requestMethodMap.delete(id);
-      this.session.reject(id, String(error.code), error.message);
-    } else {
-      // Wrap result in WalletPair EVM sub-protocol format.
-      // The dApp's EIP-1193 provider unwraps these via mapResponse().
-      this.session.approve(id, this.wrapResult(id, result));
+      console.warn(`[WalletPair] failed to deliver response ${id}:`, e instanceof Error ? e.message : e);
     }
   }
 
@@ -407,15 +451,19 @@ export class WalletPairTransport implements DAppTransport {
 
   pushWalletInfo(info: WalletInfo): void {
     if (!this._connected) return;
-    this.session.pushEvent('accountsChanged', {
-      accounts: info.accounts.map(a => ({
-        address: a.address,
-        chains: DEFAULT_NETWORKS.map(n => evmChainId(n.chainId)),
-      })),
-    });
-    this.session.pushEvent('chainChanged', {
-      chain: evmChainId(info.chainId),
-    });
+    try {
+      this.session.pushEvent('accountsChanged', {
+        accounts: info.accounts.map(a => ({
+          address: a.address,
+          chains: DEFAULT_NETWORKS.map(n => evmChainId(n.chainId)),
+        })),
+      });
+      this.session.pushEvent('chainChanged', {
+        chain: evmChainId(info.chainId),
+      });
+    } catch (e) {
+      console.warn('[WalletPair] failed to push wallet info:', e instanceof Error ? e.message : e);
+    }
   }
 
   async fetchDAppInfo(): Promise<DAppInfo | null> {
@@ -485,6 +533,27 @@ export class WalletPairTransport implements DAppTransport {
   }
 
   // -----------------------------------------------------------------------
+  // Reconnect deadline — stop the UI spinning "reconnecting" forever
+  // -----------------------------------------------------------------------
+
+  private startReconnectDeadline() {
+    if (this.reconnectDeadline) return; // already counting down this episode
+    this.reconnectDeadline = setTimeout(() => {
+      this.reconnectDeadline = null;
+      if (this._connected) return; // recovered in the meantime
+      // The relay is taking too long (or is down). Keep the session — the SDK may
+      // still recover and the user can hit "Reconnect now" — but surface a clear,
+      // recoverable error so the UI exits the indefinite "reconnecting" state.
+      console.log('[WalletPair] reconnect deadline hit — still not connected');
+      this.emit('error', 'Still trying to reconnect to the dApp. Check your connection or reconnect manually.');
+    }, RECONNECT_MAX_MS);
+  }
+
+  private clearReconnectDeadline() {
+    if (this.reconnectDeadline) { clearTimeout(this.reconnectDeadline); this.reconnectDeadline = null; }
+  }
+
+  // -----------------------------------------------------------------------
   // App foreground/background recovery (mobile)
   // -----------------------------------------------------------------------
   //
@@ -541,12 +610,14 @@ export class WalletPairTransport implements DAppTransport {
       console.log('[WalletPair] phase:', phase);
       if (phase === 'connected') {
         this._connected = true;
+        this.clearReconnectDeadline();
         this.startHeartbeat();
         this.emit('connected', this._dappInfo.name || 'WalletPair');
       } else if (phase === 'closed') {
         const wasConnected = this._connected;
         this._connected = false;
         this.stopHeartbeat();
+        this.clearReconnectDeadline();
         this.teardownAppStateRecovery();
         if (wasConnected) {
           this.emit('disconnected');
@@ -561,18 +632,26 @@ export class WalletPairTransport implements DAppTransport {
         this._connected = false;
         this.stopHeartbeat();
         this.emit('reconnecting');
+        this.startReconnectDeadline();
         console.log('[WalletPair] transport disconnected, SDK will retry...');
       }
     });
 
     this.session.on('request', (req: { id: string; method: string; params: unknown }) => {
       console.log('[WalletPair] request:', req.method, req.id);
-      const wpMethod = req.method;
-      const mappedMethod = METHOD_MAP[wpMethod] ?? wpMethod;
-      const params = walletPairParamsToJsonRpc(mappedMethod, req.params);
-      this.requestMethodMap.set(req.id, wpMethod);
-      const origin = this._dappInfo.url || this._dappInfo.name || 'walletpair';
-      this.emit('request', req.id, mappedMethod, params, origin);
+      // Isolate bad data: a malformed params payload must reject THIS request, not
+      // throw out of the SDK callback and tear down the whole channel.
+      try {
+        const wpMethod = req.method;
+        const mappedMethod = METHOD_MAP[wpMethod] ?? wpMethod;
+        const params = walletPairParamsToJsonRpc(mappedMethod, req.params);
+        this.requestMethodMap.set(req.id, wpMethod);
+        const origin = this._dappInfo.url || this._dappInfo.name || 'walletpair';
+        this.emit('request', req.id, mappedMethod, params, origin);
+      } catch (e) {
+        console.warn(`[WalletPair] dropping malformed request ${req.id} (${req.method}):`, e instanceof Error ? e.message : e);
+        try { this.session.reject(req.id, '-32602', 'Invalid params'); } catch { /* channel gone */ }
+      }
     });
 
     this.session.on('error', (err: Error) => {

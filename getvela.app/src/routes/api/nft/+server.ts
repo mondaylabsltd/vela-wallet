@@ -5,6 +5,7 @@
  */
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
+import { fetchWithTimeout, UPSTREAM_TIMEOUTS } from '$lib/server/net';
 
 const ALCHEMY_API_KEY = env.ALCHEMY_API_KEY ?? '';
 
@@ -61,7 +62,7 @@ async function fetchNftsForNetwork(
 
 	const url = `https://${slug}.g.alchemy.com/nft/v3/${ALCHEMY_API_KEY}/getNFTsForOwner?${params}`;
 
-	const res = await fetch(url);
+	const res = await fetchWithTimeout(url, {}, UPSTREAM_TIMEOUTS.nft);
 	if (!res.ok) {
 		console.error(`[nft] ${network} error: ${res.status}`);
 		return { nfts: [], pageKey: null };
@@ -145,8 +146,9 @@ export const GET: RequestHandler = async ({ url }) => {
 			});
 		}
 
-		// 并行查询所有网络（首页）
-		const results = await Promise.all(
+		// 并行查询所有网络（首页）。用 allSettled：某条链超时/报错只让它这一条返回空，
+		// 不会拖垮其它链已经拿到的 NFT（一个慢端点不应清空整页结果）。
+		const settled = await Promise.allSettled(
 			SUPPORTED_NETWORKS.map(async (net) => {
 				const result = await fetchNftsForNetwork(net, address, pageSize);
 				return { network: net, ...result };
@@ -157,7 +159,13 @@ export const GET: RequestHandler = async ({ url }) => {
 		const totalByNetwork: Record<string, number> = {};
 		const pageKeys: Record<string, string> = {};
 
-		for (const result of results) {
+		for (let i = 0; i < settled.length; i++) {
+			const outcome = settled[i];
+			if (outcome.status !== 'fulfilled') {
+				console.error(`[nft] ${SUPPORTED_NETWORKS[i]} dropped: ${outcome.reason instanceof Error ? outcome.reason.name : 'error'}`);
+				continue;
+			}
+			const result = outcome.value;
 			allNfts.push(...result.nfts);
 			totalByNetwork[result.network] = result.nfts.length;
 			if (result.pageKey) {

@@ -8,6 +8,7 @@
  */
 
 import { getEthereumDataURL } from './storage';
+import { fetchWithTimeout, NET_TIMEOUTS } from './net';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -44,7 +45,11 @@ export interface ChainSearchResult {
 
 export async function fetchChainInfo(chainId: number): Promise<ChainInfo | null> {
   try {
-    const res = await fetch(`${getEthereumDataURL()}/chains/eip155-${chainId}.json`);
+    const res = await fetchWithTimeout(
+      `${getEthereumDataURL()}/chains/eip155-${chainId}.json`,
+      {},
+      { timeoutMs: NET_TIMEOUTS.ethereumData },
+    );
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -87,7 +92,11 @@ async function loadSearchIndex(): Promise<ChainSearchResult[]> {
   }
 
   try {
-    const res = await fetch(`${getEthereumDataURL()}/index/fuse-chains.json`);
+    const res = await fetchWithTimeout(
+      `${getEthereumDataURL()}/index/fuse-chains.json`,
+      {},
+      { timeoutMs: NET_TIMEOUTS.ethereumData },
+    );
     if (!res.ok) return _searchCache ?? [];
 
     const json = await res.json();

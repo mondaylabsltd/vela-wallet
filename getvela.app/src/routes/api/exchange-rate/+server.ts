@@ -5,6 +5,7 @@
  * 服务端缓存 1 小时。
  */
 import type { RequestHandler } from './$types';
+import { fetchWithTimeout, UPSTREAM_TIMEOUTS } from '$lib/server/net';
 
 interface RateCache {
 	rates: Record<string, number>;
@@ -25,7 +26,11 @@ async function fetchRates(): Promise<Record<string, number>> {
 	}
 
 	const targets = SUPPORTED_CURRENCIES.filter(c => c !== 'USD').join(',');
-	const res = await fetch(`https://api.frankfurter.app/latest?from=USD&to=${targets}`);
+	const res = await fetchWithTimeout(
+		`https://api.frankfurter.app/latest?from=USD&to=${targets}`,
+		{},
+		UPSTREAM_TIMEOUTS.exchangeRate
+	);
 
 	if (!res.ok) throw new Error(`Frankfurter API error (${res.status})`);
 
@@ -59,6 +64,15 @@ export const GET: RequestHandler = async ({ url }) => {
 			headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600' }
 		});
 	} catch {
+		// Upstream slow/down: serve the last-known rate rather than failing, but
+		// label it stale (with its age) so the client never treats it as fresh.
+		const staleRate = cache?.rates[currency];
+		if (staleRate != null) {
+			return new Response(
+				JSON.stringify({ currency, rate: staleRate, stale: true, fetchedAt: cache!.fetchedAt }),
+				{ headers: { 'Content-Type': 'application/json', 'X-Stale': 'true', 'Cache-Control': 'no-store' } }
+			);
+		}
 		return new Response(JSON.stringify({ error: 'Failed to fetch exchange rates' }), {
 			status: 502, headers: { 'Content-Type': 'application/json' }
 		});

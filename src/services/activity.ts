@@ -210,10 +210,26 @@ async function enrichTokenIndex(
   if (byChain.size === 0) return;
 
   await Promise.all([...byChain].map(async ([chainId, addrs]) => {
-    const metas = await resolveTokenMetadata(chainId, [...addrs]).catch(() => null);
+    const metas = await resolveTokenMetadata(chainId, [...addrs]).catch((e) => {
+      // Distinguish a transient metadata-RPC outage (these tokens will be retried
+      // next sync) from genuine unreadable spam — without a log the two look
+      // identical and an incoming stablecoin can vanish from Activity silently.
+      console.warn(
+        `[Activity] token metadata unresolved for ${addrs.size} token(s) on chain ${chainId} ` +
+        `(${e instanceof Error ? e.message : String(e)}) — kept out of feed, will retry next sync`,
+      );
+      return null;
+    });
     if (!metas) return;
     for (const [addr, meta] of metas) {
       index.set(`${chainId}:${addr}`, { symbol: meta.symbol, decimals: meta.decimals, priceUsd: null });
+    }
+    const stillUnresolved = [...addrs].filter((a) => !index.has(`${chainId}:${a}`));
+    if (stillUnresolved.length) {
+      console.warn(
+        `[Activity] ${stillUnresolved.length} incoming token(s) on chain ${chainId} returned no ` +
+        `readable symbol/decimals — skipped this sync (retried next sync)`,
+      );
     }
   }));
 }

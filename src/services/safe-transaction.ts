@@ -1466,26 +1466,52 @@ export async function waitForReceipt(
   userOpHash: string,
   chainId: number,
   timeout: number = 120_000,
+  signal?: AbortSignal,
 ): Promise<string> {
   const start = Date.now();
   let interval = 1000; // Start fast (1s), then back off
 
-  while (Date.now() - start < timeout) {
-    const response = await rpcCall(
-      'eth_getUserOperationReceipt',
-      [userOpHash],
-      chainId,
-    );
+  // Track whether we ever got a clean "not ready yet" answer vs. only ever hit
+  // RPC/bundler errors. The distinction drives the final message: "submitted but
+  // not confirmed" (the bundler answered, op just hasn't landed) is very different
+  // from "bundler unreachable, status unknown" (we never got an answer at all).
+  let sawCleanResponse = false;
+  let rpcFailures = 0;
 
-    const result = response.result as
-      | { success?: boolean; receipt?: { transactionHash?: string } }
-      | undefined;
-    if (result?.receipt?.transactionHash) {
-      // Check if the UserOp was marked as failed (e.g. tx dropped from mempool)
-      if (result.success === false) {
-        throw new Error('Transaction was dropped from the network. Try again with a higher gas price.');
+  while (Date.now() - start < timeout) {
+    // Caller cancelled (e.g. the send screen unmounted) — stop polling.
+    if (signal?.aborted) throw makeAbortError();
+
+    try {
+      const response = await rpcCall(
+        'eth_getUserOperationReceipt',
+        [userOpHash],
+        chainId,
+      );
+
+      if (response.error) {
+        // The bundler responded with a JSON-RPC error (transient server issue).
+        // Don't abandon the op — it may still land; keep polling.
+        rpcFailures++;
+      } else {
+        sawCleanResponse = true;
+        const result = response.result as
+          | { success?: boolean; receipt?: { transactionHash?: string } }
+          | undefined;
+        if (result?.receipt?.transactionHash) {
+          // Check if the UserOp was marked as failed (e.g. tx dropped from mempool)
+          if (result.success === false) {
+            throw new Error('Transaction was dropped from the network. Try again with a higher gas price.');
+          }
+          return result.receipt.transactionHash;
+        }
       }
-      return result.receipt.transactionHash;
+    } catch (err) {
+      // A genuine drop (success === false) is final — rethrow it.
+      if (err instanceof Error && /dropped from the network/.test(err.message)) throw err;
+      // All bundler endpoints failed this round (network blip). Previously this
+      // aborted the whole wait; instead keep polling, since the op may still land.
+      rpcFailures++;
     }
 
     await sleep(interval);
@@ -1493,10 +1519,18 @@ export async function waitForReceipt(
     interval = Math.min(interval + 500, 3000);
   }
 
+  const shortOp = `${userOpHash.slice(0, 10)}…`;
+  if (!sawCleanResponse && rpcFailures > 0) {
+    // We never reached the bundler — the op's fate is genuinely unknown, not a
+    // confirmed pending. Mark it as such so the caller can reconcile/retry later.
+    throw new Error(
+      `Couldn't reach the bundler to confirm transaction ${shortOp}; its status is unknown. ` +
+      `Check the explorer in a few minutes before retrying.`,
+    );
+  }
   // Submitted and accepted by the bundler, but no on-chain receipt in time. The op
   // is NOT lost — it may still land (or the bundler's gas account couldn't fund the
   // bundle). Say so, and surface the hash, instead of implying outright failure.
-  const shortOp = `${userOpHash.slice(0, 10)}…`;
   throw new Error(
     `Transaction submitted (${shortOp}) but not confirmed within ${Math.round(timeout / 1000)}s. ` +
     `It may still land on-chain — check the explorer before retrying.`,
@@ -1565,6 +1599,13 @@ function bigintMax(a: bigint, b: bigint): bigint {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** An Error tagged like a standard AbortError so callers can detect cancellation. */
+function makeAbortError(): Error {
+  const e = new Error('Aborted');
+  e.name = 'AbortError';
+  return e;
 }
 
 /**

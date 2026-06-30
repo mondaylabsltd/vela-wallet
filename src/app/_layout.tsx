@@ -17,6 +17,7 @@ import { SigningRequestModal } from '@/components/SigningRequestModal';
 import { AlertProvider } from '@/components/ui/AppAlert';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { installFaultConsole } from '@/services/dev/fault-injection';
+import { installMetricsConsole } from '@/services/metrics';
 import { hasPendingUploads, loadLocalePrefs, loadRpcProviders, loadServiceEndpoints } from '@/services/storage';
 import i18n, { loadLanguage } from '@/i18n';
 import { LanguageProvider, useLanguagePreference } from '@/i18n/language';
@@ -122,7 +123,7 @@ export default function RootLayout() {
   }, [fontError]);
 
   useEffect(() => {
-    if (__DEV__) installFaultConsole();
+    if (__DEV__) { installFaultConsole(); installMetricsConsole(); }
     Promise.all([
       loadTextScale().then(() => rebuildTextScale()),
       loadColorScheme().then(() => {

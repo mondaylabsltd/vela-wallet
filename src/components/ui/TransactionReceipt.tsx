@@ -10,6 +10,7 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { chainName, getAllNetworksSync } from '@/models/network';
 import { formatBalance, shortAddr } from '@/models/types';
+import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
 import { formatFiat } from '@/services/currency';
 import { formatDateTime, useLocalePrefs } from '@/services/locale-format';
 import { copyToClipboard, hapticSuccess, openBrowser, showAlert } from '@/services/platform';
@@ -82,7 +83,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 
 async function loadImageRobust(src: string): Promise<HTMLImageElement> {
   try { return await loadImage(src); } catch {}
-  const resp = await fetch(src);
+  const resp = await fetchWithTimeout(src, { mode: 'cors' }, { timeoutMs: NET_TIMEOUTS.descriptor });
   const blob = await resp.blob();
   const blobUrl = URL.createObjectURL(blob);
   try { return await loadImage(blobUrl); } finally { URL.revokeObjectURL(blobUrl); }

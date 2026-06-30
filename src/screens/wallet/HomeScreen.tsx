@@ -53,6 +53,7 @@ import {
   loadActivityItems, loadActivityTransactions, loadConnectionEvents, relativeTime, syncReceivedTransfers,
   type ActivityItem, type ConnectionEvent,
 } from '@/services/activity';
+import { reconcilePendingTransactions } from '@/services/tx-reconciler';
 import { useLocalePrefs } from '@/services/locale-format';
 import { deleteConnectionEvents, deleteTransaction, type LocalTransaction } from '@/services/storage';
 import { getAccountBalance, getAccountBalances, setAccountBalance } from '@/services/balance-cache';
@@ -251,6 +252,24 @@ export default function HomeScreen() {
       setActivity(items);
       setConnEvents(events);
     } catch { /* ignore — keep the last-known feed */ }
+
+    // 1b. Reconcile any pending submissions whose receipt never landed in-session
+    //     (app was closed before confirmation). Re-poll the bundler and converge
+    //     them to confirmed/failed; re-read the feed if anything changed. This is
+    //     what makes a pending send survive an app restart and still resolve.
+    try {
+      const reconciled = await reconcilePendingTransactions(address);
+      if (addressRef.current !== address) return;
+      if (reconciled > 0) {
+        const [items, rawTxs] = await Promise.all([
+          loadActivityItems(address),
+          loadActivityTransactions(address),
+        ]);
+        if (addressRef.current !== address) return;
+        txByIdRef.current = new Map(rawTxs.map((t) => [t.id, t]));
+        setActivity(items);
+      }
+    } catch { /* ignore — pending records stay pending, retried next focus */ }
 
     // 2. Discover + persist new receipts in the background, then re-read the feed
     //    only when something actually landed (newCount > 0) so the list doesn't

@@ -43,6 +43,7 @@ function denialKey(reason?: string): string {
   if (reason === 'wallet_balance_too_low') return 'componentsUi.funding.denialBalanceTooLow';
   if (reason === 'no_passkey_registered') return 'componentsUi.funding.denialNoPasskey';
   if (reason === 'rate_limited') return 'componentsUi.funding.denialRateLimited';
+  if (reason === 'pending_unknown') return 'componentsUi.funding.denialPendingUnknown';
   if (reason.startsWith('transfer_failed')) return 'componentsUi.funding.denialTransferFailed';
   return 'componentsUi.funding.denialDefault';
 }

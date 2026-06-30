@@ -14,7 +14,7 @@ import { chainName } from '@/models/network';
 import { LANGUAGE_NATIVE_NAMES, type AppLanguage } from '@/i18n';
 import { getFailedRpcChains } from '@/services/rpc-pool';
 
-export const VELA_REPO_URL = 'https://github.com/atshelchin/vela-wallet';
+export const VELA_REPO_URL = 'https://github.com/mondaylabsltd/vela-wallet';
 
 export interface BugReportContext {
   /** Extra "- key: value" environment lines (e.g. the specific failing chain/RPC). */

@@ -21,7 +21,29 @@
       "denialBalanceTooLow": "Wallet balance too low to qualify.",
       "denialNoPasskey": "Passkey required for free activation.",
       "denialRateLimited": "Too many requests. Try later.",
-      "denialTransferFailed": "Transfer failed. Try again."
+      "denialTransferFailed": "Transfer failed. Try again.",
+      "denialPendingUnknown": "Couldn't confirm activation — checking your balance below. If it doesn't update shortly, fund manually."
+    },
+    "bugReport": {
+      "title": "Report a problem",
+      "subtitle": "Tell us what went wrong — it goes straight to our issue tracker.",
+      "whatLabel": "What happened?",
+      "whatPlaceholder": "e.g. I tapped Send and the screen froze.",
+      "stepsLabel": "Steps to reproduce (optional)",
+      "stepsPlaceholder": "1. Go to…\n2. Tap…\n3. See…",
+      "previewToggle": "What will be sent",
+      "consent": "Only what you see here is sent — never your keys, seed phrase, or balances.",
+      "send": "Send report",
+      "sending": "Sending…",
+      "cancel": "Cancel",
+      "successTitle": "Thanks — reported!",
+      "successBodyNew": "Logged as issue #{{number}}. You can follow it any time.",
+      "successBodyDeduped": "Added to an existing report (#{{number}}). Thanks for the extra signal!",
+      "viewIssue": "View report",
+      "fallbackTitle": "Open on GitHub instead",
+      "fallbackBody": "We couldn't submit automatically, but we've prefilled a GitHub form with the details.",
+      "openGithub": "Open GitHub form",
+      "done": "Done"
     },
     "signing": {
       "loading": "Loading...",

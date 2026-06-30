@@ -72,26 +72,44 @@ export async function uploadPublicKey(params: {
   name: string;
 }): Promise<void> {
   const { credentialId, publicKeyHex, name } = params;
+  const rpId = getRelyingPartyId();
 
   console.log('[PublicKeyUpload] Starting upload for:', name);
 
-  // 1. Upload to server (no challenge/signature needed)
-  await PublicKeyIndex.createRecord({
-    rpId: getRelyingPartyId(),
-    credentialId,
-    publicKey: publicKeyHex,
-    name,
-  });
-  console.log('[PublicKeyUpload] Upload SUCCESS for:', name);
+  // 1. Upload to server (no challenge/signature needed). A failure here is NOT
+  //    necessarily fatal: the record may already exist (idempotent re-run via the
+  //    Idempotency-Key) or the write may have landed but the response was lost to
+  //    a timeout. The verify step below is the source of truth, so remember the
+  //    error and only surface it if verification can't confirm the record.
+  let createError: unknown = null;
+  try {
+    await PublicKeyIndex.createRecord({ rpId, credentialId, publicKey: publicKeyHex, name });
+    console.log('[PublicKeyUpload] Upload request OK for:', name);
+  } catch (err) {
+    createError = err;
+    console.warn('[PublicKeyUpload] create failed; verifying before deciding:', err instanceof Error ? err.message : String(err));
+  }
 
-  // 2. Verify: query server to confirm the record exists
-  const record = await PublicKeyIndex.queryRecord(getRelyingPartyId(), credentialId);
+  // 2. Verify against the server — the stored record is the source of truth. If it
+  //    exists and matches, the upload succeeded regardless of whether THIS call
+  //    wrote it (covers "already exists" on retry and timeout-but-succeeded).
+  let record: PublicKeyIndex.PublicKeyRecord;
+  try {
+    record = await PublicKeyIndex.queryRecord(rpId, credentialId);
+  } catch (verifyErr) {
+    // Couldn't confirm. If the create also failed (e.g. genuine 4xx, or the
+    // record really isn't there → query 404s), surface that. Otherwise the write
+    // likely landed but we can't prove it yet — throw so it stays pending and is
+    // retried on next launch (createRecord dedupes via Idempotency-Key). Never
+    // remove the pending entry on an unconfirmed result, never fake success.
+    throw createError ?? verifyErr;
+  }
   if (record.publicKey !== publicKeyHex) {
     throw new Error('Server verification failed: public key mismatch');
   }
   console.log('[PublicKeyUpload] Verified on server for:', name);
 
-  // 3. Remove from pending uploads
+  // 3. Confirmed present on the server — clear the pending entry.
   await removePendingUpload(credentialId);
 }
 

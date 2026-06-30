@@ -7,6 +7,7 @@
 
 import { loadServiceEndpoints } from './storage';
 import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
+import { fetchWithTimeout, isTimeoutError, NET_TIMEOUTS } from './net';
 
 const FALLBACK_URL = DEFAULT_SERVICE_ENDPOINTS.passkeyIndexURL;
 
@@ -50,11 +51,22 @@ interface CreateRequest {
 /** Store a public key record. No signature needed — server signs on-chain tx. */
 export async function createRecord(request: CreateRequest): Promise<PublicKeyRecord> {
   const baseUrl = await getBaseUrl();
-  const response = await fetch(`${baseUrl}/api/create`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  });
+  const response = await fetchWithTimeout(
+    `${baseUrl}/api/create`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Best-effort idempotency: a backend that honours this header collapses a
+        // timeout-then-retry into one record. The natural key is (rpId,
+        // credentialId), so the same passkey never produces a second entry even
+        // if the backend ignores the header. See uploadPublicKey's verify step.
+        'Idempotency-Key': `${request.rpId}:${request.credentialId}`,
+      },
+      body: JSON.stringify(request),
+    },
+    { timeoutMs: NET_TIMEOUTS.keyIndexWrite },
+  );
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Create failed: ${response.status} ${text}`);
@@ -66,7 +78,7 @@ export async function createRecord(request: CreateRequest): Promise<PublicKeyRec
 export async function queryRecord(rpId: string, credentialId: string): Promise<PublicKeyRecord> {
   const baseUrl = await getBaseUrl();
   const url = `${baseUrl}/api/query?rpId=${encodeURIComponent(rpId)}&credentialId=${encodeURIComponent(credentialId)}`;
-  const response = await fetch(url);
+  const response = await fetchWithTimeout(url, {}, { timeoutMs: NET_TIMEOUTS.keyIndexRead });
   if (!response.ok) throw new Error(`Query failed: ${response.status}`);
   return response.json();
 }
@@ -83,7 +95,14 @@ export async function queryByWalletRef(address: string): Promise<PublicKeyRecord
   const baseUrl = await getBaseUrl();
   const walletRef = addressToBytes32(address);
   const url = `${baseUrl}/api/query?walletRef=${encodeURIComponent(walletRef)}`;
-  const response = await fetch(url);
-  if (!response.ok) return null;
-  return response.json();
+  try {
+    const response = await fetchWithTimeout(url, {}, { timeoutMs: NET_TIMEOUTS.keyIndexRead });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch (err) {
+    // Identity lookup is best-effort enrichment (badge/contact name). A slow or
+    // unreachable index must degrade to "unknown recipient", never block signing.
+    if (isTimeoutError(err)) return null;
+    throw err;
+  }
 }

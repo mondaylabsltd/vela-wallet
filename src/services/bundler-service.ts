@@ -14,9 +14,7 @@ import { nativeSymbol } from '@/models/network';
 import { getActiveBundlerBaseUrl, getChainRpcUrl, isUsingBuiltinBundler, poolRpcCall } from './rpc-pool';
 import { loadServiceEndpoints } from './storage';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from './tempo';
-
-/** Timeout for bundler REST API calls. */
-const FETCH_TIMEOUT_MS = 10_000;
+import { fetchWithTimeout, isTimeoutError, NET_TIMEOUTS } from './net';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -198,25 +196,31 @@ async function requestSponsorship(
     const headers: Record<string, string> = {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
+      // Stable idempotency key: sponsorship is a non-idempotent treasury transfer,
+      // so a timeout-then-retry must not double-spend. A backend that honours this
+      // header collapses the same (chain, safe, amount) request into one transfer.
+      'Idempotency-Key': `sponsor:${chainId}:${safeAddress.toLowerCase()}:0x${requiredWei.toString(16)}`,
     };
     if (chainRpc) headers['X-Rpc-Url'] = chainRpc;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20_000);
-    let res: Response;
-    try {
-      res = await fetch(url, {
+    const res = await fetchWithTimeout(
+      url,
+      {
         method: 'POST',
         headers,
         body: JSON.stringify({ requiredWei: '0x' + requiredWei.toString(16) }),
-        signal: controller.signal,
-      });
-    } finally {
-      clearTimeout(timer);
-    }
+      },
+      { timeoutMs: NET_TIMEOUTS.bundlerSponsor },
+    );
     if (!res.ok) return { sponsored: false, reason: 'request_failed' };
     return await res.json();
-  } catch {
+  } catch (err) {
+    // A timeout is NOT a definitive failure: the treasury transfer may have gone
+    // through and we simply didn't see the response. Report it as pending/unknown
+    // so the caller reconciles by polling the gas-account balance (the funding
+    // modal's self-fund step already polls) rather than treating it as denied —
+    // which could otherwise tempt the user into a second, duplicate sponsorship.
+    if (isTimeoutError(err)) return { sponsored: false, reason: 'pending_unknown' };
     return { sponsored: false, reason: 'network_error' };
   }
 }
@@ -247,14 +251,7 @@ export async function fetchBundlerAccountInfo(
     const headers: Record<string, string> = { 'Accept': 'application/json' };
     if (chainRpc) headers['X-Rpc-Url'] = chainRpc;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    let res: Response;
-    try {
-      res = await fetch(url, { headers, signal: controller.signal });
-    } finally {
-      clearTimeout(timer);
-    }
+    const res = await fetchWithTimeout(url, { headers }, { timeoutMs: NET_TIMEOUTS.bundlerRest });
     if (!res.ok) return null;
 
     const data = await res.json();

@@ -23,6 +23,7 @@ import { localDescriptor, knownContract, interfaceDescriptor, INTERFACE_IDS, typ
 import { knownTokenSymbol, knownTokenDecimals } from '@/services/tokens';
 import type { TypedData } from '@/services/eip712';
 import { poolRpcCall } from '@/services/rpc-pool';
+import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -103,7 +104,7 @@ async function fetchDescriptor(path: string): Promise<any | null> {
   if (descriptorCache.has(path)) return descriptorCache.get(path) ?? null;
   try {
     const url = `${getEthereumDataURL()}${path}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, {}, { timeoutMs: NET_TIMEOUTS.descriptor });
     if (!res.ok) { descriptorCache.set(path, null); return null; }
     const data = await res.json();
     descriptorCache.set(path, data);

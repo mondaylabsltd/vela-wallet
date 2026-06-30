@@ -9,6 +9,7 @@
  */
 
 import { rpcCall } from './rpc-adapter';
+import { fetchWithTimeout, NET_TIMEOUTS } from './net';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,11 +40,11 @@ async function directRpcCall(
   method: string,
   params: any[],
 ): Promise<{ result?: any; error?: any }> {
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-  });
+  }, { timeoutMs: NET_TIMEOUTS.rpcRead });
   return res.json();
 }
 

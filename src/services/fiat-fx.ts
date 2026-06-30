@@ -18,6 +18,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFiatRatesURL } from '@/services/storage';
+import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
 
 /** Normalize a provider response (array or `{rates}` object) to `{ USD:1, X:rate }`, or null. */
 export function normalizeRates(data: unknown): Record<string, number> | null {
@@ -60,7 +61,7 @@ export async function fetchFxRates(): Promise<Record<string, number>> {
 
   _inflight = (async () => {
     try {
-      const res = await fetch(url);
+      const res = await fetchWithTimeout(url, {}, { timeoutMs: NET_TIMEOUTS.fiatRates });
       if (res.ok) {
         const rates = normalizeRates(await res.json());
         if (rates) {
