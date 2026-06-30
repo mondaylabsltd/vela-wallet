@@ -19,7 +19,7 @@ import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
 import { AppModal } from '@/components/ui/AppModal';
 import { VelaButton } from '@/components/ui/VelaButton';
-import { HoldToConfirmButton } from '@/components/ui/HoldToConfirmButton';
+import { SlideToConfirmButton } from '@/components/ui/SlideToConfirmButton';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet } from '@/models/wallet-state';
 import { shortAddr, tokenLogoURLsByAddress, type BLEIncomingRequest } from '@/models/types';
@@ -525,6 +525,26 @@ export function SigningSheet({
               variant="secondary"
               style={styles.buttonFlex}
             />
+          ) : requiresHold ? (
+            // Danger-level signing: a full-width slide-to-confirm gets its own row
+            // (a slide needs the width to be usable), with Reject as a secondary
+            // full-width button beneath it.
+            <View style={styles.dangerStack}>
+              <SlideToConfirmButton
+                title={buttonLabel()}
+                hint={t('componentsUi.signing.slideToConfirm', { defaultValue: 'Slide to confirm' })}
+                onConfirm={confirm}
+                loading={isSigning || resolving}
+                disabled={confirmDisabled}
+                tone="danger"
+              />
+              <VelaButton
+                title={t('componentsUi.signing.reject')}
+                onPress={onReject}
+                variant="secondary"
+                disabled={isSigning}
+              />
+            </View>
           ) : (
             <>
               <VelaButton
@@ -534,25 +554,14 @@ export function SigningSheet({
                 disabled={isSigning}
                 style={styles.buttonFlex}
               />
-              {requiresHold ? (
-                <HoldToConfirmButton
-                  title={buttonLabel()}
-                  hint={t('componentsUi.signing.holdToConfirm')}
-                  onConfirm={confirm}
-                  loading={isSigning || resolving}
-                  disabled={confirmDisabled}
-                  style={styles.buttonFlex}
-                />
-              ) : (
-                <VelaButton
-                  title={buttonLabel()}
-                  onPress={confirm}
-                  variant={buttonVariant()}
-                  loading={isSigning || resolving}
-                  disabled={confirmDisabled}
-                  style={styles.buttonFlex}
-                />
-              )}
+              <VelaButton
+                title={buttonLabel()}
+                onPress={confirm}
+                variant={buttonVariant()}
+                loading={isSigning || resolving}
+                disabled={confirmDisabled}
+                style={styles.buttonFlex}
+              />
             </>
           )}
         </View>
@@ -1878,6 +1887,8 @@ const styles = createStyles(() => ({
     marginTop: space.sm,
   },
   buttonFlex: { flex: 1 },
+  // Danger signing stacks the full-width slide over a full-width Reject.
+  dangerStack: { flex: 1, gap: space.md },
 
   // ===== Batch (EIP-5792) breakdown =====
   batchSub: {

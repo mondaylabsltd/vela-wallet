@@ -2,6 +2,7 @@ import { QRScanner } from '@/components/QRScanner';
 import { TokenLogo } from '@/components/TokenLogo';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
+import { SlideToConfirmButton } from '@/components/ui/SlideToConfirmButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenSelector } from '@/components/ui/TokenSelector';
 import { color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
@@ -33,7 +34,8 @@ import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { ZERO_DECIMAL_CODES } from '@/services/currency';
-import { showAlert, copyToClipboard, openBrowser, hapticLight, hapticSuccess, hapticError } from '@/services/platform';
+import { showAlert, copyToClipboard, openBrowser, hapticSuccess, hapticError } from '@/services/platform';
+import { resolveRecipientRisk, type RecipientRisk } from '@/services/recipient-risk';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
@@ -242,6 +244,10 @@ export default function SendScreen() {
   const [showContactPicker, setShowContactPicker] = useState(false);
   const [amountWarning, setAmountWarning] = useState<string | null>(null);
   const [recipientIdentity, setRecipientIdentity] = useState<RecipientIdentity | null>(null);
+  // Recipient-risk signals for the confirm step — "first time" (address-poisoning
+  // defense) + contract-vs-EOA. Best-effort, never a false alarm. Same signals the
+  // dApp signing sheet shows; plain transfers deserve the same protection.
+  const [recipientRisk, setRecipientRisk] = useState<RecipientRisk | null>(null);
   // Balance-change simulation for the confirm step (null = unknown / not run).
   const [sim, setSim] = useState<AssetSimResult | null>(null);
 
@@ -491,6 +497,19 @@ export default function SendScreen() {
     return () => { cancelled = true; };
   }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate]);
 
+  // Recipient-risk on the confirm step: "first time" (address-poisoning defense)
+  // + contract-vs-EOA. Drives the first-time/contract tags by the To row and
+  // whether the confirm CTA upgrades to a deliberate hold-to-confirm. Best-effort.
+  useEffect(() => {
+    setRecipientRisk(null);
+    if (step !== 'confirm' || !selectedToken || !isValidAddress(recipient)) return;
+    let cancelled = false;
+    resolveRecipientRisk(tokenChainId(selectedToken), recipient)
+      .then((r) => { if (!cancelled) setRecipientRisk(r); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [step, selectedToken, recipient]);
+
   const handleSelectToken = (token: APIToken) => {
     setSelectedToken(token);
     setStep('enter-details');
@@ -610,7 +629,8 @@ export default function SendScreen() {
 
   const handleConfirm = async () => {
     if (!selectedToken || !activeAccount) return;
-    hapticLight(); // tactile confirm of the most consequential tap in the app
+    // Tap haptic fires on the one-tap VelaButton; the hold-to-confirm path
+    // provides its own (Medium on press + Success on completion).
 
     // Funding was already checked before entering the confirm screen.
     // Proceed directly to transaction execution.
@@ -1077,6 +1097,16 @@ export default function SendScreen() {
                 <Text style={styles.transferName}>{recipientIdentity.name}</Text>
               )}
               <Text style={styles.transferAddr}>{shortAddr(recipient)}</Text>
+              {(recipientRisk?.firstInteraction || recipientRisk?.isContract === true) && (
+                <View style={styles.riskTagRow}>
+                  {recipientRisk?.firstInteraction && (
+                    <Text style={[styles.riskTag, styles.riskTagWarn]}>{t('componentsUi.signing.firstTimeTag')}</Text>
+                  )}
+                  {recipientRisk?.isContract === true && (
+                    <Text style={styles.riskTag}>{t('componentsUi.signing.contractTag')}</Text>
+                  )}
+                </View>
+              )}
               <View style={{ marginTop: space.sm }}>
                 <KnownContactBadge address={recipient} compact />
               </View>
@@ -1185,12 +1215,16 @@ export default function SendScreen() {
           })()}
 
           {txStatus === 'idle' && (
-            <VelaButton
+            // Every send is a deliberate slide-to-confirm — a stray tap can't fire
+            // a payment. A risky destination (never sent here before, or a contract)
+            // turns the slide red and shows the first-time / contract tags above.
+            <SlideToConfirmButton
               title={estimatingGas ? t('send.checkingGas') : t('send.confirmSendBtn')}
-              onPress={handleConfirm}
-              variant="accent"
+              hint={t('componentsUi.signing.slideToConfirm', { defaultValue: 'Slide to confirm' })}
+              onConfirm={handleConfirm}
               loading={sending}
               disabled={estimatingGas}
+              tone={(recipientRisk?.firstInteraction || recipientRisk?.isContract === true) ? 'danger' : 'accent'}
               style={styles.confirmBtn}
             />
           )}
@@ -1798,6 +1832,29 @@ const styles = createStyles(() => ({
     ...inter.medium,
     fontFamily: font.mono,
     color: color.fg.muted,
+  },
+  // Recipient-risk tags (first-time / contract) — mirrors the dApp signing sheet.
+  riskTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
+    marginTop: space.sm,
+  },
+  riskTag: {
+    fontSize: 9,
+    ...inter.semibold,
+    color: color.fg.subtle,
+    backgroundColor: color.bg.sunken,
+    overflow: 'hidden',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: radius.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  riskTagWarn: {
+    color: color.warning.base,
+    backgroundColor: color.warning.soft,
   },
   transferMiddle: {
     flexDirection: 'row',
