@@ -14,7 +14,7 @@
     "switchAccountTitle": "Hesap Değiştir",
     "switcherAccountCount": "{{count}} hesap · ",
     "connEmptyTitle": "Etkin bağlantı yok",
-    "connEmptySub": "Bağlanmak için bir dApp QR kodu okutun. Aynı anda yalnızca bir bağlantı etkin olur.",
+    "connEmptySub": "Bağlanmak için bir dApp QR kodu okutun.",
     "connScanBtn": "Bağlanmak için tara",
     "connDefaultName": "Bağlı dApp",
     "connActive": "Etkin",

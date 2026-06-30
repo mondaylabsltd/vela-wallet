@@ -18,6 +18,7 @@ import { color, createStyles, inter, radius, space, text } from '@/constants/the
 import { hapticSuccess, openURL } from '@/services/platform';
 import type { AppLanguage } from '@/i18n';
 import { buildReportPreview, submitBugReport, type BugReportResult } from '@/services/bug-report';
+import { buildBugReportURL } from '@/services/feedback';
 
 export function BugReportModal({ visible, language, area, onClose }: {
   visible: boolean;
@@ -135,6 +136,17 @@ export function BugReportModal({ visible, language, area, onClose }: {
           onPress={close}
           style={styles.btn}
         />
+
+        {/* Always-available direct path to the prefilled GitHub template form
+            (supports screenshot upload). Power users / GitHub users can skip the
+            in-app flow entirely. */}
+        <Pressable
+          onPress={() => openURL(buildBugReportURL(language))}
+          disabled={submitting}
+          style={styles.githubLink}
+        >
+          <Text style={styles.githubLinkText}>{t('componentsUi.bugReport.openGithubForm')}</Text>
+        </Pressable>
       </ScrollView>
     </AppModal>
   );
@@ -217,5 +229,16 @@ const styles = createStyles(() => ({
   },
   btn: {
     marginTop: space.sm,
+  },
+  githubLink: {
+    alignItems: 'center',
+    paddingVertical: space.md,
+    marginTop: space.xs,
+  },
+  githubLinkText: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.muted,
+    textDecorationLine: 'underline',
   },
 }));

@@ -14,7 +14,7 @@
     "switchAccountTitle": "Trocar de conta",
     "switcherAccountCount": "{{count}} contas · ",
     "connEmptyTitle": "Nenhuma conexão ativa",
-    "connEmptySub": "Escaneie o QR code de um dApp para conectar. Só uma conexão fica ativa por vez.",
+    "connEmptySub": "Escaneie o QR code de um dApp para conectar.",
     "connScanBtn": "Escanear para conectar",
     "connDefaultName": "dApp conectado",
     "connActive": "Ativa",

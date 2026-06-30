@@ -854,11 +854,9 @@ function ConnectionsView({
         <View style={styles.connEmptyIcon}><Plug size={26} color={color.fg.subtle} strokeWidth={2} /></View>
         <Text style={styles.connEmptyTitle}>{t('home.connEmptyTitle')}</Text>
         <Text style={styles.connEmptySub}>{t('home.connEmptySub')}</Text>
-        <Pressable style={styles.connectBtn} onPress={onConnect}>
-          <Text style={styles.connectBtnText}>{t('home.connScanBtn')}</Text>
-        </Pressable>
 
-        {/* or — paste a pairing URI when scanning isn't handy */}
+        {/* No dedicated scan button here — the bottom scan FAB already covers it.
+            Paste a pairing URI when scanning isn't handy. */}
         <View style={styles.connOrRow}>
           <View style={styles.connOrLine} />
           <Text style={styles.connOrText}>{t('connect.list.orDivider')}</Text>
@@ -1182,8 +1180,6 @@ const styles = createStyles(() => ({
   connEmptyIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: color.bg.sunken, alignItems: 'center', justifyContent: 'center' },
   connEmptyTitle: { fontSize: text.xl, ...inter.semibold, color: color.fg.base },
   connEmptySub: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center', lineHeight: 20, paddingHorizontal: space.xl },
-  connectBtn: { marginTop: space.md, backgroundColor: color.accent.base, borderRadius: radius.lg, paddingVertical: space.lg, paddingHorizontal: space['3xl'] },
-  connectBtnText: { fontSize: text.base, ...inter.semibold, color: color.fg.inverse },
   connOrRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg, alignSelf: 'stretch', paddingHorizontal: space.xl, marginTop: space.md },
   connOrLine: { flex: 1, height: 1, backgroundColor: color.border.base },
   connOrText: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },

@@ -29,7 +29,7 @@
     "switchAccountTitle": "切换账户",
     "switcherAccountCount": "{{count}} 个账户 · ",
     "connEmptyTitle": "暂无活跃连接",
-    "connEmptySub": "扫描 dApp 二维码进行连接。同一时间仅支持一个活跃连接。",
+    "connEmptySub": "扫描 dApp 二维码进行连接。",
     "connScanBtn": "扫码连接",
     "connDefaultName": "已连接的 dApp",
     "connActive": "活跃",

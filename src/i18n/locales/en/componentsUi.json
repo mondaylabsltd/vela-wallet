@@ -43,6 +43,7 @@
       "fallbackTitle": "Open on GitHub instead",
       "fallbackBody": "We couldn't submit automatically, but we've prefilled a GitHub form with the details.",
       "openGithub": "Open GitHub form",
+      "openGithubForm": "Prefer GitHub? Open the issue form →",
       "done": "Done"
     },
     "signing": {
