@@ -1,5 +1,5 @@
 /**
- * useSweepSelection — shared token multi-select ("sweep") state, used by BOTH the
+ * useTokenMultiSelect — shared token multi-select ("multiSelect") state, used by BOTH the
  * Send token picker and the Home assets sheet so the interaction lives in exactly
  * one place (no copy-pasted selection logic).
  *
@@ -12,7 +12,7 @@ import { useCallback, useState } from 'react';
 import { tokenChainId, tokenId, type APIToken } from '@/models/types';
 import { selectAllValuable } from '@/services/batch-send';
 
-export function useSweepSelection() {
+export function useTokenMultiSelect() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [chainId, setChainId] = useState<number | null>(null);
 
@@ -81,4 +81,4 @@ export function useSweepSelection() {
   };
 }
 
-export type SweepSelection = ReturnType<typeof useSweepSelection>;
+export type TokenMultiSelect = ReturnType<typeof useTokenMultiSelect>;

@@ -27,8 +27,8 @@ import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, format
 import { AmountText } from '@/components/ui/AmountText';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { MultiRecipientEditor, makeRecipientId, recipientsAreValid, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
-import { buildSplitCalls, sumSplitBaseUnits, buildSweepCalls, toSweepTokens, reserveNativeGas } from '@/services/batch-send';
-import { useSweepSelection } from '@/hooks/use-sweep-selection';
+import { buildSplitCalls, sumSplitBaseUnits, buildMultiTokenCalls, toMultiTokenSpecs, reserveNativeGas } from '@/services/batch-send';
+import { useTokenMultiSelect } from '@/hooks/use-token-multi-select';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { TransactionReceipt } from '@/components/ui/TransactionReceipt';
@@ -198,7 +198,7 @@ export default function SendScreen() {
     prefilledAmountBase?: string;
     locked?: string;
     // Multi-token hand-off from the Home assets sheet: comma-joined tokenId()s.
-    preselectedSweep?: string;
+    preselectedMulti?: string;
   }>();
   const locked = params.locked === '1';
   // The amount is only fixed when the request actually specified one; an
@@ -209,7 +209,7 @@ export default function SendScreen() {
   const dc = useDisplayCurrency();
   const formatUsd = dc.fmt;
 
-  const hasPreselection = !!(params.prefilledRecipient || params.preselectedSweep || (params.preselectedSymbol && params.preselectedNetwork));
+  const hasPreselection = !!(params.prefilledRecipient || params.preselectedMulti || (params.preselectedSymbol && params.preselectedNetwork));
   const [step, setStep] = useState<Step>(hasPreselection ? 'enter-details' : 'select-token');
 
   // EIP-681 locked-request resolution + the exceptions it can hit.
@@ -234,12 +234,12 @@ export default function SendScreen() {
   const [splitMode, setSplitMode] = useState(false);
   const [recipients, setRecipients] = useState<RecipientDraft[]>([]);
   const [pickerTarget, setPickerTarget] = useState<string | null>(null);
-  // ② sweep (多币一人 / 清空): many tokens on ONE chain → one recipient, full
+  // ② multiSelect (多币一人 / 清空): many tokens on ONE chain → one recipient, full
   // balance each, in a single MultiSend UserOp. Selection state lives in the
-  // shared hook (also used by the Home assets sheet). `sweepMode` = we're in the
-  // sweep enter-details/confirm flow (set when a multi-selection is confirmed).
-  const [sweepMode, setSweepMode] = useState(false);
-  const sweep = useSweepSelection();
+  // shared hook (also used by the Home assets sheet). `multiSelectMode` = we're in the
+  // multiSelect enter-details/confirm flow (set when a multi-selection is confirmed).
+  const [multiSelectMode, setMultiSelectMode] = useState(false);
+  const multiSelect = useTokenMultiSelect();
   const [sending, setSending] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [copiedContract, setCopiedContract] = useState(false);
@@ -355,13 +355,13 @@ export default function SendScreen() {
           return;
         }
 
-        // Multi-token hand-off from the Home assets sheet → land in sweep mode.
-        if (params.preselectedSweep) {
-          const wanted = new Set(params.preselectedSweep.split(','));
+        // Multi-token hand-off from the Home assets sheet → land in multiSelect mode.
+        if (params.preselectedMulti) {
+          const wanted = new Set(params.preselectedMulti.split(','));
           const picked = nonZero.filter((tk) => wanted.has(tokenId(tk)));
           if (picked.length > 0) {
-            sweep.selectTokens(picked);
-            setSweepMode(true);
+            multiSelect.selectTokens(picked);
+            setMultiSelectMode(true);
             setSelectedToken(picked[0]);
             setStep('enter-details');
             if (activeAccount) {
@@ -392,7 +392,7 @@ export default function SendScreen() {
       })
       .catch(() => showAlert(t('common.error'), t('send.alertLoadTokensError')))
       .finally(() => setLoading(false));
-  }, [address, params.preselectedSymbol, params.preselectedNetwork, params.preselectedSweep, lockRetry]);
+  }, [address, params.preselectedSymbol, params.preselectedNetwork, params.preselectedMulti, lockRetry]);
 
   // Re-pull balances after the user adds/removes a custom token in the sheet,
   // so it shows up (or disappears) without a manual page refresh.
@@ -513,10 +513,10 @@ export default function SendScreen() {
   // reaches the confirm step — same surface the dApp signing sheet shows.
   // Best-effort: any failure leaves `sim` null and confirm shows nothing extra.
   useEffect(() => {
-    const okSingle = !splitMode && !sweepMode && isValidAddress(recipient);
+    const okSingle = !splitMode && !multiSelectMode && isValidAddress(recipient);
     const okSplit = splitMode && recipientsAreValid(recipients);
-    const okSweep = sweepMode && isValidAddress(recipient) && sweepTokensList.length > 0;
-    if (step !== 'confirm' || !selectedToken || !activeAccount || (!okSingle && !okSplit && !okSweep)) {
+    const okMulti = multiSelectMode && isValidAddress(recipient) && pickedTokens.length > 0;
+    if (step !== 'confirm' || !selectedToken || !activeAccount || (!okSingle && !okSplit && !okMulti)) {
       setSim(null);
       return;
     }
@@ -524,11 +524,11 @@ export default function SendScreen() {
     setSim(null);
     try {
       const chainId = tokenChainId(selectedToken);
-      // One call (single) or N calls (split/sweep) — the sim sums them into one
+      // One call (single) or N calls (split/multiSelect) — the sim sums them into one
       // net-balance preview, the same surface a batch UserOp produces on-chain.
       let calls: { to: string; value?: string; data?: string }[];
-      if (sweepMode) {
-        calls = buildSweepCalls(recipient.trim(), sweepSpecs(chainId));
+      if (multiSelectMode) {
+        calls = buildMultiTokenCalls(recipient.trim(), multiTokenSpecs(chainId));
       } else if (splitMode) {
         calls = buildSplitCalls(
           { tokenAddress: isNativeToken(selectedToken) ? null : selectedToken.tokenAddress, decimals: selectedToken.decimals },
@@ -548,7 +548,7 @@ export default function SendScreen() {
       /* malformed amount → no sim */
     }
     return () => { cancelled = true; };
-  }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate, splitMode, recipients, sweepMode, sweep.selectedIds, feeEstimate]);
+  }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate, splitMode, recipients, multiSelectMode, multiSelect.selectedIds, feeEstimate]);
 
   // Recipient-risk on the confirm step: "first time" (address-poisoning defense)
   // + contract-vs-EOA. Drives the first-time/contract tags by the To row and
@@ -600,33 +600,33 @@ export default function SendScreen() {
     }
   };
 
-  // ── ② sweep (多币一人 / 清空) ─────────────────────────────────────────────────
-  // Selection logic lives in the shared `sweep` hook; here we just react to a
+  // ── ② multiSelect (多币一人 / 清空) ─────────────────────────────────────────────────
+  // Selection logic lives in the shared `multiSelect` hook; here we just react to a
   // confirmed selection. Multi-select is gated on a chosen network (TokenSelector
   // only shows checkboxes once one is picked), so selection is always one chain.
-  const sweepTokensList = sweep.selectedTokens(tokens);
+  const pickedTokens = multiSelect.selectedTokens(tokens);
 
-  // The exact per-token amounts a sweep submits: full balance for ERC-20s, and
+  // The exact per-token amounts a multiSelect submits: full balance for ERC-20s, and
   // the native coin minus a gas reserve so the EntryPoint prefund can be paid
   // (non-Tempo, no paymaster). Used by BOTH the simulation and the submit so the
   // preview matches what gets signed. The native line drops out if it can't even
   // cover the reserve.
-  const sweepSpecs = (chainId: number) =>
+  const multiTokenSpecs = (chainId: number) =>
     reserveNativeGas(
-      toSweepTokens(sweepTokensList),
+      toMultiTokenSpecs(pickedTokens),
       !isTempoChain(chainId) && feeEstimate ? feeEstimate.totalWei * 3n : 0n,
     );
 
   // Confirmed selection → advance. ONE token is a normal amount-send (not a
-  // full-balance sweep); TWO+ is a sweep. The first token carries chain/gas context.
-  const startSweepConfirm = () => {
-    const selected = sweep.selectedTokens(tokens);
+  // full-balance multiSelect); TWO+ is a multiSelect. The first token carries chain/gas context.
+  const confirmSelection = () => {
+    const selected = multiSelect.selectedTokens(tokens);
     if (selected.length === 0) return;
     if (selected.length === 1) {
       handleSelectToken(selected[0]);
       return;
     }
-    setSweepMode(true);
+    setMultiSelectMode(true);
     setSelectedToken(selected[0]);
     setStep('enter-details');
     if (activeAccount) {
@@ -640,7 +640,7 @@ export default function SendScreen() {
 
 
   const handleSelectToken = (token: APIToken) => {
-    setSweepMode(false); // single-token path — normal amount-send, not a sweep
+    setMultiSelectMode(false); // single-token path — normal amount-send, not a multiSelect
     setSelectedToken(token);
     setStep('enter-details');
 
@@ -657,12 +657,12 @@ export default function SendScreen() {
   };
 
   const handleContinue = async () => {
-    if (sweepMode) {
+    if (multiSelectMode) {
       if (!isValidAddress(recipient)) {
         showAlert(t('send.alertInvalidAddressTitle'), t('send.alertInvalidAddressBody'));
         return;
       }
-      if (sweepTokensList.length === 0) return;
+      if (pickedTokens.length === 0) return;
     } else if (splitMode) {
       if (!recipientsAreValid(recipients)) {
         showAlert(t('send.alertInvalidAddressTitle'), t('send.alertInvalidAddressBody'));
@@ -839,23 +839,23 @@ export default function SendScreen() {
       setTxStatus('submitting');
       const maxFee = feeEstimate?.maxFeePerGas;
 
-      // One send line per output (single = 1, split = N recipients, sweep = N
-      // tokens). split/sweep submit as a single Safe MultiSend UserOp — one
-      // signature, one gas. Each line carries its own token so sweep's mixed-token
+      // One send line per output (single = 1, split = N recipients, multiSelect = N
+      // tokens). split/multiSelect submit as a single Safe MultiSend UserOp — one
+      // signature, one gas. Each line carries its own token so multiSelect's mixed-token
       // activity records (symbol/decimals/usd) are correct per line.
       let result;
       let lines: { to: string; toName?: string; amount: string; symbol: string; decimals: number; priceUsd: number }[];
-      if (sweepMode) {
+      if (multiSelectMode) {
         // Reserved specs = the exact amounts sent (native minus gas). Activity
         // lines are derived from them so each record shows what actually moved.
-        const specs = sweepSpecs(chainId);
+        const specs = multiTokenSpecs(chainId);
         if (specs.length === 0) {
-          throw new Error(t('send.sweepNoFundsAfterGas', { defaultValue: 'Not enough to cover gas after the reserve.' }));
+          throw new Error(t('send.multiSendNoFundsAfterGas', { defaultValue: 'Not enough to cover gas after the reserve.' }));
         }
-        const calls = buildSweepCalls(recipient.trim(), specs);
+        const calls = buildMultiTokenCalls(recipient.trim(), specs);
         result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn);
         lines = specs.map((spec) => {
-          const tk = sweepTokensList.find((t) => (isNativeToken(t) ? null : t.tokenAddress) === spec.tokenAddress)!;
+          const tk = pickedTokens.find((t) => (isNativeToken(t) ? null : t.tokenAddress) === spec.tokenAddress)!;
           return { to: recipient.trim(), toName: recipientIdentity?.name, amount: spec.amount, symbol: tk.symbol, decimals: tk.decimals, priceUsd: tk.priceUsd ?? 0 };
         });
       } else if (splitMode) {
@@ -996,8 +996,8 @@ export default function SendScreen() {
       setTxError(null);
       setStep('enter-details');
     } else if (step === 'enter-details') {
-      if (sweepMode) {
-        // Back to the multi-select picker, preserving the sweep selection.
+      if (multiSelectMode) {
+        // Back to the multi-select picker, preserving the multiSelect selection.
         setStep('select-token');
       } else {
         setSelectedToken(null);
@@ -1014,17 +1014,17 @@ export default function SendScreen() {
 
   // Step 1: Select Token — delegated to the shared TokenSelector.
   // Multi-select is built-in now: filter to a specific network and the picker
-  // shows checkboxes (one token = amount-send, two+ = sweep). No mode toggle.
+  // shows checkboxes (one token = amount-send, two+ = multiSelect). No mode toggle.
   const tokenMultiSelect = {
-    selectedIds: sweep.selectedIds,
-    onToggle: sweep.toggle,
-    onToggleAll: sweep.toggleAll,
-    isAllSelected: sweep.isAllSelected,
-    onNetworkChange: sweep.onNetworkChange,
-    onConfirm: startSweepConfirm,
-    confirmLabel: sweep.count === 1
+    selectedIds: multiSelect.selectedIds,
+    onToggle: multiSelect.toggle,
+    onToggleAll: multiSelect.toggleAll,
+    isAllSelected: multiSelect.isAllSelected,
+    onNetworkChange: multiSelect.onNetworkChange,
+    onConfirm: confirmSelection,
+    confirmLabel: multiSelect.count === 1
       ? t('send.continueBtn')
-      : t('send.multiSendContinue', { n: sweep.count, chain: sweep.chainId != null ? chainName(sweep.chainId) : '' }),
+      : t('send.multiSendContinue', { n: multiSelect.count, chain: multiSelect.chainId != null ? chainName(multiSelect.chainId) : '' }),
     selectAllLabel: t('send.selectAllValuable', { defaultValue: 'Select all valuable' }),
   };
 
@@ -1037,7 +1037,7 @@ export default function SendScreen() {
         onSelect={handleSelectToken}
         onAddChanged={refreshTokens}
         defaultCategory="stable"
-        initialChainId={sweep.chainId}
+        initialChainId={multiSelect.chainId}
         multiSelect={tokenMultiSelect}
       />
     </Animated.View>
@@ -1056,10 +1056,10 @@ export default function SendScreen() {
     return (
       <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Animated.View entering={fadeInDown(0, 300)}>
-          <Text style={styles.stepTitle}>{sweepMode ? t('send.multiSendTitle') : t('send.sendTitle', { symbol: selectedToken.symbol })}</Text>
+          <Text style={styles.stepTitle}>{multiSelectMode ? t('send.multiSendTitle') : t('send.sendTitle', { symbol: selectedToken.symbol })}</Text>
 
-          {/* Token hero (single/split) — tap to switch token. Sweep hides it. */}
-          {!sweepMode && (
+          {/* Token hero (single/split) — tap to switch token. Multi-select hides it. */}
+          {!multiSelectMode && (
           <VelaCard style={styles.heroCard}>
             <Pressable style={styles.heroRow} disabled={locked} onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); setSplitMode(false); setRecipients([]); }}>
               <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={44} />
@@ -1102,8 +1102,8 @@ export default function SendScreen() {
           </VelaCard>
           )}
 
-          {/* Single-recipient flow (default). Split / sweep replace it below. */}
-          {!splitMode && !sweepMode && (<>
+          {/* Single-recipient flow (default). Split / multiSelect replace it below. */}
+          {!splitMode && !multiSelectMode && (<>
           {/* Amount — large display with inline unit */}
           <Pressable style={styles.amountWrap} onPress={() => { if (!amountLocked) amountInputRef.current?.focus(); }}>
             <View style={styles.amountTopRow}>
@@ -1243,24 +1243,24 @@ export default function SendScreen() {
           )}
 
           {/* ② multi-token send — the selected tokens (full balance) + one recipient. */}
-          {sweepMode && (<>
+          {multiSelectMode && (<>
             <VelaCard style={styles.multiCard}>
-              <View style={styles.sweepSummary}>
-                <Text style={styles.sweepSummaryTitle}>
-                  {t('send.multiSendSummary', { n: sweepTokensList.length, chain: chainName(tokenChainId(selectedToken)) })}
+              <View style={styles.mtSummary}>
+                <Text style={styles.mtSummaryTitle}>
+                  {t('send.multiSendSummary', { n: pickedTokens.length, chain: chainName(tokenChainId(selectedToken)) })}
                 </Text>
-                <Text style={styles.sweepSummaryUsd}>{formatUsd(sweepTokensList.reduce((s, tk) => s + tokenUsdValue(tk), 0))}</Text>
+                <Text style={styles.mtSummaryUsd}>{formatUsd(pickedTokens.reduce((s, tk) => s + tokenUsdValue(tk), 0))}</Text>
               </View>
-              {sweepTokensList.map((tk) => (
-                <View key={tokenId(tk)} style={[styles.sweepTokenRow, styles.sweepTokenRowBorder]}>
+              {pickedTokens.map((tk) => (
+                <View key={tokenId(tk)} style={[styles.mtRow, styles.mtRowBorder]}>
                   <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={32} />
-                  <View style={styles.sweepTokenInfo}>
-                    <Text style={styles.sweepTokenSym}>{tk.symbol}</Text>
-                    <Text style={styles.sweepTokenChain}>{chainName(tokenChainId(tk))}</Text>
+                  <View style={styles.mtInfo}>
+                    <Text style={styles.mtSym}>{tk.symbol}</Text>
+                    <Text style={styles.mtChain}>{chainName(tokenChainId(tk))}</Text>
                   </View>
-                  <View style={styles.sweepTokenVals}>
-                    <Text style={styles.sweepTokenBal}>{formatTokenAmount(tokenBalanceDouble(tk), { compact: true })}</Text>
-                    {tokenUsdValue(tk) > 0 && <Text style={styles.sweepTokenUsd}>{formatUsd(tokenUsdValue(tk))}</Text>}
+                  <View style={styles.mtVals}>
+                    <Text style={styles.mtBal}>{formatTokenAmount(tokenBalanceDouble(tk), { compact: true })}</Text>
+                    {tokenUsdValue(tk) > 0 && <Text style={styles.mtUsd}>{formatUsd(tokenUsdValue(tk))}</Text>}
                   </View>
                 </View>
               ))}
@@ -1307,7 +1307,7 @@ export default function SendScreen() {
             onPress={handleContinue}
             loading={estimatingGas}
             style={styles.continueBtn}
-            disabled={(splitMode ? !recipientsAreValid(recipients) : sweepMode ? (!isValidAddress(recipient) || sweepTokensList.length === 0) : (!recipient || !amount)) || estimatingGas || fundingNeeded?.reason === 'wallet_balance_too_low' || (locked && !!amountWarning)}
+            disabled={(splitMode ? !recipientsAreValid(recipients) : multiSelectMode ? (!isValidAddress(recipient) || pickedTokens.length === 0) : (!recipient || !amount)) || estimatingGas || fundingNeeded?.reason === 'wallet_balance_too_low' || (locked && !!amountWarning)}
           />
         </Animated.View>
       </ScrollView>
@@ -1350,12 +1350,12 @@ export default function SendScreen() {
               <Text style={styles.transferAddr}>{shortAddr(address ?? '')}</Text>
             </View>
 
-            {/* Line + Token(s) — one token, or every swept token in sweep mode */}
+            {/* Line + Token(s) — one token, or every swept token in multiSelect mode */}
             <View style={styles.transferMiddle}>
               <View style={styles.transferLineCol}>
                 <View style={styles.transferLine} />
               </View>
-              {!sweepMode ? (
+              {!multiSelectMode ? (
                 <View style={styles.transferToken}>
                   <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={36} />
                   <View style={styles.transferTokenIdentity}>
@@ -1370,8 +1370,8 @@ export default function SendScreen() {
                   </View>
                 </View>
               ) : (
-                <View style={styles.sweepConfirmList}>
-                  {sweepTokensList.map((tk) => (
+                <View style={styles.mtConfirmList}>
+                  {pickedTokens.map((tk) => (
                     <View key={tokenId(tk)} style={styles.transferToken}>
                       <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={36} />
                       <View style={styles.transferTokenIdentity}>
@@ -2023,29 +2023,29 @@ const styles = createStyles(() => ({
   // ② multi-token send (multi-select → one recipient). Card owns the horizontal
   // padding (VelaCard has none); inner rows are flush so dividers align cleanly.
   multiCard: { marginBottom: space.lg, paddingHorizontal: space.xl, paddingVertical: space.xs },
-  sweepSummary: {
+  mtSummary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: space.md,
     paddingBottom: space.md,
   },
-  sweepSummaryTitle: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted, flex: 1 },
-  sweepSummaryUsd: { fontSize: text.lg, ...inter.bold, fontFamily: font.numeric, color: color.fg.base },
-  sweepTokenRow: {
+  mtSummaryTitle: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted, flex: 1 },
+  mtSummaryUsd: { fontSize: text.lg, ...inter.bold, fontFamily: font.numeric, color: color.fg.base },
+  mtRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.lg,
     paddingVertical: space.lg,
   },
-  sweepTokenRowBorder: { borderTopWidth: 1, borderTopColor: color.border.base },
-  sweepTokenInfo: { flex: 1, gap: 1 },
-  sweepTokenSym: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
-  sweepTokenChain: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle },
-  sweepTokenVals: { alignItems: 'flex-end' },
-  sweepTokenBal: { fontSize: text.base, ...inter.semibold, fontFamily: font.numeric, color: color.fg.base },
-  sweepTokenUsd: { fontSize: text.sm, ...inter.regular, fontFamily: font.numeric, color: color.fg.muted },
-  sweepConfirmList: { flex: 1, gap: space.md },
+  mtRowBorder: { borderTopWidth: 1, borderTopColor: color.border.base },
+  mtInfo: { flex: 1, gap: 1 },
+  mtSym: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
+  mtChain: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle },
+  mtVals: { alignItems: 'flex-end' },
+  mtBal: { fontSize: text.base, ...inter.semibold, fontFamily: font.numeric, color: color.fg.base },
+  mtUsd: { fontSize: text.sm, ...inter.regular, fontFamily: font.numeric, color: color.fg.muted },
+  mtConfirmList: { flex: 1, gap: space.md },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',

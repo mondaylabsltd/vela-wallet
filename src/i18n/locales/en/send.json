@@ -76,6 +76,6 @@
     "removeRecipient": "Remove",
     "alertInsufficientBalanceBody": "The total exceeds your balance.",
     "recipientPickAria": "Choose recipient or scan",
-    "sweepNoFundsAfterGas": "Not enough to cover gas after the reserve."
+    "multiSendNoFundsAfterGas": "Not enough to cover gas after the reserve."
   }
 }

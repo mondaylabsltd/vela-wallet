@@ -76,6 +76,6 @@
     "removeRecipient": "Entfernen",
     "alertInsufficientBalanceBody": "Die Summe übersteigt dein Guthaben.",
     "recipientPickAria": "Empfänger wählen oder scannen",
-    "sweepNoFundsAfterGas": "Nach der Gas-Reserve reicht das Guthaben nicht."
+    "multiSendNoFundsAfterGas": "Nach der Gas-Reserve reicht das Guthaben nicht."
   }
 }

@@ -4,7 +4,7 @@
  * gas payment) via `sendBatchCalls`:
  *
  *   ① split — one token  → many recipients   (一币多人)
- *   ② sweep — many tokens → one recipient      (多币一人, "empty the wallet")
+ *   ② multiSelect — many tokens → one recipient      (多币一人, "empty the wallet")
  *
  * These never sign or submit. They only translate already-validated UI state
  * into the `{ to, value, data }[]` array `sendBatchCalls` expects, so the
@@ -91,24 +91,24 @@ export function sumSplitBaseUnits(recipients: SplitRecipient[], decimals: number
   return recipients.reduce((sum, r) => sum + toBaseUnits(r.amount, decimals), 0n);
 }
 
-// ── ② sweep: many tokens → one recipient ────────────────────────────────────
+// ── ② multiSelect: many tokens → one recipient ────────────────────────────────────
 
-/** A token line in sweep mode. `amount` is a human decimal string (usually full balance). */
-export interface SweepToken extends TokenRef {
+/** A token line in multiSelect mode. `amount` is a human decimal string (usually full balance). */
+export interface MultiTokenSpec extends TokenRef {
   amount: string;
 }
 
-export function buildSweepCalls(recipient: string, tokens: SweepToken[]): BatchCall[] {
+export function buildMultiTokenCalls(recipient: string, tokens: MultiTokenSpec[]): BatchCall[] {
   if (tokens.length === 0) throw new BatchSendError('no tokens');
   return tokens.map((tk) => buildTransferCall(tk.tokenAddress, recipient, toBaseUnits(tk.amount, tk.decimals)));
 }
 
 /**
- * Whether a token is worth offering in the sweep picker. A positive, non-spam
+ * Whether a token is worth offering in the multiSelect picker. A positive, non-spam
  * balance is the floor; `requireValue` additionally gates on a known USD value
  * — the predicate behind "全选有价值代币" (select all valuable).
  */
-export function isSweepable(tok: APIToken, requireValue = false): boolean {
+export function isMultiSelectable(tok: APIToken, requireValue = false): boolean {
   if (tok.spam) return false;
   if (tokenBalanceDouble(tok) <= 0) return false;
   if (requireValue && tokenUsdValue(tok) <= 0) return false;
@@ -116,14 +116,14 @@ export function isSweepable(tok: APIToken, requireValue = false): boolean {
 }
 
 /**
- * Bridge a sweep selection (full APITokens) into `SweepToken` specs — each token
- * sweeps its full balance to the one recipient. Native vs ERC-20 is derived from
+ * Bridge a multiSelect selection (full APITokens) into `MultiTokenSpec` specs — each token
+ * sends its full balance to the one recipient. Native vs ERC-20 is derived from
  * the token (no address ⇒ native). Native gas-reserve is NOT applied here: Vela
  * settles gas via the bundler/gas-account, not the Safe's native balance, so a
- * full-balance native sweep is valid; the caller may still trim it if a given
+ * full-balance native multiSelect is valid; the caller may still trim it if a given
  * chain needs an EntryPoint prefund.
  */
-export function toSweepTokens(tokens: APIToken[]): SweepToken[] {
+export function toMultiTokenSpecs(tokens: APIToken[]): MultiTokenSpec[] {
   return tokens.map((tk) => ({
     tokenAddress: isNativeToken(tk) ? null : tk.tokenAddress,
     decimals: tk.decimals,
@@ -133,19 +133,19 @@ export function toSweepTokens(tokens: APIToken[]): SweepToken[] {
 
 /** The tokens a "全选有价值代币" tap selects: held, non-spam, with a known USD value. */
 export function selectAllValuable(tokens: APIToken[]): APIToken[] {
-  return tokens.filter((t) => isSweepable(t, true));
+  return tokens.filter((t) => isMultiSelectable(t, true));
 }
 
 /**
- * Trim a sweep's native-coin line by `reserveWei` so the Safe keeps enough to
+ * Trim a multiSelect's native-coin line by `reserveWei` so the Safe keeps enough to
  * fund the EntryPoint gas prefund. On non-Tempo chains there's no paymaster, so
- * the prefund is paid from the Safe's native balance — sweeping it ALL would
+ * the prefund is paid from the Safe's native balance — sending it ALL would
  * leave nothing to prefund and the UserOp would revert (AA21). ERC-20 lines are
  * untouched; the native line is dropped entirely if nothing remains after the
  * reserve. A non-positive reserve (e.g. Tempo, where prefund is a no-op) is a
  * no-op.
  */
-export function reserveNativeGas(tokens: SweepToken[], reserveWei: bigint): SweepToken[] {
+export function reserveNativeGas(tokens: MultiTokenSpec[], reserveWei: bigint): MultiTokenSpec[] {
   if (reserveWei <= 0n) return tokens;
   return tokens.flatMap((tk) => {
     if (tk.tokenAddress !== null) return [tk]; // ERC-20 — gas isn't paid in it

@@ -22,7 +22,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
-  Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming,
+  Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -48,7 +48,7 @@ import { color, createStyles, font, inter, radius, shadow, space, text } from '@
 import { useDAppConnection, type ConnectionStatus } from '@/models/dapp-connection';
 import { chainName, getAllNetworksSync, type Network } from '@/models/network';
 import { shortAddr, isAddress, tokenBalanceDouble, tokenChainId, tokenId, tokenUsdValue, type APIToken } from '@/models/types';
-import { useSweepSelection } from '@/hooks/use-sweep-selection';
+import { useTokenMultiSelect } from '@/hooks/use-token-multi-select';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import {
   loadActivityItems, loadActivityTransactions, loadConnectionEvents, relativeTime, syncReceivedTransfers,
@@ -61,7 +61,7 @@ import { getAccountBalance, getAccountBalances, setAccountBalance } from '@/serv
 import { currencyMeta, formatFiat, getCurrencyCode, getRate, loadCurrency, setCurrency, shouldShowDecimals } from '@/services/currency';
 import { parseRemoteInjectURL } from '@/services/dapp-transport';
 import { parseEIP681 } from '@/services/eip681';
-import { copyToClipboard, hapticSuccess, isAppActive, openURL, showAlert } from '@/services/platform';
+import { copyToClipboard, hapticLight, hapticSuccess, isAppActive, openURL, showAlert } from '@/services/platform';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
 import { fetchTokens } from '@/services/wallet-api';
 import { isWalletPairURI } from '@/services/walletpair-transport';
@@ -105,7 +105,7 @@ export default function HomeScreen() {
   const { connectToWalletPair, connectToBridge } = conn;
   // Same multi-select as the Send picker (shared hook) — filter a network in the
   // assets sheet to pick several tokens, then hand them to Send.
-  const sweep = useSweepSelection();
+  const multiSelect = useTokenMultiSelect();
 
   const address = activeAccount?.address ?? state.address;
   const accountName = activeAccount?.name ?? 'Wallet';
@@ -506,13 +506,13 @@ export default function HomeScreen() {
   // Multi-token confirm: one token → normal send; two+ → hand the selection to
   // Send's multi-token flow (the send/confirm logic lives only there).
   const onAssetsMultiConfirm = useCallback(() => {
-    const picked = sweep.selectedTokens(tokens);
+    const picked = multiSelect.selectedTokens(tokens);
     if (picked.length === 0) return;
-    if (picked.length === 1) { sweep.reset(); openAssetForSend(picked[0]); return; }
+    if (picked.length === 1) { multiSelect.reset(); openAssetForSend(picked[0]); return; }
     setShowAssets(false);
-    router.push({ pathname: '/send', params: { preselectedSweep: picked.map(tokenId).join(',') } });
-    sweep.reset();
-  }, [sweep, tokens, openAssetForSend, router]);
+    router.push({ pathname: '/send', params: { preselectedMulti: picked.map(tokenId).join(',') } });
+    multiSelect.reset();
+  }, [multiSelect, tokens, openAssetForSend, router]);
 
   // Connection-activity clear (whole list) + per-row delete. Both prune the
   // underlying records; on-chain transactions are untouched.
@@ -747,11 +747,11 @@ export default function HomeScreen() {
       />
 
       {/* Balance-hero assets — reuses the Send token picker (tap a token → Send). */}
-      <AppModal visible={showAssets} onClose={() => { setShowAssets(false); sweep.reset(); }}>
+      <AppModal visible={showAssets} onClose={() => { setShowAssets(false); multiSelect.reset(); }}>
         <View style={styles.assetsSheet}>
           <View style={styles.assetsHead}>
             <Text style={styles.assetsTitle}>{t('home.assetsSheetTitle')}</Text>
-            <Pressable onPress={() => { setShowAssets(false); sweep.reset(); }} hitSlop={8}>
+            <Pressable onPress={() => { setShowAssets(false); multiSelect.reset(); }} hitSlop={8}>
               <X size={22} color={color.fg.base} strokeWidth={2} />
             </Pressable>
           </View>
@@ -763,17 +763,17 @@ export default function HomeScreen() {
               onSelect={openAssetForSend}
               onAddChanged={loadData}
               defaultCategory="stable"
-              initialChainId={sweep.chainId}
+              initialChainId={multiSelect.chainId}
               multiSelect={{
-                selectedIds: sweep.selectedIds,
-                onToggle: sweep.toggle,
-                onToggleAll: sweep.toggleAll,
-                isAllSelected: sweep.isAllSelected,
-                onNetworkChange: sweep.onNetworkChange,
+                selectedIds: multiSelect.selectedIds,
+                onToggle: multiSelect.toggle,
+                onToggleAll: multiSelect.toggleAll,
+                isAllSelected: multiSelect.isAllSelected,
+                onNetworkChange: multiSelect.onNetworkChange,
                 onConfirm: onAssetsMultiConfirm,
-                confirmLabel: sweep.count === 1
+                confirmLabel: multiSelect.count === 1
                   ? t('send.continueBtn')
-                  : t('send.multiSendContinue', { n: sweep.count, chain: sweep.chainId != null ? chainName(sweep.chainId) : '' }),
+                  : t('send.multiSendContinue', { n: multiSelect.count, chain: multiSelect.chainId != null ? chainName(multiSelect.chainId) : '' }),
                 selectAllLabel: t('send.selectAllValuable'),
               }}
             />
@@ -852,6 +852,43 @@ export default function HomeScreen() {
 // ---------------------------------------------------------------------------
 // Connections view
 // ---------------------------------------------------------------------------
+
+// "立即重连" — the manual reconnect tap. SDK reconnect is fire-and-forget with no
+// status of its own, so the button owns its feedback: a haptic + pressed state on
+// tap (you felt it register), a continuously spinning icon (work is happening),
+// and a brief label flip to "重新连接中…" right after the press to acknowledge it.
+function ReconnectButton({ onReconnect }: { onReconnect: () => void }) {
+  const { t } = useTranslation();
+  const spin = useSharedValue(0);
+  const [tapped, setTapped] = useState(false);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    spin.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.linear }), -1, false);
+    return () => { if (tapTimer.current) clearTimeout(tapTimer.current); };
+  }, [spin]);
+
+  const spinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${spin.value * 360}deg` }] }));
+
+  const press = () => {
+    hapticLight();
+    setTapped(true);
+    if (tapTimer.current) clearTimeout(tapTimer.current);
+    tapTimer.current = setTimeout(() => setTapped(false), 1400);
+    onReconnect();
+  };
+
+  return (
+    <Pressable style={({ pressed }) => [styles.reconnectBtn, pressed && styles.reconnectBtnPressed]} onPress={press}>
+      <Animated.View style={spinStyle}>
+        <RefreshCw size={16} color={color.fg.inverse} strokeWidth={2.4} />
+      </Animated.View>
+      <Text style={styles.reconnectText}>
+        {tapped ? t('connect.list.reconnecting') : t('home.connReconnectBtn')}
+      </Text>
+    </Pressable>
+  );
+}
 
 function ConnectionsView({
   status, reconnectStuck, dappName, dappUrl, events, onDisconnect, onReconnect, onConnect, onPasteConnect, onOpenEvent, onClearEvents, onDeleteEvent,
@@ -943,12 +980,7 @@ function ConnectionsView({
         <Text style={[styles.connNote, reconnectStuck && styles.connNoteWarn]}>
           {reconnectStuck ? t('home.connReconnectStuck') : t('home.connNote')}
         </Text>
-        {reconnecting && (
-          <Pressable style={styles.reconnectBtn} onPress={onReconnect}>
-            <RefreshCw size={16} color={color.fg.inverse} strokeWidth={2.4} />
-            <Text style={styles.reconnectText}>{t('home.connReconnectBtn')}</Text>
-          </Pressable>
-        )}
+        {reconnecting && <ReconnectButton onReconnect={onReconnect} />}
         <Pressable style={styles.disconnectBtn} onPress={onDisconnect}>
           <Text style={styles.disconnectText}>{t('home.connDisconnect')}</Text>
         </Pressable>
@@ -1168,6 +1200,7 @@ const styles = createStyles(() => ({
     marginTop: space.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
     paddingVertical: space.lg, borderRadius: radius.lg, backgroundColor: color.accent.base, ...shadow.sm,
   },
+  reconnectBtnPressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
   reconnectText: { fontSize: text.base, ...inter.semibold, color: color.fg.inverse },
   disconnectBtn: {
     marginTop: space.lg, alignItems: 'center',

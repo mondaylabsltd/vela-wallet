@@ -76,6 +76,6 @@
     "removeRecipient": "Удалить",
     "alertInsufficientBalanceBody": "Сумма превышает ваш баланс.",
     "recipientPickAria": "Выбрать получателя или сканировать",
-    "sweepNoFundsAfterGas": "Недостаточно средств на газ после резерва."
+    "multiSendNoFundsAfterGas": "Недостаточно средств на газ после резерва."
   }
 }

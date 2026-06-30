@@ -1,22 +1,22 @@
 /**
  * Tests for batch-send — the pure call-batch builders behind the two advanced
- * send modes (① split: one token → many recipients, ② sweep: many tokens → one
+ * send modes (① split: one token → many recipients, ② multiSelect: many tokens → one
  * recipient). Covers calldata/value shape, decimal scaling, totals, validation
- * guards, and the sweepable predicate.
+ * guards, and the selectable predicate.
  */
 import {
   encodeErc20Transfer,
   buildTransferCall,
   buildSplitCalls,
   sumSplitBaseUnits,
-  buildSweepCalls,
-  isSweepable,
-  toSweepTokens,
+  buildMultiTokenCalls,
+  isMultiSelectable,
+  toMultiTokenSpecs,
   selectAllValuable,
   reserveNativeGas,
   BatchSendError,
   type SplitRecipient,
-  type SweepToken,
+  type MultiTokenSpec,
 } from '@/services/batch-send';
 import { toBaseUnits, fromBaseUnits } from '@/services/eip681';
 import type { APIToken } from '@/models/types';
@@ -113,42 +113,42 @@ describe('sumSplitBaseUnits', () => {
   });
 });
 
-describe('buildSweepCalls (② many tokens → one recipient)', () => {
+describe('buildMultiTokenCalls (② many tokens → one recipient)', () => {
   it('routes every token to the same recipient', () => {
-    const tokens: SweepToken[] = [
+    const tokens: MultiTokenSpec[] = [
       { tokenAddress: USDC, decimals: 6, amount: '10' },
       { tokenAddress: null, decimals: 18, amount: '0.5' },
     ];
-    const calls = buildSweepCalls(A, tokens);
+    const calls = buildMultiTokenCalls(A, tokens);
     expect(calls).toHaveLength(2);
     expect(calls[0].to).toBe(USDC); // ERC-20 call targets the token contract
     expect(calls[1]).toEqual({ to: A, value: '0x' + (5n * 10n ** 17n).toString(16), data: '0x' });
   });
 
   it('throws on an empty token list', () => {
-    expect(() => buildSweepCalls(A, [])).toThrow(BatchSendError);
+    expect(() => buildMultiTokenCalls(A, [])).toThrow(BatchSendError);
   });
 });
 
-describe('isSweepable', () => {
+describe('isMultiSelectable', () => {
   it('includes a held, non-spam token', () => {
-    expect(isSweepable(token({ balance: '5' }))).toBe(true);
+    expect(isMultiSelectable(token({ balance: '5' }))).toBe(true);
   });
 
   it('excludes spam and zero-balance tokens', () => {
-    expect(isSweepable(token({ spam: true }))).toBe(false);
-    expect(isSweepable(token({ balance: '0' }))).toBe(false);
+    expect(isMultiSelectable(token({ spam: true }))).toBe(false);
+    expect(isMultiSelectable(token({ balance: '0' }))).toBe(false);
   });
 
   it('with requireValue, excludes tokens with no known USD price', () => {
-    expect(isSweepable(token({ priceUsd: null }), true)).toBe(false);
-    expect(isSweepable(token({ priceUsd: 1 }), true)).toBe(true);
+    expect(isMultiSelectable(token({ priceUsd: null }), true)).toBe(false);
+    expect(isMultiSelectable(token({ priceUsd: 1 }), true)).toBe(true);
   });
 });
 
-describe('toSweepTokens', () => {
-  it('maps each token to its full-balance sweep spec (native vs ERC-20)', () => {
-    const specs = toSweepTokens([
+describe('toMultiTokenSpecs', () => {
+  it('maps each token to its full-balance multiSelect spec (native vs ERC-20)', () => {
+    const specs = toMultiTokenSpecs([
       token({ tokenAddress: USDC, decimals: 6, balance: '12.5' }),
       token({ tokenAddress: null, decimals: 18, balance: '0.3' }),
     ]);
@@ -158,8 +158,8 @@ describe('toSweepTokens', () => {
     ]);
   });
 
-  it('feeds straight into buildSweepCalls', () => {
-    const calls = buildSweepCalls(A, toSweepTokens([token({ tokenAddress: USDC, decimals: 6, balance: '1' })]));
+  it('feeds straight into buildMultiTokenCalls', () => {
+    const calls = buildMultiTokenCalls(A, toMultiTokenSpecs([token({ tokenAddress: USDC, decimals: 6, balance: '1' })]));
     expect(calls[0].to).toBe(USDC);
     expect(calls[0].data.endsWith((1_000_000).toString(16).padStart(64, '0'))).toBe(true);
   });
@@ -177,9 +177,9 @@ describe('selectAllValuable', () => {
   });
 });
 
-describe('reserveNativeGas (native sweep keeps gas for the EntryPoint prefund)', () => {
-  const native: SweepToken = { tokenAddress: null, decimals: 18, amount: '1' };       // 1e18
-  const erc20: SweepToken = { tokenAddress: USDC, decimals: 6, amount: '10' };
+describe('reserveNativeGas (native multiSelect keeps gas for the EntryPoint prefund)', () => {
+  const native: MultiTokenSpec = { tokenAddress: null, decimals: 18, amount: '1' };       // 1e18
+  const erc20: MultiTokenSpec = { tokenAddress: USDC, decimals: 6, amount: '10' };
 
   it('trims only the native line by the reserve', () => {
     const out = reserveNativeGas([erc20, native], 2n * 10n ** 17n); // reserve 0.2
@@ -197,10 +197,10 @@ describe('reserveNativeGas (native sweep keeps gas for the EntryPoint prefund)',
   });
 });
 
-describe('full-balance sweep precision (round-trip)', () => {
+describe('full-balance multiSelect precision (round-trip)', () => {
   // A swept "full balance" is the token's exact raw amount fed through
   // fromBaseUnits (what produces APIToken.balance) → toBaseUnits. It must be
-  // lossless, or a sweep would leave dust / over-send.
+  // lossless, or a multiSelect would leave dust / over-send.
   it.each([
     [1n, 18],
     [31_743_219_870_000_000_000n, 18],

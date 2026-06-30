@@ -76,6 +76,6 @@
     "removeRecipient": "Hapus",
     "alertInsufficientBalanceBody": "Totalnya melebihi saldo Anda.",
     "recipientPickAria": "Pilih penerima atau pindai",
-    "sweepNoFundsAfterGas": "Tidak cukup untuk gas setelah cadangan."
+    "multiSendNoFundsAfterGas": "Tidak cukup untuk gas setelah cadangan."
   }
 }
