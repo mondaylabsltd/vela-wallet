@@ -11,12 +11,8 @@
       "icon": "./assets/images/icon.png",
       "bundleIdentifier": "app.getvela.VelaWallet",
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "Vela Wallet uses Bluetooth to securely connect with the Vela Connect browser extension.",
-        "NSBluetoothPeripheralUsageDescription": "Vela Wallet uses Bluetooth to securely connect with the Vela Connect browser extension.",
         "NSCameraUsageDescription": "Vela Wallet uses the camera to scan QR codes for wallet addresses.",
-        "UIBackgroundModes": [
-          "bluetooth-peripheral"
-        ]
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -29,10 +25,6 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "BLUETOOTH",
-        "BLUETOOTH_ADMIN",
-        "BLUETOOTH_ADVERTISE",
-        "BLUETOOTH_CONNECT",
         "CAMERA"
       ]
     },
@@ -61,9 +53,13 @@
           "imageWidth": 180
         }
       ],
-      "./plugins/with-native-modules",
       "expo-sharing",
-      "expo-camera",
+      [
+        "expo-camera",
+        {
+          "recordAudioAndroid": false
+        }
+      ],
       "expo-image-picker",
       [
         "expo-media-library",
@@ -73,7 +69,8 @@
           "isAccessMediaLocationEnabled": false
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "./plugins/with-native-modules"
     ],
     "experiments": {
       "typedRoutes": true,

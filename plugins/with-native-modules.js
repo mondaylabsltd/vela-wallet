@@ -32,24 +32,14 @@ function copyFilesRecursive(srcDir, destDir) {
 
 function withIOSInfoPlist(config) {
   return withInfoPlist(config, (mod) => {
-    mod.modResults.NSBluetoothAlwaysUsageDescription =
-      mod.modResults.NSBluetoothAlwaysUsageDescription ||
-      'Vela Wallet uses Bluetooth to securely connect with the Vela Connect browser extension.';
-
-    mod.modResults.NSBluetoothPeripheralUsageDescription =
-      mod.modResults.NSBluetoothPeripheralUsageDescription ||
-      'Vela Wallet uses Bluetooth to securely connect with the Vela Connect browser extension.';
-
     mod.modResults.NSCameraUsageDescription =
       mod.modResults.NSCameraUsageDescription ||
       'Vela Wallet uses the camera to scan QR codes for wallet addresses.';
 
-    if (!Array.isArray(mod.modResults.UIBackgroundModes)) {
-      mod.modResults.UIBackgroundModes = [];
-    }
-    if (!mod.modResults.UIBackgroundModes.includes('bluetooth-peripheral')) {
-      mod.modResults.UIBackgroundModes.push('bluetooth-peripheral');
-    }
+    // The wallet does not record audio. expo-camera adds a microphone usage
+    // string by default; strip it so the App Store doesn't flag an unused
+    // permission (this plugin runs after expo-camera in the plugins array).
+    delete mod.modResults.NSMicrophoneUsageDescription;
 
     return mod;
   });
@@ -92,7 +82,7 @@ function withIOSSourceFiles(config) {
       // Subdirectories under ios/<project>/ are NOT auto-included in the build.
       const destDir = path.join(projectRoot, 'ios', projectName);
 
-      const modules = ['vela-ble', 'vela-passkey', 'vela-cloud-sync', 'walletpair-ble'];
+      const modules = ['vela-passkey', 'vela-cloud-sync'];
       for (const moduleName of modules) {
         const srcDir = path.join(projectRoot, 'modules', moduleName, 'ios');
         if (!fs.existsSync(srcDir)) continue;
@@ -135,29 +125,39 @@ function withAndroidPermissions(config) {
     const manifest = mod.modResults.manifest;
 
     const requiredPermissions = [
-      'android.permission.BLUETOOTH',
-      'android.permission.BLUETOOTH_ADMIN',
-      'android.permission.BLUETOOTH_ADVERTISE',
-      'android.permission.BLUETOOTH_CONNECT',
-      'android.permission.BLUETOOTH_SCAN',
-      'android.permission.ACCESS_FINE_LOCATION',
       'android.permission.CAMERA',
+    ];
+
+    // Permissions pulled in by dependencies that this wallet does NOT use:
+    //   - RECORD_AUDIO: added by expo-camera (no audio/video recording here).
+    //   - SYSTEM_ALERT_WINDOW: added by the dev menu overlay.
+    // We emit `tools:node="remove"` so they are stripped from the final merged
+    // manifest regardless of which library contributed them. (This plugin runs
+    // last in app.json's plugins array, so it also wins over earlier plugins.)
+    const removePermissions = [
+      'android.permission.RECORD_AUDIO',
+      'android.permission.SYSTEM_ALERT_WINDOW',
     ];
 
     if (!Array.isArray(manifest['uses-permission'])) {
       manifest['uses-permission'] = [];
     }
 
-    const existing = new Set(
-      manifest['uses-permission'].map((p) => p.$?.['android:name'])
+    // Drop any existing plain declarations for permissions we manage, so each
+    // appears exactly once in its canonical form below.
+    const managed = new Set([...requiredPermissions, ...removePermissions]);
+    manifest['uses-permission'] = manifest['uses-permission'].filter(
+      (p) => !managed.has(p.$?.['android:name'])
     );
 
     for (const perm of requiredPermissions) {
-      if (!existing.has(perm)) {
-        manifest['uses-permission'].push({
-          $: { 'android:name': perm },
-        });
-      }
+      manifest['uses-permission'].push({ $: { 'android:name': perm } });
+    }
+
+    for (const perm of removePermissions) {
+      manifest['uses-permission'].push({
+        $: { 'android:name': perm, 'tools:node': 'remove' },
+      });
     }
 
     // Set android:allowBackup="true" on the <application> element
@@ -192,10 +192,8 @@ function withAndroidSourceFiles(config) {
 
       // Copy Kotlin files for each module
       const moduleMappings = [
-        { name: 'vela-ble', subdir: 'ble' },
         { name: 'vela-passkey', subdir: 'passkey' },
         { name: 'vela-cloud-sync', subdir: 'cloudsync' },
-        { name: 'walletpair-ble', subdir: 'walletpairble' },
       ];
 
       for (const { name, subdir } of moduleMappings) {
@@ -274,17 +272,13 @@ function registerAndroidPackages(projectRoot) {
   let content = fs.readFileSync(mainAppPath, 'utf8');
 
   const imports = [
-    'import com.velawallet.ble.VelaBLEPackage',
     'import com.velawallet.passkey.VelaPasskeyPackage',
     'import com.velawallet.cloudsync.VelaCloudSyncPackage',
-    'import com.velawallet.walletpairble.WalletPairBlePackage',
   ];
 
   const packageRegistrations = [
-    'add(VelaBLEPackage())',
     'add(VelaPasskeyPackage())',
     'add(VelaCloudSyncPackage())',
-    'add(WalletPairBlePackage())',
   ];
 
   // Add imports (after the last existing import line)
@@ -344,14 +338,10 @@ function withXcodeProjectFiles(config) {
 
     // Native module files to add
     const nativeFiles = [
-      'VelaBLEModule.swift',
-      'VelaBLEModule.m',
       'VelaPasskeyModule.swift',
       'VelaPasskeyModule.m',
       'VelaCloudSyncModule.swift',
       'VelaCloudSyncModule.m',
-      'WalletPairBleModule.swift',
-      'WalletPairBleModule.m',
     ];
 
     for (const fileName of nativeFiles) {

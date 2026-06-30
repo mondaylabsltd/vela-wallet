@@ -4,11 +4,11 @@
  * Wraps a WalletSession from walletpair-sdk and implements the DAppTransport
  * interface so it plugs into the existing DAppConnectionProvider seamlessly.
  *
- * Web: WebSocket relay only.
- * Mobile: BLE + WebSocket relay (BLE added in Phase 4).
+ * Transport: WebSocket relay (web and mobile). Pairing happens over a relay
+ * URL carried in the pairing URI — no Bluetooth.
  */
 
-import { AppState, type AppStateStatus, Platform } from 'react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   WalletSession,
@@ -289,20 +289,10 @@ export class WalletPairTransport implements DAppTransport {
     const parsed = parsePairingUri(uri);
 
     const relayUrl = parsed.relay;
-    let sdkTransport: WPTransport;
-
-    if (relayUrl) {
-      sdkTransport = new WebSocketTransport(relayUrl);
-    } else {
-      // BLE mode — only available on native platforms
-      if (Platform.OS === 'web') {
-        throw new Error('BLE connections require the mobile app. Use a relay-based QR code on web.');
-      }
-      // Lazy import to avoid bundling native module on web
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { BlePeripheralTransport } = require('./walletpair-ble-transport');
-      sdkTransport = new BlePeripheralTransport();
+    if (!relayUrl) {
+      throw new Error('This pairing code has no relay URL. Vela Connect pairs over a relay — please scan a current Vela Connect QR code.');
     }
+    const sdkTransport: WPTransport = new WebSocketTransport(relayUrl);
 
     const persistence = createPersistence();
     const session = new WalletSession({
