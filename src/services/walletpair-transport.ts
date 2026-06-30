@@ -8,7 +8,7 @@
  * URL carried in the pairing URI — no Bluetooth.
  */
 
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState, Platform, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   WalletSession,
@@ -261,6 +261,10 @@ export class WalletPairTransport implements DAppTransport {
   private listeners = new Map<string, Set<Function>>();
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private appStateSub: { remove(): void } | null = null;
+  /** Detach fns for the web-only recovery listeners (online / tab-visible). */
+  private webRecoverCleanups: (() => void)[] | null = null;
+  /** Epoch ms of the last forced recovery — throttles back-to-back triggers. */
+  private lastRecoverAt = 0;
   /** Epoch ms when the app last went to background (null while foregrounded). */
   private backgroundedAt: number | null = null;
   /** Bounds the transient "reconnecting" state so it can't spin forever. */
@@ -275,6 +279,7 @@ export class WalletPairTransport implements DAppTransport {
     // heartbeat — otherwise it would be torn down the instant we disconnect,
     // exactly when foreground recovery matters most.
     this.setupAppStateRecovery();
+    this.setupWebRecovery();
   }
 
   // -----------------------------------------------------------------------
@@ -410,6 +415,7 @@ export class WalletPairTransport implements DAppTransport {
     this.stopHeartbeat();
     this.clearReconnectDeadline();
     this.teardownAppStateRecovery();
+    this.teardownWebRecovery();
     this.session.destroy();
     this.emit('disconnected');
     this.listeners.clear();
@@ -592,6 +598,59 @@ export class WalletPairTransport implements DAppTransport {
   }
 
   // -----------------------------------------------------------------------
+  // Web foreground/network recovery
+  // -----------------------------------------------------------------------
+  //
+  // On mobile web the relay socket dies whenever the tab is backgrounded or the
+  // network flaps (Wi-Fi↔5G, VPN reconnect), and the SDK's reconnect backoff can
+  // stretch out — leaving the panel stuck on "重新连接中…" until the user taps
+  // "立即重连". React Native's AppState only models tab visibility, never the
+  // `online` event, so we listen for both browser signals directly and force an
+  // immediate reconnect the moment the tab returns or the network comes back.
+
+  private setupWebRecovery() {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    if (this.webRecoverCleanups) return;
+
+    const onOnline = () => this.recoverNow('network online');
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        this.recoverNow('tab visible');
+      }
+    };
+    window.addEventListener('online', onOnline);
+    document.addEventListener('visibilitychange', onVisible);
+    this.webRecoverCleanups = [
+      () => window.removeEventListener('online', onOnline),
+      () => document.removeEventListener('visibilitychange', onVisible),
+    ];
+  }
+
+  /**
+   * Force a reconnect now (tab returned / network restored). Throttled so two
+   * signals firing together (e.g. `online` + `visibilitychange`) don't double-
+   * reconnect, and a no-op before pairing ('idle') or after teardown ('closed').
+   */
+  private recoverNow(reason: string) {
+    if (this.session.phase === 'idle' || this.session.phase === 'closed') return;
+    const now = Date.now();
+    if (now - this.lastRecoverAt < 3000) return;
+    this.lastRecoverAt = now;
+    if (!this._connected) {
+      console.log('[WalletPair] web recovery: forcing reconnect (', reason, ')');
+      this.emit('reconnecting');
+      this.startReconnectDeadline();
+      this.session.reconnect().catch((e) => console.log('[WalletPair] web recovery reconnect failed:', e));
+    } else {
+      this.session.ping();
+    }
+  }
+
+  private teardownWebRecovery() {
+    if (this.webRecoverCleanups) { this.webRecoverCleanups.forEach((fn) => fn()); this.webRecoverCleanups = null; }
+  }
+
+  // -----------------------------------------------------------------------
   // Session event wiring
   // -----------------------------------------------------------------------
 
@@ -609,6 +668,7 @@ export class WalletPairTransport implements DAppTransport {
         this.stopHeartbeat();
         this.clearReconnectDeadline();
         this.teardownAppStateRecovery();
+        this.teardownWebRecovery();
         if (wasConnected) {
           this.emit('disconnected');
         } else {

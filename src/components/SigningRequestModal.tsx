@@ -538,8 +538,10 @@ export function SigningSheet({
           <AdvancedPanel method={method} params={params} clearSign={clearSign} />
 
           {/* Simulation summary — revert pre-check + net balance changes, one
-              render path shared with Send's confirm step. Live-only (skipped on replay). */}
-          {!readOnly && (isTx || isBatch) && <BalanceChangePreview result={sim} chainId={chainId} />}
+              render path shared with Send's confirm step. Live mode shows the fresh
+              sim; a read-only replay shows the one persisted at sign time (state has
+              moved on, so it can't be recomputed) — same component either way. */}
+          {(isTx || isBatch) && <BalanceChangePreview result={readOnly ? replaySim : sim} chainId={chainId} />}
 
           {/* Gas fee card — only for eth_sendTransaction, and only live (not replay) */}
           {isTx && activeAccount?.address && !readOnly && (

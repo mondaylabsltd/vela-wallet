@@ -14,6 +14,7 @@
 import React from 'react';
 import { AppModal } from '@/components/ui/AppModal';
 import { SigningSheet } from '@/components/SigningRequestModal';
+import { deserializeAssetSim } from '@/services/tx-simulation';
 import type { LocalTransaction } from '@/services/storage';
 import type { BLEIncomingRequest } from '@/models/types';
 
@@ -28,6 +29,9 @@ export function SigningReplaySheet({ visible, tx, onClose }: Props) {
   const request: BLEIncomingRequest | null = req
     ? { id: tx!.id, method: req.method, params: (req.params ?? []) as any[], origin: tx!.dappOrigin ?? '' }
     : null;
+  // The "what moved" preview captured at sign time — rehydrated for the read-only
+  // replay (the live sheet can't re-simulate a past tx against current state).
+  const replaySim = tx?.assetChanges ? deserializeAssetSim(tx.assetChanges) : null;
 
   return (
     <AppModal visible={visible && request !== null} onClose={onClose}>
@@ -46,6 +50,7 @@ export function SigningReplaySheet({ visible, tx, onClose }: Props) {
           onReject={onClose}
           onDismiss={onClose}
           readOnly
+          replaySim={replaySim}
         />
       )}
     </AppModal>

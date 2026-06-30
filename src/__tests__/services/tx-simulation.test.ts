@@ -1,7 +1,9 @@
 /**
  * Tests for the revert-reason parser used by the client-side pre-check.
  */
-import { parseRevertReason } from '@/services/tx-simulation';
+import {
+  parseRevertReason, serializeAssetSim, deserializeAssetSim, type AssetSimResult,
+} from '@/services/tx-simulation';
 
 /** ABI-encode an Error(string) revert payload. */
 function encodeErrorString(msg: string): string {
@@ -41,5 +43,40 @@ describe('parseRevertReason', () => {
   test('returns undefined when there is nothing useful', () => {
     expect(parseRevertReason({})).toBeUndefined();
     expect(parseRevertReason({ data: '0x' })).toBeUndefined();
+  });
+});
+
+describe('asset-sim persistence (serialize/deserialize)', () => {
+  const live: AssetSimResult = {
+    ok: true,
+    underfundedNative: false,
+    engine: 'rpc',
+    changes: [
+      { kind: 'erc20', token: '0xabc', delta: -123456789012345678901234567890n, symbol: 'USDC', decimals: 6 },
+      { kind: 'native', delta: 5_000000000000000000n, symbol: 'ETH', decimals: 18 },
+      { kind: 'erc20', token: '0xdef', delta: 7n, unverified: true },
+    ],
+  };
+
+  test('round-trips bigint deltas through JSON-safe storage', () => {
+    const stored = serializeAssetSim(live);
+    // Persisted form must be JSON-serializable (no bigints) — AsyncStorage holds strings.
+    expect(() => JSON.stringify(stored)).not.toThrow();
+    expect(stored.changes![0].delta).toBe('-123456789012345678901234567890');
+
+    const round = deserializeAssetSim(JSON.parse(JSON.stringify(stored)));
+    expect(round).toEqual(live);
+    expect(round.changes![0].delta).toBe(-123456789012345678901234567890n);
+    expect(round.changes![2].unverified).toBe(true);
+  });
+
+  test('preserves a null changes set (degraded sim) and the revert signal', () => {
+    const reverted: AssetSimResult = { ok: false, revertReason: 'STF', engine: 'none', changes: null };
+    expect(deserializeAssetSim(serializeAssetSim(reverted))).toEqual(reverted);
+  });
+
+  test('a corrupt stored delta reads as 0n rather than throwing', () => {
+    const round = deserializeAssetSim({ ok: true, engine: 'rpc', changes: [{ kind: 'native', delta: 'not-a-number' }] });
+    expect(round.changes![0].delta).toBe(0n);
   });
 });

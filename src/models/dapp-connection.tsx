@@ -28,6 +28,7 @@ import { gateReadOnly, readOnlyKey } from '@/services/readonly-rpc-gate';
 import { PasskeyErrorCode } from '@/modules/passkey';
 import { saveTransaction, updateTransaction, loadTransactions } from '@/services/storage';
 import { buildSigningRecord } from '@/services/dapp-history';
+import { serializeAssetSim, type AssetSimResult } from '@/services/tx-simulation';
 import { waitForReceipt } from '@/services/safe-transaction';
 import {
   fetchBundlerAccountInfo,
@@ -46,6 +47,16 @@ import type { BLEIncomingRequest } from '@/models/types';
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY = 'vela.remoteInjectSession';
+
+/**
+ * Grace window before an automatic reconnect is surfaced in the UI. A relay blip
+ * — the dApp momentarily blurring/reloading, a `channel_not_found` while it
+ * re-establishes its own socket — usually self-heals within ~1s, so we keep the
+ * connection shown as active for this long and only flip to "Reconnecting…" if it
+ * hasn't recovered by then. Manual "Reconnect now" taps bypass this (the user
+ * pressed it and wants immediate feedback).
+ */
+const RECONNECT_GRACE_MS = 4000;
 
 export async function saveSession(session: RemoteInjectSession): Promise<void> {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(session));
@@ -187,6 +198,15 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   // `status` stays 'reconnecting' (a same-value setState wouldn't re-run the effect).
   const [reconnectNonce, setReconnectNonce] = useState(0);
 
+  // Holds the grace-window timer that debounces the "Reconnecting…" indicator, so
+  // a brief, self-healing reconnect never flickers the UI off "connected".
+  const reconnectGraceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearReconnectGrace = useCallback(() => {
+    if (reconnectGraceTimer.current) { clearTimeout(reconnectGraceTimer.current); reconnectGraceTimer.current = null; }
+  }, []);
+  // Don't let a pending grace timer fire setStatus after the provider unmounts.
+  useEffect(() => () => clearReconnectGrace(), [clearReconnectGrace]);
+
   // If an auto-reconnect drags on (relay down / session expired), surface a
   // manual-recovery prompt instead of spinning "Reconnecting…" forever.
   useEffect(() => {
@@ -199,7 +219,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const transportRef = useRef<DAppTransport | null>(null);
   /** Holds WalletPairTransport during fingerprint verification (before connect). */
   const pendingWpTransportRef = useRef<WalletPairTransport | null>(null);
-  const lastApproveOptsRef = useRef<{ maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[] } | undefined>(undefined);
+  const lastApproveOptsRef = useRef<{ maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null } | undefined>(undefined);
   const addressRef = useRef(address);
   const chainIdRef = useRef(chainId);
   const accountNameRef = useRef(accountName);
@@ -293,6 +313,9 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   // --- Wire transport events (shared by both transport types) ---
   const wireTransport = useCallback((transport: DAppTransport, type: ConnectionType) => {
     transport.on('connected', () => {
+      // Recovered (possibly within the grace window) — cancel any pending
+      // "Reconnecting…" flip so a self-healing blip never showed at all.
+      clearReconnectGrace();
       setStatus('connected');
       setConnectionType(type);
       transport.pushWalletInfo({
@@ -304,6 +327,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     });
 
     transport.on('disconnected', () => {
+      clearReconnectGrace();
       setStatus('disconnected');
       setConnectionType(null);
       setIncomingRequest(null);
@@ -311,9 +335,16 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     });
 
     transport.on('reconnecting', () => {
-      // Transient disconnect — SDK is auto-reconnecting.
-      // Keep transport ref and dApp info intact; just update the status indicator.
-      setStatus('reconnecting');
+      // Transient disconnect — SDK is auto-reconnecting. Keep transport ref and
+      // dApp info intact. Don't flip the indicator immediately: hold "connected"
+      // for the grace window so a sub-second blip self-heals invisibly, and only
+      // surface "Reconnecting…" if it hasn't recovered by then. Already-pending
+      // timer is left to run (don't extend the window on repeated blips).
+      if (reconnectGraceTimer.current) return;
+      reconnectGraceTimer.current = setTimeout(() => {
+        reconnectGraceTimer.current = null;
+        setStatus('reconnecting');
+      }, RECONNECT_GRACE_MS);
     });
 
     transport.on('request', handleIncoming);
@@ -323,17 +354,18 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     });
 
     transportRef.current = transport;
-  }, [handleIncoming]);
+  }, [handleIncoming, clearReconnectGrace]);
 
   // --- Disconnect any active transport ---
   const disconnectCurrent = useCallback(() => {
+    clearReconnectGrace();
     pendingWpTransportRef.current = null;
     setPendingFingerprint(null);
     if (transportRef.current) {
       transportRef.current.disconnect();
       transportRef.current = null;
     }
-  }, []);
+  }, [clearReconnectGrace]);
 
   // --- Connect (Remote Inject) ---
   const connectToBridge = useCallback(async (sess: RemoteInjectSession) => {
@@ -444,14 +476,15 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const reconnect = useCallback(() => {
     const transport = transportRef.current;
     if (!transport) return;
+    clearReconnectGrace(); // manual tap → show "Reconnecting…" now, don't wait out the grace
     setStatus('reconnecting');
     setReconnectStuck(false);
     setReconnectNonce((n) => n + 1); // re-arm the stuck timer even if status was already 'reconnecting'
     transport.reconnect?.().catch(() => { /* SDK keeps retrying; UI stays reconnecting */ });
-  }, []);
+  }, [clearReconnectGrace]);
 
   // --- Approve ---
-  const approveRequest = useCallback(async (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[] }) => {
+  const approveRequest = useCallback(async (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null }) => {
     const base = incomingRequest;
     const account = activeAccountRef.current;
     if (!base || !account) return;
@@ -459,6 +492,10 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     // The modal may hand us rewritten params (e.g. an approval capped to a finite
     // amount). Sign/submit/record THOSE, never the original unbounded request.
     const request = opts?.paramsOverride ? { ...base, params: opts.paramsOverride } : base;
+
+    // The "what moved" preview the sheet just showed — persisted (JSON-safe) on the
+    // record so the Connections-panel replay can render it without re-simulating.
+    const assetChanges = opts?.assetSim ? serializeAssetSim(opts.assetSim) : undefined;
 
     // Remember opts so a funding-driven retry resubmits the SAME (capped) request.
     lastApproveOptsRef.current = opts;
@@ -503,7 +540,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           const pending = buildSigningRecord({
             method: request.method, params: request.params, result: '',
             from: account.address, chainId: cid, dappOrigin: recordOrigin,
-            nowMs: Date.now(), status: 'pending', userOpHash: hash,
+            nowMs: Date.now(), status: 'pending', userOpHash: hash, assetChanges,
           });
           pendingRecordId = pending.id;
           pendingSave = saveTransaction(pending).catch(e => console.warn('[DAppConnection] Failed to save pending record:', e));
@@ -532,6 +569,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           chainId: cid,
           dappOrigin: recordOrigin,
           nowMs: Date.now(),
+          assetChanges,
         });
         await saveTransaction(record).catch(e => console.warn('[DAppConnection] Failed to save record:', e));
       }
