@@ -44,6 +44,8 @@
       "syncFailedHint": "Check your network, or configure a custom endpoint below.",
       "openSettings": "Open Settings",
       "retryUploadBtn": "Retry Upload",
+      "reportError": "Report this error",
+      "reportPrefill": "Wallet created, but syncing the public key to the server failed.",
       "statusSyncingKey": "Syncing public key...",
       "statusSettingUpIdentity": "Setting up secure identity...",
       "statusExtractingKey": "Extracting public key...",

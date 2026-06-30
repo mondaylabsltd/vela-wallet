@@ -44,6 +44,8 @@
       "syncFailedHint": "ネットワークを確認するか、下でカスタムエンドポイントを設定してください。",
       "openSettings": "設定を開く",
       "retryUploadBtn": "アップロードを再試行",
+      "reportError": "このエラーを報告",
+      "reportPrefill": "ウォレットは作成されましたが、公開鍵のサーバーへの同期に失敗しました。",
       "statusSyncingKey": "公開鍵を同期中...",
       "statusSettingUpIdentity": "安全な本人確認を設定中...",
       "statusExtractingKey": "公開鍵を抽出中...",

@@ -44,6 +44,8 @@
       "syncFailedHint": "Vérifiez votre réseau ou configurez un point d'accès personnalisé ci-dessous.",
       "openSettings": "Ouvrir les Réglages",
       "retryUploadBtn": "Réessayer l'envoi",
+      "reportError": "Signaler cette erreur",
+      "reportPrefill": "Portefeuille créé, mais la synchronisation de la clé publique avec le serveur a échoué.",
       "statusSyncingKey": "Synchronisation de la clé publique...",
       "statusSettingUpIdentity": "Configuration de l'identité sécurisée...",
       "statusExtractingKey": "Extraction de la clé publique...",

@@ -44,6 +44,8 @@
       "syncFailedHint": "Verifique sua conexão ou configure um endpoint personalizado abaixo.",
       "openSettings": "Abrir configurações",
       "retryUploadBtn": "Tentar enviar de novo",
+      "reportError": "Relatar este erro",
+      "reportPrefill": "A carteira foi criada, mas a sincronização da chave pública com o servidor falhou.",
       "statusSyncingKey": "Sincronizando chave pública...",
       "statusSettingUpIdentity": "Configurando identidade segura...",
       "statusExtractingKey": "Extraindo chave pública...",

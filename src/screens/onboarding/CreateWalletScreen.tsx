@@ -8,6 +8,8 @@ import { color, text, inter, space, radius, font, createStyles } from '@/constan
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { BugReportModal } from '@/components/ui/BugReportModal';
+import { useLanguagePreference } from '@/i18n/language';
 import { useWallet } from '@/models/wallet-state';
 import { saveAccount, savePendingUpload } from '@/services/storage';
 import { computeAddress } from '@/services/safe-address';
@@ -48,6 +50,8 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
   const [uploadError, setUploadError] = useState('');
   const [created, setCreated] = useState(false);
   const [addressCopied, setAddressCopied] = useState(false);
+  const [showBugReport, setShowBugReport] = useState(false);
+  const { resolved: language } = useLanguagePreference();
   const pendingRef = useRef<{
     account: StoredAccount;
     credentialId: string;
@@ -283,6 +287,9 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
                 <Text style={styles.settingsLinkText}>{t('onboarding.create.openSettings')}</Text>
               </Pressable>
             )}
+            <Pressable style={styles.reportLink} onPress={() => setShowBugReport(true)}>
+              <Text style={styles.reportLinkText}>{t('onboarding.create.reportError')}</Text>
+            </Pressable>
           </Animated.View>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -377,6 +384,14 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
           />
         ) : null}
       </View>
+
+      <BugReportModal
+        visible={showBugReport}
+        language={language}
+        area="onboarding-sync"
+        prefillWhat={t('onboarding.create.reportPrefill') + (uploadError ? `\n\n${uploadError}` : '')}
+        onClose={() => setShowBugReport(false)}
+      />
     </ScreenContainer>
   );
 }
@@ -542,6 +557,16 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     ...inter.semibold,
     color: color.accent.base,
+    textDecorationLine: 'underline',
+  },
+  reportLink: {
+    paddingVertical: space.sm,
+    paddingHorizontal: space.xl,
+  },
+  reportLinkText: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.fg.muted,
     textDecorationLine: 'underline',
   },
 

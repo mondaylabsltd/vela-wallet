@@ -44,6 +44,8 @@
       "syncFailedHint": "Ağınızı kontrol edin veya aşağıda özel bir uç nokta yapılandırın.",
       "openSettings": "Ayarları Aç",
       "retryUploadBtn": "Yüklemeyi Yeniden Dene",
+      "reportError": "Bu hatayı bildir",
+      "reportPrefill": "Cüzdan oluşturuldu ancak açık anahtarın sunucuyla eşitlenmesi başarısız oldu.",
       "statusSyncingKey": "Açık anahtar eşitleniyor...",
       "statusSettingUpIdentity": "Güvenli kimlik kuruluyor...",
       "statusExtractingKey": "Açık anahtar çıkarılıyor...",

@@ -44,6 +44,8 @@
       "syncFailedHint": "Kiểm tra kết nối mạng, hoặc cấu hình một điểm cuối tùy chỉnh bên dưới.",
       "openSettings": "Mở Cài đặt",
       "retryUploadBtn": "Thử tải lên lại",
+      "reportError": "Báo cáo lỗi này",
+      "reportPrefill": "Đã tạo ví, nhưng đồng bộ khóa công khai lên máy chủ đã thất bại.",
       "statusSyncingKey": "Đang đồng bộ khóa công khai...",
       "statusSettingUpIdentity": "Đang thiết lập danh tính bảo mật...",
       "statusExtractingKey": "Đang trích xuất khóa công khai...",

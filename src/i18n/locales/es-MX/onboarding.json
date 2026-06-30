@@ -44,6 +44,8 @@
       "syncFailedHint": "Revisa tu conexión o configura abajo un endpoint personalizado.",
       "openSettings": "Abrir Ajustes",
       "retryUploadBtn": "Reintentar subida",
+      "reportError": "Reportar este error",
+      "reportPrefill": "Se creó la billetera, pero falló la sincronización de la llave pública con el servidor.",
       "statusSyncingKey": "Sincronizando la llave pública...",
       "statusSettingUpIdentity": "Configurando una identidad segura...",
       "statusExtractingKey": "Extrayendo la llave pública...",

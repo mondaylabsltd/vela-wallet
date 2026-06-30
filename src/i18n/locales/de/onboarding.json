@@ -44,6 +44,8 @@
       "syncFailedHint": "Prüfen Sie Ihr Netzwerk oder konfigurieren Sie unten einen eigenen Endpunkt.",
       "openSettings": "Einstellungen öffnen",
       "retryUploadBtn": "Upload erneut versuchen",
+      "reportError": "Fehler melden",
+      "reportPrefill": "Wallet erstellt, aber die Synchronisierung des öffentlichen Schlüssels mit dem Server ist fehlgeschlagen.",
       "statusSyncingKey": "Öffentlicher Schlüssel wird synchronisiert ...",
       "statusSettingUpIdentity": "Sichere Identität wird eingerichtet ...",
       "statusExtractingKey": "Öffentlicher Schlüssel wird extrahiert ...",

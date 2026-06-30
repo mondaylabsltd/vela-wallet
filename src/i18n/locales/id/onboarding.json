@@ -44,6 +44,8 @@
       "syncFailedHint": "Periksa jaringan Anda, atau konfigurasikan endpoint kustom di bawah.",
       "openSettings": "Buka Pengaturan",
       "retryUploadBtn": "Coba Unggah Lagi",
+      "reportError": "Laporkan kesalahan ini",
+      "reportPrefill": "Dompet dibuat, tetapi sinkronisasi kunci publik ke server gagal.",
       "statusSyncingKey": "Menyinkronkan kunci publik...",
       "statusSettingUpIdentity": "Menyiapkan identitas aman...",
       "statusExtractingKey": "Mengekstrak kunci publik...",

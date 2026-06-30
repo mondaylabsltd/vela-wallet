@@ -8,7 +8,7 @@
  * never keys/seed/balances. On any backend failure it offers the prefilled
  * GitHub-URL fallback instead, and user input is never lost.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
@@ -21,10 +21,12 @@ import type { AppLanguage } from '@/i18n';
 import { buildReportPreview, submitBugReport, type BugReportResult } from '@/services/bug-report';
 import { buildBugReportURL } from '@/services/feedback';
 
-export function BugReportModal({ visible, language, area, onClose }: {
+export function BugReportModal({ visible, language, area, prefillWhat, onClose }: {
   visible: boolean;
   language: AppLanguage;
   area?: string;
+  /** Seed the description when opened from a specific failure (e.g. a sync error). */
+  prefillWhat?: string;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -33,6 +35,13 @@ export function BugReportModal({ visible, language, area, onClose }: {
   const [showPreview, setShowPreview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<BugReportResult | null>(null);
+
+  // When opened from a known failure, pre-fill the description so the user can
+  // send it as-is or add detail. Only seeds an empty field, so it never clobbers
+  // what they've typed; `close()` resets `what`, so each open re-seeds.
+  useEffect(() => {
+    if (visible && prefillWhat) setWhat((prev) => prev || prefillWhat);
+  }, [visible, prefillWhat]);
 
   const close = () => {
     setWhat(''); setSteps(''); setShowPreview(false); setSubmitting(false); setResult(null);

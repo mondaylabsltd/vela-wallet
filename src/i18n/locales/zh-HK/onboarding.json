@@ -44,6 +44,8 @@
       "syncFailedHint": "請檢查你的網絡，或於下方設定自訂端點。",
       "openSettings": "開啟設定",
       "retryUploadBtn": "重試上載",
+      "reportError": "回報錯誤",
+      "reportPrefill": "錢包已建立，但公鑰未能同步至伺服器。",
       "statusSyncingKey": "正在同步公鑰⋯",
       "statusSettingUpIdentity": "正在設定安全身份⋯",
       "statusExtractingKey": "正在擷取公鑰⋯",

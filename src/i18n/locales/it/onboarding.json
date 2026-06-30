@@ -44,6 +44,8 @@
       "syncFailedHint": "Controlla la tua connessione o configura un endpoint personalizzato qui sotto.",
       "openSettings": "Apri le impostazioni",
       "retryUploadBtn": "Riprova il caricamento",
+      "reportError": "Segnala questo errore",
+      "reportPrefill": "Wallet creato, ma la sincronizzazione della chiave pubblica con il server non è riuscita.",
       "statusSyncingKey": "Sincronizzazione della chiave pubblica…",
       "statusSettingUpIdentity": "Configurazione dell'identità sicura…",
       "statusExtractingKey": "Estrazione della chiave pubblica…",
