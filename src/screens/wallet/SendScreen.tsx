@@ -1209,8 +1209,8 @@ export default function SendScreen() {
                 </Text>
                 <Text style={styles.sweepSummaryUsd}>{formatUsd(sweepTokensList.reduce((s, tk) => s + tokenUsdValue(tk), 0))}</Text>
               </View>
-              {sweepTokensList.map((tk, i) => (
-                <View key={tokenId(tk)} style={[styles.sweepTokenRow, i > 0 && styles.sweepTokenRowBorder]}>
+              {sweepTokensList.map((tk) => (
+                <View key={tokenId(tk)} style={[styles.sweepTokenRow, styles.sweepTokenRowBorder]}>
                   <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={32} />
                   <View style={styles.sweepTokenInfo}>
                     <Text style={styles.sweepTokenSym}>{tk.symbol}</Text>
@@ -1978,14 +1978,14 @@ const styles = createStyles(() => ({
   },
   confirmRecipientLeft: { flex: 1, gap: 2 },
   confirmRecipientAmt: { alignItems: 'flex-end' },
-  // ② multi-token send (multi-select → one recipient)
-  multiCard: { marginBottom: space.lg, paddingVertical: space.sm },
+  // ② multi-token send (multi-select → one recipient). Card owns the horizontal
+  // padding (VelaCard has none); inner rows are flush so dividers align cleanly.
+  multiCard: { marginBottom: space.lg, paddingHorizontal: space.xl, paddingVertical: space.xs },
   sweepSummary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: space.sm,
-    paddingTop: space.sm,
+    paddingTop: space.md,
     paddingBottom: space.md,
   },
   sweepSummaryTitle: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted, flex: 1 },
@@ -1994,8 +1994,7 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.lg,
-    paddingVertical: space.md,
-    paddingHorizontal: space.sm,
+    paddingVertical: space.lg,
   },
   sweepTokenRowBorder: { borderTopWidth: 1, borderTopColor: color.border.base },
   sweepTokenInfo: { flex: 1, gap: 1 },
