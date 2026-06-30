@@ -13,15 +13,14 @@ import { DEFAULT_NETWORKS, getAllNetworks, getAllNetworksSync, refreshCustomNetw
 import type { CompatibilityResult, CustomNetwork, NetworkConfig, ServiceEndpoints, LocalePrefs } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS, isNativeToken, tokenChainId } from '@/models/types';
 import { numberFormatOptions, dateFormatOptions, timeFormatOptions, type FormatOption } from '@/services/locale-format';
-import { useDisplayCurrency } from '@/hooks/use-display-currency';
+import { AccountSwitcherModal } from '@/components/ui/AccountSwitcherModal';
 import { shortAddress, useWallet } from '@/models/wallet-state';
-import { getAccountBalances } from '@/services/balance-cache';
 import { clearBundlerCache } from '@/services/bundler-service';
 import { formatWeiToEth as formatEth } from '@/services/format-eth';
 import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { checkNetworkCompatibility } from '@/services/network-checker';
-import { hapticLight, hapticSuccess, openURL, showAlert } from '@/services/platform';
+import { hapticLight, openURL, showAlert } from '@/services/platform';
 import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { getBuiltinBundlerUrl, invalidateAllPools, poolRpcCall, refreshPool } from '@/services/rpc-pool';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from '@/services/tempo';
@@ -253,70 +252,7 @@ function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
 // Account Switcher Modal
 // ---------------------------------------------------------------------------
 
-function AccountSwitcherModal({ s, visible, onClose }: { s: S; visible: boolean; onClose: () => void }) {
-  const { t } = useTranslation();
-  const { state, dispatch } = useWallet();
-  const router = useRouter();
-  const dc = useDisplayCurrency();
-  const [cachedBalances, setCachedBalances] = useState<Map<string, number>>(new Map());
-
-  useEffect(() => {
-    if (!visible) return;
-    getAccountBalances(state.accounts.map(a => a.address)).then(setCachedBalances);
-  }, [visible, state.accounts]);
-
-  const allTotal = [...cachedBalances.values()].reduce((s, v) => s + v, 0);
-
-  return (
-    <AppModal visible={visible} onClose={onClose}>
-      <View style={s.modalContainer}>
-        <View style={s.modalHeader}>
-          <View>
-            <Text style={s.modalTitle}>{t('settingsModals.account.modalTitle')}</Text>
-            {cachedBalances.size > 0 && (
-              <Text style={s.accountTotalLabel}>{t('settingsModals.account.total', { amount: dc.fmt(allTotal) })}</Text>
-            )}
-          </View>
-          <Pressable onPress={onClose} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
-        </View>
-        <ScrollView style={s.modalScroll} contentContainerStyle={s.modalScrollContent}>
-          {state.accounts
-            .map((account, index) => ({ account, index }))
-            .sort((a, b) => {
-              const balA = cachedBalances.get(a.account.address) ?? -1;
-              const balB = cachedBalances.get(b.account.address) ?? -1;
-              if (balB !== balA) return balB - balA;
-              return a.account.name.localeCompare(b.account.name);
-            })
-            .map(({ account, index }) => {
-            const isActive = index === state.activeAccountIndex;
-            const bal = cachedBalances.get(account.address);
-            return (
-              <Pressable key={account.id} style={[s.accountItem, isActive && s.accountItemActive]}
-                onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); hapticSuccess(); onClose(); }}>
-                <View style={s.accountAvatar}>
-                  <Text style={s.accountAvatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text>
-                </View>
-                <View style={s.accountInfo}>
-                  <Text style={s.accountNameModal}>{account.name}</Text>
-                  <Text style={s.accountAddress}>{shortAddress(account.address)}</Text>
-                </View>
-                <View style={s.accountRight}>
-                  {bal != null && <Text style={s.accountBal}>{dc.fmt(bal)}</Text>}
-                  {isActive && <Check size={18} color={color.accent.base} />}
-                </View>
-              </Pressable>
-            );
-          })}
-          <View style={s.accountActions}>
-            <VelaButton title={t('settingsModals.account.createNew')} onPress={() => { onClose(); router.push('/onboarding'); }} />
-            <VelaButton title={t('settingsModals.account.signInExisting')} variant="secondary" onPress={() => { onClose(); router.push('/onboarding'); }} />
-          </View>
-        </ScrollView>
-      </View>
-    </AppModal>
-  );
-}
+// AccountSwitcherModal now lives in components/ui (shared with Home + Assets).
 
 // ---------------------------------------------------------------------------
 // Network Editor Modal (with custom networks)
@@ -1571,7 +1507,13 @@ export default function SettingsScreen() {
 
       <LanguagePickerModal s={styles} visible={showLanguagePicker} preference={langPref}
         systemLanguage={systemLanguage} onSelect={setLangPref} onClose={() => setShowLanguagePicker(false)} />
-      <AccountSwitcherModal s={styles} visible={showAccountSwitcher} onClose={() => setShowAccountSwitcher(false)} />
+      <AccountSwitcherModal
+        visible={showAccountSwitcher}
+        onClose={() => setShowAccountSwitcher(false)}
+        title={t('settingsModals.account.modalTitle')}
+        formatSubtitle={(amount) => t('settingsModals.account.total', { amount })}
+        showCreateActions
+      />
       <ContactsManager visible={showContacts} onClose={() => setShowContacts(false)} />
       <BugReportModal visible={showBugReport} language={langResolved} onClose={() => setShowBugReport(false)} />
       <NetworkEditorModal s={styles} visible={showNetworkEditor} onClose={() => setShowNetworkEditor(false)} />

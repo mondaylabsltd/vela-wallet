@@ -3,6 +3,7 @@ import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { TokenRow } from '@/components/ui/TokenRow';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { AppModal } from '@/components/ui/AppModal';
+import { AccountSwitcherModal } from '@/components/ui/AccountSwitcherModal';
 import { AmountText } from '@/components/ui/AmountText';
 import { RpcTroubleBanner } from '@/components/ui/RpcTroubleBanner';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
@@ -13,10 +14,10 @@ import { useTranslation } from 'react-i18next';
 import { chainName } from '@/models/network';
 import { shortAddr, isAddress, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
-import { useWallet, shortAddress } from '@/models/wallet-state';
+import { useWallet } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
 import { setAccountBalance, getAccountBalance, getAccountBalances } from '@/services/balance-cache';
-import { showAlert, hapticSuccess, isAppActive } from '@/services/platform';
+import { showAlert, isAppActive } from '@/services/platform';
 import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { QRScanner } from '@/components/QRScanner';
 import { useDAppConnection } from '@/models/dapp-connection';
@@ -24,7 +25,7 @@ import { isWalletPairURI } from '@/services/walletpair-transport';
 import { parseRemoteInjectURL } from '@/services/dapp-transport';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { ArrowDown, ArrowUp, Check, Clock, Plus, Search, X, RefreshCw, ScanLine, AlertTriangle } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, Clock, Plus, Search, X, RefreshCw, ScanLine, AlertTriangle } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated, {
@@ -66,7 +67,7 @@ export default function AssetsScreen() {
   const router = useRouter();
   const { t } = useTranslation();
   useLocalePrefs(); // re-render when the number format changes
-  const { activeAccount, state, dispatch } = useWallet();
+  const { activeAccount, state } = useWallet();
   const { connectToWalletPair, connectToBridge } = useDAppConnection();
   const dc = useDisplayCurrency();
 
@@ -406,62 +407,14 @@ export default function AssetsScreen() {
         )}
       </VelaRefresh>
 
-      {/* Account Switcher */}
-      <AppModal visible={showAccountSwitcher} onClose={() => setShowAccountSwitcher(false)}>
-        <View style={styles.switcherContainer}>
-          <View style={styles.switcherHeader}>
-            <View>
-              <Text style={styles.switcherTitle}>{t('assets.switcherTitle')}</Text>
-              {cachedBalances.size > 0 && (
-                <Text style={styles.switcherTotal}>
-                  {t('assets.switcherTotal', { amount: dc.fmt([...cachedBalances.values()].reduce((s, v) => s + v, 0)) })}
-                </Text>
-              )}
-            </View>
-            <Pressable onPress={() => setShowAccountSwitcher(false)} hitSlop={8}>
-              <X size={22} color={color.fg.base} strokeWidth={2} />
-            </Pressable>
-          </View>
-          <ScrollView style={styles.switcherScroll} contentContainerStyle={styles.switcherScrollContent}>
-            {state.accounts
-              .map((account, index) => ({ account, index }))
-              .sort((a, b) => {
-                const balA = cachedBalances.get(a.account.address) ?? -1;
-                const balB = cachedBalances.get(b.account.address) ?? -1;
-                if (balB !== balA) return balB - balA;
-                return a.account.name.localeCompare(b.account.name);
-              })
-              .map(({ account, index }) => {
-              const isActive = index === state.activeAccountIndex;
-              const bal = cachedBalances.get(account.address);
-              return (
-                <Pressable
-                  key={account.id}
-                  style={[styles.switcherItem, isActive && styles.switcherItemActive]}
-                  onPress={() => {
-                    dispatch({ type: 'SWITCH_ACCOUNT', index });
-                    hapticSuccess();
-                    setShowAccountSwitcher(false);
-                  }}
-                >
-                  <View style={styles.switcherAvatar}>
-                    <Text style={styles.switcherAvatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text>
-                  </View>
-                  <View style={styles.switcherInfo}>
-                    <Text style={styles.switcherName}>{account.name}</Text>
-                    <Text style={styles.switcherAddr}>{shortAddress(account.address)}</Text>
-                  </View>
-                  <View style={styles.switcherRight}>
-                    {bal != null && <Text style={styles.switcherBal}>{dc.fmt(bal)}</Text>}
-                    {isActive && <Check size={18} color={color.accent.base} />}
-                  </View>
-                </Pressable>
-              );
-            })}
-            <View style={styles.switcherEndLine} />
-          </ScrollView>
-        </View>
-      </AppModal>
+      {/* Account switcher (shared component) */}
+      <AccountSwitcherModal
+        visible={showAccountSwitcher}
+        onClose={() => setShowAccountSwitcher(false)}
+        title={t('assets.switcherTitle')}
+        formatSubtitle={(amount) => t('assets.switcherTotal', { amount })}
+        balances={cachedBalances}
+      />
 
       {showScanner && (
         <QRScanner

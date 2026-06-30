@@ -1,0 +1,152 @@
+/**
+ * AccountSwitcherModal — the multi-account picker that was built three times,
+ * near-identically, in Home, Assets and Settings (avatar + balance-sorted list +
+ * SWITCH_ACCOUNT dispatch + header total). This is the one copy.
+ *
+ * Balance sourcing is flexible so a screen that already holds a cached-balance map
+ * doesn't pay for a second fetch:
+ *   - pass `balances` (+ optional `loading`) to render from the screen's own state, or
+ *   - omit it and the modal loads balances itself when it becomes visible.
+ *
+ * The header subtitle stays at the call site (each screen has its own i18n copy):
+ *   formatSubtitle={(amount) => t('assets.switcherTotal', { amount })}
+ */
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { useRouter } from 'expo-router';
+import { Check, X } from 'lucide-react-native';
+
+import { AppModal } from '@/components/ui/AppModal';
+import { VelaButton } from '@/components/ui/VelaButton';
+import { shortAddress, useWallet } from '@/models/wallet-state';
+import { useDisplayCurrency } from '@/hooks/use-display-currency';
+import { getAccountBalances } from '@/services/balance-cache';
+import { sortAccountsByBalance, totalAccountBalance } from '@/services/accounts';
+import { hapticSuccess } from '@/services/platform';
+import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
+
+type Props = {
+  visible: boolean;
+  onClose: () => void;
+  /** Header title — each screen passes its own i18n string. */
+  title: string;
+  /**
+   * Render the header subtitle from the formatted total + account count, e.g.
+   * `(amount) => t('assets.switcherTotal', { amount })`. Omit for no subtitle.
+   */
+  formatSubtitle?: (amount: string, count: number) => string;
+  /**
+   * Cached USD balances by address. Pass the screen's own map to avoid a second
+   * fetch; omit and the modal loads them itself once visible.
+   */
+  balances?: Map<string, number>;
+  /** Parent's loading flag — only meaningful when `balances` is supplied. */
+  loading?: boolean;
+  /** Show the "create / sign in" actions (Settings only). */
+  showCreateActions?: boolean;
+};
+
+export function AccountSwitcherModal({
+  visible, onClose, title, formatSubtitle, balances, loading, showCreateActions,
+}: Props) {
+  const { t } = useTranslation();
+  const { state, dispatch } = useWallet();
+  const router = useRouter();
+  const dc = useDisplayCurrency();
+
+  // Self-load balances only when the parent doesn't supply them.
+  const selfLoad = balances === undefined;
+  const [loaded, setLoaded] = useState<Map<string, number>>(new Map());
+  const [selfLoading, setSelfLoading] = useState(false);
+  useEffect(() => {
+    if (!selfLoad || !visible) return;
+    setSelfLoading(true);
+    getAccountBalances(state.accounts.map((a) => a.address))
+      .then(setLoaded)
+      .finally(() => setSelfLoading(false));
+  }, [selfLoad, visible, state.accounts]);
+
+  const bals = balances ?? loaded;
+  const isLoading = balances ? !!loading : selfLoading;
+  const ordered = sortAccountsByBalance(state.accounts, bals);
+
+  return (
+    <AppModal visible={visible} onClose={onClose}>
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.headerInfo}>
+            <Text style={styles.title}>{title}</Text>
+            {bals.size > 0 && formatSubtitle && (
+              <Text style={styles.subtitle}>{formatSubtitle(dc.fmt(totalAccountBalance(bals)), state.accounts.length)}</Text>
+            )}
+          </View>
+          {isLoading && <ActivityIndicator size="small" color={color.fg.subtle} style={styles.spinner} />}
+          <Pressable onPress={onClose} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.list}>
+          {ordered.map(({ account, index }) => {
+            const isActive = index === state.activeAccountIndex;
+            const bal = bals.get(account.address);
+            return (
+              <Pressable
+                key={account.id}
+                style={[styles.item, isActive && styles.itemActive]}
+                onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); hapticSuccess(); onClose(); }}
+              >
+                <View style={styles.avatar}><Text style={styles.avatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text></View>
+                <View style={styles.info}>
+                  <Text style={styles.name} numberOfLines={1}>{account.name}</Text>
+                  <Text style={styles.addr}>{shortAddress(account.address)}</Text>
+                </View>
+                <View style={styles.right}>
+                  {bal != null
+                    ? <Text style={styles.bal}>{dc.fmt(bal)}</Text>
+                    : isLoading ? <ActivityIndicator size="small" color={color.fg.subtle} /> : null}
+                  {isActive && <Check size={18} color={color.accent.base} />}
+                </View>
+              </Pressable>
+            );
+          })}
+
+          {showCreateActions && (
+            <View style={styles.actions}>
+              <VelaButton title={t('settingsModals.account.createNew')} onPress={() => { onClose(); router.push('/onboarding'); }} />
+              <VelaButton title={t('settingsModals.account.signInExisting')} variant="secondary" onPress={() => { onClose(); router.push('/onboarding'); }} />
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    </AppModal>
+  );
+}
+
+const styles = createStyles(() => ({
+  container: { flex: 1, backgroundColor: color.bg.base },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: space.md, paddingHorizontal: space.xl, paddingVertical: space.lg,
+  },
+  headerInfo: { flex: 1, gap: space.xs },
+  title: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
+  subtitle: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
+  spinner: { marginRight: space.sm },
+  list: { paddingHorizontal: space.lg, paddingBottom: space['2xl'], gap: space.sm },
+  item: {
+    flexDirection: 'row', alignItems: 'center', gap: space.md,
+    padding: space.md, borderRadius: radius.lg,
+  },
+  itemActive: { backgroundColor: color.accent.soft },
+  avatar: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: color.accent.soft,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarText: { fontSize: text.base, ...inter.bold, color: color.accent.base },
+  info: { flex: 1, gap: space.xs },
+  name: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
+  addr: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, fontFamily: font.mono },
+  right: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  bal: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted },
+  actions: { gap: space.sm, paddingTop: space.lg, paddingHorizontal: space.sm },
+}));

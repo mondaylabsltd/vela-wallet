@@ -15,12 +15,12 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import {
-  ArrowRight, Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, RefreshCw, Settings, Trash2, X,
+  ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, RefreshCw, Settings, Trash2, X,
 } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming,
 } from 'react-native-reanimated';
@@ -32,6 +32,7 @@ import { ActivityRow } from '@/components/ui/ActivityRow';
 import { ConnectionEventDetailSheet } from '@/components/ui/ConnectionEventDetailSheet';
 import { AmountText } from '@/components/ui/AmountText';
 import { AppModal } from '@/components/ui/AppModal';
+import { AccountSwitcherModal } from '@/components/ui/AccountSwitcherModal';
 import { CurrencySheet } from '@/components/ui/CurrencySheet';
 import { NetworkFilterButton, NetworkFilterSheet } from '@/components/ui/NetworkFilterSheet';
 import { TransactionDetailSheet } from '@/components/ui/TransactionDetailSheet';
@@ -100,7 +101,7 @@ type Tab = 'activity' | 'connections';
 export default function HomeScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { activeAccount, state, dispatch } = useWallet();
+  const { activeAccount, state } = useWallet();
   const conn = useDAppConnection();
   const { connectToWalletPair, connectToBridge } = conn;
   // Same multi-select as the Send picker (shared hook) — filter a network in the
@@ -398,10 +399,6 @@ export default function HomeScreen() {
 
   // --- account switcher ---
   // Sum of all accounts' balances (USD), for the switcher header total.
-  const totalAllUsd = useMemo(
-    () => state.accounts.reduce((s, a) => s + (cachedBalances.get(a.address) ?? 0), 0),
-    [state.accounts, cachedBalances],
-  );
 
   // Query every account's balance (not just the active one) and update the rows
   // + total live. fetchTokens is cached (5 min) so reopening won't spam RPCs.
@@ -795,52 +792,15 @@ export default function HomeScreen() {
         onClose={() => setEventTx(null)}
       />
 
-      {/* Account switcher */}
-      <AppModal visible={showSwitcher} onClose={() => setShowSwitcher(false)}>
-        <View style={styles.switcher}>
-          <View style={styles.switcherHead}>
-            <View style={styles.switcherHeadInfo}>
-              <Text style={styles.switcherTitle}>{t('home.switchAccountTitle')}</Text>
-              <View style={styles.switcherTotalRow}>
-                <Text style={styles.switcherTotalLabel}>
-                  {t('home.switcherAccountCount', { count: state.accounts.length })}
-                </Text>
-                <Text style={styles.switcherTotalValue}>{formatFiat(totalAllUsd * rate, currencyCode, currency.symbol)}</Text>
-                {switcherLoading && <ActivityIndicator size="small" color={color.fg.subtle} style={styles.switcherSpinner} />}
-              </View>
-            </View>
-            <Pressable onPress={() => setShowSwitcher(false)} hitSlop={8}><X size={22} color={color.fg.base} strokeWidth={2} /></Pressable>
-          </View>
-          <ScrollView contentContainerStyle={styles.switcherList}>
-            {state.accounts
-              .map((account, index) => ({ account, index }))
-              .sort((a, b) => (cachedBalances.get(b.account.address) ?? -1) - (cachedBalances.get(a.account.address) ?? -1))
-              .map(({ account, index }) => {
-                const isActive = index === state.activeAccountIndex;
-                const bal = cachedBalances.get(account.address);
-                return (
-                  <Pressable
-                    key={account.id}
-                    style={[styles.switcherItem, isActive && styles.switcherItemActive]}
-                    onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); hapticSuccess(); setShowSwitcher(false); }}
-                  >
-                    <View style={styles.switcherAvatar}><Text style={styles.switcherAvatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text></View>
-                    <View style={styles.switcherInfo}>
-                      <Text style={styles.switcherName} numberOfLines={1}>{account.name}</Text>
-                      <Text style={styles.switcherAddr}>{shortAddress(account.address)}</Text>
-                    </View>
-                    <View style={styles.switcherRight}>
-                      {bal != null
-                        ? <Text style={styles.switcherBal}>{formatFiat(bal * rate, currencyCode, currency.symbol)}</Text>
-                        : switcherLoading ? <ActivityIndicator size="small" color={color.fg.subtle} /> : null}
-                      {isActive && <Check size={18} color={color.accent.base} />}
-                    </View>
-                  </Pressable>
-                );
-              })}
-          </ScrollView>
-        </View>
-      </AppModal>
+      {/* Account switcher (shared component) */}
+      <AccountSwitcherModal
+        visible={showSwitcher}
+        onClose={() => setShowSwitcher(false)}
+        title={t('home.switchAccountTitle')}
+        formatSubtitle={(amount, count) => `${t('home.switcherAccountCount', { count })} · ${amount}`}
+        balances={cachedBalances}
+        loading={switcherLoading}
+      />
 
       {showScanner && (
         <QRScanner visible={showScanner} onScan={onScan} onClose={() => setShowScanner(false)} />
