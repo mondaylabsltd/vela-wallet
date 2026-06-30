@@ -8,6 +8,9 @@
 
 let pendingRequest = null;
 
+// Toolbar icon → open the settings (configure the target rp domain).
+chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // From content script → open popup to perform WebAuthn
   if (msg.type === 'VELA_WEBAUTHN_REQUEST') {

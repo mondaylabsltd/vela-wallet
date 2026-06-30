@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 40px 48px 56px;
+      background: #0b0b12; color: #e8edf2;
+      font-family: -apple-system, system-ui, sans-serif;
+    }
+    h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+    .sub { font-size: 13px; color: #8a99ad; margin: 0 0 36px; }
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; max-width: 1180px; }
+    .card {
+      background: #11121c; border: 1px solid #1f2233; border-radius: 16px;
+      padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 14px;
+    }
+    .big { width: 132px; height: 132px; border-radius: 30px; }
+    .sizes { display: flex; align-items: flex-end; gap: 16px; height: 40px; }
+    .sizes img { image-rendering: -webkit-optimize-contrast; }
+    .name { font-size: 15px; font-weight: 600; margin-top: 4px; }
+    .name b { color: #00d2ff; }
+    .why { font-size: 12px; color: #8a99ad; text-align: center; line-height: 1.5; min-height: 32px; }
+    .tag { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #5a6678; }
+  </style>
+</head>
+<body>
+  <h1>Vela WebAuthn Dev Proxy — logo options</h1>
+  <p class="sub">Navy #1a1a2e · cyan #00d2ff · top row = the icon at 132px, strip below = actual 32px &amp; 16px (toolbar size)</p>
+  <div class="grid">
+    <div class="card">
+      <img class="big" src="variants/v1-keyhole.svg">
+      <div class="sizes"><img src="variants/v1-keyhole.svg" width="32" height="32"><img src="variants/v1-keyhole.svg" width="16" height="16"></div>
+      <div class="name">1 · <b>Keyhole</b></div>
+      <div class="why">Cleanest, most legible mark. Pure “passkey/security”. Safest at 16px.</div>
+    </div>
+    <div class="card">
+      <img class="big" src="variants/v2-passkey.svg">
+      <div class="sizes"><img src="variants/v2-passkey.svg" width="32" height="32"><img src="variants/v2-passkey.svg" width="16" height="16"></div>
+      <div class="name">2 · <b>Passkey</b></div>
+      <div class="why">A literal key. Friendly, instantly “credentials”, but busier when tiny.</div>
+    </div>
+    <div class="card">
+      <img class="big" src="variants/v3-proxy.svg">
+      <div class="sizes"><img src="variants/v3-proxy.svg" width="32" height="32"><img src="variants/v3-proxy.svg" width="16" height="16"></div>
+      <div class="name">3 · <b>Proxy</b></div>
+      <div class="why">Chevrons route inward to the keyhole — the “proxy/relay” story, on-message.</div>
+    </div>
+    <div class="card">
+      <img class="big" src="variants/v4-vmark.svg">
+      <div class="sizes"><img src="variants/v4-vmark.svg" width="32" height="32"><img src="variants/v4-vmark.svg" width="16" height="16"></div>
+      <div class="name">4 · <b>V-mark</b></div>
+      <div class="why">Vela “V” cradling a keyhole. Brand-forward; ties the tool to the wallet.</div>
+    </div>
+    <div class="card">
+      <img class="big" src="variants/v5-bridge.svg">
+      <div class="sizes"><img src="variants/v5-bridge.svg" width="32" height="32"><img src="variants/v5-bridge.svg" width="16" height="16"></div>
+      <div class="name">5 · <b>Bridge</b></div>
+      <div class="why">Arc links two endpoints (dev ↔ prod) with a key at the apex. Concept-rich.</div>
+    </div>
+    <div class="card">
+      <img class="big" src="variants/v6-shield.svg">
+      <div class="sizes"><img src="variants/v6-shield.svg" width="32" height="32"><img src="variants/v6-shield.svg" width="16" height="16"></div>
+      <div class="name">6 · <b>Shield</b></div>
+      <div class="why">Shield + keyhole. Strong “secure”, but the most generic of the set.</div>
+    </div>
+  </div>
+</body>
+</html>
