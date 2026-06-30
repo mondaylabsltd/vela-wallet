@@ -493,6 +493,11 @@ function buildBestEffortFields(decoded: Record<string, DecodedValue>, params: Ab
       value: formatGenericValue(raw, p.type),
       format: 'raw',
       role: 'generic',
+      // Best-effort raw params are unverified guesses at meaning and aren't
+      // scaled to a real value — keep them out of the headline body (where they
+      // compete with the trustworthy simulated balance changes) and tuck them
+      // under "Advanced — view raw data" for anyone who wants to inspect.
+      detail: true,
     });
   });
   return fields;
@@ -500,7 +505,10 @@ function buildBestEffortFields(decoded: Record<string, DecodedValue>, params: Ab
 
 function prettyType(type: string): string {
   if (/^address/.test(type)) return type.endsWith('[]') ? 'Addresses' : 'Address';
-  if (/^uint|^int/.test(type)) return 'Amount';
+  // A bare, unnamed integer in a best-effort decode is NOT necessarily a token
+  // amount (could be a deadline, min-out, index, gas, raw value) and we can't
+  // scale it without decimals — so call it the neutral "Value", never "Amount".
+  if (/^uint|^int/.test(type)) return 'Value';
   if (type === 'bool') return 'Flag';
   if (type === 'bytes' || /^bytes/.test(type)) return 'Data';
   if (type === 'string') return 'Text';

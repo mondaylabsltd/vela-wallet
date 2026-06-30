@@ -116,7 +116,7 @@ export interface SigningSheetProps {
   isSigning: boolean;
   signError: string | null;
   pendingOpHash: string | null;
-  onApprove: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[] }) => void;
+  onApprove: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null }) => void;
   onReject: () => void;
   onDismiss: () => void;
   /**
@@ -126,6 +126,12 @@ export interface SigningSheetProps {
    * in-flight op's status after the sheet was closed). Defaults to false.
    */
   readOnly?: boolean;
+  /**
+   * Persisted sign-time simulation for a read-only replay — the "what moved"
+   * preview captured when the request was approved. Live mode recomputes its own
+   * `sim`; replay can't (state has moved on), so the host passes the stored one.
+   */
+  replaySim?: AssetSimResult | null;
 }
 
 export function SigningSheet({
@@ -140,6 +146,7 @@ export function SigningSheet({
   onReject,
   onDismiss,
   readOnly = false,
+  replaySim = null,
 }: SigningSheetProps) {
   const { t } = useTranslation();
 
@@ -179,6 +186,13 @@ export function SigningSheet({
   // EIP-5792 batch (wallet_sendCalls): each leg resolved + approval-checked, so the
   // user sees a per-call breakdown instead of blind-signing the whole bundle.
   const [batch, setBatch] = useState<BatchItem[] | null>(null);
+  // Per-leg spending-cap choices keyed by leg index — the same never-unlimited
+  // editor single approvals use, applied to each approval leg of the batch.
+  const [batchChoices, setBatchChoices] = useState<Record<number, ApprovalChoice | null>>({});
+  // On-chain symbol/decimals for every token approved across the batch (one
+  // Multicall3 read), keyed by lowercased address, so each leg's editor shows
+  // real amounts.
+  const [batchMeta, setBatchMeta] = useState<Map<string, { symbol: string; decimals: number; verified: boolean }>>(new Map());
 
   // Resolve the approved token's symbol/decimals (on-chain via Multicall3, cached).
   useEffect(() => {
@@ -276,6 +290,7 @@ export function SigningSheet({
     if (!Array.isArray(calls) || calls.length === 0) { setBatch(null); return; }
     let cancelled = false;
     setResolving(true);
+    setBatchChoices({}); // fresh request → no carried-over caps
     Promise.all(calls.map(async (c: any): Promise<BatchItem> => {
       const cs = await resolveTransaction(c.to, c.data, c.value, chainId).catch(() => null);
       const approval = detectApproval('eth_sendTransaction', [{ to: c.to, data: c.data, value: c.value }]);
@@ -297,6 +312,31 @@ export function SigningSheet({
     }
     return () => { cancelled = true; };
   }, [incomingRequest, chainId, activeAccount?.address, readOnly]);
+
+  // Resolve symbol/decimals for every token approved across the batch's legs, so
+  // each leg's spending-cap editor can show and parse real token amounts.
+  useEffect(() => {
+    if (!batch) { setBatchMeta(new Map()); return; }
+    const tokens = Array.from(new Set(
+      batch.map((it) => it.approval?.tokenAddress?.toLowerCase()).filter(Boolean) as string[],
+    ));
+    if (tokens.length === 0) { setBatchMeta(new Map()); return; }
+    let cancelled = false;
+    resolveTokenMetadata(chainId, tokens)
+      .then((map) => {
+        if (cancelled) return;
+        const out = new Map<string, { symbol: string; decimals: number; verified: boolean }>();
+        for (const tk of tokens) {
+          const m = map.get(tk);
+          out.set(tk, m
+            ? { symbol: m.symbol, decimals: m.decimals, verified: true }
+            : { symbol: `${tk.slice(0, 6)}…`, decimals: 18, verified: false });
+        }
+        setBatchMeta(out);
+      })
+      .catch(() => { if (!cancelled) setBatchMeta(new Map()); });
+    return () => { cancelled = true; };
+  }, [batch, chainId]);
 
   if (!incomingRequest) return null;
 
@@ -344,9 +384,19 @@ export function SigningSheet({
     if (clearSign) {
       return <ClearSignView cs={clearSign} />;
     }
-    // EIP-5792 batch — list each call instead of blind-signing the bundle.
+    // EIP-5792 batch — list each call, with an editable spending cap on every
+    // approval leg (so an unlimited approve can be capped instead of only rejected).
     if (isBatch && batch) {
-      return <BatchCallsView items={batch} />;
+      return (
+        <BatchCallsView
+          items={batch}
+          choices={batchChoices}
+          onChoiceChange={(i, c) => setBatchChoices((prev) => ({ ...prev, [i]: c }))}
+          metaByToken={batchMeta}
+          editable={!readOnly}
+          requestId={incomingRequest.id}
+        />
+      );
     }
     // eth_sign signs an OPAQUE 32-byte hash — the classic blind-sign trap. It gets
     // its own hard-warning surface, never the calm personal_sign message view.
@@ -401,8 +451,10 @@ export function SigningSheet({
   // slip through the gate even though the submit guard rejects them.
   const isGrantingApproval = (a: DetectedApproval | null | undefined) =>
     !!a?.isUnbounded && !a.isReducing && !a.isBooleanGrant;
+  // A batch leg counts as danger only while it STILL grants broad access — once
+  // the user caps/revokes it, the hold (and the unlimited banner) drop away.
   const batchHasDanger =
-    isBatch && (batch?.some((it) => isGrantingApproval(it.approval) || it.clearSign?.risk === 'danger') ?? false);
+    isBatch && (batch?.some((it, i) => legGrantsBroad(it.approval, batchChoices[i]) || it.clearSign?.risk === 'danger') ?? false);
   const requiresHold =
     isEthSign ||
     clearSign?.risk === 'danger' ||
@@ -418,19 +470,44 @@ export function SigningSheet({
     if (approval?.editable && approveChoice) {
       try { paramsOverride = rewriteApprovalParams(method, params, approval, approveChoice); }
       catch { paramsOverride = undefined; }
+    } else if (isBatch && batch && Array.isArray(params?.[0]?.calls)) {
+      // Re-encode each approval leg the user capped/revoked, rebuilding the calls
+      // array. The per-leg submit guard re-checks each call, so an un-rewritten
+      // unbounded leg still fails closed.
+      const calls = params[0].calls;
+      let changed = false;
+      const newCalls = calls.map((c: any, i: number) => {
+        const ap = batch[i]?.approval;
+        const choice = batchChoices[i];
+        if (ap?.editable && choice) {
+          try {
+            const [rw] = rewriteApprovalParams('eth_sendTransaction', [{ to: c.to, data: c.data, value: c.value }], ap, choice);
+            changed = true;
+            return { ...c, data: rw.data };
+          } catch { return c; }
+        }
+        return c;
+      });
+      if (changed) paramsOverride = [{ ...params[0], calls: newCalls }, ...params.slice(1)];
     }
     onApprove({
       maxFeePerGas: feeEstimate?.maxFeePerGas,
       // Raw bundler cost (tier markup removed) drives the funding pre-check.
       bundlerCostWei: feeEstimate ? rawBundlerGasCost(feeEstimate) : undefined,
       paramsOverride,
+      // The "what moved" preview the user just saw — persisted with the record so
+      // the Connections-panel replay can show it without re-simulating stale state.
+      assetSim: sim,
     });
   };
 
   const confirmDisabled =
     resolving
     || (isTx && (estimatingGas || gasEstimateFailed))
-    || (!!approval?.editable && !approveChoice);
+    || (!!approval?.editable && !approveChoice)
+    // Every granting batch leg must be capped/revoked (or its grant deliberately
+    // chosen) before the bundle can be confirmed — mirrors the single-tx rule.
+    || (isBatch && (batch?.some((it, i) => legNeedsChoice(it.approval, batchChoices[i])) ?? false));
 
   return (
       <SigningChainContext.Provider value={chainId}>
@@ -1175,9 +1252,46 @@ function batchSummary(it: BatchItem): string | undefined {
   return f?.value;
 }
 
-function BatchCallsView({ items }: { items: BatchItem[] }) {
+/**
+ * Does this batch approval leg still need a deliberate decision before the bundle
+ * can be confirmed? (Unbounded amount not yet capped/revoked, or a grant-all with
+ * no choice.) Finite amounts are pre-accepted — editing them is optional.
+ */
+function legNeedsChoice(ap: DetectedApproval | null, choice: ApprovalChoice | null | undefined): boolean {
+  if (!ap || !ap.editable || ap.isReducing) return false;
+  if (ap.isBooleanGrant) return !choice;
+  if (ap.isUnbounded) return !(choice && (choice.type === 'amount' || choice.type === 'revoke'));
+  return false;
+}
+
+/** After the user's choice, does this leg still grant broad/unbounded access? */
+function legGrantsBroad(ap: DetectedApproval | null, choice: ApprovalChoice | null | undefined): boolean {
+  if (!ap || ap.isReducing) return false;
+  if (ap.isBooleanGrant) return choice?.type === 'grant' || !choice;
+  if (ap.isUnbounded) return !(choice && (choice.type === 'amount' || choice.type === 'revoke'));
+  return false;
+}
+
+/** Is this leg an editable, amount/grant-bearing approval that gets the inline cap editor? */
+function legIsEditableApproval(ap: DetectedApproval | null): boolean {
+  return !!ap && ap.editable && !ap.isReducing;
+}
+
+function BatchCallsView({ items, choices, onChoiceChange, metaByToken, editable, requestId }: {
+  items: BatchItem[];
+  choices: Record<number, ApprovalChoice | null>;
+  onChoiceChange: (index: number, choice: ApprovalChoice | null) => void;
+  metaByToken: Map<string, { symbol: string; decimals: number; verified: boolean }>;
+  editable: boolean;
+  /** Remounts each leg's editor when the request changes (no stale cap state). */
+  requestId: string;
+}) {
   const { t } = useTranslation();
-  const anyUnlimited = items.some((it) => it.approval?.isUnbounded && !it.approval.isReducing && !it.approval.isBooleanGrant);
+  const chainId = React.useContext(SigningChainContext);
+  // Banner reflects the EFFECTIVE state: only still-uncapped grants are flagged.
+  const anyUncapped = editable
+    ? items.some((it, i) => legGrantsBroad(it.approval, choices[i]))
+    : items.some((it) => it.approval?.isUnbounded && !it.approval.isReducing && !it.approval.isBooleanGrant);
 
   return (
     <View>
@@ -1185,12 +1299,42 @@ function BatchCallsView({ items }: { items: BatchItem[] }) {
       <Text style={styles.batchSub}>{t('componentsUi.signing.batchSubtitle', { count: items.length })}</Text>
 
       {items.map((it, i) => {
-        const unlimited = !!it.approval?.isUnbounded && !it.approval.isReducing && !it.approval.isBooleanGrant;
+        const ap = it.approval;
         const title = it.clearSign?.intent
-          ?? (it.approval ? t('componentsUi.signingApprove.verbApprove') : t('componentsUi.signing.batchCall'));
+          ?? (ap ? t('componentsUi.signingApprove.verbApprove') : t('componentsUi.signing.batchCall'));
+
+        // Editable approval leg → inline spending-cap editor (same control single
+        // approvals use), so an unlimited approve can be capped here, not only rejected.
+        if (editable && legIsEditableApproval(ap) && ap) {
+          const meta = ap.tokenAddress ? metaByToken.get(ap.tokenAddress.toLowerCase()) : undefined;
+          const logoUrls = ap.tokenAddress ? tokenLogoURLsByAddress(chainId, ap.tokenAddress) : undefined;
+          return (
+            <View key={`${requestId}-${i}`} style={styles.batchEditLeg}>
+              <View style={styles.batchEditHead}>
+                <View style={styles.batchNum}>
+                  <Text style={styles.batchNumText}>{i + 1}</Text>
+                </View>
+                <Text style={styles.batchEditTitle} numberOfLines={1}>{title}</Text>
+              </View>
+              <EditableApproveCard
+                approval={ap}
+                symbol={meta?.symbol ?? '…'}
+                decimals={meta?.decimals ?? 18}
+                decimalsVerified={meta?.verified ?? false}
+                logoUrls={logoUrls}
+                spenderLabel={it.clearSign?.contractName ?? shortAddr(ap.spender)}
+                choice={choices[i] ?? null}
+                onChange={(c) => onChoiceChange(i, c)}
+              />
+            </View>
+          );
+        }
+
+        // Non-approval / reducing / read-only leg → compact summary row.
+        const danger = legGrantsBroad(ap, choices[i]);
         const summary = batchSummary(it);
         return (
-          <View key={i} style={[styles.batchRow, unlimited && styles.batchRowDanger]}>
+          <View key={i} style={[styles.batchRow, danger && styles.batchRowDanger]}>
             <View style={styles.batchNum}>
               <Text style={styles.batchNumText}>{i + 1}</Text>
             </View>
@@ -1199,12 +1343,12 @@ function BatchCallsView({ items }: { items: BatchItem[] }) {
               {!!summary && <Text style={styles.batchDetail} numberOfLines={1}>{summary}</Text>}
               <Text style={styles.batchAddr} numberOfLines={1}>{it.to ? shortAddr(it.to) : '—'}</Text>
             </View>
-            {unlimited && <ShieldAlert size={14} color={riskColors().danger} strokeWidth={2} />}
+            {danger && <ShieldAlert size={14} color={riskColors().danger} strokeWidth={2} />}
           </View>
         );
       })}
 
-      {anyUnlimited && (
+      {anyUncapped && (
         <WarningBanner severity="danger" text={t('componentsUi.signing.unlimitedWarning')} />
       )}
     </View>
@@ -1912,6 +2056,10 @@ const styles = createStyles(() => ({
   batchTitle: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
   batchDetail: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
   batchAddr: { fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.subtle },
+  // Editable approval leg: numbered header above the inline spending-cap editor.
+  batchEditLeg: { marginVertical: space.sm },
+  batchEditHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.xs },
+  batchEditTitle: { flex: 1, fontSize: text.base, ...inter.semibold, color: color.fg.base },
 
   // ===== Advanced panel =====
   advancedBody: { gap: space.sm, marginBottom: space.md },

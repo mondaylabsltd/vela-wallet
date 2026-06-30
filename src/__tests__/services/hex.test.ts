@@ -1,7 +1,7 @@
 /**
  * Tests for hex encoding/decoding utilities.
  */
-import { toHex, fromHex, addHexPrefix, stripHexPrefix, concatBytes, toBase64Url, fromBase64Url } from '@/services/hex';
+import { toHex, fromHex, addHexPrefix, stripHexPrefix, concatBytes, toBase64Url, fromBase64Url, toQuantity } from '@/services/hex';
 
 describe('toHex', () => {
   test('empty array → empty string', () => {
@@ -76,6 +76,39 @@ describe('concatBytes', () => {
     const a = new Uint8Array(0);
     const b = new Uint8Array([1]);
     expect(concatBytes(a, b)).toEqual(new Uint8Array([1]));
+  });
+});
+
+describe('toQuantity — canonical JSON-RPC quantity (no leading zeros)', () => {
+  test('empty / nullish / 0x → 0x0', () => {
+    expect(toQuantity(undefined)).toBe('0x0');
+    expect(toQuantity(null)).toBe('0x0');
+    expect(toQuantity('')).toBe('0x0');
+    expect(toQuantity('0x')).toBe('0x0');
+    expect(toQuantity('0x0')).toBe('0x0');
+    expect(toQuantity('0x00')).toBe('0x0');
+  });
+
+  test('strips leading zeros from ethers-style padded hex', () => {
+    // BigNumber.toHexString() pads to even length; go-ethereum rejects this form.
+    expect(toQuantity('0x0de0b6b3a7640000')).toBe('0xde0b6b3a7640000');
+    expect(toQuantity('0x0001')).toBe('0x1');
+  });
+
+  test('already-canonical hex is unchanged (lowercased)', () => {
+    expect(toQuantity('0xde0b6b3a7640000')).toBe('0xde0b6b3a7640000');
+    expect(toQuantity('0xFF')).toBe('0xff');
+  });
+
+  test('accepts decimal strings, numbers, and bigints', () => {
+    expect(toQuantity('1000000000000000000')).toBe('0xde0b6b3a7640000');
+    expect(toQuantity(255)).toBe('0xff');
+    expect(toQuantity(1000000000000000000n)).toBe('0xde0b6b3a7640000');
+  });
+
+  test('garbage / negative → 0x0 (never throws)', () => {
+    expect(toQuantity('not-hex')).toBe('0x0');
+    expect(toQuantity(-5)).toBe('0x0');
   });
 });
 

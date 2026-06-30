@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { StoredAccount, PendingUpload, CustomToken, NetworkConfig, ServiceEndpoints, PriceSource, CustomNetwork, LocalePrefs } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS, DEFAULT_LOCALE_PREFS } from '@/models/types';
 import type { RpcProviderKeys } from '@/services/rpc-providers';
+import type { StoredAssetSim } from '@/services/tx-simulation';
 
 const KEYS = {
   accounts: 'vela.accounts',
@@ -399,6 +400,15 @@ export interface LocalTransaction {
    */
   signedRequest?: { method: string; params: unknown[] };
   requestTruncated?: boolean;
+  /**
+   * Sign-time asset-change simulation (predicted +/− balance changes), captured at
+   * approve so the detail/replay view can show "what moved" the same way Send and
+   * the live signing sheet do. Stored JSON-safe (bigint deltas as decimal strings,
+   * see StoredAssetSim). A prediction, not the confirmed on-chain result; only set
+   * for transactions/batches, and only when an engine could compute it. Older
+   * records lack it.
+   */
+  assetChanges?: StoredAssetSim;
 }
 
 /** Cap stored signed payloads so a huge typed-data blob can't bloat history. */

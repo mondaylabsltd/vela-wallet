@@ -9,6 +9,7 @@
  */
 import { nativeSymbol } from '@/models/network';
 import { MAX_SIGNED_CONTENT, type LocalTransaction } from '@/services/storage';
+import type { StoredAssetSim } from '@/services/tx-simulation';
 
 /** Cap stored payloads so a huge typed-data blob can't bloat history. */
 function cap(s: string | undefined): string | undefined {
@@ -131,6 +132,8 @@ export interface SigningRecordInput {
   status?: 'pending' | 'confirmed' | 'failed';
   /** UserOp hash, kept on the pending record so receipt polling can resume. */
   userOpHash?: string;
+  /** Sign-time asset-change simulation (predicted balance changes), JSON-safe. */
+  assetChanges?: StoredAssetSim;
 }
 
 /**
@@ -140,13 +143,13 @@ export interface SigningRecordInput {
  * recipient/value/hash; everything else is a signature.
  */
 export function buildSigningRecord(input: SigningRecordInput): LocalTransaction {
-  const { method, params, result, from, chainId, dappOrigin, nowMs, status = 'confirmed', userOpHash = '' } = input;
+  const { method, params, result, from, chainId, dappOrigin, nowMs, status = 'confirmed', userOpHash = '', assetChanges } = input;
   const now = Math.floor(nowMs / 1000);
   const signedContent = extractSignedContent(method, params);
   const { signedRequest, requestTruncated } = capRequest(method, params);
   const base = {
     userOpHash, from, chainId, timestamp: now,
-    status, dappOrigin, signedContent, signedRequest, requestTruncated,
+    status, dappOrigin, signedContent, signedRequest, requestTruncated, assetChanges,
   };
 
   if (method === 'eth_sendTransaction' || method === 'wallet_sendCalls') {

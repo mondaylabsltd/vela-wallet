@@ -21,6 +21,7 @@
  * with no gas noise — cleaner than simulating an EOA transaction.
  */
 import { poolRpcCall } from '@/services/rpc-pool';
+import { toQuantity } from '@/services/hex';
 import { nativeSymbol } from '@/models/network';
 import { resolveTokenMetadata, type TokenMetadata } from '@/services/token-metadata';
 import { fetchChainTokens } from '@/services/chain-tokens';
@@ -79,6 +80,46 @@ export interface AssetSimResult extends SimResult {
 }
 
 /**
+ * JSON-safe form of `AssetSimResult`, persisted on a signing record so the
+ * "what moved" preview can be replayed from history. Identical shape except each
+ * `delta` bigint is a decimal string (AsyncStorage holds JSON, not bigints).
+ */
+export interface StoredAssetSim {
+  ok: boolean;
+  revertReason?: string;
+  underfundedNative?: boolean;
+  engine: SimEngine;
+  changes: (Omit<AssetChange, 'delta'> & { delta: string })[] | null;
+}
+
+/** Capture a live sim into its persistable form (bigint delta → decimal string). */
+export function serializeAssetSim(r: AssetSimResult): StoredAssetSim {
+  return {
+    ok: r.ok,
+    revertReason: r.revertReason,
+    underfundedNative: r.underfundedNative,
+    engine: r.engine,
+    changes: r.changes ? r.changes.map((c) => ({ ...c, delta: c.delta.toString() })) : null,
+  };
+}
+
+/** Rehydrate a persisted sim back into the shape `BalanceChangePreview` renders. */
+export function deserializeAssetSim(s: StoredAssetSim): AssetSimResult {
+  return {
+    ok: s.ok,
+    revertReason: s.revertReason,
+    underfundedNative: s.underfundedNative,
+    engine: s.engine,
+    changes: s.changes ? s.changes.map((c) => ({ ...c, delta: safeBigInt(c.delta) })) : null,
+  };
+}
+
+/** Parse a stored decimal delta back to bigint; a corrupt value reads as 0. */
+function safeBigInt(v: string): bigint {
+  try { return BigInt(v); } catch { return 0n; }
+}
+
+/**
  * Simulate the inner Safe→target call. Returns null when the result is unknown
  * (RPC unreachable) — callers must treat null as "no info", never as failure.
  */
@@ -93,7 +134,7 @@ export async function simulateCall(
   try {
     const res = await poolRpcCall(
       'eth_call',
-      [{ from, to, data: data && data !== '0x' ? data : '0x', value: value && value !== '0x' ? value : '0x0' }, 'latest'],
+      [{ from, to, data: data && data !== '0x' ? data : '0x', value: toQuantity(value) }, 'latest'],
       chainId,
     );
     if (res?.error) {

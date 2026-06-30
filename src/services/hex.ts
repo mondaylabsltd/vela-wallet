@@ -33,6 +33,28 @@ export function stripHexPrefix(hex: string): string {
   return hex.startsWith('0x') ? hex.slice(2) : hex;
 }
 
+/**
+ * Normalise a value to a canonical JSON-RPC QUANTITY: `0x`-prefixed, lowercase,
+ * no leading zeros (`0x0` for zero).
+ *
+ * go-ethereum's `hexutil.Big` REJECTS leading-zero quantities with
+ * "cannot unmarshal hex number with leading zero digits". dApps routinely emit
+ * them — ethers v5's `BigNumber.toHexString()` zero-pads to an even length
+ * (`0x0de0b6b3a7640000`) — so any tx `value`/`gas`/`nonce` forwarded from a dApp
+ * MUST pass through here before it reaches `eth_call` / `eth_simulateV1` /
+ * `eth_estimateGas`. Parsing via BigInt also canonicalises decimal-string and
+ * numeric inputs. Unparseable/empty/negative → `0x0`.
+ */
+export function toQuantity(value: string | number | bigint | undefined | null): string {
+  if (value === undefined || value === null || value === '' || value === '0x') return '0x0';
+  try {
+    const n = typeof value === 'bigint' ? value : BigInt(value);
+    return n > 0n ? '0x' + n.toString(16) : '0x0';
+  } catch {
+    return '0x0';
+  }
+}
+
 /** Concatenate multiple Uint8Arrays. */
 export function concatBytes(...arrays: Uint8Array[]): Uint8Array {
   const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);

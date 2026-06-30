@@ -17,13 +17,11 @@ import { View, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ShieldCheck, ArrowDownLeft, ArrowUpRight } from 'lucide-react-native';
 import { TokenLogo } from '@/components/TokenLogo';
-import { shortAddr } from '@/models/types';
+import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
 import { nativeSymbol, nativeCoinLogoURL } from '@/models/network';
 import { formatTokenAmount } from '@/services/sim-assets';
 import type { AssetChange, AssetSimResult } from '@/services/tx-simulation';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
-
-const TOKEN_LOGO_BASE = 'https://ethereum-data.awesometools.dev/tokenlogos/';
 
 export function BalanceChangePreview({ result, chainId, selfTransfer }: {
   result: AssetSimResult | null;
@@ -102,14 +100,16 @@ function ChangeRow({ change, chainId }: { change: AssetChange; chainId: number }
   const received = change.delta > 0n;
   const tint = received ? color.success.base : color.fg.base;
   // Native coins get the real coin logo (ETH on Base → Ethereum's), ERC-20s the
-  // token logo; a bare letter avatar was the old "E" placeholder.
-  const logoUrl = change.kind === 'native'
-    ? nativeCoinLogoURL(chainId)
-    : change.token ? `${TOKEN_LOGO_BASE}${change.token}.png` : undefined;
+  // token logo by (chainId, address) — checksummed first, lowercase fallback,
+  // same source the rest of the app uses; a bare letter avatar is the last resort.
+  const nativeLogo = change.kind === 'native' ? nativeCoinLogoURL(chainId) : undefined;
+  const tokenLogos = change.kind !== 'native' && change.token
+    ? tokenLogoURLsByAddress(chainId, change.token)
+    : undefined;
 
   return (
     <View style={styles.row}>
-      <TokenLogo symbol={change.symbol ?? '?'} logoUrl={logoUrl} size={28} />
+      <TokenLogo symbol={change.symbol ?? '?'} logoUrl={nativeLogo} logoUrls={tokenLogos} size={28} />
       <View style={styles.rowInfo}>
         {change.unverified ? (
           // Decimals unknown → never imply a precise amount. Direction + caveat only.

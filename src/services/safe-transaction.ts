@@ -587,12 +587,12 @@ async function sendUserOp(
     // If bundler says a previous UserOp is already pending (replacement or duplicate),
     // extract the existing hash and poll for its receipt instead of failing.
     const errMsg = err instanceof Error ? err.message : String(err);
-    const existingHashMatch = errMsg.match(/\[existingHash:(0x[0-9a-fA-F]+)\]/);
-    if (existingHashMatch) {
-      console.log(`[UserOp] Previous op pending (${existingHashMatch[1]}), polling for receipt...`);
+    const existingHash = parseExistingUserOpHash(errMsg);
+    if (existingHash) {
+      console.log(`[UserOp] Previous op pending (${existingHash}), polling for receipt...`);
       return {
-        userOpHash: existingHashMatch[1],
-        waitForTxHash: () => waitForReceipt(existingHashMatch[1], chainId, 60_000),
+        userOpHash: existingHash,
+        waitForTxHash: () => waitForReceipt(existingHash, chainId, 60_000),
       };
     }
     throw err;
@@ -719,11 +719,11 @@ async function sendUserOpTempo(
     userOpHash = await submitUserOp(userOp, chainId, { feeToken });
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    const existingHashMatch = errMsg.match(/\[existingHash:(0x[0-9a-fA-F]+)\]/);
-    if (existingHashMatch) {
+    const existingHash = parseExistingUserOpHash(errMsg);
+    if (existingHash) {
       return {
-        userOpHash: existingHashMatch[1],
-        waitForTxHash: () => waitForReceipt(existingHashMatch[1], chainId, 60_000),
+        userOpHash: existingHash,
+        waitForTxHash: () => waitForReceipt(existingHash, chainId, 60_000),
       };
     }
     throw err;
@@ -741,7 +741,7 @@ async function sendUserOpTempo(
 // ---------------------------------------------------------------------------
 
 /** Encode Safe.executeUserOp(address to, uint256 value, bytes data, uint8 operation) */
-function buildExecuteCallData(
+export function buildExecuteCallData(
   to: string,
   value: string,
   data: Uint8Array,
@@ -784,7 +784,7 @@ interface MultiSendCall {
  * Encode Safe.executeUserOp(MultiSend, 0, multiSend(packedCalls), DELEGATECALL),
  * batching N sub-calls atomically. Each sub-call is a CALL (operation 0).
  */
-function buildMultiSendExecuteCallData(calls: MultiSendCall[]): Uint8Array {
+export function buildMultiSendExecuteCallData(calls: MultiSendCall[]): Uint8Array {
   const encodedTxs = calls.map(c => {
     const valueClean = stripHexPrefix(c.value) || '0';
     const toBytes = fromHex(stripHexPrefix(c.to));
@@ -820,7 +820,7 @@ function buildMultiSendExecuteCallData(calls: MultiSendCall[]): Uint8Array {
 }
 
 /** Encode ERC-20 transfer(address,uint256) calldata. */
-function encodeErc20Transfer(to: string, amount: bigint): Uint8Array {
+export function encodeErc20Transfer(to: string, amount: bigint): Uint8Array {
   return concatBytes(
     functionSelector('transfer(address,uint256)'),
     abiEncodeAddress(to),
@@ -832,7 +832,7 @@ function encodeErc20Transfer(to: string, amount: bigint): Uint8Array {
 // InitCode
 // ---------------------------------------------------------------------------
 
-function buildInitCode(publicKeyHex: string): Uint8Array {
+export function buildInitCode(publicKeyHex: string): Uint8Array {
   const { x, y } = parsePublicKey(publicKeyHex);
   const setupData = encodeSetupData(x, y);
   const saltNonce = calculateSaltNonce(x, y);
@@ -1580,7 +1580,19 @@ function userOpToDict(
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseHexUInt64(value: string | undefined): bigint {
+/**
+ * Parse the bundler's "[existingHash:0x…]" marker out of a submit error. When a
+ * previous UserOp for the account is still pending, the bundler rejects the new one
+ * but reports the in-flight hash so we can poll its receipt instead of failing.
+ * Returns the hash, or null when the error isn't this case. (Same recovery is used
+ * by both the standard and Tempo send paths — this is their shared parser.)
+ */
+export function parseExistingUserOpHash(errMsg: string): string | null {
+  const m = errMsg.match(/\[existingHash:(0x[0-9a-fA-F]+)\]/);
+  return m ? m[1] : null;
+}
+
+export function parseHexUInt64(value: string | undefined): bigint {
   if (!value) return 0n;
   const clean = value.startsWith('0x') ? value.slice(2) : value;
   if (!clean) return 0n;
