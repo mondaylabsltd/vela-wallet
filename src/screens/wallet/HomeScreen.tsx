@@ -1113,33 +1113,6 @@ const styles = createStyles(() => ({
   emptyText: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
   emptySub: { fontSize: text.base, ...inter.regular, color: color.fg.subtle, textAlign: 'center', paddingHorizontal: space['3xl'], lineHeight: 20 },
 
-  // Account switcher
-  switcher: { flex: 1, backgroundColor: color.bg.base },
-  switcherHead: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: space['3xl'], paddingVertical: space.xl,
-    borderBottomWidth: 1, borderBottomColor: color.border.base,
-  },
-  switcherHeadInfo: { flex: 1, gap: 2 },
-  switcherTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
-  switcherTotalRow: { flexDirection: 'row', alignItems: 'center' },
-  switcherTotalLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
-  switcherTotalValue: { fontSize: text.sm, ...inter.bold, color: color.fg.base },
-  switcherSpinner: { marginLeft: space.sm },
-  switcherList: { padding: space['3xl'], gap: space.lg },
-  switcherItem: {
-    flexDirection: 'row', alignItems: 'center', gap: space.lg,
-    padding: space.xl, backgroundColor: color.bg.raised,
-    borderRadius: radius.xl, borderWidth: 1, borderColor: color.border.base, ...shadow.sm,
-  },
-  switcherItemActive: { borderColor: color.accent.base, borderWidth: 1.5 },
-  switcherAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: color.accent.soft, alignItems: 'center', justifyContent: 'center' },
-  switcherAvatarText: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
-  switcherInfo: { flex: 1, gap: 2 },
-  switcherName: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
-  switcherAddr: { fontSize: text.sm, ...inter.medium, fontFamily: font.mono, color: color.fg.subtle },
-  switcherRight: { marginLeft: 'auto', alignItems: 'flex-end', gap: 4 },
-  switcherBal: { fontSize: text.sm, ...inter.bold, color: color.fg.base },
 
   // Connections
   connCard: { padding: space.xl, marginBottom: space.xl },

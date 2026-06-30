@@ -1625,18 +1625,6 @@ const styleFactory = () => ({
   modalScroll: { flex: 1 },
   modalScrollContent: { padding: space['3xl'], paddingBottom: space['5xl'] },
 
-  // Account Switcher
-  accountItem: { flexDirection: 'row' as const, alignItems: 'center' as const, padding: space.xl, backgroundColor: color.bg.raised, borderRadius: radius.xl, borderWidth: 1, borderColor: color.border.base, marginBottom: space.lg, gap: space.lg, ...shadow.sm },
-  accountItemActive: { borderColor: color.accent.base, borderWidth: 1.5 },
-  accountAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: color.accent.soft, alignItems: 'center' as const, justifyContent: 'center' as const },
-  accountAvatarText: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
-  accountInfo: { flex: 1, gap: 2 },
-  accountNameModal: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
-  accountAddress: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.subtle },
-  accountTotalLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle, marginTop: 2 },
-  accountRight: { marginLeft: 'auto' as const, alignItems: 'flex-end' as const, gap: 4 },
-  accountBal: { fontSize: text.sm, ...inter.bold, color: color.fg.base },
-  accountActions: { marginTop: space.xl, gap: space.lg },
 
   // Network Editor
   networkScrollContent: { padding: space.xl, paddingBottom: space['5xl'], gap: space.lg },
