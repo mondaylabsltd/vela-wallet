@@ -18,8 +18,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         `webauthn.html?method=${msg.method}&data=${encodeURIComponent(JSON.stringify(msg.options))}`
       ),
       type: 'popup',
-      width: 420,
-      height: 320,
+      width: 480,
+      height: 640,
       focused: true,
     });
 

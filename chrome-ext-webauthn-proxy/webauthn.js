@@ -8,7 +8,9 @@
  * back to background.js, which relays to content.js → inject.js → page.
  */
 
-const PROXY_RP_ID = 'getvela.app';
+const DEFAULT_RP_ID = 'getvela.app';
+// Resolved in main() from (page-requested rpId → stored config → default).
+let effectiveRpId = DEFAULT_RP_ID;
 const TAG = '[VelaWebAuthnProxy:popup]';
 
 // ---- Base64 ↔ ArrayBuffer ----
@@ -33,7 +35,7 @@ function bufToB64(buf) {
 
 function rebuildCreateOptions(serialized) {
   const pk = { ...serialized.publicKey };
-  pk.rp = { ...pk.rp, id: PROXY_RP_ID };
+  pk.rp = { ...pk.rp, id: effectiveRpId };
   pk.challenge = b64ToBuf(pk.challenge);
   if (pk.user) pk.user = { ...pk.user, id: b64ToBuf(pk.user.id) };
   if (pk.excludeCredentials) {
@@ -44,7 +46,7 @@ function rebuildCreateOptions(serialized) {
 
 function rebuildGetOptions(serialized) {
   const pk = { ...serialized.publicKey };
-  pk.rpId = PROXY_RP_ID;
+  pk.rpId = effectiveRpId;
   pk.challenge = b64ToBuf(pk.challenge);
   if (pk.allowCredentials) {
     pk.allowCredentials = pk.allowCredentials.map(c => ({ ...c, id: b64ToBuf(c.id) }));
@@ -90,6 +92,50 @@ function serializeGetResponse(cred) {
   };
 }
 
+// ---- Host-access UI ----
+
+const rpOrigin = (domain) => `*://${domain}/*`;
+
+function showPanel(id) {
+  for (const el of document.querySelectorAll('.panel')) {
+    el.classList.toggle('hidden', el.id !== id);
+  }
+}
+
+async function hasAccess(domain) {
+  try {
+    return await chrome.permissions.contains({ origins: [rpOrigin(domain)] });
+  } catch {
+    return false;
+  }
+}
+
+/** Show the grant panel; resolve true/false once the user decides. */
+function promptForAccess(domain) {
+  return new Promise((resolve) => {
+    document.getElementById('perm-domain').textContent = domain;
+    showPanel('permission');
+    document.getElementById('grant').addEventListener('click', async () => {
+      // permissions.request must run in a user gesture — this click qualifies.
+      const granted = await chrome.permissions.request({ origins: [rpOrigin(domain)] });
+      resolve(granted);
+    }, { once: true });
+    document.getElementById('cancel').addEventListener('click', () => resolve(false), { once: true });
+  });
+}
+
+async function runWebAuthn(method, options) {
+  if (method === 'create') {
+    const cred = await navigator.credentials.create(rebuildCreateOptions(options));
+    return serializeCreateResponse(cred);
+  }
+  const cred = await navigator.credentials.get(rebuildGetOptions(options));
+  return serializeGetResponse(cred);
+}
+
+const looksLikeAccessError = (msg) =>
+  /HTTPS origins|pages served from an extension/i.test(msg || '');
+
 // ---- Main ----
 
 (async () => {
@@ -97,23 +143,54 @@ function serializeGetResponse(cred) {
   const method = params.get('method');
   const options = JSON.parse(decodeURIComponent(params.get('data')));
 
-  console.log(TAG, `${method} starting, rpId: ${PROXY_RP_ID}`);
+  // Prefer the rpId the page actually requested; fall back to the user's
+  // configured domain, then the default. The extension must hold host
+  // permission for whichever domain this resolves to.
+  const pageRpId = options?.publicKey?.rpId || options?.publicKey?.rp?.id;
+  try {
+    const cfg = await chrome.storage.sync.get({ proxyRpId: '' });
+    effectiveRpId = pageRpId || cfg.proxyRpId || DEFAULT_RP_ID;
+  } catch {
+    effectiveRpId = pageRpId || DEFAULT_RP_ID;
+  }
+
+  console.log(TAG, `${method} starting, rpId: ${effectiveRpId}`);
+
+  // Chrome can silently reset/withhold the extension's host access (e.g. after a
+  // browser update). Detect it up front and let the user re-grant in one click,
+  // right here, instead of failing with a cryptic "only available to HTTPS
+  // origins…" error that they'd have to fix by digging into chrome://extensions.
+  if (!(await hasAccess(effectiveRpId))) {
+    console.warn(TAG, `no host access for ${effectiveRpId}; prompting user`);
+    const granted = await promptForAccess(effectiveRpId);
+    if (!granted) {
+      chrome.runtime.sendMessage({
+        type: 'VELA_WEBAUTHN_RESULT',
+        error: `Passkey access to ${effectiveRpId} was not granted.`,
+      });
+      return;
+    }
+  }
+
+  showPanel('loading');
 
   try {
-    let result;
-    if (method === 'create') {
-      const opts = rebuildCreateOptions(options);
-      const cred = await navigator.credentials.create(opts);
-      result = await serializeCreateResponse(cred);
-    } else {
-      const opts = rebuildGetOptions(options);
-      const cred = await navigator.credentials.get(opts);
-      result = serializeGetResponse(cred);
-    }
-
+    let result = await runWebAuthn(method, options);
     console.log(TAG, `${method} OK, credentialId:`, result.id);
     chrome.runtime.sendMessage({ type: 'VELA_WEBAUTHN_RESULT', result, method });
   } catch (err) {
+    // Belt-and-suspenders: if it still failed on the origin gate, host access is
+    // the likely culprit — offer the grant flow once more, then retry.
+    if (looksLikeAccessError(err.message) && (await promptForAccess(effectiveRpId))) {
+      showPanel('loading');
+      try {
+        const result = await runWebAuthn(method, options);
+        chrome.runtime.sendMessage({ type: 'VELA_WEBAUTHN_RESULT', result, method });
+        return;
+      } catch (retryErr) {
+        err = retryErr;
+      }
+    }
     console.error(TAG, `${method} failed:`, err);
     chrome.runtime.sendMessage({ type: 'VELA_WEBAUTHN_RESULT', error: err.message });
   }

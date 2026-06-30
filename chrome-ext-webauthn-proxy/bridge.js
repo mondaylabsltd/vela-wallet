@@ -7,6 +7,21 @@
 
 const TAG = '[VelaWebAuthnProxy:bridge]';
 
+// Push the user's configured target domain into the page (MAIN world), so
+// inject.js can expose it as window.__VELA_WEBAUTHN_PROXY_RPID__. Content
+// scripts (ISOLATED world) have chrome.storage; inject.js (MAIN world) does not.
+function broadcastConfig() {
+  chrome.storage.sync.get({ proxyRpId: '' }, (cfg) => {
+    if (cfg.proxyRpId) {
+      window.postMessage({ type: 'VELA_WEBAUTHN_CONFIG', proxyRpId: cfg.proxyRpId }, '*');
+    }
+  });
+}
+broadcastConfig();
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && changes.proxyRpId) broadcastConfig();
+});
+
 window.addEventListener('message', async (e) => {
   if (e.source !== window) return;
   if (e.data?.type !== 'VELA_WEBAUTHN_REQUEST') return;

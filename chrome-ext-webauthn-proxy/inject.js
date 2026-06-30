@@ -9,7 +9,10 @@
  */
 
 (() => {
-  const PROXY_RP_ID = 'getvela.app';
+  const DEFAULT_RP_ID = 'getvela.app';
+  // Current target rpId. Defaults to getvela.app, overridden at runtime by
+  // bridge.js (which reads the user's configured domain from chrome.storage).
+  let configuredRpId = DEFAULT_RP_ID;
   const TAG = '[VelaWebAuthnProxy]';
   let reqId = 0;
   const pending = new Map();
@@ -83,10 +86,20 @@
     };
   }
 
-  // Listen for responses from bridge.js
+  // Listen for messages from bridge.js
   window.addEventListener('message', (e) => {
     if (e.source !== window) return;
-    if (!e.data || e.data.type !== 'VELA_WEBAUTHN_RESPONSE') return;
+    if (!e.data) return;
+    // Config push from bridge.js (the user's configured target domain).
+    if (e.data.type === 'VELA_WEBAUTHN_CONFIG') {
+      if (e.data.proxyRpId) {
+        configuredRpId = e.data.proxyRpId;
+        window.__VELA_WEBAUTHN_PROXY_RPID__ = configuredRpId;
+        console.log(TAG, 'config updated — rpId →', configuredRpId);
+      }
+      return;
+    }
+    if (e.data.type !== 'VELA_WEBAUTHN_RESPONSE') return;
     const { id, error, result, method } = e.data;
     const p = pending.get(id);
     if (!p) return;
@@ -108,9 +121,10 @@
   const origGet = navigator.credentials.get.bind(navigator.credentials);
 
   function shouldProxy(rpId) {
-    // Proxy when the rpId doesn't match the current domain (browser would reject it)
-    // or when it's a non-production domain that needs remapping to getvela.app.
-    if (!rpId || rpId === PROXY_RP_ID) return true;
+    // Proxy only when the page asks for an rpId the browser itself can't satisfy
+    // here — i.e. the rpId is neither the current host nor a parent domain of it.
+    // On a dev/preview page that means "use the real production passkeys".
+    if (!rpId) return false;
     var host = location.hostname;
     return host !== rpId && !host.endsWith('.' + rpId);
   }
@@ -118,7 +132,7 @@
   navigator.credentials.create = function (opts) {
     const rpId = opts?.publicKey?.rp?.id;
     if (!opts?.publicKey || !shouldProxy(rpId)) return origCreate(opts);
-    console.log(TAG, 'intercepting credentials.create, proxying rpId →', PROXY_RP_ID);
+    console.log(TAG, 'intercepting credentials.create, proxying rpId →', rpId);
     const id = ++reqId;
     return new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject });
@@ -129,7 +143,7 @@
   navigator.credentials.get = function (opts) {
     const rpId = opts?.publicKey?.rpId;
     if (!opts?.publicKey || !shouldProxy(rpId)) return origGet(opts);
-    console.log(TAG, 'intercepting credentials.get, proxying rpId →', PROXY_RP_ID);
+    console.log(TAG, 'intercepting credentials.get, proxying rpId →', rpId);
     const id = ++reqId;
     return new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject });
@@ -138,7 +152,8 @@
   };
 
   // Expose the proxy rpId so the app can use it for public-key uploads, etc.
-  window.__VELA_WEBAUTHN_PROXY_RPID__ = PROXY_RP_ID;
+  // (bridge.js may override configuredRpId shortly after, via VELA_WEBAUTHN_CONFIG.)
+  window.__VELA_WEBAUTHN_PROXY_RPID__ = configuredRpId;
 
-  console.log(TAG, 'installed (MAIN world) — localhost WebAuthn → ' + PROXY_RP_ID);
+  console.log(TAG, 'installed (MAIN world) — WebAuthn → ' + configuredRpId);
 })();

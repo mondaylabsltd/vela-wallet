@@ -9,8 +9,12 @@
       background: #1a1a2e; color: #e0e0e0;
       display: flex; align-items: center; justify-content: center;
       height: 100vh; margin: 0;
-      flex-direction: column; gap: 12px;
     }
+    .panel {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 14px; text-align: center; padding: 0 28px; max-width: 360px;
+    }
+    .panel.hidden { display: none; }
     .spinner {
       width: 32px; height: 32px;
       border: 3px solid rgba(255,255,255,0.2);
@@ -20,11 +24,39 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
     .label { font-size: 14px; opacity: 0.7; }
+    .icon { font-size: 40px; line-height: 1; }
+    .title { font-size: 17px; font-weight: 600; }
+    .desc { font-size: 13px; opacity: 0.75; line-height: 1.5; }
+    .desc b { color: #00d2ff; font-weight: 600; }
+    button {
+      border: none; border-radius: 10px; padding: 11px 22px;
+      font-size: 14px; font-weight: 600; cursor: pointer; width: 100%;
+    }
+    #grant { background: #00d2ff; color: #06121a; margin-top: 6px; }
+    #grant:hover { background: #4ddfff; }
+    #cancel { background: transparent; color: #e0e0e0; opacity: 0.6; }
+    #cancel:hover { opacity: 1; }
   </style>
 </head>
 <body>
-  <div class="spinner"></div>
-  <div class="label">Waiting for Passkey...</div>
+  <!-- Default: doing the WebAuthn call -->
+  <div id="loading" class="panel">
+    <div class="spinner"></div>
+    <div class="label">Waiting for Passkey…</div>
+  </div>
+
+  <!-- Shown only when the extension lacks site access for the rp domain -->
+  <div id="permission" class="panel hidden">
+    <div class="icon">🔑</div>
+    <div class="title">Allow passkey access</div>
+    <div class="desc">
+      To use your passkey, this extension needs access to
+      <b id="perm-domain"></b>. Chrome may have reset this after an update.
+    </div>
+    <button id="grant">Grant access</button>
+    <button id="cancel">Cancel</button>
+  </div>
+
   <script src="webauthn.js"></script>
 </body>
 </html>

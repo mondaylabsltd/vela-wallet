@@ -1,11 +1,19 @@
 {
   "manifest_version": 3,
   "name": "Vela WebAuthn Dev Proxy",
-  "version": "1.0.0",
-  "description": "Proxy WebAuthn calls to use getvela.app rpId on any dev/preview domain",
+  "version": "1.1.0",
+  "description": "Proxy WebAuthn calls to use a production rpId (default getvela.app, configurable) on any dev/preview domain",
+  "permissions": ["storage"],
   "host_permissions": [
     "*://getvela.app/*"
   ],
+  "optional_host_permissions": [
+    "*://*/*"
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "background": {
     "service_worker": "background.js"
   },

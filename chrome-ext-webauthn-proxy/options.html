@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Vela WebAuthn Proxy — Settings</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      background: #1a1a2e; color: #e0e0e0;
+      margin: 0; padding: 32px; max-width: 560px;
+      line-height: 1.5;
+    }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    .sub { font-size: 13px; opacity: 0.6; margin: 0 0 24px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 0 0 6px; }
+    .hint { font-size: 12px; opacity: 0.6; margin: 6px 0 16px; }
+    input {
+      width: 100%; box-sizing: border-box;
+      background: #0f0f1e; border: 1px solid #33344a; color: #e0e0e0;
+      border-radius: 8px; padding: 10px 12px; font-size: 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    input:focus { outline: none; border-color: #00d2ff; }
+    button {
+      margin-top: 16px; background: #00d2ff; color: #06121a; border: none;
+      border-radius: 8px; padding: 10px 18px; font-size: 14px; font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #4ddfff; }
+    .status { margin-top: 16px; font-size: 13px; min-height: 18px; }
+    .status.ok { color: #58e08a; }
+    .status.warn { color: #ffcc66; }
+    .granted { margin-top: 24px; font-size: 12px; opacity: 0.55; word-break: break-all; }
+    code { background: #0f0f1e; padding: 1px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>WebAuthn Proxy</h1>
+  <p class="sub">Use a production site's passkeys on localhost & preview deploys.</p>
+
+  <label for="domain">Relying-party domain (rpId)</label>
+  <input id="domain" type="text" placeholder="getvela.app" spellcheck="false" autocapitalize="off" autocomplete="off">
+  <p class="hint">
+    The domain whose passkeys you want to use. The extension will request access
+    to it — paste just the host (e.g. <code>example.com</code>), no scheme or path.
+  </p>
+
+  <button id="save">Save &amp; grant access</button>
+  <div id="status" class="status"></div>
+  <div id="granted" class="granted"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>
