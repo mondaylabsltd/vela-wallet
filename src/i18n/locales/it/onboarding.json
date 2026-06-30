@@ -40,7 +40,7 @@
       "verifyHint": "Tocca qui sotto per verificare che la tua identità funzioni prima di usare il wallet.",
       "verifySignInBtn": "Verifica e accedi",
       "syncFailedTitle": "Sincronizzazione non riuscita",
-      "syncFailedMessage": "Wallet creato, ma la tua chiave pubblica non è stata sincronizzata con il server. Non potrai accedere su altri dispositivi finché non viene risolto.",
+      "syncFailedMessage": "Wallet creato, ma la tua chiave pubblica non è stata sincronizzata con il server. Non riuscirai ad accedere su altri dispositivi finché il problema non viene risolto.",
       "syncFailedHint": "Controlla la tua connessione o configura un endpoint personalizzato qui sotto.",
       "openSettings": "Apri le impostazioni",
       "retryUploadBtn": "Riprova il caricamento",

@@ -101,6 +101,39 @@ export function hapticLight(): void {
   ).catch(() => {});
 }
 
+/**
+ * Trigger an error notification haptic (failed tx, rejected sign, invalid input).
+ * Distinct from success so failure *feels* different. No-op on web.
+ */
+export function hapticError(): void {
+  if (Platform.OS === 'web') return;
+  import('expo-haptics').then(H =>
+    H.notificationAsync(H.NotificationFeedbackType.Error),
+  ).catch(() => {});
+}
+
+/**
+ * Trigger a warning notification haptic (blocking validation, "are you sure").
+ * No-op on web.
+ */
+export function hapticWarning(): void {
+  if (Platform.OS === 'web') return;
+  import('expo-haptics').then(H =>
+    H.notificationAsync(H.NotificationFeedbackType.Warning),
+  ).catch(() => {});
+}
+
+/**
+ * Trigger a selection-change haptic (segmented toggle, picker, tier switch).
+ * Lighter than an impact — the iOS "tick" feel. No-op on web.
+ */
+export function hapticSelection(): void {
+  if (Platform.OS === 'web') return;
+  import('expo-haptics').then(H =>
+    H.selectionAsync(),
+  ).catch(() => {});
+}
+
 // ---------------------------------------------------------------------------
 // App visibility (replaces AppState)
 // ---------------------------------------------------------------------------

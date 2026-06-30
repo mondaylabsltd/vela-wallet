@@ -93,7 +93,7 @@
     "toAddr": "{{addr}} adresine",
     "fromAddr": "{{addr}} adresinden",
     "signatureRequest": "İmza isteği",
-    "typedDataSignature": "Typed Data İmzası",
+    "typedDataSignature": "Yapılandırılmış Veri İmzası",
     "dappTransaction": "dApp işlemi",
     "activity": "Etkinlik"
   }

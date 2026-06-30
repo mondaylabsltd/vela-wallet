@@ -31,7 +31,6 @@
       "signLabel": "署名",
       "confirmLabel": "確認",
       "confirmIntentLabel": "{{intent}}を確認",
-      "approve": "承認",
       "dismiss": "閉じる",
       "reject": "拒否",
       "personalSignTag": "personal_sign · Gas 手数料なし",

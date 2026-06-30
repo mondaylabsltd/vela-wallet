@@ -12,6 +12,6 @@
     "txLabelSignMessage": "Подписать сообщение",
     "txLabelSignTypedData": "Подписать типизированные данные",
     "txLabelSent": "Отправлено {{symbol}}",
-    "txSentSubtitle": "Кому: {{toName}} · {{networkName}}"
+    "txSentSubtitle": "на {{toName}} · {{networkName}}"
   }
 }

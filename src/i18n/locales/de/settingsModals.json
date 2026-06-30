@@ -44,7 +44,7 @@
     "addNetwork": {
       "modalTitle": "Netzwerk hinzufügen",
       "description": "Suchen Sie nach Netzwerkname, Token-Symbol oder Chain-ID.",
-      "searchPlaceholder": "z. B. Gnosis, ACE, 648 ...",
+      "searchPlaceholder": "z. B. Gnosis, ACE, 648...",
       "chainMeta": "Chain {{chainId}} · {{symbol}}",
       "searching": "Wird gesucht ...",
       "checkingCompatibility": "Kompatibilität wird geprüft ...",

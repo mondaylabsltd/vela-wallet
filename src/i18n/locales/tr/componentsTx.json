@@ -38,7 +38,7 @@
       "statusPending": "Beklemede",
       "opContractInteraction": "Sözleşme etkileşimi",
       "opSignature": "İmza",
-      "opTypedDataSignature": "Yapılandırılmış veri imzası",
+      "opTypedDataSignature": "Yapılandırılmış Veri İmzası",
       "opTransfer": "Transfer"
     }
   }

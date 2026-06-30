@@ -6,7 +6,7 @@
     "addTokenBtn": "Token hinzufügen",
     "tokenCount": "{{n}} Token",
     "selectTokenTitle": "Token auswählen",
-    "searchPlaceholder": "Token suchen ...",
+    "searchPlaceholder": "Token suchen...",
     "loadingTokens": "Token werden geladen ...",
     "noMatchingTokens": "Keine passenden Token",
     "noTokensWithBalance": "Keine Token mit Guthaben",

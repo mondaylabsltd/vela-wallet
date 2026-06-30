@@ -42,7 +42,7 @@
     "gasPriceUserOpLabel": "Giá Gas (UserOp)",
     "gasLimitLabel": "Giới hạn Gas",
     "walletDeployedLabel": "Ví đã triển khai",
-    "walletDeployedYes": "Rồi",
+    "walletDeployedYes": "Có",
     "walletDeployedNo": "Chưa (giao dịch đầu tiên)",
     "checkingGas": "Đang kiểm tra gas...",
     "confirmSendBtn": "Xác nhận và gửi",

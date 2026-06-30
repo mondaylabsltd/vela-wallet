@@ -215,7 +215,9 @@ export const radius = {
 // ---------------------------------------------------------------------------
 
 const LIGHT_COLORS = {
-  fg:      { base: '#1A1A18', muted: '#7A776E', subtle: '#B0ADA5', inverse: '#FFFFFF' },
+  // muted/subtle darkened to clear WCAG: muted #6E6B62 ≥4.5:1 body text on bg.base,
+  // subtle #8C887E ≥3:1 for placeholders/timestamps/disabled (was #7A776E/#B0ADA5, both failing).
+  fg:      { base: '#1A1A18', muted: '#6E6B62', subtle: '#8C887E', inverse: '#FFFFFF' },
   bg:      { base: '#FAFAF8', raised: '#FFFFFF', sunken: '#F5F3EF' },
   accent:  { base: '#E8572A', soft: '#FFF0EB' },
   success: { base: '#2D8E5F', soft: '#EDFAF2' },
@@ -226,7 +228,8 @@ const LIGHT_COLORS = {
 };
 
 const DARK_COLORS = {
-  fg:      { base: '#E8E6E1', muted: '#9A9790', subtle: '#6A6760', inverse: '#1A1A18' },
+  // subtle lightened to #85827A so tertiary/placeholder text clears the 3:1 floor on dark bg (was #6A6760 ≈2.96:1).
+  fg:      { base: '#E8E6E1', muted: '#9A9790', subtle: '#85827A', inverse: '#1A1A18' },
   bg:      { base: '#141412', raised: '#1E1E1B', sunken: '#0F0F0D' },
   accent:  { base: '#E8572A', soft: '#2C1A12' },
   success: { base: '#3DA872', soft: '#132A1E' },

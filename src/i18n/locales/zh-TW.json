@@ -84,8 +84,8 @@
   },
   "time": {
     "now": "剛剛",
-    "minutesShort": "{{n}}分鐘前",
-    "hoursShort": "{{n}}小時前"
+    "minutesShort": "{{n}}分",
+    "hoursShort": "{{n}}小時"
   },
   "activity": {
     "sent": "已發送",

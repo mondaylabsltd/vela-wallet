@@ -44,7 +44,7 @@
     "modalIntentUnknown": "不明",
     "modalIntentSend": "送る",
     "modalValueLabel": "金額",
-    "modalUnverifiedContract": "未検証のコントラクト",
+    "modalUnverifiedContract": "未検証コントラクト",
     "modalRecipient": "受取人",
     "modalSpender": "承認先",
     "modalInteractingWith": "操作先",

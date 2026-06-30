@@ -84,8 +84,8 @@
   },
   "time": {
     "now": "vừa xong",
-    "minutesShort": "{{n}} phút",
-    "hoursShort": "{{n}} giờ"
+    "minutesShort": "{{n}}p",
+    "hoursShort": "{{n}}g"
   },
   "activity": {
     "sent": "Đã gửi",

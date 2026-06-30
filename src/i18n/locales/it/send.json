@@ -66,7 +66,7 @@
       "netTitle": "Rete non supportata",
       "netBody": "Questa richiesta di pagamento è su una rete che Vela non supporta ancora (chain {{chainId}}).",
       "addNetwork": "Aggiungi questa rete",
-      "netNotFound": "Impossibile trovare quella rete.",
+      "netNotFound": "Non siamo riusciti a trovare quella rete.",
       "netNotCompatible": "Quella rete non è ancora compatibile con gli smart account di Vela.",
       "netAddError": "Impossibile aggiungere la rete. Riprova.",
       "tokenTitle": "Token sconosciuto",

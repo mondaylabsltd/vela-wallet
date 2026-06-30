@@ -13,6 +13,7 @@
  * spring scale on press, Lucide icons, Pressable.
  */
 import { color, createStyles, inter, motion, radius, space, text } from '@/constants/theme';
+import { hapticLight } from '@/services/platform';
 import { Download, ScanLine, Send as SendIcon } from 'lucide-react-native';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -49,7 +50,7 @@ function DockButton({ label, icon: Icon, onPress, variant }: DockButtonProps) {
     <AnimatedPressable
       style={[styles.btn, primary ? styles.btnPrimary : styles.btnSecondary, animatedStyle]}
       onPress={onPress}
-      onPressIn={() => { scale.value = withSpring(0.97, motion.spring); }}
+      onPressIn={() => { hapticLight(); scale.value = withSpring(0.97, motion.spring); }}
       onPressOut={() => { scale.value = withSpring(1, motion.spring); }}
     >
       <Icon size={22} color={primary ? color.fg.inverse : color.fg.muted} strokeWidth={2.2} />
@@ -84,7 +85,7 @@ export function WaveDock({ onReceive, onScan, onSend }: WaveDockProps) {
         <AnimatedPressable
           style={[styles.scan, scanStyle]}
           onPress={onScan}
-          onPressIn={() => { scanScale.value = withSpring(0.92, motion.spring); }}
+          onPressIn={() => { hapticLight(); scanScale.value = withSpring(0.92, motion.spring); }}
           onPressOut={() => { scanScale.value = withSpring(1, motion.spring); }}
         >
           <ScanLine size={26} color={color.fg.base} strokeWidth={2} />

@@ -14,7 +14,7 @@
     "emptyTitle": "Deposita il tuo primo asset",
     "emptySubtext": "Tocca qui per vedere il tuo indirizzo e ricevere token",
     "errorTitle": "Errore",
-    "errorLoadBalances": "Impossibile caricare i saldi dei token.",
+    "errorLoadBalances": "Non è stato possibile caricare i saldi dei token.",
     "switcherTitle": "Cambia account",
     "switcherTotal": "Totale {{amount}}",
     "rpcFixTitle": "Correggi RPC",

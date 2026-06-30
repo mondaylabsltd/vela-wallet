@@ -33,7 +33,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { ZERO_DECIMAL_CODES } from '@/services/currency';
-import { showAlert, copyToClipboard, openBrowser } from '@/services/platform';
+import { showAlert, copyToClipboard, openBrowser, hapticLight, hapticSuccess, hapticError } from '@/services/platform';
 import { useTranslation } from 'react-i18next';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, TextInput, View, Pressable } from 'react-native';
@@ -44,7 +44,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, ScanLine, BookUser, AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Copy, Check, Globe } from 'lucide-react-native';
+import { ArrowLeft, X, BookUser, AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Copy, Check, Globe } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
@@ -610,6 +610,7 @@ export default function SendScreen() {
 
   const handleConfirm = async () => {
     if (!selectedToken || !activeAccount) return;
+    hapticLight(); // tactile confirm of the most consequential tap in the app
 
     // Funding was already checked before entering the confirm screen.
     // Proceed directly to transaction execution.
@@ -687,6 +688,7 @@ export default function SendScreen() {
       // light up the explorer link; a slow/failed receipt poll must NOT turn a
       // submitted payment into an error.
       setTxStatus('confirmed');
+      hapticSuccess(); // payment accepted by the bundler — distinct success buzz
       setSending(false);
       clearTokenCache(activeAccount.address);
 
@@ -741,7 +743,7 @@ export default function SendScreen() {
           // Break infinite loop — show error instead of modal
           fundingRetryCount.current = 0;
           setTxError(t('send.txErrorBundlerLoop'));
-          setTxStatus('error');
+          setTxStatus('error'); hapticError();
         } else {
           setTxStatus('idle');
           try {
@@ -781,11 +783,11 @@ export default function SendScreen() {
             }
           } catch { /* fall through */ }
           setTxError(t('send.txErrorBundlerFund'));
-          setTxStatus('error');
+          setTxStatus('error'); hapticError();
         }
       } else {
         setTxError(error?.message ?? String(error));
-        setTxStatus('error');
+        setTxStatus('error'); hapticError();
       }
     } finally {
       setSending(false);
@@ -948,11 +950,6 @@ export default function SendScreen() {
           {/* Recipient */}
           <View style={styles.fieldLabelRow}>
             <Text style={styles.fieldLabel}>{t('send.recipientLabel')}</Text>
-            {!locked && (
-              <Pressable onPress={() => setShowScanner(true)} hitSlop={8} style={styles.fieldLabelAction}>
-                <ScanLine size={15} color={color.fg.subtle} strokeWidth={2} />
-              </Pressable>
-            )}
           </View>
           <View style={styles.inputWrap}>
             <AutoGrowTextInput
@@ -971,8 +968,15 @@ export default function SendScreen() {
             />
             {!params.prefilledRecipient && (
               <View style={styles.inputIcons}>
-                <Pressable onPress={() => setShowContactPicker(true)} hitSlop={6}>
-                  <BookUser size={18} color={color.fg.subtle} strokeWidth={2} />
+                {/* Address book — also the way in to the QR scanner (shown at the
+                    top of the picker sheet). Big, comfortable tap target. */}
+                <Pressable
+                  onPress={() => setShowContactPicker(true)}
+                  hitSlop={8}
+                  style={styles.addrActionBtn}
+                  accessibilityLabel={t('send.recipientPickAria', { defaultValue: 'Choose recipient or scan' })}
+                >
+                  <BookUser size={22} color={color.fg.muted} strokeWidth={2} />
                 </Pressable>
               </View>
             )}
@@ -1347,6 +1351,7 @@ export default function SendScreen() {
         visible={showContactPicker}
         onClose={() => setShowContactPicker(false)}
         onSelect={(addr) => setRecipient(addr)}
+        onScan={locked ? undefined : () => setShowScanner(true)}
         myAddress={address}
       />
     </ScreenContainer>
@@ -1615,8 +1620,13 @@ const styles = createStyles(() => ({
     textTransform: 'uppercase',
     letterSpacing: 0.8,
   },
-  fieldLabelAction: {
-    padding: space.xs,
+  addrActionBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: color.bg.base,
   },
   inputWrap: {
     flexDirection: 'row',

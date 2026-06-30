@@ -84,8 +84,8 @@
   },
   "time": {
     "now": "gerade eben",
-    "minutesShort": "{{n}} Min.",
-    "hoursShort": "{{n}} Std."
+    "minutesShort": "{{n}} m",
+    "hoursShort": "{{n}} h"
   },
   "activity": {
     "sent": "Gesendet",

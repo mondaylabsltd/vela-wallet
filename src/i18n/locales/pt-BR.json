@@ -84,8 +84,8 @@
   },
   "time": {
     "now": "agora",
-    "minutesShort": "{{n}} min",
-    "hoursShort": "{{n}} h"
+    "minutesShort": "Change to '{{n}}m' to maintain compact formatting and match Brazilian fintech conventions",
+    "hoursShort": "Change to '{{n}}h'"
   },
   "activity": {
     "sent": "Enviado",

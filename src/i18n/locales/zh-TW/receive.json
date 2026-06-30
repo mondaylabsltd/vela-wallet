@@ -25,7 +25,7 @@
       "amount": "金額",
       "amountPlaceholder": "0.00",
       "amountHint": "留空則由付款方自行輸入金額",
-      "nativeToken": "{{symbol}}（原生代幣）",
+      "nativeToken": "{{symbol}}（原生幣）",
       "selectNetwork": "選擇網路",
       "selectToken": "選擇代幣",
       "tokenSearchPlaceholder": "搜尋或貼上代幣地址",

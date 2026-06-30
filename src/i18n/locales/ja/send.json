@@ -29,7 +29,7 @@
 
     "warnNotEnoughToken": "このアカウントには {{symbol}} の残高が足りません",
     "warnInsufficientForGas": "金額とガス代の合計で {{sym}} が不足しています",
-    "warnInsufficientGas": "Gas 手数料を支払う {{sym}} が不足しています",
+    "warnInsufficientGas": "ガス代の支払いに必要な {{sym}} が不足しています",
     "warnNeedGas": "Gas 手数料の支払いに {{sym}} が必要です",
 
     "confirmTitle": "確認",

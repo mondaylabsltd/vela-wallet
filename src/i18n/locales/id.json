@@ -84,8 +84,8 @@
   },
   "time": {
     "now": "sekarang",
-    "minutesShort": "{{n}} mnt",
-    "hoursShort": "{{n}} jam"
+    "minutesShort": "{{n}}m",
+    "hoursShort": "{{n}}j"
   },
   "activity": {
     "sent": "Terkirim",

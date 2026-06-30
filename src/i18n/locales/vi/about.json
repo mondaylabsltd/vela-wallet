@@ -2,7 +2,7 @@
   "about": {
     "title": "Giới thiệu",
     "version": "v{{version}} ({{commit}})",
-    "tagline": "Một cách sở hữu crypto đơn giản hơn",
+    "tagline": "Một cách sở hữu tiền điện tử đơn giản hơn",
     "sectionTechnical": "Chi tiết kỹ thuật",
     "techWalletLabel": "Ví",
     "techWalletValue": "Safe v1.4.1",
