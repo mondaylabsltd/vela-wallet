@@ -196,7 +196,7 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
               contractAddress={item.tokenAddress}
               balance={formatTokenAmount(tokenBalanceDouble(item), { compact: true })}
               usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
-              onPress={sweepActive ? () => multiSelect!.onToggle(item) : multiSelect ? () => {} : () => { onSelect(item); setSearch(''); }}
+              onPress={sweepActive ? () => multiSelect!.onToggle(item) : () => { onSelect(item); setSearch(''); }}
               selected={sweepActive ? multiSelect!.selectedIds.has(tokenId(item)) : undefined}
               index={index}
             />

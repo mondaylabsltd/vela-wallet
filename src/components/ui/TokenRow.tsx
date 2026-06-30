@@ -106,7 +106,10 @@ const styles = createStyles(() => ({
     paddingHorizontal: space.md,
     gap: space.lg,
     borderRadius: radius.lg,
-  },
+    // Web: a tappable row isn't text — no caret-blue focus ring, no text drag-select.
+    userSelect: 'none',
+    outlineStyle: 'none',
+  } as any,
   containerSelected: {
     backgroundColor: color.accent.soft,
   },
