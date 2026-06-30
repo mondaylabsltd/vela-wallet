@@ -1,3 +1,5 @@
+nnmpmpnpsp
+
 # Vela Wallet — 100 Clues (Content & SEO Source Document)
 
 > **用途 / Purpose.** 这是一份"事实库"母文档，用来派生大量 SEO 文章、用户指南、开发者文档、对比页、落地页文案等。
@@ -26,6 +28,7 @@ These come straight from the codebase and override intuition. Violating them pro
 ---
 
 ## Tier 1 — Foundational Identity (what Vela *is*) · clues 1–15
+
 *Broadest audience, highest SEO priority. These seed the homepage, "what is Vela," and every top-level intent page.*
 
 **1. A wallet with no seed phrase — the founding thesis.** Each wallet is controlled by a WebAuthn passkey (P-256) held in the device secure enclave and unlocked by Face ID / Touch ID / fingerprint. "There is no secret you can type," so there is nothing to phish. Source: `getvela.app/src/content/docs/whitepaper.md`, [src/modules/passkey/](../src/modules/passkey/). **Keywords:** seedless wallet, no seed phrase, passkey wallet, wallet without recovery phrase.
@@ -61,6 +64,7 @@ These come straight from the codebase and override intuition. Violating them pro
 ---
 
 ## Tier 2 — Key Differentiators & Trust Mechanics · clues 16–35
+
 *These seed comparison pages, "how it works," security explainers, and pricing/fees content.*
 
 **16. "Don't trust us — verify."** Every wallet is on-chain, every line is on GitHub, every claim is checkable. The homepage even shows a **live on-chain "wallets created" counter** read from the Passkey Index contract on Gnosis (`0xdd93420BD49baaBdFF4A363DdD300622Ae87E9c3`) through an auto-failover pool of public RPCs — the page demonstrates the architecture. Source: `getvela.app/src/routes/+page.svelte`:92-206.
@@ -106,6 +110,7 @@ These come straight from the codebase and override intuition. Violating them pro
 ---
 
 ## Tier 3 — Technical Architecture Depth · clues 36–65
+
 *Developer SEO, "how it's built" deep-dives, integration guides. High keyword value for technical search.*
 
 **36. Canonical contract set, identical on every chain.** One deployment used on all chains: SafeProxyFactory `0x4e1DCf7AD4e460CfD30791CCC4F9c8a4f820ec67`, Safe Singleton `0x29fcB43b46531BcA003ddC8FCB67FFE91900C762`, FallbackHandler `0xfd0732Dc9E303f09fCEf3a7388Ad10A83459Ec99`, EntryPoint `0x0000000071727De22E5E9d8BAf0edAc6f37da032`, Safe4337Module `0x75cf11467937ce3F2f357CE24ffc3DBF8fD5c226`, SafeModuleSetup `0x2dd68b007B46fBe91B9A7c3EDa5A7a1063cB5b47`, WebAuthn shared signer `0x94a4F6affBd8975951142c3999aEAB7ecee555c2`, MultiSend `0x38869bf66a61cF6bDB996A6aE40D5853Fd43B526`. Source: [src/services/safe-address.ts](../src/services/safe-address.ts):21-28.
@@ -171,6 +176,7 @@ These come straight from the codebase and override intuition. Violating them pro
 ---
 
 ## Tier 4 — Clear-Signing, Decoding, Fiat & UX Depth · clues 66–85
+
 *Feature deep-dives, security explainers, design/UX content, localization SEO.*
 
 **66. ERC-7730 descriptor cascade (richest-first).** For `eth_sendTransaction`: built-in local descriptor → contract-specific ERC-7730 (`/erc7730/calldata/eip155-{chainId}/{to}.json`) → ERC-165-disambiguated standard token methods → ERC fallbacks (erc20/721/4626) → 4-byte best-effort. Only if all fail does it blind-sign. Source: [clear-signing.ts](../src/services/clear-signing.ts):293.
@@ -216,6 +222,7 @@ These come straight from the codebase and override intuition. Violating them pro
 ---
 
 ## Tier 5 — Connection Activity, Process, Meta & Niche · clues 86–100
+
 *Power-user features, "how it's built" credibility, founder story, and content-ops notes.*
 
 **86. dApp transactions are persisted as `pending` at submit-time, before the receipt wait.** The moment the bundler accepts an op, a `pending` record is written (then patched in-place to confirmed/failed) so nothing is lost on sheet-close or reload; a mount-time effect re-polls any still-pending op newer than 24h. Source: [src/models/dapp-connection.tsx](../src/models/dapp-connection.tsx):497-543,715-734.
@@ -254,25 +261,27 @@ These come straight from the codebase and override intuition. Violating them pro
 
 Each cluster below is a writeable document. Pull facts only from the cited clues.
 
-| # | Content piece | Type | Audience | Primary clues | Target keywords |
-|---|---------------|------|----------|---------------|-----------------|
-| A | **What is Vela Wallet?** (pillar) | SEO pillar | All | 1–4, 8, 11, 13–15 | seedless wallet, smart contract wallet, self-custodial |
-| B | **No seed phrase: how passkey wallets work** | SEO explainer | Crypto-curious | 1, 3, 5, 7, 31, 46 | no seed phrase, passkey wallet, WebAuthn wallet |
-| C | **Vela vs MetaMask / Rabby / Base Account / Clave** | Comparison | Evaluators | 19, 11, 13, 32, 30 | metamask alternative, rabby alternative, best self-custody wallet |
-| D | **Your keys, our architecture can't touch them** | Security/trust | Skeptics | 3, 16, 10, 30, 92 | non-custodial proof, verify don't trust |
-| E | **Recovery without a seed phrase (and its honest limits)** | Guide | Users | 7, 31, 21, 22 | wallet recovery, icloud passkey, lost device crypto |
-| F | **Fees & gas explained** | Guide | Users | 17, 18, 54, 50–53 | crypto wallet fees, account abstraction gas, pay gas in stablecoin |
-| G | **Clear signing: never blind-sign again** | Security feature | Power users | 12, 23, 24, 25, 66–74 | clear signing, no blind signing, unlimited approval protection |
-| H | **Build on Vela: the AA + WebAuthn architecture** | Dev deep-dive | Developers | 4, 36–49, 58 | ERC-4337 v0.7, Safe 4337 module, RIP-7212, counterfactual address |
-| I | **Self-host everything** | Dev/ops guide | Self-hosters | 11, 20, 55–58, 75 | self-hosted wallet, run your own bundler, ethereum-data index |
-| J | **Multi-chain done right: RPC resilience & pricing** | Dev deep-dive | Developers | 28, 29, 55–65 | on-chain pricing, RPC failover, Multicall3 portfolio |
-| K | **Connect a dApp with Vela (WalletPair)** | Guide | Users/devs | 32, 33, 34, 88–90 | walletconnect alternative, dApp signing, EIP-5792 batch |
-| L | **Designed for everyone: cross-platform + 15 languages** | Design/i18n | Users | 79–85, 82 | multilingual wallet, [lang] crypto wallet, accessible wallet |
-| M | **The Vela story / about** | Brand | All | 8, 9, 93, 94 | indie wallet, open source wallet founder |
-| N | **Why a wallet that does less is safer** | Thought leadership | All | 13, 24, 30, 92 | minimal wallet, attack surface, secure by design |
-| O | **Supported networks (incl. Tempo, Monad, World Chain, Unichain)** | Reference/pSEO | SEO long-tail | 14, 54, 58, 63 | [chain] wallet, stablecoin gas wallet |
+
+| # | Content piece                                                      | Type               | Audience       | Primary clues          | Target keywords                                                    |
+| --- | -------------------------------------------------------------------- | -------------------- | ---------------- | ------------------------ | -------------------------------------------------------------------- |
+| A | **What is Vela Wallet?** (pillar)                                  | SEO pillar         | All            | 1–4, 8, 11, 13–15    | seedless wallet, smart contract wallet, self-custodial             |
+| B | **No seed phrase: how passkey wallets work**                       | SEO explainer      | Crypto-curious | 1, 3, 5, 7, 31, 46     | no seed phrase, passkey wallet, WebAuthn wallet                    |
+| C | **Vela vs MetaMask / Rabby / Base Account / Clave**                | Comparison         | Evaluators     | 19, 11, 13, 32, 30     | metamask alternative, rabby alternative, best self-custody wallet  |
+| D | **Your keys, our architecture can't touch them**                   | Security/trust     | Skeptics       | 3, 16, 10, 30, 92      | non-custodial proof, verify don't trust                            |
+| E | **Recovery without a seed phrase (and its honest limits)**         | Guide              | Users          | 7, 31, 21, 22          | wallet recovery, icloud passkey, lost device crypto                |
+| F | **Fees & gas explained**                                           | Guide              | Users          | 17, 18, 54, 50–53     | crypto wallet fees, account abstraction gas, pay gas in stablecoin |
+| G | **Clear signing: never blind-sign again**                          | Security feature   | Power users    | 12, 23, 24, 25, 66–74 | clear signing, no blind signing, unlimited approval protection     |
+| H | **Build on Vela: the AA + WebAuthn architecture**                  | Dev deep-dive      | Developers     | 4, 36–49, 58          | ERC-4337 v0.7, Safe 4337 module, RIP-7212, counterfactual address  |
+| I | **Self-host everything**                                           | Dev/ops guide      | Self-hosters   | 11, 20, 55–58, 75     | self-hosted wallet, run your own bundler, ethereum-data index      |
+| J | **Multi-chain done right: RPC resilience & pricing**               | Dev deep-dive      | Developers     | 28, 29, 55–65         | on-chain pricing, RPC failover, Multicall3 portfolio               |
+| K | **Connect a dApp with Vela (WalletPair)**                          | Guide              | Users/devs     | 32, 33, 34, 88–90     | walletconnect alternative, dApp signing, EIP-5792 batch            |
+| L | **Designed for everyone: cross-platform + 15 languages**           | Design/i18n        | Users          | 79–85, 82             | multilingual wallet, [lang] crypto wallet, accessible wallet       |
+| M | **The Vela story / about**                                         | Brand              | All            | 8, 9, 93, 94           | indie wallet, open source wallet founder                           |
+| N | **Why a wallet that does less is safer**                           | Thought leadership | All            | 13, 24, 30, 92         | minimal wallet, attack surface, secure by design                   |
+| O | **Supported networks (incl. Tempo, Monad, World Chain, Unichain)** | Reference/pSEO     | SEO long-tail  | 14, 54, 58, 63         | [chain] wallet, stablecoin gas wallet                              |
 
 ### Reusable canonical assets
+
 - **Taglines:** "Your keys. Your face." · "A wallet that does less — on purpose." · "We can't access your keys. Not 'we promise not to' — we architecturally can't." · "You're paying for convenience, not access." · "Don't trust us — verify."
 - **One-line ICP:** *"For people who want real self-custody without the footgun of seed-phrase management — if you can unlock your phone, you can use Vela safely."* (`docs/introduction.md`)
 - **High-value technical keyword set:** Safe smart account, ERC-4337 (EntryPoint v0.7), WebAuthn passkey, P-256 / RIP-7212, EIP-1271, ERC-7730 clear signing, EIP-5792 batch calls, counterfactual / CREATE2 address, EIP-7708.
