@@ -13,7 +13,7 @@
  * Theme-driven (light/dark). Spring press + staggered entrance per the design system.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { AccessibilityInfo, Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useTranslation } from 'react-i18next';
@@ -80,12 +80,20 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
   // (when the chain has an explorer). Mirrors the dApp/history detail actions.
   const swipeRef = useRef<Swipeable>(null);
   const [copied, setCopied] = useState(false);
+  const mountedRef = useRef(true);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    mountedRef.current = false;
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+  }, []);
+
   const explorerUrl = txHash && chain?.explorerURL
     ? `${chain.explorerURL.replace(/\/$/, '')}/tx/${txHash}`
     : undefined;
   const canSwipe = !!txHash;
 
   const handleViewExplorer = () => {
+    hapticLight();
     swipeRef.current?.close();
     if (explorerUrl) openBrowser(explorerUrl);
   };
@@ -93,8 +101,14 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
     if (!txHash) return;
     hapticLight();
     await copyToClipboard(txHash);
+    if (!mountedRef.current) return;
     setCopied(true);
-    setTimeout(() => { setCopied(false); swipeRef.current?.close(); }, 1200);
+    AccessibilityInfo.announceForAccessibility(t('receive.copied', { defaultValue: 'Copied' }));
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = setTimeout(() => {
+      if (mountedRef.current) setCopied(false);
+      swipeRef.current?.close();
+    }, 1200);
   };
 
   const renderRightActions = () => (
@@ -108,8 +122,8 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
         {copied
           ? <Check size={17} color={color.fg.inverse} strokeWidth={2.6} />
           : <Copy size={17} color={color.fg.inverse} strokeWidth={2.2} />}
-        <Text style={styles.swipeActionText}>
-          {copied ? t('activity.copied', { defaultValue: 'Copied' }) : t('activity.copy', { defaultValue: 'Copy' })}
+        <Text style={[styles.swipeActionText, styles.swipeActionTextLight]}>
+          {copied ? t('receive.copied', { defaultValue: 'Copied' }) : t('activity.copy', { defaultValue: 'Copy' })}
         </Text>
       </Pressable>
       {explorerUrl && (
@@ -117,10 +131,11 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
           style={[styles.swipeAction, styles.swipeExplorer]}
           onPress={handleViewExplorer}
           accessibilityRole="button"
-          accessibilityLabel={t('activity.viewOnExplorer', { defaultValue: 'View on block explorer' })}
+          accessibilityLabel={t('history.viewOnExplorer', { defaultValue: 'View on Explorer' })}
         >
-          <ExternalLink size={17} color={color.fg.inverse} strokeWidth={2.2} />
-          <Text style={styles.swipeActionText}>{t('activity.explorer', { defaultValue: 'Explorer' })}</Text>
+          {/* Dark glyph + label on the orange pill — white failed WCAG AA (3.6:1). */}
+          <ExternalLink size={17} color={color.fg.base} strokeWidth={2.2} />
+          <Text style={[styles.swipeActionText, styles.swipeActionTextDark]}>{t('componentsTx.explorer', { defaultValue: 'Explorer' })}</Text>
         </Pressable>
       )}
     </View>
@@ -176,22 +191,32 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
 
   return (
     <Animated.View entering={fadeInDown(index * 40, 300)}>
-      {canSwipe ? (
+      {/* Shadow lives on this wrapper — OUTSIDE Swipeable's overflow:hidden, which
+          would otherwise clip the card shadow. Swipeable is always rendered (only
+          the actions are gated) so the row subtree stays structurally stable across
+          a pending→confirmed update and the entrance animation never replays. */}
+      <View style={styles.shadowWrap}>
         <Swipeable
           ref={swipeRef}
           overshootRight={false}
           friction={2}
           rightThreshold={36}
-          renderRightActions={renderRightActions}
+          renderRightActions={canSwipe ? renderRightActions : undefined}
         >
           {rowInner}
         </Swipeable>
-      ) : rowInner}
+      </View>
     </Animated.View>
   );
 }
 
 const styles = createStyles(() => ({
+  // Shadow moved to shadowWrap (Swipeable clips it); the card keeps bg + border.
+  shadowWrap: {
+    borderRadius: radius.xl,
+    backgroundColor: color.bg.raised,
+    ...shadow.sm,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -202,7 +227,6 @@ const styles = createStyles(() => ({
     borderColor: color.border.base,
     paddingVertical: space.lg,
     paddingHorizontal: space.lg,
-    ...shadow.sm,
   },
   glow: {
     position: 'absolute',
@@ -308,6 +332,7 @@ const styles = createStyles(() => ({
   swipeActionText: {
     fontSize: text.xs,
     ...inter.semibold,
-    color: color.fg.inverse,
   },
+  swipeActionTextLight: { color: color.fg.inverse },
+  swipeActionTextDark: { color: color.fg.base },
 }));
