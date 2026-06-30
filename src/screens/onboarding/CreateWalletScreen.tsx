@@ -125,8 +125,14 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
         publicKeyHex,
         createdAt: new Date().toISOString(),
       };
-      await saveAccount(account);
 
+      // Persist a pending upload (drives retry) but DO NOT save the account
+      // locally yet. The account is saved only once the public key is confirmed
+      // on the index server (see below). Otherwise a sync failure would leave a
+      // wallet that's usable on THIS device but unrecoverable on any other —
+      // boot auto-enters on any saved account, and login checks local first, so
+      // the server-side gap would stay silent. No funds risk: the address is
+      // only shown on the success screen, so an unsynced wallet is never funded.
       await savePendingUpload({
         id: registration.credentialId,
         name: trimmed,
@@ -146,6 +152,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
         return;
       }
 
+      await saveAccount(account); // only now that the key is confirmed server-side
       setCreated(true);
       setLoading(false);
       setStatus('');
@@ -172,6 +179,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
       name: pending.name,
     });
     if (ok) {
+      await saveAccount(pending.account); // confirmed server-side — now safe to persist locally
       setCreated(true);
       setUploadFailed(false);
     }
