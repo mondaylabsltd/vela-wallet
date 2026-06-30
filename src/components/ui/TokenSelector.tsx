@@ -234,8 +234,8 @@ const styles = createStyles(() => ({
   sweepAllRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
-    paddingHorizontal: space.sm,
+    gap: space.lg,
+    paddingHorizontal: space.md,
     paddingVertical: space.md,
     marginBottom: space.sm,
   },
@@ -325,7 +325,7 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: space.sm,
+    paddingHorizontal: space.md,
     marginBottom: space.md,
   },
   summaryCount: {

@@ -103,7 +103,7 @@ const styles = createStyles(() => ({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: space.lg,
-    paddingHorizontal: space.sm,
+    paddingHorizontal: space.md,
     gap: space.lg,
     borderRadius: radius.lg,
   },
