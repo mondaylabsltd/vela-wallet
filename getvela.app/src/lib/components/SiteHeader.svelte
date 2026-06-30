@@ -34,7 +34,7 @@
 				</a>
 			{/each}
 			<a
-				href="https://github.com/atshelchin/vela-wallet"
+				href="https://github.com/mondaylabsltd/vela-wallet"
 				target="_blank"
 				rel="noopener"
 				onclick={() => (open = false)}>GitHub</a

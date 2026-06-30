@@ -69,7 +69,7 @@
 		<p>
 			All backend services are open source. You can self-host them to eliminate dependency on our
 			infrastructure. See our <a
-				href="https://github.com/atshelchin/vela-wallet#self-deploy-service-endpoints"
+				href="https://github.com/mondaylabsltd/vela-wallet#self-deploy-service-endpoints"
 				target="_blank"
 				rel="noopener">self-hosting documentation</a
 			>.
@@ -95,7 +95,7 @@
 			Vela Wallet is distributed under the MIT License. The software is provided "as is", without
 			warranty of any kind, express or implied. See the
 			<a
-				href="https://github.com/atshelchin/vela-wallet/blob/main/LICENSE"
+				href="https://github.com/mondaylabsltd/vela-wallet/blob/main/LICENSE"
 				target="_blank"
 				rel="noopener">full license</a
 			>.
@@ -124,7 +124,7 @@
 		<h2>9. Contact</h2>
 		<p>
 			Questions about these terms? Open an issue on
-			<a href="https://github.com/atshelchin/vela-wallet/issues" target="_blank" rel="noopener"
+			<a href="https://github.com/mondaylabsltd/vela-wallet/issues" target="_blank" rel="noopener"
 				>GitHub</a
 			>.
 		</p>

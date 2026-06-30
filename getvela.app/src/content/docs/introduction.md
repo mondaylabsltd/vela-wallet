@@ -27,7 +27,7 @@ understand the security model behind it.
 - **No blind signing.** Transactions are decoded into human-readable intent
   (ERC-7730); unknown calls are flagged, not hidden.
 - **Open source.** The wallet and all its services are
-  [public on GitHub](https://github.com/atshelchin/vela-wallet) so anyone can
+  [public on GitHub](https://github.com/mondaylabsltd/vela-wallet) so anyone can
   audit exactly what they do.
 
 ## Who it's for

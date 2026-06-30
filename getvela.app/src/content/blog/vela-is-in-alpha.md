@@ -64,8 +64,8 @@ the code. Run the services on your own infrastructure. Try to break it and tell
 me how. The bug reports and pull requests early users send genuinely decide what
 gets built next.
 
-- Read the code: [github.com/atshelchin/vela-wallet](https://github.com/atshelchin/vela-wallet)
-- Found something? [Open an issue](https://github.com/atshelchin/vela-wallet/issues)
+- Read the code: [github.com/mondaylabsltd/vela-wallet](https://github.com/mondaylabsltd/vela-wallet)
+- Found something? [Open an issue](https://github.com/mondaylabsltd/vela-wallet/issues)
 - Want the full security and recovery model in depth? [Read the whitepaper](/docs/whitepaper)
 
 That's the deal. Vela is early, it's honest about being early, and it's built in
