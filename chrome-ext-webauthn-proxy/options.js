@@ -22,6 +22,32 @@ function normalizeDomain(input) {
 
 const pattern = (domain) => `*://${domain}/*`;
 
+/**
+ * The dev/preview host patterns the extension injects into, read straight from
+ * the manifest's content_scripts. Port wildcards are stripped (match patterns
+ * already cover every port) and the result deduped, so they're valid origins
+ * for chrome.permissions.request.
+ */
+function devHostPatterns() {
+  const cs = chrome.runtime.getManifest().content_scripts || [];
+  const raw = cs.flatMap((s) => s.matches || []);
+  const cleaned = raw.map((p) => p.replace(/:(\*|\d+)(?=\/)/, ''));
+  return [...new Set(cleaned)];
+}
+
+async function refreshDevHosts() {
+  const origins = devHostPatterns();
+  let granted = 0;
+  for (const o of origins) {
+    if (await chrome.permissions.contains({ origins: [o] })) granted++;
+  }
+  const all = granted === origins.length;
+  $('devStatus').textContent = all
+    ? `✓ All ${origins.length} dev/preview hosts allowed.`
+    : `${granted} of ${origins.length} dev/preview hosts allowed — click below to grant the rest.`;
+  $('devStatus').className = 'status ' + (all ? 'ok' : granted ? 'warn' : '');
+}
+
 async function refresh() {
   const { proxyRpId } = await chrome.storage.sync.get({ proxyRpId: DEFAULT_RP_ID });
   $('domain').value = proxyRpId;
@@ -59,4 +85,20 @@ $('save').addEventListener('click', async () => {
   $('status').className = 'status ok';
 });
 
+$('grantDev').addEventListener('click', async () => {
+  const origins = devHostPatterns();
+  // One gesture, one combined Chrome prompt for every dev/preview host.
+  const granted = await chrome.permissions.request({ origins });
+  if (!granted) {
+    $('devStatus').textContent = 'Permission denied — dev hosts not granted.';
+    $('devStatus').className = 'status warn';
+    return;
+  }
+  await refresh();
+  await refreshDevHosts();
+  $('devStatus').textContent = '✓ All dev/preview hosts granted. Reload your dev page to apply.';
+  $('devStatus').className = 'status ok';
+});
+
 refresh();
+refreshDevHosts();

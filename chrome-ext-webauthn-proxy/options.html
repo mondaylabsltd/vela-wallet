@@ -28,6 +28,9 @@
       cursor: pointer;
     }
     button:hover { background: #4ddfff; }
+    button.secondary { background: transparent; color: #00d2ff; border: 1px solid #2f6f86; }
+    button.secondary:hover { background: rgba(0,210,255,0.12); border-color: #00d2ff; }
+    .div { border: none; border-top: 1px solid #2a2b40; margin: 30px 0 4px; }
     .status { margin-top: 16px; font-size: 13px; min-height: 18px; }
     .status.ok { color: #58e08a; }
     .status.warn { color: #ffcc66; }
@@ -48,6 +51,18 @@
 
   <button id="save">Save &amp; grant access</button>
   <div id="status" class="status"></div>
+
+  <hr class="div">
+
+  <label>Dev / preview hosts</label>
+  <p class="hint">
+    Where your app runs. The proxy's scripts only inject on hosts you've allowed.
+    Grant the localhost &amp; preview domains in one click, instead of toggling each
+    one in <code>chrome://extensions</code>.
+  </p>
+  <div id="devStatus" class="status"></div>
+  <button id="grantDev" class="secondary">Grant all dev/preview hosts</button>
+
   <div id="granted" class="granted"></div>
 
   <script src="options.js"></script>
