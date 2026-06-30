@@ -9,7 +9,7 @@
  * `TokenSelector`'s `multiSelect` prop and `batch-send`'s builders.
  */
 import { useCallback, useState } from 'react';
-import { tokenId, type APIToken } from '@/models/types';
+import { tokenChainId, tokenId, type APIToken } from '@/models/types';
 import { selectAllValuable } from '@/services/batch-send';
 
 export function useSweepSelection() {
@@ -56,6 +56,12 @@ export function useSweepSelection() {
     setChainId(null);
   }, []);
 
+  // Bulk-set the selection (e.g. prefilling a hand-off from another screen).
+  const selectTokens = useCallback((toks: APIToken[]) => {
+    setSelectedIds(new Set(toks.map(tokenId)));
+    setChainId(toks.length ? tokenChainId(toks[0]) : null);
+  }, []);
+
   const selectedTokens = useCallback(
     (tokens: APIToken[]) => tokens.filter((tk) => selectedIds.has(tokenId(tk))),
     [selectedIds],
@@ -70,6 +76,7 @@ export function useSweepSelection() {
     toggleAll,
     onNetworkChange,
     reset,
+    selectTokens,
     selectedTokens,
   };
 }

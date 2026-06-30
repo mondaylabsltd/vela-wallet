@@ -46,8 +46,9 @@ import { RpcTroubleBanner } from '@/components/ui/RpcTroubleBanner';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 import { useDAppConnection, type ConnectionStatus } from '@/models/dapp-connection';
-import { getAllNetworksSync, type Network } from '@/models/network';
-import { shortAddr, tokenBalanceDouble, tokenChainId, tokenUsdValue, type APIToken } from '@/models/types';
+import { chainName, getAllNetworksSync, type Network } from '@/models/network';
+import { shortAddr, isAddress, tokenBalanceDouble, tokenChainId, tokenId, tokenUsdValue, type APIToken } from '@/models/types';
+import { useSweepSelection } from '@/hooks/use-sweep-selection';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import {
   loadActivityItems, loadActivityTransactions, loadConnectionEvents, relativeTime, syncReceivedTransfers,
@@ -102,6 +103,9 @@ export default function HomeScreen() {
   const { activeAccount, state, dispatch } = useWallet();
   const conn = useDAppConnection();
   const { connectToWalletPair, connectToBridge } = conn;
+  // Same multi-select as the Send picker (shared hook) — filter a network in the
+  // assets sheet to pick several tokens, then hand them to Send.
+  const sweep = useSweepSelection();
 
   const address = activeAccount?.address ?? state.address;
   const accountName = activeAccount?.name ?? 'Wallet';
@@ -467,7 +471,7 @@ export default function HomeScreen() {
     }
 
     const addr = req?.recipient ?? data;
-    if (/^0x[0-9a-fA-F]{40}$/.test(addr)) {
+    if (isAddress(addr)) {
       router.push(`/send?prefilledRecipient=${addr}`);
       return;
     }
@@ -498,6 +502,17 @@ export default function HomeScreen() {
     setShowAssets(false);
     router.push({ pathname: '/send', params: { preselectedSymbol: token.symbol, preselectedNetwork: token.network } });
   }, [router]);
+
+  // Multi-token confirm: one token → normal send; two+ → hand the selection to
+  // Send's multi-token flow (the send/confirm logic lives only there).
+  const onAssetsMultiConfirm = useCallback(() => {
+    const picked = sweep.selectedTokens(tokens);
+    if (picked.length === 0) return;
+    if (picked.length === 1) { sweep.reset(); openAssetForSend(picked[0]); return; }
+    setShowAssets(false);
+    router.push({ pathname: '/send', params: { preselectedSweep: picked.map(tokenId).join(',') } });
+    sweep.reset();
+  }, [sweep, tokens, openAssetForSend, router]);
 
   // Connection-activity clear (whole list) + per-row delete. Both prune the
   // underlying records; on-chain transactions are untouched.
@@ -732,18 +747,36 @@ export default function HomeScreen() {
       />
 
       {/* Balance-hero assets — reuses the Send token picker (tap a token → Send). */}
-      <AppModal visible={showAssets} onClose={() => setShowAssets(false)}>
+      <AppModal visible={showAssets} onClose={() => { setShowAssets(false); sweep.reset(); }}>
         <View style={styles.assetsSheet}>
           <View style={styles.assetsHead}>
             <Text style={styles.assetsTitle}>{t('home.assetsSheetTitle')}</Text>
-            <Pressable onPress={() => setShowAssets(false)} hitSlop={8}>
+            <Pressable onPress={() => { setShowAssets(false); sweep.reset(); }} hitSlop={8}>
               <X size={22} color={color.fg.base} strokeWidth={2} />
             </Pressable>
           </View>
           <View style={styles.assetsBody}>
-            {/* Stablecoins are the primary thing users reach for, so pre-select
-                that chip; tapping it again falls back to all tokens. */}
-            <TokenSelector tokens={tokens} onSelect={openAssetForSend} onAddChanged={loadData} defaultCategory="stable" />
+            {/* Default to the stablecoin chip; filter a specific network to
+                multi-select tokens (shared with the Send picker). */}
+            <TokenSelector
+              tokens={tokens}
+              onSelect={openAssetForSend}
+              onAddChanged={loadData}
+              defaultCategory="stable"
+              initialChainId={sweep.chainId}
+              multiSelect={{
+                selectedIds: sweep.selectedIds,
+                onToggle: sweep.toggle,
+                onToggleAll: sweep.toggleAll,
+                isAllSelected: sweep.isAllSelected,
+                onNetworkChange: sweep.onNetworkChange,
+                onConfirm: onAssetsMultiConfirm,
+                confirmLabel: sweep.count === 1
+                  ? t('send.continueBtn')
+                  : t('send.multiSendContinue', { n: sweep.count, chain: sweep.chainId != null ? chainName(sweep.chainId) : '' }),
+                selectAllLabel: t('send.selectAllValuable'),
+              }}
+            />
           </View>
         </View>
       </AppModal>

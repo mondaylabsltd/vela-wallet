@@ -197,6 +197,8 @@ export default function SendScreen() {
     prefilledTokenAddress?: string;
     prefilledAmountBase?: string;
     locked?: string;
+    // Multi-token hand-off from the Home assets sheet: comma-joined tokenId()s.
+    preselectedSweep?: string;
   }>();
   const locked = params.locked === '1';
   // The amount is only fixed when the request actually specified one; an
@@ -207,7 +209,7 @@ export default function SendScreen() {
   const dc = useDisplayCurrency();
   const formatUsd = dc.fmt;
 
-  const hasPreselection = !!(params.prefilledRecipient || (params.preselectedSymbol && params.preselectedNetwork));
+  const hasPreselection = !!(params.prefilledRecipient || params.preselectedSweep || (params.preselectedSymbol && params.preselectedNetwork));
   const [step, setStep] = useState<Step>(hasPreselection ? 'enter-details' : 'select-token');
 
   // EIP-681 locked-request resolution + the exceptions it can hit.
@@ -353,6 +355,26 @@ export default function SendScreen() {
           return;
         }
 
+        // Multi-token hand-off from the Home assets sheet → land in sweep mode.
+        if (params.preselectedSweep) {
+          const wanted = new Set(params.preselectedSweep.split(','));
+          const picked = nonZero.filter((tk) => wanted.has(tokenId(tk)));
+          if (picked.length > 0) {
+            sweep.selectTokens(picked);
+            setSweepMode(true);
+            setSelectedToken(picked[0]);
+            setStep('enter-details');
+            if (activeAccount) {
+              const chainId = tokenChainId(picked[0]);
+              prefetchForSend(activeAccount.address, chainId);
+              fetchBundlerAccountInfo(chainId, activeAccount.address).catch(() => {});
+              findAccountByCredentialId(activeAccount.id).then((s) => { prefetchedAccount.current = s ?? null; });
+              import('@/services/webauthn-verify').then((m) => { webauthnModuleRef.current = m; });
+            }
+          }
+          return;
+        }
+
         if (params.preselectedSymbol && params.preselectedNetwork) {
           const match = nonZero.find(
             (t) => t.symbol === params.preselectedSymbol && t.network === params.preselectedNetwork
@@ -370,7 +392,7 @@ export default function SendScreen() {
       })
       .catch(() => showAlert(t('common.error'), t('send.alertLoadTokensError')))
       .finally(() => setLoading(false));
-  }, [address, params.preselectedSymbol, params.preselectedNetwork, lockRetry]);
+  }, [address, params.preselectedSymbol, params.preselectedNetwork, params.preselectedSweep, lockRetry]);
 
   // Re-pull balances after the user adds/removes a custom token in the sheet,
   // so it shows up (or disappears) without a manual page refresh.
