@@ -24,7 +24,7 @@ import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { getAccountBalances } from '@/services/balance-cache';
 import { sortAccountsByBalance, totalAccountBalance } from '@/services/accounts';
 import { hapticSuccess } from '@/services/platform';
-import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
+import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 
 type Props = {
   visible: boolean;
@@ -132,12 +132,19 @@ const styles = createStyles(() => ({
   title: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
   subtitle: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
   spinner: { marginRight: space.sm },
-  list: { paddingHorizontal: space.lg, paddingBottom: space['2xl'], gap: space.sm },
+  list: { paddingHorizontal: space.lg, paddingBottom: space['2xl'], gap: space.md },
+  // Every row is a clean white card with a hairline border + subtle lift.
+  // Selection is signalled by recolouring the border (accent ring) — not by a
+  // heavy soft-fill block. borderWidth stays constant so the active row doesn't
+  // shift; only the colour changes.
   item: {
     flexDirection: 'row', alignItems: 'center', gap: space.md,
-    padding: space.md, borderRadius: radius.lg,
+    padding: space.lg, borderRadius: radius.xl,
+    backgroundColor: color.bg.raised,
+    borderWidth: 1.5, borderColor: color.border.base,
+    ...shadow.sm,
   },
-  itemActive: { backgroundColor: color.accent.soft },
+  itemActive: { borderColor: color.accent.base },
   avatar: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: color.accent.soft,
     alignItems: 'center', justifyContent: 'center',
