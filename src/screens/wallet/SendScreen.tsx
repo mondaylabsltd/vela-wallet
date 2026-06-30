@@ -10,7 +10,7 @@ import { chainName, nativeSymbol, networkForChainId, networkId, tokenBadgeNetwor
 import { addCustomNetworkByChainId } from '@/services/add-network';
 import { parseEIP681, fromBaseUnits, toBaseUnits } from '@/services/eip681';
 import { resolveTokenMetadata } from '@/services/token-metadata';
-import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue } from '@/models/types';
+import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenId, tokenLogoURLs, tokenUsdValue } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
@@ -27,7 +27,7 @@ import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, format
 import { AmountText } from '@/components/ui/AmountText';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { MultiRecipientEditor, makeRecipientId, recipientsAreValid, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
-import { buildSplitCalls, sumSplitBaseUnits } from '@/services/batch-send';
+import { buildSplitCalls, sumSplitBaseUnits, buildSweepCalls, toSweepTokens, selectAllValuable } from '@/services/batch-send';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { TransactionReceipt } from '@/components/ui/TransactionReceipt';
@@ -231,6 +231,11 @@ export default function SendScreen() {
   const [splitMode, setSplitMode] = useState(false);
   const [recipients, setRecipients] = useState<RecipientDraft[]>([]);
   const [pickerTarget, setPickerTarget] = useState<string | null>(null);
+  // ② sweep mode (多币一人 / 清空): many tokens on ONE chain → one recipient, each
+  // at full balance, in a single MultiSend UserOp. Mutually exclusive with split.
+  const [sweepMode, setSweepMode] = useState(false);
+  const [sweepSelected, setSweepSelected] = useState<Set<string>>(new Set());
+  const [sweepChainId, setSweepChainId] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [copiedContract, setCopiedContract] = useState(false);
@@ -484,9 +489,10 @@ export default function SendScreen() {
   // reaches the confirm step — same surface the dApp signing sheet shows.
   // Best-effort: any failure leaves `sim` null and confirm shows nothing extra.
   useEffect(() => {
-    const okSingle = !splitMode && isValidAddress(recipient);
+    const okSingle = !splitMode && !sweepMode && isValidAddress(recipient);
     const okSplit = splitMode && recipientsAreValid(recipients);
-    if (step !== 'confirm' || !selectedToken || !activeAccount || (!okSingle && !okSplit)) {
+    const okSweep = sweepMode && isValidAddress(recipient) && sweepTokensList.length > 0;
+    if (step !== 'confirm' || !selectedToken || !activeAccount || (!okSingle && !okSplit && !okSweep)) {
       setSim(null);
       return;
     }
@@ -494,10 +500,12 @@ export default function SendScreen() {
     setSim(null);
     try {
       const chainId = tokenChainId(selectedToken);
-      // One call (single send) or N calls (split) — the sim sums them into one
+      // One call (single) or N calls (split/sweep) — the sim sums them into one
       // net-balance preview, the same surface a batch UserOp produces on-chain.
       let calls: { to: string; value?: string; data?: string }[];
-      if (splitMode) {
+      if (sweepMode) {
+        calls = buildSweepCalls(recipient.trim(), toSweepTokens(sweepTokensList));
+      } else if (splitMode) {
         calls = buildSplitCalls(
           { tokenAddress: isNativeToken(selectedToken) ? null : selectedToken.tokenAddress, decimals: selectedToken.decimals },
           recipients.map((r) => ({ address: r.address.trim(), amount: r.amount })),
@@ -516,7 +524,7 @@ export default function SendScreen() {
       /* malformed amount → no sim */
     }
     return () => { cancelled = true; };
-  }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate, splitMode, recipients]);
+  }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate, splitMode, recipients, sweepMode, sweepSelected]);
 
   // Recipient-risk on the confirm step: "first time" (address-poisoning defense)
   // + contract-vs-EOA. Drives the first-time/contract tags by the To row and
@@ -568,6 +576,58 @@ export default function SendScreen() {
     }
   };
 
+  // ── ② sweep-mode (多币一人 / 清空) helpers ───────────────────────────────────
+  const sweepTokensList = tokens.filter((tk) => sweepSelected.has(tokenId(tk)));
+
+  // A batch UserOp is single-chain — toggling a token on a new chain restarts the
+  // selection on that chain; clearing the last token resets the chain lock.
+  const toggleSweepToken = (tk: APIToken) => {
+    const id = tokenId(tk);
+    const chain = tokenChainId(tk);
+    setSweepSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        if (next.size === 0) setSweepChainId(null);
+        return next;
+      }
+      if (sweepChainId != null && chain !== sweepChainId) {
+        setSweepChainId(chain);
+        return new Set([id]);
+      }
+      setSweepChainId(chain);
+      next.add(id);
+      return next;
+    });
+  };
+
+  // "全选有价值代币" — all held/priced/non-spam tokens on a single chain.
+  const selectAllValuableSweep = (visible: APIToken[]) => {
+    const valuable = selectAllValuable(visible);
+    if (valuable.length === 0) return;
+    const chain = sweepChainId ?? tokenChainId(valuable[0]);
+    const onChain = valuable.filter((tk) => tokenChainId(tk) === chain);
+    setSweepChainId(chain);
+    setSweepSelected(new Set(onChain.map((tk) => tokenId(tk))));
+  };
+
+  // Selected → advance to enter-recipient. The first token carries chain/gas context.
+  const startSweepConfirm = () => {
+    const first = tokens.find((tk) => sweepSelected.has(tokenId(tk)));
+    if (!first) return;
+    setSelectedToken(first);
+    setStep('enter-details');
+    if (activeAccount) {
+      const chainId = tokenChainId(first);
+      prefetchForSend(activeAccount.address, chainId);
+      fetchBundlerAccountInfo(chainId, activeAccount.address).catch(() => {});
+      findAccountByCredentialId(activeAccount.id).then((s) => { prefetchedAccount.current = s ?? null; });
+      import('@/services/webauthn-verify').then((m) => { webauthnModuleRef.current = m; });
+    }
+  };
+
+  const exitSweep = () => { setSweepMode(false); setSweepSelected(new Set()); setSweepChainId(null); };
+
   const handleSelectToken = (token: APIToken) => {
     setSelectedToken(token);
     setStep('enter-details');
@@ -585,7 +645,13 @@ export default function SendScreen() {
   };
 
   const handleContinue = async () => {
-    if (splitMode) {
+    if (sweepMode) {
+      if (!isValidAddress(recipient)) {
+        showAlert(t('send.alertInvalidAddressTitle'), t('send.alertInvalidAddressBody'));
+        return;
+      }
+      if (sweepTokensList.length === 0) return;
+    } else if (splitMode) {
       if (!recipientsAreValid(recipients)) {
         showAlert(t('send.alertInvalidAddressTitle'), t('send.alertInvalidAddressBody'));
         return;
@@ -761,17 +827,23 @@ export default function SendScreen() {
       setTxStatus('submitting');
       const maxFee = feeEstimate?.maxFeePerGas;
 
-      // One send line per recipient (single send = one line). Split mode submits
-      // every line as a single Safe MultiSend UserOp — one signature, one gas.
+      // One send line per output (single = 1, split = N recipients, sweep = N
+      // tokens). split/sweep submit as a single Safe MultiSend UserOp — one
+      // signature, one gas. Each line carries its own token so sweep's mixed-token
+      // activity records (symbol/decimals/usd) are correct per line.
       let result;
-      let lines: { to: string; toName?: string; amount: string }[];
-      if (splitMode) {
+      let lines: { to: string; toName?: string; amount: string; symbol: string; decimals: number; priceUsd: number }[];
+      if (sweepMode) {
+        const calls = buildSweepCalls(recipient.trim(), toSweepTokens(sweepTokensList));
+        result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn);
+        lines = sweepTokensList.map((tk) => ({ to: recipient.trim(), toName: recipientIdentity?.name, amount: tk.balance || '0', symbol: tk.symbol, decimals: tk.decimals, priceUsd: tk.priceUsd ?? 0 }));
+      } else if (splitMode) {
         const calls = buildSplitCalls(
           { tokenAddress: isNativeToken(selectedToken) ? null : selectedToken.tokenAddress, decimals: selectedToken.decimals },
           recipients.map((r) => ({ address: r.address.trim(), amount: r.amount })),
         );
         result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn);
-        lines = recipients.map((r) => ({ to: r.address.trim(), amount: r.amount }));
+        lines = recipients.map((r) => ({ to: r.address.trim(), amount: r.amount, symbol: selectedToken!.symbol, decimals: selectedToken!.decimals, priceUsd: selectedToken!.priceUsd ?? 0 }));
       } else {
         const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
         const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
@@ -780,7 +852,7 @@ export default function SendScreen() {
         } else {
           result = await sendERC20(activeAccount.address, selectedToken.tokenAddress!, recipient, weiHex, chainId, stored.publicKeyHex, signFn, maxFee);
         }
-        lines = [{ to: recipient, toName: recipientIdentity?.name, amount: tokenAmount }];
+        lines = [{ to: recipient, toName: recipientIdentity?.name, amount: tokenAmount, symbol: selectedToken.symbol, decimals: selectedToken.decimals, priceUsd: selectedToken.priceUsd ?? 0 }];
       }
 
       // Bundler accepted the UserOp — treat the payment as sent right now (we
@@ -797,9 +869,8 @@ export default function SendScreen() {
       // and be patched independently when the on-chain hash lands. USD is captured
       // now so non-stablecoin sends (e.g. BNB) still render a fiat amount later.
       const ts = Math.floor(Date.now() / 1000);
-      const price = selectedToken.priceUsd ?? 0;
       const records = lines.map((ln, i) => {
-        const usd = parseFloat(ln.amount || '0') * price;
+        const usd = parseFloat(ln.amount || '0') * ln.priceUsd;
         return {
           id: lines.length > 1 ? `${result.userOpHash}-${i}` : result.userOpHash,
           userOpHash: result.userOpHash,
@@ -808,8 +879,8 @@ export default function SendScreen() {
           to: ln.to,
           toName: ln.toName,
           value: ln.amount,
-          symbol: selectedToken!.symbol,
-          decimals: selectedToken!.decimals,
+          symbol: ln.symbol,
+          decimals: ln.decimals,
           chainId,
           timestamp: ts,
           status: 'pending' as const,
@@ -904,12 +975,17 @@ export default function SendScreen() {
       setTxError(null);
       setStep('enter-details');
     } else if (step === 'enter-details') {
-      setSelectedToken(null);
-      setAmount('');
-      setRecipient('');
-      setSplitMode(false);
-      setRecipients([]);
-      setStep('select-token');
+      if (sweepMode) {
+        // Back to the multi-select picker, preserving the sweep selection.
+        setStep('select-token');
+      } else {
+        setSelectedToken(null);
+        setAmount('');
+        setRecipient('');
+        setSplitMode(false);
+        setRecipients([]);
+        setStep('select-token');
+      }
     } else {
       router.back();
     }
@@ -918,12 +994,29 @@ export default function SendScreen() {
   // Step 1: Select Token — delegated to the shared TokenSelector.
   const renderSelectToken = () => (
     <Animated.View style={styles.stepContainer} entering={fadeInDown(0, 300)}>
-      <Text style={styles.stepTitle}>{t('send.selectTokenTitle')}</Text>
+      <View style={styles.selectHead}>
+        <Text style={styles.stepTitle}>
+          {sweepMode ? t('send.sweepTitle', { defaultValue: 'Empty wallet' }) : t('send.selectTokenTitle')}
+        </Text>
+        <Pressable onPress={() => (sweepMode ? exitSweep() : setSweepMode(true))} hitSlop={8} style={styles.sweepToggleBtn}>
+          <Text style={styles.sweepToggleText}>
+            {sweepMode ? t('send.cancel', { defaultValue: 'Cancel' }) : t('send.sweepEntry', { defaultValue: 'Empty wallet' })}
+          </Text>
+        </Pressable>
+      </View>
       <TokenSelector
         tokens={tokens}
         loading={loading}
         onSelect={handleSelectToken}
         onAddChanged={refreshTokens}
+        multiSelect={sweepMode ? {
+          selectedIds: sweepSelected,
+          onToggle: toggleSweepToken,
+          onSelectAllValuable: selectAllValuableSweep,
+          onConfirm: startSweepConfirm,
+          confirmLabel: t('send.sweepContinue', { n: sweepSelected.size, defaultValue: `Empty ${sweepSelected.size} token(s) →` }),
+          selectAllLabel: t('send.selectAllValuable', { defaultValue: 'Select all valuable' }),
+        } : undefined}
       />
     </Animated.View>
   );
@@ -941,9 +1034,10 @@ export default function SendScreen() {
     return (
       <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Animated.View entering={fadeInDown(0, 300)}>
-          <Text style={styles.stepTitle}>{t('send.sendTitle', { symbol: selectedToken.symbol })}</Text>
+          <Text style={styles.stepTitle}>{sweepMode ? t('send.sweepTitle', { defaultValue: 'Empty wallet' }) : t('send.sendTitle', { symbol: selectedToken.symbol })}</Text>
 
-          {/* Hero card — tap the row to switch token; ERC-20s show a copyable contract address. */}
+          {/* Token hero (single/split) — tap to switch token. Sweep hides it. */}
+          {!sweepMode && (
           <VelaCard style={styles.heroCard}>
             <Pressable style={styles.heroRow} disabled={locked} onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); setSplitMode(false); setRecipients([]); }}>
               <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={44} />
@@ -984,9 +1078,10 @@ export default function SendScreen() {
               </Pressable>
             ) : null}
           </VelaCard>
+          )}
 
-          {/* Single-recipient flow (default). Split mode replaces it below. */}
-          {!splitMode && (<>
+          {/* Single-recipient flow (default). Split / sweep replace it below. */}
+          {!splitMode && !sweepMode && (<>
           {/* Amount — large display with inline unit */}
           <Pressable style={styles.amountWrap} onPress={() => { if (!amountLocked) amountInputRef.current?.focus(); }}>
             <View style={styles.amountTopRow}>
@@ -1125,6 +1220,53 @@ export default function SendScreen() {
             />
           )}
 
+          {/* ② sweep — the selected tokens (full balance) + one recipient. */}
+          {sweepMode && (<>
+            <View style={styles.sweepSummary}>
+              <Text style={styles.sweepSummaryTitle}>
+                {t('send.sweepSummary', { n: sweepTokensList.length, chain: chainName(tokenChainId(selectedToken)), defaultValue: `${sweepTokensList.length} token(s) on ${chainName(tokenChainId(selectedToken))}` })}
+              </Text>
+              <Text style={styles.sweepSummaryUsd}>{formatUsd(sweepTokensList.reduce((s, tk) => s + tokenUsdValue(tk), 0))}</Text>
+            </View>
+            {sweepTokensList.map((tk) => (
+              <View key={tokenId(tk)} style={styles.sweepTokenRow}>
+                <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={32} />
+                <Text style={styles.sweepTokenSym}>{tk.symbol}</Text>
+                <View style={styles.sweepTokenVals}>
+                  <Text style={styles.sweepTokenBal}>{formatTokenAmount(tokenBalanceDouble(tk), { compact: true })}</Text>
+                  {tokenUsdValue(tk) > 0 && <Text style={styles.sweepTokenUsd}>{formatUsd(tokenUsdValue(tk))}</Text>}
+                </View>
+              </View>
+            ))}
+
+            <View style={[styles.fieldLabelRow, { marginTop: space.xl }]}>
+              <Text style={styles.fieldLabel}>{t('send.recipientLabel')}</Text>
+            </View>
+            <View style={styles.inputWrap}>
+              <AutoGrowTextInput
+                style={styles.input}
+                minHeight={48}
+                maxHeight={100}
+                placeholder={t('send.recipientPlaceholder')}
+                placeholderTextColor={color.fg.subtle}
+                value={recipient}
+                onChangeText={(t) => setRecipient(t)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                blurOnSubmit
+                returnKeyType="done"
+              />
+              <View style={styles.inputIcons}>
+                <Pressable onPress={() => { setPickerTarget(null); setShowContactPicker(true); }} hitSlop={8} style={styles.addrActionBtn}>
+                  <BookUser size={22} color={color.fg.muted} strokeWidth={2} />
+                </Pressable>
+              </View>
+            </View>
+            <View style={{ marginTop: space.sm, paddingLeft: space.sm }}>
+              <KnownContactBadge address={recipient} />
+            </View>
+          </>)}
+
           {fundingNeeded?.reason === 'wallet_balance_too_low' && (
             <View style={styles.lowBalanceWarning}>
               <Text style={styles.lowBalanceText}>
@@ -1138,7 +1280,7 @@ export default function SendScreen() {
             onPress={handleContinue}
             loading={estimatingGas}
             style={styles.continueBtn}
-            disabled={(splitMode ? !recipientsAreValid(recipients) : (!recipient || !amount)) || estimatingGas || fundingNeeded?.reason === 'wallet_balance_too_low' || (locked && !!amountWarning)}
+            disabled={(splitMode ? !recipientsAreValid(recipients) : sweepMode ? (!isValidAddress(recipient) || sweepTokensList.length === 0) : (!recipient || !amount)) || estimatingGas || fundingNeeded?.reason === 'wallet_balance_too_low' || (locked && !!amountWarning)}
           />
         </Animated.View>
       </ScrollView>
@@ -1181,24 +1323,44 @@ export default function SendScreen() {
               <Text style={styles.transferAddr}>{shortAddr(address ?? '')}</Text>
             </View>
 
-            {/* Line + Token */}
+            {/* Line + Token(s) — one token, or every swept token in sweep mode */}
             <View style={styles.transferMiddle}>
               <View style={styles.transferLineCol}>
                 <View style={styles.transferLine} />
               </View>
-              <View style={styles.transferToken}>
-                <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={36} />
-                <View style={styles.transferTokenIdentity}>
-                  <Text style={styles.transferTokenSymbol}>{selectedToken.symbol}</Text>
-                  <Text style={styles.transferTokenChain}>{chain}</Text>
+              {!sweepMode ? (
+                <View style={styles.transferToken}>
+                  <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={36} />
+                  <View style={styles.transferTokenIdentity}>
+                    <Text style={styles.transferTokenSymbol}>{selectedToken.symbol}</Text>
+                    <Text style={styles.transferTokenChain}>{chain}</Text>
+                  </View>
+                  <View style={styles.transferTokenValues}>
+                    <Text style={styles.transferTokenAmount}>{formatBalance(amountNum)}</Text>
+                    {usdAmount > 0 && (
+                      <Text style={styles.transferTokenSub}>≈ {formatUsd(usdAmount)}</Text>
+                    )}
+                  </View>
                 </View>
-                <View style={styles.transferTokenValues}>
-                  <Text style={styles.transferTokenAmount}>{formatBalance(amountNum)}</Text>
-                  {usdAmount > 0 && (
-                    <Text style={styles.transferTokenSub}>≈ {formatUsd(usdAmount)}</Text>
-                  )}
+              ) : (
+                <View style={styles.sweepConfirmList}>
+                  {sweepTokensList.map((tk) => (
+                    <View key={tokenId(tk)} style={styles.transferToken}>
+                      <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={36} />
+                      <View style={styles.transferTokenIdentity}>
+                        <Text style={styles.transferTokenSymbol}>{tk.symbol}</Text>
+                        <Text style={styles.transferTokenChain}>{chainName(tokenChainId(tk))}</Text>
+                      </View>
+                      <View style={styles.transferTokenValues}>
+                        <Text style={styles.transferTokenAmount}>{formatBalance(tokenBalanceDouble(tk))}</Text>
+                        {tokenUsdValue(tk) > 0 && (
+                          <Text style={styles.transferTokenSub}>≈ {formatUsd(tokenUsdValue(tk))}</Text>
+                        )}
+                      </View>
+                    </View>
+                  ))}
                 </View>
-              </View>
+              )}
             </View>
 
             {/* To — one recipient, or the full list in split mode */}
@@ -1831,6 +1993,43 @@ const styles = createStyles(() => ({
   },
   confirmRecipientLeft: { flex: 1, gap: 2 },
   confirmRecipientAmt: { alignItems: 'flex-end' },
+  // ② sweep (清空)
+  selectHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: space.md,
+  },
+  sweepToggleBtn: {
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    borderRadius: radius.full,
+    backgroundColor: color.bg.sunken,
+    borderWidth: 1,
+    borderColor: color.border.base,
+  },
+  sweepToggleText: { fontSize: text.sm, ...inter.semibold, color: color.accent.base },
+  sweepSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: space.sm,
+    marginBottom: space.md,
+  },
+  sweepSummaryTitle: { fontSize: text.base, ...inter.semibold, color: color.fg.base, flex: 1 },
+  sweepSummaryUsd: { fontSize: text.base, ...inter.bold, fontFamily: font.numeric, color: color.fg.base },
+  sweepTokenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.lg,
+    paddingVertical: space.md,
+    paddingHorizontal: space.sm,
+  },
+  sweepTokenSym: { flex: 1, fontSize: text.lg, ...inter.semibold, color: color.fg.base },
+  sweepTokenVals: { alignItems: 'flex-end' },
+  sweepTokenBal: { fontSize: text.base, ...inter.semibold, fontFamily: font.numeric, color: color.fg.base },
+  sweepTokenUsd: { fontSize: text.sm, ...inter.regular, fontFamily: font.numeric, color: color.fg.muted },
+  sweepConfirmList: { flex: 1, gap: space.md },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
