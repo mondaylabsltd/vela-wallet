@@ -31,6 +31,7 @@ import { useRouter } from 'expo-router';
 import { AlertTriangle, BookUser, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, X, XCircle, Zap } from 'lucide-react-native';
 import { ContactsManager } from '@/components/contacts/ContactsManager';
 import { BugReportModal } from '@/components/ui/BugReportModal';
+import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { useTranslation } from 'react-i18next';
 import { useLanguagePreference } from '@/i18n/language';
 import { LANGUAGE_NATIVE_NAMES, SUPPORTED_LANGUAGES, type AppLanguage, type LanguagePreference } from '@/i18n';
@@ -538,15 +539,14 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
                 <ServiceHealthBadge health={healths[key] ?? { status: 'checking' }} />
               </View>
               <View style={s.epCardDivider} />
-              <TextInput
+              <AutoGrowTextInput
                 style={s.endpointInput}
+                minHeight={56}
                 value={endpoints[key]}
                 onChangeText={(v) => setEndpoints({ ...endpoints, [key]: v })}
                 onBlur={() => handleSave(key, endpoints[key])}
                 autoCapitalize="none"
                 autoCorrect={false}
-                multiline
-                scrollEnabled={false}
                 placeholder={DEFAULT_SERVICE_ENDPOINTS[key]}
                 placeholderTextColor={color.fg.subtle}
               />

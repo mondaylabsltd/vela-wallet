@@ -740,8 +740,9 @@ export default function HomeScreen() {
             </Pressable>
           </View>
           <View style={styles.assetsBody}>
-            {/* Overview of everything behind the balance → default to all tokens. */}
-            <TokenSelector tokens={tokens} onSelect={openAssetForSend} onAddChanged={loadData} defaultCategory="all" />
+            {/* Stablecoins are the primary thing users reach for, so pre-select
+                that chip; tapping it again falls back to all tokens. */}
+            <TokenSelector tokens={tokens} onSelect={openAssetForSend} onAddChanged={loadData} defaultCategory="stable" />
           </View>
         </View>
       </AppModal>

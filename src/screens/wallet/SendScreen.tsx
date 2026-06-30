@@ -24,6 +24,7 @@ import { saveContact } from '@/services/contacts';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, parseBundlerUnderfunded, recommendedFundingWei, type FundingNeeded } from '@/services/bundler-service';
 import { AmountText } from '@/components/ui/AmountText';
+import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { TransactionReceipt } from '@/components/ui/TransactionReceipt';
@@ -954,8 +955,10 @@ export default function SendScreen() {
             )}
           </View>
           <View style={styles.inputWrap}>
-            <TextInput
+            <AutoGrowTextInput
               style={styles.input}
+              minHeight={48}
+              maxHeight={100}
               placeholder={t('send.recipientPlaceholder')}
               placeholderTextColor={color.fg.subtle}
               value={recipient}
@@ -963,7 +966,6 @@ export default function SendScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               editable={!params.prefilledRecipient}
-              multiline
               blurOnSubmit
               returnKeyType="done"
             />

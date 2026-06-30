@@ -9,10 +9,11 @@
  * GitHub-URL fallback instead, and user input is never lost.
  */
 import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronRight } from 'lucide-react-native';
 import { AppModal } from './AppModal';
+import { AutoGrowTextInput } from './AutoGrowTextInput';
 import { VelaButton } from './VelaButton';
 import { color, createStyles, inter, radius, space, text } from '@/constants/theme';
 import { hapticSuccess, openURL } from '@/services/platform';
@@ -88,21 +89,21 @@ export function BugReportModal({ visible, language, area, onClose }: {
         <Text style={styles.subtitle}>{t('componentsUi.bugReport.subtitle')}</Text>
 
         <Text style={styles.label}>{t('componentsUi.bugReport.whatLabel')}</Text>
-        <TextInput
+        <AutoGrowTextInput
           style={styles.input}
+          minHeight={64}
           value={what}
           onChangeText={setWhat}
-          multiline
           placeholder={t('componentsUi.bugReport.whatPlaceholder')}
           placeholderTextColor={color.fg.subtle}
         />
 
         <Text style={styles.label}>{t('componentsUi.bugReport.stepsLabel')}</Text>
-        <TextInput
+        <AutoGrowTextInput
           style={styles.input}
+          minHeight={64}
           value={steps}
           onChangeText={setSteps}
-          multiline
           placeholder={t('componentsUi.bugReport.stepsPlaceholder')}
           placeholderTextColor={color.fg.subtle}
         />

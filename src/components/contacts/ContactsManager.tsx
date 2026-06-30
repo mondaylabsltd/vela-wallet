@@ -11,6 +11,7 @@ import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator } from 
 import { useTranslation } from 'react-i18next';
 import { Search, X, Star, Plus, Trash2, ChevronLeft } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
+import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import { shortAddr } from '@/models/types';
@@ -208,8 +209,9 @@ function ContactForm({ editing, onBack, onSaved, onDelete }: {
         />
 
         <Text style={[styles.fieldLabel, { marginTop: space.xl }]}>{t('contacts.addressLabel')}</Text>
-        <TextInput
+        <AutoGrowTextInput
           style={[styles.field, styles.fieldMono, isEdit && styles.fieldDisabled]}
+          minHeight={52}
           placeholder={t('contacts.addressPlaceholder')}
           placeholderTextColor={color.fg.subtle}
           value={address}
@@ -217,7 +219,6 @@ function ContactForm({ editing, onBack, onSaved, onDelete }: {
           editable={!isEdit}
           autoCapitalize="none"
           autoCorrect={false}
-          multiline
         />
         {address.length > 0 && !addrValid && (
           <Text style={styles.fieldError}>{t('contacts.invalidAddress')}</Text>
