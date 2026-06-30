@@ -8,7 +8,7 @@
     "warningTitle": "Перед получением",
     "warningBody": "Отправляйте активы только в поддерживаемых сетях — переводы в неподдерживаемых сетях могут быть потеряны навсегда.",
     "warningHint": "Проверьте",
-    "warningHintNetworks": "список поддерживаемых сетей ({{count}})",
+    "warningHintNetworks": "{{count}} поддерживаемых сетей",
     "warningHintSuffix": "ниже, прежде чем делиться адресом.",
     "warningConfirm": "Понятно",
     "networksLabel": "Работает в {{count}} сетях EVM",

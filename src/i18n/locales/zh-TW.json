@@ -93,7 +93,7 @@
     "toAddr": "至 {{addr}}",
     "fromAddr": "來自 {{addr}}",
     "signatureRequest": "簽署請求",
-    "typedDataSignature": "結構化資料簽章",
+    "typedDataSignature": "簽署結構化資料",
     "dappTransaction": "dApp 交易",
     "activity": "活動"
   }

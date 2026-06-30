@@ -26,7 +26,7 @@
       "accountNameLabel": "Nama Akun",
       "accountNamePlaceholder": "Masukkan nama untuk akun Anda",
       "accountNameHint": "Nama ini disimpan bersama kunci publik Anda secara on-chain untuk masuk lintas perangkat.",
-      "ack0": "Ini adalah dompet self-custody. Kunci privat passkey Anda dikelola oleh aplikasi pengelola kata sandi perangkat Anda (iCloud Keychain / Google Password Manager). Vela Wallet tidak dapat mengaksesnya atau memulihkannya.",
+      "ack0": "Ini adalah dompet self-custody. Kunci privat passkey Anda dikelola oleh pengelola kata sandi perangkat Anda (iCloud Keychain / Google Password Manager). Vela Wallet tidak dapat mengakses atau memulihkannya.",
       "ack1": "Jika Anda kehilangan perangkat, Anda dapat memulihkan dompet di perangkat baru melalui akun iCloud atau Google Anda.",
       "ack2": "Jika akun iCloud atau Google Anda disusupi, kendali atas dompet Anda juga bisa ikut disusupi. Lindungi dengan kata sandi yang kuat dan 2FA.",
       "ack3": "Saya menyetujui ",

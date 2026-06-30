@@ -39,7 +39,7 @@
       "connectWebTitle": "Hubungkan ke dApp Browser",
       "connectBleTitle": "Hubungkan via Bluetooth",
       "connectWebHint": "Hubungkan ke dApp Browser lokal untuk berinteraksi dengan dApp.",
-      "connectBleHint": "Mulai memancarkan sinyal untuk memasangkan dengan ekstensi browser Vela Connect.",
+      "connectBleHint": "Mulai broadcast untuk memasangkan dengan ekstensi browser Vela Connect.",
       "connect": "Hubungkan",
       "connecting": "Menghubungkan...",
       "waiting": "Menunggu koneksi...",

@@ -9,7 +9,7 @@
     "warningBody": "请仅在支持的网络上发送资产——不支持的转账可能永久丢失。",
     "warningHint": "在分享地址前，请查看",
     "warningHintNetworks": "{{count}} 个支持的网络",
-    "warningHintSuffix": "。",
+    "warningHintSuffix": "以下再分享地址。",
     "warningConfirm": "我已了解",
     "networksLabel": "支持 {{count}} 个 EVM 网络",
     "shareCardHeadline": "扫码向我转账",

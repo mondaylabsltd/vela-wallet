@@ -50,7 +50,7 @@
     "txWaitingConfirm": "等待区块链确认...",
     "txElapsed": "已等待 {{elapsed}} 秒，即将完成",
     "txRemaining": "剩余约 {{remaining}} 秒",
-    "txTypicalTime": "{{chainName}} 通常在约 {{estSecs}}s 内确认",
+    "txTypicalTime": "{{chainName}} 通常在约 {{estSecs}} 秒内确认",
     "txRetryBtn": "重试",
     "txErrorTimeout": "交易已提交，但确认超时。请稍后查看历史记录。",
     "txErrorBundlerLoop": "Gas 账户余额被 bundler 持续拒绝，请稍后再试或提高 Gas 档位。",

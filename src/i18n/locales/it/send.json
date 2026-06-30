@@ -28,7 +28,7 @@
     "alertLoadTokensError": "Impossibile caricare i token.",
 
     "warnNotEnoughToken": "Non hai abbastanza {{symbol}} in questo account",
-    "warnInsufficientForGas": "{{sym}} insufficiente per coprire importo + commissioni di gas",
+    "warnInsufficientForGas": "{{sym}} insufficiente per coprire l'importo e le commissioni di gas",
     "warnInsufficientGas": "{{sym}} insufficiente per le commissioni di gas",
     "warnNeedGas": "Ti serve {{sym}} per pagare le commissioni di gas",
 

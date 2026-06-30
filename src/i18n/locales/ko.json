@@ -93,7 +93,7 @@
     "toAddr": "받는 곳: {{addr}}",
     "fromAddr": "보내는 곳: {{addr}}",
     "signatureRequest": "서명 요청",
-    "typedDataSignature": "타입 데이터 서명",
+    "typedDataSignature": "구조화된 데이터 서명",
     "dappTransaction": "dApp 거래",
     "activity": "활동"
   }

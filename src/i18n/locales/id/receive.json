@@ -6,7 +6,7 @@
     "shareButton": "Bagikan",
     "listeningForDeposits": "Memantau deposit",
     "warningTitle": "Sebelum Anda menerima",
-    "warningBody": "Hanya kirim aset di jaringan yang didukung — transfer yang tidak didukung dapat hilang permanen.",
+    "warningBody": "Hanya kirim aset di jaringan yang didukung — pengiriman di jaringan yang tidak didukung dapat hilang permanen.",
     "warningHint": "Periksa",
     "warningHintNetworks": "{{count}} jaringan yang didukung",
     "warningHintSuffix": "di bawah sebelum membagikan alamat Anda.",

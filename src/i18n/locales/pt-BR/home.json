@@ -33,7 +33,7 @@
     "rescanWindow6h": "Últimas 6 horas",
     "rescanWindowRecent": "Últimos ~1.000 blocos",
     "rescanScanning": "Escaneando {{window}}…",
-    "rescanFound": "{{count}} novo(s) pagamento(s) encontrado(s).",
+    "rescanFound": "Encontrados {{count}} novos pagamentos.",
     "rescanNone": "Nenhum pagamento novo encontrado em {{window}}.",
     "rescanFailed": "Não foi possível acessar {{names}}. Corrija o RPC no banner da tela inicial ou confira um explorador de blocos.",
     "rescanAgain": "Escanear novamente",

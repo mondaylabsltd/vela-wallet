@@ -12,7 +12,7 @@
     "noTokensWithBalance": "沒有任何有餘額的代幣",
 
     "sendTitle": "發送 {{symbol}}",
-    "maxBtn": "最大",
+    "maxBtn": "全部",
     "recipientLabel": "收款人",
     "recipientPlaceholder": "0x… 地址",
     "velaUser": "Vela 使用者",
@@ -60,7 +60,7 @@
 
     "txErrorTimeout": "交易已送出，但確認逾時。稍後請至記錄查看。",
     "txErrorBundlerLoop": "Gas 帳戶餘額持續被 Bundler 拒絕。請稍後再試或提高 Gas 等級。",
-    "txErrorBundlerFund": "Bundler 帳戶需要更多 Gas。請至設定為其儲值。",
+    "txErrorBundlerFund": "Bundler 帳戶需要更多 Gas。請在設定中補充資金。",
     "txErrorPublicKey": "找不到此帳戶的公鑰",
 
     "lock": {

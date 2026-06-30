@@ -46,7 +46,7 @@
     "connDelete": "删除",
     "connPending": "处理中",
     "connFailed": "失败",
-    "assetsSheetTitle": "你的资产",
+    "assetsSheetTitle": "您的资产",
     "cancel": "取消",
     "toastReceived": "已收到 {{amount}} {{token}}"
   }

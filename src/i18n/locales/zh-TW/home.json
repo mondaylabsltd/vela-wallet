@@ -38,7 +38,7 @@
     "connReconnectBtn": "立即重新連線",
     "connReconnectStuck": "無法重新連線。請重試，或中斷後重新配對。",
     "connEventsHead": "連線動態 · {{count}}",
-    "connNoEvents": "此連線尚無任何請求。",
+    "connNoEvents": "此連線還沒有任何請求。",
     "toastReceived": "已收到 {{amount}} {{token}}"
   }
 }

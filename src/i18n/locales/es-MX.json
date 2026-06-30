@@ -93,7 +93,7 @@
     "toAddr": "a {{addr}}",
     "fromAddr": "de {{addr}}",
     "signatureRequest": "Solicitud de firma",
-    "typedDataSignature": "Firma de datos tipados",
+    "typedDataSignature": "Firma de datos estructurados",
     "dappTransaction": "Transacción de dApp",
     "activity": "Actividad"
   }

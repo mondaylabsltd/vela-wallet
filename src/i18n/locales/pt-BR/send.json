@@ -63,7 +63,7 @@
     "txErrorBundlerFund": "A conta do bundler precisa de mais gas. Adicione fundos nas Configurações.",
     "txErrorPublicKey": "Chave pública não encontrada para esta conta",
     "lock": {
-      "netTitle": "Rede não compatível",
+      "netTitle": "Rede não suportada",
       "netBody": "Esta solicitação de pagamento está em uma rede que a Vela ainda não suporta (chain {{chainId}}).",
       "addNetwork": "Adicionar esta rede",
       "netNotFound": "Não foi possível encontrar esta rede.",

@@ -19,7 +19,7 @@
     "preparing": "Wird vorbereitet ...",
     "continueBtn": "Weiter",
     "alertInvalidAddressTitle": "Ungültige Adresse",
-    "alertInvalidAddressBody": "Bitte geben Sie eine gültige Ethereum-Adresse ein (0x ...).",
+    "alertInvalidAddressBody": "Bitte geben Sie eine gültige Ethereum-Adresse ein (0x...).",
     "alertInvalidAmountTitle": "Ungültiger Betrag",
     "alertInvalidAmountBody": "Bitte geben Sie einen gültigen Betrag größer als null ein.",
     "alertInsufficientBalanceTitle": "Unzureichendes Guthaben",

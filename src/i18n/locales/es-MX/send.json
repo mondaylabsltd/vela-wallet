@@ -60,7 +60,7 @@
 
     "txErrorTimeout": "La transacción se envió, pero se agotó el tiempo de confirmación. Revisa el historial más tarde.",
     "txErrorBundlerLoop": "El bundler sigue rechazando el saldo de la cuenta de gas. Inténtalo más tarde o sube el nivel de gas.",
-    "txErrorBundlerFund": "La cuenta del bundler necesita más gas. Fondéala en Ajustes.",
+    "txErrorBundlerFund": "Financia tu cuenta de bundler en Ajustes.",
     "txErrorPublicKey": "No se encontró la llave pública de esta cuenta",
     "lock": {
       "netTitle": "Red no compatible",

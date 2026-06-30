@@ -19,7 +19,7 @@
     },
     "rpcProviders": {
       "modalTitle": "RPC-Anbieter",
-      "description": "Füge einen API-Schlüssel hinzu, um unterstützte Netzwerke über deinen eigenen Anbieter zu leiten. Priorität: netzwerkspezifischer RPC, dann deine Anbieter, danach Vela-intern und zuletzt der Chain-Index.",
+      "description": "Fügen Sie einen API-Schlüssel hinzu, um unterstützte Netzwerke über Ihren eigenen Anbieter zu leiten. Priorität: netzwerkspezifischer RPC, dann Ihre Anbieter, danach Vela-intern und zuletzt der Chain-Index.",
       "getKey": "Schlüssel holen",
       "test": "Testen",
       "notSet": "Nicht festgelegt",

@@ -90,10 +90,10 @@
   "activity": {
     "sent": "Gönderildi",
     "received": "Alındı",
-    "toAddr": "Alıcı: {{addr}}",
-    "fromAddr": "Gönderen: {{addr}}",
+    "toAddr": "{{addr}} adresine",
+    "fromAddr": "{{addr}} adresinden",
     "signatureRequest": "İmza isteği",
-    "typedDataSignature": "Yapılandırılmış veri imzası",
+    "typedDataSignature": "Typed Data İmzası",
     "dappTransaction": "dApp işlemi",
     "activity": "Etkinlik"
   }

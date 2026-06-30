@@ -25,7 +25,7 @@
       "notSet": "未设置",
       "checkKey": "检查密钥",
       "activeNetworks": "{{count}} 个网络",
-      "supportsCount": "支持 {{total}} 个网络中的 {{count}} 个",
+      "supportsCount": "支持 {{count}} 个网络，共 {{total}} 个",
       "unavailable": "不可用"
     },
     "endpoints": {

@@ -42,7 +42,7 @@
       "rawCalldataToggle": "Calldata grezzo · {{bytes}} byte",
       "signMessage": "Firma il messaggio",
       "signTypedData": "Firma i dati tipizzati",
-      "spenderLabel": "Autorizzato",
+      "spenderLabel": "Spender",
       "recipientLabel": "Destinatario",
       "interactingLabel": "Interazione con",
       "unverifiedLabel": "Contratto non verificato",
