@@ -27,7 +27,7 @@ import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, format
 import { AmountText } from '@/components/ui/AmountText';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { MultiRecipientEditor, makeRecipientId, recipientsAreValid, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
-import { buildSplitCalls, sumSplitBaseUnits, buildSweepCalls, toSweepTokens } from '@/services/batch-send';
+import { buildSplitCalls, sumSplitBaseUnits, buildSweepCalls, toSweepTokens, reserveNativeGas } from '@/services/batch-send';
 import { useSweepSelection } from '@/hooks/use-sweep-selection';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
@@ -506,7 +506,7 @@ export default function SendScreen() {
       // net-balance preview, the same surface a batch UserOp produces on-chain.
       let calls: { to: string; value?: string; data?: string }[];
       if (sweepMode) {
-        calls = buildSweepCalls(recipient.trim(), toSweepTokens(sweepTokensList));
+        calls = buildSweepCalls(recipient.trim(), sweepSpecs(chainId));
       } else if (splitMode) {
         calls = buildSplitCalls(
           { tokenAddress: isNativeToken(selectedToken) ? null : selectedToken.tokenAddress, decimals: selectedToken.decimals },
@@ -526,7 +526,7 @@ export default function SendScreen() {
       /* malformed amount → no sim */
     }
     return () => { cancelled = true; };
-  }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate, splitMode, recipients, sweepMode, sweep.selectedIds]);
+  }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate, splitMode, recipients, sweepMode, sweep.selectedIds, feeEstimate]);
 
   // Recipient-risk on the confirm step: "first time" (address-poisoning defense)
   // + contract-vs-EOA. Drives the first-time/contract tags by the To row and
@@ -583,6 +583,17 @@ export default function SendScreen() {
   // confirmed selection. Multi-select is gated on a chosen network (TokenSelector
   // only shows checkboxes once one is picked), so selection is always one chain.
   const sweepTokensList = sweep.selectedTokens(tokens);
+
+  // The exact per-token amounts a sweep submits: full balance for ERC-20s, and
+  // the native coin minus a gas reserve so the EntryPoint prefund can be paid
+  // (non-Tempo, no paymaster). Used by BOTH the simulation and the submit so the
+  // preview matches what gets signed. The native line drops out if it can't even
+  // cover the reserve.
+  const sweepSpecs = (chainId: number) =>
+    reserveNativeGas(
+      toSweepTokens(sweepTokensList),
+      !isTempoChain(chainId) && feeEstimate ? feeEstimate.totalWei * 3n : 0n,
+    );
 
   // Confirmed selection → advance. ONE token is a normal amount-send (not a
   // full-balance sweep); TWO+ is a sweep. The first token carries chain/gas context.
@@ -813,9 +824,18 @@ export default function SendScreen() {
       let result;
       let lines: { to: string; toName?: string; amount: string; symbol: string; decimals: number; priceUsd: number }[];
       if (sweepMode) {
-        const calls = buildSweepCalls(recipient.trim(), toSweepTokens(sweepTokensList));
+        // Reserved specs = the exact amounts sent (native minus gas). Activity
+        // lines are derived from them so each record shows what actually moved.
+        const specs = sweepSpecs(chainId);
+        if (specs.length === 0) {
+          throw new Error(t('send.sweepNoFundsAfterGas', { defaultValue: 'Not enough to cover gas after the reserve.' }));
+        }
+        const calls = buildSweepCalls(recipient.trim(), specs);
         result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn);
-        lines = sweepTokensList.map((tk) => ({ to: recipient.trim(), toName: recipientIdentity?.name, amount: tk.balance || '0', symbol: tk.symbol, decimals: tk.decimals, priceUsd: tk.priceUsd ?? 0 }));
+        lines = specs.map((spec) => {
+          const tk = sweepTokensList.find((t) => (isNativeToken(t) ? null : t.tokenAddress) === spec.tokenAddress)!;
+          return { to: recipient.trim(), toName: recipientIdentity?.name, amount: spec.amount, symbol: tk.symbol, decimals: tk.decimals, priceUsd: tk.priceUsd ?? 0 };
+        });
       } else if (splitMode) {
         const calls = buildSplitCalls(
           { tokenAddress: isNativeToken(selectedToken) ? null : selectedToken.tokenAddress, decimals: selectedToken.decimals },

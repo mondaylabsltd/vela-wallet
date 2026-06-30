@@ -75,6 +75,7 @@
     "recipientCount": "{{n}} destinataires",
     "removeRecipient": "Retirer",
     "alertInsufficientBalanceBody": "Le total dépasse votre solde.",
-    "recipientPickAria": "Choisir un destinataire ou scanner"
+    "recipientPickAria": "Choisir un destinataire ou scanner",
+    "sweepNoFundsAfterGas": "Solde insuffisant après la réserve de gas."
   }
 }

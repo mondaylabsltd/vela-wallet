@@ -75,6 +75,7 @@
     "recipientCount": "{{n}} 位收款人",
     "removeRecipient": "移除",
     "alertInsufficientBalanceBody": "总额超过你的余额。",
-    "recipientPickAria": "选择收款人或扫码"
+    "recipientPickAria": "选择收款人或扫码",
+    "sweepNoFundsAfterGas": "扣除 gas 储备后余额不足。"
   }
 }

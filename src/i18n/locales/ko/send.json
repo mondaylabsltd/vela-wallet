@@ -75,6 +75,7 @@
     "recipientCount": "수신자 {{n}}명",
     "removeRecipient": "제거",
     "alertInsufficientBalanceBody": "합계가 잔액을 초과합니다.",
-    "recipientPickAria": "수신자 선택 또는 스캔"
+    "recipientPickAria": "수신자 선택 또는 스캔",
+    "sweepNoFundsAfterGas": "가스 예약 후 잔액이 부족합니다."
   }
 }

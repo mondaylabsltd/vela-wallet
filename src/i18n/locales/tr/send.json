@@ -75,6 +75,7 @@
     "recipientCount": "{{n}} alıcı",
     "removeRecipient": "Kaldır",
     "alertInsufficientBalanceBody": "Toplam bakiyenizi aşıyor.",
-    "recipientPickAria": "Alıcı seç veya tara"
+    "recipientPickAria": "Alıcı seç veya tara",
+    "sweepNoFundsAfterGas": "Gaz rezervinden sonra bakiye yetersiz."
   }
 }

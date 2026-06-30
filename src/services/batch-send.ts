@@ -17,7 +17,7 @@
  * string ('0x0' for ERC-20 transfers), `data` is 0x-hex calldata ('0x' for a
  * bare native transfer).
  */
-import { toBaseUnits } from '@/services/eip681';
+import { toBaseUnits, fromBaseUnits } from '@/services/eip681';
 import { isNativeToken, tokenBalanceDouble, tokenUsdValue, type APIToken } from '@/models/types';
 
 /** One entry in a Safe MultiSend batch, shaped for `sendBatchCalls`. */
@@ -135,4 +135,23 @@ export function toSweepTokens(tokens: APIToken[]): SweepToken[] {
 /** The tokens a "全选有价值代币" tap selects: held, non-spam, with a known USD value. */
 export function selectAllValuable(tokens: APIToken[]): APIToken[] {
   return tokens.filter((t) => isSweepable(t, true));
+}
+
+/**
+ * Trim a sweep's native-coin line by `reserveWei` so the Safe keeps enough to
+ * fund the EntryPoint gas prefund. On non-Tempo chains there's no paymaster, so
+ * the prefund is paid from the Safe's native balance — sweeping it ALL would
+ * leave nothing to prefund and the UserOp would revert (AA21). ERC-20 lines are
+ * untouched; the native line is dropped entirely if nothing remains after the
+ * reserve. A non-positive reserve (e.g. Tempo, where prefund is a no-op) is a
+ * no-op.
+ */
+export function reserveNativeGas(tokens: SweepToken[], reserveWei: bigint): SweepToken[] {
+  if (reserveWei <= 0n) return tokens;
+  return tokens.flatMap((tk) => {
+    if (tk.tokenAddress !== null) return [tk]; // ERC-20 — gas isn't paid in it
+    const left = toBaseUnits(tk.amount, tk.decimals) - reserveWei;
+    if (left <= 0n) return []; // native balance can't even cover the gas reserve
+    return [{ ...tk, amount: fromBaseUnits(left, tk.decimals) }];
+  });
 }

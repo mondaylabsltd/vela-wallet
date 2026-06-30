@@ -13,10 +13,12 @@ import {
   isSweepable,
   toSweepTokens,
   selectAllValuable,
+  reserveNativeGas,
   BatchSendError,
   type SplitRecipient,
   type SweepToken,
 } from '@/services/batch-send';
+import { toBaseUnits, fromBaseUnits } from '@/services/eip681';
 import type { APIToken } from '@/models/types';
 
 const A = '0x1111111111111111111111111111111111111111';
@@ -172,5 +174,40 @@ describe('selectAllValuable', () => {
       token({ symbol: 'NOPX', balance: '5', priceUsd: null }), // dropped: no price
     ];
     expect(selectAllValuable(list).map((t) => t.symbol)).toEqual(['USDT']);
+  });
+});
+
+describe('reserveNativeGas (native sweep keeps gas for the EntryPoint prefund)', () => {
+  const native: SweepToken = { tokenAddress: null, decimals: 18, amount: '1' };       // 1e18
+  const erc20: SweepToken = { tokenAddress: USDC, decimals: 6, amount: '10' };
+
+  it('trims only the native line by the reserve', () => {
+    const out = reserveNativeGas([erc20, native], 2n * 10n ** 17n); // reserve 0.2
+    expect(out[0]).toEqual(erc20);                                   // ERC-20 untouched
+    expect(out[1]).toEqual({ tokenAddress: null, decimals: 18, amount: '0.8' });
+  });
+
+  it('drops the native line if the balance cannot cover the reserve', () => {
+    const out = reserveNativeGas([erc20, native], 5n * 10n ** 18n); // reserve 5 > 1
+    expect(out).toEqual([erc20]);
+  });
+
+  it('is a no-op for a non-positive reserve (e.g. Tempo)', () => {
+    expect(reserveNativeGas([erc20, native], 0n)).toEqual([erc20, native]);
+  });
+});
+
+describe('full-balance sweep precision (round-trip)', () => {
+  // A swept "full balance" is the token's exact raw amount fed through
+  // fromBaseUnits (what produces APIToken.balance) → toBaseUnits. It must be
+  // lossless, or a sweep would leave dust / over-send.
+  it.each([
+    [1n, 18],
+    [31_743_219_870_000_000_000n, 18],
+    [123_456n, 6],
+    [10n ** 30n + 7n, 18],
+    [999_999_999n, 0],
+  ])('round-trips raw %s @ %i dp', (raw, dec) => {
+    expect(toBaseUnits(fromBaseUnits(raw as bigint, dec as number), dec as number)).toBe(raw);
   });
 });

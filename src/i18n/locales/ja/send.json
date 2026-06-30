@@ -75,6 +75,7 @@
     "recipientCount": "{{n}} 名の受取人",
     "removeRecipient": "削除",
     "alertInsufficientBalanceBody": "合計が残高を超えています。",
-    "recipientPickAria": "受取人を選択またはスキャン"
+    "recipientPickAria": "受取人を選択またはスキャン",
+    "sweepNoFundsAfterGas": "ガス予約後の残高が不足しています。"
   }
 }
