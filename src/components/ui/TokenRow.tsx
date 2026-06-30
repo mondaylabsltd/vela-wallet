@@ -25,11 +25,13 @@ interface Props {
   usdValue?: string;
   onPress: () => void;
   index?: number;
+  /** When defined, renders a leading checkbox (multi-select / sweep mode). */
+  selected?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, contractAddress, balance, usdValue, onPress, index = 0 }: Props) {
+export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, contractAddress, balance, usdValue, onPress, index = 0, selected }: Props) {
   const scale = useSharedValue(1);
   const [copied, setCopied] = useState(false);
 
@@ -63,8 +65,13 @@ export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, contrac
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        style={[styles.container, animatedStyle]}
+        style={[styles.container, animatedStyle, selected && styles.containerSelected]}
       >
+        {selected !== undefined && (
+          <View style={[styles.checkbox, selected && styles.checkboxOn]}>
+            {selected && <Check size={13} color={color.bg.base} strokeWidth={3} />}
+          </View>
+        )}
         <TokenLogo symbol={symbol} logoUrl={logoUrl} logoUrls={logoUrls} chain={chain} size={40} />
         <View style={styles.info}>
           <Text style={styles.symbol} numberOfLines={1}>{symbol}</Text>
@@ -99,6 +106,22 @@ const styles = createStyles(() => ({
     paddingHorizontal: space.sm,
     gap: space.lg,
     borderRadius: radius.lg,
+  },
+  containerSelected: {
+    backgroundColor: color.accent.soft,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: color.border.strong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxOn: {
+    backgroundColor: color.accent.base,
+    borderColor: color.accent.base,
   },
   info: {
     flex: 1,

@@ -12,7 +12,7 @@ import { TokenRow } from '@/components/ui/TokenRow';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { chainName, getAllNetworksSync, tokenBadgeNetwork } from '@/models/network';
-import { isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
+import { isNativeToken, tokenBalanceDouble, tokenChainId, tokenId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
 import { isStable } from '@/services/activity';
 import { isTempoFeeToken } from '@/services/tempo';
 import { formatTokenAmount } from '@/services/locale-format';
@@ -43,9 +43,22 @@ interface Props {
   /** Hide the count + USD total row (e.g. when most balances are zero). */
   hideTotals?: boolean;
   defaultCategory?: TokenCategory;
+  /**
+   * Multi-select / sweep mode (② 多币一人). When set, rows show checkboxes and
+   * tapping toggles instead of selecting; a "select all valuable" action and a
+   * sticky confirm bar appear. `selectedIds` are tokenId() values.
+   */
+  multiSelect?: {
+    selectedIds: Set<string>;
+    onToggle: (token: APIToken) => void;
+    onSelectAllValuable: (visible: APIToken[]) => void;
+    onConfirm: () => void;
+    confirmLabel: string;
+    selectAllLabel: string;
+  };
 }
 
-export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTotals, defaultCategory = 'stable' }: Props) {
+export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTotals, defaultCategory = 'stable', multiSelect }: Props) {
   const { t } = useTranslation();
   const formatUsd = useDisplayCurrency().fmt;
   const networks = getAllNetworksSync();
@@ -132,6 +145,12 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
         />
       </View>
 
+      {multiSelect && (
+        <Pressable onPress={() => multiSelect.onSelectAllValuable(filtered)} style={styles.sweepAllChip}>
+          <Text style={styles.sweepAllText}>{multiSelect.selectAllLabel}</Text>
+        </Pressable>
+      )}
+
       {!hideTotals && !loading && filtered.length > 0 && (
         <View style={styles.summaryRow}>
           <Text style={styles.summaryCount}>{t('send.tokenCount', { n: filtered.length })}</Text>
@@ -159,11 +178,12 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
               contractAddress={item.tokenAddress}
               balance={formatTokenAmount(tokenBalanceDouble(item), { compact: true })}
               usdValue={tokenUsdValue(item) > 0 ? formatUsd(tokenUsdValue(item)) : undefined}
-              onPress={() => { onSelect(item); setSearch(''); }}
+              onPress={multiSelect ? () => multiSelect.onToggle(item) : () => { onSelect(item); setSearch(''); }}
+              selected={multiSelect ? multiSelect.selectedIds.has(tokenId(item)) : undefined}
               index={index}
             />
           )}
-          ListFooterComponent={addTokenButton}
+          ListFooterComponent={multiSelect ? null : addTokenButton}
           initialNumToRender={10}
           windowSize={5}
           showsVerticalScrollIndicator={false}
@@ -183,12 +203,43 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
         }}
       />
       <AddTokenSheet visible={showAddToken} onClose={() => setShowAddToken(false)} onChanged={onAddChanged} />
+
+      {multiSelect && (
+        <Pressable
+          onPress={multiSelect.onConfirm}
+          disabled={multiSelect.selectedIds.size === 0}
+          style={[styles.sweepConfirm, multiSelect.selectedIds.size === 0 && styles.sweepConfirmDisabled]}
+        >
+          <Text style={styles.sweepConfirmText}>{multiSelect.confirmLabel}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
 
 const styles = createStyles(() => ({
   container: { flex: 1 },
+  sweepAllChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    borderRadius: radius.full,
+    backgroundColor: color.accent.soft,
+    borderWidth: 1,
+    borderColor: color.accent.base,
+    marginBottom: space.md,
+  },
+  sweepAllText: { fontSize: text.sm, ...inter.semibold, color: color.accent.base },
+  sweepConfirm: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: space.lg,
+    borderRadius: radius.lg,
+    backgroundColor: color.accent.base,
+    marginTop: space.md,
+  },
+  sweepConfirmDisabled: { opacity: 0.4 },
+  sweepConfirmText: { fontSize: text.base, ...inter.bold, color: color.fg.inverse },
   loadingText: {
     fontSize: text.lg,
     ...inter.regular,
