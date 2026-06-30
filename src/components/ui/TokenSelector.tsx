@@ -20,6 +20,7 @@ import { Check, Plus, Search } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FlatList, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** Quick filter buckets for the token picker. Mutually exclusive + exhaustive. */
 export type TokenCategory = 'all' | 'stable' | 'gas' | 'other';
@@ -69,6 +70,7 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
   const { t } = useTranslation();
   const formatUsd = useDisplayCurrency().fmt;
   const networks = getAllNetworksSync();
+  const insets = useSafeAreaInsets();
 
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<TokenCategory>(defaultCategory);
@@ -200,6 +202,7 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
             />
           )}
           ListFooterComponent={multiSelect ? null : addTokenButton}
+          ItemSeparatorComponent={sweepActive ? () => <View style={styles.rowSeparator} /> : undefined}
           initialNumToRender={10}
           windowSize={5}
           showsVerticalScrollIndicator={false}
@@ -221,7 +224,10 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
       <AddTokenSheet visible={showAddToken} onClose={() => setShowAddToken(false)} onChanged={onAddChanged} />
 
       {sweepActive && multiSelect && multiSelect.selectedIds.size > 0 && (
-        <Pressable onPress={multiSelect.onConfirm} style={styles.sweepConfirm}>
+        <Pressable
+          onPress={multiSelect.onConfirm}
+          style={[styles.sweepConfirm, { marginBottom: Math.max(insets.bottom, space.lg) }]}
+        >
           <Text style={styles.sweepConfirmText}>{multiSelect.confirmLabel}</Text>
         </Pressable>
       )}
@@ -254,6 +260,7 @@ const styles = createStyles(() => ({
     marginTop: space.md,
   },
   sweepConfirmText: { fontSize: text.base, ...inter.bold, color: color.fg.inverse },
+  rowSeparator: { height: space.sm },
   loadingText: {
     fontSize: text.lg,
     ...inter.regular,
