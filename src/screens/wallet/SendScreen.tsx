@@ -8,13 +8,13 @@ import { TokenSelector } from '@/components/ui/TokenSelector';
 import { color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
 import { chainName, nativeSymbol, networkForChainId, networkId, tokenBadgeNetwork } from '@/models/network';
 import { addCustomNetworkByChainId } from '@/services/add-network';
-import { parseEIP681, fromBaseUnits } from '@/services/eip681';
+import { parseEIP681, fromBaseUnits, toBaseUnits } from '@/services/eip681';
 import { resolveTokenMetadata } from '@/services/token-metadata';
 import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
-import { sendERC20, sendNative, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, rawBundlerGasCost, GAS_TIER_MULTIPLIERS, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
+import { sendERC20, sendNative, sendBatchCalls, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, rawBundlerGasCost, GAS_TIER_MULTIPLIERS, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
 import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
 import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
@@ -26,6 +26,8 @@ import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, parseBundlerUnderfunded, recommendedFundingWei, type FundingNeeded } from '@/services/bundler-service';
 import { AmountText } from '@/components/ui/AmountText';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
+import { MultiRecipientEditor, makeRecipientId, recipientsAreValid, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
+import { buildSplitCalls, sumSplitBaseUnits } from '@/services/batch-send';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { TransactionReceipt } from '@/components/ui/TransactionReceipt';
@@ -46,7 +48,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, BookUser, AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Copy, Check, Globe } from 'lucide-react-native';
+import { ArrowLeft, X, BookUser, AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Copy, Check, Globe, Plus } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
@@ -222,6 +224,13 @@ export default function SendScreen() {
   const [selectedToken, setSelectedToken] = useState<APIToken | null>(null);
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
+  // ① split mode (一币多人): one token → many recipients, each its own amount,
+  // settled in one UserOp via sendBatchCalls. Off by default — single sends keep
+  // their exact existing flow. `pickerTarget` = the row id the contact picker fills
+  // (null ⇒ the single-mode recipient field).
+  const [splitMode, setSplitMode] = useState(false);
+  const [recipients, setRecipients] = useState<RecipientDraft[]>([]);
+  const [pickerTarget, setPickerTarget] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [copiedContract, setCopiedContract] = useState(false);
@@ -475,7 +484,9 @@ export default function SendScreen() {
   // reaches the confirm step — same surface the dApp signing sheet shows.
   // Best-effort: any failure leaves `sim` null and confirm shows nothing extra.
   useEffect(() => {
-    if (step !== 'confirm' || !selectedToken || !activeAccount || !isValidAddress(recipient)) {
+    const okSingle = !splitMode && isValidAddress(recipient);
+    const okSplit = splitMode && recipientsAreValid(recipients);
+    if (step !== 'confirm' || !selectedToken || !activeAccount || (!okSingle && !okSplit)) {
       setSim(null);
       return;
     }
@@ -483,19 +494,29 @@ export default function SendScreen() {
     setSim(null);
     try {
       const chainId = tokenChainId(selectedToken);
-      const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
-      const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
-      const call = isNativeToken(selectedToken)
-        ? { to: recipient, value: '0x' + weiHex }
-        : { to: selectedToken.tokenAddress!, data: encErc20Transfer(recipient, weiHex) };
-      simulateAssetChanges(activeAccount.address, [call], chainId)
+      // One call (single send) or N calls (split) — the sim sums them into one
+      // net-balance preview, the same surface a batch UserOp produces on-chain.
+      let calls: { to: string; value?: string; data?: string }[];
+      if (splitMode) {
+        calls = buildSplitCalls(
+          { tokenAddress: isNativeToken(selectedToken) ? null : selectedToken.tokenAddress, decimals: selectedToken.decimals },
+          recipients.map((r) => ({ address: r.address.trim(), amount: r.amount })),
+        );
+      } else {
+        const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
+        const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
+        calls = [isNativeToken(selectedToken)
+          ? { to: recipient, value: '0x' + weiHex }
+          : { to: selectedToken.tokenAddress!, data: encErc20Transfer(recipient, weiHex) }];
+      }
+      simulateAssetChanges(activeAccount.address, calls, chainId)
         .then((r) => { if (!cancelled) setSim(r); })
         .catch(() => { if (!cancelled) setSim(null); });
     } catch {
       /* malformed amount → no sim */
     }
     return () => { cancelled = true; };
-  }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate]);
+  }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate, splitMode, recipients]);
 
   // Recipient-risk on the confirm step: "first time" (address-poisoning defense)
   // + contract-vs-EOA. Drives the first-time/contract tags by the To row and
@@ -509,6 +530,43 @@ export default function SendScreen() {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [step, selectedToken, recipient]);
+
+  // ── ① split-mode (一币多人) helpers ─────────────────────────────────────────
+  // Enter split mode seeded with the current single recipient (amount in token
+  // units) + one empty row; a converted amount keeps continuity from the hero.
+  const enterSplitMode = () => {
+    if (!selectedToken) return;
+    const tokenAmt = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
+    setRecipients([
+      { id: makeRecipientId(), address: recipient, amount: amount ? tokenAmt : '' },
+      { id: makeRecipientId(), address: '', amount: '' },
+    ]);
+    setInputInUsd(false);
+    setSplitMode(true);
+  };
+
+  // Removing the last extra recipient drops back to the familiar single-send UI,
+  // carrying the remaining row's address/amount with it.
+  const handleRecipientsChange = (next: RecipientDraft[]) => {
+    if (next.length <= 1) {
+      setRecipient(next[0]?.address ?? '');
+      setAmount(next[0]?.amount ?? '');
+      setSplitMode(false);
+      setRecipients([]);
+      return;
+    }
+    setRecipients(next);
+  };
+
+  // Route a picked/scanned address to the split row that opened the picker, or to
+  // the single-mode recipient field when none is targeted.
+  const applyPickedAddress = (addr: string) => {
+    if (pickerTarget) {
+      setRecipients((prev) => prev.map((r) => (r.id === pickerTarget ? { ...r, address: addr } : r)));
+    } else {
+      setRecipient(addr);
+    }
+  };
 
   const handleSelectToken = (token: APIToken) => {
     setSelectedToken(token);
@@ -527,19 +585,34 @@ export default function SendScreen() {
   };
 
   const handleContinue = async () => {
-    if (!isValidAddress(recipient)) {
-      showAlert(t('send.alertInvalidAddressTitle'), t('send.alertInvalidAddressBody'));
-      return;
-    }
-    const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken!.priceUsd, selectedToken!.decimals, dc.rate);
-    const amountNum = parseFloat(tokenAmount);
-    if (isNaN(amountNum) || amountNum <= 0) {
-      showAlert(t('send.alertInvalidAmountTitle'), t('send.alertInvalidAmountBody'));
-      return;
-    }
-    if (amountWarning) {
-      showAlert(t('send.alertInsufficientBalanceTitle'), amountWarning);
-      return;
+    if (splitMode) {
+      if (!recipientsAreValid(recipients)) {
+        showAlert(t('send.alertInvalidAddressTitle'), t('send.alertInvalidAddressBody'));
+        return;
+      }
+      if (selectedToken) {
+        const totalBase = sumSplitBaseUnits(recipients, selectedToken.decimals);
+        const balBase = toBaseUnits(selectedToken.balance || '0', selectedToken.decimals);
+        if (totalBase > balBase) {
+          showAlert(t('send.alertInsufficientBalanceTitle'), t('send.alertInsufficientBalanceBody', { defaultValue: 'The total exceeds your balance.' }));
+          return;
+        }
+      }
+    } else {
+      if (!isValidAddress(recipient)) {
+        showAlert(t('send.alertInvalidAddressTitle'), t('send.alertInvalidAddressBody'));
+        return;
+      }
+      const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken!.priceUsd, selectedToken!.decimals, dc.rate);
+      const amountNum = parseFloat(tokenAmount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        showAlert(t('send.alertInvalidAmountTitle'), t('send.alertInvalidAmountBody'));
+        return;
+      }
+      if (amountWarning) {
+        showAlert(t('send.alertInsufficientBalanceTitle'), amountWarning);
+        return;
+      }
     }
 
     // Jump to confirm screen immediately — load gas estimate in background
@@ -686,21 +759,28 @@ export default function SendScreen() {
       };
 
       setTxStatus('submitting');
-      const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
-      const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
-
       const maxFee = feeEstimate?.maxFeePerGas;
+
+      // One send line per recipient (single send = one line). Split mode submits
+      // every line as a single Safe MultiSend UserOp — one signature, one gas.
       let result;
-      if (isNativeToken(selectedToken)) {
-        result = await sendNative(
-          activeAccount.address, recipient, weiHex, chainId,
-          stored.publicKeyHex, signFn, maxFee,
+      let lines: { to: string; toName?: string; amount: string }[];
+      if (splitMode) {
+        const calls = buildSplitCalls(
+          { tokenAddress: isNativeToken(selectedToken) ? null : selectedToken.tokenAddress, decimals: selectedToken.decimals },
+          recipients.map((r) => ({ address: r.address.trim(), amount: r.amount })),
         );
+        result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn);
+        lines = recipients.map((r) => ({ to: r.address.trim(), amount: r.amount }));
       } else {
-        result = await sendERC20(
-          activeAccount.address, selectedToken.tokenAddress!, recipient, weiHex, chainId,
-          stored.publicKeyHex, signFn, maxFee,
-        );
+        const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
+        const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
+        if (isNativeToken(selectedToken)) {
+          result = await sendNative(activeAccount.address, recipient, weiHex, chainId, stored.publicKeyHex, signFn, maxFee);
+        } else {
+          result = await sendERC20(activeAccount.address, selectedToken.tokenAddress!, recipient, weiHex, chainId, stored.publicKeyHex, signFn, maxFee);
+        }
+        lines = [{ to: recipient, toName: recipientIdentity?.name, amount: tokenAmount }];
       }
 
       // Bundler accepted the UserOp — treat the payment as sent right now (we
@@ -712,39 +792,40 @@ export default function SendScreen() {
       setSending(false);
       clearTokenCache(activeAccount.address);
 
-      // Persist the USD value (at send time) so the activity feed can show the
-      // fiat amount — without it, non-stablecoin sends (e.g. BNB) render with no
-      // fiat, since there's no price to recover later.
-      const sentUsd = parseFloat(tokenAmount) * (selectedToken.priceUsd ?? 0);
-      // Record immediately as 'pending' so it shows in history right away, then
-      // upgrade to 'confirmed' once the on-chain hash lands. If the receipt poll
-      // times out it stays 'pending' — honest, not a false 'confirmed'.
-      const pendingWrite = saveTransaction({
-        id: result.userOpHash,
-        userOpHash: result.userOpHash,
-        txHash: '',
-        from: activeAccount.address,
-        to: recipient,
-        toName: recipientIdentity?.name,
-        value: tokenAmount,
-        symbol: selectedToken!.symbol,
-        decimals: selectedToken!.decimals,
-        chainId,
-        timestamp: Math.floor(Date.now() / 1000),
-        status: 'pending',
-        type: 'send',
-        usd: sentUsd > 0 ? '$' + sentUsd.toFixed(2) : undefined,
-      }).catch(() => {});
+      // One activity record per recipient. In a batch they share the userOpHash,
+      // so each gets a distinct id (`<hash>-<i>`) to show as its own history line
+      // and be patched independently when the on-chain hash lands. USD is captured
+      // now so non-stablecoin sends (e.g. BNB) still render a fiat amount later.
+      const ts = Math.floor(Date.now() / 1000);
+      const price = selectedToken.priceUsd ?? 0;
+      const records = lines.map((ln, i) => {
+        const usd = parseFloat(ln.amount || '0') * price;
+        return {
+          id: lines.length > 1 ? `${result.userOpHash}-${i}` : result.userOpHash,
+          userOpHash: result.userOpHash,
+          txHash: '',
+          from: activeAccount!.address,
+          to: ln.to,
+          toName: ln.toName,
+          value: ln.amount,
+          symbol: selectedToken!.symbol,
+          decimals: selectedToken!.decimals,
+          chainId,
+          timestamp: ts,
+          status: 'pending' as const,
+          type: 'send' as const,
+          usd: usd > 0 ? '$' + usd.toFixed(2) : undefined,
+        };
+      });
+      const pendingWrites = Promise.all(records.map((rec) => saveTransaction(rec).catch(() => {})));
 
-      // Resolve the on-chain hash in the background and flip the record to
-      // 'confirmed' (awaiting the pending write first so the patch finds it).
+      // Resolve the on-chain hash in the background and flip every record to
+      // 'confirmed' (awaiting the pending writes first so the patches find them).
       result.waitForTxHash()
         .then(async (hash) => {
           if (mountedRef.current) setTxHash(hash);
-          // Persist the confirmation regardless of mount state — the record must
-          // flip to 'confirmed' even if the user already left the screen.
-          await pendingWrite;
-          await updateTransaction(result.userOpHash, { txHash: hash, status: 'confirmed' }).catch(() => {});
+          await pendingWrites;
+          await Promise.all(records.map((rec) => updateTransaction(rec.id, { txHash: hash, status: 'confirmed' }).catch(() => {})));
         })
         .catch(() => { /* receipt slow/unavailable — stays 'pending', reconciled on next view */ });
 
@@ -826,6 +907,8 @@ export default function SendScreen() {
       setSelectedToken(null);
       setAmount('');
       setRecipient('');
+      setSplitMode(false);
+      setRecipients([]);
       setStep('select-token');
     } else {
       router.back();
@@ -862,7 +945,7 @@ export default function SendScreen() {
 
           {/* Hero card — tap the row to switch token; ERC-20s show a copyable contract address. */}
           <VelaCard style={styles.heroCard}>
-            <Pressable style={styles.heroRow} disabled={locked} onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); }}>
+            <Pressable style={styles.heroRow} disabled={locked} onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); setSplitMode(false); setRecipients([]); }}>
               <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={44} />
               <View style={styles.heroIdentity}>
                 <Text style={styles.heroSymbol}>{selectedToken.symbol}</Text>
@@ -902,6 +985,8 @@ export default function SendScreen() {
             ) : null}
           </VelaCard>
 
+          {/* Single-recipient flow (default). Split mode replaces it below. */}
+          {!splitMode && (<>
           {/* Amount — large display with inline unit */}
           <Pressable style={styles.amountWrap} onPress={() => { if (!amountLocked) amountInputRef.current?.focus(); }}>
             <View style={styles.amountTopRow}>
@@ -991,7 +1076,7 @@ export default function SendScreen() {
                 {/* Address book — also the way in to the QR scanner (shown at the
                     top of the picker sheet). Big, comfortable tap target. */}
                 <Pressable
-                  onPress={() => setShowContactPicker(true)}
+                  onPress={() => { setPickerTarget(null); setShowContactPicker(true); }}
                   hitSlop={8}
                   style={styles.addrActionBtn}
                   accessibilityLabel={t('send.recipientPickAria', { defaultValue: 'Choose recipient or scan' })}
@@ -1018,6 +1103,27 @@ export default function SendScreen() {
             <KnownContactBadge address={recipient} />
           </View>
 
+          {/* Send this token to several people at once → enters split mode. */}
+          {!locked && !params.prefilledRecipient && (
+            <Pressable onPress={enterSplitMode} style={styles.addRecipientEntry}>
+              <Plus size={16} color={color.accent.base} strokeWidth={2.5} />
+              <Text style={styles.addRecipientEntryText}>{t('send.addRecipient', { defaultValue: 'Add recipient' })}</Text>
+            </Pressable>
+          )}
+          </>)}
+
+          {splitMode && selectedToken && (
+            <MultiRecipientEditor
+              recipients={recipients}
+              onChange={handleRecipientsChange}
+              tokenSymbol={selectedToken.symbol}
+              decimals={selectedToken.decimals}
+              priceUsd={selectedToken.priceUsd}
+              balance={selectedToken.balance}
+              formatUsd={formatUsd}
+              onPickContact={(id) => { setPickerTarget(id); setShowContactPicker(true); }}
+            />
+          )}
 
           {fundingNeeded?.reason === 'wallet_balance_too_low' && (
             <View style={styles.lowBalanceWarning}>
@@ -1032,7 +1138,7 @@ export default function SendScreen() {
             onPress={handleContinue}
             loading={estimatingGas}
             style={styles.continueBtn}
-            disabled={!recipient || !amount || estimatingGas || fundingNeeded?.reason === 'wallet_balance_too_low' || (locked && !!amountWarning)}
+            disabled={(splitMode ? !recipientsAreValid(recipients) : (!recipient || !amount)) || estimatingGas || fundingNeeded?.reason === 'wallet_balance_too_low' || (locked && !!amountWarning)}
           />
         </Animated.View>
       </ScrollView>
@@ -1043,7 +1149,12 @@ export default function SendScreen() {
   const renderConfirm = () => {
     if (!selectedToken) return null;
     const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
-    const amountNum = parseFloat(tokenAmount || '0');
+    const singleAmountNum = parseFloat(tokenAmount || '0');
+    // In split mode the headline amount is the sum across all recipients.
+    const splitTotalNum = splitMode
+      ? parseFloat(fromBaseUnits(sumSplitBaseUnits(recipients, selectedToken.decimals), selectedToken.decimals))
+      : 0;
+    const amountNum = splitMode ? splitTotalNum : singleAmountNum;
     const usdAmount = amountNum * (selectedToken.priceUsd ?? 0);
     const logos = tokenLogoURLs(selectedToken);
     const chain = chainName(tokenChainId(selectedToken));
@@ -1090,27 +1201,51 @@ export default function SendScreen() {
               </View>
             </View>
 
-            {/* To */}
-            <View style={styles.transferEndpoint}>
-              <Text style={styles.transferLabel}>{t('send.toLabel')}</Text>
-              {recipientIdentity && (
-                <Text style={styles.transferName}>{recipientIdentity.name}</Text>
-              )}
-              <Text style={styles.transferAddr}>{shortAddr(recipient)}</Text>
-              {(recipientRisk?.firstInteraction || recipientRisk?.isContract === true) && (
-                <View style={styles.riskTagRow}>
-                  {recipientRisk?.firstInteraction && (
-                    <Text style={[styles.riskTag, styles.riskTagWarn]}>{t('componentsUi.signing.firstTimeTag')}</Text>
-                  )}
-                  {recipientRisk?.isContract === true && (
-                    <Text style={styles.riskTag}>{t('componentsUi.signing.contractTag')}</Text>
-                  )}
+            {/* To — one recipient, or the full list in split mode */}
+            {!splitMode ? (
+              <View style={styles.transferEndpoint}>
+                <Text style={styles.transferLabel}>{t('send.toLabel')}</Text>
+                {recipientIdentity && (
+                  <Text style={styles.transferName}>{recipientIdentity.name}</Text>
+                )}
+                <Text style={styles.transferAddr}>{shortAddr(recipient)}</Text>
+                {(recipientRisk?.firstInteraction || recipientRisk?.isContract === true) && (
+                  <View style={styles.riskTagRow}>
+                    {recipientRisk?.firstInteraction && (
+                      <Text style={[styles.riskTag, styles.riskTagWarn]}>{t('componentsUi.signing.firstTimeTag')}</Text>
+                    )}
+                    {recipientRisk?.isContract === true && (
+                      <Text style={styles.riskTag}>{t('componentsUi.signing.contractTag')}</Text>
+                    )}
+                  </View>
+                )}
+                <View style={{ marginTop: space.sm }}>
+                  <KnownContactBadge address={recipient} compact />
                 </View>
-              )}
-              <View style={{ marginTop: space.sm }}>
-                <KnownContactBadge address={recipient} compact />
               </View>
-            </View>
+            ) : (
+              <View style={styles.transferEndpoint}>
+                <Text style={styles.transferLabel}>
+                  {t('send.toLabel')} · {t('send.recipientCount', { n: recipients.length, defaultValue: `${recipients.length} recipients` })}
+                </Text>
+                {recipients.map((r) => {
+                  const n = parseFloat(r.amount || '0');
+                  const u = n * (selectedToken.priceUsd ?? 0);
+                  return (
+                    <View key={r.id} style={styles.confirmRecipientRow}>
+                      <View style={styles.confirmRecipientLeft}>
+                        <Text style={styles.transferAddr}>{shortAddr(r.address)}</Text>
+                        <KnownContactBadge address={r.address} compact />
+                      </View>
+                      <View style={styles.confirmRecipientAmt}>
+                        <Text style={styles.transferTokenAmount}>{formatBalance(n)} {selectedToken.symbol}</Text>
+                        {u > 0 && <Text style={styles.transferTokenSub}>≈ {formatUsd(u)}</Text>}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </VelaCard>
 
           {/* Simulation — revert pre-check + net balance changes (shared render
@@ -1354,8 +1489,14 @@ export default function SendScreen() {
         visible={showScanner}
         onScan={(data) => {
           setShowScanner(false);
-          // A full EIP-681 request re-opens Send locked; otherwise just take the address.
           const req = parseEIP681(data);
+          // Per-row scan in split mode — just take the address; a full-request
+          // re-lock would blow away the other recipients.
+          if (pickerTarget) {
+            applyPickedAddress(req?.recipient ?? data);
+            return;
+          }
+          // A full EIP-681 request re-opens Send locked; otherwise just take the address.
           if (req && req.chainId != null) {
             const p: Record<string, string> = {
               prefilledRecipient: req.recipient,
@@ -1384,7 +1525,7 @@ export default function SendScreen() {
       <ContactPicker
         visible={showContactPicker}
         onClose={() => setShowContactPicker(false)}
-        onSelect={(addr) => setRecipient(addr)}
+        onSelect={(addr) => applyPickedAddress(addr)}
         onScan={locked ? undefined : () => setShowScanner(true)}
         myAddress={address}
       />
@@ -1662,6 +1803,34 @@ const styles = createStyles(() => ({
     justifyContent: 'center',
     backgroundColor: color.bg.base,
   },
+  // "+ 添加收款人" entry → split mode
+  addRecipientEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    paddingVertical: space.md,
+    marginTop: space.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: color.border.base,
+    borderStyle: 'dashed',
+  },
+  addRecipientEntryText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.accent.base,
+  },
+  // Split-mode confirm: one row per recipient
+  confirmRecipientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+    paddingVertical: space.sm,
+  },
+  confirmRecipientLeft: { flex: 1, gap: 2 },
+  confirmRecipientAmt: { alignItems: 'flex-end' },
   inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
