@@ -1,22 +1,32 @@
 /**
  * Cross-platform modal.
  *
- * - iOS/Android: native <Modal> with drag handle
- * - Web: portal to #root with slide-up animation, backdrop + drag dismiss
+ * - iOS: native <Modal pageSheet> — the OS already provides interactive
+ *   swipe-to-dismiss + a grabber; we keep a handle that also drags-to-close.
+ * - Android: <Modal> is full-screen (no native sheet gesture), so we add our own
+ *   whole-sheet drag-to-dismiss with a threshold haptic. The drag initiates from
+ *   the top handle region only, so it never fights an inner ScrollView.
+ * - Web: portal to #root with slide-up animation, backdrop + drag dismiss.
  */
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Modal,
   View,
   Platform,
-  Pressable,
   PanResponder,
   Animated,
   Dimensions,
   KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { hapticLight } from '@/services/platform';
 import { color, createStyles } from '@/constants/theme';
+
+/** Drag past this many px (or fling faster than VY) to dismiss. */
+const DISMISS_DY = 90;
+const DISMISS_VY = 0.5;
+/** Off-screen target for the dismiss throw. */
+const SCREEN_H = Dimensions.get('window').height;
 
 interface Props {
   visible: boolean;
@@ -25,29 +35,107 @@ interface Props {
 }
 
 export function AppModal({ visible, children, onClose }: Props) {
-  if (Platform.OS !== 'web') {
-    return (
-      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-        <View style={styles.nativeRoot}>
-          <DragHandle onClose={onClose} />
-          <KeyboardAvoidingView
-            style={styles.nativeContent}
-            behavior="padding"
-          >
+  if (Platform.OS === 'web') {
+    return <WebModal visible={visible} onClose={onClose}>{children}</WebModal>;
+  }
+  if (Platform.OS === 'android') {
+    return <AndroidSheet visible={visible} onClose={onClose}>{children}</AndroidSheet>;
+  }
+  // iOS — native pageSheet already provides interactive swipe-to-dismiss; keep the
+  // existing handle (drag-to-close) unchanged.
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={styles.nativeRoot}>
+        <DragHandle onClose={onClose} />
+        <KeyboardAvoidingView
+          style={styles.nativeContent}
+          behavior="padding"
+        >
+          <SafeAreaView style={styles.nativeContent} edges={['bottom']}>
+            {children}
+          </SafeAreaView>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Android sheet — whole content follows the drag, dismisses past a threshold.
+// ---------------------------------------------------------------------------
+
+function AndroidSheet({ visible, onClose, children }: { visible: boolean; onClose?: () => void; children: React.ReactNode }) {
+  const pan = useRef(new Animated.Value(0)).current;
+  const armed = useRef(false);
+  const dismissing = useRef(false);
+  // PanResponder is created once; read the latest onClose through a ref.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Reset position whenever the sheet (re)opens.
+  useEffect(() => {
+    if (visible) { pan.setValue(0); armed.current = false; dismissing.current = false; }
+  }, [visible, pan]);
+
+  const springBack = () =>
+    Animated.spring(pan, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }).start();
+
+  const responder = useRef(
+    PanResponder.create({
+      // Claim on MOVE, not start, so taps fall through and only a deliberate
+      // downward drag (not a horizontal swipe) is captured. (onStart=true would
+      // make the move gate dead code.)
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 4 && g.dy > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => {
+        const dy = Math.max(0, g.dy);
+        pan.setValue(dy);
+        // Fire one "armed to dismiss" haptic when crossing the threshold.
+        if (!armed.current && dy > DISMISS_DY) { armed.current = true; hapticLight(); }
+        else if (armed.current && dy <= DISMISS_DY) { armed.current = false; }
+      },
+      onPanResponderRelease: (_, g) => {
+        armed.current = false;
+        if (g.dy > DISMISS_DY || g.vy > DISMISS_VY) {
+          // Throw the sheet fully off-screen, THEN close — so the native
+          // slide-out begins from a settled (off-screen) state, no top-gap jump.
+          if (dismissing.current) return;
+          dismissing.current = true;
+          Animated.timing(pan, { toValue: SCREEN_H, duration: 200, useNativeDriver: true })
+            .start(() => onCloseRef.current?.());
+        } else {
+          springBack();
+        }
+      },
+      onPanResponderTerminate: () => {
+        armed.current = false;
+        if (!dismissing.current) springBack();
+      },
+    }),
+  ).current;
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      {/* Static full-screen backdrop in the sheet color — the inner content
+          translates over it, so the revealed area above stays seamless. */}
+      <View style={styles.nativeRoot}>
+        <Animated.View style={[styles.sheetInner, { transform: [{ translateY: pan }] }]}>
+          <View style={styles.handleArea} {...responder.panHandlers}>
+            <View style={styles.handleBar} />
+          </View>
+          <KeyboardAvoidingView style={styles.nativeContent} behavior="padding">
             <SafeAreaView style={styles.nativeContent} edges={['bottom']}>
               {children}
             </SafeAreaView>
           </KeyboardAvoidingView>
-        </View>
-      </Modal>
-    );
-  }
-
-  return <WebModal visible={visible} onClose={onClose}>{children}</WebModal>;
+        </Animated.View>
+      </View>
+    </Modal>
+  );
 }
 
 // ---------------------------------------------------------------------------
-// Drag handle
+// Drag handle (iOS + web): handle-region drag that closes past a threshold.
 // ---------------------------------------------------------------------------
 
 function DragHandle({ onClose }: { onClose?: () => void }) {
@@ -152,6 +240,7 @@ function WebModal({ visible, onClose, children }: { visible: boolean; onClose?: 
 
 const styles = createStyles(() => ({
   nativeRoot: { flex: 1, backgroundColor: color.bg.base },
+  sheetInner: { flex: 1 },
   nativeContent: { flex: 1 },
   handleArea: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
   handleBar: { width: 36, height: 5, borderRadius: 3, backgroundColor: color.border.base },
