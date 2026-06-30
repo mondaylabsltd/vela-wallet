@@ -442,15 +442,9 @@ export async function estimateTransactionFee(
   };
 }
 
-/** Format wei to a human-readable ETH-like string. */
-export function formatWeiToEth(wei: bigint): string {
-  const eth = Number(wei) / 1e18;
-  if (eth === 0) return '0';
-  if (eth < 0.000001) return '< 0.000001';
-  if (eth < 0.001) return eth.toFixed(6);
-  if (eth < 1) return eth.toFixed(4);
-  return eth.toFixed(3);
-}
+// formatWeiToEth was duplicated byte-for-byte across 4+ files; it now lives in
+// ./format-eth and is re-exported here to keep the public API (and its tests) stable.
+export { formatWeiToEth } from './format-eth';
 
 // ---------------------------------------------------------------------------
 // Core UserOp Flow

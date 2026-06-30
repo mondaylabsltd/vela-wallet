@@ -11,6 +11,7 @@
  */
 
 import { nativeSymbol } from '@/models/network';
+import { formatWeiToEth } from './format-eth';
 import { getActiveBundlerBaseUrl, getChainRpcUrl, isUsingBuiltinBundler, poolRpcCall } from './rpc-pool';
 import { loadServiceEndpoints } from './storage';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from './tempo';
@@ -332,14 +333,8 @@ function parseBigIntHex(value: any): bigint {
   return 0n;
 }
 
-export function formatWei(wei: bigint): string {
-  const eth = Number(wei) / 1e18;
-  if (eth === 0) return '0';
-  if (eth < 0.000001) return '< 0.000001';
-  if (eth < 0.001) return eth.toFixed(6);
-  if (eth < 1) return eth.toFixed(4);
-  return eth.toFixed(3);
-}
+/** @deprecated alias of {@link formatWeiToEth}; kept for existing callers and tests. */
+export const formatWei = formatWeiToEth;
 
 // ---------------------------------------------------------------------------
 // Underfunded-error detection

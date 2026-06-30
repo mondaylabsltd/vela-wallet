@@ -9,7 +9,7 @@ import { fadeIn, fadeInDown } from '@/constants/entering';
 import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
 import { color, font, inter, radius, shadow, space, text, useStyles } from '@/constants/theme';
 import type { Network } from '@/models/network';
-import { DEFAULT_NETWORKS, getAllNetworks, getAllNetworksSync, refreshCustomNetworks } from '@/models/network';
+import { DEFAULT_NETWORKS, getAllNetworks, getAllNetworksSync, refreshCustomNetworks, explorerAddressURL } from '@/models/network';
 import type { CompatibilityResult, CustomNetwork, NetworkConfig, ServiceEndpoints, LocalePrefs } from '@/models/types';
 import { DEFAULT_SERVICE_ENDPOINTS, isNativeToken, tokenChainId } from '@/models/types';
 import { numberFormatOptions, dateFormatOptions, timeFormatOptions, type FormatOption } from '@/services/locale-format';
@@ -17,6 +17,7 @@ import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import { getAccountBalances } from '@/services/balance-cache';
 import { clearBundlerCache } from '@/services/bundler-service';
+import { formatWeiToEth as formatEth } from '@/services/format-eth';
 import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { checkNetworkCompatibility } from '@/services/network-checker';
@@ -1248,7 +1249,7 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
             <VelaCard style={{ padding: 0 }}>
               {balances.map((b, i) => {
                 const needsFunding = !b.loading && (b.wei < b.recommendedWei || (b.wei === 0n && b.recommendedWei === 0n));
-                const explorerLink = `${b.explorerURL}/address/${address}`;
+                const explorerLink = explorerAddressURL(b.chainId, address);
                 return (
                   <View key={b.chainId}>
                     <Pressable
@@ -1356,15 +1357,6 @@ function formatPathUsd(units: bigint): string {
   if (v === 0) return '0';
   if (v < 0.01) return v.toFixed(4);
   return v.toFixed(2);
-}
-
-function formatEth(wei: bigint): string {
-  const eth = Number(wei) / 1e18;
-  if (eth === 0) return '0';
-  if (eth < 0.000001) return '< 0.000001';
-  if (eth < 0.001) return eth.toFixed(6);
-  if (eth < 1) return eth.toFixed(4);
-  return eth.toFixed(3);
 }
 
 // ---------------------------------------------------------------------------

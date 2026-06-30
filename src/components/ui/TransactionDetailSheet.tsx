@@ -14,7 +14,7 @@ import { AppModal } from '@/components/ui/AppModal';
 import { TxStatusBadge } from '@/components/ui/TxStatusBadge';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { ChainLogo } from '@/components/ChainLogo';
-import { chainName, getAllNetworksSync } from '@/models/network';
+import { chainName, getAllNetworksSync, explorerTxURL, explorerAddressURL } from '@/models/network';
 import type { LocalTransaction } from '@/services/storage';
 import { shortAddress } from '@/models/wallet-state';
 import { copyToClipboard, openBrowser } from '@/services/platform';
@@ -65,7 +65,6 @@ export function TransactionDetailSheet({ visible, tx, alias, rate, currency, onC
       {tx && (() => {
         const incoming = (tx.type ?? 'send') === 'receive';
         const net = getAllNetworksSync().find((n) => n.chainId === tx.chainId);
-        const explorer = net?.explorerURL ?? 'https://etherscan.io';
         const amt = formatTokenAmount(parseFloat(tx.value || '0'), { compact: true }); // match the feed
         const counterparty = incoming ? tx.from : tx.to;
         const usdVal = txUsdValue(tx);
@@ -105,7 +104,7 @@ export function TransactionDetailSheet({ visible, tx, alias, rate, currency, onC
                   {fiat ? <Text style={styles.heroUsd}>≈ {fiat}</Text> : null}
                 </View>
                 {tx.txHash ? (
-                  <Pressable hitSlop={8} onPress={() => openBrowser(`${explorer}/tx/${tx.txHash}`)} style={styles.heroChevron}>
+                  <Pressable hitSlop={8} onPress={() => openBrowser(explorerTxURL(tx.chainId, tx.txHash))} style={styles.heroChevron}>
                     <ChevronRight size={20} color={color.fg.subtle} strokeWidth={2.4} />
                   </Pressable>
                 ) : null}
@@ -132,7 +131,7 @@ export function TransactionDetailSheet({ visible, tx, alias, rate, currency, onC
                 <Divider />
                 <Row label={t('componentsTx.detail.labelStatus')} custom={<TxStatusBadge status={tx.status} />} />
                 {tx.from ? (<><Divider /><Row label={t('componentsTx.detail.labelFrom')} value={shortAddress(tx.from)} mono onCopy={() => copy('from', tx.from)} copied={copied === 'from'} /></>) : null}
-                {tx.to ? (<><Divider /><Row label={t('componentsTx.detail.labelTo')} value={shortAddress(tx.to)} mono onOpen={() => openBrowser(`${explorer}/address/${tx.to}`)} /></>) : null}
+                {tx.to ? (<><Divider /><Row label={t('componentsTx.detail.labelTo')} value={shortAddress(tx.to)} mono onOpen={() => openBrowser(explorerAddressURL(tx.chainId, tx.to))} /></>) : null}
                 <Divider />
                 <Row label={t('componentsTx.detail.labelOperation')} value={t(operationLabelKey(tx), { defaultValue: operationLabelKey(tx) })} />
                 <Divider />
@@ -142,7 +141,7 @@ export function TransactionDetailSheet({ visible, tx, alias, rate, currency, onC
                     <Text style={styles.chainText}>{chainName(tx.chainId)}</Text>
                   </View>
                 } />
-                {tx.txHash ? (<><Divider /><Row label={t('componentsTx.detail.labelHash')} value={shortAddress(tx.txHash)} mono onOpen={() => openBrowser(`${explorer}/tx/${tx.txHash}`)} /></>) : null}
+                {tx.txHash ? (<><Divider /><Row label={t('componentsTx.detail.labelHash')} value={shortAddress(tx.txHash)} mono onOpen={() => openBrowser(explorerTxURL(tx.chainId, tx.txHash))} /></>) : null}
               </VelaCard>
             </ScrollView>
           </View>

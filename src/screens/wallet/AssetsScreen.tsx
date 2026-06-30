@@ -11,7 +11,7 @@ import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, motion, radius, shadow, space, text } from '@/constants/theme';
 import { useTranslation } from 'react-i18next';
 import { chainName } from '@/models/network';
-import { shortAddr, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
+import { shortAddr, isAddress, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
@@ -468,7 +468,7 @@ export default function AssetsScreen() {
         <QRScanner
           visible={showScanner}
           onScan={(data) => {
-            if (/^0x[0-9a-fA-F]{40}$/.test(data)) {
+            if (isAddress(data)) {
               setShowScanner(false);
               router.push(`/send?prefilledRecipient=${data}`);
             } else if (isWalletPairURI(data)) {

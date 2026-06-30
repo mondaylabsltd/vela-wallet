@@ -14,7 +14,7 @@ import { AppModal } from '@/components/ui/AppModal';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
-import { shortAddr } from '@/models/types';
+import { shortAddr, isAddress } from '@/models/types';
 import { showAlert, hapticLight, hapticSuccess } from '@/services/platform';
 import {
   getAllContacts, sortContacts, matchesQuery, contactDisplayName,
@@ -23,7 +23,6 @@ import {
 } from '@/services/contacts';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 
-const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 
 export function ContactsManager({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useTranslation();
@@ -159,7 +158,7 @@ function ContactForm({ editing, onBack, onSaved, onDelete }: {
   const [resolved, setResolved] = useState<string | undefined>(editing?.resolvedName);
   const [saving, setSaving] = useState(false);
   const isEdit = !!editing;
-  const addrValid = ADDR_RE.test(address.trim());
+  const addrValid = isAddress(address.trim());
 
   // Auto-resolve an identity name for a freshly entered address (add mode).
   useEffect(() => {

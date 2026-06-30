@@ -22,8 +22,8 @@ import { VelaButton } from '@/components/ui/VelaButton';
 import { SlideToConfirmButton } from '@/components/ui/SlideToConfirmButton';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet } from '@/models/wallet-state';
-import { shortAddr, tokenLogoURLsByAddress, type BLEIncomingRequest } from '@/models/types';
-import { chainName, nativeSymbol, nativeCoinLogoURL, networkForChainId, DEFAULT_NETWORKS } from '@/models/network';
+import { shortAddr, isAddress, tokenLogoURLsByAddress, type BLEIncomingRequest } from '@/models/types';
+import { chainName, nativeSymbol, nativeCoinLogoURL, explorerBaseURL, DEFAULT_NETWORKS } from '@/models/network';
 import { openURL } from '@/services/platform';
 import {
   resolveTransaction, resolveTypedData,
@@ -675,7 +675,9 @@ function ClearSignView({ cs }: {
   const receiveAmounts = cs.fields.filter(f => f.role === 'receive-amount');
   const recipients = cs.fields.filter(f => f.role === 'recipient');
   const spenders = cs.fields.filter(f => f.role === 'spender');
-  const generic = cs.fields.filter(f => f.role === 'generic');
+  // Detail-flagged generics (best-effort raw params) live under the Advanced
+  // panel, not the headline body — only body-level generics render here.
+  const generic = cs.fields.filter(f => f.role === 'generic' && !f.detail);
 
   // Determine if this is a swap-like layout (send → receive)
   const isSwapLayout = sendAmounts.length > 0 && receiveAmounts.length > 0;
@@ -1307,7 +1309,7 @@ function ContractBar({ label, name, address, verified, warning, riskCheck }: {
   const [ident, setIdent] = useState<RecipientIdentity | null>(null);
   useEffect(() => {
     setIdent(null);
-    if (name || !address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return;
+    if (name || !isAddress(address)) return;
     let cancelled = false;
     resolveRecipientIdentity(address).then((r) => { if (!cancelled) setIdent(r); }).catch(() => {});
     return () => { cancelled = true; };
@@ -1320,15 +1322,15 @@ function ContractBar({ label, name, address, verified, warning, riskCheck }: {
   const [risk, setRisk] = useState<RecipientRisk | null>(null);
   useEffect(() => {
     setRisk(null);
-    if (!riskCheck || !address || !/^0x[0-9a-fA-F]{40}$/.test(address)) return;
+    if (!riskCheck || !isAddress(address)) return;
     let cancelled = false;
     resolveRecipientRisk(chainId, address).then((r) => { if (!cancelled) setRisk(r); }).catch(() => {});
     return () => { cancelled = true; };
   }, [riskCheck, address, chainId]);
 
-  const explorer = networkForChainId(chainId)?.explorerURL;
-  const isFullAddr = !!address && /^0x[0-9a-fA-F]{40}$/.test(address);
-  const explorerUrl = explorer && isFullAddr ? `${explorer.replace(/\/$/, '')}/address/${address}` : undefined;
+  const explorerBase = explorerBaseURL(chainId);
+  const isFullAddr = isAddress(address);
+  const explorerUrl = explorerBase && isFullAddr ? `${explorerBase}/address/${address}` : undefined;
 
   const handleCopy = useCallback(async () => {
     if (!address) return;

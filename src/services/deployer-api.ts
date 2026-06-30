@@ -11,6 +11,9 @@
 import type { BundlerDeployerInfo, NetworkFundingStatus, FundingStatus } from '@/models/types';
 import { rpcCall } from './rpc-adapter';
 import { keccak256 } from './eth-crypto';
+// Shared wei→ETH formatter (was a local 4-decimal copy). Aliased so call sites are
+// unchanged; >= 1 ETH balances now render with the app-wide 3-decimal precision.
+import { formatWeiToEth as formatWei } from './format-eth';
 
 // ---------------------------------------------------------------------------
 // Address derivation (mock)
@@ -52,14 +55,6 @@ function balanceToStatus(balanceWei: bigint): FundingStatus {
   if (balanceWei < ZERO_THRESHOLD) return 'not_funded';
   if (balanceWei < LOW_THRESHOLD) return 'low_balance';
   return 'funded';
-}
-
-function formatWei(wei: bigint): string {
-  const eth = Number(wei) / 1e18;
-  if (eth === 0) return '0';
-  if (eth < 0.000001) return '< 0.000001';
-  if (eth < 0.001) return eth.toFixed(6);
-  return eth.toFixed(4);
 }
 
 async function getBalance(address: string, chainId: number): Promise<bigint> {

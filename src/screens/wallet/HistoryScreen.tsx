@@ -17,7 +17,7 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { useWallet, shortAddress } from '@/models/wallet-state';
-import { getAllNetworksSync } from '@/models/network';
+import { getAllNetworksSync, explorerTxURL, explorerAddressURL } from '@/models/network';
 import { loadTransactions, type LocalTransaction } from '@/services/storage';
 import { openBrowser } from '@/services/platform';
 import { formatDate as fmtDateLocale, formatTime as fmtTimeLocale, formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
@@ -28,18 +28,6 @@ import {
 import type { TransactionType } from '@/services/storage';
 
 // MARK: - Helpers
-
-function explorerTxUrl(txHash: string, chainId: number): string {
-  const network = getAllNetworksSync().find((n) => n.chainId === chainId);
-  const base = network?.explorerURL ?? 'https://etherscan.io';
-  return `${base}/tx/${txHash}`;
-}
-
-function explorerAddressUrl(address: string, chainId: number): string {
-  const network = getAllNetworksSync().find((n) => n.chainId === chainId);
-  const base = network?.explorerURL ?? 'https://etherscan.io';
-  return `${base}/address/${address}`;
-}
 
 function formatDate(timestamp: number): string {
   return fmtDateLocale(timestamp * 1000);
@@ -108,7 +96,7 @@ export default function HistoryScreen() {
   const handleViewOnExplorer = useCallback(() => {
     if (!address) return;
     const chainId = selectedChainId ?? 1;
-    openBrowser(explorerAddressUrl(address, chainId));
+    openBrowser(explorerAddressURL(chainId, address));
   }, [address, selectedChainId]);
 
   const handleBack = () => router.back();
@@ -124,7 +112,7 @@ export default function HistoryScreen() {
     return (
       <Pressable
         style={styles.txRow}
-        onPress={item.txHash ? () => openBrowser(explorerTxUrl(item.txHash, item.chainId)) : undefined}
+        onPress={item.txHash ? () => openBrowser(explorerTxURL(item.chainId, item.txHash)) : undefined}
       >
         <View style={[styles.txIcon, { backgroundColor: iconBg }]}>
           {icon}

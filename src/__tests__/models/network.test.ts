@@ -8,7 +8,10 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
   default: { getItem: jest.fn(), setItem: jest.fn(), removeItem: jest.fn() },
 }));
-import { chainName, nativeSymbol, networkId, DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
+import {
+  chainName, nativeSymbol, networkId, DEFAULT_NETWORKS, getAllNetworksSync,
+  explorerBaseURL, explorerTxURL, explorerAddressURL, explorerTokenURL,
+} from '@/models/network';
 import { CHAINS } from '@/models/chains';
 import { tokenChainId, type APIToken } from '@/models/types';
 
@@ -127,6 +130,35 @@ describe('network', () => {
     test('returns at least default networks', () => {
       const all = getAllNetworksSync();
       expect(all.length).toBeGreaterThanOrEqual(DEFAULT_NETWORKS.length);
+    });
+  });
+
+  describe('explorer links', () => {
+    test('explorerBaseURL returns the chain explorer, null for unknown', () => {
+      expect(explorerBaseURL(1)).toBe('https://etherscan.io');
+      expect(explorerBaseURL(8453)).toBe('https://basescan.org');
+      expect(explorerBaseURL(100)).toBe('https://gnosisscan.io');
+      expect(explorerBaseURL(999999)).toBeNull();
+    });
+
+    test('explorerTxURL builds /tx/ links with the chain explorer', () => {
+      expect(explorerTxURL(1, '0xabc')).toBe('https://etherscan.io/tx/0xabc');
+      expect(explorerTxURL(8453, '0xdef')).toBe('https://basescan.org/tx/0xdef');
+    });
+
+    test('explorerAddressURL builds /address/ links', () => {
+      expect(explorerAddressURL(42161, '0xaddr')).toBe('https://arbiscan.io/address/0xaddr');
+    });
+
+    test('explorerTokenURL builds /token/ links, with optional holder', () => {
+      expect(explorerTokenURL(1, '0xtoken')).toBe('https://etherscan.io/token/0xtoken');
+      expect(explorerTokenURL(1, '0xtoken', '0xholder')).toBe('https://etherscan.io/token/0xtoken?a=0xholder');
+    });
+
+    test('tx/address/token builders fall back to etherscan.io for unknown chains', () => {
+      expect(explorerTxURL(999999, '0xabc')).toBe('https://etherscan.io/tx/0xabc');
+      expect(explorerAddressURL(999999, '0xa')).toBe('https://etherscan.io/address/0xa');
+      expect(explorerTokenURL(999999, '0xt')).toBe('https://etherscan.io/token/0xt');
     });
   });
 });

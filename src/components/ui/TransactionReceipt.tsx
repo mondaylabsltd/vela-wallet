@@ -8,7 +8,7 @@ import { ChainLogo } from '@/components/ChainLogo';
 import { QRCode } from '@/components/QRCode';
 import { TokenLogo } from '@/components/TokenLogo';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
-import { chainName, getAllNetworksSync } from '@/models/network';
+import { chainName, getAllNetworksSync, explorerTxURL } from '@/models/network';
 import { formatBalance, shortAddr } from '@/models/types';
 import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
 import { formatFiat } from '@/services/currency';
@@ -118,8 +118,7 @@ interface CanvasLabels {
 async function renderReceiptToCanvas(props: Props, labels: CanvasLabels): Promise<Blob> {
   const { from, fromName, to, amount, symbol, chainId, txHash, logoUrls, usdValue, timestamp, recipientIdentity } = props;
   const chain = chainName(chainId);
-  const net = getAllNetworksSync().find(n => n.chainId === chainId);
-  const explorerUrl = `${net?.explorerURL ?? 'https://etherscan.io'}/tx/${txHash}`;
+  const explorerUrl = explorerTxURL(chainId, txHash);
   const displayToName = recipientIdentity?.name ?? props.toName;
 
   // Phone-like proportions: 9:16 aspect, similar to in-app card
@@ -338,8 +337,7 @@ export function TransactionReceipt({
   const fiatPrefs = { rate, currencyCode, currencySymbol };
   const chain = chainName(chainId);
   const net = getAllNetworksSync().find(n => n.chainId === chainId);
-  const explorerBase = net?.explorerURL ?? 'https://etherscan.io';
-  const explorerUrl = `${explorerBase}/tx/${txHash}`;
+  const explorerUrl = explorerTxURL(chainId, txHash);
   const displayToName = recipientIdentity?.name ?? toName;
   // The send is already accepted by the bundler when this renders; the on-chain
   // hash may still be resolving. While pending we hide the (broken) explorer

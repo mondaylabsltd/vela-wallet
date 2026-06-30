@@ -15,6 +15,7 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 import { DEFAULT_NETWORKS, getAllNetworksSync, refreshCustomNetworks } from '@/models/network';
+import { isAddress, extractAddress } from '@/models/types';
 import type { CompatibilityResult, CustomToken } from '@/models/types';
 import { chainInfoToCustomNetwork } from '@/services/add-network';
 import { MULTICALL3, SEL, decAggregate3, decString, decU8, encAggregate3 } from '@/services/abi';
@@ -153,7 +154,7 @@ export function AddTokenPanel({ onChanged }: { onChanged?: () => void }) {
     setNetSaving(false);
   };
 
-  const isValidAddress = /^0x[0-9a-fA-F]{40}$/.test(contractAddress);
+  const isValidAddress = isAddress(contractAddress);
 
   const fetchTokenMetadata = async () => {
     if (!isValidAddress) return;
@@ -481,9 +482,9 @@ export function AddTokenPanel({ onChanged }: { onChanged?: () => void }) {
           onScan={(data) => {
             setShowScanner(false);
             // Extract 0x address from QR data (may include ethereum: prefix or extra params)
-            const match = data.match(/0x[0-9a-fA-F]{40}/);
-            if (match) {
-              setContractAddress(match[0]);
+            const addr = extractAddress(data);
+            if (addr) {
+              setContractAddress(addr);
               setFoundTokens([]);
             }
           }}

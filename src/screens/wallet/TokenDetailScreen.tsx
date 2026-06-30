@@ -5,7 +5,6 @@ import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { copyToClipboard, openBrowser } from '@/services/platform';
-import { getAllNetworksSync } from '@/models/network';
 import { useWallet } from '@/models/wallet-state';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -19,7 +18,7 @@ import { color, text, inter, space, radius, font, shadow, createStyles } from '@
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { shortAddr, tokenChainId as networkToChainId } from '@/models/types';
 import type { APIToken } from '@/models/types';
-import { badgeNetworkFor, chainName } from '@/models/network';
+import { badgeNetworkFor, chainName, explorerTokenURL, explorerAddressURL } from '@/models/network';
 import { fetch7DayHistory, type BalancePoint } from '@/services/balance-history';
 import { Copy, Check, ArrowLeft, ExternalLink } from 'lucide-react-native';
 
@@ -201,11 +200,9 @@ export default function TokenDetailScreen() {
           <Pressable
             style={styles.detailRow}
             onPress={() => {
-              const net = getAllNetworksSync().find(n => n.chainId === chainId);
-              const base = net?.explorerURL ?? 'https://etherscan.io';
               const url = contractAddress
-                ? `${base}/token/${contractAddress}?a=${walletAddress}`
-                : `${base}/address/${walletAddress}`;
+                ? explorerTokenURL(chainId, contractAddress, walletAddress)
+                : explorerAddressURL(chainId, walletAddress);
               openBrowser(url);
             }}
           >

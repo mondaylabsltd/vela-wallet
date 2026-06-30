@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { Search, X, Star, BookmarkPlus, ScanLine, ChevronRight } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
-import { shortAddr } from '@/models/types';
+import { shortAddr, isAddress } from '@/models/types';
 import {
   getAllContacts, sortContacts, matchesQuery, contactDisplayName, saveContact,
   type Contact,
@@ -20,7 +20,6 @@ import {
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 import { hapticLight } from '@/services/platform';
 
-const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 
 export function ContactPicker({ visible, onClose, onSelect, onScan, myAddress }: {
   visible: boolean;
@@ -53,7 +52,7 @@ export function ContactPicker({ visible, onClose, onSelect, onScan, myAddress }:
   const rest = filtered.filter((c) => !c.favorite);
 
   // A pasted/typed fresh address that isn't already a contact → offer it directly.
-  const typedAddr = ADDR_RE.test(query.trim()) ? query.trim().toLowerCase() : null;
+  const typedAddr = isAddress(query.trim()) ? query.trim().toLowerCase() : null;
   const typedIsKnown = !!typedAddr && (contacts ?? []).some((c) => c.address === typedAddr);
 
   const pick = (address: string, name?: string) => {

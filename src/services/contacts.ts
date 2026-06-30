@@ -16,6 +16,7 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadTransactions } from '@/services/storage';
+import { isAddress } from '@/models/types';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
 import { poolRpcCall } from '@/services/rpc-pool';
 
@@ -43,7 +44,6 @@ export interface Contact {
 }
 
 const KEY = 'vela.contacts';
-const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 
 let _saved: Contact[] | null = null;
 
@@ -131,7 +131,7 @@ export async function isSavedContact(address: string): Promise<boolean> {
 /** The user's saved contact for an address, or null. The anti-poisoning signal:
  *  a recipient you previously saved (and named) is one you've vouched for. */
 export async function getSavedContact(address: string): Promise<Contact | null> {
-  if (!ADDR_RE.test(address ?? '')) return null;
+  if (!isAddress(address)) return null;
   return (await loadSaved()).find((x) => x.address === address.toLowerCase()) ?? null;
 }
 
@@ -169,7 +169,7 @@ async function deriveFromHistory(myAddress?: string): Promise<Contact[]> {
   for (const t of txs) {
     if (t.type !== 'send') continue; // transfers only — never dApp contract calls
     const to = t.to?.toLowerCase();
-    if (!to || !ADDR_RE.test(to) || to === me) continue;
+    if (!to || !isAddress(to) || to === me) continue;
     const ts = t.timestamp ?? 0;
     const existing = map.get(to);
     if (existing) {

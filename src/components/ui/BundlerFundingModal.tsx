@@ -13,6 +13,7 @@ import { Check, Copy, RefreshCw, Fuel, Gift } from 'lucide-react-native';
 
 import { AppModal } from './AppModal';
 import { ChainLogo } from '@/components/ChainLogo';
+import { formatWeiToEth as formatWei } from '@/services/format-eth';
 import { chainName, getAllNetworksSync } from '@/models/network';
 import { QRCode } from '@/components/QRCode';
 import { VelaCard } from './VelaCard';
@@ -251,15 +252,6 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
       </View>
     </AppModal>
   );
-}
-
-function formatWei(wei: bigint): string {
-  const eth = Number(wei) / 1e18;
-  if (eth === 0) return '0';
-  if (eth < 0.000001) return '< 0.000001';
-  if (eth < 0.001) return eth.toFixed(6);
-  if (eth < 1) return eth.toFixed(4);
-  return eth.toFixed(3);
 }
 
 const styles = createStyles(() => ({

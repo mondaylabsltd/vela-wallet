@@ -66,6 +66,48 @@ export function networkForChainId(chainId: number): Network | null {
   return custom ? customToNetwork(custom) : null;
 }
 
+// ---------------------------------------------------------------------------
+// Block-explorer links
+//
+// The `${explorerURL ?? 'https://etherscan.io'}/tx/${hash}` idiom was hand-written
+// (with subtly inconsistent trailing-slash handling) in ~8 screens/components.
+// These are the single source of truth: `explorerBaseURL` returns null for an
+// unknown chain (callers in a security context — e.g. the signing sheet — should
+// show NO link rather than a misleading etherscan.io link), while the tx/address/
+// token builders fall back to etherscan.io to match the historical display behavior.
+// ---------------------------------------------------------------------------
+
+/** Etherscan as the fallback explorer when a chain has no configured explorer. */
+const FALLBACK_EXPLORER = 'https://etherscan.io';
+
+/**
+ * Block-explorer base URL for a chain (trailing slash stripped), or null when the
+ * chain is unknown. Use this when an unknown chain should yield no link at all.
+ */
+export function explorerBaseURL(chainId: number): string | null {
+  const url = networkForChainId(chainId)?.explorerURL;
+  return url ? url.replace(/\/$/, '') : null;
+}
+
+/** Block-explorer link for a transaction hash (etherscan.io fallback). */
+export function explorerTxURL(chainId: number, txHash: string): string {
+  return `${explorerBaseURL(chainId) ?? FALLBACK_EXPLORER}/tx/${txHash}`;
+}
+
+/** Block-explorer link for an account/contract address (etherscan.io fallback). */
+export function explorerAddressURL(chainId: number, address: string): string {
+  return `${explorerBaseURL(chainId) ?? FALLBACK_EXPLORER}/address/${address}`;
+}
+
+/**
+ * Block-explorer link for a token contract, optionally highlighting a holder
+ * (the `?a=` query the token-detail screen uses). Etherscan.io fallback.
+ */
+export function explorerTokenURL(chainId: number, contract: string, holder?: string): string {
+  const base = `${explorerBaseURL(chainId) ?? FALLBACK_EXPLORER}/token/${contract}`;
+  return holder ? `${base}?a=${holder}` : base;
+}
+
 /**
  * The network to badge a token's logo with, or null when no badge is needed.
  * A native coin shown on its own logo chain (ETH on Ethereum) returns null so

@@ -139,7 +139,7 @@ export function tokenLogoURLsByAddress(chainId: number, tokenAddress: string): s
   // Only a well-formed 20-byte address yields a logo URL. Never throw: this runs
   // inside the signing sheet's render, and checksumAddress() rejects a malformed
   // value — a logo lookup must never crash a security surface.
-  if (!/^0x[0-9a-fA-F]{40}$/.test(tokenAddress ?? '')) return [];
+  if (!isAddress(tokenAddress)) return [];
   const base = `${getEthereumDataURL()}/assets/eip155-${chainId}`;
   const cs = checksumAddress(tokenAddress);
   const lc = tokenAddress.toLowerCase();
@@ -355,4 +355,28 @@ export function formatBalance(value: number): string {
 export function shortAddr(address: string): string {
   if (address.length <= 12) return address;
   return `${address.slice(0, 8)}...${address.slice(-6)}`;
+}
+
+/**
+ * Anchored EVM (20-byte) address pattern. This literal was hand-copied as a
+ * private `ADDR_RE` in 6 modules and inlined ~20 more times; this is the one copy.
+ */
+export const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+
+/**
+ * True when `s` is a well-formed 0x-prefixed 20-byte hex address. Typed as a guard
+ * so a passing check narrows `string | undefined` → `string` for the caller.
+ */
+export function isAddress(s: string | null | undefined): s is string {
+  return !!s && ADDRESS_RE.test(s);
+}
+
+/**
+ * Extract the first 20-byte address embedded in arbitrary text (a scanned QR or
+ * pasted string), or null. Unanchored on purpose — the input may wrap the address
+ * (e.g. "ethereum:0x…" or "...send to 0x…").
+ */
+export function extractAddress(s: string): string | null {
+  const m = s.match(/0x[0-9a-fA-F]{40}/);
+  return m ? m[0] : null;
 }

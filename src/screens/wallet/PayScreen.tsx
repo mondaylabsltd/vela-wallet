@@ -15,7 +15,7 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { networkForChainId, networkId, tokenBadgeNetwork } from '@/models/network';
-import { tokenLogoURLs, type APIToken } from '@/models/types';
+import { isAddress, tokenLogoURLs, type APIToken } from '@/models/types';
 import { buildEIP681, toBaseUnits } from '@/services/eip681';
 import { copyToClipboard, hapticLight, openURL } from '@/services/platform';
 import { Check, Copy } from 'lucide-react-native';
@@ -42,7 +42,7 @@ export default function PayScreen() {
   const symbol = (p.sym ?? '').trim() || 'tokens';
   const decimals = parseInt(p.dec ?? '18', 10) || 18;
   const networkName = (p.net ?? '').trim() || (Number.isFinite(chainId) ? `Chain ${chainId}` : '');
-  const valid = /^0x[0-9a-fA-F]{40}$/.test(to) && Number.isFinite(chainId);
+  const valid = isAddress(to) && Number.isFinite(chainId);
   const isNative = !token;
 
   const network = useMemo(() => (Number.isFinite(chainId) ? networkForChainId(chainId) : null), [chainId]);

@@ -4,6 +4,9 @@
 import {
   formatBalance,
   shortAddr,
+  isAddress,
+  extractAddress,
+  ADDRESS_RE,
   tokenId,
   isNativeToken,
   tokenBalanceDouble,
@@ -49,6 +52,39 @@ describe('shortAddr', () => {
 
   test('returns short address unchanged', () => {
     expect(shortAddr('0x1234')).toBe('0x1234');
+  });
+});
+
+describe('isAddress', () => {
+  const VALID = '0x1234567890abcDEF1234567890aBcdef12345678';
+  test('accepts a well-formed 20-byte address (any case)', () => {
+    expect(isAddress(VALID)).toBe(true);
+    expect(isAddress(VALID.toLowerCase())).toBe(true);
+  });
+  test('rejects wrong length, missing prefix, non-hex, and nullish', () => {
+    expect(isAddress('0x1234')).toBe(false); // too short
+    expect(isAddress(VALID + 'ab')).toBe(false); // too long
+    expect(isAddress('1234567890abcdef1234567890abcdef12345678')).toBe(false); // no 0x
+    expect(isAddress('0xZZZ4567890abcdef1234567890abcdef12345678')).toBe(false); // non-hex
+    expect(isAddress('')).toBe(false);
+    expect(isAddress(null)).toBe(false);
+    expect(isAddress(undefined)).toBe(false);
+  });
+  test('ADDRESS_RE is anchored (rejects embedded address)', () => {
+    expect(ADDRESS_RE.test(`ethereum:${VALID}`)).toBe(false);
+  });
+});
+
+describe('extractAddress', () => {
+  const VALID = '0x1234567890abcdef1234567890abcdef12345678';
+  test('pulls the first address out of wrapping text', () => {
+    expect(extractAddress(`ethereum:${VALID}@1`)).toBe(VALID);
+    expect(extractAddress(`send to ${VALID} now`)).toBe(VALID);
+    expect(extractAddress(VALID)).toBe(VALID);
+  });
+  test('returns null when no address is present', () => {
+    expect(extractAddress('no address here')).toBeNull();
+    expect(extractAddress('0x1234')).toBeNull();
   });
 });
 

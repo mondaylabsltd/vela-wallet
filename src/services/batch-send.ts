@@ -18,7 +18,7 @@
  * bare native transfer).
  */
 import { toBaseUnits, fromBaseUnits } from '@/services/eip681';
-import { isNativeToken, tokenBalanceDouble, tokenUsdValue, type APIToken } from '@/models/types';
+import { isAddress, isNativeToken, tokenBalanceDouble, tokenUsdValue, type APIToken } from '@/models/types';
 
 /** One entry in a Safe MultiSend batch, shaped for `sendBatchCalls`. */
 export interface BatchCall {
@@ -29,7 +29,6 @@ export interface BatchCall {
   data: string;
 }
 
-const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
 const ERC20_TRANSFER_SELECTOR = 'a9059cbb';
 
 /** Thrown when a batch is asked to move something malformed — never silently coerced. */
@@ -47,7 +46,7 @@ function pad32(hexNo0x: string): string {
 
 /** `transfer(address,uint256)` calldata as a 0x-hex string. */
 export function encodeErc20Transfer(to: string, amount: bigint): string {
-  if (!ADDR_RE.test(to)) throw new BatchSendError(`invalid recipient: ${to}`);
+  if (!isAddress(to)) throw new BatchSendError(`invalid recipient: ${to}`);
   if (amount < 0n) throw new BatchSendError('amount must be non-negative');
   return '0x' + ERC20_TRANSFER_SELECTOR + pad32(to.slice(2).toLowerCase()) + pad32(amount.toString(16));
 }
@@ -57,12 +56,12 @@ export function encodeErc20Transfer(to: string, amount: bigint): string {
  * (value carries the amount, no calldata); otherwise an ERC-20 `transfer`.
  */
 export function buildTransferCall(tokenAddress: string | null, to: string, amount: bigint): BatchCall {
-  if (!ADDR_RE.test(to)) throw new BatchSendError(`invalid recipient: ${to}`);
+  if (!isAddress(to)) throw new BatchSendError(`invalid recipient: ${to}`);
   if (amount <= 0n) throw new BatchSendError('amount must be greater than zero');
   if (tokenAddress === null) {
     return { to, value: '0x' + amount.toString(16), data: '0x' };
   }
-  if (!ADDR_RE.test(tokenAddress)) throw new BatchSendError(`invalid token: ${tokenAddress}`);
+  if (!isAddress(tokenAddress)) throw new BatchSendError(`invalid token: ${tokenAddress}`);
   return { to: tokenAddress, value: '0x0', data: encodeErc20Transfer(to, amount) };
 }
 
