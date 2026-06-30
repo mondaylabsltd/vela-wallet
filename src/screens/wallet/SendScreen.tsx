@@ -27,7 +27,8 @@ import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, format
 import { AmountText } from '@/components/ui/AmountText';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { MultiRecipientEditor, makeRecipientId, recipientsAreValid, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
-import { buildSplitCalls, sumSplitBaseUnits, buildSweepCalls, toSweepTokens, selectAllValuable } from '@/services/batch-send';
+import { buildSplitCalls, sumSplitBaseUnits, buildSweepCalls, toSweepTokens } from '@/services/batch-send';
+import { useSweepSelection } from '@/hooks/use-sweep-selection';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { TransactionReceipt } from '@/components/ui/TransactionReceipt';
@@ -231,11 +232,12 @@ export default function SendScreen() {
   const [splitMode, setSplitMode] = useState(false);
   const [recipients, setRecipients] = useState<RecipientDraft[]>([]);
   const [pickerTarget, setPickerTarget] = useState<string | null>(null);
-  // ② sweep mode (多币一人 / 清空): many tokens on ONE chain → one recipient, each
-  // at full balance, in a single MultiSend UserOp. Mutually exclusive with split.
+  // ② sweep (多币一人 / 清空): many tokens on ONE chain → one recipient, full
+  // balance each, in a single MultiSend UserOp. Selection state lives in the
+  // shared hook (also used by the Home assets sheet). `sweepMode` = we're in the
+  // sweep enter-details/confirm flow (set when a multi-selection is confirmed).
   const [sweepMode, setSweepMode] = useState(false);
-  const [sweepSelected, setSweepSelected] = useState<Set<string>>(new Set());
-  const [sweepChainId, setSweepChainId] = useState<number | null>(null);
+  const sweep = useSweepSelection();
   const [sending, setSending] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [copiedContract, setCopiedContract] = useState(false);
@@ -524,7 +526,7 @@ export default function SendScreen() {
       /* malformed amount → no sim */
     }
     return () => { cancelled = true; };
-  }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate, splitMode, recipients, sweepMode, sweepSelected]);
+  }, [step, selectedToken, recipient, amount, inputInUsd, activeAccount, dc.rate, splitMode, recipients, sweepMode, sweep.selectedIds]);
 
   // Recipient-risk on the confirm step: "first time" (address-poisoning defense)
   // + contract-vs-EOA. Drives the first-time/contract tags by the To row and
@@ -576,50 +578,26 @@ export default function SendScreen() {
     }
   };
 
-  // ── ② sweep-mode (多币一人 / 清空) helpers ───────────────────────────────────
-  // Sweep is gated on a chosen network (the picker only enables checkboxes once a
-  // network is selected), so selection is always single-chain — no chain juggling.
-  const sweepTokensList = tokens.filter((tk) => sweepSelected.has(tokenId(tk)));
+  // ── ② sweep (多币一人 / 清空) ─────────────────────────────────────────────────
+  // Selection logic lives in the shared `sweep` hook; here we just react to a
+  // confirmed selection. Multi-select is gated on a chosen network (TokenSelector
+  // only shows checkboxes once one is picked), so selection is always one chain.
+  const sweepTokensList = sweep.selectedTokens(tokens);
 
-  const toggleSweepToken = (tk: APIToken) => {
-    setSweepSelected((prev) => {
-      const next = new Set(prev);
-      const id = tokenId(tk);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  // Master "全选" — all held/priced/non-spam tokens in the current (chain-scoped) view.
-  const isAllSweepSelected = (visible: APIToken[]) => {
-    const valuable = selectAllValuable(visible);
-    return valuable.length > 0 && valuable.every((tk) => sweepSelected.has(tokenId(tk)));
-  };
-  const toggleAllSweep = (visible: APIToken[]) => {
-    const valuable = selectAllValuable(visible);
-    if (valuable.length === 0) return;
-    setSweepSelected((prev) => {
-      const allOn = valuable.every((tk) => prev.has(tokenId(tk)));
-      const next = new Set(prev);
-      valuable.forEach((tk) => (allOn ? next.delete(tokenId(tk)) : next.add(tokenId(tk))));
-      return next;
-    });
-  };
-
-  // Network filter changed in the picker — a batch is one chain, so clear and re-lock.
-  const onSweepNetworkChange = (chainId: number | null) => {
-    setSweepSelected(new Set());
-    setSweepChainId(chainId);
-  };
-
-  // Selected → advance to enter-recipient. The first token carries chain/gas context.
+  // Confirmed selection → advance. ONE token is a normal amount-send (not a
+  // full-balance sweep); TWO+ is a sweep. The first token carries chain/gas context.
   const startSweepConfirm = () => {
-    const first = tokens.find((tk) => sweepSelected.has(tokenId(tk)));
-    if (!first) return;
-    setSelectedToken(first);
+    const selected = sweep.selectedTokens(tokens);
+    if (selected.length === 0) return;
+    if (selected.length === 1) {
+      handleSelectToken(selected[0]);
+      return;
+    }
+    setSweepMode(true);
+    setSelectedToken(selected[0]);
     setStep('enter-details');
     if (activeAccount) {
-      const chainId = tokenChainId(first);
+      const chainId = tokenChainId(selected[0]);
       prefetchForSend(activeAccount.address, chainId);
       fetchBundlerAccountInfo(chainId, activeAccount.address).catch(() => {});
       findAccountByCredentialId(activeAccount.id).then((s) => { prefetchedAccount.current = s ?? null; });
@@ -627,9 +605,9 @@ export default function SendScreen() {
     }
   };
 
-  const exitSweep = () => { setSweepMode(false); setSweepSelected(new Set()); setSweepChainId(null); };
 
   const handleSelectToken = (token: APIToken) => {
+    setSweepMode(false); // single-token path — normal amount-send, not a sweep
     setSelectedToken(token);
     setStep('enter-details');
 
@@ -993,39 +971,34 @@ export default function SendScreen() {
   };
 
   // Step 1: Select Token — delegated to the shared TokenSelector.
+  // Multi-select is built-in now: filter to a specific network and the picker
+  // shows checkboxes (one token = amount-send, two+ = sweep). No mode toggle.
+  const tokenMultiSelect = {
+    selectedIds: sweep.selectedIds,
+    onToggle: sweep.toggle,
+    onToggleAll: sweep.toggleAll,
+    isAllSelected: sweep.isAllSelected,
+    onNetworkChange: sweep.onNetworkChange,
+    onConfirm: startSweepConfirm,
+    confirmLabel: sweep.count === 1
+      ? t('send.continueBtn')
+      : sweep.chainId != null
+        ? t('send.sweepContinueChain', { chain: chainName(sweep.chainId), n: sweep.count, defaultValue: `Empty ${sweep.count} on ${chainName(sweep.chainId)} →` })
+        : t('send.sweepContinue', { n: sweep.count, defaultValue: `Empty ${sweep.count} token(s) →` }),
+    selectAllLabel: t('send.selectAllValuable', { defaultValue: 'Select all valuable' }),
+  };
+
   const renderSelectToken = () => (
     <Animated.View style={styles.stepContainer} entering={fadeInDown(0, 300)}>
-      <View style={styles.selectHead}>
-        <Text style={styles.stepTitle}>
-          {sweepMode ? t('send.sweepTitle', { defaultValue: 'Empty wallet' }) : t('send.selectTokenTitle')}
-        </Text>
-        <Pressable onPress={() => (sweepMode ? exitSweep() : setSweepMode(true))} hitSlop={8} style={styles.sweepToggleBtn}>
-          <Text style={styles.sweepToggleText}>
-            {sweepMode ? t('send.cancel', { defaultValue: 'Cancel' }) : t('send.sweepEntry', { defaultValue: 'Empty wallet' })}
-          </Text>
-        </Pressable>
-      </View>
+      <Text style={styles.stepTitle}>{t('send.selectTokenTitle')}</Text>
       <TokenSelector
-        key={sweepMode ? 'sweep' : 'browse'}
         tokens={tokens}
         loading={loading}
         onSelect={handleSelectToken}
         onAddChanged={refreshTokens}
-        defaultCategory={sweepMode ? 'all' : 'stable'}
-        initialChainId={sweepMode ? sweepChainId : null}
-        multiSelect={sweepMode ? {
-          selectedIds: sweepSelected,
-          onToggle: toggleSweepToken,
-          onToggleAll: toggleAllSweep,
-          isAllSelected: isAllSweepSelected,
-          onNetworkChange: onSweepNetworkChange,
-          onConfirm: startSweepConfirm,
-          confirmLabel: sweepChainId != null
-            ? t('send.sweepContinueChain', { chain: chainName(sweepChainId), n: sweepSelected.size, defaultValue: `Empty ${sweepSelected.size} on ${chainName(sweepChainId)} →` })
-            : t('send.sweepContinue', { n: sweepSelected.size, defaultValue: `Empty ${sweepSelected.size} token(s) →` }),
-          selectAllLabel: t('send.selectAllValuable', { defaultValue: 'Select all valuable' }),
-          pickNetworkHint: t('send.sweepPickNetwork', { defaultValue: 'Pick a network above to empty (one network at a time)' }),
-        } : undefined}
+        defaultCategory="stable"
+        initialChainId={sweep.chainId}
+        multiSelect={tokenMultiSelect}
       />
     </Animated.View>
   );
@@ -2002,22 +1975,7 @@ const styles = createStyles(() => ({
   },
   confirmRecipientLeft: { flex: 1, gap: 2 },
   confirmRecipientAmt: { alignItems: 'flex-end' },
-  // ② sweep (清空)
-  selectHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: space.md,
-  },
-  sweepToggleBtn: {
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-    borderRadius: radius.full,
-    backgroundColor: color.bg.sunken,
-    borderWidth: 1,
-    borderColor: color.border.base,
-  },
-  sweepToggleText: { fontSize: text.sm, ...inter.semibold, color: color.accent.base },
+  // ② multi-token send (multi-select → one recipient)
   sweepSummary: {
     flexDirection: 'row',
     alignItems: 'center',

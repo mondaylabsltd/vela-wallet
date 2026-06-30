@@ -60,8 +60,6 @@ interface Props {
     onConfirm: () => void;
     confirmLabel: string;
     selectAllLabel: string;
-    /** Shown (instead of checkboxes) until a specific network is chosen. */
-    pickNetworkHint: string;
   };
   /** Seed the network filter on mount (e.g. restoring a sweep after going back). */
   initialChainId?: number | null;
@@ -158,10 +156,8 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
         />
       </View>
 
-      {/* Sweep: pick a network first, then a master "select all" appears. */}
-      {multiSelect && !sweepActive && (
-        <Text style={styles.sweepHint}>{multiSelect.pickNetworkHint}</Text>
-      )}
+      {/* Pick a specific network → multi-select switches on (a master "select
+          all" + per-row checkboxes). "All networks" stays single-select. */}
       {sweepActive && multiSelect && (
         <Pressable onPress={() => multiSelect.onToggleAll(filtered)} style={styles.sweepAllRow}>
           <View style={[styles.sweepAllCheck, multiSelect.isAllSelected(filtered) && styles.sweepAllCheckOn]}>
@@ -224,12 +220,8 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
       />
       <AddTokenSheet visible={showAddToken} onClose={() => setShowAddToken(false)} onChanged={onAddChanged} />
 
-      {sweepActive && multiSelect && (
-        <Pressable
-          onPress={multiSelect.onConfirm}
-          disabled={multiSelect.selectedIds.size === 0}
-          style={[styles.sweepConfirm, multiSelect.selectedIds.size === 0 && styles.sweepConfirmDisabled]}
-        >
+      {sweepActive && multiSelect && multiSelect.selectedIds.size > 0 && (
+        <Pressable onPress={multiSelect.onConfirm} style={styles.sweepConfirm}>
           <Text style={styles.sweepConfirmText}>{multiSelect.confirmLabel}</Text>
         </Pressable>
       )}
@@ -253,11 +245,6 @@ const styles = createStyles(() => ({
   },
   sweepAllCheckOn: { backgroundColor: color.accent.base, borderColor: color.accent.base },
   sweepAllText: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
-  sweepHint: {
-    fontSize: text.sm, ...inter.medium, color: color.accent.base,
-    backgroundColor: color.accent.soft, borderRadius: radius.lg,
-    paddingHorizontal: space.lg, paddingVertical: space.md, marginBottom: space.sm,
-  },
   sweepConfirm: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -266,7 +253,6 @@ const styles = createStyles(() => ({
     backgroundColor: color.accent.base,
     marginTop: space.md,
   },
-  sweepConfirmDisabled: { opacity: 0.4 },
   sweepConfirmText: { fontSize: text.base, ...inter.bold, color: color.fg.inverse },
   loadingText: {
     fontSize: text.lg,
