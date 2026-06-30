@@ -120,6 +120,59 @@ export const CLEAR_SIGNING_SCENARIOS: ClearSigningScenario[] = [
     },
   },
   {
+    // Uniswap's real flow: an UNLIMITED Permit2 PermitSingle signature. The wallet
+    // can't cap it (the dApp redeems its own struct on-chain) → must show the risk
+    // and sign verbatim, never the cap editor. Regression guard for "signed the
+    // Permit2 but the swap reverts".
+    id: 'permit2-single-unlimited',
+    labelKey: 'clearSigning.scenarioPermit2Unlimited',
+    subtitleKey: 'clearSigning.scenarioPermit2UnlimitedSub',
+    request: {
+      id: 'test-permit2-single-unlimited',
+      method: 'eth_signTypedData_v4',
+      params: [
+        '0x0000000000000000000000000000000000000000',
+        JSON.stringify({
+          types: {
+            EIP712Domain: [
+              { name: 'name', type: 'string' },
+              { name: 'chainId', type: 'uint256' },
+              { name: 'verifyingContract', type: 'address' },
+            ],
+            PermitSingle: [
+              { name: 'details', type: 'PermitDetails' },
+              { name: 'spender', type: 'address' },
+              { name: 'sigDeadline', type: 'uint256' },
+            ],
+            PermitDetails: [
+              { name: 'token', type: 'address' },
+              { name: 'amount', type: 'uint160' },
+              { name: 'expiration', type: 'uint48' },
+              { name: 'nonce', type: 'uint48' },
+            ],
+          },
+          primaryType: 'PermitSingle',
+          domain: {
+            name: 'Permit2',
+            chainId: 1,
+            verifyingContract: '0x000000000022D473030F116dDEE9F6B43aC78BA3',
+          },
+          message: {
+            details: {
+              token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+              amount: '1461501637330902918203684832716283019655932542975', // 2^160-1 (unlimited)
+              expiration: '1790000000',
+              nonce: '0',
+            },
+            spender: '0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD', // Universal Router
+            sigDeadline: '1790000000',
+          },
+        }),
+      ],
+      origin: 'clear-signing-test',
+    },
+  },
+  {
     id: 'eip712-unknown',
     labelKey: 'clearSigning.scenarioEip712Unknown',
     subtitleKey: 'clearSigning.scenarioEip712UnknownSub',

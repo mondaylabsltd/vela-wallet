@@ -271,13 +271,17 @@ describe('approval-guard', () => {
       const req = txReq(USDC, increaseCalldata(SPENDER, MAX_U256));
       expect(() => enforceNoUnlimited(req.method, req.params)).toThrow(UnlimitedApprovalError);
     });
-    test('throws on unlimited ERC-2612 permit', () => {
+    // Off-chain permit SIGNATURES are signed verbatim under deliberate UI consent:
+    // the dApp redeems its own struct, so a forced cap would only desync the
+    // signature and revert the swap. The amount guard governs txs the WALLET
+    // submits (calldata), not signatures the dApp redeems (typed data).
+    test('does NOT throw on unlimited ERC-2612 permit (off-chain signature)', () => {
       const req = erc2612(MAX_U256.toString());
-      expect(() => enforceNoUnlimited(req.method, req.params)).toThrow(UnlimitedApprovalError);
+      expect(() => enforceNoUnlimited(req.method, req.params)).not.toThrow();
     });
-    test('throws on unlimited Permit2 single', () => {
+    test('does NOT throw on unlimited Permit2 single typed-data (off-chain signature)', () => {
       const req = permit2Single(MAX_U160.toString());
-      expect(() => enforceNoUnlimited(req.method, req.params)).toThrow(UnlimitedApprovalError);
+      expect(() => enforceNoUnlimited(req.method, req.params)).not.toThrow();
     });
     test('throws on unlimited Permit2 on-chain approve (calldata)', () => {
       const PERMIT2 = '0x000000000022D473030F116dDEE9F6B43aC78BA3';

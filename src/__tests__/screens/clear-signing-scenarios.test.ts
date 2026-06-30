@@ -111,8 +111,8 @@ async function resolveScenario(req: any): Promise<ClearSignResult | null> {
 }
 
 describe('clear-signing harness scenarios', () => {
-  it('covers all 21 scenarios', () => {
-    expect(CLEAR_SIGNING_SCENARIOS.length).toBe(21);
+  it('covers all 22 scenarios', () => {
+    expect(CLEAR_SIGNING_SCENARIOS.length).toBe(22);
   });
 
   // Every scenario must resolve + detect approvals without throwing, and never

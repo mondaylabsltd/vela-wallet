@@ -70,6 +70,8 @@
     "scenarioExpiredSwap": "兑换截止时间已过",
     "scenarioExpiredSwapSub": "截止时间已过 — 应标记提示",
     "scenarioBatch": "EIP-5792 批量",
-    "scenarioBatchSub": "wallet_sendCalls — 逐笔明细"
+    "scenarioBatchSub": "wallet_sendCalls — 逐笔明细",
+    "scenarioPermit2Unlimited": "Permit2 授权（无限额）",
+    "scenarioPermit2UnlimitedSub": "离线签名 —— 无法封顶"
   }
 }

@@ -158,7 +158,12 @@
       "expiresLabel": "过期时间",
       "chooseAction": "请选择「撤销」或「授权」以继续。",
       "resultingTotal": "授权后总额度",
-      "resultingTotalUnknown": "在你当前的额度之上再增加 {{amount}}（无法读取当前额度）"
+      "resultingTotalUnknown": "在你当前的额度之上再增加 {{amount}}（无法读取当前额度）",
+      "unlimitedValue": "无限额",
+      "multiplePermits": "多种代币",
+      "permitTag": "支出许可（签名）",
+      "permitCantCap": "许可是一个签名 —— 额度无法在此封顶。如需限额，请改用链上 Approve。",
+      "permitNote": "你正在签署一个支出许可 —— dApp 可代你动用至多此金额。"
     },
     "bugReport": {
       "title": "反馈问题",

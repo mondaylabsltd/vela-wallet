@@ -213,14 +213,24 @@ function detectTypedDataApproval(td: any): DetectedApproval | null {
   const msg = td.message ?? {};
   const domain = td.domain ?? {};
 
+  // OFF-CHAIN PERMIT SIGNATURES (everything below) are redeemed by the dApp,
+  // which submits its OWN permit struct on-chain. The wallet only signs — it
+  // can't change what the dApp submits — so rewriting the signed amount would
+  // desync the signature from the on-chain struct and revert the dApp's tx (the
+  // classic "signed the Permit2, but Uniswap's swap fails" bug). Hence these are
+  // NOT editable: they're surfaced as a risk and signed verbatim under explicit,
+  // deliberate consent, not silently capped. (On-chain `approve` calldata stays
+  // editable — there we DO control the executed bytes.)
+  const PERMIT_SIG_BLOCK = 'Off-chain permit — the dApp submits its own amount on-chain, so the wallet can\'t cap it. To limit spending, use an on-chain approval instead.';
+
   // DAI-style permit: Permit(holder, spender, nonce, expiry, allowed)
   if (pt === 'Permit' && msg.allowed !== undefined) {
     const allowed = msg.allowed === true || msg.allowed === 'true' || msg.allowed === 1 || msg.allowed === '1';
     return {
       kind: 'dai-permit', tokenAddress: lc(domain.verifyingContract), spender: lc(msg.spender),
       isUnbounded: allowed, isBooleanGrant: true, isReducing: !allowed,
-      editable: true,
-      blockReason: allowed ? 'DAI permit grants full-balance access and cannot be capped to an amount.' : undefined,
+      editable: false,
+      blockReason: allowed ? 'DAI permit grants full-balance access; sign as requested or reject.' : undefined,
       deadline: toBig(msg.expiry), locus: { type: 'typed-path', path: 'allowed' },
     };
   }
@@ -231,7 +241,8 @@ function detectTypedDataApproval(td: any): DetectedApproval | null {
     return {
       kind: 'erc2612-permit', tokenAddress: lc(domain.verifyingContract), spender: lc(msg.spender),
       amountRaw, amountBits: 256, isUnbounded: isUnboundedAmount(amountRaw, 256),
-      isBooleanGrant: false, isReducing: amountRaw === 0n, editable: true,
+      isBooleanGrant: false, isReducing: amountRaw === 0n, editable: false,
+      blockReason: PERMIT_SIG_BLOCK,
       deadline: toBig(msg.deadline), locus: { type: 'typed-path', path: 'value' },
     };
   }
@@ -242,19 +253,20 @@ function detectTypedDataApproval(td: any): DetectedApproval | null {
     return {
       kind: 'permit2-single', tokenAddress: lc(msg.details.token), spender: lc(msg.spender),
       amountRaw, amountBits: 160, isUnbounded: isUnboundedAmount(amountRaw, 160),
-      isBooleanGrant: false, isReducing: amountRaw === 0n, editable: true,
+      isBooleanGrant: false, isReducing: amountRaw === 0n, editable: false,
+      blockReason: PERMIT_SIG_BLOCK,
       deadline: toBig(msg.details.expiration), locus: { type: 'typed-path', path: 'details.amount' },
     };
   }
 
-  // Permit2 PermitBatch: details[]. Detect for the guard; editing the array is Phase 4.
+  // Permit2 PermitBatch: details[].
   if (pt === 'PermitBatch' && Array.isArray(msg.details)) {
     const anyUnbounded = msg.details.some((d: any) => isUnboundedAmount(toBig(d?.amount), 160));
     return {
       kind: 'permit2-batch', spender: lc(msg.spender), amountBits: 160,
       isUnbounded: anyUnbounded, isBooleanGrant: false, isReducing: false,
       editable: false,
-      blockReason: 'Batch approvals can\'t be edited yet — review each amount or reject.',
+      blockReason: PERMIT_SIG_BLOCK,
       locus: { type: 'typed-path', path: 'details' },
     };
   }
@@ -365,15 +377,17 @@ export class UnlimitedApprovalError extends Error {
 export function enforceNoUnlimited(method: string, params: any[] | undefined): void {
   const detected = detectApproval(method, params);
   if (!detected) return;
-  // Boolean grants (setApprovalForAll true / DAI allowed) are handled by explicit
-  // UI consent, not by this amount guard — there is no finite amount to enforce.
+  // Off-chain permit SIGNATURES (typed data) are redeemed by the dApp with its
+  // OWN struct — the wallet can't cap what it doesn't submit, so a forced cap
+  // only desyncs the signature and reverts the dApp's tx. These are gated by an
+  // explicit, deliberate UI risk-consent (slide-to-confirm), not by this
+  // amount guard, which only governs txs the WALLET itself submits.
+  if (detected.locus.type === 'typed-path') return;
+  // Boolean grants (setApprovalForAll true) are handled by explicit UI consent,
+  // not by this amount guard — there is no finite amount to enforce.
   if (detected.isBooleanGrant) return;
   // Reducing the allowance (decreaseAllowance / approve-to-0) never grants — allow.
   if (detected.isReducing) return;
-  if (detected.kind === 'permit2-batch') {
-    if (detected.isUnbounded) throw new UnlimitedApprovalError('Permit2 batch contains an unlimited amount');
-    return;
-  }
   if (detected.amountRaw !== undefined && detected.amountBits) {
     if (isUnboundedAmount(detected.amountRaw, detected.amountBits)) {
       throw new UnlimitedApprovalError(`${detected.kind} amount = ${detected.amountRaw}`);

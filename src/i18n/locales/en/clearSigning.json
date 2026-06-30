@@ -70,6 +70,8 @@
     "modalBtnApprove": "Approve",
     "modalBtnConfirmIntent": "Confirm {{intent}}",
     "alertSignedTitle": "Signed!",
-    "alertSignedBody": "This is a test — no actual signature was created."
+    "alertSignedBody": "This is a test — no actual signature was created.",
+    "scenarioPermit2Unlimited": "Permit2 Approve (Unlimited)",
+    "scenarioPermit2UnlimitedSub": "Off-chain signature — can’t be capped"
   }
 }

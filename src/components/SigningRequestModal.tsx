@@ -357,6 +357,13 @@ export function SigningSheet({
 
   // Choose which view to render — wait for descriptor resolution before showing content
   const renderContent = () => {
+    // Off-chain permit signature (Permit2 / ERC-2612 / DAI). The dApp redeems its
+    // OWN struct on-chain, so we can't cap it — capping the signed amount only
+    // desyncs the signature and reverts the dApp's tx. Surface the real risk and
+    // sign verbatim under deliberate consent, never the cap editor.
+    if (approval && approval.locus.type === 'typed-path') {
+      return <PermitSignView approval={approval} meta={approveTokenMeta} clearSign={clearSign} />;
+    }
     // Editable approval takes precedence — detection is instant (no descriptor),
     // and the spending-cap editor is the primary content for these requests.
     if (approval?.editable) {
@@ -451,6 +458,10 @@ export function SigningSheet({
   // slip through the gate even though the submit guard rejects them.
   const isGrantingApproval = (a: DetectedApproval | null | undefined) =>
     !!a?.isUnbounded && !a.isReducing && !a.isBooleanGrant;
+  // An unbounded off-chain permit signature (incl. DAI full-balance / Permit2
+  // batch) is signed verbatim, so its only safety gate is a deliberate hold.
+  const permitGrantsBroad =
+    !!approval && approval.locus.type === 'typed-path' && approval.isUnbounded && !approval.isReducing;
   // A batch leg counts as danger only while it STILL grants broad access — once
   // the user caps/revokes it, the hold (and the unlimited banner) drop away.
   const batchHasDanger =
@@ -460,6 +471,7 @@ export function SigningSheet({
     clearSign?.risk === 'danger' ||
     (!!approval?.editable && approveChoice?.type === 'grant') ||
     isGrantingApproval(approval) ||
+    permitGrantsBroad ||
     batchHasDanger;
 
   const confirm = () => {
@@ -1001,6 +1013,102 @@ function ApprovalView({ approval, meta, choice, onChange, chainId, walletAddress
       {expired && (
         <WarningBanner severity="caution" text={t('componentsUi.signingApprove.expired')} />
       )}
+    </View>
+  );
+}
+
+// ===========================================================================
+// Permit Sign View — off-chain spending permit (Permit2 / ERC-2612 / DAI)
+// ===========================================================================
+
+/**
+ * Off-chain permit signatures are redeemed by the dApp, which submits its OWN
+ * permit struct on-chain — so the wallet can't cap the amount (rewriting it only
+ * desyncs the signature and reverts the dApp's tx). We therefore show the real
+ * risk and sign VERBATIM under a deliberate hold, rather than the cap editor.
+ */
+function PermitSignView({ approval, meta, clearSign }: {
+  approval: DetectedApproval;
+  meta: { symbol: string; decimals: number; verified: boolean } | null;
+  clearSign: ClearSignResult | null;
+}) {
+  const { t } = useTranslation();
+  const chainId = React.useContext(SigningChainContext);
+
+  const symbol = meta?.symbol ?? '…';
+  const decimals = meta?.decimals ?? 18;
+  const logoUrls = approval.tokenAddress ? tokenLogoURLsByAddress(chainId, approval.tokenAddress) : undefined;
+  const dangerous = approval.isUnbounded && !approval.isReducing;
+
+  const deadlineSec = approval.deadline ? Number(approval.deadline) : 0;
+  const expired = deadlineSec > 0 && deadlineSec < Math.floor(Date.now() / 1000);
+
+  const verb = approval.isReducing
+    ? t('componentsUi.signingApprove.verbRevoke')
+    : t('componentsUi.signingApprove.verbApprove');
+  const verbColor = approval.isReducing
+    ? color.success.base
+    : approval.isUnbounded ? color.error.base : color.warning.base;
+
+  // What the dApp's permit will be authorized to spend.
+  const amountText = approval.isBooleanGrant
+    ? (approval.isUnbounded
+        ? t('componentsUi.signingApprove.fullBalance')
+        : t('componentsUi.signingApprove.revokeValue'))
+    : approval.kind === 'permit2-batch'
+      ? t('componentsUi.signingApprove.multiplePermits', { defaultValue: 'Multiple tokens' })
+      : approval.isUnbounded
+        ? t('componentsUi.signingApprove.unlimitedValue', { defaultValue: 'Unlimited' })
+        : `${formatRawTokenAmount(approval.amountRaw ?? 0n, decimals)} ${symbol}`;
+
+  return (
+    <View>
+      <IntentHeader intent={verb} color={verbColor} />
+
+      <View style={[styles.tokenCard, dangerous && { backgroundColor: color.error.soft }]}>
+        <TokenLogo symbol={approval.tokenAddress ? symbol : '?'} logoUrls={logoUrls} size={40} />
+        <View style={styles.tokenInfo}>
+          <Text style={styles.tokenAmount} numberOfLines={1}>{amountText}</Text>
+          <Text style={styles.tokenLabel}>
+            {t('componentsUi.signingApprove.permitTag', { defaultValue: 'Spending permit (signature)' })}
+          </Text>
+        </View>
+        {dangerous && <AlertTriangle size={14} color={riskColors().danger} strokeWidth={2} />}
+      </View>
+
+      <ContractBar
+        label={t('componentsUi.signingApprove.spenderLabel')}
+        name={clearSign?.contractName}
+        address={approval.spender}
+        verified={false}
+      />
+      {approval.tokenAddress && (
+        <ContractBar
+          label={t('componentsUi.signingApprove.tokenLabel')}
+          name={clearSign?.contractName ?? (meta?.verified ? meta.symbol : undefined)}
+          address={approval.tokenAddress}
+          verified={clearSign?.verified ?? false}
+        />
+      )}
+
+      {expired && <WarningBanner severity="caution" text={t('componentsUi.signingApprove.expired')} />}
+
+      {dangerous ? (
+        <>
+          <WarningBanner severity="danger" text={t('componentsUi.signing.unlimitedWarning')} />
+          <Text style={styles.permitHint}>
+            {t('componentsUi.signingApprove.permitCantCap', {
+              defaultValue: "A permit is a signature — its amount can't be capped here. To limit spending, use an on-chain Approve instead.",
+            })}
+          </Text>
+        </>
+      ) : !approval.isReducing ? (
+        <Text style={styles.permitHint}>
+          {t('componentsUi.signingApprove.permitNote', {
+            defaultValue: "You're signing a spending permit — the dApp can move up to this amount on your behalf.",
+          })}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -2058,6 +2166,8 @@ const styles = createStyles(() => ({
   batchTitle: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
   batchDetail: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
   batchAddr: { fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.subtle },
+  // Off-chain permit risk hint, under the permit card.
+  permitHint: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, lineHeight: 18, marginTop: space.xs },
   // Editable approval leg: numbered header above the inline spending-cap editor.
   batchEditLeg: { marginVertical: space.sm },
   batchEditHead: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.xs },

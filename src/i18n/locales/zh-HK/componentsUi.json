@@ -158,7 +158,12 @@
       "expiresLabel": "過期時間",
       "chooseAction": "請揀「撤銷」或「授權」以繼續。",
       "resultingTotal": "授權後總額度",
-      "resultingTotalUnknown": "在你現有額度之上再增加 {{amount}}（無法讀取目前額度）"
+      "resultingTotalUnknown": "在你現有額度之上再增加 {{amount}}（無法讀取目前額度）",
+      "unlimitedValue": "無上限",
+      "multiplePermits": "多種代幣",
+      "permitTag": "使用許可（簽名）",
+      "permitCantCap": "許可係一個簽名 —— 喺度改唔到上限。想限額嘅話，請改用鏈上 Approve。",
+      "permitNote": "你而家簽緊一個使用許可 —— dApp 可以代你用到呢個金額。"
     },
     "bugReport": {
       "title": "回報問題",

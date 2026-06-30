@@ -180,7 +180,12 @@
       "expiresLabel": "Expires",
       "chooseAction": "Choose Revoke or Grant to continue.",
       "resultingTotal": "New total allowance",
-      "resultingTotalUnknown": "Adds {{amount}} on top of your current allowance (couldn't read the current amount)"
+      "resultingTotalUnknown": "Adds {{amount}} on top of your current allowance (couldn't read the current amount)",
+      "unlimitedValue": "Unlimited",
+      "multiplePermits": "Multiple tokens",
+      "permitTag": "Spending permit (signature)",
+      "permitCantCap": "A permit is a signature — its amount can't be capped here. To limit spending, use an on-chain Approve instead.",
+      "permitNote": "You're signing a spending permit — the dApp can move up to this amount on your behalf."
     }
   }
 }
