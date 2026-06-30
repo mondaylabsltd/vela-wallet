@@ -18,7 +18,7 @@
  * bare native transfer).
  */
 import { toBaseUnits } from '@/services/eip681';
-import { tokenBalanceDouble, tokenUsdValue, type APIToken } from '@/models/types';
+import { isNativeToken, tokenBalanceDouble, tokenUsdValue, type APIToken } from '@/models/types';
 
 /** One entry in a Safe MultiSend batch, shaped for `sendBatchCalls`. */
 export interface BatchCall {
@@ -114,4 +114,25 @@ export function isSweepable(tok: APIToken, requireValue = false): boolean {
   if (tokenBalanceDouble(tok) <= 0) return false;
   if (requireValue && tokenUsdValue(tok) <= 0) return false;
   return true;
+}
+
+/**
+ * Bridge a sweep selection (full APITokens) into `SweepToken` specs — each token
+ * sweeps its full balance to the one recipient. Native vs ERC-20 is derived from
+ * the token (no address ⇒ native). Native gas-reserve is NOT applied here: Vela
+ * settles gas via the bundler/gas-account, not the Safe's native balance, so a
+ * full-balance native sweep is valid; the caller may still trim it if a given
+ * chain needs an EntryPoint prefund.
+ */
+export function toSweepTokens(tokens: APIToken[]): SweepToken[] {
+  return tokens.map((tk) => ({
+    tokenAddress: isNativeToken(tk) ? null : tk.tokenAddress,
+    decimals: tk.decimals,
+    amount: tk.balance || '0',
+  }));
+}
+
+/** The tokens a "全选有价值代币" tap selects: held, non-spam, with a known USD value. */
+export function selectAllValuable(tokens: APIToken[]): APIToken[] {
+  return tokens.filter((t) => isSweepable(t, true));
 }

@@ -11,6 +11,8 @@ import {
   sumSplitBaseUnits,
   buildSweepCalls,
   isSweepable,
+  toSweepTokens,
+  selectAllValuable,
   BatchSendError,
   type SplitRecipient,
   type SweepToken,
@@ -139,5 +141,36 @@ describe('isSweepable', () => {
   it('with requireValue, excludes tokens with no known USD price', () => {
     expect(isSweepable(token({ priceUsd: null }), true)).toBe(false);
     expect(isSweepable(token({ priceUsd: 1 }), true)).toBe(true);
+  });
+});
+
+describe('toSweepTokens', () => {
+  it('maps each token to its full-balance sweep spec (native vs ERC-20)', () => {
+    const specs = toSweepTokens([
+      token({ tokenAddress: USDC, decimals: 6, balance: '12.5' }),
+      token({ tokenAddress: null, decimals: 18, balance: '0.3' }),
+    ]);
+    expect(specs).toEqual([
+      { tokenAddress: USDC, decimals: 6, amount: '12.5' },
+      { tokenAddress: null, decimals: 18, amount: '0.3' },
+    ]);
+  });
+
+  it('feeds straight into buildSweepCalls', () => {
+    const calls = buildSweepCalls(A, toSweepTokens([token({ tokenAddress: USDC, decimals: 6, balance: '1' })]));
+    expect(calls[0].to).toBe(USDC);
+    expect(calls[0].data.endsWith((1_000_000).toString(16).padStart(64, '0'))).toBe(true);
+  });
+});
+
+describe('selectAllValuable', () => {
+  it('keeps only held, non-spam, priced tokens', () => {
+    const list = [
+      token({ symbol: 'USDT', balance: '5', priceUsd: 1 }),    // kept
+      token({ symbol: 'SPAM', balance: '999', spam: true }),   // dropped: spam
+      token({ symbol: 'ZERO', balance: '0', priceUsd: 1 }),    // dropped: no balance
+      token({ symbol: 'NOPX', balance: '5', priceUsd: null }), // dropped: no price
+    ];
+    expect(selectAllValuable(list).map((t) => t.symbol)).toEqual(['USDT']);
   });
 });
