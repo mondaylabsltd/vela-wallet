@@ -10,7 +10,6 @@
     "loadingTokens": "Caricamento token…",
     "noMatchingTokens": "Nessun token corrispondente",
     "noTokensWithBalance": "Nessun token con saldo",
-
     "sendTitle": "Invia {{symbol}}",
     "maxBtn": "Max",
     "recipientLabel": "Destinatario",
@@ -19,19 +18,16 @@
     "lowBalanceWarning": "Saldo insufficiente per coprire le commissioni di rete. Aggiungi {{nativeSym}} al tuo wallet prima di inviare.",
     "preparing": "Preparazione…",
     "continueBtn": "Continua",
-
     "alertInvalidAddressTitle": "Indirizzo non valido",
     "alertInvalidAddressBody": "Inserisci un indirizzo Ethereum valido (0x…).",
     "alertInvalidAmountTitle": "Importo non valido",
     "alertInvalidAmountBody": "Inserisci un importo valido maggiore di zero.",
     "alertInsufficientBalanceTitle": "Saldo insufficiente",
     "alertLoadTokensError": "Impossibile caricare i token.",
-
     "warnNotEnoughToken": "Non hai abbastanza {{symbol}} in questo account",
     "warnInsufficientForGas": "{{sym}} insufficiente per coprire l'importo e le commissioni di gas",
     "warnInsufficientGas": "{{sym}} insufficiente per le commissioni di gas",
     "warnNeedGas": "Ti serve {{sym}} per pagare le commissioni di gas",
-
     "confirmTitle": "Conferma",
     "walletFallbackName": "Wallet",
     "fromLabel": "Da",
@@ -46,7 +42,6 @@
     "walletDeployedNo": "No (prima transazione)",
     "checkingGas": "Controllo del gas…",
     "confirmSendBtn": "Conferma e invia",
-
     "txPreparing": "Preparazione della transazione…",
     "txSigning": "In attesa della biometria…",
     "txSubmitting": "Invio alla rete…",
@@ -57,7 +52,6 @@
     "txRemaining": "~{{remaining}} s rimanenti",
     "txTypicalTime": "{{chainName}} di solito conferma in ~{{estSecs}} s",
     "txRetryBtn": "Riprova",
-
     "txErrorTimeout": "Transazione inviata ma la conferma è scaduta. Controlla la cronologia più tardi.",
     "txErrorBundlerLoop": "Il saldo dell'account gas continua a essere rifiutato dal bundler. Riprova più tardi o aumenta il livello di gas.",
     "txErrorBundlerFund": "All'account del bundler serve più gas. Ricaricalo nelle impostazioni.",
@@ -71,6 +65,16 @@
       "netAddError": "Impossibile aggiungere la rete. Riprova.",
       "tokenTitle": "Token sconosciuto",
       "tokenBody": "Impossibile riconoscere il token di questa richiesta di pagamento su questa rete."
-    }
+    },
+    "multiSendTitle": "Invia token",
+    "multiSendSummary": "{{n}} token · {{chain}}",
+    "multiSendContinue": "Invia {{n}} · {{chain}}",
+    "selectAllValuable": "Tutti di valore",
+    "addRecipient": "Aggiungi destinatario",
+    "recipientN": "Destinatario {{n}}",
+    "recipientCount": "{{n}} destinatari",
+    "removeRecipient": "Rimuovi",
+    "alertInsufficientBalanceBody": "Il totale supera il tuo saldo.",
+    "recipientPickAria": "Scegli destinatario o scansiona"
   }
 }

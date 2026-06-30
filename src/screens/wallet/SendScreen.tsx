@@ -982,9 +982,7 @@ export default function SendScreen() {
     onConfirm: startSweepConfirm,
     confirmLabel: sweep.count === 1
       ? t('send.continueBtn')
-      : sweep.chainId != null
-        ? t('send.sweepContinueChain', { chain: chainName(sweep.chainId), n: sweep.count, defaultValue: `Empty ${sweep.count} on ${chainName(sweep.chainId)} →` })
-        : t('send.sweepContinue', { n: sweep.count, defaultValue: `Empty ${sweep.count} token(s) →` }),
+      : t('send.multiSendContinue', { n: sweep.count, chain: sweep.chainId != null ? chainName(sweep.chainId) : '' }),
     selectAllLabel: t('send.selectAllValuable', { defaultValue: 'Select all valuable' }),
   };
 
@@ -1016,7 +1014,7 @@ export default function SendScreen() {
     return (
       <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <Animated.View entering={fadeInDown(0, 300)}>
-          <Text style={styles.stepTitle}>{sweepMode ? t('send.sweepTitle', { defaultValue: 'Empty wallet' }) : t('send.sendTitle', { symbol: selectedToken.symbol })}</Text>
+          <Text style={styles.stepTitle}>{sweepMode ? t('send.multiSendTitle') : t('send.sendTitle', { symbol: selectedToken.symbol })}</Text>
 
           {/* Token hero (single/split) — tap to switch token. Sweep hides it. */}
           {!sweepMode && (
@@ -1202,24 +1200,29 @@ export default function SendScreen() {
             />
           )}
 
-          {/* ② sweep — the selected tokens (full balance) + one recipient. */}
+          {/* ② multi-token send — the selected tokens (full balance) + one recipient. */}
           {sweepMode && (<>
-            <View style={styles.sweepSummary}>
-              <Text style={styles.sweepSummaryTitle}>
-                {t('send.sweepSummary', { n: sweepTokensList.length, chain: chainName(tokenChainId(selectedToken)), defaultValue: `${sweepTokensList.length} token(s) on ${chainName(tokenChainId(selectedToken))}` })}
-              </Text>
-              <Text style={styles.sweepSummaryUsd}>{formatUsd(sweepTokensList.reduce((s, tk) => s + tokenUsdValue(tk), 0))}</Text>
-            </View>
-            {sweepTokensList.map((tk) => (
-              <View key={tokenId(tk)} style={styles.sweepTokenRow}>
-                <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={32} />
-                <Text style={styles.sweepTokenSym}>{tk.symbol}</Text>
-                <View style={styles.sweepTokenVals}>
-                  <Text style={styles.sweepTokenBal}>{formatTokenAmount(tokenBalanceDouble(tk), { compact: true })}</Text>
-                  {tokenUsdValue(tk) > 0 && <Text style={styles.sweepTokenUsd}>{formatUsd(tokenUsdValue(tk))}</Text>}
-                </View>
+            <VelaCard style={styles.multiCard}>
+              <View style={styles.sweepSummary}>
+                <Text style={styles.sweepSummaryTitle}>
+                  {t('send.multiSendSummary', { n: sweepTokensList.length, chain: chainName(tokenChainId(selectedToken)) })}
+                </Text>
+                <Text style={styles.sweepSummaryUsd}>{formatUsd(sweepTokensList.reduce((s, tk) => s + tokenUsdValue(tk), 0))}</Text>
               </View>
-            ))}
+              {sweepTokensList.map((tk, i) => (
+                <View key={tokenId(tk)} style={[styles.sweepTokenRow, i > 0 && styles.sweepTokenRowBorder]}>
+                  <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={32} />
+                  <View style={styles.sweepTokenInfo}>
+                    <Text style={styles.sweepTokenSym}>{tk.symbol}</Text>
+                    <Text style={styles.sweepTokenChain}>{chainName(tokenChainId(tk))}</Text>
+                  </View>
+                  <View style={styles.sweepTokenVals}>
+                    <Text style={styles.sweepTokenBal}>{formatTokenAmount(tokenBalanceDouble(tk), { compact: true })}</Text>
+                    {tokenUsdValue(tk) > 0 && <Text style={styles.sweepTokenUsd}>{formatUsd(tokenUsdValue(tk))}</Text>}
+                  </View>
+                </View>
+              ))}
+            </VelaCard>
 
             <View style={[styles.fieldLabelRow, { marginTop: space.xl }]}>
               <Text style={styles.fieldLabel}>{t('send.recipientLabel')}</Text>
@@ -1976,15 +1979,17 @@ const styles = createStyles(() => ({
   confirmRecipientLeft: { flex: 1, gap: 2 },
   confirmRecipientAmt: { alignItems: 'flex-end' },
   // ② multi-token send (multi-select → one recipient)
+  multiCard: { marginBottom: space.lg, paddingVertical: space.sm },
   sweepSummary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: space.sm,
-    marginBottom: space.md,
+    paddingTop: space.sm,
+    paddingBottom: space.md,
   },
-  sweepSummaryTitle: { fontSize: text.base, ...inter.semibold, color: color.fg.base, flex: 1 },
-  sweepSummaryUsd: { fontSize: text.base, ...inter.bold, fontFamily: font.numeric, color: color.fg.base },
+  sweepSummaryTitle: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted, flex: 1 },
+  sweepSummaryUsd: { fontSize: text.lg, ...inter.bold, fontFamily: font.numeric, color: color.fg.base },
   sweepTokenRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1992,7 +1997,10 @@ const styles = createStyles(() => ({
     paddingVertical: space.md,
     paddingHorizontal: space.sm,
   },
-  sweepTokenSym: { flex: 1, fontSize: text.lg, ...inter.semibold, color: color.fg.base },
+  sweepTokenRowBorder: { borderTopWidth: 1, borderTopColor: color.border.base },
+  sweepTokenInfo: { flex: 1, gap: 1 },
+  sweepTokenSym: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
+  sweepTokenChain: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle },
   sweepTokenVals: { alignItems: 'flex-end' },
   sweepTokenBal: { fontSize: text.base, ...inter.semibold, fontFamily: font.numeric, color: color.fg.base },
   sweepTokenUsd: { fontSize: text.sm, ...inter.regular, fontFamily: font.numeric, color: color.fg.muted },

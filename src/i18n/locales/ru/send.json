@@ -10,7 +10,6 @@
     "loadingTokens": "Загрузка токенов…",
     "noMatchingTokens": "Токены не найдены",
     "noTokensWithBalance": "Нет токенов с балансом",
-
     "sendTitle": "Отправить {{symbol}}",
     "maxBtn": "Макс.",
     "recipientLabel": "Получатель",
@@ -19,19 +18,16 @@
     "lowBalanceWarning": "Недостаточно средств для оплаты сетевой комиссии. Добавьте {{nativeSym}} в кошелёк перед отправкой.",
     "preparing": "Подготовка…",
     "continueBtn": "Продолжить",
-
     "alertInvalidAddressTitle": "Неверный адрес",
     "alertInvalidAddressBody": "Введите корректный адрес Ethereum (0x…).",
     "alertInvalidAmountTitle": "Неверная сумма",
     "alertInvalidAmountBody": "Введите корректную сумму больше нуля.",
     "alertInsufficientBalanceTitle": "Недостаточно средств",
     "alertLoadTokensError": "Не удалось загрузить токены.",
-
     "warnNotEnoughToken": "На этом аккаунте недостаточно {{symbol}}",
     "warnInsufficientForGas": "Недостаточно {{sym}} для покрытия суммы и комиссии за газ",
     "warnInsufficientGas": "Недостаточно {{sym}} для оплаты комиссии за газ",
     "warnNeedGas": "Для оплаты комиссии за газ нужен {{sym}}",
-
     "confirmTitle": "Подтверждение",
     "walletFallbackName": "Кошелёк",
     "fromLabel": "Откуда",
@@ -46,7 +42,6 @@
     "walletDeployedNo": "Нет (первая транзакция)",
     "checkingGas": "Проверка газа…",
     "confirmSendBtn": "Подтвердить и отправить",
-
     "txPreparing": "Подготовка транзакции…",
     "txSigning": "Ожидание биометрии…",
     "txSubmitting": "Отправка в сеть…",
@@ -57,7 +52,6 @@
     "txRemaining": "Осталось ~{{remaining}} с",
     "txTypicalTime": "{{chainName}} обычно подтверждает примерно за {{estSecs}} с",
     "txRetryBtn": "Повторить",
-
     "txErrorTimeout": "Транзакция отправлена, но истекло время ожидания подтверждения. Проверьте историю позже.",
     "txErrorBundlerLoop": "Bundler продолжает отклонять баланс газового аккаунта. Повторите позже или повысьте уровень газа.",
     "txErrorBundlerFund": "Аккаунту Bundler нужно больше газа. Пополните его в настройках.",
@@ -71,6 +65,16 @@
       "netAddError": "Не удалось добавить сеть. Попробуйте снова.",
       "tokenTitle": "Неизвестный токен",
       "tokenBody": "Не удалось распознать токен из этого запроса на оплату в данной сети."
-    }
+    },
+    "multiSendTitle": "Отправить токены",
+    "multiSendSummary": "{{n}} токенов · {{chain}}",
+    "multiSendContinue": "Отправить {{n}} · {{chain}}",
+    "selectAllValuable": "Выбрать все ценные",
+    "addRecipient": "Добавить получателя",
+    "recipientN": "Получатель {{n}}",
+    "recipientCount": "{{n}} получателей",
+    "removeRecipient": "Удалить",
+    "alertInsufficientBalanceBody": "Сумма превышает ваш баланс.",
+    "recipientPickAria": "Выбрать получателя или сканировать"
   }
 }

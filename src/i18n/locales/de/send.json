@@ -65,6 +65,16 @@
       "netAddError": "Das Netzwerk konnte nicht hinzugefügt werden. Bitte versuchen Sie es erneut.",
       "tokenTitle": "Unbekanntes Token",
       "tokenBody": "Das Token in dieser Zahlungsanfrage konnte in diesem Netzwerk nicht erkannt werden."
-    }
+    },
+    "multiSendTitle": "Token senden",
+    "multiSendSummary": "{{n}} Token · {{chain}}",
+    "multiSendContinue": "{{n}} senden · {{chain}}",
+    "selectAllValuable": "Alle werthaltigen",
+    "addRecipient": "Empfänger hinzufügen",
+    "recipientN": "Empfänger {{n}}",
+    "recipientCount": "{{n}} Empfänger",
+    "removeRecipient": "Entfernen",
+    "alertInsufficientBalanceBody": "Die Summe übersteigt dein Guthaben.",
+    "recipientPickAria": "Empfänger wählen oder scannen"
   }
 }

@@ -56,7 +56,6 @@
     "txErrorBundlerLoop": "Gas 账户余额被 bundler 持续拒绝，请稍后再试或提高 Gas 档位。",
     "txErrorBundlerFund": "Bundler 账户 Gas 不足，请在设置中充值。",
     "txErrorPublicKey": "未找到该账户的公钥",
-
     "lock": {
       "netTitle": "不支持该网络",
       "netBody": "此收款请求所在的网络 Vela 暂不支持（链 ID {{chainId}}）。",
@@ -66,6 +65,16 @@
       "netAddError": "添加网络失败，请重试。",
       "tokenTitle": "未知代币",
       "tokenBody": "无法识别此收款请求中该网络上的代币。"
-    }
+    },
+    "multiSendTitle": "发送多个代币",
+    "multiSendSummary": "{{n}} 个代币 · {{chain}}",
+    "multiSendContinue": "发送 {{n}} 个 · {{chain}}",
+    "selectAllValuable": "全选有价值代币",
+    "addRecipient": "添加收款人",
+    "recipientN": "收款人 {{n}}",
+    "recipientCount": "{{n}} 位收款人",
+    "removeRecipient": "移除",
+    "alertInsufficientBalanceBody": "总额超过你的余额。",
+    "recipientPickAria": "选择收款人或扫码"
   }
 }

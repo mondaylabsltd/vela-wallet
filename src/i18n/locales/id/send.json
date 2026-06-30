@@ -65,6 +65,16 @@
       "netAddError": "Gagal menambahkan jaringan. Silakan coba lagi.",
       "tokenTitle": "Token tidak dikenal",
       "tokenBody": "Kami tidak dapat mengenali token dalam permintaan pembayaran ini di jaringan ini."
-    }
+    },
+    "multiSendTitle": "Kirim token",
+    "multiSendSummary": "{{n}} token · {{chain}}",
+    "multiSendContinue": "Kirim {{n}} · {{chain}}",
+    "selectAllValuable": "Pilih semua bernilai",
+    "addRecipient": "Tambah penerima",
+    "recipientN": "Penerima {{n}}",
+    "recipientCount": "{{n}} penerima",
+    "removeRecipient": "Hapus",
+    "alertInsufficientBalanceBody": "Totalnya melebihi saldo Anda.",
+    "recipientPickAria": "Pilih penerima atau pindai"
   }
 }

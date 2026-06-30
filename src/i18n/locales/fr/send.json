@@ -65,6 +65,16 @@
       "netAddError": "Impossible d'ajouter le réseau. Veuillez réessayer.",
       "tokenTitle": "Token inconnu",
       "tokenBody": "Impossible de reconnaître le token de cette demande de paiement sur ce réseau."
-    }
+    },
+    "multiSendTitle": "Envoyer des tokens",
+    "multiSendSummary": "{{n}} tokens · {{chain}}",
+    "multiSendContinue": "Envoyer {{n}} · {{chain}}",
+    "selectAllValuable": "Tout (avec valeur)",
+    "addRecipient": "Ajouter un destinataire",
+    "recipientN": "Destinataire {{n}}",
+    "recipientCount": "{{n}} destinataires",
+    "removeRecipient": "Retirer",
+    "alertInsufficientBalanceBody": "Le total dépasse votre solde.",
+    "recipientPickAria": "Choisir un destinataire ou scanner"
   }
 }

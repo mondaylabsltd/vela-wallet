@@ -10,7 +10,6 @@
     "filterOther": "Other",
     "addTokenBtn": "Add Token",
     "tokenCount": "{{n}} tokens",
-
     "sendTitle": "Send {{symbol}}",
     "maxBtn": "Max",
     "recipientLabel": "Recipient",
@@ -19,19 +18,16 @@
     "lowBalanceWarning": "Insufficient balance to cover network fees. Add more {{nativeSym}} to your wallet before sending.",
     "preparing": "Preparing...",
     "continueBtn": "Continue",
-
     "alertInvalidAddressTitle": "Invalid Address",
     "alertInvalidAddressBody": "Please enter a valid Ethereum address (0x...).",
     "alertInvalidAmountTitle": "Invalid Amount",
     "alertInvalidAmountBody": "Please enter a valid amount greater than zero.",
     "alertInsufficientBalanceTitle": "Insufficient Balance",
     "alertLoadTokensError": "Failed to load tokens.",
-
     "warnNotEnoughToken": "You do not have enough {{symbol}} in this account",
     "warnInsufficientForGas": "Insufficient {{sym}} to cover amount + gas fees",
     "warnInsufficientGas": "Insufficient {{sym}} for gas fees",
     "warnNeedGas": "You need {{sym}} to pay gas fees",
-
     "confirmTitle": "Confirm",
     "walletFallbackName": "Wallet",
     "fromLabel": "From",
@@ -46,7 +42,6 @@
     "walletDeployedNo": "No (first tx)",
     "checkingGas": "Checking gas...",
     "confirmSendBtn": "Confirm & Send",
-
     "txPreparing": "Preparing transaction...",
     "txSigning": "Waiting for biometric...",
     "txSubmitting": "Submitting to network...",
@@ -57,12 +52,10 @@
     "txRemaining": "~{{remaining}}s remaining",
     "txTypicalTime": "{{chainName}} typically confirms in ~{{estSecs}}s",
     "txRetryBtn": "Try Again",
-
     "txErrorTimeout": "Transaction submitted but confirmation timed out. Check history later.",
     "txErrorBundlerLoop": "Gas account balance keeps being rejected by the bundler. Try again later or increase gas tier.",
     "txErrorBundlerFund": "Bundler account needs more gas. Please fund it in Settings.",
     "txErrorPublicKey": "Public key not found for this account",
-
     "lock": {
       "netTitle": "Network not supported",
       "netBody": "This payment request is on a network Vela doesn't support yet (chain {{chainId}}).",
@@ -72,6 +65,16 @@
       "netAddError": "Couldn't add the network. Please try again.",
       "tokenTitle": "Unknown token",
       "tokenBody": "We couldn't recognize the token in this payment request on this network."
-    }
+    },
+    "multiSendTitle": "Send tokens",
+    "multiSendSummary": "{{n}} tokens · {{chain}}",
+    "multiSendContinue": "Send {{n}} · {{chain}} →",
+    "selectAllValuable": "Select all valuable",
+    "addRecipient": "Add recipient",
+    "recipientN": "Recipient {{n}}",
+    "recipientCount": "{{n}} recipients",
+    "removeRecipient": "Remove",
+    "alertInsufficientBalanceBody": "The total exceeds your balance.",
+    "recipientPickAria": "Choose recipient or scan"
   }
 }

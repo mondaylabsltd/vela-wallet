@@ -10,7 +10,6 @@
     "loadingTokens": "Đang tải token...",
     "noMatchingTokens": "Không có token phù hợp",
     "noTokensWithBalance": "Không có token nào có số dư",
-
     "sendTitle": "Gửi {{symbol}}",
     "maxBtn": "Tối đa",
     "recipientLabel": "Người nhận",
@@ -19,19 +18,16 @@
     "lowBalanceWarning": "Số dư không đủ để trả phí mạng. Hãy nạp thêm {{nativeSym}} vào ví trước khi gửi.",
     "preparing": "Đang chuẩn bị...",
     "continueBtn": "Tiếp tục",
-
     "alertInvalidAddressTitle": "Địa chỉ không hợp lệ",
     "alertInvalidAddressBody": "Vui lòng nhập một địa chỉ Ethereum hợp lệ (0x...).",
     "alertInvalidAmountTitle": "Số lượng không hợp lệ",
     "alertInvalidAmountBody": "Vui lòng nhập một số lượng hợp lệ lớn hơn 0.",
     "alertInsufficientBalanceTitle": "Số dư không đủ",
     "alertLoadTokensError": "Không tải được token.",
-
     "warnNotEnoughToken": "Tài khoản này không đủ {{symbol}}",
     "warnInsufficientForGas": "Không đủ {{sym}} để trả số tiền + phí gas",
     "warnInsufficientGas": "Không đủ {{sym}} để trả phí gas",
     "warnNeedGas": "Bạn cần {{sym}} để trả phí gas",
-
     "confirmTitle": "Xác nhận",
     "walletFallbackName": "Ví",
     "fromLabel": "Từ",
@@ -46,7 +42,6 @@
     "walletDeployedNo": "Chưa (giao dịch đầu tiên)",
     "checkingGas": "Đang kiểm tra gas...",
     "confirmSendBtn": "Xác nhận và gửi",
-
     "txPreparing": "Đang chuẩn bị giao dịch...",
     "txSigning": "Đang chờ xác thực sinh trắc học...",
     "txSubmitting": "Đang gửi lên mạng...",
@@ -57,7 +52,6 @@
     "txRemaining": "Còn ~{{remaining}}s",
     "txTypicalTime": "{{chainName}} thường xác nhận trong ~{{estSecs}}s",
     "txRetryBtn": "Thử lại",
-
     "txErrorTimeout": "Giao dịch đã gửi nhưng hết thời gian chờ xác nhận. Kiểm tra lại trong lịch sử sau.",
     "txErrorBundlerLoop": "Số dư tài khoản gas liên tục bị bundler từ chối. Hãy thử lại sau hoặc tăng mức gas.",
     "txErrorBundlerFund": "Tài khoản bundler cần thêm gas. Vui lòng nạp trong Cài đặt.",
@@ -71,6 +65,16 @@
       "netAddError": "Không thêm được mạng. Vui lòng thử lại.",
       "tokenTitle": "Token không xác định",
       "tokenBody": "Chúng tôi không nhận diện được token trong yêu cầu thanh toán này trên mạng này."
-    }
+    },
+    "multiSendTitle": "Gửi token",
+    "multiSendSummary": "{{n}} token · {{chain}}",
+    "multiSendContinue": "Gửi {{n}} · {{chain}}",
+    "selectAllValuable": "Chọn tất cả có giá trị",
+    "addRecipient": "Thêm người nhận",
+    "recipientN": "Người nhận {{n}}",
+    "recipientCount": "{{n}} người nhận",
+    "removeRecipient": "Xóa",
+    "alertInsufficientBalanceBody": "Tổng vượt quá số dư của bạn.",
+    "recipientPickAria": "Chọn người nhận hoặc quét"
   }
 }

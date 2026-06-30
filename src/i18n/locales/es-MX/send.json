@@ -10,7 +10,6 @@
     "loadingTokens": "Cargando tokens...",
     "noMatchingTokens": "No hay tokens que coincidan",
     "noTokensWithBalance": "No hay tokens con saldo",
-
     "sendTitle": "Enviar {{symbol}}",
     "maxBtn": "Máx",
     "recipientLabel": "Destinatario",
@@ -19,19 +18,16 @@
     "lowBalanceWarning": "No tienes saldo suficiente para cubrir las comisiones de red. Agrega más {{nativeSym}} a tu billetera antes de enviar.",
     "preparing": "Preparando...",
     "continueBtn": "Continuar",
-
     "alertInvalidAddressTitle": "Dirección inválida",
     "alertInvalidAddressBody": "Ingresa una dirección de Ethereum válida (0x...).",
     "alertInvalidAmountTitle": "Monto inválido",
     "alertInvalidAmountBody": "Ingresa un monto válido mayor que cero.",
     "alertInsufficientBalanceTitle": "Saldo insuficiente",
     "alertLoadTokensError": "No se pudieron cargar los tokens.",
-
     "warnNotEnoughToken": "No tienes suficiente {{symbol}} en esta cuenta",
     "warnInsufficientForGas": "{{sym}} insuficiente para cubrir la cantidad y las comisiones de gas",
     "warnInsufficientGas": "{{sym}} insuficiente para las comisiones de gas",
     "warnNeedGas": "Necesitas {{sym}} para pagar las comisiones de gas",
-
     "confirmTitle": "Confirmar",
     "walletFallbackName": "Billetera",
     "fromLabel": "De",
@@ -46,7 +42,6 @@
     "walletDeployedNo": "No (primera tx)",
     "checkingGas": "Verificando el gas...",
     "confirmSendBtn": "Confirmar y enviar",
-
     "txPreparing": "Preparando la transacción...",
     "txSigning": "Esperando la biometría...",
     "txSubmitting": "Enviando a la red...",
@@ -57,7 +52,6 @@
     "txRemaining": "~{{remaining}}s restantes",
     "txTypicalTime": "{{chainName}} suele confirmar en ~{{estSecs}}s",
     "txRetryBtn": "Intentar de nuevo",
-
     "txErrorTimeout": "La transacción se envió, pero se agotó el tiempo de confirmación. Revisa el historial más tarde.",
     "txErrorBundlerLoop": "El bundler sigue rechazando el saldo de la cuenta de gas. Inténtalo más tarde o sube el nivel de gas.",
     "txErrorBundlerFund": "Financia tu cuenta de bundler en Ajustes.",
@@ -71,6 +65,16 @@
       "netAddError": "No se pudo agregar la red. Inténtalo de nuevo.",
       "tokenTitle": "Token desconocido",
       "tokenBody": "No se pudo reconocer el token de esta solicitud de pago en esta red."
-    }
+    },
+    "multiSendTitle": "Enviar tokens",
+    "multiSendSummary": "{{n}} tokens · {{chain}}",
+    "multiSendContinue": "Enviar {{n}} · {{chain}}",
+    "selectAllValuable": "Seleccionar con valor",
+    "addRecipient": "Agregar destinatario",
+    "recipientN": "Destinatario {{n}}",
+    "recipientCount": "{{n}} destinatarios",
+    "removeRecipient": "Quitar",
+    "alertInsufficientBalanceBody": "El total supera tu saldo.",
+    "recipientPickAria": "Elegir destinatario o escanear"
   }
 }

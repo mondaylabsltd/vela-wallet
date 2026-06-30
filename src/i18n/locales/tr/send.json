@@ -10,7 +10,6 @@
     "loadingTokens": "Token'lar yükleniyor...",
     "noMatchingTokens": "Eşleşen token yok",
     "noTokensWithBalance": "Bakiyesi olan token yok",
-
     "sendTitle": "{{symbol}} Gönder",
     "maxBtn": "Maks",
     "recipientLabel": "Alıcı",
@@ -19,19 +18,16 @@
     "lowBalanceWarning": "Ağ ücretlerini karşılamak için bakiye yetersiz. Göndermeden önce cüzdanınıza biraz daha {{nativeSym}} ekleyin.",
     "preparing": "Hazırlanıyor...",
     "continueBtn": "Devam Et",
-
     "alertInvalidAddressTitle": "Geçersiz Adres",
     "alertInvalidAddressBody": "Lütfen geçerli bir Ethereum adresi (0x...) girin.",
     "alertInvalidAmountTitle": "Geçersiz Tutar",
     "alertInvalidAmountBody": "Lütfen sıfırdan büyük geçerli bir tutar girin.",
     "alertInsufficientBalanceTitle": "Yetersiz Bakiye",
     "alertLoadTokensError": "Token'lar yüklenemedi.",
-
     "warnNotEnoughToken": "Bu hesapta yeterli {{symbol}} yok",
     "warnInsufficientForGas": "Tutar + gas ücretlerini karşılamak için {{sym}} yetersiz",
     "warnInsufficientGas": "Gas ücretleri için {{sym}} yetersiz",
     "warnNeedGas": "Gas ücretlerini ödemek için {{sym}} gerekiyor",
-
     "confirmTitle": "Onayla",
     "walletFallbackName": "Cüzdan",
     "fromLabel": "Gönderen",
@@ -46,7 +42,6 @@
     "walletDeployedNo": "Hayır (ilk işlem)",
     "checkingGas": "Gas kontrol ediliyor...",
     "confirmSendBtn": "Onayla ve Gönder",
-
     "txPreparing": "İşlem hazırlanıyor...",
     "txSigning": "Biyometrik bekleniyor...",
     "txSubmitting": "Ağa gönderiliyor...",
@@ -57,7 +52,6 @@
     "txRemaining": "~{{remaining}} sn kaldı",
     "txTypicalTime": "{{chainName}} genellikle ~{{estSecs}} sn içinde onaylar",
     "txRetryBtn": "Tekrar Dene",
-
     "txErrorTimeout": "İşlem gönderildi ancak onay zaman aşımına uğradı. Geçmişi daha sonra kontrol edin.",
     "txErrorBundlerLoop": "Gas hesabı bakiyesi bundler tarafından sürekli reddediliyor. Daha sonra tekrar deneyin veya gas kademesini yükseltin.",
     "txErrorBundlerFund": "Bundler hesabının daha fazla gas'a ihtiyacı var. Lütfen Ayarlar'dan fonlayın.",
@@ -71,6 +65,16 @@
       "netAddError": "Ağ eklenemedi. Lütfen tekrar deneyin.",
       "tokenTitle": "Bilinmeyen token",
       "tokenBody": "Bu ödeme isteğindeki token'ı bu ağda tanıyamadık."
-    }
+    },
+    "multiSendTitle": "Token gönder",
+    "multiSendSummary": "{{n}} token · {{chain}}",
+    "multiSendContinue": "{{n}} gönder · {{chain}}",
+    "selectAllValuable": "Değerli olanları seç",
+    "addRecipient": "Alıcı ekle",
+    "recipientN": "Alıcı {{n}}",
+    "recipientCount": "{{n}} alıcı",
+    "removeRecipient": "Kaldır",
+    "alertInsufficientBalanceBody": "Toplam bakiyenizi aşıyor.",
+    "recipientPickAria": "Alıcı seç veya tara"
   }
 }

@@ -65,6 +65,16 @@
       "netAddError": "新增網絡失敗，請再試一次。",
       "tokenTitle": "未知代幣",
       "tokenBody": "無法辨識此付款請求中該網絡上的代幣。"
-    }
+    },
+    "multiSendTitle": "發送多個代幣",
+    "multiSendSummary": "{{n}} 個代幣 · {{chain}}",
+    "multiSendContinue": "發送 {{n}} 個 · {{chain}}",
+    "selectAllValuable": "全選有價值代幣",
+    "addRecipient": "新增收款人",
+    "recipientN": "收款人 {{n}}",
+    "recipientCount": "{{n}} 位收款人",
+    "removeRecipient": "移除",
+    "alertInsufficientBalanceBody": "總額超過你的餘額。",
+    "recipientPickAria": "選擇收款人或掃碼"
   }
 }
