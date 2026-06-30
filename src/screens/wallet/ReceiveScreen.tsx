@@ -10,7 +10,8 @@ import { useSafeRouter } from '@/hooks/use-safe-router';
 import { chainName, getAllNetworksSync } from '@/models/network';
 import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
-import { copyToClipboard, hapticLight, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
+import { hapticLight, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
+import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { composeShareBlob, saveReceiveCard } from '@/services/share-card';
 import { fetchTokens } from '@/services/wallet-api';
 import { ArrowLeft, Check, Copy, Download, ShieldAlert } from 'lucide-react-native';
@@ -37,7 +38,7 @@ export default function ReceiveScreen() {
   interface DepositEntry { time: string; items: { symbol: string; amount: string; network: string; usd: string | null }[] }
   const [deposits, setDeposits] = useState<DepositEntry[]>([]);
   const previousTokens = useRef<APIToken[] | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyFeedback(2000);
   const [warningDismissed, setWarningDismissed] = useState(false);
 
   // Address vs EIP-681 payment-request mode.
@@ -117,16 +118,14 @@ export default function ReceiveScreen() {
     return () => { clearTimeout(timerId); };
   }, [address]);
 
-  const copyValue = useCallback(async () => {
+  const copyValue = useCallback(() => {
     // In request mode we copy the public payment LINK (a web page that bridges
     // to the Vela web wallet / other wallets), not the raw ethereum: URI.
     const value = isRequest ? request.payLink : address;
     if (!value) return;
-    await copyToClipboard(value);
     hapticLight();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [isRequest, request.payLink, address]);
+    copy(value);
+  }, [isRequest, request.payLink, address, copy]);
 
   const truncatedAddress = address
     ? `${address.slice(0, 8)}...${address.slice(-6)}`

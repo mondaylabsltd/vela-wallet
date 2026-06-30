@@ -21,7 +21,8 @@ import { formatWeiToEth as formatEth } from '@/services/format-eth';
 import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { checkNetworkCompatibility } from '@/services/network-checker';
-import { copyToClipboard, hapticLight, hapticSuccess, openURL, showAlert } from '@/services/platform';
+import { hapticLight, hapticSuccess, openURL, showAlert } from '@/services/platform';
+import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { getBuiltinBundlerUrl, invalidateAllPools, poolRpcCall, refreshPool } from '@/services/rpc-pool';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from '@/services/tempo';
 import { getBundlerServiceURL, getLocalePrefs, hasPendingUploads, loadCustomNetworks, loadLocalePrefs, loadNetworkConfigs, loadServiceEndpoints, removeCustomNetwork, saveCustomNetwork, saveLocalePrefs, saveNetworkConfig, saveServiceEndpoints } from '@/services/storage';
@@ -1104,7 +1105,7 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
   const { t } = useTranslation();
   const [address, setAddress] = useState<string | null>(null);
   const [balances, setBalances] = useState<TreasuryBalance[]>([]);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyFeedback(2000);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -1176,12 +1177,10 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
     if (refreshKey > 0 && address) loadBalances(address);
   }, [refreshKey, address, loadBalances]);
 
-  const handleCopy = async () => {
+  const handleCopy = () => {
     if (!address) return;
-    await copyToClipboard(address);
-    setCopied(true);
     hapticLight();
-    setTimeout(() => setCopied(false), 2000);
+    copy(address);
   };
 
   const handleRefresh = () => {

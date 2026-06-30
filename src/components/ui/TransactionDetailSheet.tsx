@@ -8,9 +8,10 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight, Copy, ExternalLink, X } from 'lucide-react-native';
+import { Check, ChevronRight, Copy, X } from 'lucide-react-native';
 import { AmountText } from '@/components/ui/AmountText';
 import { AppModal } from '@/components/ui/AppModal';
+import { DetailRow as Row, Divider } from '@/components/ui/DetailRow';
 import { TxStatusBadge } from '@/components/ui/TxStatusBadge';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { ChainLogo } from '@/components/ChainLogo';
@@ -151,26 +152,6 @@ export function TransactionDetailSheet({ visible, tx, alias, rate, currency, onC
   );
 }
 
-function Divider() { return <View style={styles.divider} />; }
-
-function Row({ label, value, custom, mono, onCopy, onOpen, copied }: {
-  label: string; value?: string; custom?: React.ReactNode; mono?: boolean;
-  onCopy?: () => void; onOpen?: () => void; copied?: boolean;
-}) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      {custom ?? (
-        <Pressable style={styles.rowValueWrap} onPress={onOpen ?? onCopy} disabled={!onOpen && !onCopy} hitSlop={6}>
-          <Text style={[styles.rowValue, mono && styles.rowValueMono]} numberOfLines={1}>{value}</Text>
-          {onCopy ? (copied ? <Check size={14} color={color.success.base} strokeWidth={2.6} /> : <Copy size={14} color={color.fg.subtle} strokeWidth={2} />) : null}
-          {onOpen ? <ExternalLink size={14} color={color.fg.subtle} strokeWidth={2} /> : null}
-        </Pressable>
-      )}
-    </View>
-  );
-}
-
 const styles = createStyles(() => ({
   sheet: { flex: 1, backgroundColor: color.bg.base },
   head: {
@@ -207,12 +188,6 @@ const styles = createStyles(() => ({
   // Details
   sectionTitle: { fontSize: text.base, ...inter.bold, color: color.fg.base },
   details: { paddingHorizontal: space.lg },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.lg, paddingVertical: space.lg },
-  rowLabel: { fontSize: text.base, ...inter.regular, color: color.fg.muted },
-  rowValueWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1 },
-  rowValue: { fontSize: text.base, ...inter.semibold, color: color.fg.base, flexShrink: 1 },
-  rowValueMono: { fontFamily: font.mono },
-  divider: { height: 1, backgroundColor: color.border.base },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   statusText: { fontSize: text.base, ...inter.bold },
   chainRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },

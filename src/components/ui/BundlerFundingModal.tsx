@@ -8,7 +8,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { copyToClipboard, hapticSuccess, hapticLight } from '@/services/platform';
+import { hapticSuccess, hapticLight } from '@/services/platform';
+import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { Check, Copy, RefreshCw, Fuel, Gift } from 'lucide-react-native';
 
 import { AppModal } from './AppModal';
@@ -55,7 +56,7 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
   const [requesting, setRequesting] = useState(false);
   const [denialReason, setDenialReason] = useState<string | undefined>();
 
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyFeedback(2000);
   const [checking, setChecking] = useState(false);
   const [currentBalance, setCurrentBalance] = useState(funding.currentFormatted);
   const [funded, setFunded] = useState(false);
@@ -109,11 +110,9 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
     setRequesting(false);
   };
 
-  const copyAddress = async () => {
-    await copyToClipboard(funding.depositAddress);
-    setCopied(true);
+  const copyAddress = () => {
     hapticLight();
-    setTimeout(() => setCopied(false), 2000);
+    copy(funding.depositAddress);
   };
 
   const net = getAllNetworksSync().find(n => n.chainId === funding.chainId);

@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
-import { copyToClipboard, openBrowser } from '@/services/platform';
+import { openBrowser } from '@/services/platform';
+import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { useWallet } from '@/models/wallet-state';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
@@ -57,7 +58,7 @@ export default function TokenDetailScreen() {
 
   const { activeAccount, state } = useWallet();
   const walletAddress = activeAccount?.address ?? state.address;
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyFeedback();
   const [historyData, setHistoryData] = useState<BalancePoint[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
@@ -75,11 +76,9 @@ export default function TokenDetailScreen() {
       .catch(() => {})
       .finally(() => setHistoryLoading(false));
   }, [walletAddress, chainId, contractAddress, decimals, balance]);
-  const copyContract = async () => {
+  const copyContract = () => {
     if (!contractAddress) return;
-    await copyToClipboard(contractAddress);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    copy(contractAddress);
   };
 
   const handleSend = () => {

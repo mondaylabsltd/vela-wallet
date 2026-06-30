@@ -2,9 +2,10 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { fadeIn } from '@/constants/entering';
 import { color, createStyles, font, inter, motion, radius, space, text } from '@/constants/theme';
 import type { Network } from '@/models/network';
-import { copyToClipboard, hapticLight } from '@/services/platform';
+import { hapticLight } from '@/services/platform';
+import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { Check, Copy } from 'lucide-react-native';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -33,7 +34,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, contractAddress, balance, usdValue, onPress, index = 0, selected }: Props) {
   const scale = useSharedValue(1);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyFeedback();
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -47,13 +48,11 @@ export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, contrac
     scale.value = withSpring(1, motion.spring);
   }, [scale]);
 
-  const copyAddress = useCallback(async () => {
+  const copyAddress = useCallback(() => {
     if (!contractAddress) return;
-    await copyToClipboard(contractAddress);
     hapticLight();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }, [contractAddress]);
+    copy(contractAddress);
+  }, [contractAddress, copy]);
 
   const shortAddr = contractAddress
     ? `${contractAddress.slice(0, 6)}…${contractAddress.slice(-4)}`

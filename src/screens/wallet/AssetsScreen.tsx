@@ -16,7 +16,8 @@ import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { fetchTokens } from '@/services/wallet-api';
 import { setAccountBalance, getAccountBalance, getAccountBalances } from '@/services/balance-cache';
-import { showAlert, copyToClipboard, hapticSuccess, isAppActive } from '@/services/platform';
+import { showAlert, hapticSuccess, isAppActive } from '@/services/platform';
+import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { QRScanner } from '@/components/QRScanner';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { isWalletPairURI } from '@/services/walletpair-transport';
@@ -205,12 +206,10 @@ export default function AssetsScreen() {
   }, [address, displayTotal, state.accounts]);
   const [tokenSearch, setTokenSearch] = useState('');
 
-  const [copied, setCopied] = useState(false);
-  const copyAddress = async () => {
+  const { copied, copy } = useCopyFeedback();
+  const copyAddress = () => {
     if (!address) return;
-    await copyToClipboard(address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    copy(address);
   };
 
   const navigateToToken = (token: APIToken) => {
