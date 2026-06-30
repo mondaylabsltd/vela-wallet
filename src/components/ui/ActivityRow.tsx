@@ -19,6 +19,7 @@ import { ArrowDownLeft, ArrowUpRight } from 'lucide-react-native';
 import { ChainLogo } from '@/components/ChainLogo';
 import { fadeInDown } from '@/constants/entering';
 import type { Network } from '@/models/network';
+import { hapticLight } from '@/services/platform';
 import { color, createStyles, font, inter, motion, radius, shadow, space, text } from '@/constants/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -62,13 +63,24 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
   const numberPart = sp > 0 ? amount.slice(0, sp) : amount;
   const ticker = sp > 0 ? amount.slice(sp + 1) : '';
 
+  // One spoken label for the whole row instead of five separate text nodes,
+  // e.g. "Sent, 0.05 ETH, to 0x12…ab, ≈$90, 2h ago".
+  const a11yLabel = [title, amount, subtitle, fiat, time].filter(Boolean).join(', ');
+
+  const handlePress = onPress
+    ? () => { hapticLight(); onPress(); }
+    : undefined;
+
   return (
     <Animated.View entering={fadeInDown(index * 40, 300)}>
       <AnimatedPressable
         style={[styles.row, pressStyle]}
-        onPress={onPress}
+        onPress={handlePress}
         onPressIn={() => { if (onPress) scale.value = withSpring(0.98, motion.spring); }}
         onPressOut={() => { if (onPress) scale.value = withSpring(1, motion.spring); }}
+        accessible
+        accessibilityRole={onPress ? 'button' : undefined}
+        accessibilityLabel={a11yLabel}
       >
         <Animated.View pointerEvents="none" style={[styles.glow, glowStyle]} />
 
