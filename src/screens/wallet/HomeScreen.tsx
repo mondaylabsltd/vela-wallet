@@ -654,6 +654,7 @@ export default function HomeScreen() {
                     chain={chainFor(item.chainId)}
                     index={index}
                     isNew={item.id === newItemId}
+                    txHash={item.txHash}
                     onPress={() => openDetail(item.id)}
                   />
                 )}

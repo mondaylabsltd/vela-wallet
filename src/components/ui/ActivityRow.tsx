@@ -12,14 +12,16 @@
  *
  * Theme-driven (light/dark). Spring press + staggered entrance per the design system.
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
-import { ArrowDownLeft, ArrowUpRight } from 'lucide-react-native';
+import { Swipeable } from 'react-native-gesture-handler';
+import { useTranslation } from 'react-i18next';
+import { ArrowDownLeft, ArrowUpRight, Copy, Check, ExternalLink } from 'lucide-react-native';
 import { ChainLogo } from '@/components/ChainLogo';
 import { fadeInDown } from '@/constants/entering';
 import type { Network } from '@/models/network';
-import { hapticLight } from '@/services/platform';
+import { hapticLight, openBrowser, copyToClipboard } from '@/services/platform';
 import { color, createStyles, font, inter, motion, radius, shadow, space, text } from '@/constants/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -36,9 +38,12 @@ export interface ActivityRowProps {
   onPress?: () => void;
   index?: number;
   isNew?: boolean;
+  /** On-chain tx hash; when present the row reveals copy / explorer swipe actions. */
+  txHash?: string;
 }
 
-export function ActivityRow({ direction, title, subtitle, amount, fiat, time, chain, onPress, index = 0, isNew }: ActivityRowProps) {
+export function ActivityRow({ direction, title, subtitle, amount, fiat, time, chain, onPress, index = 0, isNew, txHash }: ActivityRowProps) {
+  const { t } = useTranslation();
   const incoming = direction === 'in';
   const scale = useSharedValue(1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -71,8 +76,57 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
     ? () => { hapticLight(); onPress(); }
     : undefined;
 
-  return (
-    <Animated.View entering={fadeInDown(index * 40, 300)}>
+  // Swipe-left reveals copy-hash (always, when there's a hash) + view-on-explorer
+  // (when the chain has an explorer). Mirrors the dApp/history detail actions.
+  const swipeRef = useRef<Swipeable>(null);
+  const [copied, setCopied] = useState(false);
+  const explorerUrl = txHash && chain?.explorerURL
+    ? `${chain.explorerURL.replace(/\/$/, '')}/tx/${txHash}`
+    : undefined;
+  const canSwipe = !!txHash;
+
+  const handleViewExplorer = () => {
+    swipeRef.current?.close();
+    if (explorerUrl) openBrowser(explorerUrl);
+  };
+  const handleCopyHash = async () => {
+    if (!txHash) return;
+    hapticLight();
+    await copyToClipboard(txHash);
+    setCopied(true);
+    setTimeout(() => { setCopied(false); swipeRef.current?.close(); }, 1200);
+  };
+
+  const renderRightActions = () => (
+    <View style={styles.swipeActions}>
+      <Pressable
+        style={[styles.swipeAction, styles.swipeCopy]}
+        onPress={handleCopyHash}
+        accessibilityRole="button"
+        accessibilityLabel={t('activity.copyHash', { defaultValue: 'Copy transaction hash' })}
+      >
+        {copied
+          ? <Check size={17} color={color.fg.inverse} strokeWidth={2.6} />
+          : <Copy size={17} color={color.fg.inverse} strokeWidth={2.2} />}
+        <Text style={styles.swipeActionText}>
+          {copied ? t('activity.copied', { defaultValue: 'Copied' }) : t('activity.copy', { defaultValue: 'Copy' })}
+        </Text>
+      </Pressable>
+      {explorerUrl && (
+        <Pressable
+          style={[styles.swipeAction, styles.swipeExplorer]}
+          onPress={handleViewExplorer}
+          accessibilityRole="button"
+          accessibilityLabel={t('activity.viewOnExplorer', { defaultValue: 'View on block explorer' })}
+        >
+          <ExternalLink size={17} color={color.fg.inverse} strokeWidth={2.2} />
+          <Text style={styles.swipeActionText}>{t('activity.explorer', { defaultValue: 'Explorer' })}</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+
+  const rowInner = (
       <AnimatedPressable
         style={[styles.row, pressStyle]}
         onPress={handlePress}
@@ -118,6 +172,21 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
           {time ? <Text style={styles.time} numberOfLines={1}>{time}</Text> : null}
         </View>
       </AnimatedPressable>
+  );
+
+  return (
+    <Animated.View entering={fadeInDown(index * 40, 300)}>
+      {canSwipe ? (
+        <Swipeable
+          ref={swipeRef}
+          overshootRight={false}
+          friction={2}
+          rightThreshold={36}
+          renderRightActions={renderRightActions}
+        >
+          {rowInner}
+        </Swipeable>
+      ) : rowInner}
     </Animated.View>
   );
 }
@@ -217,5 +286,28 @@ const styles = createStyles(() => ({
     fontSize: text.xs,
     ...inter.regular,
     color: color.fg.subtle,
+  },
+  swipeActions: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  swipeAction: {
+    width: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.xs,
+    borderRadius: radius.xl,
+    marginLeft: space.sm,
+  },
+  swipeCopy: {
+    backgroundColor: color.fg.muted,
+  },
+  swipeExplorer: {
+    backgroundColor: color.accent.base,
+  },
+  swipeActionText: {
+    fontSize: text.xs,
+    ...inter.semibold,
+    color: color.fg.inverse,
   },
 }));
