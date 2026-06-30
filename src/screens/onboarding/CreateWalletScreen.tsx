@@ -21,7 +21,6 @@ import { verifySafeWebAuthn } from '@/services/webauthn-verify';
 import type { StoredAccount } from '@/models/types';
 import {
   ArrowLeft, CheckCircle2, AlertTriangle, Loader, Copy, Check, Square, CheckSquare,
-  ShieldCheck, Fingerprint, RefreshCw,
 } from 'lucide-react-native';
 import { showAlert, copyToClipboard, openURL } from '@/services/platform';
 
@@ -288,29 +287,6 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <Animated.View entering={fadeIn(0, 400)}>
-              {/* Reassurance — reframe the no-seed-phrase model as a strength
-                  before the legal acknowledgments below. */}
-              <VelaCard style={styles.reassureCard}>
-                <View style={styles.reassureHead}>
-                  <ShieldCheck size={18} color={color.success.base} strokeWidth={2} />
-                  <Text style={styles.reassureTitle}>
-                    {t('onboarding.create.reassure.title', { defaultValue: 'No seed phrase to lose' })}
-                  </Text>
-                </View>
-                <View style={styles.reassureRow}>
-                  <Fingerprint size={15} color={color.fg.muted} strokeWidth={2} />
-                  <Text style={styles.reassureText}>
-                    {t('onboarding.create.reassure.point1', { defaultValue: 'Your key is created and held by Face ID / fingerprint — never typed, never shown.' })}
-                  </Text>
-                </View>
-                <View style={styles.reassureRow}>
-                  <RefreshCw size={15} color={color.fg.muted} strokeWidth={2} />
-                  <Text style={styles.reassureText}>
-                    {t('onboarding.create.reassure.point2', { defaultValue: 'It syncs via iCloud Keychain or Google Password Manager — sign in on a new device to restore.' })}
-                  </Text>
-                </View>
-              </VelaCard>
-
               <Text style={styles.label}>{t('onboarding.create.accountNameLabel')}</Text>
               <TextInput
                 style={styles.input}
@@ -456,33 +432,6 @@ const styles = createStyles(() => ({
     ...inter.regular,
     color: color.fg.subtle,
     marginTop: space.lg,
-    lineHeight: 18,
-  },
-  reassureCard: {
-    padding: space.xl,
-    gap: space.lg,
-    marginBottom: space['3xl'],
-  },
-  reassureHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-  },
-  reassureTitle: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.fg.base,
-  },
-  reassureRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: space.md,
-  },
-  reassureText: {
-    flex: 1,
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.muted,
     lineHeight: 18,
   },
   statusRow: {
