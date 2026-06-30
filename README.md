@@ -57,7 +57,6 @@ Runs on **iOS**, **Android**, and **Web** from a single codebase.
    ```bash
    npm install
    ```
-
 2. Start the app
 
    ```bash
@@ -70,16 +69,17 @@ Runs on **iOS**, **Android**, and **Web** from a single codebase.
 
 ## Platform Support
 
-| Feature | iOS | Android | Web |
-|---------|-----|---------|-----|
+
+| Feature            | iOS                      | Android                     | Web                         |
+| -------------------- | -------------------------- | ----------------------------- | ----------------------------- |
 | Passkey (WebAuthn) | Native (ASAuthorization) | Native (Credential Manager) | `navigator.credentials` API |
-| Cloud Sync | iCloud Key-Value Store | Google Play BlockStore | IndexedDB (local only) |
-| QR Scanner | expo-camera | expo-camera | `getUserMedia` + jsQR |
-| Haptic Feedback | expo-haptics | expo-haptics | No-op |
-| Clipboard | expo-clipboard | expo-clipboard | `navigator.clipboard` |
-| In-App Browser | expo-web-browser | expo-web-browser | `window.open` |
-| BLE (DApp Connect) | VelaBLE native module | VelaBLE native module | Not supported (v1) |
-| Animated Balance | Reanimated worklet | Reanimated worklet | Plain text (no animation) |
+| Cloud Sync         | iCloud Key-Value Store   | Google Play BlockStore      | IndexedDB (local only)      |
+| QR Scanner         | expo-camera              | expo-camera                 | `getUserMedia` + jsQR       |
+| Haptic Feedback    | expo-haptics             | expo-haptics                | No-op                       |
+| Clipboard          | expo-clipboard           | expo-clipboard              | `navigator.clipboard`       |
+| In-App Browser     | expo-web-browser         | expo-web-browser            | `window.open`               |
+| BLE (DApp Connect) | VelaBLE native module    | VelaBLE native module       | Not supported (v1)          |
+| Animated Balance   | Reanimated worklet       | Reanimated worklet          | Plain text (no animation)   |
 
 ### Web Notes
 
@@ -97,7 +97,6 @@ Runs on **iOS**, **Android**, and **Web** from a single codebase.
    ```
 
    Output goes to `dist/`.
-
 2. Deploy with Wrangler CLI
 
    ```bash
@@ -106,10 +105,11 @@ Runs on **iOS**, **Android**, and **Web** from a single codebase.
 
    Or connect your GitHub repo in the [Cloudflare Dashboard](https://dash.cloudflare.com) → Pages → Create a project:
 
-   | Setting | Value |
-   |---------|-------|
-   | Build command | `npm run build:web` |
-   | Output directory | `dist` |
+
+   | Setting              | Value                 |
+   | ---------------------- | ----------------------- |
+   | Build command        | `npm run build:web`   |
+   | Output directory     | `dist`                |
    | Environment variable | `NODE_VERSION` = `20` |
 
 ## Self-Deploy Service Endpoints
@@ -118,12 +118,13 @@ Vela Wallet relies on four backend endpoints. Default instances are provided, bu
 
 Configure custom endpoints in **Settings > Advanced > Service Endpoints**.
 
-| Service | Description | Repository |
-|---------|-------------|------------|
-| **Chain Data Index** | Network info, token data, chain logos | [atshelchin/ethereum-data](https://github.com/atshelchin/ethereum-data) |
-| **Passkey Index** | Public key storage for cross-device recovery | [atshelchin/webauthnp256-publickey-index.biubiu.tools](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools) |
-| **Bundler Service** | ERC-4337 transaction bundler | [atshelchin/vela-bundler](https://github.com/atshelchin/vela-bundler) |
-| **Exchange-Rate Source** | USD-based fiat rates that drive the currency list | [Frankfurter](https://frankfurter.dev) (FOSS, self-hostable via Docker) |
+
+| Service                  | Description                                       | Repository                                                                                                                      |
+| -------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Chain Data Index**     | Network info, token data, chain logos             | [atshelchin/ethereum-data](https://github.com/atshelchin/ethereum-data)                                                         |
+| **Passkey Index**        | Public key storage for cross-device recovery      | [atshelchin/webauthnp256-publickey-index.biubiu.tools](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools) |
+| **Bundler Service**      | ERC-4337 transaction bundler                      | [atshelchin/vela-bundler](https://github.com/atshelchin/vela-bundler)                                                           |
+| **Exchange-Rate Source** | USD-based fiat rates that drive the currency list | [Frankfurter](https://frankfurter.dev) (FOSS, self-hostable via Docker)                                                         |
 
 The first three are Vela services that each expose a `/api/health` endpoint. The wallet validates three checks before accepting a custom endpoint for them:
 
@@ -167,11 +168,12 @@ This also enables local development and preview deployments to authenticate with
 
 ### How rpId is resolved
 
-| Environment | Without extension | With extension |
-|---|---|---|
-| `getvela.app` / `*.getvela.app` | `getvela.app` | `getvela.app` |
-| `localhost` / `127.0.0.1` | `localhost` | `getvela.app` |
-| Preview domains (`*.pages.dev`, `*.vercel.app`, etc.) | current hostname | `getvela.app` |
+
+| Environment                                           | Without extension | With extension |
+| ------------------------------------------------------- | ------------------- | ---------------- |
+| `getvela.app` / `*.getvela.app`                       | `getvela.app`     | `getvela.app`  |
+| `localhost` / `127.0.0.1`                             | `localhost`       | `getvela.app`  |
+| Preview domains (`*.pages.dev`, `*.vercel.app`, etc.) | current hostname  | `getvela.app`  |
 
 Without the extension, each environment uses its own rpId and maintains independent passkeys. With the extension installed, all environments share the `getvela.app` rpId and the same set of passkeys.
 
@@ -220,14 +222,15 @@ Result flows back: webauthn.js → background → bridge → inject → page
 
 When sending tokens, the wallet resolves recipient addresses to human-readable names for verification. Resolution queries run in parallel across multiple name services, returning the first match by priority:
 
-| Priority | Service | Chain | Registry | Pattern |
-|----------|---------|-------|----------|---------|
-| 1 | Passkey Index | — | Vela API | walletRef lookup |
-| 2 | .bnb | BSC (56) | `0x08CEd32a...` | Standard ENS |
-| 3 | .arb | Arbitrum (42161) | `0x4a067EE5...` | Standard ENS |
-| 4 | .g | Gravity (1625) | `0x5dC881dd...` | Standard ENS |
-| 5 | Basename | Base (8453) | `0xb9470442...` | ENSIP-19 |
-| 6 | ENS | Mainnet (1) | `0x00000000000C...` | Standard ENS |
+
+| Priority | Service       | Chain            | Registry            | Pattern          |
+| ---------- | --------------- | ------------------ | --------------------- | ------------------ |
+| 1        | Passkey Index | —               | Vela API            | walletRef lookup |
+| 2        | .bnb          | BSC (56)         | `0x08CEd32a...`     | Standard ENS     |
+| 3        | .arb          | Arbitrum (42161) | `0x4a067EE5...`     | Standard ENS     |
+| 4        | .g            | Gravity (1625)   | `0x5dC881dd...`     | Standard ENS     |
+| 5        | Basename      | Base (8453)      | `0xb9470442...`     | ENSIP-19         |
+| 6        | ENS           | Mainnet (1)      | `0x00000000000C...` | Standard ENS     |
 
 - **Standard ENS**: `namehash(addr.addr.reverse)` → `registry.resolver(node)` → `resolver.name(node)`
 - **ENSIP-19** (Basenames): `reverseRegistrar.node(addr)` → chain-specific reverse node → same flow
