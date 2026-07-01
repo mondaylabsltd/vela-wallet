@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Platform, View, Text, StyleSheet, Pressable, Modal, StatusBar } from 'react-native';
+import { Platform, View, Text, StyleSheet, Pressable, Modal, StatusBar, Linking } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
@@ -225,12 +225,20 @@ function NativeCamera({ facing, onBarCodeScanned, active }: {
   const [permission, requestPermission] = useCameraPermissions();
 
   if (!permission?.granted) {
+    // After a permanent denial (canAskAgain === false) requestPermission() can no
+    // longer re-prompt, so route the user to the OS settings instead of a dead button.
+    const canAskAgain = permission?.canAskAgain ?? true;
     return (
       <View style={styles.permissionContainer}>
         <Camera size={40} color={color.fg.subtle} />
         <Text style={styles.permissionText}>{t('componentsUi.scanner.permissionText')}</Text>
-        <Pressable style={styles.permissionButton} onPress={requestPermission}>
-          <Text style={styles.permissionButtonText}>{t('componentsUi.scanner.grantPermission')}</Text>
+        <Pressable
+          style={styles.permissionButton}
+          onPress={canAskAgain ? requestPermission : () => Linking.openSettings()}
+        >
+          <Text style={styles.permissionButtonText}>
+            {canAskAgain ? t('componentsUi.scanner.grantPermission') : t('onboarding.create.openSettings')}
+          </Text>
         </Pressable>
       </View>
     );

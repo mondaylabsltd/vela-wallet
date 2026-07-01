@@ -1,3 +1,5 @@
+ 
+
 # Vela Wallet — 100 条人工测试线索（手动测试用例指南）
 
 > **用途.** 这是一份给"回头人工逐条过一遍"用的手动测试指南：每条线索说清**测什么、怎么测、预期结果**，并按**重要程度从高到低**排序（第 1 条最重要）。
@@ -16,12 +18,13 @@
 
 ## 优先级图例
 
-| 级别 | 含义 |
-| --- | --- |
+
+| 级别   | 含义                                                                                                   |
+| -------- | -------------------------------------------------------------------------------------------------------- |
 | **P0** | 资金 / 安全 / 不可逆：失败会直接导致丢资金、被钓鱼、被盗授权或账户不可恢复。**必测，每次回归都要过。** |
-| **P1** | 核心功能正确性：钱包"能正常用"的主干（收发、余额、连接、gas、网络）。 |
-| **P2** | 重要体验 / 边界 / 多链 / 本地化 / 恢复。 |
-| **P3** | 打磨 / 小众 / 展示性。 |
+| **P1** | 核心功能正确性：钱包"能正常用"的主干（收发、余额、连接、gas、网络）。                                  |
+| **P2** | 重要体验 / 边界 / 多链 / 本地化 / 恢复。                                                               |
+| **P3** | 打磨 / 小众 / 展示性。                                                                                 |
 
 本指南共 100 条：P0 × 25，P1 × 50，P2 × 25，P3 × 0。
 
@@ -85,7 +88,7 @@
 
 - **测什么**：向合约地址转账 ERC-20 可能导致代币永久丢失（合约可能无接收逻辑）。Vela 调用 eth_getCode 检测并警告，帮用户避免误转。
 - **怎么测**：1) 进入 Send 选一个 ERC-20（如 USDC）；2) 在收款人字段粘贴一个**已知的合约地址**（例如 DEX 路由、token 合约本身）；3) 切到 confirm 屏，观察收款人地址下是否显示 「Contract」或「Smart Contract」标签；4) 继续提交（Vela 不应阻止，只是警告）；5) 用 EOA 地址重复同样的流程，验证不显示警告。
-前置：需要真实链或测试网上的已知合约地址。
+  前置：需要真实链或测试网上的已知合约地址。
 - **预期结果**：contract 地址显示 "Contract" 或 "Smart Contract Account" 标签；EOA 地址不显示标签；标签仅为信息性，用户仍可继续提交。
 - **边界/异常**：合约地址的 eth_getCode 调用失败（RPC down）时应 graceful 降级为 null（未知），不影响提交；zero address 的 is-contract 检测。
 - **源码参考**：`src/services/recipient-risk.ts:33-48 (isContractAddress), src/services/contacts.ts:208-221 (classifyContact)`
@@ -116,8 +119,8 @@
 
 - **测什么**：原生币 max-send 必须自动预留 3× gas 估算量，防止 AA21 （无法支付 EntryPoint prefund）。这是资金安全的核心：全额转账原生币会留下 0 gas 导致失败。
 - **怎么测**：1) 进入 Send，选原生币（ETH/BNB）；2) 点击 max 按钮；3) 观察输入金额 = balance - 3×gasEstimate；4) 提交交易，验证未失败；5) 链上检查交易成功。
-前置：钱包已创建，当前链有少量原生币（如 0.1 ETH），已连接真实网络或测试网。
-可在 Web 上用 vela.estimateGas() 控制台命令验证 gas 估算。
+  前置：钱包已创建，当前链有少量原生币（如 0.1 ETH），已连接真实网络或测试网。
+  可在 Web 上用 vela.estimateGas() 控制台命令验证 gas 估算。
 - **预期结果**：max 按钮显示的金额严格等于 balance - 3×fee.totalWei；转账完成后钱包仍保留足够的原生币用于后续交易的 gas。
 - **边界/异常**：极端情况：余额 < 3×gas 估算时，max 应填 0；边界输入 0.000001 ETH 时应能识别为合法金额。
 - **源码参考**：`src/screens/wallet/SendScreen.tsx:754-787, src/services/batch-send.ts:148-156 (reserveNativeGas)`
@@ -138,7 +141,7 @@
 
 - **测什么**：sweep 模式一次向一个地址转多个 token 的全部余额。原生币必须自动预留 3× gas，防 AA21。ERC-20 可全额转（gas 从 native 支付）。选择和预留逻辑必须准确，否则用户转错数量。
 - **怎么测**：1) 进入 Send > token selector，选一条网络（如 Ethereum）；2) 观察 token 列表显示勾选框；3) 勾选 ETH（原生币）、USDC、DAI（都有余额）；4) 点 "Sweep" 或多选确认按钮，进入 enter-details；5) 观察 token 总结卡片：ETH 显示「Gas reserved」标签，数量 = balance - 3×fee；USDC/DAI 显示全额；6) 输入目标地址；7) 完成提交，验证链上各 token 数量与显示一致，ETH 扣除了 gas 预留。
-前置：同一链上持有多个 token 且都有余额。
+  前置：同一链上持有多个 token 且都有余额。
 - **预期结果**：多选后显示 "N tokens to recipient" 的总结；ETH/native 显示预留 gas 后的净金额，有「Gas reserved」标签；ERC-20 显示全额；总额计算正确；gas 估算改变时预留动态更新。
 - **边界/异常**：多选后改网络，检测到链变应清除选择；仅选 ERC-20（无原生币）时不应显示 gas 预留行；原生币余额 < gas 时应移除该行（无法转）；同一链不同链的 token 无法混选（应在 UI 上过滤）。
 - **源码参考**：`src/services/batch-send.ts:126-156 (toMultiTokenSpecs, reserveNativeGas), src/screens/wallet/SendScreen.tsx:606-647 (multiSelect helpers)`
@@ -149,7 +152,7 @@
 
 - **测什么**：sweep 也用 Safe MultiSend，必须一个 UserOp 原子执行。更重要的是，Vela **永不生成无限授权**（unlimited approval），即使用户多币转账也是逐个 token 的限额转账，enforceNoUnlimited 守卫必须激活。
 - **怎么测**：1) 进入 sweep，选 USDC + DAI，指定目标地址；2) 完成签名和提交；3) 查询链上 USDC/DAI 的 approval 记录，验证 allowance ≤ 转账额（不是 uint256.max）；4) 用控制台 `vela.injectSigningBug('unlimited')` 模拟生成无限授权的 bug，观察签名前的清晰签名 sheet 应该 block 并显示 "cannot use unlimited" 错误。
-前置：需要检查链上 approval event 或 allowance 状态。
+  前置：需要检查链上 approval event 或 allowance 状态。
 - **预期结果**：sweep 提交后，每个 ERC-20 的 allowance 等于转账金额，不是 max；if 任何授权试图达到 uint256.max，enforceNoUnlimited 应拦截并错误提示；清晰签名 sheet 不显示无限授权选项。
 - **边界/异常**：重复转账同一 token 时授权逻辑；token 已有某个授权时的增量更新；0x0 recipient 的边界。
 - **源码参考**：`src/services/batch-send.ts (总体构建 sweeps), src/__tests__/services/dapp-signing-sendcalls.test.ts (enforceNoUnlimited 测试)`
@@ -160,7 +163,7 @@
 
 - **测什么**：split 的多笔转账必须在**一个 UserOp** 里完成（通过 Safe MultiSend），不是 N 个独立 tx。一个 op 失败，全部回滚。这是 gas 成本和原子性的保证。
 - **怎么测**：1) 进入 split 模式，配置 3 个收款人各 1 token；2) 完成签名和提交；3) 观察交易状态页显示 1 个 userOpHash，不是 3 个分别的哈希；4) 查询链上或 Jiffyscan，验证只有 1 条 MultiSend 的 UserOp；5) 检查 Activity 历史，3 个发送共享同一 userOpHash，各有不同 id（hash-0/hash-1/hash-2）。
-前置：需要真实网络提交或测试网观察 UserOp。
+  前置：需要真实网络提交或测试网观察 UserOp。
 - **预期结果**：提交后显示单个 userOpHash，不分裂成多个；Activity 每行都有分别的 id，但共享一个 userOpHash；链上验证所有转账在同一 MultiSend 执行；若一个收款人地址是黑洞，整个 MultiSend 应回滚，不部分成功。
 - **边界/异常**：多个地址相同时的重复转账；地址是合约且 revert 的情况；gas 估算不足导致 MultiSend revert。
 - **源码参考**：`src/services/batch-send.ts:82-87 (buildSplitCalls), src/screens/wallet/SendScreen.tsx:869-875 (split submission flow)`
@@ -261,7 +264,7 @@
 
 - **测什么**：若 bundler 的 gas 账户余额不足，提交前应弹出融资模态框，引导用户向指定地址转账充值。充值后用户重新提交，流程应顺利完成。防止用户在签名后才发现资金不足导致浪费。
 - **怎么测**：1) 清空测试网 bundler gas 账户（测试脚本或后端操作）；2) 进入 Send，填完所有细节点 continue 进 confirm；3) 尝试 confirm/sign，应收到 bundler error "bundler gas account insufficient"；4) 观察弹出 BundlerFundingModal，显示 deposit address + 推荐充值额；5) 按说明向 deposit address 转账（可用 Vela 或外部钱包）；6) 模态框应有「Send transaction」或「Retry」按钮，点击回到 confirm；7) 再次 confirm/sign，交易应成功；8) 查链确认 userOp 被正确执行。
-前置：需要 bundler 和 gas 账户的测试环境控制。
+  前置：需要 bundler 和 gas 账户的测试环境控制。
 - **预期结果**：bundler 未资金时弹出模态框（不是错误）；显示准确的 deposit address；推荐充值额正确（threshold + 缓冲）；充值后重试成功；模态框不重复出现（防无限循环，重试计数 ≤ 3）。
 - **边界/异常**：充值不足仍失败时的错误（应切换到错误提示）；多链 gas 账户独立资金检测；Tempo 链 pathUSD gas account 的融资。
 - **源码参考**：`src/components/ui/BundlerFundingModal.tsx, src/screens/wallet/SendScreen.tsx:789-809 (funding modal flow)`
@@ -272,11 +275,13 @@
 
 - **测什么**：验证添加自定义链时，钱包强制检查全部 11 个必需契约（Safe、EntryPoint v0.7、Safe 4337 Module、WebAuthn Signer 等）都已部署，且 RIP-7212 P256 precompile 可用；任何一项缺失都应拒绝添加，防止用户误添不兼容的链。
 - **怎么测**：1) 进入「Add Token」页面或「Add Network」tab（或通过 QR 扫描 EIP-681 链请求触发）
+
 2) 搜索或输入一条自定义/新链的 chain ID（如 81457 Blast 或本地测试网)
 3) 点击该链的建议行，APP 开始：a) 通过 chain-registry 获取该链的 RPC URLs；b) 测试所有 HTTPS RPC 的延迟，选最快的；c) 通过最快 RPC 用 eth_getCode 逐一检查 REQUIRED_CONTRACTS 中 11 个契约地址是否非空；d) 用 eth_call 发送有效的 P256 签名到 0x0100 precompile 或检查其代码
 4) 等待完成提示，观察兼容性结果卡片：成功则显示绿色「Compatible」与最快 RPC 的延迟；失败则红色错误信息列出缺失的契约名称与 RIP-7212 状态
 5) 若兼容，点击「Add」保存；若不兼容，「Add」按钮应禁用且显示错误原因
 6) 成功添加后，新链应立即出现在网络列表中且可用于收发
+
 - **预期结果**：检查流程完整运行，无超时；若全部契约都已部署且 P256 可用，显示「Compatible」并允许添加；若缺任何一个契约或 P256 不可用，显示具体缺失清单，禁用「Add」；新增的自定义链在后续网络选择器中可见且可选用
 - **边界/异常**：测试链注册表中不存在的链 ID（应报 not-found）；所有 RPC 都超时或无效（应报 All RPC endpoints failed）；链有一个契约部署、其他缺失（应列出所有缺失，不是部分通过）；P256 precompile 存在但签名验证返回 0（应识别为不可用）
 - **源码参考**：`src/services/network-checker.ts:44-112; src/services/add-network.ts:42-53; src/components/ui/AddTokenPanel.tsx:114-138`
@@ -467,7 +472,7 @@
 
 - **测什么**：split 模式允许用户一次向多个地址转同一 token，每个地址不同金额。总额 = 所有行的和，必须 ≤ balance。超额或地址错误应即时警告，防用户误操作。
 - **怎么测**：1) 进入 Send，选一个 token（如 USDC，持有 10）；2) 点 "Add recipient" 进入 split 模式，看到 Recipient 1 和空的 Recipient 2；3) 在 R1 输入地址 A、金额 3；4) 在 R2 输入地址 B、金额 4；5) 观察总额显示 7，绿色无警告；6) 在 R2 改成 7（总额 10），总额仍绿色；7) 在 R2 改成 8（总额 11），总额变红，"Insufficient balance" 警告显示，continue 禁用；8) 删除 R2，验证回到单人模式；9) 再次进入 split，验证状态已清除。
-前置：token 余额已知，支持至多 20 收款人。
+  前置：token 余额已知，支持至多 20 收款人。
 - **预期结果**：总额正确求和（base units）；超额时显示红色总额 + 警告文案，continue 禁用；每行地址错误显示红色 "Invalid address" 提示；删除最后一行时自动退出 split 模式回单人；行数 ≤ 20，超过时 +号禁用。
 - **边界/异常**：金额小数位截断测试（6 dp USDC 输 1.9999999）；地址大小写混合；删除行时保留顺序；总额 = 0 时应禁用提交。
 - **源码参考**：`src/components/send/MultiRecipientEditor.tsx, src/screens/wallet/SendScreen.tsx:570-594 (split mode helpers)`
@@ -478,7 +483,7 @@
 
 - **测什么**：confirm 屏应显示发送后的资产变化预览（-USDC, -gas fee）。模拟失败/不可用时应 graceful 降级不显示，不阻止提交。这给用户最后检查的机会。
 - **怎么测**：1) 进入 Send，填完所有细节切到 confirm；2) 观察确认前能否显示一个「Balance Change Preview」or 「You'll send」的总结行；3) 预览应显示 -amount（token symbol）、-gas fee（native symbol）；4) 若模拟失败（如 RPC down），预览应不显示，但 confirm CTA 仍可用；5) 完成交易，链上验证最终资产变化与预览一致（或若无预览就跳过）。
-前置：完整的 Send 流程到 confirm 屏。
+  前置：完整的 Send 流程到 confirm 屏。
 - **预期结果**：资产变化预览正确显示受影响 token 和 amount；失败时无预览显示但不阻止；提交后实际资产变化与预览一致。
 - **边界/异常**：多币 sweep 的预览（多行资产变化）；gas 估算改变时动态更新；token 价格查询失败时的 USD 预览（应降级为无 USD 显示）。
 - **源码参考**：`src/components/signing/BalanceChangePreview.tsx, src/screens/wallet/SendScreen.tsx:515-554 (sim effect)`
@@ -499,7 +504,7 @@
 
 - **测什么**：输入有效地址时，自动查询 ENS/Basename/.bnb/.arb 等域名服务 或 Passkey Index（Vela 用户）获取人性化名字显示。减轻地址读数难度，增强信任。
 - **怎么测**：1) 进入 Send，选任意 token；2) 在收款人字段输入一个**已注册 ENS 的地址**（如 vitalik.eth 对应地址或该地址逆解析为域名的情况）；3) 等待 2-3 秒，观察地址下方显示解析的域名 + 来源（"ENS"）；4) 粘贴一个 .bnb 或 .arb 注册地址，验证来源标签变为 ".bnb" 或 ".arb"；5) 输入 Vela 的一个已注册用户地址（来自 passkey-index 后端），验证名字显示 + 来源 "👤 Vela User"。
-前置：需要实际 ENS/域名已注册的地址或 Passkey Index 里真实存在的地址。
+  前置：需要实际 ENS/域名已注册的地址或 Passkey Index 里真实存在的地址。
 - **预期结果**：有效地址自动解析出人名；解析来源标签准确（ENS/Basename/.bnb/.arb/Passkey）；24h 缓存工作（重复输入同地址时第二次响应快）；解析失败时优雅降级（不显示名字，但不阻止提交）。
 - **边界/异常**：同一地址多个域名服务同时有注册时，遵循优先级顺序（Passkey > .bnb > .arb > Basename > ENS）；reverse resolver 不返回数据时无错误；网络超时应用缓存 or null。
 - **源码参考**：`src/services/recipient-identity.ts:232-267 (resolveRecipientIdentity), src/screens/wallet/SendScreen.tsx:504-513 (identity resolution effect)`
@@ -520,7 +525,7 @@
 
 - **测什么**：用户点击「免费激活」，bundler 检查资格（nonce ≤ 3、注册 passkey、treasury 余额）并赞助 gas 账户。失败时显示拒绝原因（nonce_exceeded / treasury_depleted 等），允许用户转向自己充值。
 - **怎么测**：1) 触发激活 modal（见上一测试）。2) 点击「Free Activation」按钮。3) 观察加载动画与请求过程（最多 ~5s）。4) a) 成功：余额更新为绿色，显 ✓ 与「Continue」按钮；b) 失败：显示橙色拒绝理由条，并自动切换到「Self-fund」步骤。
-- **预期结果**：成功路径：modal 显示绿色余额 + 「Continue」按钮。失败路径：显示 <Text style={styles.denialRow}> 包含 i18n 拒绝信息（nonce_exceeded / treasury_depleted / no_passkey_registered / rate_limited 等），并显示 QR + 地址供用户自己充值。
+- **预期结果**：成功路径：modal 显示绿色余额 + 「Continue」按钮。失败路径：显示 <Text style={styles.denialRow}></text> 包含 i18n 拒绝信息（nonce_exceeded / treasury_depleted / no_passkey_registered / rate_limited 等），并显示 QR + 地址供用户自己充值。
 - **边界/异常**：超时处理：bundler 超时返回 pending_unknown，弹窗仍显示自己充值选项而非硬失败。幂等性：请求携带稳定的 Idempotency-Key，重试不会双重充值（见 bundler-sponsorship.test.ts）。
 - **源码参考**：`src/services/bundler-service.ts:170, src/components/ui/BundlerFundingModal.tsx:89`
 
@@ -560,11 +565,13 @@
 
 - **测什么**：验证当一个 RPC 端点失败（网络错误、超时、server 错误）时，钱包自动转向下一个端点；端点评分系统优先使用：用户配置 > provider key (Alchemy/dRPC/Ankr) > Vela 内置 > 公共 fallback；最终选择最低延迟的端点；单个请求不应超过 8-15 秒。
 - **怎么测**：1) 在 Web 上开启 Chrome DevTools → Network 限流到「Offline」，尝试执行任何需要 RPC 的操作（查询余额、发送交易、估算 gas）
+
 2) 观察控制台日志 [RPC] 的输出，看是否尝试多个端点、故障转移、最终超时后重试一次（jitter backoff）
 3) 恢复网络连接，再试一遍，应该恢复正常
 4) 进入「Settings → Advanced → RPC Providers」，配置一个有效的 Alchemy/dRPC API key，观察该 provider 的端点是否在日志中以 `provider:` 标记出现且排序靠前
 5) 验证如果 provider RPC 和内置 RPC 都可用，provider 的被优先尝试；如果 provider 返回 401/403（无效 key），应被临时封禁 1 小时，日志显示 BANNED 和原因
 6) 关闭并重启应用，模拟多个链同时进行大量 RPC 查询（可用 fault-injection 的 vela.* 命令），观察不同链的请求是否并行且不互相饥饿
+
 - **预期结果**：在单个端点失败后 1-2 秒内自动转向下一个；同一链所有端点都失败后，显示「RPC Trouble」banner 并标出哪些链失效；端点评分日志准确反映优先级；被禁端点在冷却期间不再被使用；最终完成的请求延迟 < 15 秒（不包括意图的故障注入延迟）
 - **边界/异常**：所有 RPC 端点都被永久封禁（0 成功、≥6 次失败）→ 应自动清除封禁、重新尝试；端点返回 rate-limit 错误（-32001）→ 应被临时禁而不是永久禁；transient server error（-32603）→ 应转移而不是禁；网络突然恢复 → 不应重复提示「fixing」，应自动恢复无缝
 - **源码参考**：`src/services/rpc-pool.ts:640-741 (poolRpcCall); src/services/rpc-pool.ts:356-392 (endpointScore); src/services/rpc-pool.ts:397-417 (isPermanentRpcError)`
@@ -575,11 +582,13 @@
 
 - **测什么**：验证钱包正确列出全部 12 条支持的链（Ethereum、BNB、Polygon、Arbitrum、Optimism、Base、Avalanche、Gnosis、Unichain、Tempo、Monad、Worldchain），并且可快速点击切换，每条链的图标、颜色、原生 token 符号（如 POL、xDAI、USD）准确。
 - **怎么测**：1) 打开钱包首屏或资产屏的网络选择器（通常是一个链图标按钮或「All Networks」文案）
+
 2) 点击打开「Select Chain」sheet 或 modal
 3) 逐一验证所有 12 条链按照 CHAINS.ts 中的顺序显示，检查各链的：iconLabel（如 ETH/POL/xDAI）是否对应；iconColor 和 iconBg 是否与设计稿一致
 4) 点击任意一条链，验证 sheet 关闭，该链被选中（如果有筛选面包屑，应显示该链的标识）
 5) 再次打开选择器，验证之前选中的链有 checkmark 或高亮显示
 6) 点击已选链旁的清除按钮（✕）或点击「All Networks」，验证筛选被重置
+
 - **预期结果**：Sheet 显示全部 12 条链名称、logo、原生 token 符号准确无误；点击链后立即关闭且选择生效；checkmark 和清除按钮工作正常；不出现 UI 闪烁或数据加载延迟
 - **边界/异常**：在离线或网络缓慢（DevTools 限流 Slow 3G）下验证链列表是否仍然快速展示（这些数据本地缓存）
 - **源码参考**：`src/models/chains.ts:42-119; src/components/ui/NetworkFilterSheet.tsx; src/components/ui/NetworkFilterButton.tsx`
@@ -730,10 +739,12 @@
 
 - **测什么**：验证收款屏幕在地址模式下正确生成并显示钱包地址的QR码。QR码是收款最核心的视觉输出，若码无法生成或内容错误，用户无法被收款。
 - **怎么测**：1) 创建一个钱包
+
 2) 进入收款屏幕（应显示两个模式选项：地址 Address、请求 Request）
 3) 确保地址模式已激活
 4) 观察QR码区域是否显示黑白格子的二维码
 5) 用手机或在线QR扫描工具扫描该码，验证解码结果是否匹配钱包的完整地址（0x开头的40位十六进制）
+
 - **预期结果**：QR码能成功扫描，解码内容精确匹配钱包地址，不含任何前缀或格式错误。Web上选项卡切换流畅，地址/请求视觉反馈清晰。
 - **边界/异常**：钱包地址为空或无效时，是否优雅降级为占位符文案（receive.noAddress）
 - **源码参考**：`src/screens/wallet/ReceiveScreen.tsx:227-233, src/components/QRCode.tsx:12-52`
@@ -744,6 +755,7 @@
 
 - **测什么**：验证用户点击/pay页面"Open in Vela Wallet"或扫描EIP-681后，发送屏幕被正确的参数预填（recipient、chainId、token、amount均locked），用户只需确认即可发送。这是支付请求的关键转换点。
 - **怎么测**：1) 打开/pay链接或扫描EIP-681 URI
+
 2) 点击"Open in Vela Wallet"按钮
 3) 应导航到/send页面且带query params：prefilledRecipient、prefilledChainId、prefilledTokenAddress（若有）、prefilledAmountBase（若有）、locked=1
 4) 验证收款地址字段显示预填值且禁用编辑
@@ -753,6 +765,7 @@
 8) 若未指定金额，金额字段应可编辑
 9) 验证页面上有clear "locked mode"的视觉指示（如黄色banner或禁用图标）
 10) 完成签名/提交，验证transaction确实发往预填地址
+
 - **预期结果**：所有prefilledXxx参数正确传递；locked=1时对应字段真正禁用（不仅视觉禁用，还要阻止修改）；gas估算、签名流程正常；preview显示正确的to/token/amount。
 - **边界/异常**：prefilledAmountBase是bigint格式（需fromBaseUnits转换显示）；缺少某个参数时fallback；networkId与chainId的映射；token为null vs不存在的差异
 - **源码参考**：`src/screens/wallet/PayScreen.tsx:70-75, src/models/types.ts`
@@ -763,8 +776,9 @@
 
 - **测什么**：验证parseEIP681函数正确解析标准EIP-681格式，区分原生币支付（ethereum:recipient@chainId）和ERC-20 transfer（ethereum:token@chainId/transfer?address=recipient&uint256=amount）。格式解析错误会导致支付失败。
 - **怎么测**：可通过单元测试或手动Web端验证：
+
 1) 构造原生支付无金额URI：ethereum:0x742d35Cc6634C0532925a3b844Bc454e4438f44e@1
-2) 通过扫描或直接访问/pay?eip681=<encoded>验证解析
+2) 通过扫描或直接访问/pay?eip681=<encoded></encoded>验证解析
 3) 预期：recipient=0x742d..., chainId=1, isNative=true, amountBaseUnits=undefined
 4) 构造原生支付有金额：ethereum:0x742d35Cc6634C0532925a3b844Bc454e4438f44e@1?value=1000000000000000000
 5) 预期：amountBaseUnits=1n*10^18
@@ -774,6 +788,7 @@
 9) 预期：amountBaseUnits=5000000n
 10) 测试科学记数法：value=2.5e18，应正确转换为bigint
 11) 测试无效输入（缺少chainId、recipient不是地址、负数金额），应返回null
+
 - **预期结果**：所有有效格式正确解析；无效格式返回null；amountBaseUnits精确为BigInt；支持legacy pay-前缀容错；科学记数法正确转换。
 - **边界/异常**：金额为0；巨大数字超过js浮点；缺少可选参数（chainId、amount）；重复的query参数；URL encode特殊字符
 - **源码参考**：`src/services/eip681.ts:110-157`
@@ -834,12 +849,14 @@
 
 - **测什么**：验证用户在请求模式可以选择代币、输入金额，系统生成有效的EIP-681 URI且能编码到QR码中。这是链接不同钱包的标准支付协议。
 - **怎么测**：1) 进入收款屏幕 > 点击"Request"选项卡
+
 2) 看到资产选择器和金额输入框
 3) 点击资产选择器（默认应为ETH on Ethereum）
 4) 从列表选择USDC（或其他ERC-20代币）
 5) 在金额输入框输入"10.5"，观察金额验证（不应允许多个小数点、应限制小数位数）
 6) 观察上方QR码和"Request Summary"文案是否更新
-7) 扫描QR码，验证内容符合EIP-681格式：ethereum:<token>@<chainId>/transfer?address=<recipient>&uint256=<baseUnits>
+7) 扫描QR码，验证内容符合EIP-681格式：ethereum:<token></token>@<chainId></chainid>/transfer?address=<recipient></recipient>&uint256=<baseUnits></baseunits>
+
 - **预期结果**：资产切换时金额精度正确重新限制；QR码实时更新；生成的EIP-681 URI有效且参数准确；USD价格换算若显示应正确对应当前价格。
 - **边界/异常**：输入"0"或空金额时，QR码应编码无金额的开放请求（无uint256参数）；超大金额（>1e20 wei）；自定义链上的非标代币
 - **源码参考**：`src/components/ReceiveRequestControls.tsx:44-89, src/services/eip681.ts:89-103`
@@ -850,12 +867,14 @@
 
 - **测什么**：验证金额输入框防止输入错误格式（多个小数点、非数字字符）且在切换代币时动态限制小数位数以符合该代币的decimals。金额格式错误会导致EIP-681无效。
 - **怎么测**：1) 在请求模式下，点击金额输入框
+
 2) 尝试输入"10.5.2"（两个小数点），观察第二个小数点是否被拒绝
 3) 尝试输入"abc"或特殊符号，观察是否过滤
 4) 输入"10.123456789"（多位小数）
 5) 切换代币到USDC（6位decimals），观察输入是否自动截断至6位
 6) 切换回ETH（18位decimals），验证小数位限制是否放宽
 7) 输入"0"，再输入有效金额，验证可清空且重新输入
+
 - **预期结果**：多小数点被拒；非数字字符过滤；切换代币后精度重新限制；sanitizeAmount函数正确处理所有边界；UI反馈流畅无卡顿。
 - **边界/异常**：粘贴包含多个小数点的文本；输入非常大的数字（超过js浮点精度）；输入负数前缀
 - **源码参考**：`src/components/ReceiveRequestControls.tsx:36-42, 108-116`
@@ -866,6 +885,7 @@
 
 - **测什么**：验证当pay链接或EIP-681包含钱包不支持的chainId或无法找到的token contract时，系统显示友好错误并给出处理选项（如添加网络）。若无此保护，用户会陷入卡死的发送流程。
 - **怎么测**：前置条件：有现成的不支持链ID（如99999）和死地址（如0x000...dEaD）
+
 1) 构造pay链接指向unsupported chain：/pay?to=0x742d...&chain=99999&sym=TEST&dec=18&net=Unknown
 2) 打开链接，验证是否显示错误（"Network not supported"）
 3) 若有"Add this network"按钮，点击并验证跳转到network addition flow
@@ -874,6 +894,7 @@
 6) 验证error state下的UI反馈：clear message、建议操作或返回按钮
 7) 测试余额不足场景：prefilledAmountBase超过当前余额
 8) 验证显示"You do not have enough XXX"并阻止提交
+
 - **预期结果**：unsupported chainId显示清晰错误且建议添加网络；unknown token显示错误；insufficient balance显示红色warning；所有error state都有返回/关闭操作；不允许盲目提交失败的tx。
 - **边界/异常**：网络添加失败或用户拒绝；被标记为spam的token；极端金额（>max supply）；十进制溢出的amountBase
 - **源码参考**：`e2e/eip681-pay.spec.ts:71-88`
@@ -884,6 +905,7 @@
 
 - **测什么**：验证用户在收款屏幕打开时，系统后台定期轮询余额，检测到新到账时实时显示绿色成功提示框（deposit notification）。这提升用户确认收款的安心感。
 - **怎么测**：前置条件：钱包已配置、有连接到测试网RPC
+
 1) 进入收款屏幕
 2) 注意观察屏幕是否有入账检测逻辑：应有"Successfully received"类的绿色框（若有入账）
 3) 在另一钱包或合约向当前钱包转账任意ERC20 token
@@ -891,6 +913,7 @@
 5) 观察QR卡片下方是否出现新的绿框，显示：入账时间戳、代币符号、金额、网络名称、USD价值（若可用）
 6) 多笔入账到达，应列为多个entry并按时间排序
 7) 保持屏幕打开5分钟，验证轮询是否在TOTAL_LISTEN_MS=5分钟后停止
+
 - **预期结果**：首次轮询3秒内检测，之后在FAST_PHASE_MS内保持3秒间隔，TOTAL_LISTEN_MS后切换60秒间隔直到5分钟停止；入账显示准确；USD换算若显示应正确；绿色提示框动画入场流畅。
 - **边界/异常**：离开屏幕（isAppActive false）时应暂停检测；网络故障时graceful处理；极短时间多笔到账的排序；已持有的token新增金额vs全新token首次接收；零余额token的检测
 - **源码参考**：`src/screens/wallet/ReceiveScreen.tsx:58-119`
@@ -901,6 +924,7 @@
 
 - **测什么**：验证iOS/Android上的摄像头扫描和图库上传能解码QR码。在真实场景中，用户常通过扫描纸质地址或发来的截图来支付。
 - **怎么测**：前置条件：已创建钱包；拥有真实iOS或Android设备
+
 1) 在Vela发起扫描（需要额外功能如"扫描支付"或内置扫描器），或通过dApp连接触发扫描
 2) 相机权限提示出现，点击"允许"
 3) 相机视图打开，显示扫描框和角标
@@ -908,6 +932,7 @@
 5) 系统应在2秒内识别并解析
 6) 点击"图片"按钮打开相册，选择包含QR码的截图
 7) 系统解码，应自动返回扫描结果
+
 - **预期结果**：相机实时扫描无延迟；QR解码成功率>95%；图库上传支持JPEG和PNG；解码后自动关闭扫描器且传递正确的URI/地址到调用方。
 - **边界/异常**：低光线条件下扫描；QR码被部分遮挡；极小或极大的QR码；损坏或打印质量差的码；反向相机（front-facing）扫描；拒绝相机权限
 - **源码参考**：`src/components/QRScanner.tsx:217-249, 286-345`
@@ -1008,9 +1033,11 @@
 
 - **测什么**：验证 Tempo 链（4217）因无原生 gas coin 而使用 gasModel='tempo'，RPC 和 bundler 路由无差异，但在发送交易时流程会走 services/tempo.ts 的特殊处理（gas 以 USD stablecoin 结算）；Tempo 的 bundler URL 和端点管理与其他链相同。
 - **怎么测**：1) 进入设置或链配置，验证 Tempo 链的信息：a) nativeSymbol 为 'USD'；b) gasModel 字段为 'tempo'（如果暴露）
+
 2) 在 Tempo 上执行一笔发送，观察 gas 估算和扣款是否涉及 stablecoin（不是 native coin）
 3) 验证 Tempo 的 RPC 端点正常工作（pool 初始化、failover 等）
 4) 验证 Tempo 的 bundler URL 被正确设置（vela-bundler.getvela.app/4217）
+
 - **预期结果**：Tempo 链显示，nativeSymbol 为 USD；发送交易走 tempo.ts 流程（可查阅代码或日志）；RPC/bundler 端点管理与其他链无差异；不因特殊 gasModel 而故障
 - **边界/异常**：Tempo RPC 返回 200 但链不可用 → 应被识别（合约检查时缺失）；Tempo bundler 故障 → 应 fallback 到内置而非以 native gas 重试
 - **源码参考**：`src/models/chains.ts:98-106; src/services/rpc-pool.ts:201-221 (initPool applies to all chains uniformly)`
@@ -1021,12 +1048,14 @@
 
 - **测什么**：验证用户配置的单个全局 API 密钥（Alchemy/dRPC/Ankr）能自动为所有该 provider 支持的链生成 RPC URL，钱包在池中以 provider tier 处理，被优先级排序；无效 key 被禁；能指引用户获取密钥。
 - **怎么测**：1) 进入「Settings → Advanced → RPC Providers」
+
 2) 对每个 provider（Alchemy、dRPC、Ankr）输入一个有效的 API key（可从各服务免费获取），保存
 3) 观察「Test」按钮自动触发，逐一 ping 该 provider 支持的所有链的 eth_chainId，显示延迟和 ✓/✗ 状态
 4) 验证兼容链数量准确（Alchemy 12 条、dRPC 12 条、Ankr 8 条，Unichain/World/Monad/Tempo 无 Ankr 支持）
 5) 输入一个无效的 key（如故意删减字符），保存，观察测试重新运行、所有链返回 ✗，显示「API key invalid」或类似
 6) 清除 key，验证提示重新变为「No key」，该 tier 不再参与评分
 7) 配置有效 key 后，进行任何需要 RPC 的操作，观察日志 [RPC] 包含 `provider:` 标记且排序高于 `default:` 和 `public:`
+
 - **预期结果**：输入和保存 key 后 < 5 秒完成测试；支持链列表准确（数量、名称）；invalid key 立即被识别并禁（不浪费后续请求）；provider RPC 在日志中排优先级；能点击链接获取 key（外部浏览器打开对应 provider 的仪表板）
 - **边界/异常**：key 中含特殊字符或空格 → 应 trim 后处理；中途更改 key 时前一个 key 的测试结果应清除；没有网络时输入 key → 保存应成功，测试延迟到网络恢复
 - **源码参考**：`src/screens/settings/RpcProvidersModal.tsx; src/services/rpc-providers.ts:74-137; src/services/rpc-pool.ts:286-293`
@@ -1037,11 +1066,13 @@
 
 - **测什么**：验证 RPC 端点的两层封禁系统：1) 临时禁（1 小时，用于 rate-limit/401/403），冷却后自动解禁；2) 永久禁（0 成功且 ≥6 次失败），24 小时后过期解禁以允许恢复；通过故障注入验证行为。
 - **怎么测**：1) 在 Web 上通过浏览器 console 的 fault-injection 注入 vela.banEndpoint(url) 或类似（若 API 存在），或者让一个特定 URL 的 RPC 返回 HTTP 401 多次
+
 2) 观察日志显示 「BANNED: unauthorized」和该端点在 SOURCE_PRIORITY 中的降分（消失在候选列表）
 3) 等待 1 小时或模拟时间流逝，观察该端点是否重新进入候选（临时禁解除）
 4) 让同一端点故意失败 6+ 次无任何成功，观察是否被标记为永久禁、日志显示「PERMA-BANNED: 0 success in N attempts」
 5) 关闭再打开应用，验证永久禁列表从本地存储恢复
 6) 等待 24 小时或刷新缓存，观察永久禁是否自动解除
+
 - **预期结果**：临时禁的端点在 1 小时冷却后、或应用重启后自动重试；永久禁的端点被持久化存储，跨应用重启保留；24 小时后永久禁自动清除；日志清晰标出禁类型和恢复条件；不会因单次超时而永久禁
 - **边界/异常**：同一 URL 被多个并发请求同时失败 → 只禁一次（不重复）；URL 列表中有重复 → 应被去重，不多次禁；清除缓存后，禁列表应清空（不污染新会话）
 - **源码参考**：`src/services/rpc-pool.ts:68-116 (ban system); src/services/rpc-pool.ts:147-154 (maybePermaBan)`
@@ -1130,31 +1161,31 @@
 
 ## 附录 A — P0 冒烟清单（每次发版至少过这些）
 
-- [ ] #1 无限授权被拦截（ERC-20 Approve）
-- [ ] #2 编辑授权后 enforceNoUnlimited 最终守卫
-- [ ] #3 交易签名前显示无限授权防护，capped 后的参数应在批准时使用
-- [ ] #4 ERC-2612 Permit 离线签名显示为不可编辑
-- [ ] #5 单币单人：收款人地址投毒防御（首次交互警告）
-- [ ] #6 单币单人：Contract 地址警告（非钱包地址转账风险）
-- [ ] #7 SIWE 域名绑定检查与钓鱼防护
-- [ ] #8 Blind Sign 无描述符时的警告与降级
-- [ ] #9 单币单人：输入金额→预期 max 包含 gas 预留
-- [ ] #10 Max-send 预留 EntryPoint prefund：确保费用不会溢出
-- [ ] #11 sweep 模式（多币一人，清空钱包）：选择多个 token，gas 预留准确
-- [ ] #12 sweep 模式：一个 MultiSend UserOp，无限授权防卫激活
-- [ ] #13 split 模式：单个 MultiSend UserOp 批量提交，失败恢复正确
-- [ ] #14 高价格拒绝保护：GasQuoteTooHighError 触发与显示
-- [ ] #15 扫描 WalletPair QR 后显示 4 位指纹核对
-- [ ] #16 用户确认指纹后 E2E 加密通道连接成功
-- [ ] #17 创建钱包-钱包地址幂等性与多链一致
-- [ ] #18 首次创建钱包-Passkey生物识别仪式
-- [ ] #19 交易签名-每笔都需生物识别
-- [ ] #20 公钥提取与地址计算-CBOR与P256验证
-- [ ] #21 pending→confirmed 对账及持久化
-- [ ] #22 eth_sendTransaction 提交后立即记录 pending 状态，关闭弹框不丢失
-- [ ] #23 Bundler 资金不足时的融资模态框（BundlerFundingModal）
-- [ ] #24 自定义网络添加与完整性校验（全契约+RIP-7212）
-- [ ] #25 RPC 修复 URL 验证与链 ID 检查
+- [ ]  #1 无限授权被拦截（ERC-20 Approve）
+- [ ]  #2 编辑授权后 enforceNoUnlimited 最终守卫
+- [ ]  #3 交易签名前显示无限授权防护，capped 后的参数应在批准时使用
+- [ ]  #4 ERC-2612 Permit 离线签名显示为不可编辑
+- [ ]  #5 单币单人：收款人地址投毒防御（首次交互警告）
+- [ ]  #6 单币单人：Contract 地址警告（非钱包地址转账风险）
+- [ ]  #7 SIWE 域名绑定检查与钓鱼防护
+- [ ]  #8 Blind Sign 无描述符时的警告与降级
+- [ ]  #9 单币单人：输入金额→预期 max 包含 gas 预留
+- [ ]  #10 Max-send 预留 EntryPoint prefund：确保费用不会溢出
+- [ ]  #11 sweep 模式（多币一人，清空钱包）：选择多个 token，gas 预留准确
+- [ ]  #12 sweep 模式：一个 MultiSend UserOp，无限授权防卫激活
+- [ ]  #13 split 模式：单个 MultiSend UserOp 批量提交，失败恢复正确
+- [ ]  #14 高价格拒绝保护：GasQuoteTooHighError 触发与显示
+- [ ]  #15 扫描 WalletPair QR 后显示 4 位指纹核对
+- [ ]  #16 用户确认指纹后 E2E 加密通道连接成功
+- [ ]  #17 创建钱包-钱包地址幂等性与多链一致
+- [ ]  #18 首次创建钱包-Passkey生物识别仪式
+- [ ]  #19 交易签名-每笔都需生物识别
+- [ ]  #20 公钥提取与地址计算-CBOR与P256验证
+- [ ]  #21 pending→confirmed 对账及持久化
+- [ ]  #22 eth_sendTransaction 提交后立即记录 pending 状态，关闭弹框不丢失
+- [ ]  #23 Bundler 资金不足时的融资模态框（BundlerFundingModal）
+- [ ]  #24 自定义网络添加与完整性校验（全契约+RIP-7212）
+- [ ]  #25 RPC 修复 URL 验证与链 ID 检查
 
 ## 附录 B — 按分类索引
 

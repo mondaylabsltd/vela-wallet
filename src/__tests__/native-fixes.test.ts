@@ -89,3 +89,34 @@ describe('iOS passkey native fixes (audit medium)', () => {
     expect(swift).toContain('case .canceled, .notInteractive:');
   });
 });
+
+describe('decision defaults B1/B2 (config plugin)', () => {
+  const plugin = read('plugins/with-native-modules.js');
+
+  it('B1: unused vela-cloud-sync module is no longer wired', () => {
+    expect(plugin).not.toContain("'vela-cloud-sync'");
+    expect(plugin).not.toContain('VelaCloudSyncModule.swift');
+    expect(plugin).not.toContain('VelaCloudSyncPackage');
+  });
+
+  it('B1: the unbacked iCloud KV entitlement is not emitted', () => {
+    expect(plugin).not.toContain("mod.modResults['com.apple.developer.ubiquity-kvstore-identifier']");
+  });
+
+  it('B1: passkey associated-domains entitlement is still present', () => {
+    expect(plugin).toContain('webcredentials:getvela.app');
+  });
+
+  it('B2: android allowBackup is set to false', () => {
+    expect(plugin).toContain("app.$['android:allowBackup'] = 'false'");
+    expect(plugin).not.toContain("app.$['android:allowBackup'] = 'true'");
+  });
+});
+
+describe('camera permanent-denial escape (audit low)', () => {
+  it('QRScanner offers Open Settings when the permission can no longer be asked', () => {
+    const src = read('src/components/QRScanner.tsx');
+    expect(src).toContain('Linking.openSettings()');
+    expect(src).toContain('canAskAgain');
+  });
+});

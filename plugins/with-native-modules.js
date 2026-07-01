@@ -46,14 +46,16 @@ function withIOSInfoPlist(config) {
 }
 
 // ---------------------------------------------------------------------------
-// iOS – Entitlements (iCloud KV Store + Associated Domains for passkeys)
+// iOS – Entitlements (Associated Domains for passkeys)
 // ---------------------------------------------------------------------------
 
 function withIOSEntitlements(config) {
   return withEntitlementsPlist(config, (mod) => {
-    // iCloud KV Store
-    mod.modResults['com.apple.developer.ubiquity-kvstore-identifier'] =
-      '$(TeamIdentifierPrefix)$(CFBundleIdentifier)';
+    // NOTE: the iCloud Key-Value Store entitlement was removed. No JS consumes
+    // it (the vela-cloud-sync module is not wired), and emitting an entitlement
+    // the provisioning profile doesn't grant fails Release codesign/Archive.
+    // Re-add it here AND enable the iCloud KV capability on the App ID together,
+    // only when cloud sync is actually shipped.
 
     // Associated Domains for passkeys
     if (!Array.isArray(mod.modResults['com.apple.developer.associated-domains'])) {
@@ -82,7 +84,8 @@ function withIOSSourceFiles(config) {
       // Subdirectories under ios/<project>/ are NOT auto-included in the build.
       const destDir = path.join(projectRoot, 'ios', projectName);
 
-      const modules = ['vela-passkey', 'vela-cloud-sync'];
+      // vela-cloud-sync is intentionally omitted — it has no JS consumer yet.
+      const modules = ['vela-passkey'];
       for (const moduleName of modules) {
         const srcDir = path.join(projectRoot, 'modules', moduleName, 'ios');
         if (!fs.existsSync(srcDir)) continue;
@@ -160,10 +163,12 @@ function withAndroidPermissions(config) {
       });
     }
 
-    // Set android:allowBackup="true" on the <application> element
+    // Set android:allowBackup="false" on the <application> element — a wallet's
+    // local state (accounts, endpoints, dApp sessions) should not be copied into
+    // the user's Google cloud backup / device-transfer.
     const app = manifest.application?.[0];
     if (app) {
-      app.$['android:allowBackup'] = 'true';
+      app.$['android:allowBackup'] = 'false';
     }
 
     return mod;
@@ -190,10 +195,9 @@ function withAndroidSourceFiles(config) {
         'velawallet'
       );
 
-      // Copy Kotlin files for each module
+      // Copy Kotlin files for each module (vela-cloud-sync omitted — no JS consumer)
       const moduleMappings = [
         { name: 'vela-passkey', subdir: 'passkey' },
-        { name: 'vela-cloud-sync', subdir: 'cloudsync' },
       ];
 
       for (const { name, subdir } of moduleMappings) {
@@ -271,14 +275,13 @@ function registerAndroidPackages(projectRoot) {
 
   let content = fs.readFileSync(mainAppPath, 'utf8');
 
+  // vela-cloud-sync omitted — no JS consumer yet.
   const imports = [
     'import com.velawallet.passkey.VelaPasskeyPackage',
-    'import com.velawallet.cloudsync.VelaCloudSyncPackage',
   ];
 
   const packageRegistrations = [
     'add(VelaPasskeyPackage())',
-    'add(VelaCloudSyncPackage())',
   ];
 
   // Add imports (after the last existing import line)
@@ -336,12 +339,10 @@ function withXcodeProjectFiles(config) {
         return typeof group === 'object' && group.name === projectName;
       });
 
-    // Native module files to add
+    // Native module files to add (vela-cloud-sync omitted — no JS consumer yet)
     const nativeFiles = [
       'VelaPasskeyModule.swift',
       'VelaPasskeyModule.m',
-      'VelaCloudSyncModule.swift',
-      'VelaCloudSyncModule.m',
     ];
 
     for (const fileName of nativeFiles) {

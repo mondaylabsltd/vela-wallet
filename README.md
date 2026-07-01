@@ -2,7 +2,7 @@
 
 A self-custodial smart wallet for EVM networks, built with React Native and Expo.
 
-Vela Wallet uses ERC-4337 account abstraction with WebAuthn (passkey) authentication — no seed phrases, no private keys to manage.
+Vela Wallet uses ERC-4337 account abstraction with WebAuthn (passkey) authentication — no seed phrases, no private keys to manage.`npm run build:web`
 
 Runs on **iOS**, **Android**, and **Web** from a single codebase.
 
