@@ -146,7 +146,12 @@ function startRelay({ port = DEFAULT_PORT } = {}) {
         baseUrl,
         newSession,
         sessions,
-        stop: () => new Promise((r) => server.close(r)),
+        // Force-close first: the SSE streams are keep-alive and never end on their
+        // own, so a bare server.close() would hang waiting for them to drain.
+        stop: () => new Promise((r) => {
+          try { server.closeAllConnections?.(); } catch { /* older node */ }
+          server.close(() => r());
+        }),
       });
     });
   });

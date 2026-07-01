@@ -16,10 +16,12 @@ import { test, expect, type Page } from '@playwright/test';
 import { startRelay } from './support/relay';
 import {
   RELAY_PORT, FIXTURE, type Relay,
-  openWalletConnect, connectWallet, openTestDapp, request, confirmSheet, gnosisBalanceWei,
+  openWalletConnect, connectWallet, openTestDapp, request, confirmSheet,
+  gnosisBalanceWei, bundlerGasAccount,
 } from './support/parallel';
 
-const MIN_WEI = 2_000_000_000_000_000n; // ~0.002 xDAI: enough for a tiny transfer + gas
+const MIN_WEI = 200_000_000_000_000n; // ~0.0002 xDAI: enough for the tiny transfer value
+const MIN_GAS_WEI = 100_000_000_000_000n; // ~0.0001 xDAI in the bundler gas account
 
 let relay: Relay;
 
@@ -35,6 +37,15 @@ test.describe('@onchain parallel-space · real Gnosis settlement', () => {
     test.skip(
       balance < MIN_WEI,
       `Fund Parallel One (${FIXTURE.one}) with a little xDAI on Gnosis — balance ${balance} wei`,
+    );
+
+    // The vela-bundler pays gas from a per-Safe deposit address, not the Safe balance.
+    const gas = await bundlerGasAccount(100, FIXTURE.one);
+    test.skip(
+      gas.spendableWei < MIN_GAS_WEI,
+      `Fund the bundler GAS ACCOUNT for Parallel One with a little xDAI: ${gas.depositAddress} ` +
+      `(spendable ${gas.spendableWei} wei). The Safe balance covers the transfer value; the deposit ` +
+      `address covers gas. Alternatively use the in-app "request sponsorship" button.`,
     );
 
     const session = relay.newSession();

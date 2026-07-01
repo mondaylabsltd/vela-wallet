@@ -46,9 +46,9 @@ test.describe('parallel-space · dApp connection', () => {
 
   test('connects and exposes the fixture account to the dApp', async () => {
     await expect(dapp.getByTestId('dapp-wallet-address')).toHaveText(FIXTURE.one);
-    // The wallet's connected card shows the dApp identity from the relay metadata.
-    await expect(wallet.getByText('Vela Test dApp')).toBeVisible();
-    await expect(wallet.getByText('Connected', { exact: true })).toBeVisible();
+    // The Connections tab shows the dApp identity (relay metadata) + an Active status.
+    await expect(wallet.getByText('Vela Test dApp').first()).toBeVisible();
+    await expect(wallet.getByText('Active', { exact: true })).toBeVisible();
   });
 
   test('answers eth_requestAccounts locally with the fixture address', async () => {

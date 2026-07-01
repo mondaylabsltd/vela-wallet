@@ -43,22 +43,38 @@ export async function stubWalletNetwork(page: Page, _relayPort = RELAY_PORT): Pr
   });
 }
 
-/** Open the wallet's real Connect screen inside the parallel space. */
+/**
+ * Enter the parallel space and land on the REAL Home with the fixture wallet loaded.
+ * Waiting for the account name guarantees the fixtures are persisted, so a subsequent
+ * `page.goto('/<route>')` reboots straight back into the armed mode.
+ */
+export async function enterParallel(page: Page): Promise<void> {
+  await page.goto('/parallel');
+  await expect(page.getByTestId('parallel-space-badge')).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByText('Parallel One').first()).toBeVisible({ timeout: 20_000 });
+}
+
+/**
+ * Enter the parallel space and open the REAL dApp-connection surface: the Home
+ * screen's "Connections" tab (the production entry — not the standalone /connect route).
+ */
 export async function openWalletConnect(page: Page): Promise<void> {
-  await page.goto('/parallel/connect');
+  await page.goto('/parallel'); // bootstraps the mode, then redirects into the real Home
   await page.waitForLoadState('networkidle').catch(() => {});
   // The PARALLEL SPACE badge proves the mode is armed (fixed passkey + fixture wallet).
-  await expect(page.getByTestId('parallel-space-badge')).toBeVisible({ timeout: 20_000 });
-  // The paste field is the real ConnectScreen's link input.
+  await expect(page.getByTestId('parallel-space-badge')).toBeVisible({ timeout: 25_000 });
+  // Home → Connections tab → the inline paste field.
+  await page.getByText('Connections', { exact: true }).first().click();
   await expect(page.getByPlaceholder(/Paste/i)).toBeVisible({ timeout: 20_000 });
 }
 
-/** Paste a relay connect URL and wait for the wallet to show "Connected". */
+/** Paste a relay connect URL and wait for the connected dApp card to appear. */
 export async function connectWallet(page: Page, connectUrl: string): Promise<void> {
   const input = page.getByPlaceholder(/Paste/i);
   await input.fill(connectUrl);
   await input.press('Enter');
-  await expect(page.getByText('Connected', { exact: true })).toBeVisible({ timeout: 20_000 });
+  // The connected card in the Connections tab shows the dApp's relay metadata name.
+  await expect(page.getByText('Vela Test dApp').first()).toBeVisible({ timeout: 20_000 });
 }
 
 /** Open the served test dApp page bound to a specific relay session. */
@@ -110,4 +126,15 @@ export async function gnosisBalanceWei(address: string): Promise<bigint> {
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [address, 'latest'] }),
   });
   return BigInt((await r.json()).result ?? '0x0');
+}
+
+/**
+ * The vela-bundler gas account for a Safe on a chain. The bundler pays gas from a
+ * per-Safe deposit address (NOT the Safe's own balance), so a real UserOp needs THIS
+ * funded (or a sponsorship). Returns the deposit address + spendable balance (wei).
+ */
+export async function bundlerGasAccount(chainId: number, safe: string): Promise<{ depositAddress: string; spendableWei: bigint }> {
+  const r = await fetch(`https://vela-bundler.getvela.app/v1/account/${chainId}/${safe}`);
+  const j = await r.json();
+  return { depositAddress: j.activeDepositAddress ?? '', spendableWei: BigInt(j.spendableBalance ?? '0x0') };
 }
