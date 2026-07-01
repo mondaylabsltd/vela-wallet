@@ -485,14 +485,23 @@ async function sendUserOp(
   // Use fetched nonce for deployed wallets, 0 for undeployed
   const nonce: string = deployed ? nonceResult : '0x0';
 
-  // Guard: maxFeeOverride is typed bigint, but the type is erased at runtime.
-  // A mis-wired caller (e.g. onPress={approveRequest} passing a gesture event)
-  // could hand us a non-bigint, which would serialize to "0x[object Object]"
-  // and blow up both bundler estimation and the SafeOp hash (BigInt parse).
-  const maxFee =
-    typeof maxFeeOverride === 'bigint'
-      ? maxFeeOverride
-      : calcMaxFeePerGas(gasPrices.gasPrice);
+  // Price the op. Priority order:
+  //  1. Caller-supplied override (the confirm screen's displayed bundler quote).
+  //     Guard: maxFeeOverride is typed bigint, but the type is erased at runtime — a
+  //     mis-wired caller (e.g. onPress={approveRequest} passing a gesture event) could
+  //     hand us a non-bigint, which would serialize to "0x[object Object]" and blow up
+  //     bundler estimation and the SafeOp hash. So type-check before trusting it.
+  //  2. The bundler's OWN quote (tip-inclusive, the same source that accepts/rejects).
+  //     This covers override-less callers — notably dApp wallet_sendCalls — so they
+  //     never under-price on chains where the wallet's per-chain RPC drops the tip.
+  //  3. Local estimate off getGasPrices(), only if the bundler can't quote.
+  let maxFee: bigint;
+  if (typeof maxFeeOverride === 'bigint') {
+    maxFee = maxFeeOverride;
+  } else {
+    const quote = await getBundlerGasQuote(chainId).catch(() => null);
+    maxFee = quote?.maxFeePerGas ?? calcMaxFeePerGas(gasPrices.gasPrice);
+  }
   const maxPriority = maxFee;
 
   // 5. Initial gas estimates
