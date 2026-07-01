@@ -12,6 +12,8 @@
     "txLabelSignMessage": "Tanda Tangani Pesan",
     "txLabelSignTypedData": "Tanda Tangani Typed Data",
     "txLabelSent": "Terkirim {{symbol}}",
-    "txSentSubtitle": "Ke {{toName}} · {{networkName}}"
+    "txSentSubtitle": "Ke {{toName}} · {{networkName}}",
+    "txLabelReceived": "Diterima {{symbol}}",
+    "txReceivedSubtitle": "Dari {{fromName}} · {{networkName}}"
   }
 }

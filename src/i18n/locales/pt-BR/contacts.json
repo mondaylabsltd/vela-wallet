@@ -33,6 +33,24 @@
     "sends_other": "{{count}} envios",
     "savedTag": "Salvo",
     "savedContact": "Contato salvo",
-    "scanToAdd": "Escanear para adicionar um endereço"
+    "scanToAdd": "Escanear para adicionar um endereço",
+    "sectionGroups": "Grupos",
+    "groupMembers": "{{count}} membros",
+    "groupNew": "Novo grupo",
+    "groupEdit": "Editar grupo",
+    "groupNameLabel": "Nome do grupo",
+    "groupNamePlaceholder": "ex.: Folha de pagamento",
+    "groupMembersLabel": "Membros",
+    "groupNoContacts": "Salve alguns contatos primeiro e depois agrupe-os aqui.",
+    "groupDelete": "Excluir grupo",
+    "importBtn": "Importar",
+    "importing": "Importando…",
+    "exportBtn": "Exportar",
+    "exportTitle": "Exportar contatos",
+    "exportBody": "Escolha um formato para fazer backup da sua agenda de endereços.",
+    "importDoneTitle": "Importação concluída",
+    "importDoneBody": "{{added}} adicionados, {{skipped}} já existiam.",
+    "importFailTitle": "Falha na importação",
+    "importFailBody": "Use um arquivo de contatos JSON ou CSV."
   }
 }

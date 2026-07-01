@@ -7,6 +7,7 @@
     "listeningForDeposits": "À l'écoute des dépôts",
     "warningTitle": "Avant de recevoir",
     "warningBody": "N'envoyez que des actifs sur les réseaux pris en charge — les transferts non pris en charge peuvent être perdus définitivement.",
+    "warningCounterfactual": "Votre adresse est identique sur tous les réseaux pris en charge. Les fonds envoyés ici sont en sécurité et vous appartiennent — même avant le déploiement de votre portefeuille.",
     "warningHint": "Consultez les",
     "warningHintNetworks": "{{count}} réseaux pris en charge",
     "warningHintSuffix": "ci-dessous avant de partager votre adresse.",

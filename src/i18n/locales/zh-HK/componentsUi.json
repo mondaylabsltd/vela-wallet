@@ -86,7 +86,8 @@
     "currency": {
       "title": "顯示貨幣",
       "searchPlaceholder": "搜尋貨幣",
-      "noMatch": "沒有貨幣符合「{{query}}」。"
+      "noMatch": "沒有貨幣符合「{{query}}」。",
+      "clearSearch": "清除搜尋"
     },
     "scanner": {
       "title": "掃描 QR",
@@ -115,13 +116,16 @@
     },
     "dock": {
       "receive": "接收",
-      "send": "發送"
+      "send": "發送",
+      "scan": "掃描"
     },
     "networkFilter": {
       "selectChain": "選擇區塊鏈",
       "searchChains": "搜尋區塊鏈",
       "allNetworks": "所有網絡",
-      "showEvery": "顯示每條區塊鏈"
+      "showEvery": "顯示每條區塊鏈",
+      "clearFilter": "清除網絡篩選",
+      "toggleSearch": "搜尋區塊鏈"
     },
     "chart": {
       "noDataFor": "{{label}} 沒有數據",
@@ -149,21 +153,21 @@
       "verbApprove": "授權",
       "verbApproveAll": "授權全部",
       "verbRevoke": "撤銷",
-      "spenderLabel": "被授權方",
+      "spenderLabel": "支用方",
       "operatorLabel": "操作者",
       "tokenLabel": "代幣",
       "collectionLabel": "NFT 系列",
       "expired": "此授權簽章已過期",
       "noExpiry": "此授權永不過期",
       "expiresLabel": "過期時間",
-      "chooseAction": "請揀「撤銷」或「授權」以繼續。",
+      "chooseAction": "請選擇「撤銷」或「授權」以繼續。",
       "resultingTotal": "授權後總額度",
       "resultingTotalUnknown": "在你現有額度之上再增加 {{amount}}（無法讀取目前額度）",
       "unlimitedValue": "無上限",
       "multiplePermits": "多種代幣",
       "permitTag": "使用許可（簽名）",
-      "permitCantCap": "許可係一個簽名 —— 喺度改唔到上限。想限額嘅話，請改用鏈上 Approve。",
-      "permitNote": "你而家簽緊一個使用許可 —— dApp 可以代你用到呢個金額。"
+      "permitCantCap": "許可是一個簽名 —— 無法在此設定上限。如需限制花費額度，請改用鏈上 Approve。",
+      "permitNote": "你正在簽署一項使用許可 —— dApp 可代你動用最多此金額。"
     },
     "bugReport": {
       "title": "回報問題",

@@ -70,6 +70,8 @@
     "scenarioExpiredSwap": "Süresi geçmiş swap son tarihi",
     "scenarioExpiredSwapSub": "Son tarih çoktan geçmiş — işaretle",
     "scenarioBatch": "EIP-5792 toplu işlem",
-    "scenarioBatchSub": "wallet_sendCalls — çağrı başına döküm"
+    "scenarioBatchSub": "wallet_sendCalls — çağrı başına döküm",
+    "scenarioPermit2Unlimited": "Permit2 Onay (Sınırsız)",
+    "scenarioPermit2UnlimitedSub": "Zincir dışı imza — sınırlandırılamaz"
   }
 }

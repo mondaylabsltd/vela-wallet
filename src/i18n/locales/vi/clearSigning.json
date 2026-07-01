@@ -70,6 +70,8 @@
     "scenarioExpiredSwap": "Hạn chót hoán đổi đã quá hạn",
     "scenarioExpiredSwapSub": "Hạn chót đã trôi qua — hãy đánh dấu",
     "scenarioBatch": "Gộp EIP-5792",
-    "scenarioBatchSub": "wallet_sendCalls — chi tiết từng lệnh gọi"
+    "scenarioBatchSub": "wallet_sendCalls — chi tiết từng lệnh gọi",
+    "scenarioPermit2Unlimited": "Permit2 Approve (Không giới hạn)",
+    "scenarioPermit2UnlimitedSub": "Chữ ký off-chain — không thể giới hạn"
   }
 }

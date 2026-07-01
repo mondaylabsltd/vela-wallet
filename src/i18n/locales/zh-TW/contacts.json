@@ -33,6 +33,24 @@
     "sends_other": "已發送 {{count}} 次",
     "savedTag": "已儲存",
     "savedContact": "已儲存的聯絡人",
-    "scanToAdd": "掃碼新增地址"
+    "scanToAdd": "掃碼新增地址",
+    "sectionGroups": "群組",
+    "groupMembers": "{{count}} 位成員",
+    "groupNew": "新增群組",
+    "groupEdit": "編輯群組",
+    "groupNameLabel": "群組名稱",
+    "groupNamePlaceholder": "例如：薪資名單",
+    "groupMembersLabel": "成員",
+    "groupNoContacts": "請先儲存一些聯絡人，再於此處分組。",
+    "groupDelete": "刪除群組",
+    "importBtn": "匯入",
+    "importing": "匯入中…",
+    "exportBtn": "匯出",
+    "exportTitle": "匯出聯絡人",
+    "exportBody": "選擇一種格式來備份你的通訊錄。",
+    "importDoneTitle": "匯入完成",
+    "importDoneBody": "已新增 {{added}} 筆，{{skipped}} 筆已存在。",
+    "importFailTitle": "匯入失敗",
+    "importFailBody": "請使用 JSON 或 CSV 聯絡人檔案。"
   }
 }

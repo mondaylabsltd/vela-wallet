@@ -13,11 +13,11 @@
       "themeLabelAuto": "自动",
       "sectionPasskeyIndex": "通行密钥索引",
       "passkeyHint": "此服务存储您的通行密钥公钥，用于跨设备登录。Vela Wallet 无法访问您的通行密钥私钥。",
-      "endpointUrlLabel": "端点 URL",
+      "endpointUrlLabel": "服务地址",
       "resetToDefault": "恢复默认",
       "sectionDebug": "调试",
       "simulateFailure": "模拟端点故障",
-      "warningText": "通行密钥索引服务不可达。创建钱包和登录均需要此服务。请在下方配置可用的端点。"
+      "warningText": "通行密钥索引服务不可达。创建钱包和登录均需要此服务。请在下方配置可用的服务地址。"
     },
     "create": {
       "headerDefault": "创建钱包",

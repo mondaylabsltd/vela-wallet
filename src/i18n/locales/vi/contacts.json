@@ -33,6 +33,24 @@
     "sends_other": "{{count}} lần gửi",
     "savedTag": "Đã lưu",
     "savedContact": "Liên hệ đã lưu",
-    "scanToAdd": "Quét để thêm địa chỉ"
+    "scanToAdd": "Quét để thêm địa chỉ",
+    "sectionGroups": "Nhóm",
+    "groupMembers": "{{count}} thành viên",
+    "groupNew": "Nhóm mới",
+    "groupEdit": "Sửa nhóm",
+    "groupNameLabel": "Tên nhóm",
+    "groupNamePlaceholder": "ví dụ: Trả lương",
+    "groupMembersLabel": "Thành viên",
+    "groupNoContacts": "Hãy lưu vài liên hệ trước, rồi gom chúng vào nhóm tại đây.",
+    "groupDelete": "Xóa nhóm",
+    "importBtn": "Nhập",
+    "importing": "Đang nhập…",
+    "exportBtn": "Xuất",
+    "exportTitle": "Xuất danh bạ",
+    "exportBody": "Chọn một định dạng để sao lưu sổ địa chỉ của bạn.",
+    "importDoneTitle": "Nhập hoàn tất",
+    "importDoneBody": "Đã thêm {{added}}, {{skipped}} đã tồn tại.",
+    "importFailTitle": "Nhập thất bại",
+    "importFailBody": "Hãy dùng tệp danh bạ JSON hoặc CSV."
   }
 }

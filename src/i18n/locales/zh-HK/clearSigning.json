@@ -43,7 +43,7 @@
     "modalNoDescriptor": "找不到描述符。請仔細檢視。",
     "modalIntentUnknown": "未知",
     "modalIntentSend": "發送",
-    "modalValueLabel": "數值",
+    "modalValueLabel": "金額",
     "modalUnverifiedContract": "未經驗證的合約",
     "modalRecipient": "收款人",
     "modalSpender": "支用方",
@@ -72,6 +72,6 @@
     "scenarioBatch": "EIP-5792 批次",
     "scenarioBatchSub": "wallet_sendCalls — 逐筆調用拆解",
     "scenarioPermit2Unlimited": "Permit2 授權（無上限）",
-    "scenarioPermit2UnlimitedSub": "離線簽名 —— 改唔到上限"
+    "scenarioPermit2UnlimitedSub": "鏈下簽名 —— 無法設定上限"
   }
 }

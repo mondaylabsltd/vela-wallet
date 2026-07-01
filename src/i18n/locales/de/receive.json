@@ -7,6 +7,7 @@
     "listeningForDeposits": "Warten auf Eingänge",
     "warningTitle": "Bevor Sie empfangen",
     "warningBody": "Senden Sie nur Assets über unterstützte Netzwerke — nicht unterstützte Überweisungen können dauerhaft verloren gehen.",
+    "warningCounterfactual": "Ihre Adresse ist in jedem unterstützten Netzwerk dieselbe. Hierhin gesendete Gelder sind sicher und gehören Ihnen — schon bevor Ihre Wallet bereitgestellt ist.",
     "warningHint": "Prüfen Sie die",
     "warningHintNetworks": "{{count}} unterstützten Netzwerke",
     "warningHintSuffix": "unten, bevor Sie Ihre Adresse teilen.",

@@ -19,6 +19,7 @@
     "copied": "Đã sao chép!",
     "copyRequestLink": "Sao chép liên kết thanh toán",
     "shareAddressSummary": "Địa chỉ ví của tôi",
+    "warningCounterfactual": "Địa chỉ của bạn giống nhau trên mọi mạng được hỗ trợ. Tiền gửi đến đây luôn an toàn và thuộc về bạn — kể cả trước khi ví của bạn được triển khai.",
     "request": {
       "network": "Mạng",
       "token": "Token",
@@ -33,7 +34,7 @@
       "tokenNotFound": "Không tìm thấy token đó trên mạng này",
       "noTokens": "Không tìm thấy token nào",
       "summaryAmount": "Yêu cầu {{amount}} {{symbol}} · {{network}}",
-      "summaryOpen": "Bất kỳ số lượng {{symbol}} · {{network}}",
+      "summaryOpen": "Số lượng {{symbol}} bất kỳ · {{network}}",
       "share": "Chia sẻ",
       "save": "Lưu",
       "saveImage": "Lưu ảnh",
@@ -59,7 +60,7 @@
       "token": "Token",
       "native": "{{symbol}} (coin gốc)",
       "amount": "Số lượng",
-      "anyAmount": "Bất kỳ số lượng",
+      "anyAmount": "Số lượng bất kỳ",
       "invalidTitle": "Liên kết thanh toán không hợp lệ",
       "invalidBody": "Liên kết này thiếu người nhận hoặc mạng hợp lệ. Hãy yêu cầu người gửi gửi liên kết mới."
     }

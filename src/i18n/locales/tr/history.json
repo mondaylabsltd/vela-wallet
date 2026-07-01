@@ -12,6 +12,8 @@
     "txLabelSignMessage": "Mesaj İmzala",
     "txLabelSignTypedData": "Yapılandırılmış Veri İmzala",
     "txLabelSent": "{{symbol}} Gönderildi",
-    "txSentSubtitle": "Alıcı: {{toName}} · {{networkName}}"
+    "txSentSubtitle": "Alıcı: {{toName}} · {{networkName}}",
+    "txLabelReceived": "{{symbol}} Alındı",
+    "txReceivedSubtitle": "Gönderen: {{fromName}} · {{networkName}}"
   }
 }

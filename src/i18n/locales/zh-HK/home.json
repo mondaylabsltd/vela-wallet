@@ -48,6 +48,13 @@
     "connPending": "處理中",
     "connFailed": "失敗",
     "assetsSheetTitle": "你的資產",
-    "cancel": "取消"
+    "cancel": "取消",
+    "a11yViewAssets": "查看你的資產",
+    "a11yHideBalance": "隱藏餘額",
+    "a11yShowBalance": "顯示餘額",
+    "a11yChangeCurrency": "更改顯示貨幣，目前為 {{code}}",
+    "a11yViewStatement": "在區塊鏈瀏覽器查看完整對帳單",
+    "a11ySwitchAccount": "帳戶 {{name}}。切換帳戶",
+    "a11yOpenSettings": "設定"
   }
 }

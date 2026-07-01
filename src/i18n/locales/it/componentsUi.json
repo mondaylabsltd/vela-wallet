@@ -31,7 +31,6 @@
       "signLabel": "Firma",
       "confirmLabel": "Conferma",
       "confirmIntentLabel": "Conferma: {{intent}}",
-      "approve": "Approva",
       "dismiss": "Ignora",
       "reject": "Rifiuta",
       "personalSignTag": "personal_sign · Nessuna commissione di gas",
@@ -66,7 +65,7 @@
       "contractTag": "Contratto",
       "holdToConfirm": "Tieni premuto per confermare",
       "advancedToggle": "Avanzate — mostra i dati grezzi",
-      "batchIntent": "Gruppo",
+      "batchIntent": "Batch",
       "batchSubtitle": "{{count}} transazioni, firmate insieme",
       "batchCall": "Chiamata al contratto",
       "balanceUnderfundedNative": "{{symbol}} non sufficienti per coprire questo trasferimento: ci si aspetta che fallisca on-chain.",
@@ -115,12 +114,18 @@
       "expired": "Questo permesso è già scaduto",
       "noExpiry": "Questa approvazione non scade mai",
       "expiresLabel": "Scade",
-      "chooseAction": "Scegli Revoca o Concedi per continuare."
+      "chooseAction": "Scegli Revoca o Concedi per continuare.",
+      "unlimitedValue": "Illimitato",
+      "multiplePermits": "Più token",
+      "permitTag": "Permesso di spesa (firma)",
+      "permitCantCap": "Un permesso è una firma — il suo importo non può essere limitato qui. Per limitare la spesa, usa invece un Approve on-chain.",
+      "permitNote": "Stai firmando un permesso di spesa — la dApp può muovere fino a questo importo per tuo conto."
     },
     "currency": {
       "title": "Valuta di visualizzazione",
       "searchPlaceholder": "Cerca valuta",
-      "noMatch": "Nessuna valuta corrisponde a «{{query}}»."
+      "noMatch": "Nessuna valuta corrisponde a «{{query}}».",
+      "clearSearch": "Cancella la ricerca"
     },
     "scanner": {
       "title": "Scansiona QR",
@@ -149,13 +154,16 @@
     },
     "dock": {
       "receive": "Ricevi",
-      "send": "Invia"
+      "send": "Invia",
+      "scan": "Scansiona"
     },
     "networkFilter": {
       "selectChain": "Seleziona rete",
       "searchChains": "Cerca reti",
       "allNetworks": "Tutte le reti",
-      "showEvery": "Mostra tutte le reti"
+      "showEvery": "Mostra tutte le reti",
+      "clearFilter": "Cancella il filtro di rete",
+      "toggleSearch": "Cerca reti"
     },
     "chart": {
       "noDataFor": "Nessun dato per {{label}}",

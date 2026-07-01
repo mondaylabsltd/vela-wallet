@@ -48,6 +48,13 @@
     "connPending": "Обработка",
     "connFailed": "Не удалось",
     "assetsSheetTitle": "Ваши активы",
-    "cancel": "Отмена"
+    "cancel": "Отмена",
+    "a11yViewAssets": "Посмотреть ваши активы",
+    "a11yHideBalance": "Скрыть баланс",
+    "a11yShowBalance": "Показать баланс",
+    "a11yChangeCurrency": "Изменить валюту отображения, сейчас {{code}}",
+    "a11yViewStatement": "Открыть полную выписку в обозревателе блоков",
+    "a11ySwitchAccount": "Аккаунт {{name}}. Сменить аккаунт",
+    "a11yOpenSettings": "Настройки"
   }
 }

@@ -33,6 +33,24 @@
     "sends_other": "{{count}} Überweisungen",
     "savedTag": "Gespeichert",
     "savedContact": "Gespeicherter Kontakt",
-    "scanToAdd": "Adresse per Scan hinzufügen"
+    "scanToAdd": "Adresse per Scan hinzufügen",
+    "sectionGroups": "Gruppen",
+    "groupMembers": "{{count}} Mitglieder",
+    "groupNew": "Neue Gruppe",
+    "groupEdit": "Gruppe bearbeiten",
+    "groupNameLabel": "Gruppenname",
+    "groupNamePlaceholder": "z. B. Gehaltsabrechnung",
+    "groupMembersLabel": "Mitglieder",
+    "groupNoContacts": "Speichern Sie zuerst einige Kontakte und gruppieren Sie sie dann hier.",
+    "groupDelete": "Gruppe löschen",
+    "importBtn": "Importieren",
+    "importing": "Wird importiert …",
+    "exportBtn": "Exportieren",
+    "exportTitle": "Kontakte exportieren",
+    "exportBody": "Wählen Sie ein Format, um Ihr Adressbuch zu sichern.",
+    "importDoneTitle": "Import abgeschlossen",
+    "importDoneBody": "{{added}} hinzugefügt, {{skipped}} bereits vorhanden.",
+    "importFailTitle": "Import fehlgeschlagen",
+    "importFailBody": "Verwenden Sie eine JSON- oder CSV-Kontaktdatei."
   }
 }

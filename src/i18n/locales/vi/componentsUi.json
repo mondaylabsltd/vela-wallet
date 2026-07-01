@@ -31,7 +31,6 @@
       "signLabel": "Ký",
       "confirmLabel": "Xác nhận",
       "confirmIntentLabel": "Xác nhận {{intent}}",
-      "approve": "Phê duyệt",
       "dismiss": "Bỏ qua",
       "reject": "Từ chối",
       "personalSignTag": "personal_sign · Không tốn phí gas",
@@ -115,12 +114,18 @@
       "expired": "Quyền cấp này đã hết hạn",
       "noExpiry": "Quyền phê duyệt này không bao giờ hết hạn",
       "expiresLabel": "Hết hạn",
-      "chooseAction": "Chọn Thu hồi hoặc Cấp quyền để tiếp tục."
+      "chooseAction": "Chọn Thu hồi hoặc Cấp quyền để tiếp tục.",
+      "unlimitedValue": "Không giới hạn",
+      "multiplePermits": "Nhiều token",
+      "permitTag": "Cho phép chi (chữ ký)",
+      "permitCantCap": "Một permit là một chữ ký — không thể giới hạn số lượng của nó ở đây. Để giới hạn mức chi, hãy dùng Approve on-chain thay thế.",
+      "permitNote": "Bạn đang ký một quyền cho phép chi — dApp có thể chuyển tối đa số lượng này thay cho bạn."
     },
     "currency": {
       "title": "Tiền tệ hiển thị",
       "searchPlaceholder": "Tìm tiền tệ",
-      "noMatch": "Không có tiền tệ nào khớp với \"{{query}}\"."
+      "noMatch": "Không có tiền tệ nào khớp với \"{{query}}\".",
+      "clearSearch": "Xóa tìm kiếm"
     },
     "scanner": {
       "title": "Quét QR",
@@ -149,13 +154,16 @@
     },
     "dock": {
       "receive": "Nhận",
-      "send": "Gửi"
+      "send": "Gửi",
+      "scan": "Quét"
     },
     "networkFilter": {
       "selectChain": "Chọn chain",
       "searchChains": "Tìm chain",
       "allNetworks": "Tất cả các mạng",
-      "showEvery": "Hiển thị mọi chain"
+      "showEvery": "Hiển thị mọi chain",
+      "clearFilter": "Xóa bộ lọc mạng",
+      "toggleSearch": "Tìm chain"
     },
     "chart": {
       "noDataFor": "Không có dữ liệu cho {{label}}",

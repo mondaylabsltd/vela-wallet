@@ -23,7 +23,7 @@
       "assetsCount": "{{n}} asset",
       "statusConfirmed": "Confermato",
       "statusSubmitted": "Inviato",
-      "statusFailed": "Fallito",
+      "statusFailed": "Non riuscita",
       "failedHint": "Questa transazione non è andata a buon fine on-chain."
     },
     "detail": {

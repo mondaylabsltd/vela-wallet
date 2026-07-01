@@ -33,6 +33,24 @@
     "sends_other": "{{count}} kiriman",
     "savedTag": "Tersimpan",
     "savedContact": "Kontak tersimpan",
-    "scanToAdd": "Pindai untuk menambah alamat"
+    "scanToAdd": "Pindai untuk menambah alamat",
+    "sectionGroups": "Grup",
+    "groupMembers": "{{count}} anggota",
+    "groupNew": "Grup baru",
+    "groupEdit": "Edit grup",
+    "groupNameLabel": "Nama grup",
+    "groupNamePlaceholder": "mis. Penggajian",
+    "groupMembersLabel": "Anggota",
+    "groupNoContacts": "Simpan beberapa kontak dulu, lalu kelompokkan di sini.",
+    "groupDelete": "Hapus grup",
+    "importBtn": "Impor",
+    "importing": "Mengimpor…",
+    "exportBtn": "Ekspor",
+    "exportTitle": "Ekspor kontak",
+    "exportBody": "Pilih format untuk mencadangkan buku alamat Anda.",
+    "importDoneTitle": "Impor selesai",
+    "importDoneBody": "{{added}} ditambahkan, {{skipped}} sudah ada.",
+    "importFailTitle": "Impor gagal",
+    "importFailBody": "Gunakan berkas kontak JSON atau CSV."
   }
 }

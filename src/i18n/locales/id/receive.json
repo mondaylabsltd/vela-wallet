@@ -19,6 +19,7 @@
     "copied": "Disalin!",
     "copyRequestLink": "Salin tautan pembayaran",
     "shareAddressSummary": "Alamat dompet saya",
+    "warningCounterfactual": "Alamat Anda sama di setiap jaringan yang didukung. Dana yang dikirim ke sini aman dan menjadi milik Anda — bahkan sebelum dompet Anda di-deploy.",
     "request": {
       "network": "Jaringan",
       "token": "Token",

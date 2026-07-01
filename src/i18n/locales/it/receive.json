@@ -11,6 +11,7 @@
     "warningHintNetworks": "{{count}} reti supportate",
     "warningHintSuffix": "qui sotto prima di condividere il tuo indirizzo.",
     "warningConfirm": "Ho capito",
+    "warningCounterfactual": "Il tuo indirizzo è lo stesso su ogni rete supportata. I fondi inviati qui sono al sicuro e sono tuoi — anche prima che il tuo wallet venga deployato.",
     "networksLabel": "Funziona su {{count}} reti EVM",
     "shareCardHeadline": "Scansiona per inviarmi crypto",
     "shareDialogTitle": "Indirizzo wallet di {{name}}",

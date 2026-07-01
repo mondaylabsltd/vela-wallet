@@ -70,6 +70,8 @@
     "scenarioExpiredSwap": "Abgelaufene Swap-Frist",
     "scenarioExpiredSwapSub": "Frist bereits abgelaufen — markieren",
     "scenarioBatch": "EIP-5792-Stapel",
-    "scenarioBatchSub": "wallet_sendCalls — Aufschlüsselung pro Aufruf"
+    "scenarioBatchSub": "wallet_sendCalls — Aufschlüsselung pro Aufruf",
+    "scenarioPermit2Unlimited": "Permit2-Freigabe (unbegrenzt)",
+    "scenarioPermit2UnlimitedSub": "Off-chain-Signatur — nicht begrenzbar"
   }
 }

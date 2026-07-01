@@ -50,7 +50,7 @@
     "modalInteractingWith": "상호작용 대상",
     "modalSigningFor": "서명 대상",
     "modalTypeLabel": "유형",
-    "modalUnlimitedWarning": "무제한 — 이 컨트랙트가 보유한 모든 토큰을 사용할 수 있습니다",
+    "modalUnlimitedWarning": "무제한 — 이 컨트랙트가 내 토큰을 모두 사용할 수 있습니다",
     "modalUndecodedWarning": "디코딩할 수 없음 — ERC-7730 디스크립터 없음 ({{bytes}} 바이트)",
     "modalRawCalldata": "원시 calldata",
     "modalSignatureRequest": "서명 요청",
@@ -70,6 +70,8 @@
     "scenarioExpiredSwap": "만료된 스왑 마감 시각",
     "scenarioExpiredSwapSub": "마감 시각이 이미 지남 — 표시 처리",
     "scenarioBatch": "EIP-5792 일괄 처리",
-    "scenarioBatchSub": "wallet_sendCalls — 호출별 상세 내역"
+    "scenarioBatchSub": "wallet_sendCalls — 호출별 상세 내역",
+    "scenarioPermit2Unlimited": "Permit2 승인 (무제한)",
+    "scenarioPermit2UnlimitedSub": "오프체인 서명 — 한도를 설정할 수 없습니다"
   }
 }

@@ -86,7 +86,8 @@
     "currency": {
       "title": "显示货币",
       "searchPlaceholder": "搜索货币",
-      "noMatch": "没有符合「{{query}}」的货币。"
+      "noMatch": "没有符合「{{query}}」的货币。",
+      "clearSearch": "清除搜索"
     },
     "scanner": {
       "title": "扫描二维码",
@@ -115,13 +116,16 @@
     },
     "dock": {
       "receive": "接收",
-      "send": "发送"
+      "send": "发送",
+      "scan": "扫码"
     },
     "networkFilter": {
       "selectChain": "选择链",
       "searchChains": "搜索链",
       "allNetworks": "所有网络",
-      "showEvery": "显示所有链"
+      "showEvery": "显示所有链",
+      "clearFilter": "清除网络筛选",
+      "toggleSearch": "搜索链"
     },
     "chart": {
       "noDataFor": "{{label}} 暂无数据",

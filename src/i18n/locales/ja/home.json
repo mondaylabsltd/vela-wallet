@@ -48,6 +48,13 @@
     "connPending": "処理中",
     "connFailed": "失敗",
     "assetsSheetTitle": "保有資産",
-    "cancel": "キャンセル"
+    "cancel": "キャンセル",
+    "a11yViewAssets": "保有資産を表示",
+    "a11yHideBalance": "残高を隠す",
+    "a11yShowBalance": "残高を表示",
+    "a11yChangeCurrency": "表示通貨を変更します。現在は {{code}} です",
+    "a11yViewStatement": "ブロックエクスプローラーで全取引明細を表示",
+    "a11ySwitchAccount": "アカウント {{name}}。アカウントを切り替える",
+    "a11yOpenSettings": "設定"
   }
 }

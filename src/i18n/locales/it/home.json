@@ -48,6 +48,13 @@
     "connPending": "In elaborazione",
     "connFailed": "Non riuscita",
     "assetsSheetTitle": "I tuoi asset",
-    "cancel": "Annulla"
+    "cancel": "Annulla",
+    "a11yViewAssets": "Visualizza i tuoi asset",
+    "a11yHideBalance": "Nascondi il saldo",
+    "a11yShowBalance": "Mostra il saldo",
+    "a11yChangeCurrency": "Cambia la valuta di visualizzazione, attualmente {{code}}",
+    "a11yViewStatement": "Visualizza l'estratto conto completo sul block explorer",
+    "a11ySwitchAccount": "Account {{name}}. Cambia account",
+    "a11yOpenSettings": "Impostazioni"
   }
 }

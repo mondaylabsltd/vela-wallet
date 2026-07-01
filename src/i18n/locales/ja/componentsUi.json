@@ -33,7 +33,7 @@
       "confirmIntentLabel": "{{intent}}を確認",
       "dismiss": "閉じる",
       "reject": "拒否",
-      "personalSignTag": "personal_sign · Gas 手数料なし",
+      "personalSignTag": "personal_sign · ガス代なし",
       "unlimitedWarning": "無制限 — このコントラクトはあなたのトークンをすべて使用できます",
       "partialWarning": "不完全 — 一部の詳細をデコードできませんでした。承認する前に内容を慎重にご確認ください。",
       "unverifiedWarning": "トークンの数量をオンチェーンで確認できませんでした — 承認する前に再度ご確認ください。",
@@ -114,12 +114,18 @@
       "expired": "この承認（permit）はすでに期限切れです",
       "noExpiry": "この承認に期限はありません",
       "expiresLabel": "有効期限",
-      "chooseAction": "続けるには「取り消す」か「許可」を選択してください。"
+      "chooseAction": "続けるには「取り消す」か「許可」を選択してください。",
+      "unlimitedValue": "無制限",
+      "multiplePermits": "複数のトークン",
+      "permitTag": "使用許可（署名）",
+      "permitCantCap": "使用許可（permit）は署名であり、その金額をここで上限設定することはできません。使用額を制限するには、代わりにオンチェーンの Approve をご利用ください。",
+      "permitNote": "使用許可（permit）に署名しようとしています — dApp はあなたに代わってこの金額まで移動できます。"
     },
     "currency": {
       "title": "表示通貨",
       "searchPlaceholder": "通貨を検索",
-      "noMatch": "「{{query}}」に一致する通貨はありません。"
+      "noMatch": "「{{query}}」に一致する通貨はありません。",
+      "clearSearch": "検索をクリア"
     },
     "scanner": {
       "title": "QR をスキャン",
@@ -148,13 +154,16 @@
     },
     "dock": {
       "receive": "受け取る",
-      "send": "送る"
+      "send": "送る",
+      "scan": "スキャン"
     },
     "networkFilter": {
       "selectChain": "チェーンを選択",
       "searchChains": "チェーンを検索",
       "allNetworks": "すべてのネットワーク",
-      "showEvery": "すべてのチェーンを表示"
+      "showEvery": "すべてのチェーンを表示",
+      "clearFilter": "ネットワークフィルターをクリア",
+      "toggleSearch": "チェーンを検索"
     },
     "chart": {
       "noDataFor": "{{label}} のデータはありません",

@@ -10,7 +10,7 @@
       "txHash": "İşlem Hash'i",
       "confirming": "Onaylanıyor…",
       "confirmingHint": "Gönderildi! Zincir üzerinde onaylanıyor — gezgin bağlantısı birazdan görünecek.",
-      "scanHint": "Blok Gezgininde görüntülemek için tara",
+      "scanHint": "Blok Gezgininde görüntülemek için tarayın",
       "footerBrand": "VELA WALLET",
       "footerUrl": "getvela.app",
       "explorer": "Blok Gezgini",

@@ -70,6 +70,8 @@
     "scenarioExpiredSwap": "Истёкший срок обмена",
     "scenarioExpiredSwapSub": "Срок уже прошёл — отметить это",
     "scenarioBatch": "Пакет EIP-5792",
-    "scenarioBatchSub": "wallet_sendCalls — разбивка по каждому вызову"
+    "scenarioBatchSub": "wallet_sendCalls — разбивка по каждому вызову",
+    "scenarioPermit2Unlimited": "Permit2 Approve (без лимита)",
+    "scenarioPermit2UnlimitedSub": "Офчейн-подпись — лимит установить нельзя"
   }
 }

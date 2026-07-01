@@ -19,6 +19,7 @@
     "copied": "복사됨!",
     "copyRequestLink": "결제 링크 복사",
     "shareAddressSummary": "내 지갑 주소",
+    "warningCounterfactual": "지원되는 모든 네트워크에서 주소가 동일합니다. 지갑이 배포되기 전이라도 이곳으로 보낸 자산은 안전하며 내 자산입니다.",
     "request": {
       "network": "네트워크",
       "token": "토큰",

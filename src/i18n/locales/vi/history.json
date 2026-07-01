@@ -12,6 +12,8 @@
     "txLabelSignMessage": "Ký thông điệp",
     "txLabelSignTypedData": "Ký dữ liệu có cấu trúc",
     "txLabelSent": "Đã gửi {{symbol}}",
-    "txSentSubtitle": "Đến {{toName}} · {{networkName}}"
+    "txSentSubtitle": "Đến {{toName}} · {{networkName}}",
+    "txLabelReceived": "Đã nhận {{symbol}}",
+    "txReceivedSubtitle": "Từ {{fromName}} · {{networkName}}"
   }
 }

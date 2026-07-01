@@ -11,6 +11,7 @@
     "warningHintNetworks": "{{count}} 個支援的網路",
     "warningHintSuffix": "。",
     "warningConfirm": "我了解",
+    "warningCounterfactual": "你的地址在每個支援的網路上都相同。發送到這裡的資金安全無虞、屬於你——即使在你的錢包尚未部署之前也是如此。",
     "networksLabel": "可在 {{count}} 個 EVM 網路上使用",
     "shareCardHeadline": "掃描即可向我發送加密貨幣",
     "shareDialogTitle": "{{name}} 錢包地址",

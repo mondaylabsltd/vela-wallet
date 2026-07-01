@@ -70,6 +70,8 @@
     "scenarioExpiredSwap": "Batas waktu swap kedaluwarsa",
     "scenarioExpiredSwapSub": "Batas waktu sudah lewat — tandai",
     "scenarioBatch": "Batch EIP-5792",
-    "scenarioBatchSub": "wallet_sendCalls — rincian per panggilan"
+    "scenarioBatchSub": "wallet_sendCalls — rincian per panggilan",
+    "scenarioPermit2Unlimited": "Approve Permit2 (Tanpa Batas)",
+    "scenarioPermit2UnlimitedSub": "Tanda tangan off-chain — tidak dapat dibatasi"
   }
 }

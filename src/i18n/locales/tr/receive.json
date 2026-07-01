@@ -11,6 +11,7 @@
     "warningHintNetworks": "{{count}} ağı",
     "warningHintSuffix": "kontrol edin.",
     "warningConfirm": "Anladım",
+    "warningCounterfactual": "Adresiniz desteklenen her ağda aynıdır. Buraya gönderilen fonlar güvendedir ve size aittir — cüzdanınız dağıtılmadan önce bile.",
     "networksLabel": "{{count}} EVM ağında çalışır",
     "shareCardHeadline": "Bana Kripto Göndermek İçin Tara",
     "shareDialogTitle": "{{name}} Cüzdan Adresi",

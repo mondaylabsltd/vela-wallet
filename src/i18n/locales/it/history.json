@@ -12,6 +12,8 @@
     "txLabelSignMessage": "Firma messaggio",
     "txLabelSignTypedData": "Firma dati tipizzati",
     "txLabelSent": "Inviato {{symbol}}",
-    "txSentSubtitle": "A {{toName}} · {{networkName}}"
+    "txSentSubtitle": "A {{toName}} · {{networkName}}",
+    "txLabelReceived": "Ricevuto {{symbol}}",
+    "txReceivedSubtitle": "Da {{fromName}} · {{networkName}}"
   }
 }

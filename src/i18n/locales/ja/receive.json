@@ -19,6 +19,7 @@
     "copied": "コピーしました！",
     "copyRequestLink": "支払いリンクをコピー",
     "shareAddressSummary": "自分のウォレットアドレス",
+    "warningCounterfactual": "あなたのアドレスは、対応するすべてのネットワークで同一です。ここに送られた資産は、ウォレットがデプロイされる前でも安全に、あなたのものとして保管されます。",
     "request": {
       "network": "ネットワーク",
       "token": "トークン",

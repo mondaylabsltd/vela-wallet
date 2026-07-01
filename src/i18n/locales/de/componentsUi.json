@@ -31,7 +31,6 @@
       "signLabel": "Signieren",
       "confirmLabel": "Bestätigen",
       "confirmIntentLabel": "{{intent}} bestätigen",
-      "approve": "Genehmigen",
       "dismiss": "Schließen",
       "reject": "Ablehnen",
       "personalSignTag": "personal_sign · Keine Gas-Gebühr",
@@ -82,7 +81,7 @@
       "balanceChangesTitle": "Guthabenänderungen",
       "balanceNoAssetsMove": "Es verlassen keine Assets Ihre Wallet",
       "balanceUnverifiedToken": "Nicht verifizierter Token",
-      "balanceSelfTransfer": "An deine eigene Adresse · Guthaben bleibt gleich"
+      "balanceSelfTransfer": "An Ihre eigene Adresse · Guthaben bleibt gleich"
     },
     "signingApprove": {
       "resultingTotal": "Neue Gesamtfreigabe",
@@ -115,12 +114,18 @@
       "expired": "Dieser Permit ist bereits abgelaufen",
       "noExpiry": "Diese Freigabe läuft nie ab",
       "expiresLabel": "Läuft ab",
-      "chooseAction": "Wählen Sie Widerrufen oder Gewähren, um fortzufahren."
+      "chooseAction": "Wählen Sie Widerrufen oder Gewähren, um fortzufahren.",
+      "unlimitedValue": "Unbegrenzt",
+      "multiplePermits": "Mehrere Token",
+      "permitTag": "Ausgabegenehmigung (Signatur)",
+      "permitCantCap": "Ein Permit ist eine Signatur — sein Betrag kann hier nicht begrenzt werden. Verwenden Sie stattdessen ein On-chain-Approve, um die Ausgaben zu begrenzen.",
+      "permitNote": "Sie signieren eine Ausgabegenehmigung — die dApp kann in Ihrem Namen bis zu diesem Betrag bewegen."
     },
     "currency": {
       "title": "Anzeigewährung",
       "searchPlaceholder": "Währung suchen",
-      "noMatch": "Keine Währung passt zu „{{query}}“."
+      "noMatch": "Keine Währung passt zu „{{query}}“.",
+      "clearSearch": "Suche löschen"
     },
     "scanner": {
       "title": "QR-Code scannen",
@@ -149,13 +154,16 @@
     },
     "dock": {
       "receive": "Empfangen",
-      "send": "Senden"
+      "send": "Senden",
+      "scan": "Scannen"
     },
     "networkFilter": {
       "selectChain": "Chain auswählen",
       "searchChains": "Chains suchen",
       "allNetworks": "Alle Netzwerke",
-      "showEvery": "Jede Chain anzeigen"
+      "showEvery": "Jede Chain anzeigen",
+      "clearFilter": "Netzwerkfilter zurücksetzen",
+      "toggleSearch": "Chains suchen"
     },
     "chart": {
       "noDataFor": "Keine Daten für {{label}}",

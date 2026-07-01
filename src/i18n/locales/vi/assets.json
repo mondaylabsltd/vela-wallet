@@ -24,7 +24,7 @@
     "rpcFixSaveBtn": "Lưu và thử lại",
     "errorSaveRpc": "Không lưu được URL RPC.",
     "rpcFixUnreachable": "Không thể kết nối tới RPC đó. Hãy kiểm tra URL và thử lại.",
-    "rpcFixWrongChain": "RPC đó phục vụ một mạng khác (chuỗi {{actual}}, mong đợi {{expected}}).",
+    "rpcFixWrongChain": "RPC đó phục vụ một mạng khác (chain {{actual}}, cần {{expected}}).",
     "rpcProvidersTitle": "Nơi lấy RPC đáng tin cậy",
     "rpcProvidersHint": "Điểm cuối miễn phí — đăng ký, sao chép URL của bạn và dán vào ô phía trên.",
     "rpcReport": "Vẫn không hoạt động? Báo cáo",

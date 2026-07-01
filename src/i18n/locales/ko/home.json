@@ -48,6 +48,13 @@
     "connPending": "처리 중",
     "connFailed": "실패",
     "assetsSheetTitle": "내 자산",
-    "cancel": "취소"
+    "cancel": "취소",
+    "a11yViewAssets": "내 자산 보기",
+    "a11yHideBalance": "잔액 숨기기",
+    "a11yShowBalance": "잔액 표시",
+    "a11yChangeCurrency": "표시 통화 변경, 현재 {{code}}",
+    "a11yViewStatement": "블록 탐색기에서 전체 거래 내역 보기",
+    "a11ySwitchAccount": "{{name}} 계정. 계정 전환",
+    "a11yOpenSettings": "설정"
   }
 }

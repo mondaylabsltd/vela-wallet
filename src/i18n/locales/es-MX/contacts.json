@@ -33,6 +33,24 @@
     "sends_other": "{{count}} envíos",
     "savedTag": "Guardado",
     "savedContact": "Contacto guardado",
-    "scanToAdd": "Escanear para agregar una dirección"
+    "scanToAdd": "Escanear para agregar una dirección",
+    "sectionGroups": "Grupos",
+    "groupMembers": "{{count}} integrantes",
+    "groupNew": "Nuevo grupo",
+    "groupEdit": "Editar grupo",
+    "groupNameLabel": "Nombre del grupo",
+    "groupNamePlaceholder": "ej. Nómina",
+    "groupMembersLabel": "Integrantes",
+    "groupNoContacts": "Primero guarda algunos contactos y luego agrúpalos aquí.",
+    "groupDelete": "Eliminar grupo",
+    "importBtn": "Importar",
+    "importing": "Importando…",
+    "exportBtn": "Exportar",
+    "exportTitle": "Exportar contactos",
+    "exportBody": "Elige un formato para respaldar tu libreta de direcciones.",
+    "importDoneTitle": "Importación completa",
+    "importDoneBody": "{{added}} agregados, {{skipped}} ya existían.",
+    "importFailTitle": "Falló la importación",
+    "importFailBody": "Usa un archivo de contactos en JSON o CSV."
   }
 }

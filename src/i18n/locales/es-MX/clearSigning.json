@@ -70,6 +70,8 @@
     "scenarioExpiredSwap": "Fecha límite de swap vencida",
     "scenarioExpiredSwapSub": "La fecha límite ya pasó — márcalo",
     "scenarioBatch": "Lote EIP-5792",
-    "scenarioBatchSub": "wallet_sendCalls — desglose por llamada"
+    "scenarioBatchSub": "wallet_sendCalls — desglose por llamada",
+    "scenarioPermit2Unlimited": "Aprobación de Permit2 (ilimitada)",
+    "scenarioPermit2UnlimitedSub": "Firma fuera de cadena — no se puede limitar"
   }
 }

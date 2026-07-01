@@ -33,6 +33,24 @@
     "sends_other": "{{count}} 回送付",
     "savedTag": "保存済み",
     "savedContact": "保存済みの連絡先",
-    "scanToAdd": "スキャンしてアドレスを追加"
+    "scanToAdd": "スキャンしてアドレスを追加",
+    "sectionGroups": "グループ",
+    "groupMembers": "{{count}} 名のメンバー",
+    "groupNew": "新しいグループ",
+    "groupEdit": "グループを編集",
+    "groupNameLabel": "グループ名",
+    "groupNamePlaceholder": "例：給与支払い",
+    "groupMembersLabel": "メンバー",
+    "groupNoContacts": "まず連絡先を保存してから、ここでグループにまとめましょう。",
+    "groupDelete": "グループを削除",
+    "importBtn": "取り込む",
+    "importing": "取り込み中…",
+    "exportBtn": "書き出す",
+    "exportTitle": "連絡先を書き出す",
+    "exportBody": "アドレス帳をバックアップする形式を選択してください。",
+    "importDoneTitle": "取り込みが完了しました",
+    "importDoneBody": "{{added}} 件を追加、{{skipped}} 件は既に存在していました。",
+    "importFailTitle": "取り込みに失敗しました",
+    "importFailBody": "JSON または CSV の連絡先ファイルをご利用ください。"
   }
 }

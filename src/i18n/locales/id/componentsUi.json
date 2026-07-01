@@ -31,7 +31,6 @@
       "signLabel": "Tanda Tangani",
       "confirmLabel": "Konfirmasi",
       "confirmIntentLabel": "Konfirmasi {{intent}}",
-      "approve": "Setujui",
       "dismiss": "Tutup",
       "reject": "Tolak",
       "personalSignTag": "personal_sign · Tanpa biaya gas",
@@ -85,8 +84,8 @@
       "balanceSelfTransfer": "Ke alamat Anda sendiri · saldo tidak berubah"
     },
     "signingApprove": {
-      "resultingTotal": "Total tunjangan baru",
-      "resultingTotalUnknown": "Menambah {{amount}} di atas tunjangan Anda saat ini (jumlah saat ini tidak dapat dibaca)",
+      "resultingTotal": "Total izin belanja baru",
+      "resultingTotalUnknown": "Menambah {{amount}} di atas izin belanja Anda saat ini (jumlah saat ini tidak dapat dibaca)",
       "spendingCap": "Batas belanja",
       "reduceBy": "Kurangi sebesar",
       "requested": "Diminta",
@@ -115,12 +114,18 @@
       "expired": "Permit ini sudah kedaluwarsa",
       "noExpiry": "Persetujuan ini tidak pernah kedaluwarsa",
       "expiresLabel": "Kedaluwarsa",
-      "chooseAction": "Pilih Cabut atau Berikan untuk melanjutkan."
+      "chooseAction": "Pilih Cabut atau Berikan untuk melanjutkan.",
+      "unlimitedValue": "Tanpa batas",
+      "multiplePermits": "Beberapa token",
+      "permitTag": "Izin belanja (tanda tangan)",
+      "permitCantCap": "Permit adalah sebuah tanda tangan — jumlahnya tidak dapat dibatasi di sini. Untuk membatasi pembelanjaan, gunakan Approve on-chain sebagai gantinya.",
+      "permitNote": "Anda menandatangani izin belanja — dApp dapat memindahkan hingga jumlah ini atas nama Anda."
     },
     "currency": {
       "title": "Mata uang tampilan",
       "searchPlaceholder": "Cari mata uang",
-      "noMatch": "Tidak ada mata uang yang cocok dengan \"{{query}}\"."
+      "noMatch": "Tidak ada mata uang yang cocok dengan \"{{query}}\".",
+      "clearSearch": "Hapus pencarian"
     },
     "scanner": {
       "title": "Pindai QR",
@@ -149,13 +154,16 @@
     },
     "dock": {
       "receive": "Terima",
-      "send": "Kirim"
+      "send": "Kirim",
+      "scan": "Pindai"
     },
     "networkFilter": {
       "selectChain": "Pilih Chain",
       "searchChains": "Cari chain",
       "allNetworks": "Semua Jaringan",
-      "showEvery": "Tampilkan semua chain"
+      "showEvery": "Tampilkan semua chain",
+      "clearFilter": "Hapus filter jaringan",
+      "toggleSearch": "Cari chain"
     },
     "chart": {
       "noDataFor": "Tidak ada data untuk {{label}}",

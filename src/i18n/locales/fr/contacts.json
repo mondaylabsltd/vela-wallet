@@ -33,6 +33,24 @@
     "sends_other": "{{count}} envois",
     "savedTag": "Enregistré",
     "savedContact": "Contact enregistré",
-    "scanToAdd": "Scanner pour ajouter une adresse"
+    "scanToAdd": "Scanner pour ajouter une adresse",
+    "sectionGroups": "Groupes",
+    "groupMembers": "{{count}} membres",
+    "groupNew": "Nouveau groupe",
+    "groupEdit": "Modifier le groupe",
+    "groupNameLabel": "Nom du groupe",
+    "groupNamePlaceholder": "ex. Paie",
+    "groupMembersLabel": "Membres",
+    "groupNoContacts": "Enregistrez d'abord quelques contacts, puis regroupez-les ici.",
+    "groupDelete": "Supprimer le groupe",
+    "importBtn": "Importer",
+    "importing": "Importation…",
+    "exportBtn": "Exporter",
+    "exportTitle": "Exporter les contacts",
+    "exportBody": "Choisissez un format pour sauvegarder votre carnet d'adresses.",
+    "importDoneTitle": "Importation terminée",
+    "importDoneBody": "{{added}} ajoutés, {{skipped}} existaient déjà.",
+    "importFailTitle": "Échec de l'importation",
+    "importFailBody": "Utilisez un fichier de contacts JSON ou CSV."
   }
 }

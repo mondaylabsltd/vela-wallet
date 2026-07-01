@@ -24,7 +24,7 @@
       "statusConfirmed": "Đã xác nhận",
       "statusSubmitted": "Đã gửi",
       "statusFailed": "Thất bại",
-      "failedHint": "Giao dịch này không thành công trên chuỗi."
+      "failedHint": "Giao dịch này không thể hoàn tất on-chain."
     },
     "detail": {
       "received": "Đã nhận",

@@ -12,6 +12,8 @@
     "txLabelSignMessage": "メッセージの署名",
     "txLabelSignTypedData": "型付きデータの署名",
     "txLabelSent": "{{symbol}} を送金",
-    "txSentSubtitle": "宛先: {{toName}} · {{networkName}}"
+    "txSentSubtitle": "宛先: {{toName}} · {{networkName}}",
+    "txLabelReceived": "{{symbol}} を受取",
+    "txReceivedSubtitle": "差出人: {{fromName}} · {{networkName}}"
   }
 }

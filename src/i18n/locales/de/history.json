@@ -12,6 +12,8 @@
     "txLabelSignMessage": "Nachricht signieren",
     "txLabelSignTypedData": "Typisierte Daten signieren",
     "txLabelSent": "{{symbol}} gesendet",
-    "txSentSubtitle": "An {{toName}} · {{networkName}}"
+    "txSentSubtitle": "An {{toName}} · {{networkName}}",
+    "txLabelReceived": "{{symbol}} erhalten",
+    "txReceivedSubtitle": "Von {{fromName}} · {{networkName}}"
   }
 }

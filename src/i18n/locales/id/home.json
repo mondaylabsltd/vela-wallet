@@ -48,6 +48,13 @@
     "connPending": "Memproses",
     "connFailed": "Gagal",
     "assetsSheetTitle": "Aset Anda",
-    "cancel": "Batal"
+    "cancel": "Batal",
+    "a11yViewAssets": "Lihat aset Anda",
+    "a11yHideBalance": "Sembunyikan saldo",
+    "a11yShowBalance": "Tampilkan saldo",
+    "a11yChangeCurrency": "Ubah mata uang tampilan, saat ini {{code}}",
+    "a11yViewStatement": "Lihat mutasi lengkap di block explorer",
+    "a11ySwitchAccount": "Akun {{name}}. Ganti akun",
+    "a11yOpenSettings": "Pengaturan"
   }
 }

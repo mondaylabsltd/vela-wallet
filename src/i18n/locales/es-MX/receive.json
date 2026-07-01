@@ -19,6 +19,7 @@
     "copied": "¡Copiado!",
     "copyRequestLink": "Copiar enlace de pago",
     "shareAddressSummary": "La dirección de mi billetera",
+    "warningCounterfactual": "Tu dirección es la misma en todas las redes compatibles. Los fondos que envíes aquí están a salvo y son tuyos — incluso antes de que tu billetera se despliegue.",
     "request": {
       "network": "Red",
       "token": "Token",

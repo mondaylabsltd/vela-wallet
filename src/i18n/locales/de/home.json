@@ -48,6 +48,13 @@
     "connPending": "Wird verarbeitet",
     "connFailed": "Fehlgeschlagen",
     "assetsSheetTitle": "Ihre Assets",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "a11yViewAssets": "Ihre Assets anzeigen",
+    "a11yHideBalance": "Guthaben ausblenden",
+    "a11yShowBalance": "Guthaben anzeigen",
+    "a11yChangeCurrency": "Anzeigewährung ändern, aktuell {{code}}",
+    "a11yViewStatement": "Vollständigen Kontoauszug im Block-Explorer ansehen",
+    "a11ySwitchAccount": "Konto {{name}}. Konto wechseln",
+    "a11yOpenSettings": "Einstellungen"
   }
 }

@@ -5,7 +5,7 @@
     "statement": "Sao kê",
     "tabActivity": "Hoạt động",
     "tabConnections": "Kết nối",
-    "liveIndicator": "Trực tiếp · đang theo dõi khoản nhận",
+    "liveIndicator": "Trực tiếp · đang chờ thanh toán",
     "emptyNoActivityNetwork": "Chưa có hoạt động trên mạng này",
     "emptyNoActivity": "Chưa có hoạt động nào",
     "emptySubtitle": "Các khoản thanh toán nhận được sẽ hiển thị tại đây theo thời gian thực.",
@@ -48,6 +48,13 @@
     "connPending": "Đang xử lý",
     "connFailed": "Thất bại",
     "assetsSheetTitle": "Tài sản của bạn",
-    "cancel": "Hủy"
+    "cancel": "Hủy",
+    "a11yViewAssets": "Xem tài sản của bạn",
+    "a11yHideBalance": "Ẩn số dư",
+    "a11yShowBalance": "Hiện số dư",
+    "a11yChangeCurrency": "Đổi tiền tệ hiển thị, hiện tại là {{code}}",
+    "a11yViewStatement": "Xem sao kê đầy đủ trên block explorer",
+    "a11ySwitchAccount": "Tài khoản {{name}}. Chuyển tài khoản",
+    "a11yOpenSettings": "Cài đặt"
   }
 }

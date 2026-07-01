@@ -70,6 +70,8 @@
     "scenarioExpiredSwap": "Scadenza dello swap superata",
     "scenarioExpiredSwapSub": "Scadenza già passata — segnalala",
     "scenarioBatch": "Batch EIP-5792",
-    "scenarioBatchSub": "wallet_sendCalls — dettaglio per chiamata"
+    "scenarioBatchSub": "wallet_sendCalls — dettaglio per chiamata",
+    "scenarioPermit2Unlimited": "Permit2 Approve (illimitato)",
+    "scenarioPermit2UnlimitedSub": "Firma off-chain — non può essere limitata"
   }
 }

@@ -48,6 +48,13 @@
     "connFailed": "失败",
     "assetsSheetTitle": "您的资产",
     "cancel": "取消",
-    "toastReceived": "已收到 {{amount}} {{token}}"
+    "toastReceived": "已收到 {{amount}} {{token}}",
+    "a11yViewAssets": "查看你的资产",
+    "a11yHideBalance": "隐藏余额",
+    "a11yShowBalance": "显示余额",
+    "a11yChangeCurrency": "更改显示货币，当前为 {{code}}",
+    "a11yViewStatement": "在区块浏览器中查看完整对账单",
+    "a11ySwitchAccount": "账户 {{name}}。切换账户",
+    "a11yOpenSettings": "设置"
   }
 }

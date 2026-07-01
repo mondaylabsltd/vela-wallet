@@ -19,6 +19,7 @@
     "copied": "已複製！",
     "copyRequestLink": "複製付款連結",
     "shareAddressSummary": "我的錢包地址",
+    "warningCounterfactual": "你的地址在每個支援的網絡上都相同。發送到這裡的資金安全且屬於你 — 即使你的錢包尚未部署亦然。",
     "request": {
       "network": "網絡",
       "token": "代幣",

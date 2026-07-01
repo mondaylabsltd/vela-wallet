@@ -12,6 +12,8 @@
     "txLabelSignMessage": "簽署訊息",
     "txLabelSignTypedData": "簽署結構化資料",
     "txLabelSent": "已發送 {{symbol}}",
-    "txSentSubtitle": "至 {{toName}} · {{networkName}}"
+    "txSentSubtitle": "至 {{toName}} · {{networkName}}",
+    "txLabelReceived": "已收到 {{symbol}}",
+    "txReceivedSubtitle": "來自 {{fromName}} · {{networkName}}"
   }
 }

@@ -70,6 +70,8 @@
     "scenarioExpiredSwap": "Échéance de swap dépassée",
     "scenarioExpiredSwapSub": "Échéance déjà passée — la signaler",
     "scenarioBatch": "Lot EIP-5792",
-    "scenarioBatchSub": "wallet_sendCalls — détail par appel"
+    "scenarioBatchSub": "wallet_sendCalls — détail par appel",
+    "scenarioPermit2Unlimited": "Approbation Permit2 (illimitée)",
+    "scenarioPermit2UnlimitedSub": "Signature hors chaîne — ne peut pas être plafonnée"
   }
 }

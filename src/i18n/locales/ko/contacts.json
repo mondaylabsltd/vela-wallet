@@ -33,6 +33,24 @@
     "sends_other": "{{count}}회 전송",
     "savedTag": "저장됨",
     "savedContact": "저장된 연락처",
-    "scanToAdd": "스캔하여 주소 추가"
+    "scanToAdd": "스캔하여 주소 추가",
+    "sectionGroups": "그룹",
+    "groupMembers": "구성원 {{count}}명",
+    "groupNew": "새 그룹",
+    "groupEdit": "그룹 수정",
+    "groupNameLabel": "그룹 이름",
+    "groupNamePlaceholder": "예: 급여",
+    "groupMembersLabel": "구성원",
+    "groupNoContacts": "먼저 연락처를 저장한 뒤 여기에서 그룹으로 묶으세요.",
+    "groupDelete": "그룹 삭제",
+    "importBtn": "가져오기",
+    "importing": "가져오는 중…",
+    "exportBtn": "내보내기",
+    "exportTitle": "연락처 내보내기",
+    "exportBody": "주소록을 백업할 형식을 선택하세요.",
+    "importDoneTitle": "가져오기 완료",
+    "importDoneBody": "{{added}}개 추가됨, {{skipped}}개는 이미 존재합니다.",
+    "importFailTitle": "가져오기 실패",
+    "importFailBody": "JSON 또는 CSV 연락처 파일을 사용하세요."
   }
 }

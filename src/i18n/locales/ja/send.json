@@ -1,7 +1,7 @@
 {
   "send": {
     "filterStable": "ステーブルコイン",
-    "filterGas": "ガス",
+    "filterGas": "ガストークン",
     "filterOther": "その他",
     "addTokenBtn": "トークンを追加",
     "tokenCount": "{{n}} 件のトークン",
@@ -27,7 +27,7 @@
     "warnNotEnoughToken": "このアカウントには {{symbol}} の残高が足りません",
     "warnInsufficientForGas": "金額とガス代の合計で {{sym}} が不足しています",
     "warnInsufficientGas": "ガス代の支払いに必要な {{sym}} が不足しています",
-    "warnNeedGas": "Gas 手数料の支払いに {{sym}} が必要です",
+    "warnNeedGas": "ガス代の支払いに {{sym}} が必要です",
     "confirmTitle": "確認",
     "walletFallbackName": "ウォレット",
     "fromLabel": "送金元",
@@ -68,7 +68,7 @@
     },
     "multiSendTitle": "トークンを送る",
     "multiSendSummary": "{{n}} 件 · {{chain}}",
-    "multiSendContinue": "{{n}} 件を送る · {{chain}}",
+    "multiSendContinue": "{{n}} 件を送る · {{chain}} →",
     "selectAllValuable": "価値のあるものを全選択",
     "addRecipient": "受取人を追加",
     "recipientN": "受取人 {{n}}",
@@ -77,6 +77,34 @@
     "alertInsufficientBalanceBody": "合計が残高を超えています。",
     "recipientPickAria": "受取人を選択またはスキャン",
     "multiSendNoFundsAfterGas": "ガス予約後の残高が不足しています。",
-    "gasReserved": "ガス確保済み"
+    "gasReserved": "ガス確保済み",
+    "txErrorGeneric": "トランザクションを送信できませんでした。資産は安全です — もう一度お試しください。",
+    "gasTier": {
+      "slow": "低速",
+      "standard": "標準",
+      "rapid": "急速",
+      "fast": "高速"
+    },
+    "batchImport": "リストを取り込む",
+    "batchTitle": "受取人を取り込む",
+    "batchPastePlaceholder": "0xabc… , 5000\n0xdef… , 8000",
+    "batchImportFile": "ファイルを取り込む",
+    "batchReading": "読み込み中…",
+    "batchTemplate": "テンプレート",
+    "batchUnitFiat": "{{code}} 建ての金額",
+    "batchUnitToken": "{{sym}} 建ての金額",
+    "batchRateLabel": "1 {{sym}} =",
+    "batchRateReset": "自動",
+    "batchNoPrice": "市場価格がありません — 上でレートを指定してください。",
+    "batchBadAddress": "無効なアドレス",
+    "batchDup": "重複 — スキップしました",
+    "batchOverCap": "先頭の {{n}} 名の受取人のみ送信されます。",
+    "batchRejected": "{{n}} 行をスキップしました（無効または重複）。",
+    "batchApply": "{{n}} 名の受取人を取り込む",
+    "batchImportFailedTitle": "ファイルを読み込めませんでした",
+    "batchImportFailedBody": "CSV、TSV、TXT、または Excel ファイルをご利用ください。",
+    "batchModeFiat": "法定通貨の金額で指定",
+    "batchModeToken": "{{sym}} の数量で指定",
+    "batchCurrencyLabel": "価格の基準通貨"
   }
 }

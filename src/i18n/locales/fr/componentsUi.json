@@ -31,7 +31,6 @@
       "signLabel": "Signer",
       "confirmLabel": "Confirmer",
       "confirmIntentLabel": "Confirmer {{intent}}",
-      "approve": "Approuver",
       "dismiss": "Ignorer",
       "reject": "Refuser",
       "personalSignTag": "personal_sign · Sans frais de gas",
@@ -115,12 +114,18 @@
       "expired": "Cette autorisation a déjà expiré",
       "noExpiry": "Cette approbation n'expire jamais",
       "expiresLabel": "Expire le",
-      "chooseAction": "Choisissez Révoquer ou Accorder pour continuer."
+      "chooseAction": "Choisissez Révoquer ou Accorder pour continuer.",
+      "unlimitedValue": "Illimité",
+      "multiplePermits": "Plusieurs tokens",
+      "permitTag": "Permission de dépense (signature)",
+      "permitCantCap": "Un permit est une signature — son montant ne peut pas être plafonné ici. Pour limiter la dépense, utilisez plutôt une approbation Approve on-chain.",
+      "permitNote": "Vous signez une permission de dépense — la dApp peut déplacer jusqu'à ce montant en votre nom."
     },
     "currency": {
       "title": "Devise d'affichage",
       "searchPlaceholder": "Rechercher une devise",
-      "noMatch": "Aucune devise ne correspond à « {{query}} »."
+      "noMatch": "Aucune devise ne correspond à « {{query}} ».",
+      "clearSearch": "Effacer la recherche"
     },
     "scanner": {
       "title": "Scanner un QR",
@@ -149,13 +154,16 @@
     },
     "dock": {
       "receive": "Recevoir",
-      "send": "Envoyer"
+      "send": "Envoyer",
+      "scan": "Scanner"
     },
     "networkFilter": {
       "selectChain": "Sélectionner une chaîne",
       "searchChains": "Rechercher des chaînes",
       "allNetworks": "Tous les réseaux",
-      "showEvery": "Afficher toutes les chaînes"
+      "showEvery": "Afficher toutes les chaînes",
+      "clearFilter": "Effacer le filtre de réseau",
+      "toggleSearch": "Rechercher des chaînes"
     },
     "chart": {
       "noDataFor": "Aucune donnée pour {{label}}",

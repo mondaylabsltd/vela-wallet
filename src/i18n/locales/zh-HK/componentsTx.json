@@ -24,7 +24,7 @@
       "statusConfirmed": "已確認",
       "statusSubmitted": "已提交",
       "statusFailed": "失敗",
-      "failedHint": "此交易喺鏈上未能成功。"
+      "failedHint": "此交易未能在鏈上完成。"
     },
     "detail": {
       "received": "已接收",

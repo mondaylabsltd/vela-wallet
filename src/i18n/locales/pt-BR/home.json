@@ -48,6 +48,13 @@
     "connPending": "Processando",
     "connFailed": "Falhou",
     "assetsSheetTitle": "Seus ativos",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "a11yViewAssets": "Ver seus ativos",
+    "a11yHideBalance": "Ocultar saldo",
+    "a11yShowBalance": "Mostrar saldo",
+    "a11yChangeCurrency": "Alterar moeda de exibição, atualmente {{code}}",
+    "a11yViewStatement": "Ver extrato completo no explorador de blocos",
+    "a11ySwitchAccount": "Conta {{name}}. Trocar de conta",
+    "a11yOpenSettings": "Configurações"
   }
 }

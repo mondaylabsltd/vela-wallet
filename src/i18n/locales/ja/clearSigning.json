@@ -70,6 +70,8 @@
     "scenarioExpiredSwap": "スワップ期限切れ",
     "scenarioExpiredSwapSub": "期限がすでに過ぎている — フラグを立てる",
     "scenarioBatch": "EIP-5792 バッチ",
-    "scenarioBatchSub": "wallet_sendCalls — 呼び出しごとの内訳"
+    "scenarioBatchSub": "wallet_sendCalls — 呼び出しごとの内訳",
+    "scenarioPermit2Unlimited": "Permit2 承認（無制限）",
+    "scenarioPermit2UnlimitedSub": "オフチェーン署名 — 上限設定はできません"
   }
 }

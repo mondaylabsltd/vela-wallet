@@ -11,6 +11,7 @@
     "warningHintNetworks": "{{count}} redes compatíveis",
     "warningHintSuffix": "abaixo antes de compartilhar seu endereço.",
     "warningConfirm": "Entendi",
+    "warningCounterfactual": "Seu endereço é o mesmo em todas as redes compatíveis. Os fundos enviados para cá estão seguros e são seus — mesmo antes de sua carteira ser implantada.",
     "networksLabel": "Funciona em {{count}} redes EVM",
     "shareCardHeadline": "Escaneie para me enviar cripto",
     "shareDialogTitle": "Endereço da carteira {{name}}",

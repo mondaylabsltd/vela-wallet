@@ -53,7 +53,7 @@
       "intentSend": "發送",
       "valueLabel": "金額",
       "signingFor": "簽署對象",
-      "bestEffortWarning": "根據函式簽章解析得出 — 非經過驗證的描述符，請仔細核對細節。",
+      "bestEffortWarning": "根據函式簽章解析得出 — 並非經過驗證的描述檔，請仔細核對細節。",
       "simWillSucceed": "模擬通過 — 預計可成功",
       "simWillFail": "這筆交易預計會失敗 — 但仍會扣除 gas。",
       "simWillFailReason": "預計會失敗：{{reason}} — 但仍會扣除 gas。",
@@ -86,7 +86,8 @@
     "currency": {
       "title": "顯示貨幣",
       "searchPlaceholder": "搜尋貨幣",
-      "noMatch": "沒有符合「{{query}}」的貨幣。"
+      "noMatch": "沒有符合「{{query}}」的貨幣。",
+      "clearSearch": "清除搜尋"
     },
     "scanner": {
       "title": "掃描 QR",
@@ -115,13 +116,16 @@
     },
     "dock": {
       "receive": "收款",
-      "send": "發送"
+      "send": "發送",
+      "scan": "掃描"
     },
     "networkFilter": {
       "selectChain": "選擇鏈",
       "searchChains": "搜尋鏈",
       "allNetworks": "所有網路",
-      "showEvery": "顯示所有鏈"
+      "showEvery": "顯示所有鏈",
+      "clearFilter": "清除網路篩選",
+      "toggleSearch": "搜尋鏈"
     },
     "chart": {
       "noDataFor": "{{label}} 沒有資料",
@@ -149,7 +153,7 @@
       "verbApprove": "授權",
       "verbApproveAll": "授權全部",
       "verbRevoke": "撤銷",
-      "spenderLabel": "被授權方",
+      "spenderLabel": "授權對象",
       "operatorLabel": "操作者",
       "tokenLabel": "代幣",
       "collectionLabel": "NFT 系列",
@@ -159,11 +163,11 @@
       "chooseAction": "請選擇「撤銷」或「授權」以繼續。",
       "resultingTotal": "授權後總額度",
       "resultingTotalUnknown": "在你目前的額度之上再增加 {{amount}}（無法讀取目前額度）",
-      "unlimitedValue": "無限額",
+      "unlimitedValue": "無上限",
       "multiplePermits": "多種代幣",
-      "permitTag": "支出許可（簽名）",
-      "permitCantCap": "許可是一個簽名 —— 額度無法在此設上限。如需限額，請改用鏈上 Approve。",
-      "permitNote": "你正在簽署一個支出許可 —— dApp 可代你動用至多此金額。"
+      "permitTag": "支出許可（簽章）",
+      "permitCantCap": "許可是一項簽章——其金額無法在此設上限。若要限制支出，請改用鏈上 Approve。",
+      "permitNote": "你正在簽署一項支出許可——dApp 可代你動用至多此金額。"
     },
     "bugReport": {
       "title": "回報問題",

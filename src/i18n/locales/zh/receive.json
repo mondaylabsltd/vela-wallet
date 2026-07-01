@@ -11,6 +11,7 @@
     "warningHintNetworks": "{{count}} 个支持的网络",
     "warningHintSuffix": "以下再分享地址。",
     "warningConfirm": "我已了解",
+    "warningCounterfactual": "你的地址在所有受支持的网络上都相同。转入此处的资金安全且归你所有——即使在钱包尚未部署时也是如此。",
     "networksLabel": "支持 {{count}} 个 EVM 网络",
     "shareCardHeadline": "扫码向我转账",
     "shareDialogTitle": "{{name}} 钱包地址",

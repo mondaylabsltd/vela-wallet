@@ -26,7 +26,7 @@
       "accountNameLabel": "Nome dell'account",
       "accountNamePlaceholder": "Inserisci un nome per il tuo account",
       "accountNameHint": "Questo nome viene memorizzato on-chain insieme alla tua chiave pubblica per l'accesso da più dispositivi.",
-      "ack0": "Questo è un wallet non-custodial. La chiave privata della tua passkey è gestita dal gestore di password del tuo dispositivo (Portachiavi iCloud / Gestore delle password di Google). Vela Wallet non può accedervi né recuperarla.",
+      "ack0": "Questo è un wallet self-custodial. La chiave privata della tua passkey è gestita dal gestore di password del tuo dispositivo (Portachiavi iCloud / Gestore delle password di Google). Vela Wallet non può accedervi né recuperarla.",
       "ack1": "Se perdi il dispositivo, puoi ripristinare il wallet su un nuovo dispositivo tramite il tuo account iCloud o Google.",
       "ack2": "Se il tuo account iCloud o Google viene compromesso, anche il controllo del wallet potrebbe esserlo. Proteggilo con una password forte e l'autenticazione a due fattori.",
       "ack3": "Accetto ",

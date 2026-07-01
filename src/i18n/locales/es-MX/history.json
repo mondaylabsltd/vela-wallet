@@ -12,6 +12,8 @@
     "txLabelSignMessage": "Firmar mensaje",
     "txLabelSignTypedData": "Firmar datos estructurados",
     "txLabelSent": "Enviaste {{symbol}}",
-    "txSentSubtitle": "Para {{toName}} · {{networkName}}"
+    "txSentSubtitle": "Para {{toName}} · {{networkName}}",
+    "txLabelReceived": "Recibiste {{symbol}}",
+    "txReceivedSubtitle": "De {{fromName}} · {{networkName}}"
   }
 }

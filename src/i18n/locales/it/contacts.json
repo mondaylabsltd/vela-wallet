@@ -33,6 +33,24 @@
     "sends_other": "{{count}} invii",
     "savedTag": "Salvato",
     "savedContact": "Contatto salvato",
-    "scanToAdd": "Scansiona per aggiungere un indirizzo"
+    "scanToAdd": "Scansiona per aggiungere un indirizzo",
+    "sectionGroups": "Gruppi",
+    "groupMembers": "{{count}} membri",
+    "groupNew": "Nuovo gruppo",
+    "groupEdit": "Modifica gruppo",
+    "groupNameLabel": "Nome del gruppo",
+    "groupNamePlaceholder": "es. Stipendi",
+    "groupMembersLabel": "Membri",
+    "groupNoContacts": "Salva prima qualche contatto, poi raggruppali qui.",
+    "groupDelete": "Elimina gruppo",
+    "importBtn": "Importa",
+    "importing": "Importazione…",
+    "exportBtn": "Esporta",
+    "exportTitle": "Esporta contatti",
+    "exportBody": "Scegli un formato per fare il backup della tua rubrica.",
+    "importDoneTitle": "Importazione completata",
+    "importDoneBody": "{{added}} aggiunti, {{skipped}} già esistenti.",
+    "importFailTitle": "Importazione non riuscita",
+    "importFailBody": "Usa un file di contatti JSON o CSV."
   }
 }
