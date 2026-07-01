@@ -270,7 +270,9 @@
 | ~~P0~~ ✅ | ~~`wallet-state.ts` reducer 无测试~~ → 已补 `models/wallet-state.test.ts`（SET_WALLET/ADD/SWITCH/LOGOUT 资金隔离/不可变性，US 6.4）；reducer/INITIAL_STATE/WalletAction 已追加导出 | M9 | 完成 |
 | ~~P1~~ ✅ | 组件/旅程交互层——**3/3 条 P0 旅程已建并实机验证**：✅ `onboarding-sync.spec.ts`(US 1.3)、✅ `approval-guard.spec.ts`(US 5.3)、✅ `send-high-risk.spec.ts`(US 3.7 高风险确认，mock 链上余额+合约) | 全 | 真实模式（非 `/test-*` 假路由）：真路由 + localStorage 播种(`vela.accounts`) + `page.route` 阻断/构造 JSON-RPC + **CDP 虚拟 WebAuthn 认证器** + **手编 aggregate3 余额 fixture**（用真实 `decAggregate3` 验证过） |
 | ~~P1~~ ✅ | dApp transport（US 5.1）：✅ `parseRemoteInjectURL`（无效链接→null）+ ✅ `RemoteInjectTransport.connect` SSE 状态机（ready 解析/onerror 未ready拒绝/openTimer 超时/断连 emit）——`dapp-transport.test.ts` 13 tests | M8 | 完成（walletpair 重连边界可后续补） |
-| 🟡 P1 | `wallet-api.ts`（US 2.1/2.2）：✅ token-fetch 缓存/in-flight 去重/clearTokenCache（`wallet-api-cache.test.ts`）；⬜ 剩「某链超时→不清零、按链合并」需 Multicall3 aggregate3 fixture | M4 | 剩 merge-by-chain：aggregate3 fixture |
+| ~~P1~~ ✅ | `wallet-api.ts`（US 2.1/2.2）：✅ 缓存/in-flight 去重/clearTokenCache（`wallet-api-cache.test.ts`）+ ✅ merge-by-chain（`wallet-api-merge.test.ts`：某链失败不清零健康链余额，aggregate3 fixture） | M4 | 完成 |
+| ⬜ P1 | `walletpair-transport.ts` 重连边界（30s/60s，US 5.1）——深度耦合 walletpair-sdk（WebSocketTransport/session） | M8 | 需 walletpair-sdk mock harness；宜与 transport 测试(`remote-inject-transport.test.ts`)一并建，避免重复 |
+| ⬜ P2 | `share-card.ts` 收款卡截图/保存/分享（view-shot/canvas，纯 IO） | M10 | 快照式测试 |
 | ~~P1~~ ✅ | `transfer-monitor.ts`（US 4.2）：已补 decode 反日志伪造（topics[2]≠本钱包→拒绝）+ <3topics/零值 spam 过滤 + from/value/token 提取 + EIP-7708 native 分类（9 tests） | M6 | 完成 |
 | ~~P2~~ ✅ | `public-key-upload`（US 1.2「verify 为准」四象限 + validateCreateClientData + retry）→ 已补 `public-key-upload.test.ts` | M1 | 完成 |
 | 🟡 P2 | ✅ `tokens.ts`、✅ `price-service.ts`(别名+回退)、✅ `platform.ts`(web 回退：showAlert/copyToClipboard，`platform.test.ts`)；⬜ 剩 `share-card.ts`(view-shot/canvas，IO 快照) | M4/M10 | 剩 share-card 用快照 |
