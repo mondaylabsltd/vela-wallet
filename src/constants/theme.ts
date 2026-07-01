@@ -222,7 +222,11 @@ const LIGHT_COLORS = {
   accent:  { base: '#E8572A', soft: '#FFF0EB' },
   success: { base: '#2D8E5F', soft: '#EDFAF2' },
   warning: { base: '#92600A', soft: '#FFF8F0', border: '#F0DCC8' },
-  error:   { base: '#EF4444', soft: '#FEF2F2' },
+  // base deepened #EF4444 → #C62828 so danger TEXT clears WCAG AA (4.5:1) on error.soft
+  // (#FEF2F2) and on white — the old bright red measured 3.44:1, and this is the most
+  // safety-critical copy on the signing surface. Deep red also reads warmer/on-brand and
+  // stays clearly distinct from the accent orange. White-on-base is 5.6:1 (destructive btns).
+  error:   { base: '#C62828', soft: '#FEF2F2' },
   info:    { base: '#4267F4', soft: '#EDF0FF' },
   border:  { base: '#ECEBE4', strong: '#D8D6CE' },
 };

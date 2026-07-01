@@ -111,6 +111,38 @@ export function decodeUserName(userID: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Dev-only signer override (parallel space)
+// ---------------------------------------------------------------------------
+//
+// The parallel-space test environment (see services/dev/parallel-space.ts) installs
+// a fixed-key signer here so the app can be driven without a real device passkey.
+// This override is the ONLY functional difference between the real app and the
+// parallel space — everything else (chains, bundler, backend, UI) is untouched.
+//
+// It is a compile-time no-op in production: `__setPasskeyOverride` returns early
+// unless `__DEV__`, so `__override` stays null and every hot path below strips its
+// `if (__DEV__ && __override)` guard when bundled for release.
+
+export interface PasskeyOverride {
+  sign(challengeHex: string, credentialId?: string | null): Promise<PasskeyAssertionResult>;
+  register?(userName: string): Promise<PasskeyRegistrationResult>;
+  authenticate?(): Promise<PasskeyAssertionResult>;
+}
+
+let __override: PasskeyOverride | null = null;
+
+/** Install (or clear with `null`) a fixed-key passkey signer. No-op outside `__DEV__`. */
+export function __setPasskeyOverride(override: PasskeyOverride | null): void {
+  if (!__DEV__) return;
+  __override = override;
+}
+
+/** Whether a dev signer override is currently active. */
+export function __hasPasskeyOverride(): boolean {
+  return __DEV__ && __override != null;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -125,6 +157,7 @@ export async function isSupported(): Promise<boolean> {
 }
 
 export async function register(userName: string): Promise<PasskeyRegistrationResult> {
+  if (__DEV__ && __override?.register) return __override.register(userName);
   if (isWeb) return webRegister(userName);
   assertNativeAvailable();
   try { return await VelaPasskey.register(userName); }
@@ -132,6 +165,7 @@ export async function register(userName: string): Promise<PasskeyRegistrationRes
 }
 
 export async function authenticate(): Promise<PasskeyAssertionResult> {
+  if (__DEV__ && __override?.authenticate) return __override.authenticate();
   if (isWeb) return webAuthenticate();
   assertNativeAvailable();
   try { return await VelaPasskey.authenticate(); }
@@ -145,6 +179,7 @@ export async function sign(
   challengeHex: string,
   credentialId?: string | null,
 ): Promise<PasskeyAssertionResult> {
+  if (__DEV__ && __override) return __override.sign(challengeHex, credentialId ?? null);
   if (isWeb) return webSign(challengeHex, credentialId ?? null);
   assertNativeAvailable();
   try { return await VelaPasskey.sign(challengeHex, credentialId ?? null); }

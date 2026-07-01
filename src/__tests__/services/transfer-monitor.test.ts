@@ -156,3 +156,76 @@ describe('transfer-monitor scanRecentTransfers — bounded recent-window scan', 
     expect(out).toHaveLength(1);
   });
 });
+
+describe('transfer-monitor decode — anti-spoofing + spam filter (money-in correctness)', () => {
+  /** A crafted eth_getLogs batch (span within cap → one call) + block timestamps. */
+  function batchMock(logs: any[]) {
+    return async (method: string) => {
+      if (method === 'eth_blockNumber') return { result: hex(LATEST) };
+      if (method === 'eth_getBlockByNumber') return { result: { timestamp: '0x60000000' } };
+      if (method === 'eth_getLogs') return { result: logs };
+      return { result: null };
+    };
+  }
+
+  function log(opts: {
+    to?: string; from?: string; value?: bigint; topics?: string[]; address?: string; block?: number;
+  } = {}) {
+    const block = opts.block ?? 999_990;
+    const topics = opts.topics ?? [
+      TRANSFER_TOPIC,
+      recipientTopic(opts.from ?? SENDER),
+      recipientTopic(opts.to ?? ADDR),
+    ];
+    return {
+      address: opts.address ?? '0x' + 'a'.repeat(40),
+      topics,
+      data: '0x' + (opts.value ?? 1000n).toString(16).padStart(64, '0'),
+      transactionHash: '0x' + block.toString(16).padStart(64, '0'),
+      blockNumber: hex(block),
+      logIndex: '0x0',
+    };
+  }
+
+  test('rejects a log whose recipient is NOT this wallet (RPC spoof / cache bleed)', async () => {
+    // A failover endpoint returns someone else's Transfer — topics[2] ≠ us. The
+    // decoder must drop it even though the RPC "matched" our topic filter.
+    mockPoolRpcCall.mockImplementation(batchMock([
+      log(),                 // → ADDR, valid
+      log({ to: SENDER }),   // → someone else, must be dropped
+    ]));
+    const out = await scanRecentTransfers(ADDR, 42161, 100);
+    expect(out).toHaveLength(1);
+    expect(out[0].from.toLowerCase()).toBe(SENDER.toLowerCase());
+  });
+
+  test('skips malformed (<3 topics) and zero-value spam', async () => {
+    mockPoolRpcCall.mockImplementation(batchMock([
+      log(),                             // valid
+      log({ topics: [TRANSFER_TOPIC] }), // <3 topics — malformed
+      log({ value: 0n }),                // zero-value dust
+    ]));
+    const out = await scanRecentTransfers(ADDR, 42161, 100);
+    expect(out).toHaveLength(1);
+  });
+
+  test('extracts sender, value and the ERC-20 token address', async () => {
+    mockPoolRpcCall.mockImplementation(batchMock([
+      log({ from: SENDER, value: 123456n, address: '0x' + 'c'.repeat(40) }),
+    ]));
+    const [t] = await scanRecentTransfers(ADDR, 42161, 100);
+    expect(t.from.toLowerCase()).toBe(SENDER.toLowerCase());
+    expect(t.value).toBe(123456n);
+    expect(t.isNative).toBe(false);
+    expect(t.token).toBe('0x' + 'c'.repeat(40));
+  });
+
+  test('classifies an EIP-7708 native-transfer log as native (token = null)', async () => {
+    mockPoolRpcCall.mockImplementation(batchMock([
+      log({ address: '0xfffffffffffffffffffffffffffffffffffffffe' }),
+    ]));
+    const [t] = await scanRecentTransfers(ADDR, 42161, 100);
+    expect(t.isNative).toBe(true);
+    expect(t.token).toBeNull();
+  });
+});

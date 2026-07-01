@@ -12,6 +12,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, Platform } from 'react-native';
 import { color, createStyles, inter, radius, shadow, space, text } from '@/constants/theme';
+import { useWebDialog } from '@/hooks/use-web-dialog';
 
 interface AlertButton {
   text?: string;
@@ -60,6 +61,9 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
     btn?.onPress?.();
   }, []);
 
+  // Escape-to-close, focus trap, focus restore + scroll lock (web only).
+  const dialogRef = useWebDialog(alert.visible, () => dismiss(), 'alertdialog');
+
   // Create a persistent DOM container above all modals (z-index > AppModal's 99999)
   const portalRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -80,9 +84,9 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
 
   const alertContent = Platform.OS === 'web' && alert.visible ? (
     <View style={styles.overlay}>
-      <Pressable style={styles.backdrop} onPress={() => dismiss()} />
-      <View style={styles.card}>
-        <Text style={styles.title}>{alert.title}</Text>
+      <Pressable style={styles.backdrop} onPress={() => dismiss()} accessibilityLabel={alert.title} />
+      <View ref={dialogRef} style={styles.card}>
+        <Text style={styles.title} accessibilityRole="header">{alert.title}</Text>
         {alert.message ? <Text style={styles.message}>{alert.message}</Text> : null}
         <View style={styles.buttonRow}>
           {alert.buttons.map((btn, i) => {
@@ -92,6 +96,8 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
             return (
               <Pressable
                 key={i}
+                accessibilityRole="button"
+                accessibilityLabel={btn.text ?? 'OK'}
                 style={[
                   styles.button,
                   isPrimary && styles.buttonPrimary,

@@ -56,6 +56,13 @@
     "txErrorBundlerLoop": "Gas account balance keeps being rejected by the bundler. Try again later or increase gas tier.",
     "txErrorBundlerFund": "Bundler account needs more gas. Please fund it in Settings.",
     "txErrorPublicKey": "Public key not found for this account",
+    "txErrorGeneric": "The transaction couldn't be submitted. Your funds are safe — please try again.",
+    "gasTier": {
+      "slow": "Slow",
+      "standard": "Standard",
+      "rapid": "Rapid",
+      "fast": "Fast"
+    },
     "lock": {
       "netTitle": "Network not supported",
       "netBody": "This payment request is on a network Vela doesn't support yet (chain {{chainId}}).",

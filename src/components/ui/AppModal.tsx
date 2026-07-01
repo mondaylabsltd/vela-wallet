@@ -20,7 +20,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { hapticLight } from '@/services/platform';
-import { color, createStyles } from '@/constants/theme';
+import { color, createStyles, radius } from '@/constants/theme';
+import { useWebDialog } from '@/hooks/use-web-dialog';
 
 /** Drag past this many px (or fling faster than VY) to dismiss. */
 const DISMISS_DY = 90;
@@ -200,6 +201,9 @@ function WebModal({ visible, onClose, children }: { visible: boolean; onClose?: 
     }
   }, [visible, container]);
 
+  // Escape-to-close, focus trap, focus restore + background scroll lock (web only).
+  const dialogRef = useWebDialog(visible, onClose);
+
   if (!container || !mounted) return null;
 
   const { createPortal } = require('react-dom');
@@ -216,16 +220,20 @@ function WebModal({ visible, onClose, children }: { visible: boolean; onClose?: 
         }}
       />
       {/* Content sheet */}
-      <div style={{
-        position: 'relative',
-        backgroundColor: color.bg.base,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        maxHeight: '92%',
-        overflow: 'auto',
-        transform: show ? 'translateY(0)' : 'translateY(100%)',
-        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-      }}>
+      <div
+        ref={dialogRef}
+        style={{
+          position: 'relative',
+          backgroundColor: color.bg.base,
+          borderTopLeftRadius: radius['2xl'],
+          borderTopRightRadius: radius['2xl'],
+          maxHeight: '92%',
+          overflow: 'auto',
+          outline: 'none',
+          transform: show ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
+      >
         <DragHandle onClose={onClose} />
         <View style={styles.webContent}>{children}</View>
       </div>

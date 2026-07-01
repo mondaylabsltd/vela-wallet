@@ -73,7 +73,7 @@
 | `services/safe-address.ts` | 由 P-256 公钥确定性推导 Safe 地址、CREATE2 salt、MultiSend 编码 | [纯] | ✅ |
 | `services/eth-crypto.ts` | keccak-256、ABI 编码、CREATE2、EIP-55 checksum | [纯] | ✅ |
 | `services/accounts.ts` | 账户按余额排序、总额聚合 | [纯] | ✅ |
-| `services/public-key-upload.ts` | 上传编排（校验[纯] + 建记录[IO] + 验证为准） | [纯]+[IO:D3] | ⚠️ |
+| `services/public-key-upload.ts` | 上传编排（校验[纯] + 建记录[IO] + 验证为准） | [纯]+[IO:D3] | ✅（新增 public-key-upload.test.ts 四象限） |
 | `services/public-key-index.ts` | p256-index 客户端（跨设备恢复） | [IO:D3] | ⚠️ 集成 |
 
 ### M2 — 交易构建与签名（Tx Building & Signing）
@@ -102,9 +102,9 @@
 | 文件 | 职责 | 类型 | 覆盖 |
 |------|------|------|------|
 | `services/wallet-api.ts` | 多链资产查询（Multicall3 组合 ERC20 余额+DEX 报价+Chainlink） | [IO:D1] | ⚠️ |
-| `services/token-reads.ts` / `token-metadata.ts` / `tokens.ts` | allowance 读、token 元数据解析、已知 token 表 | [纯]/[IO:D1] | ✅/✅/❌ tokens |
+| `services/token-reads.ts` / `token-metadata.ts` / `tokens.ts` | allowance 读、token 元数据解析、已知 token 表 | [纯]/[IO:D1] | ✅/✅/✅（新增 tokens.test.ts） |
 | `services/balance-cache.ts` / `balance-history.ts` | 余额缓存（AsyncStorage）、历史余额（archive RPC） | [IO:D6]/[IO:D1] | ✅/— |
-| `services/price-service.ts` | Chainlink 主网喂价（Multicall3），缓存 3min | [IO:D4] | — |
+| `services/price-service.ts` | Chainlink 主网喂价（Multicall3），缓存 3min | [IO:D4] | ✅（新增 price-service.test.ts：别名+回退） |
 | `services/fiat-rates.ts` / `fiat-fx.ts` | 法币汇率（Chainlink via ENS / 可配 FX endpoint） | [IO:D4] | ✅/✅ |
 | `services/currency.ts` / `currency-catalog.ts` | 货币换算、货币目录 | [纯] | ✅ |
 | `services/format-eth.ts` / `locale-format.ts` | wei 格式化、本地化数字/日期格式（显式预设，非 Intl） | [纯] | ✅ |
@@ -124,7 +124,7 @@
 | 文件 | 职责 | 类型 | 覆盖 |
 |------|------|------|------|
 | `services/activity.ts` | 活动条目本地存取、批量折叠 | [纯]+[IO:D6] | ✅ |
-| `services/transfer-monitor.ts` | 增量扫 log 检测到账 | [IO:D1] | ✅ |
+| `services/transfer-monitor.ts` | 增量扫 log 检测到账 | [IO:D1] | ✅（+decode 反伪造/spam/native） |
 | `services/tx-reconciler.ts` | 轮询 bundler receipt 对账 pending（超时不判失败） | [IO:D2] | ✅ |
 | `services/dapp-history.ts` | dApp 签名事件历史（pending→confirmed/failed，可只读重放） | [纯]+[IO:D6] | ✅ |
 
@@ -140,7 +140,7 @@
 ### M8 — dApp 连接（dApp Transport）
 | 文件 | 职责 | 类型 | 覆盖 |
 |------|------|------|------|
-| `services/dapp-transport.ts` | remote-inject relay（SSE + POST，nonce/secret 鉴权） | [IO:D5] | ⚠️ |
+| `services/dapp-transport.ts` | remote-inject relay（SSE + POST，nonce/secret 鉴权） | [IO:D5] | ✅（parseRemoteInjectURL + connect SSE 状态机） |
 | `services/walletpair-transport.ts` | WalletPair（WebSocket，能力协商 + Tier-2 只读 RPC 转发） | [IO:D5] | ⚠️ |
 | `models/dapp-connection.tsx` | RemoteInjectTransport 会话上下文、请求队列、连接状态 | [纯]+[IO:D5/D6] | ⚠️ |
 
@@ -187,7 +187,7 @@
 | US | 用户故事 | 验收主线 | 关键失败/边界态 | 核心模块 | 依赖 | 层 | 现状 |
 |----|---------|---------|----------------|---------|------|----|----|
 | 2.1 | 作为持有者，我打开 app 立刻看到余额和活动 | 先用本地缓存瞬时绘制→后台多链流式拉取→按链合并 | 冷启动无缓存空态；账户切换中途(addressRef 守卫) | M4(wallet-api,balance-cache),M6(activity) | D1 | SI + E2E | SI⚠️ |
-| 2.2 | 作为持有者，某条链 RPC 挂了我仍看到可信的总额 | 单链失败→加入 `failedChainIds`→banner "RPC offline"→总额取 `max(live,cached)` 并标 "余额不完整" | 全部链失败；token 无喂价→partial | M4,M5(rpc-pool) | D1,D4 | SI | ⚠️ 建 |
+| 2.2 | 作为持有者，某条链 RPC 挂了我仍看到可信的总额 | 单链失败→加入 `failedChainIds`→总额取 `max(live,cached)`；**持久故障**才弹换-RPC banner，**限流(transient)只留缓存、不弹 banner** | 全部链失败；token 无喂价→partial；限流 vs 硬故障区分 | M4,M5(rpc-pool `getRateLimitedChains`) | D1,D4 | U+E2E | ✅ rpc-pool-ratelimit + fault-injection 单测 + parallel-rate-limit e2e（平行空间，经 `__velaRpcState` 断言分类区分） |
 | 2.3 | 作为持有者，我下拉刷新 / app 自动刷新 | VelaRefresh 手势(spinner 保持 650ms)；前台每 10min 自动刷 | 刷新中断网→保留旧值不清零 | M4 | D1 | C/M | 待 |
 | 2.4 | 作为持有者，我查看某 token 明细与历史 | TokenDetail：余额、喂价、历史；Activity 列表 ENS/vela 名解析 | 无喂价 token；名解析失败→显示裸地址 | M4,M6,M7(recipient-identity) | D1,D3,D4 | SI + E2E | ⚠️ |
 | 2.5 | 作为持有者，pending 的发送在我打开 app 时被对账 | Home 加载时轮询 bundler receipt→pending→confirmed/failed | receipt 超时→保持 pending 不误判失败 | M6(tx-reconciler) | D2 | SI | ✅ |
@@ -207,7 +207,7 @@
 | 3.4 | 作为用户，我把 1 个 token 拆发给 N 个人（split） | MultiRecipientEditor 多行→1 个 MultiSend UserOp→批量回执分行 | 某行地址/金额非法；行增删 | M2(batch-send) | D2 | U + E2E | U✅ |
 | 3.5 | 作为用户，我把某链上的多个 token 全额扫给 1 个地址（sweep/multiSelect） | 从资产 sheet 预选→1 个 MultiSend N 笔 ERC20→全额 | 与 split 互斥；全额取整 | M2(batch-send) | D2 | U + E2E | U✅ |
 | 3.6 | 作为用户，我扫/粘一个 EIP-681 支付请求发款 | 解析 URI→锁定收款人/金额→缺网络走"加网络"、缺 token 造零余额占位 | 网络未知、token 未知、金额/地址非法 | M7(eip681),M5(add-network) | D1 | U + E2E | U✅ E2E✅ |
-| 3.7 | 作为用户，收款人有风险时我被要求更谨慎地确认 | 首次/合约地址→风险标签→**长按**确认（非滑动） | 首次转账警告、合约 vs EOA | M3,M7(recipient-risk) | D1 | C + M | 待 |
+| 3.7 | 作为用户，收款人有风险时我被要求更谨慎地确认 | 首次/合约地址→风险标签(First time/Contract)→**滑动**确认(SlideToConfirm，danger 变红) | 首次转账警告、合约 vs EOA | M3,M7(recipient-risk) | D1 | E2E + M | ✅ E2E(send-high-risk) |
 
 **Epic 3 失败态：** 余额不足、原生 gas 不足、Tempo fee token 不足、bundler underfunded、gas 估算失败(best-effort)、模拟失败(无预览)、passkey 取消、签后 bundler 报错(回执转轮询)、EIP-681 三类非法。（RPC 类用 `vela.failRpc/slowRpc`；bundler underfunded 需手动断网/指向不可达端点）
 
@@ -219,7 +219,7 @@
 | US | 用户故事 | 验收主线 | 关键失败/边界态 | 核心模块 | 依赖 | 层 | 现状 |
 |----|---------|---------|----------------|---------|------|----|----|
 | 4.1 | 作为收款人，我出示地址二维码收款 | 200×200 地址 QR + 支持网络网格 + 复制/存图；防中毒遮罩 | 无地址(未建钱包)→"No address"；存图权限被拒→提示 | M7(qrcode),M10(share-card) | D6 | U + M | QR U✅ |
-| 4.2 | 作为收款人，二维码打开时到账被实时探测 | 3s×1min 快轮询→60s×4min 慢轮询→停；diff baseline→haptic+行内到账 | 探测 RPC 失败→静默跳过本轮；5min 后停 | M4(fetchTokens),M6 | D1 | SI + M | ⚠️ |
+| 4.2 | 作为收款人，二维码打开时到账被实时探测 | 3s×1min 快轮询→60s×4min 慢轮询→停；diff baseline→haptic+行内到账；decode 只认收款人=本钱包的日志(反伪造) | 探测 RPC 失败→静默跳过本轮；5min 后停；RPC 返回他人日志→拒绝 | M4(fetchTokens),M6(transfer-monitor decode) | D1 | U + M | ✅ U(decode 反伪造/spam/native) |
 | 4.3 | 作为收款人，我生成一个带金额的 EIP-681 请求 | 构建器：链/token/金额→生成 URI→QR 编码→人类可读摘要 | 参数非法 | M7(eip681) | — | U | ✅ |
 | 4.4 | 作为付款人，我打开一个 Vela 支付链接付款 | Pay 页显示 token/金额/收款人/链；三路径：Open in Vela(锁定 Send)/另一钱包 QR/复制字段 | 无效链接→"Invalid payment link"；网络未知→Open in Vela 禁用 | M7(eip681) | D1 | U + E2E | eip681 E2E✅ |
 
@@ -232,7 +232,7 @@
 
 | US | 用户故事 | 验收主线 | 关键失败/边界态 | 核心模块 | 依赖 | 层 | 现状 |
 |----|---------|---------|----------------|---------|------|----|----|
-| 5.1 | 作为用户，我扫码/粘链接连上一个 dApp | 扫 QR/粘链接→指纹交换→连上显示 dApp 卡+账户+链+E2E 徽章(WalletPair) | 无效配对链接；连接失败→重试；重连卡住→banner+手动重连 | M8(dapp-transport/walletpair) | D5 | SI + M | ⚠️ |
+| 5.1 | 作为用户，我扫码/粘链接连上一个 dApp | 扫 QR/粘链接→指纹交换→连上显示 dApp 卡+账户+链+E2E 徽章(WalletPair) | 无效配对链接；连接失败→重试；重连卡住→banner+手动重连 | M8(dapp-transport/walletpair) | D5 | U + M | ✅ U(parseURL + connect SSE 状态机) |
 | 5.2 | 作为用户，dApp 请求交易时我看到人类可读意图（clear signing） | descriptor 命中→意图布局(动作词+token 卡+箭头+折叠详情)；无 descriptor→盲签回退(合约+calldata) | descriptor 解析失败→盲签；未知选择器 | M3(clear-signing,abi-decode,selector) | D3,D7 | U + E2E | U✅ E2E✅ |
 | 5.3 | 作为用户，任何无限授权都被拦下、必须我设有限额度 | approve/increaseAllowance/setApprovalForAll/permit/Permit2 皆检出→额度可编辑→**无限时确认禁用**，无旁路(含滑动) | 粘贴 uint256-max / 2^255 / 2^160-1 仍被拦 | M3(approval-guard) | — | U + M | U✅(P0) |
 | 5.4 | 作为用户，签名前我看到链上会发生什么（余额变化预览） | eth_call 回滚预检 + 资产净变化预览 + 收款人风险标签 | 模拟失败→无预览(best-effort)；received token 只 gate 不信 log(见 memory：非对称信任) | M3(tx-simulation,sim-assets) | D1 | SI + M | ✅ |
@@ -268,12 +268,12 @@
 |-------|------|------|------|
 | ~~P0~~ ✅ | ~~`webauthn-verify.ts` 无测试~~ → 已补 `webauthn-verify.test.ts`（prefix/字段序/UV flag/长度/检查顺序，US 1.4） | M1 | 完成 |
 | ~~P0~~ ✅ | ~~`wallet-state.ts` reducer 无测试~~ → 已补 `models/wallet-state.test.ts`（SET_WALLET/ADD/SWITCH/LOGOUT 资金隔离/不可变性，US 6.4）；reducer/INITIAL_STATE/WalletAction 已追加导出 | M9 | 完成 |
-| ~~P1~~ 🟡 | 组件/旅程交互层——2/3 条 P0 旅程已建：✅ `onboarding-sync.spec.ts`(US 1.3 同步失败→账户不落地)、✅ `approval-guard.spec.ts`(US 5.3 无限授权门控)；⬜ 剩 US 3.7 send 高风险确认（需注入余额+合约检测 mock 才能确定化到达确认步） | 全 | 用真实模式（非 `/test-*` 假路由）：真路由 + localStorage 播种(`vela.accounts`) + `page.route` 阻断外网 + **CDP 虚拟 WebAuthn 认证器**（`WebAuthn.addVirtualAuthenticator`，让 passkey 注册产出可解析 attestation） |
-| **P1** | dApp transport（SSE/WebSocket）内部无独立桩（US 5.1） | M8 | mock EventSource/WebSocket，测重连边界(30s/60s) |
+| ~~P1~~ ✅ | 组件/旅程交互层——**3/3 条 P0 旅程已建并实机验证**：✅ `onboarding-sync.spec.ts`(US 1.3)、✅ `approval-guard.spec.ts`(US 5.3)、✅ `send-high-risk.spec.ts`(US 3.7 高风险确认，mock 链上余额+合约) | 全 | 真实模式（非 `/test-*` 假路由）：真路由 + localStorage 播种(`vela.accounts`) + `page.route` 阻断/构造 JSON-RPC + **CDP 虚拟 WebAuthn 认证器** + **手编 aggregate3 余额 fixture**（用真实 `decAggregate3` 验证过） |
+| ~~P1~~ ✅ | dApp transport（US 5.1）：✅ `parseRemoteInjectURL`（无效链接→null）+ ✅ `RemoteInjectTransport.connect` SSE 状态机（ready 解析/onerror 未ready拒绝/openTimer 超时/断连 emit）——`dapp-transport.test.ts` 13 tests | M8 | 完成（walletpair 重连边界可后续补） |
 | **P1** | `wallet-api.ts` 多链聚合仅 ⚠️（US 2.1/2.2 可信总额的实际来源） | M4 | mock Multicall3 batch，测某链超时→不清零、按链合并 |
-| **P1** | `transfer-monitor.ts` 到账探测轮询节奏（US 4.2） | M6 | 已有单测，补探测窗口(3s×1min→60s×4min→停)边界 |
-| **P2** | `public-key-upload/index` 仅集成（US 1.2 的"verify 为准"分支） | M1 | mock fetch，测 create 超时但 verify 成功/失败四象限 |
-| **P2** | `tokens.ts`、`price-service.ts`、`platform.ts`、`share-card.ts` 无测 | M4/M10 | 低成本补纯逻辑；IO 部分用快照 |
+| ~~P1~~ ✅ | `transfer-monitor.ts`（US 4.2）：已补 decode 反日志伪造（topics[2]≠本钱包→拒绝）+ <3topics/零值 spam 过滤 + from/value/token 提取 + EIP-7708 native 分类（9 tests） | M6 | 完成 |
+| ~~P2~~ ✅ | `public-key-upload`（US 1.2「verify 为准」四象限 + validateCreateClientData + retry）→ 已补 `public-key-upload.test.ts` | M1 | 完成 |
+| 🟡 P2 | ✅ `tokens.ts`(已补)、✅ `price-service.ts`(resolveChainlinkPrice 别名+回退，已补)；⬜ 剩 `platform.ts`、`share-card.ts`(IO，快照) | M4/M10 | 剩 platform/share-card 用快照 |
 | **P3** | `sim-engine-tevm.ts` 刻意禁用 | M3 | 保持可选，不强测 |
 
 ---
@@ -301,6 +301,7 @@
 | 场景 | 命令 | 覆盖故事 |
 |------|------|---------|
 | 单链 / 全链 RPC 失败（同时停活动，同一 RPC 层） | `vela.failRpc(chainId \| 'all')` | US 2.2, 3.1, 4.2 |
+| RPC 限流(429)——**临时**：余额留缓存、**不弹**换-RPC banner | `vela.rateLimitRpc(chainId \| 'all')` | US 2.2 |
 | RPC 加延迟 | `vela.slowRpc(ms)` | US 2.3, 5.4 |
 | 随机丢包 | `vela.flakyRpc(rate 0..1)` | US 2.1, 5.1 |
 | token 有余额但无喂价（总额少算） | `vela.nullPrice(chainId \| 'all')` | US 2.2, 2.4 |
@@ -314,7 +315,7 @@
 
 1. **补 P0 单测缺口**（低成本高价值）：`webauthn-verify`、`wallet-state` reducer。→ 补齐资金安全护城河的确定性验证。
 2. **补 P1 核心地基**：`rpc-pool` fixture 测（可信总额）、dApp transport 桩（连接稳定性）。
-3. **建组件/E2E 层**（进行中 🟡）：三条 P0 旅程中 **2 条已完成** —— ✅ Onboarding 同步失败→账户不落地(US 1.3, `e2e/onboarding-sync.spec.ts`)、✅ Sign 无限授权门控(US 5.3, `e2e/approval-guard.spec.ts`)。⬜ 剩 **Send 高风险确认(US 3.7)**：需先做「注入 token 余额 + 合约检测」的 RPC mock fixture（Send 要有余额才能到达确认步、`resolveRecipientRisk` 的合约判定要 `eth_getCode`），offline 才能确定化；这块比前两条工程量大，建议单独一轮。
+3. **建组件/E2E 层**（✅ 完成）：三条 P0 旅程全部建成并实机验证 —— ✅ Onboarding 同步失败→账户不落地(US 1.3, `e2e/onboarding-sync.spec.ts`)、✅ Sign 无限授权门控(US 5.3, `e2e/approval-guard.spec.ts`)、✅ Send 高风险确认(US 3.7, `e2e/send-high-risk.spec.ts`)。US 3.7 通过 mock JSON-RPC 实现：`page.route` 构造 aggregate3 余额响应（让 token picker 有可花的原生币）+ `eth_getCode` 返回字节码（判定合约）+ 阻断 bundler（`checkBundlerFunding` 返回 null 放行到确认步）。此 RPC-mock fixture 可复用给 Epic 2/3 更多余额相关旅程。
 4. **失败态回归**：把 §6 每条 `vela.*` 场景固化成 e2e 断言，纳入 CI。
 5. **手动真机**：每次发版按 MANUAL-TEST-100-CLUES.md 过 P0×25。
 

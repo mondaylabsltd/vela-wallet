@@ -12,6 +12,8 @@
     "txLabelSignMessage": "Sign Message",
     "txLabelSignTypedData": "Sign Typed Data",
     "txLabelSent": "Sent {{symbol}}",
-    "txSentSubtitle": "To {{toName}} · {{networkName}}"
+    "txSentSubtitle": "To {{toName}} · {{networkName}}",
+    "txLabelReceived": "Received {{symbol}}",
+    "txReceivedSubtitle": "From {{fromName}} · {{networkName}}"
   }
 }

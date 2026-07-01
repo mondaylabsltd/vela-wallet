@@ -108,7 +108,8 @@
     "currency": {
       "title": "Display currency",
       "searchPlaceholder": "Search currency",
-      "noMatch": "No currency matches \"{{query}}\"."
+      "noMatch": "No currency matches \"{{query}}\".",
+      "clearSearch": "Clear search"
     },
     "scanner": {
       "title": "Scan QR",
@@ -137,13 +138,16 @@
     },
     "dock": {
       "receive": "Receive",
-      "send": "Send"
+      "send": "Send",
+      "scan": "Scan"
     },
     "networkFilter": {
       "selectChain": "Select Chain",
       "searchChains": "Search chains",
       "allNetworks": "All Networks",
-      "showEvery": "Show every chain"
+      "showEvery": "Show every chain",
+      "clearFilter": "Clear network filter",
+      "toggleSearch": "Search chains"
     },
     "chart": {
       "noDataFor": "No data for {{label}}",

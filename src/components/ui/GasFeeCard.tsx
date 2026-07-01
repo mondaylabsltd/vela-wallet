@@ -16,7 +16,6 @@ import { color, createStyles, font, inter, radius, space, text } from '@/constan
 import {
   estimateTransactionFee,
   refreshGasPrice,
-  GAS_TIER_MULTIPLIERS,
   type GasTier,
   type TransactionFeeEstimate,
 } from '@/services/safe-transaction';
@@ -142,14 +141,16 @@ export function GasFeeCard({
           <VelaCard style={styles.gasCard}>
             {/* Tier selector */}
             <View style={styles.tierRow}>
-              {(['slow', 'standard', 'fast'] as GasTier[]).map((t) => (
+              {(['slow', 'standard', 'fast'] as GasTier[]).map((tier) => (
                 <Pressable
-                  key={t}
-                  style={[styles.tierBtn, gasTier === t && styles.tierBtnActive]}
-                  onPress={() => handleTierChange(t)}
+                  key={tier}
+                  style={[styles.tierBtn, gasTier === tier && styles.tierBtnActive]}
+                  onPress={() => handleTierChange(tier)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: gasTier === tier }}
                 >
-                  <Text style={[styles.tierBtnText, gasTier === t && styles.tierBtnTextActive]}>
-                    {GAS_TIER_MULTIPLIERS[t].label}
+                  <Text style={[styles.tierBtnText, gasTier === tier && styles.tierBtnTextActive]}>
+                    {t(`send.gasTier.${tier}`)}
                   </Text>
                 </Pressable>
               ))}

@@ -33,9 +33,16 @@ interface NetworkFilterButtonProps {
 }
 
 export function NetworkFilterButton({ networks, selected, onPress, onClear }: NetworkFilterButtonProps) {
+  const { t } = useTranslation();
   const preview = networks.slice(0, 3);
   return (
-    <Pressable style={styles.trigger} onPress={onPress} hitSlop={6}>
+    <Pressable
+      style={styles.trigger}
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={`${t('componentsUi.networkFilter.selectChain')}: ${selected ? selected.displayName : t('componentsUi.networkFilter.allNetworks')}`}
+    >
       {selected ? (
         <ChainLogo label={selected.iconLabel} color={selected.iconColor} bgColor={selected.iconBg} logoURL={selected.logoURL} size={20} />
       ) : (
@@ -49,7 +56,7 @@ export function NetworkFilterButton({ networks, selected, onPress, onClear }: Ne
       )}
       <Text style={styles.triggerLabel} numberOfLines={1}>{selected ? selected.displayName : 'All'}</Text>
       {selected ? (
-        <Pressable onPress={onClear} hitSlop={8} style={styles.clearBtn}>
+        <Pressable onPress={onClear} hitSlop={8} style={styles.clearBtn} accessibilityRole="button" accessibilityLabel={t('componentsUi.networkFilter.clearFilter')}>
           <X size={12} color={color.fg.muted} strokeWidth={2.6} />
         </Pressable>
       ) : (
@@ -103,7 +110,7 @@ export function NetworkFilterSheet({
         <View style={styles.sheetHead}>
           <View style={styles.headSpacer} />
           <Text style={styles.sheetTitle}>{t('componentsUi.networkFilter.selectChain')}</Text>
-          <Pressable onPress={() => setSearching((s) => !s)} hitSlop={8} style={styles.searchToggle}>
+          <Pressable onPress={() => setSearching((s) => !s)} hitSlop={8} style={styles.searchToggle} accessibilityRole="button" accessibilityLabel={t('componentsUi.networkFilter.toggleSearch')}>
             {searching ? <X size={18} color={color.fg.base} strokeWidth={2} /> : <Search size={18} color={color.fg.base} strokeWidth={2} />}
           </Pressable>
         </View>
@@ -124,7 +131,13 @@ export function NetworkFilterSheet({
         <ScrollView style={styles.list} contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
           {/* All Networks */}
           {!query && (
-            <Pressable style={[styles.row, selectedChainId === null && styles.rowSelected]} onPress={() => pick(null)}>
+            <Pressable
+              style={[styles.row, selectedChainId === null && styles.rowSelected]}
+              onPress={() => pick(null)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: selectedChainId === null }}
+              accessibilityLabel={t('componentsUi.networkFilter.allNetworks')}
+            >
               <View style={styles.allIcon}>
                 <Globe size={20} color={color.fg.muted} strokeWidth={2} />
               </View>
@@ -140,7 +153,14 @@ export function NetworkFilterSheet({
             const isSel = selectedChainId === n.chainId;
             const sub = subtitleForChain?.(n);
             return (
-              <Pressable key={n.chainId} style={[styles.row, isSel && styles.rowSelected]} onPress={() => pick(n.chainId)}>
+              <Pressable
+                key={n.chainId}
+                style={[styles.row, isSel && styles.rowSelected]}
+                onPress={() => pick(n.chainId)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: isSel }}
+                accessibilityLabel={n.displayName}
+              >
                 <ChainLogo label={n.iconLabel} color={n.iconColor} bgColor={n.iconBg} logoURL={n.logoURL} size={40} />
                 <View style={styles.rowInfo}>
                   <Text style={styles.rowName}>{n.displayName}</Text>
@@ -223,7 +243,7 @@ const styles = createStyles(() => ({
     justifyContent: 'center',
   },
   search: {
-    fontSize: 16,
+    fontSize: text.lg, // match CurrencySheet + respect text scale (iOS-zoom handled in global.css)
     ...inter.regular,
     color: color.fg.base,
     backgroundColor: color.bg.raised,

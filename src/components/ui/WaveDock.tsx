@@ -52,6 +52,8 @@ function DockButton({ label, icon: Icon, onPress, variant }: DockButtonProps) {
       onPress={onPress}
       onPressIn={() => { hapticLight(); scale.value = withSpring(0.97, motion.spring); }}
       onPressOut={() => { scale.value = withSpring(1, motion.spring); }}
+      accessibilityRole="button"
+      accessibilityLabel={label}
     >
       <Icon size={22} color={primary ? color.fg.inverse : color.fg.muted} strokeWidth={2.2} />
       <Text style={[styles.btnLabel, primary ? styles.btnLabelPrimary : styles.btnLabelSecondary]}>{label}</Text>
@@ -87,6 +89,8 @@ export function WaveDock({ onReceive, onScan, onSend }: WaveDockProps) {
           onPress={onScan}
           onPressIn={() => { hapticLight(); scanScale.value = withSpring(0.92, motion.spring); }}
           onPressOut={() => { scanScale.value = withSpring(1, motion.spring); }}
+          accessibilityRole="button"
+          accessibilityLabel={t('componentsUi.dock.scan')}
         >
           <ScanLine size={26} color={color.fg.base} strokeWidth={2} />
         </AnimatedPressable>

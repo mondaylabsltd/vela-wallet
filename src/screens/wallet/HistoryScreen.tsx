@@ -107,7 +107,7 @@ export default function HistoryScreen() {
     const network = getAllNetworksSync().find((n) => n.chainId === item.chainId);
     const networkName = network?.displayName ?? `Chain ${item.chainId}`;
     const txType = item.type ?? 'send';
-    const { icon, iconBg, label, subtitle, showAmount } = txDisplayInfo(txType, item, networkName);
+    const { icon, iconBg, label, subtitle, showAmount, incoming } = txDisplayInfo(txType, item, networkName);
 
     return (
       <Pressable
@@ -126,13 +126,13 @@ export default function HistoryScreen() {
         <View style={styles.txValues}>
           {showAmount ? (
             <AmountText
-              text={`-${formatTokenAmount(parseFloat(item.value), { compact: true })}`}
+              text={`${incoming ? '+' : '-'}${formatTokenAmount(parseFloat(item.value), { compact: true })}`}
               unit={item.symbol}
               size={text.lg}
               minScale={0.7}
               tailScale={0.7}
-              style={styles.txAmount}
-              tailStyle={styles.txAmountUnit}
+              style={[styles.txAmount, incoming && styles.txAmountIn]}
+              tailStyle={[styles.txAmountUnit, incoming && styles.txAmountIn]}
               containerStyle={styles.txAmountBox}
             />
           ) : (
@@ -152,6 +152,15 @@ export default function HistoryScreen() {
     const sw = 2.5;
     const sz = 18;
     switch (txType) {
+      case 'receive':
+        return {
+          icon: <ArrowDownLeft size={sz} color={color.success.base} strokeWidth={sw} />,
+          iconBg: color.success.soft,
+          label: t('history.txLabelReceived', { symbol: item.symbol }),
+          subtitle: t('history.txReceivedSubtitle', { fromName: shortAddress(item.from), networkName }),
+          showAmount: true,
+          incoming: true,
+        };
       case 'dapp_tx':
         return {
           icon: item.intent
@@ -165,6 +174,7 @@ export default function HistoryScreen() {
             networkName,
           ].filter(Boolean).join(' · '),
           showAmount: parseFloat(item.value || '0') > 0,
+          incoming: false,
         };
       case 'sign_message':
         return {
@@ -173,6 +183,7 @@ export default function HistoryScreen() {
           label: t('history.txLabelSignMessage'),
           subtitle: [item.dappOrigin, networkName].filter(Boolean).join(' · '),
           showAmount: false,
+          incoming: false,
         };
       case 'sign_typed_data':
         return {
@@ -181,6 +192,7 @@ export default function HistoryScreen() {
           label: item.intent || t('history.txLabelSignTypedData'),
           subtitle: [item.dappOrigin, networkName].filter(Boolean).join(' · '),
           showAmount: false,
+          incoming: false,
         };
       case 'send':
       default:
@@ -190,6 +202,7 @@ export default function HistoryScreen() {
           label: t('history.txLabelSent', { symbol: item.symbol }),
           subtitle: t('history.txSentSubtitle', { toName: item.toName ?? shortAddress(item.to), networkName }),
           showAmount: true,
+          incoming: false,
         };
     }
   }
@@ -471,6 +484,11 @@ const styles = createStyles(() => ({
   },
   txAmountUnit: {
     color: color.fg.muted,
+  },
+  // Incoming (received) amounts read green + a leading "+", mirroring ActivityRow,
+  // so direction is never conveyed by the arrow icon alone.
+  txAmountIn: {
+    color: color.success.base,
   },
   txTime: {
     fontSize: text.sm,

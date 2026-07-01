@@ -15,7 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchChainInfo } from './chain-registry';
 import { getBundlerServiceURL, getNetworkConfig, getRpcProviderKeys, loadServiceEndpoints } from './storage';
 import { buildProviderRpcUrl, PROVIDER_ORDER } from './rpc-providers';
-import { rpcLatencyMs, rpcShouldFail } from './dev/fault-injection';
+import { rpcLatencyMs, rpcShouldFail, rpcShouldRateLimit } from './dev/fault-injection';
 import { NET_TIMEOUTS, backoffWithJitter } from './net';
 import { recordNet } from './metrics';
 
@@ -159,6 +159,29 @@ const rpcFailedChains = new Set<number>();
 /** Get the set of chain IDs whose RPC endpoints are all currently failing. */
 export function getFailedRpcChains(): ReadonlySet<number> {
   return rpcFailedChains;
+}
+
+/**
+ * Chains whose current failure is (at least partly) RATE-LIMITING — a transient,
+ * self-healing condition, not a broken endpoint. A subset hint alongside
+ * {@link getFailedRpcChains}: the balance still falls back to its cached value,
+ * but the UI must NOT nag the user to swap in their own RPC for these — a public
+ * endpoint's rate limit lifts on its own within seconds. Cleared on success.
+ */
+const rpcRateLimitedChains = new Set<number>();
+
+/** Get the set of chain IDs currently failing specifically due to rate-limiting. */
+export function getRateLimitedChains(): ReadonlySet<number> {
+  return rpcRateLimitedChains;
+}
+
+// Dev/e2e introspection: expose the live failure sets so a harness can assert the
+// classification directly (no-op in prod builds — __DEV__ is false there).
+if (typeof __DEV__ !== 'undefined' && __DEV__) {
+  (globalThis as { __velaRpcState?: unknown }).__velaRpcState = {
+    failed: () => [...rpcFailedChains],
+    rateLimited: () => [...rpcRateLimitedChains],
+  };
 }
 
 /** Built-in bundler base URL (reads user config, falls back to default) */
@@ -533,6 +556,32 @@ class HttpBanError extends Error {
   constructor(status: number) { super(`HTTP ${status}`); this.name = 'HttpBanError'; }
 }
 
+/** Custom error to flag a rate-limited endpoint (HTTP 429). Transient — fail over
+ *  now and let the endpoint cool down briefly, never a hard ban. */
+class RateLimitError extends Error {
+  constructor() { super('HTTP 429'); this.name = 'RateLimitError'; }
+}
+
+/** True when a JSON-RPC error signals rate-limiting / quota (as opposed to a hard
+ *  auth/config failure). Used only to CLASSIFY a chain's failure as transient, not
+ *  to change the ban/failover decision (that stays with the existing checks). */
+function isRateLimitSignal(error: RPCResponse['error']): boolean {
+  if (!error) return false;
+  const msg = (error.message ?? '').toLowerCase();
+  const code = error.code;
+  return (
+    msg.includes('rate limit') ||
+    msg.includes('rate-limit') ||
+    msg.includes('too many request') ||
+    msg.includes('usage limit') ||
+    msg.includes('quota') ||
+    msg.includes('exceeded') ||
+    code === -32005 || // common provider rate-limit code (Infura/others)
+    code === -32001 || // 1rpc "usage limit"
+    code === -32029
+  );
+}
+
 async function tryEndpoint(
   url: string,
   method: string,
@@ -555,6 +604,10 @@ async function tryEndpoint(
     if (res.status === 401 || res.status === 403 || res.status === 404) {
       throw new HttpBanError(res.status);
     }
+    // 429 Too Many Requests = rate-limited. The endpoint is fine, it just wants us
+    // to back off — fail over now (short cooldown, no hard ban) and let the UI treat
+    // this chain as transiently unavailable rather than "broken".
+    if (res.status === 429) throw new RateLimitError();
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const contentType = res.headers.get('content-type') ?? '';
     if (!contentType.includes('json')) {
@@ -648,7 +701,15 @@ export async function poolRpcCall(
   if (injectedLatency > 0) await new Promise(r => setTimeout(r, injectedLatency));
   if (rpcShouldFail(chainId)) {
     rpcFailedChains.add(chainId);
+    rpcRateLimitedChains.delete(chainId); // a hard fault is persistent, not rate-limiting
     throw new Error(`[fault] RPC forced to fail for chain ${chainId}`);
+  }
+  if (rpcShouldRateLimit(chainId)) {
+    // Simulate every endpoint being rate-limited: the chain reads fail now, but
+    // it's transient — mark it so the UI keeps the cached balance and stays calm.
+    rpcFailedChains.add(chainId);
+    rpcRateLimitedChains.add(chainId);
+    throw new Error(`[fault] RPC rate-limited for chain ${chainId}`);
   }
 
   await ensurePool(chainId);
@@ -669,6 +730,10 @@ export async function poolRpcCall(
   }
   console.log(`[RPC] ${method} chain=${chainId} endpoints=${endpoints.length} [${endpoints.map(e => `${e.source}:${shorten(e.url)}`).join(', ')}]`);
 
+  // Whether any endpoint this pass reported rate-limiting. If the whole chain ends
+  // up failing, this decides transient (rate-limited → keep cached, stay quiet) vs
+  // persistent (→ surface the fix-your-RPC banner).
+  let sawRateLimit = false;
   for (const ep of endpoints) {
     const t0 = Date.now();
     try {
@@ -683,12 +748,14 @@ export async function poolRpcCall(
         recordSuccess(ep, ms);
         recordNet('rpc', 'success');
         rpcFailedChains.delete(chainId);
+        rpcRateLimitedChains.delete(chainId);
         console.log(`[RPC] eth_getLogs → ${shorten(ep.url)} ${ms}ms RANGE_LIMIT: ${response.error.message?.slice(0, 60)} → caller splits`);
         return response;
       }
 
       // Ban endpoints that require auth/API key and failover to next
       if (response.error && isPermanentRpcError(response.error)) {
+        if (isRateLimitSignal(response.error)) sawRateLimit = true;
         ep.banned = true;
         recordFailure(ep);
         tempBan(ep.url);
@@ -699,6 +766,7 @@ export async function poolRpcCall(
 
       // Transient server errors: failover without banning
       if (response.error && isTransientServerError(response.error)) {
+        if (isRateLimitSignal(response.error)) sawRateLimit = true;
         recordFailure(ep);
         console.warn(`[RPC] ${method} → ${shorten(ep.url)} ${ms}ms SERVER_ERR: ${response.error.message?.slice(0, 60)} → trying next`);
         continue;
@@ -707,6 +775,7 @@ export async function poolRpcCall(
       recordSuccess(ep, ms);
       recordNet('rpc', 'success');
       rpcFailedChains.delete(chainId);
+      rpcRateLimitedChains.delete(chainId);
       console.log(`[RPC] ${method} → ${shorten(ep.url)} ${ms}ms ${response.error ? 'ERR:' + response.error.message?.slice(0, 60) : 'OK'}`);
       return response;
     } catch (err) {
@@ -716,6 +785,11 @@ export async function poolRpcCall(
         tempBan(ep.url);
         maybePermaBan(ep);
         console.warn(`[RPC] ${method} → ${shorten(ep.url)} BANNED: ${err.message}`);
+      } else if (err instanceof RateLimitError) {
+        // 429: back off this endpoint briefly (scoring cooldown), never a hard ban.
+        sawRateLimit = true;
+        recordFailure(ep);
+        console.warn(`[RPC] ${method} → ${shorten(ep.url)} RATE_LIMITED (429) → trying next`);
       } else {
         recordFailure(ep);
         console.warn(`[RPC] ${method} → ${shorten(ep.url)} FAIL: ${err instanceof Error ? err.message : String(err)}`);
@@ -736,6 +810,10 @@ export async function poolRpcCall(
   }
 
   rpcFailedChains.add(chainId);
+  // Classify the chain-level failure: rate-limited (transient, self-healing → the
+  // UI keeps the cached balance and stays quiet) vs a hard failure (→ fix banner).
+  if (sawRateLimit) rpcRateLimitedChains.add(chainId);
+  else rpcRateLimitedChains.delete(chainId);
   recordNet('rpc', 'final_failure', { note: `all endpoints failed: ${method} chain ${chainId}` });
   throw new Error(`All RPC endpoints failed for chain ${chainId}`);
 }

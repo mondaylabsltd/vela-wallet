@@ -48,6 +48,13 @@
     "connFailed": "Failed",
     "assetsSheetTitle": "Your assets",
     "cancel": "Cancel",
-    "toastReceived": "{{amount}} {{token}} received"
+    "toastReceived": "{{amount}} {{token}} received",
+    "a11yViewAssets": "View your assets",
+    "a11yHideBalance": "Hide balance",
+    "a11yShowBalance": "Show balance",
+    "a11yChangeCurrency": "Change display currency, currently {{code}}",
+    "a11yViewStatement": "View full statement on block explorer",
+    "a11ySwitchAccount": "Account {{name}}. Switch account",
+    "a11yOpenSettings": "Settings"
   }
 }

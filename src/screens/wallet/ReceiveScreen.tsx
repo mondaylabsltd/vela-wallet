@@ -291,7 +291,15 @@ export default function ReceiveScreen() {
                   <Text style={styles.warningText}>
                     {t('receive.warningBody')}
                   </Text>
-                  <Pressable style={styles.warningBtn} onPress={() => setWarningDismissed(true)}>
+                  <Text style={styles.warningReassure}>
+                    {t('receive.warningCounterfactual')}
+                  </Text>
+                  <Pressable
+                    style={styles.warningBtn}
+                    onPress={() => setWarningDismissed(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('receive.warningConfirm')}
+                  >
                     <Text style={styles.warningBtnText}>{t('receive.warningConfirm')}</Text>
                   </Pressable>
                 </View>
@@ -471,6 +479,16 @@ const styles = createStyles(() => ({
     color: color.fg.subtle,
     textAlign: 'center',
     lineHeight: 22,
+  },
+  // Positive counterfactual reassurance — reads as trust, not caution, so it's
+  // tinted success rather than the muted caution copy above it.
+  warningReassure: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.success.base,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: space.md,
   },
   warningBtn: {
     backgroundColor: color.accent.base,

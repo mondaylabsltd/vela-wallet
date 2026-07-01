@@ -19,15 +19,27 @@ export function Divider() {
   return <View style={styles.divider} />;
 }
 
-export function DetailRow({ label, value, custom, mono, onCopy, onOpen, copied }: {
+export function DetailRow({ label, value, custom, mono, onCopy, onOpen, copied, actionHint }: {
   label: string; value?: string; custom?: React.ReactNode; mono?: boolean;
   onCopy?: () => void; onOpen?: () => void; copied?: boolean;
+  /** Localized hint for the tap action, e.g. "Copy address" / "Open in explorer". */
+  actionHint?: string;
 }) {
+  const interactive = !!(onOpen || onCopy);
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
       {custom ?? (
-        <Pressable style={styles.rowValueWrap} onPress={onOpen ?? onCopy} disabled={!onOpen && !onCopy} hitSlop={6}>
+        <Pressable
+          style={styles.rowValueWrap}
+          onPress={onOpen ?? onCopy}
+          disabled={!interactive}
+          hitSlop={10}
+          accessibilityRole={interactive ? 'button' : undefined}
+          accessibilityLabel={interactive ? (value ? `${label}: ${value}` : label) : undefined}
+          accessibilityHint={interactive ? actionHint : undefined}
+          accessibilityState={onCopy ? { selected: !!copied } : undefined}
+        >
           <Text style={[styles.rowValue, mono && styles.rowValueMono]} numberOfLines={1}>{value}</Text>
           {onCopy ? (copied ? <Check size={14} color={color.success.base} strokeWidth={2.6} /> : <Copy size={14} color={color.fg.subtle} strokeWidth={2} />) : null}
           {onOpen ? <ExternalLink size={14} color={color.fg.subtle} strokeWidth={2} /> : null}

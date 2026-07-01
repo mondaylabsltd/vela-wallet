@@ -18,6 +18,8 @@ import { AlertProvider } from '@/components/ui/AppAlert';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { installFaultConsole } from '@/services/dev/fault-injection';
 import { installMetricsConsole } from '@/services/metrics';
+import { installParallelConsole, applyParallelSpaceOnBoot } from '@/services/dev/parallel-space';
+import { ParallelSpaceBadge } from '@/components/dev/ParallelSpaceBadge';
 import { hasPendingUploads, loadLocalePrefs, loadRpcProviders, loadServiceEndpoints } from '@/services/storage';
 import i18n, { loadLanguage } from '@/i18n';
 import { LanguageProvider, useLanguagePreference } from '@/i18n/language';
@@ -92,8 +94,10 @@ function AppShell() {
               <Stack.Screen name="assets" options={{ presentation: 'modal' }} />
               <Stack.Screen name="history" options={{ presentation: 'modal' }} />
               <Stack.Screen name="about" options={{ presentation: 'modal' }} />
+              {__DEV__ && <Stack.Screen name="parallel" />}
             </Stack>
             <SigningRequestModal />
+            {__DEV__ && <ParallelSpaceBadge />}
           </ThemeProvider>
         </DAppConnectionProvider>
       </WalletProvider>
@@ -123,8 +127,11 @@ export default function RootLayout() {
   }, [fontError]);
 
   useEffect(() => {
-    if (__DEV__) { installFaultConsole(); installMetricsConsole(); }
+    if (__DEV__) { installFaultConsole(); installMetricsConsole(); installParallelConsole(); }
     Promise.all([
+      // Parallel space (dev): re-arm the fixed-key signer before the wallet mounts so
+      // a reload inside the test environment stays in it. No-op in real space / prod.
+      __DEV__ ? applyParallelSpaceOnBoot() : Promise.resolve(),
       loadTextScale().then(() => rebuildTextScale()),
       loadColorScheme().then(() => {
         const pref = getColorSchemePreference();

@@ -81,7 +81,7 @@ export function CurrencySheet({ visible, selected, onSelect, onClose }: Props) {
             returnKeyType="search"
           />
           {query.length > 0 && (
-            <Pressable onPress={() => setQuery('')} hitSlop={8}>
+            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('componentsUi.currency.clearSearch')}>
               <X size={18} color={color.fg.subtle} strokeWidth={2.2} />
             </Pressable>
           )}
@@ -103,6 +103,9 @@ export function CurrencySheet({ visible, selected, onSelect, onClose }: Props) {
                 key={c.code}
                 style={[styles.row, isSel && styles.rowSel]}
                 onPress={() => pick(c.code)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: isSel }}
+                accessibilityLabel={`${c.code} · ${c.name}`}
                 onLayout={isSel ? (e) => {
                   selectedYRef.current = e.nativeEvent.layout.y;
                   if (openingRef.current) requestAnimationFrame(scrollToSelected);

@@ -46,6 +46,9 @@ export function VelaButton({ title, onPress, variant = 'primary', disabled, load
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       disabled={disabled || loading}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: !!(disabled || loading), busy: !!loading }}
       style={[
         styles.button,
         compact && styles.buttonCompact,

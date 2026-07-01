@@ -46,3 +46,4 @@ images-de
 .VSCodeCounter
 e2e/screenshots/
 test-results/
+.ux-audit/

@@ -24,6 +24,8 @@
 interface Faults {
   rpcFailAll: boolean;
   rpcFailChains: Set<number>;
+  rpcRateLimitAll: boolean;
+  rpcRateLimitChains: Set<number>;
   rpcLatencyMs: number;
   rpcFailRate: number; // 0..1
   priceNullAll: boolean;
@@ -33,6 +35,8 @@ interface Faults {
 const faults: Faults = {
   rpcFailAll: false,
   rpcFailChains: new Set(),
+  rpcRateLimitAll: false,
+  rpcRateLimitChains: new Set(),
   rpcLatencyMs: 0,
   rpcFailRate: 0,
   priceNullAll: false,
@@ -46,6 +50,8 @@ function recompute(): void {
   active =
     faults.rpcFailAll ||
     faults.rpcFailChains.size > 0 ||
+    faults.rpcRateLimitAll ||
+    faults.rpcRateLimitChains.size > 0 ||
     faults.rpcLatencyMs > 0 ||
     faults.rpcFailRate > 0 ||
     faults.priceNullAll ||
@@ -62,6 +68,15 @@ export function rpcShouldFail(chainId: number): boolean {
   if (faults.rpcFailAll || faults.rpcFailChains.has(chainId)) return true;
   if (faults.rpcFailRate > 0 && Math.random() < faults.rpcFailRate) return true;
   return false;
+}
+
+/** True if an RPC call on this chain should be forced to RATE-LIMIT right now.
+ *  Distinct from {@link rpcShouldFail}: the read still fails, but as a transient,
+ *  self-healing condition — so the UI keeps the cached balance and skips the
+ *  "swap your RPC" banner. */
+export function rpcShouldRateLimit(chainId: number): boolean {
+  if (!active) return false;
+  return faults.rpcRateLimitAll || faults.rpcRateLimitChains.has(chainId);
 }
 
 /** Artificial latency (ms) to add before an RPC call. 0 = none. */
@@ -92,6 +107,8 @@ function describe(): string[] {
   const lines: string[] = [];
   if (faults.rpcFailAll) lines.push('• RPC: failing on ALL chains');
   else if (faults.rpcFailChains.size) lines.push(`• RPC: failing on ${[...faults.rpcFailChains].map(chainLabel).join(', ')}`);
+  if (faults.rpcRateLimitAll) lines.push('• RPC: rate-limited on ALL chains (transient → cached balance, no banner)');
+  else if (faults.rpcRateLimitChains.size) lines.push(`• RPC: rate-limited on ${[...faults.rpcRateLimitChains].map(chainLabel).join(', ')}`);
   if (faults.rpcLatencyMs) lines.push(`• RPC latency: +${faults.rpcLatencyMs}ms per call`);
   if (faults.rpcFailRate) lines.push(`• RPC flaky: ${Math.round(faults.rpcFailRate * 100)}% of calls fail`);
   if (faults.priceNullAll) lines.push('• Prices: nulled on ALL chains (tokens show, total drops)');
@@ -103,6 +120,7 @@ const HELP = [
   'Vela fault injection — simulate degraded network conditions:',
   '',
   "  vela.failRpc(chainId | 'all')   force RPC calls to fail (also stops activity — same RPC layer)",
+  "  vela.rateLimitRpc(chain|'all')  simulate 429 rate-limiting — transient: cached balance, NO scary banner",
   '  vela.slowRpc(ms)                add latency to every RPC call',
   '  vela.flakyRpc(rate 0..1)        randomly fail that fraction of RPC calls',
   "  vela.nullPrice(chainId | 'all') tokens load but have no price → total undercounts",
@@ -123,7 +141,7 @@ type ChainArg = number | 'all';
 export function installFaultConsole(): void {
   const g = globalThis as any;
 
-  const toggleChain = (set: Set<number>, allKey: 'rpcFailAll' | 'priceNullAll', arg: ChainArg) => {
+  const toggleChain = (set: Set<number>, allKey: 'rpcFailAll' | 'rpcRateLimitAll' | 'priceNullAll', arg: ChainArg) => {
     if (arg === 'all') { faults[allKey] = true; }
     else { set.add(arg); }
     recompute();
@@ -132,6 +150,10 @@ export function installFaultConsole(): void {
   const api = {
     failRpc(chain: ChainArg) {
       toggleChain(faults.rpcFailChains, 'rpcFailAll', chain);
+      return api.status();
+    },
+    rateLimitRpc(chain: ChainArg) {
+      toggleChain(faults.rpcRateLimitChains, 'rpcRateLimitAll', chain);
       return api.status();
     },
     slowRpc(ms: number) {
@@ -151,6 +173,8 @@ export function installFaultConsole(): void {
     clear() {
       faults.rpcFailAll = false;
       faults.rpcFailChains.clear();
+      faults.rpcRateLimitAll = false;
+      faults.rpcRateLimitChains.clear();
       faults.rpcLatencyMs = 0;
       faults.rpcFailRate = 0;
       faults.priceNullAll = false;
@@ -173,3 +197,24 @@ export function installFaultConsole(): void {
   g.vela = Object.assign(g.vela ?? {}, api);
   console.log('[vela] fault injection ready — run vela.help()');
 }
+
+/**
+ * Automation seam: an e2e harness pre-arms faults BEFORE the first render by setting
+ * `globalThis.__VELA_FAULT_INIT__` (Playwright addInitScript) to a list of [method,
+ * arg] steps, e.g. [['rateLimitRpc', 'all']]. Applied at MODULE LOAD — earlier than
+ * any React effect — so the very first balance load already runs under the fault
+ * (no refresh-timing games). No-op unless the global is set (i.e. never in prod use).
+ */
+(function applyPreArmedFaults() {
+  const seed = (globalThis as { __VELA_FAULT_INIT__?: unknown }).__VELA_FAULT_INIT__;
+  if (!Array.isArray(seed)) return;
+  for (const step of seed) {
+    const [fn, arg] = Array.isArray(step) ? step : [step, undefined];
+    if (fn === 'failRpc') { if (arg === 'all') faults.rpcFailAll = true; else faults.rpcFailChains.add(Number(arg)); }
+    else if (fn === 'rateLimitRpc') { if (arg === 'all') faults.rpcRateLimitAll = true; else faults.rpcRateLimitChains.add(Number(arg)); }
+    else if (fn === 'nullPrice') { if (arg === 'all') faults.priceNullAll = true; else faults.priceNullChains.add(Number(arg)); }
+    else if (fn === 'slowRpc') faults.rpcLatencyMs = Math.max(0, Number(arg) | 0);
+    else if (fn === 'flakyRpc') faults.rpcFailRate = Math.min(1, Math.max(0, Number(arg)));
+  }
+  recompute();
+})();

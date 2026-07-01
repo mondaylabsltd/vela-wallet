@@ -15,7 +15,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import {
-  ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, RefreshCw, Settings, Trash2, X,
+  AlertTriangle, ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, RefreshCw, Settings, Trash2, X,
 } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -43,6 +43,7 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { WaveDock } from '@/components/ui/WaveDock';
 import { RpcTroubleBanner } from '@/components/ui/RpcTroubleBanner';
+import { getRateLimitedChains } from '@/services/rpc-pool';
 
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
@@ -114,6 +115,10 @@ export default function HomeScreen() {
   const [tab, setTab] = useState<Tab>('activity');
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [failedChainIds, setFailedChainIds] = useState<number[]>([]);
+  // Subset of failedChainIds that failed due to rate-limiting — transient and
+  // self-healing, so we keep the cached balance but suppress the "fix your RPC"
+  // banner (swapping RPC is the wrong fix for a limit that lifts on its own).
+  const [rateLimitedChainIds, setRateLimitedChainIds] = useState<number[]>([]);
   const [cachedTotal, setCachedTotal] = useState<number | null>(null);
   const [hidden, setHidden] = useState(false);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
@@ -332,6 +337,8 @@ export default function HomeScreen() {
       if (addressRef.current !== address) return; // stale result for a previous account
       setTokens(result);
       setFailedChainIds(failed);
+      // Snapshot which of those failures are just rate-limiting (transient).
+      setRateLimitedChainIds([...getRateLimitedChains()]);
       // Only trust the total as the new "last known good" when it's complete —
       // no failed chains and every held token priced.
       const unpriced = result.some((t) => tokenBalanceDouble(t) > 0 && t.priceUsd == null);
@@ -588,22 +595,54 @@ export default function HomeScreen() {
           <Text style={styles.balanceLabel}>{t('home.totalBalance')}</Text>
           <View style={styles.balanceTopRow}>
             {/* Tap the balance to see the assets behind it (reuses the Send picker). */}
-            <Pressable style={styles.balanceFill} onPress={() => setShowAssets(true)} disabled={hidden} hitSlop={4}>
+            <Pressable
+              style={styles.balanceFill}
+              onPress={() => setShowAssets(true)}
+              disabled={hidden}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.a11yViewAssets')}
+            >
               {hidden ? <Text style={styles.balanceHidden}>••••••</Text> : (
                 <Balance value={displayTotal * rate} symbol={currency.symbol} code={currencyCode} />
               )}
             </Pressable>
-            <Pressable onPress={() => setHidden((h) => !h)} hitSlop={8} style={styles.eyeBtn}>
+            <Pressable
+              onPress={() => setHidden((h) => !h)}
+              hitSlop={8}
+              style={styles.eyeBtn}
+              accessibilityRole="button"
+              accessibilityLabel={t(hidden ? 'home.a11yShowBalance' : 'home.a11yHideBalance')}
+              accessibilityState={{ expanded: !hidden }}
+            >
               {hidden ? <EyeOff size={22} color={color.fg.muted} strokeWidth={2} /> : <Eye size={22} color={color.fg.muted} strokeWidth={2} />}
             </Pressable>
           </View>
+          {balancePartial && (
+            <View style={styles.balanceStaleRow}>
+              <AlertTriangle size={12} color={color.warning.base} strokeWidth={2.5} />
+              <Text style={styles.balanceStaleText}>{t('home.balanceStale')}</Text>
+            </View>
+          )}
           <View style={styles.balanceBottomRow}>
-            <Pressable style={styles.currencyChip} onPress={() => setShowCurrency(true)} hitSlop={6}>
+            <Pressable
+              style={styles.currencyChip}
+              onPress={() => setShowCurrency(true)}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.a11yChangeCurrency', { code: currencyCode })}
+            >
               <Text style={styles.currencyText}>{currencyCode}</Text>
               <ChevronDown size={14} color={color.fg.muted} strokeWidth={2.4} />
             </Pressable>
-            <Pressable style={styles.manageBtn} onPress={() => { if (address) openURL(`https://blockscan.com/address/${address}`); }} hitSlop={6}>
-              <Text style={styles.manageText}>{t('home.statement')}</Text>
+            <Pressable
+              style={styles.manageBtn}
+              onPress={() => { if (address) openURL(`https://blockscan.com/address/${address}`); }}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={t('home.a11yViewStatement')}
+            >
+              <Text style={styles.manageText} numberOfLines={1}>{t('home.statement')}</Text>
               <ChevronRight size={18} color={color.fg.muted} strokeWidth={2.6} />
             </Pressable>
           </View>
@@ -612,9 +651,11 @@ export default function HomeScreen() {
       </Animated.View>
       )}
 
-      {/* RPC failure banner + fix flow (shared with AssetsScreen). */}
+      {/* RPC failure banner + fix flow (shared with AssetsScreen). Rate-limited
+          chains are excluded — that's transient and self-healing, so nagging the
+          user to swap RPC would be wrong; their balance quietly stays on cache. */}
       <RpcTroubleBanner
-        chainIds={failedChainIds}
+        chainIds={failedChainIds.filter((id) => !rateLimitedChainIds.includes(id))}
         onResolved={(chainId) => {
           setFailedChainIds((prev) => prev.filter((id) => id !== chainId));
           loadData();
@@ -661,7 +702,12 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safe} edges={['top']}>
         {/* Header */}
         <Animated.View style={styles.header} entering={fadeIn(0, 400)}>
-          <Pressable style={styles.account} onPress={openSwitcher}>
+          <Pressable
+            style={styles.account}
+            onPress={openSwitcher}
+            accessibilityRole="button"
+            accessibilityLabel={t('home.a11ySwitchAccount', { name: accountName })}
+          >
             <View style={styles.avatar}><Text style={styles.avatarText}>{(accountName[0] ?? 'V').toUpperCase()}</Text></View>
             <View style={styles.accountInfo}>
               <Text style={styles.accountName} numberOfLines={1}>{accountName}</Text>
@@ -671,7 +717,13 @@ export default function HomeScreen() {
               <ChevronDown size={16} color={color.fg.subtle} strokeWidth={2.4} />
             )}
           </Pressable>
-          <Pressable style={styles.iconBtn} onPress={() => router.navigate('/settings')} hitSlop={6}>
+          <Pressable
+            style={styles.iconBtn}
+            onPress={() => router.navigate('/settings')}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={t('home.a11yOpenSettings')}
+          >
             <Settings size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
         </Animated.View>
@@ -1118,6 +1170,10 @@ const styles = createStyles(() => ({
   balanceDec: { fontSize: 30, ...inter.bold, fontFamily: font.display, color: color.fg.subtle },
   balanceHidden: { fontSize: 52, ...inter.bold, color: color.fg.base, flex: 1, letterSpacing: 2 },
   eyeBtn: { padding: space.xs },
+  // Parity with AssetsScreen: when a chain read failed or a held token is unpriced,
+  // the hero total is an estimate — say so rather than showing a confident number.
+  balanceStaleRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.md },
+  balanceStaleText: { fontSize: text.sm, ...inter.medium, color: color.warning.base },
   balanceBottomRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.xl },
   currencyChip: {
     flexDirection: 'row', alignItems: 'center', gap: space.xs,

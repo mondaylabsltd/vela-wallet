@@ -64,6 +64,7 @@ export function SlideToConfirmButton({ title, hint, onConfirm, disabled, loading
   blockedRef.current = blocked;
 
   const danger = tone === 'danger';
+  const trackRef = useRef<any>(null);
 
   const fire = useCallback(() => {
     if (fired.current || disabled || loading) return;
@@ -71,6 +72,27 @@ export function SlideToConfirmButton({ title, hint, onConfirm, disabled, loading
     hapticSuccess();
     onConfirm();
   }, [onConfirm, disabled, loading]);
+
+  // Web keyboard access: the commit is a pointer-drag, so on web the whole
+  // (idle) send/sign flow would be unreachable by keyboard & switch users — this
+  // is the ONLY commit control. Expose the track as a focusable button that fires
+  // on Enter/Space (explicit activation is an acceptable a11y substitute for the
+  // anti-fat-finger drag). Native keeps its onAccessibilityAction path below.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const el = trackRef.current as HTMLElement | null;
+    if (!el) return;
+    el.setAttribute('tabindex', blocked ? '-1' : '0');
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (blockedRef.current) return;
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+        e.preventDefault();
+        fire();
+      }
+    };
+    el.addEventListener('keydown', onKeyDown);
+    return () => el.removeEventListener('keydown', onKeyDown);
+  }, [blocked, fire]);
 
   const reset = useCallback(() => {
     armed.current = false;
@@ -169,6 +191,7 @@ export function SlideToConfirmButton({ title, hint, onConfirm, disabled, loading
 
   return (
     <View
+      ref={trackRef}
       style={[styles.track, danger && styles.trackDanger, blocked && styles.disabled, style]}
       onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
       accessible

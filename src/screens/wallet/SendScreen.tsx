@@ -14,7 +14,7 @@ import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenC
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
-import { sendERC20, sendNative, sendBatchCalls, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, rawBundlerGasCost, GAS_TIER_MULTIPLIERS, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
+import { sendERC20, sendNative, sendBatchCalls, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, rawBundlerGasCost, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
 import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
 import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
@@ -1033,7 +1033,11 @@ export default function SendScreen() {
           setTxStatus('error'); hapticError();
         }
       } else {
-        setTxError(error?.message ?? String(error));
+        // Never surface a raw RPC/library exception on the money-flow confirm
+        // screen — it's unlocalized and jargon-filled. Log it for diagnostics and
+        // show a calm, actionable, localized message instead.
+        console.warn('[send] unhandled tx error:', error?.message ?? String(error));
+        setTxError(t('send.txErrorGeneric'));
         setTxStatus('error'); hapticError();
       }
     } finally {
@@ -1576,14 +1580,17 @@ export default function SendScreen() {
                 {!tempo && (
                   <>
                     <View style={styles.tierRow}>
-                      {(['slow', 'standard', 'rapid', 'fast'] as GasTier[]).map((t) => (
+                      {(['slow', 'standard', 'rapid', 'fast'] as GasTier[]).map((tier) => (
                         <Pressable
-                          key={t}
-                          style={[styles.tierBtn, gasTier === t && styles.tierBtnActive]}
-                          onPress={() => handleTierChange(t)}
+                          key={tier}
+                          style={[styles.tierBtn, gasTier === tier && styles.tierBtnActive]}
+                          onPress={() => handleTierChange(tier)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: gasTier === tier }}
+                          accessibilityLabel={t(`send.gasTier.${tier}`)}
                         >
-                          <Text style={[styles.tierBtnText, gasTier === t && styles.tierBtnTextActive]}>
-                            {GAS_TIER_MULTIPLIERS[t].label}
+                          <Text style={[styles.tierBtnText, gasTier === tier && styles.tierBtnTextActive]}>
+                            {t(`send.gasTier.${tier}`)}
                           </Text>
                         </Pressable>
                       ))}
@@ -2551,7 +2558,7 @@ const styles = createStyles(() => ({
     borderRadius: 2,
   },
   txProgressFillSlow: {
-    backgroundColor: color.warning?.base ?? '#F59E0B',
+    backgroundColor: color.warning.base,
   },
   txConfirmHint: {
     fontSize: text.xs,

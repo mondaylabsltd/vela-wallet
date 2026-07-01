@@ -110,6 +110,7 @@ const styles = createStyles(() => ({
     justifyContent: 'center',
     gap: space.sm,
     paddingVertical: space.md,
+    minHeight: 44, // WCAG 2.5.8 touch-target floor (was ~29px)
     borderRadius: radius.md,
   },
   label: {
