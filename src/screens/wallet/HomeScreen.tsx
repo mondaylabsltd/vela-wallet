@@ -900,7 +900,7 @@ export default function HomeScreen() {
         visible={showSwitcher}
         onClose={() => setShowSwitcher(false)}
         title={t('home.switchAccountTitle')}
-        formatSubtitle={(amount, count) => `${t('home.switcherAccountCount', { count })} · ${amount}`}
+        formatSubtitle={(amount, count) => `${t('home.switcherAccountCount', { count })}${amount}`}
         balances={cachedBalances}
         loading={switcherLoading}
       />

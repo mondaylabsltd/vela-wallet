@@ -3,8 +3,9 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { SlideToConfirmButton } from '@/components/ui/SlideToConfirmButton';
-import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenSelector } from '@/components/ui/TokenSelector';
+import { SectionLabel } from '@/components/ui/SectionLabel';
+import { Divider } from '@/components/ui/DetailRow';
 import { color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
 import { chainName, nativeSymbol, networkForChainId, networkId, tokenBadgeNetwork } from '@/models/network';
 import { addCustomNetworkByChainId } from '@/services/add-network';
@@ -1118,9 +1119,10 @@ export default function SendScreen() {
         <Animated.View entering={fadeInDown(0, 300)}>
           <Text style={styles.stepTitle}>{multiSelectMode ? t('send.multiSendTitle') : t('send.sendTitle', { symbol: selectedToken.symbol })}</Text>
 
-          {/* Token hero (single/split) — tap to switch token. Multi-select hides it. */}
+          {/* Token hero (single/split) — open row on the page, tap to switch token.
+              Multi-select hides it. */}
           {!multiSelectMode && (
-          <VelaCard style={styles.heroCard}>
+          <View style={styles.heroBlock}>
             <Pressable style={styles.heroRow} disabled={locked} onPress={() => { setStep('select-token'); setSelectedToken(null); setAmount(''); setInputInUsd(false); setSplitMode(false); setRecipients([]); }}>
               <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={44} />
               <View style={styles.heroIdentity}>
@@ -1142,7 +1144,8 @@ export default function SendScreen() {
                 )}
               </View>
             </Pressable>
-            {!isNativeToken(selectedToken) && selectedToken.tokenAddress ? (
+            {!isNativeToken(selectedToken) && selectedToken.tokenAddress ? (<>
+              <View style={styles.heroDivider} />
               <Pressable
                 style={styles.contractRow}
                 onPress={() => {
@@ -1158,13 +1161,14 @@ export default function SendScreen() {
                   ? <Check size={14} color={color.success.base} strokeWidth={2.5} />
                   : <Copy size={14} color={color.fg.subtle} strokeWidth={2} />}
               </Pressable>
-            ) : null}
-          </VelaCard>
+            </>) : null}
+          </View>
           )}
 
           {/* Single-recipient flow (default). Split / multiSelect replace it below. */}
           {!splitMode && !multiSelectMode && (<>
-          {/* Amount — large display with inline unit */}
+          {/* Amount — open hero on the page (no box); large display with inline unit */}
+          <SectionLabel>{t('send.amountLabel', { defaultValue: 'Amount' })}</SectionLabel>
           <Pressable style={styles.amountWrap} onPress={() => { if (!amountLocked) amountInputRef.current?.focus(); }}>
             <View style={styles.amountTopRow}>
               <View style={styles.amountInputWrap}>
@@ -1314,7 +1318,7 @@ export default function SendScreen() {
             };
             const total = pickedTokens.reduce((s, tk) => s + amountOf(tk) * (tk.priceUsd ?? 0), 0);
             return (<>
-            <VelaCard style={styles.multiCard}>
+            <View style={styles.multiBlock}>
               <View style={styles.mtSummary}>
                 <Text style={styles.mtSummaryTitle}>
                   {t('send.multiSendSummary', { n: pickedTokens.length, chain: chainName(cid) })}
@@ -1326,22 +1330,25 @@ export default function SendScreen() {
                 const usd = amt * (tk.priceUsd ?? 0);
                 const reserved = isNativeToken(tk) && amt < tokenBalanceDouble(tk);
                 return (
-                  <View key={tokenId(tk)} style={[styles.mtRow, styles.mtRowBorder]}>
-                    <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={32} />
-                    <View style={styles.mtInfo}>
-                      <Text style={styles.mtSym}>{tk.symbol}</Text>
-                      <Text style={styles.mtChain}>
-                        {chainName(tokenChainId(tk))}{reserved ? ` · ${t('send.gasReserved')}` : ''}
-                      </Text>
-                    </View>
-                    <View style={styles.mtVals}>
-                      <Text style={styles.mtBal}>{formatTokenAmount(amt, { compact: true })}</Text>
-                      {usd > 0 && <Text style={styles.mtUsd}>{formatUsd(usd)}</Text>}
+                  <View key={tokenId(tk)}>
+                    <View style={styles.mtSep} />
+                    <View style={styles.mtRow}>
+                      <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={32} />
+                      <View style={styles.mtInfo}>
+                        <Text style={styles.mtSym}>{tk.symbol}</Text>
+                        <Text style={styles.mtChain}>
+                          {chainName(tokenChainId(tk))}{reserved ? ` · ${t('send.gasReserved')}` : ''}
+                        </Text>
+                      </View>
+                      <View style={styles.mtVals}>
+                        <Text style={styles.mtBal}>{formatTokenAmount(amt, { compact: true })}</Text>
+                        {usd > 0 && <Text style={styles.mtUsd}>{formatUsd(usd)}</Text>}
+                      </View>
                     </View>
                   </View>
                 );
               })}
-            </VelaCard>
+            </View>
 
             <View style={[styles.fieldLabelRow, { marginTop: space.xl }]}>
               <Text style={styles.fieldLabel}>{t('send.recipientLabel')}</Text>
@@ -1419,8 +1426,8 @@ export default function SendScreen() {
         <Animated.View entering={fadeInDown(0, 300)}>
           <Text style={styles.stepTitle}>{t('send.confirmTitle')}</Text>
 
-          {/* Transfer card: From → To with token info */}
-          <VelaCard style={styles.confirmCard}>
+          {/* Transfer review: From → To with token info — open rows on the page */}
+          <View style={styles.confirmBlock}>
             {/* From */}
             <View style={styles.transferEndpoint}>
               <Text style={styles.transferLabel}>{t('send.fromLabel')}</Text>
@@ -1434,7 +1441,7 @@ export default function SendScreen() {
                 <View style={styles.transferLine} />
               </View>
               {!multiSelectMode ? (
-                <View style={styles.transferToken}>
+                <View style={styles.transferTokenRow}>
                   <TokenLogo symbol={selectedToken.symbol} logoUrls={logos} chain={tokenBadgeNetwork(selectedToken)} size={36} />
                   <View style={styles.transferTokenIdentity}>
                     <Text style={styles.transferTokenSymbol}>{selectedToken.symbol}</Text>
@@ -1462,7 +1469,7 @@ export default function SendScreen() {
                         const usd = amt * (tk.priceUsd ?? 0);
                         const reserved = isNativeToken(tk) && amt < tokenBalanceDouble(tk);
                         return (
-                          <View key={tokenId(tk)} style={styles.transferToken}>
+                          <View key={tokenId(tk)} style={styles.transferTokenRow}>
                             <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={36} />
                             <View style={styles.transferTokenIdentity}>
                               <Text style={styles.transferTokenSymbol}>{tk.symbol}</Text>
@@ -1527,7 +1534,7 @@ export default function SendScreen() {
                 })}
               </View>
             )}
-          </VelaCard>
+          </View>
 
           {/* Simulation — revert pre-check + net balance changes (shared render
               path with the dApp signing sheet). */}
@@ -1585,11 +1592,12 @@ export default function SendScreen() {
             };
 
             return (
-              <VelaCard style={styles.gasCard}>
+              <View style={styles.gasBlock}>
                 {/* Speed tiers — hidden on Tempo: gas price is a fixed protocol rate with
-                    no priority-fee market, so the tiers do nothing. */}
+                    no priority-fee market, so the tiers do nothing. Light chip selector. */}
                 {!tempo && (
                   <>
+                    <SectionLabel>{t('send.gasSpeedLabel', { defaultValue: 'Speed' })}</SectionLabel>
                     <View style={styles.tierRow}>
                       {(['slow', 'standard', 'rapid', 'fast'] as GasTier[]).map((tier) => (
                         <Pressable
@@ -1613,7 +1621,6 @@ export default function SendScreen() {
                         )}
                       </Pressable>
                     </View>
-                    <View style={styles.confirmSeparator} />
                   </>
                 )}
                 {tempo ? (
@@ -1621,15 +1628,15 @@ export default function SendScreen() {
                 ) : (
                   <>
                     <ConfirmRow label={t('send.gasPriceLabel')} value={`${bundlerGwei.toFixed(4)} Gwei`} />
-                    <View style={styles.confirmSeparator} />
+                    <Divider />
                     <ConfirmRow label={t('send.gasPriceUserOpLabel')} value={`${userOpGwei.toFixed(4)} Gwei`} />
                   </>
                 )}
-                <View style={styles.confirmSeparator} />
+                <Divider />
                 <ConfirmRow label={t('send.gasLimitLabel')} value={feeEstimate.totalGas.toLocaleString()} />
-                <View style={styles.confirmSeparator} />
+                <Divider />
                 <ConfirmRow label={t('send.walletDeployedLabel')} value={feeEstimate.deployed ? t('send.walletDeployedYes') : t('send.walletDeployedNo')} />
-              </VelaCard>
+              </View>
             );
           })()}
 
@@ -2014,10 +2021,16 @@ const styles = createStyles(() => ({
     color: color.accent.base,
   },
 
-  // Hero card (matches TokenDetailScreen)
-  heroCard: {
-    padding: space['2xl'],
+  // Token hero — open on the page (de-boxed), grouped by space + a hairline
+  heroBlock: {
     marginBottom: space['3xl'],
+  },
+  heroDivider: {
+    height: 1,
+    backgroundColor: color.border.base,
+    marginTop: space.lg,
+    // inset past the 44px logo + its gap so the line aligns under the text
+    marginLeft: 44 + space.lg,
   },
   heroRow: {
     flexDirection: 'row',
@@ -2038,15 +2051,14 @@ const styles = createStyles(() => ({
     ...inter.medium,
     color: color.fg.subtle,
   },
-  // ERC-20 contract address (tap to copy)
+  // ERC-20 contract address (tap to copy) — open row under the hairline, inset to
+  // align under the hero's text
   contractRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
     marginTop: space.lg,
-    paddingTop: space.lg,
-    borderTopWidth: 1,
-    borderTopColor: color.border.base,
+    marginLeft: 44 + space.lg,
   },
   contractLabel: {
     fontSize: text.sm,
@@ -2138,9 +2150,9 @@ const styles = createStyles(() => ({
   },
   confirmRecipientLeft: { flex: 1, gap: 2 },
   confirmRecipientAmt: { alignItems: 'flex-end' },
-  // ② multi-token send (multi-select → one recipient). Card owns the horizontal
-  // padding (VelaCard has none); inner rows are flush so dividers align cleanly.
-  multiCard: { marginBottom: space.lg, paddingHorizontal: space.xl, paddingVertical: space.xs },
+  // ② multi-token send (multi-select → one recipient) — open rows on the page,
+  // grouped by a summary line + hairline dividers (de-boxed, no card).
+  multiBlock: { marginBottom: space.lg },
   mtSummary: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2156,7 +2168,8 @@ const styles = createStyles(() => ({
     gap: space.lg,
     paddingVertical: space.lg,
   },
-  mtRowBorder: { borderTopWidth: 1, borderTopColor: color.border.base },
+  // Hairline between token rows, inset past the 32px logo + gap
+  mtSep: { height: 1, backgroundColor: color.border.base, marginLeft: 32 + space.lg },
   mtInfo: { flex: 1, gap: 1 },
   mtSym: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
   mtChain: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle },
@@ -2210,13 +2223,9 @@ const styles = createStyles(() => ({
     marginHorizontal: space.lg,
   },
 
+  // Amount hero — open on the page (no box); the big number leads
   amountWrap: {
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    paddingHorizontal: space.xl,
-    paddingVertical: space.lg,
+    paddingVertical: space.md,
     marginBottom: space.lg,
   },
   amountTopRow: {
@@ -2240,13 +2249,12 @@ const styles = createStyles(() => ({
     marginLeft: space.sm,
     flexShrink: 0,
   },
+  // MAX — a soft, borderless light chip (matches the filter-chip language)
   maxBtn: {
-    paddingVertical: space.xs,
+    paddingVertical: space.sm,
     paddingHorizontal: space.lg,
-    backgroundColor: color.bg.raised,
+    backgroundColor: color.bg.sunken,
     borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: color.border.base,
   },
   maxBtnText: {
     fontSize: text.sm,
@@ -2289,9 +2297,8 @@ const styles = createStyles(() => ({
     textAlign: 'center' as const,
   },
 
-  // Confirm — transfer flow card
-  confirmCard: {
-    padding: space['2xl'],
+  // Confirm — transfer review, open on the page (de-boxed)
+  confirmBlock: {
     marginBottom: space.lg,
   },
   transferEndpoint: {
@@ -2354,15 +2361,13 @@ const styles = createStyles(() => ({
     flex: 1,
     backgroundColor: color.border.base,
   },
-  transferToken: {
+  // Token line in the confirm review — open row (de-boxed, no sunken panel)
+  transferTokenRow: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.lg,
     paddingVertical: space.md,
-    paddingHorizontal: space.lg,
   },
   transferTokenIdentity: {
     flex: 1,
@@ -2425,8 +2430,8 @@ const styles = createStyles(() => ({
     ...inter.regular,
     color: color.fg.subtle,
   },
-  gasCard: {
-    padding: space.xl,
+  // Gas details — open rows under a section label (de-boxed, no card)
+  gasBlock: {
     marginBottom: space.lg,
   },
   tierRow: {
@@ -2442,8 +2447,9 @@ const styles = createStyles(() => ({
     alignItems: 'center',
     backgroundColor: color.bg.sunken,
   },
+  // Selected tier — a light accent-soft chip (not a heavy filled box)
   tierBtnActive: {
-    backgroundColor: color.fg.base,
+    backgroundColor: color.accent.soft,
   },
   tierBtnText: {
     fontSize: text.xs,
@@ -2451,21 +2457,17 @@ const styles = createStyles(() => ({
     color: color.fg.muted,
   },
   tierBtnTextActive: {
-    color: color.fg.inverse,
+    color: color.accent.base,
   },
   tierRefresh: {
     padding: space.sm,
   },
-  // Kept for gas detail rows (ConfirmRow)
+  // Gas detail rows (ConfirmRow) — open rows separated by <Divider/>
   confirmRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: space.lg,
-  },
-  confirmSeparator: {
-    height: 1,
-    backgroundColor: color.border.base,
   },
   confirmLabel: {
     fontSize: text.sm,

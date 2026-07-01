@@ -202,7 +202,7 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
             />
           )}
           ListFooterComponent={multiSelect ? null : addTokenButton}
-          ItemSeparatorComponent={sweepActive ? () => <View style={styles.rowSeparator} /> : undefined}
+          ItemSeparatorComponent={sweepActive ? () => <View style={styles.rowSeparator} /> : () => <View style={styles.tokenSep} />}
           initialNumToRender={10}
           windowSize={5}
           showsVerticalScrollIndicator={false}
@@ -261,6 +261,8 @@ const styles = createStyles(() => ({
   },
   sweepConfirmText: { fontSize: text.base, ...inter.bold, color: color.fg.inverse },
   rowSeparator: { height: space.sm },
+  // Hairline between de-boxed token rows, inset past the 40px logo.
+  tokenSep: { height: 1, backgroundColor: color.border.base, marginLeft: space.md + 40 + space.lg },
   loadingText: {
     fontSize: text.lg,
     ...inter.regular,
@@ -282,9 +284,7 @@ const styles = createStyles(() => ({
     alignItems: 'center',
     gap: space.md,
     backgroundColor: color.bg.sunken,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border.base,
+    borderRadius: radius.full,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
     marginBottom: space.md,
@@ -315,12 +315,9 @@ const styles = createStyles(() => ({
     paddingVertical: space.sm,
     borderRadius: radius.full,
     backgroundColor: color.bg.sunken,
-    borderWidth: 1,
-    borderColor: color.border.base,
   },
   chipActive: {
     backgroundColor: color.accent.soft,
-    borderColor: color.accent.base,
   },
   chipText: {
     fontSize: text.sm,
@@ -346,6 +343,7 @@ const styles = createStyles(() => ({
     fontFamily: font.numeric,
     color: color.fg.base,
   },
+  // De-boxed "add" affordance — a plain centered accent row (was a dashed card).
   addTokenRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -353,12 +351,7 @@ const styles = createStyles(() => ({
     alignSelf: 'stretch',
     gap: space.sm,
     paddingVertical: space.xl,
-    marginTop: space.lg,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    borderStyle: 'dashed',
-    backgroundColor: color.bg.raised,
+    marginTop: space.md,
   },
   addTokenText: {
     fontSize: text.base,
