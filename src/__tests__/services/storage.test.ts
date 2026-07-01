@@ -20,6 +20,9 @@ import {
   loadAccounts,
   findAccountByCredentialId,
   saveTransaction,
+  saveTransactions,
+  updateTransaction,
+  updateTransactions,
   loadTransactions,
   deleteTransaction,
   deleteConnectionEvents,
@@ -176,6 +179,69 @@ describe('storage - transactions', () => {
     const txs = await loadTransactions();
     expect(txs.length).toBeLessThanOrEqual(200);
     expect(txs[0].id).toBe('newest');
+  });
+});
+
+describe('storage - concurrent batch-send writes', () => {
+  // A split (1 token → N recipients) / multiSelect (N tokens → 1 recipient) send
+  // writes one record per line, all sharing a userOpHash with a distinct id.
+  const sibling = (id: string, symbol: string, over: Partial<LocalTransaction> = {}): LocalTransaction => ({
+    id, userOpHash: '0xshared', txHash: '',
+    from: '0xme', to: '0xrecipient', value: '1', symbol,
+    decimals: 6, chainId: 56, timestamp: 1000, status: 'pending', type: 'send', ...over,
+  });
+
+  test('concurrent saveTransaction calls all persist (no lost-update race)', async () => {
+    // Each read-modify-writes the whole array. Without serialization the siblings
+    // read the same empty snapshot and the last write clobbered the rest, so only
+    // ONE survived — collapsing the batch to a single Activity line.
+    await Promise.all([
+      saveTransaction(sibling('0xshared-0', 'USDC')),
+      saveTransaction(sibling('0xshared-1', 'USDT')),
+      saveTransaction(sibling('0xshared-2', 'DAI')),
+    ]);
+    const ids = (await loadTransactions()).map((t) => t.id).sort();
+    expect(ids).toEqual(['0xshared-0', '0xshared-1', '0xshared-2']);
+  });
+
+  test('saveTransactions writes a batch atomically', async () => {
+    await saveTransactions([sibling('0xshared-0', 'USDC'), sibling('0xshared-1', 'USDT')]);
+    const txs = await loadTransactions();
+    expect(txs).toHaveLength(2);
+    expect(txs.map((t) => t.symbol).sort()).toEqual(['USDC', 'USDT']);
+  });
+
+  test('saveTransactions de-dupes by id against existing records (latest wins)', async () => {
+    await saveTransaction(sibling('0xshared-0', 'USDC'));
+    await saveTransactions([
+      sibling('0xshared-0', 'USDC', { status: 'confirmed', txHash: '0xreceipt' }),
+      sibling('0xshared-1', 'USDT'),
+    ]);
+    const txs = await loadTransactions();
+    expect(txs).toHaveLength(2);
+    const usdc = txs.find((t) => t.id === '0xshared-0')!;
+    expect(usdc.status).toBe('confirmed');
+    expect(usdc.txHash).toBe('0xreceipt');
+  });
+
+  test('concurrent updateTransaction calls do not clobber each other', async () => {
+    await saveTransactions([sibling('0xshared-0', 'USDC'), sibling('0xshared-1', 'USDT')]);
+    // Background hash resolution patches every sibling — previously the concurrent
+    // read-modify-writes lost all but the last patch.
+    await Promise.all([
+      updateTransaction('0xshared-0', { status: 'confirmed', txHash: '0xreceipt' }),
+      updateTransaction('0xshared-1', { status: 'confirmed', txHash: '0xreceipt' }),
+    ]);
+    const txs = await loadTransactions();
+    expect(txs.every((t) => t.status === 'confirmed')).toBe(true);
+    expect(txs.every((t) => t.txHash === '0xreceipt')).toBe(true);
+  });
+
+  test('updateTransactions patches all siblings in one write', async () => {
+    await saveTransactions([sibling('0xshared-0', 'USDC'), sibling('0xshared-1', 'USDT')]);
+    await updateTransactions(['0xshared-0', '0xshared-1'], { status: 'failed' });
+    const txs = await loadTransactions();
+    expect(txs.every((t) => t.status === 'failed')).toBe(true);
   });
 });
 

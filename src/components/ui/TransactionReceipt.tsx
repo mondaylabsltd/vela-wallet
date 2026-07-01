@@ -21,6 +21,7 @@ import QRCodeLib from 'qrcode';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -172,7 +173,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-interface CanvasLabels {
+export interface CanvasLabels {
   canvasTitle: string;
   from: string;
   to: string;
@@ -186,7 +187,28 @@ interface CanvasLabels {
   assetsSummary: string;
 }
 
-async function renderReceiptToCanvas(props: Props, labels: CanvasLabels): Promise<Blob> {
+/**
+ * Build the canvas share-image labels from the i18n `t`. Shared by the component
+ * and the dev receipt harness so the two render paths can never drift apart.
+ * `itemCount` drives the "N recipients" / "N assets" summaries.
+ */
+export function buildCanvasLabels(t: TFunction, itemCount: number): CanvasLabels {
+  return {
+    canvasTitle: t('componentsTx.receipt.canvasTitle'),
+    from: t('componentsTx.receipt.from'),
+    to: t('componentsTx.receipt.to'),
+    network: t('componentsTx.receipt.network'),
+    time: t('componentsTx.receipt.time'),
+    txHash: t('componentsTx.receipt.txHash'),
+    scanHint: t('componentsTx.receipt.scanHint'),
+    footerBrand: t('componentsTx.receipt.footerBrand'),
+    footerUrl: t('componentsTx.receipt.footerUrl'),
+    recipientsSummary: t('componentsTx.receipt.recipientsCount', { n: itemCount }),
+    assetsSummary: t('componentsTx.receipt.assetsCount', { n: itemCount }),
+  };
+}
+
+export async function renderReceiptToCanvas(props: Props, labels: CanvasLabels): Promise<Blob> {
   const { from, fromName, chainId, txHash, timestamp, recipientIdentity } = props;
   const { batch, amount, symbol, logoUrls, usdValue, to, toName } = normalizeReceipt(props);
   const chain = chainName(chainId);
@@ -545,20 +567,7 @@ export function TransactionReceipt(props: Props) {
 
   const recipientsSummary = t('componentsTx.receipt.recipientsCount', { n: batch?.items.length ?? 0 });
   const assetsSummary = t('componentsTx.receipt.assetsCount', { n: batch?.items.length ?? 0 });
-
-  const canvasLabels: CanvasLabels = {
-    canvasTitle: t('componentsTx.receipt.canvasTitle'),
-    from: t('componentsTx.receipt.from'),
-    to: t('componentsTx.receipt.to'),
-    network: t('componentsTx.receipt.network'),
-    time: t('componentsTx.receipt.time'),
-    txHash: t('componentsTx.receipt.txHash'),
-    scanHint: t('componentsTx.receipt.scanHint'),
-    footerBrand: t('componentsTx.receipt.footerBrand'),
-    footerUrl: t('componentsTx.receipt.footerUrl'),
-    recipientsSummary,
-    assetsSummary,
-  };
+  const canvasLabels = buildCanvasLabels(t, batch?.items.length ?? 0);
 
   const handleViewExplorer = () => openBrowser(explorerUrl);
 
