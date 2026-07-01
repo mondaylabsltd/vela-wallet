@@ -2,19 +2,16 @@
  * Tevm simulation engine — the optional, provider-independent fallback.
  *
  * STATUS: present but DISABLED by default. It runs only after an explicit
- * `enableTevmFallback(true)`, and even then only if `tevm` actually loads in the
- * host runtime. This is deliberate:
+ * `enableTevmFallback(true)`, and even then only if a Tevm loader has been
+ * registered. This is deliberate:
  *
  *   - `tevm` ships a full JS EVM (ethereumjs). It is NOT a dependency of this
- *     app, and bundling it under Metro/Hermes is unverified. So this module
- *     never lets the bundler see an `import('tevm')` to resolve — not even a
- *     computed specifier, which Metro's dependency collector still rejects at
- *     build time (it breaks `expo export`). Instead it loads through a
- *     `new Function('m','return import(m)')` indirection — the same escape the
- *     QR scanner uses for its WASM module — so the bundle builds with `tevm`
- *     absent, and the import only resolves at runtime when one is installed.
- *   - Turning it on is a deliberate follow-up: `npm i tevm`, verify it bundles,
- *     then `enableTevmFallback(true)` at app start.
+ *     app, and bundling it under Metro/Hermes is unverified. Hermes also cannot
+ *     parse `import()` inside `new Function`, so hiding an optional import that
+ *     way crashes route evaluation before the fallback is ever called.
+ *   - Turning it on is a deliberate follow-up: `npm i tevm`, register a loader
+ *     through `setTevmLoader`, verify the normal import bundles, then call
+ *     `enableTevmFallback(true)` at app start.
  *
  * When it does run it forks the chain from the user's own RPC (same pool as
  * everything else), replays the inner call(s), and reuses the SAME pure
@@ -28,15 +25,16 @@ import {
   type EngineResult, type SimCall, type SimLog,
 } from '@/services/sim-assets';
 
-// The import lives inside a `new Function` body so the bundler never parses an
-// `import('tevm')` to resolve — a computed specifier alone is NOT enough, Metro
-// rejects `import(variable)` during dependency collection. This only resolves at
-// runtime, when `tevm` is actually installed. Typed as `any`: there are no
-// `tevm` type declarations installed, and that's fine.
-const TEVM_SPECIFIER = 'tevm';
-const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
+/** Tevm stays optional: the app that installs it must provide the normal import. */
+export type TevmLoader = () => Promise<any>;
 
 let enabled = false;
+let tevmLoader: TevmLoader | null = null;
+
+/** Register the build-time-visible Tevm import, or null to remove it. */
+export function setTevmLoader(loader: TevmLoader | null): void {
+  tevmLoader = loader;
+}
 
 /** Opt into the Tevm fallback (off by default). See the file header before enabling. */
 export function enableTevmFallback(on: boolean): void {
@@ -49,8 +47,9 @@ export function isTevmFallbackEnabled(): boolean {
 }
 
 async function loadTevm(): Promise<any | null> {
+  if (!tevmLoader) return null;
   try {
-    const mod: any = await dynamicImport(TEVM_SPECIFIER);
+    const mod: any = await tevmLoader();
     return mod ?? null;
   } catch {
     return null; // not installed / can't load in this runtime

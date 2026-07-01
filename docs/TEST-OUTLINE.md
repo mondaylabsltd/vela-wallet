@@ -94,7 +94,7 @@
 | `services/tx-simulation.ts` | 模拟编排：eth_call 回滚预检 + 资产变化引擎选择 | [IO:D1] | ✅ |
 | `services/sim-assets.ts` | 从 log 算资产净变化、解析 revert 原因 | [纯] | ✅ |
 | `services/sim-engine-rpc.ts` | `eth_simulateV1` 后端模拟 | [IO:D1] | ✅ |
-| `services/sim-engine-tevm.ts` | Tevm 本地 fork 回退（默认禁用，Function() 逃逸加载） | [IO:tevm] | ⛔ 刻意可选 |
+| `services/sim-engine-tevm.ts` | Tevm 本地 fork 回退（默认禁用，显式 loader 注入） | [IO:tevm] | ⛔ 刻意可选 |
 | `services/abi.ts` / `abi-decode.ts` | ABI 编解码、calldata 解码 | [纯] | ✅ |
 | `services/selector-registry.ts` | 4-byte 选择器查询（并行多源）+ 缓存 | [IO:D7] | ✅ |
 
