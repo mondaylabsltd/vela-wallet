@@ -44,8 +44,12 @@ export interface Contact {
 }
 
 const KEY = 'vela.contacts';
+const DISMISSED_KEY = 'vela.contacts.dismissed';
 
 let _saved: Contact[] | null = null;
+/** address → ms timestamp it was deleted. A history-derived suggestion is
+ *  suppressed unless the user has transacted with it *since* the deletion. */
+let _dismissed: Record<string, number> | null = null;
 
 // Serialize read-modify-write mutations of the `_saved` cache. Several callers can
 // fire concurrently — e.g. multiple RecipientTrust rows each resolving an identity
@@ -74,6 +78,26 @@ async function persist(list: Contact[]): Promise<void> {
   _saved = list;
   try {
     await AsyncStorage.setItem(KEY, JSON.stringify(list));
+  } catch {
+    /* storage unavailable — keep the in-memory copy for this session */
+  }
+}
+
+async function loadDismissed(): Promise<Record<string, number>> {
+  if (_dismissed) return _dismissed;
+  try {
+    const raw = await AsyncStorage.getItem(DISMISSED_KEY);
+    _dismissed = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    _dismissed = {};
+  }
+  return _dismissed;
+}
+
+async function persistDismissed(map: Record<string, number>): Promise<void> {
+  _dismissed = map;
+  try {
+    await AsyncStorage.setItem(DISMISSED_KEY, JSON.stringify(map));
   } catch {
     /* storage unavailable — keep the in-memory copy for this session */
   }
@@ -113,6 +137,12 @@ export async function saveContact(input: SaveContactInput): Promise<Contact> {
           source: 'manual',
         };
     await persist([merged, ...list.filter((x) => x.address !== addr)]);
+    // Re-adding an address clears any prior deletion tombstone.
+    const dismissed = await loadDismissed();
+    if (dismissed[addr] != null) {
+      const { [addr]: _removed, ...rest } = dismissed;
+      await persistDismissed(rest);
+    }
     return merged;
   });
 }
@@ -121,6 +151,10 @@ export async function deleteContact(address: string): Promise<void> {
   return withWriteLock(async () => {
     const addr = address.toLowerCase();
     await persist((await loadSaved()).filter((x) => x.address !== addr));
+    // Tombstone the address so it doesn't immediately re-appear as a
+    // history-derived suggestion. Cleared if the user saves it again, or
+    // superseded by any later send (see getAllContacts).
+    await persistDismissed({ ...(await loadDismissed()), [addr]: Date.now() });
   });
 }
 
@@ -160,6 +194,7 @@ export async function getSavedContact(address: string): Promise<Contact | null> 
  */
 export async function getAllContacts(myAddress?: string): Promise<Contact[]> {
   const saved = await loadSaved();
+  const dismissed = await loadDismissed();
   const byAddr = new Map(saved.map((c) => [c.address, { ...c }]));
   for (const a of await deriveFromHistory(myAddress)) {
     const existing = byAddr.get(a.address);
@@ -168,6 +203,9 @@ export async function getAllContacts(myAddress?: string): Promise<Contact[]> {
       existing.lastUsed = Math.max(existing.lastUsed, a.lastUsed);
       if (!existing.resolvedName && a.resolvedName) existing.resolvedName = a.resolvedName;
     } else {
+      // Suppress a deleted recipient unless it's been used since deletion.
+      const dismissedAt = dismissed[a.address];
+      if (dismissedAt != null && a.lastUsed <= dismissedAt) continue;
       byAddr.set(a.address, a);
     }
   }
@@ -266,5 +304,6 @@ export function matchesQuery(c: Contact, query: string): boolean {
 /** Test hook / account switch. */
 export function clearContactsCache(): void {
   _saved = null;
+  _dismissed = null;
   kindCache.clear();
 }

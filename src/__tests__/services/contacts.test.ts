@@ -136,6 +136,45 @@ describe('merge of saved + history', () => {
   });
 });
 
+describe('delete tombstone (history suggestions)', () => {
+  test('deleting a saved contact with send history removes it for good, not just un-favorited', async () => {
+    mockTxs.mockResolvedValue([sendTx(A, 500)]); // sent before deletion (delete stamps t=1000)
+    await saveContact({ address: A, name: 'Alice', favorite: true });
+    expect((await getAllContacts(ME)).map((c) => c.address)).toEqual([A]);
+
+    await deleteContact(A);
+    // Regression: used to re-appear as an `auto` suggestion derived from history.
+    expect(await getAllContacts(ME)).toHaveLength(0);
+  });
+
+  test('a send after deletion re-surfaces the recipient', async () => {
+    mockTxs.mockResolvedValue([sendTx(A, 500)]);
+    await deleteContact(A); // tombstone at t=1000
+    expect(await getAllContacts(ME)).toHaveLength(0);
+
+    mockTxs.mockResolvedValue([sendTx(A, 500), sendTx(A, 2000)]); // transacted again, after deletion
+    expect((await getAllContacts(ME)).map((c) => c.address)).toEqual([A]);
+  });
+
+  test('re-saving a deleted address clears the tombstone', async () => {
+    mockTxs.mockResolvedValue([sendTx(A, 500)]);
+    await deleteContact(A);
+    expect(await getAllContacts(ME)).toHaveLength(0);
+
+    await saveContact({ address: A, name: 'Alice' });
+    const all = await getAllContacts(ME);
+    expect(all.map((c) => c.address)).toEqual([A]);
+    expect(all[0]).toMatchObject({ name: 'Alice', source: 'manual' });
+  });
+
+  test('tombstone persists across a cold load', async () => {
+    mockTxs.mockResolvedValue([sendTx(A, 500)]);
+    await deleteContact(A);
+    clearContactsCache(); // simulate app restart (storage persists)
+    expect(await getAllContacts(ME)).toHaveLength(0);
+  });
+});
+
 describe('sort + search', () => {
   test('favorites first, then most-recent', () => {
     const list: Contact[] = [

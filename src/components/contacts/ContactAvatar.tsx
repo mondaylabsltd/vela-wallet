@@ -1,20 +1,30 @@
 /**
  * Contact avatar — a colored initial, deterministically tinted from the address
- * so the same contact always reads the same. Matches the app's avatar style
- * (initials in a soft circle; no blockies). A smart-contract account gets a small
- * badge so "another wallet" reads differently from a person.
+ * so the same contact always reads the same. To keep a long list calm, the tint
+ * is drawn from a small curated palette of muted, harmonious tones (not the full
+ * hue wheel) — enough color to tell people apart, without the rainbow. Tones are
+ * mode-aware. A smart-contract account gets a small badge so "another wallet"
+ * reads differently from a person.
  */
 import React from 'react';
 import { View, Text } from 'react-native';
 import { Wallet } from 'lucide-react-native';
-import { color, inter, radius, createStyles } from '@/constants/theme';
+import { color, inter, isDarkMode, createStyles } from '@/constants/theme';
 import type { ContactKind } from '@/services/contacts';
 
-/** Deterministic hue from a string (mirrors TokenLogo's fallback tinting). */
-function hue(seed: string): number {
+/**
+ * Curated hues (degrees) — a deliberately restrained spread that sits with the
+ * warm Vela palette: terracotta, slate, sage, dusty rose, ochre, muted teal,
+ * soft violet, dusty cyan. Harmonious as a set, so a screen full of avatars
+ * reads as one family rather than confetti.
+ */
+const HUES = [18, 210, 150, 340, 42, 268, 122, 190];
+
+/** Deterministic index into {@link HUES} from a string seed. */
+function pickHue(seed: string): number {
   let h = 0;
   for (let i = 0; i < seed.length; i++) h = seed.charCodeAt(i) + ((h << 5) - h);
-  return Math.abs(h) % 360;
+  return HUES[Math.abs(h) % HUES.length];
 }
 
 export function ContactAvatar({ name, address, kind, size = 40 }: {
@@ -25,17 +35,22 @@ export function ContactAvatar({ name, address, kind, size = 40 }: {
 }) {
   const seed = address || name;
   const initial = (name.trim()[0] ?? address.slice(2, 3) ?? '?').toUpperCase();
-  const h = hue(seed);
+  const h = pickHue(seed);
+
+  // Low saturation + mode-aware lightness keeps the tint quiet in both themes.
+  const dark = isDarkMode();
+  const bg = dark ? `hsl(${h}, 24%, 22%)` : `hsl(${h}, 32%, 91%)`;
+  const fg = dark ? `hsl(${h}, 38%, 74%)` : `hsl(${h}, 40%, 36%)`;
 
   return (
     <View style={{ width: size, height: size }}>
       <View
         style={[
           styles.circle,
-          { width: size, height: size, borderRadius: size / 2, backgroundColor: `hsl(${h}, 45%, 92%)` },
+          { width: size, height: size, borderRadius: size / 2, backgroundColor: bg },
         ]}
       >
-        <Text style={[styles.initial, { color: `hsl(${h}, 45%, 38%)`, fontSize: size * 0.42 }]}>
+        <Text style={[styles.initial, { color: fg, fontSize: size * 0.42 }]}>
           {initial}
         </Text>
       </View>
