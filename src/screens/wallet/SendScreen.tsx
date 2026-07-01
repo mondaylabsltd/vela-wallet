@@ -27,7 +27,9 @@ import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, format
 import { AmountText } from '@/components/ui/AmountText';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { MultiRecipientEditor, makeRecipientId, recipientsAreValid, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
-import { buildSplitCalls, sumSplitBaseUnits, buildMultiTokenCalls, toMultiTokenSpecs, reserveNativeGas } from '@/services/batch-send';
+import { buildSplitCalls, sumSplitBaseUnits, buildMultiTokenCalls, toMultiTokenSpecs, reserveNativeGas, BATCH_MAX_RECIPIENTS } from '@/services/batch-send';
+import { resolveTokenAmount } from '@/services/fiat-convert';
+import { BatchImportSheet } from '@/components/send/BatchImportSheet';
 import { useTokenMultiSelect } from '@/hooks/use-token-multi-select';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
@@ -49,7 +51,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, BookUser, AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Copy, Check, Globe, Plus } from 'lucide-react-native';
+import { ArrowLeft, X, BookUser, AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Copy, Check, Globe, Plus, FileUp } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
@@ -113,18 +115,6 @@ function synthNativeToken(chainId: number): APIToken {
 /** A zero-balance ERC-20 placeholder built from resolved metadata (locked EIP-681 send). */
 function synthErc20Token(chainId: number, address: string, symbol: string, decimals: number): APIToken {
   return { network: networkId(chainId), chainName: chainName(chainId), symbol, balance: '0', decimals, logo: null, name: symbol, tokenAddress: address, priceUsd: null, spam: false };
-}
-
-/** Resolve the token amount from user input, handling fiat-input mode.
- *  In fiat mode the typed value is in the user's *display currency*, so we divide
- *  by the token's price in that currency (priceUsd × USD→fiat rate), not by the
- *  raw USD price. Truncates to `decimals` to avoid floating-point garbage. */
-function resolveTokenAmount(amount: string, inFiat: boolean, priceUsd: number | null | undefined, decimals: number = 18, rate: number = 1): string {
-  if (!inFiat || !priceUsd || priceUsd <= 0) return amount;
-  const fiat = parseFloat(amount || '0');
-  if (fiat <= 0) return '0';
-  const fiatPrice = priceUsd * (rate > 0 ? rate : 1);
-  return (fiat / fiatPrice).toFixed(decimals).replace(/\.?0+$/, '');
 }
 
 /**
@@ -271,6 +261,7 @@ export default function SendScreen() {
   const [gasTier, setGasTier] = useState<GasTier>('standard');
   const [refreshingGas, setRefreshingGas] = useState(false);
   const [showContactPicker, setShowContactPicker] = useState(false);
+  const [showBatchImport, setShowBatchImport] = useState(false);
   const [amountWarning, setAmountWarning] = useState<string | null>(null);
   const [recipientIdentity, setRecipientIdentity] = useState<RecipientIdentity | null>(null);
   // Recipient-risk signals for the confirm step — "first time" (address-poisoning
@@ -589,6 +580,17 @@ export default function SendScreen() {
     ]);
     setInputInUsd(false);
     setSplitMode(true);
+  };
+
+  // A batch import (payroll table) or a whole-group pick seeds split mode directly
+  // with the resolved recipient rows — same submission path as a hand-built split.
+  const seedSplitRecipients = (rows: RecipientDraft[]) => {
+    if (rows.length === 0) return;
+    setInputInUsd(false);
+    setRecipients(rows);
+    setSplitMode(true);
+    setShowBatchImport(false);
+    setShowContactPicker(false);
   };
 
   // Removing the last extra recipient drops back to the familiar single-send UI,
@@ -1268,12 +1270,19 @@ export default function SendScreen() {
             <RecipientTrust address={recipient} identity={recipientIdentity} />
           </View>
 
-          {/* Send this token to several people at once → enters split mode. */}
+          {/* Send this token to several people at once → split mode, or import a
+              payroll table (fiat → token) in one go. */}
           {!locked && !params.prefilledRecipient && (
-            <Pressable onPress={enterSplitMode} style={styles.addRecipientEntry}>
-              <Plus size={16} color={color.accent.base} strokeWidth={2.5} />
-              <Text style={styles.addRecipientEntryText}>{t('send.addRecipient', { defaultValue: 'Add recipient' })}</Text>
-            </Pressable>
+            <View style={styles.splitEntryRow}>
+              <Pressable onPress={enterSplitMode} style={styles.addRecipientEntry}>
+                <Plus size={16} color={color.accent.base} strokeWidth={2.5} />
+                <Text style={styles.addRecipientEntryText}>{t('send.addRecipient', { defaultValue: 'Add recipient' })}</Text>
+              </Pressable>
+              <Pressable onPress={() => setShowBatchImport(true)} style={styles.addRecipientEntry} testID="send-batch-import">
+                <FileUp size={16} color={color.accent.base} strokeWidth={2.5} />
+                <Text style={styles.addRecipientEntryText}>{t('send.batchImport', { defaultValue: 'Import list' })}</Text>
+              </Pressable>
+            </View>
           )}
           </>)}
 
@@ -1287,6 +1296,8 @@ export default function SendScreen() {
               balance={selectedToken.balance}
               formatUsd={formatUsd}
               onPickContact={(id) => { setPickerTarget(id); setShowContactPicker(true); }}
+              onImport={() => setShowBatchImport(true)}
+              maxRecipients={BATCH_MAX_RECIPIENTS}
             />
           )}
 
@@ -1803,9 +1814,23 @@ export default function SendScreen() {
         visible={showContactPicker}
         onClose={() => setShowContactPicker(false)}
         onSelect={(addr) => applyPickedAddress(addr)}
+        onSelectGroup={locked || pickerTarget ? undefined : (addrs) =>
+          seedSplitRecipients(addrs.map((a) => ({ id: makeRecipientId(), address: a, amount: '' })))}
         onScan={locked ? undefined : () => setShowScanner(true)}
         myAddress={address}
       />
+
+      {selectedToken && (
+        <BatchImportSheet
+          visible={showBatchImport}
+          onClose={() => setShowBatchImport(false)}
+          token={selectedToken}
+          currencyCode={dc.code}
+          currencySymbol={dc.symbol}
+          onApply={seedSplitRecipients}
+          maxRecipients={BATCH_MAX_RECIPIENTS}
+        />
+      )}
     </ScreenContainer>
   );
 }
@@ -2080,14 +2105,19 @@ const styles = createStyles(() => ({
     justifyContent: 'center',
     backgroundColor: color.bg.base,
   },
-  // "+ 添加收款人" entry → split mode
+  // "+ 添加收款人" / "导入表格" entries → split mode (side by side)
+  splitEntryRow: {
+    flexDirection: 'row',
+    gap: space.md,
+    marginTop: space.lg,
+  },
   addRecipientEntry: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.sm,
     paddingVertical: space.md,
-    marginTop: space.lg,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: color.border.base,

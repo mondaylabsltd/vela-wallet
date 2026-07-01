@@ -13,7 +13,7 @@
 import React from 'react';
 import { View, Text, Pressable, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Plus, X, BookUser } from 'lucide-react-native';
+import { Plus, X, BookUser, FileUp } from 'lucide-react-native';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
@@ -64,11 +64,13 @@ interface Props {
   formatUsd: (n: number) => string;
   /** Open the host's contact picker to fill the row with this id. */
   onPickContact: (id: string) => void;
+  /** Open the payroll batch importer (paste/file → converted rows). */
+  onImport?: () => void;
   maxRecipients?: number;
 }
 
 export function MultiRecipientEditor({
-  recipients, onChange, tokenSymbol, decimals, priceUsd, balance, formatUsd, onPickContact, maxRecipients = 20,
+  recipients, onChange, tokenSymbol, decimals, priceUsd, balance, formatUsd, onPickContact, onImport, maxRecipients = 20,
 }: Props) {
   const { t } = useTranslation();
 
@@ -140,14 +142,22 @@ export function MultiRecipientEditor({
         );
       })}
 
-      <Pressable
-        onPress={add}
-        disabled={recipients.length >= maxRecipients}
-        style={[styles.addRow, recipients.length >= maxRecipients && styles.addRowDisabled]}
-      >
-        <Plus size={18} color={color.accent.base} strokeWidth={2.5} />
-        <Text style={styles.addText}>{t('send.addRecipient', { defaultValue: 'Add recipient' })}</Text>
-      </Pressable>
+      <View style={styles.addBtnRow}>
+        <Pressable
+          onPress={add}
+          disabled={recipients.length >= maxRecipients}
+          style={[styles.addRow, recipients.length >= maxRecipients && styles.addRowDisabled]}
+        >
+          <Plus size={18} color={color.accent.base} strokeWidth={2.5} />
+          <Text style={styles.addText}>{t('send.addRecipient', { defaultValue: 'Add recipient' })}</Text>
+        </Pressable>
+        {onImport && (
+          <Pressable onPress={onImport} style={styles.addRow} testID="editor-batch-import">
+            <FileUp size={18} color={color.accent.base} strokeWidth={2.5} />
+            <Text style={styles.addText}>{t('send.batchImport', { defaultValue: 'Import list' })}</Text>
+          </Pressable>
+        )}
+      </View>
 
       {/* Total */}
       <View style={styles.totalRow}>
@@ -202,8 +212,9 @@ const styles = createStyles(() => ({
   } as any,
   amountSym: { fontSize: text.base, ...inter.semibold, color: color.fg.muted },
   amountUsd: { fontSize: text.xs, ...inter.regular, color: color.fg.muted, paddingLeft: space.lg },
+  addBtnRow: { flexDirection: 'row', gap: space.md },
   addRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
     paddingVertical: space.lg, borderRadius: radius.lg,
     borderWidth: 1, borderColor: color.border.base, borderStyle: 'dashed', backgroundColor: color.bg.raised,
   },

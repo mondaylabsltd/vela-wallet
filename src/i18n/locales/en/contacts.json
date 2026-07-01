@@ -33,6 +33,24 @@
     "sends_other": "{{count}} sends",
     "savedTag": "Saved",
     "savedContact": "Saved contact",
-    "scanToAdd": "Scan to add an address"
+    "scanToAdd": "Scan to add an address",
+    "sectionGroups": "Groups",
+    "groupMembers": "{{count}} members",
+    "groupNew": "New group",
+    "groupEdit": "Edit group",
+    "groupNameLabel": "Group name",
+    "groupNamePlaceholder": "e.g. Payroll",
+    "groupMembersLabel": "Members",
+    "groupNoContacts": "Save some contacts first, then group them here.",
+    "groupDelete": "Delete group",
+    "importBtn": "Import",
+    "importing": "Importing…",
+    "exportBtn": "Export",
+    "exportTitle": "Export contacts",
+    "exportBody": "Choose a format to back up your address book.",
+    "importDoneTitle": "Import complete",
+    "importDoneBody": "{{added}} added, {{skipped}} already existed.",
+    "importFailTitle": "Import failed",
+    "importFailBody": "Use a JSON or CSV contacts file."
   }
 }

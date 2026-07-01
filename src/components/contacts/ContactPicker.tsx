@@ -9,22 +9,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Search, X, Star, BookmarkPlus, ScanLine, ChevronRight } from 'lucide-react-native';
+import { Search, X, Star, BookmarkPlus, ScanLine, ChevronRight, Users } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import { shortAddr, isAddress } from '@/models/types';
 import {
   getAllContacts, sortContacts, matchesQuery, contactDisplayName, saveContact,
-  type Contact,
+  getGroups, type Contact, type ContactGroup,
 } from '@/services/contacts';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 import { hapticLight } from '@/services/platform';
 
 
-export function ContactPicker({ visible, onClose, onSelect, onScan, myAddress }: {
+export function ContactPicker({ visible, onClose, onSelect, onSelectGroup, onScan, myAddress }: {
   visible: boolean;
   onClose: () => void;
   onSelect: (address: string, name?: string) => void;
+  /** Pick a whole group as recipients — enables the Groups section. The host
+      (SendScreen) seeds split mode with one row per member. */
+  onSelectGroup?: (addresses: string[], name: string) => void;
   /** Optional QR-scan entry, shown as a prominent action at the top of the
       sheet. Tapping it closes the picker and hands off to the scanner. */
   onScan?: () => void;
@@ -33,6 +36,7 @@ export function ContactPicker({ visible, onClose, onSelect, onScan, myAddress }:
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [contacts, setContacts] = useState<Contact[] | null>(null);
+  const [groups, setGroups] = useState<ContactGroup[]>([]);
 
   useEffect(() => {
     if (!visible) return;
@@ -41,8 +45,13 @@ export function ContactPicker({ visible, onClose, onSelect, onScan, myAddress }:
     getAllContacts(myAddress)
       .then((list) => { if (!cancelled) setContacts(sortContacts(list)); })
       .catch(() => { if (!cancelled) setContacts([]); });
+    if (onSelectGroup) {
+      getGroups()
+        .then((g) => { if (!cancelled) setGroups(g.filter((x) => x.members.length > 0)); })
+        .catch(() => { if (!cancelled) setGroups([]); });
+    }
     return () => { cancelled = true; };
-  }, [visible, myAddress]);
+  }, [visible, myAddress, onSelectGroup]);
 
   const filtered = useMemo(
     () => (contacts ?? []).filter((c) => matchesQuery(c, query)),
@@ -60,6 +69,14 @@ export function ContactPicker({ visible, onClose, onSelect, onScan, myAddress }:
     onSelect(address, name);
     onClose();
   };
+
+  const pickGroup = (g: ContactGroup) => {
+    hapticLight();
+    onSelectGroup?.(g.members, g.name);
+    onClose();
+  };
+
+  const showGroups = !!onSelectGroup && groups.length > 0 && !query;
 
   return (
     <AppModal visible={visible} onClose={onClose}>
@@ -128,6 +145,11 @@ export function ContactPicker({ visible, onClose, onSelect, onScan, myAddress }:
             </View>
           ) : (
             <>
+              {showGroups && (
+                <Section title={t('contacts.sectionGroups', { defaultValue: 'Groups' })}>
+                  {groups.map((g) => <GroupRow key={g.id} g={g} onPick={pickGroup} />)}
+                </Section>
+              )}
               {favorites.length > 0 && (
                 <Section title={t('contacts.sectionFavorites')}>
                   {favorites.map((c) => <Row key={c.address} c={c} onPick={pick} />)}
@@ -152,6 +174,22 @@ function Section({ title, children }: { title?: string; children: React.ReactNod
       {title && <Text style={styles.sectionTitle}>{title}</Text>}
       {children}
     </View>
+  );
+}
+
+function GroupRow({ g, onPick }: { g: ContactGroup; onPick: (g: ContactGroup) => void }) {
+  const { t } = useTranslation();
+  return (
+    <Pressable style={styles.row} onPress={() => onPick(g)} testID="group-row">
+      <View style={styles.groupIcon}>
+        <Users size={20} color={color.accent.base} strokeWidth={2} />
+      </View>
+      <View style={styles.rowInfo}>
+        <Text style={styles.rowName} numberOfLines={1}>{g.name}</Text>
+        <Text style={styles.rowAddr}>{t('contacts.groupMembers', { count: g.members.length, defaultValue: `${g.members.length} members` })}</Text>
+      </View>
+      <ChevronRight size={18} color={color.fg.subtle} strokeWidth={2} />
+    </Pressable>
   );
 }
 
@@ -215,6 +253,10 @@ const styles = createStyles(() => ({
   row: {
     flexDirection: 'row', alignItems: 'center', gap: space.lg,
     paddingVertical: space.md, paddingHorizontal: space.sm,
+  },
+  groupIcon: {
+    width: 40, height: 40, borderRadius: radius.lg,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: color.accent.soft,
   },
   useRow: {
     flexDirection: 'row', alignItems: 'center', gap: space.lg,

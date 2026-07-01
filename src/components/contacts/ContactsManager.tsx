@@ -12,19 +12,22 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
-import { Search, X, Star, Plus, Trash2, ChevronLeft } from 'lucide-react-native';
+import { Search, X, Star, Plus, Trash2, ChevronLeft, Users, ChevronRight, Upload, Download } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
+import { GroupEditor } from '@/components/contacts/GroupEditor';
 import { shortAddr, isAddress } from '@/models/types';
 import { showAlert, hapticLight, hapticSuccess } from '@/services/platform';
 import { fadeIn } from '@/constants/entering';
 import {
   getAllContacts, sortContacts, matchesQuery, contactDisplayName,
   saveContact, deleteContact, toggleFavorite, enrichContactIdentity,
-  type Contact,
+  getGroups, type Contact, type ContactGroup,
 } from '@/services/contacts';
+import { exportContactsJson, exportContactsCsv, parseContactsFile, importContacts } from '@/services/contact-io';
+import { pickTable, saveTextFile } from '@/services/file-io';
 import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 
 type Filter = 'all' | 'starred';
@@ -32,14 +35,18 @@ type Filter = 'all' | 'starred';
 export function ContactsManager({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const [contacts, setContacts] = useState<Contact[] | null>(null);
+  const [groups, setGroups] = useState<ContactGroup[]>([]);
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
-  const [view, setView] = useState<'list' | 'form'>('list');
+  const [view, setView] = useState<'list' | 'form' | 'group'>('list');
   const [editing, setEditing] = useState<Contact | null>(null);
+  const [editingGroup, setEditingGroup] = useState<ContactGroup | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const reload = React.useCallback(() => {
     getAllContacts().then((l) => setContacts(sortContacts(l))).catch(() => setContacts([]));
+    getGroups().then(setGroups).catch(() => setGroups([]));
   }, []);
 
   useEffect(() => {
@@ -64,6 +71,39 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
 
   const openAdd = () => { setEditing(null); setView('form'); };
   const openEdit = (c: Contact) => { setEditing(c); setView('form'); };
+  const openGroupNew = () => { setEditingGroup(null); setView('group'); };
+  const openGroupEdit = (g: ContactGroup) => { setEditingGroup(g); setView('group'); };
+
+  const onExport = () => {
+    showAlert(
+      t('contacts.exportTitle', { defaultValue: 'Export contacts' }),
+      t('contacts.exportBody', { defaultValue: 'Choose a format to back up your address book.' }),
+      [
+        { text: 'JSON', onPress: async () => { await saveTextFile('vela-contacts.json', await exportContactsJson(), 'application/json'); } },
+        { text: 'CSV', onPress: async () => { await saveTextFile('vela-contacts.csv', await exportContactsCsv(), 'text/csv'); } },
+        { text: t('contacts.cancel'), style: 'cancel' },
+      ],
+    );
+  };
+
+  const onImport = async () => {
+    setBusy(true);
+    try {
+      const picked = await pickTable();
+      if (!picked) return;
+      const textContent = picked.text ?? (picked.bytes ? new TextDecoder().decode(picked.bytes) : '');
+      const report = await importContacts(parseContactsFile(textContent, picked.name));
+      reload();
+      showAlert(
+        t('contacts.importDoneTitle', { defaultValue: 'Import complete' }),
+        t('contacts.importDoneBody', { added: report.added, skipped: report.skipped, defaultValue: `${report.added} added, ${report.skipped} already existed.` }),
+      );
+    } catch {
+      showAlert(t('contacts.importFailTitle', { defaultValue: 'Import failed' }), t('contacts.importFailBody', { defaultValue: 'Use a JSON or CSV contacts file.' }));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const openSearch = () => { hapticLight(); setSearching(true); };
   const closeSearch = () => { hapticLight(); setQuery(''); setSearching(false); };
@@ -147,6 +187,25 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
             )}
 
             <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {!searching && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>{t('contacts.sectionGroups', { defaultValue: 'Groups' })}</Text>
+                  {groups.map((g) => (
+                    <Pressable key={g.id} style={styles.row} onPress={() => openGroupEdit(g)} testID="manager-group-row">
+                      <View style={styles.groupIcon}><Users size={18} color={color.accent.base} strokeWidth={2} /></View>
+                      <View style={styles.rowInfo}>
+                        <Text style={styles.rowName} numberOfLines={1}>{g.name}</Text>
+                        <Text style={styles.rowAddr}>{t('contacts.groupMembers', { count: g.members.length, defaultValue: `${g.members.length} members` })}</Text>
+                      </View>
+                      <ChevronRight size={18} color={color.fg.subtle} strokeWidth={2} />
+                    </Pressable>
+                  ))}
+                  <Pressable style={styles.newGroupRow} onPress={openGroupNew} testID="manager-new-group">
+                    <Plus size={16} color={color.accent.base} strokeWidth={2.5} />
+                    <Text style={styles.newGroupText}>{t('contacts.groupNew', { defaultValue: 'New group' })}</Text>
+                  </Pressable>
+                </View>
+              )}
               {contacts === null ? (
                 <View style={styles.loading}><ActivityIndicator size="small" color={color.fg.muted} /></View>
               ) : searching ? (
@@ -188,8 +247,27 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
                   )}
                 </>
               )}
+
+              {!searching && (
+                <View style={styles.ioRow}>
+                  <Pressable style={styles.ioBtn} onPress={onImport} disabled={busy} testID="contacts-import">
+                    <Upload size={15} color={color.fg.muted} strokeWidth={2} />
+                    <Text style={styles.ioText}>{busy ? t('contacts.importing', { defaultValue: 'Importing…' }) : t('contacts.importBtn', { defaultValue: 'Import' })}</Text>
+                  </Pressable>
+                  <Pressable style={styles.ioBtn} onPress={onExport} testID="contacts-export">
+                    <Download size={15} color={color.fg.muted} strokeWidth={2} />
+                    <Text style={styles.ioText}>{t('contacts.exportBtn', { defaultValue: 'Export' })}</Text>
+                  </Pressable>
+                </View>
+              )}
             </ScrollView>
           </>
+        ) : view === 'group' ? (
+          <GroupEditor
+            editing={editingGroup}
+            onBack={() => setView('list')}
+            onSaved={() => { setView('list'); reload(); }}
+          />
         ) : (
           <ContactForm
             editing={editing}
@@ -416,6 +494,24 @@ const styles = createStyles(() => ({
   rowName: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
   rowAddr: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.muted },
   starBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+
+  // Groups + import/export
+  groupIcon: {
+    width: 42, height: 42, borderRadius: radius.lg,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: color.accent.soft,
+  },
+  newGroupRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
+    paddingVertical: space.md, marginTop: space.xs, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: color.border.base, borderStyle: 'dashed',
+  },
+  newGroupText: { fontSize: text.base, ...inter.semibold, color: color.accent.base },
+  ioRow: { flexDirection: 'row', gap: space.md, marginTop: space['2xl'], marginBottom: space.lg },
+  ioBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
+    paddingVertical: space.md, borderRadius: radius.lg, backgroundColor: color.bg.sunken,
+  },
+  ioText: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted },
 
   loading: { paddingVertical: space['4xl'], alignItems: 'center' },
   empty: { paddingVertical: space['4xl'], alignItems: 'center', paddingHorizontal: space.xl, gap: space.md },

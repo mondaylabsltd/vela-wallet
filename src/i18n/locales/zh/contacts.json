@@ -33,6 +33,24 @@
     "sends_other": "{{count}} 笔转账",
     "savedTag": "已保存",
     "savedContact": "已保存联系人",
-    "scanToAdd": "扫码添加地址"
+    "scanToAdd": "扫码添加地址",
+    "sectionGroups": "分组",
+    "groupMembers": "{{count}} 人",
+    "groupNew": "新建分组",
+    "groupEdit": "编辑分组",
+    "groupNameLabel": "分组名称",
+    "groupNamePlaceholder": "例如：工资单",
+    "groupMembersLabel": "成员",
+    "groupNoContacts": "请先保存联系人，再在此处分组。",
+    "groupDelete": "删除分组",
+    "importBtn": "导入",
+    "importing": "导入中…",
+    "exportBtn": "导出",
+    "exportTitle": "导出通讯录",
+    "exportBody": "选择格式以备份你的通讯录。",
+    "importDoneTitle": "导入完成",
+    "importDoneBody": "新增 {{added}} 个，{{skipped}} 个已存在。",
+    "importFailTitle": "导入失败",
+    "importFailBody": "请使用 JSON 或 CSV 通讯录文件。"
   }
 }

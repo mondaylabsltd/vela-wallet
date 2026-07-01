@@ -77,6 +77,27 @@
     "alertInsufficientBalanceBody": "总额超过你的余额。",
     "recipientPickAria": "选择收款人或扫码",
     "multiSendNoFundsAfterGas": "扣除 gas 储备后余额不足。",
-    "gasReserved": "已留 gas"
+    "gasReserved": "已留 gas",
+    "batchImport": "导入表格",
+    "batchTitle": "导入收款人",
+    "batchPastePlaceholder": "0xabc… , 5000\n0xdef… , 8000",
+    "batchImportFile": "导入文件",
+    "batchReading": "读取中…",
+    "batchTemplate": "模板",
+    "batchUnitFiat": "金额单位：{{code}}",
+    "batchUnitToken": "金额单位：{{sym}}",
+    "batchRateLabel": "1 {{sym}} =",
+    "batchRateReset": "自动",
+    "batchNoPrice": "暂无市场价格，请在上方自定义汇率。",
+    "batchBadAddress": "地址无效",
+    "batchDup": "重复，已跳过",
+    "batchOverCap": "仅发送前 {{n}} 位收款人。",
+    "batchRejected": "已跳过 {{n}} 行（无效或重复）。",
+    "batchApply": "导入 {{n}} 位收款人",
+    "batchImportFailedTitle": "无法读取文件",
+    "batchImportFailedBody": "请使用 CSV、TSV、TXT 或 Excel 文件。",
+    "batchModeFiat": "按法币计价",
+    "batchModeToken": "按 {{sym}} 数量",
+    "batchCurrencyLabel": "计价货币"
   }
 }
