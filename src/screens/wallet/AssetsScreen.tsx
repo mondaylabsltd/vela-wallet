@@ -1,15 +1,15 @@
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { TokenRow } from '@/components/ui/TokenRow';
-import { VelaCard } from '@/components/ui/VelaCard';
-import { AppModal } from '@/components/ui/AppModal';
+import { VelaButton } from '@/components/ui/VelaButton';
+import { SectionLabel } from '@/components/ui/SectionLabel';
 import { AccountSwitcherModal } from '@/components/ui/AccountSwitcherModal';
 import { AmountText } from '@/components/ui/AmountText';
 import { RpcTroubleBanner } from '@/components/ui/RpcTroubleBanner';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { shouldShowDecimals } from '@/services/currency';
 import { fadeIn, fadeInDown } from '@/constants/entering';
-import { color, createStyles, font, inter, motion, radius, shadow, space, text } from '@/constants/theme';
+import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { useTranslation } from 'react-i18next';
 import { chainName } from '@/models/network';
 import { shortAddr, isAddress, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
@@ -25,13 +25,12 @@ import { isWalletPairURI } from '@/services/walletpair-transport';
 import { parseRemoteInjectURL } from '@/services/dapp-transport';
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { ArrowDown, ArrowUp, Clock, Plus, Search, X, RefreshCw, ScanLine, AlertTriangle } from 'lucide-react-native';
+import { ArrowDown, Plus, Search, X, RefreshCw, ScanLine, AlertTriangle } from 'lucide-react-native';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
-  withSpring,
   withTiming,
   withRepeat,
   Easing,
@@ -39,29 +38,6 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-function ActionButton({ label, icon: Icon, onPress, accent }: { label: string; icon: React.ComponentType<any>; onPress: () => void; accent?: boolean }) {
-  const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  return (
-    <AnimatedPressable
-      style={[styles.actionBtn, accent && styles.actionBtnAccent, animatedStyle]}
-      onPress={onPress}
-      onPressIn={() => { scale.value = withSpring(0.95, motion.spring); }}
-      onPressOut={() => { scale.value = withSpring(1, motion.spring); }}
-    >
-      <View style={[styles.actionIconWrap, accent && styles.actionIconWrapAccent]}>
-        <Icon size={18} color={accent ? color.fg.inverse : color.fg.base} strokeWidth={2.5} />
-      </View>
-      <Text style={[styles.actionLabel, accent && styles.actionLabelAccent]}>{label}</Text>
-    </AnimatedPressable>
-  );
-}
 
 export default function AssetsScreen() {
   const router = useRouter();
@@ -266,6 +242,7 @@ export default function AssetsScreen() {
             value={(debugBalance ?? displayTotal) * dc.rate}
             symbol={dc.symbol}
             size={36}
+            symbolScale={0.58}
             minScale={0.5}
             showDecimals={shouldShowDecimals((debugBalance ?? displayTotal) * dc.rate, dc.code)}
             style={[styles.balanceInt, { textAlign: 'center' }]}
@@ -281,17 +258,19 @@ export default function AssetsScreen() {
         </Animated.View>
       </Pressable>
 
-      {/* Action buttons */}
+      {/* Action buttons — VelaButton CTAs (Send = accent, Receive = secondary). */}
+      {/* History removed: the Home Activity tab (transfers, via TransactionDetailSheet)
+          and the Connections tab (dApp/signatures, via ConnectionEventDetailSheet +
+          SigningReplaySheet) now cover everything the standalone History page did. */}
       <Animated.View style={styles.actionRow} entering={fadeInDown(200, 400)}>
-        <ActionButton label={t('assets.actionSend')} icon={ArrowUp} onPress={() => router.push('/send')} accent />
-        <ActionButton label={t('assets.actionReceive')} icon={ArrowDown} onPress={() => router.push('/receive')} />
-        <ActionButton label={t('assets.actionHistory')} icon={Clock} onPress={() => router.push('/history')} />
+        <VelaButton title={t('assets.actionSend')} variant="accent" onPress={() => router.push('/send')} style={styles.actionBtn} />
+        <VelaButton title={t('assets.actionReceive')} variant="secondary" onPress={() => router.push('/receive')} style={styles.actionBtn} />
       </Animated.View>
 
       {/* Token list header */}
       <View style={styles.tokenListHeader}>
         <View style={styles.tokenListTitleRow}>
-          <Text style={styles.tokenListTitle}>{t('assets.sectionTitle')}</Text>
+          <SectionLabel style={styles.tokenListTitle}>{t('assets.sectionTitle')}</SectionLabel>
           {hiddenCount > 0 && (
             <Pressable onPress={() => setShowZeroBalance(!showZeroBalance)} hitSlop={8}>
               <Text style={styles.hiddenCount}>
@@ -351,16 +330,14 @@ export default function AssetsScreen() {
   const renderEmpty = () => {
     if (loading) return null;
     return (
-      <Pressable onPress={() => router.push('/receive')}>
-        <VelaCard style={styles.emptyCard}>
-          <View style={styles.emptyIconWrap}>
-            <ArrowDown size={22} color={color.accent.base} strokeWidth={2.5} />
-          </View>
-          <Text style={styles.emptyTitle}>{t('assets.emptyTitle')}</Text>
-          <Text style={styles.emptySubtext}>
-            {t('assets.emptySubtext')}
-          </Text>
-        </VelaCard>
+      <Pressable style={styles.emptyCard} onPress={() => router.push('/receive')}>
+        <View style={styles.emptyIconWrap}>
+          <ArrowDown size={22} color={color.accent.base} strokeWidth={2.5} />
+        </View>
+        <Text style={styles.emptyTitle}>{t('assets.emptyTitle')}</Text>
+        <Text style={styles.emptySubtext}>
+          {t('assets.emptySubtext')}
+        </Text>
       </Pressable>
     );
   };
@@ -398,6 +375,7 @@ export default function AssetsScreen() {
                 index={index}
               />
             )}
+            ItemSeparatorComponent={() => <View style={styles.sep} />}
             initialNumToRender={10}
             windowSize={5}
             maxToRenderPerBatch={8}
@@ -493,19 +471,6 @@ const styles = createStyles(() => ({
     marginTop: space['3xl'],
     marginBottom: space['2xl'],
   },
-  balanceLabel: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: space.sm,
-  },
-  balanceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'center',
-  },
   balanceBox: {
     width: '100%',
   },
@@ -537,41 +502,15 @@ const styles = createStyles(() => ({
     padding: 0,
   },
 
-  // Actions
+  // Actions — full-width VelaButton CTAs (Send accent, Receive secondary).
   actionRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: space.xl,
+    gap: space.md,
+    paddingHorizontal: space.lg,
     marginBottom: space['3xl'],
   },
   actionBtn: {
-    alignItems: 'center',
-    gap: space.md,
-    minWidth: 72,
-  },
-  actionBtnAccent: {},
-  actionIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: color.bg.sunken,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: color.border.base,
-    ...shadow.sm,
-  },
-  actionIconWrapAccent: {
-    backgroundColor: color.accent.base,
-    ...shadow.md,
-  },
-  actionLabel: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.base,
-  },
-  actionLabelAccent: {
-    ...inter.semibold,
+    flex: 1,
   },
 
   // Token list header
@@ -587,10 +526,11 @@ const styles = createStyles(() => ({
     alignItems: 'center',
     gap: space.md,
   },
+  // SectionLabel default carries vertical margins for standalone use; zero them
+  // so it sits inline in the token-list header row (label ↔ actions).
   tokenListTitle: {
-    fontSize: text.lg,
-    ...inter.bold,
-    color: color.fg.base,
+    marginTop: 0,
+    marginBottom: 0,
   },
   hiddenCount: {
     fontSize: text.xs,
@@ -622,7 +562,7 @@ const styles = createStyles(() => ({
     color: color.accent.base,
   },
 
-  // Search
+  // Search — soft bg.sunken input (no border), lighter than a boxed control.
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -631,9 +571,8 @@ const styles = createStyles(() => ({
     borderRadius: radius.lg,
     paddingHorizontal: space.lg,
     paddingVertical: space.md,
+    marginHorizontal: space.md,
     marginBottom: space.lg,
-    borderWidth: 1,
-    borderColor: color.border.base,
   },
   searchInput: {
     flex: 1,
@@ -644,8 +583,16 @@ const styles = createStyles(() => ({
     outlineStyle: 'none',
   } as any,
 
+  // Hairline divider between de-boxed token rows, inset past the 40px token logo
+  // (row padding + logo + gap) so it aligns under the symbol/chain text.
+  sep: {
+    height: 1,
+    backgroundColor: color.border.base,
+    marginLeft: space.md + 40 + space.lg,
+    marginRight: space.md,
+  },
 
-  // Empty
+  // Empty — open state (no card): centered icon + copy on the page.
   emptyCard: {
     padding: space['4xl'],
     alignItems: 'center',

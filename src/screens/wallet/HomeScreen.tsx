@@ -83,7 +83,8 @@ function Balance({ value, symbol, code }: { value: number; symbol: string; code:
     <AmountText
       value={value}
       symbol={symbol}
-      size={52}
+      size={56}
+      symbolScale={0.58}
       minScale={0.55}
       showDecimals={shouldShowDecimals(value, code)}
       style={styles.balanceInt}
@@ -166,10 +167,18 @@ export default function HomeScreen() {
     setConnEvents(pend.size ? events.filter((e) => !pend.has(e.id)) : events);
   }, []);
 
+  // Entrance animations must play ONCE, on first mount. Opening the account
+  // switcher fires a burst of state updates (setCachedBalances/setAccountBalance,
+  // one per account, via refreshAllBalances); without this gate the FlatList
+  // header re-creates its `entering={fadeInDown}` on each re-render and the whole
+  // balance/header appears to slide/flicker behind the modal. After the first
+  // paint, entrance props go undefined so re-renders never re-animate.
+  const hasEntered = useRef(false);
+  useEffect(() => { hasEntered.current = true; }, []);
+
   // Balance "money in" pulse (cross-platform via shared value).
   const balancePulse = useSharedValue(0);
   const balanceScaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + balancePulse.value * 0.03 }] }));
-  const balanceRingStyle = useAnimatedStyle(() => ({ opacity: balancePulse.value }));
 
   const networks = useMemo(() => getAllNetworksSync(), []);
   const selectedNetwork = selectedChainId != null ? networks.find((n) => n.chainId === selectedChainId) ?? null : null;
@@ -586,12 +595,11 @@ export default function HomeScreen() {
 
   // --- renderers ---
   const renderHeader = () => (
-    <Animated.View entering={fadeInDown(60, 400)}>
+    <Animated.View entering={hasEntered.current ? undefined : fadeInDown(60, 400)}>
       {/* Balance — hidden on the Connections tab so its list gets the vertical room */}
       {tab === 'activity' && (
       <Animated.View style={balanceScaleStyle}>
-        <VelaCard elevated style={styles.balanceCard}>
-          <View pointerEvents="none" style={styles.balanceBlob} />
+        <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>{t('home.totalBalance')}</Text>
           <View style={styles.balanceTopRow}>
             {/* Tap the balance to see the assets behind it (reuses the Send picker). */}
@@ -646,8 +654,7 @@ export default function HomeScreen() {
               <ChevronRight size={18} color={color.fg.muted} strokeWidth={2.6} />
             </Pressable>
           </View>
-          <Animated.View pointerEvents="none" style={[styles.balanceRing, balanceRingStyle]} />
-        </VelaCard>
+        </View>
       </Animated.View>
       )}
 
@@ -701,7 +708,7 @@ export default function HomeScreen() {
       )}
       <SafeAreaView style={styles.safe} edges={['top']}>
         {/* Header */}
-        <Animated.View style={styles.header} entering={fadeIn(0, 400)}>
+        <Animated.View style={styles.header} entering={hasEntered.current ? undefined : fadeIn(0, 400)}>
           <Pressable
             style={styles.account}
             onPress={openSwitcher}
@@ -710,12 +717,14 @@ export default function HomeScreen() {
           >
             <View style={styles.avatar}><Text style={styles.avatarText}>{(accountName[0] ?? 'V').toUpperCase()}</Text></View>
             <View style={styles.accountInfo}>
-              <Text style={styles.accountName} numberOfLines={1}>{accountName}</Text>
+              <View style={styles.accountNameRow}>
+                <Text style={styles.accountName} numberOfLines={1}>{accountName}</Text>
+                {state.accounts.length > 1 && (
+                  <ChevronDown size={15} color={color.fg.subtle} strokeWidth={2.4} />
+                )}
+              </View>
               <Text style={styles.accountAddr} numberOfLines={1}>{shortAddr(address)}</Text>
             </View>
-            {state.accounts.length > 1 && (
-              <ChevronDown size={16} color={color.fg.subtle} strokeWidth={2.4} />
-            )}
           </Pressable>
           <Pressable
             style={styles.iconBtn}
@@ -1120,67 +1129,54 @@ const styles = createStyles(() => ({
     paddingTop: space.md,
     paddingBottom: space.lg,
   },
+  // De-boxed header (Wise): account + settings sit openly on the page, no card.
   account: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    backgroundColor: color.bg.raised,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    borderRadius: radius.lg,
-    paddingVertical: space.md,
-    paddingHorizontal: space.lg,
-    ...shadow.sm,
+    paddingVertical: space.xs,
   },
   avatar: {
-    width: 40, height: 40, borderRadius: 13,
+    width: 44, height: 44, borderRadius: radius.full,
     backgroundColor: color.accent.soft,
     alignItems: 'center', justifyContent: 'center',
   },
   avatarText: { fontSize: text.lg, ...inter.bold, color: color.accent.base },
   accountInfo: { flex: 1, minWidth: 0 },
-  accountName: { fontSize: text.lg, ...inter.bold, color: color.fg.base },
+  accountNameRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
+  accountName: { fontSize: text.lg, ...inter.bold, color: color.fg.base, flexShrink: 1 },
   accountAddr: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle, fontFamily: font.mono },
   iconBtn: {
-    width: 58, height: 58, borderRadius: radius.lg,
-    backgroundColor: color.bg.raised,
-    borderWidth: 1, borderColor: color.border.base,
+    width: 44, height: 44,
     alignItems: 'center', justifyContent: 'center',
-    ...shadow.sm,
   },
-  iconBtnMuted: { backgroundColor: color.bg.sunken },
+  iconBtnMuted: {},
 
-  // Balance card
-  balanceCard: { padding: space['2xl'], marginBottom: space.xl, overflow: 'hidden' },
-  balanceBlob: {
-    position: 'absolute', top: -60, right: -50,
-    width: 150, height: 150, borderRadius: 75,
-    backgroundColor: color.accent.soft,
-    opacity: 0.55,
+  // Balance — OPEN hero (Wise): sits directly on the page, no card. Grouped by
+  // space + a section label, not by a box. Premium via generous space + type.
+  balanceCard: {
+    paddingTop: space.lg,
+    paddingBottom: space['2xl'],
   },
-  balanceRing: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    borderRadius: radius.xl, borderWidth: 2, borderColor: color.success.base,
-  },
-  balanceLabel: { fontSize: text.base, ...inter.medium, color: color.fg.muted, letterSpacing: 0.3 },
+  balanceLabel: { fontSize: text.sm, ...inter.semibold, color: color.fg.subtle, letterSpacing: 0.6, textTransform: 'uppercase' },
   balanceTopRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.sm },
   balanceFill: { flex: 1 },
-  balanceInt: { fontSize: 52, ...inter.bold, fontFamily: font.display, color: color.fg.base, letterSpacing: -1 },
-  balanceDec: { fontSize: 30, ...inter.bold, fontFamily: font.display, color: color.fg.subtle },
+  balanceInt: { fontSize: 52, ...inter.bold, fontFamily: font.display, color: color.fg.base, letterSpacing: -1.2 },
+  balanceDec: { fontSize: 28, ...inter.bold, fontFamily: font.display, color: color.fg.subtle, letterSpacing: -0.5 },
   balanceHidden: { fontSize: 52, ...inter.bold, color: color.fg.base, flex: 1, letterSpacing: 2 },
   eyeBtn: { padding: space.xs },
   // Parity with AssetsScreen: when a chain read failed or a held token is unpriced,
   // the hero total is an estimate — say so rather than showing a confident number.
   balanceStaleRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.md },
   balanceStaleText: { fontSize: text.sm, ...inter.medium, color: color.warning.base },
-  balanceBottomRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.xl },
+  balanceBottomRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.lg },
   currencyChip: {
     flexDirection: 'row', alignItems: 'center', gap: space.xs,
     backgroundColor: color.bg.sunken, borderRadius: radius.full,
     paddingVertical: space.sm, paddingHorizontal: space.lg,
   },
-  currencyText: { fontSize: text.lg, ...inter.bold, color: color.fg.muted },
+  currencyText: { fontSize: text.lg, ...inter.bold, color: color.fg.base },
   manageBtn: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 2 },
   manageText: { fontSize: text.lg, ...inter.semibold, color: color.fg.muted },
 
@@ -1200,7 +1196,9 @@ const styles = createStyles(() => ({
 
   // List
   listContent: { paddingHorizontal: space['3xl'], paddingBottom: DOCK_CLEARANCE },
-  sep: { height: space.lg },
+  // Hairline divider between de-boxed rows, inset past the avatar (Apple-Wallet style)
+  // so it aligns under the row's text, not the icon.
+  sep: { height: 1, backgroundColor: color.border.base, marginLeft: 44 + space.lg + space.xs },
   empty: { alignItems: 'center', paddingTop: space['5xl'], gap: space.md },
   emptyIcon: {
     width: 64, height: 64, borderRadius: 32,

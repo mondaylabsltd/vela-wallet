@@ -17,8 +17,8 @@ import {
 } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { DetailRow as Row, Divider } from '@/components/ui/DetailRow';
+import { SectionLabel } from '@/components/ui/SectionLabel';
 import { TxStatusBadge } from '@/components/ui/TxStatusBadge';
-import { VelaCard } from '@/components/ui/VelaCard';
 import { ChainLogo } from '@/components/ChainLogo';
 import { chainName, getAllNetworksSync, explorerTxURL, explorerAddressURL } from '@/models/network';
 import type { LocalTransaction } from '@/services/storage';
@@ -98,8 +98,8 @@ export function ConnectionEventDetailSheet({ visible, tx, onClose }: Props) {
             </View>
 
             <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-              {/* Identity — which app, what operation */}
-              <VelaCard elevated style={styles.hero}>
+              {/* Identity — which app, what operation. Open on the page, no card. */}
+              <View style={styles.hero}>
                 <View style={styles.heroIcon}><HeroIcon size={22} color={color.accent.base} strokeWidth={2} /></View>
                 <View style={styles.heroInfo}>
                   <Text style={styles.heroTitle} numberOfLines={1}>{title}</Text>
@@ -111,34 +111,33 @@ export function ConnectionEventDetailSheet({ visible, tx, onClose }: Props) {
                   </View>
                 </View>
                 {amount ? <Text style={styles.heroAmount} numberOfLines={1}>{amount}</Text> : null}
-              </VelaCard>
+              </View>
 
               {offChain ? (
                 <Text style={styles.offChainNote}>{t('connect.detail.offChainNote')}</Text>
               ) : null}
 
-              {/* Signed content — the "what did I authorize" */}
-              <Text style={styles.sectionTitle}>{contentLabel}</Text>
-              <VelaCard style={styles.contentCard}>
-                {tx.signedContent ? (
-                  <>
-                    <ScrollView style={styles.contentScroll} nestedScrollEnabled showsVerticalScrollIndicator>
-                      <Text style={styles.contentText} selectable>{tx.signedContent}</Text>
-                    </ScrollView>
-                    <Pressable onPress={() => copy('content', tx.signedContent!)} hitSlop={8} style={styles.copyBtn}>
-                      {copied === 'content'
-                        ? <Check size={16} color={color.success.base} strokeWidth={2.6} />
-                        : <Copy size={16} color={color.fg.subtle} strokeWidth={2} />}
-                    </Pressable>
-                  </>
-                ) : (
-                  <Text style={styles.contentMissing}>{t('connect.detail.contentMissing')}</Text>
-                )}
-              </VelaCard>
+              {/* Signed content — the "what did I authorize". A legible code block
+                  (light bg.sunken, no border/shadow), not a "card pile" panel. */}
+              <SectionLabel>{contentLabel}</SectionLabel>
+              {tx.signedContent ? (
+                <View style={styles.contentBlock}>
+                  <ScrollView style={styles.contentScroll} nestedScrollEnabled showsVerticalScrollIndicator>
+                    <Text style={styles.contentText} selectable>{tx.signedContent}</Text>
+                  </ScrollView>
+                  <Pressable onPress={() => copy('content', tx.signedContent!)} hitSlop={10} style={styles.copyBtn}>
+                    {copied === 'content'
+                      ? <Check size={16} color={color.success.base} strokeWidth={2.6} />
+                      : <Copy size={16} color={color.fg.subtle} strokeWidth={2} />}
+                  </Pressable>
+                </View>
+              ) : (
+                <Text style={styles.contentMissing}>{t('connect.detail.contentMissing')}</Text>
+              )}
 
               {/* Metadata trail */}
-              <Text style={styles.sectionTitle}>{t('componentsTx.detail.sectionTitle')}</Text>
-              <VelaCard style={styles.details}>
+              <SectionLabel>{t('componentsTx.detail.sectionTitle')}</SectionLabel>
+              <View style={styles.section}>
                 <Row label={t('connect.detail.labelApp')} value={tx.dappOrigin || '—'} />
                 <Divider />
                 <Row label={t('componentsTx.detail.labelDate')} value={formatDateTime(tx.timestamp * 1000)} />
@@ -157,7 +156,7 @@ export function ConnectionEventDetailSheet({ visible, tx, onClose }: Props) {
                 {kind === 'tx' && tx.to ? (<><Divider /><Row label={t('componentsTx.detail.labelTo')} value={shortAddress(tx.to)} mono onOpen={() => openBrowser(explorerAddressURL(tx.chainId, tx.to))} /></>) : null}
                 {amount ? (<><Divider /><Row label={t('connect.dapp.detailValue')} value={amount} /></>) : null}
                 {tx.txHash ? (<><Divider /><Row label={t('componentsTx.detail.labelHash')} value={shortAddress(tx.txHash)} mono onOpen={() => openBrowser(explorerTxURL(tx.chainId, tx.txHash))} /></>) : null}
-              </VelaCard>
+              </View>
             </ScrollView>
           </View>
         );
@@ -174,11 +173,12 @@ const styles = createStyles(() => ({
   },
   headSpacer: { width: 34 },
   headTitle: { flex: 1, textAlign: 'center', fontSize: text.xl, ...inter.bold, color: color.fg.base, paddingHorizontal: space.sm },
+  // Plain icon button — no card bg/border/shadow; hitSlop keeps a ≥44 target.
   closeBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   body: { paddingHorizontal: space['2xl'], paddingBottom: space['4xl'], gap: space.xl },
 
-  // Identity
-  hero: { flexDirection: 'row', alignItems: 'center', gap: space.lg, padding: space.xl },
+  // Identity — open on the page, no card.
+  hero: { flexDirection: 'row', alignItems: 'center', gap: space.lg, paddingTop: space.lg, paddingBottom: space.md },
   heroIcon: { width: 44, height: 44, borderRadius: 22, backgroundColor: color.accent.soft, alignItems: 'center', justifyContent: 'center' },
   heroInfo: { flex: 1, gap: 3 },
   heroTitle: { fontSize: text.lg, ...inter.bold, color: color.fg.base },
@@ -188,18 +188,16 @@ const styles = createStyles(() => ({
 
   offChainNote: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, lineHeight: 18, marginTop: -space.md },
 
-  // Signed content
-  sectionTitle: { fontSize: text.base, ...inter.bold, color: color.fg.base },
-  contentCard: { padding: space.lg, gap: space.md },
+  // Signed content — a legible code block (light, no border/shadow), not a card.
+  contentBlock: { backgroundColor: color.bg.sunken, borderRadius: radius.lg, padding: space.lg, gap: space.md },
   contentScroll: { maxHeight: 220 },
   contentText: { fontSize: text.sm, fontFamily: font.mono, color: color.fg.base, lineHeight: 19 },
   contentMissing: { fontSize: text.base, ...inter.regular, color: color.fg.subtle },
-  copyBtn: { alignSelf: 'flex-end', width: 32, height: 32, borderRadius: radius.md, backgroundColor: color.bg.sunken, alignItems: 'center', justifyContent: 'center' },
+  // Plain icon button (no filled square).
+  copyBtn: { alignSelf: 'flex-end', width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
 
-  // Details
-  details: { paddingHorizontal: space.lg },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  statusText: { fontSize: text.base, ...inter.bold },
+  // Details — open section, hairline-separated rows.
+  section: {},
   chainRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   chainText: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
 }));

@@ -7,7 +7,19 @@ export default function Root({ children }: PropsWithChildren) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        {/*
+          maximum-scale=1 stops iOS Safari from auto-zooming when a text input
+          smaller than 16px is focused (which, in this fixed 390×844 app shell,
+          left the page zoomed-in and cut off). It caps the *automatic* focus
+          zoom only — iOS still honors the user's system Accessibility zoom, and
+          the app has its own in-app text-scale control (Settings → A–A).
+          viewport-fit=cover exposes env(safe-area-inset-*) for notch/home-indicator
+          padding, which the app already consumes via safe-area insets.
+        */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+        />
         {/* Safari address bar + status bar color — light mode */}
         <meta name="theme-color" content="#FAFAF8" media="(prefers-color-scheme: light)" />
         {/* Safari address bar + status bar color — dark mode */}

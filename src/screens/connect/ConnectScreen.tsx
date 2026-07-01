@@ -13,8 +13,8 @@ import { View, Text, TextInput, ScrollView, Pressable, Image } from 'react-nativ
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
-import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
+import { SectionLabel } from '@/components/ui/SectionLabel';
 import { QRScanner } from '@/components/QRScanner';
 import { ConnectionFlowStates } from '@/components/ConnectionFlowStates';
 import { useDAppConnection } from '@/models/dapp-connection';
@@ -97,34 +97,32 @@ export default function ConnectScreen() {
         {/* ================================================================= */}
         {status === 'disconnected' && (
           <>
-            {/* How it works */}
+            {/* How it works — open section, not a card */}
             <Animated.View entering={fadeInDown(50, 300)}>
-              <VelaCard style={styles.guideCard}>
-                <Text style={styles.guideTitle}>{t('connect.list.guideTitle')}</Text>
+              <SectionLabel>{t('connect.list.guideTitle')}</SectionLabel>
 
-                <View style={styles.steps}>
-                  <StepRow
-                    number={1}
-                    icon={<QrCode size={18} color={color.accent.base} strokeWidth={2} />}
-                    title={t('connect.list.step1Title')}
-                    subtitle={t('connect.list.step1Subtitle')}
-                  />
-                  <View style={styles.stepConnector} />
-                  <StepRow
-                    number={2}
-                    icon={<Lock size={12} color={color.accent.base} strokeWidth={2} />}
-                    title={t('connect.list.step2Title')}
-                    subtitle={t('connect.list.step2Subtitle')}
-                  />
-                  <View style={styles.stepConnector} />
-                  <StepRow
-                    number={3}
-                    icon={<Zap size={18} color={color.accent.base} strokeWidth={2} />}
-                    title={t('connect.list.step3Title')}
-                    subtitle={t('connect.list.step3Subtitle')}
-                  />
-                </View>
-              </VelaCard>
+              <View style={styles.steps}>
+                <StepRow
+                  number={1}
+                  icon={<QrCode size={18} color={color.accent.base} strokeWidth={2} />}
+                  title={t('connect.list.step1Title')}
+                  subtitle={t('connect.list.step1Subtitle')}
+                />
+                <View style={styles.stepConnector} />
+                <StepRow
+                  number={2}
+                  icon={<Lock size={12} color={color.accent.base} strokeWidth={2} />}
+                  title={t('connect.list.step2Title')}
+                  subtitle={t('connect.list.step2Subtitle')}
+                />
+                <View style={styles.stepConnector} />
+                <StepRow
+                  number={3}
+                  icon={<Zap size={18} color={color.accent.base} strokeWidth={2} />}
+                  title={t('connect.list.step3Title')}
+                  subtitle={t('connect.list.step3Subtitle')}
+                />
+              </View>
             </Animated.View>
 
             {/* Actions */}
@@ -156,11 +154,12 @@ export default function ConnectScreen() {
                   onSubmitEditing={handlePasteConnect}
                 />
                 <Pressable
-                  style={[styles.linkConnectBtn, !linkInput.trim() && styles.linkConnectBtnDisabled]}
+                  style={styles.linkConnectBtn}
                   onPress={handlePasteConnect}
                   disabled={!linkInput.trim()}
+                  hitSlop={8}
                 >
-                  <ArrowRight size={18} color={!linkInput.trim() ? color.fg.subtle : color.fg.inverse} strokeWidth={2.5} />
+                  <ArrowRight size={20} color={!linkInput.trim() ? color.fg.subtle : color.accent.base} strokeWidth={2.5} />
                 </Pressable>
               </View>
             </Animated.View>
@@ -177,21 +176,21 @@ export default function ConnectScreen() {
         {/* ================================================================= */}
         {(status === 'connected' || status === 'reconnecting') && (
           <Animated.View entering={fadeInDown(50, 300)}>
-            {/* Status card */}
-            <VelaCard style={styles.connectedCard}>
-              <View style={styles.connectedHeader}>
-                <View style={[styles.connectedDot, status === 'reconnecting' && styles.reconnectingDot]} />
-                <Text style={styles.connectedTitle}>
-                  {status === 'reconnecting' ? t('connect.list.reconnecting') : t('connect.list.connected')}
-                </Text>
-                {connectionType === 'walletpair' && (
-                  <View style={styles.encryptedBadge}>
-                    <Lock size={10} color={color.success.base} strokeWidth={2.5} />
-                    <Text style={styles.encryptedBadgeText}>E2E</Text>
-                  </View>
-                )}
-              </View>
+            {/* Status — open section, grouped by a label + hairline rows */}
+            <View style={styles.connectedHeader}>
+              <View style={[styles.connectedDot, status === 'reconnecting' && styles.reconnectingDot]} />
+              <Text style={styles.connectedTitle}>
+                {status === 'reconnecting' ? t('connect.list.reconnecting') : t('connect.list.connected')}
+              </Text>
+              {connectionType === 'walletpair' && (
+                <View style={styles.encryptedBadge}>
+                  <Lock size={10} color={color.success.base} strokeWidth={2.5} />
+                  <Text style={styles.encryptedBadgeText}>E2E</Text>
+                </View>
+              )}
+            </View>
 
+            <View style={styles.infoGroup}>
               {dappInfo ? (
                 <View style={styles.infoRow}>
                   {dappInfo.icon ? (
@@ -212,6 +211,8 @@ export default function ConnectScreen() {
                 </View>
               )}
 
+              <View style={styles.infoSep} />
+
               <View style={styles.infoRow}>
                 <Smartphone size={14} color={color.fg.muted} strokeWidth={2} />
                 <Text style={styles.infoText}>
@@ -219,15 +220,17 @@ export default function ConnectScreen() {
                 </Text>
               </View>
 
+              <View style={styles.infoSep} />
+
               <View style={styles.infoRow}>
                 <Link size={14} color={color.fg.muted} strokeWidth={2} />
                 <Text style={styles.infoText}>{chainName(chainId)}</Text>
               </View>
+            </View>
 
-              <Text style={styles.connectedHint}>
-                {t('connect.list.signingHint')}
-              </Text>
-            </VelaCard>
+            <Text style={styles.connectedHint}>
+              {t('connect.list.signingHint')}
+            </Text>
 
             {/* Disconnect */}
             <View style={styles.disconnectSection}>
@@ -306,13 +309,8 @@ const styles = createStyles(() => ({
   },
   emptyText: { fontSize: text.lg, ...inter.regular, color: color.fg.muted },
 
-  // Guide card
-  guideCard: { padding: space['2xl'], gap: space.lg },
-  guideTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
-  guideSubtitle: { fontSize: text.base, ...inter.regular, color: color.fg.muted, lineHeight: 20 },
-
   // Steps
-  steps: { marginTop: space.lg },
+  steps: { marginTop: space.md },
   stepRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -366,34 +364,17 @@ const styles = createStyles(() => ({
     padding: space.lg,
     backgroundColor: color.bg.sunken,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: color.border.base,
   },
+  // Plain icon button (no bg/border/shadow), ≥44×44 hit target.
   linkConnectBtn: {
     width: 44,
     height: 44,
-    borderRadius: radius.lg,
-    backgroundColor: color.accent.base,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  linkConnectBtnDisabled: {
-    backgroundColor: color.bg.sunken,
-  },
 
-  extensionLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.sm,
-  },
-  extensionLinkText: {
-    fontSize: text.base, ...inter.semibold, color: color.accent.base,
-  },
-
-  // Connected card
-  connectedCard: { padding: space['2xl'], gap: space.lg },
-  connectedHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  // Connected — open section (no card)
+  connectedHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.lg },
   encryptedBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
     paddingHorizontal: space.sm, paddingVertical: 2,
@@ -412,14 +393,17 @@ const styles = createStyles(() => ({
     opacity: 0.7,
   },
   connectedTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
-  infoRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  infoGroup: {},
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.lg },
+  // Hairline between de-boxed info rows, inset past the leading 14px icon + gap.
+  infoSep: { height: 1, backgroundColor: color.border.base, marginLeft: 14 + space.md },
   infoText: {
     fontSize: text.sm, fontWeight: '500', fontFamily: font.mono,
     color: color.fg.subtle, flex: 1,
   },
   connectedHint: {
     fontSize: text.base, ...inter.regular, color: color.fg.muted,
-    marginTop: space.sm,
+    marginTop: space.lg,
   },
 
   disconnectSection: { marginTop: space['2xl'] },

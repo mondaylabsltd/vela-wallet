@@ -12,7 +12,6 @@ import { useTranslation } from 'react-i18next';
 import { View, Text, Image } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
-import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
@@ -29,7 +28,7 @@ export function ConnectionFlowStates({ onScanAgain }: { onScanAgain: () => void 
   if (status === 'connecting' && pendingFingerprint) {
     return (
       <Animated.View entering={fadeInDown(50, 300)}>
-        <VelaCard style={styles.fingerprintCard}>
+        <View style={styles.fingerprintCard}>
           <View style={styles.fingerprintHeader}>
             <Fingerprint size={28} color={color.accent.base} strokeWidth={2} />
             <Text style={styles.fingerprintTitle}>{t('connect.list.verifyTitle')}</Text>
@@ -75,7 +74,7 @@ export function ConnectionFlowStates({ onScanAgain }: { onScanAgain: () => void 
               style={styles.fingerprintBtn}
             />
           </View>
-        </VelaCard>
+        </View>
       </Animated.View>
     );
   }
@@ -103,26 +102,26 @@ export function ConnectionFlowStates({ onScanAgain }: { onScanAgain: () => void 
   // ----- Error -----
   if (status === 'error') {
     return (
-      <Animated.View entering={fadeInDown(0, 300)}>
-        <VelaCard style={styles.errorCard}>
+      <Animated.View entering={fadeInDown(0, 300)} style={styles.errorCard}>
+        <View style={styles.errorIconWrap}>
           <AlertTriangle size={28} color={color.error.base} />
-          <Text style={styles.errorTitle}>{t('connect.list.connFailed')}</Text>
-          <Text style={styles.errorMessage}>{errorMessage ?? t('connect.list.connError')}</Text>
+        </View>
+        <Text style={styles.errorTitle}>{t('connect.list.connFailed')}</Text>
+        <Text style={styles.errorMessage}>{errorMessage ?? t('connect.list.connError')}</Text>
+        <VelaButton
+          title={t('connect.list.scanAgain')}
+          onPress={onScanAgain}
+          variant="accent"
+          style={styles.errorBtn}
+        />
+        {session && (
           <VelaButton
-            title={t('connect.list.scanAgain')}
-            onPress={onScanAgain}
-            variant="accent"
-            style={styles.errorBtn}
+            title={t('connect.list.retry')}
+            onPress={() => connectToBridge(session)}
+            variant="secondary"
+            style={styles.retryBtn}
           />
-          {session && (
-            <VelaButton
-              title={t('connect.list.retry')}
-              onPress={() => connectToBridge(session)}
-              variant="secondary"
-              style={styles.retryBtn}
-            />
-          )}
-        </VelaCard>
+        )}
       </Animated.View>
     );
   }
@@ -137,8 +136,14 @@ const styles = createStyles(() => ({
 
   dappIcon: { width: 14, height: 14, borderRadius: 3 },
 
-  // Fingerprint verification
-  fingerprintCard: { padding: space['2xl'], gap: space.lg, alignItems: 'center' },
+  // Fingerprint verification — a deliberate security GATE, so it stays a surface,
+  // but a LIGHT one: soft sunken fill + hairline, no card shadow/raised bg.
+  fingerprintCard: {
+    padding: space['2xl'], gap: space.lg, alignItems: 'center',
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.xl,
+    borderWidth: 1, borderColor: color.border.base,
+  },
   fingerprintHeader: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   fingerprintTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
   fingerprintHint: {
@@ -148,8 +153,8 @@ const styles = createStyles(() => ({
   fingerprintCodeRow: { flexDirection: 'row', gap: space.lg, marginVertical: space.xl },
   fingerprintDigitBox: {
     width: 52, height: 64, borderRadius: radius.lg,
-    backgroundColor: color.bg.sunken,
-    borderWidth: 1, borderColor: color.border.base,
+    backgroundColor: color.bg.raised,
+    borderWidth: 1, borderColor: color.border.strong,
     alignItems: 'center', justifyContent: 'center',
   },
   fingerprintDigit: {
@@ -176,8 +181,13 @@ const styles = createStyles(() => ({
   },
   cancelBtn: { marginTop: space.lg },
 
-  // Error
-  errorCard: { padding: space['2xl'], alignItems: 'center', gap: space.md },
+  // Error — open, typographic state (no card), matching the waiting state.
+  errorCard: { paddingVertical: space['4xl'], alignItems: 'center', gap: space.md },
+  errorIconWrap: {
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: color.error.soft,
+    alignItems: 'center', justifyContent: 'center', marginBottom: space.sm,
+  },
   errorTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
   errorMessage: {
     fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center', lineHeight: 20,

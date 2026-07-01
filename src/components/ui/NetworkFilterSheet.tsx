@@ -177,15 +177,13 @@ export function NetworkFilterSheet({
 }
 
 const styles = createStyles(() => ({
-  // Trigger
+  // Trigger — soft chip (was a bordered box); matches the de-boxed, light control row.
   trigger: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    backgroundColor: color.bg.raised,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    borderRadius: radius.lg,
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.full,
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
     maxWidth: 150,

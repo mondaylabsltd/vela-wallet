@@ -8,6 +8,8 @@
  * don't hold yet. Reports the resulting QR value + summary up to ReceiveScreen.
  */
 import { AppModal } from '@/components/ui/AppModal';
+import { Divider } from '@/components/ui/DetailRow';
+import { SectionLabel } from '@/components/ui/SectionLabel';
 import { TokenLogo } from '@/components/TokenLogo';
 import { TokenSelector } from '@/components/ui/TokenSelector';
 import { color, createStyles, inter, radius, space, text } from '@/constants/theme';
@@ -91,8 +93,8 @@ export function ReceiveRequestControls({ recipient, onChange }: Props) {
 
   return (
     <View style={styles.wrap}>
-      {/* Asset (network + token in one) */}
-      <Text style={styles.rowLabel}>{t('receive.request.token')}</Text>
+      {/* Asset (network + token in one) — open row, hairline-separated */}
+      <SectionLabel>{t('receive.request.token')}</SectionLabel>
       <Pressable style={styles.selectRow} onPress={() => setShowPicker(true)}>
         <TokenLogo symbol={asset.symbol} logoUrls={tokenLogoURLs(asset)} chain={tokenBadgeNetwork(asset)} size={32} />
         <View style={styles.selectInfo}>
@@ -101,9 +103,10 @@ export function ReceiveRequestControls({ recipient, onChange }: Props) {
         </View>
         <ChevronDown size={18} color={color.fg.muted} strokeWidth={2.2} />
       </Pressable>
+      <Divider />
 
       {/* Amount */}
-      <Text style={styles.rowLabel}>{t('receive.request.amount')}</Text>
+      <SectionLabel>{t('receive.request.amount')}</SectionLabel>
       <View style={styles.amountRow}>
         <TextInput
           style={styles.amountInput}
@@ -138,23 +141,12 @@ export function ReceiveRequestControls({ recipient, onChange }: Props) {
 
 const styles = createStyles(() => ({
   wrap: { gap: space.sm },
-  rowLabel: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.subtle,
-    marginTop: space.lg,
-    marginBottom: space.xs,
-  },
+  // Asset picker — an open de-boxed row (no fill/border), a hairline sits below.
   selectRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    backgroundColor: color.bg.raised,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    borderRadius: radius.lg,
     paddingVertical: space.md,
-    paddingHorizontal: space.lg,
   },
   selectInfo: { flex: 1 },
   selectValue: {
@@ -167,13 +159,12 @@ const styles = createStyles(() => ({
     ...inter.regular,
     color: color.fg.muted,
   },
+  // Amount — a functional input kept as a soft, light chip (no heavy box/border).
   amountRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
-    backgroundColor: color.bg.raised,
-    borderWidth: 1,
-    borderColor: color.border.base,
+    backgroundColor: color.bg.sunken,
     borderRadius: radius.lg,
     paddingHorizontal: space.lg,
   },

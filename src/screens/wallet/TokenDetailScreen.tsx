@@ -11,11 +11,12 @@ import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
-import { VelaCard } from '@/components/ui/VelaCard';
 import { TokenLogo } from '@/components/TokenLogo';
 import { AmountText } from '@/components/ui/AmountText';
+import { SectionLabel } from '@/components/ui/SectionLabel';
+import { Divider } from '@/components/ui/DetailRow';
 import { BarChart } from '@/components/ui/BarChart';
-import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
+import { color, text, inter, space, font, createStyles } from '@/constants/theme';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { shortAddr, tokenChainId as networkToChainId } from '@/models/types';
 import type { APIToken } from '@/models/types';
@@ -95,7 +96,7 @@ export default function TokenDetailScreen() {
   return (
     <ScreenContainer>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        {/* Nav bar */}
+        {/* Nav bar — plain icon button, no card surface */}
         <View style={styles.navBar}>
           <Pressable onPress={() => router.back()} hitSlop={8} style={styles.navBtn}>
             <ArrowLeft size={22} color={color.fg.base} strokeWidth={2} />
@@ -104,56 +105,62 @@ export default function TokenDetailScreen() {
           <View style={styles.navSpacer} />
         </View>
 
-        {/* Hero card — logo, name, network, balance, USD */}
-        <Animated.View entering={fadeIn(0, 400)}>
-          <VelaCard elevated style={styles.heroCard}>
-            <View style={styles.heroRow}>
-              <TokenLogo symbol={symbol} logoUrls={logoUrls} chain={badgeNetworkFor(symbol, chainId, !contractAddress)} size={44} />
-              <View style={styles.heroIdentity}>
-                <Text style={styles.heroSymbol}>{symbol}</Text>
-                <Text style={styles.heroChain}>{chain}</Text>
-              </View>
-              <View style={styles.heroBalance}>
-                <AmountText
-                  text={formatTokenAmount(balance, { compact: true })}
-                  size={text.xl}
-                  minScale={0.7}
-                  style={styles.heroAmount}
-                  containerStyle={styles.heroAmountBox}
-                />
-                {usdValue > 0 && (
-                  <Text style={styles.heroUsd} adjustsFontSizeToFit numberOfLines={1}>
-                    {formatUsd(usdValue)}
-                  </Text>
-                )}
-              </View>
+        {/* Hero — open on the page (no card): token identity + big balance with a
+            subordinated fiat value below. */}
+        <Animated.View entering={fadeIn(0, 400)} style={styles.hero}>
+          <View style={styles.heroIdentityRow}>
+            <TokenLogo symbol={symbol} logoUrls={logoUrls} chain={badgeNetworkFor(symbol, chainId, !contractAddress)} size={44} />
+            <View style={styles.heroIdentity}>
+              <Text style={styles.heroSymbol}>{symbol}</Text>
+              <Text style={styles.heroChain}>{chain}</Text>
             </View>
-          </VelaCard>
+          </View>
+          <AmountText
+            text={formatTokenAmount(balance, { compact: true })}
+            unit={symbol}
+            size={text['4xl']}
+            minScale={0.6}
+            style={styles.heroAmount}
+            tailStyle={styles.heroAmountUnit}
+            containerStyle={styles.heroAmountBox}
+          />
+          {usdValue > 0 && (
+            <AmountText
+              value={usdValue * dc.rate}
+              symbol={dc.symbol}
+              symbolScale={0.58}
+              size={text.xl}
+              minScale={0.6}
+              style={styles.heroUsd}
+              tailStyle={styles.heroUsdTail}
+              containerStyle={styles.heroUsdBox}
+            />
+          )}
         </Animated.View>
 
-        {/* 7-day balance chart */}
-        <Animated.View entering={fadeInDown(50, 400)}>
-          <VelaCard style={styles.chartCard}>
-            <Text style={styles.chartTitle}>{t('tokenDetail.chartTitle')}</Text>
-            {historyLoading ? (
-              <View style={styles.chartLoading}>
-                <ActivityIndicator size="small" color={color.fg.subtle} />
-              </View>
-            ) : historyData.length > 0 ? (
-              <BarChart data={historyData} symbol={symbol} />
-            ) : (
-              <Text style={styles.chartEmpty}>{t('tokenDetail.chartEmpty')}</Text>
-            )}
-          </VelaCard>
+        {/* 7-day balance chart — open section, hairline-grouped by a SectionLabel.
+            The BarChart itself is data viz and stays as-is. */}
+        <Animated.View entering={fadeInDown(50, 400)} style={styles.chartSection}>
+          <SectionLabel>{t('tokenDetail.chartTitle')}</SectionLabel>
+          {historyLoading ? (
+            <View style={styles.chartLoading}>
+              <ActivityIndicator size="small" color={color.fg.subtle} />
+            </View>
+          ) : historyData.length > 0 ? (
+            <BarChart data={historyData} symbol={symbol} />
+          ) : (
+            <Text style={styles.chartEmpty}>{t('tokenDetail.chartEmpty')}</Text>
+          )}
         </Animated.View>
 
-        {/* Action buttons */}
+        {/* Action buttons — VelaButton CTAs, kept */}
         <Animated.View style={styles.buttonRow} entering={fadeInDown(100, 400)}>
           <VelaButton title={t('tokenDetail.send')} onPress={handleSend} style={styles.actionBtn} />
           <VelaButton title={t('tokenDetail.receive')} onPress={handleReceive} variant="secondary" style={styles.actionBtn} />
         </Animated.View>
 
-        {/* Details — contract, decimals, unit price */}
+        {/* Details — open rows on the page, separated by hairline dividers under a
+            SectionLabel heading (no per-row / whole-section card). */}
         <Animated.View entering={fadeInDown(200, 400)} style={styles.detailSection}>
           {tokenName !== symbol && (
             <>
@@ -161,7 +168,7 @@ export default function TokenDetailScreen() {
                 <Text style={styles.detailLabel}>{t('tokenDetail.labelName')}</Text>
                 <Text style={styles.detailValue}>{tokenName}</Text>
               </View>
-              <View style={styles.separator} />
+              <Divider />
             </>
           )}
           {contractAddress && (
@@ -179,7 +186,7 @@ export default function TokenDetailScreen() {
           )}
           {contractAddress && (
             <>
-              <View style={styles.separator} />
+              <Divider />
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>{t('tokenDetail.labelDecimals')}</Text>
                 <Text style={styles.detailValue}>{decimals}</Text>
@@ -188,14 +195,14 @@ export default function TokenDetailScreen() {
           )}
           {priceUsd > 0 && (
             <>
-              {contractAddress && <View style={styles.separator} />}
+              {contractAddress && <Divider />}
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>{t('tokenDetail.labelPrice')}</Text>
                 <Text style={styles.detailValue}>{t('tokenDetail.priceValue', { symbol, value: formatUsd(priceUsd) })}</Text>
               </View>
             </>
           )}
-          <View style={styles.separator} />
+          <Divider />
           <Pressable
             style={styles.detailRow}
             onPress={() => {
@@ -240,15 +247,17 @@ const styles = createStyles(() => ({
   },
   navSpacer: { minWidth: 50 },
 
-  // Hero card
-  heroCard: {
-    padding: space['2xl'],
+  // Hero — OPEN on the page (no card): token identity, then a big balance with a
+  // subordinated fiat value below. Grouped by space, not by a box.
+  hero: {
+    paddingTop: space.lg,
     marginBottom: space['2xl'],
   },
-  heroRow: {
+  heroIdentityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.lg,
+    marginBottom: space.xl,
   },
   heroIdentity: {
     flex: 1,
@@ -264,39 +273,39 @@ const styles = createStyles(() => ({
     ...inter.medium,
     color: color.fg.subtle,
   },
-  heroBalance: {
-    alignItems: 'flex-end',
-    gap: 2,
-    flexShrink: 1,
-    maxWidth: '58%',
-  },
   heroAmountBox: {
     alignSelf: 'stretch',
   },
   heroAmount: {
-    fontSize: text.xl,
+    fontSize: text['4xl'],
     ...inter.bold,
     fontFamily: font.display,
     color: color.fg.base,
-    textAlign: 'right',
+    letterSpacing: -0.8,
+  },
+  heroAmountUnit: {
+    ...inter.bold,
+    fontFamily: font.display,
+    color: color.fg.subtle,
+  },
+  heroUsdBox: {
+    alignSelf: 'flex-start',
+    marginTop: space.sm,
   },
   heroUsd: {
-    fontSize: text.sm,
+    fontSize: text.xl,
     ...inter.medium,
+    fontFamily: font.display,
     color: color.fg.muted,
+  },
+  heroUsdTail: {
+    ...inter.medium,
+    color: color.fg.subtle,
   },
 
-  // Buttons
-  chartCard: {
-    padding: space.xl,
+  // Chart — open section under a SectionLabel (no card). BarChart is data viz.
+  chartSection: {
     marginBottom: space.lg,
-  },
-  chartTitle: {
-    fontSize: text.sm,
-    ...inter.semibold,
-    color: color.fg.muted,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.5,
   },
   chartLoading: {
     height: 120,
@@ -344,9 +353,5 @@ const styles = createStyles(() => ({
     fontSize: text.sm,
     ...inter.medium,
     color: color.fg.base,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: color.border.base,
   },
 }));

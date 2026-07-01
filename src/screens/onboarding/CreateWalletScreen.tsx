@@ -6,7 +6,6 @@ import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 import { VelaButton } from '@/components/ui/VelaButton';
-import { VelaCard } from '@/components/ui/VelaCard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { BugReportModal } from '@/components/ui/BugReportModal';
 import { useLanguagePreference } from '@/i18n/language';
@@ -283,9 +282,9 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
               {t('onboarding.create.syncFailedMessage')}
             </Text>
             {uploadError ? (
-              <VelaCard style={styles.errorDetail}>
+              <View style={styles.errorDetail}>
                 <Text style={styles.errorDetailText}>{uploadError}</Text>
-              </VelaCard>
+              </View>
             ) : null}
             <Text style={styles.hint}>
               {t('onboarding.create.syncFailedHint')}
@@ -523,6 +522,8 @@ const styles = createStyles(() => ({
   errorDetail: {
     padding: space.xl,
     width: '100%',
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.lg,
   },
   errorDetailText: {
     fontSize: text.sm,

@@ -11,6 +11,7 @@ import { fadeIn, fadeInUp } from '@/constants/entering';
 import { color, text, inter, space, radius, font, motion, createStyles } from '@/constants/theme';
 import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
 import { AppModal } from '@/components/ui/AppModal';
+import { SectionLabel } from '@/components/ui/SectionLabel';
 import { loadServiceEndpoints, saveServiceEndpoints } from '@/services/storage';
 import { DEFAULT_SERVICE_ENDPOINTS } from '@/models/types';
 import type { ServiceEndpoints } from '@/models/types';
@@ -64,13 +65,14 @@ async function checkServiceEndpointHealth(
 
 function HealthDot({ health }: { health: ServiceHealth }) {
   if (health.status === 'checking') {
-    return <ActivityIndicator size={8} color="rgba(255,255,255,0.4)" style={{ marginLeft: 6 }} />;
+    return <ActivityIndicator size={8} color={color.fg.subtle} style={{ marginLeft: 6 }} />;
   }
   const isOk = health.status === 'ok';
+  const dotColor = isOk ? color.success.base : color.accent.base;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 6 }}>
-      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: isOk ? '#4CAF50' : '#E8572A' }} />
-      <Text style={{ fontSize: 11, fontWeight: '500', color: isOk ? '#4CAF50' : '#E8572A' }}>
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: dotColor }} />
+      <Text style={{ fontSize: 11, fontWeight: '500', color: dotColor }}>
         {isOk ? `${health.latencyMs}ms` : (health.detail ?? 'Offline')}
       </Text>
     </View>
@@ -129,7 +131,7 @@ export function OnboardingSettingsModal({ visible, onClose, unreachable }: { vis
           {/* Warning banner when auto-shown due to unreachable endpoint */}
           {unreachable && (
             <View style={settingsStyles.warningBanner}>
-              <AlertTriangle size={18} color="#E8572A" strokeWidth={2} />
+              <AlertTriangle size={18} color={color.accent.base} strokeWidth={2} />
               <Text style={settingsStyles.warningText}>
                 {t('onboarding.settings.warningText')}
               </Text>
@@ -137,7 +139,7 @@ export function OnboardingSettingsModal({ visible, onClose, unreachable }: { vis
           )}
 
           {/* Theme */}
-          <Text style={settingsStyles.sectionLabel}>{t('onboarding.settings.sectionAppearance')}</Text>
+          <SectionLabel>{t('onboarding.settings.sectionAppearance')}</SectionLabel>
           <View style={settingsStyles.themeRow}>
             {THEME_OPTIONS.map(({ key, labelKey, Icon }) => {
               const active = colorPref === key;
@@ -152,7 +154,7 @@ export function OnboardingSettingsModal({ visible, onClose, unreachable }: { vis
           </View>
 
           {/* Passkey Index — the only endpoint needed for onboarding */}
-          <Text style={settingsStyles.sectionLabel}>{t('onboarding.settings.sectionPasskeyIndex')}</Text>
+          <SectionLabel>{t('onboarding.settings.sectionPasskeyIndex')}</SectionLabel>
           <Text style={settingsStyles.hint}>
             {t('onboarding.settings.passkeyHint')}
           </Text>
@@ -184,7 +186,7 @@ export function OnboardingSettingsModal({ visible, onClose, unreachable }: { vis
           {/* Debug: simulate endpoint failure */}
           {__DEV__ && (
             <>
-              <Text style={settingsStyles.sectionLabel}>{t('onboarding.settings.sectionDebug')}</Text>
+              <SectionLabel>{t('onboarding.settings.sectionDebug')}</SectionLabel>
               <Pressable style={settingsStyles.debugBtn} onPress={() => {
                 const broken = 'https://invalid.endpoint.test';
                 setEndpoints({ ...endpoints, passkeyIndexURL: broken });
@@ -209,9 +211,8 @@ const settingsStyles = createStyles(() => ({
   title: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
   scroll: { flex: 1 },
   scrollContent: { padding: space['3xl'], paddingBottom: space['5xl'] },
-  warningBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, backgroundColor: 'rgba(232,87,42,0.08)', borderRadius: radius.lg, padding: space.xl, marginBottom: space.xl, borderWidth: 1, borderColor: 'rgba(232,87,42,0.2)' },
-  warningText: { flex: 1, fontSize: text.sm, ...inter.medium, color: '#E8572A', lineHeight: 20 },
-  sectionLabel: { fontSize: text.xs, ...inter.semibold, color: color.fg.subtle, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: space.lg, marginTop: space.xl },
+  warningBanner: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md, backgroundColor: color.accent.soft, borderRadius: radius.lg, padding: space.xl, marginBottom: space.xl },
+  warningText: { flex: 1, fontSize: text.sm, ...inter.medium, color: color.accent.base, lineHeight: 20 },
   hint: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, lineHeight: 20, marginBottom: space.xl },
   themeRow: { flexDirection: 'row', gap: space.md, marginBottom: space.lg },
   themeOption: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingVertical: space.lg, borderRadius: radius.lg, backgroundColor: color.bg.sunken },
@@ -224,7 +225,7 @@ const settingsStyles = createStyles(() => ({
   input: { fontSize: text.sm, fontWeight: '500', fontFamily: font.mono, color: color.fg.base, padding: space.lg, backgroundColor: color.bg.sunken, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border.base },
   resetBtn: { alignItems: 'center', paddingVertical: space.xl, marginTop: space.sm },
   resetText: { fontSize: text.base, ...inter.semibold, color: color.accent.base },
-  debugBtn: { backgroundColor: color.bg.sunken, borderRadius: radius.lg, padding: space.lg, alignItems: 'center', borderWidth: 1, borderColor: color.border.base },
+  debugBtn: { paddingVertical: space.lg, alignItems: 'center' },
   debugBtnText: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
 }));
 

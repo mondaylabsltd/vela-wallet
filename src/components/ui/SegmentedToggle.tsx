@@ -87,8 +87,8 @@ export function SegmentedToggle<T extends string>({ options, value, onChange }: 
 const styles = createStyles(() => ({
   track: {
     flexDirection: 'row',
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.lg,
+    // Transparent track (was a heavy filled bg.sunken box) — reads as light tabs
+    // with a single floating active chip, matching the de-boxed page.
     padding: PAD,
     gap: GAP,
     flex: 1,
@@ -101,6 +101,8 @@ const styles = createStyles(() => ({
     bottom: PAD,
     borderRadius: radius.md,
     backgroundColor: color.bg.raised,
+    borderWidth: 1,
+    borderColor: color.border.base,
     ...shadow.sm,
   },
   segment: {

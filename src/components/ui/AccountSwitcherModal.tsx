@@ -18,13 +18,14 @@ import { useRouter } from 'expo-router';
 import { Check, X } from 'lucide-react-native';
 
 import { AppModal } from '@/components/ui/AppModal';
+import { SectionLabel } from '@/components/ui/SectionLabel';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { getAccountBalances } from '@/services/balance-cache';
 import { sortAccountsByBalance, totalAccountBalance } from '@/services/accounts';
 import { hapticSuccess } from '@/services/platform';
-import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
+import { color, createStyles, font, inter, space, text } from '@/constants/theme';
 
 type Props = {
   visible: boolean;
@@ -86,27 +87,30 @@ export function AccountSwitcherModal({
         </View>
 
         <ScrollView contentContainerStyle={styles.list}>
-          {ordered.map(({ account, index }) => {
+          <SectionLabel style={styles.sectionLabel}>{title}</SectionLabel>
+          {ordered.map(({ account, index }, pos) => {
             const isActive = index === state.activeAccountIndex;
             const bal = bals.get(account.address);
             return (
-              <Pressable
-                key={account.id}
-                style={[styles.item, isActive && styles.itemActive]}
-                onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); hapticSuccess(); onClose(); }}
-              >
-                <View style={styles.avatar}><Text style={styles.avatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text></View>
-                <View style={styles.info}>
-                  <Text style={styles.name} numberOfLines={1}>{account.name}</Text>
-                  <Text style={styles.addr}>{shortAddress(account.address)}</Text>
-                </View>
-                <View style={styles.right}>
-                  {bal != null
-                    ? <Text style={styles.bal}>{dc.fmt(bal)}</Text>
-                    : isLoading ? <ActivityIndicator size="small" color={color.fg.subtle} /> : null}
-                  {isActive && <Check size={18} color={color.accent.base} />}
-                </View>
-              </Pressable>
+              <React.Fragment key={account.id}>
+                {pos > 0 && <View style={styles.sep} />}
+                <Pressable
+                  style={styles.item}
+                  onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); hapticSuccess(); onClose(); }}
+                >
+                  <View style={styles.avatar}><Text style={styles.avatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text></View>
+                  <View style={styles.info}>
+                    <Text style={[styles.name, isActive && styles.nameActive]} numberOfLines={1}>{account.name}</Text>
+                    <Text style={styles.addr}>{shortAddress(account.address)}</Text>
+                  </View>
+                  <View style={styles.right}>
+                    {bal != null
+                      ? <Text style={styles.bal}>{dc.fmt(bal)}</Text>
+                      : isLoading ? <ActivityIndicator size="small" color={color.fg.subtle} /> : null}
+                    {isActive && <Check size={18} color={color.accent.base} />}
+                  </View>
+                </Pressable>
+              </React.Fragment>
             );
           })}
 
@@ -132,19 +136,18 @@ const styles = createStyles(() => ({
   title: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
   subtitle: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
   spinner: { marginRight: space.sm },
-  list: { paddingHorizontal: space.lg, paddingBottom: space['2xl'], gap: space.md },
-  // Every row is a clean white card with a hairline border + subtle lift.
-  // Selection is signalled by recolouring the border (accent ring) — not by a
-  // heavy soft-fill block. borderWidth stays constant so the active row doesn't
-  // shift; only the colour changes.
+  list: { paddingHorizontal: space.xl, paddingBottom: space['2xl'] },
+  sectionLabel: { marginTop: space.sm },
+  // Accounts sit as open rows directly on the page, grouped under a SectionLabel
+  // and separated by hairline dividers (inset past the avatar). The active account
+  // is signalled by an accent name + the trailing Check — not by a boxed card.
   item: {
     flexDirection: 'row', alignItems: 'center', gap: space.md,
-    padding: space.lg, borderRadius: radius.xl,
-    backgroundColor: color.bg.raised,
-    borderWidth: 1.5, borderColor: color.border.base,
-    ...shadow.sm,
+    paddingVertical: space.lg,
   },
-  itemActive: { borderColor: color.accent.base },
+  // Hairline divider inset past the 40px avatar + its space.md gap so it aligns
+  // under the account name (Apple-Wallet style).
+  sep: { height: 1, backgroundColor: color.border.base, marginLeft: 40 + space.md },
   avatar: {
     width: 40, height: 40, borderRadius: 20, backgroundColor: color.accent.soft,
     alignItems: 'center', justifyContent: 'center',
@@ -152,8 +155,9 @@ const styles = createStyles(() => ({
   avatarText: { fontSize: text.base, ...inter.bold, color: color.accent.base },
   info: { flex: 1, gap: space.xs },
   name: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
+  nameActive: { color: color.accent.base },
   addr: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, fontFamily: font.mono },
   right: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   bal: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted },
-  actions: { gap: space.sm, paddingTop: space.lg, paddingHorizontal: space.sm },
+  actions: { gap: space.sm, paddingTop: space['2xl'], paddingHorizontal: space.sm },
 }));

@@ -55,6 +55,12 @@ export interface AmountTextProps {
   compact?: boolean;
   /** Relative size of the subordinated tail (decimal + unit). Default 0.56. */
   tailScale?: number;
+  /**
+   * Relative size of the currency symbol (e.g. "$"), rendered as a lighter leading
+   * glyph so the NUMBER is the hero (Wise / Cash App). Omit to keep the symbol at
+   * full size, glued to the integer (default). Only applies to the `value` path.
+   */
+  symbolScale?: number;
   /** Max lines. 1 (default) = atomic single line; >1 wraps at the decimal. */
   maxLines?: number;
   /** Style for the integer (color / weight / fontFamily — fontSize is managed). */
@@ -65,7 +71,7 @@ export interface AmountTextProps {
   containerStyle?: StyleProp<ViewStyle>;
 }
 
-interface Resolved { head: string; tail: string; unit: string; size: number }
+interface Resolved { symbol: string; head: string; tail: string; unit: string; size: number }
 
 /** Largest font that fits `effLen` "full-size" chars in `width`, floored at `min`. */
 function fit(effLen: number, width: number, size: number, min: number): number {
@@ -85,38 +91,39 @@ function resolve(p: AmountTextProps, width: number): Resolved {
   // Pre-formatted path: the caller owns the string; we only fit it to width.
   if (text != null) {
     const effLen = text.length + unitStr.length * tailScale;
-    return { head: text, tail: '', unit: unitStr, size: fit(effLen, width, size, floor) };
+    return { symbol: '', head: text, tail: '', unit: unitStr, size: fit(effLen, width, size, floor) };
   }
 
   const sign = (value ?? 0) < 0 ? '-' : '';
   const abs = Math.abs(value ?? 0);
 
-  // Full-precision split into a large head (symbol + integer) and a small tail.
+  // Symbol is kept separate so callers can subordinate it (symbolScale); it's
+  // counted in effLen so the fit estimate still accounts for its width.
   let head: string, tail: string;
   if (!showDecimals) {
-    head = sign + symbol + formatNumber(abs, { maximumFractionDigits: 0 });
+    head = sign + formatNumber(abs, { maximumFractionDigits: 0 });
     tail = '';
   } else {
     const { decimal } = numberSeparators();
     const full = formatNumber(abs, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const idx = full.lastIndexOf(decimal);
-    head = sign + symbol + (idx === -1 ? full : full.slice(0, idx));
+    head = sign + (idx === -1 ? full : full.slice(0, idx));
     tail = idx === -1 ? '' : full.slice(idx);
   }
 
   // Effective char count: the tail + unit count less because they render smaller.
-  const effLen = head.length + (tail.length + unitStr.length) * tailScale;
+  const effLen = symbol.length + head.length + (tail.length + unitStr.length) * tailScale;
   const ideal = width ? width / (effLen * CHAR_EM) : size;
 
   // Full number fits above the floor → keep it (two-tier).
   if (!compact || ideal >= floor) {
-    return { head, tail, unit: unitStr, size: Math.max(floor, Math.min(size, ideal)) };
+    return { symbol, head, tail, unit: unitStr, size: Math.max(floor, Math.min(size, ideal)) };
   }
 
   // Below the floor → switch representation rather than shrink into illegibility.
-  const cHead = sign + symbol + formatCompact(abs);
-  const cEff = cHead.length + unitStr.length * tailScale;
-  return { head: cHead, tail: '', unit: unitStr, size: fit(cEff, width, size, floor) };
+  const cHead = sign + formatCompact(abs);
+  const cEff = symbol.length + cHead.length + unitStr.length * tailScale;
+  return { symbol, head: cHead, tail: '', unit: unitStr, size: fit(cEff, width, size, floor) };
 }
 
 export function AmountText(props: AmountTextProps) {
@@ -129,9 +136,14 @@ export function AmountText(props: AmountTextProps) {
     if (Math.abs(w - width) > 0.5) setWidth(w);
   };
 
-  const { head, tail, unit, size } = resolve(props, width);
+  const { symbol, head, tail, unit, size } = resolve(props, width);
   const tailSize = Math.round(size * (props.tailScale ?? 0.56));
   const tailFont: StyleProp<TextStyle> = [style, tailStyle, { fontSize: tailSize }];
+  // Currency symbol: subordinated (lighter/smaller) when symbolScale is set so the
+  // number leads; otherwise full size, glued to the integer (legacy behavior).
+  const symFont: StyleProp<TextStyle> = props.symbolScale != null
+    ? [style, { fontSize: Math.round(size * props.symbolScale) }]
+    : [style, { fontSize: Math.round(size) }];
 
   return (
     <View style={containerStyle} onLayout={onLayout}>
@@ -141,6 +153,7 @@ export function AmountText(props: AmountTextProps) {
         minimumFontScale={minScale}
         style={[style, { fontSize: Math.round(size), lineHeight: Math.round(size * 1.12) }]}
       >
+        {symbol ? <Text style={symFont}>{symbol}</Text> : null}
         {head}
         {tail ? <Text style={tailFont}>{tail}</Text> : null}
         {unit ? <Text style={tailFont}>{unit}</Text> : null}

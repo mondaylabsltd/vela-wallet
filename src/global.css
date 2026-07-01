@@ -42,9 +42,14 @@ html, body {
   overscroll-behavior: none;
 }
 
-/* Prevent iOS Safari auto-zoom on input focus (requires fontSize >= 16px).
-   Exclude amount-input which uses dynamic fontSize (already >= 17px). */
-@supports (-webkit-touch-callout: none) {
+/* Prevent iOS Safari auto-zoom on input focus (it zooms whenever a focused input
+   is < 16px). The viewport's maximum-scale=1 already caps the zoom, but we also
+   floor inputs at 16px as defense-in-depth for Safari builds that ignore
+   maximum-scale for accessibility. Gate on `pointer: coarse` (reliable touch
+   detection across browsers) rather than the `-webkit-touch-callout` @supports
+   hack, which is not honored by every engine (measured false in Chromium).
+   Exclude amount-input, which uses a dynamic fontSize (always >= 17px). */
+@media (pointer: coarse) {
   input:not([data-testid="amount-input"]),
   textarea:not([data-testid="amount-input"]),
   select {

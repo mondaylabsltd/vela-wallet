@@ -2,6 +2,7 @@ import { ChainLogo } from '@/components/ChainLogo';
 import { QRCode } from '@/components/QRCode';
 import { AppModal } from '@/components/ui/AppModal';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { SectionLabel } from '@/components/ui/SectionLabel';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
@@ -518,16 +519,19 @@ function FormatPickerModal<K extends string>({ s, visible, title, subtitle, opti
         </View>
         <ScrollView style={s.modalScroll} contentContainerStyle={s.epScrollContent}>
           <Text style={s.epDescription}>{subtitle}</Text>
-          {options.map((o) => {
+          {options.map((o, i) => {
             const sel = o.key === selected;
             return (
-              <Pressable key={o.key} style={[s.fmtRow, sel && s.fmtRowSel]} onPress={() => { onSelect(o.key); onClose(); }}>
-                <View style={s.fmtRowInfo}>
-                  <Text style={s.fmtExample}>{o.example}</Text>
-                  {o.noteKey ? <Text style={s.fmtNote}>{t(`settings.formatNote.${o.noteKey}`)}</Text> : null}
-                </View>
-                {sel && <Check size={20} color={color.accent.base} strokeWidth={2.6} />}
-              </Pressable>
+              <React.Fragment key={o.key}>
+                {i > 0 ? <View style={s.fmtRowSep} /> : null}
+                <Pressable style={[s.fmtRow, sel && s.fmtRowSel]} onPress={() => { onSelect(o.key); onClose(); }}>
+                  <View style={s.fmtRowInfo}>
+                    <Text style={s.fmtExample}>{o.example}</Text>
+                    {o.noteKey ? <Text style={s.fmtNote}>{t(`settings.formatNote.${o.noteKey}`)}</Text> : null}
+                  </View>
+                  {sel && <Check size={20} color={color.accent.base} strokeWidth={2.6} />}
+                </Pressable>
+              </React.Fragment>
             );
           })}
         </ScrollView>
@@ -912,16 +916,19 @@ function LanguagePickerModal({ s, visible, preference, systemLanguage, onSelect,
         </View>
         <ScrollView style={s.modalScroll} contentContainerStyle={s.epScrollContent}>
           <Text style={s.epDescription}>{t('language.pickerSubtitle')}</Text>
-          {options.map((o) => {
+          {options.map((o, i) => {
             const sel = o.key === preference;
             return (
-              <Pressable key={o.key} style={[s.fmtRow, sel && s.fmtRowSel]} onPress={() => { onSelect(o.key); onClose(); }}>
-                <View style={s.fmtRowInfo}>
-                  <Text style={s.fmtExample}>{o.label}</Text>
-                  {o.note ? <Text style={s.fmtNote}>{o.note}</Text> : null}
-                </View>
-                {sel && <Check size={20} color={color.accent.base} strokeWidth={2.6} />}
-              </Pressable>
+              <React.Fragment key={o.key}>
+                {i > 0 ? <View style={s.fmtRowSep} /> : null}
+                <Pressable style={[s.fmtRow, sel && s.fmtRowSel]} onPress={() => { onSelect(o.key); onClose(); }}>
+                  <View style={s.fmtRowInfo}>
+                    <Text style={s.fmtExample}>{o.label}</Text>
+                    {o.note ? <Text style={s.fmtNote}>{o.note}</Text> : null}
+                  </View>
+                  {sel && <Check size={20} color={color.accent.base} strokeWidth={2.6} />}
+                </Pressable>
+              </React.Fragment>
             );
           })}
           <Pressable style={s.langContribute} onPress={() => openURL(translationIssueURL(effectiveLang))}>
@@ -1361,48 +1368,32 @@ export default function SettingsScreen() {
 
         {/* Account */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(50, 300)}>
-          <Text style={styles.sectionTitle}>{t('settings.sections.account')}</Text>
-          <VelaCard>
-            <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: UserIcon }}
-              title={accountName} subtitle={address ? shortAddress(address) : t('settings.account.switch')}
-              showDivider={false} onPress={() => setShowAccountSwitcher(true)} />
-          </VelaCard>
-        </Animated.View>
-
-        {/* Contacts */}
-        <Animated.View style={styles.sectionContainer} entering={fadeInDown(60, 300)}>
-          <VelaCard>
-            <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: BookUser }}
-              title={t('contacts.title')} subtitle={t('contacts.manageSubtitle')}
-              showDivider={false} onPress={() => setShowContacts(true)} />
-          </VelaCard>
-        </Animated.View>
-
-        {/* Feedback */}
-        <Animated.View style={styles.sectionContainer} entering={fadeInDown(75, 300)}>
-          <VelaCard>
-            <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: MessageSquare }}
-              title={t('settings.feedback.title')} subtitle={t('settings.feedback.subtitle')}
-              showDivider={false} onPress={() => setShowBugReport(true)}
-              right={<ExternalLink size={16} color={color.fg.subtle} />} />
-          </VelaCard>
+          <SectionLabel style={styles.sectionLabel}>{t('settings.sections.account')}</SectionLabel>
+          <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: UserIcon }}
+            title={accountName} subtitle={address ? shortAddress(address) : t('settings.account.switch')}
+            showDivider onPress={() => setShowAccountSwitcher(true)} />
+          <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: BookUser }}
+            title={t('contacts.title')} subtitle={t('contacts.manageSubtitle')}
+            showDivider onPress={() => setShowContacts(true)} />
+          <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: MessageSquare }}
+            title={t('settings.feedback.title')} subtitle={t('settings.feedback.subtitle')}
+            showDivider={false} onPress={() => setShowBugReport(true)}
+            right={<ExternalLink size={16} color={color.fg.subtle} />} />
         </Animated.View>
 
         {/* Appearance */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(100, 300)}>
-          <Text style={styles.sectionTitle}>{t('settings.sections.appearance')}</Text>
-          <VelaCard>
-            <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Languages }}
-              title={t('language.title')} subtitle={languageSubtitle}
-              showDivider onPress={() => setShowLanguagePicker(true)} />
-            <TextScaleSlider
-              s={styles}
-              currentIndex={currentScaleIndex}
-              onChangeIndex={setScaleIndex}
-            />
-            <View style={styles.settingsRowDividerFull} />
-            <ThemePicker s={styles} current={colorPref} onChange={setColorPref} />
-          </VelaCard>
+          <SectionLabel style={styles.sectionLabel}>{t('settings.sections.appearance')}</SectionLabel>
+          <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Languages }}
+            title={t('language.title')} subtitle={languageSubtitle}
+            showDivider onPress={() => setShowLanguagePicker(true)} />
+          <TextScaleSlider
+            s={styles}
+            currentIndex={currentScaleIndex}
+            onChangeIndex={setScaleIndex}
+          />
+          <View style={styles.settingsRowDividerFull} />
+          <ThemePicker s={styles} current={colorPref} onChange={setColorPref} />
         </Animated.View>
 
         {/* Localization */}
@@ -1416,18 +1407,16 @@ export default function SettingsScreen() {
           };
           return (
             <Animated.View style={styles.sectionContainer} entering={fadeInDown(135, 300)}>
-              <Text style={styles.sectionTitle}>{t('settings.sections.localization')}</Text>
-              <VelaCard>
-                <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Hash }}
-                  title={t('settings.localization.numberTitle')} subtitle={subtitleFor(localePrefs.numberFormat, numOpts)}
-                  showDivider onPress={() => setFmtPicker('number')} />
-                <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Calendar }}
-                  title={t('settings.localization.dateTitle')} subtitle={subtitleFor(localePrefs.dateFormat, dateOpts)}
-                  showDivider onPress={() => setFmtPicker('date')} />
-                <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Clock }}
-                  title={t('settings.localization.timeTitle')} subtitle={subtitleFor(localePrefs.timeFormat, timeOpts)}
-                  showDivider={false} onPress={() => setFmtPicker('time')} />
-              </VelaCard>
+              <SectionLabel style={styles.sectionLabel}>{t('settings.sections.localization')}</SectionLabel>
+              <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Hash }}
+                title={t('settings.localization.numberTitle')} subtitle={subtitleFor(localePrefs.numberFormat, numOpts)}
+                showDivider onPress={() => setFmtPicker('number')} />
+              <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Calendar }}
+                title={t('settings.localization.dateTitle')} subtitle={subtitleFor(localePrefs.dateFormat, dateOpts)}
+                showDivider onPress={() => setFmtPicker('date')} />
+              <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Clock }}
+                title={t('settings.localization.timeTitle')} subtitle={subtitleFor(localePrefs.timeFormat, timeOpts)}
+                showDivider={false} onPress={() => setFmtPicker('time')} />
               <FormatPickerModal s={styles} visible={fmtPicker === 'number'} title={t('settings.localization.numberTitle')}
                 subtitle={t('settings.localization.numberSubtitle')}
                 options={numOpts} selected={localePrefs.numberFormat}
@@ -1447,11 +1436,11 @@ export default function SettingsScreen() {
         {/* Advanced */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(150, 300)}>
           <Pressable style={styles.advancedHeader} onPress={() => setShowAdvanced(!showAdvanced)}>
-            <Text style={styles.sectionTitle}>{t('settings.sections.advanced')}</Text>
+            <SectionLabel style={styles.sectionLabelInline}>{t('settings.sections.advanced')}</SectionLabel>
             <ChevronDown size={14} color={color.fg.subtle} style={showAdvanced ? { transform: [{ rotate: '180deg' }] } : undefined} />
           </Pressable>
           {showAdvanced && (
-            <VelaCard>
+            <>
               <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: NetworkIcon }}
                 title={t('settings.advanced.networksTitle')} subtitle={t('settings.advanced.networksSubtitle')}
                 showDivider={true} onPress={() => setShowNetworkEditor(true)} />
@@ -1465,7 +1454,7 @@ export default function SettingsScreen() {
               <SettingsRow s={styles} icon={{ bg: color.success.soft, fg: color.success.base, Icon: Server }}
                 title={t('settings.advanced.endpointsTitle')} subtitle={t('settings.advanced.endpointsSubtitle')}
                 showDivider={false} onPress={() => setShowEndpointEditor(true)} />
-            </VelaCard>
+            </>
           )}
         </Animated.View>
 
@@ -1473,28 +1462,26 @@ export default function SettingsScreen() {
         {devUnlocked && (
           <Animated.View style={styles.sectionContainer} entering={fadeInDown(175, 300)}>
             <Pressable style={styles.advancedHeader} onPress={() => setShowDevOptions(!showDevOptions)}>
-              <Text style={styles.sectionTitle}>{t('settings.sections.developer')}</Text>
+              <SectionLabel style={styles.sectionLabelInline}>{t('settings.sections.developer')}</SectionLabel>
               <ChevronDown size={14} color={color.fg.subtle} style={showDevOptions ? { transform: [{ rotate: '180deg' }] } : undefined} />
             </Pressable>
             {showDevOptions && (
-              <VelaCard>
+              <>
                 <SettingsRow s={styles} icon={{ bg: color.warning.soft, fg: color.warning.base, Icon: Key }}
                   title={t('settings.developer.treasuryTitle')} subtitle={t('settings.developer.treasurySubtitle')}
                   showDivider={true} onPress={() => setShowTreasury(true)} />
                 <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Key }}
                   title={t('settings.developer.clearSigningTitle')} subtitle={t('settings.developer.clearSigningSubtitle')}
                   showDivider={false} onPress={() => router.push('/clear-signing-test')} />
-              </VelaCard>
+              </>
             )}
           </Animated.View>
         )}
 
         {/* About & Sign Out */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(200, 300)}>
-          <VelaCard>
-            <SettingsRow s={styles} icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
-              title={t('settings.about.title')} subtitle={t('settings.about.subtitle', { version: APP_VERSION })} showDivider={false} onPress={() => router.push('/about')} />
-          </VelaCard>
+          <SettingsRow s={styles} icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
+            title={t('settings.about.title')} subtitle={t('settings.about.subtitle', { version: APP_VERSION })} showDivider={false} onPress={() => router.push('/about')} />
         </Animated.View>
 
         <Animated.View entering={fadeInDown(225, 300)}>
@@ -1568,8 +1555,12 @@ const styleFactory = () => ({
   screenTitle: { fontSize: text['3xl'], ...inter.bold, color: color.fg.base, letterSpacing: -0.5 },
   screenClose: { width: 40, height: 40, alignItems: 'center' as const, justifyContent: 'center' as const },
   sectionContainer: { marginBottom: space['2xl'] },
-  sectionTitle: { fontSize: text.sm, ...inter.semibold, color: color.fg.subtle, letterSpacing: 1.2, textTransform: 'uppercase' as const, marginBottom: space.md, paddingHorizontal: space.sm },
-  advancedHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingRight: space.md, marginBottom: space.md },
+  // SectionLabel overrides: align the heading's left edge with the row title
+  // (rows are inset by space.xl) and remove its default top margin — the parent
+  // sectionContainer already handles inter-section spacing.
+  sectionLabel: { marginTop: 0, paddingHorizontal: space.xl },
+  sectionLabelInline: { marginTop: 0, marginBottom: 0, paddingHorizontal: space.xl },
+  advancedHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingRight: space.xl, marginBottom: space.md },
 
   // Settings Row
   settingsRow: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: space.xl, paddingVertical: space.xl, position: 'relative' as const },
@@ -1580,9 +1571,11 @@ const styleFactory = () => ({
   settingsRowDivider: { position: 'absolute' as const, bottom: 0, left: 66, right: 0, height: 1, backgroundColor: color.border.base },
   settingsRowDividerFull: { height: 1, backgroundColor: color.border.base, marginHorizontal: space.xl },
 
-  // Format picker (number / date / time)
-  fmtRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.lg, paddingVertical: space.lg, paddingHorizontal: space.xl, marginBottom: space.md, backgroundColor: color.bg.raised, borderRadius: radius.xl, borderWidth: 1.5, borderColor: 'transparent' as const, ...shadow.sm },
-  fmtRowSel: { borderColor: color.accent.base },
+  // Format / language picker — de-boxed rows separated by hairline dividers.
+  // A selected option keeps its accent outline (a genuine "selected" surface).
+  fmtRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.lg, paddingVertical: space.lg, paddingHorizontal: space.md, borderRadius: radius.lg, borderWidth: 1.5, borderColor: 'transparent' as const },
+  fmtRowSel: { borderColor: color.accent.base, backgroundColor: color.accent.soft, paddingHorizontal: space.lg },
+  fmtRowSep: { height: 1, backgroundColor: color.border.base, marginHorizontal: space.md },
   fmtRowInfo: { flex: 1, gap: 2 },
   fmtExample: { fontSize: text.lg, ...inter.semibold, color: color.fg.base, fontFamily: font.mono },
   fmtNote: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
@@ -1593,8 +1586,8 @@ const styleFactory = () => ({
   langContributeCtaRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
   langContributeCta: { fontSize: text.sm, ...inter.medium, color: color.accent.base },
 
-  // Logout
-  logoutButton: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, paddingVertical: space.xl, backgroundColor: color.bg.raised, borderRadius: radius.xl, borderWidth: 1, borderColor: color.border.base, gap: space.md, ...shadow.sm },
+  // Logout — open (de-boxed) destructive action row, not a card
+  logoutButton: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, paddingVertical: space.xl, gap: space.md },
   logoutText: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
 
   // Text Scale

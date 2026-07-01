@@ -1,9 +1,11 @@
 /**
  * TransactionDetailSheet — tap an Activity row to see the full transaction.
  *
- * Hero amount + counterparty + a details card (date, status, from, to, operation,
- * chain, hash with explorer link). Built on AppModal; theme-driven. Populated
- * from the stored LocalTransaction; rows with no data are hidden.
+ * Open hero amount + counterparty + a de-boxed details section (date, status,
+ * from, to, operation, chain, hash with explorer link). Built on AppModal;
+ * theme-driven. Populated from the stored LocalTransaction; rows with no data
+ * are hidden. Content sits directly on the page — grouped by space + a
+ * <SectionLabel> + hairline <Divider>, not boxed in cards.
  */
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -12,8 +14,8 @@ import { Check, ChevronRight, Copy, X } from 'lucide-react-native';
 import { AmountText } from '@/components/ui/AmountText';
 import { AppModal } from '@/components/ui/AppModal';
 import { DetailRow as Row, Divider } from '@/components/ui/DetailRow';
+import { SectionLabel } from '@/components/ui/SectionLabel';
 import { TxStatusBadge } from '@/components/ui/TxStatusBadge';
-import { VelaCard } from '@/components/ui/VelaCard';
 import { ChainLogo } from '@/components/ChainLogo';
 import { TokenLogo } from '@/components/TokenLogo';
 import { chainName, getAllNetworksSync, explorerTxURL, explorerAddressURL } from '@/models/network';
@@ -24,7 +26,7 @@ import { formatFiat, type Currency } from '@/services/currency';
 import { txUsdValue, type ActivityBatch } from '@/services/activity';
 import { pollUserOpReceipt } from '@/services/tx-reconciler';
 import { formatDateTime, formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
-import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
+import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 
 interface Props {
   visible: boolean;
@@ -126,8 +128,8 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
             </View>
 
             <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-              {/* Hero: split = one-token total; multiSelect = asset count + fiat total */}
-              <VelaCard elevated style={styles.hero}>
+              {/* Hero: split = one-token total; multiSelect = asset count + fiat total. Open on the page — no card. */}
+              <View style={styles.hero}>
                 {isSplit ? (
                   <TokenLogo symbol={batch.symbol ?? ''} logoUrls={batch.logoUrls} chain={net ?? null} size={52} />
                 ) : (
@@ -159,22 +161,22 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
                   {fiat ? <Text style={styles.heroUsd}>≈ {fiat}</Text> : null}
                 </View>
                 {effTxHash ? (
-                  <Pressable hitSlop={8} onPress={() => openBrowser(explorerTxURL(batch.chainId, effTxHash))} style={styles.heroChevron}>
+                  <Pressable hitSlop={12} onPress={() => openBrowser(explorerTxURL(batch.chainId, effTxHash))} style={styles.heroChevron}>
                     <ChevronRight size={20} color={color.fg.subtle} strokeWidth={2.4} />
                   </Pressable>
                 ) : null}
-              </VelaCard>
+              </View>
 
               {/* Counterparty: split → recipient count; multiSelect → the one recipient */}
               {isSplit ? (
-                <View style={styles.cpCard}>
+                <View style={styles.cpRow}>
                   <Text style={styles.cpLabel}>{t('componentsTx.detail.to')}</Text>
                   <View style={styles.cpRight}>
                     <Text style={styles.cpShort}>{t('componentsTx.receipt.recipientsCount', { n: batch.count })}</Text>
                   </View>
                 </View>
               ) : batch.to ? (
-                <Pressable onPress={() => copy('cp', batch.to!)} style={styles.cpCard}>
+                <Pressable onPress={() => copy('cp', batch.to!)} style={styles.cpRow}>
                   <Text style={styles.cpLabel}>{t('componentsTx.detail.to')}</Text>
                   <View style={styles.cpRight}>
                     {batch.toName ? <Text style={styles.cpAlias} numberOfLines={1}>{batch.toName}</Text> : null}
@@ -187,14 +189,14 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
               ) : null}
 
               {/* Per-line breakdown — split rows are recipients, multiSelect rows are tokens */}
-              <Text style={styles.sectionTitle}>{t('componentsTx.detail.breakdownTitle')}</Text>
-              <VelaCard style={styles.details}>
+              <SectionLabel>{t('componentsTx.detail.breakdownTitle')}</SectionLabel>
+              <View style={styles.section}>
                 {batch.transfers.map((it, i) => {
                   const amt = formatTokenAmount(parseFloat(it.value || '0'), { compact: true });
                   const lineFiat = it.usdValue > 0 ? formatFiat(it.usdValue * rate, currency.code, currency.symbol) : null;
                   return (
                     <React.Fragment key={i}>
-                      {i > 0 ? <Divider /> : null}
+                      {i > 0 ? <View style={isSplit ? styles.divider : styles.brSep} /> : null}
                       <View style={styles.brRow}>
                         {isSplit ? (
                           <View style={styles.brLeft}>
@@ -215,11 +217,11 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
                     </React.Fragment>
                   );
                 })}
-              </VelaCard>
+              </View>
 
               {/* Details */}
-              <Text style={styles.sectionTitle}>{t('componentsTx.detail.sectionTitle')}</Text>
-              <VelaCard style={styles.details}>
+              <SectionLabel>{t('componentsTx.detail.sectionTitle')}</SectionLabel>
+              <View style={styles.section}>
                 <Row label={t('componentsTx.detail.labelDate')} value={formatDateTime(batch.timestamp * 1000)} />
                 <Divider />
                 <Row label={t('componentsTx.detail.labelStatus')} custom={<TxStatusBadge status={effStatus} />} />
@@ -235,7 +237,7 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
                   </View>
                 } />
                 {effTxHash ? (<><Divider /><Row label={t('componentsTx.detail.labelHash')} value={shortAddress(effTxHash)} mono onOpen={() => openBrowser(explorerTxURL(batch.chainId, effTxHash))} /></>) : null}
-              </VelaCard>
+              </View>
             </ScrollView>
           </View>
         );
@@ -258,8 +260,8 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
             </View>
 
             <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-              {/* Hero amount */}
-              <VelaCard elevated style={styles.hero}>
+              {/* Hero amount — open on the page, no card. */}
+              <View style={styles.hero}>
                 <TokenLogo symbol={tx.symbol} logoUrls={tx.logoUrls} chain={net ?? null} size={52} />
                 <View style={styles.heroAmounts}>
                   <AmountText
@@ -274,15 +276,15 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
                   {fiat ? <Text style={styles.heroUsd}>≈ {fiat}</Text> : null}
                 </View>
                 {effTxHash ? (
-                  <Pressable hitSlop={8} onPress={() => openBrowser(explorerTxURL(tx.chainId, effTxHash))} style={styles.heroChevron}>
+                  <Pressable hitSlop={12} onPress={() => openBrowser(explorerTxURL(tx.chainId, effTxHash))} style={styles.heroChevron}>
                     <ChevronRight size={20} color={color.fg.subtle} strokeWidth={2.4} />
                   </Pressable>
                 ) : null}
-              </VelaCard>
+              </View>
 
               {/* Counterparty (the "who" — shown once here, not repeated in Details) */}
               {counterparty ? (
-                <Pressable onPress={() => copy('cp', counterparty)} style={styles.cpCard}>
+                <Pressable onPress={() => copy('cp', counterparty)} style={styles.cpRow}>
                   <Text style={styles.cpLabel}>{incoming ? t('componentsTx.detail.from') : t('componentsTx.detail.to')}</Text>
                   <View style={styles.cpRight}>
                     {alias ? <Text style={styles.cpAlias} numberOfLines={1}>{alias}</Text> : null}
@@ -295,8 +297,8 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
               ) : null}
 
               {/* Details */}
-              <Text style={styles.sectionTitle}>{t('componentsTx.detail.sectionTitle')}</Text>
-              <VelaCard style={styles.details}>
+              <SectionLabel>{t('componentsTx.detail.sectionTitle')}</SectionLabel>
+              <View style={styles.section}>
                 <Row label={t('componentsTx.detail.labelDate')} value={formatDateTime(tx.timestamp * 1000)} />
                 <Divider />
                 <Row label={t('componentsTx.detail.labelStatus')} custom={<TxStatusBadge status={effStatus} />} />
@@ -312,7 +314,7 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
                   </View>
                 } />
                 {effTxHash ? (<><Divider /><Row label={t('componentsTx.detail.labelHash')} value={shortAddress(effTxHash)} mono onOpen={() => openBrowser(explorerTxURL(tx.chainId, effTxHash))} /></>) : null}
-              </VelaCard>
+              </View>
             </ScrollView>
           </View>
         );
@@ -329,30 +331,34 @@ const styles = createStyles(() => ({
   },
   headSpacer: { width: 34 },
   headTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
+  // Plain icon button — no card bg/border/shadow; hitSlop keeps a ≥44 target.
   closeBtn: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   body: { paddingHorizontal: space['2xl'], paddingBottom: space['4xl'], gap: space.xl },
 
-  // Hero
-  hero: { flexDirection: 'row', alignItems: 'center', gap: space.lg, padding: space.xl },
+  // Hero — open on the page (no card), grouped by space.
+  hero: { flexDirection: 'row', alignItems: 'center', gap: space.lg, paddingTop: space.lg, paddingBottom: space.md },
   tokenWrap: { width: 52, height: 52 },
   token: { width: 52, height: 52, borderRadius: 26, backgroundColor: color.bg.sunken, alignItems: 'center', justifyContent: 'center' },
   tokenText: { fontSize: text.base, ...inter.bold, color: color.fg.base },
-  tokenBadge: { position: 'absolute', right: -2, bottom: -2, borderRadius: radius.full, borderWidth: 2, borderColor: color.bg.raised },
+  tokenBadge: { position: 'absolute', right: -2, bottom: -2, borderRadius: radius.full, borderWidth: 2, borderColor: color.bg.base },
   heroAmounts: { flex: 1, gap: 2 },
   heroAmount: { fontSize: text['2xl'], ...inter.bold, fontFamily: font.display, color: color.fg.base },
   heroAmountIn: { color: color.success.base },
   heroUnit: { color: color.fg.muted }, // ticker subordinated next to the amount
   heroUsd: { fontSize: text.base, ...inter.medium, color: color.fg.muted },
-  heroChevron: { width: 36, height: 36, borderRadius: 18, backgroundColor: color.bg.sunken, alignItems: 'center', justifyContent: 'center' },
+  // Plain icon button (no filled circle).
+  heroChevron: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 
-  // Counterparty
-  cpCard: { backgroundColor: color.bg.sunken, borderRadius: radius.xl, padding: space.lg, gap: space.sm },
+  // Counterparty — open row on the page, not a filled chip.
+  cpRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.lg, paddingVertical: space.md },
   cpLabel: { fontSize: text.base, ...inter.medium, color: color.fg.muted },
-  cpRight: { gap: 2 },
+  cpRight: { alignItems: 'flex-end', gap: 2 },
   cpAlias: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
   cpAddrRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   cpShort: { fontSize: text.lg, ...inter.bold, color: color.fg.base, fontFamily: font.mono },
-  cpFull: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, fontFamily: font.mono },
+
+  // Open sections (breakdown / details) — hairline-separated rows, no card.
+  section: {},
 
   // Batch breakdown rows
   brRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md, paddingVertical: space.md },
@@ -362,12 +368,12 @@ const styles = createStyles(() => ({
   brPrimary: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
   brSub: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, fontFamily: font.mono },
   brAmount: { fontSize: text.base, ...inter.bold, color: color.fg.base },
+  // Full-width hairline (recipient rows have no leading icon)…
+  divider: { height: 1, backgroundColor: color.border.base },
+  // …and one inset past the token logo (28 + gap) for the token rows.
+  brSep: { height: 1, backgroundColor: color.border.base, marginLeft: 28 + space.md },
 
   // Details
-  sectionTitle: { fontSize: text.base, ...inter.bold, color: color.fg.base },
-  details: { paddingHorizontal: space.lg },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  statusText: { fontSize: text.base, ...inter.bold },
   chainRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   chainText: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
 }));

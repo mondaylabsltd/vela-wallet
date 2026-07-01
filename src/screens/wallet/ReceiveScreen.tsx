@@ -3,7 +3,7 @@ import { QRCode } from '@/components/QRCode';
 import { ReceiveRequestControls } from '@/components/ReceiveRequestControls';
 import { ReceiveShareCard, type ShareCardModel } from '@/components/ReceiveShareCard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
-import { VelaCard } from '@/components/ui/VelaCard';
+import { SectionLabel } from '@/components/ui/SectionLabel';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
@@ -185,7 +185,7 @@ export default function ReceiveScreen() {
   // Save-image button — sits right under the copy button inside the QR card,
   // so it serves both Address and Request modes.
   const saveButton = (
-    <Pressable style={styles.saveBtn} onPress={onSaveImage} disabled={savingImage || !warningDismissed}>
+    <Pressable style={styles.saveBtn} onPress={onSaveImage} disabled={savingImage || !warningDismissed} hitSlop={8}>
       <Download size={17} color={color.accent.base} strokeWidth={2.2} />
       <Text style={styles.saveBtnText}>{t('receive.request.saveImage')}</Text>
     </Pressable>
@@ -218,11 +218,11 @@ export default function ReceiveScreen() {
           ))}
         </View>
 
-        {/* QR Card */}
+        {/* QR — open on the page, no card */}
         <Animated.View entering={fadeInDown(100, 400)}>
           <View style={styles.qrCardWrap}>
-            <VelaCard elevated style={styles.qrCard}>
-              {/* QR */}
+            <View style={styles.qrCard}>
+              {/* QR — keeps its own white quiet-zone frame (required to scan) */}
               <View style={styles.qrBorder}>
                 {qrValue ? (
                   <QRCode value={qrValue} size={200} />
@@ -278,7 +278,7 @@ export default function ReceiveScreen() {
                   ))}
                 </Animated.View>
               )}
-            </VelaCard>
+            </View>
 
             {/* Warning overlay */}
             {!warningDismissed && (
@@ -316,7 +316,7 @@ export default function ReceiveScreen() {
         ) : (
           /* Supported networks */
           <Animated.View entering={fadeInDown(200, 400)}>
-            <Text style={styles.sectionLabel}>{t('receive.networksLabel', { count: networks.length })}</Text>
+            <SectionLabel>{t('receive.networksLabel', { count: networks.length })}</SectionLabel>
 
             <View style={styles.networkGrid}>
               {networks.map((network) => (
@@ -404,17 +404,17 @@ const styles = createStyles(() => ({
     fontFamily: undefined,
     textAlign: 'center',
   },
-  // Save-image button — a friendly accent pill right under the copy button.
+  // Save-image button — plain accent action (no fill), under the copy row.
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.sm,
-    alignSelf: 'stretch',
-    marginTop: space.md,
+    alignSelf: 'center',
+    marginTop: space.xs,
     paddingVertical: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: color.accent.soft,
+    paddingHorizontal: space.md,
+    minHeight: 44,
   },
   saveBtnText: {
     fontSize: text.sm,
@@ -440,32 +440,29 @@ const styles = createStyles(() => ({
     marginBottom: space.xl,
   },
 
-  // Warning overlay
+  // Warning GATE — a deliberate acknowledge-before-receive surface. Kept as a
+  // covering overlay (must obscure the QR until confirmed) but lightened: it
+  // sits on the page color, compact, no heavy card fill.
   warningOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: color.bg.raised,
-    borderRadius: radius['2xl'],
+    backgroundColor: color.bg.base,
     zIndex: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: space['3xl'],
+    paddingHorizontal: space.xl,
   },
   warningContent: {
     alignItems: 'center',
-    gap: space.lg,
+    gap: space.md,
   },
   warningIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: color.accent.soft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: space.sm,
+    marginBottom: space.xs,
   },
   warningTitle: {
     fontSize: text.xl,
@@ -488,14 +485,14 @@ const styles = createStyles(() => ({
     color: color.success.base,
     textAlign: 'center',
     lineHeight: 20,
-    marginTop: space.md,
+    marginTop: space.sm,
   },
   warningBtn: {
     backgroundColor: color.accent.base,
     borderRadius: radius.lg,
     paddingVertical: space.lg,
     paddingHorizontal: space['4xl'],
-    marginTop: space.lg,
+    marginTop: space.md,
     alignSelf: 'stretch',
     alignItems: 'center',
   },
@@ -505,12 +502,10 @@ const styles = createStyles(() => ({
     color: color.fg.inverse,
   },
 
-  // QR Card
+  // QR — open on the page (no card), content simply centered
   qrCard: {
-    padding: space['3xl'],
-    paddingTop: space['3xl'],
-    paddingBottom: space['2xl'],
     alignItems: 'center',
+    paddingTop: space.md,
   },
   qrBorder: {
     borderWidth: 1,
@@ -539,26 +534,20 @@ const styles = createStyles(() => ({
     marginBottom: space.lg,
   },
 
-  // Copy button — full-width, large tap target
+  // Copy address — plain de-boxed row (no fill/border), still a large tap target
   copyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     gap: space.md,
-    alignSelf: 'stretch',
+    alignSelf: 'center',
     paddingVertical: space.lg,
-    paddingHorizontal: space.xl,
-    borderRadius: radius.lg,
-    backgroundColor: color.bg.sunken,
-    borderWidth: 1,
-    borderColor: color.border.base,
+    paddingHorizontal: space.md,
+    minHeight: 44,
   },
-  copyBtnCopied: {
-    backgroundColor: color.success.soft,
-    borderColor: color.success.base,
-  },
+  copyBtnCopied: {},
   copyAddr: {
-    flex: 1,
+    flexShrink: 1,
     fontSize: text.base,
     ...inter.medium,
     fontFamily: font.mono,
@@ -568,21 +557,22 @@ const styles = createStyles(() => ({
     color: color.success.base,
   },
 
-  // Deposit detection
+  // Deposit detection — an open, de-boxed "just landed" section (no filled card):
+  // a hairline separates it from the actions above, success-tinted text carries
+  // the positive state.
   depositBox: {
-    backgroundColor: color.success.soft,
-    borderRadius: radius.lg,
     marginTop: space.lg,
+    paddingTop: space.lg,
     width: '100%',
-    overflow: 'hidden',
+    borderTopWidth: 1,
+    borderTopColor: color.border.base,
   },
   depositEntry: {
-    paddingHorizontal: space.xl,
-    paddingVertical: space.lg,
+    paddingVertical: space.md,
   },
   depositEntryBorder: {
     borderTopWidth: 1,
-    borderTopColor: color.success.base + '20',
+    borderTopColor: color.border.base,
   },
   depositHeader: {
     flexDirection: 'row',
@@ -622,12 +612,6 @@ const styles = createStyles(() => ({
   },
 
   // Networks — compact chip grid
-  sectionLabel: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.fg.subtle,
-    marginBottom: space.lg,
-  },
   networkGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
