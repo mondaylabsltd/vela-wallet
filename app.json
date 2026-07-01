@@ -17,6 +17,7 @@
     },
     "android": {
       "package": "app.getvela.wallet",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#0A1929",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

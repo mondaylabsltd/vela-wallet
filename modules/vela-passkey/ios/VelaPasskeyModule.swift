@@ -1,6 +1,7 @@
 import Foundation
 import AuthenticationServices
 import React
+import UIKit
 
 @objc(VelaPasskey)
 class VelaPasskeyModule: NSObject {
@@ -188,12 +189,20 @@ class VelaPasskeyModule: NSObject {
         _ error: Error,
         reject: @escaping RCTPromiseRejectBlock
     ) {
-        if let authError = error as? ASAuthorizationError,
-           authError.code == .canceled {
-            reject("PASSKEY_CANCELLED", "Passkey operation was cancelled", error)
-        } else {
-            reject("PASSKEY_FAILED", error.localizedDescription, error)
+        if let authError = error as? ASAuthorizationError {
+            switch authError.code {
+            case .canceled, .notInteractive:
+                // User dismissed the sheet, or a (conditional) request had nothing
+                // to present — benign, not a hard failure. On iOS the "no passkey on
+                // this device" case also surfaces here when the user dismisses, so
+                // callers should treat CANCELLED on login as "no wallet yet".
+                reject("PASSKEY_CANCELLED", "Passkey operation was cancelled", error)
+            default:
+                reject("PASSKEY_FAILED", error.localizedDescription, error)
+            }
+            return
         }
+        reject("PASSKEY_FAILED", error.localizedDescription, error)
     }
 
     private static func encodeUserID(name: String) -> Data {
@@ -246,11 +255,21 @@ private class PasskeyRequestHandler: NSObject,
     }
 
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = scene.windows.first else {
-            return ASPresentationAnchor()
+        let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+
+        // Prefer the key window of the foreground-active scene. Presenting on a
+        // background/detached scene's window makes iOS refuse to show the sheet
+        // (or hang), so we never just grab connectedScenes.first.
+        if let window = windowScenes
+            .filter({ $0.activationState == .foregroundActive })
+            .flatMap({ $0.windows })
+            .first(where: { $0.isKeyWindow }) {
+            return window
         }
-        return window
+
+        // Fallbacks: any key window, then any window at all.
+        let allWindows = windowScenes.flatMap { $0.windows }
+        return allWindows.first(where: { $0.isKeyWindow }) ?? allWindows.first ?? ASPresentationAnchor()
     }
 }
 

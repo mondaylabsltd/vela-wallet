@@ -25,7 +25,10 @@ export function ScreenContainer({ children, style, edges = ['top'] }: Props) {
       <SafeAreaView style={styles.safeArea} edges={edges}>
         <KeyboardAvoidingView
           style={styles.keyboardAvoiding}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          // iOS needs 'padding' to lift inputs. On Android 'height' mis-measures
+          // under edge-to-edge and can leave bottom inputs (Send amount, wallet
+          // name) hidden behind the keyboard — let native adjustResize handle it.
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           {children}
         </KeyboardAvoidingView>

@@ -380,14 +380,14 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
 
   if (Platform.OS !== 'web') {
     return (
-      <Modal visible={visible} animationType="slide" statusBarTranslucent>
+      <Modal visible={visible} animationType="slide" statusBarTranslucent onRequestClose={onClose}>
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         {content}
       </Modal>
     );
   }
 
-  return <Modal visible={visible} animationType="slide" transparent>{content}</Modal>;
+  return <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>{content}</Modal>;
 }
 
 // ============================================================================

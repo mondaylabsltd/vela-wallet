@@ -5,6 +5,7 @@ import androidx.credentials.*
 import androidx.credentials.exceptions.*
 import com.facebook.react.bridge.*
 import kotlinx.coroutines.*
+import org.json.JSONArray
 import org.json.JSONObject
 import java.security.SecureRandom
 
@@ -24,8 +25,12 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
-    override fun onCatalystInstanceDestroy() {
+    // invalidate() is the module teardown hook called under BOTH the old and the
+    // New Architecture; onCatalystInstanceDestroy() is deprecated and is NOT called
+    // on the New Arch, which would leak the coroutine scope.
+    override fun invalidate() {
         scope.cancel()
+        super.invalidate()
     }
 
     @ReactMethod
@@ -48,20 +53,33 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
                 val challengeB64 = base64UrlEncode(challenge)
                 val userIdB64 = base64UrlEncode(userId)
 
-                val json = """
-                {
-                    "rp": {"id": "$RELYING_PARTY", "name": "Vela Wallet"},
-                    "user": {"id": "$userIdB64", "name": "$userName", "displayName": "$userName"},
-                    "challenge": "$challengeB64",
-                    "pubKeyCredParams": [{"type": "public-key", "alg": -7}],
-                    "authenticatorSelection": {
-                        "authenticatorAttachment": "platform",
-                        "residentKey": "required",
-                        "userVerification": "required"
-                    },
-                    "attestation": "direct"
-                }
-                """.trimIndent()
+                // Build the request with JSONObject/JSONArray so values (notably the
+                // user-supplied wallet name) are escaped. Hand-interpolating userName into
+                // a JSON string breaks on a quote/backslash/newline and fails registration.
+                val json = JSONObject().apply {
+                    put("rp", JSONObject().apply {
+                        put("id", RELYING_PARTY)
+                        put("name", "Vela Wallet")
+                    })
+                    put("user", JSONObject().apply {
+                        put("id", userIdB64)
+                        put("name", userName)
+                        put("displayName", userName)
+                    })
+                    put("challenge", challengeB64)
+                    put("pubKeyCredParams", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("type", "public-key")
+                            put("alg", -7)
+                        })
+                    })
+                    put("authenticatorSelection", JSONObject().apply {
+                        put("authenticatorAttachment", "platform")
+                        put("residentKey", "required")
+                        put("userVerification", "required")
+                    })
+                    put("attestation", "direct")
+                }.toString()
 
                 val request = CreatePublicKeyCredentialRequest(json)
                 val credentialManager = CredentialManager.create(reactApplicationContext)

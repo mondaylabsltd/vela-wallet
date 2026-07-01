@@ -1,3 +1,4 @@
+import '@/polyfills'; // MUST be first: installs crypto/btoa/atob/Buffer on Hermes before any dep loads
 import '@/global.css';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
