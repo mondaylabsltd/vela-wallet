@@ -43,6 +43,16 @@ const FOCUSABLE =
 export function useWebDialog(open: boolean, onClose?: () => void, role: 'dialog' | 'alertdialog' = 'dialog') {
   const containerRef = useRef<any>(null);
 
+  // Read the latest onClose/role from the keydown handler without re-running the
+  // whole effect when the caller passes a fresh onClose on each render. Otherwise a
+  // parent that re-renders while the dialog is open (e.g. Home's account switcher
+  // refreshing every account's balance) would repeatedly tear down and re-run the
+  // body scroll-lock + focus setup, making the background flicker/shift.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const roleRef = useRef(role);
+  roleRef.current = role;
+
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined' || !open) return;
 
@@ -52,7 +62,7 @@ export function useWebDialog(open: boolean, onClose?: () => void, role: 'dialog'
     const prevFocused = document.activeElement as HTMLElement | null;
 
     if (el) {
-      el.setAttribute('role', role);
+      el.setAttribute('role', roleRef.current);
       el.setAttribute('aria-modal', 'true');
       if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
     }
@@ -74,7 +84,7 @@ export function useWebDialog(open: boolean, onClose?: () => void, role: 'dialog'
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation();
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       if (e.key === 'Tab' && el) {
@@ -109,7 +119,9 @@ export function useWebDialog(open: boolean, onClose?: () => void, role: 'dialog'
       // Restore focus to whatever opened the dialog.
       prevFocused?.focus?.();
     };
-  }, [open, onClose, role]);
+    // Depend only on `open`: onClose/role are read via refs so an unstable onClose
+    // can't tear down and re-run the scroll-lock while the dialog stays open.
+  }, [open]);
 
   return containerRef;
 }

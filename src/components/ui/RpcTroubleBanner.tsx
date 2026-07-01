@@ -18,7 +18,7 @@ import { openURL, showAlert } from '@/services/platform';
 import { probeRpcChainId, refreshPool } from '@/services/rpc-pool';
 import { getNetworkConfig, saveNetworkConfig } from '@/services/storage';
 import { AlertTriangle, ExternalLink, Wifi, X } from 'lucide-react-native';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -43,6 +43,11 @@ export function RpcTroubleBanner({
   const [fixChainId, setFixChainId] = useState<number | null>(null);
   const [fixUrl, setFixUrl] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Enter once, on first mount — a parent re-render (e.g. Home refreshing every
+  // account's balance while the switcher is open) must not replay the slide-in.
+  const hasEntered = useRef(false);
+  useEffect(() => { hasEntered.current = true; }, []);
 
   const failedNetworks = chainIds
     .map(id => getAllNetworksSync().find(n => n.chainId === id))
@@ -100,7 +105,7 @@ export function RpcTroubleBanner({
 
   return (
     <>
-      <Animated.View entering={fadeInDown(0, 300)} style={styles.banner}>
+      <Animated.View entering={hasEntered.current ? undefined : fadeInDown(0, 300)} style={styles.banner}>
         <AlertTriangle size={14} color={'#C07A0A'} strokeWidth={2.5} />
         <View style={styles.bannerContent}>
           <Text style={styles.bannerText}>

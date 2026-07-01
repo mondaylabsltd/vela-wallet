@@ -22,7 +22,7 @@ import { ChainLogo } from '@/components/ChainLogo';
 import { fadeInDown } from '@/constants/entering';
 import type { Network } from '@/models/network';
 import { hapticLight } from '@/services/platform';
-import { color, createStyles, font, inter, motion, radius, shadow, space, text } from '@/constants/theme';
+import { color, createStyles, font, inter, motion, radius, space, text } from '@/constants/theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -58,6 +58,13 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value }));
+
+  // Play the staggered entrance ONCE, on first mount. The Home feed re-renders in
+  // a burst when the account switcher opens (it refreshes every account's balance);
+  // without this gate each re-render re-applies `entering` and the whole list
+  // appears to slide/flicker behind the sheet. Mirrors HomeScreen's header gate.
+  const hasEntered = useRef(false);
+  useEffect(() => { hasEntered.current = true; }, []);
 
   const Arrow = incoming ? ArrowDownLeft : ArrowUpRight;
 
@@ -117,7 +124,7 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
         <Animated.View pointerEvents="none" style={[styles.glow, glowStyle]} />
 
         <View style={[styles.avatar, incoming && styles.avatarIn]}>
-          <Arrow size={24} color={incoming ? color.success.base : color.fg.muted} strokeWidth={2.4} />
+          <Arrow size={19} color={incoming ? color.success.base : color.fg.subtle} strokeWidth={2.2} />
           {chain && (
             <View style={styles.badge}>
               <ChainLogo label={chain.iconLabel} color={chain.iconColor} bgColor={chain.iconBg} logoURL={chain.logoURL} size={18} />
@@ -153,7 +160,7 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
   );
 
   return (
-    <Animated.View entering={fadeInDown(index * 40, 300)}>
+    <Animated.View entering={hasEntered.current ? undefined : fadeInDown(index * 40, 300)}>
       {/* Shadow lives on this wrapper — OUTSIDE Swipeable's overflow:hidden, which
           would otherwise clip the card shadow. Swipeable is always rendered (only
           the actions are gated) so the row subtree stays structurally stable across
@@ -174,35 +181,31 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
 }
 
 const styles = createStyles(() => ({
-  // Shadow moved to shadowWrap (Swipeable clips it); the card keeps bg + border.
+  // De-boxed (Apple Wallet / Wise minimal): rows are edge-to-edge on the page,
+  // separated by a hairline in the list — no per-row card, border, or shadow.
+  // Wrapper stays for the Swipeable + entrance-animation structure; its bg matches
+  // the page so a swipe reveals the page (not a card) behind the row.
   shadowWrap: {
-    borderRadius: radius.xl,
-    backgroundColor: color.bg.raised,
-    ...shadow.sm,
+    backgroundColor: color.bg.base,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.lg,
-    backgroundColor: color.bg.raised,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    paddingVertical: space.lg,
-    paddingHorizontal: space.lg,
+    backgroundColor: color.bg.base,
+    paddingVertical: space.xl,
+    paddingHorizontal: space.xs,
   },
   glow: {
+    // "Just arrived" — a soft success wash across the row, no bordered box.
     position: 'absolute',
     top: 0, left: 0, right: 0, bottom: 0,
-    borderRadius: radius.xl,
-    borderWidth: 2,
-    borderColor: color.success.base,
     backgroundColor: color.success.soft,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: color.bg.sunken,
     alignItems: 'center',
     justifyContent: 'center',
