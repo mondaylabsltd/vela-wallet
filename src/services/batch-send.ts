@@ -31,6 +31,16 @@ export interface BatchCall {
 
 const ERC20_TRANSFER_SELECTOR = 'a9059cbb';
 
+/**
+ * Max recipients in one split/batch UserOp. A payroll run settles as a SINGLE
+ * MultiSend (one signature, one gas payment), so this is bounded by the UserOp's
+ * gas ceiling, not the UI. 60 keeps the call-gas comfortably under bundler limits
+ * on every supported chain; the batch importer warns and trims past it, and the
+ * final gas is still estimated on the confirm step (BundlerFundingModal covers a
+ * shortfall). Larger payrolls are split across a couple of sends.
+ */
+export const BATCH_MAX_RECIPIENTS = 60;
+
 /** Thrown when a batch is asked to move something malformed — never silently coerced. */
 export class BatchSendError extends Error {
   constructor(message: string) {
