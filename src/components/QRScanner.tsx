@@ -341,7 +341,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
         if (asset.base64) {
           try {
             const { decodeBase64Image } = await import('@/services/image-decode');
-            const imageData = decodeBase64Image(asset.base64, asset.width, asset.height);
+            const imageData = decodeBase64Image(asset.base64);
             if (imageData) {
               const code = jsQR(imageData.data as any, imageData.width, imageData.height, JSQR_OPTS);
               if (code?.data) { hapticSuccess(); onScan(code.data.trim()); return; }

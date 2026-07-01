@@ -1,11 +1,13 @@
 /**
- * Pure-JS image decoder for native platforms (no canvas needed).
- * Decodes JPEG/PNG base64 data into raw RGBA pixel data for jsQR.
+ * Pure-JS JPEG decoder for native platforms (no canvas needed).
+ *
+ * PNG is deliberately not decoded here. The gallery flow first asks
+ * expo-camera's native `scanFromURLAsync` to scan both JPEG and PNG files. This
+ * module is only the jsQR fallback, and importing the Node-oriented `pngjs`
+ * package here pulls `util`/`stream` into the Android bundle and breaks Metro.
  */
 
 import jpegDecode from 'jpeg-js';
-// @ts-ignore — pngjs has no type declarations
-import { PNG } from 'pngjs';
 
 export interface ImageData {
   data: Uint8ClampedArray;
@@ -17,22 +19,18 @@ export interface ImageData {
 const MAX_DIM = 1024;
 
 /**
- * Decode a base64-encoded JPEG or PNG into RGBA pixel data.
- * Returns null if the format is unrecognised or decoding fails.
+ * Decode a base64-encoded JPEG into RGBA pixel data.
+ * Returns null for PNG/unknown formats or when decoding fails.
  */
-export function decodeBase64Image(base64: string, hintWidth?: number, hintHeight?: number): ImageData | null {
+export function decodeBase64Image(base64: string): ImageData | null {
   const buf = Buffer.from(base64, 'base64');
 
   // Detect format by magic bytes
   const isJPEG = buf[0] === 0xFF && buf[1] === 0xD8;
-  const isPNG = buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
 
   try {
     if (isJPEG) {
       return decodeJPEG(buf);
-    }
-    if (isPNG) {
-      return decodePNG(buf);
     }
   } catch (e) {
     console.warn('[image-decode] Failed to decode image:', e);
@@ -47,15 +45,6 @@ function decodeJPEG(buf: Buffer): ImageData {
     data: new Uint8ClampedArray(raw.data.buffer, raw.data.byteOffset, raw.data.byteLength),
     width: raw.width,
     height: raw.height,
-  });
-}
-
-function decodePNG(buf: Buffer): ImageData {
-  const png = PNG.sync.read(buf);
-  return maybeScale({
-    data: new Uint8ClampedArray(png.data.buffer, png.data.byteOffset, png.data.byteLength),
-    width: png.width,
-    height: png.height,
   });
 }
 
