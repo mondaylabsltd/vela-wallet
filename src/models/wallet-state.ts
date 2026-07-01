@@ -19,7 +19,7 @@ export interface WalletState {
   isLoading: boolean;
 }
 
-const INITIAL_STATE: WalletState = {
+export const INITIAL_STATE: WalletState = {
   hasWallet: false,
   address: '',
   isConnectedToBrowser: false,
@@ -30,7 +30,7 @@ const INITIAL_STATE: WalletState = {
 
 // MARK: - Actions
 
-type WalletAction =
+export type WalletAction =
   | { type: 'SET_WALLET'; accounts: Account[]; activeIndex?: number }
   | { type: 'ADD_ACCOUNT'; account: Account }
   | { type: 'SWITCH_ACCOUNT'; index: number }
@@ -38,7 +38,7 @@ type WalletAction =
   | { type: 'LOADED_EMPTY' }
   | { type: 'LOGOUT' };
 
-function walletReducer(state: WalletState, action: WalletAction): WalletState {
+export function walletReducer(state: WalletState, action: WalletAction): WalletState {
   switch (action.type) {
     case 'SET_WALLET': {
       const idx = action.activeIndex ?? 0;
