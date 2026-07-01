@@ -874,7 +874,7 @@ export default function SendScreen() {
           throw new Error(t('send.multiSendNoFundsAfterGas', { defaultValue: 'Not enough to cover gas after the reserve.' }));
         }
         const calls = buildMultiTokenCalls(recipient.trim(), specs);
-        result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn);
+        result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn, maxFee);
         lines = specs.map((spec) => {
           const tk = pickedTokens.find((t) => (isNativeToken(t) ? null : t.tokenAddress) === spec.tokenAddress)!;
           return { to: recipient.trim(), toName: recipientIdentity?.name, amount: spec.amount, symbol: tk.symbol, decimals: tk.decimals, priceUsd: tk.priceUsd ?? 0, logoUrls: tokenLogoURLs(tk) };
@@ -884,7 +884,7 @@ export default function SendScreen() {
           { tokenAddress: isNativeToken(selectedToken) ? null : selectedToken.tokenAddress, decimals: selectedToken.decimals },
           recipients.map((r) => ({ address: r.address.trim(), amount: r.amount })),
         );
-        result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn);
+        result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn, maxFee);
         lines = recipients.map((r) => ({ to: r.address.trim(), amount: r.amount, symbol: selectedToken!.symbol, decimals: selectedToken!.decimals, priceUsd: selectedToken!.priceUsd ?? 0, logoUrls: tokenLogoURLs(selectedToken!) }));
       } else {
         const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);

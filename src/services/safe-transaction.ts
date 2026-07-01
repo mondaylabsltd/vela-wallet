@@ -175,6 +175,11 @@ export async function sendBatchCalls(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
+  // The per-gas price the confirm screen quoted & displayed (feeEstimate.maxFeePerGas,
+  // a tip-inclusive bundler quote at the user's tier). Threaded through so the batch
+  // submits EXACTLY the price it showed — same as single sends. Omitted → sendUserOp
+  // re-derives from getGasPrices (also tip-inclusive now), so this never underprices.
+  maxFeeOverride?: bigint,
 ): Promise<SubmitResult> {
   const byteCalls: MultiSendCall[] = calls.map(c => ({
     to: c.to,
@@ -183,11 +188,12 @@ export async function sendBatchCalls(
   }));
 
   if (isTempoChain(chainId)) {
+    // Tempo signs maxFee=0 (gas paid in stablecoin) — the override doesn't apply.
     return sendUserOpTempo(from, byteCalls, TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
 
   const callData = buildMultiSendExecuteCallData(byteCalls);
-  return sendUserOp(from, callData, chainId, publicKeyHex, signFn);
+  return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
 // ---------------------------------------------------------------------------
@@ -1233,45 +1239,109 @@ function incrementNonceCache(safeAddress: string, chainId: number): void {
 }
 
 // Cache: gas prices are stable enough for 15s
-const _gasPriceCache = new Map<number, { gasPrice: bigint; at: number }>();
+/**
+ * The chain signals that set a UserOp's gas price, plus the derived network price.
+ * Callers apply the tier markup on top of `gasPrice`.
+ */
+export interface ChainGasPrice {
+  /** Network price = max(eth_gasPrice, baseFee + priorityFee). */
+  gasPrice: bigint;
+  /** Latest-block base fee (0n on non-EIP-1559 chains / when unavailable). */
+  baseFee: bigint;
+  /** Suggested priority tip (eth_maxPriorityFeePerGas), or derived from eth_gasPrice. */
+  priorityFee: bigint;
+  /**
+   * True only when `priorityFee` came from a real eth_maxPriorityFeePerGas read — NOT
+   * derived from eth_gasPrice, defaulted, or skipped (Tempo). When false the wallet has
+   * no trustworthy independent tip, so the abuse cap (isQuoteAbusive) fail-opens and
+   * defers to the bundler rather than false-reject an honest quote (→ blank "—" fee).
+   */
+  tipMeasured: boolean;
+}
+
+/**
+ * Derive the network gas price from the raw chain signals, using the SAME formula the
+ * bundler prices from (vela-bundler shared/simulation/index.ts getGasPrices +
+ * shared/gas/fee-model.ts): networkPrice = max(eth_gasPrice, baseFee + tip).
+ *
+ * The priority tip is LOAD-BEARING on chains where the base fee is a rounding error but
+ * validators still demand a real tip — Gnosis is the canonical case (baseFee≈0, the tip
+ * is essentially the whole gas price). The old max(eth_gasPrice, baseFee) dropped the
+ * tip, under-pricing a Gnosis UserOp ~40×, so the bundler rejected it ("derived outer
+ * price 26 < 20% of chain rate 1219") AND its honest tip-inclusive quote tripped the
+ * wallet's own 3× sanity cap, rendering the fee as "—".
+ *
+ * When the tip is 0 (the chain didn't answer eth_maxPriorityFeePerGas, or it's a Tempo
+ * chain we deliberately don't tip-query) we recover it from eth_gasPrice exactly like
+ * the bundler does, so the result never regresses below today's price. `tipMeasured`
+ * (default: whether a positive tip was supplied) records whether that tip is a real
+ * reading — the caller passes it explicitly to distinguish a measured 0 (L2s) from a
+ * failed/absent read. Pure + tested.
+ */
+export function deriveChainGasPrice(signals: {
+  ethGasPrice: bigint;
+  baseFee: bigint;
+  priorityFee: bigint;
+  tipMeasured?: boolean;
+}): ChainGasPrice {
+  const { ethGasPrice, baseFee } = signals;
+  const priorityFee = signals.priorityFee > 0n
+    ? signals.priorityFee
+    : ethGasPrice > baseFee ? ethGasPrice - baseFee : 0n;
+  const withTip = baseFee + priorityFee;
+  const gasPrice = ethGasPrice > withTip ? ethGasPrice : withTip;
+  const tipMeasured = signals.tipMeasured ?? signals.priorityFee > 0n;
+  return { gasPrice, baseFee, priorityFee, tipMeasured };
+}
+
+const _gasPriceCache = new Map<number, ChainGasPrice & { at: number }>();
 const GAS_PRICE_CACHE_TTL = 15_000; // 15s
 
 /**
- * Fetch raw on-chain gas price (no markup applied).
- * The tier-based markup is applied by callers (estimateTransactionFee, sendUserOp).
+ * Fetch the on-chain network gas price (no tier markup — callers add that). Reads the
+ * same three signals the bundler reads (eth_gasPrice, block baseFee,
+ * eth_maxPriorityFeePerGas) so the wallet's price basis matches the bundler's.
+ *
+ * Tempo is EXCLUDED from the tip query: there gas is denominated in attodollars and
+ * eth_maxPriorityFeePerGas is meaningless, so feeding it in would corrupt the stablecoin
+ * reimbursement. On Tempo the tip isn't measured, so `gasPrice` equals the legacy
+ * max(eth_gasPrice, baseFee) and `tipMeasured` is false. The block/tip reads degrade
+ * gracefully — only an eth_gasPrice failure falls through to the 5-gwei default; a
+ * failed tip read leaves tipMeasured=false so the abuse cap defers to the bundler.
  */
-async function getGasPrices(
-  chainId: number,
-): Promise<{ gasPrice: bigint }> {
+async function getGasPrices(chainId: number): Promise<ChainGasPrice> {
   const cached = _gasPriceCache.get(chainId);
   if (cached && Date.now() - cached.at < GAS_PRICE_CACHE_TTL) {
-    return { gasPrice: cached.gasPrice };
+    return { gasPrice: cached.gasPrice, baseFee: cached.baseFee, priorityFee: cached.priorityFee, tipMeasured: cached.tipMeasured };
   }
 
+  const wantTip = !isTempoChain(chainId);
   try {
-    // Fetch eth_gasPrice and latest block baseFee in parallel.
-    // On some chains (Gnosis), eth_gasPrice returns an absurdly low value
-    // that doesn't reflect the actual baseFee. Use max(eth_gasPrice, baseFee)
-    // to ensure the UserOp gas price covers at least the base fee.
-    const [gasPriceRes, blockRes] = await Promise.all([
+    const [gasPriceRes, blockRes, tipRes] = await Promise.all([
       rpcCall('eth_gasPrice', [], chainId),
       rpcCall('eth_getBlockByNumber', ['latest', false], chainId).catch(() => null),
+      wantTip
+        ? rpcCall('eth_maxPriorityFeePerGas', [], chainId).catch(() => null)
+        : Promise.resolve(null),
     ]);
     const ethGasPrice = parseHexUInt64(gasPriceRes.result as string | undefined);
     const baseFee = blockRes?.result?.baseFeePerGas
       ? parseHexUInt64(blockRes.result.baseFeePerGas as string)
       : 0n;
-    const gasPrice = ethGasPrice > baseFee ? ethGasPrice : baseFee;
-    if (gasPrice > 0n) {
-      console.log(`[UserOp] Gas: ethGasPrice=${ethGasPrice} baseFee=${baseFee} using=${gasPrice}`);
-      _gasPriceCache.set(chainId, { gasPrice, at: Date.now() });
-      return { gasPrice };
+    // A present result (even "0x0" on L2s) is a real measurement; null = failed/skipped.
+    const tipMeasured = wantTip && tipRes?.result != null;
+    const tip = tipRes?.result ? parseHexUInt64(tipRes.result as string) : 0n;
+    const derived = deriveChainGasPrice({ ethGasPrice, baseFee, priorityFee: tip, tipMeasured });
+    if (derived.gasPrice > 0n) {
+      console.log(`[UserOp] Gas: ethGasPrice=${ethGasPrice} baseFee=${baseFee} tip=${derived.priorityFee} measured=${derived.tipMeasured} using=${derived.gasPrice}`);
+      _gasPriceCache.set(chainId, { ...derived, at: Date.now() });
+      return derived;
     }
   } catch {
     // Use defaults
   }
 
-  const fallback = { gasPrice: 5_000_000_000n }; // 5 gwei
+  const fallback: ChainGasPrice = { gasPrice: 5_000_000_000n, baseFee: 5_000_000_000n, priorityFee: 0n, tipMeasured: false }; // 5 gwei
   _gasPriceCache.set(chainId, { ...fallback, at: Date.now() });
   return fallback;
 }
@@ -1316,6 +1386,55 @@ export class GasQuoteTooHighError extends Error {
   }
 }
 
+/**
+ * Per-tier priority-tip scaling the bundler applies when it quotes
+ * (pimlico_getUserOperationGasPrice → quote(100|150|200); see vela-bundler
+ * shared/rpc/handlers.ts). The wallet mirrors it so the sanity cap below compares a
+ * quote against the honest network price AT THE SAME TIER. Without this a fast-tier
+ * quote (tip×2) looks abusive next to a slow-tier (tip×1) baseline on a tip-dominated
+ * chain like Gnosis, and the fee falsely renders as "—". The bundler only quotes
+ * slow/standard/fast; 'rapid' falls back to a local estimate and never reaches the cap.
+ */
+const BUNDLER_QUOTE_TIP_PERCENT: Record<GasTier, bigint> = {
+  slow: 100n, standard: 150n, fast: 200n, rapid: 200n,
+};
+
+/**
+ * True when a bundler's quoted maxFeePerGas is abusively high.
+ *
+ * Judged PRIMARILY by the bundler's OWN reported network cost (its markup) — the same
+ * authoritative source that decides accept/reject at submit — so the check is reliable and
+ * consistent across chains and NEVER depends on the wallet's per-chain RPC. That RPC is
+ * unreliable on cheap-gas chains (Gnosis eth_gasPrice ≈ 0, and providers disagree on the
+ * priority tip); letting it veto the bundler's honest quote is exactly what blanked the fee
+ * to "—" and forced an under-priced local fallback (the chronic "gas price too low 33 <
+ * 1225" on Gnosis). Honest Vela markup is 2× (userPrice = 2 × networkPrice); the cap is 3×
+ * for head-room.
+ *
+ * A generic bundler that omits the networkFee field (reportedNetworkFeePerGas = 0n) gives no
+ * markup signal, so we cross-check against the wallet's INDEPENDENT price — but only when it
+ * was reliably measured (tipMeasured); otherwise we trust the bundler (fail-open). Pure + tested.
+ */
+export function isQuoteAbusive(
+  quotedMaxFeePerGas: bigint,
+  reportedNetworkFeePerGas: bigint,
+  chain: ChainGasPrice,
+  tier: GasTier,
+): boolean {
+  // Preferred: the bundler's own markup — user price vs its reported network cost.
+  if (reportedNetworkFeePerGas > 0n) {
+    return quotedMaxFeePerGas > reportedNetworkFeePerGas * MAX_QUOTE_VS_CHAIN_MULTIPLE;
+  }
+  // Generic bundler, no network-cost signal → cross-check the wallet's own price, but only
+  // when trustworthy. Never let an unreliable per-chain RPC veto the bundler's quote.
+  if (!chain.tipMeasured) return false;
+  const tipMul = BUNDLER_QUOTE_TIP_PERCENT[tier] ?? 150n;
+  const scaledNetwork = chain.baseFee + (chain.priorityFee * tipMul) / 100n;
+  const expectedNetwork = chain.gasPrice > scaledNetwork ? chain.gasPrice : scaledNetwork;
+  if (expectedNetwork <= 0n) return false;
+  return quotedMaxFeePerGas > expectedNetwork * MAX_QUOTE_VS_CHAIN_MULTIPLE;
+}
+
 export interface GasQuoteTier {
   maxFeePerGas: bigint;
   maxPriorityFeePerGas: bigint;
@@ -1338,14 +1457,14 @@ export async function getBundlerGasQuote(
   tier: GasTier = 'standard',
 ): Promise<GasQuoteTier | null> {
   let resp;
-  let chainGasPrice: bigint;
+  let chain: ChainGasPrice;
   try {
     const [r, gp] = await Promise.all([
       rpcCall('pimlico_getUserOperationGasPrice', [], chainId),
       getGasPrices(chainId),
     ]);
     resp = r;
-    chainGasPrice = gp.gasPrice;
+    chain = gp;
   } catch (err) {
     console.log(
       '[Gas] Bundler gas-price quote unavailable, using local estimate:',
@@ -1359,22 +1478,25 @@ export async function getBundlerGasQuote(
 
   const maxFeePerGas = parseHexUInt64(t.maxFeePerGas as string);
   const maxPriorityFeePerGas = parseHexUInt64((t.maxPriorityFeePerGas ?? t.maxFeePerGas) as string);
-  // Vela extension fields; derive them if a generic bundler omits them.
-  const networkFeePerGas = t.networkFeePerGas
-    ? parseHexUInt64(t.networkFeePerGas as string)
-    : chainGasPrice;
+  // The bundler's OWN network-cost basis (Vela extension). 0n when a generic bundler omits it.
+  const reportedNetworkFee = t.networkFeePerGas ? parseHexUInt64(t.networkFeePerGas as string) : 0n;
+  // Display/return value; fall back to the wallet's chain price when the field is absent.
+  const networkFeePerGas = reportedNetworkFee > 0n ? reportedNetworkFee : chain.gasPrice;
   const relayerFeePerGas = t.relayerFeePerGas
     ? parseHexUInt64(t.relayerFeePerGas as string)
     : maxFeePerGas > networkFeePerGas
       ? maxFeePerGas - networkFeePerGas
       : 0n;
 
-  // Client-side hard cap — refuse, don't silently fall back.
-  if (chainGasPrice > 0n && maxFeePerGas > chainGasPrice * MAX_QUOTE_VS_CHAIN_MULTIPLE) {
+  // Client-side hard cap — judged by the BUNDLER's own reported markup (maxFee vs its
+  // networkFee), NOT the wallet's per-chain RPC, which must never veto the authoritative
+  // quote (that veto is what blanked the fee to "—" and under-priced Gnosis). See isQuoteAbusive.
+  if (isQuoteAbusive(maxFeePerGas, reportedNetworkFee, chain, tier)) {
     console.warn(
-      `[Gas] Bundler quote ${maxFeePerGas} exceeds ${MAX_QUOTE_VS_CHAIN_MULTIPLE}× chain price ${chainGasPrice} — refusing.`,
+      `[Gas] Bundler quote ${maxFeePerGas} exceeds ${MAX_QUOTE_VS_CHAIN_MULTIPLE}× its reported ${tier} ` +
+      `network cost ${networkFeePerGas} — refusing.`,
     );
-    throw new GasQuoteTooHighError(maxFeePerGas, chainGasPrice);
+    throw new GasQuoteTooHighError(maxFeePerGas, networkFeePerGas);
   }
 
   return { maxFeePerGas, maxPriorityFeePerGas, networkFeePerGas, relayerFeePerGas };
