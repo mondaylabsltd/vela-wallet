@@ -145,6 +145,22 @@ export default function HomeScreen() {
   const addressRef = useRef(address);
   useEffect(() => { addressRef.current = address; }, [address]);
 
+  // Swipe-to-delete tombstones. Deletion removes the row from state instantly but
+  // writes to storage asynchronously; a background reload that read storage BEFORE
+  // that write lands would otherwise repaint the just-deleted row. These sets hold
+  // ids mid-delete so any storage-sourced repaint filters them out until the write
+  // is committed. `commit*` are the only setters the reload paths should use.
+  const pendingDeleteIds = useRef<Set<string>>(new Set());
+  const pendingDeleteConnIds = useRef<Set<string>>(new Set());
+  const commitActivity = useCallback((items: ActivityItem[]) => {
+    const pend = pendingDeleteIds.current;
+    setActivity(pend.size ? items.filter((a) => !pend.has(a.id)) : items);
+  }, []);
+  const commitConnEvents = useCallback((events: ConnectionEvent[]) => {
+    const pend = pendingDeleteConnIds.current;
+    setConnEvents(pend.size ? events.filter((e) => !pend.has(e.id)) : events);
+  }, []);
+
   // Balance "money in" pulse (cross-platform via shared value).
   const balancePulse = useSharedValue(0);
   const balanceScaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + balancePulse.value * 0.03 }] }));
@@ -179,8 +195,8 @@ export default function HomeScreen() {
   const localePrefs = useLocalePrefs();
   useEffect(() => {
     const addr = addressRef.current;
-    if (addr) loadActivityItems(addr).then(setActivity).catch(() => {});
-  }, [localePrefs]);
+    if (addr) loadActivityItems(addr).then(commitActivity).catch(() => {});
+  }, [localePrefs, commitActivity]);
 
   const pickCurrency = useCallback(async (code: string) => {
     await setCurrency(code);
@@ -255,8 +271,8 @@ export default function HomeScreen() {
       ]);
       if (addressRef.current !== address) return; // account switched mid-load
       txByIdRef.current = new Map(rawTxs.map((t) => [t.id, t]));
-      setActivity(items);
-      setConnEvents(events);
+      commitActivity(items);
+      commitConnEvents(events);
     } catch { /* ignore — keep the last-known feed */ }
 
     // 1b. Reconcile any pending submissions whose receipt never landed in-session
@@ -273,7 +289,7 @@ export default function HomeScreen() {
         ]);
         if (addressRef.current !== address) return;
         txByIdRef.current = new Map(rawTxs.map((t) => [t.id, t]));
-        setActivity(items);
+        commitActivity(items);
       }
     } catch { /* ignore — pending records stay pending, retried next focus */ }
 
@@ -294,7 +310,7 @@ export default function HomeScreen() {
         txByIdRef.current = new Map(rawTxs.map((t) => [t.id, t]));
         const newestIn = items.find((i) => i.direction === 'in');
         if (!firstPass && newestIn) celebrateReceipt(newestIn);
-        setActivity(items);
+        commitActivity(items);
       }
     } catch { /* ignore */ }
 
@@ -325,7 +341,7 @@ export default function HomeScreen() {
         setCachedTotal(usd);
       }
     } catch { /* ignore — keep last-known tokens + total */ }
-  }, [address, celebrateReceipt]);
+  }, [address, celebrateReceipt, commitActivity, commitConnEvents]);
   loadDataRef.current = loadData;
 
   useFocusEffect(useCallback(() => {
@@ -530,18 +546,28 @@ export default function HomeScreen() {
   }, [address, t]);
 
   const deleteConnEvent = useCallback((id: string) => {
-    deleteTransaction(id);
+    // Optimistic remove + tombstone until the async storage write commits, so a
+    // concurrent background reload can't repaint the just-deleted event.
+    pendingDeleteConnIds.current.add(id);
     setConnEvents((prev) => prev.filter((e) => e.id !== id));
+    deleteTransaction(id)
+      .catch((e) => console.warn('[Home] connection-event delete failed', e))
+      .finally(() => { pendingDeleteConnIds.current.delete(id); });
   }, []);
 
   // Swipe-to-delete on an Activity row prunes the local record(s); on-chain
   // history is untouched and a receipt already past the monitor checkpoint won't
   // reappear. Batch sends collapse N sibling records into one row (id =
   // userOpHash, not a real record id) — delete every sibling via `batch.ids`.
+  // Optimistic remove + tombstone (keyed by the row's display id) until the async
+  // deletes commit, so an in-flight reload can't resurrect the row.
   const deleteActivityItem = useCallback((item: ActivityItem) => {
     const ids = item.batch?.ids ?? [item.id];
-    ids.forEach((id) => deleteTransaction(id));
+    pendingDeleteIds.current.add(item.id);
     setActivity((prev) => prev.filter((a) => a.id !== item.id));
+    Promise.all(ids.map((id) => deleteTransaction(id)))
+      .catch((e) => console.warn('[Home] activity delete failed', e))
+      .finally(() => { pendingDeleteIds.current.delete(item.id); });
   }, []);
 
   // Resolved alias for the open detail tx's counterparty.
