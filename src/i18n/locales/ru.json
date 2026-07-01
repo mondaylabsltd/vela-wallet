@@ -95,6 +95,7 @@
     "signatureRequest": "Запрос подписи",
     "typedDataSignature": "Подпись типизированных данных",
     "dappTransaction": "Транзакция dApp",
-    "activity": "Активность"
+    "activity": "Активность",
+    "delete": "Удалить"
   }
 }

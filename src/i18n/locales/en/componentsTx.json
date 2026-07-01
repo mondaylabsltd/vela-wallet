@@ -18,7 +18,13 @@
       "done": "Done",
       "copiedTitle": "Copied",
       "copiedImageBody": "Receipt image copied to clipboard.",
-      "copiedLinkBody": "Explorer link copied."
+      "copiedLinkBody": "Explorer link copied.",
+      "recipientsCount": "{{n}} recipients",
+      "assetsCount": "{{n}} assets",
+      "statusConfirmed": "Confirmed",
+      "statusSubmitted": "Submitted",
+      "statusFailed": "Failed",
+      "failedHint": "This transaction failed to settle on-chain."
     },
     "detail": {
       "received": "Received",
@@ -39,7 +45,8 @@
       "opContractInteraction": "Contract interaction",
       "opSignature": "Signature",
       "opTypedDataSignature": "Typed-data signature",
-      "opTransfer": "Transfer"
+      "opTransfer": "Transfer",
+      "breakdownTitle": "Breakdown"
     }
   }
 }

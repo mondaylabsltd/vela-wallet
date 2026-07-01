@@ -95,6 +95,7 @@
     "signatureRequest": "簽署請求",
     "typedDataSignature": "結構化資料簽署",
     "dappTransaction": "dApp 交易",
-    "activity": "活動"
+    "activity": "活動",
+    "delete": "刪除"
   }
 }

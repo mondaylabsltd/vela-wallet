@@ -47,6 +47,18 @@ const KEY = 'vela.contacts';
 
 let _saved: Contact[] | null = null;
 
+// Serialize read-modify-write mutations of the `_saved` cache. Several callers can
+// fire concurrently — e.g. multiple RecipientTrust rows each resolving an identity
+// and writing the name back at once — and would otherwise interleave
+// loadSaved()→map→persist and silently drop each other's writes (last-writer-wins).
+// Chaining every mutator through one promise makes each write atomic.
+let _writeChain: Promise<unknown> = Promise.resolve();
+function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = _writeChain.then(fn, fn);
+  _writeChain = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 async function loadSaved(): Promise<Contact[]> {
   if (_saved) return _saved;
   try {
@@ -84,35 +96,41 @@ export interface SaveContactInput {
 
 /** Create or update a saved contact (idempotent on address). */
 export async function saveContact(input: SaveContactInput): Promise<Contact> {
-  const addr = input.address.toLowerCase();
-  const list = await loadSaved();
-  const now = Date.now();
-  const existing = list.find((x) => x.address === addr);
-  const merged: Contact = existing
-    ? { ...existing, ...input, address: addr, source: 'manual' }
-    : {
-        txCount: 0,
-        lastUsed: now,
-        firstSeen: now,
-        ...input,
-        address: addr,
-        kind: input.kind ?? 'unknown',
-        source: 'manual',
-      };
-  await persist([merged, ...list.filter((x) => x.address !== addr)]);
-  return merged;
+  return withWriteLock(async () => {
+    const addr = input.address.toLowerCase();
+    const list = await loadSaved();
+    const now = Date.now();
+    const existing = list.find((x) => x.address === addr);
+    const merged: Contact = existing
+      ? { ...existing, ...input, address: addr, source: 'manual' }
+      : {
+          txCount: 0,
+          lastUsed: now,
+          firstSeen: now,
+          ...input,
+          address: addr,
+          kind: input.kind ?? 'unknown',
+          source: 'manual',
+        };
+    await persist([merged, ...list.filter((x) => x.address !== addr)]);
+    return merged;
+  });
 }
 
 export async function deleteContact(address: string): Promise<void> {
-  const addr = address.toLowerCase();
-  await persist((await loadSaved()).filter((x) => x.address !== addr));
+  return withWriteLock(async () => {
+    const addr = address.toLowerCase();
+    await persist((await loadSaved()).filter((x) => x.address !== addr));
+  });
 }
 
 export async function updateContact(address: string, patch: Partial<Contact>): Promise<void> {
-  const addr = address.toLowerCase();
-  await persist(
-    (await loadSaved()).map((x) => (x.address === addr ? { ...x, ...patch, address: addr } : x)),
-  );
+  return withWriteLock(async () => {
+    const addr = address.toLowerCase();
+    await persist(
+      (await loadSaved()).map((x) => (x.address === addr ? { ...x, ...patch, address: addr } : x)),
+    );
+  });
 }
 
 /** Favourite a contact — promotes a live suggestion to a saved contact. */

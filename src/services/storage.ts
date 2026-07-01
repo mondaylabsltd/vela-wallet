@@ -373,6 +373,12 @@ export interface LocalTransaction {
   value: string;
   symbol: string;
   decimals: number;
+  /**
+   * Ordered token-logo URL candidates, captured at send time so the detail sheet
+   * can show the real token logo instead of a letter glyph. Older records / most
+   * receives lack it (the logo falls back to the letter circle).
+   */
+  logoUrls?: string[];
   chainId: number;
   timestamp: number;
   status: 'pending' | 'confirmed' | 'failed';
@@ -414,15 +420,51 @@ export interface LocalTransaction {
 /** Cap stored signed payloads so a huge typed-data blob can't bloat history. */
 export const MAX_SIGNED_CONTENT = 8000;
 
+/**
+ * Serialize every transaction-history mutation. Each save/update/merge/delete does
+ * a read-modify-write over the whole array; without a lock, two concurrent writers
+ * both read the same snapshot and the last write clobbers the other. That silently
+ * dropped the sibling records of a batch send (split = 1 token → N recipients,
+ * multiSelect = N tokens → 1 recipient) — which are written together via
+ * `Promise.all` — collapsing the batch to a single line in Activity. Chaining every
+ * mutation through one promise makes them atomic with respect to each other.
+ */
+let _txWriteLock: Promise<unknown> = Promise.resolve();
+function withTxLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = _txWriteLock.then(fn, fn);
+  // Keep the chain alive whether the mutation resolves or rejects.
+  _txWriteLock = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 export async function saveTransaction(tx: LocalTransaction): Promise<void> {
   // De-dupe by id: a resubmitted UserOp (e.g. two identical sends sharing a
   // nonce) yields the same userOpHash, which is the record id — without this it
   // would persist twice and surface as a React duplicate-key warning in the feed.
-  const txs = (await loadTransactions()).filter((t) => t.id !== tx.id);
-  txs.unshift(tx); // newest first
-  // Keep max 200 transactions
-  if (txs.length > 200) txs.length = 200;
-  await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(txs));
+  return withTxLock(async () => {
+    const txs = (await loadTransactions()).filter((t) => t.id !== tx.id);
+    txs.unshift(tx); // newest first
+    // Keep max 200 transactions
+    if (txs.length > 200) txs.length = 200;
+    await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(txs));
+  });
+}
+
+/**
+ * Persist several records in ONE atomic read-modify-write. Preferred over
+ * `Promise.all(records.map(saveTransaction))` for batch sends: fewer disk writes
+ * and no reliance on the write-lock to serialize the siblings. De-duped by id,
+ * newest-first, capped at 200.
+ */
+export async function saveTransactions(incoming: LocalTransaction[]): Promise<void> {
+  if (incoming.length === 0) return;
+  return withTxLock(async () => {
+    const ids = new Set(incoming.map((t) => t.id));
+    const txs = (await loadTransactions()).filter((t) => !ids.has(t.id));
+    txs.unshift(...incoming); // newest first, in the given order
+    if (txs.length > 200) txs.length = 200;
+    await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(txs));
+  });
 }
 
 export async function loadTransactions(): Promise<LocalTransaction[]> {
@@ -438,11 +480,31 @@ export async function loadTransactions(): Promise<LocalTransaction[]> {
  * once its on-chain hash resolves. No-op if the id isn't present.
  */
 export async function updateTransaction(id: string, patch: Partial<LocalTransaction>): Promise<void> {
-  const txs = await loadTransactions();
-  const idx = txs.findIndex((t) => t.id === id);
-  if (idx === -1) return;
-  txs[idx] = { ...txs[idx], ...patch };
-  await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(txs));
+  return withTxLock(async () => {
+    const txs = await loadTransactions();
+    const idx = txs.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+    txs[idx] = { ...txs[idx], ...patch };
+    await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(txs));
+  });
+}
+
+/**
+ * Apply the same patch to several records in ONE atomic read-modify-write —
+ * e.g. flip every sibling of a batch send to 'confirmed' once its shared on-chain
+ * hash lands. Missing ids are skipped.
+ */
+export async function updateTransactions(ids: string[], patch: Partial<LocalTransaction>): Promise<void> {
+  if (ids.length === 0) return;
+  const idSet = new Set(ids);
+  return withTxLock(async () => {
+    const txs = await loadTransactions();
+    let changed = false;
+    for (let i = 0; i < txs.length; i++) {
+      if (idSet.has(txs[i].id)) { txs[i] = { ...txs[i], ...patch }; changed = true; }
+    }
+    if (changed) await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(txs));
+  });
 }
 
 /**
@@ -453,22 +515,26 @@ export async function updateTransaction(id: string, patch: Partial<LocalTransact
  */
 export async function mergeTransactions(incoming: LocalTransaction[]): Promise<number> {
   if (incoming.length === 0) return 0;
-  const existing = await loadTransactions();
-  const ids = new Set(existing.map((t) => t.id));
-  const fresh = incoming.filter((t) => !ids.has(t.id));
-  if (fresh.length === 0) return 0;
-  const merged = [...fresh, ...existing].sort((a, b) => b.timestamp - a.timestamp);
-  if (merged.length > 200) merged.length = 200;
-  await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(merged));
-  return fresh.length;
+  return withTxLock(async () => {
+    const existing = await loadTransactions();
+    const ids = new Set(existing.map((t) => t.id));
+    const fresh = incoming.filter((t) => !ids.has(t.id));
+    if (fresh.length === 0) return 0;
+    const merged = [...fresh, ...existing].sort((a, b) => b.timestamp - a.timestamp);
+    if (merged.length > 200) merged.length = 200;
+    await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(merged));
+    return fresh.length;
+  });
 }
 
 /** Remove a single transaction by id (e.g. swipe-to-delete in Connections). */
 export async function deleteTransaction(id: string): Promise<void> {
-  const txs = await loadTransactions();
-  const next = txs.filter((t) => t.id !== id);
-  if (next.length === txs.length) return;
-  await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(next));
+  return withTxLock(async () => {
+    const txs = await loadTransactions();
+    const next = txs.filter((t) => t.id !== id);
+    if (next.length === txs.length) return;
+    await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(next));
+  });
 }
 
 /**
@@ -478,11 +544,13 @@ export async function deleteTransaction(id: string): Promise<void> {
 export async function deleteConnectionEvents(address: string): Promise<void> {
   const lc = address.toLowerCase();
   const dappTypes = new Set<TransactionType>(['dapp_tx', 'sign_message', 'sign_typed_data']);
-  const txs = await loadTransactions();
-  const next = txs.filter(
-    (t) => !(t.from.toLowerCase() === lc && dappTypes.has((t.type ?? 'send') as TransactionType)),
-  );
-  await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(next));
+  return withTxLock(async () => {
+    const txs = await loadTransactions();
+    const next = txs.filter(
+      (t) => !(t.from.toLowerCase() === lc && dappTypes.has((t.type ?? 'send') as TransactionType)),
+    );
+    await AsyncStorage.setItem(KEYS.transactionHistory, JSON.stringify(next));
+  });
 }
 
 // ---------------------------------------------------------------------------

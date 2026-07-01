@@ -18,7 +18,13 @@
       "done": "完了",
       "copiedTitle": "コピーしました",
       "copiedImageBody": "明細画像をクリップボードにコピーしました。",
-      "copiedLinkBody": "エクスプローラーのリンクをコピーしました。"
+      "copiedLinkBody": "エクスプローラーのリンクをコピーしました。",
+      "recipientsCount": "送金先 {{n}} 件",
+      "assetsCount": "{{n}} 種類の資産",
+      "statusConfirmed": "確認済み",
+      "statusSubmitted": "送信済み",
+      "statusFailed": "失敗",
+      "failedHint": "このトランザクションはオンチェーンで失敗しました。"
     },
     "detail": {
       "received": "受け取り",
@@ -39,7 +45,8 @@
       "opContractInteraction": "コントラクトの操作",
       "opSignature": "署名",
       "opTypedDataSignature": "型付きデータの署名",
-      "opTransfer": "送金"
+      "opTransfer": "送金",
+      "breakdownTitle": "内訳"
     }
   }
 }

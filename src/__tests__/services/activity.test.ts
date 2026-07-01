@@ -85,3 +85,58 @@ describe('activity - loadActivityItems de-dup', () => {
     expect(items.map((i) => i.id)).toEqual(['0xaaa', '0xbbb']); // newest first, both kept
   });
 });
+
+describe('activity - batch grouping', () => {
+  const batchLine = (
+    userOpHash: string,
+    i: number,
+    over: Partial<LocalTransaction>,
+  ): LocalTransaction => ({
+    ...sendRecord(`${userOpHash}-${i}`, 5000),
+    userOpHash,
+    ...over,
+  });
+
+  test('split (1 token → N recipients) collapses to one row + breakdown', async () => {
+    const op = '0xsplit';
+    seed([
+      batchLine(op, 0, { to: '0x' + 'a1'.repeat(20), value: '10', symbol: 'USDC' }),
+      batchLine(op, 1, { to: '0x' + 'b2'.repeat(20), value: '20', symbol: 'USDC' }),
+      batchLine(op, 2, { to: '0x' + 'c3'.repeat(20), value: '30', symbol: 'USDC' }),
+    ]);
+
+    const items = await loadActivityItems(ADDR);
+    expect(items).toHaveLength(1);
+    const it = items[0];
+    expect(it.id).toBe(op); // keyed by the shared userOpHash
+    expect(it.batch?.kind).toBe('split');
+    expect(it.batch?.count).toBe(3);
+    expect(it.batch?.ids).toEqual([`${op}-0`, `${op}-1`, `${op}-2`]);
+    expect(it.batch?.symbol).toBe('USDC');
+    expect(it.address).toBeUndefined(); // split has no single recipient
+  });
+
+  test('multiSelect (N tokens → 1 recipient) collapses to one row', async () => {
+    const op = '0xmulti';
+    const to = '0x' + 'd4'.repeat(20);
+    seed([
+      batchLine(op, 0, { to, value: '10', symbol: 'USDC' }),
+      batchLine(op, 1, { to, value: '5', symbol: 'DAI' }),
+    ]);
+
+    const items = await loadActivityItems(ADDR);
+    expect(items).toHaveLength(1);
+    expect(items[0].batch?.kind).toBe('multiSelect');
+    expect(items[0].batch?.transfers.map((x) => x.symbol)).toEqual(['USDC', 'DAI']);
+    expect(items[0].address).toBe(to); // single recipient drives the "to" subtitle
+  });
+
+  test('same-id duplicates in one userOp are NOT treated as a batch', async () => {
+    // A resubmitted single send lands two records with the SAME id + userOpHash.
+    seed([sendRecord('0xdup', 2000), sendRecord('0xdup', 1000)]);
+
+    const items = await loadActivityItems(ADDR);
+    expect(items).toHaveLength(1);
+    expect(items[0].batch).toBeUndefined(); // one line, not a batch
+  });
+});

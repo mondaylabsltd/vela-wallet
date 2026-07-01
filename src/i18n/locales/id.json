@@ -95,6 +95,7 @@
     "signatureRequest": "Permintaan tanda tangan",
     "typedDataSignature": "Tanda tangan typed data",
     "dappTransaction": "Transaksi dApp",
-    "activity": "Aktivitas"
+    "activity": "Aktivitas",
+    "delete": "Hapus"
   }
 }

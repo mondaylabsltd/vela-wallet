@@ -18,7 +18,13 @@
       "done": "Fertig",
       "copiedTitle": "Kopiert",
       "copiedImageBody": "Belegbild in die Zwischenablage kopiert.",
-      "copiedLinkBody": "Explorer-Link kopiert."
+      "copiedLinkBody": "Explorer-Link kopiert.",
+      "recipientsCount": "{{n}} Empfänger",
+      "assetsCount": "{{n}} Assets",
+      "statusConfirmed": "Bestätigt",
+      "statusSubmitted": "Übermittelt",
+      "statusFailed": "Fehlgeschlagen",
+      "failedHint": "Diese Transaktion konnte nicht bestätigt werden."
     },
     "detail": {
       "received": "Empfangen",
@@ -39,7 +45,8 @@
       "opContractInteraction": "Contract-Interaktion",
       "opSignature": "Signatur",
       "opTypedDataSignature": "Signatur typisierter Daten",
-      "opTransfer": "Transfer"
+      "opTransfer": "Transfer",
+      "breakdownTitle": "Aufschlüsselung"
     }
   }
 }

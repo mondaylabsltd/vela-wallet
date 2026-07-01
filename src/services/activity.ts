@@ -43,6 +43,47 @@ export interface ActivityItem {
   address?: string;
   /** Resolved name for `address` (local/ENS/Vela/etc.), if known. */
   alias?: string;
+  /**
+   * Set when this row collapses a batch send (split = 1 token → N recipients,
+   * multiSelect = N tokens → 1 recipient) that shared one UserOp. Carries the
+   * per-line breakdown so the row + detail sheet can show every transfer instead
+   * of one (misleading) line. Undefined for plain single sends/receives.
+   */
+  batch?: ActivityBatch;
+}
+
+/** One line in a batch send breakdown (mirror of a stored per-line record). */
+export interface ActivityBatchTransfer {
+  to: string;
+  toName?: string;
+  value: string;
+  symbol: string;
+  decimals: number;
+  usdValue: number;
+  logoUrls?: string[];
+}
+
+/** A batch send (split / multiSelect) summarized from its per-line records. */
+export interface ActivityBatch {
+  kind: 'split' | 'multiSelect';
+  count: number;
+  totalUsd: number;
+  transfers: ActivityBatchTransfer[];
+  /** Stored record ids of the siblings — for live status reconciliation. */
+  ids: string[];
+  // Shared header fields (identical across the siblings) for the detail sheet.
+  from: string;
+  chainId: number;
+  timestamp: number;
+  status: LocalTransaction['status'];
+  txHash: string;
+  userOpHash: string;
+  /** split only: the single token symbol + its logo. */
+  symbol?: string;
+  logoUrls?: string[];
+  /** multiSelect only: the single recipient. */
+  to?: string;
+  toName?: string;
 }
 
 export interface ConnectionEvent {
@@ -139,6 +180,69 @@ function sendTxToActivity(tx: LocalTransaction): ActivityItem {
     txHash: tx.txHash || undefined,
     address: tx.to,
     alias: tx.toName,
+  };
+}
+
+/**
+ * Classify + summarize a group of 'send' records that shared one UserOp.
+ *   split       — one token, many recipients (一币多人)
+ *   multiSelect — many tokens, one recipient (多币一人)
+ * The siblings share from/chainId/timestamp/status/txHash (written together and
+ * patched together), so the first one carries the header fields.
+ */
+export function buildBatchView(group: LocalTransaction[]): ActivityBatch {
+  const first = group[0];
+  const symbols = new Set(group.map((g) => g.symbol));
+  const recipients = new Set(group.map((g) => g.to.toLowerCase()));
+  const kind: 'split' | 'multiSelect' =
+    symbols.size <= 1 && recipients.size > 1 ? 'split'
+    : recipients.size <= 1 && symbols.size > 1 ? 'multiSelect'
+    : symbols.size <= 1 ? 'split' : 'multiSelect';
+  const totalUsd = group.reduce((s, g) => s + txUsdValue(g), 0);
+  return {
+    kind,
+    count: group.length,
+    totalUsd,
+    transfers: group.map((g) => ({ to: g.to, toName: g.toName, value: g.value, symbol: g.symbol, decimals: g.decimals, usdValue: txUsdValue(g), logoUrls: g.logoUrls })),
+    ids: group.map((g) => g.id),
+    from: first.from,
+    chainId: first.chainId,
+    timestamp: first.timestamp,
+    status: first.status,
+    txHash: first.txHash,
+    userOpHash: first.userOpHash,
+    symbol: kind === 'split' ? first.symbol : undefined,
+    logoUrls: kind === 'split' ? first.logoUrls : undefined,
+    to: kind === 'multiSelect' ? first.to : undefined,
+    toName: kind === 'multiSelect' ? first.toName : undefined,
+  };
+}
+
+/** Map a batch send group into one ActivityItem with a per-line breakdown. */
+function batchSendToActivity(group: LocalTransaction[]): ActivityItem {
+  const b = buildBatchView(group);
+  // split sums to one token figure ("-30 USDC"); multiSelect can't sum mixed
+  // tokens, so the figure is the asset count and the fiat total leads instead.
+  const amount = b.kind === 'split'
+    ? `-${compactAmount(b.transfers.reduce((s, x) => s + (parseFloat(x.value) || 0), 0))} ${b.symbol ?? ''}`
+    : i18n.t('componentsTx.receipt.assetsCount', { n: b.count });
+  return {
+    id: b.userOpHash || group[0].id,
+    direction: 'out',
+    title: 'Sent',
+    // Used by the home row only when there's no single recipient (split). The
+    // multiSelect row uses `address` to render "to <recipient>".
+    subtitle: i18n.t('componentsTx.receipt.recipientsCount', { n: b.count }),
+    amount,
+    usd: formatUsd(b.totalUsd),
+    usdValue: b.totalUsd,
+    token: b.symbol ?? '',
+    chainId: b.chainId,
+    timestamp: b.timestamp,
+    txHash: b.txHash || undefined,
+    address: b.kind === 'multiSelect' ? b.to : undefined,
+    alias: b.kind === 'multiSelect' ? b.toName : undefined,
+    batch: b,
   };
 }
 
@@ -299,16 +403,46 @@ export async function loadActivityItems(address: string): Promise<ActivityItem[]
 
   const lc = address.toLowerCase();
   const txs = await loadTransactions().catch(() => [] as LocalTransaction[]);
+
+  // Batch sends write one record per line, each with a DISTINCT id (`<hash>-<i>`)
+  // but a shared userOpHash. Group those siblings so a split/multiSelect shows as
+  // ONE row with a breakdown instead of N look-alike rows. Dedupe by id first so a
+  // legacy same-id duplicate (a resubmitted single send) is NOT mistaken for a
+  // batch — only genuinely distinct lines count toward the group size.
+  const sendGroups = new Map<string, LocalTransaction[]>();
+  const groupSeenIds = new Map<string, Set<string>>();
+  for (const t of txs) {
+    if ((t.type ?? 'send') !== 'send') continue;
+    if (t.from.toLowerCase() !== lc || !t.userOpHash) continue;
+    let ids = groupSeenIds.get(t.userOpHash);
+    if (!ids) groupSeenIds.set(t.userOpHash, (ids = new Set()));
+    if (ids.has(t.id)) continue; // same-id duplicate — count the line once
+    ids.add(t.id);
+    const arr = sendGroups.get(t.userOpHash) ?? [];
+    arr.push(t);
+    sendGroups.set(t.userOpHash, arr);
+  }
+
   const items: ActivityItem[] = [];
   // `item.id` is the FlatList key (HomeScreen). Guard against any legacy
-  // duplicate-id records already in the store so a row can't render twice.
+  // duplicate-id records already in the store so a row can't render twice, and
+  // skip every member of a batch once its grouped row has been emitted.
   const seen = new Set<string>();
   for (const t of txs) {
     if (seen.has(t.id)) continue;
     const type = t.type ?? 'send';
     let item: ActivityItem | null = null;
-    if (type === 'receive' && t.to.toLowerCase() === lc) item = receiveRecordToActivity(t);
-    else if (type === 'send' && t.from.toLowerCase() === lc) item = sendTxToActivity(t);
+    if (type === 'receive' && t.to.toLowerCase() === lc) {
+      item = receiveRecordToActivity(t);
+    } else if (type === 'send' && t.from.toLowerCase() === lc) {
+      const group = t.userOpHash ? sendGroups.get(t.userOpHash) : undefined;
+      if (group && group.length > 1) {
+        item = batchSendToActivity(group);
+        for (const g of group) seen.add(g.id);
+      } else {
+        item = sendTxToActivity(t);
+      }
+    }
     if (!item) continue;
     seen.add(t.id);
     items.push(item);

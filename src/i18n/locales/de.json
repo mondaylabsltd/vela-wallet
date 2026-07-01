@@ -95,6 +95,7 @@
     "signatureRequest": "Signaturanfrage",
     "typedDataSignature": "Signatur typisierter Daten",
     "dappTransaction": "dApp-Transaktion",
-    "activity": "Aktivität"
+    "activity": "Aktivität",
+    "delete": "Löschen"
   }
 }

@@ -18,7 +18,13 @@
       "done": "Xong",
       "copiedTitle": "Đã sao chép",
       "copiedImageBody": "Đã sao chép ảnh biên lai vào bộ nhớ tạm.",
-      "copiedLinkBody": "Đã sao chép liên kết explorer."
+      "copiedLinkBody": "Đã sao chép liên kết explorer.",
+      "recipientsCount": "{{n}} người nhận",
+      "assetsCount": "{{n}} tài sản",
+      "statusConfirmed": "Đã xác nhận",
+      "statusSubmitted": "Đã gửi",
+      "statusFailed": "Thất bại",
+      "failedHint": "Giao dịch này không thành công trên chuỗi."
     },
     "detail": {
       "received": "Đã nhận",
@@ -39,7 +45,8 @@
       "opContractInteraction": "Tương tác hợp đồng",
       "opSignature": "Chữ ký",
       "opTypedDataSignature": "Chữ ký dữ liệu có cấu trúc",
-      "opTransfer": "Chuyển"
+      "opTransfer": "Chuyển",
+      "breakdownTitle": "Chi tiết"
     }
   }
 }

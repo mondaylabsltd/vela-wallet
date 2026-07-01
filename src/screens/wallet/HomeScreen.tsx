@@ -53,7 +53,7 @@ import { useTokenMultiSelect } from '@/hooks/use-token-multi-select';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import {
   loadActivityItems, loadActivityTransactions, loadConnectionEvents, relativeTime, syncReceivedTransfers,
-  type ActivityItem, type ConnectionEvent,
+  type ActivityItem, type ActivityBatch, type ConnectionEvent,
 } from '@/services/activity';
 import { reconcilePendingTransactions } from '@/services/tx-reconciler';
 import { useLocalePrefs } from '@/services/locale-format';
@@ -134,6 +134,7 @@ export default function HomeScreen() {
   const [aliasMap, setAliasMap] = useState<Map<string, string>>(new Map());
   const aliasAttempted = useRef<Set<string>>(new Set());
   const [detailTx, setDetailTx] = useState<LocalTransaction | null>(null);
+  const [detailBatch, setDetailBatch] = useState<ActivityBatch | null>(null);
   const [eventTx, setEventTx] = useState<LocalTransaction | null>(null);
   const txByIdRef = useRef<Map<string, LocalTransaction>>(new Map());
   const insets = useSafeAreaInsets();
@@ -489,9 +490,12 @@ export default function HomeScreen() {
 
   const chainFor = (chainId: number): Network | null => networks.find((n) => n.chainId === chainId) ?? null;
 
-  const openDetail = (id: string) => {
-    const t = txByIdRef.current.get(id);
-    if (t) setDetailTx(t);
+  const openDetail = (item: ActivityItem) => {
+    // A grouped batch row carries its own breakdown; a normal row resolves to a
+    // single stored record by id.
+    if (item.batch) { setDetailTx(null); setDetailBatch(item.batch); return; }
+    const t = txByIdRef.current.get(item.id);
+    if (t) { setDetailBatch(null); setDetailTx(t); }
   };
 
   // Tap a token in the balance-hero asset sheet → open Send pre-filled to it.
@@ -528,6 +532,16 @@ export default function HomeScreen() {
   const deleteConnEvent = useCallback((id: string) => {
     deleteTransaction(id);
     setConnEvents((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
+  // Swipe-to-delete on an Activity row prunes the local record(s); on-chain
+  // history is untouched and a receipt already past the monitor checkpoint won't
+  // reappear. Batch sends collapse N sibling records into one row (id =
+  // userOpHash, not a real record id) — delete every sibling via `batch.ids`.
+  const deleteActivityItem = useCallback((item: ActivityItem) => {
+    const ids = item.batch?.ids ?? [item.id];
+    ids.forEach((id) => deleteTransaction(id));
+    setActivity((prev) => prev.filter((a) => a.id !== item.id));
   }, []);
 
   // Resolved alias for the open detail tx's counterparty.
@@ -666,8 +680,8 @@ export default function HomeScreen() {
                     chain={chainFor(item.chainId)}
                     index={index}
                     isNew={item.id === newItemId}
-                    txHash={item.txHash}
-                    onPress={() => openDetail(item.id)}
+                    onDelete={() => deleteActivityItem(item)}
+                    onPress={() => openDetail(item)}
                   />
                 )}
                 ItemSeparatorComponent={() => <View style={styles.sep} />}
@@ -735,12 +749,14 @@ export default function HomeScreen() {
 
       {/* Transaction detail */}
       <TransactionDetailSheet
-        visible={detailTx !== null}
+        visible={detailTx !== null || detailBatch !== null}
         tx={detailTx}
+        batch={detailBatch}
         alias={detailAlias}
         rate={rate}
         currency={currency}
-        onClose={() => setDetailTx(null)}
+        onResolved={() => loadData()}
+        onClose={() => { setDetailTx(null); setDetailBatch(null); }}
       />
 
       {/* Balance-hero assets — reuses the Send token picker (tap a token → Send). */}

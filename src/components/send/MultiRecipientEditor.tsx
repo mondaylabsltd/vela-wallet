@@ -15,7 +15,7 @@ import { View, Text, Pressable, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Plus, X, BookUser } from 'lucide-react-native';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
-import { KnownContactBadge } from '@/components/contacts/KnownContactBadge';
+import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { sumSplitBaseUnits } from '@/services/batch-send';
 import { toBaseUnits, fromBaseUnits } from '@/services/eip681';
@@ -121,7 +121,7 @@ export function MultiRecipientEditor({
             </View>
             {addrInvalid
               ? <Text style={styles.rowError}>{t('send.alertInvalidAddressTitle')}</Text>
-              : <View style={styles.badgeWrap}><KnownContactBadge address={r.address} compact /></View>}
+              : <View style={styles.badgeWrap}><RecipientTrust address={r.address} compact /></View>}
 
             {/* Amount */}
             <View style={styles.amountRow}>

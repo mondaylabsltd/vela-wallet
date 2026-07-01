@@ -18,7 +18,13 @@
       "done": "完成",
       "copiedTitle": "已复制",
       "copiedImageBody": "收据图片已复制到剪贴板。",
-      "copiedLinkBody": "浏览器链接已复制。"
+      "copiedLinkBody": "浏览器链接已复制。",
+      "recipientsCount": "{{n}} 个接收方",
+      "assetsCount": "{{n}} 种资产",
+      "statusConfirmed": "已确认",
+      "statusSubmitted": "已提交",
+      "statusFailed": "失败",
+      "failedHint": "该交易在链上未能成功。"
     },
     "detail": {
       "received": "已接收",
@@ -39,7 +45,8 @@
       "opContractInteraction": "合约交互",
       "opSignature": "签名",
       "opTypedDataSignature": "结构化数据签名",
-      "opTransfer": "转账"
+      "opTransfer": "转账",
+      "breakdownTitle": "明细"
     }
   }
 }

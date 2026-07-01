@@ -95,6 +95,7 @@
     "signatureRequest": "Yêu cầu ký",
     "typedDataSignature": "Ký dữ liệu có cấu trúc",
     "dappTransaction": "Giao dịch dApp",
-    "activity": "Hoạt động"
+    "activity": "Hoạt động",
+    "delete": "Xóa"
   }
 }

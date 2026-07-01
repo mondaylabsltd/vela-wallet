@@ -18,7 +18,13 @@
       "done": "완료",
       "copiedTitle": "복사됨",
       "copiedImageBody": "영수증 이미지를 클립보드에 복사했습니다.",
-      "copiedLinkBody": "탐색기 링크를 복사했습니다."
+      "copiedLinkBody": "탐색기 링크를 복사했습니다.",
+      "recipientsCount": "받는 사람 {{n}}명",
+      "assetsCount": "자산 {{n}}개",
+      "statusConfirmed": "확인됨",
+      "statusSubmitted": "제출됨",
+      "statusFailed": "실패",
+      "failedHint": "이 거래가 온체인에서 실패했습니다."
     },
     "detail": {
       "received": "받음",
@@ -39,7 +45,8 @@
       "opContractInteraction": "컨트랙트 상호작용",
       "opSignature": "서명",
       "opTypedDataSignature": "구조화된 데이터 서명",
-      "opTransfer": "전송"
+      "opTransfer": "전송",
+      "breakdownTitle": "내역"
     }
   }
 }

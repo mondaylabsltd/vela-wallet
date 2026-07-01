@@ -95,6 +95,7 @@
     "signatureRequest": "署名リクエスト",
     "typedDataSignature": "型付きデータの署名",
     "dappTransaction": "dApp トランザクション",
-    "activity": "アクティビティ"
+    "activity": "アクティビティ",
+    "delete": "削除"
   }
 }

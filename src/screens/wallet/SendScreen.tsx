@@ -18,9 +18,9 @@ import { sendERC20, sendNative, sendBatchCalls, estimateTransactionFee, formatWe
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
 import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
 import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
-import { findAccountByCredentialId, saveTransaction, updateTransaction } from '@/services/storage';
+import { findAccountByCredentialId, saveTransactions, updateTransactions } from '@/services/storage';
 import { ContactPicker } from '@/components/contacts/ContactPicker';
-import { KnownContactBadge } from '@/components/contacts/KnownContactBadge';
+import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { saveContact } from '@/services/contacts';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, parseBundlerUnderfunded, recommendedFundingWei, type FundingNeeded } from '@/services/bundler-service';
@@ -31,7 +31,7 @@ import { buildSplitCalls, sumSplitBaseUnits, buildMultiTokenCalls, toMultiTokenS
 import { useTokenMultiSelect } from '@/hooks/use-token-multi-select';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
-import { TransactionReceipt } from '@/components/ui/TransactionReceipt';
+import { TransactionReceipt, type ReceiptTransfer } from '@/components/ui/TransactionReceipt';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
@@ -254,7 +254,18 @@ export default function SendScreen() {
   useEffect(() => () => { mountedRef.current = false; }, []);
   const [txStatus, setTxStatus] = useState<TxStatus>('idle');
   const [txHash, setTxHash] = useState<string | null>(null);
+  // The submitted UserOp hash — passed to the receipt so it can self-poll the
+  // bundler and converge its status even if the parent's waitForTxHash times out.
+  const [userOpHash, setUserOpHash] = useState<string | null>(null);
   const [txError, setTxError] = useState<string | null>(null);
+  // Batch-send receipt: the per-line breakdown shown on the confirmed receipt for
+  // split (1 token → N recipients) / multiSelect (N tokens → 1 recipient). null for
+  // a plain single send (which uses the scalar amount/symbol props instead).
+  const [receiptTransfers, setReceiptTransfers] = useState<ReceiptTransfer[] | null>(null);
+  const [receiptKind, setReceiptKind] = useState<'split' | 'multiSelect' | null>(null);
+  // Set when the background on-chain poll reports a definitive failure, so the
+  // receipt shows a clear "Failed" stamp instead of staying "Submitted" forever.
+  const [receiptFailed, setReceiptFailed] = useState(false);
   const [inputInUsd, setInputInUsd] = useState(false);
   const [gasExpanded, setGasExpanded] = useState(false);
   const [gasTier, setGasTier] = useState<GasTier>('standard');
@@ -813,7 +824,9 @@ export default function SendScreen() {
     setSending(true);
     setTxStatus('preparing');
     setTxHash(null);
+    setUserOpHash(null);
     setTxError(null);
+    setReceiptFailed(false);
     try {
       const chainId = tokenChainId(selectedToken);
       // Use prefetched account if available, otherwise fetch now
@@ -852,7 +865,7 @@ export default function SendScreen() {
       // signature, one gas. Each line carries its own token so multiSelect's mixed-token
       // activity records (symbol/decimals/usd) are correct per line.
       let result;
-      let lines: { to: string; toName?: string; amount: string; symbol: string; decimals: number; priceUsd: number }[];
+      let lines: { to: string; toName?: string; amount: string; symbol: string; decimals: number; priceUsd: number; logoUrls?: string[] }[];
       if (multiSelectMode) {
         // Reserved specs = the exact amounts sent (native minus gas). Activity
         // lines are derived from them so each record shows what actually moved.
@@ -864,7 +877,7 @@ export default function SendScreen() {
         result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn);
         lines = specs.map((spec) => {
           const tk = pickedTokens.find((t) => (isNativeToken(t) ? null : t.tokenAddress) === spec.tokenAddress)!;
-          return { to: recipient.trim(), toName: recipientIdentity?.name, amount: spec.amount, symbol: tk.symbol, decimals: tk.decimals, priceUsd: tk.priceUsd ?? 0 };
+          return { to: recipient.trim(), toName: recipientIdentity?.name, amount: spec.amount, symbol: tk.symbol, decimals: tk.decimals, priceUsd: tk.priceUsd ?? 0, logoUrls: tokenLogoURLs(tk) };
         });
       } else if (splitMode) {
         const calls = buildSplitCalls(
@@ -872,7 +885,7 @@ export default function SendScreen() {
           recipients.map((r) => ({ address: r.address.trim(), amount: r.amount })),
         );
         result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn);
-        lines = recipients.map((r) => ({ to: r.address.trim(), amount: r.amount, symbol: selectedToken!.symbol, decimals: selectedToken!.decimals, priceUsd: selectedToken!.priceUsd ?? 0 }));
+        lines = recipients.map((r) => ({ to: r.address.trim(), amount: r.amount, symbol: selectedToken!.symbol, decimals: selectedToken!.decimals, priceUsd: selectedToken!.priceUsd ?? 0, logoUrls: tokenLogoURLs(selectedToken!) }));
       } else {
         const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
         const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
@@ -881,13 +894,32 @@ export default function SendScreen() {
         } else {
           result = await sendERC20(activeAccount.address, selectedToken.tokenAddress!, recipient, weiHex, chainId, stored.publicKeyHex, signFn, maxFee);
         }
-        lines = [{ to: recipient, toName: recipientIdentity?.name, amount: tokenAmount, symbol: selectedToken.symbol, decimals: selectedToken.decimals, priceUsd: selectedToken.priceUsd ?? 0 }];
+        lines = [{ to: recipient, toName: recipientIdentity?.name, amount: tokenAmount, symbol: selectedToken.symbol, decimals: selectedToken.decimals, priceUsd: selectedToken.priceUsd ?? 0, logoUrls: tokenLogoURLs(selectedToken) }];
+      }
+
+      // Feed the receipt the per-line breakdown for batch sends so it renders
+      // "30 USDC → 3 recipients" / "3 assets → Bob" instead of a single (NaN) amount.
+      // A plain single send stays null and uses the scalar amount/symbol props.
+      if (multiSelectMode || splitMode) {
+        setReceiptTransfers(lines.map((ln) => ({
+          to: ln.to,
+          toName: ln.toName,
+          amount: ln.amount,
+          symbol: ln.symbol,
+          logoUrls: ln.logoUrls ?? [],
+          usdValue: (parseFloat(ln.amount || '0') || 0) * ln.priceUsd,
+        })));
+        setReceiptKind(multiSelectMode ? 'multiSelect' : 'split');
+      } else {
+        setReceiptTransfers(null);
+        setReceiptKind(null);
       }
 
       // Bundler accepted the UserOp — treat the payment as sent right now (we
       // have the userOpHash). The on-chain tx hash resolves in the background to
       // light up the explorer link; a slow/failed receipt poll must NOT turn a
       // submitted payment into an error.
+      if (mountedRef.current) setUserOpHash(result.userOpHash);
       setTxStatus('confirmed');
       hapticSuccess(); // payment accepted by the bundler — distinct success buzz
       setSending(false);
@@ -910,6 +942,7 @@ export default function SendScreen() {
           value: ln.amount,
           symbol: ln.symbol,
           decimals: ln.decimals,
+          logoUrls: ln.logoUrls,
           chainId,
           timestamp: ts,
           status: 'pending' as const,
@@ -917,17 +950,30 @@ export default function SendScreen() {
           usd: usd > 0 ? '$' + usd.toFixed(2) : undefined,
         };
       });
-      const pendingWrites = Promise.all(records.map((rec) => saveTransaction(rec).catch(() => {})));
+      // Persist ALL siblings in one atomic write. A per-record Promise.all would
+      // race the read-modify-write and silently drop every sibling but one — which
+      // collapsed a batch send to a single line in Activity.
+      const recordIds = records.map((rec) => rec.id);
+      const pendingWrites = saveTransactions(records).catch(() => {});
 
       // Resolve the on-chain hash in the background and flip every record to
       // 'confirmed' (awaiting the pending writes first so the patches find them).
+      // A definitive drop/revert flips them to 'failed' so the receipt stamp and
+      // the feed both show the real outcome; a transient/timeout stays 'pending'.
       result.waitForTxHash()
         .then(async (hash) => {
           if (mountedRef.current) setTxHash(hash);
           await pendingWrites;
-          await Promise.all(records.map((rec) => updateTransaction(rec.id, { txHash: hash, status: 'confirmed' }).catch(() => {})));
+          await updateTransactions(recordIds, { txHash: hash, status: 'confirmed' }).catch(() => {});
         })
-        .catch(() => { /* receipt slow/unavailable — stays 'pending', reconciled on next view */ });
+        .catch(async (err) => {
+          // Definitive failure (op dropped / reverted) vs. a slow/unreachable poll.
+          // Only the former is a real failure; the latter stays pending (reconciled later).
+          if (!/dropped from the network|reverted|failed/i.test(err?.message ?? '')) return;
+          if (mountedRef.current) setReceiptFailed(true);
+          await pendingWrites;
+          await updateTransactions(recordIds, { status: 'failed' }).catch(() => {});
+        });
 
     } catch (error: any) {
       // Wording-tolerant detection — the bundler has reworded this error before
@@ -1212,20 +1258,10 @@ export default function SendScreen() {
             )}
           </View>
 
-          {/* Recipient identity */}
-          {recipientIdentity && (
-            <View style={styles.identityRow}>
-              <Text style={styles.identityName}>
-                {recipientIdentity.source === 'passkey' ? '👤 ' : ''}
-                {recipientIdentity.name}
-              </Text>
-              <Text style={styles.identitySource}>
-                {recipientIdentity.source === 'passkey' ? t('send.velaUser') : recipientIdentity.source}
-              </Text>
-            </View>
-          )}
-          <View style={{ marginTop: space.sm, paddingLeft: space.sm }}>
-            <KnownContactBadge address={recipient} />
+          {/* Recipient identity — one line, one name: a green check for a starred
+              contact, else a neutral person icon for any resolved identity. */}
+          <View style={{ marginTop: space.sm }}>
+            <RecipientTrust address={recipient} identity={recipientIdentity} />
           </View>
 
           {/* Send this token to several people at once → enters split mode. */}
@@ -1315,8 +1351,8 @@ export default function SendScreen() {
                 </Pressable>
               </View>
             </View>
-            <View style={{ marginTop: space.sm, paddingLeft: space.sm }}>
-              <KnownContactBadge address={recipient} />
+            <View style={{ marginTop: space.sm }}>
+              <RecipientTrust address={recipient} identity={recipientIdentity} />
             </View>
           </>);
           })()}
@@ -1438,9 +1474,9 @@ export default function SendScreen() {
             {!splitMode ? (
               <View style={styles.transferEndpoint}>
                 <Text style={styles.transferLabel}>{t('send.toLabel')}</Text>
-                {recipientIdentity && (
-                  <Text style={styles.transferName}>{recipientIdentity.name}</Text>
-                )}
+                <View style={{ marginBottom: 2 }}>
+                  <RecipientTrust address={recipient} identity={recipientIdentity} prominent />
+                </View>
                 <Text style={styles.transferAddr}>{shortAddr(recipient)}</Text>
                 {(recipientRisk?.firstInteraction || recipientRisk?.isContract === true) && (
                   <View style={styles.riskTagRow}>
@@ -1452,9 +1488,6 @@ export default function SendScreen() {
                     )}
                   </View>
                 )}
-                <View style={{ marginTop: space.sm }}>
-                  <KnownContactBadge address={recipient} compact />
-                </View>
               </View>
             ) : (
               <View style={styles.transferEndpoint}>
@@ -1468,7 +1501,7 @@ export default function SendScreen() {
                     <View key={r.id} style={styles.confirmRecipientRow}>
                       <View style={styles.confirmRecipientLeft}>
                         <Text style={styles.transferAddr}>{shortAddr(r.address)}</Text>
-                        <KnownContactBadge address={r.address} compact />
+                        <RecipientTrust address={r.address} compact />
                       </View>
                       <View style={styles.confirmRecipientAmt}>
                         <Text style={styles.transferTokenAmount}>{formatBalance(n)} {selectedToken.symbol}</Text>
@@ -1700,6 +1733,7 @@ export default function SendScreen() {
           symbol={selectedToken.symbol}
           chainId={tokenChainId(selectedToken)}
           txHash={txHash ?? ''}
+          userOpHash={userOpHash ?? undefined}
           logoUrls={tokenLogoURLs(selectedToken)}
           usdValue={parseFloat(resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate)) * (selectedToken.priceUsd ?? 0)}
           rate={dc.rate}
@@ -1707,8 +1741,11 @@ export default function SendScreen() {
           currencySymbol={dc.symbol}
           timestamp={new Date()}
           recipientIdentity={recipientIdentity}
+          transfers={receiptTransfers ?? undefined}
+          batchKind={receiptKind ?? undefined}
+          status={receiptFailed ? 'failed' : (txHash ? 'confirmed' : 'submitted')}
           onDone={() => router.back()}
-          onSaveContact={() => saveContact({ address: recipient, name: recipientIdentity?.name, resolvedName: recipientIdentity?.name })}
+          onSaveContact={receiptKind === 'split' ? undefined : () => saveContact({ address: recipient, name: recipientIdentity?.name, resolvedName: recipientIdentity?.name })}
         />
       ) : (
         <>
@@ -2115,26 +2152,6 @@ const styles = createStyles(() => ({
     gap: space.lg,
     paddingRight: space.lg,
   },
-  // Recipient identity
-  identityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: space.lg,
-    paddingVertical: space.sm,
-    marginBottom: space.xs,
-  },
-  identityName: {
-    fontSize: text.sm,
-    ...inter.semibold,
-    color: color.accent.base,
-  },
-  identitySource: {
-    fontSize: text.xs,
-    ...inter.medium,
-    color: color.fg.subtle,
-  },
-
   // Recent contacts
   contactsCard: {
     marginBottom: space.lg,

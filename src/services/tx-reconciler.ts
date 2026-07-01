@@ -38,6 +38,33 @@ interface UserOpReceipt {
   receipt?: { transactionHash?: string };
 }
 
+export interface UserOpResolution {
+  confirmed: boolean;
+  failed: boolean;
+  txHash?: string;
+}
+
+/**
+ * Poll the bundler once for a single UserOp's definitive receipt. Returns null
+ * when there's no definitive answer yet (not landed / transient error) so the
+ * caller can retry; never throws. Pure read — the caller decides what to persist.
+ * Used by the detail sheet to live-update a still-pending transaction the user is
+ * looking at, without waiting for the next Home-focus reconcile sweep.
+ */
+export async function pollUserOpReceipt(userOpHash: string, chainId: number): Promise<UserOpResolution | null> {
+  if (!userOpHash) return null;
+  try {
+    const res = await rpcCall('eth_getUserOperationReceipt', [userOpHash], chainId);
+    if (res.error || !res.result) return null;
+    const r = res.result as UserOpReceipt;
+    const txHash = r.receipt?.transactionHash;
+    if (!txHash) return null;
+    return { confirmed: r.success !== false, failed: r.success === false, txHash };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Re-poll the bundler for any still-pending UserOp submissions belonging to
  * `address` and converge their stored status. Returns the number resolved

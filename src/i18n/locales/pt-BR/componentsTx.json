@@ -18,7 +18,13 @@
       "done": "Concluído",
       "copiedTitle": "Copiado",
       "copiedImageBody": "Imagem do comprovante copiada para a área de transferência.",
-      "copiedLinkBody": "Link do explorer copiado."
+      "copiedLinkBody": "Link do explorer copiado.",
+      "recipientsCount": "{{n}} destinatários",
+      "assetsCount": "{{n}} ativos",
+      "statusConfirmed": "Confirmado",
+      "statusSubmitted": "Enviado",
+      "statusFailed": "Falhou",
+      "failedHint": "Esta transação falhou ao confirmar na rede."
     },
     "detail": {
       "received": "Recebido",
@@ -39,7 +45,8 @@
       "opContractInteraction": "Interação com contrato",
       "opSignature": "Assinatura",
       "opTypedDataSignature": "Assinatura de dados tipados",
-      "opTransfer": "Transferência"
+      "opTransfer": "Transferência",
+      "breakdownTitle": "Detalhamento"
     }
   }
 }

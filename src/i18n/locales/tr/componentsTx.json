@@ -18,7 +18,13 @@
       "done": "Tamam",
       "copiedTitle": "Kopyalandı",
       "copiedImageBody": "Makbuz görseli panoya kopyalandı.",
-      "copiedLinkBody": "Blok Gezgini linki kopyalandı."
+      "copiedLinkBody": "Blok Gezgini linki kopyalandı.",
+      "recipientsCount": "{{n}} alıcı",
+      "assetsCount": "{{n}} varlık",
+      "statusConfirmed": "Onaylandı",
+      "statusSubmitted": "Gönderildi",
+      "statusFailed": "Başarısız",
+      "failedHint": "Bu işlem zincirde tamamlanamadı."
     },
     "detail": {
       "received": "Alındı",
@@ -39,7 +45,8 @@
       "opContractInteraction": "Sözleşme etkileşimi",
       "opSignature": "İmza",
       "opTypedDataSignature": "Yapılandırılmış Veri İmzası",
-      "opTransfer": "Transfer"
+      "opTransfer": "Transfer",
+      "breakdownTitle": "Döküm"
     }
   }
 }

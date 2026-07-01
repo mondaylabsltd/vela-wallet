@@ -95,6 +95,7 @@
     "signatureRequest": "İmza isteği",
     "typedDataSignature": "Yapılandırılmış Veri İmzası",
     "dappTransaction": "dApp işlemi",
-    "activity": "Etkinlik"
+    "activity": "Etkinlik",
+    "delete": "Sil"
   }
 }

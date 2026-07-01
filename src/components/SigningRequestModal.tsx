@@ -47,7 +47,7 @@ import { fetchChainlinkPrices, resolveChainlinkPrice } from '@/services/price-se
 import { formatTokenAmount as formatRawTokenAmount } from '@/services/approval-guard';
 import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
 import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
-import { KnownContactBadge } from '@/components/contacts/KnownContactBadge';
+import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { ChainLogo } from '@/components/ChainLogo';
 import { TokenLogo } from '@/components/TokenLogo';
 import {
@@ -1619,7 +1619,7 @@ function ContractBar({ label, name, address, verified, warning, riskCheck }: {
             <Text style={styles.riskTag}>{t('componentsUi.signing.contractTag')}</Text>
           )}
         </View>
-        <KnownContactBadge address={address} compact />
+        <RecipientTrust address={address} compact />
       </View>
       {address && (
         <Pressable onPress={handleCopy} hitSlop={8} style={[styles.copyBtn, copied && styles.copyBtnDone]}>

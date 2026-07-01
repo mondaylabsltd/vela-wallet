@@ -1,13 +1,16 @@
 /**
  * ContactsManager — the address-book management sheet (opened from Settings).
  *
- * Two views in one modal: a searchable list, and an add/edit form. Saved and
- * recent contacts share the list; favouriting is one tap; editing/deleting lives
- * in the form. Manual adds resolve an identity name (ENS/Basename/passkey) as you
- * type a valid address, so a contact rarely needs a hand-typed name.
+ * Two views in one modal: a searchable list, and an add/edit form. The list is
+ * calm by default — search is tucked behind a header icon, and a segmented
+ * [All | Favorites] filter (with counts) sits above the rows so the book never
+ * reads as one flat noisy wall. Favouriting is one tap; editing/deleting lives
+ * in the form. Manual adds resolve an identity name (ENS/Basename/passkey) as
+ * you type a valid address, so a contact rarely needs a hand-typed name.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { Search, X, Star, Plus, Trash2, ChevronLeft } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
@@ -16,18 +19,22 @@ import { VelaButton } from '@/components/ui/VelaButton';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import { shortAddr, isAddress } from '@/models/types';
 import { showAlert, hapticLight, hapticSuccess } from '@/services/platform';
+import { fadeIn } from '@/constants/entering';
 import {
   getAllContacts, sortContacts, matchesQuery, contactDisplayName,
   saveContact, deleteContact, toggleFavorite, enrichContactIdentity,
   type Contact,
 } from '@/services/contacts';
-import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 
+type Filter = 'all' | 'starred';
 
 export function ContactsManager({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const [contacts, setContacts] = useState<Contact[] | null>(null);
   const [query, setQuery] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [filter, setFilter] = useState<Filter>('all');
   const [view, setView] = useState<'list' | 'form'>('list');
   const [editing, setEditing] = useState<Contact | null>(null);
 
@@ -39,16 +46,27 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
     if (!visible) return;
     setView('list');
     setQuery('');
+    setSearching(false);
+    setFilter('all');
     reload();
   }, [visible, reload]);
 
-  const filtered = useMemo(
+  const favorites = useMemo(() => (contacts ?? []).filter((c) => c.favorite), [contacts]);
+  const others = useMemo(() => (contacts ?? []).filter((c) => !c.favorite), [contacts]);
+  const searchResults = useMemo(
     () => (contacts ?? []).filter((c) => matchesQuery(c, query)),
     [contacts, query],
   );
 
+  const total = contacts?.length ?? 0;
+  // The filter only earns its place once there's something to separate.
+  const showSegment = !searching && total > 0 && favorites.length > 0;
+
   const openAdd = () => { setEditing(null); setView('form'); };
   const openEdit = (c: Contact) => { setEditing(c); setView('form'); };
+
+  const openSearch = () => { hapticLight(); setSearching(true); };
+  const closeSearch = () => { hapticLight(); setQuery(''); setSearching(false); };
 
   const onToggleFav = async (c: Contact) => {
     hapticLight();
@@ -68,68 +86,107 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
     ]);
   };
 
+  const setFilterTo = (f: Filter) => { if (f !== filter) { hapticLight(); setFilter(f); } };
+
   return (
     <AppModal visible={visible} onClose={onClose}>
       <View style={styles.container}>
         {view === 'list' ? (
           <>
-            <View style={styles.header}>
-              <Text style={styles.title}>{t('contacts.title')}</Text>
-              <View style={styles.headerActions}>
-                <Pressable onPress={openAdd} hitSlop={8} style={styles.addBtn}>
-                  <Plus size={18} color={color.accent.base} strokeWidth={2.5} />
+            {searching ? (
+              <Animated.View style={styles.searchHeader} entering={fadeIn(0, 160)}>
+                <Search size={16} color={color.fg.subtle} strokeWidth={2} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder={t('contacts.searchPlaceholder')}
+                  placeholderTextColor={color.fg.subtle}
+                  value={query}
+                  onChangeText={setQuery}
+                  autoFocus
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="search"
+                />
+                <Pressable onPress={closeSearch} hitSlop={8} style={styles.searchClose}>
+                  <X size={18} color={color.fg.muted} strokeWidth={2} />
                 </Pressable>
-                <Pressable onPress={onClose} hitSlop={8}>
-                  <X size={22} color={color.fg.base} strokeWidth={2} />
-                </Pressable>
+              </Animated.View>
+            ) : (
+              <View style={styles.header}>
+                <Text style={styles.title}>{t('contacts.title')}</Text>
+                <View style={styles.headerActions}>
+                  <Pressable onPress={openSearch} hitSlop={8} style={styles.iconBtn}>
+                    <Search size={20} color={color.fg.muted} strokeWidth={2} />
+                  </Pressable>
+                  <Pressable onPress={openAdd} hitSlop={8} style={styles.addBtn}>
+                    <Plus size={18} color={color.accent.base} strokeWidth={2.5} />
+                  </Pressable>
+                  <Pressable onPress={onClose} hitSlop={8} style={styles.iconBtn}>
+                    <X size={22} color={color.fg.base} strokeWidth={2} />
+                  </Pressable>
+                </View>
               </View>
-            </View>
+            )}
 
-            <View style={styles.searchWrap}>
-              <Search size={16} color={color.fg.subtle} strokeWidth={2} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder={t('contacts.searchPlaceholder')}
-                placeholderTextColor={color.fg.subtle}
-                value={query}
-                onChangeText={setQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
+            {showSegment && (
+              <View style={styles.segmentRow}>
+                <Segment
+                  label={t('contacts.filterAll')}
+                  count={total}
+                  active={filter === 'all'}
+                  onPress={() => setFilterTo('all')}
+                />
+                <Segment
+                  label={t('contacts.sectionFavorites')}
+                  count={favorites.length}
+                  active={filter === 'starred'}
+                  onPress={() => setFilterTo('starred')}
+                  starred
+                />
+              </View>
+            )}
 
             <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               {contacts === null ? (
                 <View style={styles.loading}><ActivityIndicator size="small" color={color.fg.muted} /></View>
-              ) : filtered.length === 0 ? (
+              ) : searching ? (
+                searchResults.length === 0 ? (
+                  <View style={styles.empty}>
+                    <Text style={styles.emptyTitle}>
+                      {query ? t('contacts.noResults', { query }) : t('contacts.empty')}
+                    </Text>
+                  </View>
+                ) : (
+                  searchResults.map((c) => (
+                    <ContactRow key={c.address} c={c} onOpen={openEdit} onToggleFav={onToggleFav} />
+                  ))
+                )
+              ) : total === 0 ? (
                 <View style={styles.empty}>
-                  <Text style={styles.emptyTitle}>{query ? t('contacts.noResults', { query }) : t('contacts.empty')}</Text>
-                  {!query && <Text style={styles.emptyHint}>{t('contacts.emptyHint')}</Text>}
+                  <Text style={styles.emptyTitle}>{t('contacts.empty')}</Text>
+                  <Text style={styles.emptyHint}>{t('contacts.emptyHint')}</Text>
                 </View>
+              ) : filter === 'starred' ? (
+                favorites.map((c) => (
+                  <ContactRow key={c.address} c={c} onOpen={openEdit} onToggleFav={onToggleFav} />
+                ))
               ) : (
-                filtered.map((c) => {
-                  const name = contactDisplayName(c);
-                  return (
-                    <Pressable key={c.address} style={styles.row} onPress={() => openEdit(c)}>
-                      <ContactAvatar name={name} address={c.address} kind={c.kind} size={42} />
-                      <View style={styles.rowInfo}>
-                        <Text style={styles.rowName} numberOfLines={1}>{name || shortAddr(c.address)}</Text>
-                        <Text style={styles.rowAddr} numberOfLines={1}>
-                          {name ? shortAddr(c.address) : (c.kind === 'account' ? t('contacts.kindAccount') : ' ')}
-                          {c.source === 'manual' ? `  ·  ${t('contacts.savedTag')}` : ''}
-                        </Text>
-                      </View>
-                      <Pressable hitSlop={10} onPress={() => onToggleFav(c)} style={styles.starBtn}>
-                        <Star
-                          size={18}
-                          color={c.favorite ? color.warning.base : color.fg.subtle}
-                          strokeWidth={2}
-                          fill={c.favorite ? color.warning.base : 'none'}
-                        />
-                      </Pressable>
-                    </Pressable>
-                  );
-                })
+                <>
+                  {favorites.length > 0 && (
+                    <Section title={others.length > 0 ? t('contacts.sectionFavorites') : undefined}>
+                      {favorites.map((c) => (
+                        <ContactRow key={c.address} c={c} onOpen={openEdit} onToggleFav={onToggleFav} />
+                      ))}
+                    </Section>
+                  )}
+                  {others.length > 0 && (
+                    <Section title={favorites.length > 0 ? t('contacts.sectionRecent') : undefined}>
+                      {others.map((c) => (
+                        <ContactRow key={c.address} c={c} onOpen={openEdit} onToggleFav={onToggleFav} />
+                      ))}
+                    </Section>
+                  )}
+                </>
               )}
             </ScrollView>
           </>
@@ -143,6 +200,71 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
         )}
       </View>
     </AppModal>
+  );
+}
+
+function Segment({ label, count, active, onPress, starred }: {
+  label: string;
+  count: number;
+  active: boolean;
+  onPress: () => void;
+  starred?: boolean;
+}) {
+  return (
+    <Pressable style={[styles.segment, active && styles.segmentActive]} onPress={onPress}>
+      {starred && (
+        <Star
+          size={13}
+          color={active ? color.warning.base : color.fg.subtle}
+          strokeWidth={2}
+          fill={active ? color.warning.base : 'none'}
+        />
+      )}
+      <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={[styles.segmentCount, active && styles.segmentCountActive]}>{count}</Text>
+    </Pressable>
+  );
+}
+
+function Section({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <View style={styles.section}>
+      {title && <Text style={styles.sectionTitle}>{title}</Text>}
+      {children}
+    </View>
+  );
+}
+
+function ContactRow({ c, onOpen, onToggleFav }: {
+  c: Contact;
+  onOpen: (c: Contact) => void;
+  onToggleFav: (c: Contact) => void;
+}) {
+  const { t } = useTranslation();
+  const name = contactDisplayName(c);
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      onPress={() => onOpen(c)}
+    >
+      <ContactAvatar name={name} address={c.address} kind={c.kind} size={42} />
+      <View style={styles.rowInfo}>
+        <Text style={styles.rowName} numberOfLines={1}>{name || shortAddr(c.address)}</Text>
+        <Text style={styles.rowAddr} numberOfLines={1}>
+          {name ? shortAddr(c.address) : (c.kind === 'account' ? t('contacts.kindAccount') : shortAddr(c.address))}
+        </Text>
+      </View>
+      <Pressable hitSlop={10} onPress={() => onToggleFav(c)} style={styles.starBtn}>
+        <Star
+          size={18}
+          color={c.favorite ? color.warning.base : color.fg.subtle}
+          strokeWidth={2}
+          fill={c.favorite ? color.warning.base : 'none'}
+        />
+      </Pressable>
+    </Pressable>
   );
 }
 
@@ -241,28 +363,55 @@ const styles = createStyles(() => ({
   container: { paddingHorizontal: space['2xl'], paddingTop: space.lg, flex: 1 },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    marginBottom: space.xl,
+    marginBottom: space.xl, minHeight: 40,
   },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: space.xl },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   title: { fontSize: text['2xl'], ...inter.bold, color: color.fg.base },
+  iconBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   addBtn: {
     width: 32, height: 32, borderRadius: radius.lg, backgroundColor: color.accent.soft,
     alignItems: 'center', justifyContent: 'center',
   },
   backBtn: { width: 32, height: 32, justifyContent: 'center' },
 
-  searchWrap: {
+  // Search — revealed from the header icon, replaces the title row.
+  searchHeader: {
     flexDirection: 'row', alignItems: 'center', gap: space.md,
     backgroundColor: color.bg.sunken, borderRadius: radius.xl,
-    paddingHorizontal: space.xl, paddingVertical: space.lg, marginBottom: space.lg,
+    paddingHorizontal: space.xl, paddingVertical: space.lg,
+    marginBottom: space.xl, minHeight: 40,
   },
   searchInput: { flex: 1, fontSize: text.lg, ...inter.regular, color: color.fg.base, padding: 0 },
+  searchClose: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+
+  // Segmented [All | Favorites] filter with counts.
+  segmentRow: {
+    flexDirection: 'row', gap: space.xs,
+    backgroundColor: color.bg.sunken, borderRadius: radius.xl,
+    padding: 3, marginBottom: space.lg,
+  },
+  segment: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: space.sm, paddingVertical: space.md, borderRadius: radius.lg,
+  },
+  segmentActive: { backgroundColor: color.bg.raised, ...shadow.sm },
+  segmentLabel: { fontSize: text.base, ...inter.semibold, color: color.fg.muted },
+  segmentLabelActive: { color: color.fg.base },
+  segmentCount: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
+  segmentCountActive: { color: color.fg.muted },
 
   scroll: { flex: 1 },
+  section: { marginBottom: space.lg },
+  sectionTitle: {
+    fontSize: 10, ...inter.semibold, color: color.fg.subtle,
+    textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: space.sm, marginLeft: space.sm,
+  },
+
   row: {
     flexDirection: 'row', alignItems: 'center', gap: space.lg,
-    paddingVertical: space.md, paddingHorizontal: space.sm,
+    paddingVertical: space.lg, paddingHorizontal: space.sm, borderRadius: radius.lg,
   },
+  rowPressed: { backgroundColor: color.bg.sunken },
   rowInfo: { flex: 1, gap: 2 },
   rowName: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
   rowAddr: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.muted },

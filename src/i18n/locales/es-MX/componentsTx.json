@@ -18,7 +18,13 @@
       "done": "Listo",
       "copiedTitle": "Copiado",
       "copiedImageBody": "Imagen del comprobante copiada al portapapeles.",
-      "copiedLinkBody": "Enlace del explorador copiado."
+      "copiedLinkBody": "Enlace del explorador copiado.",
+      "recipientsCount": "{{n}} destinatarios",
+      "assetsCount": "{{n}} activos",
+      "statusConfirmed": "Confirmado",
+      "statusSubmitted": "Enviado",
+      "statusFailed": "Fallido",
+      "failedHint": "Esta transacción no se completó en la red."
     },
     "detail": {
       "received": "Recibido",
@@ -39,7 +45,8 @@
       "opContractInteraction": "Interacción con contrato",
       "opSignature": "Firma",
       "opTypedDataSignature": "Firma de datos estructurados",
-      "opTransfer": "Transferencia"
+      "opTransfer": "Transferencia",
+      "breakdownTitle": "Desglose"
     }
   }
 }

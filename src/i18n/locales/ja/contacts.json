@@ -4,6 +4,7 @@
     "manageSubtitle": "保存済みアドレスと最近の送付先",
     "pickerTitle": "送付先を選択",
     "searchPlaceholder": "名前またはアドレスで検索",
+    "filterAll": "すべて",
     "sectionFavorites": "お気に入り",
     "sectionRecent": "最近",
     "sectionSaved": "保存済み",

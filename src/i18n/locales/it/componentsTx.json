@@ -18,7 +18,13 @@
       "done": "Fatto",
       "copiedTitle": "Copiato",
       "copiedImageBody": "Immagine della ricevuta copiata negli appunti.",
-      "copiedLinkBody": "Link all'explorer copiato."
+      "copiedLinkBody": "Link all'explorer copiato.",
+      "recipientsCount": "{{n}} destinatari",
+      "assetsCount": "{{n}} asset",
+      "statusConfirmed": "Confermato",
+      "statusSubmitted": "Inviato",
+      "statusFailed": "Fallito",
+      "failedHint": "Questa transazione non è andata a buon fine on-chain."
     },
     "detail": {
       "received": "Ricevuto",
@@ -39,7 +45,8 @@
       "opContractInteraction": "Interazione con il contratto",
       "opSignature": "Firma",
       "opTypedDataSignature": "Firma di dati tipizzati",
-      "opTransfer": "Trasferimento"
+      "opTransfer": "Trasferimento",
+      "breakdownTitle": "Dettaglio"
     }
   }
 }

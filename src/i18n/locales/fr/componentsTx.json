@@ -18,7 +18,13 @@
       "done": "Terminé",
       "copiedTitle": "Copié",
       "copiedImageBody": "Image du reçu copiée dans le presse-papiers.",
-      "copiedLinkBody": "Lien de l'explorateur copié."
+      "copiedLinkBody": "Lien de l'explorateur copié.",
+      "recipientsCount": "{{n}} destinataires",
+      "assetsCount": "{{n}} actifs",
+      "statusConfirmed": "Confirmé",
+      "statusSubmitted": "Soumis",
+      "statusFailed": "Échoué",
+      "failedHint": "Cette transaction a échoué sur la blockchain."
     },
     "detail": {
       "received": "Reçu",
@@ -39,7 +45,8 @@
       "opContractInteraction": "Interaction avec un contrat",
       "opSignature": "Signature",
       "opTypedDataSignature": "Signature de données typées",
-      "opTransfer": "Transfert"
+      "opTransfer": "Transfert",
+      "breakdownTitle": "Détail"
     }
   }
 }

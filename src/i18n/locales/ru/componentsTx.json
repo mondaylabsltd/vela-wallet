@@ -18,7 +18,13 @@
       "done": "Готово",
       "copiedTitle": "Скопировано",
       "copiedImageBody": "Изображение квитанции скопировано в буфер обмена.",
-      "copiedLinkBody": "Ссылка на обозреватель скопирована."
+      "copiedLinkBody": "Ссылка на обозреватель скопирована.",
+      "recipientsCount": "{{n}} получателей",
+      "assetsCount": "{{n}} активов",
+      "statusConfirmed": "Подтверждено",
+      "statusSubmitted": "Отправлено",
+      "statusFailed": "Ошибка",
+      "failedHint": "Транзакция не прошла в сети."
     },
     "detail": {
       "received": "Получено",
@@ -39,7 +45,8 @@
       "opContractInteraction": "Взаимодействие с контрактом",
       "opSignature": "Подпись",
       "opTypedDataSignature": "Подпись типизированных данных",
-      "opTransfer": "Перевод"
+      "opTransfer": "Перевод",
+      "breakdownTitle": "Разбивка"
     }
   }
 }

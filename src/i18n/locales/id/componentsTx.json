@@ -18,7 +18,13 @@
       "done": "Selesai",
       "copiedTitle": "Disalin",
       "copiedImageBody": "Gambar bukti transaksi disalin ke clipboard.",
-      "copiedLinkBody": "Tautan explorer disalin."
+      "copiedLinkBody": "Tautan explorer disalin.",
+      "recipientsCount": "{{n}} penerima",
+      "assetsCount": "{{n}} aset",
+      "statusConfirmed": "Dikonfirmasi",
+      "statusSubmitted": "Terkirim",
+      "statusFailed": "Gagal",
+      "failedHint": "Transaksi ini gagal diselesaikan on-chain."
     },
     "detail": {
       "received": "Diterima",
@@ -39,7 +45,8 @@
       "opContractInteraction": "Interaksi kontrak",
       "opSignature": "Tanda tangan",
       "opTypedDataSignature": "Tanda tangan typed data",
-      "opTransfer": "Transfer"
+      "opTransfer": "Transfer",
+      "breakdownTitle": "Rincian"
     }
   }
 }
