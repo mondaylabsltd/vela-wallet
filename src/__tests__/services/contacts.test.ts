@@ -16,6 +16,8 @@ import { poolRpcCall } from '@/services/rpc-pool';
 import {
   saveContact, deleteContact, toggleFavorite, getSavedContacts, getAllContacts,
   isSavedContact, sortContacts, matchesQuery, classifyContact, clearContactsCache,
+  getGroups, saveGroup, deleteGroup, setGroupMembers, addToGroup, removeFromGroup,
+  getGroupMembers, getGroupsForAddress,
   type Contact,
 } from '@/services/contacts';
 
@@ -24,6 +26,7 @@ const mockRpc = poolRpcCall as jest.Mock;
 
 const A = '0x' + 'aa'.repeat(20);
 const B = '0x' + 'bb'.repeat(20);
+const C = '0x' + 'cc'.repeat(20);
 const ME = '0x' + '11'.repeat(20);
 
 const sendTx = (to: string, timestamp: number, toName?: string) => ({ type: 'send', to, timestamp, toName, from: ME });
@@ -215,5 +218,94 @@ describe('classifyContact', () => {
     await classifyContact(1, A);
     await classifyContact(1, A);
     expect(mockRpc).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('contact groups', () => {
+  test('create → stable id, normalised members (lowercased, valid, de-duped)', async () => {
+    const g = await saveGroup({ name: 'Payroll', members: [A.toUpperCase(), A, B, '0xnope'] });
+    expect(g.id).toBe('grp_1');
+    expect(g.name).toBe('Payroll');
+    expect(g.members).toEqual([A, B]); // upper-cased dup dropped, invalid dropped
+  });
+
+  test('ids never collide, even across a cold reload', async () => {
+    await saveGroup({ name: 'One' }); // grp_1
+    clearContactsCache();             // storage persists; process counter would reset
+    const two = await saveGroup({ name: 'Two' });
+    expect(two.id).toBe('grp_2');     // derived from the max persisted suffix, not a counter
+  });
+
+  test('update in place: rename + replace members, keep the id', async () => {
+    const g = await saveGroup({ name: 'Team', members: [A] });
+    const up = await saveGroup({ id: g.id, name: 'Team Renamed', members: [B, C] });
+    expect(up.id).toBe(g.id);
+    expect(up.name).toBe('Team Renamed');
+    expect(up.members).toEqual([B, C]);
+    expect(await getGroups()).toHaveLength(1); // still one group
+  });
+
+  test('updating without members leaves membership untouched', async () => {
+    const g = await saveGroup({ name: 'Team', members: [A, B] });
+    await saveGroup({ id: g.id, name: 'Team!' });
+    expect((await getGroups())[0].members).toEqual([A, B]);
+  });
+
+  test('add / remove members are idempotent and de-duping', async () => {
+    const g = await saveGroup({ name: 'Team' });
+    await addToGroup(g.id, A);
+    await addToGroup(g.id, A.toUpperCase()); // no dup
+    await addToGroup(g.id, B);
+    expect((await getGroups())[0].members).toEqual([A, B]);
+    await removeFromGroup(g.id, A);
+    expect((await getGroups())[0].members).toEqual([B]);
+  });
+
+  test('setGroupMembers replaces the whole list (normalised)', async () => {
+    const g = await saveGroup({ name: 'Team', members: [A] });
+    await setGroupMembers(g.id, [C, B, C]);
+    expect((await getGroups())[0].members).toEqual([C, B]);
+  });
+
+  test('deleteGroup removes it but never touches the contacts', async () => {
+    await saveContact({ address: A, name: 'Alice' });
+    const g = await saveGroup({ name: 'Team', members: [A] });
+    await deleteGroup(g.id);
+    expect(await getGroups()).toHaveLength(0);
+    expect(await isSavedContact(A)).toBe(true); // contact survives
+  });
+
+  test('deleting a contact cascades: it is dropped from every group', async () => {
+    await saveContact({ address: A, name: 'Alice' });
+    await saveContact({ address: B, name: 'Bob' });
+    const g1 = await saveGroup({ name: 'Payroll', members: [A, B] });
+    const g2 = await saveGroup({ name: 'Friends', members: [A] });
+    await deleteContact(A);
+    expect((await getGroups()).find((g) => g.id === g1.id)?.members).toEqual([B]);
+    expect((await getGroups()).find((g) => g.id === g2.id)?.members).toEqual([]);
+  });
+
+  test('getGroupMembers resolves saved contacts in order, synthesises unsaved payees', async () => {
+    await saveContact({ address: A, name: 'Alice' });
+    const g = await saveGroup({ name: 'Team', members: [A, B] }); // B not a saved contact
+    const members = await getGroupMembers(g.id);
+    expect(members.map((c) => c.address)).toEqual([A, B]); // order + nothing dropped
+    expect(members[0]).toMatchObject({ name: 'Alice', source: 'manual' });
+    expect(members[1]).toMatchObject({ address: B, source: 'auto' }); // synthesised, not lost
+  });
+
+  test('getGroupsForAddress lists every group an address is in', async () => {
+    const g1 = await saveGroup({ name: 'Payroll', members: [A, B] });
+    const g2 = await saveGroup({ name: 'Friends', members: [A] });
+    expect((await getGroupsForAddress(A.toUpperCase())).sort()).toEqual([g1.id, g2.id].sort());
+    expect(await getGroupsForAddress(C)).toEqual([]);
+  });
+
+  test('groups persist across a cold load', async () => {
+    await saveGroup({ name: 'Payroll', members: [A] });
+    clearContactsCache();
+    const groups = await getGroups();
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ name: 'Payroll', members: [A] });
   });
 });

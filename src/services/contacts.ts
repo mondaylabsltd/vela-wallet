@@ -43,13 +43,30 @@ export interface Contact {
   source: 'manual' | 'auto';
 }
 
+/**
+ * A named set of contacts (e.g. "Payroll") — a first-class registry object rather
+ * than a tag, so it can be empty, renamed, and reordered independently of its
+ * members. `members` are lowercased addresses; a whole group can be picked as the
+ * recipients of a split send (one row per member).
+ */
+export interface ContactGroup {
+  id: string;
+  name: string;
+  /** Optional accent hue for the group chip (a `color.*` token name or hex). */
+  color?: string;
+  /** Lowercased member addresses, in display order. */
+  members: string[];
+}
+
 const KEY = 'vela.contacts';
 const DISMISSED_KEY = 'vela.contacts.dismissed';
+const GROUPS_KEY = 'vela.contactGroups';
 
 let _saved: Contact[] | null = null;
 /** address → ms timestamp it was deleted. A history-derived suggestion is
  *  suppressed unless the user has transacted with it *since* the deletion. */
 let _dismissed: Record<string, number> | null = null;
+let _groups: ContactGroup[] | null = null;
 
 // Serialize read-modify-write mutations of the `_saved` cache. Several callers can
 // fire concurrently — e.g. multiple RecipientTrust rows each resolving an identity
@@ -101,6 +118,50 @@ async function persistDismissed(map: Record<string, number>): Promise<void> {
   } catch {
     /* storage unavailable — keep the in-memory copy for this session */
   }
+}
+
+async function loadGroups(): Promise<ContactGroup[]> {
+  if (_groups) return _groups;
+  try {
+    const raw = await AsyncStorage.getItem(GROUPS_KEY);
+    _groups = raw ? (JSON.parse(raw) as ContactGroup[]) : [];
+  } catch {
+    _groups = [];
+  }
+  return _groups;
+}
+
+async function persistGroups(list: ContactGroup[]): Promise<void> {
+  _groups = list;
+  try {
+    await AsyncStorage.setItem(GROUPS_KEY, JSON.stringify(list));
+  } catch {
+    /* storage unavailable — keep the in-memory copy for this session */
+  }
+}
+
+/** Lowercase, drop invalid, de-dupe (first wins) — the canonical member shape. */
+function normalizeMembers(addrs: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const a of addrs) {
+    if (!isAddress(a)) continue;
+    const low = a.toLowerCase();
+    if (seen.has(low)) continue;
+    seen.add(low);
+    out.push(low);
+  }
+  return out;
+}
+
+/** Next stable, collision-free group id: one past the largest numeric suffix.
+ *  Deterministic (no Date/random), so it survives cold reload and is test-safe. */
+function nextGroupId(list: ContactGroup[]): string {
+  const max = list.reduce((m, g) => {
+    const n = parseInt(g.id.replace(/^grp_/, ''), 10);
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0);
+  return `grp_${max + 1}`;
 }
 
 /** Manually-saved contacts only (no history suggestions). */
@@ -155,6 +216,13 @@ export async function deleteContact(address: string): Promise<void> {
     // history-derived suggestion. Cleared if the user saves it again, or
     // superseded by any later send (see getAllContacts).
     await persistDismissed({ ...(await loadDismissed()), [addr]: Date.now() });
+    // Cascade: drop the address from every group so a member never dangles.
+    const groups = await loadGroups();
+    if (groups.some((g) => g.members.includes(addr))) {
+      await persistGroups(
+        groups.map((g) => (g.members.includes(addr) ? { ...g, members: g.members.filter((m) => m !== addr) } : g)),
+      );
+    }
   });
 }
 
@@ -248,6 +316,105 @@ async function deriveFromHistory(myAddress?: string): Promise<Contact[]> {
   return [...map.values()];
 }
 
+// ── Contact groups ───────────────────────────────────────────────────────────
+
+/** All groups (copies — safe for the caller to mutate). */
+export async function getGroups(): Promise<ContactGroup[]> {
+  return (await loadGroups()).map((g) => ({ ...g, members: [...g.members] }));
+}
+
+export interface SaveGroupInput {
+  /** Omit to create; pass an existing id to update in place. */
+  id?: string;
+  name: string;
+  color?: string;
+  /** When updating, omitting `members` leaves the existing membership untouched. */
+  members?: string[];
+}
+
+/** Create or update a group. New groups get a stable, collision-free id; members
+ *  are normalised (lowercased, valid-only, de-duped). */
+export async function saveGroup(input: SaveGroupInput): Promise<ContactGroup> {
+  return withWriteLock(async () => {
+    const list = await loadGroups();
+    const existing = input.id ? list.find((g) => g.id === input.id) : undefined;
+    if (existing) {
+      const merged: ContactGroup = {
+        ...existing,
+        name: input.name.trim() || existing.name,
+        color: input.color ?? existing.color,
+        members: input.members ? normalizeMembers(input.members) : existing.members,
+      };
+      await persistGroups(list.map((g) => (g.id === existing.id ? merged : g)));
+      return merged;
+    }
+    const group: ContactGroup = {
+      id: input.id ?? nextGroupId(list),
+      name: input.name.trim(),
+      color: input.color,
+      members: normalizeMembers(input.members ?? []),
+    };
+    await persistGroups([...list, group]);
+    return group;
+  });
+}
+
+export async function deleteGroup(id: string): Promise<void> {
+  return withWriteLock(async () => {
+    await persistGroups((await loadGroups()).filter((g) => g.id !== id));
+  });
+}
+
+export async function setGroupMembers(id: string, addrs: string[]): Promise<void> {
+  return withWriteLock(async () => {
+    const members = normalizeMembers(addrs);
+    await persistGroups((await loadGroups()).map((g) => (g.id === id ? { ...g, members } : g)));
+  });
+}
+
+export async function addToGroup(id: string, address: string): Promise<void> {
+  if (!isAddress(address)) return;
+  return withWriteLock(async () => {
+    const addr = address.toLowerCase();
+    await persistGroups(
+      (await loadGroups()).map((g) =>
+        g.id === id && !g.members.includes(addr) ? { ...g, members: [...g.members, addr] } : g,
+      ),
+    );
+  });
+}
+
+export async function removeFromGroup(id: string, address: string): Promise<void> {
+  return withWriteLock(async () => {
+    const addr = address.toLowerCase();
+    await persistGroups(
+      (await loadGroups()).map((g) => (g.id === id ? { ...g, members: g.members.filter((m) => m !== addr) } : g)),
+    );
+  });
+}
+
+/**
+ * Resolve a group's members to contacts, in membership order. A member with a
+ * saved contact carries its name/kind; a member without one (e.g. imported, or a
+ * bare address) is returned as a minimal `auto` contact so send-to-group never
+ * silently drops a payee.
+ */
+export async function getGroupMembers(id: string): Promise<Contact[]> {
+  const group = (await loadGroups()).find((g) => g.id === id);
+  if (!group) return [];
+  const byAddr = new Map((await loadSaved()).map((c) => [c.address, c]));
+  return group.members.map(
+    (addr) =>
+      byAddr.get(addr) ?? { address: addr, kind: 'unknown', txCount: 0, lastUsed: 0, firstSeen: 0, source: 'auto' },
+  );
+}
+
+/** The ids of every group a given address belongs to (for the contact form chips). */
+export async function getGroupsForAddress(address: string): Promise<string[]> {
+  const addr = address.toLowerCase();
+  return (await loadGroups()).filter((g) => g.members.includes(addr)).map((g) => g.id);
+}
+
 /** Best-effort identity name (ENS / Basename / passkey) for auto-naming. */
 export async function enrichContactIdentity(address: string): Promise<{ name?: string; source?: string }> {
   try {
@@ -305,5 +472,6 @@ export function matchesQuery(c: Contact, query: string): boolean {
 export function clearContactsCache(): void {
   _saved = null;
   _dismissed = null;
+  _groups = null;
   kindCache.clear();
 }
