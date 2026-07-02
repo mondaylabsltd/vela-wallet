@@ -1,0 +1,47 @@
+# Minimal CI gate — mirrors the local checks documented in
+# docs/project-takeover/02-local-development.md.
+#
+# Deliberately NOT included:
+#   - Playwright E2E: boots a Metro dev server + fixture relay; run locally via
+#     `npm run test:e2e` (see docs/PARALLEL-SPACE-E2E-PLAYBOOK.md). Promote to CI
+#     once it has a proven-stable record on a runner.
+#   - price-query real-RPC suite: opt-in only (RUN_NETWORK_TESTS=1) — it depends
+#     on third-party public RPC availability, not on our code.
+#   - getvela.app: separate bun/SvelteKit project, checked in its own job below.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npx expo lint -- --max-warnings=10000
+      - name: Unit tests
+        run: npx jest --ci
+      - name: Web production build
+        run: npm run build:web
+
+  site:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: getvela.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Svelte check
+        run: bun run check
