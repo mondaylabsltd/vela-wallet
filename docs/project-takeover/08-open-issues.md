@@ -64,6 +64,10 @@ bundler/wallet/nft/transactions 代理无速率限制(bug-report 有)。**建议
 ### C6. expo 工具链 moderate 漏洞(P3)
 11 个 moderate 全在 @expo/* 家族,随下次 expo SDK 升级消除。基线记录在 04。
 
+### C7. validateCreateClientData 未接线(P2,2026-07-02 训练题库构建时发现)
+`src/services/public-key-upload.ts:36` 导出但生产代码零调用方——设计意图(创建时拒绝 clientDataJSON 字段顺序不兼容的 passkey 提供方)未落地,03 号文档原陈述已修正。若某提供方 create 兼容但签名时字段顺序不合 Safe 合约要求,用户可能在**收款后**才发现无法签名。
+**决策**:接线到创建流程(推荐)或删除并依赖后置门。**验收**:二选一落地 + 单测覆盖不兼容 clientDataJSON 被拒场景。
+
 ## D. 已知行为限制(非缺陷,记录在案)
 
 - passkey 不可导出:恢复 = 平台同步(iCloud/Google)+ p256-index;两者都丢则地址找不回(资金仍在链上,但无签名能力=永久锁定)。**面向用户的恢复说明文档尚未写**(建议列入上架前材料)

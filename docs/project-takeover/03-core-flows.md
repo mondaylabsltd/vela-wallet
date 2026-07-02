@@ -7,7 +7,7 @@
 入口 `/onboarding` → `src/screens/onboarding/CreateWalletScreen.tsx`
 
 1. `Passkey.isSupported()` → `Passkey.register(name)`(`src/modules/passkey/index.ts`,平台分派:iOS ASAuthorization / Android Credential Manager / Web navigator.credentials)
-2. `validateCreateClientData()`(`src/services/public-key-upload.ts:36`)——**在保存任何东西之前**拒绝 clientDataJSON 字段顺序不合 Safe 合约要求的 passkey 提供方
+2. `validateCreateClientData()`(`src/services/public-key-upload.ts:36`)——设计意图是**在保存任何东西之前**拒绝 clientDataJSON 字段顺序不合 Safe 合约要求的 passkey 提供方。**⚠️ 2026-07-02 核实:该函数生产代码零调用方(仅导出),门未接线**——见 08-open-issues C7,决策待定(接线或删除)
 3. 解析 attestation 提取 P-256 公钥 → `computeSafeAddress()` CREATE2 推导(`src/services/safe-address.ts`),Safe 此时**未部署**(counterfactual),首笔交易时通过 initCode 部署
 4. 公钥上传索引服务:3 次重试(1s/2s 退避)→ create→**verify 为准**→失败进 pending 队列,App 启动时 `retryPendingUploads()` 静默重试(幂等,Idempotency-Key = `rpId:credentialId`)
 5. 账户写入 AsyncStorage `vela.accounts`(只有 credentialId/地址/公钥,无私密材料)

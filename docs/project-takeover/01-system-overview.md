@@ -43,7 +43,7 @@ getvela.app/         独立 SvelteKit 子项目:官网 + API 代理(bundler/bug-
                      exchange-rate/nft/og/proxy/transactions/wallet)+ .well-known
 modules/vela-passkey/  原生模块源码(Swift/Kotlin),经 plugins/with-native-modules.js 注入
 modules/vela-cloud-sync/ iOS iCloud KV(未接线,见 08-open-issues)
-android/ ios/        原生工程(已提交,bare-ish workflow)
+android/ ios/        原生工程(**不入库**,.gitignore:42-43 忽略;prebuild 生成物,持久化改动必须走 config plugin,见 plugins/)
 chrome-ext-webauthn-proxy/  独立开发工具(passkey rpId 代理插件),不参与 App 构建
 e2e/                 Playwright 测试
 docs/                设计/需求/测试/上架文档(较全,见各文件)

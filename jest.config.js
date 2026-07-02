@@ -5,6 +5,10 @@ module.exports = {
   roots: ['<rootDir>/src'],
   setupFiles: ['<rootDir>/jest.setup.js'],
   testMatch: ['**/__tests__/**/*.test.ts'],
+  reporters: [
+    'default',
+    '<rootDir>/scripts/jest-skipped-reporter.js',
+  ],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
