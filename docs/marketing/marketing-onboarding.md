@@ -47,6 +47,7 @@
    ② [pricing-analysis.md](pricing-analysis.md) —— 为什么 $39.99、为什么商店不是获客入口
    ③ [why-we-charge.md](why-we-charge.md) —— 品牌声音的标定样本(以后她写的每篇东西,语气向这篇对齐)
    ④ [distribution-plan.md](distribution-plan.md) —— 她未来的作战地图
+   ⑤ [fireworks-vs-engine.md](fireworks-vs-engine.md) —— 烟花与引擎:判断每一份时间投入是"资产还是消息"的底层模型
    辅助:`docs/CONTENT-SOURCE-100-CLUES.md` 是事实库,写任何产品声明前先查它(README 已过期,**不许**从 README 取事实)
 3. **毕业作业:一页纸产品复述**——用她自己的话回答:这是什么/给谁/凭什么信/怎么赚钱/绝不说什么。
 
