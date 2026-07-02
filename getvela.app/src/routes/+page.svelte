@@ -821,7 +821,7 @@
 				Vela is <strong>a passkey wallet you can fully own.</strong> Your passkey stays where your
 				device already protects it — iCloud Keychain or Google Password Manager. When you sign a
 				transaction, Vela sends a challenge to your device; your device signs it and sends back just
-				the signature. The private key never leaves. Most wallets still have a dangerous moment,
+				the signature. Vela never sees the key itself. Most wallets still have a dangerous moment,
 				even if it's brief: words on a screen, a seed phrase in memory, a recovery key sitting in a
 				browser tab. Vela is designed so that moment never exists.
 				<strong
@@ -963,8 +963,7 @@
 				<h3>Sign a transaction</h3>
 				<p>
 					The app builds a transaction and sends a signing challenge to your device. Your device
-					signs it with the passkey and sends back just the signature — the private key never
-					leaves. The signed transaction goes on-chain through an <a
+					signs it with the passkey and sends back just the signature — Vela never sees the key. The signed transaction goes on-chain through an <a
 						href="https://eips.ethereum.org/EIPS/eip-4337"
 						target="_blank"
 						rel="noopener">ERC-4337</a

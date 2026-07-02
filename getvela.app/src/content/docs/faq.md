@@ -8,8 +8,8 @@ description: Common questions about Vela — custody, passkeys, smart accounts, 
 ## Is Vela self-custodial?
 
 Yes. Your wallet is a smart account controlled by a key that only you can use,
-stored in your device's secure hardware. Vela cannot move, freeze, or recover
-your funds.
+held by your device's OS and never seen by Vela. Vela cannot move, freeze, or
+recover your funds.
 
 ## Is my wallet a normal account or a contract?
 
@@ -20,7 +20,8 @@ before approving it, and use the same address on every network. See the
 
 ## Is there really no seed phrase?
 
-Really. Your signing key is a passkey in your device's secure element. There's no
+Really. Your signing key is a passkey held by your device's OS, and Vela never
+sees it. There's no
 twelve-word phrase to write down, lose, or have phished. Read
 [how passkeys work](/docs/passkeys) for why that's safe.
 
