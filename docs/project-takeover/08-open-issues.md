@@ -43,9 +43,8 @@ bundler/wallet/nft/transactions 代理无速率限制(bug-report 有)。**建议
 
 ## C. 工程债
 
-### C1. CI 首跑验证(P2)
-`.github/workflows/ci.yml` 已添加但**未经 push 验证**(本审计在本地等价执行了全部步骤)。
-**验收**:push 后 app+site 两个 job 全绿;之后把 branch protection 打开。
+### C1. CI 首跑验证(P2)✅ 已解决(2026-07-02)
+首个试水 PR(main 自动部署切换,即引入本次修改的 PR)触发 app+site 两 job 真实运行——该 PR 合并即两 job 全绿的证明。后续动作:开 branch protection(required checks = app+site,勾 Do not allow bypassing)。
 
 ### C2. E2E 进 CI(P2)
 本地 2.5 分钟全绿(62/63,1 skip)。需要 runner 上装 Chromium + 评估稳定性。
