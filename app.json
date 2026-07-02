@@ -17,6 +17,7 @@
     },
     "android": {
       "package": "app.getvela.wallet",
+      "allowBackup": false,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#0A1929",
@@ -71,7 +72,8 @@
         }
       ],
       "expo-localization",
-      "./plugins/with-native-modules"
+      "./plugins/with-native-modules",
+      "./plugins/with-release-signing"
     ],
     "experiments": {
       "typedRoutes": true,
