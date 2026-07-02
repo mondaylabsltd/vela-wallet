@@ -125,7 +125,7 @@
 
 **8. 12 条网络，一个地址。** Ethereum、Base、Arbitrum、Optimism、Polygon、BNB、Avalanche、Gnosis、Unichain、Tempo、Monad、World Chain + 自定义网络，地址完全相同（`src/models/chains.ts`）。→ "记一个地址，收所有链。"主打多链用户的便利与心智简化。
 
-**9. 完全免费，没有代币。** "There is nothing to buy, farm, or speculate on."（whitepaper）→ 在充斥 token 套路的赛道里，"无代币"本身是信任信号；强调激励对齐，不会割你。
+**9. 没有代币，Web 版免费。** "There is nothing to buy, farm, or speculate on."（whitepaper）→ 在充斥 token 套路的赛道里，"无代币"本身是信任信号；强调激励对齐，不会割你。⚠️ 商业模型更正（2026-07-02）：Web 免费即用；iOS/Android 商店版为**付费下载**（定价待定）——对外话术不可写 "free app"，可写 "free on web / no token"。
 
 **10. 浏览器即用，无需下载。** 同一套代码跑 iOS / Android / Web，Web 端打开链接就能用。→ 把"试用门槛"降到零，是投放落地页/Product Hunt 的转化利器："Try it now, no install."
 
