@@ -98,7 +98,11 @@ function AppShell() {
               {__DEV__ && <Stack.Screen name="parallel" />}
             </Stack>
             <SigningRequestModal />
-            {__DEV__ && <ParallelSpaceBadge />}
+            {/* Self-gating (renders null unless parallel mode is armed). Must NOT be
+                behind __DEV__: a production build can still enter the parallel space
+                via `dev_unlocked`, and the fixture wallet must never be mistakable
+                for the real one — its keys are public. */}
+            <ParallelSpaceBadge />
           </ThemeProvider>
         </DAppConnectionProvider>
       </WalletProvider>
@@ -130,9 +134,13 @@ export default function RootLayout() {
   useEffect(() => {
     if (__DEV__) { installFaultConsole(); installMetricsConsole(); installParallelConsole(); }
     Promise.all([
-      // Parallel space (dev): re-arm the fixed-key signer before the wallet mounts so
-      // a reload inside the test environment stays in it. No-op in real space / prod.
-      __DEV__ ? applyParallelSpaceOnBoot() : Promise.resolve(),
+      // Parallel space: re-arm the fixed-key signer before the wallet mounts so a
+      // reload inside the test environment stays in it (and keeps the badge on).
+      // Runs in prod too — a production build can be in parallel mode via
+      // `dev_unlocked`, and booting with fixture accounts in storage but no armed
+      // signer/badge would present the fixture wallet as the real one. In real
+      // space this is a single AsyncStorage read.
+      applyParallelSpaceOnBoot(),
       loadTextScale().then(() => rebuildTextScale()),
       loadColorScheme().then(() => {
         const pref = getColorSchemePreference();

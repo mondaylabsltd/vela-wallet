@@ -77,8 +77,8 @@ test.describe('Clear Signing UI', () => {
     const body = await page.textContent('body');
     // Should show intent "Approve"
     expect(body).toMatch(/Approve/i);
-    // Should show unlimited warning
-    expect(body).toMatch(/Unlimited|unlimited/);
+    // Should surface the spending-cap editor (never-unlimited mandate)
+    expect(body).toContain('Spending cap');
 
     await closeModal(page);
   });
@@ -89,8 +89,12 @@ test.describe('Clear Signing UI', () => {
 
     const body = await page.textContent('body');
     expect(body).toMatch(/Approve/i);
-    // Should NOT show unlimited warning
-    expect(body).not.toMatch(/Unlimited/);
+    // Shows the requested finite cap…
+    expect(body).toContain('500 USDC');
+    // …and NOT the unlimited warning. Match the exact warning sentence — the
+    // scenario LIST in the background contains "(Unlimited)" in two row titles,
+    // so a bare /Unlimited/ against the whole body false-fails.
+    expect(body).not.toContain('Unlimited — this contract can spend all your tokens');
 
     await closeModal(page);
   });

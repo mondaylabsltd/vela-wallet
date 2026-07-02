@@ -142,7 +142,13 @@ interface Props {
 // -- Scan line animation (native only) ---------------------------------------
 
 function ScanLine() {
-  if (Platform.OS === 'web') return null;
+  // Platform.OS is constant at runtime, but branching before the hooks still
+  // violates rules-of-hooks — keep the hooks in a component that only ever
+  // renders on native.
+  return Platform.OS === 'web' ? null : <NativeScanLine />;
+}
+
+function NativeScanLine() {
   const translateY = useSharedValue(0);
   useEffect(() => {
     translateY.value = withRepeat(

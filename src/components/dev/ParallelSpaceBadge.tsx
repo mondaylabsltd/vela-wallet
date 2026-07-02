@@ -3,8 +3,9 @@
  *
  * A persistent, unmissable marker shown app-wide whenever the parallel-space test
  * environment is active (fixed passkey, everything else real). It exists so the test
- * space and the real space can never be confused. Dev-only — the root layout renders
- * it behind `__DEV__`, and it returns null unless the parallel mode is on.
+ * space and the real space can never be confused. The root layout renders it
+ * unconditionally (including production builds, which can enter the parallel space
+ * via `dev_unlocked`); it returns null unless the parallel mode is on.
  *
  * Tapping it opens the parallel-space hub (`/parallel`).
  */

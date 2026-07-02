@@ -183,8 +183,11 @@ export async function exitParallelSpace(): Promise<void> {
 }
 
 /**
- * On app boot (dev only): if the parallel flag is set, re-install the fixed-key signer
- * so a reload inside the parallel space stays in it (fixtures are already in storage).
+ * On app boot: if the parallel flag is set, re-install the fixed-key signer so a
+ * reload inside the parallel space stays in it (fixtures are already in storage).
+ * Called unconditionally from the root layout — production builds can be in
+ * parallel mode too (via `dev_unlocked`), and skipping the re-arm there would boot
+ * the fixture wallet unmarked, as if it were the real one. No-op in real space.
  */
 export async function applyParallelSpaceOnBoot(): Promise<void> {
   try {

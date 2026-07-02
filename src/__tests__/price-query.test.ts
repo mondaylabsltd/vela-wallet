@@ -152,7 +152,13 @@ function mc(target: string, callData: string): Call3 {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('Native token price queries (real RPC)', () => {
+// This suite sends real eth_calls to public third-party RPCs, so it can fail on
+// their rate limits / outages — signal about the network, not about our code.
+// It is opt-in so the default `npm test` gate stays deterministic:
+//   RUN_NETWORK_TESTS=1 npx jest price-query --testTimeout=30000
+const describeNetwork = process.env.RUN_NETWORK_TESTS === '1' ? describe : describe.skip;
+
+describeNetwork('Native token price queries (real RPC)', () => {
   for (const chain of CHAINS) {
     describe(`${chain.name} (${chain.chainId})`, () => {
 

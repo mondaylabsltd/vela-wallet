@@ -473,7 +473,7 @@ async function sendUserOp(
   _gasPriceCache.delete(chainId);
   const [deployed, nonceResult, gasPrices] = await Promise.all([
     isDeployed(safeAddress, chainId),
-    getNonce(safeAddress, chainId).catch(() => '0x0'),
+    getNonce(safeAddress, chainId).catch(() => null),
     getGasPrices(chainId),
   ]);
 
@@ -482,8 +482,14 @@ async function sendUserOp(
     ? new Uint8Array(0)
     : buildInitCode(publicKeyHex);
 
-  // Use fetched nonce for deployed wallets, 0 for undeployed
-  const nonce: string = deployed ? nonceResult : '0x0';
+  // Use fetched nonce for deployed wallets, 0 for undeployed. A failed nonce fetch
+  // is only tolerable for an undeployed wallet (its nonce IS 0); for a deployed one,
+  // submitting 0x0 would burn a passkey prompt on an op the bundler must reject
+  // (AA25 invalid nonce) — fail fast with a retryable error before signing instead.
+  if (deployed && nonceResult === null) {
+    throw new Error('Could not fetch the account nonce — the network may be unstable. Please try again.');
+  }
+  const nonce: string = deployed ? (nonceResult as string) : '0x0';
 
   // Price the op. Priority order:
   //  1. Caller-supplied override (the confirm screen's displayed bundler quote).

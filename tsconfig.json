@@ -16,5 +16,15 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  // getvela.app is a separate SvelteKit/Cloudflare project with its own tsconfig
+  // and generated `$types` (typecheck it there with `bun run check`). Including it
+  // here breaks the app's `tsc --noEmit` with 50+ spurious errors. Listing an
+  // explicit `exclude` overrides the default, so node_modules must be re-listed.
+  "exclude": [
+    "node_modules",
+    "getvela.app",
+    "dist",
+    "test-results"
   ]
 }
