@@ -1,13 +1,13 @@
 # 05 — 部署手册 (Deployment Runbook)
 
-> 现状:全手动部署,无 CI/CD 历史(本次接管新增 `.github/workflows/ci.yml` 作为门禁,尚未接部署)。三个可部署单元互相独立。
+> 现状(2026-07-02 起):**Web 钱包 = merge 进 main 自动部署**(CF Pages git-connected,production branch = main;PR 每次 push 自动生成预览 URL)。官网/API 与移动端仍手动。`.github/workflows/ci.yml` 是合并门禁(branch protection 要求 app+site 两 job 绿才能 merge)。三个可部署单元互相独立。
 
 ## 部署单元一览
 
 
 | 单元        | 产物                     | 目标                                 | 命令                                                                 |
 | ------------- | -------------------------- | -------------------------------------- | ---------------------------------------------------------------------- |
-| Web 钱包    | `dist/`(静态)            | Cloudflare Pages(wallet.getvela.app) | `npm run build:web` → CF Pages 上传/`wrangler pages deploy dist`    |
+| Web 钱包    | `dist/`(静态)            | Cloudflare Pages(wallet.getvela.app,git-connected) | merge 进 main → CF Pages 自动执行 `npm run build:web`(本地跑它仅作验证,无手动上传路径) |
 | 官网+API    | `.svelte-kit/cloudflare` | Cloudflare Workers(getvela.app)      | `cd getvela.app && bun run deploy`                                   |
 | iOS App     | .ipa                     | App Store Connect                    | Xcode/`expo run:ios --configuration Release` + 上传                  |
 | Android App | .aab                     | Google Play                          | `cd android && ./gradlew bundleRelease`(需 keystore.properties,见下) |
@@ -28,21 +28,24 @@ cd getvela.app && bun run check   # 0 errors
 
 发布 checklist 附加项:
 
-- [ ]  `git status` 干净、在 main 上(commit hash 由 `app.config.js` 构建时注入——脏工作区构建会给"未提交的代码"打上"最近 commit"的标签,线上无法溯源)
+- [ ]  (手动部署单元:官网/移动端)`git status` 干净、在 main 上——commit hash 由 `app.config.js` 构建时注入,脏工作区构建会给"未提交的代码"打上"最近 commit"的标签。Web 钱包对此已免疫:CF Pages 只从已合并的 main commit 构建
 - [ ]  若改过 bundler 错误文案或 `parseBundlerUnderfunded`:与 vela-bundler 仓库联合验证
 - [ ]  若改过 approval-guard / 签名编码:在 parallel space 手动过一遍 clear-signing 场景页
 - [ ]  若动过依赖:重跑全量 E2E
 
-## Web 钱包发布
+## Web 钱包发布(自动,2026-07-02 起)
 
-1. `npm run build:web`(内含 fix-cf-pages-assets,勿跳过——CF Pages 会丢 `node_modules` 路径资产)
-2. 部署 `dist/` 到 CF Pages
-3. **Smoke Test(生产域)**:
+1. 分支上开发 → PR → CI(app+site)绿 → merge 进 main
+2. CF Pages 自动构建部署:执行 `npm run build:web`(内含 fix-cf-pages-assets,git 构建同样必需——CF Pages 会丢 `node_modules` 路径资产);About 页 commit 由 `CF_PAGES_COMMIT_SHA` 经 `app.config.js` 注入,永远等于所合并的 main commit
+3. 合并前可用 PR 的 CF 预览 URL 做预检(每次 push 自动生成)
+4. **Smoke Test(生产域)**:
    - 打开 wallet.getvela.app → 首屏加载、无控制台报错
    - 已有钱包:余额加载、Receive 显示地址、Activity 渲染
    - passkey 登录弹窗出现(rpId=getvela.app)
    - 确认**没有** PARALLEL SPACE 紫色徽章(若出现=你在 fixture 空间,立即排查)
-4. 回滚:CF Pages 控制台一键回滚到上一个 deployment(静态产物,无状态,秒级)
+   - About 页 commit = 刚合并的 main commit
+5. 回滚:CF Pages 控制台一键回滚到上一个 deployment(静态产物,无状态,秒级)
+6. 故障排查:**CI 绿 ≠ 已发布**——部署由 CF Pages 独立构建,若线上没更新,去 CF Dashboard 看构建日志(Retry deployment);GitHub Actions 里看不到 CF 的失败
 
 ## 官网/API 发布(getvela.app)
 

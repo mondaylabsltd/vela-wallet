@@ -1,6 +1,12 @@
 # Minimal CI gate — mirrors the local checks documented in
 # docs/project-takeover/02-local-development.md.
 #
+# Deployment coupling (since 2026-07-02): merging to main auto-deploys the web
+# wallet via Cloudflare Pages git integration (→ wallet.getvela.app). These two
+# jobs are the merge gate — branch protection requires both green before merge.
+# CF Pages builds independently of this workflow: a CF build failure shows in
+# the CF dashboard, NOT here (CI green ≠ deployed).
+#
 # Deliberately NOT included:
 #   - Playwright E2E: boots a Metro dev server + fixture relay; run locally via
 #     `npm run test:e2e` (see docs/PARALLEL-SPACE-E2E-PLAYBOOK.md). Promote to CI

@@ -1230,7 +1230,7 @@
 **题干**:现在要把 Web 钱包发一版到 wallet.getvela.app。请说出:(a) 完整的构建命令及它内部实际执行了什么;(b) 构建链里那个"修资产"的脚本在防什么事故,跳过它用户会看到什么;(c) About 页显示的 commit hash 是从哪来的、什么时机定下来的,能不能手改;(d) 发出去发现坏了,怎么回滚?
 
 **标准答案要点**:
-1. 构建命令是 npm run build:web,它实际执行 npx expo export --platform web && node ./scripts/fix-cf-pages-assets.js;之后把 dist/ 部署到 Cloudflare Pages(wrangler pages deploy dist 或控制台上传)。
+1. 发布方式(2026-07-02 起)= 分支 → PR → CI 绿 → merge 进 main,CF Pages(git-connected)自动执行 npm run build:web(= npx expo export --platform web && node ./scripts/fix-cf-pages-assets.js)并发布到 wallet.getvela.app;本地跑 build:web 仅作验证,**没有手动上传路径**(deploy:web 后门已删)。
 2. commit hash 在**构建时**由 app.config.js 求值定下:CI 环境优先读 CF_PAGES_COMMIT_SHA/GITHUB_SHA,本地回退 git rev-parse --short HEAD,注入 Expo config 的 extra.gitCommit;运行时 src/constants/build-info.ts 从 expo-constants 读出。没有可手改的地方——想改只能改 HEAD 本身,所以**脏工作区构建=未提交代码顶着最近 commit 的名义上线**(bug-report 的 environment 行依赖它标注版本)。〔2026-07-02 前为 prebuild 钩子生成文件的旧机制,已重构,git history 可查〕
 3. fix-cf-pages-assets.js 防的是:CF Pages 在 wrangler pages deploy 时会丢弃任何名为 node_modules 的目录,而 expo 把 Plus Jakarta 字体输出在 dist/assets/node_modules/ 下;跳过则字体请求回落到 index.html,浏览器报 OTS parsing error,useFonts() 永久挂起,应用白屏转圈。
 4. 该脚本把 assets/node_modules 移到 assets/vendor 并重写 .js/.html/.css/.json 中的所有引用,最后自检仍有残留引用就 exit 1 使构建失败——所以它是构建必经步骤不是可选优化。
@@ -1238,7 +1238,7 @@
 6. 回滚:CF Pages 控制台一键回滚到上一个 deployment,静态产物无状态,秒级完成;这与 getvela.app Worker 的回滚(wrangler rollback)是两个不同的部署单元。
 
 **代码证据**:
-- `package.json` scripts — build:web = expo export + fix-cf-pages-assets.js;deploy:web = wrangler pages deploy dist
+- `package.json` scripts — build:web = expo export + fix-cf-pages-assets.js(即 CF Pages 的构建命令;deploy:web 直传后门已于 2026-07-02 删除)
 - `app.config.js` — resolveGitCommit():CF_PAGES_COMMIT_SHA/GITHUB_SHA 优先,回退 git rev-parse,注入 extra.gitCommit
 - `src/constants/build-info.ts` — 静态源码:从 expo-constants 读 version + extra.gitCommit
 - `scripts/fix-cf-pages-assets.js:3-13` — 头注释:CF Pages 丢 node_modules 目录 → 字体变 HTML → OTS parsing error → useFonts 挂起
@@ -1247,7 +1247,7 @@
 
 **常见错误**:
 - 【受训者原错】完全说不出命令,只能说"AI 之前都是自动弄的"。
-- 以为 git push 到 main 就自动部署了(本项目 CI 只是门禁,部署全手动,ci.yml 头注释和 05 手册都写明)。
+- 〔2026-07-02 前的旧错,方向已反转〕以为 push 到 main 就自动部署——当时部署全手动;现在 merge 进 main **确实**自动发布,新的易错点变成:想找手动部署命令(已不存在),或以为 CI 绿=已发布(CF 构建独立于 GHA,失败只在 CF Dashboard 可见)。
 - 把 fix-cf-pages-assets 当成可跳过的优化脚本,不知道跳过=生产白屏。
 - 以为 build-info.ts 里存着 hash、发版前去手改它(现在文件里根本没有 hash,值在构建时注入)。
 - 意识不到脏工作区构建会让线上产物无法溯源到确切代码。
@@ -1265,39 +1265,39 @@
 
 **考察目标**:确认知道仓库存在 CI、其两个 job 各查什么、哪些检查被故意排除及理由、以及"CI 从未被 push 验证过"这一未决状态(直接针对基线错误:不知道仓库有 CI)。
 
-**题干**:这个仓库有没有 CI?如果有:什么事件触发、有几个 job、每个 job 按顺序跑哪些检查?有哪两类测试被故意排除在 CI 外,理由分别是什么?这套 CI 现在最大的"未知数"是什么,验收标准是什么?
+**题干**:这个仓库有没有 CI?如果有:什么事件触发、有几个 job、每个 job 按顺序跑哪些检查?有哪两类测试被故意排除在 CI 外,理由分别是什么?这套 CI 与生产部署是什么关系——它曾有过一个最大"未知数",是什么、怎么被消除的?
 
 **标准答案要点**:
-1. 有:.github/workflows/ci.yml,push 到 main 和所有 pull_request 触发;是本次接管新增的门禁,不做任何部署。
+1. 有:.github/workflows/ci.yml,push 到 main 和所有 pull_request 触发;它是**合并门禁**——branch protection 要求两 job 绿才能 merge 进 main;merge 后由 CF Pages git integration 自动部署 Web 钱包。**部署不在 GHA 里**:CF 独立构建,CI 绿 ≠ 已发布,CF 构建失败只在 CF Dashboard 可见。
 2. app job(Node 22 + npm ci):npx tsc --noEmit → npx expo lint(--max-warnings=10000)→ npx jest --ci → npm run build:web 四道关。
 3. site job:working-directory 为 getvela.app,bun install --frozen-lockfile → bun run check(svelte-check),因为官网是独立的 bun/SvelteKit 项目。
 4. 故意排除一:Playwright E2E——需要起 Metro dev server + fixture relay,等 runner 上有稳定记录再提升进 CI(本地 npm run test:e2e 跑)。
 5. 故意排除二:price-query 真实 RPC 套件——RUN_NETWORK_TESTS=1 手动开启,因为它依赖第三方公共 RPC 可用性而非我们的代码。
-6. 最大未知数是 08 号未决事项 C1:ci.yml 已提交但从未经真实 push 验证(审计只在本地等价执行了全部步骤);验收=push 后 app+site 两个 job 全绿,之后才开 branch protection。
+6. 曾经的最大未知数(08 号 C1):ci.yml 提交后长期未经真实 push 验证(审计只在本地等价执行了全部步骤);2026-07-02 由"main 自动部署切换"的试水 PR 消除——两 job 真实全绿之后才开 branch protection,顺序不能反(否则可能把自己锁死在坏配置上)。
 
 **代码证据**:
 - `.github/workflows/ci.yml:13-16` — 触发条件:push main + pull_request
 - `.github/workflows/ci.yml:27-35` — app job 四步:npm ci、tsc --noEmit、expo lint、jest --ci、build:web
 - `.github/workflows/ci.yml:37-47` — site job:getvela.app 目录下 bun install --frozen-lockfile + bun run check
 - `.github/workflows/ci.yml:4-10` — 头注释明确列出 deliberately NOT included:Playwright E2E、price-query 真实 RPC 套件及各自理由
-- `docs/project-takeover/08-open-issues.md:46-48` — C1:CI 未经 push 验证,验收=两 job 全绿后开 branch protection
-- `docs/project-takeover/08-open-issues.md:50-52` — C2:E2E 进 CI 的条件是连续 10 次无 flake
-- `docs/project-takeover/05-deployment-runbook.md:3` — 全手动部署,CI 仅门禁不接部署
+- `docs/project-takeover/08-open-issues.md` C1(✅ 已解决)— CI 首跑由试水 PR 验证,之后才开 branch protection
+- `docs/project-takeover/08-open-issues.md` C2 — E2E 进 CI 的条件是连续 10 次无 flake
+- `docs/project-takeover/05-deployment-runbook.md:3` — Web=merge 进 main 自动部署(CF Pages git-connected),CI 为合并门禁
 
 **常见错误**:
 - 【受训者原错】"这个仓库没有 CI"(ci.yml 就在 .github/workflows/ 且是最近的提交之一)。
-- 以为 CI 绿了就等于自动发布了新版本(它不部署任何东西)。
+- 把"PR 上 CI 绿"当成"已发布"——发布发生在 merge 之后,执行者是 CF Pages 的独立构建;CI 绿但 CF 构建失败时线上不会更新(要看 CF Dashboard)。
 - 以为 E2E 在 CI 里跑,坏了 CI 会拦住(实际 E2E 只在本地)。
-- 不知道 CI 本身从未被验证过,直接开 branch protection 可能把自己锁死在一个坏配置上。
+- 说不出 C1 这段工程史(CI 曾长期未经真实验证)以及"先试水 PR、再开 branch protection"的顺序讲究。
 
 **追问**:
 1. 为什么 lint 步骤要加 --max-warnings=10000 这种看似放水的参数?它实际把关的是什么?(答:把关 errors 而非 warnings。)
 2. 如果明天你 push 后 site job 红了但 app job 绿了,最可能是哪个目录的什么检查挂了?
 3. 把 E2E 提进 CI 之前,08 手册定的量化标准是什么?(答:连续 10 次无 flake。)
 
-**真懂 vs 背诵**:真懂的人能说出"哪些故意不在 CI 里+为什么+C1 未验证"这三层;背诵的人只会背 "有 typecheck lint test build" 四个词。
+**真懂 vs 背诵**:真懂的人能说出"哪些故意不在 CI 里+为什么"以及 CI 与 CF Pages 的分工边界(门禁≠部署);背诵的人只会背 "有 typecheck lint test build" 四个词。
 
-**评分规则**:3 分线=知道 ci.yml 存在、触发条件和两 job 大致内容;5 分线=能完整说出排除项的理由和 C1 未验证状态及其验收标准。
+**评分规则**:3 分线=知道 ci.yml 存在、触发条件和两 job 大致内容;5 分线=额外讲清排除项理由、CI/CF Pages 分工边界、以及 C1 从"从未验证"到被试水 PR 消除的这段工程史。
 
 ### D11-D12-ops-external-Q3 · 难度 3/5
 

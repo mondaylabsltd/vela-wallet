@@ -223,7 +223,10 @@ async function detectTokenStandard(chainId: number, addr: string): Promise<Token
     return 'erc20';
   })();
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Not ReturnType<typeof setTimeout>: on a fresh checkout (CI, no expo-env.d.ts)
+  // the merged DOM/Node setTimeout overloads make ReturnType resolve to `number`
+  // while the call site resolves to NodeJS.Timeout. The union typechecks in both.
+  let timer: NodeJS.Timeout | number | undefined;
   const timeout = new Promise<TokenStandard>((r) => {
     timer = setTimeout(() => r('erc20'), INTERFACE_DETECT_TIMEOUT_MS);
   });
@@ -382,7 +385,7 @@ async function warmTokenDecimals(chainId: number, addrs: string[]): Promise<void
   // still unresolved falls back to 18 decimals + a warning (the safe path), and
   // the in-flight lookups still populate the cache for next time. Clear the timer
   // once the lookups settle so it never dangles past the await.
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: NodeJS.Timeout | number | undefined; // union: see detectTokenStandard's timer note
   try {
     await Promise.race([lookups, new Promise((r) => { timer = setTimeout(r, DECIMALS_WARM_TIMEOUT_MS); })]);
   } finally {
