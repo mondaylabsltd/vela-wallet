@@ -37,7 +37,7 @@ Two things worth knowing:
 Vela doesn't just "broadcast" a transaction. Under the hood:
 
 1. It builds an ERC-4337 **UserOperation** for your Safe account.
-2. Your secure element signs it with a **WebAuthn (P-256)** assertion after your
+2. Your device signs it with a **WebAuthn (P-256)** assertion after your
    biometric check.
 3. The signed operation goes to the **bundler**, which submits it to the
    EntryPoint; your Safe verifies the P-256 signature **on-chain** and executes.

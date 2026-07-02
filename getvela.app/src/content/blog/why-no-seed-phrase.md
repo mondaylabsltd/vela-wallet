@@ -28,15 +28,15 @@ to be password managers.
 
 ## Passkeys instead
 
-A passkey is a public/private key pair created and stored by your device's
-secure hardware — the same Secure Enclave or equivalent that guards Apple Pay and
-your fingerprint. The private key never leaves that hardware. You authorize use
-of it with your face or fingerprint.
+A passkey is a public/private key pair created and protected by your device — the
+same technology that guards Apple Pay and your fingerprint unlock. The crucial
+part: no app, including Vela, ever gets to read the private key. Your device uses
+it to sign only after you authorize with your face or fingerprint.
 
 For Vela, that means:
 
-- There is no secret for you to store, because the secret never exists outside
-  your device's secure element.
+- There is no secret for you to store, because Vela never gives you one to write
+  down — and the key itself never reaches the app.
 - There is nothing to phish. A fake support page cannot ask you to "type your
   passkey" — there's nothing to type.
 - Signing a transaction feels like unlocking your phone, because it is the same

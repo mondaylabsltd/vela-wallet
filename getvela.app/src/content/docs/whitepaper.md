@@ -20,9 +20,9 @@ the open-source code.
 
 Vela is a **self-custodial smart-contract wallet** for EVM networks. Each wallet
 is a [Safe](https://github.com/safe-fndn/safe-smart-account) smart account
-controlled by a **passkey** — a WebAuthn (P-256) credential held in your device's
-secure hardware and unlocked with Face ID, Touch ID, or a fingerprint. There are
-no seed phrases and no private keys for you to copy, store, or lose.
+controlled by a **passkey** — a WebAuthn (P-256) credential held by your device's
+OS, end-to-end encrypted, and unlocked with Face ID, Touch ID, or a fingerprint.
+There are no seed phrases and no private keys for you to copy, store, or lose.
 
 Vela, the company, never holds your keys or your funds and **cannot move, freeze,
 or seize them**. The app, the transaction bundler, and the supporting services
@@ -41,13 +41,14 @@ Most wallets force a trade-off:
 - **Blind signing** — approving opaque hex you can't read — is normalized across
   the ecosystem and is behind a large share of drained wallets.
 
-Vela aims to be as easy as a custodial app and as sovereign as a hardware wallet:
+Vela aims to be as easy as a custodial app while keeping you fully self-custodial:
 no seed phrase, no custody, and no transaction you can't read before you sign it.
 
 ## Design principles
 
-1. **Self-custody, no exceptions.** Keys are generated and held by your device's
-   secure element. Vela's servers only ever see public data.
+1. **Self-custody, no exceptions.** Keys are generated on your device and held by
+   your OS passkey provider, end-to-end encrypted. Vela's servers only ever see
+   public data.
 2. **Verify, don't trust.** The entire stack — app and all three backend
    services — is open source under the MIT license.
 3. **No blind signing.** Transactions are decoded into human-readable intent
@@ -59,7 +60,7 @@ no seed phrase, no custody, and no transaction you can't read before you sign it
 
 ```text
 Vela App (iOS / Android / Web, one codebase)
-  • Passkey (WebAuthn P-256, secure enclave)
+  • Passkey (WebAuthn P-256, OS passkey provider)
   • UserOperation construction & signing
   • Clear-signing UI (ERC-7730)
         │  signed UserOperation
@@ -87,9 +88,9 @@ from its own balance, on your first transaction.
 ### Keys and authentication
 
 Authentication uses **WebAuthn passkeys** on the **P-256** curve. The private key
-is generated inside, and never leaves, your device's secure hardware, and is
-synced by your OS passkey provider (iCloud Keychain or Google Password Manager).
-**Vela's servers only ever see your public key.** Signing requires a fresh
+is generated on your device and held, end-to-end encrypted, by your OS passkey
+provider (iCloud Keychain or Google Password Manager), which syncs it across your
+devices. **Vela's servers only ever see your public key.** Signing requires a fresh
 biometric verification every time — there is no long-lived session key. See
 [how passkeys work](/docs/passkeys) for the full detail.
 
@@ -97,7 +98,7 @@ biometric verification every time — there is no long-lived session key. See
 
 1. **Construct** an ERC-4337 `UserOperation` for your Safe and estimate gas.
 2. **Decode** the call into human-readable intent and show it for review.
-3. **Sign** — your secure element produces a WebAuthn assertion over the
+3. **Sign** — your device produces a WebAuthn assertion over the
    operation hash after biometric verification.
 4. **Encode** the assertion as an **EIP-1271** contract signature.
 5. **Relay** the signed operation to the bundler, which submits it to the
@@ -156,7 +157,7 @@ networks via configurable RPC endpoints.
 - Freeze or seize your account — the Safe is your contract on-chain; Vela has no
   privileged role on it.
 - Sign on your behalf — every transaction needs a fresh biometric assertion.
-- See your private key — it never leaves your device's secure hardware.
+- See your private key — it never reaches Vela; only your device can use it to sign.
 - Alter a transaction after you sign — any change invalidates the signature.
 
 **What you do trust:**
