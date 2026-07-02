@@ -4,12 +4,13 @@
 
 ## 部署单元一览
 
-| 单元 | 产物 | 目标 | 命令 |
-|---|---|---|---|
-| Web 钱包 | `dist/`(静态) | Cloudflare Pages(wallet.getvela.app) | `npm run build:web` → CF Pages 上传/`wrangler pages deploy dist` |
-| 官网+API | `.svelte-kit/cloudflare` | Cloudflare Workers(getvela.app) | `cd getvela.app && bun run deploy` |
-| iOS App | .ipa | App Store Connect | Xcode/`expo run:ios --configuration Release` + 上传 |
-| Android App | .aab | Google Play | `cd android && ./gradlew bundleRelease`(需 keystore.properties,见下) |
+
+| 单元        | 产物                     | 目标                                 | 命令                                                                 |
+| ------------- | -------------------------- | -------------------------------------- | ---------------------------------------------------------------------- |
+| Web 钱包    | `dist/`(静态)            | Cloudflare Pages(wallet.getvela.app) | `npm run build:web` → CF Pages 上传/`wrangler pages deploy dist`    |
+| 官网+API    | `.svelte-kit/cloudflare` | Cloudflare Workers(getvela.app)      | `cd getvela.app && bun run deploy`                                   |
+| iOS App     | .ipa                     | App Store Connect                    | Xcode/`expo run:ios --configuration Release` + 上传                  |
+| Android App | .aab                     | Google Play                          | `cd android && ./gradlew bundleRelease`(需 keystore.properties,见下) |
 
 另有两个**独立仓库**的服务(不在本仓库,部署互不耦合但语义耦合):vela-bundler(gas 报价与错误文案)、p256-index(公钥索引)。
 
@@ -26,10 +27,11 @@ cd getvela.app && bun run check   # 0 errors
 ```
 
 发布 checklist 附加项:
-- [ ] `git status` 干净、在 main 上、`build-info.ts` 将由构建自动生成
-- [ ] 若改过 bundler 错误文案或 `parseBundlerUnderfunded`:与 vela-bundler 仓库联合验证
-- [ ] 若改过 approval-guard / 签名编码:在 parallel space 手动过一遍 clear-signing 场景页
-- [ ] 若动过依赖:重跑全量 E2E
+
+- [ ]  `git status` 干净、在 main 上(commit hash 由 `app.config.js` 构建时注入——脏工作区构建会给"未提交的代码"打上"最近 commit"的标签,线上无法溯源)
+- [ ]  若改过 bundler 错误文案或 `parseBundlerUnderfunded`:与 vela-bundler 仓库联合验证
+- [ ]  若改过 approval-guard / 签名编码:在 parallel space 手动过一遍 clear-signing 场景页
+- [ ]  若动过依赖:重跑全量 E2E
 
 ## Web 钱包发布
 
@@ -53,6 +55,7 @@ cd getvela.app && bun run check   # 0 errors
 ## Android 发布(当前被阻塞,见 08)
 
 前置(一次性,人工)。注意 `/android` 与 `/ios` 目录是 `expo prebuild` 生成物、**不入库**;release 签名逻辑由 `plugins/with-release-signing.js`(app.json 已注册)在每次 prebuild 时注入,手改 android/ 会被 `expo prebuild --clean` 抹掉:
+
 1. `keytool -genkeypair … -keystore upload-keystore.jks -alias vela-upload`(**离库保存+备份**)
 2. `cp keystore.properties.example android/keystore.properties` 并填真值(example 在仓库根)
 3. Play Console 注册 + Play App Signing 开启

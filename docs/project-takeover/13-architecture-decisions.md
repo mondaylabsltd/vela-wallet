@@ -142,7 +142,7 @@ Gnosis 链上反复出现 "gas price too low" 提交失败与费率显示 "—" 
 ## ADR-005 配置全部代码内常量 + AsyncStorage 覆盖,无 .env
 
 **背景**
-App 端(钱包本体)不存在 .env / EXPO_PUBLIC_* 体系(01 号文档"配置体系");RPC 列表、bundler 地址、服务端点等全部是代码内常量,用户可在设置里经 AsyncStorage 覆盖(键 `vela.serviceEndpoints`,`src/services/storage.ts:19`;`loadServiceEndpoints` 被 bundler/公钥索引等服务消费)。唯一的构建期生成物是 `src/constants/build-info.ts`(由 `scripts/generate-build-info.js` 生成,不手改)。注意边界:**getvela.app 子项目(服务端)不适用本条**——它的密钥走 `.dev.vars`(本地,gitignore,经 `git log --all` 验证从未入库)与 `wrangler secret put`(生产)(01 号文档)。
+App 端(钱包本体)不存在 .env / EXPO_PUBLIC_* 体系(01 号文档"配置体系");RPC 列表、bundler 地址、服务端点等全部是代码内常量,用户可在设置里经 AsyncStorage 覆盖(键 `vela.serviceEndpoints`,`src/services/storage.ts:19`;`loadServiceEndpoints` 被 bundler/公钥索引等服务消费)。构建元信息(版本+commit)不例外:`app.config.js` 构建时求值注入 `extra.gitCommit`、经 `expo-constants` 读取,仍非环境变量体系(2026-07-02 前为脚本生成 `build-info.ts` 文件的旧机制,已废除)。注意边界:**getvela.app 子项目(服务端)不适用本条**——它的密钥走 `.dev.vars`(本地,gitignore,经 `git log --all` 验证从未入库)与 `wrangler secret put`(生产)(01 号文档)。
 
 **决策**
 App 端零环境变量:配置即代码、随版本审查与回滚;运行时差异只允许两种来源——用户显式覆盖(AsyncStorage)与 `__DEV__`/`dev_unlocked` 门控(01 号文档"环境差异"表)。

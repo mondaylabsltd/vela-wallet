@@ -1225,23 +1225,22 @@
 
 ### D11-D12-ops-external-Q1 · 难度 1/5
 
-**考察目标**:能独立说出 Web 钱包从代码到 wallet.getvela.app 上线的完整命令链、fix-cf-pages-assets 存在的原因、build-info 自动生成机制、以及 CF Pages 回滚方式(直接针对基线错误:构建部署命令说不出)。
+**考察目标**:能独立说出 Web 钱包从代码到 wallet.getvela.app 上线的完整命令链、fix-cf-pages-assets 存在的原因、build-info 构建时注入机制、以及 CF Pages 回滚方式(直接针对基线错误:构建部署命令说不出)。
 
-**题干**:现在要把 Web 钱包发一版到 wallet.getvela.app。请说出:(a) 完整的构建命令及它内部实际执行了什么;(b) 构建链里那个"修资产"的脚本在防什么事故,跳过它用户会看到什么;(c) src/constants/build-info.ts 里的 commit hash 是谁写进去的,能不能手改;(d) 发出去发现坏了,怎么回滚?
+**题干**:现在要把 Web 钱包发一版到 wallet.getvela.app。请说出:(a) 完整的构建命令及它内部实际执行了什么;(b) 构建链里那个"修资产"的脚本在防什么事故,跳过它用户会看到什么;(c) About 页显示的 commit hash 是从哪来的、什么时机定下来的,能不能手改;(d) 发出去发现坏了,怎么回滚?
 
 **标准答案要点**:
 1. 构建命令是 npm run build:web,它实际执行 npx expo export --platform web && node ./scripts/fix-cf-pages-assets.js;之后把 dist/ 部署到 Cloudflare Pages(wrangler pages deploy dist 或控制台上传)。
-2. npm 的 pre 钩子 prebuild:web 会先跑 prebuild-info(scripts/generate-build-info.js),用 git rev-parse --short HEAD 生成 src/constants/build-info.ts;文件头写明 do not edit,手改会在下次构建被覆盖,且 bug-report 的 environment 行依赖它标注版本。
+2. commit hash 在**构建时**由 app.config.js 求值定下:CI 环境优先读 CF_PAGES_COMMIT_SHA/GITHUB_SHA,本地回退 git rev-parse --short HEAD,注入 Expo config 的 extra.gitCommit;运行时 src/constants/build-info.ts 从 expo-constants 读出。没有可手改的地方——想改只能改 HEAD 本身,所以**脏工作区构建=未提交代码顶着最近 commit 的名义上线**(bug-report 的 environment 行依赖它标注版本)。〔2026-07-02 前为 prebuild 钩子生成文件的旧机制,已重构,git history 可查〕
 3. fix-cf-pages-assets.js 防的是:CF Pages 在 wrangler pages deploy 时会丢弃任何名为 node_modules 的目录,而 expo 把 Plus Jakarta 字体输出在 dist/assets/node_modules/ 下;跳过则字体请求回落到 index.html,浏览器报 OTS parsing error,useFonts() 永久挂起,应用白屏转圈。
 4. 该脚本把 assets/node_modules 移到 assets/vendor 并重写 .js/.html/.css/.json 中的所有引用,最后自检仍有残留引用就 exit 1 使构建失败——所以它是构建必经步骤不是可选优化。
 5. 上线后 smoke test:首屏无控制台报错、余额/Receive/Activity 正常、passkey 弹窗 rpId=getvela.app、且确认没有紫色 PARALLEL SPACE 徽章(出现=发了 fixture 空间)。
 6. 回滚:CF Pages 控制台一键回滚到上一个 deployment,静态产物无状态,秒级完成;这与 getvela.app Worker 的回滚(wrangler rollback)是两个不同的部署单元。
 
 **代码证据**:
-- `package.json:13-14` — prebuild:web 钩子接 prebuild-info;build:web = expo export + fix-cf-pages-assets.js
-- `package.json:6` — prebuild-info 脚本指向 scripts/generate-build-info.js
-- `scripts/generate-build-info.js:10-17` — git rev-parse --short HEAD 写入 build-info.ts,带 'do not edit' 头
-- `src/constants/build-info.ts:1-3` — 生成物实体:APP_VERSION + GIT_COMMIT
+- `package.json` scripts — build:web = expo export + fix-cf-pages-assets.js;deploy:web = wrangler pages deploy dist
+- `app.config.js` — resolveGitCommit():CF_PAGES_COMMIT_SHA/GITHUB_SHA 优先,回退 git rev-parse,注入 extra.gitCommit
+- `src/constants/build-info.ts` — 静态源码:从 expo-constants 读 version + extra.gitCommit
 - `scripts/fix-cf-pages-assets.js:3-13` — 头注释:CF Pages 丢 node_modules 目录 → 字体变 HTML → OTS parsing error → useFonts 挂起
 - `scripts/fix-cf-pages-assets.js:66-78` — 部署前自检,残留引用则 fail(exit 1)
 - `docs/project-takeover/05-deployment-runbook.md:36-43` — Web 发布四步:build(勿跳过 fix 脚本)→ 部署 → smoke(含无紫徽章)→ CF Pages 一键回滚
@@ -1250,7 +1249,8 @@
 - 【受训者原错】完全说不出命令,只能说"AI 之前都是自动弄的"。
 - 以为 git push 到 main 就自动部署了(本项目 CI 只是门禁,部署全手动,ci.yml 头注释和 05 手册都写明)。
 - 把 fix-cf-pages-assets 当成可跳过的优化脚本,不知道跳过=生产白屏。
-- 以为 build-info.ts 是手工维护的版本文件,发版前去手改它。
+- 以为 build-info.ts 里存着 hash、发版前去手改它(现在文件里根本没有 hash,值在构建时注入)。
+- 意识不到脏工作区构建会让线上产物无法溯源到确切代码。
 
 **追问**:
 1. 如果 smoke test 时看到紫色 PARALLEL SPACE 徽章,说明发布环节哪里出了问题?对用户有什么风险?
@@ -1259,7 +1259,7 @@
 
 **真懂 vs 背诵**:真懂的人能讲出 fix 脚本防的具体事故链(node_modules 被丢→字体 404 变 HTML→useFonts 挂起)并知道它失败会中断构建;背诵的人只会念"运行 npm run build:web 然后部署"。
 
-**评分规则**:3 分线=说出 build:web 完整命令链+CF Pages 一键回滚;5 分线=额外讲清 fix 脚本的事故机理、prebuild 钩子生成 build-info 不可手改、smoke 项含无紫徽章。
+**评分规则**:3 分线=说出 build:web 完整命令链+CF Pages 一键回滚;5 分线=额外讲清 fix 脚本的事故机理、commit hash 构建时注入(app.config.js→expo-constants)+脏工作区溯源风险、smoke 项含无紫徽章。
 
 ### D11-D12-ops-external-Q2 · 难度 2/5
 

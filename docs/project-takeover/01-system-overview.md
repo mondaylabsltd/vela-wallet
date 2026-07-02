@@ -70,7 +70,7 @@ docs/                设计/需求/测试/上架文档(较全,见各文件)
 ## 配置体系
 
 - **没有 .env / EXPO_PUBLIC_* 体系**:App 端全部配置为代码内常量 + AsyncStorage 用户覆盖(RPC/bundler/服务端点均可在设置中覆盖,`vela.serviceEndpoints`)。
-- `src/constants/build-info.ts` 由 `scripts/generate-build-info.js` 在 prestart/prebuild 自动生成(版本+git commit),**不要手改**。
+- 构建元信息(版本+git commit):`app.config.js` 构建时求值注入 `extra.gitCommit`(CI 优先读 `CF_PAGES_COMMIT_SHA`/`GITHUB_SHA`,本地回退 `git rev-parse`),`src/constants/build-info.ts` 是从 `expo-constants` 读取的静态源码。(2026-07-02 前为 `scripts/generate-build-info.js` 生成物,旧机制每次构建弄脏工作区,已废除。)
 - getvela.app 子项目:本地密钥在 `.dev.vars`(已 gitignore,从未入库——`git log --all` 验证),生产密钥走 `wrangler secret put`(GITHUB_BUG_TOKEN / ALCHEMY_API_KEY / PIMLICO_API_KEY)。
 
 ## 环境差异

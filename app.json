@@ -78,6 +78,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0d798810-2982-455b-9079-7b9a7cabb97d"
+      }
+    },
+    "owner": "monday-labs-ltd"
   }
 }

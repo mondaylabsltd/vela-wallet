@@ -14,7 +14,7 @@ npm run web                 # Web 开发(expo start --web,默认 :8081)
 npm run ios / npm run android   # 原生 Debug(模拟器;等价 npx expo run:ios / run:android)
 ```
 
-`prestart` 钩子自动生成 `src/constants/build-info.ts`(git commit + 版本),该文件属生成产物,改动无须提交。
+构建元信息(git commit + 版本)由 `app.config.js` 在构建时注入 `extra.gitCommit`,运行时经 `expo-constants` 读取(`src/constants/build-info.ts`)——没有生成文件,构建不会弄脏工作区。(2026-07-02 前为 `prestart` 钩子生成文件,已废除。)
 
 ## 原生构建与真机运行
 

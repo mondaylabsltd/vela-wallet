@@ -56,6 +56,6 @@
 
 ## 生成物与禁改清单
 
-- `src/constants/build-info.ts`:脚本生成,别手改
+- `src/constants/build-info.ts`:静态源码,但值由 `app.config.js` 构建时注入(`extra.gitCommit`)——改版本号去 `app.json`/`package.json`,别在这里硬编码
 - `android/` `ios/`:部分由 `expo prebuild` + `plugins/with-native-modules.js` 管理;手改原生文件前确认它不会被 prebuild 覆盖(签名配置、Manifest 我们已手改,重跑 prebuild 时需比对 app.json 的 `allowBackup: false` 是否保留了语义)
 - `dist/`:构建产物
