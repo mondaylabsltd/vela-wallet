@@ -26,6 +26,8 @@
       "accountNameLabel": "Kontoname",
       "accountNamePlaceholder": "Geben Sie einen Namen für Ihr Konto ein",
       "accountNameHint": "Dieser Name wird zusammen mit Ihrem öffentlichen Schlüssel on-chain für die geräteübergreifende Anmeldung gespeichert.",
+      "nameTooLong": "Dieser Name ist zu lang für einen Passkey — bitte kürzen Sie ihn.",
+      "technicalDetails": "Technische Details",
       "ack0": "Dies ist eine Wallet mit Selbstverwahrung. Der private Schlüssel Ihres Passkeys wird vom Passwortmanager Ihres Geräts verwaltet (iCloud-Schlüsselbund / Google Passwortmanager). Vela Wallet kann ihn weder einsehen noch wiederherstellen.",
       "ack1": "Wenn Sie Ihr Gerät verlieren, können Sie Ihre Wallet über Ihr iCloud- oder Google-Konto auf einem neuen Gerät wiederherstellen.",
       "ack2": "Wenn Ihr iCloud- oder Google-Konto kompromittiert wird, kann auch die Kontrolle über Ihre Wallet gefährdet sein. Schützen Sie es mit einem starken Passwort und 2FA.",

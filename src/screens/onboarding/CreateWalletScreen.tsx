@@ -57,7 +57,15 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
     registration: Passkey.PasskeyRegistrationResult;
     name: string;
   } | null>(null);
+  const [showErrorDetail, setShowErrorDetail] = useState(false);
   const { resolved: language } = useLanguagePreference();
+
+  // WebAuthn user.id caps at 64 bytes; the UTF-8 name gets 27 of them (see
+  // MAX_USER_NAME_BYTES). Validate live — without this, a long (esp. CJK)
+  // name only fails deep inside the passkey ceremony with a cryptic
+  // "User handle exceeds 64 bytes."
+  const nameTooLong =
+    new TextEncoder().encode(name.trim()).length > Passkey.MAX_USER_NAME_BYTES;
   const pendingRef = useRef<{
     account: StoredAccount;
     credentialId: string;
@@ -97,6 +105,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
   async function handleCreate() {
     const trimmed = pendingReg?.name ?? name.trim();
     if (!trimmed || loading) return;
+    if (!pendingReg && nameTooLong) return; // resumed names were validated at registration
     setLoading(true);
     setStatus('');
     setUploadFailed(false);
@@ -327,11 +336,6 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             <Text style={styles.errorMessage}>
               {t('onboarding.create.syncFailedMessage')}
             </Text>
-            {uploadError ? (
-              <View style={styles.errorDetail}>
-                <Text style={styles.errorDetailText}>{uploadError}</Text>
-              </View>
-            ) : null}
             <Text style={styles.hint}>
               {t('onboarding.create.syncFailedHint')}
             </Text>
@@ -343,6 +347,20 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             <Pressable style={styles.reportLink} onPress={() => setShowBugReport(true)}>
               <Text style={styles.reportLinkText}>{t('onboarding.create.reportError')}</Text>
             </Pressable>
+            {/* Raw error text is for the bug report, not the user — keep it
+                behind a quiet disclosure instead of an alarming red box. */}
+            {uploadError ? (
+              <>
+                <Pressable style={styles.detailsToggle} onPress={() => setShowErrorDetail(v => !v)}>
+                  <Text style={styles.detailsToggleText}>{t('onboarding.create.technicalDetails')}</Text>
+                </Pressable>
+                {showErrorDetail ? (
+                  <View style={styles.errorDetail}>
+                    <Text style={styles.errorDetailText}>{uploadError}</Text>
+                  </View>
+                ) : null}
+              </>
+            ) : null}
           </Animated.View>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -359,9 +377,15 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
                 onSubmitEditing={() => Keyboard.dismiss()}
                 editable={!loading && !pendingReg}
               />
-              <Text style={styles.hint}>
-                {t('onboarding.create.accountNameHint')}
-              </Text>
+              {nameTooLong ? (
+                <Text style={styles.nameTooLongText}>
+                  {t('onboarding.create.nameTooLong')}
+                </Text>
+              ) : (
+                <Text style={styles.hint}>
+                  {t('onboarding.create.accountNameHint')}
+                </Text>
+              )}
 
               {/* Acknowledgment checklist */}
               <View style={styles.checklistWrap}>
@@ -405,7 +429,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
                 <VelaButton
                   title={pendingReg ? t('onboarding.create.finishVerifyBtn') : t('onboarding.create.createWalletBtn')}
                   onPress={handleCreate}
-                  disabled={(!pendingReg && !name.trim()) || loading || !checks.every(Boolean)}
+                  disabled={(!pendingReg && (!name.trim() || nameTooLong)) || loading || !checks.every(Boolean)}
                   loading={loading}
                 />
                 {/* Escape hatch for a passkey that keeps failing verification
@@ -515,6 +539,13 @@ const styles = createStyles(() => ({
     marginTop: space.lg,
     lineHeight: 18,
   },
+  nameTooLongText: {
+    fontSize: text.sm,
+    ...inter.medium,
+    color: color.accent.base,
+    marginTop: space.lg,
+    lineHeight: 18,
+  },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -585,9 +616,21 @@ const styles = createStyles(() => ({
     borderRadius: radius.lg,
   },
   errorDetailText: {
-    fontSize: text.sm,
+    fontSize: text.xs,
+    color: color.fg.muted,
+    fontFamily: font.mono,
+    lineHeight: 16,
+  },
+  detailsToggle: {
+    paddingVertical: space.sm,
+    paddingHorizontal: space.xl,
+    marginTop: space.md,
+  },
+  detailsToggleText: {
+    fontSize: text.xs,
     ...inter.regular,
-    color: color.accent.base,
+    color: color.fg.subtle,
+    textDecorationLine: 'underline',
   },
 
   // Wallet ready address

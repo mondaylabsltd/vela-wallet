@@ -102,6 +102,14 @@ export interface PasskeyAssertionResult {
 // UserID helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * WebAuthn caps user.id at 64 bytes and Chromium enforces it hard ("User
+ * handle exceeds 64 bytes."). encodeUserID appends '\0' + a 36-char UUID
+ * (37 bytes), so the UTF-8 name must fit in the remaining 27 — the create
+ * form validates against this before registering.
+ */
+export const MAX_USER_NAME_BYTES = 64 - 37;
+
 export function encodeUserID(name: string): string {
   return `${name}\0${generateUUID()}`;
 }

@@ -26,6 +26,8 @@
       "accountNameLabel": "Nombre de la cuenta",
       "accountNamePlaceholder": "Escribe un nombre para tu cuenta",
       "accountNameHint": "Este nombre se guarda con tu llave pública on-chain para iniciar sesión entre dispositivos.",
+      "nameTooLong": "Este nombre es demasiado largo para una passkey — acórtalo, por favor.",
+      "technicalDetails": "Detalles técnicos",
       "ack0": "Esta es una billetera de autocustodia. La llave privada de tu passkey la administra el gestor de contraseñas de tu dispositivo (Llavero de iCloud / Administrador de contraseñas de Google). Vela Wallet no puede acceder a ella ni recuperarla.",
       "ack1": "Si pierdes tu dispositivo, puedes restaurar tu billetera en uno nuevo a través de tu cuenta de iCloud o Google.",
       "ack2": "Si tu cuenta de iCloud o Google se ve comprometida, el control de tu billetera también podría verse comprometido. Protégela con una contraseña fuerte y 2FA.",
