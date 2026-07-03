@@ -1,6 +1,8 @@
 import QRCodeLib from 'qrcode';
 import React, { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import Svg, { Path, Rect } from 'react-native-svg';
+
+import { buildQrPath } from './qr-path';
 
 interface Props {
   value: string;
@@ -9,50 +11,28 @@ interface Props {
   backgroundColor?: string;
 }
 
+/**
+ * Renders the whole matrix as a single SVG path. Drawing each module as its
+ * own View lets React Native round every cell to the pixel grid
+ * independently, which shows up as hairline white gridlines on most devices
+ * whenever size / moduleCount is fractional. One vector path has no per-cell
+ * layout, so it stays seamless at any scale.
+ */
 export function QRCode({ value, size = 200, color = '#000000', backgroundColor = '#FFFFFF' }: Props) {
-  const matrix = useMemo(() => {
+  const { path, moduleCount } = useMemo(() => {
     try {
-      const segments = QRCodeLib.create(value, { errorCorrectionLevel: 'M' });
-      const modules = segments.modules;
-      const moduleCount = modules.size;
-      const data = modules.data;
-      const rows: boolean[][] = [];
-      for (let y = 0; y < moduleCount; y++) {
-        const row: boolean[] = [];
-        for (let x = 0; x < moduleCount; x++) {
-          row.push(data[y * moduleCount + x] === 1);
-        }
-        rows.push(row);
-      }
-      return rows;
+      const code = QRCodeLib.create(value, { errorCorrectionLevel: 'M' });
+      const modules = code.modules;
+      return { path: buildQrPath(modules.data, modules.size), moduleCount: modules.size };
     } catch {
-      return [[true]];
+      return { path: 'M0 0h1v1h-1z', moduleCount: 1 };
     }
   }, [value]);
 
-  const moduleSize = size / matrix.length;
-
   return (
-    <View style={[styles.container, { width: size, height: size, backgroundColor }]}>
-      {matrix.map((row, y) => (
-        <View key={y} style={styles.row}>
-          {row.map((cell, x) => (
-            <View
-              key={x}
-              style={{
-                width: moduleSize,
-                height: moduleSize,
-                backgroundColor: cell ? color : backgroundColor,
-              }}
-            />
-          ))}
-        </View>
-      ))}
-    </View>
+    <Svg width={size} height={size} viewBox={`0 0 ${moduleCount} ${moduleCount}`}>
+      <Rect x={0} y={0} width={moduleCount} height={moduleCount} fill={backgroundColor} />
+      <Path d={path} fill={color} />
+    </Svg>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flexDirection: 'column' },
-  row: { flexDirection: 'row' },
-});
