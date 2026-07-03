@@ -50,6 +50,7 @@
     "expo-status-bar": "~55.0.5",
     "expo-symbols": "~55.0.7",
     "expo-system-ui": "~55.0.16",
+    "expo-updates": "~55.0.25",
     "expo-web-browser": "~55.0.14",
     "i18next": "^26.3.1",
     "jpeg-js": "^0.4.4",
