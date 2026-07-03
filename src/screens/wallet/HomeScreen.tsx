@@ -180,7 +180,11 @@ export default function HomeScreen() {
   const balancePulse = useSharedValue(0);
   const balanceScaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + balancePulse.value * 0.03 }] }));
 
-  const networks = useMemo(() => getAllNetworksSync(), []);
+  // Bumped when a custom network is added via the filter sheet, so the memoized
+  // list re-reads the (already refreshed) in-memory network cache.
+  const [networksVersion, setNetworksVersion] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const networks = useMemo(() => getAllNetworksSync(), [networksVersion]);
   const selectedNetwork = selectedChainId != null ? networks.find((n) => n.chainId === selectedChainId) ?? null : null;
   const connected = conn.status === 'connected' || conn.status === 'reconnecting';
   const currency = currencyMeta(currencyCode);
@@ -824,6 +828,7 @@ export default function HomeScreen() {
           const c = activity.filter((a) => a.chainId === n.chainId).length;
           return c > 0 ? `${c} event${c > 1 ? 's' : ''}` : undefined;
         }}
+        onNetworksChanged={() => setNetworksVersion((v) => v + 1)}
       />
 
       {/* Currency picker */}

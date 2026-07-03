@@ -220,6 +220,7 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
           const c = tokens.filter((tk) => tokenChainId(tk) === n.chainId).length;
           return c > 0 ? t('send.tokenCount', { n: c }) : undefined;
         }}
+        onNetworksChanged={onAddChanged}
       />
       <AddTokenSheet visible={showAddToken} onClose={() => setShowAddToken(false)} onChanged={onAddChanged} />
 

@@ -9,7 +9,7 @@ import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { X } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
-import { AddTokenPanel } from '@/components/ui/AddTokenPanel';
+import { AddTokenPanel, type AddTokenTab } from '@/components/ui/AddTokenPanel';
 import { color, createStyles, inter, space, text } from '@/constants/theme';
 import { useTranslation } from 'react-i18next';
 
@@ -18,9 +18,11 @@ interface Props {
   onClose: () => void;
   /** Fires after a token/network is added or removed (e.g. to refresh a list). */
   onChanged?: () => void;
+  /** Tab to open on (default 'erc20'; pass 'network' for add-network entry points). */
+  initialTab?: AddTokenTab;
 }
 
-export function AddTokenSheet({ visible, onClose, onChanged }: Props) {
+export function AddTokenSheet({ visible, onClose, onChanged, initialTab }: Props) {
   const { t } = useTranslation();
   return (
     <AppModal visible={visible} onClose={onClose}>
@@ -32,7 +34,7 @@ export function AddTokenSheet({ visible, onClose, onChanged }: Props) {
             <X size={18} color={color.fg.base} strokeWidth={2} />
           </Pressable>
         </View>
-        <AddTokenPanel onChanged={onChanged} />
+        <AddTokenPanel onChanged={onChanged} initialTab={initialTab} />
       </View>
     </AppModal>
   );

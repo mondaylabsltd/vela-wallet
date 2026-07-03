@@ -13,8 +13,9 @@
  */
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { Check, ChevronDown, Globe, Search, X } from 'lucide-react-native';
+import { Check, ChevronDown, Globe, Plus, Search, X } from 'lucide-react-native';
 import { ChainLogo } from '@/components/ChainLogo';
+import { AddTokenSheet } from '@/components/ui/AddTokenSheet';
 import { AppModal } from '@/components/ui/AppModal';
 import type { Network } from '@/models/network';
 import { color, createStyles, inter, radius, space, text } from '@/constants/theme';
@@ -78,6 +79,9 @@ interface NetworkFilterSheetProps {
   onClose: () => void;
   /** Optional secondary line per chain (e.g. value or event count). */
   subtitleForChain?: (network: Network) => string | undefined;
+  /** Fires after a network is added/removed via the Add-network row, so the
+   *  caller can re-read its network list. */
+  onNetworksChanged?: () => void;
 }
 
 export function NetworkFilterSheet({
@@ -87,9 +91,11 @@ export function NetworkFilterSheet({
   onSelect,
   onClose,
   subtitleForChain,
+  onNetworksChanged,
 }: NetworkFilterSheetProps) {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
+  const [showAddNetwork, setShowAddNetwork] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -170,8 +176,30 @@ export function NetworkFilterSheet({
               </Pressable>
             );
           })}
+
+          {/* Add a chain the wallet doesn't list yet — reuses the add-network flow. */}
+          <Pressable
+            style={styles.row}
+            onPress={() => setShowAddNetwork(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('addToken.addNetworkBtn')}
+          >
+            <View style={styles.allIcon}>
+              <Plus size={20} color={color.fg.muted} strokeWidth={2} />
+            </View>
+            <View style={styles.rowInfo}>
+              <Text style={styles.rowName}>{t('addToken.addNetworkBtn')}</Text>
+            </View>
+          </Pressable>
         </ScrollView>
       </View>
+
+      <AddTokenSheet
+        visible={showAddNetwork}
+        initialTab="network"
+        onClose={() => setShowAddNetwork(false)}
+        onChanged={onNetworksChanged}
+      />
     </AppModal>
   );
 }

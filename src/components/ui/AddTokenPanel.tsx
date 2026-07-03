@@ -60,11 +60,11 @@ async function fetchErc20Meta(
   return { name, symbol, decimals };
 }
 
-type Tab = 'erc20' | 'network';
+export type AddTokenTab = 'erc20' | 'network';
 
-export function AddTokenPanel({ onChanged }: { onChanged?: () => void }) {
+export function AddTokenPanel({ onChanged, initialTab = 'erc20' }: { onChanged?: () => void; initialTab?: AddTokenTab }) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<Tab>('erc20');
+  const [tab, setTab] = useState<AddTokenTab>(initialTab);
 
   // ERC-20 state
   const [contractAddress, setContractAddress] = useState('');
