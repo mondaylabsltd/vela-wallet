@@ -76,3 +76,32 @@ jobs:
         with:
           profile: development
           branch: pr-${{ github.event.number }}
+      # The bot table above assumes Expo fluency; this sticky comment tells
+      # testers what to actually do. Content lives in the guide file so it can
+      # be edited without touching workflow logic.
+      - name: Tester guide comment (sticky)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- vela-preview-guide -->';
+            const body = fs.readFileSync('.github/expo-preview-guide.md', 'utf8');
+            if (!body.startsWith(marker)) {
+              core.setFailed('guide file must start with the sticky-comment marker'); return;
+            }
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100,
+            });
+            const mine = comments.find(c => c.body.startsWith(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: mine.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              });
+            }
