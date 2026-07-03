@@ -40,6 +40,8 @@
       "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap.",
       "enterWalletBtn": "Masuk ke Dompet",
       "finishVerifyBtn": "Selesaikan Verifikasi",
+      "verifyStuckHint": "Verifikasi terus gagal? Perangkat Anda mungkin tidak menyimpan passkey ini dengan benar. Aman untuk memulai ulang — belum ada yang dibuat.",
+      "startOverBtn": "Mulai ulang dengan passkey baru",
       "syncFailedTitle": "Sinkronisasi gagal",
       "syncFailedMessage": "Dompet dibuat, tetapi kunci publik Anda belum tersinkron ke server. Anda tidak akan bisa masuk di perangkat lain sampai masalah ini teratasi.",
       "syncFailedHint": "Periksa jaringan Anda, atau konfigurasikan endpoint kustom di bawah.",

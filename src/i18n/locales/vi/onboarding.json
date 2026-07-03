@@ -40,6 +40,8 @@
       "verifyHint": "Passkey của bạn đã được xác minh và khóa đã được đồng bộ — mọi thứ đã sẵn sàng.",
       "enterWalletBtn": "Vào ví",
       "finishVerifyBtn": "Hoàn tất xác minh",
+      "verifyStuckHint": "Xác minh cứ thất bại? Thiết bị của bạn có thể chưa lưu passkey này đúng cách. Bạn có thể yên tâm bắt đầu lại — chưa có gì được tạo cả.",
+      "startOverBtn": "Bắt đầu lại với passkey mới",
       "syncFailedTitle": "Đồng bộ thất bại",
       "syncFailedMessage": "Đã tạo ví, nhưng khóa công khai của bạn chưa được đồng bộ lên máy chủ. Bạn sẽ không thể đăng nhập trên thiết bị khác cho đến khi vấn đề này được khắc phục.",
       "syncFailedHint": "Kiểm tra kết nối mạng, hoặc cấu hình một điểm cuối tùy chỉnh bên dưới.",

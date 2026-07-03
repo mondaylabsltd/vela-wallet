@@ -40,6 +40,8 @@
       "verifyHint": "Votre clé d'accès est vérifiée et votre clé synchronisée — tout est prêt.",
       "enterWalletBtn": "Ouvrir le portefeuille",
       "finishVerifyBtn": "Terminer la vérification",
+      "verifyStuckHint": "La vérification échoue encore ? Votre appareil n'a peut-être pas bien enregistré cette clé d'accès. Vous pouvez recommencer sans risque — rien n'a encore été créé.",
+      "startOverBtn": "Recommencer avec une nouvelle clé d'accès",
       "syncFailedTitle": "Échec de la synchronisation",
       "syncFailedMessage": "Portefeuille créé, mais votre clé publique n'a pas été synchronisée avec le serveur. Vous ne pourrez pas vous connecter sur d'autres appareils tant que ce problème n'est pas résolu.",
       "syncFailedHint": "Vérifiez votre réseau ou configurez un point d'accès personnalisé ci-dessous.",

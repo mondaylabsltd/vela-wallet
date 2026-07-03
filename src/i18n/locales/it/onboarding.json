@@ -40,6 +40,8 @@
       "verifyHint": "La tua passkey è verificata e la chiave sincronizzata — tutto pronto.",
       "enterWalletBtn": "Entra nel wallet",
       "finishVerifyBtn": "Completa la verifica",
+      "verifyStuckHint": "La verifica continua a fallire? Il tuo dispositivo potrebbe non aver salvato correttamente questa passkey. Puoi ricominciare in tutta sicurezza — non è stato ancora creato nulla.",
+      "startOverBtn": "Ricomincia con una nuova passkey",
       "syncFailedTitle": "Sincronizzazione non riuscita",
       "syncFailedMessage": "Wallet creato, ma la tua chiave pubblica non è stata sincronizzata con il server. Non riuscirai ad accedere su altri dispositivi finché il problema non viene risolto.",
       "syncFailedHint": "Controlla la tua connessione o configura un endpoint personalizzato qui sotto.",

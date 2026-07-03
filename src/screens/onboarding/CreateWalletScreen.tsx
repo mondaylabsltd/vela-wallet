@@ -249,6 +249,14 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
     setStatus('');
   }
 
+  function handleStartOver() {
+    // Abandon the unverified passkey and let the user mint a fresh one.
+    // Nothing about the old one was persisted (no account, no upload), so
+    // this is a clean reset; the orphaned authenticator entry is inert.
+    setPendingReg(null);
+    setStatus('');
+  }
+
   function handleEnter() {
     // Signing was already proven during creation (stage 2 of handleCreate) —
     // entering the wallet is now just a state transition.
@@ -400,6 +408,19 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
                   disabled={(!pendingReg && !name.trim()) || loading || !checks.every(Boolean)}
                   loading={loading}
                 />
+                {/* Escape hatch for a passkey that keeps failing verification
+                    (e.g. the provider reported success but never durably
+                    stored it — issue #1): discard it and start over, instead
+                    of being trapped retrying a signature that can never
+                    succeed. */}
+                {pendingReg && !loading ? (
+                  <>
+                    <Text style={styles.startOverHint}>{t('onboarding.create.verifyStuckHint')}</Text>
+                    <Pressable style={styles.startOverLink} onPress={handleStartOver}>
+                      <Text style={styles.startOverText}>{t('onboarding.create.startOverBtn')}</Text>
+                    </Pressable>
+                  </>
+                ) : null}
               </View>
             </Animated.View>
           </ScrollView>
@@ -642,5 +663,27 @@ const styles = createStyles(() => ({
   inlineBottom: {
     marginTop: space['3xl'],
     paddingBottom: space['3xl'],
+  },
+
+  // Start-over escape hatch (verification stuck on a dead passkey)
+  startOverHint: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.subtle,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginTop: space['2xl'],
+  },
+  startOverLink: {
+    alignSelf: 'center',
+    paddingVertical: space.md,
+    paddingHorizontal: space.xl,
+    marginTop: space.xs,
+  },
+  startOverText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.accent.base,
+    textDecorationLine: 'underline',
   },
 }));

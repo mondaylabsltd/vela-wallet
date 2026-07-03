@@ -40,6 +40,8 @@
       "verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit.",
       "enterWalletBtn": "Wallet öffnen",
       "finishVerifyBtn": "Bestätigung abschließen",
+      "verifyStuckHint": "Die Bestätigung schlägt immer wieder fehl? Ihr Gerät hat diesen Passkey möglicherweise nicht richtig gespeichert. Sie können bedenkenlos neu beginnen — es wurde noch nichts erstellt.",
+      "startOverBtn": "Mit neuem Passkey neu beginnen",
       "syncFailedTitle": "Synchronisierung fehlgeschlagen",
       "syncFailedMessage": "Wallet erstellt, aber Ihr öffentlicher Schlüssel wurde nicht mit dem Server synchronisiert. Sie können sich auf anderen Geräten erst anmelden, wenn dies behoben ist.",
       "syncFailedHint": "Prüfen Sie Ihr Netzwerk oder konfigurieren Sie unten einen eigenen Endpunkt.",

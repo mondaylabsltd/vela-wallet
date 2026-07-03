@@ -40,6 +40,8 @@
       "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır.",
       "enterWalletBtn": "Cüzdana gir",
       "finishVerifyBtn": "Doğrulamayı tamamla",
+      "verifyStuckHint": "Doğrulama sürekli başarısız mı oluyor? Cihazınız bu geçiş anahtarını düzgün kaydetmemiş olabilir. Baştan başlamak güvenli — henüz hiçbir şey oluşturulmadı.",
+      "startOverBtn": "Yeni bir geçiş anahtarıyla baştan başla",
       "syncFailedTitle": "Eşitleme başarısız",
       "syncFailedMessage": "Cüzdan oluşturuldu ancak açık anahtarınız sunucuyla eşitlenmedi. Bu sorun çözülene kadar diğer cihazlarda giriş yapamazsınız.",
       "syncFailedHint": "Ağınızı kontrol edin veya aşağıda özel bir uç nokta yapılandırın.",

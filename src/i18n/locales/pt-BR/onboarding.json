@@ -40,6 +40,8 @@
       "verifyHint": "Sua passkey foi verificada e sua chave sincronizada — tudo pronto.",
       "enterWalletBtn": "Entrar na carteira",
       "finishVerifyBtn": "Concluir verificação",
+      "verifyStuckHint": "A verificação continua falhando? Seu dispositivo pode não ter salvado esta passkey corretamente. É seguro recomeçar — nada foi criado ainda.",
+      "startOverBtn": "Recomeçar com uma nova passkey",
       "syncFailedTitle": "Falha na sincronização",
       "syncFailedMessage": "A carteira foi criada, mas sua chave pública não foi sincronizada com o servidor. Você não conseguirá entrar em outros dispositivos até que isso seja resolvido.",
       "syncFailedHint": "Verifique sua conexão ou configure um endpoint personalizado abaixo.",

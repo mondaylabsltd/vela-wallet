@@ -40,6 +40,8 @@
       "verifyHint": "Your passkey is verified and your key is synced — you're all set.",
       "enterWalletBtn": "Enter Wallet",
       "finishVerifyBtn": "Finish Verification",
+      "verifyStuckHint": "Verification keeps failing? Your device may not have saved this passkey properly. It's safe to start over — nothing has been created yet.",
+      "startOverBtn": "Start over with a new passkey",
       "syncFailedTitle": "Sync failed",
       "syncFailedMessage": "Wallet created, but your public key wasn't synced to the server. You won't be able to sign in on other devices until this is resolved.",
       "syncFailedHint": "Check your network, or configure a custom endpoint below.",

@@ -177,5 +177,19 @@ test.describe('Onboarding — passkey must prove it can sign before anything per
     expect(created).toHaveLength(1);
 
     await page.screenshot({ path: 'e2e/screenshots/onboarding-dead-passkey.png', fullPage: true });
+
+    // THE ESCAPE HATCH: a dead passkey must not trap the user in a retry loop.
+    // "Start over" discards it, and the next Create mints a FRESH passkey that
+    // completes the whole journey: stuck → start over → wallet created.
+    await expect(page.locator('body')).toContainText('Start over with a new passkey');
+    await page.getByText('Start over with a new passkey', { exact: true }).click();
+    await expect(page.locator('body')).not.toContainText('Finish Verification');
+
+    await page.getByText('Create Wallet', { exact: true }).last().click();
+    await expect(page.locator('body')).toContainText('Your wallet is ready!', { timeout: 30_000 });
+    expect(created).toHaveLength(2); // a fresh passkey — not the dead one
+
+    const accountsAfter = await page.evaluate(() => localStorage.getItem('vela.accounts'));
+    expect(JSON.parse(accountsAfter!)).toHaveLength(1);
   });
 });

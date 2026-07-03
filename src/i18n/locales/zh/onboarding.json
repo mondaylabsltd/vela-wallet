@@ -40,6 +40,8 @@
       "verifyHint": "您的通行密钥已验证，公钥已同步——一切就绪。",
       "enterWalletBtn": "进入钱包",
       "finishVerifyBtn": "完成验证",
+      "verifyStuckHint": "验证一直失败？您的设备可能没有正确保存这枚通行密钥。可以放心重新开始——目前还没有创建任何内容。",
+      "startOverBtn": "用新的通行密钥重新开始",
       "syncFailedTitle": "同步失败",
       "syncFailedMessage": "钱包已创建，但您的公钥未同步到服务器。在此问题解决之前，您将无法在其他设备上登录。",
       "syncFailedHint": "请检查网络，或在下方配置自定义端点。",
