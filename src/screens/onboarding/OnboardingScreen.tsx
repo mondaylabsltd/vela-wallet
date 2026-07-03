@@ -2,8 +2,10 @@ import type { StoredAccount } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { PasskeyError, PasskeyErrorCode } from '@/modules/passkey';
-import { fromHex } from '@/services/hex';
+import { fromHex, toHex } from '@/services/hex';
+import { recoverPublicKeyFromAssertions } from '@/services/p256-recovery';
 import * as PublicKeyIndex from '@/services/public-key-index';
+import { uploadPublicKey } from '@/services/public-key-upload';
 import { computeAddress } from '@/services/safe-address';
 import { loadAccounts, saveAccount } from '@/services/storage';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -125,10 +127,19 @@ export default function OnboardingScreen() {
       // 4. Try public key index server
       const rpId = Passkey.getRelyingPartyId();
       __DEV__ && console.log('[Login] Querying server: rpId=', rpId, 'credentialId=', assertion.credentialId);
-      const record = await PublicKeyIndex.queryRecord(
-        rpId,
-        assertion.credentialId,
-      );
+      let record: PublicKeyIndex.PublicKeyRecord;
+      try {
+        record = await PublicKeyIndex.queryRecord(rpId, assertion.credentialId);
+      } catch (queryErr) {
+        const queryMsg = queryErr instanceof Error ? queryErr.message : String(queryErr);
+        if (queryMsg.includes('404')) {
+          // The index has no record, but the passkey itself can rebuild the
+          // wallet: two signatures pin down the public key (p256-recovery.ts).
+          offerSignatureRecovery(assertion);
+          return;
+        }
+        throw queryErr;
+      }
       __DEV__ && console.log('[Login] Server returned:', record.name, 'publicKey:', record.publicKey.slice(0, 16) + '...');
 
       const address = computeAddress(record.publicKey);
@@ -150,12 +161,7 @@ export default function OnboardingScreen() {
         // User cancelled — do nothing
       } else {
         const msg = error instanceof Error ? error.message : String(error);
-        if (msg.includes('404')) {
-          showAlert(
-            t('onboarding.login.alertNotFoundTitle'),
-            t('onboarding.login.alertNotFoundBody'),
-          );
-        } else if (msg.includes('Network request failed') || msg.includes('fetch') || msg.includes('Connection failed')) {
+        if (msg.includes('Network request failed') || msg.includes('fetch') || msg.includes('Connection failed')) {
           setEndpointUnreachable(true);
           setShowSettings(true);
         } else {
@@ -164,6 +170,68 @@ export default function OnboardingScreen() {
             t('onboarding.login.alertSignInFailedBody', { message: msg }),
           );
         }
+      }
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  /**
+   * Cryptographic escape hatch: the index has no record for this passkey, but
+   * the passkey itself can rebuild the wallet. Offer it — one more signature
+   * and the public key (hence the Safe address) is recovered on-device.
+   */
+  function offerSignatureRecovery(assertion: Passkey.PasskeyAssertionResult) {
+    showAlert(
+      t('onboarding.login.recoverOfferTitle'),
+      t('onboarding.login.recoverOfferBody'),
+      [
+        { text: t('onboarding.login.recoverCancel'), style: 'cancel' },
+        { text: t('onboarding.login.recoverConfirm'), onPress: () => { void recoverFromSignatures(assertion); } },
+      ],
+    );
+  }
+
+  async function recoverFromSignatures(first: Passkey.PasskeyAssertionResult) {
+    try {
+      setLoginLoading(true);
+      // A second signature over a fresh challenge pins the candidate sets down
+      // to exactly one public key (see services/p256-recovery.ts). The
+      // challenge only needs to be unique, not secret — nothing is being
+      // authenticated against a server here.
+      const challenge = toHex(new TextEncoder().encode('vela-recover-' + Date.now()));
+      const second = await Passkey.sign(challenge, first.credentialId);
+
+      const publicKeyHex = recoverPublicKeyFromAssertions(first, second);
+      __DEV__ && console.log('[Recover] Recovered publicKey:', publicKeyHex ? publicKeyHex.slice(0, 16) + '...' : null);
+      if (!publicKeyHex) {
+        showAlert(t('onboarding.login.recoverFailedTitle'), t('onboarding.login.recoverFailedBody'));
+        return;
+      }
+
+      const address = computeAddress(publicKeyHex);
+      const userName = decodeUserNameFromAssertion(first.userIdHex);
+      const account: StoredAccount = {
+        id: first.credentialId,
+        name: userName,
+        address,
+        publicKeyHex,
+        createdAt: new Date().toISOString(),
+      };
+      await saveAccount(account);
+      dispatch({ type: 'ADD_ACCOUNT', account });
+
+      // Heal the index in the background. The wallet already exists (and may
+      // hold funds), so reaching it must never be blocked on the server —
+      // unlike creation, where blocking prevents funding an unsynced wallet.
+      uploadPublicKey({ credentialId: first.credentialId, publicKeyHex, name: userName }).catch(() => {});
+
+      router.replace('/(tabs)/wallet');
+    } catch (error) {
+      if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
+        // User cancelled the second signature — stay on the welcome screen
+      } else {
+        showAlert(t('onboarding.login.recoverFailedTitle'), t('onboarding.login.recoverFailedBody'));
       }
     } finally {
       setLoginLoading(false);

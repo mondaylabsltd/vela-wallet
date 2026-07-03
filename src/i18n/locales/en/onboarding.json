@@ -66,7 +66,13 @@
       "alertNotFoundBody": "No wallet was found for this identity.\n\nPossible reasons:\n• You haven't created a wallet yet\n• Your identity hasn't synced to this device (check iCloud / Google settings)\n• The public key server is unreachable\n\nTry creating a new wallet, or ensure your identity provider (Face ID / fingerprint) is synced across devices.",
       "alertSignInFailedTitle": "Sign In Failed",
       "alertSignInFailedBody": "{{message}}\n\nMake sure your device has Face ID, Touch ID, or fingerprint set up and try again.",
-      "alertIncompatibleBodyCreate": "Your device's identity provider is not compatible with this wallet. Please switch to Google Password Manager in system settings and try again."
+      "alertIncompatibleBodyCreate": "Your device's identity provider is not compatible with this wallet. Please switch to Google Password Manager in system settings and try again.",
+      "recoverOfferTitle": "We Can Still Find Your Wallet",
+      "recoverOfferBody": "The key server has no record of this passkey yet — but your passkey itself can rebuild your wallet. Confirm one more signature and we'll recover your wallet address right here on this device. Nothing leaves your device.",
+      "recoverConfirm": "Recover Wallet",
+      "recoverCancel": "Not Now",
+      "recoverFailedTitle": "Recovery Didn't Work",
+      "recoverFailedBody": "We couldn't rebuild your wallet from those signatures. Nothing was changed — please try again in a moment."
     }
   }
 }
