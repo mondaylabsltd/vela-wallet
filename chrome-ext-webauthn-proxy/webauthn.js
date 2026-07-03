@@ -167,6 +167,7 @@ const looksLikeAccessError = (msg) =>
       chrome.runtime.sendMessage({
         type: 'VELA_WEBAUTHN_RESULT',
         error: `Passkey access to ${effectiveRpId} was not granted.`,
+        errorName: 'NotAllowedError',
       });
       return;
     }
@@ -192,6 +193,10 @@ const looksLikeAccessError = (msg) =>
       }
     }
     console.error(TAG, `${method} failed:`, err);
-    chrome.runtime.sendMessage({ type: 'VELA_WEBAUTHN_RESULT', error: err.message });
+    // Forward the error NAME too: the page shim rebuilds a DOMException from
+    // it. Collapsing everything to NotAllowedError made the wallet render
+    // real failures (e.g. Chromium's "User handle exceeds 64 bytes.") as
+    // "user cancelled" — invisible except in this console.
+    chrome.runtime.sendMessage({ type: 'VELA_WEBAUTHN_RESULT', error: err.message, errorName: err.name });
   }
 })();
