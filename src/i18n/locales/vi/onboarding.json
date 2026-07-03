@@ -67,9 +67,9 @@
       "alertSignInFailedTitle": "Đăng nhập thất bại",
       "alertSignInFailedBody": "{{message}}\n\nHãy đảm bảo thiết bị của bạn đã thiết lập Face ID, Touch ID hoặc vân tay rồi thử lại.",
       "alertIncompatibleBodyCreate": "Nhà cung cấp danh tính trên thiết bị của bạn không tương thích với ví này. Vui lòng chuyển sang Google Password Manager trong cài đặt hệ thống và thử lại.",
-      "recoverOfferTitle": "Vẫn có thể tìm lại ví của bạn",
-      "recoverOfferBody": "Máy chủ khóa chưa có bản ghi cho passkey này — nhưng chính passkey của bạn có thể tự dựng lại ví. Chỉ cần xác nhận thêm một chữ ký, chúng tôi sẽ khôi phục địa chỉ ví ngay trên thiết bị này. Không có dữ liệu nào rời khỏi thiết bị của bạn.",
-      "recoverConfirm": "Khôi phục ví",
+      "recoverOfferTitle": "Khôi phục ví",
+      "recoverOfferBody": "Máy chủ khóa không có bản ghi cho passkey này. Xác nhận thêm một chữ ký để dựng lại khóa công khai — và địa chỉ ví — ngay trên thiết bị này.",
+      "recoverConfirm": "Khôi phục ngay",
       "recoverCancel": "Để sau",
       "recoverFailedTitle": "Khôi phục chưa thành công",
       "recoverFailedBody": "Chúng tôi không thể dựng lại ví từ các chữ ký đó. Không có gì bị thay đổi — hãy thử lại sau giây lát nhé."

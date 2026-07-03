@@ -67,9 +67,9 @@
       "alertSignInFailedTitle": "Échec de la connexion",
       "alertSignInFailedBody": "{{message}}\n\nAssurez-vous que votre appareil dispose de Face ID, Touch ID ou d'une empreinte digitale configurée, puis réessayez.",
       "alertIncompatibleBodyCreate": "Le fournisseur d'identité de votre appareil n'est pas compatible avec ce portefeuille. Veuillez passer au Gestionnaire de mots de passe Google dans les réglages système, puis réessayez.",
-      "recoverOfferTitle": "Nous pouvons encore retrouver votre portefeuille",
-      "recoverOfferBody": "Le serveur de clés n'a pas encore d'enregistrement pour cette clé d'accès — mais votre clé d'accès peut reconstruire votre portefeuille à elle seule. Confirmez une signature supplémentaire et nous récupérerons l'adresse de votre portefeuille directement sur cet appareil. Rien ne quitte votre appareil.",
-      "recoverConfirm": "Récupérer le portefeuille",
+      "recoverOfferTitle": "Récupérer le portefeuille",
+      "recoverOfferBody": "Le serveur de clés n'a aucun enregistrement pour cette clé d'accès. Confirmez une signature supplémentaire pour reconstruire la clé publique — et votre adresse — sur cet appareil.",
+      "recoverConfirm": "Récupérer",
       "recoverCancel": "Pas maintenant",
       "recoverFailedTitle": "La récupération n'a pas abouti",
       "recoverFailedBody": "Nous n'avons pas pu reconstruire votre portefeuille à partir de ces signatures. Rien n'a été modifié — réessayez dans un instant."

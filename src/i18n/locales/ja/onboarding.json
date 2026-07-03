@@ -67,9 +67,9 @@
       "alertSignInFailedTitle": "サインインに失敗しました",
       "alertSignInFailedBody": "{{message}}\n\n端末に Face ID、Touch ID、または指紋認証が設定されていることを確認してから、もう一度お試しください。",
       "alertIncompatibleBodyCreate": "お使いの端末の本人確認プロバイダーはこのウォレットと互換性がありません。システム設定で Google パスワード マネージャーに切り替えてからもう一度お試しください。",
-      "recoverOfferTitle": "ウォレットはまだ見つけられます",
-      "recoverOfferBody": "鍵サーバーにはこのパスキーの記録がまだありません。でも大丈夫 — パスキー自体がウォレットを再構築できます。もう一度署名を確認するだけで、この端末上でウォレットのアドレスを復元します。データが端末の外に出ることはありません。",
-      "recoverConfirm": "ウォレットを復元",
+      "recoverOfferTitle": "ウォレットを復元",
+      "recoverOfferBody": "鍵サーバーにこのパスキーの記録がありません。もう一度署名を確認すれば、この端末上で公開鍵とウォレットアドレスを再構築できます。",
+      "recoverConfirm": "今すぐ復元",
       "recoverCancel": "今はしない",
       "recoverFailedTitle": "復元できませんでした",
       "recoverFailedBody": "これらの署名からウォレットを再構築できませんでした。何も変更されていません。少し待ってからもう一度お試しください。"

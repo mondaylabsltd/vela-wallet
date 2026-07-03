@@ -67,9 +67,9 @@
       "alertSignInFailedTitle": "Falha ao entrar",
       "alertSignInFailedBody": "{{message}}\n\nVerifique se o seu dispositivo tem Face ID, Touch ID ou impressão digital configurados e tente de novo.",
       "alertIncompatibleBodyCreate": "O provedor de identidade do seu dispositivo não é compatível com esta carteira. Mude para o Gerenciador de Senhas do Google nas configurações do sistema e tente de novo.",
-      "recoverOfferTitle": "Ainda podemos encontrar sua carteira",
-      "recoverOfferBody": "O servidor de chaves ainda não tem registro desta passkey — mas a sua passkey pode reconstruir a carteira sozinha. Confirme mais uma assinatura e recuperaremos o endereço da sua carteira aqui mesmo, neste dispositivo. Nada sai do seu dispositivo.",
-      "recoverConfirm": "Recuperar carteira",
+      "recoverOfferTitle": "Recuperar carteira",
+      "recoverOfferBody": "O servidor de chaves não tem registro desta passkey. Confirme mais uma assinatura para reconstruir a chave pública — e seu endereço — neste dispositivo.",
+      "recoverConfirm": "Recuperar agora",
       "recoverCancel": "Agora não",
       "recoverFailedTitle": "A recuperação não funcionou",
       "recoverFailedBody": "Não conseguimos reconstruir sua carteira com essas assinaturas. Nada foi alterado — tente de novo em instantes."

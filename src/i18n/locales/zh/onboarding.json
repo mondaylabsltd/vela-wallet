@@ -67,9 +67,9 @@
       "alertSignInFailedTitle": "登录失败",
       "alertSignInFailedBody": "{{message}}\n\n请确保您的设备已设置 Face ID、Touch ID 或指纹，然后重试。",
       "alertIncompatibleBodyCreate": "您的设备身份提供商与此钱包不兼容。请在系统设置中切换到 Google 密码管理器后重试。",
-      "recoverOfferTitle": "仍然可以找回您的钱包",
-      "recoverOfferBody": "密钥服务器暂时没有这枚通行密钥的记录——但通行密钥本身就能重建您的钱包。只需再确认一次签名，我们就会在这台设备上直接恢复您的钱包地址。任何数据都不会离开您的设备。",
-      "recoverConfirm": "找回钱包",
+      "recoverOfferTitle": "找回钱包",
+      "recoverOfferBody": "服务器暂无这枚通行密钥的记录。再确认一次签名，即可在本机重建公钥和钱包地址。",
+      "recoverConfirm": "立即找回",
       "recoverCancel": "暂时不用",
       "recoverFailedTitle": "未能完成找回",
       "recoverFailedBody": "未能根据这些签名重建您的钱包。没有任何更改——请稍后再试一次。"

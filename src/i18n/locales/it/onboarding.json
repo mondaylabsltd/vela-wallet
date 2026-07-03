@@ -67,9 +67,9 @@
       "alertSignInFailedTitle": "Accesso non riuscito",
       "alertSignInFailedBody": "{{message}}\n\nAssicurati che sul dispositivo siano configurati Face ID, Touch ID o l'impronta digitale e riprova.",
       "alertIncompatibleBodyCreate": "Il provider di identità del tuo dispositivo non è compatibile con questo wallet. Passa a Gestore delle password di Google nelle impostazioni di sistema e riprova.",
-      "recoverOfferTitle": "Possiamo ancora trovare il tuo wallet",
-      "recoverOfferBody": "Il server delle chiavi non ha ancora un record per questa passkey — ma la tua passkey può ricostruire il wallet da sola. Conferma una firma in più e recupereremo il tuo indirizzo direttamente su questo dispositivo. Nulla lascia il tuo dispositivo.",
-      "recoverConfirm": "Recupera wallet",
+      "recoverOfferTitle": "Recupera wallet",
+      "recoverOfferBody": "Il server delle chiavi non ha alcun record di questa passkey. Conferma una firma in più per ricostruire la chiave pubblica — e il tuo indirizzo — su questo dispositivo.",
+      "recoverConfirm": "Recupera ora",
       "recoverCancel": "Non ora",
       "recoverFailedTitle": "Il recupero non è riuscito",
       "recoverFailedBody": "Non siamo riusciti a ricostruire il wallet da quelle firme. Non è stato modificato nulla — riprova tra un momento."

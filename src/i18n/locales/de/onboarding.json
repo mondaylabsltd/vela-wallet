@@ -67,9 +67,9 @@
       "alertSignInFailedTitle": "Anmeldung fehlgeschlagen",
       "alertSignInFailedBody": "{{message}}\n\nStellen Sie sicher, dass auf Ihrem Gerät Face ID, Touch ID oder ein Fingerabdruck eingerichtet ist, und versuchen Sie es erneut.",
       "alertIncompatibleBodyCreate": "Der Identitätsanbieter Ihres Geräts ist nicht mit dieser Wallet kompatibel. Bitte wechseln Sie in den Systemeinstellungen zum Google Passwortmanager und versuchen Sie es erneut.",
-      "recoverOfferTitle": "Wir können Ihre Wallet trotzdem finden",
-      "recoverOfferBody": "Der Schlüsselserver hat noch keinen Eintrag zu diesem Passkey — aber Ihr Passkey selbst kann Ihre Wallet wiederherstellen. Bestätigen Sie eine weitere Signatur, und wir stellen Ihre Wallet-Adresse direkt auf diesem Gerät wieder her. Nichts verlässt Ihr Gerät.",
-      "recoverConfirm": "Wallet wiederherstellen",
+      "recoverOfferTitle": "Wallet wiederherstellen",
+      "recoverOfferBody": "Der Schlüsselserver hat keinen Eintrag zu diesem Passkey. Bestätigen Sie eine weitere Signatur, um den öffentlichen Schlüssel — und Ihre Wallet-Adresse — auf diesem Gerät wiederherzustellen.",
+      "recoverConfirm": "Jetzt wiederherstellen",
       "recoverCancel": "Jetzt nicht",
       "recoverFailedTitle": "Wiederherstellung fehlgeschlagen",
       "recoverFailedBody": "Aus diesen Signaturen konnten wir Ihre Wallet nicht wiederherstellen. Es wurde nichts verändert — bitte versuchen Sie es gleich noch einmal."
