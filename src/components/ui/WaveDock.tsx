@@ -4,7 +4,8 @@
  * One continuous full-bleed surface with a soft wave crest in the centre that
  * the circular Scan button emerges from. Two core actions sit on the bar:
  * Receive (primary / brand) and Send (secondary). Payment-first: Receive is the
- * single brand-accent control by default.
+ * single brand-accent control by default — quiet accent outline, not a solid
+ * fill, so it reads as the brand action without shouting.
  *
  * Full-bleed: render this as a child of a full-width container (not inside the
  * padded ScreenContainer). It positions itself absolutely at the bottom.
@@ -55,7 +56,7 @@ function DockButton({ label, icon: Icon, onPress, variant }: DockButtonProps) {
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Icon size={22} color={primary ? color.fg.inverse : color.fg.muted} strokeWidth={2.2} />
+      <Icon size={22} color={primary ? color.accent.base : color.fg.muted} strokeWidth={2.2} />
       <Text style={[styles.btnLabel, primary ? styles.btnLabelPrimary : styles.btnLabelSecondary]}>{label}</Text>
     </AnimatedPressable>
   );
@@ -175,7 +176,11 @@ const styles = createStyles(() => ({
     borderRadius: radius.xl,
   },
   btnPrimary: {
-    backgroundColor: color.accent.base,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: color.accent.base,
+    // Keep the same outer height as the borderless secondary button.
+    paddingVertical: space.xl - 1.5,
   },
   btnSecondary: {
     backgroundColor: color.bg.sunken,
@@ -185,7 +190,7 @@ const styles = createStyles(() => ({
     ...inter.semibold,
   },
   btnLabelPrimary: {
-    color: color.fg.inverse,
+    color: color.accent.base,
   },
   btnLabelSecondary: {
     color: color.fg.base,
