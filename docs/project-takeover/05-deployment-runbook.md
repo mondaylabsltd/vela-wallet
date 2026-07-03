@@ -9,8 +9,8 @@
 | ------------- | -------------------------- | -------------------------------------- | ---------------------------------------------------------------------- |
 | Web 钱包    | `dist/`(静态)            | Cloudflare Pages(wallet.getvela.app,git-connected) | merge 进 main → CF Pages 自动执行 `npm run build:web`(本地跑它仅作验证,无手动上传路径) |
 | 官网+API    | `.svelte-kit/cloudflare` | Cloudflare Workers(getvela.app)      | `cd getvela.app && bun run deploy`                                   |
-| iOS App     | .ipa                     | App Store Connect                    | Xcode/`expo run:ios --configuration Release` + 上传                  |
-| Android App | .aab                     | Google Play                          | `cd android && ./gradlew bundleRelease`(需 keystore.properties,见下) |
+| iOS App     | .ipa                     | App Store Connect                    | `eas build -p ios --profile production`(EAS 托管证书;Xcode Archive 为后备) |
+| Android App | .aab                     | Google Play                          | `eas build -p android --profile production`(EAS 托管 keystore;本地 gradlew 为后备,见下) |
 
 另有两个**独立仓库**的服务(不在本仓库,部署互不耦合但语义耦合):vela-bundler(gas 报价与错误文案)、p256-index(公钥索引)。
 
@@ -55,19 +55,23 @@ cd getvela.app && bun run check   # 0 errors
 4. 回滚:`wrangler rollback` 或重发上一个 commit 的构建
 5. **注意**:API 部署影响钱包 App 的 bundler 代理路径——发布后立刻在钱包里做一次小额估算(不需提交)确认 `/api/bundler` 正常
 
-## Android 发布(当前被阻塞,见 08)
+## Android 发布(主路径:EAS Build,2026-07-03 起)
 
-前置(一次性,人工)。注意 `/android` 与 `/ios` 目录是 `expo prebuild` 生成物、**不入库**;release 签名逻辑由 `plugins/with-release-signing.js`(app.json 已注册)在每次 prebuild 时注入,手改 android/ 会被 `expo prebuild --clean` 抹掉:
+签名主路径已切换为 **EAS 托管凭据**:首次 `eas build -p android --profile production`(或 `eas credentials`)时,EAS 生成 upload keystore 并存于 Expo 云端——创始人不再承担本地 keystore 保管/丢失风险(可用 `eas credentials` 下载备份一份离库冷存)。
 
-1. `keytool -genkeypair … -keystore upload-keystore.jks -alias vela-upload`(**离库保存+备份**)
-2. `cp keystore.properties.example android/keystore.properties` 并填真值(example 在仓库根)
-3. Play Console 注册 + Play App Signing 开启
-4. 从 Play Console 取 **app signing cert** 与 **upload cert** 两枚 SHA-256,写入 `getvela.app/src/routes/.well-known/assetlinks.json/+server.ts`,部署官网
-5. 用 Google Statement List Tester 验证 assetlinks
-6. 真机验证 passkey 创建/登录(DAL 生效需要签名匹配)
+前置(一次性):
 
-之后每次:`cd android && ./gradlew bundleRelease` → Play Console 上传 → 分阶段发布(建议 10%→50%→100%)。
-**警告**:没有 keystore.properties 时构建会用 debug keystore 并打印 WARNING——该产物**禁止上传**。
+1. `eas build -p android --profile production` → 选择让 EAS 生成 keystore(项目已接 EAS,projectId 在 app.json)
+2. Play Console 注册 + 上传首个 AAB + Play App Signing 开启(EAS keystore 自动成为 upload key)
+3. 取**两枚 SHA-256** 写入 `getvela.app/src/routes/.well-known/assetlinks.json/+server.ts` 并部署官网:
+   - app signing cert:Play Console → App Signing 页(Google 重签名后的正式证书)
+   - upload cert:`eas credentials`(Android → keystore → 显示指纹;内部测试轨道装的是这把签的)
+4. Google Statement List Tester 验证 assetlinks
+5. 真机验证 passkey 创建/登录(DAL 生效需要签名匹配)
+
+之后每次:`eas build -p android --profile production`(eas.json production profile 带 autoIncrement,版本号源=remote)→ Play Console 上传(或 `eas submit`)→ 分阶段发布(建议 10%→50%→100%)。`.eas/workflows/create-production-builds.yml` 可一次出双平台生产包。
+
+**与 `plugins/with-release-signing.js` 的关系**(经 EAS 构建流程文档核实):EAS 构建在 prebuild 之后向 `android/app/build.gradle` 末尾 `apply from` 注入 `eas-build.gradle`,用云端 keystore 的 release signingConfig **覆盖**项目内配置——所以 EAS 构建时本插件的 debug 回退分支虽会执行并打 WARNING,但随后被 EAS 覆盖,产物签名正确(该 WARNING 在 EAS 日志里属预期噪音,可忽略)。插件保留,服务本地 `expo run:android` release 变体的老路径(keytool + keystore.properties,见 keystore.properties.example);两条路径互不干扰。
 
 ## iOS 发布
 
