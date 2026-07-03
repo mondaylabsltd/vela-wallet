@@ -37,8 +37,11 @@
       "createWalletBtn": "Créer un portefeuille",
       "successTitle": "Votre portefeuille est prêt !",
       "successMessage": "Votre adresse fonctionne sur les {{count}} réseaux pris en charge.",
-      "verifyHint": "Appuyez ci-dessous pour vérifier votre identité avant d'utiliser le portefeuille.",
-      "verifySignInBtn": "Vérifier et se connecter",
+      "verifyHint": "Votre clé d'accès est vérifiée et votre clé synchronisée — tout est prêt.",
+      "enterWalletBtn": "Ouvrir le portefeuille",
+      "finishVerifyBtn": "Terminer la vérification",
+      "verifyStuckHint": "La vérification échoue encore ? Votre appareil n'a peut-être pas bien enregistré cette clé d'accès. Vous pouvez recommencer sans risque — rien n'a encore été créé.",
+      "startOverBtn": "Recommencer avec une nouvelle clé d'accès",
       "syncFailedTitle": "Échec de la synchronisation",
       "syncFailedMessage": "Portefeuille créé, mais votre clé publique n'a pas été synchronisée avec le serveur. Vous ne pourrez pas vous connecter sur d'autres appareils tant que ce problème n'est pas résolu.",
       "syncFailedHint": "Vérifiez votre réseau ou configurez un point d'accès personnalisé ci-dessous.",
@@ -55,7 +58,9 @@
       "statusVerifyCancelled": "La vérification a été annulée. Veuillez réessayer.",
       "alertNotSupportedTitle": "Non pris en charge",
       "alertNotSupportedBody": "L'authentification biométrique n'est pas disponible sur cet appareil.",
-      "alertErrorTitle": "Erreur"
+      "alertErrorTitle": "Erreur",
+      "alertNotDiscoverableTitle": "Clé d'accès non synchronisée",
+      "alertNotDiscoverableBody": "Votre appareil a enregistré cette clé d'accès uniquement en local : elle n'apparaîtrait pas à la connexion et ne pourrait pas récupérer votre portefeuille plus tard. Par sécurité, le portefeuille n'a pas encore été créé — vous n'avez rien perdu.\n\nDans les réglages système, choisissez le Gestionnaire de mots de passe Google ou le Trousseau iCloud comme fournisseur de clés d'accès, puis réessayez simplement."
     },
     "login": {
       "alertNotSupportedTitle": "Non pris en charge",

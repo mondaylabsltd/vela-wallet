@@ -66,6 +66,7 @@ export const PasskeyErrorCode = {
   NO_CREDENTIAL: 'PASSKEY_NO_CREDENTIAL',
   NOT_SUPPORTED: 'PASSKEY_NOT_SUPPORTED',
   NOT_AVAILABLE: 'PASSKEY_NOT_AVAILABLE',
+  NOT_DISCOVERABLE: 'PASSKEY_NOT_DISCOVERABLE',
 } as const;
 
 export type PasskeyErrorCode = (typeof PasskeyErrorCode)[keyof typeof PasskeyErrorCode];
@@ -220,14 +221,35 @@ async function webRegister(userName: string): Promise<PasskeyRegistrationResult>
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
           residentKey: 'required',
+          // WebAuthn L2 §5.4.4: RPs SHOULD set this iff residentKey is
+          // 'required'. Clients that only honor the L1 boolean would otherwise
+          // silently create a NON-discoverable credential (issue #1).
+          requireResidentKey: true,
           userVerification: 'required',
         },
         attestation: 'direct',
+        // credProps.rk tells us whether the credential actually came out
+        // discoverable — the only client-side signal for it.
+        extensions: { credProps: true },
       },
     }) as PublicKeyCredential | null;
 
     if (!credential) {
       throw new PasskeyError(PasskeyErrorCode.NO_CREDENTIAL, 'No credential returned');
+    }
+
+    // Sign-in ("I already have a wallet") and cross-device recovery both rely
+    // on discoverable credentials — a non-discoverable one signs fine when
+    // pinned by ID but never shows up in the passkey picker or syncs, so the
+    // wallet would die with this device. Fail here, BEFORE anything is saved
+    // or funded. `rk` undefined means the client can't say — give it the
+    // benefit of the doubt. (The orphaned authenticator entry is harmless.)
+    const credProps = credential.getClientExtensionResults?.().credProps;
+    if (credProps?.rk === false) {
+      throw new PasskeyError(
+        PasskeyErrorCode.NOT_DISCOVERABLE,
+        'Authenticator created a non-discoverable credential',
+      );
     }
 
     const response = credential.response as AuthenticatorAttestationResponse;
@@ -372,6 +394,7 @@ function mapNativeCode(code?: string): PasskeyErrorCode {
     case 'PASSKEY_CANCELLED': return PasskeyErrorCode.CANCELLED;
     case 'PASSKEY_NO_CREDENTIAL': return PasskeyErrorCode.NO_CREDENTIAL;
     case 'PASSKEY_NOT_SUPPORTED': return PasskeyErrorCode.NOT_SUPPORTED;
+    case 'PASSKEY_NOT_DISCOVERABLE': return PasskeyErrorCode.NOT_DISCOVERABLE;
     default: return PasskeyErrorCode.FAILED;
   }
 }

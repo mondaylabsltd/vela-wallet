@@ -37,8 +37,11 @@
       "createWalletBtn": "Cüzdan Oluştur",
       "successTitle": "Cüzdanınız hazır!",
       "successMessage": "Adresiniz desteklenen tüm {{count}} ağda çalışır.",
-      "verifyHint": "Cüzdanı kullanmadan önce kimliğinizin çalıştığını doğrulamak için aşağıya dokunun.",
-      "verifySignInBtn": "Doğrula ve Giriş Yap",
+      "verifyHint": "Geçiş anahtarınız doğrulandı ve anahtarınız eşitlendi — her şey hazır.",
+      "enterWalletBtn": "Cüzdana gir",
+      "finishVerifyBtn": "Doğrulamayı tamamla",
+      "verifyStuckHint": "Doğrulama sürekli başarısız mı oluyor? Cihazınız bu geçiş anahtarını düzgün kaydetmemiş olabilir. Baştan başlamak güvenli — henüz hiçbir şey oluşturulmadı.",
+      "startOverBtn": "Yeni bir geçiş anahtarıyla baştan başla",
       "syncFailedTitle": "Eşitleme başarısız",
       "syncFailedMessage": "Cüzdan oluşturuldu ancak açık anahtarınız sunucuyla eşitlenmedi. Bu sorun çözülene kadar diğer cihazlarda giriş yapamazsınız.",
       "syncFailedHint": "Ağınızı kontrol edin veya aşağıda özel bir uç nokta yapılandırın.",
@@ -55,7 +58,9 @@
       "statusVerifyCancelled": "Doğrulama iptal edildi. Lütfen tekrar deneyin.",
       "alertNotSupportedTitle": "Desteklenmiyor",
       "alertNotSupportedBody": "Bu cihazda biyometrik kimlik doğrulama kullanılamıyor.",
-      "alertErrorTitle": "Hata"
+      "alertErrorTitle": "Hata",
+      "alertNotDiscoverableTitle": "Geçiş anahtarı eşitlenmedi",
+      "alertNotDiscoverableBody": "Cihazınız bu geçiş anahtarını yalnızca bu cihaza kaydetti; oturum açarken görünmez ve cüzdanınızı daha sonra kurtaramaz. Güvenliğiniz için cüzdan henüz oluşturulmadı — hiçbir şey kaybetmediniz.\n\nSistem ayarlarından geçiş anahtarı sağlayıcısı olarak Google Password Manager veya iCloud Keychain'i seçin ve yeniden deneyin."
     },
     "login": {
       "alertNotSupportedTitle": "Desteklenmiyor",

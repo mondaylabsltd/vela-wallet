@@ -37,8 +37,11 @@
       "createWalletBtn": "Create Wallet",
       "successTitle": "Your wallet is ready!",
       "successMessage": "Your address works on all {{count}} supported networks.",
-      "verifyHint": "Tap below to verify your identity works before using the wallet.",
-      "verifySignInBtn": "Verify & Sign in",
+      "verifyHint": "Your passkey is verified and your key is synced — you're all set.",
+      "enterWalletBtn": "Enter Wallet",
+      "finishVerifyBtn": "Finish Verification",
+      "verifyStuckHint": "Verification keeps failing? Your device may not have saved this passkey properly. It's safe to start over — nothing has been created yet.",
+      "startOverBtn": "Start over with a new passkey",
       "syncFailedTitle": "Sync failed",
       "syncFailedMessage": "Wallet created, but your public key wasn't synced to the server. You won't be able to sign in on other devices until this is resolved.",
       "syncFailedHint": "Check your network, or configure a custom endpoint below.",
@@ -55,7 +58,9 @@
       "statusVerifyCancelled": "Verification was cancelled. Please try again.",
       "alertNotSupportedTitle": "Not Supported",
       "alertNotSupportedBody": "Biometric authentication is not available on this device.",
-      "alertErrorTitle": "Error"
+      "alertErrorTitle": "Error",
+      "alertNotDiscoverableTitle": "Passkey Didn't Sync",
+      "alertNotDiscoverableBody": "Your device saved this passkey only on this device, so it wouldn't appear when you sign in and couldn't recover your wallet later. To keep you safe, no wallet was created — nothing is lost.\n\nIn system settings, set Google Password Manager or iCloud Keychain as your passkey provider, then simply try again."
     },
     "login": {
       "alertNotSupportedTitle": "Not Supported",

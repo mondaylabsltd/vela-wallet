@@ -37,8 +37,11 @@
       "createWalletBtn": "Crear billetera",
       "successTitle": "¡Tu billetera está lista!",
       "successMessage": "Tu dirección funciona en las {{count}} redes compatibles.",
-      "verifyHint": "Toca abajo para verificar que tu identidad funciona antes de usar la billetera.",
-      "verifySignInBtn": "Verificar e iniciar sesión",
+      "verifyHint": "Tu passkey está verificada y tu llave sincronizada — todo listo.",
+      "enterWalletBtn": "Entrar a la billetera",
+      "finishVerifyBtn": "Terminar verificación",
+      "verifyStuckHint": "¿La verificación sigue fallando? Puede que tu dispositivo no haya guardado bien esta passkey. Es seguro empezar de nuevo — aún no se creó nada.",
+      "startOverBtn": "Empezar de nuevo con otra passkey",
       "syncFailedTitle": "Falló la sincronización",
       "syncFailedMessage": "Se creó la billetera, pero tu llave pública no se sincronizó con el servidor. No podrás iniciar sesión en otros dispositivos hasta resolver esto.",
       "syncFailedHint": "Revisa tu conexión o configura abajo un endpoint personalizado.",
@@ -55,7 +58,9 @@
       "statusVerifyCancelled": "Se canceló la verificación. Inténtalo de nuevo.",
       "alertNotSupportedTitle": "No compatible",
       "alertNotSupportedBody": "La autenticación biométrica no está disponible en este dispositivo.",
-      "alertErrorTitle": "Error"
+      "alertErrorTitle": "Error",
+      "alertNotDiscoverableTitle": "Tu passkey no se sincronizó",
+      "alertNotDiscoverableBody": "Tu dispositivo guardó esta passkey solo en este equipo, así que no aparecería al iniciar sesión ni podría recuperar tu billetera después. Por tu seguridad, aún no se creó la billetera — no perdiste nada.\n\nEn los ajustes del sistema, elige el Administrador de contraseñas de Google o el Llavero de iCloud como proveedor de passkeys e inténtalo de nuevo."
     },
     "login": {
       "alertNotSupportedTitle": "No compatible",

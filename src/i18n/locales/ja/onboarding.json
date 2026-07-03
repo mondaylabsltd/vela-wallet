@@ -37,8 +37,11 @@
       "createWalletBtn": "ウォレットを作成",
       "successTitle": "ウォレットの準備ができました！",
       "successMessage": "あなたのアドレスは、対応する {{count}} 件すべてのネットワークで利用できます。",
-      "verifyHint": "ウォレットを使う前に、下をタップして本人確認が機能することを確認しましょう。",
-      "verifySignInBtn": "確認してサインイン",
+      "verifyHint": "パスキーの確認と鍵の同期が完了しました。準備完了です。",
+      "enterWalletBtn": "ウォレットへ進む",
+      "finishVerifyBtn": "確認を完了する",
+      "verifyStuckHint": "確認が何度も失敗しますか？端末がこのパスキーを正しく保存できていない可能性があります。まだ何も作成されていないので、安心して最初からやり直せます。",
+      "startOverBtn": "新しいパスキーで最初からやり直す",
       "syncFailedTitle": "同期に失敗しました",
       "syncFailedMessage": "ウォレットは作成されましたが、公開鍵がサーバーに同期されませんでした。これが解決するまで、他の端末でサインインできません。",
       "syncFailedHint": "ネットワークを確認するか、下でカスタムエンドポイントを設定してください。",
@@ -55,7 +58,9 @@
       "statusVerifyCancelled": "確認がキャンセルされました。もう一度お試しください。",
       "alertNotSupportedTitle": "非対応",
       "alertNotSupportedBody": "この端末では生体認証を利用できません。",
-      "alertErrorTitle": "エラー"
+      "alertErrorTitle": "エラー",
+      "alertNotDiscoverableTitle": "パスキーが同期されませんでした",
+      "alertNotDiscoverableBody": "お使いの端末はこのパスキーをこの端末内にのみ保存したため、次回のサインイン時に表示されず、ウォレットの復元にも使えません。安全のため、ウォレットはまだ作成されていません。失われたものは何もありませんのでご安心ください。\n\nシステム設定でパスキーの保存先を Google パスワード マネージャーまたは iCloud キーチェーンに切り替えて、もう一度お試しください。"
     },
     "login": {
       "alertNotSupportedTitle": "非対応",

@@ -37,8 +37,11 @@
       "createWalletBtn": "Wallet erstellen",
       "successTitle": "Ihre Wallet ist bereit!",
       "successMessage": "Ihre Adresse funktioniert auf allen {{count}} unterstützten Netzwerken.",
-      "verifyHint": "Tippen Sie unten, um zu prüfen, ob Ihre Identität funktioniert, bevor Sie die Wallet nutzen.",
-      "verifySignInBtn": "Prüfen & anmelden",
+      "verifyHint": "Ihr Passkey ist bestätigt und Ihr Schlüssel synchronisiert — alles bereit.",
+      "enterWalletBtn": "Wallet öffnen",
+      "finishVerifyBtn": "Bestätigung abschließen",
+      "verifyStuckHint": "Die Bestätigung schlägt immer wieder fehl? Ihr Gerät hat diesen Passkey möglicherweise nicht richtig gespeichert. Sie können bedenkenlos neu beginnen — es wurde noch nichts erstellt.",
+      "startOverBtn": "Mit neuem Passkey neu beginnen",
       "syncFailedTitle": "Synchronisierung fehlgeschlagen",
       "syncFailedMessage": "Wallet erstellt, aber Ihr öffentlicher Schlüssel wurde nicht mit dem Server synchronisiert. Sie können sich auf anderen Geräten erst anmelden, wenn dies behoben ist.",
       "syncFailedHint": "Prüfen Sie Ihr Netzwerk oder konfigurieren Sie unten einen eigenen Endpunkt.",
@@ -55,7 +58,9 @@
       "statusVerifyCancelled": "Überprüfung wurde abgebrochen. Bitte versuchen Sie es erneut.",
       "alertNotSupportedTitle": "Nicht unterstützt",
       "alertNotSupportedBody": "Biometrische Authentifizierung ist auf diesem Gerät nicht verfügbar.",
-      "alertErrorTitle": "Fehler"
+      "alertErrorTitle": "Fehler",
+      "alertNotDiscoverableTitle": "Passkey wurde nicht synchronisiert",
+      "alertNotDiscoverableBody": "Ihr Gerät hat diesen Passkey nur lokal gespeichert. Er würde beim Anmelden nicht angezeigt und könnte Ihre Wallet später nicht wiederherstellen. Zu Ihrer Sicherheit wurde noch keine Wallet erstellt — es ist nichts verloren gegangen.\n\nWählen Sie in den Systemeinstellungen den Google Passwortmanager oder den iCloud-Schlüsselbund als Passkey-Anbieter und versuchen Sie es einfach erneut."
     },
     "login": {
       "alertNotSupportedTitle": "Nicht unterstützt",

@@ -37,8 +37,11 @@
       "createWalletBtn": "建立錢包",
       "successTitle": "您的錢包已就緒！",
       "successMessage": "您的地址可在全部 {{count}} 個支援的網路上使用。",
-      "verifyHint": "使用錢包前，請點擊下方驗證您的身分是否正常運作。",
-      "verifySignInBtn": "驗證並登入",
+      "verifyHint": "您的通行密鑰已驗證，金鑰已同步——一切就緒。",
+      "enterWalletBtn": "進入錢包",
+      "finishVerifyBtn": "完成驗證",
+      "verifyStuckHint": "驗證一直失敗？您的裝置可能沒有正確儲存這枚通行密鑰。可以放心重新開始——目前尚未建立任何內容。",
+      "startOverBtn": "用新的通行密鑰重新開始",
       "syncFailedTitle": "同步失敗",
       "syncFailedMessage": "錢包已建立，但您的公鑰尚未同步到伺服器。在解決此問題前，您將無法在其他裝置上登入。",
       "syncFailedHint": "請檢查您的網路，或於下方設定自訂端點。",
@@ -55,7 +58,9 @@
       "statusVerifyCancelled": "驗證已取消，請再試一次。",
       "alertNotSupportedTitle": "不支援",
       "alertNotSupportedBody": "此裝置不支援生物辨識驗證。",
-      "alertErrorTitle": "錯誤"
+      "alertErrorTitle": "錯誤",
+      "alertNotDiscoverableTitle": "通行密鑰未能同步",
+      "alertNotDiscoverableBody": "您的裝置只將這枚通行密鑰儲存在本機，之後登入時它不會出現，也無法用來找回錢包。為了保護您，錢包尚未建立，您沒有任何損失。\n\n只要到系統設定將通行密鑰提供者改為 Google 密碼管理工具或 iCloud 鑰匙圈，再試一次即可。"
     },
     "login": {
       "alertNotSupportedTitle": "不支援",

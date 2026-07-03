@@ -37,8 +37,11 @@
       "createWalletBtn": "지갑 만들기",
       "successTitle": "지갑이 준비되었습니다!",
       "successMessage": "주소는 지원되는 {{count}}개 네트워크 모두에서 작동합니다.",
-      "verifyHint": "지갑을 사용하기 전에 아래를 눌러 신원이 정상 작동하는지 확인하세요.",
-      "verifySignInBtn": "확인 후 로그인",
+      "verifyHint": "패스키가 확인되었고 키가 동기화되었습니다. 모든 준비가 끝났습니다.",
+      "enterWalletBtn": "지갑으로 이동",
+      "finishVerifyBtn": "확인 완료하기",
+      "verifyStuckHint": "확인이 계속 실패하나요? 기기가 이 패스키를 제대로 저장하지 못했을 수 있습니다. 아직 아무것도 생성되지 않았으니 안심하고 처음부터 다시 시작하세요.",
+      "startOverBtn": "새 패스키로 다시 시작",
       "syncFailedTitle": "동기화 실패",
       "syncFailedMessage": "지갑은 생성되었지만 공개 키가 서버에 동기화되지 않았습니다. 이 문제가 해결될 때까지 다른 기기에서 로그인할 수 없습니다.",
       "syncFailedHint": "네트워크를 확인하거나 아래에서 사용자 지정 엔드포인트를 설정하세요.",
@@ -55,7 +58,9 @@
       "statusVerifyCancelled": "확인이 취소되었습니다. 다시 시도하세요.",
       "alertNotSupportedTitle": "지원되지 않음",
       "alertNotSupportedBody": "이 기기에서는 생체 인증을 사용할 수 없습니다.",
-      "alertErrorTitle": "오류"
+      "alertErrorTitle": "오류",
+      "alertNotDiscoverableTitle": "패스키가 동기화되지 않았습니다",
+      "alertNotDiscoverableBody": "기기가 이 패스키를 이 기기에만 저장하여 다음 로그인 때 표시되지 않고, 나중에 지갑을 복구하는 데도 사용할 수 없습니다. 안전을 위해 지갑은 아직 생성되지 않았으며, 잃은 것은 아무것도 없으니 안심하세요.\n\n시스템 설정에서 패스키 제공자를 Google 비밀번호 관리자 또는 iCloud 키체인으로 변경한 후 다시 시도해 주세요."
     },
     "login": {
       "alertNotSupportedTitle": "지원되지 않음",

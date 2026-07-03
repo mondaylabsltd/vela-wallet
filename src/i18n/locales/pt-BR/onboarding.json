@@ -37,8 +37,11 @@
       "createWalletBtn": "Criar carteira",
       "successTitle": "Sua carteira está pronta!",
       "successMessage": "Seu endereço funciona em todas as {{count}} redes compatíveis.",
-      "verifyHint": "Toque abaixo para confirmar que sua identidade funciona antes de usar a carteira.",
-      "verifySignInBtn": "Verificar e entrar",
+      "verifyHint": "Sua passkey foi verificada e sua chave sincronizada — tudo pronto.",
+      "enterWalletBtn": "Entrar na carteira",
+      "finishVerifyBtn": "Concluir verificação",
+      "verifyStuckHint": "A verificação continua falhando? Seu dispositivo pode não ter salvado esta passkey corretamente. É seguro recomeçar — nada foi criado ainda.",
+      "startOverBtn": "Recomeçar com uma nova passkey",
       "syncFailedTitle": "Falha na sincronização",
       "syncFailedMessage": "A carteira foi criada, mas sua chave pública não foi sincronizada com o servidor. Você não conseguirá entrar em outros dispositivos até que isso seja resolvido.",
       "syncFailedHint": "Verifique sua conexão ou configure um endpoint personalizado abaixo.",
@@ -55,7 +58,9 @@
       "statusVerifyCancelled": "A verificação foi cancelada. Tente de novo.",
       "alertNotSupportedTitle": "Não compatível",
       "alertNotSupportedBody": "A autenticação biométrica não está disponível neste dispositivo.",
-      "alertErrorTitle": "Erro"
+      "alertErrorTitle": "Erro",
+      "alertNotDiscoverableTitle": "A passkey não foi sincronizada",
+      "alertNotDiscoverableBody": "Seu dispositivo salvou esta passkey apenas neste aparelho, então ela não apareceria ao entrar nem poderia recuperar sua carteira depois. Para sua segurança, a carteira ainda não foi criada — você não perdeu nada.\n\nNas configurações do sistema, escolha o Gerenciador de Senhas do Google ou o Chaveiro do iCloud como provedor de passkeys e tente de novo."
     },
     "login": {
       "alertNotSupportedTitle": "Não compatível",

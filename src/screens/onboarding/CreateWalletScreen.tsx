@@ -50,6 +50,13 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
   const [created, setCreated] = useState(false);
   const [addressCopied, setAddressCopied] = useState(false);
   const [showBugReport, setShowBugReport] = useState(false);
+  // A passkey that registered OK but hasn't proven it can sign yet. Kept in
+  // state so a cancelled verification can resume (re-sign only) without
+  // minting a second passkey, and so the button label reflects the resume.
+  const [pendingReg, setPendingReg] = useState<{
+    registration: Passkey.PasskeyRegistrationResult;
+    name: string;
+  } | null>(null);
   const { resolved: language } = useLanguagePreference();
   const pendingRef = useRef<{
     account: StoredAccount;
@@ -88,23 +95,76 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
   }
 
   async function handleCreate() {
-    const trimmed = name.trim();
+    const trimmed = pendingReg?.name ?? name.trim();
     if (!trimmed || loading) return;
     setLoading(true);
     setStatus('');
     setUploadFailed(false);
     setUploadError('');
 
-    try {
-      const supported = await Passkey.isSupported();
-      if (!supported) {
-        showAlert(t('onboarding.create.alertNotSupportedTitle'), t('onboarding.create.alertNotSupportedBody'));
+    // ------------------------------------------------------------------
+    // Stage 1 — register the passkey (skipped when resuming a cancelled
+    // verification, so we never mint a second passkey for the same wallet).
+    // ------------------------------------------------------------------
+    let registration = pendingReg?.registration ?? null;
+    if (!registration) {
+      try {
+        const supported = await Passkey.isSupported();
+        if (!supported) {
+          showAlert(t('onboarding.create.alertNotSupportedTitle'), t('onboarding.create.alertNotSupportedBody'));
+          setLoading(false);
+          return;
+        }
+
+        setStatus(t('onboarding.create.statusSettingUpIdentity'));
+        registration = await Passkey.register(trimmed);
+        setPendingReg({ registration, name: trimmed });
+      } catch (error) {
+        if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
+          setStatus(t('onboarding.create.statusSetupCancelled'));
+        } else if (error instanceof PasskeyError && error.code === PasskeyErrorCode.NOT_DISCOVERABLE) {
+          // The authenticator created a device-local (non-discoverable) passkey.
+          // It would sign fine on this device but never appear at sign-in or sync
+          // for recovery — nothing was saved, so guide the user to a compatible
+          // provider instead (issue #1).
+          showAlert(
+            t('onboarding.create.alertNotDiscoverableTitle'),
+            t('onboarding.create.alertNotDiscoverableBody'),
+          );
+        } else {
+          showAlert(t('onboarding.create.alertErrorTitle'), error instanceof Error ? error.message : String(error));
+        }
         setLoading(false);
         return;
       }
+    }
 
-      setStatus(t('onboarding.create.statusSettingUpIdentity'));
-      const registration = await Passkey.register(trimmed);
+    // ------------------------------------------------------------------
+    // Stage 2 — prove the passkey can actually SIGN before anything is
+    // persisted or the address is ever shown. A provider can report a
+    // successful create() and still fail to durably store the credential
+    // (issue #1: "created successfully" yet absent from Google Password
+    // Manager, with nowhere to sign). Verifying up front means a dead
+    // passkey aborts cleanly: no index record, no local account, no
+    // fundable address — instead of a permanently unusable wallet.
+    // ------------------------------------------------------------------
+    try {
+      setStatus(t('onboarding.create.statusVerifyingIdentity'));
+      const testChallenge = toHex(new TextEncoder().encode('vela-verify-' + Date.now()));
+      const assertion = await Passkey.sign(testChallenge, registration.credentialId);
+      const compat = verifySafeWebAuthn(assertion);
+      if (!compat.ok) {
+        // Non-retryable: the provider's response format can't work with the
+        // Safe contracts. The user needs a different provider (B05).
+        setPendingReg(null);
+        showAlert(
+          t('onboarding.login.alertIncompatibleTitle'),
+          t('onboarding.login.alertIncompatibleBodyCreate'),
+        );
+        setLoading(false);
+        setStatus('');
+        return;
+      }
 
       setStatus(t('onboarding.create.statusExtractingKey'));
       const attestationBytes = fromHex(registration.attestationObjectHex);
@@ -131,7 +191,8 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
       // wallet that's usable on THIS device but unrecoverable on any other —
       // boot auto-enters on any saved account, and login checks local first, so
       // the server-side gap would stay silent. No funds risk: the address is
-      // only shown on the success screen, so an unsynced wallet is never funded.
+      // only shown on the success screen — after signing is proven and the key
+      // is synced — so an unverified or unsynced wallet is never funded.
       await savePendingUpload({
         id: registration.credentialId,
         name: trimmed,
@@ -151,14 +212,16 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
         return;
       }
 
-      await saveAccount(account); // only now that the key is confirmed server-side
+      await saveAccount(account); // only now that signing is proven AND the key is confirmed server-side
       setCreated(true);
       setLoading(false);
       setStatus('');
 
     } catch (error) {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
-        setStatus(t('onboarding.create.statusSetupCancelled'));
+        // Verification cancelled — pendingReg is kept, so the button resumes
+        // from the signature (never a second registration).
+        setStatus(t('onboarding.create.statusVerifyCancelled'));
       } else {
         showAlert(t('onboarding.create.alertErrorTitle'), error instanceof Error ? error.message : String(error));
       }
@@ -186,39 +249,22 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
     setStatus('');
   }
 
-  async function handleSignIn() {
+  function handleStartOver() {
+    // Abandon the unverified passkey and let the user mint a fresh one.
+    // Nothing about the old one was persisted (no account, no upload), so
+    // this is a clean reset; the orphaned authenticator entry is inert.
+    setPendingReg(null);
+    setStatus('');
+  }
+
+  function handleEnter() {
+    // Signing was already proven during creation (stage 2 of handleCreate) —
+    // entering the wallet is now just a state transition.
     const pending = pendingRef.current;
     if (!pending || loading) return;
-    setLoading(true);
-    setStatus(t('onboarding.create.statusVerifyingIdentity'));
-
-    try {
-      const testChallenge = toHex(new TextEncoder().encode('vela-verify-' + Date.now()));
-      const assertion = await Passkey.sign(testChallenge, pending.credentialId);
-      const compat = verifySafeWebAuthn(assertion);
-
-      if (!compat.ok) {
-        showAlert(
-          t('onboarding.login.alertIncompatibleTitle'),
-          t('onboarding.login.alertIncompatibleBodyCreate'),
-        );
-        setLoading(false);
-        setStatus('');
-        return;
-      }
-
-      dispatch({ type: 'ADD_ACCOUNT', account: pending.account });
-      onCreated?.(pending.account.address, pending.account.name);
-      router.replace('/(tabs)/wallet');
-    } catch (error) {
-      if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
-        setStatus(t('onboarding.create.statusVerifyCancelled'));
-      } else {
-        showAlert(t('onboarding.create.alertErrorTitle'), error instanceof Error ? error.message : String(error));
-        setStatus('');
-      }
-      setLoading(false);
-    }
+    dispatch({ type: 'ADD_ACCOUNT', account: pending.account });
+    onCreated?.(pending.account.address, pending.account.name);
+    router.replace('/(tabs)/wallet');
   }
 
   return (
@@ -311,7 +357,7 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
                 autoFocus
                 returnKeyType="done"
                 onSubmitEditing={() => Keyboard.dismiss()}
-                editable={!loading}
+                editable={!loading && !pendingReg}
               />
               <Text style={styles.hint}>
                 {t('onboarding.create.accountNameHint')}
@@ -357,11 +403,24 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
 
               <View style={styles.inlineBottom}>
                 <VelaButton
-                  title={t('onboarding.create.createWalletBtn')}
+                  title={pendingReg ? t('onboarding.create.finishVerifyBtn') : t('onboarding.create.createWalletBtn')}
                   onPress={handleCreate}
-                  disabled={!name.trim() || loading || !checks.every(Boolean)}
+                  disabled={(!pendingReg && !name.trim()) || loading || !checks.every(Boolean)}
                   loading={loading}
                 />
+                {/* Escape hatch for a passkey that keeps failing verification
+                    (e.g. the provider reported success but never durably
+                    stored it — issue #1): discard it and start over, instead
+                    of being trapped retrying a signature that can never
+                    succeed. */}
+                {pendingReg && !loading ? (
+                  <>
+                    <Text style={styles.startOverHint}>{t('onboarding.create.verifyStuckHint')}</Text>
+                    <Pressable style={styles.startOverLink} onPress={handleStartOver}>
+                      <Text style={styles.startOverText}>{t('onboarding.create.startOverBtn')}</Text>
+                    </Pressable>
+                  </>
+                ) : null}
               </View>
             </Animated.View>
           </ScrollView>
@@ -379,8 +438,8 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
       <View style={styles.bottom}>
         {created ? (
           <VelaButton
-            title={t('onboarding.create.verifySignInBtn')}
-            onPress={handleSignIn}
+            title={t('onboarding.create.enterWalletBtn')}
+            onPress={handleEnter}
             loading={loading}
           />
         ) : uploadFailed ? (
@@ -604,5 +663,27 @@ const styles = createStyles(() => ({
   inlineBottom: {
     marginTop: space['3xl'],
     paddingBottom: space['3xl'],
+  },
+
+  // Start-over escape hatch (verification stuck on a dead passkey)
+  startOverHint: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.subtle,
+    lineHeight: 18,
+    textAlign: 'center',
+    marginTop: space['2xl'],
+  },
+  startOverLink: {
+    alignSelf: 'center',
+    paddingVertical: space.md,
+    paddingHorizontal: space.xl,
+    marginTop: space.xs,
+  },
+  startOverText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.accent.base,
+    textDecorationLine: 'underline',
   },
 }));

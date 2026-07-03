@@ -76,6 +76,11 @@ class VelaPasskeyModule(reactContext: ReactApplicationContext) :
                     put("authenticatorSelection", JSONObject().apply {
                         put("authenticatorAttachment", "platform")
                         put("residentKey", "required")
+                        // WebAuthn L2: set alongside residentKey=required. Third-party
+                        // credential providers parse this JSON themselves and some only
+                        // honor the L1 boolean — without it they silently create a
+                        // NON-discoverable credential that never appears at sign-in.
+                        put("requireResidentKey", true)
                         put("userVerification", "required")
                     })
                     put("attestation", "direct")

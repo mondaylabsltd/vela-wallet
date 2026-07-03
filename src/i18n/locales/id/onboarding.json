@@ -37,8 +37,11 @@
       "createWalletBtn": "Buat Dompet",
       "successTitle": "Dompet Anda siap!",
       "successMessage": "Alamat Anda berlaku di semua {{count}} jaringan yang didukung.",
-      "verifyHint": "Ketuk di bawah untuk memastikan identitas Anda berfungsi sebelum menggunakan dompet.",
-      "verifySignInBtn": "Verifikasi & Masuk",
+      "verifyHint": "Passkey Anda telah diverifikasi dan kunci Anda tersinkron — semuanya siap.",
+      "enterWalletBtn": "Masuk ke Dompet",
+      "finishVerifyBtn": "Selesaikan Verifikasi",
+      "verifyStuckHint": "Verifikasi terus gagal? Perangkat Anda mungkin tidak menyimpan passkey ini dengan benar. Aman untuk memulai ulang — belum ada yang dibuat.",
+      "startOverBtn": "Mulai ulang dengan passkey baru",
       "syncFailedTitle": "Sinkronisasi gagal",
       "syncFailedMessage": "Dompet dibuat, tetapi kunci publik Anda belum tersinkron ke server. Anda tidak akan bisa masuk di perangkat lain sampai masalah ini teratasi.",
       "syncFailedHint": "Periksa jaringan Anda, atau konfigurasikan endpoint kustom di bawah.",
@@ -55,7 +58,9 @@
       "statusVerifyCancelled": "Verifikasi dibatalkan. Silakan coba lagi.",
       "alertNotSupportedTitle": "Tidak Didukung",
       "alertNotSupportedBody": "Autentikasi biometrik tidak tersedia di perangkat ini.",
-      "alertErrorTitle": "Kesalahan"
+      "alertErrorTitle": "Kesalahan",
+      "alertNotDiscoverableTitle": "Passkey Belum Tersinkron",
+      "alertNotDiscoverableBody": "Perangkat Anda menyimpan passkey ini hanya di perangkat ini, jadi passkey tidak akan muncul saat masuk dan tidak bisa memulihkan dompet Anda nanti. Demi keamanan Anda, dompet belum dibuat — tidak ada yang hilang.\n\nDi pengaturan sistem, pilih Google Password Manager atau iCloud Keychain sebagai penyedia passkey, lalu coba lagi."
     },
     "login": {
       "alertNotSupportedTitle": "Tidak Didukung",

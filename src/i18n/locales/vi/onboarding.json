@@ -37,8 +37,11 @@
       "createWalletBtn": "Tạo ví",
       "successTitle": "Ví của bạn đã sẵn sàng!",
       "successMessage": "Địa chỉ của bạn hoạt động trên cả {{count}} mạng được hỗ trợ.",
-      "verifyHint": "Chạm bên dưới để xác minh danh tính của bạn trước khi dùng ví.",
-      "verifySignInBtn": "Xác minh và đăng nhập",
+      "verifyHint": "Passkey của bạn đã được xác minh và khóa đã được đồng bộ — mọi thứ đã sẵn sàng.",
+      "enterWalletBtn": "Vào ví",
+      "finishVerifyBtn": "Hoàn tất xác minh",
+      "verifyStuckHint": "Xác minh cứ thất bại? Thiết bị của bạn có thể chưa lưu passkey này đúng cách. Bạn có thể yên tâm bắt đầu lại — chưa có gì được tạo cả.",
+      "startOverBtn": "Bắt đầu lại với passkey mới",
       "syncFailedTitle": "Đồng bộ thất bại",
       "syncFailedMessage": "Đã tạo ví, nhưng khóa công khai của bạn chưa được đồng bộ lên máy chủ. Bạn sẽ không thể đăng nhập trên thiết bị khác cho đến khi vấn đề này được khắc phục.",
       "syncFailedHint": "Kiểm tra kết nối mạng, hoặc cấu hình một điểm cuối tùy chỉnh bên dưới.",
@@ -55,7 +58,9 @@
       "statusVerifyCancelled": "Quá trình xác minh đã bị hủy. Vui lòng thử lại.",
       "alertNotSupportedTitle": "Không hỗ trợ",
       "alertNotSupportedBody": "Thiết bị này không hỗ trợ xác thực sinh trắc học.",
-      "alertErrorTitle": "Lỗi"
+      "alertErrorTitle": "Lỗi",
+      "alertNotDiscoverableTitle": "Passkey chưa được đồng bộ",
+      "alertNotDiscoverableBody": "Thiết bị của bạn chỉ lưu passkey này trên máy này, nên nó sẽ không xuất hiện khi đăng nhập và không thể khôi phục ví sau này. Để bảo vệ bạn, ví chưa được tạo — bạn không mất gì cả.\n\nTrong cài đặt hệ thống, hãy chọn Google Password Manager hoặc iCloud Keychain làm nơi lưu passkey rồi thử lại nhé."
     },
     "login": {
       "alertNotSupportedTitle": "Không hỗ trợ",
