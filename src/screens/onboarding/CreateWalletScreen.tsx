@@ -47,6 +47,10 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
   const [status, setStatus] = useState('');
   const [uploadFailed, setUploadFailed] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  // Transport failures ('network') get the "check your network" hint; an HTTP
+  // status or verify mismatch ('server') is deterministic — telling the user to
+  // check their network would mask a server-side problem they should report.
+  const [uploadErrorKind, setUploadErrorKind] = useState<'network' | 'server'>('network');
   const [created, setCreated] = useState(false);
   const [addressCopied, setAddressCopied] = useState(false);
   const [showBugReport, setShowBugReport] = useState(false);
@@ -98,7 +102,16 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
         }
       }
     }
-    setUploadError(lastErr instanceof Error ? lastErr.message : String(lastErr));
+    const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
+    setUploadError(message);
+    // HTTP-status errors from the index client ("Create failed: 400 …",
+    // "Query failed: 500") and a stored-key mismatch mean the server answered
+    // and said no; everything else (timeout, DNS, offline) is transport.
+    setUploadErrorKind(
+      /^(Create|Query) failed: \d+/.test(message) || message.startsWith('Server verification failed')
+        ? 'server'
+        : 'network',
+    );
     return false;
   }
 
@@ -258,6 +271,20 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
     setStatus('');
   }
 
+  async function handleContinueUnsynced() {
+    // Enter the wallet with the key still unsynced. Safe since PR #13: the
+    // pending upload is already persisted and retried on every app launch, and
+    // sign-in on other devices falls back to two-signature recovery when the
+    // index has no record — the index is a cache, not a gate. Signing was
+    // proven in stage 2, so the wallet is fully usable on this device now.
+    const pending = pendingRef.current;
+    if (!pending || loading) return;
+    await saveAccount(pending.account);
+    dispatch({ type: 'ADD_ACCOUNT', account: pending.account });
+    onCreated?.(pending.account.address, pending.account.name);
+    router.replace('/(tabs)/wallet');
+  }
+
   function handleStartOver() {
     // Abandon the unverified passkey and let the user mint a fresh one.
     // Nothing about the old one was persisted (no account, no upload), so
@@ -337,7 +364,9 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
               {t('onboarding.create.syncFailedMessage')}
             </Text>
             <Text style={styles.hint}>
-              {t('onboarding.create.syncFailedHint')}
+              {t(uploadErrorKind === 'server'
+                ? 'onboarding.create.syncFailedServerHint'
+                : 'onboarding.create.syncFailedHint')}
             </Text>
             {onOpenSettings && (
               <Pressable style={styles.settingsLink} onPress={onOpenSettings}>
@@ -467,11 +496,23 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
             loading={loading}
           />
         ) : uploadFailed ? (
-          <VelaButton
-            title={t('onboarding.create.retryUploadBtn')}
-            onPress={handleRetryUpload}
-            loading={loading}
-          />
+          <>
+            <VelaButton
+              title={t('onboarding.create.retryUploadBtn')}
+              onPress={handleRetryUpload}
+              loading={loading}
+            />
+            {/* The wallet already proved it can sign; sync retries on every
+                launch. Don't hold the user hostage to the index server. */}
+            {!loading && (
+              <>
+                <Pressable style={styles.continueLink} onPress={handleContinueUnsynced}>
+                  <Text style={styles.continueLinkText}>{t('onboarding.create.syncFailedContinueBtn')}</Text>
+                </Pressable>
+                <Text style={styles.continueHint}>{t('onboarding.create.syncFailedContinueHint')}</Text>
+              </>
+            )}
+          </>
         ) : null}
       </View>
 
@@ -706,6 +747,27 @@ const styles = createStyles(() => ({
   inlineBottom: {
     marginTop: space['3xl'],
     paddingBottom: space['3xl'],
+  },
+
+  // Continue-without-sync escape hatch on the sync-failed screen
+  continueLink: {
+    alignSelf: 'center',
+    marginTop: space.lg,
+    paddingVertical: space.md,
+    paddingHorizontal: space.xl,
+  },
+  continueLinkText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    color: color.accent.base,
+    textDecorationLine: 'underline',
+  },
+  continueHint: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.subtle,
+    lineHeight: 18,
+    textAlign: 'center',
   },
 
   // Start-over escape hatch (verification stuck on a dead passkey)

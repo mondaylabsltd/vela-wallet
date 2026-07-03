@@ -85,4 +85,54 @@ test.describe('Onboarding — wallet is NOT persisted until the key syncs (US 1.
     expect(pending).toBeTruthy();
     expect(pending).not.toBe('[]');
   });
+
+  test('Continue anyway enters the wallet, persists the account and keeps the pending upload (issue #17)', async ({ page }) => {
+    const client = await page.context().newCDPSession(page);
+    await client.send('WebAuthn.enable');
+    await client.send('WebAuthn.addVirtualAuthenticator', {
+      options: {
+        protocol: 'ctap2',
+        transport: 'internal',
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
+      },
+    });
+    await blockExternal(page);
+
+    await page.goto('/onboarding?mode=create');
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('body')).toContainText('Create Wallet', { timeout: 40_000 });
+
+    await page.getByPlaceholder('Enter a name for your account').fill('E2E Continue Test');
+    for (const frag of ACK_FRAGMENTS) {
+      await page.getByText(frag, { exact: false }).first().click();
+    }
+    await page.getByText('Create Wallet', { exact: true }).last().click();
+    await expect(page.locator('body')).toContainText('Sync failed', { timeout: 30_000 });
+
+    // The onboarding health check (also failing — the index host is blocked)
+    // may have auto-opened the endpoint-settings sheet over this screen;
+    // dismiss it so it can't intercept the click below.
+    const endpointWarning = page.getByText('The Passkey Index service is unreachable', { exact: false });
+    if (await endpointWarning.isVisible().catch(() => false)) {
+      await page.keyboard.press('Escape');
+      await expect(endpointWarning).toBeHidden();
+    }
+
+    // The escape hatch: signing is proven, sync retries on every launch, and
+    // other-device sign-in has the two-signature recovery fallback — so the
+    // user may enter the wallet without waiting on the index server.
+    await page.getByText('Continue anyway', { exact: true }).click();
+
+    // Entered the wallet: account persisted…
+    await expect
+      .poll(async () => page.evaluate(() => localStorage.getItem('vela.accounts')), { timeout: 15_000 })
+      .toContain('E2E Continue Test');
+    // …and the pending upload is retained so launch-time retry keeps trying.
+    const pending = await page.evaluate(() => localStorage.getItem('vela.pendingUploads'));
+    expect(pending).toBeTruthy();
+    expect(pending).not.toBe('[]');
+  });
 });
