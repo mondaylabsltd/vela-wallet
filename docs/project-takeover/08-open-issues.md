@@ -4,10 +4,10 @@
 
 ## A. 上线阻塞(Android 商店路径)
 
-### A1. Android 发布签名(P1,阻塞 Play 上架)
-- **现状**:代码侧脚手架已就绪——`plugins/with-release-signing.js` config plugin(prebuild 持久化,因为 /android 不入库)+ 仓库根 `keystore.properties.example` + 无 keystore 时构建警告。缺真实 keystore 与 Play 注册。
-- **负责条件**:创始人(Google Play 账号 + keystore 保管责任)
-- **步骤**:见 `05-deployment-runbook.md` Android 节(keytool → Play App Signing → assetlinks 双指纹 → Statement List Tester → 真机 passkey 验证)
+### A1. Android 发布签名(P1,阻塞 Play 上架)——路径已定:EAS 托管(2026-07-03)
+- **现状**:项目已接 EAS Build(eas.json + projectId + 双平台生产工作流)。签名主路径=EAS 云端生成并托管 upload keystore,**本地 keystore 保管责任消失**(建议 `eas credentials` 下载一份冷备)。`plugins/with-release-signing.js` 保留作本地 gradlew 后备路径,与 EAS 构建互不干扰(EAS 注入 `eas-build.gradle` 覆盖项目签名配置,插件的 debug-回退 WARNING 在 EAS 日志中属预期噪音)。
+- **剩余步骤**:首次 `eas build -p android --profile production` → Play Console 注册 + Play App Signing → assetlinks 双指纹(app signing cert 取自 Play Console,upload cert 取自 `eas credentials`)→ Statement List Tester → 真机 passkey 验证(详见 05 Android 节)
+- **负责条件**:创始人(Google Play 账号 + Expo 账号)
 - **验收**:Play 内部测试轨道安装的构建,passkey 创建+登录成功
 
 ### A2. 真机验证清单 D 节(P1,两平台上架前)
