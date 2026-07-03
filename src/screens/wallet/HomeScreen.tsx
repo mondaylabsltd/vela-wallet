@@ -611,7 +611,18 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel={t('home.a11yViewAssets')}
             >
-              {hidden ? <Text style={styles.balanceHidden}>••••••</Text> : (
+              {hidden ? (
+                // Mask goes through AmountText's pre-formatted path so it shares
+                // the same one-line fit system as the visible balance (raw Text
+                // wraps the dots under OS font scaling).
+                <AmountText
+                  text="••••••"
+                  size={56}
+                  minScale={0.55}
+                  style={styles.balanceHidden}
+                  containerStyle={styles.balanceFill}
+                />
+              ) : (
                 <Balance value={displayTotal * rate} symbol={currency.symbol} code={currencyCode} />
               )}
             </Pressable>
@@ -1164,7 +1175,8 @@ const styles = createStyles(() => ({
   balanceFill: { flex: 1 },
   balanceInt: { fontSize: 52, ...inter.bold, fontFamily: font.display, color: color.fg.base, letterSpacing: -1.2 },
   balanceDec: { fontSize: 28, ...inter.bold, fontFamily: font.display, color: color.fg.subtle, letterSpacing: -0.5 },
-  balanceHidden: { fontSize: 52, ...inter.bold, color: color.fg.base, flex: 1, letterSpacing: 2 },
+  // fontSize is managed by AmountText's fit system; flex lives on balanceFill.
+  balanceHidden: { ...inter.bold, color: color.fg.base, letterSpacing: 2 },
   eyeBtn: { padding: space.xs },
   // Parity with AssetsScreen: when a chain read failed or a held token is unpriced,
   // the hero total is an estimate — say so rather than showing a confident number.
