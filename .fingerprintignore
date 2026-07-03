@@ -1,0 +1,25 @@
+# Read by @expo/fingerprint (runtimeVersion policy "fingerprint").
+#
+# Why: EAS build workers recompute the fingerprint DURING the build, and their
+# node_modules copies of the RN-core-autolinked libraries no longer hash the
+# same as the trigger environment's pristine `npm ci` (worker-side mutation
+# around pod install / codegen). Every such build then dies with
+# "Runtime version calculated on local machine not equal to runtime version
+# calculated during build", diffing exactly these dir sources.
+#
+# Ignoring the DIR CONTENTS is safe: each library's resolved version still
+# lands in the fingerprint via the rncoreAutolinkingConfig JSON source, so
+# upgrading any of these packages still changes the runtime and forces a new
+# dev build. What is lost is content-level detection of in-place edits to
+# these node_modules dirs (e.g. patch-package) — this repo has none; if
+# patches are ever added, remove the affected line here.
+node_modules/@react-native-async-storage/async-storage/**/*
+node_modules/expo/**/*
+node_modules/react-native-gesture-handler/**/*
+node_modules/react-native-get-random-values/**/*
+node_modules/react-native-reanimated/**/*
+node_modules/react-native-safe-area-context/**/*
+node_modules/react-native-screens/**/*
+node_modules/react-native-svg/**/*
+node_modules/react-native-view-shot/**/*
+node_modules/react-native-worklets/**/*
