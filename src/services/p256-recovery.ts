@@ -160,8 +160,8 @@ function verifySignature(q: Point, r: bigint, s: bigint, e: bigint): boolean {
 function recoverCandidates(r: bigint, s: bigint, e: bigint): [bigint, bigint][] {
   if (r <= 0n || r >= N || s <= 0n || s >= N) return [];
   const candidates: [bigint, bigint][] = [];
-  // x ≡ r (mod n) allows x = r and (astronomically rarely, since p − n ≈ 2^224
-  // is tiny next to p) x = r + n.
+  // x ≡ r (mod n) allows x = r and — only when r < p − n ≈ 2^126, i.e. with
+  // probability ≈ 2^-130 for a random r — x = r + n. Handled anyway.
   for (const x of [r, r + N]) {
     for (const yOdd of [0, 1] as const) {
       const rPoint = liftX(x, yOdd);
