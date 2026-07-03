@@ -7,6 +7,12 @@
     "icon": "./assets/images/icon.png",
     "scheme": "velawallet",
     "userInterfaceStyle": "automatic",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0d798810-2982-455b-9079-7b9a7cabb97d"
+    },
     "ios": {
       "icon": "./assets/images/icon.png",
       "bundleIdentifier": "app.getvela.VelaWallet",
