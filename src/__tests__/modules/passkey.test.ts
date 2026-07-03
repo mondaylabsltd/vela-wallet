@@ -334,6 +334,18 @@ describe('Passkey web registration (discoverable credential guard)', () => {
     expect(publicKey.extensions).toEqual({ credProps: true });
   });
 
+  test('requests ES256 (P-256) only — no RS256 fallback', async () => {
+    // The on-chain verifier (RIP-7212 precompile) and two-signature pubkey
+    // recovery are both P-256 ECDSA — an RS256 credential can never become a
+    // working wallet, so offering it would only delay the failure past
+    // create() and leave an orphan passkey behind. Android is ES256-only too.
+    createMock.mockResolvedValue(fakeCredential({ credProps: { rk: true } }));
+    await Passkey.register('Alice');
+
+    const publicKey = createMock.mock.calls[0][0].publicKey;
+    expect(publicKey.pubKeyCredParams).toEqual([{ type: 'public-key', alg: -7 }]);
+  });
+
   test('rejects with NOT_DISCOVERABLE when the client reports rk: false', async () => {
     createMock.mockResolvedValue(fakeCredential({ credProps: { rk: false } }));
     await expect(Passkey.register('Alice')).rejects.toMatchObject({

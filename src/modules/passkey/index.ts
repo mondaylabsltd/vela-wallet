@@ -256,9 +256,17 @@ async function webRegister(userName: string): Promise<PasskeyRegistrationResult>
           displayName: userName,
         },
         challenge,
+        // ES256 (P-256) ONLY — no RS256 fallback on purpose. The wallet's
+        // on-chain verifier is the RIP-7212 P-256 precompile and two-signature
+        // recovery is ECDSA math, so an RSA credential can never become a
+        // working wallet: it would pass create() here, then die in
+        // extractPublicKey() with a generic error — after minting an orphan
+        // passkey in the user's provider. Restricting to ES256 makes an
+        // RSA-only authenticator fail up front with a standard
+        // NotSupportedError instead. Matches the Android module, which is
+        // already ES256-only (iOS platform passkeys are ES256 by design).
         pubKeyCredParams: [
-          { type: 'public-key', alg: -7 },  // ES256 (P-256) — preferred
-          { type: 'public-key', alg: -257 }, // RS256 — fallback for compatibility
+          { type: 'public-key', alg: -7 },
         ],
         authenticatorSelection: {
           authenticatorAttachment: 'platform',
