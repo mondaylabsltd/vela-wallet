@@ -1,8 +1,10 @@
 /**
  * Cross-platform modal.
  *
- * - iOS: native <Modal pageSheet> — the OS already provides interactive
- *   swipe-to-dismiss + a grabber; we keep a handle that also drags-to-close.
+ * - iOS: native <Modal pageSheet> with `allowSwipeDismissal`, which re-enables
+ *   UIKit's interactive pull-down (RN pins pageSheet modals by default). The
+ *   grabber is purely visual — the OS gesture tracks the finger 1:1 and hands
+ *   off from an inner ScrollView at the top on its own.
  * - Android: <Modal> is full-screen (no native sheet gesture), so we add our own
  *   whole-sheet drag-to-dismiss with a threshold haptic. The drag initiates from
  *   the top handle region only, so it never fights an inner ScrollView.
@@ -42,12 +44,22 @@ export function AppModal({ visible, children, onClose }: Props) {
   if (Platform.OS === 'android') {
     return <AndroidSheet visible={visible} onClose={onClose}>{children}</AndroidSheet>;
   }
-  // iOS — native pageSheet already provides interactive swipe-to-dismiss; keep the
-  // existing handle (drag-to-close) unchanged.
+  // iOS — allowSwipeDismissal unpins the pageSheet so UIKit's pull-down tracks
+  // the finger (without it the sheet only rubber-bands, then closes by a canned
+  // animation on release). The handle is static: a JS drag here would fight the
+  // live native gesture.
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      allowSwipeDismissal
+      onRequestClose={onClose}
+    >
       <View style={styles.nativeRoot}>
-        <DragHandle onClose={onClose} />
+        <View style={styles.handleArea}>
+          <View style={styles.handleBar} />
+        </View>
         <KeyboardAvoidingView
           style={styles.nativeContent}
           behavior="padding"
@@ -136,7 +148,7 @@ function AndroidSheet({ visible, onClose, children }: { visible: boolean; onClos
 }
 
 // ---------------------------------------------------------------------------
-// Drag handle (iOS + web): handle-region drag that closes past a threshold.
+// Drag handle (web): handle-region drag that closes past a threshold.
 // ---------------------------------------------------------------------------
 
 function DragHandle({ onClose }: { onClose?: () => void }) {
