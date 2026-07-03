@@ -38,7 +38,7 @@ window.addEventListener('message', async (e) => {
     });
 
     if (response?.error) {
-      window.postMessage({ type: 'VELA_WEBAUTHN_RESPONSE', id, method, error: response.error }, '*');
+      window.postMessage({ type: 'VELA_WEBAUTHN_RESPONSE', id, method, error: response.error, errorName: response.errorName }, '*');
     } else {
       window.postMessage({ type: 'VELA_WEBAUTHN_RESPONSE', id, method, result: response.result }, '*');
     }

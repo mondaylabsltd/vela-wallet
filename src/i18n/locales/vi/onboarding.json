@@ -26,6 +26,8 @@
       "accountNameLabel": "Tên tài khoản",
       "accountNamePlaceholder": "Nhập tên cho tài khoản của bạn",
       "accountNameHint": "Tên này được lưu trên chuỗi cùng khóa công khai của bạn để đăng nhập trên nhiều thiết bị.",
+      "nameTooLong": "Tên này quá dài cho passkey — vui lòng rút ngắn.",
+      "technicalDetails": "Chi tiết kỹ thuật",
       "ack0": "Đây là ví tự quản lý. Khóa riêng tư của passkey được quản lý bởi trình quản lý mật khẩu trên thiết bị của bạn (iCloud Keychain / Google Password Manager). Vela Wallet không thể truy cập hay khôi phục khóa đó.",
       "ack1": "Nếu mất thiết bị, bạn có thể khôi phục ví trên thiết bị mới thông qua tài khoản iCloud hoặc Google của mình.",
       "ack2": "Nếu tài khoản iCloud hoặc Google của bạn bị xâm phạm, quyền kiểm soát ví cũng có thể bị xâm phạm. Hãy bảo vệ bằng mật khẩu mạnh và 2FA.",

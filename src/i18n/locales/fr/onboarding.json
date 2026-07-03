@@ -26,6 +26,8 @@
       "accountNameLabel": "Nom du compte",
       "accountNamePlaceholder": "Saisissez un nom pour votre compte",
       "accountNameHint": "Ce nom est enregistré avec votre clé publique on-chain pour la connexion multi-appareils.",
+      "nameTooLong": "Ce nom est trop long pour une clé d'accès — veuillez le raccourcir.",
+      "technicalDetails": "Détails techniques",
       "ack0": "Ceci est un portefeuille non-dépositaire (auto-conservation). La clé privée de votre clé d'accès est gérée par le gestionnaire de mots de passe de votre appareil (Trousseau iCloud / Gestionnaire de mots de passe Google). Vela Wallet ne peut ni y accéder ni la récupérer.",
       "ack1": "Si vous perdez votre appareil, vous pouvez restaurer votre portefeuille sur un nouvel appareil via votre compte iCloud ou Google.",
       "ack2": "Si votre compte iCloud ou Google est compromis, le contrôle de votre portefeuille peut l'être aussi. Protégez-le avec un mot de passe fort et la double authentification (2FA).",

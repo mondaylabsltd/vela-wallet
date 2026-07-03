@@ -26,6 +26,8 @@
       "accountNameLabel": "Hesap Adı",
       "accountNamePlaceholder": "Hesabınız için bir ad girin",
       "accountNameHint": "Bu ad, cihazlar arası giriş için açık anahtarınızla birlikte zincir üzerinde saklanır.",
+      "nameTooLong": "Bu ad bir geçiş anahtarına sığmayacak kadar uzun — lütfen kısaltın.",
+      "technicalDetails": "Teknik ayrıntılar",
       "ack0": "Bu, kendi kontrolünüzdeki bir cüzdandır. Geçiş anahtarınızın özel anahtarı cihazınızın parola yöneticisi (iCloud Keychain / Google Password Manager) tarafından yönetilir. Vela Wallet bu anahtara erişemez veya onu kurtaramaz.",
       "ack1": "Cihazınızı kaybederseniz, iCloud veya Google hesabınız üzerinden yeni bir cihazda cüzdanınızı geri yükleyebilirsiniz.",
       "ack2": "iCloud veya Google hesabınız ele geçirilirse cüzdan kontrolünüz de ele geçirilmiş olabilir. Güçlü bir parola ve 2FA ile koruyun.",

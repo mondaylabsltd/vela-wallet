@@ -63,6 +63,7 @@ chrome.windows.onRemoved.addListener((windowId) => {
   const respond = pendingByWindow.get(windowId);
   if (respond) {
     pendingByWindow.delete(windowId);
-    respond({ error: 'The passkey window was closed before completing.' });
+    // Closing the window IS a user cancellation — keep NotAllowedError semantics.
+    respond({ error: 'The passkey window was closed before completing.', errorName: 'NotAllowedError' });
   }
 });

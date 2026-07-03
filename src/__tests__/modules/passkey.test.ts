@@ -18,6 +18,7 @@ jest.mock('react-native', () => ({
 
 import {
   isSupported,
+  MAX_USER_NAME_BYTES,
   register,
   authenticate,
   sign,
@@ -84,6 +85,21 @@ describe('encodeUserID', () => {
   test('handles unicode names', () => {
     const encoded = encodeUserID('Vela');
     expect(encoded).toContain('Vela');
+  });
+});
+
+describe('MAX_USER_NAME_BYTES', () => {
+  test('a maximal name still fits WebAuthn\'s 64-byte user.id cap', () => {
+    const maxAscii = 'x'.repeat(MAX_USER_NAME_BYTES);
+    expect(new TextEncoder().encode(encodeUserID(maxAscii)).length).toBeLessThanOrEqual(64);
+    // Multi-byte names count in BYTES, not characters: 9 CJK chars = 27 bytes.
+    const maxCjk = '看'.repeat(Math.floor(MAX_USER_NAME_BYTES / 3));
+    expect(new TextEncoder().encode(encodeUserID(maxCjk)).length).toBeLessThanOrEqual(64);
+  });
+
+  test('one byte over the limit exceeds the cap (documents the boundary)', () => {
+    const oneOver = 'x'.repeat(MAX_USER_NAME_BYTES + 1);
+    expect(new TextEncoder().encode(encodeUserID(oneOver)).length).toBeGreaterThan(64);
   });
 });
 

@@ -100,13 +100,16 @@
       return;
     }
     if (e.data.type !== 'VELA_WEBAUTHN_RESPONSE') return;
-    const { id, error, result, method } = e.data;
+    const { id, error, errorName, result, method } = e.data;
     const p = pending.get(id);
     if (!p) return;
     pending.delete(id);
     if (error) {
       console.error(TAG, 'proxy error:', error);
-      p.reject(new DOMException(error, 'NotAllowedError'));
+      // Preserve the original error name: collapsing everything to
+      // NotAllowedError made the wallet treat real failures (e.g. "User
+      // handle exceeds 64 bytes.") as a user cancellation.
+      p.reject(new DOMException(error, errorName || 'NotAllowedError'));
     } else {
       const credential = method === 'create'
         ? deserializeCreateResponse(result)

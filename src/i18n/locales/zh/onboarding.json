@@ -26,6 +26,8 @@
       "accountNameLabel": "账户名称",
       "accountNamePlaceholder": "为您的账户输入名称",
       "accountNameHint": "此名称将与您的公钥一起存储上链，用于跨设备登录。",
+      "nameTooLong": "名字太长，放不进通行密钥——请缩短一些。",
+      "technicalDetails": "技术详情",
       "ack0": "这是一个自托管钱包。您的通行密钥私钥由设备的密码管理器（iCloud 钥匙串 / Google 密码管理器）管理。Vela Wallet 无法访问或恢复它。",
       "ack1": "如果您丢失设备，可以通过 iCloud 或 Google 账户在新设备上恢复钱包。",
       "ack2": "如果您的 iCloud 或 Google 账户遭到入侵，您的钱包控制权也可能受到影响。请使用强密码和双重验证加以保护。",
