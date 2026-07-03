@@ -37,7 +37,17 @@ const GY = BigInt('0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837b
 // Field / point arithmetic (affine; null = point at infinity)
 // ---------------------------------------------------------------------------
 
-type Point = readonly [bigint, bigint] | null;
+// Scalar multiplication runs in Jacobian projective coordinates (X, Y, Z with
+// x = X/Z², y = Y/Z³). Affine formulas need one modular inverse — a full
+// Fermat exponentiation — per point addition, which made a 256-bit scalar
+// multiplication orders of magnitude slower (seconds per recovery; CI
+// timeouts, and Hermes on phones would be worse). Jacobian needs no inverse
+// until the single final conversion back to affine.
+
+type Point = readonly [bigint, bigint] | null; // affine; null = point at infinity
+type JPoint = readonly [bigint, bigint, bigint]; // Jacobian; Z = 0 = infinity
+
+const J_INFINITY: JPoint = [1n, 1n, 0n];
 
 const mod = (a: bigint, m: bigint): bigint => ((a % m) + m) % m;
 
@@ -58,29 +68,72 @@ const modInv = (a: bigint, m: bigint): bigint => modPow(mod(a, m), m - 2n, m);
 /** Square root mod P — valid because P ≡ 3 (mod 4). */
 const sqrtP = (a: bigint): bigint => modPow(a, (P + 1n) / 4n, P);
 
-function pointAdd(p1: Point, p2: Point): Point {
-  if (!p1) return p2;
-  if (!p2) return p1;
-  const [x1, y1] = p1;
-  const [x2, y2] = p2;
-  if (x1 === x2 && mod(y1 + y2, P) === 0n) return null;
-  const lambda = x1 === x2 && y1 === y2
-    ? mod((3n * x1 * x1 + A) * modInv(2n * y1, P), P)
-    : mod((y2 - y1) * modInv(x2 - x1, P), P);
-  const x3 = mod(lambda * lambda - x1 - x2, P);
-  return [x3, mod(lambda * (x1 - x3) - y1, P)];
+const toJacobian = (p: Point): JPoint => (p ? [p[0], p[1], 1n] : J_INFINITY);
+
+function toAffine(p: JPoint): Point {
+  const [x, y, z] = p;
+  if (z === 0n) return null;
+  const zInv = modInv(z, P);
+  const zInv2 = (zInv * zInv) % P;
+  return [mod(x * zInv2, P), mod(((y * zInv2) % P) * zInv, P)];
 }
 
-function pointMul(k: bigint, pt: Point): Point {
-  let result: Point = null;
-  let addend = pt;
+/** Jacobian doubling ("dbl-2001-b" — exploits P-256's a = −3). */
+function jDouble(p: JPoint): JPoint {
+  const [x, y, z] = p;
+  if (z === 0n || y === 0n) return J_INFINITY;
+  const delta = (z * z) % P;
+  const gamma = (y * y) % P;
+  const beta = (x * gamma) % P;
+  const alpha = mod(3n * (x - delta) * (x + delta), P);
+  const x3 = mod(alpha * alpha - 8n * beta, P);
+  const z3 = mod((y + z) * (y + z) - gamma - delta, P);
+  const y3 = mod(alpha * (4n * beta - x3) - 8n * gamma * gamma, P);
+  return [x3, y3, z3];
+}
+
+/** General Jacobian addition. */
+function jAdd(p1: JPoint, p2: JPoint): JPoint {
+  if (p1[2] === 0n) return p2;
+  if (p2[2] === 0n) return p1;
+  const [x1, y1, z1] = p1;
+  const [x2, y2, z2] = p2;
+  const z1z1 = (z1 * z1) % P;
+  const z2z2 = (z2 * z2) % P;
+  const u1 = (x1 * z2z2) % P;
+  const u2 = (x2 * z1z1) % P;
+  const s1 = (((y1 * z2z2) % P) * z2) % P;
+  const s2 = (((y2 * z1z1) % P) * z1) % P;
+  const h = mod(u2 - u1, P);
+  const r = mod(s2 - s1, P);
+  if (h === 0n) {
+    return r === 0n ? jDouble(p1) : J_INFINITY; // same point → double; inverses → ∞
+  }
+  const h2 = (h * h) % P;
+  const h3 = (h2 * h) % P;
+  const v = (u1 * h2) % P;
+  const x3 = mod(r * r - h3 - 2n * v, P);
+  const y3 = mod(r * (v - x3) - s1 * h3, P);
+  const z3 = (((z1 * z2) % P) * h) % P;
+  return [x3, y3, z3];
+}
+
+/** Double-and-add scalar multiplication (inputs are public — timing is fine). */
+function jMul(k: bigint, p: Point): JPoint {
+  let result = J_INFINITY;
+  let addend = toJacobian(p);
   k = mod(k, N);
   while (k > 0n) {
-    if (k & 1n) result = pointAdd(result, addend);
-    addend = pointAdd(addend, addend);
+    if (k & 1n) result = jAdd(result, addend);
+    addend = jDouble(addend);
     k >>= 1n;
   }
   return result;
+}
+
+/** k1·P1 + k2·P2, with the single inverse-to-affine at the very end. */
+function mulAdd(k1: bigint, p1: Point, k2: bigint, p2: Point): Point {
+  return toAffine(jAdd(jMul(k1, p1), jMul(k2, p2)));
 }
 
 /** Reconstruct the curve point with the given x and y parity, if one exists. */
@@ -95,10 +148,7 @@ function liftX(x: bigint, yOdd: 0 | 1): Point {
 function verifySignature(q: Point, r: bigint, s: bigint, e: bigint): boolean {
   if (!q) return false;
   const sInv = modInv(s, N);
-  const sum = pointAdd(
-    pointMul(mod(e * sInv, N), [GX, GY]),
-    pointMul(mod(r * sInv, N), q),
-  );
+  const sum = mulAdd(mod(e * sInv, N), [GX, GY], mod(r * sInv, N), q);
   return sum !== null && mod(sum[0], N) === r;
 }
 
@@ -117,10 +167,7 @@ function recoverCandidates(r: bigint, s: bigint, e: bigint): [bigint, bigint][] 
       const rPoint = liftX(x, yOdd);
       if (!rPoint) continue;
       const rInv = modInv(r, N);
-      const q = pointAdd(
-        pointMul(mod(s * rInv, N), rPoint),
-        pointMul(mod(-e * rInv, N), [GX, GY]),
-      );
+      const q = mulAdd(mod(s * rInv, N), rPoint, mod(-e * rInv, N), [GX, GY]);
       if (q && verifySignature(q, r, s, e)) candidates.push([q[0], q[1]]);
     }
   }

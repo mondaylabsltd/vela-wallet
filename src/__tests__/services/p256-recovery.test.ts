@@ -97,6 +97,9 @@ describe('sha256', () => {
 // ---------------------------------------------------------------------------
 
 describe('recoverPublicKeyFromAssertions', () => {
+  // Explicit timeout: a crypto property test — ~10ms/recovery since the
+  // Jacobian-coordinate rewrite, but CI hardware varies and the default 5s
+  // is exactly what it tripped on with the old affine math.
   test('recovers the exact public key from two assertions (5 independent keys)', async () => {
     for (let i = 0; i < 5; i++) {
       const credential = await makeCredential(`key${i}`);
@@ -104,7 +107,7 @@ describe('recoverPublicKeyFromAssertions', () => {
       const second = await credential.sign('second');
       expect(recoverPublicKeyFromAssertions(first, second)).toBe(credential.publicKeyHex);
     }
-  });
+  }, 30_000);
 
   test('recovery is order-independent', async () => {
     const credential = await makeCredential('order');
