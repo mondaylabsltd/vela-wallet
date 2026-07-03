@@ -1,6 +1,6 @@
 {
   "home": {
-    "totalBalance": "Total balance",
+    "totalBalance": "Total balance · PR preview 🎉",
     "balanceStale": "Some balances are still updating.",
     "rescanButton": "Re-scan",
     "rescanTitle": "Re-scan recent activity",
