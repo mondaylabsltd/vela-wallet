@@ -102,8 +102,14 @@ const styles = createStyles(() => ({
     borderRadius: radius.md,
     backgroundColor: color.bg.raised,
     borderWidth: 1,
-    borderColor: color.border.base,
+    // border.strong, not border.base: the raised chip sits on the page bg with
+    // no track fill, so the hairline border is the only contrast that renders
+    // everywhere — Android draws elevation-1 shadows near-invisibly.
+    borderColor: color.border.strong,
     ...shadow.sm,
+    // elevation would also lift the opaque pill ABOVE the sibling labels in
+    // Android's z-order (iOS keeps document order), hiding the active label.
+    elevation: 0,
   },
   segment: {
     flex: 1,
