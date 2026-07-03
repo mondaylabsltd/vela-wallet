@@ -233,12 +233,18 @@ export default function ReceiveScreen() {
                 )}
               </View>
 
-              {/* Identity — below the QR */}
-              <Text style={styles.walletName}>{accountName}</Text>
-
-              {/* In request mode, show the human-readable summary above the copy button */}
-              {isRequest && !!request.summary && (
-                <Text style={styles.requestSummary} numberOfLines={2}>{request.summary}</Text>
+              {/* Below the QR the content leads: in request mode that's the request
+                  itself, with the wallet name subordinated; in address mode the
+                  name IS the content and stays prominent. */}
+              {isRequest ? (
+                <>
+                  {!!request.summary && (
+                    <Text style={styles.requestHero} numberOfLines={2}>{request.summary}</Text>
+                  )}
+                  <Text style={styles.walletNameSub}>{accountName}</Text>
+                </>
+              ) : (
+                <Text style={styles.walletName}>{accountName}</Text>
               )}
 
               {/* Big, easy-to-tap copy button — copies the address or the EIP-681 URI */}
@@ -392,13 +398,19 @@ const styles = createStyles(() => ({
     color: color.fg.base,
   },
 
-  // Request summary + share/save
-  requestSummary: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.accent.base,
+  // Request mode: the request is the hero, the wallet name a quiet identity line.
+  requestHero: {
+    fontSize: text['2xl'],
+    ...inter.bold,
+    color: color.fg.base,
     textAlign: 'center',
-    marginBottom: space.md,
+    marginBottom: space.xs,
+  },
+  walletNameSub: {
+    fontSize: text.base,
+    ...inter.medium,
+    color: color.fg.subtle,
+    marginBottom: space.lg,
   },
   copyAddrRequest: {
     fontFamily: undefined,

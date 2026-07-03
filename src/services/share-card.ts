@@ -214,19 +214,21 @@ async function composeCardCanvas(model: ShareCardModel): Promise<Blob> {
   ctx.drawImage(qrCanvas, qrX, y + 18, QR, QR);
   y += qrBox + gapQrName;
 
-  // --- name ---
+  // --- hero line ---
+  // Request: the request itself leads and the wallet name is a subordinate
+  // identity line. Address: the name IS the content, keep it prominent.
   ctx.textAlign = 'center';
   ctx.fillStyle = INK;
   ctx.font = `700 23px ${SANS}`;
-  ctx.fillText(model.name, cx, y + nameH / 2);
+  ctx.fillText(isRequest && model.summary ? model.summary : model.name, cx, y + nameH / 2);
   y += nameH + 14;
 
   // --- body ---
   if (isRequest) {
     if (model.summary) {
-      ctx.fillStyle = ACCENT;
-      ctx.font = `600 16px ${SANS}`;
-      ctx.fillText(model.summary, cx, y + 8);
+      ctx.fillStyle = SUBTLE;
+      ctx.font = `500 15px ${SANS}`;
+      ctx.fillText(model.name, cx, y + 8);
       y += 28;
     }
     ctx.fillStyle = SUBTLE;

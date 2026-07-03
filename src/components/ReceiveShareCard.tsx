@@ -55,15 +55,16 @@ export function ReceiveShareCard({ model }: { model: ShareCardModel }) {
         <QRCode value={model.qrValue || model.address} size={196} />
       </View>
 
-      <Text style={styles.name}>{model.name}</Text>
-
       {isRequest ? (
         <>
-          {!!model.summary && <Text style={styles.summary}>{model.summary}</Text>}
+          {/* The request leads; the wallet name is a subordinate identity line. */}
+          {!!model.summary && <Text style={styles.summaryHero}>{model.summary}</Text>}
+          <Text style={styles.nameSub}>{model.name}</Text>
           <Text style={styles.addr}>{short(model.address)}</Text>
         </>
       ) : (
         <>
+          <Text style={styles.name}>{model.name}</Text>
           <Text style={styles.addr}>{short(model.address)}</Text>
           {!!model.networks?.length && (
             <View style={styles.netSection}>
@@ -123,12 +124,19 @@ const styles = createStyles(() => ({
     color: '#16161A',
     marginBottom: 6,
   },
-  summary: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.accent.base,
-    marginBottom: 10,
+  // Request variant: the request is the hero, the wallet name a quiet identity line.
+  summaryHero: {
+    fontSize: text['2xl'],
+    ...inter.bold,
+    color: '#16161A',
+    marginBottom: 6,
     textAlign: 'center',
+  },
+  nameSub: {
+    fontSize: text.base,
+    ...inter.medium,
+    color: '#8A8A96',
+    marginBottom: 10,
   },
   addr: {
     fontSize: text.sm,
