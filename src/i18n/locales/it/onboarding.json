@@ -55,7 +55,9 @@
       "statusVerifyCancelled": "Verifica annullata. Riprova.",
       "alertNotSupportedTitle": "Non supportato",
       "alertNotSupportedBody": "L'autenticazione biometrica non è disponibile su questo dispositivo.",
-      "alertErrorTitle": "Errore"
+      "alertErrorTitle": "Errore",
+      "alertNotDiscoverableTitle": "Passkey non sincronizzata",
+      "alertNotDiscoverableBody": "Il tuo dispositivo ha salvato questa passkey solo in locale: non comparirebbe all'accesso e non potrebbe recuperare il wallet in seguito. Per la tua sicurezza il wallet non è stato ancora creato — non hai perso nulla.\n\nNelle impostazioni di sistema scegli Gestore delle password di Google o il Portachiavi iCloud come provider di passkey e riprova."
     },
     "login": {
       "alertNotSupportedTitle": "Non supportato",

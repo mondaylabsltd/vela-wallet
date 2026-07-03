@@ -50,6 +50,7 @@ describe('PasskeyErrorCode', () => {
     expect(PasskeyErrorCode.NO_CREDENTIAL).toBe('PASSKEY_NO_CREDENTIAL');
     expect(PasskeyErrorCode.NOT_SUPPORTED).toBe('PASSKEY_NOT_SUPPORTED');
     expect(PasskeyErrorCode.NOT_AVAILABLE).toBe('PASSKEY_NOT_AVAILABLE');
+    expect(PasskeyErrorCode.NOT_DISCOVERABLE).toBe('PASSKEY_NOT_DISCOVERABLE');
   });
 });
 
@@ -214,6 +215,93 @@ describe('Passkey API (native module present)', () => {
 
     const { NativeModules } = require('react-native');
     expect(NativeModules.VelaPasskey.sign).toHaveBeenCalledWith('deadbeef', 'cred123');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Web registration — discoverable-credential guard (issue #1)
+// ---------------------------------------------------------------------------
+
+describe('Passkey web registration (discoverable credential guard)', () => {
+  let Passkey: typeof import('@/modules/passkey');
+  let createMock: jest.Mock;
+
+  /** Minimal PublicKeyCredential stand-in for navigator.credentials.create(). */
+  function fakeCredential(extensionResults: Record<string, unknown> | null) {
+    return {
+      rawId: new Uint8Array([0x01, 0x02, 0x03]).buffer,
+      response: {
+        attestationObject: new Uint8Array([0x04, 0x05]).buffer,
+        clientDataJSON: new Uint8Array([0x06]).buffer,
+      },
+      ...(extensionResults !== null
+        ? { getClientExtensionResults: () => extensionResults }
+        : {}),
+    };
+  }
+
+  beforeEach(() => {
+    jest.resetModules();
+    jest.doMock('react-native', () => ({
+      NativeModules: {},
+      Platform: { OS: 'web' },
+    }));
+    createMock = jest.fn();
+    Object.defineProperty(globalThis, 'window', {
+      value: {
+        PublicKeyCredential: function PublicKeyCredential() {},
+        location: { hostname: 'getvela.app' },
+      },
+      configurable: true,
+    });
+    // Node ≥21 exposes navigator as a getter — defineProperty to override it
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { credentials: { create: createMock } },
+      configurable: true,
+    });
+    Passkey = require('@/modules/passkey');
+  });
+
+  afterEach(() => {
+    delete (globalThis as Record<string, unknown>).window;
+    delete (globalThis as Record<string, unknown>).navigator;
+  });
+
+  test('requests a discoverable credential per WebAuthn L1 AND L2 fields, plus credProps', async () => {
+    createMock.mockResolvedValue(fakeCredential({ credProps: { rk: true } }));
+    await Passkey.register('Alice');
+
+    const publicKey = createMock.mock.calls[0][0].publicKey;
+    expect(publicKey.authenticatorSelection.residentKey).toBe('required');
+    expect(publicKey.authenticatorSelection.requireResidentKey).toBe(true);
+    expect(publicKey.extensions).toEqual({ credProps: true });
+  });
+
+  test('rejects with NOT_DISCOVERABLE when the client reports rk: false', async () => {
+    createMock.mockResolvedValue(fakeCredential({ credProps: { rk: false } }));
+    await expect(Passkey.register('Alice')).rejects.toMatchObject({
+      code: PasskeyErrorCode.NOT_DISCOVERABLE,
+    });
+  });
+
+  test('resolves when the client reports rk: true', async () => {
+    createMock.mockResolvedValue(fakeCredential({ credProps: { rk: true } }));
+    const result = await Passkey.register('Alice');
+    expect(result.credentialId).toBe('010203');
+  });
+
+  test('resolves when credProps is absent (client cannot say — benefit of the doubt)', async () => {
+    createMock.mockResolvedValue(fakeCredential({}));
+    await expect(Passkey.register('Alice')).resolves.toMatchObject({
+      credentialId: '010203',
+    });
+  });
+
+  test('resolves when getClientExtensionResults is missing entirely', async () => {
+    createMock.mockResolvedValue(fakeCredential(null));
+    await expect(Passkey.register('Alice')).resolves.toMatchObject({
+      credentialId: '010203',
+    });
   });
 });
 

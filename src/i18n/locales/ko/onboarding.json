@@ -55,7 +55,9 @@
       "statusVerifyCancelled": "확인이 취소되었습니다. 다시 시도하세요.",
       "alertNotSupportedTitle": "지원되지 않음",
       "alertNotSupportedBody": "이 기기에서는 생체 인증을 사용할 수 없습니다.",
-      "alertErrorTitle": "오류"
+      "alertErrorTitle": "오류",
+      "alertNotDiscoverableTitle": "패스키가 동기화되지 않았습니다",
+      "alertNotDiscoverableBody": "기기가 이 패스키를 이 기기에만 저장하여 다음 로그인 때 표시되지 않고, 나중에 지갑을 복구하는 데도 사용할 수 없습니다. 안전을 위해 지갑은 아직 생성되지 않았으며, 잃은 것은 아무것도 없으니 안심하세요.\n\n시스템 설정에서 패스키 제공자를 Google 비밀번호 관리자 또는 iCloud 키체인으로 변경한 후 다시 시도해 주세요."
     },
     "login": {
       "alertNotSupportedTitle": "지원되지 않음",

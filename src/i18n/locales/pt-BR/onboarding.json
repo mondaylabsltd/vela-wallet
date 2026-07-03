@@ -55,7 +55,9 @@
       "statusVerifyCancelled": "A verificação foi cancelada. Tente de novo.",
       "alertNotSupportedTitle": "Não compatível",
       "alertNotSupportedBody": "A autenticação biométrica não está disponível neste dispositivo.",
-      "alertErrorTitle": "Erro"
+      "alertErrorTitle": "Erro",
+      "alertNotDiscoverableTitle": "A passkey não foi sincronizada",
+      "alertNotDiscoverableBody": "Seu dispositivo salvou esta passkey apenas neste aparelho, então ela não apareceria ao entrar nem poderia recuperar sua carteira depois. Para sua segurança, a carteira ainda não foi criada — você não perdeu nada.\n\nNas configurações do sistema, escolha o Gerenciador de Senhas do Google ou o Chaveiro do iCloud como provedor de passkeys e tente de novo."
     },
     "login": {
       "alertNotSupportedTitle": "Não compatível",

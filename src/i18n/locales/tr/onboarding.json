@@ -55,7 +55,9 @@
       "statusVerifyCancelled": "Doğrulama iptal edildi. Lütfen tekrar deneyin.",
       "alertNotSupportedTitle": "Desteklenmiyor",
       "alertNotSupportedBody": "Bu cihazda biyometrik kimlik doğrulama kullanılamıyor.",
-      "alertErrorTitle": "Hata"
+      "alertErrorTitle": "Hata",
+      "alertNotDiscoverableTitle": "Geçiş anahtarı eşitlenmedi",
+      "alertNotDiscoverableBody": "Cihazınız bu geçiş anahtarını yalnızca bu cihaza kaydetti; oturum açarken görünmez ve cüzdanınızı daha sonra kurtaramaz. Güvenliğiniz için cüzdan henüz oluşturulmadı — hiçbir şey kaybetmediniz.\n\nSistem ayarlarından geçiş anahtarı sağlayıcısı olarak Google Password Manager veya iCloud Keychain'i seçin ve yeniden deneyin."
     },
     "login": {
       "alertNotSupportedTitle": "Desteklenmiyor",

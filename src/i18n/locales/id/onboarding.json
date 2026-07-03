@@ -55,7 +55,9 @@
       "statusVerifyCancelled": "Verifikasi dibatalkan. Silakan coba lagi.",
       "alertNotSupportedTitle": "Tidak Didukung",
       "alertNotSupportedBody": "Autentikasi biometrik tidak tersedia di perangkat ini.",
-      "alertErrorTitle": "Kesalahan"
+      "alertErrorTitle": "Kesalahan",
+      "alertNotDiscoverableTitle": "Passkey Belum Tersinkron",
+      "alertNotDiscoverableBody": "Perangkat Anda menyimpan passkey ini hanya di perangkat ini, jadi passkey tidak akan muncul saat masuk dan tidak bisa memulihkan dompet Anda nanti. Demi keamanan Anda, dompet belum dibuat — tidak ada yang hilang.\n\nDi pengaturan sistem, pilih Google Password Manager atau iCloud Keychain sebagai penyedia passkey, lalu coba lagi."
     },
     "login": {
       "alertNotSupportedTitle": "Tidak Didukung",

@@ -55,7 +55,9 @@
       "statusVerifyCancelled": "驗證已取消，請再試一次。",
       "alertNotSupportedTitle": "不支援",
       "alertNotSupportedBody": "此裝置不支援生物辨識驗證。",
-      "alertErrorTitle": "錯誤"
+      "alertErrorTitle": "錯誤",
+      "alertNotDiscoverableTitle": "通行密鑰未能同步",
+      "alertNotDiscoverableBody": "您的裝置只將這枚通行密鑰儲存在本機，之後登入時它不會出現，也無法用來找回錢包。為了保護您，錢包尚未建立，您沒有任何損失。\n\n只要到系統設定將通行密鑰提供者改為 Google 密碼管理工具或 iCloud 鑰匙圈，再試一次即可。"
     },
     "login": {
       "alertNotSupportedTitle": "不支援",

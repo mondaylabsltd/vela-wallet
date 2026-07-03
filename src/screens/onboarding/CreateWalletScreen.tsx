@@ -159,6 +159,15 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
     } catch (error) {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
         setStatus(t('onboarding.create.statusSetupCancelled'));
+      } else if (error instanceof PasskeyError && error.code === PasskeyErrorCode.NOT_DISCOVERABLE) {
+        // The authenticator created a device-local (non-discoverable) passkey.
+        // It would sign fine on this device but never appear at sign-in or sync
+        // for recovery — nothing was saved, so guide the user to a compatible
+        // provider instead (issue #1).
+        showAlert(
+          t('onboarding.create.alertNotDiscoverableTitle'),
+          t('onboarding.create.alertNotDiscoverableBody'),
+        );
       } else {
         showAlert(t('onboarding.create.alertErrorTitle'), error instanceof Error ? error.message : String(error));
       }

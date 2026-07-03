@@ -55,7 +55,9 @@
       "statusVerifyCancelled": "確認がキャンセルされました。もう一度お試しください。",
       "alertNotSupportedTitle": "非対応",
       "alertNotSupportedBody": "この端末では生体認証を利用できません。",
-      "alertErrorTitle": "エラー"
+      "alertErrorTitle": "エラー",
+      "alertNotDiscoverableTitle": "パスキーが同期されませんでした",
+      "alertNotDiscoverableBody": "お使いの端末はこのパスキーをこの端末内にのみ保存したため、次回のサインイン時に表示されず、ウォレットの復元にも使えません。安全のため、ウォレットはまだ作成されていません。失われたものは何もありませんのでご安心ください。\n\nシステム設定でパスキーの保存先を Google パスワード マネージャーまたは iCloud キーチェーンに切り替えて、もう一度お試しください。"
     },
     "login": {
       "alertNotSupportedTitle": "非対応",

@@ -55,7 +55,9 @@
       "statusVerifyCancelled": "Quá trình xác minh đã bị hủy. Vui lòng thử lại.",
       "alertNotSupportedTitle": "Không hỗ trợ",
       "alertNotSupportedBody": "Thiết bị này không hỗ trợ xác thực sinh trắc học.",
-      "alertErrorTitle": "Lỗi"
+      "alertErrorTitle": "Lỗi",
+      "alertNotDiscoverableTitle": "Passkey chưa được đồng bộ",
+      "alertNotDiscoverableBody": "Thiết bị của bạn chỉ lưu passkey này trên máy này, nên nó sẽ không xuất hiện khi đăng nhập và không thể khôi phục ví sau này. Để bảo vệ bạn, ví chưa được tạo — bạn không mất gì cả.\n\nTrong cài đặt hệ thống, hãy chọn Google Password Manager hoặc iCloud Keychain làm nơi lưu passkey rồi thử lại nhé."
     },
     "login": {
       "alertNotSupportedTitle": "Không hỗ trợ",
