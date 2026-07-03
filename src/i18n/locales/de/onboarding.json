@@ -71,7 +71,13 @@
       "alertNotFoundBody": "Für diese Identität wurde keine Wallet gefunden.\n\nMögliche Gründe:\n• Sie haben noch keine Wallet erstellt\n• Ihre Identität wurde nicht mit diesem Gerät synchronisiert (prüfen Sie die iCloud- / Google-Einstellungen)\n• Der Server für öffentliche Schlüssel ist nicht erreichbar\n\nVersuchen Sie, eine neue Wallet zu erstellen, oder stellen Sie sicher, dass Ihr Identitätsanbieter (Face ID / Fingerabdruck) geräteübergreifend synchronisiert ist.",
       "alertSignInFailedTitle": "Anmeldung fehlgeschlagen",
       "alertSignInFailedBody": "{{message}}\n\nStellen Sie sicher, dass auf Ihrem Gerät Face ID, Touch ID oder ein Fingerabdruck eingerichtet ist, und versuchen Sie es erneut.",
-      "alertIncompatibleBodyCreate": "Der Identitätsanbieter Ihres Geräts ist nicht mit dieser Wallet kompatibel. Bitte wechseln Sie in den Systemeinstellungen zum Google Passwortmanager und versuchen Sie es erneut."
+      "alertIncompatibleBodyCreate": "Der Identitätsanbieter Ihres Geräts ist nicht mit dieser Wallet kompatibel. Bitte wechseln Sie in den Systemeinstellungen zum Google Passwortmanager und versuchen Sie es erneut.",
+      "recoverOfferTitle": "Wallet wiederherstellen",
+      "recoverOfferBody": "Der Schlüsselserver hat keinen Eintrag zu diesem Passkey. Bestätigen Sie eine weitere Signatur, um den öffentlichen Schlüssel — und Ihre Wallet-Adresse — auf diesem Gerät wiederherzustellen.",
+      "recoverConfirm": "Jetzt wiederherstellen",
+      "recoverCancel": "Jetzt nicht",
+      "recoverFailedTitle": "Wiederherstellung fehlgeschlagen",
+      "recoverFailedBody": "Aus diesen Signaturen konnten wir Ihre Wallet nicht wiederherstellen. Es wurde nichts verändert — bitte versuchen Sie es gleich noch einmal."
     }
   }
 }

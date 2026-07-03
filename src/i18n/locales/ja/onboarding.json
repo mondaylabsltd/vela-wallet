@@ -71,7 +71,13 @@
       "alertNotFoundBody": "この本人確認に対応するウォレットが見つかりませんでした。\n\n考えられる原因:\n• まだウォレットを作成していない\n• 本人確認情報がこの端末に同期されていない（iCloud／Google の設定を確認してください）\n• 公開鍵サーバーに接続できない\n\n新しいウォレットを作成するか、本人確認プロバイダー（Face ID／指紋）が端末間で同期されていることを確認してください。",
       "alertSignInFailedTitle": "サインインに失敗しました",
       "alertSignInFailedBody": "{{message}}\n\n端末に Face ID、Touch ID、または指紋認証が設定されていることを確認してから、もう一度お試しください。",
-      "alertIncompatibleBodyCreate": "お使いの端末の本人確認プロバイダーはこのウォレットと互換性がありません。システム設定で Google パスワード マネージャーに切り替えてからもう一度お試しください。"
+      "alertIncompatibleBodyCreate": "お使いの端末の本人確認プロバイダーはこのウォレットと互換性がありません。システム設定で Google パスワード マネージャーに切り替えてからもう一度お試しください。",
+      "recoverOfferTitle": "ウォレットを復元",
+      "recoverOfferBody": "鍵サーバーにこのパスキーの記録がありません。もう一度署名を確認すれば、この端末上で公開鍵とウォレットアドレスを再構築できます。",
+      "recoverConfirm": "今すぐ復元",
+      "recoverCancel": "今はしない",
+      "recoverFailedTitle": "復元できませんでした",
+      "recoverFailedBody": "これらの署名からウォレットを再構築できませんでした。何も変更されていません。少し待ってからもう一度お試しください。"
     }
   }
 }

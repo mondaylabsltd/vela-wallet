@@ -71,7 +71,13 @@
       "alertNotFoundBody": "No se encontró ninguna billetera para esta identidad.\n\nPosibles motivos:\n• Aún no has creado una billetera\n• Tu identidad no se ha sincronizado en este dispositivo (revisa los ajustes de iCloud / Google)\n• No se puede contactar al servidor de llaves públicas\n\nIntenta crear una billetera nueva o asegúrate de que tu proveedor de identidad (Face ID / huella) esté sincronizado entre dispositivos.",
       "alertSignInFailedTitle": "Error al iniciar sesión",
       "alertSignInFailedBody": "{{message}}\n\nAsegúrate de que tu dispositivo tenga configurado Face ID, Touch ID o huella e inténtalo de nuevo.",
-      "alertIncompatibleBodyCreate": "El proveedor de identidad de tu dispositivo no es compatible con esta billetera. Cambia al Administrador de contraseñas de Google en los ajustes del sistema e inténtalo de nuevo."
+      "alertIncompatibleBodyCreate": "El proveedor de identidad de tu dispositivo no es compatible con esta billetera. Cambia al Administrador de contraseñas de Google en los ajustes del sistema e inténtalo de nuevo.",
+      "recoverOfferTitle": "Recuperar billetera",
+      "recoverOfferBody": "El servidor de llaves no tiene registro de esta passkey. Confirma una firma más para reconstruir la llave pública — y tu dirección — en este dispositivo.",
+      "recoverConfirm": "Recuperar ahora",
+      "recoverCancel": "Ahora no",
+      "recoverFailedTitle": "La recuperación no funcionó",
+      "recoverFailedBody": "No pudimos reconstruir tu billetera con esas firmas. No se cambió nada — inténtalo de nuevo en un momento."
     }
   }
 }

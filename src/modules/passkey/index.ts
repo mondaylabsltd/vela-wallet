@@ -111,6 +111,40 @@ export function decodeUserName(userID: string): string {
   return idx === -1 ? userID : userID.slice(0, idx);
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+// eslint-disable-next-line no-control-regex
+const UNPRINTABLE_RE = /[\u0000-\u001f\u007f-\u009f\ufffd]/;
+
+/**
+ * Decode the wallet name from an assertion's userHandle (hex).
+ *
+ * user.id is the UTF-8 bytes of `name\0uuid` on every platform (web, iOS,
+ * Android — see encodeUserID and its native counterparts). Returns null
+ * unless the handle decodes as UTF-8 AND matches that exact shape with a
+ * printable name. Two failure modes this guards against:
+ * - decoding UTF-8 bytes as Latin-1 garbled every non-ASCII name (看看书 →
+ *   mojibake), and
+ * - a foreign credential's random handle passed straight through as the
+ *   account name — and from there onto the public key index.
+ */
+export function decodeUserNameFromHandle(userIdHex: string | undefined): string | null {
+  if (!userIdHex) return null;
+  try {
+    const str = new TextDecoder('utf-8', { fatal: true }).decode(hexToBuf(userIdHex));
+    const sep = str.indexOf('\0');
+    if (sep === -1) return null;
+    const name = str.slice(0, sep);
+    const uuid = str.slice(sep + 1);
+    if (!UUID_RE.test(uuid)) return null;
+    // UNPRINTABLE_RE also catches U+FFFD, in case a TextDecoder polyfill
+    // ignores `fatal` and substitutes replacement characters instead.
+    if (!name || name.length > 64 || UNPRINTABLE_RE.test(name)) return null;
+    return name;
+  } catch {
+    return null; // not valid UTF-8 (or bad hex) — not a handle we minted
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Dev-only signer override (parallel space)
 // ---------------------------------------------------------------------------

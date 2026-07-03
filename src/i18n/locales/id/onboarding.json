@@ -71,7 +71,13 @@
       "alertNotFoundBody": "Tidak ada dompet yang ditemukan untuk identitas ini.\n\nKemungkinan penyebab:\n• Anda belum membuat dompet\n• Identitas Anda belum tersinkron ke perangkat ini (periksa pengaturan iCloud / Google)\n• Server kunci publik tidak dapat dijangkau\n\nCoba buat dompet baru, atau pastikan penyedia identitas Anda (Face ID / sidik jari) tersinkron di seluruh perangkat.",
       "alertSignInFailedTitle": "Gagal Masuk",
       "alertSignInFailedBody": "{{message}}\n\nPastikan perangkat Anda telah menyiapkan Face ID, Touch ID, atau sidik jari lalu coba lagi.",
-      "alertIncompatibleBodyCreate": "Penyedia identitas perangkat Anda tidak kompatibel dengan dompet ini. Beralihlah ke Google Password Manager di pengaturan sistem lalu coba lagi."
+      "alertIncompatibleBodyCreate": "Penyedia identitas perangkat Anda tidak kompatibel dengan dompet ini. Beralihlah ke Google Password Manager di pengaturan sistem lalu coba lagi.",
+      "recoverOfferTitle": "Pulihkan Dompet",
+      "recoverOfferBody": "Server kunci tidak memiliki catatan passkey ini. Konfirmasi satu tanda tangan lagi untuk membangun kembali kunci publik — dan alamat dompet Anda — di perangkat ini.",
+      "recoverConfirm": "Pulihkan Sekarang",
+      "recoverCancel": "Nanti Saja",
+      "recoverFailedTitle": "Pemulihan Tidak Berhasil",
+      "recoverFailedBody": "Kami tidak dapat membangun kembali dompet Anda dari tanda tangan tersebut. Tidak ada yang berubah — silakan coba lagi sebentar lagi."
     }
   }
 }

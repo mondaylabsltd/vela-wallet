@@ -1,0 +1,229 @@
+/**
+ * P-256 public key recovery from WebAuthn assertion signatures.
+ *
+ * An ECDSA signature determines its signing key up to a small candidate set
+ * (≤4, almost always 2), and the candidate sets of two signatures intersect
+ * in exactly one key — the same math as Ethereum's ecrecover, minus the
+ * recovery-id hint. This gives the wallet a cryptographic escape hatch: if
+ * the public key index is unreachable or lost AND the account isn't in local
+ * storage, two passkey signatures rebuild the public key — and from it the
+ * Safe address — entirely on-device. The index becomes a cache, not a single
+ * point of failure.
+ *
+ * Security notes:
+ * - Every input here is PUBLIC data (signatures, authenticator data, client
+ *   data). No private material is handled, so variable-time BigInt math is
+ *   acceptable. Do NOT reuse these routines for signing.
+ * - The recovered key is verified against BOTH signatures before being
+ *   returned, so a corrupt input can only yield null, never a wrong key.
+ */
+
+import { derSignatureToRaw } from './attestation-parser';
+import { fromHex } from './hex';
+import { sha256 } from './sha256';
+
+// ---------------------------------------------------------------------------
+// Curve parameters (secp256r1 / NIST P-256)
+// ---------------------------------------------------------------------------
+
+const P = BigInt('0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff');
+const A = P - 3n;
+const B = BigInt('0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b');
+const N = BigInt('0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551');
+const GX = BigInt('0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296');
+const GY = BigInt('0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5');
+
+// ---------------------------------------------------------------------------
+// Field / point arithmetic (affine; null = point at infinity)
+// ---------------------------------------------------------------------------
+
+// Scalar multiplication runs in Jacobian projective coordinates (X, Y, Z with
+// x = X/Z², y = Y/Z³). Affine formulas need one modular inverse — a full
+// Fermat exponentiation — per point addition, which made a 256-bit scalar
+// multiplication orders of magnitude slower (seconds per recovery; CI
+// timeouts, and Hermes on phones would be worse). Jacobian needs no inverse
+// until the single final conversion back to affine.
+
+type Point = readonly [bigint, bigint] | null; // affine; null = point at infinity
+type JPoint = readonly [bigint, bigint, bigint]; // Jacobian; Z = 0 = infinity
+
+const J_INFINITY: JPoint = [1n, 1n, 0n];
+
+const mod = (a: bigint, m: bigint): bigint => ((a % m) + m) % m;
+
+function modPow(base: bigint, exp: bigint, m: bigint): bigint {
+  let result = 1n;
+  base = mod(base, m);
+  while (exp > 0n) {
+    if (exp & 1n) result = (result * base) % m;
+    base = (base * base) % m;
+    exp >>= 1n;
+  }
+  return result;
+}
+
+/** Modular inverse via Fermat's little theorem (both moduli here are prime). */
+const modInv = (a: bigint, m: bigint): bigint => modPow(mod(a, m), m - 2n, m);
+
+/** Square root mod P — valid because P ≡ 3 (mod 4). */
+const sqrtP = (a: bigint): bigint => modPow(a, (P + 1n) / 4n, P);
+
+const toJacobian = (p: Point): JPoint => (p ? [p[0], p[1], 1n] : J_INFINITY);
+
+function toAffine(p: JPoint): Point {
+  const [x, y, z] = p;
+  if (z === 0n) return null;
+  const zInv = modInv(z, P);
+  const zInv2 = (zInv * zInv) % P;
+  return [mod(x * zInv2, P), mod(((y * zInv2) % P) * zInv, P)];
+}
+
+/** Jacobian doubling ("dbl-2001-b" — exploits P-256's a = −3). */
+function jDouble(p: JPoint): JPoint {
+  const [x, y, z] = p;
+  if (z === 0n || y === 0n) return J_INFINITY;
+  const delta = (z * z) % P;
+  const gamma = (y * y) % P;
+  const beta = (x * gamma) % P;
+  const alpha = mod(3n * (x - delta) * (x + delta), P);
+  const x3 = mod(alpha * alpha - 8n * beta, P);
+  const z3 = mod((y + z) * (y + z) - gamma - delta, P);
+  const y3 = mod(alpha * (4n * beta - x3) - 8n * gamma * gamma, P);
+  return [x3, y3, z3];
+}
+
+/** General Jacobian addition. */
+function jAdd(p1: JPoint, p2: JPoint): JPoint {
+  if (p1[2] === 0n) return p2;
+  if (p2[2] === 0n) return p1;
+  const [x1, y1, z1] = p1;
+  const [x2, y2, z2] = p2;
+  const z1z1 = (z1 * z1) % P;
+  const z2z2 = (z2 * z2) % P;
+  const u1 = (x1 * z2z2) % P;
+  const u2 = (x2 * z1z1) % P;
+  const s1 = (((y1 * z2z2) % P) * z2) % P;
+  const s2 = (((y2 * z1z1) % P) * z1) % P;
+  const h = mod(u2 - u1, P);
+  const r = mod(s2 - s1, P);
+  if (h === 0n) {
+    return r === 0n ? jDouble(p1) : J_INFINITY; // same point → double; inverses → ∞
+  }
+  const h2 = (h * h) % P;
+  const h3 = (h2 * h) % P;
+  const v = (u1 * h2) % P;
+  const x3 = mod(r * r - h3 - 2n * v, P);
+  const y3 = mod(r * (v - x3) - s1 * h3, P);
+  const z3 = (((z1 * z2) % P) * h) % P;
+  return [x3, y3, z3];
+}
+
+/** Double-and-add scalar multiplication (inputs are public — timing is fine). */
+function jMul(k: bigint, p: Point): JPoint {
+  let result = J_INFINITY;
+  let addend = toJacobian(p);
+  k = mod(k, N);
+  while (k > 0n) {
+    if (k & 1n) result = jAdd(result, addend);
+    addend = jDouble(addend);
+    k >>= 1n;
+  }
+  return result;
+}
+
+/** k1·P1 + k2·P2, with the single inverse-to-affine at the very end. */
+function mulAdd(k1: bigint, p1: Point, k2: bigint, p2: Point): Point {
+  return toAffine(jAdd(jMul(k1, p1), jMul(k2, p2)));
+}
+
+/** Reconstruct the curve point with the given x and y parity, if one exists. */
+function liftX(x: bigint, yOdd: 0 | 1): Point {
+  if (x >= P) return null;
+  const ySquared = mod(x * x * x + A * x + B, P);
+  const y = sqrtP(ySquared);
+  if ((y * y) % P !== ySquared) return null; // x is not on the curve
+  return (y & 1n) === BigInt(yOdd) ? [x, y] : [x, P - y];
+}
+
+function verifySignature(q: Point, r: bigint, s: bigint, e: bigint): boolean {
+  if (!q) return false;
+  const sInv = modInv(s, N);
+  const sum = mulAdd(mod(e * sInv, N), [GX, GY], mod(r * sInv, N), q);
+  return sum !== null && mod(sum[0], N) === r;
+}
+
+// ---------------------------------------------------------------------------
+// Recovery
+// ---------------------------------------------------------------------------
+
+/** All candidate public keys that could have produced signature (r, s) over hash e. */
+function recoverCandidates(r: bigint, s: bigint, e: bigint): [bigint, bigint][] {
+  if (r <= 0n || r >= N || s <= 0n || s >= N) return [];
+  const candidates: [bigint, bigint][] = [];
+  // x ≡ r (mod n) allows x = r and — only when r < p − n ≈ 2^126, i.e. with
+  // probability ≈ 2^-130 for a random r — x = r + n. Handled anyway.
+  for (const x of [r, r + N]) {
+    for (const yOdd of [0, 1] as const) {
+      const rPoint = liftX(x, yOdd);
+      if (!rPoint) continue;
+      const rInv = modInv(r, N);
+      const q = mulAdd(mod(s * rInv, N), rPoint, mod(-e * rInv, N), [GX, GY]);
+      if (q && verifySignature(q, r, s, e)) candidates.push([q[0], q[1]]);
+    }
+  }
+  return candidates;
+}
+
+/** The subset of WebAuthn assertion fields recovery needs (hex-encoded). */
+export interface RecoverableAssertion {
+  signatureHex: string;
+  authenticatorDataHex: string;
+  clientDataJSONHex: string;
+}
+
+const bytesToBig = (bytes: Uint8Array): bigint =>
+  bytes.reduce((acc, byte) => (acc << 8n) | BigInt(byte), 0n);
+
+/** e = sha256(authenticatorData || sha256(clientDataJSON)) — what WebAuthn signs. */
+function assertionSigningHash(assertion: RecoverableAssertion): bigint {
+  const authData = fromHex(assertion.authenticatorDataHex);
+  const clientDataHash = sha256(fromHex(assertion.clientDataJSONHex));
+  const message = new Uint8Array(authData.length + clientDataHash.length);
+  message.set(authData);
+  message.set(clientDataHash, authData.length);
+  return bytesToBig(sha256(message));
+}
+
+function assertionToRs(assertion: RecoverableAssertion): { r: bigint; s: bigint } | null {
+  const raw = derSignatureToRaw(fromHex(assertion.signatureHex));
+  if (!raw || raw.length !== 64) return null;
+  return { r: bytesToBig(raw.subarray(0, 32)), s: bytesToBig(raw.subarray(32, 64)) };
+}
+
+/**
+ * Recover the uncompressed public key (`04 || x || y` hex) shared by two
+ * WebAuthn assertions from the same credential, or null if the inputs don't
+ * pin down exactly one key (malformed input, different credentials, or the
+ * same signature passed twice — one signature alone is deliberately never
+ * enough, its candidate set is ambiguous).
+ */
+export function recoverPublicKeyFromAssertions(
+  first: RecoverableAssertion,
+  second: RecoverableAssertion,
+): string | null {
+  const sig1 = assertionToRs(first);
+  const sig2 = assertionToRs(second);
+  if (!sig1 || !sig2) return null;
+  if (sig1.r === sig2.r && sig1.s === sig2.s) return null; // same signature twice — ambiguous
+
+  const candidates1 = recoverCandidates(sig1.r, sig1.s, assertionSigningHash(first));
+  const candidates2 = recoverCandidates(sig2.r, sig2.s, assertionSigningHash(second));
+
+  const shared = candidates1.filter(([x, y]) =>
+    candidates2.some(([x2, y2]) => x === x2 && y === y2),
+  );
+  if (shared.length !== 1) return null;
+
+  const [x, y] = shared[0];
+  return '04' + x.toString(16).padStart(64, '0') + y.toString(16).padStart(64, '0');
+}

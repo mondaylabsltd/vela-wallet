@@ -71,7 +71,13 @@
       "alertNotFoundBody": "Bu kimlik için cüzdan bulunamadı.\n\nOlası nedenler:\n• Henüz bir cüzdan oluşturmadınız\n• Kimliğiniz bu cihazla eşitlenmedi (iCloud / Google ayarlarını kontrol edin)\n• Açık anahtar sunucusuna ulaşılamıyor\n\nYeni bir cüzdan oluşturmayı deneyin veya kimlik sağlayıcınızın (Face ID / parmak izi) cihazlar arasında eşitlendiğinden emin olun.",
       "alertSignInFailedTitle": "Giriş Başarısız",
       "alertSignInFailedBody": "{{message}}\n\nCihazınızda Face ID, Touch ID veya parmak izinin ayarlı olduğundan emin olup tekrar deneyin.",
-      "alertIncompatibleBodyCreate": "Cihazınızın kimlik sağlayıcısı bu cüzdanla uyumlu değil. Lütfen sistem ayarlarından Google Password Manager'a geçip tekrar deneyin."
+      "alertIncompatibleBodyCreate": "Cihazınızın kimlik sağlayıcısı bu cüzdanla uyumlu değil. Lütfen sistem ayarlarından Google Password Manager'a geçip tekrar deneyin.",
+      "recoverOfferTitle": "Cüzdanı kurtar",
+      "recoverOfferBody": "Anahtar sunucusunda bu geçiş anahtarına ait kayıt yok. Bir imza daha onaylayın; genel anahtar ve cüzdan adresiniz bu cihazda yeniden oluşturulsun.",
+      "recoverConfirm": "Şimdi kurtar",
+      "recoverCancel": "Şimdi Değil",
+      "recoverFailedTitle": "Kurtarma işe yaramadı",
+      "recoverFailedBody": "Bu imzalardan cüzdanınızı yeniden oluşturamadık. Hiçbir şey değişmedi — birazdan tekrar deneyin."
     }
   }
 }

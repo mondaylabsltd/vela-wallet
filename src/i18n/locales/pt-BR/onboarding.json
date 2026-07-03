@@ -71,7 +71,13 @@
       "alertNotFoundBody": "Nenhuma carteira foi encontrada para esta identidade.\n\nPossíveis motivos:\n• Você ainda não criou uma carteira\n• Sua identidade não foi sincronizada com este dispositivo (verifique as configurações do iCloud / Google)\n• O servidor de chaves públicas está inacessível\n\nTente criar uma nova carteira ou garanta que seu provedor de identidade (Face ID / impressão digital) esteja sincronizado entre os dispositivos.",
       "alertSignInFailedTitle": "Falha ao entrar",
       "alertSignInFailedBody": "{{message}}\n\nVerifique se o seu dispositivo tem Face ID, Touch ID ou impressão digital configurados e tente de novo.",
-      "alertIncompatibleBodyCreate": "O provedor de identidade do seu dispositivo não é compatível com esta carteira. Mude para o Gerenciador de Senhas do Google nas configurações do sistema e tente de novo."
+      "alertIncompatibleBodyCreate": "O provedor de identidade do seu dispositivo não é compatível com esta carteira. Mude para o Gerenciador de Senhas do Google nas configurações do sistema e tente de novo.",
+      "recoverOfferTitle": "Recuperar carteira",
+      "recoverOfferBody": "O servidor de chaves não tem registro desta passkey. Confirme mais uma assinatura para reconstruir a chave pública — e seu endereço — neste dispositivo.",
+      "recoverConfirm": "Recuperar agora",
+      "recoverCancel": "Agora não",
+      "recoverFailedTitle": "A recuperação não funcionou",
+      "recoverFailedBody": "Não conseguimos reconstruir sua carteira com essas assinaturas. Nada foi alterado — tente de novo em instantes."
     }
   }
 }

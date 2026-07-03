@@ -23,6 +23,7 @@ import {
   sign,
   encodeUserID,
   decodeUserName,
+  decodeUserNameFromHandle,
   RELYING_PARTY,
   PasskeyErrorCode,
   type PasskeyRegistrationResult,
@@ -106,6 +107,46 @@ describe('decodeUserName', () => {
     const encoded = encodeUserID('Bob');
     const decoded = decodeUserName(encoded);
     expect(decoded).toBe('Bob');
+  });
+});
+
+describe('decodeUserNameFromHandle', () => {
+  /** Hex of the UTF-8 bytes of `s` — how user.id crosses the bridge. */
+  const handleHex = (s: string): string =>
+    Array.from(new TextEncoder().encode(s), (b) => b.toString(16).padStart(2, '0')).join('');
+
+  test('roundtrips an ASCII name', () => {
+    expect(decodeUserNameFromHandle(handleHex(encodeUserID('Alice')))).toBe('Alice');
+  });
+
+  test('roundtrips a Chinese name (regression: Latin-1 decode garbled UTF-8)', () => {
+    // The exact failure from issue #1's follow-up: a passkey named 看看书
+    // recovered as mojibake because UTF-8 bytes were read as Latin-1.
+    expect(decodeUserNameFromHandle(handleHex(encodeUserID('看看书')))).toBe('看看书');
+    expect(decodeUserNameFromHandle(handleHex(encodeUserID('日本語ウォレット')))).toBe('日本語ウォレット');
+    expect(decodeUserNameFromHandle(handleHex(encodeUserID('família €')))).toBe('família €');
+  });
+
+  test('rejects a random (non-UTF-8) foreign handle instead of leaking mojibake', () => {
+    // Shape of the real-world case: ~23 random bytes as user.id from a
+    // credential the app did not mint.
+    expect(decodeUserNameFromHandle('5249d650b5b4f8e9d6e747457131dc61163613ad6291f621')).toBeNull();
+  });
+
+  test('rejects valid UTF-8 that is not name\\0uuid shaped', () => {
+    expect(decodeUserNameFromHandle(handleHex('just a plain string'))).toBeNull(); // no separator
+    expect(decodeUserNameFromHandle(handleHex('Alice\u0000not-a-uuid'))).toBeNull(); // bad uuid
+    expect(decodeUserNameFromHandle(handleHex(encodeUserID('')))).toBeNull(); // empty name
+  });
+
+  test('rejects control characters in the name', () => {
+    const uuid = '12345678-1234-4123-8123-123456789abc';
+    expect(decodeUserNameFromHandle(handleHex(`Bad\u0007Name\u0000${uuid}`))).toBeNull();
+  });
+
+  test('returns null for missing input', () => {
+    expect(decodeUserNameFromHandle(undefined)).toBeNull();
+    expect(decodeUserNameFromHandle('')).toBeNull();
   });
 });
 
