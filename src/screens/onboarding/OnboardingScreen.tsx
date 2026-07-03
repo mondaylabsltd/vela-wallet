@@ -2,7 +2,7 @@ import type { StoredAccount } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { PasskeyError, PasskeyErrorCode } from '@/modules/passkey';
-import { fromHex, toHex } from '@/services/hex';
+import { toHex } from '@/services/hex';
 import { recoverPublicKeyFromAssertions } from '@/services/p256-recovery';
 import * as PublicKeyIndex from '@/services/public-key-index';
 import { uploadPublicKey } from '@/services/public-key-upload';
@@ -267,14 +267,14 @@ export default function OnboardingScreen() {
   );
 }
 
-/** Decode username from the assertion's userIdHex field. */
+/**
+ * Decode username from the assertion's userIdHex field.
+ *
+ * Delegates to the strict UTF-8 `name\0uuid` decoder — the previous
+ * byte-by-byte String.fromCharCode decode read UTF-8 as Latin-1, garbling any
+ * non-ASCII name (看看书 → mojibake), and let a foreign credential's random
+ * handle pass straight through as the account name.
+ */
 function decodeUserNameFromAssertion(userIdHex?: string): string {
-  if (!userIdHex) return 'Wallet';
-  try {
-    const bytes = fromHex(userIdHex);
-    const str = String.fromCharCode(...bytes);
-    return Passkey.decodeUserName(str) || 'Wallet';
-  } catch {
-    return 'Wallet';
-  }
+  return Passkey.decodeUserNameFromHandle(userIdHex) ?? 'Wallet';
 }
