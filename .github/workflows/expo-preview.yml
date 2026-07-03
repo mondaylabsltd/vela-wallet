@@ -1,0 +1,107 @@
+# PR preview for the NATIVE app — the Expo analogue of the Cloudflare Pages
+# preview comment (which covers only the web wallet).
+#
+# How it decides update vs. full build (per platform, automatically):
+# `continuous-deploy-fingerprint` computes the project's NATIVE fingerprint —
+# a hash over everything that ends up in the binary: native deps in
+# package.json, config plugins, app.json native fields (permissions, ids),
+# local native modules under modules/*, the Expo SDK. Pure JS/TS/i18n/asset
+# changes do not move it. Then:
+#
+#   fingerprint matches an existing development build on EAS
+#     → publish an EAS Update on branch `pr-<number>` and comment a QR;
+#       testers scan it and the PR's JS loads inside the dev build they
+#       already have installed. (~1 min, no build credits.)
+#   fingerprint matches nothing (native changed)
+#     → trigger `eas build --profile development` for that platform and
+#       comment the build's install link/QR instead. Once installed, that new
+#       runtime receives plain updates again.
+#
+# This works because app.json pins `runtimeVersion: {"policy": "fingerprint"}`:
+# the runtime an update targets IS the fingerprint, so compatibility is exact —
+# no path-based guessing. android/ios stay gitignored (CNG), which keeps the
+# CI-computed fingerprint deterministic; build dev clients on EAS (not
+# `--local`) so their runtime matches what CI computes.
+#
+# One-time prerequisites:
+#   1. Repo secret EXPO_TOKEN — robot access token from
+#      expo.dev → monday-labs-ltd → Settings → Access tokens.
+#      Without it this workflow skips itself instead of failing.
+#   2. iOS/Android build credentials stored on EAS (eas credentials) so the
+#      auto-triggered dev builds can run non-interactively.
+#   3. One fresh `eas build --profile development --platform all` after this
+#      lands — the existing dev builds (Runtime "None") predate expo-updates
+#      and can never receive updates.
+name: expo-preview
+
+on:
+  pull_request:
+
+concurrency:
+  group: expo-preview-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  # secrets.* is not readable in a job-level `if`, so a tiny gate job exports it.
+  gate:
+    runs-on: ubuntu-latest
+    # Forked PRs can't read EXPO_TOKEN — skip them too.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    outputs:
+      has-token: ${{ steps.check.outputs.present }}
+    steps:
+      - id: check
+        run: echo "present=${{ secrets.EXPO_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
+  preview:
+    needs: gate
+    if: needs.gate.outputs.has-token == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # the QR / build-link comment
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      # v9 is the first tag that ships continuous-deploy-fingerprint.
+      - uses: expo/expo-github-action/continuous-deploy-fingerprint@v9
+        with:
+          profile: development
+          branch: pr-${{ github.event.number }}
+      # The bot table above assumes Expo fluency; this sticky comment tells
+      # testers what to actually do. Content lives in the guide file so it can
+      # be edited without touching workflow logic.
+      - name: Tester guide comment (sticky)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- vela-preview-guide -->';
+            const body = fs.readFileSync('.github/expo-preview-guide.md', 'utf8');
+            if (!body.startsWith(marker)) {
+              core.setFailed('guide file must start with the sticky-comment marker'); return;
+            }
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100,
+            });
+            const mine = comments.find(c => c.body.startsWith(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: mine.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              });
+            }
