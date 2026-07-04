@@ -24,50 +24,50 @@ const store: Map<string, string> = (AsyncStorage as unknown as { __store: Map<st
 
 beforeEach(async () => {
   store.clear();
-  await setAvatarStyle('initials');
+  await setAvatarStyle('identicon');
 });
 
 describe('avatar-style service', () => {
-  it('defaults to initials', () => {
-    expect(getAvatarStyle()).toBe('initials');
+  it('defaults to identicon', () => {
+    expect(getAvatarStyle()).toBe('identicon');
   });
 
   it('persists and reloads the chosen style', async () => {
-    await setAvatarStyle('identicon');
-    expect(store.get('vela.avatarStyle')).toBe('identicon');
+    await setAvatarStyle('initials');
+    expect(store.get('vela.avatarStyle')).toBe('initials');
 
     // Simulate a fresh boot: cache poisoned back to default, then load.
-    await setAvatarStyle('initials');
-    store.set('vela.avatarStyle', 'identicon');
+    await setAvatarStyle('identicon');
+    store.set('vela.avatarStyle', 'initials');
     await loadAvatarStyle();
-    expect(getAvatarStyle()).toBe('identicon');
+    expect(getAvatarStyle()).toBe('initials');
   });
 
   it('ignores corrupt stored values', async () => {
     store.set('vela.avatarStyle', 'garbage');
     await loadAvatarStyle();
-    expect(getAvatarStyle()).toBe('initials');
+    expect(getAvatarStyle()).toBe('identicon');
   });
 
   it('notifies subscribers on change, not on no-ops', async () => {
     const seen: string[] = [];
     const unsubscribe = subscribeAvatarStyle(() => seen.push(getAvatarStyle()));
 
-    await setAvatarStyle('identicon');
-    await setAvatarStyle('identicon'); // no-op — same value
     await setAvatarStyle('initials');
-    expect(seen).toEqual(['identicon', 'initials']);
+    await setAvatarStyle('initials'); // no-op — same value
+    await setAvatarStyle('identicon');
+    expect(seen).toEqual(['initials', 'identicon']);
 
     unsubscribe();
-    await setAvatarStyle('identicon');
-    expect(seen).toEqual(['identicon', 'initials']);
+    await setAvatarStyle('initials');
+    expect(seen).toEqual(['initials', 'identicon']);
   });
 
   it('keeps the cached style when storage reads fail', async () => {
-    await setAvatarStyle('identicon');
+    await setAvatarStyle('initials');
     (AsyncStorage.getItem as jest.Mock).mockRejectedValueOnce(new Error('disk'));
-    await expect(loadAvatarStyle()).resolves.toBe('identicon');
-    expect(getAvatarStyle()).toBe('identicon');
+    await expect(loadAvatarStyle()).resolves.toBe('initials');
+    expect(getAvatarStyle()).toBe('initials');
   });
 
   it('a set during an in-flight load wins over the stored value', async () => {

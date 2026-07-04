@@ -1,6 +1,6 @@
 /**
  * Avatar-style preference — how account/contact avatars render app-wide:
- * a colored initial (default) or a Nimiq identicon derived from the address.
+ * a Nimiq identicon derived from the address (default) or a colored initial.
  *
  * Same module-cache + AsyncStorage pattern as the display currency, plus a
  * listener set so `useAvatarStyle` (useSyncExternalStore) re-renders every
@@ -12,7 +12,7 @@ export type AvatarStyle = 'initials' | 'identicon';
 
 const KEY = 'vela.avatarStyle';
 
-let _style: AvatarStyle = 'initials';
+let _style: AvatarStyle = 'identicon';
 // Bumped on every set; an in-flight load only adopts the stored value if no
 // set happened while its read was pending, so a late read can never clobber
 // a fresher user choice.
