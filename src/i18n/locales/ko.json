@@ -32,7 +32,9 @@
     "appearance": {
       "themeLight": "라이트",
       "themeDark": "다크",
-      "themeAuto": "자동"
+      "themeAuto": "자동",
+      "avatarInitials": "이니셜",
+      "avatarIdenticon": "아이덴티콘"
     },
     "localization": {
       "autoExample": "자동 · {{example}}",

@@ -32,7 +32,9 @@
     "appearance": {
       "themeLight": "Hell",
       "themeDark": "Dunkel",
-      "themeAuto": "Automatisch"
+      "themeAuto": "Automatisch",
+      "avatarInitials": "Initialen",
+      "avatarIdenticon": "Identicon"
     },
     "localization": {
       "autoExample": "Automatisch · {{example}}",

@@ -20,6 +20,7 @@ import { Check, X } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { VelaButton } from '@/components/ui/VelaButton';
+import { WalletAvatar } from '@/components/ui/WalletAvatar';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { getAccountBalances } from '@/services/balance-cache';
@@ -98,7 +99,7 @@ export function AccountSwitcherModal({
                   style={styles.item}
                   onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); hapticSuccess(); onClose(); }}
                 >
-                  <View style={styles.avatar}><Text style={styles.avatarText}>{(account.name[0] ?? 'V').toUpperCase()}</Text></View>
+                  <WalletAvatar name={account.name} address={account.address} size={40} letterSize={text.base} />
                   <View style={styles.info}>
                     <Text style={[styles.name, isActive && styles.nameActive]} numberOfLines={1}>{account.name}</Text>
                     <Text style={styles.addr}>{shortAddress(account.address)}</Text>
@@ -148,11 +149,6 @@ const styles = createStyles(() => ({
   // Hairline divider inset past the 40px avatar + its space.md gap so it aligns
   // under the account name (Apple-Wallet style).
   sep: { height: 1, backgroundColor: color.border.base, marginLeft: 40 + space.md },
-  avatar: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: color.accent.soft,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: { fontSize: text.base, ...inter.bold, color: color.accent.base },
   info: { flex: 1, gap: space.xs },
   name: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
   nameActive: { color: color.accent.base },

@@ -10,6 +10,9 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { Wallet } from 'lucide-react-native';
 import { color, inter, isDarkMode, createStyles } from '@/constants/theme';
+import { Identicon } from '@/components/ui/Identicon';
+import { useAvatarStyle } from '@/hooks/use-avatar-style';
+import { isAddress } from '@/models/types';
 import type { ContactKind } from '@/services/contacts';
 
 /**
@@ -33,9 +36,16 @@ export function ContactAvatar({ name, address, kind, size = 40 }: {
   kind?: ContactKind;
   size?: number;
 }) {
+  const avatarStyle = useAvatarStyle();
   const seed = address || name;
   const initial = (name.trim()[0] ?? address.slice(2, 3) ?? '?').toUpperCase();
   const h = pickHue(seed);
+
+  // Identicons need a real address to be meaningful — the add-contact form
+  // feeds this the live TextInput value on every keystroke, so hold the tinted
+  // initial until the input is an actual address (not a partial or arbitrary
+  // string, which would hash to a different identicon per keystroke).
+  const showIdenticon = avatarStyle === 'identicon' && isAddress(address);
 
   // Low saturation + mode-aware lightness keeps the tint quiet in both themes.
   const dark = isDarkMode();
@@ -44,16 +54,20 @@ export function ContactAvatar({ name, address, kind, size = 40 }: {
 
   return (
     <View style={{ width: size, height: size }}>
-      <View
-        style={[
-          styles.circle,
-          { width: size, height: size, borderRadius: size / 2, backgroundColor: bg },
-        ]}
-      >
-        <Text style={[styles.initial, { color: fg, fontSize: size * 0.42 }]}>
-          {initial}
-        </Text>
-      </View>
+      {showIdenticon ? (
+        <Identicon seed={address} size={size} />
+      ) : (
+        <View
+          style={[
+            styles.circle,
+            { width: size, height: size, borderRadius: size / 2, backgroundColor: bg },
+          ]}
+        >
+          <Text style={[styles.initial, { color: fg, fontSize: size * 0.42 }]}>
+            {initial}
+          </Text>
+        </View>
+      )}
       {kind === 'account' && (
         <View style={styles.badge}>
           <Wallet size={9} color={color.fg.inverse} strokeWidth={2.5} />
