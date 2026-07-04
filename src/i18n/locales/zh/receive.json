@@ -12,6 +12,8 @@
     "warningCounterfactual": "你的地址在所有受支持的网络上都相同。转入此处的资金安全且归你所有——即使在钱包尚未部署时也是如此。",
     "networksLabel": "支持的网络",
     "networksLine": "同一地址，通用于全部 {{count}} 个网络",
+    "networkDetail": "{{name}} · 链 ID {{id}}",
+    "viewOnExplorer": "在浏览器中查看 {{name}}",
     "shareCardHeadline": "扫码向我转账",
     "shareDialogTitle": "{{name}} 钱包地址",
     "modeAddress": "地址",

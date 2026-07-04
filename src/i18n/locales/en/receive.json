@@ -12,6 +12,8 @@
     "warningReminder": "Supported networks only — transfers on other networks may be lost.",
     "networksLabel": "Supported networks",
     "networksLine": "One address across all {{count}} networks",
+    "networkDetail": "{{name}} · Chain ID {{id}}",
+    "viewOnExplorer": "View {{name}} on explorer",
     "shareCardHeadline": "Scan to Send Me Crypto",
     "shareDialogTitle": "{{name}} Wallet Address",
     "modeAddress": "Address",

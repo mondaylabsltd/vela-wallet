@@ -160,10 +160,11 @@ export function parseEIP681(input: string): EIP681Request | null {
 export const PAY_LINK_FALLBACK = 'https://wallet.getvela.app/pay';
 
 /**
- * The base for payment links. On the web we use the *current* origin's /pay
- * route, so a self-hosted wallet (e.g. mydomain.com) produces links that point
- * back to its own deployment. On native (no `window`) we fall back to the
- * public hosted page.
+ * The base for payment links.
+ *   · Web (Expo web / self-hosted): the CURRENT origin's /pay route, so the link
+ *     stays on the same host the wallet is served from — localhost in dev, the
+ *     real domain in prod; a self-hosted deployment links back to itself.
+ *   · Native app (no `window.location`): the canonical public hosted page.
  */
 export function payLinkBase(): string {
   try {

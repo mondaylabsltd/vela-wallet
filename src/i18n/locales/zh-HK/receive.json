@@ -10,6 +10,8 @@
     "warningReminder": "只限支援的網絡 — 其他網絡的轉帳可能遺失。",
     "warningConfirm": "我明白",
     "networksLine": "一個地址通用於全部 {{count}} 個網絡",
+    "networkDetail": "{{name}} · 鏈 ID {{id}}",
+    "viewOnExplorer": "喺瀏覽器度睇 {{name}}",
     "networksLabel": "支援的網絡",
     "a11yBack": "返回",
     "a11yCopyAddress": "複製地址",

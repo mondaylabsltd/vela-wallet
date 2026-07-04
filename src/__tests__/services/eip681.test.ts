@@ -1,7 +1,7 @@
 /**
  * EIP-681 build/parse unit tests.
  */
-import { buildEIP681, parseEIP681, toBaseUnits, fromBaseUnits } from '@/services/eip681';
+import { buildEIP681, parseEIP681, toBaseUnits, fromBaseUnits, buildPayLink, payLinkBase, PAY_LINK_FALLBACK } from '@/services/eip681';
 
 const ME = '0x742d35Cc6634C0532925a3b844Bc454e4438f44e';
 const USDC = '0x3c499c542cEF5E3811e1192ce70d8cc03d5c3359'; // USDC on Polygon
@@ -98,5 +98,29 @@ describe('parseEIP681', () => {
     expect(r.recipient).toBe(ME);
     expect(r.tokenAddress).toBe(USDC);
     expect(fromBaseUnits(r.amountBaseUnits!, 6)).toBe('1.5');
+  });
+});
+
+describe('pay-link origin', () => {
+  const realWindow = (globalThis as any).window;
+  afterEach(() => { (globalThis as any).window = realWindow; });
+
+  it('web keeps the current origin (Expo web / self-hosted link back to their own host)', () => {
+    (globalThis as any).window = { location: { origin: 'http://localhost:8081' } };
+    expect(payLinkBase()).toBe('http://localhost:8081/pay');
+    (globalThis as any).window = { location: { origin: 'https://wallet.getvela.app' } };
+    expect(payLinkBase()).toBe('https://wallet.getvela.app/pay');
+  });
+
+  it('native (no window.location) uses the default public host', () => {
+    (globalThis as any).window = undefined;
+    expect(payLinkBase()).toBe(PAY_LINK_FALLBACK);
+    (globalThis as any).window = {}; // RN defines window but not window.location
+    expect(payLinkBase()).toBe(PAY_LINK_FALLBACK);
+  });
+
+  it('honors an explicit baseUrl override', () => {
+    const link = buildPayLink({ recipient: ME, chainId: 1, symbol: 'ETH', decimals: 18, networkName: 'Ethereum', baseUrl: 'https://x.example/pay' });
+    expect(link.startsWith('https://x.example/pay?')).toBe(true);
   });
 });

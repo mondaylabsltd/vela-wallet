@@ -10,6 +10,8 @@
     "warningConfirm": "Saya Mengerti",
     "warningReminder": "Hanya jaringan yang didukung — pengiriman di jaringan lain dapat hilang.",
     "networksLine": "Satu alamat untuk semua {{count}} jaringan",
+    "networkDetail": "{{name}} · Chain ID {{id}}",
+    "viewOnExplorer": "Lihat {{name}} di explorer",
     "networksLabel": "Jaringan yang didukung",
     "a11yBack": "Kembali",
     "a11yCopyAddress": "Salin alamat",

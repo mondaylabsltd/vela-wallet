@@ -11,6 +11,8 @@
     "warningReminder": "Nur unterstützte Netzwerke — Überweisungen auf anderen Netzwerken können verloren gehen.",
     "warningConfirm": "Verstanden",
     "networksLine": "Eine Adresse für alle {{count}} Netzwerke",
+    "networkDetail": "{{name}} · Chain-ID {{id}}",
+    "viewOnExplorer": "{{name}} im Explorer ansehen",
     "networksLabel": "Unterstützte Netzwerke",
     "a11yBack": "Zurück",
     "a11yCopyAddress": "Adresse kopieren",
