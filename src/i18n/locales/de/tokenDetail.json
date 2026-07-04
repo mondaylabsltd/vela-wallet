@@ -1,7 +1,5 @@
 {
   "tokenDetail": {
-    "chartTitle": "Guthaben der letzten 7 Tage",
-    "chartEmpty": "Keine historischen Daten verfügbar",
     "send": "Senden",
     "receive": "Empfangen",
     "labelName": "Name",

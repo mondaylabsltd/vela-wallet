@@ -4,31 +4,29 @@ input, textarea, [contenteditable] {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Keyboard-only focus ring (WCAG 2.4.7). ':focus-visible' matches only keyboard/
-   AT focus, so mouse & touch users never see it — but keyboard users get a clear
-   accent ring on every interactive element, including inputs where the rule above
-   force-removes the default outline. box-shadow is used so it renders even inside
-   overflow:hidden containers and rounds to the element's own corners. */
+/* Keyboard-only focus ring (WCAG 2.4.7) for NON-TEXT controls. ':focus-visible'
+   matches only keyboard/AT focus on buttons/links/tabs — but text fields are the
+   spec'd exception: editable elements match it on ANY focus (tap included), which
+   painted an accent ring around every input on every tap. So text fields are
+   deliberately excluded — like native iOS/Android they show only the caret — and
+   the ring covers the controls where it genuinely means "keyboard user here".
+   box-shadow is used so it renders even inside overflow:hidden containers and
+   rounds to the element's own corners. */
 a:focus-visible,
 button:focus-visible,
-input:focus-visible,
-textarea:focus-visible,
-select:focus-visible,
-[contenteditable]:focus-visible,
 [role="button"]:focus-visible,
 [role="link"]:focus-visible,
 [role="radio"]:focus-visible,
 [role="switch"]:focus-visible,
 [role="tab"]:focus-visible,
-[tabindex]:focus-visible {
+[tabindex]:not(input):not(textarea):focus-visible {
   outline: none !important;
   box-shadow: 0 0 0 2px #FAFAF8, 0 0 0 4px #E8572A !important;
 }
 @media (prefers-color-scheme: dark) {
-  a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible,
-  select:focus-visible, [contenteditable]:focus-visible, [role="button"]:focus-visible,
+  a:focus-visible, button:focus-visible, [role="button"]:focus-visible,
   [role="link"]:focus-visible, [role="radio"]:focus-visible, [role="switch"]:focus-visible,
-  [role="tab"]:focus-visible, [tabindex]:focus-visible {
+  [role="tab"]:focus-visible, [tabindex]:not(input):not(textarea):focus-visible {
     box-shadow: 0 0 0 2px #141412, 0 0 0 4px #E8572A !important;
   }
 }

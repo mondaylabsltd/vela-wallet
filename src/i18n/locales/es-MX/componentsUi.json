@@ -165,19 +165,16 @@
       "clearFilter": "Quitar filtro de red",
       "toggleSearch": "Buscar cadenas"
     },
-    "chart": {
-      "noDataFor": "No hay datos para {{label}}",
-      "tapHint": "Toca una barra para ver el saldo"
-    },
     "bugReport": {
       "title": "Reportar un problema",
-      "subtitle": "Cuéntanos qué salió mal — va directo a nuestro rastreador de incidencias.",
+      "subtitle": "Cuéntanos qué salió mal.",
       "whatLabel": "¿Qué pasó?",
       "whatPlaceholder": "ej. Toqué Enviar y la pantalla se congeló.",
+      "addSteps": "+ Agregar pasos para reproducirlo",
       "stepsLabel": "Pasos para reproducirlo (opcional)",
       "stepsPlaceholder": "1. Ve a…\n2. Toca…\n3. Observa…",
       "previewToggle": "Lo que se va a enviar",
-      "consent": "Solo se envía lo que ves aquí — nunca tus llaves, frase de recuperación ni saldos.",
+      "consent": "Solo se envía lo que ves — nunca tus llaves, frase de recuperación ni saldos.",
       "send": "Enviar reporte",
       "sending": "Enviando…",
       "cancel": "Cancelar",

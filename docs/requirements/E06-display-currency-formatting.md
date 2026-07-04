@@ -30,6 +30,12 @@ style) must be encoded deliberately so amounts read natively in each locale.
 
 - **FR-1** — Present a currency picker populated from the FX endpoint's supported list (E05) — data-driven, not hardcoded.
 - **FR-2** — Persist the chosen display currency (A06); apply it app-wide.
+- **FR-6** — Entry point is **Settings › Localization, first row** (N01 FR-1) with a live example
+  subtitle (`USD · $1,234.56`) — the home hero carries only a passive `· CODE` unit label.
+- **FR-7** — **First-launch seeding**: with no stored preference, derive the currency from the
+  device region (`expo-localization getLocales()[i].currencyCode`; native NSLocale/java.util —
+  no Hermes `Intl`). Commit the seed **only after a real rate resolves** (`resolveRate`, not the
+  rate-1 fallback), else stay on USD and retry next launch. A stored key is never overwritten.
 - **FR-3** — Drop decimals when `|value| ≥ 100,000` or for zero-decimal currencies (JPY/KRW/IDR/VND/etc.).
 - **FR-4** — Use the Intl-free number formatter (M02) for grouping (comma_dot / dot_comma / space_comma / indian) with an `auto` device path.
 - **FR-5** — Render amounts atomically via `AmountText` (M03).
@@ -41,7 +47,10 @@ style) must be encoded deliberately so amounts read natively in each locale.
 
 ## 6. UX / flow notes
 
-`CurrencySheet` for selection. Compact suffixes use universal K/M/B/T (CJK myriad avoided on purpose, M02).
+`CurrencySheet` for selection, opened from the Settings row (2026-07: the home-hero currency chip
+was removed — a set-once preference doesn't earn hero real estate; the hero label shows
+`Total balance · CODE` so `$` stays unambiguous). Compact suffixes use universal K/M/B/T (CJK
+myriad avoided on purpose, M02).
 
 ## 7. Acceptance criteria
 

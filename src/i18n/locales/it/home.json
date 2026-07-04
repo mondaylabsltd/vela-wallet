@@ -17,8 +17,8 @@
     "rescanClose": "Fatto",
     "rescanNativeNote": "Le monete native (ETH, BNB, MATIC…) ricevute su alcune reti non possono essere rilevate qui. Il tuo saldo resta comunque corretto — apri un block explorer per lo storico completo.",
     "rescanExplorerTitle": "Controlla direttamente su un block explorer",
-    "statement": "Estratto conto",
     "tabActivity": "Attività",
+    "tabAssets": "Asset",
     "tabConnections": "Connessioni",
     "liveIndicator": "Live · in ascolto dei pagamenti",
     "emptyNoActivityNetwork": "Nessuna attività su questa rete",
@@ -47,13 +47,9 @@
     "connDelete": "Elimina",
     "connPending": "In elaborazione",
     "connFailed": "Non riuscita",
-    "assetsSheetTitle": "I tuoi asset",
     "cancel": "Annulla",
-    "a11yViewAssets": "Visualizza i tuoi asset",
     "a11yHideBalance": "Nascondi il saldo",
     "a11yShowBalance": "Mostra il saldo",
-    "a11yChangeCurrency": "Cambia la valuta di visualizzazione, attualmente {{code}}",
-    "a11yViewStatement": "Visualizza l'estratto conto completo sul block explorer",
     "a11ySwitchAccount": "Account {{name}}. Cambia account",
     "a11yOpenSettings": "Impostazioni"
   }

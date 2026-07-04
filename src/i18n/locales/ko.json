@@ -32,11 +32,12 @@
     "appearance": {
       "themeLight": "라이트",
       "themeDark": "다크",
-      "themeAuto": "자동",
+      "themeAuto": "시스템 설정 따르기",
       "avatarInitials": "이니셜",
       "avatarIdenticon": "아이덴티콘"
     },
     "localization": {
+      "currencyTitle": "통화",
       "autoExample": "자동 · {{example}}",
       "numberTitle": "숫자 형식",
       "numberSubtitle": "금액의 자릿수 구분과 소수점 표시 방식입니다.",

@@ -165,17 +165,14 @@
       "clearFilter": "네트워크 필터 지우기",
       "toggleSearch": "체인 검색"
     },
-    "chart": {
-      "noDataFor": "{{label}}에 대한 데이터가 없습니다",
-      "tapHint": "막대를 눌러 잔액을 확인하세요"
-    },
     "bugReport": {
       "title": "문제 신고",
-      "subtitle": "무엇이 잘못됐는지 알려주세요 — 바로 이슈 트래커로 전달됩니다.",
+      "subtitle": "무엇이 잘못됐는지 알려주세요.",
       "whatLabel": "무슨 일이 있었나요?",
       "whatPlaceholder": "예: 보내기를 눌렀더니 화면이 멈췄어요.",
       "stepsLabel": "재현 단계 (선택)",
       "stepsPlaceholder": "1. 이동…\n2. 누르기…\n3. 확인…",
+      "addSteps": "+ 재현 단계 추가",
       "previewToggle": "전송될 내용",
       "consent": "여기 보이는 내용만 전송됩니다 — 키, 시드 문구, 잔액은 절대 보내지 않습니다.",
       "send": "신고 보내기",

@@ -32,11 +32,12 @@
     "appearance": {
       "themeLight": "Açık",
       "themeDark": "Koyu",
-      "themeAuto": "Otomatik",
+      "themeAuto": "Sistemi Takip Et",
       "avatarInitials": "Baş harfler",
       "avatarIdenticon": "Identicon"
     },
     "localization": {
+      "currencyTitle": "Para birimi",
       "autoExample": "Otomatik · {{example}}",
       "numberTitle": "Sayı biçimi",
       "numberSubtitle": "Tutarların nasıl gruplandığı ve ondalık işaretinin görünümü.",

@@ -1,7 +1,5 @@
 {
   "tokenDetail": {
-    "chartTitle": "Баланс за 7 дней",
-    "chartEmpty": "Нет исторических данных",
     "send": "Отправить",
     "receive": "Получить",
     "labelName": "Название",

@@ -165,19 +165,16 @@
       "clearFilter": "Xóa bộ lọc mạng",
       "toggleSearch": "Tìm chain"
     },
-    "chart": {
-      "noDataFor": "Không có dữ liệu cho {{label}}",
-      "tapHint": "Chạm vào một cột để xem số dư"
-    },
     "bugReport": {
       "title": "Báo lỗi",
-      "subtitle": "Cho chúng tôi biết chuyện gì đã xảy ra — báo cáo sẽ được gửi thẳng đến hệ thống theo dõi lỗi.",
+      "subtitle": "Cho chúng tôi biết chuyện gì đã xảy ra.",
       "whatLabel": "Chuyện gì đã xảy ra?",
       "whatPlaceholder": "ví dụ: Tôi chạm Gửi thì màn hình bị đứng.",
+      "addSteps": "+ Thêm các bước tái hiện",
       "stepsLabel": "Các bước tái hiện (tùy chọn)",
       "stepsPlaceholder": "1. Vào…\n2. Chạm…\n3. Thấy…",
       "previewToggle": "Nội dung sẽ được gửi",
-      "consent": "Chỉ những gì bạn thấy ở đây được gửi đi — không bao giờ gồm khóa, cụm từ khôi phục hay số dư của bạn.",
+      "consent": "Chỉ những gì bạn thấy mới được gửi đi — không bao giờ gồm khóa, cụm từ khôi phục hay số dư.",
       "send": "Gửi báo cáo",
       "sending": "Đang gửi…",
       "cancel": "Hủy",

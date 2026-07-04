@@ -165,19 +165,16 @@
       "clearFilter": "Netzwerkfilter zurücksetzen",
       "toggleSearch": "Chains suchen"
     },
-    "chart": {
-      "noDataFor": "Keine Daten für {{label}}",
-      "tapHint": "Tippen Sie auf einen Balken, um das Guthaben zu sehen"
-    },
     "bugReport": {
       "title": "Problem melden",
-      "subtitle": "Sagen Sie uns, was schiefgelaufen ist — es geht direkt an unseren Issue-Tracker.",
+      "subtitle": "Sagen Sie uns, was schiefgelaufen ist.",
       "whatLabel": "Was ist passiert?",
       "whatPlaceholder": "z. B. Ich habe auf Senden getippt und der Bildschirm ist eingefroren.",
+      "addSteps": "+ Schritte zum Nachstellen hinzufügen",
       "stepsLabel": "Schritte zum Nachstellen (optional)",
       "stepsPlaceholder": "1. Gehen Sie zu …\n2. Tippen Sie auf …\n3. Sehen Sie …",
       "previewToggle": "Was gesendet wird",
-      "consent": "Es wird nur gesendet, was Sie hier sehen — niemals Ihre Schlüssel, Ihre Seed-Phrase oder Ihre Guthaben.",
+      "consent": "Es wird nur gesendet, was Sie sehen — niemals Schlüssel, Seed-Phrase oder Guthaben.",
       "send": "Meldung senden",
       "sending": "Wird gesendet …",
       "cancel": "Abbrechen",

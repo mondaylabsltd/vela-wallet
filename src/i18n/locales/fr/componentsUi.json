@@ -165,19 +165,16 @@
       "clearFilter": "Effacer le filtre de réseau",
       "toggleSearch": "Rechercher des chaînes"
     },
-    "chart": {
-      "noDataFor": "Aucune donnée pour {{label}}",
-      "tapHint": "Appuyez sur une barre pour voir le solde"
-    },
     "bugReport": {
       "title": "Signaler un problème",
-      "subtitle": "Dites-nous ce qui n'a pas fonctionné — c'est transmis directement à notre suivi des incidents.",
+      "subtitle": "Dites-nous ce qui n'a pas fonctionné.",
       "whatLabel": "Que s'est-il passé ?",
       "whatPlaceholder": "ex. J'ai appuyé sur Envoyer et l'écran s'est figé.",
       "stepsLabel": "Étapes pour reproduire (facultatif)",
       "stepsPlaceholder": "1. Aller à…\n2. Appuyer sur…\n3. Constater…",
+      "addSteps": "+ Ajouter les étapes pour reproduire",
       "previewToggle": "Ce qui sera envoyé",
-      "consent": "Seul ce que vous voyez ici est envoyé — jamais vos clés, votre phrase de récupération ni vos soldes.",
+      "consent": "Seul ce que vous voyez est envoyé — jamais vos clés, votre phrase de récupération ni vos soldes.",
       "send": "Envoyer le signalement",
       "sending": "Envoi…",
       "cancel": "Annuler",

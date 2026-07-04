@@ -32,11 +32,12 @@
     "appearance": {
       "themeLight": "Hell",
       "themeDark": "Dunkel",
-      "themeAuto": "Automatisch",
+      "themeAuto": "System folgen",
       "avatarInitials": "Initialen",
       "avatarIdenticon": "Identicon"
     },
     "localization": {
+      "currencyTitle": "Währung",
       "autoExample": "Automatisch · {{example}}",
       "numberTitle": "Zahlenformat",
       "numberSubtitle": "Wie Beträge gruppiert und das Dezimaltrennzeichen dargestellt werden.",

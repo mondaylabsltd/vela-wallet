@@ -1,11 +1,6 @@
 {
   "assets": {
-    "actionSend": "Gönder",
-    "actionReceive": "Al",
-    "actionHistory": "Geçmiş",
     "sectionTitle": "Varlıklar",
-    "hideZero": "Sıfırları gizle",
-    "hiddenCount": "{{count}} gizli",
     "addToken": "Ekle",
     "searchPlaceholder": "Token ara...",
     "rpcUnavailableSingle": "{{name}} RPC kullanılamıyor",
@@ -14,8 +9,6 @@
     "emptyTitle": "İlk varlığınızı yatırın",
     "emptySubtext": "Adresinizi görmek ve token almak için buraya dokunun",
     "errorTitle": "Hata",
-    "errorLoadBalances": "Token bakiyeleri yüklenemedi.",
-    "switcherTitle": "Hesap Değiştir",
     "switcherTotal": "Toplam {{amount}}",
     "rpcFixTitle": "RPC'yi Düzelt",
     "rpcFixChainId": "Zincir ID: {{chainId}}",
@@ -28,8 +21,6 @@
     "rpcProvidersTitle": "Güvenilir bir RPC nereden alınır",
     "rpcProvidersHint": "Ücretsiz uç noktalar — kaydolun, URL'nizi kopyalayıp yukarıya yapıştırın.",
     "rpcReport": "Hâlâ çalışmıyor mu? Bildirin",
-    "invalidQrTitle": "Geçersiz QR",
-    "invalidQrMessage": "Lütfen geçerli bir Ethereum adresi veya bağlantı URI'si okutun.",
     "chainFallback": "Zincir {{chainId}}"
   }
 }

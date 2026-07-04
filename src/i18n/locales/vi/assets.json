@@ -1,11 +1,6 @@
 {
   "assets": {
-    "actionSend": "Gửi",
-    "actionReceive": "Nhận",
-    "actionHistory": "Lịch sử",
     "sectionTitle": "Tài sản",
-    "hideZero": "Ẩn số dư 0",
-    "hiddenCount": "Đã ẩn {{count}}",
     "addToken": "Thêm",
     "searchPlaceholder": "Tìm token...",
     "rpcUnavailableSingle": "RPC của {{name}} không khả dụng",
@@ -14,8 +9,6 @@
     "emptyTitle": "Nạp tài sản đầu tiên của bạn",
     "emptySubtext": "Chạm vào đây để xem địa chỉ và nhận token",
     "errorTitle": "Lỗi",
-    "errorLoadBalances": "Không tải được số dư token.",
-    "switcherTitle": "Chuyển tài khoản",
     "switcherTotal": "Tổng {{amount}}",
     "rpcFixTitle": "Sửa RPC",
     "rpcFixChainId": "Chain ID: {{chainId}}",
@@ -28,8 +21,6 @@
     "rpcProvidersTitle": "Nơi lấy RPC đáng tin cậy",
     "rpcProvidersHint": "Điểm cuối miễn phí — đăng ký, sao chép URL của bạn và dán vào ô phía trên.",
     "rpcReport": "Vẫn không hoạt động? Báo cáo",
-    "invalidQrTitle": "QR không hợp lệ",
-    "invalidQrMessage": "Vui lòng quét một địa chỉ Ethereum hoặc URI kết nối hợp lệ.",
     "chainFallback": "Chain {{chainId}}"
   }
 }

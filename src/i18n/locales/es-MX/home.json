@@ -2,8 +2,8 @@
   "home": {
     "totalBalance": "Saldo total",
     "balanceStale": "Algunos saldos aún se están actualizando.",
-    "statement": "Estado de cuenta",
     "tabActivity": "Actividad",
+    "tabAssets": "Activos",
     "tabConnections": "Conexiones",
     "liveIndicator": "En vivo · esperando pagos",
     "emptyNoActivityNetwork": "Sin actividad en esta red",
@@ -47,13 +47,9 @@
     "connDelete": "Eliminar",
     "connPending": "Procesando",
     "connFailed": "Falló",
-    "assetsSheetTitle": "Tus activos",
     "cancel": "Cancelar",
-    "a11yViewAssets": "Ver tus activos",
     "a11yHideBalance": "Ocultar saldo",
     "a11yShowBalance": "Mostrar saldo",
-    "a11yChangeCurrency": "Cambiar la moneda de visualización, actualmente {{code}}",
-    "a11yViewStatement": "Ver el estado de cuenta completo en el explorador de bloques",
     "a11ySwitchAccount": "Cuenta {{name}}. Cambiar de cuenta",
     "a11yOpenSettings": "Ajustes"
   }

@@ -17,8 +17,8 @@
     "rescanClose": "Готово",
     "rescanNativeNote": "Нативные монеты (ETH, BNB, MATIC…), полученные в некоторых сетях, здесь не отображаются. Баланс при этом верный — откройте обозреватель блоков, чтобы увидеть полную историю.",
     "rescanExplorerTitle": "Проверить напрямую в обозревателе блоков",
-    "statement": "Выписка",
     "tabActivity": "Активность",
+    "tabAssets": "Активы",
     "tabConnections": "Подключения",
     "liveIndicator": "В реальном времени · ждём платежи",
     "emptyNoActivityNetwork": "В этой сети нет активности",
@@ -47,13 +47,9 @@
     "connDelete": "Удалить",
     "connPending": "Обработка",
     "connFailed": "Не удалось",
-    "assetsSheetTitle": "Ваши активы",
     "cancel": "Отмена",
-    "a11yViewAssets": "Посмотреть ваши активы",
     "a11yHideBalance": "Скрыть баланс",
     "a11yShowBalance": "Показать баланс",
-    "a11yChangeCurrency": "Изменить валюту отображения, сейчас {{code}}",
-    "a11yViewStatement": "Открыть полную выписку в обозревателе блоков",
     "a11ySwitchAccount": "Аккаунт {{name}}. Сменить аккаунт",
     "a11yOpenSettings": "Настройки"
   }

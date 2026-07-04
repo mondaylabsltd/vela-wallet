@@ -32,11 +32,12 @@
     "appearance": {
       "themeLight": "Светлая",
       "themeDark": "Тёмная",
-      "themeAuto": "Авто",
+      "themeAuto": "Как в системе",
       "avatarInitials": "Инициалы",
       "avatarIdenticon": "Идентикон"
     },
     "localization": {
+      "currencyTitle": "Валюта",
       "autoExample": "Автоматически · {{example}}",
       "numberTitle": "Формат чисел",
       "numberSubtitle": "Как группируются суммы и какой знак отделяет дробную часть.",

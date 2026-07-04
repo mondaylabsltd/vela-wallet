@@ -2,8 +2,8 @@
   "home": {
     "totalBalance": "Toplam bakiye",
     "balanceStale": "Bazı bakiyeler hâlâ güncelleniyor.",
-    "statement": "Ekstre",
     "tabActivity": "Etkinlik",
+    "tabAssets": "Varlıklar",
     "tabConnections": "Bağlantılar",
     "liveIndicator": "Canlı · ödemeler dinleniyor",
     "emptyNoActivityNetwork": "Bu ağda etkinlik yok",
@@ -47,13 +47,9 @@
     "connDelete": "Sil",
     "connPending": "İşleniyor",
     "connFailed": "Başarısız",
-    "assetsSheetTitle": "Varlıkların",
     "cancel": "İptal",
-    "a11yViewAssets": "Varlıklarınızı görüntüleyin",
     "a11yHideBalance": "Bakiyeyi gizle",
     "a11yShowBalance": "Bakiyeyi göster",
-    "a11yChangeCurrency": "Görüntüleme para birimini değiştirin, şu anda {{code}}",
-    "a11yViewStatement": "Tam ekstreyi blok gezgininde görüntüleyin",
     "a11ySwitchAccount": "Hesap {{name}}. Hesap değiştir",
     "a11yOpenSettings": "Ayarlar"
   }

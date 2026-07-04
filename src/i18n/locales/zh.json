@@ -32,11 +32,12 @@
     "appearance": {
       "themeLight": "浅色",
       "themeDark": "深色",
-      "themeAuto": "自动",
+      "themeAuto": "跟随系统",
       "avatarInitials": "首字母",
       "avatarIdenticon": "图形头像"
     },
     "localization": {
+      "currencyTitle": "货币",
       "autoExample": "自动 · {{example}}",
       "numberTitle": "数字格式",
       "numberSubtitle": "金额的分组方式与小数点符号。",

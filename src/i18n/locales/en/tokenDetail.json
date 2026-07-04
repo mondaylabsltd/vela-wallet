@@ -1,7 +1,5 @@
 {
   "tokenDetail": {
-    "chartTitle": "7-Day Balance",
-    "chartEmpty": "No historical data available",
     "send": "Send",
     "receive": "Receive",
     "labelName": "Name",

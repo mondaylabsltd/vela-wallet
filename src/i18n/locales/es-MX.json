@@ -32,11 +32,12 @@
     "appearance": {
       "themeLight": "Claro",
       "themeDark": "Oscuro",
-      "themeAuto": "Automático",
+      "themeAuto": "Seguir al sistema",
       "avatarInitials": "Iniciales",
       "avatarIdenticon": "Identicón"
     },
     "localization": {
+      "currencyTitle": "Moneda",
       "autoExample": "Automático · {{example}}",
       "numberTitle": "Formato de números",
       "numberSubtitle": "Cómo se agrupan los montos y qué marca decimal se muestra.",

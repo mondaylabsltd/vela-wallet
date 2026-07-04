@@ -1,39 +1,55 @@
 /**
- * Slide-to-confirm button for deliberate, premium confirmation of consequential
- * actions (sends to risky recipients, danger-level signing). Replaces a timed
- * press-and-hold with a drag: the user slides the thumb to the end to commit.
- * Same anti-fat-finger intent as a hold — a stray tap can't fire it — but it
- * reads as a modern, intentional gesture (Coinbase / Revolut style).
+ * Slide-to-confirm button for deliberate confirmation of consequential actions
+ * (sends, danger-level signing). Replaces a timed press-and-hold with a drag:
+ * the user slides the knob to the end to commit. Same anti-fat-finger intent
+ * as a hold — a stray tap can't fire it.
  *
- * The premium feel comes from three things working together:
- *   - an accent progress fill that follows the thumb (the track "fills up"),
- *   - animated direction chevrons hinting which way to slide, and
- *   - a label parked clear of the thumb so it's never half-hidden at rest.
+ * Look — matches the getvela.app landing mockup (the founder-approved design):
+ * a QUIET raised track with a hairline border, an accent knob with a white
+ * arrow, and a muted centered label. On commit the track settles into soft
+ * success green. Never a red track — recipient risk is signaled by the tags
+ * and copy above the control, not by making the commit surface scary.
  *
- * Cross-platform via PanResponder — the same responder system AppModal's drag
- * uses — so it works with touch on iOS/Android AND mouse+touch on Expo web,
- * where react-native-gesture-handler's Pan is disabled. Drop-in API-compatible
- * with <HoldToConfirmButton>. All animation is JS-driven (non-native) so the
- * progress fill's width can track the same value as the thumb's translate.
+ * Feel: the drag runs on the UI thread — react-native-gesture-handler Pan +
+ * Reanimated shared values (the same stack as Settings' text-scale slider), so
+ * the knob tracks the finger even while JS is busy estimating gas. Grab scales
+ * the knob, a tick fires at 60%, overdrag rubber-bands, a fast flick past
+ * mid-track commits, and an under-threshold release springs back. The knob
+ * "peeks" right a few times at rest to teach the gesture, and stops forever on
+ * first grab. `activeOffsetX`/`failOffsetY` yield cleanly to vertical scroll.
+ *
+ * iPhone app-switcher note: the SYSTEM horizontal-swipe gesture owns the home-
+ * indicator band, so this control must never rest against the screen's bottom
+ * edge — call sites keep ≥ ~48pt of clearance below it (see SendScreen's
+ * confirmBtn margin; the signing sheet parks a Reject button beneath it).
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Animated,
-  PanResponder,
-  Platform,
-  View,
-  ActivityIndicator,
-  type ViewStyle,
-} from 'react-native';
-import { ArrowRight, ChevronRight } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Platform, type ViewStyle } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  cancelAnimation,
+  interpolateColor,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
+import { ArrowRight } from 'lucide-react-native';
 import { hapticLight, hapticSuccess } from '@/services/platform';
-import { color, text, inter, space, shadow, createStyles } from '@/constants/theme';
+import { color, text, inter, shadow, createStyles } from '@/constants/theme';
 
 const TRACK_H = 60;
 const THUMB = 52;
 const PAD = 4;
 /** Fraction of the track the thumb must cross before release to commit. */
-const COMPLETE = 0.88;
+const COMPLETE = 0.8;
+/** A fast rightward flick past this fraction also commits (feels premium). */
+const FLICK_MIN = 0.45;
+const FLICK_VELOCITY = 900;
 
 interface Props {
   /** Primary label shown on the track (e.g. "Confirm & Send"). */
@@ -43,28 +59,26 @@ interface Props {
   onConfirm: () => void;
   disabled?: boolean;
   loading?: boolean;
-  /** 'accent' (orange, default) or 'danger' (red) for higher-stakes actions. */
-  tone?: 'accent' | 'danger';
   style?: ViewStyle;
 }
 
-export function SlideToConfirmButton({ title, hint, onConfirm, disabled, loading, tone = 'accent', style }: Props) {
-  const x = useRef(new Animated.Value(0)).current;
+export function SlideToConfirmButton({ title, hint, onConfirm, disabled, loading, style }: Props) {
+  const x = useSharedValue(0);
+  const startX = useSharedValue(0);
+  const maxX = useSharedValue(0);
+  const grabbed = useSharedValue(0); // 1 while the finger is down (knob scale)
+  const nudge = useSharedValue(0); // idle "peek" offset — teaches the gesture
+  const done = useSharedValue(0); // 1 after commit — track settles into success
+  const ticked = useSharedValue(false); // mid-drag haptic latch
   const [trackW, setTrackW] = useState(0);
-  const maxX = Math.max(0, trackW - THUMB - PAD * 2);
-  // Mirror for the PanResponder closure (which is memoised and won't see state).
-  const maxXRef = useRef(0);
-  maxXRef.current = maxX;
 
-  const armed = useRef(false); // crossed the commit threshold this drag
-  const ticked = useRef(false); // mid-drag tick already fired
   const fired = useRef(false);
   const blocked = !!(disabled || loading);
-  const blockedRef = useRef(blocked);
-  blockedRef.current = blocked;
-
-  const danger = tone === 'danger';
   const trackRef = useRef<any>(null);
+
+  useEffect(() => {
+    maxX.value = Math.max(0, trackW - THUMB - PAD * 2);
+  }, [trackW, maxX]);
 
   const fire = useCallback(() => {
     if (fired.current || disabled || loading) return;
@@ -73,11 +87,31 @@ export function SlideToConfirmButton({ title, hint, onConfirm, disabled, loading
     onConfirm();
   }, [onConfirm, disabled, loading]);
 
+  // Idle nudge: the knob peeks right a few times, then rests. Killed for good
+  // on the first grab — once the user has the gesture, motion is just noise.
+  const nudgeKilled = useRef(false);
+  useEffect(() => {
+    if (blocked || nudgeKilled.current) { cancelAnimation(nudge); nudge.value = 0; return; }
+    nudge.value = withRepeat(
+      withSequence(
+        withDelay(2200, withTiming(9, { duration: 240 })),
+        withSpring(0, { damping: 13, stiffness: 240 }),
+      ),
+      3,
+      false,
+    );
+    return () => cancelAnimation(nudge);
+  }, [blocked, nudge]);
+
+  const killNudge = useCallback(() => { nudgeKilled.current = true; }, []);
+
   // Web keyboard access: the commit is a pointer-drag, so on web the whole
   // (idle) send/sign flow would be unreachable by keyboard & switch users — this
   // is the ONLY commit control. Expose the track as a focusable button that fires
   // on Enter/Space (explicit activation is an acceptable a11y substitute for the
   // anti-fat-finger drag). Native keeps its onAccessibilityAction path below.
+  const blockedRef = useRef(blocked);
+  blockedRef.current = blocked;
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const el = trackRef.current as HTMLElement | null;
@@ -94,105 +128,112 @@ export function SlideToConfirmButton({ title, hint, onConfirm, disabled, loading
     return () => el.removeEventListener('keydown', onKeyDown);
   }, [blocked, fire]);
 
-  const reset = useCallback(() => {
-    armed.current = false;
-    ticked.current = false;
-    Animated.spring(x, { toValue: 0, useNativeDriver: false, bounciness: 0, speed: 18 }).start(() => {
-      fired.current = false;
-    });
-  }, [x]);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => !blockedRef.current,
-        onMoveShouldSetPanResponder: (_e, g) => !blockedRef.current && Math.abs(g.dx) > 2,
-        onPanResponderGrant: () => {
-          if (blockedRef.current) return;
-          // Self-initialize each drag so the button is never dependent on reset()
-          // having run — a fresh grab always re-arms, even if a prior commit left
-          // the latches set.
-          fired.current = false;
-          armed.current = false;
-          ticked.current = false;
-          hapticLight();
-        },
-        onPanResponderMove: (_e, g) => {
-          if (blockedRef.current) return;
-          const m = maxXRef.current;
-          const nx = Math.min(Math.max(0, g.dx), m);
-          x.setValue(nx);
-          if (!ticked.current && m > 0 && nx >= m * 0.5) { ticked.current = true; hapticLight(); }
-          armed.current = m > 0 && nx >= m * COMPLETE;
-        },
-        onPanResponderRelease: () => {
-          if (blockedRef.current) { reset(); return; }
-          const m = maxXRef.current;
-          if (armed.current && m > 0) {
-            Animated.timing(x, { toValue: m, duration: 110, useNativeDriver: false }).start(() => fire());
-          } else {
-            reset();
-          }
-        },
-        onPanResponderTerminate: () => reset(),
-      }),
-    [x, fire, reset],
-  );
-
-  // Looping shimmer that animates the direction chevrons. Paused while blocked.
-  const pulse = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (blocked) { pulse.setValue(0); return; }
-    const anim = Animated.loop(
-      Animated.timing(pulse, { toValue: 1, duration: 1500, useNativeDriver: false }),
-    );
-    anim.start();
-    return () => anim.stop();
-  }, [blocked, pulse]);
-
-  // Re-arm after the action resolves. A committed slide latches `fired` and parks
-  // the thumb at the end; `reset()` (the only thing that clears them) does NOT run
-  // on the success path. Callers that unmount the button on commit (SendScreen) are
-  // fine, but a persistently-mounted caller — the signing sheet across a cancelled
-  // passkey prompt or an underfunded-gas retry — would otherwise be left with a
-  // dead slider stuck at the far end. When the button leaves the blocked state,
-  // spring back to start and clear the latches. Skips the initial mount.
+  // Re-arm after the action resolves. A committed slide latches `fired` and
+  // parks the thumb at the end. Callers that unmount the button on commit
+  // (SendScreen) are fine, but a persistently-mounted caller — the signing
+  // sheet across a cancelled passkey prompt or an underfunded-gas retry —
+  // would otherwise be left with a dead slider stuck at the far end. When the
+  // button leaves the blocked state, spring back and clear the latch.
   const wasBlocked = useRef(blocked);
   useEffect(() => {
     if (wasBlocked.current && !blocked) {
       fired.current = false;
-      armed.current = false;
-      ticked.current = false;
-      Animated.spring(x, { toValue: 0, useNativeDriver: false, bounciness: 0, speed: 18 }).start();
+      ticked.value = false;
+      done.value = withTiming(0, { duration: 200 });
+      x.value = withSpring(0, { damping: 18, stiffness: 260 });
     }
     wasBlocked.current = blocked;
-  }, [blocked, x]);
+  }, [blocked, x, ticked, done]);
 
-  // Label + chevrons fade out as the thumb advances, so they never sit under it.
-  const labelOpacity = x.interpolate({
-    inputRange: [0, Math.max(1, maxX) * 0.5],
-    outputRange: [1, 0],
-    extrapolate: 'clamp',
+  // While loading, park the thumb at the end (it hosts the spinner) — covers a
+  // caller that mounts the button already-loading.
+  useEffect(() => {
+    if (loading && maxX.value > 0) x.value = withTiming(maxX.value, { duration: 160 });
+  }, [loading, maxX, x]);
+
+  const pan = Gesture.Pan()
+    .enabled(!blocked)
+    .activeOffsetX([-6, 6])
+    .failOffsetY([-14, 14])
+    .onStart(() => {
+      startX.value = x.value;
+      grabbed.value = withSpring(1, { damping: 16, stiffness: 320 });
+      cancelAnimation(nudge);
+      nudge.value = withTiming(0, { duration: 80 });
+      ticked.value = false;
+      runOnJS(killNudge)();
+      runOnJS(hapticLight)();
+    })
+    .onUpdate((e) => {
+      const m = maxX.value;
+      if (m <= 0) return;
+      const raw = startX.value + e.translationX;
+      // Rubber-band past both ends instead of a hard stop.
+      x.value = raw < 0
+        ? raw * 0.12
+        : raw > m
+          ? m + Math.min((raw - m) * 0.12, 10)
+          : raw;
+      if (!ticked.value && x.value >= m * 0.6) {
+        ticked.value = true;
+        runOnJS(hapticLight)();
+      }
+    })
+    .onEnd((e) => {
+      grabbed.value = withSpring(0, { damping: 16, stiffness: 320 });
+      const m = maxX.value;
+      if (m <= 0) return;
+      const commit = x.value >= m * COMPLETE ||
+        (e.velocityX > FLICK_VELOCITY && x.value >= m * FLICK_MIN);
+      if (commit) {
+        done.value = withTiming(1, { duration: 220 });
+        x.value = withTiming(m, { duration: 110 }, (finished) => {
+          if (finished) runOnJS(fire)();
+        });
+      } else {
+        x.value = withSpring(0, { damping: 18, stiffness: 260 });
+      }
+    })
+    .onFinalize((_e, success) => {
+      if (!success) {
+        grabbed.value = withSpring(0, { damping: 16, stiffness: 320 });
+        x.value = withSpring(0, { damping: 18, stiffness: 260 });
+      }
+    });
+
+  // Colors resolved in render scope (theme-aware tokens), captured by worklets
+  // as plain strings.
+  const trackBgRest = color.bg.raised;
+  const trackBgDone = color.success.soft;
+  const borderRest = color.border.base;
+  const borderDone = 'rgba(45, 142, 95, 0.3)';
+
+  const trackStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(done.value, [0, 1], [trackBgRest, trackBgDone]),
+    borderColor: interpolateColor(done.value, [0, 1], [borderRest, borderDone]),
+  }));
+
+  const thumbStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: x.value + nudge.value },
+      { scale: 1 + grabbed.value * 0.06 },
+    ],
+  }));
+
+  // Label fades and drifts as the knob approaches it.
+  const labelStyle = useAnimatedStyle(() => {
+    const m = Math.max(1, maxX.value);
+    const p = Math.min(1, Math.max(0, x.value / (m * 0.55)));
+    return {
+      opacity: 1 - p,
+      transform: [{ translateX: p * 14 }],
+    };
   });
-  // Label color rides from its at-rest tint (readable on the light track) to white
-  // as the fill sweeps in behind it — otherwise grey-on-orange (or, in danger tone,
-  // red-on-identical-red) goes unreadable in the overlap window.
-  const labelColor = x.interpolate({
-    inputRange: [0, Math.max(1, maxX) * 0.35],
-    outputRange: [danger ? color.error.base : color.fg.muted, color.fg.inverse],
-    extrapolate: 'clamp',
-  });
-
-  // Progress fill: left-anchored, grows to the thumb's right edge. Its rounded
-  // right end is concentric with the thumb, so the thumb hides the seam.
-  const fillWidth = Animated.add(x, THUMB);
-
-  const chevTint = danger ? color.error.base : color.accent.base;
 
   return (
-    <View
+    <Animated.View
       ref={trackRef}
-      style={[styles.track, danger && styles.trackDanger, blocked && styles.disabled, style]}
+      style={[styles.track, trackStyle, blocked && styles.disabled, style]}
       onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}
       accessible
       accessibilityRole="button"
@@ -202,106 +243,53 @@ export function SlideToConfirmButton({ title, hint, onConfirm, disabled, loading
       accessibilityActions={[{ name: 'activate' }]}
       onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'activate') fire(); }}
     >
-      {loading ? (
-        <ActivityIndicator color={danger ? color.error.base : color.accent.base} />
-      ) : (
-        <>
-          <Animated.View
-            pointerEvents="none"
-            style={[styles.fill, danger && styles.fillDanger, { width: fillWidth }]}
-          />
-          <Animated.View style={[styles.labelRow, { opacity: labelOpacity }]} pointerEvents="none">
-            <Animated.Text style={[styles.label, { color: labelColor }]} numberOfLines={1}>
-              {title}
-            </Animated.Text>
-            <View style={styles.chevrons}>
-              {[0, 1, 2].map((i) => {
-                const start = i * 0.18;
-                return (
-                  <Animated.View
-                    key={i}
-                    style={{
-                      opacity: pulse.interpolate({
-                        inputRange: [start, start + 0.18, start + 0.36, 1],
-                        outputRange: [0.25, 1, 0.25, 0.25],
-                        extrapolate: 'clamp',
-                      }),
-                    }}
-                  >
-                    <ChevronRight size={16} color={chevTint} strokeWidth={2.75} />
-                  </Animated.View>
-                );
-              })}
-            </View>
-          </Animated.View>
-          <Animated.View
-            style={[styles.thumb, danger && styles.thumbDanger, { transform: [{ translateX: x }] }]}
-            {...panResponder.panHandlers}
-          >
+      <Animated.View style={[styles.labelRow, labelStyle]} pointerEvents="none">
+        <Animated.Text style={styles.label} numberOfLines={1}>{title}</Animated.Text>
+      </Animated.View>
+      <GestureDetector gesture={pan}>
+        <Animated.View style={[styles.thumb, thumbStyle]} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          {loading ? (
+            <ActivityIndicator size="small" color={color.fg.inverse} />
+          ) : (
             <ArrowRight size={22} color={color.fg.inverse} strokeWidth={2.6} />
-          </Animated.View>
-        </>
-      )}
-    </View>
+          )}
+        </Animated.View>
+      </GestureDetector>
+    </Animated.View>
   );
 }
 
 const styles = createStyles(() => ({
+  // Quiet raised track + hairline border (landing-page mockup look): the accent
+  // knob is the only loud element — the commit surface itself never shouts.
   track: {
     height: TRACK_H,
     borderRadius: TRACK_H / 2,
-    backgroundColor: color.bg.sunken,
+    backgroundColor: color.bg.raised,
     borderWidth: 1,
     borderColor: color.border.base,
     justifyContent: 'center',
-    // No `overflow: hidden` here — it would clip the thumb's shadow. The fill is a
-    // self-rounded pill inset by PAD, so it stays inside the track without clipping.
-    // The slide gesture owns the drag — never let the browser select the label
-    // or pop the iOS/Android touch callout, which would cancel the gesture.
+    // No `overflow: hidden` — it would clip the knob's shadow. Never let the
+    // browser select the label or pop the touch callout mid-drag.
     userSelect: 'none',
     ...(Platform.OS === 'web'
-      ? ({ WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'none' } as any)
+      ? ({ WebkitUserSelect: 'none', WebkitTouchCallout: 'none', touchAction: 'pan-y' } as any)
       : null),
-  },
-  trackDanger: {
-    backgroundColor: color.error.soft,
-    borderColor: color.error.soft,
-  },
-  fill: {
-    position: 'absolute',
-    left: PAD,
-    top: PAD,
-    bottom: PAD,
-    borderRadius: THUMB / 2,
-    backgroundColor: color.accent.base,
-    // The thumb leads, an accent trail "paints" the track behind it.
-    opacity: 0.9,
-  },
-  fillDanger: {
-    backgroundColor: color.error.base,
   },
   labelRow: {
     position: 'absolute',
     left: TRACK_H,
-    right: space.lg,
+    right: TRACK_H, // symmetric: label stays optically centered on the track
     top: 0,
     bottom: 0,
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: space.sm,
   },
   label: {
-    flexShrink: 1,
-    textAlign: 'center',
     fontSize: text.lg,
     ...inter.semibold,
-    // color is animated (see labelColor) — dark at rest, white under the fill.
-  },
-  chevrons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 1,
+    color: color.fg.muted,
+    textAlign: 'center',
   },
   thumb: {
     position: 'absolute',
@@ -315,9 +303,6 @@ const styles = createStyles(() => ({
     justifyContent: 'center',
     ...shadow.md,
     ...(Platform.OS === 'web' ? ({ cursor: 'grab' } as any) : null),
-  },
-  thumbDanger: {
-    backgroundColor: color.error.base,
   },
   disabled: {
     opacity: 0.45,

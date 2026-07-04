@@ -321,7 +321,7 @@
 **`P1`** ｜ **分类** 余额与资产组合（多链/价格/到账） ｜ **平台** All
 
 - **测什么**：验证 USDC、USDT 等稳定币在任何链上的 priceUsd 总是被固定为 1.0，而非依赖 DEX 或 Chainlink。这是资产分类的基础。
-- **怎么测**：1) 进入 AssetsScreen，搜索或筛选 USDC（任意链）。2) 进入该 token 详情页 (TokenDetailScreen)。3) 查看 'Price' 字段是否显示 1.0 USD。4) 在 HomeScreen 刷新并观察 USDC 行的 USD 值是否与余额 1:1 对应（如 100 USDC = $100）。
+- **怎么测**：1) 进入首页「资产」tab（HoldingsList），搜索或筛选 USDC（任意链）。2) 进入该 token 详情页 (TokenDetailScreen)。3) 查看 'Price' 字段是否显示 1.0 USD。4) 在 HomeScreen 刷新并观察 USDC 行的 USD 值是否与余额 1:1 对应（如 100 USDC = $100）。
 - **预期结果**：所有稳定币（category=stable）在 TokenRow 和 TokenDetailScreen 中显示价格为 $1.00；在余额计算中，稳定币总额 = 代币数量 × 1.0（不受 DEX/Chainlink 波动影响）。
 - **边界/异常**：跨多链对比同一稳定币（如 Ethereum 和 Polygon 的 USDC）；验证 USDC.e、USDT 等变体也都是 $1；测试自定义稳定币标记是否也应用 priceUsd=1。
 - **源码参考**：`src/services/wallet-api.ts:445-446; src/models/types.ts tokenUsdValue`
@@ -599,7 +599,7 @@
 
 - **测什么**：验证刷新时若无缓存但多链加载在途，总余额不会闪现 $0，而是显示上一次缓存值（displayTotal 的 Math.max 逻辑）。这是防止用户惊吓的关键。
 - **怎么测**：1) 清空 App（卸载或 Settings 重置缓存）。2) 进入 HomeScreen，观察 hero 余额展示。3) 即使各链还在加载（每条链 18s 超时），余额应以缓存值显示或保持昨日值，不能是 $0。4) 所有链加载完毕后，余额自动跳到实时合计。
-- **预期结果**：从 App 启动到所有链加载完毕的全程，余额柱子从不降到 $0；若本次完全无价格（某链 priceUsd = null），hero 余额仍显示缓存或上次成功的聚合值，页面顶部有 ⚠️ 'Stale Balance' 警告（见 AssetsScreen 的 balanceStaleRow）。
+- **预期结果**：从 App 启动到所有链加载完毕的全程，余额柱子从不降到 $0；若本次完全无价格（某链 priceUsd = null），hero 余额仍显示缓存或上次成功的聚合值，页面顶部有 ⚠️ 'Stale Balance' 警告（见 HomeScreen hero 的 balanceStaleRow）。
 - **边界/异常**：测试清空缓存后的冷启动；测试多链中仅 1 条超时（18s cap）的情况下其他链数据及时加载。
 - **源码参考**：`src/screens/wallet/HomeScreen.tsx:161-168; src/services/balance-cache.ts:53-74`
 
@@ -618,7 +618,7 @@
 **`P1`** ｜ **分类** 余额与资产组合（多链/价格/到账） ｜ **平台** All
 
 - **测什么**：验证若某条链的 RPC 全部故障，该链的 token 查询应在 18 秒后自动超时降级（不会卡住其他链），同时在 failedChainIds 中报告该链失败。
-- **怎么测**：1) 进入 HomeScreen / AssetsScreen，观察初始加载。2) 在浏览器控制台执行 `vela.failRpc(137)` 模拟 Polygon 全部 RPC 故障。3) 下拉刷新 (pull-to-refresh)。4) 计时：应在 18 秒内（不是 60s+），Polygon 被标记为 failed，其他链的数据继续加载；页面顶部出现 'RPC Trouble' 横幅，允许用户尝试修复。
+- **怎么测**：1) 进入 HomeScreen（活动或资产 tab），观察初始加载。2) 在浏览器控制台执行 `vela.failRpc(137)` 模拟 Polygon 全部 RPC 故障。3) 下拉刷新 (pull-to-refresh)。4) 计时：应在 18 秒内（不是 60s+），Polygon 被标记为 failed，其他链的数据继续加载；页面顶部出现 'RPC Trouble' 横幅，允许用户尝试修复。
 - **预期结果**：失败链在 18 秒内被 failedChainIds 捕获，不延迟其他链加载；失败链的 token 不现身在列表（zero balance）；failedChainIds 长度 > 0 时，hero 余额顶部显示 balancePartial 状态（⚠️ 和缓存 fallback）；RpcTroubleBanner 渲染 failed chains 列表和 'Retry' 按钮。
 - **边界/异常**：测试一条链超时但其他链正常；所有 12 条链都超时；部分链返回空结果（不同于 RPC 故障）。
 - **源码参考**：`src/services/wallet-api.ts:191-220; src/screens/wallet/HomeScreen.tsx:304-326`
@@ -637,18 +637,18 @@
 
 **`P1`** ｜ **分类** 余额与资产组合（多链/价格/到账） ｜ **平台** All
 
-- **测什么**：验证 HomeScreen / AssetsScreen 的账户切换器（AccountSwitcher modal）正确显示所有账户的缓存余额，且点击切换时实时更新活跃账户的 hero 余额。
+- **测什么**：验证 HomeScreen 的账户切换器（AccountSwitcher modal）正确显示所有账户的缓存余额，且点击切换时实时更新活跃账户的 hero 余额。
 - **怎么测**：1) 创建多个账户（Settings → Add Account，至少 2 个）。2) 进入 HomeScreen，点击顶部账户芯片（左上）打开切换器。3) 观察 modal 显示所有账户，每个账户旁显示其 cached balance（从 balance-cache 中读取）；顶部显示所有账户余额总和。4) 点击另一个账户，切换器关闭，HomeScreen 更新为新账户的数据；hero 余额瞬间展示该账户的缓存余额，然后后台刷新（若有更新则跳到新值）。5) 在切换器打开状态下，按 'Refresh All' 按钮，所有账户的余额后台更新，modal 的数字实时跳动。
 - **预期结果**：AccountSwitcher 打开时立即显示所有账户的缓存余额（来自 getAccountBalances）；点击账户时 activeAccount 切换，setTokens 清空，setCachedTotal 恢复为该账户的缓存值，然后 loadData() 后台刷新；refreshAllBalances 时同步 fetchTokens(每个账户)，并更新所有的 cachedBalance map；顶部总额 = 所有账户 cached 余额之和。
 - **边界/异常**：新账户无缓存（应显示加载中或 $0）；切换中途有新 tx 到账；快速切换多个账户；删除账户后切换器更新。
-- **源码参考**：`src/screens/wallet/HomeScreen.tsx:401-430, 795-803; src/screens/wallet/AssetsScreen.tsx:195-207`
+- **源码参考**：`src/screens/wallet/HomeScreen.tsx:401-430, 795-803; src/components/ui/HoldingsList.tsx (token rows → /token-detail)`
 
 ### 59. token 详情页 send/receive 按钮路由验证
 
 **`P1`** ｜ **分类** 余额与资产组合（多链/价格/到账） ｜ **平台** All
 
 - **测什么**：验证 TokenDetailScreen 的 Send/Receive 按钮正确导航到 Send 或 Receive，且 Send 时预填该 token 的 symbol 和 network。
-- **怎么测**：1) 进入 AssetsScreen，点击任意 token 进入 TokenDetailScreen（如 USDC on Polygon）。2) 点击 'Send' 按钮，应导航到 /send 页面，preselectedSymbol='USDC', preselectedNetwork='polygon'；Send 页面应预选 USDC on Polygon。3) 返回 TokenDetailScreen。4) 点击 'Receive' 按钮，应导航到 /receive。5) 返回，验证 token 详情页信息仍保留（no flashing）。
+- **怎么测**：1) 进入首页「资产」tab，点击任意 token 进入 TokenDetailScreen（如 USDC on Polygon）。2) 点击 'Send' 按钮，应导航到 /send 页面，preselectedSymbol='USDC', preselectedNetwork='polygon'；Send 页面应预选 USDC on Polygon。3) 返回 TokenDetailScreen。4) 点击 'Receive' 按钮，应导航到 /receive。5) 返回，验证 token 详情页信息仍保留（no flashing）。
 - **预期结果**：Send 按钮触发 router.push(/send, {preselectedSymbol, preselectedNetwork})；Receive 按钮触发 router.push(/receive)；token 详情页未卸载（导航是 push，可返回）。
 - **边界/异常**：无价格的 token；原生 token；自定义 token。
 - **源码参考**：`src/screens/wallet/TokenDetailScreen.tsx:84-93`

@@ -10,6 +10,7 @@ import { ChainLogo } from '@/components/ChainLogo';
 import { QRCode } from '@/components/QRCode';
 import { TokenLogo } from '@/components/TokenLogo';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
+import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
@@ -25,6 +26,10 @@ import { useTranslation } from 'react-i18next';
 import { Image, Pressable, ScrollView, Text, View } from 'react-native';
 
 const LOGO = require('../../../assets/images/icon.png');
+
+// QR quiet zone must stay literal white in BOTH color schemes — scanners need
+// the contrast, and every bg.* token darkens in dark mode.
+const QR_QUIET_ZONE = '#FFFFFF';
 
 function short(a: string): string {
   return a ? `${a.slice(0, 10)}…${a.slice(-8)}` : '';
@@ -122,14 +127,15 @@ export default function PayScreen() {
         {showOther && (
           <VelaCard style={styles.card}>
             {/* QR mode: full EIP-681 request vs plain address for non-681 wallets */}
-            <View style={styles.seg}>
-              {(['eip681', 'address'] as const).map((m) => (
-                <Pressable key={m} style={[styles.segBtn, qrMode === m && styles.segBtnActive]} onPress={() => setQrMode(m)}>
-                  <Text style={[styles.segText, qrMode === m && styles.segTextActive]}>
-                    {t(m === 'eip681' ? 'receive.pay.qrEip681' : 'receive.pay.qrAddress')}
-                  </Text>
-                </Pressable>
-              ))}
+            <View style={styles.segRow}>
+              <SegmentedToggle<'eip681' | 'address'>
+                options={[
+                  { key: 'eip681', label: t('receive.pay.qrEip681') },
+                  { key: 'address', label: t('receive.pay.qrAddress') },
+                ]}
+                value={qrMode}
+                onChange={setQrMode}
+              />
             </View>
 
             <View style={styles.qrBox}>
@@ -203,12 +209,8 @@ const styles = createStyles(() => ({
   otherBtn: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: space.lg, marginTop: space.sm },
   otherBtnText: { fontSize: text.base, ...inter.semibold, color: color.fg.muted },
   // QR mode segmented toggle
-  seg: { flexDirection: 'row', alignSelf: 'stretch', backgroundColor: color.bg.sunken, borderRadius: radius.full, padding: 4, marginBottom: space.lg },
-  segBtn: { flex: 1, alignItems: 'center', paddingVertical: space.sm, borderRadius: radius.full },
-  segBtnActive: { backgroundColor: color.bg.raised },
-  segText: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted },
-  segTextActive: { color: color.fg.base },
-  qrBox: { borderWidth: 1, borderColor: color.border.base, borderRadius: radius.xl, padding: space.lg, backgroundColor: '#FFFFFF', marginBottom: space.md },
+  segRow: { flexDirection: 'row', justifyContent: 'center', marginBottom: space.lg },
+  qrBox: { borderWidth: 1, borderColor: color.border.base, borderRadius: radius.xl, padding: space.lg, backgroundColor: QR_QUIET_ZONE, marginBottom: space.md },
   scanHint: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, marginBottom: space.lg, textAlign: 'center' },
   openWalletBtn: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: space.lg, borderRadius: radius.lg, borderWidth: 1, borderColor: color.border.strong, backgroundColor: color.bg.raised },
   openWalletText: { fontSize: text.base, ...inter.semibold, color: color.fg.base },

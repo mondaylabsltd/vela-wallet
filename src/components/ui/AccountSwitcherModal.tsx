@@ -22,6 +22,7 @@ import { SectionLabel } from '@/components/ui/SectionLabel';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { WalletAvatar } from '@/components/ui/WalletAvatar';
 import { shortAddress, useWallet } from '@/models/wallet-state';
+import { useBalancePrivacy } from '@/hooks/use-balance-privacy';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { getAccountBalances } from '@/services/balance-cache';
 import { sortAccountsByBalance, totalAccountBalance } from '@/services/accounts';
@@ -56,6 +57,10 @@ export function AccountSwitcherModal({
   const { state, dispatch } = useWallet();
   const router = useRouter();
   const dc = useDisplayCurrency();
+  // Balance privacy: the switcher lists every account's fiat balance — exactly
+  // the numbers the masked hero conceals — so it masks with the same store.
+  const { hidden } = useBalancePrivacy();
+  const fmtBal = (usd: number) => (hidden ? '••••' : dc.fmt(usd));
 
   // Self-load balances only when the parent doesn't supply them.
   const selfLoad = balances === undefined;
@@ -80,7 +85,7 @@ export function AccountSwitcherModal({
           <View style={styles.headerInfo}>
             <Text style={styles.title}>{title}</Text>
             {bals.size > 0 && formatSubtitle && (
-              <Text style={styles.subtitle}>{formatSubtitle(dc.fmt(totalAccountBalance(bals)), state.accounts.length)}</Text>
+              <Text style={styles.subtitle}>{formatSubtitle(fmtBal(totalAccountBalance(bals)), state.accounts.length)}</Text>
             )}
           </View>
           {isLoading && <ActivityIndicator size="small" color={color.fg.subtle} style={styles.spinner} />}
@@ -106,7 +111,7 @@ export function AccountSwitcherModal({
                   </View>
                   <View style={styles.right}>
                     {bal != null
-                      ? <Text style={styles.bal}>{dc.fmt(bal)}</Text>
+                      ? <Text style={styles.bal}>{fmtBal(bal)}</Text>
                       : isLoading ? <ActivityIndicator size="small" color={color.fg.subtle} /> : null}
                     {isActive && <Check size={18} color={color.accent.base} />}
                   </View>

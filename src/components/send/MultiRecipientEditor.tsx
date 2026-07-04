@@ -162,7 +162,9 @@ export function MultiRecipientEditor({
       {/* Total */}
       <View style={styles.totalRow}>
         <Text style={styles.totalLabel}>
-          {t('send.recipientCount', { n: recipients.length, defaultValue: `${recipients.length} recipients` })}
+          {/* `count` drives the en/zh plural forms; `n` still feeds the
+              not-yet-pluralized bare key in the other locales. */}
+          {t('send.recipientCount', { count: recipients.length, n: recipients.length })}
         </Text>
         <View style={styles.totalRight}>
           <Text style={[styles.totalValue, overBalance && styles.totalOver]}>{totalHuman} {tokenSymbol}</Text>

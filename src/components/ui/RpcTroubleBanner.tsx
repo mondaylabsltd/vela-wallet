@@ -3,8 +3,8 @@
  *
  * Shown when one or more chains have all their RPC endpoints failing. Surfaces
  * which networks are down, lets the user paste a working RPC URL, and points
- * them at reputable providers where they can get one. Shared by HomeScreen and
- * AssetsScreen so the recovery path is identical everywhere a balance/activity
+ * them at reputable providers where they can get one. Rendered from Home's
+ * header so the recovery path is identical everywhere a balance/activity
  * read can silently come up short.
  */
 import { ChainLogo } from '@/components/ChainLogo';

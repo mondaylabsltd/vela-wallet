@@ -2,8 +2,8 @@
   "home": {
     "totalBalance": "合計残高",
     "balanceStale": "一部の残高を更新中です。",
-    "statement": "取引明細",
     "tabActivity": "アクティビティ",
+    "tabAssets": "資産",
     "tabConnections": "接続",
     "liveIndicator": "ライブ · 入金を待機中",
     "emptyNoActivityNetwork": "このネットワークにアクティビティはありません",
@@ -47,13 +47,9 @@
     "connDelete": "削除",
     "connPending": "処理中",
     "connFailed": "失敗",
-    "assetsSheetTitle": "保有資産",
     "cancel": "キャンセル",
-    "a11yViewAssets": "保有資産を表示",
     "a11yHideBalance": "残高を隠す",
     "a11yShowBalance": "残高を表示",
-    "a11yChangeCurrency": "表示通貨を変更します。現在は {{code}} です",
-    "a11yViewStatement": "ブロックエクスプローラーで全取引明細を表示",
     "a11ySwitchAccount": "アカウント {{name}}。アカウントを切り替える",
     "a11yOpenSettings": "設定"
   }

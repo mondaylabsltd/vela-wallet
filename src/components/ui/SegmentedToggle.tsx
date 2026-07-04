@@ -1,20 +1,32 @@
 /**
- * SegmentedToggle — a compact two-or-more segment switch (e.g. Activity | Connections).
+ * SegmentedToggle — content-sized, horizontally scrollable text tabs
+ * (e.g. Activity | Assets | Connections).
+ *
+ * Labels are NEVER truncated: each segment takes the width its text needs and
+ * the row scrolls when the locale runs long (ja/de/ru), instead of squeezing
+ * three equal columns. The active state is a soft `bg.sunken` chip — no border,
+ * no shadow (design language: light controls, no chunky boxes) — that springs
+ * between segments, animating position and width together since segments are
+ * no longer equal. The active segment auto-scrolls into view.
  *
  * Generic over the option key type. Optional numeric badge per segment.
- * Theme-driven (light/dark). A single raised pill slides between segments with a
- * spring (iOS-segmented-control feel) and a selection haptic fires on change.
+ * A selection haptic fires on change.
  */
-import React, { useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { color, createStyles, inter, motion, radius, shadow, space, text } from '@/constants/theme';
+import { color, createStyles, inter, motion, radius, space, text } from '@/constants/theme';
 import { hapticSelection } from '@/services/platform';
 
 export interface SegmentOption<T extends string> {
   key: T;
   label: string;
   badge?: number;
+  /** Optional leading element (e.g. a theme icon or avatar preview), rendered
+      by active state so it can match the label's ink. */
+  icon?: (active: boolean) => React.ReactNode;
+  /** Forwarded to the segment's Pressable (e.g. E2E hooks). */
+  testID?: string;
 }
 
 interface Props<T extends string> {
@@ -23,55 +35,75 @@ interface Props<T extends string> {
   onChange: (key: T) => void;
 }
 
-/** Track padding + inter-segment gap (kept in sync with the styles below). */
-const PAD = space.sm;
-const GAP = space.sm;
+type Box = { x: number; width: number };
 
 export function SegmentedToggle<T extends string>({ options, value, onChange }: Props<T>) {
-  const [trackW, setTrackW] = useState(0);
-  const n = options.length;
-  const segW = trackW > 0 ? (trackW - PAD * 2 - GAP * (n - 1)) / n : 0;
-  const activeIndex = Math.max(0, options.findIndex((o) => o.key === value));
+  const [boxes, setBoxes] = useState<Partial<Record<T, Box>>>({});
+  const scrollRef = useRef<ScrollView>(null);
 
   const tx = useSharedValue(0);
+  const w = useSharedValue(0);
   const ready = useSharedValue(false);
 
-  // Slide the pill to the active segment. First measured position is set without
-  // animation; subsequent changes spring.
+  const active = boxes[value];
+
+  // Slide + resize the chip to the active segment. First measured position is
+  // set without animation; subsequent changes spring (position AND width — the
+  // segments are content-sized, so both move).
   useEffect(() => {
-    if (segW <= 0) return;
-    const target = PAD + activeIndex * (segW + GAP);
+    if (!active || active.width <= 0) return;
     if (!ready.value) {
-      tx.value = target;
+      tx.value = active.x;
+      w.value = active.width;
       ready.value = true;
     } else {
-      tx.value = withSpring(target, motion.spring);
+      tx.value = withSpring(active.x, motion.spring);
+      w.value = withSpring(active.width, motion.spring);
     }
+    // Keep the active label readable on narrow screens / long locales.
+    scrollRef.current?.scrollTo({ x: Math.max(0, active.x - space['3xl']), animated: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeIndex, segW]);
+  }, [active?.x, active?.width]);
 
-  const pillStyle = useAnimatedStyle(() => ({ transform: [{ translateX: tx.value }] }));
+  const chipStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tx.value }],
+    width: w.value,
+  }));
 
   return (
-    <View style={styles.track} onLayout={(e) => setTrackW(e.nativeEvent.layout.width)}>
-      {segW > 0 && (
-        <Animated.View style={[styles.pill, { width: segW }, pillStyle]} pointerEvents="none" />
-      )}
+    <ScrollView
+      ref={scrollRef}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.scroller}
+      contentContainerStyle={styles.track}
+    >
+      <Animated.View style={[styles.chip, chipStyle]} pointerEvents="none" />
       {options.map((opt) => {
-        const active = opt.key === value;
+        const isActive = opt.key === value;
         return (
           <Pressable
             key={opt.key}
             style={styles.segment}
+            onLayout={(e) => {
+              const { x, width } = e.nativeEvent.layout;
+              setBoxes((prev) => {
+                const cur = prev[opt.key];
+                if (cur && cur.x === x && cur.width === width) return prev;
+                return { ...prev, [opt.key]: { x, width } };
+              });
+            }}
             onPress={() => {
               if (opt.key !== value) hapticSelection();
               onChange(opt.key);
             }}
             accessibilityRole="button"
-            accessibilityState={{ selected: active }}
+            accessibilityState={{ selected: isActive }}
             accessibilityLabel={opt.label}
+            testID={opt.testID}
           >
-            <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>{opt.label}</Text>
+            {opt.icon?.(isActive)}
+            <Text style={[styles.label, isActive && styles.labelActive]}>{opt.label}</Text>
             {opt.badge != null && opt.badge > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>{opt.badge}</Text>
@@ -80,46 +112,47 @@ export function SegmentedToggle<T extends string>({ options, value, onChange }: 
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = createStyles(() => ({
+  scroller: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
   track: {
     flexDirection: 'row',
-    // Transparent track (was a heavy filled bg.sunken box) — reads as light tabs
-    // with a single floating active chip, matching the de-boxed page.
-    padding: PAD,
-    gap: GAP,
-    flex: 1,
+    alignItems: 'center',
+    gap: space.xs,
   },
-  // The single sliding indicator behind the labels (replaces per-segment bg).
-  pill: {
+  // The single sliding indicator behind the active label: a soft sunken chip —
+  // no border, no shadow (light controls; the heavy raised pill is gone).
+  chip: {
     position: 'absolute',
     left: 0,
-    top: PAD,
-    bottom: PAD,
-    borderRadius: radius.md,
-    backgroundColor: color.bg.raised,
-    borderWidth: 1,
-    borderColor: color.border.base,
-    ...shadow.sm,
+    top: 0,
+    bottom: 0,
+    borderRadius: radius.full,
+    backgroundColor: color.bg.sunken,
   },
   segment: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.sm,
     paddingVertical: space.md,
-    minHeight: 44, // WCAG 2.5.8 touch-target floor (was ~29px)
-    borderRadius: radius.md,
+    paddingHorizontal: space.xl,
+    minHeight: 44, // WCAG 2.5.8 touch-target floor
+    borderRadius: radius.full,
   },
   label: {
     fontSize: text.base,
     ...inter.semibold,
     color: color.fg.muted,
   },
+  // Color only — a weight change would alter the text width and make the chip
+  // re-spring a second time after landing.
   labelActive: {
     color: color.fg.base,
   },

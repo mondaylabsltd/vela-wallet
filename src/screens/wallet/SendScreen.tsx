@@ -52,7 +52,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, BookUser, AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Copy, Check, Globe, Plus, FileUp } from 'lucide-react-native';
+import { ArrowLeft, X, BookUser, ScanLine, AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Copy, Check, Globe, Plus, FileUp } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
@@ -188,7 +188,9 @@ export default function SendScreen() {
     prefilledTokenAddress?: string;
     prefilledAmountBase?: string;
     locked?: string;
-    // Multi-token hand-off from the Home assets sheet: comma-joined tokenId()s.
+    // Multi-token hand-off: comma-joined tokenId()s land Send in multiSelect
+    // mode. (No in-app producer since the Home assets sheet was retired; kept
+    // as a param entry into the sweep flow.)
     preselectedMulti?: string;
   }>();
   const locked = params.locked === '1';
@@ -227,7 +229,7 @@ export default function SendScreen() {
   const [pickerTarget, setPickerTarget] = useState<string | null>(null);
   // ② multiSelect (多币一人 / 清空): many tokens on ONE chain → one recipient, full
   // balance each, in a single MultiSend UserOp. Selection state lives in the
-  // shared hook (also used by the Home assets sheet). `multiSelectMode` = we're in the
+  // shared hook. `multiSelectMode` = we're in the
   // multiSelect enter-details/confirm flow (set when a multi-selection is confirmed).
   const [multiSelectMode, setMultiSelectMode] = useState(false);
   const multiSelect = useTokenMultiSelect();
@@ -358,7 +360,7 @@ export default function SendScreen() {
           return;
         }
 
-        // Multi-token hand-off from the Home assets sheet → land in multiSelect mode.
+        // Multi-token hand-off via params → land in multiSelect mode.
         if (params.preselectedMulti) {
           const wanted = new Set(params.preselectedMulti.split(','));
           const picked = nonZero.filter((tk) => wanted.has(tokenId(tk)));
@@ -1254,13 +1256,23 @@ export default function SendScreen() {
             />
             {!params.prefilledRecipient && (
               <View style={styles.inputIcons}>
-                {/* Address book — also the way in to the QR scanner (shown at the
-                    top of the picker sheet). Big, comfortable tap target. */}
+                {/* Scan in-flow (one tap) — plain icon, no container. */}
+                <Pressable
+                  onPress={() => setShowScanner(true)}
+                  hitSlop={8}
+                  style={styles.addrActionBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('send.scanAria', { defaultValue: 'Scan a QR code' })}
+                >
+                  <ScanLine size={22} color={color.fg.muted} strokeWidth={2} />
+                </Pressable>
+                {/* Address book / recent recipients. */}
                 <Pressable
                   onPress={() => { setPickerTarget(null); setShowContactPicker(true); }}
                   hitSlop={8}
                   style={styles.addrActionBtn}
-                  accessibilityLabel={t('send.recipientPickAria', { defaultValue: 'Choose recipient or scan' })}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('send.recipientPickAria', { defaultValue: 'Choose recipient' })}
                 >
                   <BookUser size={22} color={color.fg.muted} strokeWidth={2} />
                 </Pressable>
@@ -1514,7 +1526,8 @@ export default function SendScreen() {
             ) : (
               <View style={styles.transferEndpoint}>
                 <Text style={styles.transferLabel}>
-                  {t('send.toLabel')} · {t('send.recipientCount', { n: recipients.length, defaultValue: `${recipients.length} recipients` })}
+                  {/* `count` drives the en/zh plurals; `n` feeds the bare key in other locales. */}
+                  {t('send.toLabel')} · {t('send.recipientCount', { count: recipients.length, n: recipients.length })}
                 </Text>
                 {recipients.map((r) => {
                   const n = parseFloat(r.amount || '0');
@@ -1643,14 +1656,14 @@ export default function SendScreen() {
           {txStatus === 'idle' && (
             // Every send is a deliberate slide-to-confirm — a stray tap can't fire
             // a payment. A risky destination (never sent here before, or a contract)
-            // turns the slide red and shows the first-time / contract tags above.
+            // is signaled by the first-time / contract tags above; the slide itself
+            // stays quiet (founder call: never a scary red commit surface).
             <SlideToConfirmButton
               title={estimatingGas ? t('send.checkingGas') : t('send.confirmSendBtn')}
               hint={t('componentsUi.signing.slideToConfirm', { defaultValue: 'Slide to confirm' })}
               onConfirm={handleConfirm}
               loading={sending}
               disabled={estimatingGas}
-              tone={(recipientRisk?.firstInteraction || recipientRisk?.isContract === true) ? 'danger' : 'accent'}
               style={styles.confirmBtn}
             />
           )}
@@ -2499,6 +2512,10 @@ const styles = createStyles(() => ({
   },
   confirmBtn: {
     marginTop: space.md,
+    // Keep the slide clear of the iPhone home-indicator band: a horizontal drag
+    // that starts inside it is the SYSTEM app-switch gesture, not ours. The
+    // screen has no bottom safe-area edge, so the clearance lives here.
+    marginBottom: space['5xl'],
   },
 
   // Inline tx status
