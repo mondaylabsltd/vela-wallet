@@ -15,7 +15,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
-import { color, createStyles, inter, motion, radius, space, text } from '@/constants/theme';
+import { color, createStyles, inter, motion, radius, shadow, space, text } from '@/constants/theme';
 import { hapticSelection } from '@/services/platform';
 
 export interface SegmentOption<T extends string> {
@@ -126,15 +126,23 @@ const styles = createStyles(() => ({
     alignItems: 'center',
     gap: space.xs,
   },
-  // The single sliding indicator behind the active label: a soft sunken chip —
-  // no border, no shadow (light controls; the heavy raised pill is gone).
+  // The single sliding active indicator — a FLOATING chip (design language:
+  // "transparent track + a single floating active chip"). A raised fill lifts
+  // it over the transparent track; a strong hairline defines the edge; a soft
+  // shadow floats it. Multiple redundant cues, because this warm low-contrast
+  // palette can't carry selection on fill alone (bg.sunken was ~1.04:1 — no
+  // visible chip, selection left to label color, WCAG 1.4.1). Not the old heavy
+  // pill: the cramped truncated layout was the real culprit, now content-sized.
   chip: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
     borderRadius: radius.full,
-    backgroundColor: color.bg.sunken,
+    backgroundColor: color.bg.raised,
+    borderWidth: 1,
+    borderColor: color.border.strong,
+    ...shadow.sm,
   },
   segment: {
     flexDirection: 'row',
