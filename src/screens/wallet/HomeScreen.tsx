@@ -106,6 +106,29 @@ function Balance({ value, symbol, code }: { value: number; symbol: string; code:
   );
 }
 
+// Shimmer placeholder shown before the first balance is known — a bare "0" there
+// reads as a real, wrong value. A light band sweeps across a sunken bar (raised
+// on sunken reads as a highlight in BOTH themes), sized to the balance's line box.
+const SKELETON_W = 208;
+const SKELETON_H = 46;
+const SKELETON_BAND_W = 96;
+function BalanceSkeleton() {
+  const x = useSharedValue(0);
+  useEffect(() => {
+    x.value = withRepeat(withTiming(1, { duration: 1150, easing: Easing.inOut(Easing.quad) }), -1, false);
+  }, [x]);
+  const band = useAnimatedStyle(() => ({
+    transform: [{ translateX: -SKELETON_BAND_W + x.value * (SKELETON_W + SKELETON_BAND_W) }],
+  }));
+  return (
+    <View style={styles.balanceFill} accessibilityLabel="…" accessibilityRole="progressbar">
+      <View style={styles.balanceSkeleton}>
+        <Animated.View style={[styles.balanceSkeletonBand, band]} />
+      </View>
+    </View>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
@@ -139,6 +162,9 @@ export default function HomeScreen() {
   // When balances were last synced — surfaced in the pull-to-refresh caption so
   // the pull's payoff is a glance at freshness, not just a re-fetch.
   const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
+  // True once the first fetch for this account has settled — lets us tell
+  // "balance not known yet" (show a skeleton) from a genuine $0 wallet.
+  const [bootstrapped, setBootstrapped] = useState(false);
   // Balance privacy — shared store (hero, feed, holdings, switcher, toast all
   // mask together); persisted, hydrate-race-safe.
   const { hidden, toggle: toggleHidden } = useBalancePrivacy();
@@ -222,6 +248,9 @@ export default function HomeScreen() {
     !hasLiveData && cachedTotal != null ? cachedTotal
     : balancePartial && cachedTotal != null ? Math.max(liveTotal, cachedTotal)
     : liveTotal;
+  // Nothing known yet: no live tokens, no cached total, first fetch still in
+  // flight → show a skeleton, never a fake "0" that later jumps to the real value.
+  const balanceUnknown = !hasLiveData && cachedTotal == null && !bootstrapped;
 
   // The feed's amount strings are formatted at load time and cached in state, so
   // a number-format change doesn't re-run the adapter. Re-derive the feed when
@@ -401,6 +430,8 @@ export default function HomeScreen() {
         setNoticeAllowed(true);
       }
     } catch { /* ignore — keep last-known tokens + total */ }
+    // The first fetch has settled (either way) — stop showing the skeleton.
+    if (addressRef.current === address) setBootstrapped(true);
   }, [address, celebrateReceipt, commitActivity, commitConnEvents]);
   loadDataRef.current = loadData;
 
@@ -437,6 +468,7 @@ export default function HomeScreen() {
     setTokens([]);
     setFailedChainIds([]);
     setCachedTotal(null);
+    setBootstrapped(false); // new account: unknown until its first fetch settles
     // Fresh grace budget for the new account; drop any pending retry from the old one.
     partialRetriesLeft.current = MAX_PARTIAL_RETRIES;
     setNoticeAllowed(false);
@@ -643,6 +675,7 @@ export default function HomeScreen() {
           <Pressable
             style={styles.balanceTopRow}
             onPress={toggleHidden}
+            disabled={balanceUnknown}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={hidden ? t('home.a11yShowBalance') : dc.fmt(displayTotal)}
@@ -653,6 +686,8 @@ export default function HomeScreen() {
                 <Text style={styles.balanceHidden}>••••••</Text>
                 <EyeOff size={20} color={color.fg.subtle} strokeWidth={2} />
               </View>
+            ) : balanceUnknown ? (
+              <BalanceSkeleton />
             ) : (
               <Balance value={displayTotal * dc.rate} symbol={dc.symbol} code={dc.code} />
             )}
@@ -1146,6 +1181,24 @@ const styles = createStyles(() => ({
   balanceFill: { flex: 1 },
   balanceInt: { fontSize: 52, ...inter.bold, fontFamily: font.display, color: color.fg.base, letterSpacing: -1.2 },
   balanceDec: { fontSize: 28, ...inter.bold, fontFamily: font.display, color: color.fg.subtle, letterSpacing: -0.5 },
+  // Loading skeleton (sized to the balance line box): a sunken bar with a
+  // sweeping raised band — reads as a highlight in both light and dark.
+  balanceSkeleton: {
+    width: SKELETON_W,
+    height: SKELETON_H,
+    marginVertical: (63 - SKELETON_H) / 2, // center within the ~63px balance line
+    borderRadius: radius.md,
+    backgroundColor: color.bg.sunken,
+    overflow: 'hidden',
+  },
+  balanceSkeletonBand: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: SKELETON_BAND_W,
+    backgroundColor: color.bg.raised,
+    opacity: 0.85,
+  },
   // Masked state: dots + the only chrome the hero ever shows (EyeOff glyph).
   balanceHiddenRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md },
   balanceHidden: { fontSize: 52, ...inter.bold, color: color.fg.base, letterSpacing: 2 },
