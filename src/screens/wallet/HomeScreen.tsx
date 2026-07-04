@@ -199,16 +199,15 @@ export default function HomeScreen() {
   const addressRef = useRef(address);
   useEffect(() => { addressRef.current = address; }, [address]);
 
-  // Swipe-to-delete tombstones. Deletion removes the row from state instantly but
-  // writes to storage asynchronously; a background reload that read storage BEFORE
-  // that write lands would otherwise repaint the just-deleted row. These sets hold
-  // ids mid-delete so any storage-sourced repaint filters them out until the write
-  // is committed. `commit*` are the only setters the reload paths should use.
-  const pendingDeleteIds = useRef<Set<string>>(new Set());
+  // Swipe-to-delete tombstone (Connections only — the activity feed no longer
+  // has delete). A per-row delete removes the event from state instantly but
+  // writes to storage asynchronously; a background reload that read storage
+  // BEFORE that write lands would otherwise repaint the just-deleted event, so
+  // this set holds ids mid-delete to filter such repaints. `commit*` are the
+  // only setters the reload paths should use.
   const pendingDeleteConnIds = useRef<Set<string>>(new Set());
   const commitActivity = useCallback((items: ActivityItem[]) => {
-    const pend = pendingDeleteIds.current;
-    setActivity(pend.size ? items.filter((a) => !pend.has(a.id)) : items);
+    setActivity(items);
   }, []);
   const commitConnEvents = useCallback((events: ConnectionEvent[]) => {
     const pend = pendingDeleteConnIds.current;
@@ -657,21 +656,6 @@ export default function HomeScreen() {
       .finally(() => { pendingDeleteConnIds.current.delete(id); });
   }, []);
 
-  // Swipe-to-delete on an Activity row prunes the local record(s); on-chain
-  // history is untouched and a receipt already past the monitor checkpoint won't
-  // reappear. Batch sends collapse N sibling records into one row (id =
-  // userOpHash, not a real record id) — delete every sibling via `batch.ids`.
-  // Optimistic remove + tombstone (keyed by the row's display id) until the async
-  // deletes commit, so an in-flight reload can't resurrect the row.
-  const deleteActivityItem = useCallback((item: ActivityItem) => {
-    const ids = item.batch?.ids ?? [item.id];
-    pendingDeleteIds.current.add(item.id);
-    setActivity((prev) => prev.filter((a) => a.id !== item.id));
-    Promise.all(ids.map((id) => deleteTransaction(id)))
-      .catch((e) => console.warn('[Home] activity delete failed', e))
-      .finally(() => { pendingDeleteIds.current.delete(item.id); });
-  }, []);
-
   // Resolved alias for the open detail tx's counterparty.
   const detailAlias = (() => {
     if (!detailTx) return undefined;
@@ -847,7 +831,6 @@ export default function HomeScreen() {
                         chain={chainFor(item.chainId)}
                         index={index}
                         isNew={item.id === newItemId}
-                        onDelete={() => deleteActivityItem(item)}
                         onPress={() => openDetail(item)}
                       />
                     </>
