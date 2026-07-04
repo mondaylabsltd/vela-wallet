@@ -1,0 +1,94 @@
+# Post-merge Expo preview — the sibling of expo-preview.yml (which covers OPEN
+# PRs). When a PR is MERGED, its per-PR `pr-<number>` update is orphaned, and
+# nothing published the merged (main) state for testers to scan. This runs once
+# on merge: it publishes an EAS Update on the `main` branch from the exact merge
+# commit and comments the QR back onto the just-merged PR — so the PR ends with
+# a "here's the same code, now live on main" build you can scan.
+#
+# Same fingerprint logic as the PR preview (see expo-preview.yml for the full
+# explanation): `continuous-deploy-fingerprint` publishes a fast JS update when
+# the native fingerprint matches an existing dev build, or triggers a dev build
+# when native changed. `runtimeVersion: {"policy":"fingerprint"}` keeps the
+# update↔runtime match exact.
+#
+# Prerequisites are identical to expo-preview.yml (repo secret EXPO_TOKEN, EAS
+# build credentials). Without the token this workflow skips itself.
+name: expo-merged
+
+on:
+  pull_request:
+    types: [closed]
+
+concurrency:
+  # One deploy per PR; a re-run supersedes an in-flight one.
+  group: expo-merged-${{ github.event.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Only merged PRs into this repo, and only when EXPO_TOKEN is present.
+  # secrets.* isn't readable in a job-level `if`, so a tiny gate job exports it.
+  gate:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.repo.full_name == github.repository
+    outputs:
+      has-token: ${{ steps.check.outputs.present }}
+    steps:
+      - id: check
+        run: echo "present=${{ secrets.EXPO_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: gate
+    if: needs.gate.outputs.has-token == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # the QR / build-link comment on the merged PR
+    steps:
+      # The exact merge commit — the merged (main) state, race-free even if
+      # another PR lands right after this one.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: expo/expo-github-action@v9
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      # Publishes to the stable `main` EAS branch and comments the QR on the
+      # (now-closed) PR — GitHub allows comments on merged PRs.
+      - uses: expo/expo-github-action/continuous-deploy-fingerprint@v9
+        with:
+          profile: development
+          branch: main
+      # Sticky note distinguishing this from the PR-open preview: it's the
+      # merged code now on main. Editable without touching workflow logic.
+      - name: Merged-preview guide comment (sticky)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- vela-merged-guide -->';
+            const body = fs.readFileSync('.github/expo-merged-guide.md', 'utf8');
+            if (!body.startsWith(marker)) {
+              core.setFailed('guide file must start with the sticky-comment marker'); return;
+            }
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100,
+            });
+            const mine = comments.find(c => c.body.startsWith(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: mine.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              });
+            }
