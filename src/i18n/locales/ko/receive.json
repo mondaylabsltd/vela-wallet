@@ -9,6 +9,8 @@
     "warningBody": "지원되는 네트워크에서만 자산을 보내세요. 지원되지 않는 전송은 영구적으로 손실될 수 있습니다.",
     "warningConfirm": "확인했어요",
     "networksLine": "지원되는 모든 {{count}}개 네트워크에서 동일한 주소",
+    "networkDetail": "{{name}} · 체인 ID {{id}}",
+    "viewOnExplorer": "{{name}} 익스플로러에서 보기",
     "warningReminder": "지원되는 네트워크에서만 — 다른 네트워크로 전송하면 손실될 수 있습니다.",
     "a11yBack": "뒤로",
     "a11yCopyAddress": "주소 복사",

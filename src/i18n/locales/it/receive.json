@@ -12,6 +12,8 @@
     "warningCounterfactual": "Il tuo indirizzo è lo stesso su ogni rete supportata. I fondi inviati qui sono al sicuro e sono tuoi — anche prima che il tuo wallet venga deployato.",
     "networksLabel": "Reti supportate",
     "networksLine": "Un unico indirizzo su tutte le {{count}} reti",
+    "networkDetail": "{{name}} · Chain ID {{id}}",
+    "viewOnExplorer": "Vedi {{name}} sull'explorer",
     "a11yBack": "Indietro",
     "a11yCopyAddress": "Copia indirizzo",
     "shareCardHeadline": "Scansiona per inviarmi crypto",

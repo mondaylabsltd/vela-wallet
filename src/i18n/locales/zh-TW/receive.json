@@ -14,6 +14,8 @@
     "warningCounterfactual": "你的地址在每個支援的網路上都相同。發送到這裡的資金安全無虞、屬於你——即使在你的錢包尚未部署之前也是如此。",
     "networksLabel": "支援的網路",
     "networksLine": "同一地址適用全部 {{count}} 個網路",
+    "networkDetail": "{{name}} · 鏈 ID {{id}}",
+    "viewOnExplorer": "在瀏覽器中查看 {{name}}",
     "shareCardHeadline": "掃描即可向我發送加密貨幣",
     "shareDialogTitle": "{{name}} 錢包地址",
     "modeAddress": "地址",

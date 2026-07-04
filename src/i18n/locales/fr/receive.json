@@ -11,6 +11,8 @@
     "warningConfirm": "J'ai compris",
     "warningReminder": "Réseaux pris en charge uniquement — les transferts sur d'autres réseaux peuvent être perdus.",
     "networksLine": "Une seule adresse sur les {{count}} réseaux",
+    "networkDetail": "{{name}} · ID de chaîne {{id}}",
+    "viewOnExplorer": "Voir {{name}} sur l'explorateur",
     "networksLabel": "Réseaux pris en charge",
     "a11yBack": "Retour",
     "a11yCopyAddress": "Copier l'adresse",

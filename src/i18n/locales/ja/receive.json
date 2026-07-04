@@ -11,6 +11,8 @@
     "warningReminder": "対応ネットワークのみ — 他のネットワークへの送金は失われる場合があります。",
     "networksLabel": "対応ネットワーク",
     "networksLine": "1 つのアドレスで {{count}} 件すべてのネットワークに対応",
+    "networkDetail": "{{name}} · チェーンID {{id}}",
+    "viewOnExplorer": "{{name}} をエクスプローラーで表示",
     "a11yBack": "戻る",
     "a11yCopyAddress": "アドレスをコピー",
     "shareCardHeadline": "スキャンして暗号資産を送る",

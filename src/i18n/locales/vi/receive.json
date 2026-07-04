@@ -10,6 +10,8 @@
     "warningReminder": "Chỉ các mạng được hỗ trợ — chuyển khoản trên mạng khác có thể bị mất.",
     "warningConfirm": "Tôi đã hiểu",
     "networksLine": "Một địa chỉ cho toàn bộ {{count}} mạng",
+    "networkDetail": "{{name}} · Chain ID {{id}}",
+    "viewOnExplorer": "Xem {{name}} trên explorer",
     "networksLabel": "Mạng được hỗ trợ",
     "a11yBack": "Quay lại",
     "a11yCopyAddress": "Sao chép địa chỉ",

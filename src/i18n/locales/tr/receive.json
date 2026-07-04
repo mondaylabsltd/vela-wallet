@@ -12,6 +12,8 @@
     "warningCounterfactual": "Adresiniz desteklenen her ağda aynıdır. Buraya gönderilen fonlar güvendedir ve size aittir — cüzdanınız dağıtılmadan önce bile.",
     "networksLabel": "Desteklenen ağlar",
     "networksLine": "Tüm {{count}} ağda tek adres",
+    "networkDetail": "{{name}} · Zincir kimliği {{id}}",
+    "viewOnExplorer": "{{name}} gezginde görüntüle",
     "a11yBack": "Geri",
     "a11yCopyAddress": "Adresi kopyala",
     "shareCardHeadline": "Bana Kripto Göndermek İçin Tara",

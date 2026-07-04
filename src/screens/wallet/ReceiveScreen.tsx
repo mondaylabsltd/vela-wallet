@@ -9,15 +9,15 @@ import { VelaButton } from '@/components/ui/VelaButton';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, leading, radius, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
-import { chainName, getAllNetworksSync } from '@/models/network';
+import { chainName, explorerBaseURL, getAllNetworksSync } from '@/models/network';
 import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
-import { hapticLight, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
+import { hapticLight, hapticSuccess, isAppActive, openBrowser, showAlert } from '@/services/platform';
 import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { composeShareBlob, saveReceiveCard } from '@/services/share-card';
 import { fetchTokens } from '@/services/wallet-api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Check, Copy, ImageDown, ShieldAlert } from 'lucide-react-native';
+import { ArrowLeft, Check, Copy, ExternalLink, ImageDown, ShieldAlert } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
@@ -71,6 +71,9 @@ export default function ReceiveScreen() {
   // Entrances play once (design language rule 10) — never replay on tab switch.
   const hasEntered = useRef(false);
   useEffect(() => { hasEntered.current = true; }, []);
+
+  // Tapped network in the supported-networks strip → reveals its name + chain ID.
+  const [selectedNet, setSelectedNet] = useState<string | null>(null);
 
   // Address vs EIP-681 payment-request mode.
   const [mode, setMode] = useState<'address' | 'request'>('address');
@@ -373,25 +376,58 @@ export default function ReceiveScreen() {
             /* Supported networks — a wrapped logo strip, names live in the a11y label */
             <>
               <SectionLabel>{t('receive.networksLabel')}</SectionLabel>
-              <View
-                style={styles.networkStrip}
-                accessible
-                accessibilityLabel={networks.map((n) => n.displayName).join(', ')}
-              >
-                {networks.map((network) => (
-                  <ChainLogo
-                    key={network.id}
-                    label={network.iconLabel}
-                    color={network.iconColor}
-                    bgColor={network.iconBg}
-                    logoURL={network.logoURL}
-                    size={22}
-                  />
-                ))}
+              <View style={styles.networkStrip}>
+                {networks.map((network) => {
+                  const active = selectedNet === network.id;
+                  // Tapping toggles focus: the active chip lifts + rings, the
+                  // rest dim, so attention lands on the one you picked.
+                  const dimmed = selectedNet !== null && !active;
+                  return (
+                    <Pressable
+                      key={network.id}
+                      onPress={() => { hapticLight(); setSelectedNet(active ? null : network.id); }}
+                      hitSlop={8}
+                      style={[styles.netChip, active && styles.netChipActive, dimmed && styles.netChipDimmed]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                      accessibilityLabel={t('receive.networkDetail', { name: network.displayName, id: network.chainId })}
+                    >
+                      <ChainLogo
+                        label={network.iconLabel}
+                        color={network.iconColor}
+                        bgColor={network.iconBg}
+                        logoURL={network.logoURL}
+                        size={22}
+                      />
+                    </Pressable>
+                  );
+                })}
               </View>
-              <Text style={styles.networksLine}>
-                {t('receive.networksLine', { count: networks.length })}
-              </Text>
+              {selectedNet !== null ? (
+                (() => {
+                  const n = networks.find((x) => x.id === selectedNet);
+                  if (!n) return null;
+                  const explorer = explorerBaseURL(n.chainId);
+                  const detail = t('receive.networkDetail', { name: n.displayName, id: n.chainId });
+                  // Tapping the revealed detail opens that chain's explorer.
+                  return (
+                    <Pressable
+                      style={styles.networkDetailRow}
+                      onPress={explorer ? () => { hapticLight(); openBrowser(explorer); } : undefined}
+                      disabled={!explorer}
+                      accessibilityRole={explorer ? 'link' : undefined}
+                      accessibilityLabel={explorer ? t('receive.viewOnExplorer', { name: n.displayName }) : detail}
+                    >
+                      <Text style={styles.networkDetailLine}>{detail}</Text>
+                      {explorer ? <ExternalLink size={13} color={color.fg.muted} strokeWidth={2.2} /> : null}
+                    </Pressable>
+                  );
+                })()
+              ) : (
+                <Text style={styles.networksLine}>
+                  {t('receive.networksLine', { count: networks.length })}
+                </Text>
+              )}
             </>
           )}
         </Animated.View>
@@ -428,6 +464,9 @@ const styles = createStyles(() => ({
   // Mode toggle
   segRow: {
     flexDirection: 'row',
+    // Center the content-sized toggle — alone in its row (unlike Home, where it
+    // shares the row with the network filter), left-aligned looked off-balance.
+    justifyContent: 'center',
     marginBottom: space.xl,
   },
 
@@ -658,17 +697,44 @@ const styles = createStyles(() => ({
     color: color.fg.muted,
   },
 
-  // Networks — a single wrapped strip of chain logos (no pill boxes)
+  // Networks — a single wrapped strip of tappable chain logos (no pill boxes)
   networkStrip: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: space.md,
+    gap: space.sm,
     marginBottom: space.lg,
+  },
+  // Each logo sits in a transparent chip so the selected one can ring without
+  // shifting the others' layout (padding reserved on every chip).
+  netChip: {
+    padding: space.xs,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  netChipActive: {
+    borderColor: color.accent.base,
+    backgroundColor: color.accent.soft,
+  },
+  netChipDimmed: {
+    opacity: 0.4,
   },
   networksLine: {
     fontSize: text.sm,
     ...inter.regular,
     color: color.fg.subtle,
     marginBottom: space['4xl'],
+  },
+  // The revealed "{name} · Chain ID {id}" line + explorer affordance.
+  networkDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginBottom: space['4xl'],
+  },
+  networkDetailLine: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.fg.base,
   },
 }));

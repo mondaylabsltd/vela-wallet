@@ -10,6 +10,8 @@
     "warningReminder": "Только поддерживаемые сети — переводы в других сетях могут быть потеряны.",
     "warningConfirm": "Понятно",
     "networksLine": "Один адрес во всех {{count}} сетях",
+    "networkDetail": "{{name}} · ID сети {{id}}",
+    "viewOnExplorer": "Открыть {{name}} в обозревателе",
     "networksLabel": "Поддерживаемые сети",
     "a11yBack": "Назад",
     "a11yCopyAddress": "Скопировать адрес",
