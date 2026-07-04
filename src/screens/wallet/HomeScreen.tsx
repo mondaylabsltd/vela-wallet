@@ -59,7 +59,7 @@ import { useBalancePrivacy } from '@/hooks/use-balance-privacy';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import {
-  loadActivityItems, loadActivityTransactions, loadConnectionEvents, relativeTime, syncReceivedTransfers,
+  dayGroupLabel, dayStartMs, loadActivityItems, loadActivityTransactions, loadConnectionEvents, relativeTime, syncReceivedTransfers,
   type ActivityItem, type ActivityBatch, type ConnectionEvent,
 } from '@/services/activity';
 import { reconcilePendingTransactions } from '@/services/tx-reconciler';
@@ -603,6 +603,26 @@ export default function HomeScreen() {
     ? activity.filter((a) => a.chainId === selectedChainId)
     : activity;
 
+  // Date-first feed: rows carry no per-row time; instead they're grouped under a
+  // date header ("Today" / "Yesterday" / "04/07/2026"). Items arrive newest-first,
+  // so a header is emitted whenever the calendar day changes. localePrefs is a dep
+  // so the header re-derives when the date format preset changes.
+  type FeedRow = { kind: 'header'; id: string; label: string } | { kind: 'item'; item: ActivityItem };
+  const activityFeed = useMemo<FeedRow[]>(() => {
+    const rows: FeedRow[] = [];
+    let lastDay: number | null = null;
+    for (const item of filteredActivity) {
+      const day = dayStartMs(item.timestamp);
+      if (day !== lastDay) {
+        rows.push({ kind: 'header', id: `day-${day}`, label: dayGroupLabel(item.timestamp) });
+        lastDay = day;
+      }
+      rows.push({ kind: 'item', item });
+    }
+    return rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredActivity, localePrefs]);
+
   const chainFor = (chainId: number): Network | null => networks.find((n) => n.chainId === chainId) ?? null;
 
   const openDetail = (item: ActivityItem) => {
@@ -794,35 +814,45 @@ export default function HomeScreen() {
             {(scrollProps) => (
               <Animated.FlatList
                 {...scrollProps}
-                data={filteredActivity}
-                keyExtractor={(item: ActivityItem) => item.id}
+                data={activityFeed}
+                keyExtractor={(row: FeedRow) => (row.kind === 'header' ? row.id : row.item.id)}
                 ListHeaderComponent={renderHeader()}
                 ListEmptyComponent={renderActivityEmpty()}
-                renderItem={({ item, index }: { item: ActivityItem; index: number }) => (
-                  <ActivityRow
-                    direction={item.direction}
-                    title={t(item.direction === 'out' ? 'activity.sent' : 'activity.received')}
-                    subtitle={
-                      item.address
-                        ? t(item.direction === 'out' ? 'activity.toAddr' : 'activity.fromAddr', {
-                            // Prefer a resolved alias (ENS/.bnb/Vela/own-account), then the
-                            // stored name, falling back to the short address. aliasMap is state,
-                            // so the row re-renders to the name once it resolves.
-                            addr: aliasMap.get(item.address.toLowerCase()) ?? item.alias ?? shortAddress(item.address),
-                          })
-                        : item.subtitle
-                    }
-                    amount={hidden ? '••••' : item.amount}
-                    fiat={!hidden && item.usdValue > 0 ? dc.fmt(item.usdValue) : undefined}
-                    time={relativeTime(item.timestamp)}
-                    chain={chainFor(item.chainId)}
-                    index={index}
-                    isNew={item.id === newItemId}
-                    onDelete={() => deleteActivityItem(item)}
-                    onPress={() => openDetail(item)}
-                  />
-                )}
-                ItemSeparatorComponent={() => <View style={styles.sep} />}
+                renderItem={({ item: row, index }: { item: FeedRow; index: number }) => {
+                  if (row.kind === 'header') {
+                    return <Text style={styles.dayHeader}>{row.label}</Text>;
+                  }
+                  const item = row.item;
+                  // Hairline only between consecutive item rows — never abutting a
+                  // day header (the header's own spacing separates groups).
+                  const prev = activityFeed[index - 1];
+                  return (
+                    <>
+                      {prev && prev.kind === 'item' ? <View style={styles.sep} /> : null}
+                      <ActivityRow
+                        direction={item.direction}
+                        title={t(item.direction === 'out' ? 'activity.sent' : 'activity.received')}
+                        subtitle={
+                          item.address
+                            ? t(item.direction === 'out' ? 'activity.toAddr' : 'activity.fromAddr', {
+                                // Prefer a resolved alias (ENS/.bnb/Vela/own-account), then the
+                                // stored name, falling back to the short address. aliasMap is state,
+                                // so the row re-renders to the name once it resolves.
+                                addr: aliasMap.get(item.address.toLowerCase()) ?? item.alias ?? shortAddress(item.address),
+                              })
+                            : item.subtitle
+                        }
+                        amount={hidden ? '••••' : item.amount}
+                        fiat={!hidden && item.usdValue > 0 ? dc.fmt(item.usdValue) : undefined}
+                        chain={chainFor(item.chainId)}
+                        index={index}
+                        isNew={item.id === newItemId}
+                        onDelete={() => deleteActivityItem(item)}
+                        onPress={() => openDetail(item)}
+                      />
+                    </>
+                  );
+                }}
                 contentContainerStyle={listContentStyle}
                 showsVerticalScrollIndicator={false}
               />
@@ -1228,6 +1258,14 @@ const styles = createStyles(() => ({
   // Hairline divider between de-boxed rows, inset past the avatar (Apple-Wallet style)
   // so it aligns under the row's text, not the icon.
   sep: { height: 1, backgroundColor: color.border.base, marginLeft: 44 + space.lg + space.xs },
+  // Date group header — quiet, uppercase-free date label above each day's rows.
+  dayHeader: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.fg.subtle,
+    marginTop: space.xl,
+    marginBottom: space.sm,
+  },
   empty: { alignItems: 'center', paddingTop: space['5xl'], gap: space.md },
   emptyIcon: {
     width: 64, height: 64, borderRadius: 32,

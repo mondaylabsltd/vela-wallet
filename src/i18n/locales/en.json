@@ -88,7 +88,9 @@
   "time": {
     "now": "now",
     "minutesShort": "{{n}}m",
-    "hoursShort": "{{n}}h"
+    "hoursShort": "{{n}}h",
+    "today": "Today",
+    "yesterday": "Yesterday"
   },
   "activity": {
     "sent": "Sent",

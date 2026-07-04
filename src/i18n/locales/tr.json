@@ -88,7 +88,9 @@
   "time": {
     "now": "şimdi",
     "minutesShort": "{{n}} dk",
-    "hoursShort": "{{n}} sa"
+    "hoursShort": "{{n}} sa",
+    "today": "Bugün",
+    "yesterday": "Dün"
   },
   "activity": {
     "sent": "Gönderildi",

@@ -88,7 +88,9 @@
   "time": {
     "now": "たった今",
     "minutesShort": "{{n}}分前",
-    "hoursShort": "{{n}}時間前"
+    "hoursShort": "{{n}}時間前",
+    "today": "今日",
+    "yesterday": "昨日"
   },
   "activity": {
     "sent": "送金",

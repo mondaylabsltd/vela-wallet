@@ -123,6 +123,23 @@ export function relativeTime(tsSeconds: number, nowMs: number = Date.now()): str
   return formatDate(d);
 }
 
+/** Local-midnight ms for a timestamp — the key that groups feed items by day. */
+export function dayStartMs(tsSeconds: number): number {
+  const d = new Date(tsSeconds * 1000);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/** Date-group header for the activity feed: "Today" / "Yesterday", else the
+ *  user's date preset ("04/07/2026"). Localized + re-evaluated at render. */
+export function dayGroupLabel(tsSeconds: number, nowMs: number = Date.now()): string {
+  const now = new Date(nowMs);
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const diffDays = Math.round((todayStart - dayStartMs(tsSeconds)) / 86_400_000);
+  if (diffDays <= 0) return i18n.t('time.today');
+  if (diffDays === 1) return i18n.t('time.yesterday');
+  return formatDate(tsSeconds * 1000);
+}
+
 /** Format a USD number as "$1.00"; "$0.00" for unknown/zero. */
 function formatUsd(n: number): string {
   if (!isFinite(n) || n <= 0) return '$0.00';

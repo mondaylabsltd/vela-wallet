@@ -88,7 +88,9 @@
   "time": {
     "now": "sekarang",
     "minutesShort": "{{n}}m",
-    "hoursShort": "{{n}}j"
+    "hoursShort": "{{n}}j",
+    "today": "Hari ini",
+    "yesterday": "Kemarin"
   },
   "activity": {
     "sent": "Terkirim",

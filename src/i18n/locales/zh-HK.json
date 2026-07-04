@@ -88,7 +88,9 @@
   "time": {
     "now": "剛剛",
     "minutesShort": "{{n}}分鐘",
-    "hoursShort": "{{n}}小時"
+    "hoursShort": "{{n}}小時",
+    "today": "今日",
+    "yesterday": "尋日"
   },
   "activity": {
     "sent": "已發送",

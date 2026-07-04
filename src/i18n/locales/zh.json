@@ -88,7 +88,9 @@
   "time": {
     "now": "刚刚",
     "minutesShort": "{{n}}分钟前",
-    "hoursShort": "{{n}}小时前"
+    "hoursShort": "{{n}}小时前",
+    "today": "今天",
+    "yesterday": "昨天"
   },
   "activity": {
     "sent": "已发送",

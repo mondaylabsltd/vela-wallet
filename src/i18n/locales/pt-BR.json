@@ -88,7 +88,9 @@
   "time": {
     "now": "agora",
     "minutesShort": "{{n}}m",
-    "hoursShort": "{{n}}h"
+    "hoursShort": "{{n}}h",
+    "today": "Hoje",
+    "yesterday": "Ontem"
   },
   "activity": {
     "sent": "Enviado",
