@@ -105,16 +105,11 @@ export default function TokenDetailScreen() {
             containerStyle={styles.heroAmountBox}
           />
           {usdValue > 0 && (
-            <AmountText
-              value={usdValue * dc.rate}
-              symbol={dc.symbol}
-              symbolScale={0.58}
-              size={text.xl}
-              minScale={0.6}
-              style={styles.heroUsd}
-              tailStyle={styles.heroUsdTail}
-              containerStyle={styles.heroUsdBox}
-            />
+            // Secondary conversion line — plain text, NOT AmountText's fit-to-width
+            // cascade: on this short "≈ $x" line the cascade kept re-measuring and
+            // shrank it (the flicker + tiny-text bug). The token amount above is
+            // the hero; this just annotates it.
+            <Text style={styles.heroUsd} numberOfLines={1}>{`≈ ${formatUsd(usdValue)}`}</Text>
           )}
         </Animated.View>
 
@@ -253,19 +248,12 @@ const styles = createStyles(() => ({
     fontFamily: font.display,
     color: color.fg.subtle,
   },
-  heroUsdBox: {
-    alignSelf: 'flex-start',
-    marginTop: space.sm,
-  },
   heroUsd: {
-    fontSize: text.xl,
-    ...inter.medium,
+    marginTop: space.sm,
+    fontSize: text['2xl'],
+    ...inter.semibold,
     fontFamily: font.display,
     color: color.fg.muted,
-  },
-  heroUsdTail: {
-    ...inter.medium,
-    color: color.fg.subtle,
   },
 
   buttonRow: {
