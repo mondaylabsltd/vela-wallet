@@ -690,11 +690,20 @@ async function pickFastestRpcUrl(chainId: number): Promise<string | undefined> {
  * Make an RPC call with automatic load balancing and failover.
  * Tries endpoints in score order (user > built-in > default > public).
  */
+// A chain is marked "failed" (→ stale-balance notice) only after the whole
+// endpoint pool has been swept this many times, each after an escalating
+// jittered backoff. More than one pass because most failures are transient
+// (CDN 502, DNS hiccup, a cold public node) and self-heal within a second or
+// two — the extra passes are what keep the "still updating" notice from showing
+// on a flaky-but-recoverable chain. Bounded to fit inside PER_CHAIN_TIMEOUT_MS
+// (18s) in wallet-api's per-chain race.
+const MAX_RPC_ATTEMPTS = 3;
+
 export async function poolRpcCall(
   method: string,
   params: any[],
   chainId: number,
-  retried = false,
+  attempt = 0,
 ): Promise<RPCResponse> {
   // Dev fault injection (no-op in production / when no faults are set).
   const injectedLatency = rpcLatencyMs();
@@ -797,16 +806,17 @@ export async function poolRpcCall(
     }
   }
 
-  // All endpoints failed on first pass — retry once after a short, JITTERED delay
-  // to recover from transient network glitches (CDN 502s, DNS hiccups). Jitter
-  // (vs a fixed 1s) de-synchronises many clients retrying after a shared outage so
-  // they don't thunder-herd the endpoints the instant they recover.
-  if (!retried) {
+  // Every endpoint failed this pass — sweep the whole pool again after an
+  // escalating, JITTERED backoff, up to MAX_RPC_ATTEMPTS passes. Multiple passes
+  // recover from transient glitches (CDN 502s, DNS hiccups, a cold node) before
+  // we give up and mark the chain failed. Jitter (vs a fixed delay) de-syncs many
+  // clients retrying after a shared outage so they don't thunder-herd on recovery.
+  if (attempt + 1 < MAX_RPC_ATTEMPTS) {
     recordNet('rpc', 'retry');
-    const delay = backoffWithJitter(0, 1000, 1000); // ~0–1000ms full jitter
-    console.warn(`[RPC] All endpoints failed for chain ${chainId}, retrying in ${delay}ms...`);
+    const delay = backoffWithJitter(attempt, 300, 1500); // ~0–300ms, ~0–600ms, …
+    console.warn(`[RPC] All endpoints failed for chain ${chainId}, retry ${attempt + 1}/${MAX_RPC_ATTEMPTS - 1} in ${delay}ms...`);
     await new Promise(r => setTimeout(r, delay));
-    return poolRpcCall(method, params, chainId, true);
+    return poolRpcCall(method, params, chainId, attempt + 1);
   }
 
   rpcFailedChains.add(chainId);

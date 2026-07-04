@@ -2,6 +2,8 @@
   "home": {
     "totalBalance": "Saldo total",
     "balanceStale": "Alguns saldos ainda estão sendo atualizados.",
+    "balanceUnpriced": "Não foi possível obter o preço de alguns tokens.",
+    "lastUpdated": "Atualizado {{ago}}",
     "tabActivity": "Atividade",
     "tabAssets": "Ativos",
     "tabConnections": "Conexões",

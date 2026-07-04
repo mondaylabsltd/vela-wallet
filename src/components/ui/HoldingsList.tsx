@@ -41,11 +41,13 @@ interface Props {
   header: React.ReactElement;
   refreshing: boolean;
   onRefresh: () => void;
+  /** "Updated Xm ago" caption for the pull-to-refresh indicator. */
+  refreshStatus?: string;
   contentContainerStyle: StyleProp<ViewStyle>;
 }
 
 export function HoldingsList({
-  tokens, loading, selectedChainId, header, refreshing, onRefresh, contentContainerStyle,
+  tokens, loading, selectedChainId, header, refreshing, onRefresh, refreshStatus, contentContainerStyle,
 }: Props) {
   const router = useRouter();
   const { t } = useTranslation();
@@ -152,7 +154,7 @@ export function HoldingsList({
   };
 
   return (
-    <VelaRefresh refreshing={refreshing} onRefresh={onRefresh}>
+    <VelaRefresh refreshing={refreshing} onRefresh={onRefresh} statusText={refreshStatus}>
       {(scrollProps) => (
         <Animated.FlatList
           {...scrollProps}

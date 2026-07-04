@@ -2,6 +2,8 @@
   "home": {
     "totalBalance": "Tổng số dư",
     "balanceStale": "Một số số dư vẫn đang cập nhật.",
+    "balanceUnpriced": "Không thể lấy giá của một số token.",
+    "lastUpdated": "Đã cập nhật {{ago}}",
     "tabActivity": "Hoạt động",
     "tabAssets": "Tài sản",
     "tabConnections": "Kết nối",
