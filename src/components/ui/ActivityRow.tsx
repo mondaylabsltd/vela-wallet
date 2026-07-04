@@ -33,7 +33,9 @@ export interface ActivityRowProps {
   amount: string;
   /** Value in the user's display currency, shown under the amount (e.g. "AR$1,428.20"). */
   fiat?: string;
-  time: string;
+  /** Per-row timestamp label. Omitted on the home feed, which groups rows under
+      date headers instead (a date-first layout). Kept for other callers. */
+  time?: string;
   chain?: Network | null;
   onPress?: () => void;
   index?: number;

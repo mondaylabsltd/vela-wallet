@@ -88,7 +88,9 @@
   "time": {
     "now": "сейчас",
     "minutesShort": "{{n}} мин",
-    "hoursShort": "{{n}} ч"
+    "hoursShort": "{{n}} ч",
+    "today": "Сегодня",
+    "yesterday": "Вчера"
   },
   "activity": {
     "sent": "Отправлено",

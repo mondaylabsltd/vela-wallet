@@ -88,7 +88,9 @@
   "time": {
     "now": "방금",
     "minutesShort": "{{n}}분 전",
-    "hoursShort": "{{n}}시간 전"
+    "hoursShort": "{{n}}시간 전",
+    "today": "오늘",
+    "yesterday": "어제"
   },
   "activity": {
     "sent": "보냄",
