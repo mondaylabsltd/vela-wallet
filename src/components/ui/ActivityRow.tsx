@@ -15,9 +15,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
-import { Swipeable } from 'react-native-gesture-handler';
-import { useTranslation } from 'react-i18next';
-import { ArrowDownLeft, ArrowUpRight, Trash2 } from 'lucide-react-native';
+import { ArrowDownLeft, ArrowUpRight } from 'lucide-react-native';
 import { ChainLogo } from '@/components/ChainLogo';
 import { fadeInDown } from '@/constants/entering';
 import type { Network } from '@/models/network';
@@ -40,12 +38,9 @@ export interface ActivityRowProps {
   onPress?: () => void;
   index?: number;
   isNew?: boolean;
-  /** Swipe-left reveals a Delete action that removes this record from the local feed. */
-  onDelete?: () => void;
 }
 
-export function ActivityRow({ direction, title, subtitle, amount, fiat, time, chain, onPress, index = 0, isNew, onDelete }: ActivityRowProps) {
-  const { t } = useTranslation();
+export function ActivityRow({ direction, title, subtitle, amount, fiat, time, chain, onPress, index = 0, isNew }: ActivityRowProps) {
   const incoming = direction === 'in';
   const scale = useSharedValue(1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -84,34 +79,6 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
   const handlePress = onPress
     ? () => { hapticLight(); onPress(); }
     : undefined;
-
-  // Swipe-left reveals a single Delete action that removes this record from the
-  // local feed (on-chain history is untouched). Mirrors the Connections per-row
-  // swipe-to-delete so the gesture reads the same everywhere in the app.
-  const swipeRef = useRef<Swipeable>(null);
-  const canSwipe = !!onDelete;
-
-  const handleDelete = () => {
-    hapticLight();
-    swipeRef.current?.close();
-    onDelete?.();
-  };
-
-  const renderRightActions = () => (
-    <View style={styles.swipeActions}>
-      <Pressable
-        style={[styles.swipeAction, styles.swipeDelete]}
-        onPress={handleDelete}
-        accessibilityRole="button"
-        accessibilityLabel={t('activity.delete', { defaultValue: 'Delete' })}
-      >
-        <Trash2 size={17} color={color.fg.inverse} strokeWidth={2.2} />
-        <Text style={[styles.swipeActionText, styles.swipeActionTextLight]}>
-          {t('activity.delete', { defaultValue: 'Delete' })}
-        </Text>
-      </Pressable>
-    </View>
-  );
 
   const rowInner = (
       <AnimatedPressable
@@ -163,20 +130,8 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
 
   return (
     <Animated.View entering={hasEntered.current ? undefined : fadeInDown(index * 40, 300)}>
-      {/* Shadow lives on this wrapper — OUTSIDE Swipeable's overflow:hidden, which
-          would otherwise clip the card shadow. Swipeable is always rendered (only
-          the actions are gated) so the row subtree stays structurally stable across
-          a pending→confirmed update and the entrance animation never replays. */}
       <View style={styles.shadowWrap}>
-        <Swipeable
-          ref={swipeRef}
-          overshootRight={false}
-          friction={2}
-          rightThreshold={36}
-          renderRightActions={canSwipe ? renderRightActions : undefined}
-        >
-          {rowInner}
-        </Swipeable>
+        {rowInner}
       </View>
     </Animated.View>
   );
@@ -185,8 +140,7 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
 const styles = createStyles(() => ({
   // De-boxed (Apple Wallet / Wise minimal): rows are edge-to-edge on the page,
   // separated by a hairline in the list — no per-row card, border, or shadow.
-  // Wrapper stays for the Swipeable + entrance-animation structure; its bg matches
-  // the page so a swipe reveals the page (not a card) behind the row.
+  // Wrapper keeps the entrance-animation structure; its bg matches the page.
   shadowWrap: {
     backgroundColor: color.bg.base,
   },
@@ -279,24 +233,4 @@ const styles = createStyles(() => ({
     ...inter.regular,
     color: color.fg.subtle,
   },
-  swipeActions: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-  },
-  swipeAction: {
-    width: 72,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.xs,
-    borderRadius: radius.xl,
-    marginLeft: space.sm,
-  },
-  swipeDelete: {
-    backgroundColor: color.error.base,
-  },
-  swipeActionText: {
-    fontSize: text.xs,
-    ...inter.semibold,
-  },
-  swipeActionTextLight: { color: color.fg.inverse },
 }));
