@@ -41,6 +41,7 @@ import { SigningReplaySheet } from '@/components/ui/SigningReplaySheet';
 import { TokenSelector } from '@/components/ui/TokenSelector';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaRefresh } from '@/components/ui/VelaRefresh';
+import { WalletAvatar } from '@/components/ui/WalletAvatar';
 import { WaveDock } from '@/components/ui/WaveDock';
 import { RpcTroubleBanner } from '@/components/ui/RpcTroubleBanner';
 import { getRateLimitedChains } from '@/services/rpc-pool';
@@ -715,7 +716,7 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('home.a11ySwitchAccount', { name: accountName })}
           >
-            <View style={styles.avatar}><Text style={styles.avatarText}>{(accountName[0] ?? 'V').toUpperCase()}</Text></View>
+            <WalletAvatar name={accountName} address={address} size={44} letterSize={text.lg} />
             <View style={styles.accountInfo}>
               <View style={styles.accountNameRow}>
                 <Text style={styles.accountName} numberOfLines={1}>{accountName}</Text>
@@ -1137,12 +1138,6 @@ const styles = createStyles(() => ({
     gap: space.md,
     paddingVertical: space.xs,
   },
-  avatar: {
-    width: 44, height: 44, borderRadius: radius.full,
-    backgroundColor: color.accent.soft,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: { fontSize: text.lg, ...inter.bold, color: color.accent.base },
   accountInfo: { flex: 1, minWidth: 0 },
   accountNameRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   accountName: { fontSize: text.lg, ...inter.bold, color: color.fg.base, flexShrink: 1 },

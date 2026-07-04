@@ -32,7 +32,9 @@
     "appearance": {
       "themeLight": "Terang",
       "themeDark": "Gelap",
-      "themeAuto": "Otomatis"
+      "themeAuto": "Otomatis",
+      "avatarInitials": "Inisial",
+      "avatarIdenticon": "Identicon"
     },
     "localization": {
       "autoExample": "Otomatis · {{example}}",

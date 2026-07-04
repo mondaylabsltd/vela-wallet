@@ -1,6 +1,7 @@
 import { ChainLogo } from '@/components/ChainLogo';
 import { QRCode } from '@/components/QRCode';
 import { AppModal } from '@/components/ui/AppModal';
+import { Identicon } from '@/components/ui/Identicon';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { VelaButton } from '@/components/ui/VelaButton';
@@ -22,6 +23,8 @@ import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
 import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
 import { checkNetworkCompatibility } from '@/services/network-checker';
 import { hapticLight, openURL, showAlert } from '@/services/platform';
+import { setAvatarStyle, type AvatarStyle } from '@/services/avatar-style';
+import { useAvatarStyle } from '@/hooks/use-avatar-style';
 import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { getBuiltinBundlerUrl, invalidateAllPools, poolRpcCall, refreshPool } from '@/services/rpc-pool';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from '@/services/tempo';
@@ -870,6 +873,59 @@ function ThemePicker({ s, current, onChange }: {
 }
 
 // ---------------------------------------------------------------------------
+// Avatar Style Picker — initials vs Nimiq identicon, with live previews
+// ---------------------------------------------------------------------------
+
+/** Seed for the identicon preview when no account address is available yet. */
+const AVATAR_DEMO_SEED = 'vela';
+
+function AvatarStylePicker({ s, current, onChange, previewName, previewAddress }: {
+  s: S; current: AvatarStyle; onChange: (style: AvatarStyle) => void;
+  previewName: string; previewAddress?: string;
+}) {
+  const { t } = useTranslation();
+  const options: { key: AvatarStyle; label: string; preview: React.ReactNode }[] = [
+    {
+      key: 'initials',
+      label: t('settings.appearance.avatarInitials'),
+      preview: (
+        <View style={s.avatarPreviewCircle}>
+          <Text style={s.avatarPreviewLetter}>{(previewName[0] ?? 'V').toUpperCase()}</Text>
+        </View>
+      ),
+    },
+    {
+      key: 'identicon',
+      label: t('settings.appearance.avatarIdenticon'),
+      // 18px matches the ThemePicker icons above so the two rows keep one height.
+      preview: <Identicon seed={previewAddress || AVATAR_DEMO_SEED} size={18} />,
+    },
+  ];
+  return (
+    <View style={s.themePickerContainer}>
+      {options.map(({ key, label, preview }) => {
+        const active = current === key;
+        return (
+          <Pressable
+            key={key}
+            style={[s.themeOption, active && s.themeOptionActive]}
+            onPress={() => {
+              if (key !== current) {
+                hapticLight();
+                onChange(key);
+              }
+            }}
+          >
+            {preview}
+            <Text style={[s.themeOptionLabel, active && s.themeOptionLabelActive]} numberOfLines={1}>{label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Language Picker — Follow System / English / 简体中文 (instant, no restart)
 // ---------------------------------------------------------------------------
 
@@ -1334,6 +1390,7 @@ export default function SettingsScreen() {
   const [signingOut, setSigningOut] = useState(false);
   const { levelIndex: currentScaleIndex, setIndex: setScaleIndex } = useTextScale();
   const { preference: colorPref, setPreference: setColorPref } = useColorSchemePreference();
+  const avatarStyle = useAvatarStyle();
   const { t } = useTranslation();
   const { preference: langPref, resolved: langResolved, systemLanguage, setPreference: setLangPref } = useLanguagePreference();
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
@@ -1394,6 +1451,9 @@ export default function SettingsScreen() {
           />
           <View style={styles.settingsRowDividerFull} />
           <ThemePicker s={styles} current={colorPref} onChange={setColorPref} />
+          <View style={styles.settingsRowDividerFull} />
+          <AvatarStylePicker s={styles} current={avatarStyle} onChange={(k) => { setAvatarStyle(k); }}
+            previewName={accountName} previewAddress={address} />
         </Animated.View>
 
         {/* Localization */}
@@ -1597,6 +1657,11 @@ const styleFactory = () => ({
   themeOptionActive: { backgroundColor: color.accent.soft, borderWidth: 1.5, borderColor: color.accent.base },
   themeOptionLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
   themeOptionLabelActive: { color: color.accent.base, ...inter.semibold },
+  avatarPreviewCircle: {
+    width: 18, height: 18, borderRadius: 9, backgroundColor: color.accent.soft,
+    alignItems: 'center' as const, justifyContent: 'center' as const,
+  },
+  avatarPreviewLetter: { fontSize: 9, ...inter.bold, color: color.accent.base },
 
   // Slider
   sliderContainer: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: space['2xl'], paddingHorizontal: space.xl, gap: space.lg },

@@ -32,7 +32,9 @@
     "appearance": {
       "themeLight": "Светлая",
       "themeDark": "Тёмная",
-      "themeAuto": "Авто"
+      "themeAuto": "Авто",
+      "avatarInitials": "Инициалы",
+      "avatarIdenticon": "Идентикон"
     },
     "localization": {
       "autoExample": "Автоматически · {{example}}",

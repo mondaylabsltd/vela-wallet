@@ -32,7 +32,9 @@
     "appearance": {
       "themeLight": "淺色",
       "themeDark": "深色",
-      "themeAuto": "自動"
+      "themeAuto": "自動",
+      "avatarInitials": "首字母",
+      "avatarIdenticon": "圖形頭像"
     },
     "localization": {
       "autoExample": "自動 · {{example}}",

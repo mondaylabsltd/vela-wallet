@@ -53,6 +53,7 @@
     "expo-updates": "~55.0.25",
     "expo-web-browser": "~55.0.14",
     "i18next": "^26.3.1",
+    "identicons-esm": "1.0.1",
     "jpeg-js": "^0.4.4",
     "jsqr": "^1.4.0",
     "lucide-react-native": "^1.11.0",

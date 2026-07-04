@@ -32,7 +32,9 @@
     "appearance": {
       "themeLight": "Sáng",
       "themeDark": "Tối",
-      "themeAuto": "Tự động"
+      "themeAuto": "Tự động",
+      "avatarInitials": "Chữ cái đầu",
+      "avatarIdenticon": "Identicon"
     },
     "localization": {
       "autoExample": "Tự động · {{example}}",

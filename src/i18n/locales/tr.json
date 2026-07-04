@@ -32,7 +32,9 @@
     "appearance": {
       "themeLight": "Açık",
       "themeDark": "Koyu",
-      "themeAuto": "Otomatik"
+      "themeAuto": "Otomatik",
+      "avatarInitials": "Baş harfler",
+      "avatarIdenticon": "Identicon"
     },
     "localization": {
       "autoExample": "Otomatik · {{example}}",

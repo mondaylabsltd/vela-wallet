@@ -22,6 +22,7 @@ import { installMetricsConsole } from '@/services/metrics';
 import { installParallelConsole, applyParallelSpaceOnBoot } from '@/services/dev/parallel-space';
 import { ParallelSpaceBadge } from '@/components/dev/ParallelSpaceBadge';
 import { hasPendingUploads, loadLocalePrefs, loadRpcProviders, loadServiceEndpoints } from '@/services/storage';
+import { loadAvatarStyle } from '@/services/avatar-style';
 import i18n, { loadLanguage } from '@/i18n';
 import { LanguageProvider, useLanguagePreference } from '@/i18n/language';
 import { loadTextScale, TextScaleProvider } from '@/constants/text-scale';
@@ -157,6 +158,8 @@ export default function RootLayout() {
       // Warm provider-key cache so the RPC pool can read it synchronously.
       loadRpcProviders(),
       loadLocalePrefs(),
+      // Avatar style must be in the module cache before the first Home render.
+      loadAvatarStyle(),
       // Apply the stored UI language before the first render.
       loadLanguage(),
     ])
