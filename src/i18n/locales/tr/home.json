@@ -3,6 +3,7 @@
     "totalBalance": "Toplam bakiye",
     "balanceStale": "Bazı bakiyeler hâlâ güncelleniyor.",
     "balanceUnpriced": "Bazı tokenların fiyatı alınamadı.",
+    "lastUpdated": "Güncellendi {{ago}}",
     "tabActivity": "Etkinlik",
     "tabAssets": "Varlıklar",
     "tabConnections": "Bağlantılar",

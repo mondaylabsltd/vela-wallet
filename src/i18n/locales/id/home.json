@@ -3,6 +3,7 @@
     "totalBalance": "Total saldo",
     "balanceStale": "Sebagian saldo masih diperbarui.",
     "balanceUnpriced": "Harga beberapa token tidak dapat diperoleh.",
+    "lastUpdated": "Diperbarui {{ago}}",
     "tabActivity": "Aktivitas",
     "tabAssets": "Aset",
     "tabConnections": "Koneksi",

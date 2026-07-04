@@ -3,6 +3,7 @@
     "totalBalance": "Gesamtguthaben",
     "balanceStale": "Einige Guthaben werden noch aktualisiert.",
     "balanceUnpriced": "Für einige Token konnte kein Preis ermittelt werden.",
+    "lastUpdated": "Aktualisiert {{ago}}",
     "tabActivity": "Aktivität",
     "tabAssets": "Assets",
     "tabConnections": "Verbindungen",

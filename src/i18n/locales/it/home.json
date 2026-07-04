@@ -3,6 +3,7 @@
     "totalBalance": "Saldo totale",
     "balanceStale": "Alcuni saldi sono ancora in aggiornamento.",
     "balanceUnpriced": "Non è stato possibile ottenere il prezzo di alcuni token.",
+    "lastUpdated": "Aggiornato {{ago}}",
     "rescanButton": "Riscansiona",
     "rescanTitle": "Riscansiona l'attività recente",
     "rescanSubtitle": "Manca un pagamento? Interroga direttamente la blockchain per i trasferimenti recenti.",

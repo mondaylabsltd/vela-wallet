@@ -136,6 +136,9 @@ export default function HomeScreen() {
   const [noticeAllowed, setNoticeAllowed] = useState(false);
   const partialRetriesLeft = useRef(MAX_PARTIAL_RETRIES);
   const partialRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When balances were last synced — surfaced in the pull-to-refresh caption so
+  // the pull's payoff is a glance at freshness, not just a re-fetch.
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<number | null>(null);
   // Balance privacy — shared store (hero, feed, holdings, switcher, toast all
   // mask together); persisted, hydrate-race-safe.
   const { hidden, toggle: toggleHidden } = useBalancePrivacy();
@@ -228,6 +231,12 @@ export default function HomeScreen() {
     const addr = addressRef.current;
     if (addr) loadActivityItems(addr).then(commitActivity).catch(() => {});
   }, [localePrefs, commitActivity]);
+
+  // Pull-to-refresh caption: "Updated <relative time>" (the reason to pull is to
+  // see freshness). relativeTime is localized + re-evaluates each render.
+  const refreshStatus = lastRefreshedAt != null
+    ? t('home.lastUpdated', { ago: relativeTime(Math.floor(lastRefreshedAt / 1000)) })
+    : undefined;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -361,6 +370,7 @@ export default function HomeScreen() {
       if (addressRef.current !== address) return; // stale result for a previous account
       setTokens(result);
       setFailedChainIds(failed);
+      setLastRefreshedAt(Date.now());
       // Snapshot which of those failures are just rate-limiting (transient).
       setRateLimitedChainIds([...getRateLimitedChains()]);
       // Only trust the total as the new "last known good" when it's complete —
@@ -745,7 +755,7 @@ export default function HomeScreen() {
 
         {/* Content — branded pull-to-refresh (gesture-driven, cross-platform) */}
         {tab === 'activity' ? (
-          <VelaRefresh refreshing={refreshing} onRefresh={onRefresh}>
+          <VelaRefresh refreshing={refreshing} onRefresh={onRefresh} statusText={refreshStatus}>
             {(scrollProps) => (
               <Animated.FlatList
                 {...scrollProps}
@@ -795,10 +805,11 @@ export default function HomeScreen() {
             header={renderHeader()}
             refreshing={refreshing}
             onRefresh={onRefresh}
+            refreshStatus={refreshStatus}
             contentContainerStyle={listContentStyle}
           />
         ) : (
-          <VelaRefresh refreshing={refreshing} onRefresh={onRefresh}>
+          <VelaRefresh refreshing={refreshing} onRefresh={onRefresh} statusText={refreshStatus}>
             {(scrollProps) => (
               <Animated.ScrollView
                 {...scrollProps}

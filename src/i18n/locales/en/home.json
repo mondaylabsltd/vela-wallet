@@ -3,6 +3,7 @@
     "totalBalance": "Total balance",
     "balanceStale": "Some balances are still updating.",
     "balanceUnpriced": "Some tokens couldn't be priced.",
+    "lastUpdated": "Updated {{ago}}",
     "rescanButton": "Re-scan",
     "rescanTitle": "Re-scan recent activity",
     "rescanSubtitle": "Missing a payment? Re-query the blockchain directly for recent transfers.",

@@ -28,7 +28,7 @@
  *   </VelaRefresh>
  */
 import React, { useEffect, useRef } from 'react';
-import { Platform, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
@@ -45,15 +45,17 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
-import { color, createStyles, motion } from '@/constants/theme';
+import { color, createStyles, inter, motion, space, text } from '@/constants/theme';
 import { hapticLight } from '@/services/platform';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 /** Pull distance (px) at which a release fires a refresh. */
 const TRIGGER = 72;
-/** Resting indicator height while the refresh runs. */
-const REST = 54;
+/** Resting pull height while the refresh runs. Equal to TRIGGER so the band's
+    content sits fully inside the clip at rest (a smaller REST pushed the band up
+    and the overflow:hidden clip shaved the indicator's top). */
+const REST = TRIGGER;
 /** Resistance applied to pull beyond the trigger (1 = none, 0 = solid). */
 const OVERPULL = 0.4;
 const SPRING = motion.spring;
@@ -81,9 +83,12 @@ interface VelaRefreshProps {
   style?: StyleProp<ViewStyle>;
   /** Disable the pull (e.g. while a sheet is open). Scrolling still works. */
   enabled?: boolean;
+  /** Small caption under the indicator, e.g. "Updated 2m ago" — the reason the
+      pull exists is to glance at freshness. Shown while pulling/refreshing. */
+  statusText?: string;
 }
 
-export function VelaRefresh({ refreshing, onRefresh, children, style, enabled = true }: VelaRefreshProps) {
+export function VelaRefresh({ refreshing, onRefresh, children, style, enabled = true, statusText }: VelaRefreshProps) {
   const scrollRef = useRef<any>(null);
   const rootRef = useRef<any>(null);
 
@@ -260,6 +265,9 @@ export function VelaRefresh({ refreshing, onRefresh, children, style, enabled = 
         <View style={[styles.clip, style]}>
           <Animated.View pointerEvents="none" style={[styles.band, bandStyle]}>
             <RefreshIndicator pull={pull} refreshing={refreshing} />
+            {statusText ? (
+              <Text style={styles.status} numberOfLines={1}>{statusText}</Text>
+            ) : null}
           </Animated.View>
           <Animated.View style={[styles.fill, listStyle]}>
             {children(scrollProps)}
@@ -338,7 +346,13 @@ const styles = createStyles(() => ({
     height: TRIGGER,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: space.xs,
     zIndex: 0,
+  },
+  status: {
+    fontSize: text.xs,
+    ...inter.medium,
+    color: color.fg.subtle,
   },
   indicator: {
     width: RING + 14,

@@ -3,6 +3,7 @@
     "totalBalance": "总余额",
     "balanceStale": "部分余额仍在更新。",
     "balanceUnpriced": "部分代币无法获取价格。",
+    "lastUpdated": "上次更新 · {{ago}}",
     "rescanButton": "重新扫描",
     "rescanTitle": "重新扫描近期活动",
     "rescanSubtitle": "没收到某笔款项？直接向区块链重新查询近期转账。",

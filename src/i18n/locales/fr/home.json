@@ -3,6 +3,7 @@
     "totalBalance": "Solde total",
     "balanceStale": "Certains soldes sont encore en cours de mise à jour.",
     "balanceUnpriced": "Impossible d'obtenir le prix de certains tokens.",
+    "lastUpdated": "Mis à jour {{ago}}",
     "tabActivity": "Activité",
     "tabAssets": "Actifs",
     "tabConnections": "Connexions",
