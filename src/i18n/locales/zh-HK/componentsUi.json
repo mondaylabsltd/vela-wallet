@@ -115,8 +115,8 @@
       "deployedNo": "否（首次交易）"
     },
     "dock": {
-      "receive": "接收",
-      "send": "發送",
+      "receive": "收款",
+      "send": "轉賬",
       "scan": "掃描"
     },
     "networkFilter": {
@@ -126,10 +126,6 @@
       "showEvery": "顯示每條區塊鏈",
       "clearFilter": "清除網絡篩選",
       "toggleSearch": "搜尋區塊鏈"
-    },
-    "chart": {
-      "noDataFor": "{{label}} 沒有數據",
-      "tapHint": "點按長條以查看餘額"
     },
     "signingApprove": {
       "spendingCap": "授權上限",
@@ -171,11 +167,12 @@
     },
     "bugReport": {
       "title": "回報問題",
-      "subtitle": "告訴我們出了甚麼問題 — 內容會直接送到我們的問題追蹤系統。",
+      "subtitle": "告訴我們出了甚麼問題。",
       "whatLabel": "發生了甚麼事？",
       "whatPlaceholder": "例如：我點按「發送」後畫面就卡住了。",
       "stepsLabel": "重現步驟（選填）",
       "stepsPlaceholder": "1. 前往⋯\n2. 點按⋯\n3. 看到⋯",
+      "addSteps": "+ 新增重現步驟",
       "previewToggle": "將會傳送的內容",
       "consent": "只會傳送你在此看到的內容 — 絕不會傳送你的密鑰、助記詞或餘額。",
       "send": "傳送回報",

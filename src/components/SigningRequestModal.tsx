@@ -627,7 +627,6 @@ export function SigningSheet({
                 onConfirm={confirm}
                 loading={isSigning || resolving}
                 disabled={confirmDisabled}
-                tone="danger"
               />
               <VelaButton
                 title={t('componentsUi.signing.reject')}

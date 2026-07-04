@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, View, Text, Pressable, ScrollView } from 'react-native';
+import React from 'react';
+import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useLocalSearchParams } from 'expo-router';
 import { useSafeRouter } from '@/hooks/use-safe-router';
@@ -13,15 +13,12 @@ import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { TokenLogo } from '@/components/TokenLogo';
 import { AmountText } from '@/components/ui/AmountText';
-import { SectionLabel } from '@/components/ui/SectionLabel';
 import { Divider } from '@/components/ui/DetailRow';
-import { BarChart } from '@/components/ui/BarChart';
 import { color, text, inter, space, font, createStyles } from '@/constants/theme';
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { shortAddr, tokenChainId as networkToChainId } from '@/models/types';
 import type { APIToken } from '@/models/types';
 import { badgeNetworkFor, chainName, explorerTokenURL, explorerAddressURL } from '@/models/network';
-import { fetch7DayHistory, type BalancePoint } from '@/services/balance-history';
 import { Copy, Check, ArrowLeft, ExternalLink } from 'lucide-react-native';
 
 export default function TokenDetailScreen() {
@@ -60,23 +57,6 @@ export default function TokenDetailScreen() {
   const { activeAccount, state } = useWallet();
   const walletAddress = activeAccount?.address ?? state.address;
   const { copied, copy } = useCopyFeedback();
-  const [historyData, setHistoryData] = useState<BalancePoint[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
-
-  useEffect(() => {
-    if (!walletAddress) return;
-    setHistoryLoading(true);
-    fetch7DayHistory({
-      address: walletAddress,
-      chainId,
-      tokenAddress: contractAddress,
-      decimals,
-      currentBalance: balance,
-    })
-      .then(setHistoryData)
-      .catch(() => {})
-      .finally(() => setHistoryLoading(false));
-  }, [walletAddress, chainId, contractAddress, decimals, balance]);
   const copyContract = () => {
     if (!contractAddress) return;
     copy(contractAddress);
@@ -135,21 +115,6 @@ export default function TokenDetailScreen() {
               tailStyle={styles.heroUsdTail}
               containerStyle={styles.heroUsdBox}
             />
-          )}
-        </Animated.View>
-
-        {/* 7-day balance chart — open section, hairline-grouped by a SectionLabel.
-            The BarChart itself is data viz and stays as-is. */}
-        <Animated.View entering={fadeInDown(50, 400)} style={styles.chartSection}>
-          <SectionLabel>{t('tokenDetail.chartTitle')}</SectionLabel>
-          {historyLoading ? (
-            <View style={styles.chartLoading}>
-              <ActivityIndicator size="small" color={color.fg.subtle} />
-            </View>
-          ) : historyData.length > 0 ? (
-            <BarChart data={historyData} symbol={symbol} />
-          ) : (
-            <Text style={styles.chartEmpty}>{t('tokenDetail.chartEmpty')}</Text>
           )}
         </Animated.View>
 
@@ -301,23 +266,6 @@ const styles = createStyles(() => ({
   heroUsdTail: {
     ...inter.medium,
     color: color.fg.subtle,
-  },
-
-  // Chart — open section under a SectionLabel (no card). BarChart is data viz.
-  chartSection: {
-    marginBottom: space.lg,
-  },
-  chartLoading: {
-    height: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  chartEmpty: {
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.subtle,
-    textAlign: 'center' as const,
-    paddingVertical: space['3xl'],
   },
 
   buttonRow: {

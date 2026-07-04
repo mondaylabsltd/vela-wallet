@@ -13,6 +13,7 @@
  * currencies like VND with no code change. Names/symbols come from the catalog.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Localization from 'expo-localization';
 import { currencyMeta } from '@/services/currency-catalog';
 import { getFxRate, getSupportedFxCodes } from '@/services/fiat-fx';
 import { getChainlinkRate, isChainlinkFiat, FIAT_FEED_CODES } from '@/services/fiat-rates';
@@ -111,9 +112,53 @@ export function formatFiat(value: number, code: string, symbol: string): string 
 
 const KEY = 'vela.displayCurrency';
 let _code = 'USD';
+let _seedPromise: Promise<void> | null = null;
+
+/**
+ * First launch only (no stored preference): derive the display currency from the
+ * device region (NSLocale / java.util.Currency via expo-localization — no Hermes
+ * Intl involved; `currencyCode` is null on web, which safely falls through).
+ *
+ * The seed is committed — persisted — only after a REAL rate resolves. A seeded
+ * currency must never render at the rate-1 fallback: ₫78 instead of ₫2,000,000
+ * is strictly worse than showing USD. Until a rate resolves we stay on USD and,
+ * because the key stays absent, retry on the next launch. An absent key always
+ * means "the user never chose" — a user's explicit choice is never overwritten.
+ */
+async function seedFromDeviceLocale(): Promise<void> {
+  let cand: string | null = null;
+  try {
+    // Primary locale only: it carries the region signal. Scanning secondary
+    // keyboard/language entries would mis-seed multilingual users.
+    for (const locale of Localization.getLocales()) {
+      const c = locale.currencyCode?.toUpperCase();
+      if (!c) continue; // web / regionless entries
+      if (/^[A-Z]{3}$/.test(c)) cand = c;
+      break;
+    }
+  } catch { return; }
+  if (!cand || cand === 'USD') return;
+  // No static allow-list here: the FX endpoint prices ~160 currencies (VND
+  // included) that the base list doesn't — resolveRate IS the support check.
+  const rate = await resolveRate(cand);
+  if (rate == null) return; // offline or unpriceable — stay USD, retry next launch
+  try {
+    // The rate fetch took real network time; if the user explicitly picked a
+    // currency meanwhile (Settings), their choice wins — never overwrite.
+    if (await AsyncStorage.getItem(KEY)) return;
+    _code = cand;
+    await AsyncStorage.setItem(KEY, cand);
+  } catch { /* best effort — key stays absent, retried next launch */ }
+}
 
 export async function loadCurrency(): Promise<string> {
-  try { const v = await AsyncStorage.getItem(KEY); if (v) _code = v; } catch { /* keep default */ }
+  try {
+    const v = await AsyncStorage.getItem(KEY);
+    if (v) { _code = v; return _code; }
+    // Single-flight: many screens call loadCurrency concurrently on startup.
+    _seedPromise ??= seedFromDeviceLocale();
+    await _seedPromise;
+  } catch { /* keep default */ }
   return _code;
 }
 export function getCurrencyCode(): string { return _code; }
@@ -124,12 +169,13 @@ export async function setCurrency(code: string): Promise<void> {
 }
 
 /**
- * USD → `code` rate (1 for USD), resolved through the source abstraction:
+ * USD → `code` rate, or null when no source can price it right now:
  *   1. Chainlink fiat/USD feed (decentralized, on-chain) when available.
  *   2. The configurable fiat-rate endpoint (Frankfurter/ECB by default).
- * Falls back to 1 so the balance always renders.
+ * Callers that must distinguish "really 1" from "unpriceable" (e.g. the
+ * first-launch seed) use this; display paths use `getRate`.
  */
-export async function getRate(code: string): Promise<number> {
+export async function resolveRate(code: string): Promise<number | null> {
   if (code === 'USD') return 1;
 
   // 1. Chainlink fiat/USD feed (ENS-addressed on Ethereum mainnet).
@@ -146,5 +192,10 @@ export async function getRate(code: string): Promise<number> {
     if (r != null && r > 0) return r;
   } catch { /* fall through */ }
 
-  return 1;
+  return null;
+}
+
+/** USD → `code` rate (1 for USD). Falls back to 1 so the balance always renders. */
+export async function getRate(code: string): Promise<number> {
+  return (await resolveRate(code)) ?? 1;
 }

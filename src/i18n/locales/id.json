@@ -32,11 +32,12 @@
     "appearance": {
       "themeLight": "Terang",
       "themeDark": "Gelap",
-      "themeAuto": "Otomatis",
+      "themeAuto": "Ikuti Sistem",
       "avatarInitials": "Inisial",
       "avatarIdenticon": "Identicon"
     },
     "localization": {
+      "currencyTitle": "Mata uang",
       "autoExample": "Otomatis · {{example}}",
       "numberTitle": "Format angka",
       "numberSubtitle": "Cara nominal dikelompokkan dan tanda desimal yang ditampilkan.",

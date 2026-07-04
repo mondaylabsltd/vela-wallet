@@ -95,7 +95,12 @@ export function ReceiveRequestControls({ recipient, onChange }: Props) {
     <View style={styles.wrap}>
       {/* Asset (network + token in one) — open row, hairline-separated */}
       <SectionLabel>{t('receive.request.token')}</SectionLabel>
-      <Pressable style={styles.selectRow} onPress={() => setShowPicker(true)}>
+      <Pressable
+        style={styles.selectRow}
+        onPress={() => setShowPicker(true)}
+        accessibilityRole="button"
+        accessibilityLabel={t('receive.request.selectToken')}
+      >
         <TokenLogo symbol={asset.symbol} logoUrls={tokenLogoURLs(asset)} chain={tokenBadgeNetwork(asset)} size={32} />
         <View style={styles.selectInfo}>
           <Text style={styles.selectValue} numberOfLines={1}>{asset.symbol}</Text>

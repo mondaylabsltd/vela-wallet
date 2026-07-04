@@ -32,11 +32,12 @@
     "appearance": {
       "themeLight": "Sáng",
       "themeDark": "Tối",
-      "themeAuto": "Tự động",
+      "themeAuto": "Theo hệ thống",
       "avatarInitials": "Chữ cái đầu",
       "avatarIdenticon": "Identicon"
     },
     "localization": {
+      "currencyTitle": "Tiền tệ",
       "autoExample": "Tự động · {{example}}",
       "numberTitle": "Định dạng số",
       "numberSubtitle": "Cách nhóm chữ số và dấu thập phân hiển thị.",

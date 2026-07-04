@@ -18,8 +18,15 @@ a single connection surfaced), not as an asset-heavy portfolio grid. It presents
 ## 2. Background & context
 
 Vela is payment-first and minimal (A01). The home IA was rebuilt from asset-first to
-activity-first/single-screen: Activity = ERC-20 + EIP-7708 transfers; Connections = a single dApp
-session. The goal is that the most common job (pay / see what happened) is the default view.
+activity-first/single-screen: Activity = ERC-20 + EIP-7708 transfers; Assets = the holdings list
+(`HoldingsList` → token detail); Connections = a single dApp session. The goal is that the most
+common job (pay / see what happened) is the default view, with holdings one visible tap away.
+
+2026-07 hero simplification: the hero is bare — label (`Total balance · CODE`) plus the number,
+which tap-toggles balance privacy (persisted; also masks the feed and holdings). The
+display-currency control moved to Settings › Localization (N01 FR-1, E06); the external
+"Statement" link was removed (per-tx explorer links in the detail sheet cover verification); the
+tap-balance asset sheet was replaced by the Assets tab.
 
 ## 3. Users & stories
 
@@ -41,7 +48,10 @@ session. The goal is that the most common job (pay / see what happened) is the d
 
 ## 6. UX / flow notes
 
-Single-screen, scrollable. Balance hero can open an asset sheet. Design = "depth through shadow, not glass" (M01). No feature grid.
+Single-screen, scrollable. The hero's only interaction is tap-to-hide (an EyeOff glyph appears
+only beside the masked value). Holdings live in the `[ Activity | Assets | Connections ]`
+segmented toggle; the network filter applies to both Activity and Assets. Design = "depth through
+shadow, not glass" (M01). No feature grid.
 
 ## 7. Acceptance criteria
 
@@ -60,5 +70,5 @@ Single-screen, scrollable. Balance hero can open an asset sheet. Design = "depth
 
 ## 10. Source anchors
 
-- `src/screens/wallet/HomeScreen.tsx`, `src/components/ui/WaveDock.tsx`, `src/components/ui/VelaRefresh.tsx`.
+- `src/screens/wallet/HomeScreen.tsx`, `src/components/ui/HoldingsList.tsx`, `src/components/ui/WaveDock.tsx`, `src/components/ui/VelaRefresh.tsx`.
 - `docs/CONTENT-SOURCE-100-CLUES.md` — clues 64, 79, 85; memory `project_home_ia_redesign`.

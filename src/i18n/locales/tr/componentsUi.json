@@ -165,17 +165,14 @@
       "clearFilter": "Ağ filtresini temizle",
       "toggleSearch": "Zincirlerde ara"
     },
-    "chart": {
-      "noDataFor": "{{label}} için veri yok",
-      "tapHint": "Bakiyeyi görmek için bir çubuğa dokunun"
-    },
     "bugReport": {
       "title": "Sorun bildir",
-      "subtitle": "Neyin ters gittiğini anlatın — doğrudan sorun takip sistemimize iletilir.",
+      "subtitle": "Neyin ters gittiğini anlatın.",
       "whatLabel": "Ne oldu?",
       "whatPlaceholder": "ör. Gönder'e dokundum ve ekran dondu.",
       "stepsLabel": "Yeniden oluşturma adımları (isteğe bağlı)",
       "stepsPlaceholder": "1. Şuraya gidin…\n2. Şuna dokunun…\n3. Şunu görün…",
+      "addSteps": "+ Yeniden oluşturma adımları ekle",
       "previewToggle": "Gönderilecekler",
       "consent": "Yalnızca burada gördüğünüz gönderilir — asla anahtarlarınız, kurtarma ifadeniz veya bakiyeleriniz değil.",
       "send": "Raporu gönder",

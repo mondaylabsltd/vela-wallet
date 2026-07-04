@@ -4,8 +4,10 @@ import { ReceiveRequestControls } from '@/components/ReceiveRequestControls';
 import { ReceiveShareCard, type ShareCardModel } from '@/components/ReceiveShareCard';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { SectionLabel } from '@/components/ui/SectionLabel';
+import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
+import { VelaButton } from '@/components/ui/VelaButton';
 import { fadeIn, fadeInDown } from '@/constants/entering';
-import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
+import { color, createStyles, font, inter, leading, radius, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { chainName, getAllNetworksSync } from '@/models/network';
 import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken } from '@/models/types';
@@ -14,7 +16,8 @@ import { hapticLight, hapticSuccess, isAppActive, showAlert } from '@/services/p
 import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { composeShareBlob, saveReceiveCard } from '@/services/share-card';
 import { fetchTokens } from '@/services/wallet-api';
-import { ArrowLeft, Check, Copy, Download, ShieldAlert } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ArrowLeft, Check, Copy, ImageDown, ShieldAlert } from 'lucide-react-native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Platform, Pressable, ScrollView, Text, View } from 'react-native';
@@ -25,6 +28,14 @@ const FAST_INTERVAL_MS = 3_000;
 const SLOW_INTERVAL_MS = 60_000;
 const FAST_PHASE_MS = 1 * 60_000;
 const TOTAL_LISTEN_MS = 5 * 60_000;
+
+// QR quiet zone must stay literal white in BOTH color schemes — scanners need
+// the contrast, and every bg.* token darkens in dark mode.
+const QR_QUIET_ZONE = '#FFFFFF';
+// Deposit "landed" dot; item rows indent past it to align under the time label.
+const DEPOSIT_DOT_SIZE = 6;
+// The warning gate shows once per account, then decays to a one-line reminder.
+const warnedStorageKey = (address: string) => `vela.receiveWarned.${address}`;
 
 export default function ReceiveScreen() {
   const { t } = useTranslation();
@@ -39,7 +50,27 @@ export default function ReceiveScreen() {
   const [deposits, setDeposits] = useState<DepositEntry[]>([]);
   const previousTokens = useRef<APIToken[] | null>(null);
   const { copied, copy } = useCopyFeedback(2000);
-  const [warningDismissed, setWarningDismissed] = useState(false);
+
+  // Per-account acknowledge flag: null = loading (keep the QR covered so first
+  // visits never flash it), false = show the gate, true = one-line reminder.
+  const [warned, setWarned] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    setWarned(null);
+    AsyncStorage.getItem(warnedStorageKey(address))
+      .then((v) => { if (!cancelled) setWarned(v === '1'); })
+      .catch(() => { if (!cancelled) setWarned(false); });
+    return () => { cancelled = true; };
+  }, [address]);
+  const acknowledgeWarning = useCallback(() => {
+    setWarned(true);
+    if (address) AsyncStorage.setItem(warnedStorageKey(address), '1').catch(() => {});
+  }, [address]);
+
+  // Entrances play once (design language rule 10) — never replay on tab switch.
+  const hasEntered = useRef(false);
+  useEffect(() => { hasEntered.current = true; }, []);
 
   // Address vs EIP-681 payment-request mode.
   const [mode, setMode] = useState<'address' | 'request'>('address');
@@ -183,11 +214,23 @@ export default function ReceiveScreen() {
   }, [shareModel, shareFileName, t]);
 
   // Save-image button — sits right under the copy button inside the QR card,
-  // so it serves both Address and Request modes.
+  // so it serves both Address and Request modes. Secondary action: muted icon +
+  // ink label (accent is reserved for the copy action on each tab).
+  const saveDisabled = savingImage || warned !== true;
   const saveButton = (
-    <Pressable style={styles.saveBtn} onPress={onSaveImage} disabled={savingImage || !warningDismissed} hitSlop={8}>
-      <Download size={17} color={color.accent.base} strokeWidth={2.2} />
-      <Text style={styles.saveBtnText}>{t('receive.request.saveImage')}</Text>
+    <Pressable
+      style={[styles.saveBtn, savingImage && styles.saveBtnBusy]}
+      onPress={onSaveImage}
+      disabled={saveDisabled}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={t('receive.request.saveImage')}
+      accessibilityState={{ disabled: saveDisabled, busy: savingImage }}
+    >
+      <ImageDown size={17} color={color.fg.muted} strokeWidth={2.2} />
+      <Text style={styles.saveBtnText}>
+        {t(savingImage ? 'receive.shareGenerating' : 'receive.request.saveImage')}
+      </Text>
     </Pressable>
   );
 
@@ -196,7 +239,13 @@ export default function ReceiveScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={8} style={styles.navBtn}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={8}
+            style={styles.navBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t('receive.a11yBack')}
+          >
             <ArrowLeft size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
           <Text style={styles.title}>{t('receive.title')}</Text>
@@ -204,22 +253,19 @@ export default function ReceiveScreen() {
         </View>
 
         {/* Mode toggle: plain address vs EIP-681 payment request */}
-        <View style={styles.segWrap}>
-          {(['address', 'request'] as const).map((m) => (
-            <Pressable
-              key={m}
-              style={[styles.segBtn, mode === m && styles.segBtnActive]}
-              onPress={() => { hapticLight(); setMode(m); }}
-            >
-              <Text style={[styles.segText, mode === m && styles.segTextActive]}>
-                {t(m === 'address' ? 'receive.modeAddress' : 'receive.modeRequest')}
-              </Text>
-            </Pressable>
-          ))}
+        <View style={styles.segRow}>
+          <SegmentedToggle<'address' | 'request'>
+            options={[
+              { key: 'address', label: t('receive.modeAddress') },
+              { key: 'request', label: t('receive.modeRequest') },
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
         </View>
 
         {/* QR — open on the page, no card */}
-        <Animated.View entering={fadeInDown(100, 400)}>
+        <Animated.View entering={hasEntered.current ? undefined : fadeInDown(100, 400)}>
           <View style={styles.qrCardWrap}>
             <View style={styles.qrCard}>
               {/* QR — keeps its own white quiet-zone frame (required to scan) */}
@@ -233,18 +279,27 @@ export default function ReceiveScreen() {
                 )}
               </View>
 
-              {/* Identity — below the QR */}
-              <Text style={styles.walletName}>{accountName}</Text>
-
-              {/* In request mode, show the human-readable summary above the copy button */}
-              {isRequest && !!request.summary && (
-                <Text style={styles.requestSummary} numberOfLines={2}>{request.summary}</Text>
+              {/* Acknowledged accounts get a one-line reminder instead of the gate */}
+              {warned === true && (
+                <Text style={styles.warningReminder}>{t('receive.warningReminder')}</Text>
               )}
 
-              {/* Big, easy-to-tap copy button — copies the address or the EIP-681 URI */}
+              {/* Identity — below the QR; request mode also shows the receiving
+                  address so the requester can self-check it */}
+              <View style={styles.identity}>
+                <Text style={styles.walletName}>{accountName}</Text>
+                {isRequest && !!truncatedAddress && (
+                  <Text style={styles.addressCaption} numberOfLines={1}>{truncatedAddress}</Text>
+                )}
+              </View>
+
+              {/* Big, easy-to-tap copy button — THE accent action of each tab
+                  (address tab: copy address; request tab: copy payment link) */}
               <Pressable
-                onPress={warningDismissed ? copyValue : undefined}
-                style={[styles.copyBtn, copied && styles.copyBtnCopied]}
+                onPress={warned === true ? copyValue : undefined}
+                style={styles.copyBtn}
+                accessibilityRole="button"
+                accessibilityLabel={isRequest ? t('receive.copyRequestLink') : t('receive.a11yCopyAddress')}
               >
                 <Text style={[styles.copyAddr, isRequest && styles.copyAddrRequest, copied && styles.copyAddrCopied]} numberOfLines={1}>
                   {copied ? t('receive.copied') : (isRequest ? t('receive.copyRequestLink') : truncatedAddress)}
@@ -252,7 +307,7 @@ export default function ReceiveScreen() {
                 {copied ? (
                   <Check size={18} color={color.success.base} strokeWidth={2.5} />
                 ) : (
-                  <Copy size={18} color={color.fg.muted} strokeWidth={2} />
+                  <Copy size={18} color={color.accent.base} strokeWidth={2} />
                 )}
               </Pressable>
 
@@ -280,60 +335,66 @@ export default function ReceiveScreen() {
               )}
             </View>
 
-            {/* Warning overlay */}
-            {!warningDismissed && (
+            {/* Warning GATE — covers the QR while the flag loads (null) and until
+                first acknowledgement (false); content only once we know it's new */}
+            {warned !== true && (
               <View style={styles.warningOverlay}>
-                <View style={styles.warningContent}>
-                  <View style={styles.warningIconWrap}>
-                    <ShieldAlert size={28} color={color.accent.base} strokeWidth={2} />
+                {warned === false && (
+                  <View style={styles.warningContent}>
+                    <View style={styles.warningIconWrap}>
+                      <ShieldAlert size={28} color={color.warning.base} strokeWidth={2} />
+                    </View>
+                    <Text style={styles.warningTitle}>{t('receive.warningTitle')}</Text>
+                    <Text style={styles.warningText}>
+                      {t('receive.warningBody')}
+                    </Text>
+                    <Text style={styles.warningReassure}>
+                      {t('receive.warningCounterfactual')}
+                    </Text>
+                    <VelaButton
+                      title={t('receive.warningConfirm')}
+                      onPress={acknowledgeWarning}
+                      style={styles.warningBtn}
+                    />
                   </View>
-                  <Text style={styles.warningTitle}>{t('receive.warningTitle')}</Text>
-                  <Text style={styles.warningText}>
-                    {t('receive.warningBody')}
-                  </Text>
-                  <Text style={styles.warningReassure}>
-                    {t('receive.warningCounterfactual')}
-                  </Text>
-                  <Pressable
-                    style={styles.warningBtn}
-                    onPress={() => setWarningDismissed(true)}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('receive.warningConfirm')}
-                  >
-                    <Text style={styles.warningBtnText}>{t('receive.warningConfirm')}</Text>
-                  </Pressable>
-                </View>
+                )}
               </View>
             )}
           </View>
         </Animated.View>
 
-        {isRequest ? (
-          /* Request builder */
-          <Animated.View entering={fadeInDown(200, 400)}>
-            {address ? <ReceiveRequestControls recipient={address} onChange={setRequest} /> : null}
-          </Animated.View>
-        ) : (
-          /* Supported networks */
-          <Animated.View entering={fadeInDown(200, 400)}>
-            <SectionLabel>{t('receive.networksLabel', { count: networks.length })}</SectionLabel>
-
-            <View style={styles.networkGrid}>
-              {networks.map((network) => (
-                <View key={network.id} style={styles.networkChip}>
+        {/* Lower half — ONE persistent Animated.View so switching tabs swaps the
+            content without remounting (no entrance replay, no jolt) */}
+        <Animated.View entering={hasEntered.current ? undefined : fadeInDown(200, 400)}>
+          {isRequest ? (
+            /* Request builder */
+            address ? <ReceiveRequestControls recipient={address} onChange={setRequest} /> : null
+          ) : (
+            /* Supported networks — a wrapped logo strip, names live in the a11y label */
+            <>
+              <SectionLabel>{t('receive.networksLabel')}</SectionLabel>
+              <View
+                style={styles.networkStrip}
+                accessible
+                accessibilityLabel={networks.map((n) => n.displayName).join(', ')}
+              >
+                {networks.map((network) => (
                   <ChainLogo
+                    key={network.id}
                     label={network.iconLabel}
                     color={network.iconColor}
                     bgColor={network.iconBg}
                     logoURL={network.logoURL}
                     size={22}
                   />
-                  <Text style={styles.networkChipName} numberOfLines={1}>{network.displayName}</Text>
-                </View>
-              ))}
-            </View>
-          </Animated.View>
-        )}
+                ))}
+              </View>
+              <Text style={styles.networksLine}>
+                {t('receive.networksLine', { count: networks.length })}
+              </Text>
+            </>
+          )}
+        </Animated.View>
       </ScrollView>
 
       {/* Off-screen branded card — the capture target for native share/save. */}
@@ -365,46 +426,19 @@ const styles = createStyles(() => ({
   },
 
   // Mode toggle
-  segWrap: {
+  segRow: {
     flexDirection: 'row',
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.full,
-    padding: 4,
     marginBottom: space.xl,
   },
-  segBtn: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: space.md,
-    borderRadius: radius.full,
-  },
-  segBtnActive: {
-    backgroundColor: color.bg.raised,
-    ...shadow.sm,
-  },
-  segText: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.fg.muted,
-  },
-  segTextActive: {
-    color: color.fg.base,
-  },
 
-  // Request summary + share/save
-  requestSummary: {
-    fontSize: text.base,
+  // Request tab: the copy row reads as a text button (UI face, accent ink) —
+  // inter.semibold replaces the mono face copyAddr sets.
+  copyAddrRequest: {
+    textAlign: 'center',
     ...inter.semibold,
     color: color.accent.base,
-    textAlign: 'center',
-    marginBottom: space.md,
   },
-  copyAddrRequest: {
-    fontFamily: undefined,
-    textAlign: 'center',
-  },
-  // Save-image button — plain accent action (no fill), under the copy row.
+  // Save-image button — secondary action: muted icon, ink label, no accent.
   saveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -416,10 +450,13 @@ const styles = createStyles(() => ({
     paddingHorizontal: space.md,
     minHeight: 44,
   },
+  saveBtnBusy: {
+    opacity: 0.4,
+  },
   saveBtnText: {
     fontSize: text.sm,
     ...inter.semibold,
-    color: color.accent.base,
+    color: color.fg.base,
   },
   navBtn: {
     width: 40,
@@ -432,7 +469,8 @@ const styles = createStyles(() => ({
     ...inter.bold,
     color: color.fg.base,
   },
-  headerSpacer: { minWidth: 50 },
+  // Mirrors navBtn's width so the title sits optically centered.
+  headerSpacer: { width: 40 },
 
   // QR Card wrapper (for overlay positioning)
   qrCardWrap: {
@@ -475,7 +513,7 @@ const styles = createStyles(() => ({
     ...inter.regular,
     color: color.fg.subtle,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: text.base * leading.relaxed,
   },
   // Positive counterfactual reassurance — reads as trust, not caution, so it's
   // tinted success rather than the muted caution copy above it.
@@ -484,22 +522,20 @@ const styles = createStyles(() => ({
     ...inter.medium,
     color: color.success.base,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: text.sm * leading.relaxed,
     marginTop: space.sm,
   },
   warningBtn: {
-    backgroundColor: color.accent.base,
-    borderRadius: radius.lg,
-    paddingVertical: space.lg,
-    paddingHorizontal: space['4xl'],
-    marginTop: space.md,
     alignSelf: 'stretch',
-    alignItems: 'center',
+    marginTop: space.md,
   },
-  warningBtnText: {
-    fontSize: text.base,
-    ...inter.semibold,
-    color: color.fg.inverse,
+  // Post-acknowledgement reminder — replaces the gate on later visits.
+  warningReminder: {
+    fontSize: text.xs,
+    ...inter.regular,
+    color: color.fg.subtle,
+    textAlign: 'center',
+    marginBottom: space.lg,
   },
 
   // QR — open on the page (no card), content simply centered
@@ -513,7 +549,7 @@ const styles = createStyles(() => ({
     borderRadius: radius.xl,
     padding: space['2xl'],
     marginBottom: space.xl,
-    backgroundColor: "#FFFFFF"
+    backgroundColor: QR_QUIET_ZONE,
   },
   qrPlaceholder: {
     width: 200,
@@ -527,25 +563,36 @@ const styles = createStyles(() => ({
     fontSize: text.base,
     color: color.fg.subtle,
   },
+  identity: {
+    alignItems: 'center',
+    gap: space.xs,
+    marginBottom: space.lg,
+  },
   walletName: {
     fontSize: text['2xl'],
     ...inter.bold,
     color: color.fg.base,
-    marginBottom: space.lg,
+  },
+  // Request mode: the receiving address, so the requester can self-check it.
+  addressCaption: {
+    fontSize: text.sm,
+    ...inter.regular,
+    fontFamily: font.mono,
+    color: color.fg.muted,
   },
 
-  // Copy address — plain de-boxed row (no fill/border), still a large tap target
+  // Copy address — plain de-boxed row (no fill/border), still a large tap
+  // target; stretched so the row width never jumps as the label changes.
   copyBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: space.md,
-    alignSelf: 'center',
+    alignSelf: 'stretch',
     paddingVertical: space.lg,
     paddingHorizontal: space.md,
     minHeight: 44,
   },
-  copyBtnCopied: {},
   copyAddr: {
     flexShrink: 1,
     fontSize: text.base,
@@ -581,23 +628,24 @@ const styles = createStyles(() => ({
     marginBottom: space.sm,
   },
   depositDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: DEPOSIT_DOT_SIZE,
+    height: DEPOSIT_DOT_SIZE,
+    borderRadius: DEPOSIT_DOT_SIZE / 2,
     backgroundColor: color.success.base,
   },
+  // Success ink stays on the dot + amount only; time/meta are plain muted text.
   depositTime: {
     fontSize: text.xs,
     ...inter.medium,
-    color: color.success.base,
-    opacity: 0.7,
+    color: color.fg.muted,
   },
   depositRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'baseline',
-    paddingLeft: 14,
-    marginTop: 2,
+    // Inset past the dot so amounts align under the time label.
+    paddingLeft: DEPOSIT_DOT_SIZE + space.sm,
+    marginTop: space.xs,
   },
   depositAmount: {
     fontSize: text.base,
@@ -607,32 +655,20 @@ const styles = createStyles(() => ({
   depositMeta: {
     fontSize: text.sm,
     ...inter.regular,
-    color: color.success.base,
-    opacity: 0.7,
+    color: color.fg.muted,
   },
 
-  // Networks — compact chip grid
-  networkGrid: {
+  // Networks — a single wrapped strip of chain logos (no pill boxes)
+  networkStrip: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: space.md,
-    marginBottom: space['4xl'],
-  },
-  networkChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: space.md,
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.full,
-    paddingHorizontal: space.lg,
-    paddingVertical: space.md,
-    width: '48.5%',
+    marginBottom: space.lg,
   },
-  networkChipName: {
+  networksLine: {
     fontSize: text.sm,
-    ...inter.semibold,
-    color: color.fg.base,
-    flexShrink: 1,
+    ...inter.regular,
+    color: color.fg.subtle,
+    marginBottom: space['4xl'],
   },
 }));

@@ -165,9 +165,15 @@ export function RpcProvidersModal({ visible, onClose }: { visible: boolean; onCl
                 </View>
 
                 <View style={s.actionsRow}>
-                  <Pressable onPress={() => openURL(meta.keyUrl)} hitSlop={8} style={s.getKeyBtn}>
+                  <Pressable
+                    onPress={() => openURL(meta.keyUrl)}
+                    hitSlop={8}
+                    style={s.getKeyBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('settingsModals.rpcProviders.getKey', { defaultValue: 'Get a key' })}
+                  >
                     <Text style={s.getKeyText}>{t('settingsModals.rpcProviders.getKey', { defaultValue: 'Get a key' })}</Text>
-                    <ExternalLink size={13} color={color.accent.base} strokeWidth={2} />
+                    <ExternalLink size={13} color={color.fg.muted} strokeWidth={2} />
                   </Pressable>
                   {hasKey ? (
                     <Pressable onPress={() => runTest(id, value)} hitSlop={8} style={s.testBtn} disabled={test?.status === 'testing'}>
@@ -288,8 +294,9 @@ const styleFactory = () => ({
   eyeBtn: { padding: space.sm },
 
   actionsRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const },
+  // Quiet external link — accent is reserved for commit actions, not sign-up detours.
   getKeyBtn: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
-  getKeyText: { fontSize: text.sm, ...inter.semibold, color: color.accent.base },
+  getKeyText: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted },
   testBtn: { paddingHorizontal: space.lg, paddingVertical: space.sm, borderRadius: radius.md, backgroundColor: color.bg.sunken },
   testText: { fontSize: text.sm, ...inter.semibold, color: color.fg.base },
 

@@ -93,7 +93,6 @@ function AppShell() {
               <Stack.Screen name="receive" options={{ presentation: 'modal' }} />
               <Stack.Screen name="token-detail" options={{ presentation: 'modal' }} />
               <Stack.Screen name="add-token" options={{ presentation: 'modal' }} />
-              <Stack.Screen name="assets" options={{ presentation: 'modal' }} />
               <Stack.Screen name="history" options={{ presentation: 'modal' }} />
               <Stack.Screen name="about" options={{ presentation: 'modal' }} />
               {__DEV__ && <Stack.Screen name="parallel" />}

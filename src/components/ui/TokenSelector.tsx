@@ -9,6 +9,7 @@
 import { AddTokenSheet } from '@/components/ui/AddTokenSheet';
 import { NetworkFilterButton, NetworkFilterSheet } from '@/components/ui/NetworkFilterSheet';
 import { TokenRow } from '@/components/ui/TokenRow';
+import { VelaButton } from '@/components/ui/VelaButton';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { chainName, getAllNetworksSync, tokenBadgeNetwork } from '@/models/network';
@@ -16,6 +17,7 @@ import { isNativeToken, tokenBalanceDouble, tokenChainId, tokenId, tokenLogoURLs
 import { isStable } from '@/services/activity';
 import { isTempoFeeToken } from '@/services/tempo';
 import { formatTokenAmount } from '@/services/locale-format';
+import { hapticSelection } from '@/services/platform';
 import { Check, Plus, Search } from 'lucide-react-native';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +26,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /** Quick filter buckets for the token picker. Mutually exclusive + exhaustive. */
 export type TokenCategory = 'all' | 'stable' | 'gas' | 'other';
+
+/** Leading logo diameter in <TokenRow> — the row hairline must inset past it. */
+const TOKEN_LOGO_SIZE = 40;
 
 export function tokenMatchesCategory(tok: APIToken, cat: TokenCategory): boolean {
   if (cat === 'all') return true;
@@ -112,7 +117,12 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
   ];
 
   const addTokenButton = (
-    <Pressable style={styles.addTokenRow} onPress={() => setShowAddToken(true)}>
+    <Pressable
+      style={styles.addTokenRow}
+      onPress={() => setShowAddToken(true)}
+      accessibilityRole="button"
+      accessibilityLabel={t('send.addTokenBtn')}
+    >
       <Plus size={18} color={color.accent.base} strokeWidth={2.5} />
       <Text style={styles.addTokenText}>{t('send.addTokenBtn')}</Text>
     </Pressable>
@@ -144,7 +154,16 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
           {CATEGORIES.map((c) => {
             const active = category === c.key;
             return (
-              <Pressable key={c.key} onPress={() => setCategory(c.key)} style={[styles.chip, active && styles.chipActive]}>
+              <Pressable
+                key={c.key}
+                onPress={() => { if (!active) hapticSelection(); setCategory(c.key); }}
+                style={[styles.chip, active && styles.chipActive]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={c.label}
+                // Vertical only — horizontal slop would overlap adjacent chips.
+                hitSlop={{ top: space.lg, bottom: space.lg }}
+              >
                 <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1}>{c.label}</Text>
               </Pressable>
             );
@@ -161,9 +180,15 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
       {/* Pick a specific network → multi-select switches on (a master "select
           all" + per-row checkboxes). "All networks" stays single-select. */}
       {sweepActive && multiSelect && (
-        <Pressable onPress={() => multiSelect.onToggleAll(filtered)} style={styles.sweepAllRow}>
+        <Pressable
+          onPress={() => multiSelect.onToggleAll(filtered)}
+          style={styles.sweepAllRow}
+          accessibilityRole="button"
+          accessibilityState={{ selected: multiSelect.isAllSelected(filtered) }}
+          accessibilityLabel={multiSelect.selectAllLabel}
+        >
           <View style={[styles.sweepAllCheck, multiSelect.isAllSelected(filtered) && styles.sweepAllCheckOn]}>
-            {multiSelect.isAllSelected(filtered) && <Check size={13} color={color.bg.base} strokeWidth={3} />}
+            {multiSelect.isAllSelected(filtered) && <Check size={13} color={color.fg.inverse} strokeWidth={3} />}
           </View>
           <Text style={styles.sweepAllText}>{multiSelect.selectAllLabel}</Text>
         </Pressable>
@@ -201,7 +226,9 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
               index={index}
             />
           )}
-          ListFooterComponent={multiSelect ? null : addTokenButton}
+          // Always reachable — a non-empty (or filtered) list still needs a way
+          // to add a token the scan didn't surface.
+          ListFooterComponent={addTokenButton}
           ItemSeparatorComponent={sweepActive ? () => <View style={styles.rowSeparator} /> : () => <View style={styles.tokenSep} />}
           initialNumToRender={10}
           windowSize={5}
@@ -224,12 +251,12 @@ export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTot
       <AddTokenSheet visible={showAddToken} onClose={() => setShowAddToken(false)} onChanged={onAddChanged} />
 
       {sweepActive && multiSelect && multiSelect.selectedIds.size > 0 && (
-        <Pressable
+        <VelaButton
+          title={multiSelect.confirmLabel}
           onPress={multiSelect.onConfirm}
-          style={[styles.sweepConfirm, { marginBottom: Math.max(insets.bottom, space.lg) }]}
-        >
-          <Text style={styles.sweepConfirmText}>{multiSelect.confirmLabel}</Text>
-        </Pressable>
+          variant="accent"
+          style={{ marginTop: space.md, marginBottom: Math.max(insets.bottom, space.lg) }}
+        />
       )}
     </View>
   );
@@ -251,18 +278,9 @@ const styles = createStyles(() => ({
   },
   sweepAllCheckOn: { backgroundColor: color.accent.base, borderColor: color.accent.base },
   sweepAllText: { fontSize: text.base, ...inter.semibold, color: color.fg.base },
-  sweepConfirm: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: space.lg,
-    borderRadius: radius.lg,
-    backgroundColor: color.accent.base,
-    marginTop: space.md,
-  },
-  sweepConfirmText: { fontSize: text.base, ...inter.bold, color: color.fg.inverse },
   rowSeparator: { height: space.sm },
-  // Hairline between de-boxed token rows, inset past the 40px logo.
-  tokenSep: { height: 1, backgroundColor: color.border.base, marginLeft: space.md + 40 + space.lg },
+  // Hairline between de-boxed token rows, inset past the leading logo.
+  tokenSep: { height: 1, backgroundColor: color.border.base, marginLeft: space.md + TOKEN_LOGO_SIZE + space.lg },
   loadingText: {
     fontSize: text.lg,
     ...inter.regular,
@@ -316,15 +334,17 @@ const styles = createStyles(() => ({
     borderRadius: radius.full,
     backgroundColor: color.bg.sunken,
   },
+  // Selected = neutral ink (SegmentedToggle badge recipe) — accent is reserved
+  // for actions that move money or commit.
   chipActive: {
-    backgroundColor: color.accent.soft,
+    backgroundColor: color.fg.base,
   },
   chipText: {
     fontSize: text.sm,
     ...inter.semibold,
     color: color.fg.muted,
   },
-  chipTextActive: { color: color.accent.base },
+  chipTextActive: { color: color.fg.inverse },
   summaryRow: {
     flexDirection: 'row',
     alignItems: 'center',

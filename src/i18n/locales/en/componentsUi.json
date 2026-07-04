@@ -26,13 +26,14 @@
     },
     "bugReport": {
       "title": "Report a problem",
-      "subtitle": "Tell us what went wrong — it goes straight to our issue tracker.",
+      "subtitle": "Tell us what went wrong.",
       "whatLabel": "What happened?",
       "whatPlaceholder": "e.g. I tapped Send and the screen froze.",
       "stepsLabel": "Steps to reproduce (optional)",
+      "addSteps": "+ Add steps to reproduce",
       "stepsPlaceholder": "1. Go to…\n2. Tap…\n3. See…",
       "previewToggle": "What will be sent",
-      "consent": "Only what you see here is sent — never your keys, seed phrase, or balances.",
+      "consent": "Only what you see is sent — never keys, seed phrase, or balances.",
       "send": "Send report",
       "sending": "Sending…",
       "cancel": "Cancel",
@@ -148,10 +149,6 @@
       "showEvery": "Show every chain",
       "clearFilter": "Clear network filter",
       "toggleSearch": "Search chains"
-    },
-    "chart": {
-      "noDataFor": "No data for {{label}}",
-      "tapHint": "Tap a bar to see balance"
     },
     "signingApprove": {
       "spendingCap": "Spending cap",

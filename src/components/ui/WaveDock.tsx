@@ -1,39 +1,32 @@
 /**
  * WaveDock — the home screen's bottom action bar.
  *
- * One continuous full-bleed surface with a soft wave crest in the centre that
- * the circular Scan button emerges from. Two core actions sit on the bar:
- * Receive (primary / brand) and Send (secondary). Payment-first: Receive is the
- * single brand-accent control by default.
+ * Flat full-bleed bar on `bg.raised` with a 1px top hairline. The circular
+ * Scan FAB floats centered, overlapping the bar's top edge by half — it is the
+ * composition's focal point. Send is the single accent action (it moves
+ * money); Receive is its matched neutral pill.
  *
  * Full-bleed: render this as a child of a full-width container (not inside the
  * padded ScreenContainer). It positions itself absolutely at the bottom.
  *
- * Theme-driven (light/dark via token reads) and follows the design system:
- * spring scale on press, Lucide icons, Pressable.
+ * Screens must reserve scroll clearance of DOCK_BAR_HEIGHT + insets.bottom
+ * (+ breathing room) — the bar height here excludes the safe-area inset.
  */
-import { color, createStyles, inter, motion, radius, space, text } from '@/constants/theme';
+import { color, createStyles, inter, motion, radius, shadow, space, text } from '@/constants/theme';
 import { hapticLight } from '@/services/platform';
-import { Download, ScanLine, Send as SendIcon } from 'lucide-react-native';
+import { ArrowDownLeft, ArrowUpRight, ScanLine } from 'lucide-react-native';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-/** Visual height of the bar above the safe-area inset (compact). */
-const BAR_HEIGHT = 86;
-/** Height of the wavy top strip (viewBox is 1:1 with this). */
-const WAVE_H = 40;
+/** Visual height of the bar above the safe-area inset (excludes the FAB overhang). */
+export const DOCK_BAR_HEIGHT = 86;
 /** Diameter of the Scan circle. */
 const SCAN_SIZE = 56;
-
-// Tight concave cradle that hugs the Scan FAB — shallow + narrow so it doesn't
-// waste space. Shoulders y=12 (bar opaque almost full width), cradle bottom y=24.
-const WAVE_FILL = 'M0,12 L140,12 C152,12 158,24 180,24 C202,24 208,12 220,12 L360,12 L360,40 L0,40 Z';
 
 interface DockButtonProps {
   label: string;
@@ -55,7 +48,8 @@ function DockButton({ label, icon: Icon, onPress, variant }: DockButtonProps) {
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Icon size={22} color={primary ? color.fg.inverse : color.fg.muted} strokeWidth={2.2} />
+      {/* Icon color must match the label color — a dimmer icon reads as half-disabled. */}
+      <Icon size={22} color={primary ? color.fg.inverse : color.fg.base} strokeWidth={2.2} />
       <Text style={[styles.btnLabel, primary ? styles.btnLabelPrimary : styles.btnLabelSecondary]}>{label}</Text>
     </AnimatedPressable>
   );
@@ -73,16 +67,17 @@ export function WaveDock({ onReceive, onScan, onSend }: WaveDockProps) {
   const scanScale = useSharedValue(1);
   const scanStyle = useAnimatedStyle(() => ({ transform: [{ scale: scanScale.value }] }));
 
+  // The container is taller than the bar by half the FAB so the overhanging
+  // Scan button stays inside its bounds (touches outside a parent are dropped
+  // on some platforms). The bar itself is anchored to the bottom.
   return (
-    <View style={[styles.dock, { height: BAR_HEIGHT + insets.bottom }]} pointerEvents="box-none">
-      {/* Continuous surface: wavy top strip + solid fill down to the bottom.
-          No stroke — a soft drop-shadow defines the edge so there's no hard line. */}
-      <Svg width="100%" height={WAVE_H} viewBox="0 0 360 40" preserveAspectRatio="none" style={styles.wave}>
-        <Path d={WAVE_FILL} fill={color.bg.raised} />
-      </Svg>
-      <View style={[styles.fill, { top: WAVE_H - 0.5 }]} />
+    <View
+      style={[styles.dock, { height: DOCK_BAR_HEIGHT + insets.bottom + SCAN_SIZE / 2 }]}
+      pointerEvents="box-none"
+    >
+      <View style={[styles.bar, { height: DOCK_BAR_HEIGHT + insets.bottom }]} />
 
-      {/* Scan — floats in the cradle (icon only, no label) */}
+      {/* Scan — floats over the bar's top edge, half in / half out (icon only, no label) */}
       <View style={styles.scanWrap} pointerEvents="box-none">
         <AnimatedPressable
           style={[styles.scan, scanStyle]}
@@ -96,11 +91,12 @@ export function WaveDock({ onReceive, onScan, onSend }: WaveDockProps) {
         </AnimatedPressable>
       </View>
 
-      {/* Two core buttons fill the width, leaving a slot for the Scan */}
+      {/* Two core buttons fill the width, leaving a slot for the Scan.
+          Arrow pair mirrors ActivityRow's in/out glyphs. */}
       <View style={[styles.row, { bottom: insets.bottom + space.md }]} pointerEvents="box-none">
-        <DockButton label={t('componentsUi.dock.receive')} icon={Download} onPress={onReceive} variant="primary" />
+        <DockButton label={t('componentsUi.dock.receive')} icon={ArrowDownLeft} onPress={onReceive} variant="secondary" />
         <View style={styles.scanSlot} pointerEvents="none" />
-        <DockButton label={t('componentsUi.dock.send')} icon={SendIcon} onPress={onSend} variant="secondary" />
+        <DockButton label={t('componentsUi.dock.send')} icon={ArrowUpRight} onPress={onSend} variant="primary" />
       </View>
     </View>
   );
@@ -113,25 +109,19 @@ const styles = createStyles(() => ({
     right: 0,
     bottom: 0,
   },
-  wave: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    // ...shadow.lg,
-    // shadowOffset: { width: 0, height: -6 },
-  },
-  fill: {
+  bar: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
     backgroundColor: color.bg.raised,
+    borderTopWidth: 1,
+    borderTopColor: color.border.base,
   },
   // Scan
   scanWrap: {
     position: 'absolute',
-    top: -16,
+    top: 0,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -145,13 +135,8 @@ const styles = createStyles(() => ({
     borderColor: color.border.base,
     alignItems: 'center',
     justifyContent: 'center',
-    // Fixed dark shadow (NOT fg.base — that becomes a white glow in dark mode).
-    // Gentle, so Scan reads as a quiet utility button rather than an eye-catcher.
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.10,
-    shadowRadius: 8,
-    elevation: 4,
+    // Fixed-dark shadow token (fg.base would become a white glow in dark mode).
+    ...shadow.md,
   },
   // Buttons fill the width; a small fixed slot leaves room for the Scan FAB.
   row: {
@@ -173,21 +158,29 @@ const styles = createStyles(() => ({
     paddingVertical: space.xl,
     paddingHorizontal: space.md,
     borderRadius: radius.xl,
+    // Both variants carry a 1px border so the pills stay the same height.
+    borderWidth: 1,
   },
   btnPrimary: {
     backgroundColor: color.accent.base,
+    borderColor: color.accent.base,
   },
+  // bg.base + strong border, NOT bg.sunken: sunken-on-raised inverts to ~1.15:1
+  // in dark mode (sunken is darker than raised there).
   btnSecondary: {
-    backgroundColor: color.bg.sunken,
+    backgroundColor: color.bg.base,
+    borderColor: color.border.strong,
   },
+  // text.xl: white-on-accent needs large-text size to clear WCAG 3:1 in light mode.
   btnLabel: {
-    fontSize: text.lg,
-    ...inter.semibold,
+    fontSize: text.xl,
   },
   btnLabelPrimary: {
     color: color.fg.inverse,
+    ...inter.bold,
   },
   btnLabelSecondary: {
     color: color.fg.base,
+    ...inter.semibold,
   },
 }));

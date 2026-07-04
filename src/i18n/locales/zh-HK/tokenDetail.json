@@ -1,9 +1,7 @@
 {
   "tokenDetail": {
-    "chartTitle": "7 日餘額",
-    "chartEmpty": "沒有可用的歷史數據",
-    "send": "發送",
-    "receive": "接收",
+    "send": "轉賬",
+    "receive": "收款",
     "labelName": "名稱",
     "labelContract": "合約",
     "labelDecimals": "小數位",

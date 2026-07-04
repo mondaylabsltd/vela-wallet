@@ -1,11 +1,6 @@
 {
   "assets": {
-    "actionSend": "Kirim",
-    "actionReceive": "Terima",
-    "actionHistory": "Riwayat",
     "sectionTitle": "Aset",
-    "hideZero": "Sembunyikan nol",
-    "hiddenCount": "{{count}} disembunyikan",
     "addToken": "Tambah",
     "searchPlaceholder": "Cari token...",
     "rpcUnavailableSingle": "RPC {{name}} tidak tersedia",
@@ -14,8 +9,6 @@
     "emptyTitle": "Setor aset pertama Anda",
     "emptySubtext": "Ketuk di sini untuk melihat alamat dan menerima token",
     "errorTitle": "Kesalahan",
-    "errorLoadBalances": "Gagal memuat saldo token.",
-    "switcherTitle": "Ganti Akun",
     "switcherTotal": "Total {{amount}}",
     "rpcFixTitle": "Perbaiki RPC",
     "rpcFixChainId": "Chain ID: {{chainId}}",
@@ -28,8 +21,6 @@
     "rpcProvidersTitle": "Tempat mendapatkan RPC yang andal",
     "rpcProvidersHint": "Endpoint gratis — daftar, salin URL Anda, lalu tempel di atas.",
     "rpcReport": "Masih tidak berfungsi? Laporkan",
-    "invalidQrTitle": "QR Tidak Valid",
-    "invalidQrMessage": "Pindai alamat Ethereum atau URI koneksi yang valid.",
     "chainFallback": "Chain {{chainId}}"
   }
 }

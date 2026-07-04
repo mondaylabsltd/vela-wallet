@@ -165,15 +165,12 @@
       "clearFilter": "Hapus filter jaringan",
       "toggleSearch": "Cari chain"
     },
-    "chart": {
-      "noDataFor": "Tidak ada data untuk {{label}}",
-      "tapHint": "Ketuk sebuah batang untuk melihat saldo"
-    },
     "bugReport": {
       "title": "Laporkan masalah",
-      "subtitle": "Beri tahu kami apa yang salah — langsung masuk ke pelacak masalah kami.",
+      "subtitle": "Beri tahu kami apa yang salah.",
       "whatLabel": "Apa yang terjadi?",
       "whatPlaceholder": "mis. Saya ketuk Kirim lalu layar membeku.",
+      "addSteps": "+ Tambah langkah untuk mereproduksi",
       "stepsLabel": "Langkah untuk mereproduksi (opsional)",
       "stepsPlaceholder": "1. Buka…\n2. Ketuk…\n3. Lihat…",
       "previewToggle": "Yang akan dikirim",

@@ -32,11 +32,12 @@
     "appearance": {
       "themeLight": "Light",
       "themeDark": "Dark",
-      "themeAuto": "Auto",
+      "themeAuto": "Follow System",
       "avatarInitials": "Initials",
       "avatarIdenticon": "Identicon"
     },
     "localization": {
+      "currencyTitle": "Currency",
       "autoExample": "Automatic · {{example}}",
       "numberTitle": "Number format",
       "numberSubtitle": "How amounts are grouped and the decimal mark shown.",

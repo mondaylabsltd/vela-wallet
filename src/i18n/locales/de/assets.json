@@ -1,11 +1,6 @@
 {
   "assets": {
-    "actionSend": "Senden",
-    "actionReceive": "Empfangen",
-    "actionHistory": "Verlauf",
     "sectionTitle": "Assets",
-    "hideZero": "Nullsalden ausblenden",
-    "hiddenCount": "{{count}} ausgeblendet",
     "addToken": "Hinzufügen",
     "searchPlaceholder": "Token suchen ...",
     "rpcUnavailableSingle": "RPC für {{name}} nicht verfügbar",
@@ -14,8 +9,6 @@
     "emptyTitle": "Empfangen Sie Ihr erstes Asset",
     "emptySubtext": "Tippen Sie hier, um Ihre Adresse zu sehen und Token zu empfangen",
     "errorTitle": "Fehler",
-    "errorLoadBalances": "Token-Guthaben konnten nicht geladen werden.",
-    "switcherTitle": "Konto wechseln",
     "switcherTotal": "Gesamt {{amount}}",
     "rpcFixTitle": "RPC beheben",
     "rpcFixChainId": "Chain-ID: {{chainId}}",
@@ -28,8 +21,6 @@
     "rpcProvidersTitle": "Wo Sie einen zuverlässigen RPC bekommen",
     "rpcProvidersHint": "Kostenlose Endpunkte — registrieren Sie sich, kopieren Sie Ihre URL und fügen Sie sie oben ein.",
     "rpcReport": "Funktioniert immer noch nicht? Melden",
-    "invalidQrTitle": "Ungültiger QR-Code",
-    "invalidQrMessage": "Bitte scannen Sie eine gültige Ethereum-Adresse oder Verbindungs-URI.",
     "chainFallback": "Chain {{chainId}}"
   }
 }

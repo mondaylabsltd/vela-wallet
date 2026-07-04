@@ -115,8 +115,8 @@
       "deployedNo": "否（首次交易）"
     },
     "dock": {
-      "receive": "接收",
-      "send": "发送",
+      "receive": "收款",
+      "send": "转账",
       "scan": "扫码"
     },
     "networkFilter": {
@@ -126,10 +126,6 @@
       "showEvery": "显示所有链",
       "clearFilter": "清除网络筛选",
       "toggleSearch": "搜索链"
-    },
-    "chart": {
-      "noDataFor": "{{label}} 暂无数据",
-      "tapHint": "点击柱状图查看余额"
     },
     "signingApprove": {
       "spendingCap": "授权上限",
@@ -171,13 +167,14 @@
     },
     "bugReport": {
       "title": "反馈问题",
-      "subtitle": "告诉我们出了什么问题 — 它会直接提交到我们的问题跟踪系统。",
+      "subtitle": "告诉我们出了什么问题。",
       "whatLabel": "发生了什么？",
       "whatPlaceholder": "例如：我点了「发送」，屏幕就卡住了。",
       "stepsLabel": "复现步骤（可选）",
+      "addSteps": "+ 添加复现步骤",
       "stepsPlaceholder": "1. 打开…\n2. 点击…\n3. 看到…",
       "previewToggle": "将要发送的内容",
-      "consent": "仅发送你在此看到的内容 — 绝不会包含你的密钥、助记词或余额。",
+      "consent": "仅发送你看到的内容，绝不含密钥、助记词或余额。",
       "send": "发送反馈",
       "sending": "发送中…",
       "cancel": "取消",

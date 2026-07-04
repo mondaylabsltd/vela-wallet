@@ -1,7 +1,5 @@
 {
   "tokenDetail": {
-    "chartTitle": "7일간 잔액",
-    "chartEmpty": "이용 가능한 과거 데이터가 없습니다",
     "send": "보내기",
     "receive": "받기",
     "labelName": "이름",

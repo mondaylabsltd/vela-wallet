@@ -12,6 +12,9 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
   default: { getItem: jest.fn(() => Promise.resolve(null)), setItem: jest.fn(() => Promise.resolve()) },
 }));
+// currency.ts reads the device region for first-launch seeding (not exercised
+// here — see currency-seed.test.ts); expo-localization ships untransformed ESM.
+jest.mock('expo-localization', () => ({ getLocales: jest.fn(() => []) }));
 jest.mock('@/services/fiat-fx', () => ({
   getFxRate: jest.fn(),
   getSupportedFxCodes: jest.fn(() => Promise.resolve(['USD'])),

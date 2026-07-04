@@ -1,74 +1,83 @@
 import { ChainLogo } from '@/components/ChainLogo';
+import { ContactsManager } from '@/components/contacts/ContactsManager';
 import { QRCode } from '@/components/QRCode';
+import { AccountSwitcherModal } from '@/components/ui/AccountSwitcherModal';
 import { AppModal } from '@/components/ui/AppModal';
+import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
+import { BugReportModal } from '@/components/ui/BugReportModal';
+import { CurrencySheet } from '@/components/ui/CurrencySheet';
 import { Identicon } from '@/components/ui/Identicon';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { SectionLabel } from '@/components/ui/SectionLabel';
+import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
-import { color, font, inter, radius, shadow, space, text, useStyles } from '@/constants/theme';
-import type { Network } from '@/models/network';
-import { DEFAULT_NETWORKS, getAllNetworks, getAllNetworksSync, refreshCustomNetworks, explorerAddressURL } from '@/models/network';
-import type { CompatibilityResult, CustomNetwork, NetworkConfig, ServiceEndpoints, LocalePrefs } from '@/models/types';
-import { DEFAULT_SERVICE_ENDPOINTS, isNativeToken, tokenChainId } from '@/models/types';
-import { numberFormatOptions, dateFormatOptions, timeFormatOptions, type FormatOption } from '@/services/locale-format';
-import { AccountSwitcherModal } from '@/components/ui/AccountSwitcherModal';
-import { shortAddress, useWallet } from '@/models/wallet-state';
-import { clearBundlerCache } from '@/services/bundler-service';
-import { formatWeiToEth as formatEth } from '@/services/format-eth';
-import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
-import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
-import { checkNetworkCompatibility } from '@/services/network-checker';
-import { hapticLight, openURL, showAlert } from '@/services/platform';
-import { setAvatarStyle, type AvatarStyle } from '@/services/avatar-style';
+import { color, createStyles, font, inter, radius, shadow, space, text, useStyles } from '@/constants/theme';
 import { useAvatarStyle } from '@/hooks/use-avatar-style';
 import { useCopyFeedback } from '@/hooks/use-copy-feedback';
+import { LANGUAGE_NATIVE_NAMES, SUPPORTED_LANGUAGES, type AppLanguage, type LanguagePreference } from '@/i18n';
+import { useLanguagePreference } from '@/i18n/language';
+import type { Network } from '@/models/network';
+import { DEFAULT_NETWORKS, explorerAddressURL, getAllNetworks, getAllNetworksSync, refreshCustomNetworks } from '@/models/network';
+import type { CompatibilityResult, CustomNetwork, LocalePrefs, NetworkConfig, ServiceEndpoints } from '@/models/types';
+import { DEFAULT_SERVICE_ENDPOINTS, isNativeToken, tokenChainId } from '@/models/types';
+import { shortAddress, useWallet } from '@/models/wallet-state';
+import { setAvatarStyle, type AvatarStyle } from '@/services/avatar-style';
+import { clearBundlerCache } from '@/services/bundler-service';
+import { fetchChainInfo, searchChains, type ChainSearchResult } from '@/services/chain-registry';
+import { currencyMeta, formatFiat, getCurrencyCode, getRate, loadCurrency, setCurrency } from '@/services/currency';
+import { formatWeiToEth as formatEth } from '@/services/format-eth';
+import { dateFormatOptions, numberFormatOptions, timeFormatOptions, type FormatOption } from '@/services/locale-format';
+import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
+import { checkNetworkCompatibility } from '@/services/network-checker';
+import { hapticLight, openURL, showAlert } from '@/services/platform';
 import { getBuiltinBundlerUrl, invalidateAllPools, poolRpcCall, refreshPool } from '@/services/rpc-pool';
-import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from '@/services/tempo';
 import { getBundlerServiceURL, getLocalePrefs, hasPendingUploads, loadCustomNetworks, loadLocalePrefs, loadNetworkConfigs, loadServiceEndpoints, removeCustomNetwork, saveCustomNetwork, saveLocalePrefs, saveNetworkConfig, saveServiceEndpoints } from '@/services/storage';
+import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from '@/services/tempo';
 import { fetchTokens } from '@/services/wallet-api';
-import { RpcProvidersModal } from './RpcProvidersModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { AlertTriangle, BookUser, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, X, XCircle, Zap } from 'lucide-react-native';
-import { ContactsManager } from '@/components/contacts/ContactsManager';
-import { BugReportModal } from '@/components/ui/BugReportModal';
-import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
-import { useTranslation } from 'react-i18next';
-import { useLanguagePreference } from '@/i18n/language';
-import { LANGUAGE_NATIVE_NAMES, SUPPORTED_LANGUAGES, type AppLanguage, type LanguagePreference } from '@/i18n';
+import { AlertTriangle, Banknote, BookUser, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, X, XCircle, Zap } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
-    ActivityIndicator,
-    Pressable,
-    ScrollView,
-    Text,
-    TextInput,
-    View,
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
-    runOnJS,
-    useAnimatedStyle,
-    useSharedValue,
-    withSpring,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
 } from 'react-native-reanimated';
+import { RpcProvidersModal } from './RpcProvidersModal';
 
 // All styles in one factory → useStyles recomputes everything on text scale change
 type S = ReturnType<typeof styleFactory>;
 
-type IconConfig = { bg: string; fg: string; Icon: React.ComponentType<{ size: number; color: string }> };
-
-function SettingsRow({ s, icon, title, subtitle, showDivider = true, onPress, right }: {
-  s: S; icon: IconConfig; title: string; subtitle?: string; showDivider?: boolean; onPress?: () => void; right?: React.ReactNode;
+// Every row chip uses one quiet recipe (bg.sunken + fg.muted) — accent/semantic
+// tints are reserved for states, not navigation.
+function SettingsRow({ s, icon: Icon, title, subtitle, showDivider = true, onPress, right }: {
+  s: S; icon: React.ComponentType<{ size: number; color: string }>; title: string; subtitle?: string; showDivider?: boolean; onPress?: () => void; right?: React.ReactNode;
 }) {
   return (
-    <Pressable style={s.settingsRow} onPress={onPress} disabled={!onPress}>
-      <View style={[s.settingsIcon, { backgroundColor: icon.bg }]}>
-        <icon.Icon size={16} color={icon.fg} />
+    <Pressable
+      style={s.settingsRow}
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole="button"
+      accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
+    >
+      <View style={s.settingsIcon}>
+        <Icon size={16} color={color.fg.muted} />
       </View>
       <View style={s.settingsRowContent}>
         <Text style={s.settingsRowTitle}>{title}</Text>
@@ -143,27 +152,27 @@ async function checkEndpointHealth(url: string, type: 'rpc' | 'explorer' | 'bund
 function HealthBadge({ health }: { health: EndpointHealth }) {
   const { t } = useTranslation();
   if (health.status === 'checking') {
-    return <ActivityIndicator size={10} color={color.fg.subtle} style={{ marginLeft: 6 }} />;
+    return <ActivityIndicator size={10} color={color.fg.subtle} style={{ marginLeft: space.md }} />;
   }
-  const dotColor = health.status === 'ok' ? color.success.base : color.accent.base;
+  const dotColor = health.status === 'ok' ? color.success.base : color.error.base;
   const label = health.status === 'ok'
     ? `${health.latencyMs}ms`
     : t('settingsModals.health.offline');
   return (
     <View style={healthStyles.badge}>
       <View style={[healthStyles.dot, { backgroundColor: dotColor }]} />
-      <Text style={[healthStyles.text, { color: health.status === 'ok' ? color.success.base : color.accent.base }]}>
+      <Text style={[healthStyles.text, { color: dotColor }]}>
         {label}
       </Text>
     </View>
   );
 }
 
-const healthStyles = {
-  badge: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, marginLeft: 8 },
-  dot: { width: 6, height: 6, borderRadius: 3 },
-  text: { fontSize: 11, fontWeight: '500' as const },
-};
+const healthStyles = createStyles(() => ({
+  badge: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.sm, marginLeft: space.md },
+  dot: { width: 6, height: 6, borderRadius: radius.full },
+  text: { fontSize: text.sm, ...inter.medium },
+}));
 
 function NetworkConfigCard({ s, network, savedConfig, onSave, onDelete }: {
   s: S; network: Network; savedConfig?: NetworkConfig;
@@ -400,12 +409,12 @@ async function checkServiceEndpointHealth(
 function ServiceHealthBadge({ health }: { health: ServiceHealth }) {
   const { t } = useTranslation();
   if (health.status === 'checking') {
-    return <ActivityIndicator size={10} color={color.fg.subtle} style={{ marginLeft: 6 }} />;
+    return <ActivityIndicator size={10} color={color.fg.subtle} style={{ marginLeft: space.md }} />;
   }
   const cfg: Record<string, { dot: string; label: string }> = {
     ok: { dot: color.success.base, label: `${health.latencyMs ?? 0}ms` },
-    not_https: { dot: color.accent.base, label: t('settingsModals.health.httpsRequired') },
-    unreachable: { dot: color.accent.base, label: t('settingsModals.health.offline') },
+    not_https: { dot: color.error.base, label: t('settingsModals.health.httpsRequired') },
+    unreachable: { dot: color.error.base, label: t('settingsModals.health.offline') },
     invalid_response: { dot: color.warning.base, label: health.detail ?? t('settingsModals.health.invalid') },
   };
   const { dot, label } = cfg[health.status] ?? cfg.unreachable;
@@ -527,7 +536,13 @@ function FormatPickerModal<K extends string>({ s, visible, title, subtitle, opti
             return (
               <React.Fragment key={o.key}>
                 {i > 0 ? <View style={s.fmtRowSep} /> : null}
-                <Pressable style={[s.fmtRow, sel && s.fmtRowSel]} onPress={() => { onSelect(o.key); onClose(); }}>
+                <Pressable
+                  style={s.fmtRow}
+                  onPress={() => { onSelect(o.key); onClose(); }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: sel }}
+                  accessibilityLabel={o.example}
+                >
                   <View style={s.fmtRowInfo}>
                     <Text style={s.fmtExample}>{o.example}</Text>
                     {o.noteKey ? <Text style={s.fmtNote}>{t(`settings.formatNote.${o.noteKey}`)}</Text> : null}
@@ -772,7 +787,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
                 <View style={s.contractStatusRow}>
                   {compatResult.p256Available
                     ? <CheckCircle2 size={14} color={color.success.base} strokeWidth={2} />
-                    : <XCircle size={14} color={color.accent.base} strokeWidth={2} />}
+                    : <XCircle size={14} color={color.error.base} strokeWidth={2} />}
                   <Text style={[s.addNetCompatText, !compatResult.p256Available && s.addNetCompatMissing]}>P256 Precompile (RIP-7212)</Text>
                 </View>
               </View>
@@ -783,7 +798,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
                   <View style={s.contractStatusRow}>
                     {c.deployed
                       ? <CheckCircle2 size={14} color={color.success.base} strokeWidth={2} />
-                      : <XCircle size={14} color={color.accent.base} strokeWidth={2} />}
+                      : <XCircle size={14} color={color.error.base} strokeWidth={2} />}
                     <Text style={[s.addNetCompatText, !c.deployed && s.addNetCompatMissing]}>{c.name}</Text>
                   </View>
                 </View>
@@ -849,25 +864,18 @@ function ThemePicker({ s, current, onChange }: {
 }) {
   const { t } = useTranslation();
   return (
-    <View style={s.themePickerContainer}>
-      {THEME_OPTIONS.map(({ key, labelKey, Icon }) => {
-        const active = current === key;
-        return (
-          <Pressable
-            key={key}
-            style={[s.themeOption, active && s.themeOptionActive]}
-            onPress={() => {
-              if (key !== current) {
-                hapticLight();
-                onChange(key);
-              }
-            }}
-          >
-            <Icon size={18} color={active ? color.accent.base : color.fg.subtle} strokeWidth={2} />
-            <Text style={[s.themeOptionLabel, active && s.themeOptionLabelActive]}>{t(labelKey)}</Text>
-          </Pressable>
-        );
-      })}
+    <View style={s.pickerRow}>
+      <SegmentedToggle<ColorSchemePreference>
+        options={THEME_OPTIONS.map(({ key, labelKey, Icon }) => ({
+          key,
+          label: t(labelKey),
+          icon: (active: boolean) => (
+            <Icon size={14} color={active ? color.fg.base : color.fg.subtle} strokeWidth={2} />
+          ),
+        }))}
+        value={current}
+        onChange={onChange}
+      />
     </View>
   );
 }
@@ -884,43 +892,30 @@ function AvatarStylePicker({ s, current, onChange, previewName, previewAddress }
   previewName: string; previewAddress?: string;
 }) {
   const { t } = useTranslation();
-  const options: { key: AvatarStyle; label: string; preview: React.ReactNode }[] = [
-    {
-      key: 'initials',
-      label: t('settings.appearance.avatarInitials'),
-      preview: (
-        <View style={s.avatarPreviewCircle}>
-          <Text style={s.avatarPreviewLetter}>{(previewName[0] ?? 'V').toUpperCase()}</Text>
-        </View>
-      ),
-    },
-    {
-      key: 'identicon',
-      label: t('settings.appearance.avatarIdenticon'),
-      // 18px matches the ThemePicker icons above so the two rows keep one height.
-      preview: <Identicon seed={previewAddress || AVATAR_DEMO_SEED} size={18} />,
-    },
-  ];
   return (
-    <View style={s.themePickerContainer}>
-      {options.map(({ key, label, preview }) => {
-        const active = current === key;
-        return (
-          <Pressable
-            key={key}
-            style={[s.themeOption, active && s.themeOptionActive]}
-            onPress={() => {
-              if (key !== current) {
-                hapticLight();
-                onChange(key);
-              }
-            }}
-          >
-            {preview}
-            <Text style={[s.themeOptionLabel, active && s.themeOptionLabelActive]} numberOfLines={1}>{label}</Text>
-          </Pressable>
-        );
-      })}
+    <View style={s.pickerRow}>
+      <SegmentedToggle<AvatarStyle>
+        options={[
+          {
+            key: 'initials',
+            label: t('settings.appearance.avatarInitials'),
+            // Previews are content, not state glyphs — they keep one neutral look
+            // in both states (the identicon can't dim either).
+            icon: () => (
+              <View style={s.avatarPreviewCircle}>
+                <Text style={s.avatarPreviewLetter}>{(previewName[0] ?? 'V').toUpperCase()}</Text>
+              </View>
+            ),
+          },
+          {
+            key: 'identicon',
+            label: t('settings.appearance.avatarIdenticon'),
+            icon: () => <Identicon seed={previewAddress || AVATAR_DEMO_SEED} size={18} />,
+          },
+        ]}
+        value={current}
+        onChange={onChange}
+      />
     </View>
   );
 }
@@ -977,7 +972,13 @@ function LanguagePickerModal({ s, visible, preference, systemLanguage, onSelect,
             return (
               <React.Fragment key={o.key}>
                 {i > 0 ? <View style={s.fmtRowSep} /> : null}
-                <Pressable style={[s.fmtRow, sel && s.fmtRowSel]} onPress={() => { onSelect(o.key); onClose(); }}>
+                <Pressable
+                  style={s.fmtRow}
+                  onPress={() => { onSelect(o.key); onClose(); }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: sel }}
+                  accessibilityLabel={o.label}
+                >
                   <View style={s.fmtRowInfo}>
                     <Text style={s.fmtExample}>{o.label}</Text>
                     {o.note ? <Text style={s.fmtNote}>{o.note}</Text> : null}
@@ -1082,7 +1083,7 @@ function TextScaleSlider({ s, currentIndex, onChangeIndex }: {
         <Animated.View style={[s.sliderFill, fillStyle]} />
         <View style={s.sliderTicks}>
           {TEXT_SCALE_LEVELS.map((_, i) => (
-            <View key={i} style={[s.sliderTickDot, i <= currentIndex && s.sliderTickDotActive]} />
+            <View key={i} style={s.sliderTickDot} />
           ))}
         </View>
         <GestureDetector gesture={pan}>
@@ -1375,6 +1376,17 @@ export default function SettingsScreen() {
   const [localePrefs, setLocalePrefs] = useState<LocalePrefs>(getLocalePrefs);
   const [fmtPicker, setFmtPicker] = useState<null | 'number' | 'date' | 'time'>(null);
   useEffect(() => { loadLocalePrefs().then(setLocalePrefs); }, []);
+  // Display currency (E06) — the app-wide preference; screens pick the change up
+  // on focus via useDisplayCurrency. Warm the rate here so Home paints converted
+  // values immediately on return instead of a USD-magnitude flash.
+  const [currencyCode, setCurrencyCode] = useState(getCurrencyCode());
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  useEffect(() => { loadCurrency().then(setCurrencyCode); }, []);
+  const pickCurrency = async (code: string) => {
+    await setCurrency(code);
+    setCurrencyCode(code);
+    getRate(code).catch(() => {});
+  };
   const applyLocale = async (patch: Partial<LocalePrefs>) => {
     const next = { ...localePrefs, ...patch };
     setLocalePrefs(next);
@@ -1426,13 +1438,13 @@ export default function SettingsScreen() {
         {/* Account */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(50, 300)}>
           <SectionLabel style={styles.sectionLabel}>{t('settings.sections.account')}</SectionLabel>
-          <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: UserIcon }}
+          <SettingsRow s={styles} icon={UserIcon}
             title={accountName} subtitle={address ? shortAddress(address) : t('settings.account.switch')}
             showDivider onPress={() => setShowAccountSwitcher(true)} />
-          <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: BookUser }}
+          <SettingsRow s={styles} icon={BookUser}
             title={t('contacts.title')} subtitle={t('contacts.manageSubtitle')}
             showDivider onPress={() => setShowContacts(true)} />
-          <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: MessageSquare }}
+          <SettingsRow s={styles} icon={MessageSquare}
             title={t('settings.feedback.title')} subtitle={t('settings.feedback.subtitle')}
             showDivider={false} onPress={() => setShowBugReport(true)}
             right={<ExternalLink size={16} color={color.fg.subtle} />} />
@@ -1441,7 +1453,7 @@ export default function SettingsScreen() {
         {/* Appearance */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(100, 300)}>
           <SectionLabel style={styles.sectionLabel}>{t('settings.sections.appearance')}</SectionLabel>
-          <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Languages }}
+          <SettingsRow s={styles} icon={Languages}
             title={t('language.title')} subtitle={languageSubtitle}
             showDivider onPress={() => setShowLanguagePicker(true)} />
           <TextScaleSlider
@@ -1468,13 +1480,20 @@ export default function SettingsScreen() {
           return (
             <Animated.View style={styles.sectionContainer} entering={fadeInDown(135, 300)}>
               <SectionLabel style={styles.sectionLabel}>{t('settings.sections.localization')}</SectionLabel>
-              <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Hash }}
+              {/* Currency first: of the four "how values render" prefs it changes
+                  the figure itself, not just separators. Live example, like its
+                  number/date/time siblings. */}
+              <SettingsRow s={styles} icon={Banknote}
+                title={t('settings.localization.currencyTitle')}
+                subtitle={`${currencyCode} · ${formatFiat(1234.56, currencyCode, currencyMeta(currencyCode).symbol)}`}
+                showDivider onPress={() => setShowCurrencyPicker(true)} />
+              <SettingsRow s={styles} icon={Hash}
                 title={t('settings.localization.numberTitle')} subtitle={subtitleFor(localePrefs.numberFormat, numOpts)}
                 showDivider onPress={() => setFmtPicker('number')} />
-              <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Calendar }}
+              <SettingsRow s={styles} icon={Calendar}
                 title={t('settings.localization.dateTitle')} subtitle={subtitleFor(localePrefs.dateFormat, dateOpts)}
                 showDivider onPress={() => setFmtPicker('date')} />
-              <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: Clock }}
+              <SettingsRow s={styles} icon={Clock}
                 title={t('settings.localization.timeTitle')} subtitle={subtitleFor(localePrefs.timeFormat, timeOpts)}
                 showDivider={false} onPress={() => setFmtPicker('time')} />
               <FormatPickerModal s={styles} visible={fmtPicker === 'number'} title={t('settings.localization.numberTitle')}
@@ -1501,17 +1520,17 @@ export default function SettingsScreen() {
           </Pressable>
           {showAdvanced && (
             <>
-              <SettingsRow s={styles} icon={{ bg: color.info.soft, fg: color.info.base, Icon: NetworkIcon }}
+              <SettingsRow s={styles} icon={NetworkIcon}
                 title={t('settings.advanced.networksTitle')} subtitle={t('settings.advanced.networksSubtitle')}
                 showDivider={true} onPress={() => setShowNetworkEditor(true)} />
-              <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Zap }}
+              <SettingsRow s={styles} icon={Zap}
                 title={t('settings.advanced.rpcProvidersTitle', { defaultValue: 'RPC Providers' })}
                 subtitle={t('settings.advanced.rpcProvidersSubtitle', { defaultValue: 'Alchemy, dRPC, Ankr keys' })}
                 showDivider={true} onPress={() => setShowRpcProviders(true)} />
-              <SettingsRow s={styles} icon={{ bg: color.success.soft, fg: color.success.base, Icon: Plus }}
+              <SettingsRow s={styles} icon={Plus}
                 title={t('settings.advanced.addNetworkTitle')} subtitle={t('settings.advanced.addNetworkSubtitle')}
                 showDivider={true} onPress={() => setShowAddNetwork(true)} />
-              <SettingsRow s={styles} icon={{ bg: color.success.soft, fg: color.success.base, Icon: Server }}
+              <SettingsRow s={styles} icon={Server}
                 title={t('settings.advanced.endpointsTitle')} subtitle={t('settings.advanced.endpointsSubtitle')}
                 showDivider={false} onPress={() => setShowEndpointEditor(true)} />
             </>
@@ -1527,10 +1546,10 @@ export default function SettingsScreen() {
             </Pressable>
             {showDevOptions && (
               <>
-                <SettingsRow s={styles} icon={{ bg: color.warning.soft, fg: color.warning.base, Icon: Key }}
+                <SettingsRow s={styles} icon={Key}
                   title={t('settings.developer.treasuryTitle')} subtitle={t('settings.developer.treasurySubtitle')}
                   showDivider={true} onPress={() => setShowTreasury(true)} />
-                <SettingsRow s={styles} icon={{ bg: color.accent.soft, fg: color.accent.base, Icon: Key }}
+                <SettingsRow s={styles} icon={Key}
                   title={t('settings.developer.clearSigningTitle')} subtitle={t('settings.developer.clearSigningSubtitle')}
                   showDivider={false} onPress={() => router.push('/clear-signing-test')} />
               </>
@@ -1540,13 +1559,18 @@ export default function SettingsScreen() {
 
         {/* About & Sign Out */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(200, 300)}>
-          <SettingsRow s={styles} icon={{ bg: color.bg.sunken, fg: color.fg.muted, Icon: InfoIcon }}
+          <SettingsRow s={styles} icon={InfoIcon}
             title={t('settings.about.title')} subtitle={t('settings.about.subtitle', { version: APP_VERSION })} showDivider={false} onPress={() => router.push('/about')} />
         </Animated.View>
 
         <Animated.View entering={fadeInDown(225, 300)}>
-          <Pressable style={styles.logoutButton} onPress={handleOpenSignOut}>
-            <LogOutIcon size={16} color={color.accent.base} />
+          <Pressable
+            style={styles.logoutButton}
+            onPress={handleOpenSignOut}
+            accessibilityRole="button"
+            accessibilityLabel={t('settings.signOut.button')}
+          >
+            <LogOutIcon size={16} color={color.fg.muted} />
             <Text style={styles.logoutText}>{t('settings.signOut.button')}</Text>
           </Pressable>
         </Animated.View>
@@ -1554,6 +1578,8 @@ export default function SettingsScreen() {
 
       <LanguagePickerModal s={styles} visible={showLanguagePicker} preference={langPref}
         systemLanguage={systemLanguage} onSelect={setLangPref} onClose={() => setShowLanguagePicker(false)} />
+      <CurrencySheet visible={showCurrencyPicker} selected={currencyCode}
+        onSelect={pickCurrency} onClose={() => setShowCurrencyPicker(false)} />
       <AccountSwitcherModal
         visible={showAccountSwitcher}
         onClose={() => setShowAccountSwitcher(false)}
@@ -1573,7 +1599,7 @@ export default function SettingsScreen() {
       <AppModal visible={showSignOut} onClose={() => setShowSignOut(false)}>
         <View style={styles.signOutModal}>
           <View style={styles.signOutIconWrap}>
-            <LogOutIcon size={24} color={color.accent.base} strokeWidth={2} />
+            <LogOutIcon size={24} color={color.error.base} strokeWidth={2} />
           </View>
           <Text style={styles.signOutTitle}>{t('settings.signOut.title')}</Text>
           <Text style={styles.signOutDesc}>
@@ -1589,6 +1615,8 @@ export default function SettingsScreen() {
             </View>
           )}
 
+          {/* Destructive commit = error, never accent. VelaButton has no
+              destructive variant, so signOutBtn overrides the accent bg. */}
           <VelaButton
             title={pendingSync ? t('settings.signOut.anyway') : t('settings.signOut.button')}
             onPress={handleSignOut}
@@ -1624,7 +1652,7 @@ const styleFactory = () => ({
 
   // Settings Row
   settingsRow: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: space.xl, paddingVertical: space.xl, position: 'relative' as const },
-  settingsIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center' as const, justifyContent: 'center' as const },
+  settingsIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: color.bg.sunken, alignItems: 'center' as const, justifyContent: 'center' as const },
   settingsRowContent: { flex: 1, marginLeft: space.lg, gap: 2 },
   settingsRowTitle: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
   settingsRowSubtitle: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle },
@@ -1632,9 +1660,9 @@ const styleFactory = () => ({
   settingsRowDividerFull: { height: 1, backgroundColor: color.border.base, marginHorizontal: space.xl },
 
   // Format / language picker — de-boxed rows separated by hairline dividers.
-  // A selected option keeps its accent outline (a genuine "selected" surface).
-  fmtRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.lg, paddingVertical: space.lg, paddingHorizontal: space.md, borderRadius: radius.lg, borderWidth: 1.5, borderColor: 'transparent' as const },
-  fmtRowSel: { borderColor: color.accent.base, backgroundColor: color.accent.soft, paddingHorizontal: space.lg },
+  // Selection is marked only by the accent Check glyph: no fill/outline, so
+  // switching options never shifts the layout.
+  fmtRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.lg, paddingVertical: space.lg, paddingHorizontal: space.md },
   fmtRowSep: { height: 1, backgroundColor: color.border.base, marginHorizontal: space.md },
   fmtRowInfo: { flex: 1, gap: 2 },
   fmtExample: { fontSize: text.lg, ...inter.semibold, color: color.fg.base, fontFamily: font.mono },
@@ -1646,22 +1674,17 @@ const styleFactory = () => ({
   langContributeCtaRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.xs },
   langContributeCta: { fontSize: text.sm, ...inter.medium, color: color.accent.base },
 
-  // Logout — open (de-boxed) destructive action row, not a card
+  // Logout — open (de-boxed) row; quiet ink, danger lives in the confirm modal
   logoutButton: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, paddingVertical: space.xl, gap: space.md },
-  logoutText: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
+  logoutText: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
 
-  // Text Scale
-  // Theme Picker
-  themePickerContainer: { flexDirection: 'row' as const, paddingVertical: space.xl, paddingHorizontal: space.xl, gap: space.md },
-  themeOption: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'center' as const, gap: space.sm, paddingVertical: space.lg, borderRadius: radius.lg, backgroundColor: color.bg.sunken },
-  themeOptionActive: { backgroundColor: color.accent.soft, borderWidth: 1.5, borderColor: color.accent.base },
-  themeOptionLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
-  themeOptionLabelActive: { color: color.accent.base, ...inter.semibold },
+  // Theme / avatar pickers — SegmentedToggle rows, inset to match SettingsRow
+  pickerRow: { paddingVertical: space.lg, paddingHorizontal: space.xl },
   avatarPreviewCircle: {
-    width: 18, height: 18, borderRadius: 9, backgroundColor: color.accent.soft,
+    width: 18, height: 18, borderRadius: radius.full, backgroundColor: color.bg.sunken,
     alignItems: 'center' as const, justifyContent: 'center' as const,
   },
-  avatarPreviewLetter: { fontSize: 9, ...inter.bold, color: color.accent.base },
+  avatarPreviewLetter: { fontSize: 9, ...inter.bold, color: color.fg.base },
 
   // Slider
   sliderContainer: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: space['2xl'], paddingHorizontal: space.xl, gap: space.lg },
@@ -1669,11 +1692,11 @@ const styleFactory = () => ({
   sliderLabelLarge: { fontSize: text.xl, ...inter.semibold, color: color.fg.subtle },
   sliderTrackOuter: { flex: 1, height: 36, justifyContent: 'center' as const },
   sliderTrack: { position: 'absolute' as const, left: 0, right: 0, height: 4, borderRadius: 2, backgroundColor: color.border.base },
-  sliderFill: { position: 'absolute' as const, left: 0, height: 4, borderRadius: 2, backgroundColor: color.accent.base },
+  sliderFill: { position: 'absolute' as const, left: 0, height: 4, borderRadius: 2, backgroundColor: color.border.base },
   sliderTicks: { position: 'absolute' as const, left: 0, right: 0, flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const },
+  // Only the fill carries accent — ticks and thumb stay neutral.
   sliderTickDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.border.strong },
-  sliderTickDotActive: { backgroundColor: color.accent.base },
-  sliderThumb: { position: 'absolute' as const, top: 4, width: 28, height: 28, borderRadius: 14, backgroundColor: color.bg.raised, borderWidth: 2, borderColor: color.accent.base, ...shadow.md },
+  sliderThumb: { position: 'absolute' as const, top: 4, width: 28, height: 28, borderRadius: 14, backgroundColor: color.bg.raised, borderWidth: 2, borderColor: color.border.strong, ...shadow.md },
 
   // Modal shared
   modalContainer: { flex: 1, backgroundColor: color.bg.base },
@@ -1727,7 +1750,7 @@ const styleFactory = () => ({
 
   // Add Network — results
   checkBtn: { marginTop: space.lg, marginBottom: space.lg },
-  addNetError: { fontSize: text.sm, ...inter.medium, color: color.accent.base, marginTop: space.md },
+  addNetError: { fontSize: text.sm, ...inter.medium, color: color.error.base, marginTop: space.md },
   addNetResult: { padding: space['2xl'], gap: space.sm, marginBottom: space.lg },
   addNetResultName: { fontSize: text.lg, ...inter.bold, color: color.fg.base },
   addNetResultDetail: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
@@ -1736,23 +1759,22 @@ const styleFactory = () => ({
   addNetCompatTitle: { fontSize: text.sm, ...inter.bold, color: color.fg.base, marginBottom: space.sm },
   contractRow: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingVertical: 4 },
   contractStatusRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.md, flex: 1 },
-  deployBtn: { backgroundColor: color.accent.soft, paddingHorizontal: space.lg, paddingVertical: space.sm, borderRadius: radius.md },
-  deployBtnText: { fontSize: text.xs, ...inter.semibold, color: color.accent.base },
   addNetCompatRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: space.md, paddingVertical: 3 },
   addNetCompatText: { fontSize: text.sm, ...inter.medium, color: color.fg.base },
-  addNetCompatMissing: { color: color.accent.base },
+  addNetCompatMissing: { color: color.error.base },
   addNetCompatDetail: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle, marginTop: 2, marginLeft: 30 },
-  addNetCompatError: { fontSize: text.sm, ...inter.regular, color: color.accent.base, marginTop: space.sm },
+  addNetCompatError: { fontSize: text.sm, ...inter.regular, color: color.error.base, marginTop: space.sm },
   addNetHint: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, textAlign: 'center' as const, lineHeight: 20 },
 
   // Sign Out Modal
   signOutModal: { padding: space['3xl'], paddingTop: space['2xl'], alignItems: 'center' as const },
-  signOutIconWrap: { width: 56, height: 56, borderRadius: 28, backgroundColor: color.accent.soft, alignItems: 'center' as const, justifyContent: 'center' as const, marginBottom: space.xl },
+  signOutIconWrap: { width: 56, height: 56, borderRadius: 28, backgroundColor: color.error.soft, alignItems: 'center' as const, justifyContent: 'center' as const, marginBottom: space.xl },
   signOutTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base, marginBottom: space.md },
   signOutDesc: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center' as const, lineHeight: 22, marginBottom: space.xl },
   signOutWarning: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, gap: space.md, backgroundColor: color.warning.soft, borderRadius: radius.lg, padding: space.xl, marginBottom: space.xl, width: '100%' as const },
   signOutWarningText: { flex: 1, fontSize: text.sm, ...inter.medium, color: color.warning.base, lineHeight: 20 },
-  signOutBtn: { width: '100%' as const, marginBottom: space.lg },
+  // backgroundColor overrides VelaButton's accent — destructive commit is error-colored.
+  signOutBtn: { width: '100%' as const, marginBottom: space.lg, backgroundColor: color.error.base },
   signOutCancel: { paddingVertical: space.lg },
   signOutCancelText: { fontSize: text.base, ...inter.semibold, color: color.fg.muted },
 });

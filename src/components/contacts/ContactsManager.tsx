@@ -16,6 +16,9 @@ import { Search, X, Star, Plus, Trash2, ChevronLeft, Users, ChevronRight, Upload
 import { AppModal } from '@/components/ui/AppModal';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { VelaButton } from '@/components/ui/VelaButton';
+import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
+import { SectionLabel } from '@/components/ui/SectionLabel';
+import { Divider } from '@/components/ui/DetailRow';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import { GroupEditor } from '@/components/contacts/GroupEditor';
 import { shortAddr, isAddress } from '@/models/types';
@@ -28,7 +31,7 @@ import {
 } from '@/services/contacts';
 import { exportContactsJson, exportContactsCsv, parseContactsFile, importContacts } from '@/services/contact-io';
 import { pickTable, saveTextFile } from '@/services/file-io';
-import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
+import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 
 type Filter = 'all' | 'starred';
 
@@ -155,13 +158,16 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
               <View style={styles.header}>
                 <Text style={styles.title}>{t('contacts.title')}</Text>
                 <View style={styles.headerActions}>
-                  <Pressable onPress={openSearch} hitSlop={8} style={styles.iconBtn}>
+                  <Pressable onPress={openSearch} hitSlop={8} style={styles.iconBtn}
+                    accessibilityRole="button" accessibilityLabel={t('contacts.searchPlaceholder')}>
                     <Search size={20} color={color.fg.muted} strokeWidth={2} />
                   </Pressable>
-                  <Pressable onPress={openAdd} hitSlop={8} style={styles.addBtn}>
-                    <Plus size={18} color={color.accent.base} strokeWidth={2.5} />
+                  <Pressable onPress={openAdd} hitSlop={8} style={styles.iconBtn}
+                    accessibilityRole="button" accessibilityLabel={t('contacts.addContact')}>
+                    <Plus size={22} color={color.fg.muted} strokeWidth={2.4} />
                   </Pressable>
-                  <Pressable onPress={onClose} hitSlop={8} style={styles.iconBtn}>
+                  <Pressable onPress={onClose} hitSlop={8} style={styles.iconBtn}
+                    accessibilityRole="button" accessibilityLabel={t('contacts.cancel')}>
                     <X size={22} color={color.fg.base} strokeWidth={2} />
                   </Pressable>
                 </View>
@@ -170,18 +176,24 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
 
             {showSegment && (
               <View style={styles.segmentRow}>
-                <Segment
-                  label={t('contacts.filterAll')}
-                  count={total}
-                  active={filter === 'all'}
-                  onPress={() => setFilterTo('all')}
-                />
-                <Segment
-                  label={t('contacts.sectionFavorites')}
-                  count={favorites.length}
-                  active={filter === 'starred'}
-                  onPress={() => setFilterTo('starred')}
-                  starred
+                <SegmentedToggle<Filter>
+                  value={filter}
+                  onChange={setFilterTo}
+                  options={[
+                    { key: 'all', label: `${t('contacts.filterAll')} ${total}` },
+                    {
+                      key: 'starred',
+                      label: `${t('contacts.sectionFavorites')} ${favorites.length}`,
+                      icon: (active) => (
+                        <Star
+                          size={13}
+                          color={active ? color.warning.base : color.fg.subtle}
+                          strokeWidth={2}
+                          fill={active ? color.warning.base : 'none'}
+                        />
+                      ),
+                    },
+                  ]}
                 />
               </View>
             )}
@@ -189,21 +201,27 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
             <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               {!searching && (
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>{t('contacts.sectionGroups', { defaultValue: 'Groups' })}</Text>
-                  {groups.map((g) => (
-                    <Pressable key={g.id} style={styles.row} onPress={() => openGroupEdit(g)} testID="manager-group-row">
-                      <View style={styles.groupIcon}><Users size={18} color={color.accent.base} strokeWidth={2} /></View>
-                      <View style={styles.rowInfo}>
-                        <Text style={styles.rowName} numberOfLines={1}>{g.name}</Text>
-                        <Text style={styles.rowAddr}>{t('contacts.groupMembers', { count: g.members.length, defaultValue: `${g.members.length} members` })}</Text>
-                      </View>
-                      <ChevronRight size={18} color={color.fg.subtle} strokeWidth={2} />
+                  <View style={styles.sectionHeaderRow}>
+                    <SectionLabel style={styles.sectionLabel}>{t('contacts.sectionGroups')}</SectionLabel>
+                    <Pressable onPress={openGroupNew} hitSlop={10} testID="manager-new-group"
+                      accessibilityRole="button" accessibilityLabel={t('contacts.groupNew')}>
+                      <Text style={styles.sectionAction}>{t('contacts.groupNew')}</Text>
                     </Pressable>
+                  </View>
+                  {groups.map((g, i) => (
+                    <React.Fragment key={g.id}>
+                      {i > 0 && <View style={styles.rowDividerWrap}><Divider /></View>}
+                      <Pressable style={styles.row} onPress={() => openGroupEdit(g)} testID="manager-group-row"
+                        accessibilityRole="button" accessibilityLabel={g.name}>
+                        <View style={styles.iconCircle}><Users size={18} color={color.fg.muted} strokeWidth={2} /></View>
+                        <View style={styles.rowInfo}>
+                          <Text style={styles.rowName} numberOfLines={1}>{g.name}</Text>
+                          <Text style={styles.rowAddr}>{t('contacts.groupMembers', { count: g.members.length })}</Text>
+                        </View>
+                        <ChevronRight size={18} color={color.fg.subtle} strokeWidth={2} />
+                      </Pressable>
+                    </React.Fragment>
                   ))}
-                  <Pressable style={styles.newGroupRow} onPress={openGroupNew} testID="manager-new-group">
-                    <Plus size={16} color={color.accent.base} strokeWidth={2.5} />
-                    <Text style={styles.newGroupText}>{t('contacts.groupNew', { defaultValue: 'New group' })}</Text>
-                  </Pressable>
                 </View>
               )}
               {contacts === null ? (
@@ -216,47 +234,45 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
                     </Text>
                   </View>
                 ) : (
-                  searchResults.map((c) => (
-                    <ContactRow key={c.address} c={c} onOpen={openEdit} onToggleFav={onToggleFav} />
-                  ))
+                  <ContactList items={searchResults} onOpen={openEdit} onToggleFav={onToggleFav} />
                 )
               ) : total === 0 ? (
                 <View style={styles.empty}>
                   <Text style={styles.emptyTitle}>{t('contacts.empty')}</Text>
                   <Text style={styles.emptyHint}>{t('contacts.emptyHint')}</Text>
+                  <Pressable style={styles.addContactBtn} onPress={openAdd}
+                    accessibilityRole="button" accessibilityLabel={t('contacts.addContact')}>
+                    <Text style={styles.addContactText}>{t('contacts.addContact')}</Text>
+                  </Pressable>
                 </View>
               ) : filter === 'starred' ? (
-                favorites.map((c) => (
-                  <ContactRow key={c.address} c={c} onOpen={openEdit} onToggleFav={onToggleFav} />
-                ))
+                <ContactList items={favorites} onOpen={openEdit} onToggleFav={onToggleFav} />
               ) : (
                 <>
                   {favorites.length > 0 && (
                     <Section title={others.length > 0 ? t('contacts.sectionFavorites') : undefined}>
-                      {favorites.map((c) => (
-                        <ContactRow key={c.address} c={c} onOpen={openEdit} onToggleFav={onToggleFav} />
-                      ))}
+                      <ContactList items={favorites} onOpen={openEdit} onToggleFav={onToggleFav} />
                     </Section>
                   )}
                   {others.length > 0 && (
                     <Section title={favorites.length > 0 ? t('contacts.sectionRecent') : undefined}>
-                      {others.map((c) => (
-                        <ContactRow key={c.address} c={c} onOpen={openEdit} onToggleFav={onToggleFav} />
-                      ))}
+                      <ContactList items={others} onOpen={openEdit} onToggleFav={onToggleFav} />
                     </Section>
                   )}
                 </>
               )}
 
-              {!searching && (
+              {!searching && total > 0 && (
                 <View style={styles.ioRow}>
-                  <Pressable style={styles.ioBtn} onPress={onImport} disabled={busy} testID="contacts-import">
+                  <Pressable style={styles.ioBtn} onPress={onImport} disabled={busy} testID="contacts-import"
+                    accessibilityRole="button" accessibilityLabel={t('contacts.importBtn')}>
                     <Upload size={15} color={color.fg.muted} strokeWidth={2} />
-                    <Text style={styles.ioText}>{busy ? t('contacts.importing', { defaultValue: 'Importing…' }) : t('contacts.importBtn', { defaultValue: 'Import' })}</Text>
+                    <Text style={styles.ioText}>{busy ? t('contacts.importing') : t('contacts.importBtn')}</Text>
                   </Pressable>
-                  <Pressable style={styles.ioBtn} onPress={onExport} testID="contacts-export">
+                  <Pressable style={styles.ioBtn} onPress={onExport} testID="contacts-export"
+                    accessibilityRole="button" accessibilityLabel={t('contacts.exportBtn')}>
                     <Download size={15} color={color.fg.muted} strokeWidth={2} />
-                    <Text style={styles.ioText}>{t('contacts.exportBtn', { defaultValue: 'Export' })}</Text>
+                    <Text style={styles.ioText}>{t('contacts.exportBtn')}</Text>
                   </Pressable>
                 </View>
               )}
@@ -281,37 +297,30 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
   );
 }
 
-function Segment({ label, count, active, onPress, starred }: {
-  label: string;
-  count: number;
-  active: boolean;
-  onPress: () => void;
-  starred?: boolean;
-}) {
-  return (
-    <Pressable style={[styles.segment, active && styles.segmentActive]} onPress={onPress}>
-      {starred && (
-        <Star
-          size={13}
-          color={active ? color.warning.base : color.fg.subtle}
-          strokeWidth={2}
-          fill={active ? color.warning.base : 'none'}
-        />
-      )}
-      <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]} numberOfLines={1}>
-        {label}
-      </Text>
-      <Text style={[styles.segmentCount, active && styles.segmentCountActive]}>{count}</Text>
-    </Pressable>
-  );
-}
-
 function Section({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
-      {title && <Text style={styles.sectionTitle}>{title}</Text>}
+      {title && <SectionLabel style={styles.sectionLabel}>{title}</SectionLabel>}
       {children}
     </View>
+  );
+}
+
+/** Contact rows separated by a hairline inset past the avatar. */
+function ContactList({ items, onOpen, onToggleFav }: {
+  items: Contact[];
+  onOpen: (c: Contact) => void;
+  onToggleFav: (c: Contact) => void;
+}) {
+  return (
+    <>
+      {items.map((c, i) => (
+        <React.Fragment key={c.address}>
+          {i > 0 && <View style={styles.rowDividerWrap}><Divider /></View>}
+          <ContactRow c={c} onOpen={onOpen} onToggleFav={onToggleFav} />
+        </React.Fragment>
+      ))}
+    </>
   );
 }
 
@@ -446,10 +455,6 @@ const styles = createStyles(() => ({
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   title: { fontSize: text['2xl'], ...inter.bold, color: color.fg.base },
   iconBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-  addBtn: {
-    width: 32, height: 32, borderRadius: radius.lg, backgroundColor: color.accent.soft,
-    alignItems: 'center', justifyContent: 'center',
-  },
   backBtn: { width: 32, height: 32, justifyContent: 'center' },
 
   // Search — revealed from the header icon, replaces the title row.
@@ -462,61 +467,52 @@ const styles = createStyles(() => ({
   searchInput: { flex: 1, fontSize: text.lg, ...inter.regular, color: color.fg.base, padding: 0 },
   searchClose: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
 
-  // Segmented [All | Favorites] filter with counts.
-  segmentRow: {
-    flexDirection: 'row', gap: space.xs,
-    backgroundColor: color.bg.sunken, borderRadius: radius.xl,
-    padding: 3, marginBottom: space.lg,
-  },
-  segment: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: space.sm, paddingVertical: space.md, borderRadius: radius.lg,
-  },
-  segmentActive: { backgroundColor: color.bg.raised, ...shadow.sm },
-  segmentLabel: { fontSize: text.base, ...inter.semibold, color: color.fg.muted },
-  segmentLabelActive: { color: color.fg.base },
-  segmentCount: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
-  segmentCountActive: { color: color.fg.muted },
+  // [All | Favorites] filter — the shared SegmentedToggle; just spacing here.
+  segmentRow: { marginBottom: space.md },
 
   scroll: { flex: 1 },
   section: { marginBottom: space.lg },
-  sectionTitle: {
-    fontSize: 10, ...inter.semibold, color: color.fg.subtle,
-    textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: space.sm, marginLeft: space.sm,
+  sectionLabel: { marginLeft: space.sm },
+  sectionHeaderRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
+  sectionAction: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted },
 
   row: {
     flexDirection: 'row', alignItems: 'center', gap: space.lg,
-    paddingVertical: space.lg, paddingHorizontal: space.sm, borderRadius: radius.lg,
+    paddingVertical: space.md, paddingHorizontal: space.sm, borderRadius: radius.lg, minHeight: 60,
   },
   rowPressed: { backgroundColor: color.bg.sunken },
+  rowDividerWrap: { marginLeft: space.sm + 42 + space.lg },
   rowInfo: { flex: 1, gap: 2 },
   rowName: { fontSize: text.lg, ...inter.semibold, color: color.fg.base },
   rowAddr: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.muted },
   starBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 
-  // Groups + import/export
-  groupIcon: {
-    width: 42, height: 42, borderRadius: radius.lg,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: color.accent.soft,
+  // Group rows share the quiet neutral icon circle (no accent).
+  iconCircle: {
+    width: 42, height: 42, borderRadius: 21,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: color.bg.sunken,
   },
-  newGroupRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
-    paddingVertical: space.md, marginTop: space.xs, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: color.border.base, borderStyle: 'dashed',
+  // Import / export — quiet text buttons under a hairline, power features that
+  // must not outweigh the contacts themselves.
+  ioRow: {
+    flexDirection: 'row', gap: space['3xl'], justifyContent: 'center',
+    marginTop: space['2xl'], marginBottom: space.lg, paddingTop: space.xl,
+    borderTopWidth: 1, borderTopColor: color.border.base,
   },
-  newGroupText: { fontSize: text.base, ...inter.semibold, color: color.accent.base },
-  ioRow: { flexDirection: 'row', gap: space.md, marginTop: space['2xl'], marginBottom: space.lg },
   ioBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
-    paddingVertical: space.md, borderRadius: radius.lg, backgroundColor: color.bg.sunken,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
+    paddingVertical: space.sm, minHeight: 44,
   },
-  ioText: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted },
+  ioText: { fontSize: text.sm, ...inter.semibold, color: color.fg.base },
 
   loading: { paddingVertical: space['4xl'], alignItems: 'center' },
   empty: { paddingVertical: space['4xl'], alignItems: 'center', paddingHorizontal: space.xl, gap: space.md },
   emptyTitle: { fontSize: text.lg, ...inter.semibold, color: color.fg.base, textAlign: 'center' },
   emptyHint: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center', lineHeight: 20 },
+  addContactBtn: { paddingVertical: space.sm, paddingHorizontal: space.lg, marginTop: space.xs },
+  addContactText: { fontSize: text.base, ...inter.semibold, color: color.accent.base },
 
   // ===== Form =====
   formAvatar: { alignItems: 'center', paddingVertical: space.xl },

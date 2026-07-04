@@ -165,19 +165,16 @@
       "clearFilter": "Limpar filtro de rede",
       "toggleSearch": "Buscar chains"
     },
-    "chart": {
-      "noDataFor": "Sem dados para {{label}}",
-      "tapHint": "Toque em uma barra para ver o saldo"
-    },
     "bugReport": {
       "title": "Relatar um problema",
-      "subtitle": "Conte o que deu errado — vai direto para o nosso rastreador de problemas.",
+      "subtitle": "Conte o que deu errado.",
       "whatLabel": "O que aconteceu?",
       "whatPlaceholder": "ex.: toquei em Enviar e a tela travou.",
       "stepsLabel": "Passos para reproduzir (opcional)",
       "stepsPlaceholder": "1. Acesse…\n2. Toque em…\n3. Veja…",
+      "addSteps": "+ Adicionar passos para reproduzir",
       "previewToggle": "O que será enviado",
-      "consent": "Só enviamos o que você vê aqui — nunca suas chaves, frase de recuperação ou saldos.",
+      "consent": "Só enviamos o que você vê — nunca suas chaves, frase de recuperação ou saldos.",
       "send": "Enviar relatório",
       "sending": "Enviando…",
       "cancel": "Cancelar",

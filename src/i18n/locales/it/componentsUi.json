@@ -165,19 +165,16 @@
       "clearFilter": "Cancella il filtro di rete",
       "toggleSearch": "Cerca reti"
     },
-    "chart": {
-      "noDataFor": "Nessun dato per {{label}}",
-      "tapHint": "Tocca una barra per vedere il saldo"
-    },
     "bugReport": {
       "title": "Segnala un problema",
-      "subtitle": "Dicci cosa è andato storto — finirà direttamente nel nostro tracker delle segnalazioni.",
+      "subtitle": "Dicci cosa è andato storto.",
       "whatLabel": "Cosa è successo?",
       "whatPlaceholder": "es. Ho toccato Invia e la schermata si è bloccata.",
       "stepsLabel": "Passaggi per riprodurre (facoltativo)",
       "stepsPlaceholder": "1. Vai a…\n2. Tocca…\n3. Vedi…",
+      "addSteps": "+ Aggiungi i passaggi per riprodurre",
       "previewToggle": "Cosa verrà inviato",
-      "consent": "Viene inviato solo ciò che vedi qui — mai le tue chiavi, la frase di recupero o i saldi.",
+      "consent": "Viene inviato solo ciò che vedi — mai le chiavi, la frase di recupero o i saldi.",
       "send": "Invia segnalazione",
       "sending": "Invio…",
       "cancel": "Annulla",

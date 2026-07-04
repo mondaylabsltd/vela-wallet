@@ -32,11 +32,12 @@
     "appearance": {
       "themeLight": "ライト",
       "themeDark": "ダーク",
-      "themeAuto": "自動",
+      "themeAuto": "システムに合わせる",
       "avatarInitials": "イニシャル",
       "avatarIdenticon": "識別アイコン"
     },
     "localization": {
+      "currencyTitle": "通貨",
       "autoExample": "自動 · {{example}}",
       "numberTitle": "数値の形式",
       "numberSubtitle": "金額の桁区切りと小数点の表示方法です。",

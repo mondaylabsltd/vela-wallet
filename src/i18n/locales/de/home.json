@@ -2,8 +2,8 @@
   "home": {
     "totalBalance": "Gesamtguthaben",
     "balanceStale": "Einige Guthaben werden noch aktualisiert.",
-    "statement": "Kontoauszug",
     "tabActivity": "Aktivität",
+    "tabAssets": "Assets",
     "tabConnections": "Verbindungen",
     "liveIndicator": "Live · wartet auf Zahlungen",
     "emptyNoActivityNetwork": "Keine Aktivität in diesem Netzwerk",
@@ -47,13 +47,9 @@
     "connDelete": "Löschen",
     "connPending": "Wird verarbeitet",
     "connFailed": "Fehlgeschlagen",
-    "assetsSheetTitle": "Ihre Assets",
     "cancel": "Abbrechen",
-    "a11yViewAssets": "Ihre Assets anzeigen",
     "a11yHideBalance": "Guthaben ausblenden",
     "a11yShowBalance": "Guthaben anzeigen",
-    "a11yChangeCurrency": "Anzeigewährung ändern, aktuell {{code}}",
-    "a11yViewStatement": "Vollständigen Kontoauszug im Block-Explorer ansehen",
     "a11ySwitchAccount": "Konto {{name}}. Konto wechseln",
     "a11yOpenSettings": "Einstellungen"
   }

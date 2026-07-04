@@ -17,20 +17,29 @@ export interface DisplayCurrency {
   fmt: (usd: number) => string;
 }
 
+// Last committed code+rate PAIR, shared across hook instances. A fresh mount
+// (e.g. a tab pane) must never pair the stored code with the rate-1 default —
+// ¥12 instead of ¥1,860 — so until some instance has committed a real pair,
+// everyone renders the consistent USD/1.
+let _committed: { code: string; rate: number } | null = null;
+
 export function useDisplayCurrency(): DisplayCurrency {
-  const [code, setCode] = useState(getCurrencyCode());
-  const [rate, setRate] = useState(1);
+  const [pair, setPair] = useState(() => _committed ?? { code: 'USD', rate: 1 });
 
   useFocusEffect(useCallback(() => {
     let alive = true;
-    loadCurrency().then((c) => {
+    // Commit code + rate together: flipping the code while the old rate is still
+    // applied would render a wrong-magnitude value for a frame (huge for IDR/KRW).
+    loadCurrency().then(async (c) => {
+      const r = await getRate(c);
       if (!alive) return;
-      setCode(c);
-      getRate(c).then((r) => { if (alive) setRate(r); });
+      _committed = { code: c, rate: r };
+      setPair(_committed);
     });
     return () => { alive = false; };
   }, []));
 
+  const { code, rate } = pair;
   const meta = currencyMeta(code);
   return {
     code,

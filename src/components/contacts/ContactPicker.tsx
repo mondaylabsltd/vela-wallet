@@ -5,12 +5,18 @@
  * contacts, and live search by name or address. Picking a row fills the caller's
  * recipient field. If you type/paste a fresh valid address, it offers to use it
  * directly (and save it) — so the picker never gets in the way of a one-off send.
+ *
+ * Quiet by design: every entry is a plain de-boxed row (avatar/icon + name +
+ * hairline), no accent slabs — the primary act is picking a row, so accent is
+ * spent on nothing here (design language rules 1/6/8).
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Search, X, Star, BookmarkPlus, ScanLine, ChevronRight, Users } from 'lucide-react-native';
+import { Search, X, Star, ScanLine, ChevronRight, Users } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
+import { SectionLabel } from '@/components/ui/SectionLabel';
+import { Divider } from '@/components/ui/DetailRow';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import { shortAddr, isAddress } from '@/models/types';
 import {
@@ -20,17 +26,22 @@ import {
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 import { hapticLight } from '@/services/platform';
 
+/** Leading avatar/icon diameter — row hairlines inset past it so they align
+    under the text (Apple-Wallet style). */
+const ROW_AVATAR = 40;
 
-export function ContactPicker({ visible, onClose, onSelect, onSelectGroup, onScan, myAddress }: {
+export function ContactPicker({ visible, onClose, onSelect, onSelectGroup, onScan, onAddContact, myAddress }: {
   visible: boolean;
   onClose: () => void;
   onSelect: (address: string, name?: string) => void;
   /** Pick a whole group as recipients — enables the Groups section. The host
       (SendScreen) seeds split mode with one row per member. */
   onSelectGroup?: (addresses: string[], name: string) => void;
-  /** Optional QR-scan entry, shown as a prominent action at the top of the
-      sheet. Tapping it closes the picker and hands off to the scanner. */
+  /** Optional QR-scan entry, shown as a quiet row at the top of the list.
+      Tapping it closes the picker and hands off to the scanner. */
   onScan?: () => void;
+  /** Optional "add a contact" escape hatch for the empty state. */
+  onAddContact?: () => void;
   myAddress?: string;
 }) {
   const { t } = useTranslation();
@@ -77,13 +88,14 @@ export function ContactPicker({ visible, onClose, onSelect, onSelectGroup, onSca
   };
 
   const showGroups = !!onSelectGroup && groups.length > 0 && !query;
+  const isEmpty = contacts !== null && filtered.length === 0 && !typedAddr;
 
   return (
     <AppModal visible={visible} onClose={onClose}>
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>{t('contacts.pickerTitle')}</Text>
-          <Pressable onPress={onClose} hitSlop={8}>
+          <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('contacts.cancel')}>
             <X size={22} color={color.fg.base} strokeWidth={2} />
           </Pressable>
         </View>
@@ -100,64 +112,104 @@ export function ContactPicker({ visible, onClose, onSelect, onSelectGroup, onSca
             autoCorrect={false}
           />
           {query.length > 0 && (
-            <Pressable onPress={() => setQuery('')} hitSlop={8}>
+            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('contacts.cancel')}>
               <X size={15} color={color.fg.subtle} strokeWidth={2} />
             </Pressable>
           )}
         </View>
 
-        {onScan && (
-          <Pressable style={styles.scanRow} onPress={() => { hapticLight(); onClose(); onScan(); }}>
-            <View style={styles.scanIcon}>
-              <ScanLine size={20} color={color.accent.base} strokeWidth={2} />
-            </View>
-            <Text style={styles.scanText}>{t('contacts.scanToAdd')}</Text>
-            <ChevronRight size={18} color={color.fg.subtle} strokeWidth={2} />
-          </Pressable>
-        )}
-
         <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {/* Scan — a plain row, not a promoted slab; the icon rhymes with the avatars. */}
+          {onScan && !query && (
+            <>
+              <Pressable
+                style={styles.row}
+                onPress={() => { hapticLight(); onClose(); onScan(); }}
+                accessibilityRole="button"
+                accessibilityLabel={t('contacts.scanToAdd')}
+              >
+                <View style={styles.iconCircle}>
+                  <ScanLine size={19} color={color.fg.muted} strokeWidth={2} />
+                </View>
+                <Text style={styles.rowName}>{t('contacts.scanToAdd')}</Text>
+              </Pressable>
+              <RowDivider />
+            </>
+          )}
+
           {/* Use a freshly typed address right away */}
           {typedAddr && !typedIsKnown && (
-            <Pressable style={styles.useRow} onPress={() => pick(typedAddr)}>
-              <ContactAvatar name="" address={typedAddr} size={40} />
+            <Pressable
+              style={styles.row}
+              onPress={() => pick(typedAddr)}
+              accessibilityRole="button"
+              accessibilityLabel={t('contacts.useTyped')}
+            >
+              <ContactAvatar name="" address={typedAddr} size={ROW_AVATAR} />
               <View style={styles.rowInfo}>
-                <Text style={styles.rowName}>{t('contacts.useTyped', { defaultValue: 'Use this address' })}</Text>
+                <Text style={styles.rowName}>{t('contacts.useTyped')}</Text>
                 <Text style={styles.rowAddr}>{shortAddr(typedAddr)}</Text>
               </View>
               <Pressable
-                hitSlop={8}
-                style={styles.saveBtn}
+                hitSlop={12}
                 onPress={(e) => { e.stopPropagation?.(); saveContact({ address: typedAddr }).then(() => pick(typedAddr)); }}
+                accessibilityRole="button"
+                accessibilityLabel={t('contacts.saveToContacts')}
               >
-                <BookmarkPlus size={18} color={color.accent.base} strokeWidth={2} />
+                <Text style={styles.saveText}>{t('contacts.save')}</Text>
               </Pressable>
             </Pressable>
           )}
 
           {contacts === null ? (
             <View style={styles.loading}><ActivityIndicator size="small" color={color.fg.muted} /></View>
-          ) : filtered.length === 0 && !typedAddr ? (
+          ) : isEmpty ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyText}>
+              <Text style={styles.emptyTitle}>
                 {query ? t('contacts.noResults', { query }) : t('contacts.emptyPicker')}
               </Text>
+              {!query && <Text style={styles.emptyHint}>{t('contacts.pickerEmptyHint')}</Text>}
+              {!query && onAddContact && (
+                <Pressable
+                  style={styles.addContactBtn}
+                  onPress={() => { hapticLight(); onAddContact(); }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('contacts.addContact')}
+                >
+                  <Text style={styles.addContactText}>{t('contacts.addContact')}</Text>
+                </Pressable>
+              )}
             </View>
           ) : (
             <>
               {showGroups && (
-                <Section title={t('contacts.sectionGroups', { defaultValue: 'Groups' })}>
-                  {groups.map((g) => <GroupRow key={g.id} g={g} onPick={pickGroup} />)}
+                <Section title={t('contacts.sectionGroups')}>
+                  {groups.map((g, i) => (
+                    <React.Fragment key={g.id}>
+                      {i > 0 && <RowDivider />}
+                      <GroupRow g={g} onPick={pickGroup} />
+                    </React.Fragment>
+                  ))}
                 </Section>
               )}
               {favorites.length > 0 && (
                 <Section title={t('contacts.sectionFavorites')}>
-                  {favorites.map((c) => <Row key={c.address} c={c} onPick={pick} />)}
+                  {favorites.map((c, i) => (
+                    <React.Fragment key={c.address}>
+                      {i > 0 && <RowDivider />}
+                      <Row c={c} onPick={pick} />
+                    </React.Fragment>
+                  ))}
                 </Section>
               )}
               {rest.length > 0 && (
-                <Section title={favorites.length > 0 ? t('contacts.sectionRecent') : undefined}>
-                  {rest.map((c) => <Row key={c.address} c={c} onPick={pick} />)}
+                <Section title={favorites.length > 0 ? t('contacts.sectionRecent') : t('contacts.title')}>
+                  {rest.map((c, i) => (
+                    <React.Fragment key={c.address}>
+                      {i > 0 && <RowDivider />}
+                      <Row c={c} onPick={pick} />
+                    </React.Fragment>
+                  ))}
                 </Section>
               )}
             </>
@@ -168,10 +220,15 @@ export function ContactPicker({ visible, onClose, onSelect, onSelectGroup, onSca
   );
 }
 
+/** Hairline inset past the leading avatar/icon so it aligns under the row text. */
+function RowDivider() {
+  return <View style={styles.rowDividerWrap}><Divider /></View>;
+}
+
 function Section({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
-      {title && <Text style={styles.sectionTitle}>{title}</Text>}
+      {title && <SectionLabel style={styles.sectionLabel}>{title}</SectionLabel>}
       {children}
     </View>
   );
@@ -179,14 +236,21 @@ function Section({ title, children }: { title?: string; children: React.ReactNod
 
 function GroupRow({ g, onPick }: { g: ContactGroup; onPick: (g: ContactGroup) => void }) {
   const { t } = useTranslation();
+  const members = t('contacts.groupMembers', { count: g.members.length });
   return (
-    <Pressable style={styles.row} onPress={() => onPick(g)} testID="group-row">
-      <View style={styles.groupIcon}>
-        <Users size={20} color={color.accent.base} strokeWidth={2} />
+    <Pressable
+      style={styles.row}
+      onPress={() => onPick(g)}
+      testID="group-row"
+      accessibilityRole="button"
+      accessibilityLabel={`${g.name}, ${members}`}
+    >
+      <View style={styles.iconCircle}>
+        <Users size={19} color={color.fg.muted} strokeWidth={2} />
       </View>
       <View style={styles.rowInfo}>
         <Text style={styles.rowName} numberOfLines={1}>{g.name}</Text>
-        <Text style={styles.rowAddr}>{t('contacts.groupMembers', { count: g.members.length, defaultValue: `${g.members.length} members` })}</Text>
+        <Text style={styles.rowAddr}>{members}</Text>
       </View>
       <ChevronRight size={18} color={color.fg.subtle} strokeWidth={2} />
     </Pressable>
@@ -200,15 +264,20 @@ function Row({ c, onPick }: {
   const { t } = useTranslation();
   const name = contactDisplayName(c);
   return (
-    <Pressable style={styles.row} onPress={() => onPick(c.address, name || undefined)}>
-      <ContactAvatar name={name} address={c.address} kind={c.kind} size={40} />
+    <Pressable
+      style={styles.row}
+      onPress={() => onPick(c.address, name || undefined)}
+      accessibilityRole="button"
+      accessibilityLabel={name || shortAddr(c.address)}
+    >
+      <ContactAvatar name={name} address={c.address} kind={c.kind} size={ROW_AVATAR} />
       <View style={styles.rowInfo}>
         <View style={styles.rowNameLine}>
           <Text style={styles.rowName} numberOfLines={1}>{name || shortAddr(c.address)}</Text>
           {c.favorite && <Star size={12} color={color.warning.base} strokeWidth={2} fill={color.warning.base} />}
         </View>
         <Text style={styles.rowAddr} numberOfLines={1}>
-          {name ? shortAddr(c.address) : (c.kind === 'account' ? t('contacts.kindAccount') : ' ')}
+          {name ? shortAddr(c.address) : (c.kind === 'account' ? t('contacts.kindAccount') : ' ')}
           {c.txCount > 0 ? `  ·  ${t('contacts.sends', { count: c.txCount })}` : ''}
         </Text>
       </View>
@@ -227,53 +296,34 @@ const styles = createStyles(() => ({
   searchWrap: {
     flexDirection: 'row', alignItems: 'center', gap: space.md,
     backgroundColor: color.bg.sunken, borderRadius: radius.xl,
-    paddingHorizontal: space.xl, paddingVertical: space.lg, marginBottom: space.lg,
+    paddingHorizontal: space.xl, paddingVertical: space.lg, marginBottom: space.sm,
   },
   searchInput: { flex: 1, fontSize: text.lg, ...inter.regular, color: color.fg.base, padding: 0 },
 
-  scanRow: {
-    flexDirection: 'row', alignItems: 'center', gap: space.lg,
-    paddingVertical: space.md, paddingHorizontal: space.lg,
-    backgroundColor: color.accent.soft, borderRadius: radius.xl, marginBottom: space.lg,
-  },
-  scanIcon: {
-    width: 40, height: 40, borderRadius: radius.lg,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: color.bg.base,
-  },
-  scanText: { flex: 1, fontSize: text.lg, ...inter.semibold, color: color.fg.base },
-
   scroll: { flex: 1 },
-  section: { marginBottom: space.xl },
-  sectionTitle: {
-    fontSize: 10, ...inter.semibold, color: color.fg.subtle,
-    textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: space.sm, marginLeft: space.sm,
-  },
+  section: { marginBottom: space.md },
+  sectionLabel: { marginLeft: space.sm },
 
+  // De-boxed rows: single shared left inset, hairline dividers between them.
   row: {
     flexDirection: 'row', alignItems: 'center', gap: space.lg,
-    paddingVertical: space.md, paddingHorizontal: space.sm,
+    paddingVertical: space.md, paddingHorizontal: space.sm, minHeight: 56,
   },
-  groupIcon: {
-    width: 40, height: 40, borderRadius: radius.lg,
-    alignItems: 'center', justifyContent: 'center', backgroundColor: color.accent.soft,
-  },
-  useRow: {
-    flexDirection: 'row', alignItems: 'center', gap: space.lg,
-    paddingVertical: space.md, paddingHorizontal: space.lg,
-    backgroundColor: color.accent.soft, borderRadius: radius.xl, marginBottom: space.lg,
+  rowDividerWrap: { marginLeft: space.sm + ROW_AVATAR + space.lg },
+  iconCircle: {
+    width: ROW_AVATAR, height: ROW_AVATAR, borderRadius: ROW_AVATAR / 2,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: color.bg.sunken,
   },
   rowInfo: { flex: 1, gap: 2 },
   rowNameLine: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   rowName: { fontSize: text.lg, ...inter.semibold, color: color.fg.base, flexShrink: 1 },
   rowAddr: { fontSize: text.sm, fontWeight: '500' as const, fontFamily: font.mono, color: color.fg.muted },
-  saveBtn: {
-    width: 36, height: 36, borderRadius: radius.lg,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: color.bg.raised,
-  },
+  saveText: { fontSize: text.base, ...inter.semibold, color: color.fg.muted, paddingHorizontal: space.sm },
 
   loading: { paddingVertical: space['4xl'], alignItems: 'center' },
-  empty: { paddingVertical: space['4xl'], alignItems: 'center', paddingHorizontal: space.xl },
-  emptyText: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center' },
+  empty: { paddingVertical: space['4xl'], alignItems: 'center', paddingHorizontal: space.xl, gap: space.md },
+  emptyTitle: { fontSize: text.lg, ...inter.semibold, color: color.fg.base, textAlign: 'center' },
+  emptyHint: { fontSize: text.base, ...inter.regular, color: color.fg.muted, textAlign: 'center', lineHeight: 20 },
+  addContactBtn: { paddingVertical: space.sm, paddingHorizontal: space.lg, marginTop: space.xs },
+  addContactText: { fontSize: text.base, ...inter.semibold, color: color.accent.base },
 }));

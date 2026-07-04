@@ -2,11 +2,17 @@
  * HomeScreen (layout A) — payment-first, activity-first single screen.
  *
  *   Header:   account selector · settings (gear)
- *   Balance:  total · hide · currency · Statement → blockscan.com/address
- *   Content:  [ Activity | Connections ] toggle + Network filter
- *               · Activity   = value-transfer feed (received / sent)
+ *   Balance:  "Total balance · CODE" label + the number (tap = hide/show)
+ *   Content:  [ Activity | Assets | Connections ] toggle + Network filter
+ *               · Activity    = value-transfer feed (received / sent)
+ *               · Assets      = holdings list (HoldingsList → token detail)
  *               · Connections = single active dApp connection + its events
  *   Dock:     Receive · Scan · Send  (WaveDock, full-bleed)
+ *
+ * The hero is deliberately bare — the number is the only actor. Display
+ * currency moved to Settings › Localization (N01 FR-1); balance privacy is the
+ * number's own tap (persisted, masks the feed + holdings too, an EyeOff glyph
+ * appears only in the masked state).
  *
  * Incoming payments play a haptic + row glow. The Activity feed currently uses
  * the interim local-tx adapter; the RPC received-transfer monitor plugs into the
@@ -15,7 +21,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import {
-  AlertTriangle, ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, Plug, RefreshCw, Settings, Trash2, X,
+  AlertTriangle, ArrowRight, ChevronDown, ChevronRight, EyeOff, Inbox, Plug, RefreshCw, Settings, Trash2,
 } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,27 +37,26 @@ import { ConnectionFlowStates } from '@/components/ConnectionFlowStates';
 import { ActivityRow } from '@/components/ui/ActivityRow';
 import { ConnectionEventDetailSheet } from '@/components/ui/ConnectionEventDetailSheet';
 import { AmountText } from '@/components/ui/AmountText';
-import { AppModal } from '@/components/ui/AppModal';
 import { AccountSwitcherModal } from '@/components/ui/AccountSwitcherModal';
-import { CurrencySheet } from '@/components/ui/CurrencySheet';
+import { HoldingsList } from '@/components/ui/HoldingsList';
 import { NetworkFilterButton, NetworkFilterSheet } from '@/components/ui/NetworkFilterSheet';
 import { TransactionDetailSheet } from '@/components/ui/TransactionDetailSheet';
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
 import { SigningReplaySheet } from '@/components/ui/SigningReplaySheet';
-import { TokenSelector } from '@/components/ui/TokenSelector';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { WalletAvatar } from '@/components/ui/WalletAvatar';
-import { WaveDock } from '@/components/ui/WaveDock';
+import { DOCK_BAR_HEIGHT, WaveDock } from '@/components/ui/WaveDock';
 import { RpcTroubleBanner } from '@/components/ui/RpcTroubleBanner';
 import { getRateLimitedChains } from '@/services/rpc-pool';
 
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 import { useDAppConnection, type ConnectionStatus } from '@/models/dapp-connection';
-import { chainName, getAllNetworksSync, type Network } from '@/models/network';
-import { shortAddr, isAddress, tokenBalanceDouble, tokenChainId, tokenId, tokenUsdValue, type APIToken } from '@/models/types';
-import { useTokenMultiSelect } from '@/hooks/use-token-multi-select';
+import { getAllNetworksSync, type Network } from '@/models/network';
+import { shortAddr, isAddress, tokenBalanceDouble, tokenChainId, tokenUsdValue, type APIToken } from '@/models/types';
+import { useBalancePrivacy } from '@/hooks/use-balance-privacy';
+import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import {
   loadActivityItems, loadActivityTransactions, loadConnectionEvents, relativeTime, syncReceivedTransfers,
@@ -61,17 +66,16 @@ import { reconcilePendingTransactions } from '@/services/tx-reconciler';
 import { useLocalePrefs } from '@/services/locale-format';
 import { deleteConnectionEvents, deleteTransaction, type LocalTransaction } from '@/services/storage';
 import { getAccountBalance, getAccountBalances, setAccountBalance } from '@/services/balance-cache';
-import { currencyMeta, formatFiat, getCurrencyCode, getRate, loadCurrency, setCurrency, shouldShowDecimals } from '@/services/currency';
+import { currencyMeta, shouldShowDecimals } from '@/services/currency';
 import { parseRemoteInjectURL } from '@/services/dapp-transport';
 import { parseEIP681 } from '@/services/eip681';
-import { copyToClipboard, hapticLight, hapticSuccess, isAppActive, openURL, showAlert } from '@/services/platform';
+import { copyToClipboard, hapticLight, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
 import { fetchTokens } from '@/services/wallet-api';
 import { isWalletPairURI } from '@/services/walletpair-transport';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
 const LIVE_POLL_MS = 10 * 1000;
-const DOCK_CLEARANCE = 112;
 
 // ---------------------------------------------------------------------------
 // Balance — fintech "atomic number" cascade: fit-to-width on one line, drop
@@ -99,7 +103,7 @@ function Balance({ value, symbol, code }: { value: number; symbol: string; code:
 // Screen
 // ---------------------------------------------------------------------------
 
-type Tab = 'activity' | 'connections';
+type Tab = 'activity' | 'assets' | 'connections';
 
 export default function HomeScreen() {
   const { t } = useTranslation();
@@ -107,9 +111,6 @@ export default function HomeScreen() {
   const { activeAccount, state } = useWallet();
   const conn = useDAppConnection();
   const { connectToWalletPair, connectToBridge } = conn;
-  // Same multi-select as the Send picker (shared hook) — filter a network in the
-  // assets sheet to pick several tokens, then hand them to Send.
-  const multiSelect = useTokenMultiSelect();
 
   const address = activeAccount?.address ?? state.address;
   const accountName = activeAccount?.name ?? 'Wallet';
@@ -122,7 +123,9 @@ export default function HomeScreen() {
   // banner (swapping RPC is the wrong fix for a limit that lifts on its own).
   const [rateLimitedChainIds, setRateLimitedChainIds] = useState<number[]>([]);
   const [cachedTotal, setCachedTotal] = useState<number | null>(null);
-  const [hidden, setHidden] = useState(false);
+  // Balance privacy — shared store (hero, feed, holdings, switcher, toast all
+  // mask together); persisted, hydrate-race-safe.
+  const { hidden, toggle: toggleHidden } = useBalancePrivacy();
   const [activity, setActivity] = useState<ActivityItem[]>([]);
   const [connEvents, setConnEvents] = useState<ConnectionEvent[]>([]);
   const [selectedChainId, setSelectedChainId] = useState<number | null>(null);
@@ -134,10 +137,6 @@ export default function HomeScreen() {
   const [newItemId, setNewItemId] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<{ amount: string; token: string } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [currencyCode, setCurrencyCode] = useState(getCurrencyCode());
-  const [rate, setRate] = useState(1);
-  const [showCurrency, setShowCurrency] = useState(false);
-  const [showAssets, setShowAssets] = useState(false);
   const [aliasMap, setAliasMap] = useState<Map<string, string>>(new Map());
   const aliasAttempted = useRef<Set<string>>(new Set());
   const [detailTx, setDetailTx] = useState<LocalTransaction | null>(null);
@@ -145,6 +144,12 @@ export default function HomeScreen() {
   const [eventTx, setEventTx] = useState<LocalTransaction | null>(null);
   const txByIdRef = useRef<Map<string, LocalTransaction>>(new Map());
   const insets = useSafeAreaInsets();
+  // Dock clearance depends on the device's bottom inset — static padding either
+  // clips the last row (inset > 0) or wastes space (inset = 0).
+  const listContentStyle = useMemo(
+    () => [styles.listContent, { paddingBottom: DOCK_BAR_HEIGHT + insets.bottom + space['2xl'] }],
+    [insets.bottom],
+  );
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadDataRef = useRef<(() => Promise<void>) | null>(null);
   // Tracks the live address so a slow in-flight load for a previous account
@@ -184,7 +189,10 @@ export default function HomeScreen() {
   const networks = useMemo(() => getAllNetworksSync(), []);
   const selectedNetwork = selectedChainId != null ? networks.find((n) => n.chainId === selectedChainId) ?? null : null;
   const connected = conn.status === 'connected' || conn.status === 'reconnecting';
-  const currency = currencyMeta(currencyCode);
+  // Display currency — set in Settings › Localization; re-read on focus by the
+  // hook, so a change over there lands here without a remount.
+  const dc = useDisplayCurrency();
+  const currency = currencyMeta(dc.code);
 
   // --- balance: derive from streamed tokens, with cache fallback + partial detection ---
   // Never show a confidently-wrong smaller number. If a chain's RPC failed or a
@@ -199,11 +207,6 @@ export default function HomeScreen() {
     : balancePartial && cachedTotal != null ? Math.max(liveTotal, cachedTotal)
     : liveTotal;
 
-  // --- load currency preference once ---
-  useEffect(() => {
-    loadCurrency().then((code) => { setCurrencyCode(code); getRate(code).then(setRate); });
-  }, []);
-
   // The feed's amount strings are formatted at load time and cached in state, so
   // a number-format change doesn't re-run the adapter. Re-derive the feed when
   // the format changes (other surfaces re-render via useLocalePrefs directly).
@@ -212,12 +215,6 @@ export default function HomeScreen() {
     const addr = addressRef.current;
     if (addr) loadActivityItems(addr).then(commitActivity).catch(() => {});
   }, [localePrefs, commitActivity]);
-
-  const pickCurrency = useCallback(async (code: string) => {
-    await setCurrency(code);
-    setCurrencyCode(code);
-    setRate(await getRate(code));
-  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -531,23 +528,6 @@ export default function HomeScreen() {
     if (t) { setDetailBatch(null); setDetailTx(t); }
   };
 
-  // Tap a token in the balance-hero asset sheet → open Send pre-filled to it.
-  const openAssetForSend = useCallback((token: APIToken) => {
-    setShowAssets(false);
-    router.push({ pathname: '/send', params: { preselectedSymbol: token.symbol, preselectedNetwork: token.network } });
-  }, [router]);
-
-  // Multi-token confirm: one token → normal send; two+ → hand the selection to
-  // Send's multi-token flow (the send/confirm logic lives only there).
-  const onAssetsMultiConfirm = useCallback(() => {
-    const picked = multiSelect.selectedTokens(tokens);
-    if (picked.length === 0) return;
-    if (picked.length === 1) { multiSelect.reset(); openAssetForSend(picked[0]); return; }
-    setShowAssets(false);
-    router.push({ pathname: '/send', params: { preselectedMulti: picked.map(tokenId).join(',') } });
-    multiSelect.reset();
-  }, [multiSelect, tokens, openAssetForSend, router]);
-
   // Connection-activity clear (whole list) + per-row delete. Both prune the
   // underlying records; on-chain transactions are untouched.
   const clearConnEvents = useCallback(() => {
@@ -597,69 +577,43 @@ export default function HomeScreen() {
   // --- renderers ---
   const renderHeader = () => (
     <Animated.View entering={hasEntered.current ? undefined : fadeInDown(60, 400)}>
-      {/* Balance — hidden on the Connections tab so its list gets the vertical room */}
-      {tab === 'activity' && (
+      {/* Balance — the hero shows on every tab, Connections included: a constant
+          anchor beats reclaiming its vertical room. */}
       <Animated.View style={balanceScaleStyle}>
         <View style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>{t('home.totalBalance')}</Text>
-          <View style={styles.balanceTopRow}>
-            {/* Tap the balance to see the assets behind it (reuses the Send picker). */}
-            <Pressable
-              style={styles.balanceFill}
-              onPress={() => setShowAssets(true)}
-              disabled={hidden}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('home.a11yViewAssets')}
-            >
-              {hidden ? <Text style={styles.balanceHidden}>••••••</Text> : (
-                <Balance value={displayTotal * rate} symbol={currency.symbol} code={currencyCode} />
-              )}
-            </Pressable>
-            <Pressable
-              onPress={() => setHidden((h) => !h)}
-              hitSlop={8}
-              style={styles.eyeBtn}
-              accessibilityRole="button"
-              accessibilityLabel={t(hidden ? 'home.a11yShowBalance' : 'home.a11yHideBalance')}
-              accessibilityState={{ expanded: !hidden }}
-            >
-              {hidden ? <EyeOff size={22} color={color.fg.muted} strokeWidth={2} /> : <Eye size={22} color={color.fg.muted} strokeWidth={2} />}
-            </Pressable>
-          </View>
+          {/* The code in the label keeps the unit unambiguous ($ alone could be
+              USD/CAD/AUD…) now that the currency control lives in Settings. */}
+          <Text style={styles.balanceLabel}>{`${t('home.totalBalance')} · ${dc.code}`}</Text>
+          {/* The number is the hero's only actor: tapping it toggles privacy
+              mode (persisted). The EyeOff glyph appears only beside the masked
+              value — chrome only when it has something to say. */}
+          <Pressable
+            style={styles.balanceTopRow}
+            onPress={toggleHidden}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={hidden ? t('home.a11yShowBalance') : dc.fmt(displayTotal)}
+            accessibilityHint={hidden ? undefined : t('home.a11yHideBalance')}
+          >
+            {hidden ? (
+              <View style={styles.balanceHiddenRow}>
+                <Text style={styles.balanceHidden}>••••••</Text>
+                <EyeOff size={20} color={color.fg.subtle} strokeWidth={2} />
+              </View>
+            ) : (
+              <Balance value={displayTotal * dc.rate} symbol={dc.symbol} code={dc.code} />
+            )}
+          </Pressable>
           {balancePartial && (
             <View style={styles.balanceStaleRow}>
               <AlertTriangle size={12} color={color.warning.base} strokeWidth={2.5} />
               <Text style={styles.balanceStaleText}>{t('home.balanceStale')}</Text>
             </View>
           )}
-          <View style={styles.balanceBottomRow}>
-            <Pressable
-              style={styles.currencyChip}
-              onPress={() => setShowCurrency(true)}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={t('home.a11yChangeCurrency', { code: currencyCode })}
-            >
-              <Text style={styles.currencyText}>{currencyCode}</Text>
-              <ChevronDown size={14} color={color.fg.muted} strokeWidth={2.4} />
-            </Pressable>
-            <Pressable
-              style={styles.manageBtn}
-              onPress={() => { if (address) openURL(`https://blockscan.com/address/${address}`); }}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={t('home.a11yViewStatement')}
-            >
-              <Text style={styles.manageText} numberOfLines={1}>{t('home.statement')}</Text>
-              <ChevronRight size={18} color={color.fg.muted} strokeWidth={2.6} />
-            </Pressable>
-          </View>
         </View>
       </Animated.View>
-      )}
 
-      {/* RPC failure banner + fix flow (shared with AssetsScreen). Rate-limited
+      {/* RPC failure banner + fix flow. Rate-limited
           chains are excluded — that's transient and self-healing, so nagging the
           user to swap RPC would be wrong; their balance quietly stays on cache. */}
       <RpcTroubleBanner
@@ -675,6 +629,7 @@ export default function HomeScreen() {
         <SegmentedToggle<Tab>
           options={[
             { key: 'activity', label: t('home.tabActivity') },
+            { key: 'assets', label: t('home.tabAssets') },
             { key: 'connections', label: t('home.tabConnections'), badge: connected ? 1 : 0 },
           ]}
           value={tab}
@@ -704,7 +659,9 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
-      {receipt && (
+      {/* Suppressed while balance privacy is on — an incoming toast would leak
+          exactly the class of number the mask conceals. */}
+      {receipt && !hidden && (
         <ReceiptToast amount={receipt.amount} token={receipt.token} top={insets.top + space.md} />
       )}
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -762,8 +719,8 @@ export default function HomeScreen() {
                           })
                         : item.subtitle
                     }
-                    amount={item.amount}
-                    fiat={item.usdValue > 0 ? formatFiat(item.usdValue * rate, currencyCode, currency.symbol) : undefined}
+                    amount={hidden ? '••••' : item.amount}
+                    fiat={!hidden && item.usdValue > 0 ? dc.fmt(item.usdValue) : undefined}
                     time={relativeTime(item.timestamp)}
                     chain={chainFor(item.chainId)}
                     index={index}
@@ -773,17 +730,31 @@ export default function HomeScreen() {
                   />
                 )}
                 ItemSeparatorComponent={() => <View style={styles.sep} />}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={listContentStyle}
                 showsVerticalScrollIndicator={false}
               />
             )}
           </VelaRefresh>
+        ) : tab === 'assets' ? (
+          // Keyed by address: an account switch resets the list's local state
+          // (zero-balance superset, toggle, search) instead of leaking the
+          // previous account's holdings while the new scan streams in.
+          <HoldingsList
+            key={address ?? 'none'}
+            tokens={tokens}
+            loading={tokens.length === 0 && (cachedTotal ?? 0) > 0}
+            selectedChainId={selectedChainId}
+            header={renderHeader()}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            contentContainerStyle={listContentStyle}
+          />
         ) : (
           <VelaRefresh refreshing={refreshing} onRefresh={onRefresh}>
             {(scrollProps) => (
               <Animated.ScrollView
                 {...scrollProps}
-                contentContainerStyle={styles.listContent}
+                contentContainerStyle={listContentStyle}
                 showsVerticalScrollIndicator={false}
               >
                 {renderHeader()}
@@ -827,60 +798,17 @@ export default function HomeScreen() {
         }}
       />
 
-      {/* Currency picker */}
-      <CurrencySheet
-        visible={showCurrency}
-        selected={currencyCode}
-        onSelect={pickCurrency}
-        onClose={() => setShowCurrency(false)}
-      />
-
       {/* Transaction detail */}
       <TransactionDetailSheet
         visible={detailTx !== null || detailBatch !== null}
         tx={detailTx}
         batch={detailBatch}
         alias={detailAlias}
-        rate={rate}
+        rate={dc.rate}
         currency={currency}
         onResolved={() => loadData()}
         onClose={() => { setDetailTx(null); setDetailBatch(null); }}
       />
-
-      {/* Balance-hero assets — reuses the Send token picker (tap a token → Send). */}
-      <AppModal visible={showAssets} onClose={() => { setShowAssets(false); multiSelect.reset(); }}>
-        <View style={styles.assetsSheet}>
-          <View style={styles.assetsHead}>
-            <Text style={styles.assetsTitle}>{t('home.assetsSheetTitle')}</Text>
-            <Pressable onPress={() => { setShowAssets(false); multiSelect.reset(); }} hitSlop={8}>
-              <X size={22} color={color.fg.base} strokeWidth={2} />
-            </Pressable>
-          </View>
-          <View style={styles.assetsBody}>
-            {/* Default to the stablecoin chip; filter a specific network to
-                multi-select tokens (shared with the Send picker). */}
-            <TokenSelector
-              tokens={tokens}
-              onSelect={openAssetForSend}
-              onAddChanged={loadData}
-              defaultCategory="stable"
-              initialChainId={multiSelect.chainId}
-              multiSelect={{
-                selectedIds: multiSelect.selectedIds,
-                onToggle: multiSelect.toggle,
-                onToggleAll: multiSelect.toggleAll,
-                isAllSelected: multiSelect.isAllSelected,
-                onNetworkChange: multiSelect.onNetworkChange,
-                onConfirm: onAssetsMultiConfirm,
-                confirmLabel: multiSelect.count === 1
-                  ? t('send.continueBtn')
-                  : t('send.multiSendContinue', { n: multiSelect.count, chain: multiSelect.chainId != null ? chainName(multiSelect.chainId) : '' }),
-                selectAllLabel: t('send.selectAllValuable'),
-              }}
-            />
-          </View>
-        </View>
-      </AppModal>
 
       {/* dApp signing-record detail. Records that captured their original request
           replay the FULL signing panel (read-only); older ones fall back to the
@@ -1159,21 +1087,13 @@ const styles = createStyles(() => ({
   balanceFill: { flex: 1 },
   balanceInt: { fontSize: 52, ...inter.bold, fontFamily: font.display, color: color.fg.base, letterSpacing: -1.2 },
   balanceDec: { fontSize: 28, ...inter.bold, fontFamily: font.display, color: color.fg.subtle, letterSpacing: -0.5 },
-  balanceHidden: { fontSize: 52, ...inter.bold, color: color.fg.base, flex: 1, letterSpacing: 2 },
-  eyeBtn: { padding: space.xs },
-  // Parity with AssetsScreen: when a chain read failed or a held token is unpriced,
-  // the hero total is an estimate — say so rather than showing a confident number.
+  // Masked state: dots + the only chrome the hero ever shows (EyeOff glyph).
+  balanceHiddenRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md },
+  balanceHidden: { fontSize: 52, ...inter.bold, color: color.fg.base, letterSpacing: 2 },
+  // Parity with the holdings view: when a chain read failed or a held token is
+  // unpriced, the hero total is an estimate — say so, not a confident number.
   balanceStaleRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.md },
   balanceStaleText: { fontSize: text.sm, ...inter.medium, color: color.warning.base },
-  balanceBottomRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.lg },
-  currencyChip: {
-    flexDirection: 'row', alignItems: 'center', gap: space.xs,
-    backgroundColor: color.bg.sunken, borderRadius: radius.full,
-    paddingVertical: space.sm, paddingHorizontal: space.lg,
-  },
-  currencyText: { fontSize: text.lg, ...inter.bold, color: color.fg.base },
-  manageBtn: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 2 },
-  manageText: { fontSize: text.lg, ...inter.semibold, color: color.fg.muted },
 
   // Receipt toast
   toast: {
@@ -1186,11 +1106,13 @@ const styles = createStyles(() => ({
   toastDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: color.fg.inverse },
   toastText: { fontSize: text.lg, ...inter.bold, color: color.fg.inverse },
 
-  // Nav row
-  navRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, marginBottom: space.lg },
+  // Nav row — tabs are content-sized (scrollable), so push the network filter
+  // to the right edge explicitly.
+  navRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md, marginBottom: space.lg },
 
   // List
-  listContent: { paddingHorizontal: space['3xl'], paddingBottom: DOCK_CLEARANCE },
+  // paddingBottom (dock clearance) is inset-dependent — applied via listContentStyle.
+  listContent: { paddingHorizontal: space['3xl'] },
   // Hairline divider between de-boxed rows, inset past the avatar (Apple-Wallet style)
   // so it aligns under the row's text, not the icon.
   sep: { height: 1, backgroundColor: color.border.base, marginLeft: 44 + space.lg + space.xs },
@@ -1257,16 +1179,6 @@ const styles = createStyles(() => ({
   eventPillText: { fontSize: text.xs, ...inter.semibold },
   eventPillTextPending: { color: color.info.base },
   eventPillTextFailed: { color: color.error.base },
-
-  // Balance-hero asset sheet (Req C)
-  assetsSheet: { flex: 1, backgroundColor: color.bg.base },
-  assetsHead: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: space['3xl'], paddingVertical: space.xl,
-    borderBottomWidth: 1, borderBottomColor: color.border.base,
-  },
-  assetsTitle: { fontSize: text.xl, ...inter.bold, color: color.fg.base },
-  assetsBody: { flex: 1, paddingHorizontal: space['3xl'], paddingTop: space.lg },
 
   connEmpty: { alignItems: 'center', paddingTop: space['4xl'], gap: space.md },
   connEmptyIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: color.bg.sunken, alignItems: 'center', justifyContent: 'center' },

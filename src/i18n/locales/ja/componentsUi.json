@@ -165,15 +165,12 @@
       "clearFilter": "ネットワークフィルターをクリア",
       "toggleSearch": "チェーンを検索"
     },
-    "chart": {
-      "noDataFor": "{{label}} のデータはありません",
-      "tapHint": "バーをタップして残高を表示"
-    },
     "bugReport": {
       "title": "問題を報告",
-      "subtitle": "不具合の内容をお知らせください — 内容はそのまま課題トラッカーに送信されます。",
+      "subtitle": "不具合の内容をお知らせください。",
       "whatLabel": "何が起きましたか？",
       "whatPlaceholder": "例：送るをタップしたら画面が固まった。",
+      "addSteps": "＋ 再現手順を追加",
       "stepsLabel": "再現手順（任意）",
       "stepsPlaceholder": "1. ○○を開く…\n2. ○○をタップ…\n3. ○○が表示される…",
       "previewToggle": "送信される内容",

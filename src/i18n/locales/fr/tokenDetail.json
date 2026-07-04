@@ -1,7 +1,5 @@
 {
   "tokenDetail": {
-    "chartTitle": "Solde sur 7 jours",
-    "chartEmpty": "Aucune donnée historique disponible",
     "send": "Envoyer",
     "receive": "Recevoir",
     "labelName": "Nom",

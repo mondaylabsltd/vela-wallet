@@ -1,7 +1,5 @@
 {
   "tokenDetail": {
-    "chartTitle": "Saldo dos últimos 7 dias",
-    "chartEmpty": "Nenhum dado histórico disponível",
     "send": "Enviar",
     "receive": "Receber",
     "labelName": "Nome",

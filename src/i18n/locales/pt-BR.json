@@ -32,11 +32,12 @@
     "appearance": {
       "themeLight": "Claro",
       "themeDark": "Escuro",
-      "themeAuto": "Automático",
+      "themeAuto": "Seguir o sistema",
       "avatarInitials": "Iniciais",
       "avatarIdenticon": "Identicon"
     },
     "localization": {
+      "currencyTitle": "Moeda",
       "autoExample": "Automático · {{example}}",
       "numberTitle": "Formato de número",
       "numberSubtitle": "Como os valores são agrupados e qual separador decimal é exibido.",

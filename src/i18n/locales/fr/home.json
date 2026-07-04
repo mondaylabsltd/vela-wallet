@@ -2,8 +2,8 @@
   "home": {
     "totalBalance": "Solde total",
     "balanceStale": "Certains soldes sont encore en cours de mise à jour.",
-    "statement": "Relevé",
     "tabActivity": "Activité",
+    "tabAssets": "Actifs",
     "tabConnections": "Connexions",
     "liveIndicator": "En direct · à l'écoute des paiements",
     "emptyNoActivityNetwork": "Aucune activité sur ce réseau",
@@ -47,13 +47,9 @@
     "connDelete": "Supprimer",
     "connPending": "En cours",
     "connFailed": "Échec",
-    "assetsSheetTitle": "Vos actifs",
     "cancel": "Annuler",
-    "a11yViewAssets": "Voir vos actifs",
     "a11yHideBalance": "Masquer le solde",
     "a11yShowBalance": "Afficher le solde",
-    "a11yChangeCurrency": "Changer la devise d'affichage, actuellement {{code}}",
-    "a11yViewStatement": "Voir le relevé complet sur l'explorateur de blocs",
     "a11ySwitchAccount": "Compte {{name}}. Changer de compte",
     "a11yOpenSettings": "Réglages"
   }
