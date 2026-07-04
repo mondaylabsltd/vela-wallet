@@ -2,6 +2,7 @@
   "home": {
     "totalBalance": "總餘額",
     "balanceStale": "部分餘額仍在更新。",
+    "balanceUnpriced": "部分代幣無法取得價格。",
     "rescanButton": "重新掃描",
     "rescanTitle": "重新掃描近期動態",
     "rescanSubtitle": "沒收到某筆款項？直接向區塊鏈重新查詢近期轉帳。",

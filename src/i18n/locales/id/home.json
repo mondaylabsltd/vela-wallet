@@ -2,6 +2,7 @@
   "home": {
     "totalBalance": "Total saldo",
     "balanceStale": "Sebagian saldo masih diperbarui.",
+    "balanceUnpriced": "Harga beberapa token tidak dapat diperoleh.",
     "tabActivity": "Aktivitas",
     "tabAssets": "Aset",
     "tabConnections": "Koneksi",

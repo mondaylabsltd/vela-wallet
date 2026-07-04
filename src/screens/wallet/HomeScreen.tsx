@@ -76,6 +76,13 @@ import { isWalletPairURI } from '@/services/walletpair-transport';
 
 const AUTO_REFRESH_MS = 10 * 60 * 1000;
 const LIVE_POLL_MS = 10 * 1000;
+// When a fetch settles incomplete (a chain's RPC failed, or a held token has no
+// price yet), we don't shout "still updating" immediately — that notice showing
+// on a routine hiccup, and surviving repeated pulls, is the bug we're fixing.
+// Instead we silently force-refetch a few times with escalating backoff; the
+// notice only appears if the balance is STILL incomplete after all of them.
+const MAX_PARTIAL_RETRIES = 3;
+const PARTIAL_RETRY_DELAYS_MS = [1500, 4000, 8000];
 
 // ---------------------------------------------------------------------------
 // Balance — fintech "atomic number" cascade: fit-to-width on one line, drop
@@ -123,6 +130,12 @@ export default function HomeScreen() {
   // banner (swapping RPC is the wrong fix for a limit that lifts on its own).
   const [rateLimitedChainIds, setRateLimitedChainIds] = useState<number[]>([]);
   const [cachedTotal, setCachedTotal] = useState<number | null>(null);
+  // Gate for the "still updating / couldn't be priced" notice: kept hidden while
+  // silent force-retries are still in flight, flipped true only once they're
+  // exhausted and the balance is still incomplete. Reset per account.
+  const [noticeAllowed, setNoticeAllowed] = useState(false);
+  const partialRetriesLeft = useRef(MAX_PARTIAL_RETRIES);
+  const partialRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Balance privacy — shared store (hero, feed, holdings, switcher, toast all
   // mask together); persisted, hydrate-race-safe.
   const { hidden, toggle: toggleHidden } = useBalancePrivacy();
@@ -151,7 +164,7 @@ export default function HomeScreen() {
     [insets.bottom],
   );
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const loadDataRef = useRef<(() => Promise<void>) | null>(null);
+  const loadDataRef = useRef<((forceRefresh?: boolean) => Promise<void>) | null>(null);
   // Tracks the live address so a slow in-flight load for a previous account
   // can't paint stale balances after the user switches accounts.
   const addressRef = useRef(address);
@@ -218,10 +231,13 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Hold the branded spinner for a beat so a fast fetch never flickers.
+    // A user-initiated pull MUST re-hit RPC — forceRefresh bypasses the 5-min
+    // token cache. Without it, pulling within the TTL silently re-served the same
+    // (possibly stale/partial) snapshot, so the "still updating" notice never
+    // cleared no matter how many times you pulled.
     try {
       await Promise.all([
-        loadDataRef.current?.(),
+        loadDataRef.current?.(true),
         new Promise((resolve) => setTimeout(resolve, 650)),
       ]);
     } finally { setRefreshing(false); }
@@ -269,7 +285,7 @@ export default function HomeScreen() {
 
   // --- data loading ---
   const initializedRef = useRef(false);
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (forceRefresh = false) => {
     if (!address) return;
 
     // 1. Paint the feed instantly from the on-device store (no network). It's
@@ -331,6 +347,7 @@ export default function HomeScreen() {
       // drops to $0 mid-refresh (slow chains keep their last value).
       let failed: number[] = [];
       const result = await fetchTokens(address, {
+        forceRefresh,
         onProgress: (partialTokens) => {
           if (addressRef.current !== address) return; // account switched mid-load
           setTokens((prev) => {
@@ -349,10 +366,29 @@ export default function HomeScreen() {
       // Only trust the total as the new "last known good" when it's complete —
       // no failed chains and every held token priced.
       const unpriced = result.some((t) => tokenBalanceDouble(t) > 0 && t.priceUsd == null);
-      if (failed.length === 0 && !unpriced) {
+      const isPartial = failed.length > 0 || unpriced;
+      if (!isPartial) {
         const usd = result.reduce((s, t) => s + tokenUsdValue(t), 0);
         setAccountBalance(address, usd);
         setCachedTotal(usd);
+      }
+      // Grace before the notice: an incomplete result gets a few silent
+      // force-retries with escalating backoff before we admit "still updating".
+      // A clean result resets the budget so a later hiccup gets its own grace.
+      if (partialRetryTimer.current) { clearTimeout(partialRetryTimer.current); partialRetryTimer.current = null; }
+      if (!isPartial) {
+        partialRetriesLeft.current = MAX_PARTIAL_RETRIES;
+        setNoticeAllowed(false);
+      } else if (partialRetriesLeft.current > 0) {
+        const delay = PARTIAL_RETRY_DELAYS_MS[MAX_PARTIAL_RETRIES - partialRetriesLeft.current] ?? 8000;
+        partialRetriesLeft.current -= 1;
+        setNoticeAllowed(false);
+        partialRetryTimer.current = setTimeout(() => {
+          if (addressRef.current === address) loadDataRef.current?.(true);
+        }, delay);
+      } else {
+        // Retries exhausted and still incomplete — now the notice is honest.
+        setNoticeAllowed(true);
       }
     } catch { /* ignore — keep last-known tokens + total */ }
   }, [address, celebrateReceipt, commitActivity, commitConnEvents]);
@@ -391,12 +427,19 @@ export default function HomeScreen() {
     setTokens([]);
     setFailedChainIds([]);
     setCachedTotal(null);
+    // Fresh grace budget for the new account; drop any pending retry from the old one.
+    partialRetriesLeft.current = MAX_PARTIAL_RETRIES;
+    setNoticeAllowed(false);
+    if (partialRetryTimer.current) { clearTimeout(partialRetryTimer.current); partialRetryTimer.current = null; }
     let cancelled = false;
     if (address) {
       getAccountBalance(address).then((v) => { if (!cancelled && v != null) setCachedTotal(v); });
     }
     return () => { cancelled = true; };
   }, [address]);
+
+  // Drop any pending partial-retry timer on unmount.
+  useEffect(() => () => { if (partialRetryTimer.current) clearTimeout(partialRetryTimer.current); }, []);
 
   // Resolve counterparty names (own accounts → ENS/.bnb/Vela/etc.), best-effort + cached.
   useEffect(() => {
@@ -604,10 +647,15 @@ export default function HomeScreen() {
               <Balance value={displayTotal * dc.rate} symbol={dc.symbol} code={dc.code} />
             )}
           </Pressable>
-          {balancePartial && (
+          {balancePartial && noticeAllowed && (
             <View style={styles.balanceStaleRow}>
               <AlertTriangle size={12} color={color.warning.base} strokeWidth={2.5} />
-              <Text style={styles.balanceStaleText}>{t('home.balanceStale')}</Text>
+              {/* Failed chains are transient ("still updating" is honest — a retry
+                  can fix it); a held token with no price source is not going to
+                  resolve on its own, so promising an update would lie. */}
+              <Text style={styles.balanceStaleText}>
+                {t(failedChainIds.length > 0 ? 'home.balanceStale' : 'home.balanceUnpriced')}
+              </Text>
             </View>
           )}
         </View>

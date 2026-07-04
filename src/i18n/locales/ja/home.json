@@ -2,6 +2,7 @@
   "home": {
     "totalBalance": "合計残高",
     "balanceStale": "一部の残高を更新中です。",
+    "balanceUnpriced": "一部のトークンの価格を取得できませんでした。",
     "tabActivity": "アクティビティ",
     "tabAssets": "資産",
     "tabConnections": "接続",
