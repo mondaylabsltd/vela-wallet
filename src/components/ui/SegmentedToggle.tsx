@@ -68,6 +68,11 @@ export function SegmentedToggle<T extends string>({ options, value, onChange }: 
   const chipStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: tx.value }],
     width: w.value,
+    // Hide the chip until it has a measured width. A 0-width chip still paints
+    // its 1px border as a thin vertical line — visible as a flash on every tab
+    // switch, because this control remounts inside the list header when the
+    // tab's list swaps (state resets → w returns to 0 until onLayout re-measures).
+    opacity: w.value > 0 ? 1 : 0,
   }));
 
   return (
