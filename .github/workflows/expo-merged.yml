@@ -80,7 +80,10 @@ jobs:
         env:
           UPDATE_OUTPUT: ${{ steps.deploy.outputs.update-output }}
           PROJECT_ID: 0d798810-2982-455b-9079-7b9a7cabb97d
-          APP_SCHEME: vela-wallet
+          # Must be a scheme the app actually registers (app.json `scheme`) — the
+          # slug `vela-wallet` is NOT a URL scheme. Wrong value here = the deep
+          # link resolves to no app.
+          APP_SCHEME: velawallet
         with:
           script: |
             let updates = [];
@@ -99,10 +102,21 @@ jobs:
             if (groups.size === 0) { core.info('No EAS Update group in output — skipping QR comment.'); return; }
             const { PROJECT_ID, APP_SCHEME } = process.env;
             const rows = [...groups.entries()].map(([group, plats]) => {
-              const deep = `https://expo.dev/eas-update?appScheme=${APP_SCHEME}&projectId=${PROJECT_ID}&groupId=${group}`;
+              // The QR must encode a dev-client DEEP LINK, not the expo.dev HTML
+              // redirect page. The old QR encoded `https://expo.dev/eas-update?…`;
+              // the in-app scanner GETs whatever it decodes, so it fetched that
+              // web page and got `Content-Type: text/html` → the red
+              // "Expected MIME-Type …" screen. Point straight at the update
+              // manifest instead. Prefer the action-provided permalink; fall back
+              // to the documented `u.expo.dev/<projectId>/group/<groupId>` form.
+              const u = updates.find((x) => x.group === group) || {};
+              const manifest = u.manifestPermalink || `https://u.expo.dev/${PROJECT_ID}/group/${group}`;
+              const deep = `${APP_SCHEME}://expo-development-client/?url=${encodeURIComponent(manifest)}`;
               const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=12&data=${encodeURIComponent(deep)}`;
+              // Clickable browser fallback: expo.dev bounces to the same scheme.
+              const permalink = `https://expo.dev/eas-update?appScheme=${APP_SCHEME}&projectId=${PROJECT_ID}&groupId=${group}`;
               const label = [...new Set(plats)].join(' + ');
-              return `**${label}** — [Update permalink](${deep})<br/><img src="${qr}" width="200" height="200" alt="Merged main update QR (${label})" />`;
+              return `**${label}** — [Open in dev build](${permalink})<br/><img src="${qr}" width="200" height="200" alt="Merged main update QR (${label})" />`;
             });
             const sha = context.sha.slice(0, 7);
             const body = [
