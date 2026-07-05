@@ -374,9 +374,11 @@ export interface LocalTransaction {
   symbol: string;
   decimals: number;
   /**
-   * Ordered token-logo URL candidates, captured at send time so the detail sheet
-   * can show the real token logo instead of a letter glyph. Older records / most
-   * receives lack it (the logo falls back to the letter circle).
+   * Ordered token-logo URL candidates, captured at send/receive time so the
+   * detail sheet can show the real token logo instead of a letter glyph. Captured
+   * when the record is written because the record keeps only `symbol`, not the
+   * contract address, so the logo can't be reconstructed later. Older records
+   * (pre-capture receives) lack it and fall back to the letter circle.
    */
   logoUrls?: string[];
   chainId: number;
