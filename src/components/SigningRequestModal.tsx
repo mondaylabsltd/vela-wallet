@@ -29,7 +29,7 @@ import {
   resolveTransaction, resolveTypedData,
   type ClearSignResult, type ClearSignField, type SigningRisk,
 } from '@/services/clear-signing';
-import { color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
+import { scaleFont, color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { GasFeeCard } from '@/components/ui/GasFeeCard';
 import { EditableApproveCard } from '@/components/signing/EditableApproveCard';
@@ -1931,7 +1931,7 @@ const styles = createStyles(() => ({
   },
   contractInfo: { flex: 1, gap: 2 },
   contractLabel: {
-    fontSize: 10, ...inter.semibold,
+    fontSize: scaleFont(10), ...inter.semibold,
     color: color.fg.subtle,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.3,
@@ -1947,7 +1947,7 @@ const styles = createStyles(() => ({
   },
   contractNameNeutral: { color: color.fg.base },
   sourceTag: {
-    fontSize: 9, ...inter.semibold, color: color.fg.subtle,
+    fontSize: scaleFont(9), ...inter.semibold, color: color.fg.subtle,
     backgroundColor: color.bg.sunken, overflow: 'hidden',
     paddingHorizontal: 5, paddingVertical: 1, borderRadius: radius.sm,
     textTransform: 'uppercase', letterSpacing: 0.3,
@@ -2040,7 +2040,7 @@ const styles = createStyles(() => ({
     marginBottom: space.xl,
   },
   msgTagText: {
-    fontSize: 10, ...inter.semibold,
+    fontSize: scaleFont(10), ...inter.semibold,
     color: color.fg.subtle,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.3,
@@ -2075,7 +2075,7 @@ const styles = createStyles(() => ({
     marginBottom: space.lg,
   },
   rawText: {
-    fontSize: 9, fontFamily: font.mono, fontWeight: '400' as const,
+    fontSize: scaleFont(9), fontFamily: font.mono, fontWeight: '400' as const,
     color: color.fg.subtle, lineHeight: 14,
   },
 
@@ -2197,7 +2197,7 @@ const styles = createStyles(() => ({
 
   // ===== Recipient-risk tags (first-time / contract) =====
   riskTag: {
-    fontSize: 9, ...inter.semibold, color: color.fg.subtle,
+    fontSize: scaleFont(9), ...inter.semibold, color: color.fg.subtle,
     backgroundColor: color.bg.raised, overflow: 'hidden',
     paddingHorizontal: 5, paddingVertical: 1, borderRadius: radius.sm,
     textTransform: 'uppercase', letterSpacing: 0.3,
@@ -2213,7 +2213,7 @@ const styles = createStyles(() => ({
     marginVertical: space.sm, gap: 2,
   },
   allowanceTotalLabel: {
-    fontSize: 10, ...inter.semibold, color: color.fg.subtle,
+    fontSize: scaleFont(10), ...inter.semibold, color: color.fg.subtle,
     textTransform: 'uppercase' as const, letterSpacing: 0.3,
   },
   allowanceTotalValue: {
@@ -2233,7 +2233,7 @@ const styles = createStyles(() => ({
   ethSignTitle: { fontSize: text.base, ...inter.bold, color: color.error.base },
   ethSignBody: { fontSize: text.sm, ...inter.regular, color: color.fg.base, lineHeight: 19 },
   ethSignHash: {
-    fontSize: 11, fontFamily: font.mono, fontWeight: '400' as const,
+    fontSize: scaleFont(11), fontFamily: font.mono, fontWeight: '400' as const,
     color: color.fg.muted, backgroundColor: color.bg.sunken,
     padding: space.md, borderRadius: radius.md,
   },

@@ -15,7 +15,7 @@ import {
   getSavedContacts, saveGroup, deleteGroup, contactDisplayName, matchesQuery,
   type Contact, type ContactGroup,
 } from '@/services/contacts';
-import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
+import { scaleFont, color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 
 export function GroupEditor({ editing, onBack, onSaved }: {
   editing: ContactGroup | null;
@@ -153,7 +153,7 @@ const styles = createStyles(() => ({
   backBtn: { width: 32, height: 32, justifyContent: 'center' },
   title: { fontSize: text['2xl'], ...inter.bold, color: color.fg.base },
   fieldLabel: {
-    fontSize: 10, ...inter.semibold, color: color.fg.subtle,
+    fontSize: scaleFont(10), ...inter.semibold, color: color.fg.subtle,
     textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: space.sm, marginLeft: space.sm,
   },
   field: {
