@@ -120,13 +120,23 @@ export function tokenLogoURLs(t: APIToken): string[] {
   if (t.logo && t.logo.length > 0) return [t.logo];
   const cid = tokenChainId(t);
   if (isNativeToken(t)) {
-    const logoChain = nativeCoinLogoChainId(t.symbol, cid);
-    return [`${getEthereumDataURL()}/chainlogos/eip155-${logoChain}.png`];
+    return nativeLogoURLs(cid, t.symbol);
   }
   if (t.tokenAddress) {
     return tokenLogoURLsByAddress(cid, t.tokenAddress);
   }
   return [];
+}
+
+/**
+ * Native-coin logo URL(s) for a raw (chainId, symbol) pair — for surfaces that
+ * have no APIToken (e.g. a discovered incoming native transfer). The logo tracks
+ * the COIN's identity via {@link nativeCoinLogoChainId} (ETH is always eip155-1,
+ * even on Base), not the chain it currently sits on.
+ */
+export function nativeLogoURLs(chainId: number, symbol: string): string[] {
+  const logoChain = nativeCoinLogoChainId(symbol, chainId);
+  return [`${getEthereumDataURL()}/chainlogos/eip155-${logoChain}.png`];
 }
 
 /**

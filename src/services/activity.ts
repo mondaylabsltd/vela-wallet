@@ -15,7 +15,7 @@
 import { loadTransactions, mergeTransactions, type LocalTransaction } from '@/services/storage';
 import { chainName, nativeSymbol } from '@/models/network';
 import { shortAddress } from '@/models/wallet-state';
-import { tokenChainId, type APIToken } from '@/models/types';
+import { tokenChainId, tokenLogoURLsByAddress, nativeLogoURLs, type APIToken } from '@/models/types';
 import { fetchTokens } from '@/services/wallet-api';
 import { fetchIncomingTransfers, type IncomingTransfer } from '@/services/transfer-monitor';
 import { resolveTokenMetadata } from '@/services/token-metadata';
@@ -290,6 +290,15 @@ function incomingToRecord(tx: IncomingTransfer, address: string, index: Map<stri
     : isStable(symbol)
       ? formatUsd(amount)
       : '$0.00';
+  // Capture the token's logo URLs now, while we still hold the contract address
+  // (tx.token) — the persisted record keeps only `symbol`, so the detail sheet
+  // can't reconstruct an ERC-20 logo later. Mirrors what the send path stores,
+  // so a received token shows the same logo as when it's sent (not a letter).
+  const logoUrls = tx.isNative
+    ? nativeLogoURLs(tx.chainId, symbol)
+    : tx.token
+      ? tokenLogoURLsByAddress(tx.chainId, tx.token)
+      : [];
   return {
     id: tx.id,
     userOpHash: '',
@@ -299,6 +308,7 @@ function incomingToRecord(tx: IncomingTransfer, address: string, index: Map<stri
     value: String(amount),
     symbol,
     decimals,
+    ...(logoUrls.length ? { logoUrls } : {}),
     chainId: tx.chainId,
     timestamp: tx.timestamp,
     status: 'confirmed',
