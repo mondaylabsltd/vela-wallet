@@ -2,6 +2,7 @@ import '@/polyfills'; // MUST be first: installs crypto/btoa/atob/Buffer on Herm
 import '@/global.css';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import React, { Component, useEffect, useState, type ReactNode } from 'react';
 import { Appearance, View, Text, ActivityIndicator, Pressable } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -82,6 +83,11 @@ function AppShell() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      {/* Status-bar icon color follows the APP's resolved theme (not the system's,
+          which can differ when the user overrides the theme in-app): dark icons on
+          the light background, light icons on the dark one — so the phone's clock
+          and signal glyphs stay legible in every combination. */}
+      <StatusBar style={resolved === 'dark' ? 'light' : 'dark'} />
       <WalletProvider>
         <DAppConnectionProvider>
           <ThemeProvider value={resolved === 'dark' ? DarkTheme : DefaultTheme}>
