@@ -18,6 +18,7 @@ import { useRouter } from 'expo-router';
 import { Check, X } from 'lucide-react-native';
 
 import { AppModal } from '@/components/ui/AppModal';
+import { IdenticonViewerProvider } from '@/components/ui/IdenticonViewerProvider';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { WalletAvatar } from '@/components/ui/WalletAvatar';
@@ -80,6 +81,10 @@ export function AccountSwitcherModal({
 
   return (
     <AppModal visible={visible} onClose={onClose}>
+      {/* Host the identicon viewer INSIDE this modal: on iOS a modal opened from
+          the root VC while this pageSheet is up deadlocks — presenting it from
+          this modal's own VC does not. */}
+      <IdenticonViewerProvider>
       <View style={styles.container}>
         <View style={styles.header}>
           <View style={styles.headerInfo}>
@@ -128,6 +133,7 @@ export function AccountSwitcherModal({
           )}
         </ScrollView>
       </View>
+      </IdenticonViewerProvider>
     </AppModal>
   );
 }
