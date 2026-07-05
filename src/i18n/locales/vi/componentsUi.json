@@ -189,6 +189,14 @@
       "openGithub": "Mở biểu mẫu GitHub",
       "openGithubForm": "Thích dùng GitHub? Mở biểu mẫu báo lỗi →",
       "done": "Xong"
+    },
+    "identiconViewer": {
+      "title": "Identicon",
+      "caption": "Dấu vân tay hình ảnh của địa chỉ này — cùng một địa chỉ luôn vẽ ra cùng một họa tiết, nên bạn có thể nhận ra tài khoản của mình chỉ bằng một cái nhìn.",
+      "copyAddress": "Sao chép địa chỉ",
+      "copied": "Đã sao chép",
+      "close": "Đóng",
+      "a11yOpen": "Xem identicon"
     }
   }
 }

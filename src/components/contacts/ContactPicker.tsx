@@ -145,7 +145,7 @@ export function ContactPicker({ visible, onClose, onSelect, onSelectGroup, onSca
               accessibilityRole="button"
               accessibilityLabel={t('contacts.useTyped')}
             >
-              <ContactAvatar name="" address={typedAddr} size={ROW_AVATAR} />
+              <ContactAvatar name="" address={typedAddr} size={ROW_AVATAR} enlargeable />
               <View style={styles.rowInfo}>
                 <Text style={styles.rowName}>{t('contacts.useTyped')}</Text>
                 <Text style={styles.rowAddr}>{shortAddr(typedAddr)}</Text>
@@ -270,7 +270,7 @@ function Row({ c, onPick }: {
       accessibilityRole="button"
       accessibilityLabel={name || shortAddr(c.address)}
     >
-      <ContactAvatar name={name} address={c.address} kind={c.kind} size={ROW_AVATAR} />
+      <ContactAvatar name={name} address={c.address} kind={c.kind} size={ROW_AVATAR} enlargeable />
       <View style={styles.rowInfo}>
         <View style={styles.rowNameLine}>
           <Text style={styles.rowName} numberOfLines={1}>{name || shortAddr(c.address)}</Text>

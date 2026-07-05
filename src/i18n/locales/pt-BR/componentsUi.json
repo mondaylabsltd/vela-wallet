@@ -189,6 +189,14 @@
       "openGithub": "Abrir formulário do GitHub",
       "openGithubForm": "Prefere o GitHub? Abrir o formulário de issue →",
       "done": "Concluído"
+    },
+    "identiconViewer": {
+      "title": "Identicon",
+      "caption": "Uma impressão digital visual deste endereço: o mesmo endereço sempre gera o mesmo padrão, para que você reconheça sua conta num relance.",
+      "copyAddress": "Copiar endereço",
+      "copied": "Copiado",
+      "close": "Fechar",
+      "a11yOpen": "Ver identicon"
     }
   }
 }

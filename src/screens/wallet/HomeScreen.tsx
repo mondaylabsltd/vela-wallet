@@ -770,7 +770,9 @@ export default function HomeScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('home.a11ySwitchAccount', { name: accountName })}
           >
-            <WalletAvatar name={accountName} address={address} size={44} letterSize={text.lg} />
+            {/* Tapping the identicon itself enlarges it (handled inside
+                WalletAvatar); the rest of this button opens the switcher. */}
+            <WalletAvatar name={accountName} address={address} size={44} letterSize={text.lg} enlargeable />
             <View style={styles.accountInfo}>
               <View style={styles.accountNameRow}>
                 <Text style={styles.accountName} numberOfLines={1}>{accountName}</Text>

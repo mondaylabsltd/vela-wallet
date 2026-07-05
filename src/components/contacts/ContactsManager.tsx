@@ -336,7 +336,7 @@ function ContactRow({ c, onOpen, onToggleFav }: {
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
       onPress={() => onOpen(c)}
     >
-      <ContactAvatar name={name} address={c.address} kind={c.kind} size={42} />
+      <ContactAvatar name={name} address={c.address} kind={c.kind} size={42} enlargeable />
       <View style={styles.rowInfo}>
         <Text style={styles.rowName} numberOfLines={1}>{name || shortAddr(c.address)}</Text>
         <Text style={styles.rowAddr} numberOfLines={1}>

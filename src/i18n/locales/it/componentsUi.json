@@ -189,6 +189,14 @@
       "openGithub": "Apri il modulo GitHub",
       "openGithubForm": "Preferisci GitHub? Apri il modulo della issue →",
       "done": "Fatto"
+    },
+    "identiconViewer": {
+      "title": "Identicon",
+      "caption": "Un'impronta visiva di questo indirizzo: lo stesso indirizzo disegna sempre lo stesso motivo, così riconosci il tuo account a colpo d'occhio.",
+      "copyAddress": "Copia indirizzo",
+      "copied": "Copiato",
+      "close": "Chiudi",
+      "a11yOpen": "Visualizza identicon"
     }
   }
 }

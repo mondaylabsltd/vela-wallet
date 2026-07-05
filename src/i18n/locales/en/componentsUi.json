@@ -189,6 +189,14 @@
       "permitTag": "Spending permit (signature)",
       "permitCantCap": "A permit is a signature — its amount can't be capped here. To limit spending, use an on-chain Approve instead.",
       "permitNote": "You're signing a spending permit — the dApp can move up to this amount on your behalf."
+    },
+    "identiconViewer": {
+      "title": "Identicon",
+      "caption": "A visual fingerprint of this address — the same address always draws the same pattern, so you can recognise your account at a glance.",
+      "copyAddress": "Copy address",
+      "copied": "Copied",
+      "close": "Close",
+      "a11yOpen": "View identicon"
     }
   }
 }
