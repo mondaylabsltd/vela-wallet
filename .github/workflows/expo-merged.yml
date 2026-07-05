@@ -132,3 +132,49 @@ jobs:
               owner: context.repo.owner, repo: context.repo.repo,
               issue_number: context.issue.number, body,
             });
+
+      # When native code changed, the fingerprint moved and NO update is published
+      # for that platform — a fresh dev build is started instead and testers must
+      # reinstall. The Expo bot comment carries a Build Permalink but no QR, so you
+      # can't scan-to-install. Post our own comment with a scannable QR for each
+      # newly-started build's install page. The action exposes the build ids +
+      # whether a new build started; the build page URL exists the moment it's
+      # queued, so the QR is scannable immediately (watch it finish, then install).
+      - name: Post merged build-install QR comment
+        if: steps.deploy.outputs.android-did-start-new-build == 'true' || steps.deploy.outputs.ios-did-start-new-build == 'true'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          ANDROID_BUILD_ID: ${{ steps.deploy.outputs.android-build-id }}
+          IOS_BUILD_ID: ${{ steps.deploy.outputs.ios-build-id }}
+          ANDROID_NEW: ${{ steps.deploy.outputs.android-did-start-new-build }}
+          IOS_NEW: ${{ steps.deploy.outputs.ios-did-start-new-build }}
+          BUILD_OWNER: monday-labs-ltd
+          BUILD_SLUG: vela-wallet
+        with:
+          script: |
+            const { ANDROID_BUILD_ID, IOS_BUILD_ID, ANDROID_NEW, IOS_NEW, BUILD_OWNER, BUILD_SLUG } = process.env;
+            const rows = [];
+            const add = (label, id, isNew) => {
+              if (isNew !== 'true' || !id) return; // only platforms that need a reinstall
+              const permalink = `https://expo.dev/accounts/${BUILD_OWNER}/projects/${BUILD_SLUG}/builds/${id}`;
+              const qr = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=12&data=${encodeURIComponent(permalink)}`;
+              rows.push(`**${label}** — [Install build](${permalink})<br/><img src="${qr}" width="200" height="200" alt="${label} dev build install QR" />`);
+            };
+            add('🍎 iOS', IOS_BUILD_ID, IOS_NEW);
+            add('🤖 Android', ANDROID_BUILD_ID, ANDROID_NEW);
+            if (rows.length === 0) { core.info('No newly-started build to post.'); return; }
+            const sha = context.sha.slice(0, 7);
+            const body = [
+              '### 📲 New dev build — scan to install',
+              '',
+              'This merge changed **native code** (`' + sha + '`), so the runtime/fingerprint moved and a fresh dev build was started. Over-the-air updates can\'t load until you reinstall. Scan the QR on the target device (or open the link), wait for the build to finish, then install:',
+              '',
+              rows.join('\n\n'),
+              '',
+              '_Opening the build page needs Expo org access (one-time). After installing, JS-only merges update over-the-air again — no reinstall until native changes._',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, body,
+            });
