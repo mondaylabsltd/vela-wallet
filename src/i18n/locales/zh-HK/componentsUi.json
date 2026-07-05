@@ -189,6 +189,14 @@
       "openGithub": "開啟 GitHub 表單",
       "openGithubForm": "想用 GitHub？開啟問題表單 →",
       "done": "完成"
+    },
+    "identiconViewer": {
+      "title": "Identicon",
+      "caption": "此地址的視覺指紋 — 同一個地址永遠產生相同的圖案，讓你一眼就認得出自己的帳戶。",
+      "copyAddress": "複製地址",
+      "copied": "已複製",
+      "close": "關閉",
+      "a11yOpen": "查看 Identicon"
     }
   }
 }

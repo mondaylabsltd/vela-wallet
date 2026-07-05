@@ -5,23 +5,47 @@
  * can never drift apart.
  */
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { color, inter, createStyles } from '@/constants/theme';
 import { Identicon } from '@/components/ui/Identicon';
 import { useAvatarStyle } from '@/hooks/use-avatar-style';
+import { useIdenticonViewer } from '@/components/ui/IdenticonViewerProvider';
+import { isAddress } from '@/models/types';
+import { hapticSelection } from '@/services/platform';
+import i18n from '@/i18n';
 
-export function WalletAvatar({ name, address, size = 40, letterSize }: {
+export function WalletAvatar({ name, address, size = 40, letterSize, enlargeable = false }: {
   name: string;
   /** Safe address — the identicon seed. Falls back to the initial without one. */
   address?: string;
   size?: number;
   /** Font size for the initial; defaults to the ~0.34 ratio of the classic 40/44px looks. */
   letterSize?: number;
+  /** When the avatar is an identicon, tap it to open the large viewer. */
+  enlargeable?: boolean;
 }) {
   const style = useAvatarStyle();
+  const openViewer = useIdenticonViewer();
 
   if (style === 'identicon' && address) {
-    return <Identicon seed={address} size={size} />;
+    const idc = <Identicon seed={address} size={size} />;
+    if (enlargeable && isAddress(address)) {
+      return (
+        <Pressable
+          // stopPropagation so tapping the avatar enlarges it instead of also
+          // firing the row/button it sits inside (e.g. the Home account button).
+          // No accessibilityRole="button": these avatars live INSIDE button-role
+          // rows, and a <button> nested in a <button> is invalid HTML on web.
+          // Rendering as a plain labelled pressable keeps the tap without nesting.
+          onPress={(e) => { e.stopPropagation?.(); hapticSelection(); openViewer(name, address); }}
+          hitSlop={6}
+          accessibilityLabel={i18n.t('componentsUi.identiconViewer.a11yOpen')}
+        >
+          {idc}
+        </Pressable>
+      );
+    }
+    return idc;
   }
 
   return (

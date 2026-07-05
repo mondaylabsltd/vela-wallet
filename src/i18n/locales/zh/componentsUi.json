@@ -189,6 +189,14 @@
       "openGithub": "打开 GitHub 表单",
       "openGithubForm": "更想用 GitHub？打开问题表单 →",
       "done": "完成"
+    },
+    "identiconViewer": {
+      "title": "身份图标",
+      "caption": "这是该地址的可视化指纹 —— 同一个地址始终生成相同的图案，让你一眼就能认出自己的账户。",
+      "copyAddress": "复制地址",
+      "copied": "已复制",
+      "close": "关闭",
+      "a11yOpen": "查看身份图标"
     }
   }
 }

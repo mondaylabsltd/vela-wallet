@@ -189,6 +189,14 @@
       "openGithub": "GitHub フォームを開く",
       "openGithubForm": "GitHub をお使いですか？課題フォームを開く →",
       "done": "完了"
+    },
+    "identiconViewer": {
+      "title": "Identicon",
+      "caption": "このアドレスの視覚的な指紋です。同じアドレスは必ず同じ模様になるため、自分のアカウントをひと目で見分けられます。",
+      "copyAddress": "アドレスをコピー",
+      "copied": "コピーしました",
+      "close": "閉じる",
+      "a11yOpen": "Identicon を表示"
     }
   }
 }

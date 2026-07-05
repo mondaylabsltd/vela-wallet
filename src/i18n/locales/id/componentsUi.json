@@ -189,6 +189,14 @@
       "openGithub": "Buka formulir GitHub",
       "openGithubForm": "Lebih suka GitHub? Buka formulir isu →",
       "done": "Selesai"
+    },
+    "identiconViewer": {
+      "title": "Identicon",
+      "caption": "Sidik jari visual dari alamat ini — alamat yang sama selalu menghasilkan pola yang sama, jadi Anda bisa mengenali akun Anda sekilas.",
+      "copyAddress": "Salin alamat",
+      "copied": "Disalin",
+      "close": "Tutup",
+      "a11yOpen": "Lihat Identicon"
     }
   }
 }

@@ -7,12 +7,15 @@
  * reads differently from a person.
  */
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, Pressable } from 'react-native';
 import { Wallet } from 'lucide-react-native';
 import { color, inter, isDarkMode, createStyles } from '@/constants/theme';
 import { Identicon } from '@/components/ui/Identicon';
 import { useAvatarStyle } from '@/hooks/use-avatar-style';
+import { useIdenticonViewer } from '@/components/ui/IdenticonViewerProvider';
+import { hapticSelection } from '@/services/platform';
 import { isAddress } from '@/models/types';
+import i18n from '@/i18n';
 import type { ContactKind } from '@/services/contacts';
 
 /**
@@ -30,13 +33,16 @@ function pickHue(seed: string): number {
   return HUES[Math.abs(h) % HUES.length];
 }
 
-export function ContactAvatar({ name, address, kind, size = 40 }: {
+export function ContactAvatar({ name, address, kind, size = 40, enlargeable = false }: {
   name: string;
   address: string;
   kind?: ContactKind;
   size?: number;
+  /** When the avatar is an identicon, tap it to open the large viewer. */
+  enlargeable?: boolean;
 }) {
   const avatarStyle = useAvatarStyle();
+  const openViewer = useIdenticonViewer();
   const seed = address || name;
   const initial = (name.trim()[0] ?? address.slice(2, 3) ?? '?').toUpperCase();
   const h = pickHue(seed);
@@ -55,7 +61,21 @@ export function ContactAvatar({ name, address, kind, size = 40 }: {
   return (
     <View style={{ width: size, height: size }}>
       {showIdenticon ? (
-        <Identicon seed={address} size={size} />
+        enlargeable ? (
+          <Pressable
+            // stopPropagation so tapping the avatar enlarges it instead of also
+            // triggering the row it sits inside (open contact / pick recipient).
+            // No accessibilityRole="button": these avatars live INSIDE button-role
+            // rows, and a <button> nested in a <button> is invalid HTML on web.
+            onPress={(e) => { e.stopPropagation?.(); hapticSelection(); openViewer(name, address); }}
+            hitSlop={6}
+            accessibilityLabel={i18n.t('componentsUi.identiconViewer.a11yOpen')}
+          >
+            <Identicon seed={address} size={size} />
+          </Pressable>
+        ) : (
+          <Identicon seed={address} size={size} />
+        )
       ) : (
         <View
           style={[

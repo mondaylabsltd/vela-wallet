@@ -104,7 +104,7 @@ export function AccountSwitcherModal({
                   style={styles.item}
                   onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); hapticSuccess(); onClose(); }}
                 >
-                  <WalletAvatar name={account.name} address={account.address} size={40} letterSize={text.base} />
+                  <WalletAvatar name={account.name} address={account.address} size={40} letterSize={text.base} enlargeable />
                   <View style={styles.info}>
                     <Text style={[styles.name, isActive && styles.nameActive]} numberOfLines={1}>{account.name}</Text>
                     <Text style={styles.addr}>{shortAddress(account.address)}</Text>

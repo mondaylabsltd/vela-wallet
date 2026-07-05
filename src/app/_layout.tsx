@@ -17,6 +17,7 @@ import { WalletProvider } from '@/models/wallet-state';
 import { DAppConnectionProvider } from '@/models/dapp-connection';
 import { SigningRequestModal } from '@/components/SigningRequestModal';
 import { AlertProvider } from '@/components/ui/AppAlert';
+import { IdenticonViewerProvider } from '@/components/ui/IdenticonViewerProvider';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { installFaultConsole } from '@/services/dev/fault-injection';
 import { installMetricsConsole } from '@/services/metrics';
@@ -91,6 +92,7 @@ function AppShell() {
       <WalletProvider>
         <DAppConnectionProvider>
           <ThemeProvider value={resolved === 'dark' ? DarkTheme : DefaultTheme}>
+            <IdenticonViewerProvider>
             {/* key folds in language so a switch remounts the tree (instant, no restart) */}
             <Stack screenOptions={{ headerShown: false }} key={`${resolved}-${language}`}>
               <Stack.Screen name="(tabs)" />
@@ -103,6 +105,7 @@ function AppShell() {
               <Stack.Screen name="about" options={{ presentation: 'modal' }} />
               {__DEV__ && <Stack.Screen name="parallel" />}
             </Stack>
+            </IdenticonViewerProvider>
             <SigningRequestModal />
             {/* Self-gating (renders null unless parallel mode is armed). Must NOT be
                 behind __DEV__: a production build can still enter the parallel space

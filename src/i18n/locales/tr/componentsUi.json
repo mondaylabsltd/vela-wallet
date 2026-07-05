@@ -189,6 +189,14 @@
       "openGithub": "GitHub formunu aç",
       "openGithubForm": "GitHub'ı mı tercih edersin? Sorun formunu aç →",
       "done": "Bitti"
+    },
+    "identiconViewer": {
+      "title": "Identicon",
+      "caption": "Bu adresin görsel parmak izi; aynı adres her zaman aynı deseni çizer, böylece hesabınızı bir bakışta tanıyabilirsiniz.",
+      "copyAddress": "Adresi kopyala",
+      "copied": "Kopyalandı",
+      "close": "Kapat",
+      "a11yOpen": "Identicon'u görüntüle"
     }
   }
 }
