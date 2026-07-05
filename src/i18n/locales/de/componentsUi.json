@@ -136,7 +136,9 @@
       "noQrFoundMsg": "Im ausgewählten Bild konnte kein QR-Code gefunden werden.",
       "error": "Fehler",
       "errorImage": "Bild konnte nicht verarbeitet werden.",
-      "errorPicker": "Bildauswahl konnte nicht geöffnet werden."
+      "errorPicker": "Bildauswahl konnte nicht geöffnet werden.",
+      "torchLabel": "Taschenlampe umschalten",
+      "zoomLabel": "Zoom"
     },
     "gas": {
       "estFee": "Geschätzte Gebühr",

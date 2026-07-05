@@ -136,7 +136,9 @@
       "noQrFoundMsg": "Tidak dapat menemukan kode QR di gambar yang dipilih.",
       "error": "Kesalahan",
       "errorImage": "Gagal memproses gambar.",
-      "errorPicker": "Gagal membuka pemilih gambar."
+      "errorPicker": "Gagal membuka pemilih gambar.",
+      "torchLabel": "Alihkan senter",
+      "zoomLabel": "Zoom"
     },
     "gas": {
       "estFee": "Est. Biaya",

@@ -136,7 +136,9 @@
       "noQrFoundMsg": "Không tìm thấy mã QR trong ảnh đã chọn.",
       "error": "Lỗi",
       "errorImage": "Không xử lý được ảnh.",
-      "errorPicker": "Không mở được trình chọn ảnh."
+      "errorPicker": "Không mở được trình chọn ảnh.",
+      "torchLabel": "Bật/tắt đèn pin",
+      "zoomLabel": "Thu phóng"
     },
     "gas": {
       "estFee": "Phí ước tính",

@@ -136,7 +136,9 @@
       "noQrFoundMsg": "Seçilen görselde bir QR kodu bulunamadı.",
       "error": "Hata",
       "errorImage": "Görsel işlenemedi.",
-      "errorPicker": "Görsel seçici açılamadı."
+      "errorPicker": "Görsel seçici açılamadı.",
+      "torchLabel": "Feneri aç/kapat",
+      "zoomLabel": "Yakınlaştır"
     },
     "gas": {
       "estFee": "Tahmini Ücret",

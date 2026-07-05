@@ -98,7 +98,9 @@
       "noQrFoundMsg": "在所選圖片中找不到 QR 碼。",
       "error": "錯誤",
       "errorImage": "處理圖片失敗。",
-      "errorPicker": "開啟圖片選擇器失敗。"
+      "errorPicker": "開啟圖片選擇器失敗。",
+      "torchLabel": "開關電筒",
+      "zoomLabel": "縮放"
     },
     "gas": {
       "estFee": "預估費用",
