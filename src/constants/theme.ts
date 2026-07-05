@@ -51,11 +51,20 @@ const TEXT_BASE = {
 type TextKey = keyof typeof TEXT_BASE;
 const TEXT_KEYS = Object.keys(TEXT_BASE) as TextKey[];
 
+// Web-only baseline boost. On native, RN keeps applying the device's OS text
+// size on top of our own factor (allowFontScaling defaults to true), so each
+// user's system magnification is preserved — that's why native reads
+// comfortably. The browser exposes no OS text-size to react-native-web, so web
+// text is stuck at the raw factor and reads noticeably small. This fixed
+// multiplier stands in for "an average user's system magnification" so web isn't
+// cramped. It does NOT touch native (multiplier is 1 there).
+const WEB_TEXT_BOOST = Platform.OS === 'web' ? 1.2 : 1;
+
 function buildTextScale(): Record<TextKey, number> {
   const s = getTextScaleFactor();
   const result = {} as Record<TextKey, number>;
   for (const key of TEXT_KEYS) {
-    result[key] = Math.round(TEXT_BASE[key] * s);
+    result[key] = Math.round(TEXT_BASE[key] * s * WEB_TEXT_BOOST);
   }
   return result;
 }
@@ -71,7 +80,7 @@ export function getStyleVersion() { return _styleVersion; }
 export function rebuildTextScale(): void {
   const s = getTextScaleFactor();
   for (const key of TEXT_KEYS) {
-    text[key] = Math.round(TEXT_BASE[key] * s);
+    text[key] = Math.round(TEXT_BASE[key] * s * WEB_TEXT_BOOST);
   }
   _styleVersion++;
 }
