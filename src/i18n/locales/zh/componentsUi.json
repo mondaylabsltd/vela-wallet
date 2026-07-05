@@ -98,7 +98,9 @@
       "noQrFoundMsg": "在所选图片中未找到二维码。",
       "error": "错误",
       "errorImage": "处理图片失败。",
-      "errorPicker": "打开图片选择器失败。"
+      "errorPicker": "打开图片选择器失败。",
+      "torchLabel": "开关手电筒",
+      "zoomLabel": "缩放"
     },
     "gas": {
       "estFee": "预估费用",

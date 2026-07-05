@@ -136,7 +136,9 @@
       "noQrFoundMsg": "Não foi possível encontrar um QR code na imagem selecionada.",
       "error": "Erro",
       "errorImage": "Não foi possível processar a imagem.",
-      "errorPicker": "Não foi possível abrir o seletor de imagens."
+      "errorPicker": "Não foi possível abrir o seletor de imagens.",
+      "torchLabel": "Alternar lanterna",
+      "zoomLabel": "Zoom"
     },
     "gas": {
       "estFee": "Taxa estimada",

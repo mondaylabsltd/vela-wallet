@@ -136,7 +136,9 @@
       "noQrFoundMsg": "선택한 이미지에서 QR 코드를 찾을 수 없습니다.",
       "error": "오류",
       "errorImage": "이미지를 처리하지 못했습니다.",
-      "errorPicker": "이미지 선택기를 열지 못했습니다."
+      "errorPicker": "이미지 선택기를 열지 못했습니다.",
+      "torchLabel": "손전등 켜기/끄기",
+      "zoomLabel": "확대/축소"
     },
     "gas": {
       "estFee": "예상 수수료",

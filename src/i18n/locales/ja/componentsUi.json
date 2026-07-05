@@ -136,7 +136,9 @@
       "noQrFoundMsg": "選択した画像から QR コードが見つかりませんでした。",
       "error": "エラー",
       "errorImage": "画像の処理に失敗しました。",
-      "errorPicker": "画像ピッカーを開けませんでした。"
+      "errorPicker": "画像ピッカーを開けませんでした。",
+      "torchLabel": "ライトを切り替え",
+      "zoomLabel": "ズーム"
     },
     "gas": {
       "estFee": "推定手数料",

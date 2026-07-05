@@ -121,7 +121,9 @@
       "noQrFoundMsg": "Could not find a QR code in the selected image.",
       "error": "Error",
       "errorImage": "Failed to process the image.",
-      "errorPicker": "Failed to open image picker."
+      "errorPicker": "Failed to open image picker.",
+      "torchLabel": "Toggle flashlight",
+      "zoomLabel": "Zoom"
     },
     "gas": {
       "estFee": "Est. Fee",
