@@ -2,7 +2,7 @@ import { APP_VERSION, GIT_COMMIT } from '@/constants/build-info';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { fadeIn, fadeInDown } from '@/constants/entering';
-import { color, createStyles, font, inter, space, text } from '@/constants/theme';
+import { scaleFont, color, createStyles, font, inter, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { getAllNetworksSync } from '@/models/network';
 import { hapticSuccess, openURL } from '@/services/platform';
@@ -134,7 +134,7 @@ const styles = createStyles(() => ({
     marginBottom: space['3xl'],
   },
   logo: {
-    fontSize: 40,
+    fontSize: scaleFont(40),
     ...inter.bold,
     color: color.fg.base,
     letterSpacing: 3,

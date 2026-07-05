@@ -13,7 +13,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, ShieldCheck, Pencil } from 'lucide-react-native';
-import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
+import { scaleFont, color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { TokenLogo } from '@/components/TokenLogo';
 import {
   type DetectedApproval,
@@ -267,7 +267,7 @@ const styles = createStyles(() => ({
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   symbol: { fontSize: text.base, ...inter.bold, color: color.fg.base },
   capLabel: {
-    marginLeft: 'auto', fontSize: 10, ...inter.semibold, color: color.fg.subtle,
+    marginLeft: 'auto', fontSize: scaleFont(10), ...inter.semibold, color: color.fg.subtle,
     textTransform: 'uppercase', letterSpacing: 0.4,
   },
 

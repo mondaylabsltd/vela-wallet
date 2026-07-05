@@ -31,7 +31,7 @@ import {
 } from '@/services/contacts';
 import { exportContactsJson, exportContactsCsv, parseContactsFile, importContacts } from '@/services/contact-io';
 import { pickTable, saveTextFile } from '@/services/file-io';
-import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
+import { scaleFont, color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 
 type Filter = 'all' | 'starred';
 
@@ -517,7 +517,7 @@ const styles = createStyles(() => ({
   // ===== Form =====
   formAvatar: { alignItems: 'center', paddingVertical: space.xl },
   fieldLabel: {
-    fontSize: 10, ...inter.semibold, color: color.fg.subtle,
+    fontSize: scaleFont(10), ...inter.semibold, color: color.fg.subtle,
     textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: space.sm, marginLeft: space.sm,
   },
   field: {

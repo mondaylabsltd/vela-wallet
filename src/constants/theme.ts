@@ -72,6 +72,16 @@ function buildTextScale(): Record<TextKey, number> {
 /** Scaled text sizes — multiply base × user scale factor (loaded at app start) */
 export const text = buildTextScale();
 
+/**
+ * Apply the same web boost the `text` tokens get to a RAW (non-token) font size,
+ * so hardcoded `fontSize: N` values aren't left small on web while everything
+ * around them grew. No-op on native (WEB_TEXT_BOOST is 1 there), so native is
+ * byte-for-byte unchanged. Use as `fontSize: scaleFont(10)`.
+ */
+export function scaleFont(size: number): number {
+  return Math.round(size * WEB_TEXT_BOOST);
+}
+
 /** Style version — increments when text scale changes, invalidating createStyles caches. */
 let _styleVersion = 0;
 export function getStyleVersion() { return _styleVersion; }
