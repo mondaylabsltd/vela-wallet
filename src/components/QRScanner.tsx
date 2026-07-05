@@ -146,40 +146,26 @@ async function decodeUploadedImage(canvas: HTMLCanvasElement): Promise<string | 
 }
 
 // ============================================================================
-// Zoom model
+// Zoom model (NATIVE ONLY)
 // ============================================================================
 //
-// `zoom` throughout this component is a device-agnostic 0..1 *intent* (0 = none,
-// 1 = each device's best USABLE zoom). We deliberately stop short of the device's
-// absolute maximum, which on phone cameras is deep digital zoom that's too blurry
-// to be useful. The stopping point is device-relative, so a more capable camera
-// reaches further; none reach the mushy absolute max.
+// Zoom (slider + pinch + auto-hunt) is a NATIVE-only feature. On web it's
+// intentionally absent: real hardware zoom exists only on some browsers
+// (Chrome/Android), never on Safari, and the JS-driven slider felt laggy and
+// unreliable — so web gets no zoom UI at all. Distant codes on web are still
+// helped invisibly by the decoder's center-crop far-reach pass (see WebCamera).
 //
-//  - Native: expo-camera's `zoom` prop is 0..1 = a fraction of the device's max
-//    zoom (that max is huge & unreadable from JS: iOS wide lens ~16-130x digital;
-//    Android 4-100x). iOS applies it exponentially (factor = deviceMax^z), Android
-//    linearly (factor = z*deviceMax). `nativeCap` is the best-usable fraction.
-//  - Web: getCapabilities() exposes the real hardware zoom range, so we reach a
-//    fraction of that range; without hardware zoom (e.g. iOS Safari) we digitally
-//    crop up to a quality ceiling (deeper crops are unreadable).
+// `zoom` is a device-agnostic 0..1 *intent* (0 = none, 1 = the device's best
+// USABLE zoom). We stop short of the device's absolute max, which on phone
+// cameras is deep digital zoom that's too blurry to be useful. expo-camera's
+// `zoom` prop is 0..1 = a fraction of the device's max zoom (huge & unreadable
+// from JS: iOS wide lens ~16-130x digital; Android 4-100x). iOS applies it
+// exponentially (factor = deviceMax^z), Android linearly (factor = z*deviceMax);
+// `nativeCap` is the best-usable fraction.
 const ZOOM = {
   nativeCap: Platform.OS === 'ios' ? 0.5 : 0.55, // intent 1 -> this fraction of device max
-  webHwFraction: 0.6,   // web hardware zoom: fraction of the camera's own zoom range
-  webDigitalMax: 4,     // web digital-crop zoom: quality ceiling (deeper is mush)
   autoIntentCap: 0.45,  // how far auto-hunt sweeps (kept gentle)
 };
-
-// Web: map a 0..1 intent to a concrete zoom value. With hardware zoom this returns
-// a value inside the camera's real [min, max] range (reaching a best-usable
-// fraction of it); without it, a digital magnification factor (1..webDigitalMax).
-function webZoomFactor(intent: number, hw: { min: number; max: number } | null): number {
-  const t = Math.max(0, Math.min(1, intent));
-  if (hw) {
-    const top = hw.min + (hw.max - hw.min) * ZOOM.webHwFraction;
-    return hw.min + t * (top - hw.min);
-  }
-  return 1 + t * (ZOOM.webDigitalMax - 1);
-}
 
 // ============================================================================
 // Components
@@ -215,57 +201,32 @@ function NativeScanLine() {
 
 // -- Web camera --------------------------------------------------------------
 
-function WebCamera({ onScan, scanned, torch, zoom, onCapabilities }: {
+function WebCamera({ onScan, scanned, torch, onReady }: {
   onScan: (data: string) => void;
   scanned: boolean;
   torch: boolean;
-  /** Normalized 0-1 zoom, shared with the native path. */
-  zoom: number;
-  /** Reports which of torch/hardware-zoom the browser+camera actually support. */
-  onCapabilities: (caps: { torch: boolean; hwZoom: boolean }) => void;
+  /** Fires once the camera stream is live. Web has no zoom — see ZOOM. */
+  onReady: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scannedRef = useRef(scanned);
   const onScanRef = useRef(onScan);
-  const zoomRef = useRef(zoom);
   const torchRef = useRef(torch);
-  const torchSupportedRef = useRef(false);
-  const hwZoomRef = useRef<{ min: number; max: number } | null>(null);
   scannedRef.current = scanned;
   onScanRef.current = onScan;
-  zoomRef.current = zoom;
   torchRef.current = torch;
 
-  // Push torch + zoom to the live track in a SINGLE applyConstraints call.
-  // applyConstraints REPLACES the track's constraint set (it doesn't merge), so
-  // torch and zoom must be sent together or the last writer wipes the other.
-  const applyTrackConstraints = useCallback(() => {
+  // Torch is the only live-track control on web. We don't gate on
+  // getCapabilities().torch — that under-reports on some browsers (e.g. iOS
+  // Safari, which turns the torch on fine via applyConstraints even though it
+  // doesn't advertise the capability). Best-effort apply; a no-op on the rare
+  // camera with no flash. (Zoom is deliberately unsupported on web.)
+  const applyTorch = useCallback(() => {
     const track = streamRef.current?.getVideoTracks?.()[0];
-    const hw = hwZoomRef.current;
-    // Torch and zoom go as SEPARATE advanced ConstraintSets in ONE call: one call
-    // (so neither clobbers the other) but each set is satisfied independently (so
-    // an unsatisfiable zoom can't silently drop the torch).
-    const sets: Record<string, unknown>[] = [];
-    if (torchSupportedRef.current) sets.push({ torch: torchRef.current });
-    if (hw) {
-      const val = Math.max(hw.min, Math.min(hw.max, webZoomFactor(zoomRef.current, hw)));
-      sets.push({ zoom: val });
-    }
-    if (track && sets.length) {
-      try { track.applyConstraints({ advanced: sets as any }); } catch {}
-    }
-    // Digital zoom (no hardware zoom, e.g. iOS Safari): scale the <video> so the
-    // preview matches the center crop the decoder reads.
-    const v = videoRef.current;
-    if (v) {
-      if (hw) { v.style.transform = ''; }
-      else {
-        v.style.transform = `scale(${webZoomFactor(zoomRef.current, null).toFixed(3)})`;
-        (v.style as any).transformOrigin = 'center center';
-      }
-    }
+    if (!track) return;
+    try { track.applyConstraints({ advanced: [{ torch: torchRef.current }] as any }); } catch {}
   }, []);
 
   useEffect(() => {
@@ -279,21 +240,9 @@ function WebCamera({ onScan, scanned, torch, zoom, onCapabilities }: {
       if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
       streamRef.current = stream;
       if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
-      // Probe hardware capabilities. Chrome/Android exposes torch + zoom; iOS
-      // Safari exposes neither, so we fall back to digital zoom and hide torch.
-      try {
-        const track = stream.getVideoTracks()[0];
-        const caps: any = track?.getCapabilities ? track.getCapabilities() : {};
-        const zc = caps.zoom;
-        hwZoomRef.current = zc && typeof zc === 'object' && 'max' in zc
-          ? { min: typeof zc.min === 'number' ? zc.min : 1, max: zc.max }
-          : null;
-        torchSupportedRef.current = !!caps.torch;
-        onCapabilities({ torch: !!caps.torch, hwZoom: !!hwZoomRef.current });
-      } catch { onCapabilities({ torch: false, hwZoom: false }); }
-      // Apply whatever torch/zoom the user (or auto-hunt) has already set while
-      // the camera was starting up — otherwise an early state is silently lost.
-      applyTrackConstraints();
+      onReady();
+      // Apply any torch the user set while the camera was starting up.
+      applyTorch();
     }).catch(() => {});
 
     let timer: ReturnType<typeof setTimeout>;
@@ -307,16 +256,9 @@ function WebCamera({ onScan, scanned, torch, zoom, onCapabilities }: {
       if (c) {
         c.width = v.videoWidth; c.height = v.videoHeight;
         c.getContext('2d', { willReadFrequently: true })!.drawImage(v, 0, 0);
-        // Hardware zoom already magnified the frame; digital zoom crops to match
-        // what's shown. cropFactor 1 = full frame.
-        const hw = hwZoomRef.current;
-        const cropFactor = hw ? 1 : 1 / webZoomFactor(zoomRef.current, null);
-        decoded = await decodeCameraFrame(c, cropFactor);
-        // When digitally zoomed, also try the full frame so a large/near code
-        // that no longer fits the crop still decodes.
-        if (!decoded && cropFactor < 0.999) decoded = await decodeCameraFrame(c, 1);
-        // Always take one tighter center pass so distant/small codes get read
-        // automatically without the user having to zoom in.
+        // Decode the full frame, then a center-crop far-reach pass so small or
+        // distant codes read automatically — our "zoom" on web, with no UI.
+        decoded = await decodeCameraFrame(c, 1);
         if (!decoded) decoded = await decodeCameraFrame(c, 0.6);
       }
 
@@ -326,10 +268,10 @@ function WebCamera({ onScan, scanned, torch, zoom, onCapabilities }: {
     timer = setTimeout(scan, 1000);
 
     return () => { mounted = false; clearTimeout(timer); streamRef.current?.getTracks().forEach(t => t.stop()); };
-  }, [applyTrackConstraints, onCapabilities]);
+  }, [applyTorch, onReady]);
 
-  // Re-apply on any torch/zoom change (single combined constraint set).
-  useEffect(() => { applyTrackConstraints(); }, [torch, zoom, applyTrackConstraints]);
+  // Re-apply on torch toggle.
+  useEffect(() => { applyTorch(); }, [torch, applyTorch]);
 
   return (
     <View style={styles.cameraContainer}>
@@ -500,7 +442,6 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   const [zoom, setZoom] = useState(0);
   const [manualZoom, setManualZoom] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
-  const [webCaps, setWebCaps] = useState<{ torch: boolean; hwZoom: boolean }>({ torch: false, hwZoom: false });
   const insets = useSafeAreaInsets();
 
   // Fresh session every time the sheet opens.
@@ -514,8 +455,9 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   // Unlike a ramp-and-hold this self-recovers — it can never get stuck too-zoomed.
   // Any manual interaction (slider/pinch) or a successful scan cancels it, and it
   // only runs once the live camera is up (not on the permission/denied screen).
+  // Native only — web has no zoom (see ZOOM).
   useEffect(() => {
-    if (!visible || !cameraReady || scanned || manualZoom) return;
+    if (Platform.OS === 'web' || !visible || !cameraReady || scanned || manualZoom) return;
     const GRACE = 1800, STEP = 0.09, INTERVAL = 650, CAP = ZOOM.autoIntentCap;
     const up = Math.max(1, Math.ceil(CAP / STEP));
     const period = up * 2; // steps for a full 0 -> CAP -> 0 cycle
@@ -533,14 +475,9 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   }, [visible, cameraReady, scanned, manualZoom]);
 
   const startManual = useCallback(() => setManualZoom(true), []);
-  // Stable identities — WebCamera's start-once effect depends on onCapabilities,
-  // and the parent re-renders every ~650ms during the auto-hunt sweep, so an
-  // inline closure here would restart getUserMedia on every tick.
+  // Stable identity — WebCamera's start-once effect depends on onReady, so an
+  // inline closure here could restart getUserMedia on re-render.
   const handleReady = useCallback(() => setCameraReady(true), []);
-  const handleCapabilities = useCallback((caps: { torch: boolean; hwZoom: boolean }) => {
-    setWebCaps(caps);
-    setCameraReady(true);
-  }, []);
 
   function handleBarCodeScanned({ data }: { data: string }) {
     if (scanned) return;
@@ -565,9 +502,12 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
     });
   }
 
-  // Torch button visibility: only once the camera is live, and on native only for
-  // the back camera; on web capability-gated (hidden on iOS Safari, no torch).
-  const showTorch = cameraReady && (Platform.OS === 'web' ? webCaps.torch : facing === 'back');
+  // Torch button visibility: once the camera is live — on web always (best-effort;
+  // Chrome/Android and iOS Safari both light up), on native only the back camera.
+  const showTorch = cameraReady && (Platform.OS === 'web' || facing === 'back');
+  // Zoom UI is native only (see ZOOM): web zoom was laggy/unreliable and Safari
+  // has no hardware zoom at all, so the slider is simply absent on web.
+  const showZoom = cameraReady && Platform.OS !== 'web';
 
   async function handlePickImage() {
     if (Platform.OS === 'web') {
@@ -640,8 +580,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           onScan={(data) => handleBarCodeScanned({ data })}
           scanned={scanned}
           torch={torch}
-          zoom={zoom}
-          onCapabilities={handleCapabilities}
+          onReady={handleReady}
         />
       ) : (
         <NativeCamera
@@ -686,7 +625,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
       </View>
 
       <View style={[styles.footerOverlay, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-        {cameraReady && <ZoomSlider value={zoom} onChange={setZoom} onManualStart={startManual} />}
+        {showZoom && <ZoomSlider value={zoom} onChange={setZoom} onManualStart={startManual} />}
         <Text style={styles.hint}>{t('componentsUi.scanner.hint')}</Text>
       </View>
     </GestureHandlerRootView>
