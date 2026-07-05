@@ -201,13 +201,12 @@ function NativeScanLine() {
 
 // -- Web camera --------------------------------------------------------------
 
-function WebCamera({ onScan, scanned, torch, onTorchSupported }: {
+function WebCamera({ onScan, scanned, torch, onReady }: {
   onScan: (data: string) => void;
   scanned: boolean;
   torch: boolean;
-  /** Reports whether this browser+camera supports the torch (Chrome/Android yes,
-   *  Safari no) and that the camera is now live. Web has no zoom — see ZOOM. */
-  onTorchSupported: (supported: boolean) => void;
+  /** Fires once the camera stream is live. Web has no zoom — see ZOOM. */
+  onReady: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -215,16 +214,18 @@ function WebCamera({ onScan, scanned, torch, onTorchSupported }: {
   const scannedRef = useRef(scanned);
   const onScanRef = useRef(onScan);
   const torchRef = useRef(torch);
-  const torchSupportedRef = useRef(false);
   scannedRef.current = scanned;
   onScanRef.current = onScan;
   torchRef.current = torch;
 
-  // Torch is the only live-track control on web (Chrome/Android). Zoom is
-  // deliberately unsupported on web.
+  // Torch is the only live-track control on web. We don't gate on
+  // getCapabilities().torch — that under-reports on some browsers (e.g. iOS
+  // Safari, which turns the torch on fine via applyConstraints even though it
+  // doesn't advertise the capability). Best-effort apply; a no-op on the rare
+  // camera with no flash. (Zoom is deliberately unsupported on web.)
   const applyTorch = useCallback(() => {
     const track = streamRef.current?.getVideoTracks?.()[0];
-    if (!track || !torchSupportedRef.current) return;
+    if (!track) return;
     try { track.applyConstraints({ advanced: [{ torch: torchRef.current }] as any }); } catch {}
   }, []);
 
@@ -239,14 +240,7 @@ function WebCamera({ onScan, scanned, torch, onTorchSupported }: {
       if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
       streamRef.current = stream;
       if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
-      // Probe torch support. Chrome/Android exposes it; Safari doesn't (so the
-      // torch button is hidden there).
-      try {
-        const track = stream.getVideoTracks()[0];
-        const caps: any = track?.getCapabilities ? track.getCapabilities() : {};
-        torchSupportedRef.current = !!caps.torch;
-        onTorchSupported(!!caps.torch);
-      } catch { onTorchSupported(false); }
+      onReady();
       // Apply any torch the user set while the camera was starting up.
       applyTorch();
     }).catch(() => {});
@@ -274,7 +268,7 @@ function WebCamera({ onScan, scanned, torch, onTorchSupported }: {
     timer = setTimeout(scan, 1000);
 
     return () => { mounted = false; clearTimeout(timer); streamRef.current?.getTracks().forEach(t => t.stop()); };
-  }, [applyTorch, onTorchSupported]);
+  }, [applyTorch, onReady]);
 
   // Re-apply on torch toggle.
   useEffect(() => { applyTorch(); }, [torch, applyTorch]);
@@ -448,7 +442,6 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   const [zoom, setZoom] = useState(0);
   const [manualZoom, setManualZoom] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
-  const [webTorchSupported, setWebTorchSupported] = useState(false);
   const insets = useSafeAreaInsets();
 
   // Fresh session every time the sheet opens.
@@ -482,13 +475,9 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
   }, [visible, cameraReady, scanned, manualZoom]);
 
   const startManual = useCallback(() => setManualZoom(true), []);
-  // Stable identities — WebCamera's start-once effect depends on onTorchSupported,
-  // so an inline closure here could restart getUserMedia on re-render.
+  // Stable identity — WebCamera's start-once effect depends on onReady, so an
+  // inline closure here could restart getUserMedia on re-render.
   const handleReady = useCallback(() => setCameraReady(true), []);
-  const handleTorchSupported = useCallback((supported: boolean) => {
-    setWebTorchSupported(supported);
-    setCameraReady(true);
-  }, []);
 
   function handleBarCodeScanned({ data }: { data: string }) {
     if (scanned) return;
@@ -513,9 +502,9 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
     });
   }
 
-  // Torch button visibility: only once the camera is live, and on native only for
-  // the back camera; on web capability-gated (hidden on iOS Safari, no torch).
-  const showTorch = cameraReady && (Platform.OS === 'web' ? webTorchSupported : facing === 'back');
+  // Torch button visibility: once the camera is live — on web always (best-effort;
+  // Chrome/Android and iOS Safari both light up), on native only the back camera.
+  const showTorch = cameraReady && (Platform.OS === 'web' || facing === 'back');
   // Zoom UI is native only (see ZOOM): web zoom was laggy/unreliable and Safari
   // has no hardware zoom at all, so the slider is simply absent on web.
   const showZoom = cameraReady && Platform.OS !== 'web';
@@ -591,7 +580,7 @@ export function QRScanner({ visible, onScan, onClose }: Props) {
           onScan={(data) => handleBarCodeScanned({ data })}
           scanned={scanned}
           torch={torch}
-          onTorchSupported={handleTorchSupported}
+          onReady={handleReady}
         />
       ) : (
         <NativeCamera
