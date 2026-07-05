@@ -14,6 +14,7 @@ import Animated from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { Search, X, Star, Plus, Trash2, ChevronLeft, Users, ChevronRight, Upload, Download } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
+import { IdenticonViewerProvider } from '@/components/ui/IdenticonViewerProvider';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
@@ -133,6 +134,9 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
 
   return (
     <AppModal visible={visible} onClose={onClose}>
+      {/* Identicon viewer hosted inside the modal so iOS presents it from this
+          modal's VC (a root-level modal over this pageSheet deadlocks). */}
+      <IdenticonViewerProvider>
       <View style={styles.container}>
         {view === 'list' ? (
           <>
@@ -293,6 +297,7 @@ export function ContactsManager({ visible, onClose }: { visible: boolean; onClos
           />
         )}
       </View>
+      </IdenticonViewerProvider>
     </AppModal>
   );
 }

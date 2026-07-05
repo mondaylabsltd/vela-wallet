@@ -15,6 +15,7 @@ import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator } from 
 import { useTranslation } from 'react-i18next';
 import { Search, X, Star, ScanLine, ChevronRight, Users } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
+import { IdenticonViewerProvider } from '@/components/ui/IdenticonViewerProvider';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { Divider } from '@/components/ui/DetailRow';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
@@ -92,6 +93,9 @@ export function ContactPicker({ visible, onClose, onSelect, onSelectGroup, onSca
 
   return (
     <AppModal visible={visible} onClose={onClose}>
+      {/* Identicon viewer hosted inside the modal so iOS presents it from this
+          modal's VC (a root-level modal over this pageSheet deadlocks). */}
+      <IdenticonViewerProvider>
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>{t('contacts.pickerTitle')}</Text>
@@ -216,6 +220,7 @@ export function ContactPicker({ visible, onClose, onSelect, onSelectGroup, onSca
           )}
         </ScrollView>
       </View>
+      </IdenticonViewerProvider>
     </AppModal>
   );
 }
