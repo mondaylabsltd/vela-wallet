@@ -171,13 +171,42 @@ export function openURL(url: string): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Open a URL in an in-app browser (native) or new tab (web).
+ * Open a URL in an in-app browser — the page stays inside Vela, it does not
+ * kick the user out to the system browser app.
+ *
+ * - iOS: SFSafariViewController presented as a PAGE_SHEET card (rounded top,
+ *   swipe-down to dismiss, the previous screen peeking behind) — the
+ *   "opens inside the app" feel of Telegram / Slack.
+ * - Android: a Chrome Custom Tab, themed to the app, that returns to Vela on
+ *   Back — also in-app, not a separate browser app.
+ * - Web: a new tab. Third-party pages (block explorers, GitHub, docs) send
+ *   X-Frame-Options / CSP frame-ancestors and refuse to be iframed, so an
+ *   in-app iframe would render blank for exactly the links we open here. A new
+ *   tab is the correct web idiom (Telegram / Slack web behave the same).
+ *
+ * The chrome colors read the live theme tokens, so the browser follows the
+ * active light/dark mode. Use this for viewing web content; use openURL() for
+ * deep links meant to LEAVE the app (ethereum: / wallet: URIs, mailto:, tel:).
  */
 export async function openBrowser(url: string): Promise<void> {
   if (Platform.OS === 'web') {
     window.open(url, '_blank', 'noopener,noreferrer');
-  } else {
-    const WebBrowser = await import('expo-web-browser');
-    await WebBrowser.openBrowserAsync(url);
+    return;
   }
+  const WebBrowser = await import('expo-web-browser');
+  // Read live tokens (mutated on theme change) so the browser matches light/dark.
+  const { color } = require('@/constants/theme');
+  await WebBrowser.openBrowserAsync(url, {
+    // iOS: card presentation — the Telegram-style in-app sheet.
+    presentationStyle: WebBrowser.WebBrowserPresentationStyle.PAGE_SHEET,
+    dismissButtonStyle: 'close',
+    // Theme-aware chrome: iOS bar tint + control tint, Android toolbar color.
+    toolbarColor: color.bg.base,
+    controlsColor: color.accent.base,
+    // Collapse the bar on scroll for more content room.
+    enableBarCollapsing: true,
+    // Android niceties.
+    showTitle: true,
+    enableDefaultShareMenuItem: true,
+  });
 }

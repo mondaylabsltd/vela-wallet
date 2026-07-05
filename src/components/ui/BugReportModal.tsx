@@ -16,7 +16,7 @@ import { AppModal } from './AppModal';
 import { AutoGrowTextInput } from './AutoGrowTextInput';
 import { VelaButton } from './VelaButton';
 import { color, createStyles, inter, radius, space, text } from '@/constants/theme';
-import { hapticSuccess, openURL } from '@/services/platform';
+import { hapticSuccess, openBrowser } from '@/services/platform';
 import type { AppLanguage } from '@/i18n';
 import { buildReportPreview, submitBugReport, type BugReportResult } from '@/services/bug-report';
 import { buildBugReportURL } from '@/services/feedback';
@@ -77,7 +77,7 @@ export function BugReportModal({ visible, language, area, prefillWhat, onClose }
           <Text style={styles.title}>{t('componentsUi.bugReport.successTitle')}</Text>
           <Text style={styles.body}>{body}</Text>
           {result.url ? (
-            <VelaButton title={t('componentsUi.bugReport.viewIssue')} variant="secondary" onPress={() => openURL(result.url!)} style={styles.btn} />
+            <VelaButton title={t('componentsUi.bugReport.viewIssue')} variant="secondary" onPress={() => openBrowser(result.url!)} style={styles.btn} />
           ) : null}
           <VelaButton title={t('componentsUi.bugReport.done')} variant="accent" onPress={close} style={styles.btn} />
         </View>
@@ -92,7 +92,7 @@ export function BugReportModal({ visible, language, area, prefillWhat, onClose }
         <View style={styles.container}>
           <Text style={styles.title}>{t('componentsUi.bugReport.fallbackTitle')}</Text>
           <Text style={styles.body}>{t('componentsUi.bugReport.fallbackBody')}</Text>
-          <VelaButton title={t('componentsUi.bugReport.openGithub')} variant="accent" onPress={() => { openURL(result.fallbackUrl!); close(); }} style={styles.btn} />
+          <VelaButton title={t('componentsUi.bugReport.openGithub')} variant="accent" onPress={() => { void openBrowser(result.fallbackUrl!).finally(close); }} style={styles.btn} />
           <VelaButton title={t('componentsUi.bugReport.cancel')} variant="secondary" onPress={close} style={styles.btn} />
         </View>
       </AppModal>
@@ -176,7 +176,7 @@ export function BugReportModal({ visible, language, area, prefillWhat, onClose }
             (supports screenshot upload). Power users / GitHub users can skip the
             in-app flow entirely. */}
         <Pressable
-          onPress={() => openURL(buildBugReportURL(language))}
+          onPress={() => openBrowser(buildBugReportURL(language))}
           disabled={submitting}
           accessibilityRole="link"
           accessibilityLabel={t('componentsUi.bugReport.openGithubForm')}

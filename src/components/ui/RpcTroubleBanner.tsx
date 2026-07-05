@@ -14,7 +14,7 @@ import { color, createStyles, inter, radius, shadow, space, text } from '@/const
 import type { AppLanguage } from '@/i18n';
 import { getAllNetworksSync, type Network } from '@/models/network';
 import { buildBugReportURL } from '@/services/feedback';
-import { openURL, showAlert } from '@/services/platform';
+import { openBrowser, showAlert } from '@/services/platform';
 import { probeRpcChainId, refreshPool } from '@/services/rpc-pool';
 import { getNetworkConfig, saveNetworkConfig } from '@/services/storage';
 import { AlertTriangle, ExternalLink, Wifi, X } from 'lucide-react-native';
@@ -205,7 +205,7 @@ export function RpcFixForm({
           <Text style={styles.providersHint}>{t('assets.rpcProvidersHint')}</Text>
           <View style={styles.providerChips}>
             {RPC_PROVIDERS.map(p => (
-              <Pressable key={p.url} style={styles.providerChip} onPress={() => openURL(p.url)}>
+              <Pressable key={p.url} style={styles.providerChip} onPress={() => openBrowser(p.url)}>
                 <Text style={styles.providerChipText}>{p.name}</Text>
                 <ExternalLink size={12} color={color.fg.subtle} strokeWidth={2} />
               </Pressable>
@@ -216,7 +216,7 @@ export function RpcFixForm({
         {/* Last resort: reach the developer with this exact failure attached */}
         <Pressable
           style={styles.reportRow}
-          onPress={() => openURL(buildBugReportURL(i18n.language as AppLanguage, {
+          onPress={() => openBrowser(buildBugReportURL(i18n.language as AppLanguage, {
             extraLines: [
               `- Failing network: ${net?.displayName ?? chainId} (chainId ${chainId})`,
               `- RPC entered: ${fixUrl || net?.rpcURL || 'n/a'}`,

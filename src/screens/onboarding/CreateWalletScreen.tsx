@@ -23,7 +23,7 @@ import type { StoredAccount } from '@/models/types';
 import {
   ArrowLeft, CheckCircle2, AlertTriangle, Loader, Copy, Check, Square, CheckSquare,
 } from 'lucide-react-native';
-import { showAlert, copyToClipboard, openURL } from '@/services/platform';
+import { showAlert, copyToClipboard, openBrowser } from '@/services/platform';
 
 interface Props {
   onCreated?: (address: string, name: string) => void;
@@ -406,9 +406,9 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
                         {isLast ? (
                           <>
                             {t('onboarding.create.ack3')}
-                            <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/privacy')}>{t('onboarding.create.ack3PrivacyPolicy')}</Text>
+                            <Text style={styles.checkLink} onPress={() => openBrowser('https://getvela.app/privacy')}>{t('onboarding.create.ack3PrivacyPolicy')}</Text>
                             {t('onboarding.create.ack3And')}
-                            <Text style={styles.checkLink} onPress={() => openURL('https://getvela.app/terms')}>{t('onboarding.create.ack3Terms')}</Text>
+                            <Text style={styles.checkLink} onPress={() => openBrowser('https://getvela.app/terms')}>{t('onboarding.create.ack3Terms')}</Text>
                             {t('onboarding.create.ack3Period')}
                           </>
                         ) : t(labelKey)}
