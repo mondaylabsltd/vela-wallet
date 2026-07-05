@@ -14,5 +14,5 @@
 - Only when the **Runtime version** in the bot comment differs from the one you last installed (meaning this PR changed native code). Otherwise, just scan — never reinstall.
 
 **Common errors:**
-- `Expected MIME-Type … got 'text/html'` → your phone has an outdated dev build (no OTA support). Delete it and reinstall from this comment's Build Permalink, then scan again.
+- `Expected MIME-Type … got 'text/html'` → the scanned link resolved to a web page instead of a JS bundle. Make sure you scanned the **Update QR** from the newest bot comment (not an old one, and not a Build link). If it still happens, your installed dev build's **Runtime version** differs from this update — reinstall from the Build Permalink, then scan again.
 - Nothing happens when scanning → don't use WeChat or other scanner apps; use the iOS system camera or the in-app scanner.
