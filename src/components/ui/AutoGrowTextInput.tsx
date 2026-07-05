@@ -60,6 +60,16 @@ export const AutoGrowTextInput = forwardRef<TextInput, AutoGrowTextInputProps>(
       [ref],
     );
 
+    // Android's multiline EditText already auto-grows (and shrinks) to fit its
+    // content — imposing a JS-measured `height` fights that and CLIPS the last
+    // line, because Android under-reports contentSize (it excludes the field's
+    // own padding), so a two-line address gets clamped to `minHeight` and the
+    // second line is cut off. So on Android we drive height with min/max bounds
+    // and let the native view size itself. iOS still needs the explicit height
+    // (its multiline field scrolls rather than growing); web is handled above.
+    const heightStyle =
+      Platform.OS === 'android' ? { minHeight, maxHeight } : { height };
+
     return (
       <TextInput
         textAlignVertical="top"
@@ -69,11 +79,11 @@ export const AutoGrowTextInput = forwardRef<TextInput, AutoGrowTextInputProps>(
         multiline
         scrollEnabled={maxHeight != null}
         onContentSizeChange={(e) => {
-          // Native measures (and shrinks) correctly; web is handled above.
-          if (Platform.OS !== 'web') setHeight(clamp(e.nativeEvent.contentSize.height));
+          // iOS measures (and shrinks) via this; Android grows natively; web above.
+          if (Platform.OS === 'ios') setHeight(clamp(e.nativeEvent.contentSize.height));
           onContentSizeChange?.(e);
         }}
-        style={[style, { height }]}
+        style={[style, heightStyle]}
       />
     );
   },
