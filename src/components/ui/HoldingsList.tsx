@@ -168,7 +168,8 @@ export function HoldingsList({
               chainLabel={chainName(tokenChainId(item))}
               logoUrls={tokenLogoURLs(item)}
               chain={tokenBadgeNetwork(item)}
-              balance={hidden ? '••••' : formatTokenAmount(tokenBalanceDouble(item), { compact: true })}
+              balance={formatTokenAmount(tokenBalanceDouble(item), { compact: true })}
+              masked={hidden}
               usdValue={!hidden && tokenUsdValue(item) > 0 ? dc.fmt(tokenUsdValue(item)) : undefined}
               onPress={() => navigateToToken(item)}
               index={index}

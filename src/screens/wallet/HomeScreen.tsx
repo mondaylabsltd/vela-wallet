@@ -830,7 +830,8 @@ export default function HomeScreen() {
                               })
                             : item.subtitle
                         }
-                        amount={hidden ? '••••' : item.amount}
+                        amount={item.amount}
+                        masked={hidden}
                         fiat={!hidden && item.usdValue > 0 ? dc.fmt(item.usdValue) : undefined}
                         chain={chainFor(item.chainId)}
                         index={index}
