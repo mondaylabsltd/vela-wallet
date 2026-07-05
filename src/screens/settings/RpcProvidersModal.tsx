@@ -14,7 +14,7 @@ import { AppModal } from '@/components/ui/AppModal';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { color, font, inter, radius, space, text, useStyles } from '@/constants/theme';
 import { chainMeta } from '@/models/chains';
-import { openURL } from '@/services/platform';
+import { openBrowser } from '@/services/platform';
 import {
   buildProviderRpcUrl,
   PROVIDER_ORDER,
@@ -166,7 +166,7 @@ export function RpcProvidersModal({ visible, onClose }: { visible: boolean; onCl
 
                 <View style={s.actionsRow}>
                   <Pressable
-                    onPress={() => openURL(meta.keyUrl)}
+                    onPress={() => openBrowser(meta.keyUrl)}
                     hitSlop={8}
                     style={s.getKeyBtn}
                     accessibilityRole="button"

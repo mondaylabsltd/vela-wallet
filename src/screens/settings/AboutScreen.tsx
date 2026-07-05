@@ -5,7 +5,7 @@ import { fadeIn, fadeInDown } from '@/constants/entering';
 import { scaleFont, color, createStyles, font, inter, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { getAllNetworksSync } from '@/models/network';
-import { hapticSuccess, openURL } from '@/services/platform';
+import { hapticSuccess, openBrowser } from '@/services/platform';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ArrowLeft, ExternalLink } from 'lucide-react-native';
 import React, { useMemo, useRef } from 'react';
@@ -97,7 +97,7 @@ function TechRow({ label, value }: { label: string; value: string }) {
 
 function LinkRow({ label, url }: { label: string; url: string }) {
   return (
-    <Pressable style={styles.linkRow} onPress={() => openURL(url)}>
+    <Pressable style={styles.linkRow} onPress={() => openBrowser(url)}>
       <Text style={styles.linkLabel}>{label}</Text>
       <ExternalLink size={14} color={color.fg.subtle} strokeWidth={2} />
     </Pressable>

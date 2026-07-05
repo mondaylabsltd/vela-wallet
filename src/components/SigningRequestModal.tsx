@@ -24,7 +24,7 @@ import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet } from '@/models/wallet-state';
 import { shortAddr, isAddress, tokenLogoURLsByAddress, type BLEIncomingRequest } from '@/models/types';
 import { chainName, nativeSymbol, nativeCoinLogoURL, explorerBaseURL, DEFAULT_NETWORKS } from '@/models/network';
-import { openURL } from '@/services/platform';
+import { openBrowser } from '@/services/platform';
 import {
   resolveTransaction, resolveTypedData,
   type ClearSignResult, type ClearSignField, type SigningRisk,
@@ -1630,7 +1630,7 @@ function ContractBar({ label, name, address, verified, warning, riskCheck }: {
       )}
       {/* Jump out to the block explorer to audit the contract / address. */}
       {explorerUrl && (
-        <Pressable onPress={() => openURL(explorerUrl)} hitSlop={8} style={styles.copyBtn}>
+        <Pressable onPress={() => openBrowser(explorerUrl)} hitSlop={8} style={styles.copyBtn}>
           <ExternalLink size={12} color={color.fg.muted} strokeWidth={2} />
         </Pressable>
       )}

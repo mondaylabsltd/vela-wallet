@@ -33,7 +33,7 @@ import { formatWeiToEth as formatEth } from '@/services/format-eth';
 import { dateFormatOptions, numberFormatOptions, timeFormatOptions, type FormatOption } from '@/services/locale-format';
 import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
 import { checkNetworkCompatibility } from '@/services/network-checker';
-import { hapticLight, openURL, showAlert } from '@/services/platform';
+import { hapticLight, openBrowser, showAlert } from '@/services/platform';
 import { getBuiltinBundlerUrl, invalidateAllPools, poolRpcCall, refreshPool } from '@/services/rpc-pool';
 import { getBundlerServiceURL, getLocalePrefs, hasPendingUploads, loadCustomNetworks, loadLocalePrefs, loadNetworkConfigs, loadServiceEndpoints, removeCustomNetwork, saveCustomNetwork, saveLocalePrefs, saveNetworkConfig, saveServiceEndpoints } from '@/services/storage';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from '@/services/tempo';
@@ -469,7 +469,7 @@ function EndpointEditorModal({ s, visible, onClose }: { s: S; visible: boolean; 
         <View style={s.modalHeader}>
           <Text style={s.modalTitle}>{t('settingsModals.endpoints.modalTitle')}</Text>
           <View style={s.modalHeaderRight}>
-            <Pressable onPress={() => openURL('https://github.com/atshelchin/vela-wallet#self-deploy-service-endpoints')} hitSlop={8} style={s.refreshBtn}>
+            <Pressable onPress={() => openBrowser('https://github.com/atshelchin/vela-wallet#self-deploy-service-endpoints')} hitSlop={8} style={s.refreshBtn}>
               <ExternalLink size={18} color={color.fg.muted} strokeWidth={2} />
             </Pressable>
             <Pressable onPress={() => setRefreshCount(c => c + 1)} hitSlop={8} style={s.refreshBtn}>
@@ -831,7 +831,7 @@ function AddNetworkModal({ s, visible, onClose, onAdded }: { s: S; visible: bool
               <Text style={s.addNetHint}>{t('settingsModals.addNetwork.incompatibleHint')}</Text>
               <VelaButton
                 title={t('settingsModals.addNetwork.openChainSetupTool')}
-                onPress={() => openURL(VELA_CHAIN_SETUP_URL)}
+                onPress={() => openBrowser(VELA_CHAIN_SETUP_URL)}
                 variant="accent"
                 style={s.checkBtn}
               />
@@ -988,7 +988,7 @@ function LanguagePickerModal({ s, visible, preference, systemLanguage, onSelect,
               </React.Fragment>
             );
           })}
-          <Pressable style={s.langContribute} onPress={() => openURL(translationIssueURL(effectiveLang))}>
+          <Pressable style={s.langContribute} onPress={() => openBrowser(translationIssueURL(effectiveLang))}>
             <Text style={s.langContributeNote}>{t('language.contributeNote')}</Text>
             <View style={s.langContributeCtaRow}>
               <Text style={s.langContributeCta}>{t('language.contributeCta')}</Text>
@@ -1253,7 +1253,7 @@ function TreasuryModal({ visible, onClose }: { visible: boolean; onClose: () => 
                   <View key={b.chainId}>
                     <Pressable
                       style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg, paddingVertical: space.md }}
-                      onPress={() => openURL(explorerLink)}
+                      onPress={() => openBrowser(explorerLink)}
                     >
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space.sm }}>
