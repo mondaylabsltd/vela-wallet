@@ -91,6 +91,14 @@ interface VelaRefreshProps {
 export function VelaRefresh({ refreshing, onRefresh, children, style, enabled = true, statusText }: VelaRefreshProps) {
   const scrollRef = useRef<any>(null);
   const rootRef = useRef<any>(null);
+  // NativeViewGestureHandler adopted over the consumer's scrollable. A plain
+  // component ref (scrollRef → Animated.FlatList) has no `handlerTag`, so passing
+  // it to simultaneousWithExternalGesture() silently resolves to -1 and the
+  // relation is dropped — so on the one tab tall enough to actually scroll
+  // (Assets, funded) the native scroll won the drag and the pull never engaged.
+  // `.withRef` fills this with the REAL handler object (real tag) so the relation
+  // is established. Native only; the web pull uses the raw-touch path below.
+  const nativeRef = useRef<any>(undefined);
 
   const pull = useSharedValue(0);
   const scrollY = useSharedValue(0);
@@ -195,9 +203,16 @@ export function VelaRefresh({ refreshing, onRefresh, children, style, enabled = 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Adopt the consumer's scrollable as a real RNGH native gesture so the Pan can
+  // be genuinely simultaneous with it (see nativeRef above). Passing the REF (not
+  // the gesture object) makes RNGH read `nativeRef.current.handlerTag` lazily on
+  // update — resilient to the two detectors' effect ordering and to these gesture
+  // objects being recreated each render.
+  const nativeGesture = Gesture.Native().withRef(nativeRef);
+
   const pan = Gesture.Pan()
     .enabled(enabled && Platform.OS !== 'web')
-    .simultaneousWithExternalGesture(scrollRef)
+    .simultaneousWithExternalGesture(nativeRef)
     // Engage on a downward drag; bail to the scroll view on an upward drag.
     .activeOffsetY(12)
     .failOffsetY(-12)
@@ -270,7 +285,17 @@ export function VelaRefresh({ refreshing, onRefresh, children, style, enabled = 
             ) : null}
           </Animated.View>
           <Animated.View style={[styles.fill, listStyle]}>
-            {children(scrollProps)}
+            {/* Native: wrap the consumer's scrollable in the adopted native
+                gesture so the Pan and the scroll recognize simultaneously. Web
+                keeps the raw-touch path untouched (pan is .enabled(false) there
+                and nativeGesture is never mounted). */}
+            {Platform.OS === 'web' ? (
+              children(scrollProps)
+            ) : (
+              <GestureDetector gesture={nativeGesture}>
+                {children(scrollProps)}
+              </GestureDetector>
+            )}
           </Animated.View>
         </View>
       </GestureDetector>
