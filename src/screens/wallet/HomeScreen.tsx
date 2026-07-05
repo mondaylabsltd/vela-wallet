@@ -47,14 +47,15 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { WalletAvatar } from '@/components/ui/WalletAvatar';
 import { DOCK_BAR_HEIGHT, WaveDock } from '@/components/ui/WaveDock';
-import { RpcTroubleBanner } from '@/components/ui/RpcTroubleBanner';
+import { RpcTroubleBanner, RpcFixModal } from '@/components/ui/RpcTroubleBanner';
+import { BalanceDetailSheet } from '@/components/ui/BalanceDetailSheet';
 import { getRateLimitedChains } from '@/services/rpc-pool';
 
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 import { useDAppConnection, type ConnectionStatus } from '@/models/dapp-connection';
 import { getAllNetworksSync, type Network } from '@/models/network';
-import { shortAddr, isAddress, tokenBalanceDouble, tokenChainId, tokenUsdValue, type APIToken } from '@/models/types';
+import { shortAddr, isAddress, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
 import { useBalancePrivacy } from '@/hooks/use-balance-privacy';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { shortAddress, useWallet } from '@/models/wallet-state';
@@ -172,6 +173,11 @@ export default function HomeScreen() {
   const [connEvents, setConnEvents] = useState<ConnectionEvent[]>([]);
   const [selectedChainId, setSelectedChainId] = useState<number | null>(null);
   const [showNetSheet, setShowNetSheet] = useState(false);
+  // The hero's "still updating / couldn't be priced" line is tappable — it opens
+  // a sheet enumerating the exact culprit networks + tokens. `fixChainId` drives
+  // the single shared RPC-fix modal (used by both the banner and that sheet).
+  const [showBalanceDetail, setShowBalanceDetail] = useState(false);
+  const [fixChainId, setFixChainId] = useState<number | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [switcherLoading, setSwitcherLoading] = useState(false);
@@ -241,6 +247,13 @@ export default function HomeScreen() {
   // approximate and prefer the last-known-good cached total over the undercount.
   const liveTotal = useMemo(() => tokens.reduce((s, t) => s + tokenUsdValue(t), 0), [tokens]);
   const hasUnpriced = useMemo(() => tokens.some((t) => tokenBalanceDouble(t) > 0 && t.priceUsd == null), [tokens]);
+  // The concrete tokens behind the "couldn't be priced" line — held, valued at
+  // nothing (no price source), spam excluded so the detail sheet mirrors the
+  // Assets view rather than dumping airdrop noise on the user.
+  const unpricedTokens = useMemo(
+    () => tokens.filter((t) => !t.spam && tokenBalanceDouble(t) > 0 && t.priceUsd == null),
+    [tokens],
+  );
   const hasLiveData = tokens.length > 0;
   const balancePartial = failedChainIds.length > 0 || (hasLiveData && hasUnpriced);
   const displayTotal =
@@ -701,7 +714,15 @@ export default function HomeScreen() {
             )}
           </Pressable>
           {balancePartial && noticeAllowed && (
-            <View style={styles.balanceStaleRow}>
+            // Tappable: the ChevronRight is the "there's more — see exactly what"
+            // affordance. Opens a sheet enumerating the culprit networks + tokens.
+            <Pressable
+              style={({ pressed }) => [styles.balanceStaleRow, pressed && styles.balanceStalePressed]}
+              onPress={() => setShowBalanceDetail(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityHint={t('home.balanceDetailViewHint')}
+            >
               <AlertTriangle size={12} color={color.warning.base} strokeWidth={2.5} />
               {/* Failed chains are transient ("still updating" is honest — a retry
                   can fix it); a held token with no price source is not going to
@@ -709,7 +730,8 @@ export default function HomeScreen() {
               <Text style={styles.balanceStaleText}>
                 {t(failedChainIds.length > 0 ? 'home.balanceStale' : 'home.balanceUnpriced')}
               </Text>
-            </View>
+              <ChevronRight size={14} color={color.warning.base} strokeWidth={2.5} />
+            </Pressable>
           )}
         </View>
       </Animated.View>
@@ -719,10 +741,7 @@ export default function HomeScreen() {
           user to swap RPC would be wrong; their balance quietly stays on cache. */}
       <RpcTroubleBanner
         chainIds={failedChainIds.filter((id) => !rateLimitedChainIds.includes(id))}
-        onResolved={(chainId) => {
-          setFailedChainIds((prev) => prev.filter((id) => id !== chainId));
-          loadData();
-        }}
+        onFix={setFixChainId}
       />
 
       {/* Toggle + network filter */}
@@ -907,6 +926,47 @@ export default function HomeScreen() {
         subtitleForChain={(n) => {
           const c = activity.filter((a) => a.chainId === n.chainId).length;
           return c > 0 ? `${c} event${c > 1 ? 's' : ''}` : undefined;
+        }}
+      />
+
+      {/* Balance-detail sheet (opened by the tappable hero notice) + the single
+          shared RPC-fix modal. The banner chips and the sheet's per-chain "Fix"
+          rows both drive RpcFixModal, so there's one recovery form, not two. */}
+      <BalanceDetailSheet
+        visible={showBalanceDetail}
+        onClose={() => setShowBalanceDetail(false)}
+        failedChainIds={failedChainIds}
+        rateLimitedChainIds={rateLimitedChainIds}
+        unpricedTokens={unpricedTokens}
+        onFixResolved={(chainId) => {
+          setFailedChainIds((prev) => prev.filter((id) => id !== chainId));
+          loadData();
+        }}
+        onRetry={() => loadData(true)}
+        onTokenPress={(token) => {
+          setShowBalanceDetail(false);
+          router.push({
+            pathname: '/token-detail',
+            params: {
+              symbol: token.symbol,
+              name: token.name,
+              network: token.network,
+              balance: token.balance,
+              decimals: String(token.decimals),
+              logos: JSON.stringify(tokenLogoURLs(token)),
+              tokenAddress: token.tokenAddress ?? '',
+              priceUsd: String(token.priceUsd ?? 0),
+              chainName: token.chainName,
+            },
+          });
+        }}
+      />
+      <RpcFixModal
+        chainId={fixChainId}
+        onClose={() => setFixChainId(null)}
+        onResolved={(chainId) => {
+          setFailedChainIds((prev) => prev.filter((id) => id !== chainId));
+          loadData();
         }}
       />
 
@@ -1227,7 +1287,8 @@ const styles = createStyles(() => ({
   balanceDot: { width: 16, height: 16, borderRadius: 8, backgroundColor: color.fg.base },
   // Parity with the holdings view: when a chain read failed or a held token is
   // unpriced, the hero total is an estimate — say so, not a confident number.
-  balanceStaleRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.md },
+  balanceStaleRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.md, alignSelf: 'flex-start' },
+  balanceStalePressed: { opacity: 0.6 },
   balanceStaleText: { fontSize: text.sm, ...inter.medium, color: color.warning.base },
 
   // Receipt toast

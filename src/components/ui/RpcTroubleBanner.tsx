@@ -33,16 +33,14 @@ const RPC_PROVIDERS: { name: string; url: string }[] = [
 
 export function RpcTroubleBanner({
   chainIds,
-  onResolved,
+  onFix,
 }: {
   chainIds: number[];
-  /** Called after the user saves a new RPC for a chain, so the caller can re-fetch. */
-  onResolved?: (chainId: number) => void;
+  /** Open the shared RPC-fix flow for a chain (the modal is owned by the parent,
+      so it's a single instance across the banner and the balance-detail sheet). */
+  onFix: (chainId: number) => void;
 }) {
-  const { t, i18n } = useTranslation();
-  const [fixChainId, setFixChainId] = useState<number | null>(null);
-  const [fixUrl, setFixUrl] = useState('');
-  const [saving, setSaving] = useState(false);
+  const { t } = useTranslation();
 
   // Enter once, on first mount — a parent re-render (e.g. Home refreshing every
   // account's balance while the switcher is open) must not replay the slide-in.
@@ -55,18 +53,71 @@ export function RpcTroubleBanner({
 
   if (failedNetworks.length === 0) return null;
 
-  const openFix = async (chainId: number) => {
-    // Pre-fill the user's *saved* override, not the built-in default. The default
-    // is the endpoint that's currently failing, so re-showing it just makes a
-    // prior fix look like it didn't stick — and invites re-saving the broken URL.
-    // No override yet => leave empty so the placeholder guides them.
-    const saved = await getNetworkConfig(chainId);
-    setFixChainId(chainId);
-    setFixUrl(saved?.rpcURL ?? '');
-  };
+  return (
+    <Animated.View entering={hasEntered.current ? undefined : fadeInDown(0, 300)} style={styles.banner}>
+      <AlertTriangle size={14} color={'#C07A0A'} strokeWidth={2.5} />
+      <View style={styles.bannerContent}>
+        <Text style={styles.bannerText}>
+          {failedNetworks.length === 1
+            ? t('assets.rpcUnavailableSingle', { name: failedNetworks[0].displayName })
+            : t('assets.rpcUnavailableMultiple', { count: failedNetworks.length })}
+        </Text>
+        <View style={styles.bannerChips}>
+          {failedNetworks.map(net => (
+            <Pressable key={net.chainId} style={styles.bannerChip} onPress={() => onFix(net.chainId)}>
+              <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />
+              <Text style={styles.bannerChipText}>{net.displayName}</Text>
+              <Text style={styles.bannerFixLink}>{t('assets.rpcFix')}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+/**
+ * RpcFixModal — the paste-a-working-RPC recovery form, as a standalone controlled
+ * modal. Owned by the parent (a single instance drives both the RpcTroubleBanner
+ * chips and the balance-detail sheet's "Fix" rows), so closing one surface and
+ * opening the fix flow never fights a nested modal. `chainId` = which chain to
+ * fix (null = closed).
+ */
+/**
+ * RpcFixForm — just the recovery form body (no modal wrapper). Extracted so it can
+ * render EITHER inside its own modal (RpcFixModal, for the banner) OR swapped in as
+ * a sub-view of another sheet (the balance-detail sheet). The latter matters on iOS:
+ * two sibling AppModals are native pageSheets, and presenting one while dismissing
+ * another from the same VC is dropped by UIKit — so a sheet must show the fix form
+ * IN PLACE, never by handing off to a second modal. `chainId` is always a real chain.
+ */
+export function RpcFixForm({
+  chainId,
+  onClose,
+  onResolved,
+}: {
+  chainId: number;
+  onClose: () => void;
+  /** Called after the user saves a new RPC for a chain, so the caller can re-fetch. */
+  onResolved?: (chainId: number) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const [fixUrl, setFixUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Pre-fill the user's *saved* override, not the built-in default. The default
+  // is the endpoint that's currently failing, so re-showing it just makes a prior
+  // fix look like it didn't stick — and invites re-saving the broken URL. Clear
+  // first so a stale prior-chain URL never flashes when switching chains.
+  useEffect(() => {
+    let active = true;
+    setFixUrl('');
+    getNetworkConfig(chainId).then(saved => { if (active) setFixUrl(saved?.rpcURL ?? ''); }).catch(() => {});
+    return () => { active = false; };
+  }, [chainId]);
 
   const handleSave = async () => {
-    if (!fixChainId || !fixUrl.trim()) return;
+    if (!fixUrl.trim()) return;
     const url = fixUrl.trim();
     setSaving(true);
     try {
@@ -77,25 +128,24 @@ export function RpcTroubleBanner({
         showAlert(t('assets.errorTitle'), t('assets.rpcFixUnreachable'));
         return;
       }
-      if (reportedChainId !== fixChainId) {
-        showAlert(t('assets.errorTitle'), t('assets.rpcFixWrongChain', { expected: fixChainId, actual: reportedChainId }));
+      if (reportedChainId !== chainId) {
+        showAlert(t('assets.errorTitle'), t('assets.rpcFixWrongChain', { expected: chainId, actual: reportedChainId }));
         return;
       }
       // Preserve any explorer/bundler the user already customized in Settings:
       // saveNetworkConfig replaces the whole entry by chainId, so falling back to
       // the built-in defaults here would silently clobber those overrides.
-      const saved = await getNetworkConfig(fixChainId);
-      const net = getAllNetworksSync().find(n => n.chainId === fixChainId);
+      const saved = await getNetworkConfig(chainId);
+      const net = getAllNetworksSync().find(n => n.chainId === chainId);
       await saveNetworkConfig({
-        chainId: fixChainId,
+        chainId,
         rpcURL: url,
         explorerURL: saved?.explorerURL ?? net?.explorerURL ?? '',
         bundlerURL: saved?.bundlerURL ?? net?.bundlerURL ?? '',
       });
-      await refreshPool(fixChainId);
-      const fixed = fixChainId;
-      setFixChainId(null);
-      onResolved?.(fixed);
+      await refreshPool(chainId);
+      onResolved?.(chainId);
+      onClose();
     } catch {
       showAlert(t('assets.errorTitle'), t('assets.errorSaveRpc'));
     } finally {
@@ -103,109 +153,101 @@ export function RpcTroubleBanner({
     }
   };
 
+  const net = getAllNetworksSync().find(n => n.chainId === chainId);
   return (
-    <>
-      <Animated.View entering={hasEntered.current ? undefined : fadeInDown(0, 300)} style={styles.banner}>
-        <AlertTriangle size={14} color={'#C07A0A'} strokeWidth={2.5} />
-        <View style={styles.bannerContent}>
-          <Text style={styles.bannerText}>
-            {failedNetworks.length === 1
-              ? t('assets.rpcUnavailableSingle', { name: failedNetworks[0].displayName })
-              : t('assets.rpcUnavailableMultiple', { count: failedNetworks.length })}
-          </Text>
-          <View style={styles.bannerChips}>
-            {failedNetworks.map(net => (
-              <Pressable key={net.chainId} style={styles.bannerChip} onPress={() => openFix(net.chainId)}>
-                <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />
-                <Text style={styles.bannerChipText}>{net.displayName}</Text>
-                <Text style={styles.bannerFixLink}>{t('assets.rpcFix')}</Text>
+    <View style={styles.fixContainer}>
+      <View style={styles.fixHeader}>
+        <Text style={styles.fixTitle}>{t('assets.rpcFixTitle')}</Text>
+        <Pressable onPress={onClose} hitSlop={8}>
+          <X size={22} color={color.fg.base} strokeWidth={2} />
+        </Pressable>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.fixBody}>
+        <View style={styles.fixChainRow}>
+          {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={32} />}
+          <View>
+            <Text style={styles.fixChainName}>{net?.displayName ?? t('assets.chainFallback', { chainId })}</Text>
+            <Text style={styles.fixChainSub}>{t('assets.rpcFixChainId', { chainId })}</Text>
+          </View>
+        </View>
+
+        <View style={styles.fixWarning}>
+          <Wifi size={14} color={'#C07A0A'} strokeWidth={2.5} />
+          <Text style={styles.fixWarningText}>{t('assets.rpcFixWarning')}</Text>
+        </View>
+
+        <Text style={styles.fixLabel}>{t('assets.rpcFixLabel')}</Text>
+        <TextInput
+          style={styles.fixInput}
+          value={fixUrl}
+          onChangeText={setFixUrl}
+          placeholder="https://rpc.example.com"
+          placeholderTextColor={color.fg.subtle}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoFocus
+        />
+
+        <Pressable
+          style={[styles.fixBtn, saving && styles.fixBtnDisabled]}
+          onPress={handleSave}
+          disabled={saving || !fixUrl.trim()}
+        >
+          {saving
+            ? <ActivityIndicator size={16} color={color.fg.inverse} />
+            : <Text style={styles.fixBtnText}>{t('assets.rpcFixSaveBtn')}</Text>}
+        </Pressable>
+
+        {/* Where to get a reliable RPC */}
+        <View style={styles.providers}>
+          <Text style={styles.providersTitle}>{t('assets.rpcProvidersTitle')}</Text>
+          <Text style={styles.providersHint}>{t('assets.rpcProvidersHint')}</Text>
+          <View style={styles.providerChips}>
+            {RPC_PROVIDERS.map(p => (
+              <Pressable key={p.url} style={styles.providerChip} onPress={() => openURL(p.url)}>
+                <Text style={styles.providerChipText}>{p.name}</Text>
+                <ExternalLink size={12} color={color.fg.subtle} strokeWidth={2} />
               </Pressable>
             ))}
           </View>
         </View>
-      </Animated.View>
 
-      <AppModal visible={fixChainId !== null} onClose={() => setFixChainId(null)}>
-        {fixChainId !== null && (() => {
-          const net = getAllNetworksSync().find(n => n.chainId === fixChainId);
-          return (
-            <View style={styles.fixContainer}>
-              <View style={styles.fixHeader}>
-                <Text style={styles.fixTitle}>{t('assets.rpcFixTitle')}</Text>
-                <Pressable onPress={() => setFixChainId(null)} hitSlop={8}>
-                  <X size={22} color={color.fg.base} strokeWidth={2} />
-                </Pressable>
-              </View>
+        {/* Last resort: reach the developer with this exact failure attached */}
+        <Pressable
+          style={styles.reportRow}
+          onPress={() => openURL(buildBugReportURL(i18n.language as AppLanguage, {
+            extraLines: [
+              `- Failing network: ${net?.displayName ?? chainId} (chainId ${chainId})`,
+              `- RPC entered: ${fixUrl || net?.rpcURL || 'n/a'}`,
+            ],
+          }))}
+        >
+          <Text style={styles.reportText}>{t('assets.rpcReport')}</Text>
+          <ExternalLink size={12} color={color.fg.subtle} strokeWidth={2} />
+        </Pressable>
+      </ScrollView>
+    </View>
+  );
+}
 
-              <ScrollView contentContainerStyle={styles.fixBody}>
-                <View style={styles.fixChainRow}>
-                  {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={32} />}
-                  <View>
-                    <Text style={styles.fixChainName}>{net?.displayName ?? t('assets.chainFallback', { chainId: fixChainId })}</Text>
-                    <Text style={styles.fixChainSub}>{t('assets.rpcFixChainId', { chainId: fixChainId })}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.fixWarning}>
-                  <Wifi size={14} color={'#C07A0A'} strokeWidth={2.5} />
-                  <Text style={styles.fixWarningText}>{t('assets.rpcFixWarning')}</Text>
-                </View>
-
-                <Text style={styles.fixLabel}>{t('assets.rpcFixLabel')}</Text>
-                <TextInput
-                  style={styles.fixInput}
-                  value={fixUrl}
-                  onChangeText={setFixUrl}
-                  placeholder="https://rpc.example.com"
-                  placeholderTextColor={color.fg.subtle}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoFocus
-                />
-
-                <Pressable
-                  style={[styles.fixBtn, saving && styles.fixBtnDisabled]}
-                  onPress={handleSave}
-                  disabled={saving || !fixUrl.trim()}
-                >
-                  {saving
-                    ? <ActivityIndicator size={16} color={color.fg.inverse} />
-                    : <Text style={styles.fixBtnText}>{t('assets.rpcFixSaveBtn')}</Text>}
-                </Pressable>
-
-                {/* Where to get a reliable RPC */}
-                <View style={styles.providers}>
-                  <Text style={styles.providersTitle}>{t('assets.rpcProvidersTitle')}</Text>
-                  <Text style={styles.providersHint}>{t('assets.rpcProvidersHint')}</Text>
-                  <View style={styles.providerChips}>
-                    {RPC_PROVIDERS.map(p => (
-                      <Pressable key={p.url} style={styles.providerChip} onPress={() => openURL(p.url)}>
-                        <Text style={styles.providerChipText}>{p.name}</Text>
-                        <ExternalLink size={12} color={color.fg.subtle} strokeWidth={2} />
-                      </Pressable>
-                    ))}
-                  </View>
-                </View>
-
-                {/* Last resort: reach the developer with this exact failure attached */}
-                <Pressable
-                  style={styles.reportRow}
-                  onPress={() => openURL(buildBugReportURL(i18n.language as AppLanguage, {
-                    extraLines: [
-                      `- Failing network: ${net?.displayName ?? fixChainId} (chainId ${fixChainId})`,
-                      `- RPC entered: ${fixUrl || net?.rpcURL || 'n/a'}`,
-                    ],
-                  }))}
-                >
-                  <Text style={styles.reportText}>{t('assets.rpcReport')}</Text>
-                  <ExternalLink size={12} color={color.fg.subtle} strokeWidth={2} />
-                </Pressable>
-              </ScrollView>
-            </View>
-          );
-        })()}
-      </AppModal>
-    </>
+/**
+ * RpcFixModal — RpcFixForm in its own AppModal. Used by the banner, where opening
+ * the fix flow doesn't dismiss any other modal (so no present-during-dismiss race).
+ */
+export function RpcFixModal({
+  chainId,
+  onClose,
+  onResolved,
+}: {
+  chainId: number | null;
+  onClose: () => void;
+  onResolved?: (chainId: number) => void;
+}) {
+  return (
+    <AppModal visible={chainId !== null} onClose={onClose}>
+      {chainId !== null && <RpcFixForm chainId={chainId} onClose={onClose} onResolved={onResolved} />}
+    </AppModal>
   );
 }
 
