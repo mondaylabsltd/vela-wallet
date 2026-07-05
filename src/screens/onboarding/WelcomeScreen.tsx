@@ -8,7 +8,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { fadeIn, fadeInUp } from '@/constants/entering';
-import { color, text, inter, space, radius, font, motion, createStyles } from '@/constants/theme';
+import { scaleFont, color, text, inter, space, radius, font, motion, createStyles } from '@/constants/theme';
 import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
 import { AppModal } from '@/components/ui/AppModal';
 import { SectionLabel } from '@/components/ui/SectionLabel';
@@ -72,7 +72,7 @@ function HealthDot({ health }: { health: ServiceHealth }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 6 }}>
       <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: dotColor }} />
-      <Text style={{ fontSize: 11, fontWeight: '500', color: dotColor }}>
+      <Text style={{ fontSize: scaleFont(11), fontWeight: '500', color: dotColor }}>
         {isOk ? `${health.latencyMs}ms` : (health.detail ?? 'Offline')}
       </Text>
     </View>
@@ -333,7 +333,7 @@ const styles = createStyles(() => ({
     alignItems: 'center',
   },
   logo: {
-    fontSize: 48,
+    fontSize: scaleFont(48),
     ...inter.bold,
     color: '#FFFFFF', // Always white on dark brand screen
     letterSpacing: 3,

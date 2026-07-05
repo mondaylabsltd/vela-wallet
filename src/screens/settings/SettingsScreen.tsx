@@ -15,7 +15,7 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
-import { color, createStyles, font, inter, radius, shadow, space, text, useStyles } from '@/constants/theme';
+import { scaleFont, color, createStyles, font, inter, radius, shadow, space, text, useStyles } from '@/constants/theme';
 import { useAvatarStyle } from '@/hooks/use-avatar-style';
 import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { LANGUAGE_NATIVE_NAMES, SUPPORTED_LANGUAGES, type AppLanguage, type LanguagePreference } from '@/i18n';
@@ -1684,7 +1684,7 @@ const styleFactory = () => ({
     width: 18, height: 18, borderRadius: radius.full, backgroundColor: color.bg.sunken,
     alignItems: 'center' as const, justifyContent: 'center' as const,
   },
-  avatarPreviewLetter: { fontSize: 9, ...inter.bold, color: color.fg.base },
+  avatarPreviewLetter: { fontSize: scaleFont(9), ...inter.bold, color: color.fg.base },
 
   // Slider
   sliderContainer: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingVertical: space['2xl'], paddingHorizontal: space.xl, gap: space.lg },

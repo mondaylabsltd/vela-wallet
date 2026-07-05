@@ -21,7 +21,7 @@ import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
 import { nativeSymbol, nativeCoinLogoURL } from '@/models/network';
 import { formatTokenAmount } from '@/services/sim-assets';
 import type { AssetChange, AssetSimResult } from '@/services/tx-simulation';
-import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
+import { scaleFont, color, text, inter, space, radius, createStyles } from '@/constants/theme';
 
 export function BalanceChangePreview({ result, chainId, selfTransfer }: {
   result: AssetSimResult | null;
@@ -143,7 +143,7 @@ const styles = createStyles(() => ({
     gap: space.sm,
   },
   title: {
-    fontSize: 10, ...inter.semibold, color: color.fg.subtle,
+    fontSize: scaleFont(10), ...inter.semibold, color: color.fg.subtle,
     textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: space.xs,
   },
   row: {

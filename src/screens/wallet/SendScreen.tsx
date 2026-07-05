@@ -6,7 +6,7 @@ import { SlideToConfirmButton } from '@/components/ui/SlideToConfirmButton';
 import { TokenSelector } from '@/components/ui/TokenSelector';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { Divider } from '@/components/ui/DetailRow';
-import { color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
+import { scaleFont, color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
 import { chainName, nativeSymbol, networkForChainId, networkId, tokenBadgeNetwork } from '@/models/network';
 import { addCustomNetworkByChainId } from '@/services/add-network';
 import { parseEIP681, fromBaseUnits, toBaseUnits } from '@/services/eip681';
@@ -2343,7 +2343,7 @@ const styles = createStyles(() => ({
     marginTop: space.sm,
   },
   riskTag: {
-    fontSize: 9,
+    fontSize: scaleFont(9),
     ...inter.semibold,
     color: color.fg.subtle,
     backgroundColor: color.bg.sunken,

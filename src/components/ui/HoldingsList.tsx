@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { TokenRow } from '@/components/ui/TokenRow';
 import { VelaRefresh } from '@/components/ui/VelaRefresh';
-import { color, createStyles, inter, radius, space, text } from '@/constants/theme';
+import { scaleFont, color, createStyles, inter, radius, space, text } from '@/constants/theme';
 import { useBalancePrivacy } from '@/hooks/use-balance-privacy';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { chainName, tokenBadgeNetwork } from '@/models/network';
@@ -236,7 +236,7 @@ const styles = createStyles(() => ({
   },
   searchInput: {
     flex: 1,
-    fontSize: 16, // ≥16px prevents iOS Safari auto-zoom on focus
+    fontSize: scaleFont(16), // ≥16px prevents iOS Safari auto-zoom on focus
     ...inter.regular,
     color: color.fg.base,
     paddingVertical: space.xs,

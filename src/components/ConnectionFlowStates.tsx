@@ -14,7 +14,7 @@ import Animated from 'react-native-reanimated';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { useDAppConnection } from '@/models/dapp-connection';
-import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
+import { scaleFont, color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 import { Radio, Globe, AlertTriangle, Lock, Fingerprint } from 'lucide-react-native';
 
 export function ConnectionFlowStates({ onScanAgain }: { onScanAgain: () => void }) {
@@ -158,7 +158,7 @@ const styles = createStyles(() => ({
     alignItems: 'center', justifyContent: 'center',
   },
   fingerprintDigit: {
-    fontSize: 28, fontWeight: '700' as const, fontFamily: font.mono, color: color.fg.base,
+    fontSize: scaleFont(28), fontWeight: '700' as const, fontFamily: font.mono, color: color.fg.base,
   },
   fingerprintDapp: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   fingerprintDappText: {

@@ -26,7 +26,7 @@ import { loadAvatarStyle } from '@/services/avatar-style';
 import i18n, { loadLanguage } from '@/i18n';
 import { LanguageProvider, useLanguagePreference } from '@/i18n/language';
 import { loadTextScale, TextScaleProvider } from '@/constants/text-scale';
-import { color, rebuildTextScale, rebuildColors, createStyles } from '@/constants/theme';
+import { scaleFont, color, rebuildTextScale, rebuildColors, createStyles } from '@/constants/theme';
 import { refreshCustomNetworks } from '@/models/network';
 import {
   loadColorScheme,
@@ -57,17 +57,17 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
     if (this.state.error) {
       return (
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, backgroundColor: '#faf9f7' }}>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: '#1a1a18', marginBottom: 8 }}>
+          <Text style={{ fontSize: scaleFont(18), fontWeight: '700', color: '#1a1a18', marginBottom: 8 }}>
             {i18n.t('common.somethingWrong')}
           </Text>
-          <Text style={{ fontSize: 13, color: '#8a8580', textAlign: 'center', lineHeight: 20, marginBottom: 20 }}>
+          <Text style={{ fontSize: scaleFont(13), color: '#8a8580', textAlign: 'center', lineHeight: 20, marginBottom: 20 }}>
             {this.state.error.message}
           </Text>
           <Pressable
             onPress={() => this.setState({ error: null })}
             style={{ paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#E8572A', borderRadius: 12 }}
           >
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{i18n.t('common.tryAgain')}</Text>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: scaleFont(15) }}>{i18n.t('common.tryAgain')}</Text>
           </Pressable>
         </View>
       );
