@@ -23,6 +23,9 @@ interface Props {
   /** ERC-20 contract address — shown (tappable to copy) to disambiguate same-named tokens. */
   contractAddress?: string | null;
   balance: string;
+  /** Privacy mode: hide the balance behind tight fixed-size dots (not bullet
+   *  glyphs, which spread out on Android). */
+  masked?: boolean;
   usdValue?: string;
   onPress: () => void;
   index?: number;
@@ -32,7 +35,7 @@ interface Props {
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, contractAddress, balance, usdValue, onPress, index = 0, selected }: Props) {
+export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, contractAddress, balance, masked, usdValue, onPress, index = 0, selected }: Props) {
   const scale = useSharedValue(1);
   const { copied, copy } = useCopyFeedback();
 
@@ -87,9 +90,17 @@ export function TokenRow({ symbol, chainLabel, logoUrl, logoUrls, chain, contrac
           ) : null}
         </View>
         <View style={styles.values}>
-          <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-            {balance}
-          </Text>
+          {masked ? (
+            <View style={styles.balanceDots}>
+              {[0, 1, 2, 3].map((i) => (
+                <View key={i} style={styles.balanceDot} />
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.balance} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+              {balance}
+            </Text>
+          )}
           {usdValue ? <Text style={styles.usd} numberOfLines={1}>{usdValue}</Text> : null}
         </View>
       </AnimatedPressable>
@@ -172,6 +183,9 @@ const styles = createStyles(() => ({
     fontFamily: font.numeric,
     color: color.fg.base,
   },
+  // Masked balance: tight fixed-size dots (bullet glyphs spread out on Android).
+  balanceDots: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: 4 },
+  balanceDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: color.fg.base },
   usd: {
     fontSize: text.sm,
     ...inter.regular,

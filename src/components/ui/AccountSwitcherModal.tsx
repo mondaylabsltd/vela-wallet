@@ -160,5 +160,5 @@ const styles = createStyles(() => ({
   addr: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, fontFamily: font.mono },
   right: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   bal: { fontSize: text.sm, ...inter.semibold, color: color.fg.muted },
-  actions: { gap: space.sm, paddingTop: space['2xl'], paddingHorizontal: space.sm },
+  actions: { gap: space.md, paddingTop: space['4xl'], paddingBottom: space.lg, paddingHorizontal: space.sm },
 }));

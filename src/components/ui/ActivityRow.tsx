@@ -29,6 +29,9 @@ export interface ActivityRowProps {
   title: string;
   subtitle: string;
   amount: string;
+  /** Privacy mode: hide the amount behind dots (rendered as tight fixed-size dots,
+   *  not bullet glyphs, which spread out on Android). */
+  masked?: boolean;
   /** Value in the user's display currency, shown under the amount (e.g. "AR$1,428.20"). */
   fiat?: string;
   /** Per-row timestamp label. Omitted on the home feed, which groups rows under
@@ -40,7 +43,7 @@ export interface ActivityRowProps {
   isNew?: boolean;
 }
 
-export function ActivityRow({ direction, title, subtitle, amount, fiat, time, chain, onPress, index = 0, isNew }: ActivityRowProps) {
+export function ActivityRow({ direction, title, subtitle, amount, masked, fiat, time, chain, onPress, index = 0, isNew }: ActivityRowProps) {
   const incoming = direction === 'in';
   const scale = useSharedValue(1);
   const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -73,8 +76,9 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
   const ticker = sp > 0 ? amount.slice(sp + 1) : '';
 
   // One spoken label for the whole row instead of five separate text nodes,
-  // e.g. "Sent, 0.05 ETH, to 0x12…ab, ≈$90, 2h ago".
-  const a11yLabel = [title, amount, subtitle, fiat, time].filter(Boolean).join(', ');
+  // e.g. "Sent, 0.05 ETH, to 0x12…ab, ≈$90, 2h ago". In privacy mode the amount
+  // is omitted so it isn't read aloud.
+  const a11yLabel = [title, masked ? null : amount, subtitle, fiat, time].filter(Boolean).join(', ');
 
   const handlePress = onPress
     ? () => { hapticLight(); onPress(); }
@@ -102,18 +106,26 @@ export function ActivityRow({ direction, title, subtitle, amount, fiat, time, ch
         </View>
 
         <View style={styles.content}>
-          {/* Line 1: title ↔ amount */}
+          {/* Line 1: title ↔ amount (or tight dots when masked) */}
           <View style={styles.line}>
             <Text style={styles.title} numberOfLines={1}>{title}</Text>
-            <Text
-              style={[styles.amount, incoming && styles.amountIn]}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.85}
-            >
-              {numberPart}
-              {ticker ? <Text style={styles.ticker}> {ticker}</Text> : null}
-            </Text>
+            {masked ? (
+              <View style={styles.amountDots}>
+                {[0, 1, 2, 3].map((i) => (
+                  <View key={i} style={[styles.amountDot, incoming && styles.amountDotIn]} />
+                ))}
+              </View>
+            ) : (
+              <Text
+                style={[styles.amount, incoming && styles.amountIn]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}
+              >
+                {numberPart}
+                {ticker ? <Text style={styles.ticker}> {ticker}</Text> : null}
+              </Text>
+            )}
           </View>
 
           {/* Line 2: counterparty (address/alias) ↔ fiat */}
@@ -206,6 +218,10 @@ const styles = createStyles(() => ({
   amountIn: {
     color: color.success.base,
   },
+  // Masked amount: tight fixed-size dots (bullet glyphs spread out on Android).
+  amountDots: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: 6 },
+  amountDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: color.fg.base },
+  amountDotIn: { backgroundColor: color.success.base },
   ticker: {
     fontSize: text.sm,
     ...inter.semibold,

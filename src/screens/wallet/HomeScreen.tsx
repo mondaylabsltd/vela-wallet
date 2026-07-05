@@ -687,7 +687,11 @@ export default function HomeScreen() {
           >
             {hidden ? (
               <View style={styles.balanceHiddenRow}>
-                <Text style={styles.balanceHidden}>••••••</Text>
+                <View style={styles.balanceDots}>
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <View key={i} style={styles.balanceDot} />
+                  ))}
+                </View>
                 <EyeOff size={20} color={color.fg.subtle} strokeWidth={2} />
               </View>
             ) : balanceUnknown ? (
@@ -826,7 +830,8 @@ export default function HomeScreen() {
                               })
                             : item.subtitle
                         }
-                        amount={hidden ? '••••' : item.amount}
+                        amount={item.amount}
+                        masked={hidden}
                         fiat={!hidden && item.usdValue > 0 ? dc.fmt(item.usdValue) : undefined}
                         chain={chainFor(item.chainId)}
                         index={index}
@@ -939,6 +944,7 @@ export default function HomeScreen() {
         formatSubtitle={(amount, count) => `${t('home.switcherAccountCount', { count })}${amount}`}
         balances={cachedBalances}
         loading={switcherLoading}
+        showCreateActions
       />
 
       {showScanner && (
@@ -1212,9 +1218,13 @@ const styles = createStyles(() => ({
     backgroundColor: color.bg.raised,
     opacity: 0.85,
   },
-  // Masked state: dots + the only chrome the hero ever shows (EyeOff glyph).
-  balanceHiddenRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md },
-  balanceHidden: { fontSize: 52, ...inter.bold, color: color.fg.base, letterSpacing: 2 },
+  // Masked state: fixed-size View dots (NOT bullet glyphs — those render wide and
+  // wrap to a second line on Android) + the only chrome the hero ever shows (EyeOff
+  // glyph). Row height is pinned to the ~63px balance line box so toggling privacy
+  // doesn't shift the hero up/down.
+  balanceHiddenRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: space.md, height: 63 },
+  balanceDots: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  balanceDot: { width: 16, height: 16, borderRadius: 8, backgroundColor: color.fg.base },
   // Parity with the holdings view: when a chain read failed or a held token is
   // unpriced, the hero total is an estimate — say so, not a confident number.
   balanceStaleRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.md },
