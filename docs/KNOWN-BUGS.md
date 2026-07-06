@@ -204,11 +204,31 @@ handshake/`?ch=` routing differences; a stale persisted `K_walletpairSession` re
 colliding; the relay treating the RN connection as a replacement on the channel). WalletPair's
 ≈0 real-dApp adoption is why this app-side breakage went unnoticed.
 
-**Next step (fixable in THIS repo):** enable `setWalletpairDebugLogging(true)` +
-`setDisconnectLogSink` on the wallet side (walletpair-transport.ts) + rebuild, and watch the
-app's WS handshake / the exact frame that precedes the peer close; compare to the Node
-`WalletSession` that pairs cleanly. Until then the device concurrent proof reaches **2/4**
-(extension real-signature ✓, no-leak ✓; wp-connected / wp-survived blocked). The harness
-(`check_concurrent.py` + `wp_peer.mjs`) is ready → 4/4 once the app's wallet can hold a session.
-A workaround via peer keepalive is impossible — `DAppSession.ping()` is a no-op unless already
-`connected` (dapp-session.ts:294), and the drop isn't idle-based anyway.
+**★★ Deep trace via a local WS proxy (`e2e/safari/wp_proxy.mjs`, forwards to the real relay +
+logs every frame) — the CHAIN, 2026-07-06:**
+1. The app's RN wallet DOES connect (`ws://` passes ATS — the DEV build already talks to
+   `http://<lan>` for Metro + testdapp) and sends a proper `{t:"join", body:{sealed_join:…}}`.
+2. But the dApp **peer never accepts** it — it stays `phase:waiting`, never emits `walletJoined`
+   (in Node↔Node the peer gets it and goes `pending_accept → connected` in ~2s). So the peer
+   isn't processing the app's join (candidate: the app's `sealed_join` is malformed vs the Node
+   `WalletSession`'s — an RN-side sealing/serialization/crypto difference; the join frame reaches
+   the relay fine).
+3. The wallet, stuck in `waiting_accept`, **RETRIES the join** (observed 4× in the proxy log,
+   first with a real `sealed_join`, then `sealed_join:null`). Each retry is a fresh connection,
+   and the relay's per-channel connection handling **closes the peer** (`code 1000 willReconnect`)
+   as the extra connections pile on → the peer drops and the join is lost → `peer_closed`.
+4. A separate confound found + FIXED along the way: **BUG-6** — the app restored a STALE persisted
+   WalletPair session every launch and, on `reconnect()` failing with `channel_not_found`, never
+   cleared the snapshot (dapp-connection.tsx:865 restore block) → it restore-looped a dead channel
+   and its live reconnect collided with fresh pairings. Fixed: `dropIfDead()` drops the transport +
+   `clearWalletPairSession()` when a restored session isn't live shortly after reconnect.
+
+**Next step (crypto/serialization deep-dive, fixable in THIS repo):** hook the peer's raw inbound
+frames (or the DAppSession unseal path) to see whether the app's `sealed_join` is REJECTED (unseal
+fails → no `walletJoined`) vs never delivered; compare the app's `sealed_join` bytes to the Node
+`WalletSession`'s for the same channel. If it's malformed, the bug is in the app's WalletPair
+sealing on Hermes (X25519/ChaCha directional keys — the same crypto area as BUG-4). Until then the
+device concurrent proof is **2/4** (extension real-signature ✓, no-leak ✓; wp-connected / survived
+blocked). Harness ready → 4/4 once the app's wallet holds a session. Keepalive workaround is
+impossible (`DAppSession.ping()` no-ops unless `connected`, dapp-session.ts:294; the drop isn't
+idle-based — a lone peer waits 38s+ clean).

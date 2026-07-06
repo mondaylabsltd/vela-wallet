@@ -869,11 +869,25 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           wireTransport(wpTransport, 'walletpair');
           const info = await wpTransport.fetchDAppInfo();
           setDappInfo(info);
+          const dropIfDead = () => {
+            // A restored session whose channel is gone (the relay answers a join with
+            // `terminate: channel_not_found`) can NEVER come back. Left alone, the SDK
+            // treats it as the durable session and the snapshot restore-loops on every
+            // launch — and a live reconnect attempt to a dead channel collides with a
+            // fresh pairing on the relay (BUG-6, and a contributor to BUG-5). So if it
+            // isn't live shortly after the reconnect attempt, drop it AND clear the
+            // snapshot so the next launch starts clean.
+            if (transportRef.current === wpTransport && !wpTransport.connected) {
+              wpTransport.disconnect();
+              if (transportRef.current === wpTransport) transportRef.current = null;
+              clearWalletPairSession();
+            }
+          };
           try {
             await wpTransport.reconnect();
+            setTimeout(dropIfDead, 8000); // real reconnects settle well under this; dead channels 404 fast
           } catch {
-            // Reconnect failed — session will retry via SDK backoff
-            // or phase listener will set status to disconnected
+            dropIfDead();
           }
         }
       } catch {
