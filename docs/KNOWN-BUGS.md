@@ -193,11 +193,22 @@ auto-reconnects, but the wallet's join arrives during that gap and is LOST → t
 drop the join message (e.g. CF Worker hibernation), leaving both sides stuck in waiting_accept"
 case that `src/services/walletpair-transport.ts`'s `confirmFingerprint` already anticipates.
 
-**Impact:** any pairing where the wallet doesn't join within the relay's short pre-pair idle
-window fails — which a real user scanning a QR + verifying a 4-digit fingerprint can easily
-exceed. WalletPair's ≈0 real-dApp adoption is likely why this went unnoticed. Fix lives in the
-RELAY / `walletpair-sdk` (separate repos), not this app: either keep the pre-pair channel alive
-(server-side idle grace / client keepalive) or have the relay QUEUE + redeliver the join across
-a reconnect. Until then the device concurrent proof reaches **2/4** (extension real-signature ✓,
-no-leak ✓; wp-connected / wp-survived blocked). The harness (`check_concurrent.py` + `wp_peer.mjs`)
-is ready and will hit 4/4 once a WalletPair session can actually be established on the relay.
+**★ It is APP-SIDE, not the relay (isolated 2026-07-06):** a pure **Node↔Node** pairing —
+`DAppSession` ↔ `WalletSession` from the SAME `walletpair-sdk`, both over the SAME real relay
+`wss://relay.walletpair.org/v1` — **pairs in ~2s, fingerprints match, both reach `connected`**.
+And a lone peer sits in `waiting` for 38s+ with NO disconnect. So the relay + SDK are fine; the
+peer only drops **when the APP's wallet joins**. The one variable is the wallet-side WebSocket:
+Node's `ws` vs React-Native's `WebSocket` (Hermes). Something about the app's RN WalletPair
+connection makes the relay close the peer as the app joins (candidate causes: RN `WebSocket`
+handshake/`?ch=` routing differences; a stale persisted `K_walletpairSession` reconnecting and
+colliding; the relay treating the RN connection as a replacement on the channel). WalletPair's
+≈0 real-dApp adoption is why this app-side breakage went unnoticed.
+
+**Next step (fixable in THIS repo):** enable `setWalletpairDebugLogging(true)` +
+`setDisconnectLogSink` on the wallet side (walletpair-transport.ts) + rebuild, and watch the
+app's WS handshake / the exact frame that precedes the peer close; compare to the Node
+`WalletSession` that pairs cleanly. Until then the device concurrent proof reaches **2/4**
+(extension real-signature ✓, no-leak ✓; wp-connected / wp-survived blocked). The harness
+(`check_concurrent.py` + `wp_peer.mjs`) is ready → 4/4 once the app's wallet can hold a session.
+A workaround via peer keepalive is impossible — `DAppSession.ping()` is a no-op unless already
+`connected` (dapp-session.ts:294), and the drop isn't idle-based anyway.
