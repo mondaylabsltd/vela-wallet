@@ -12,9 +12,13 @@
 //   node e2e/safari/wp_peer.mjs
 // stdout = newline-delimited JSON events (the Python harness reads these);
 // stderr = human logs.
-import { DAppSession, WebSocketTransport } from 'walletpair-sdk';
+import { DAppSession, WebSocketTransport, setDisconnectLogSink, setWalletpairDebugLogging } from 'walletpair-sdk';
 
 const RELAY = process.env.WP_RELAY || 'wss://relay.walletpair.org/v1';
+if (process.env.WP_DEBUG) {
+  try { setWalletpairDebugLogging(true); } catch { /* older sdk */ }
+  try { setDisconnectLogSink((e) => console.error('[wp_peer][disconnect]', JSON.stringify(e))); } catch { /* older sdk */ }
+}
 const log = (...a) => console.error('[wp_peer]', ...a);
 const out = (obj) => process.stdout.write(JSON.stringify(obj) + '\n');
 

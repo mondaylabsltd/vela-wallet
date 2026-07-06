@@ -136,7 +136,7 @@ matters — the submit function — rather than per-button. Verified: typecheck 
 the adversarial deadlock lens found no path that strands the lock (`serializeAssetSim` can't
 throw; the pre-check is `try`-wrapped; all returns release). **File:** `dapp-connection.tsx`.
 
-## BUG-4 (HIGH — WalletPair broken on device) — pairing throws "crypto.getRandomValues must be defined"
+## BUG-4 (✅ FIXED 2026-07-06 — WalletPair) — pairing threw "crypto.getRandomValues must be defined"
 
 **Discovered:** 2026-07-06, building the concurrent-session DEVICE harness
 (`e2e/safari/check_concurrent.py` — the first time a REAL WalletPair session was
@@ -168,6 +168,36 @@ function after the import and install a fallback (e.g. `expo-crypto`) if not. Th
 Connect screen → URI entry → connectToWalletPair → fingerprint → concurrent extension sign →
 assert WP survives + no leak); it currently stops at this crypto throw.
 
+**Fix (shipped + DEVICE-VERIFIED 2026-07-06):** a custom entry `index.js`
+(`import './src/polyfills'; import 'expo-router/entry';`) set as `package.json` `main` — so
+the RNG polyfill installs `globalThis.crypto` before ANY `@noble/*` module (and thus before
+the module-load capture) unconditionally. `polyfills.ts` also fails loud now if
+`crypto.getRandomValues` is still missing after the import. Verified on the device (ABC iPhone
+11): after `main→index.js` + a Metro restart (`iOS Bundled index.js`), the polyfill "MISSING"
+warning does NOT fire, and WalletPair pairing no longer throws — the fingerprint-verify screen
+renders and Confirm proceeds (the crypto crash is gone). NO native rebuild needed — the entry
+change is picked up by re-bundling.
+
 **Note:** the two-slot ROUTING isolation (F2/F3/F4) is independently proven headless
-(`src/__tests__/concurrent-session.test.ts`) and is unaffected by this — BUG-4 blocks only the
-live on-device concurrent demonstration.
+(`src/__tests__/concurrent-session.test.ts`) and is unaffected by this.
+
+## BUG-5 (relay flakiness — blocks the live concurrent proof) — WalletPair join lost when the relay drops an idle pre-pair connection
+
+**Discovered:** 2026-07-06, right after fixing BUG-4, running `e2e/safari/check_concurrent.py`.
+With BUG-4 fixed the wallet now joins the relay (app phase `waiting_accept`), but the session
+never reaches `connected`: the dApp peer's own SDK disconnect log is
+`{"side":"dapp","kind":"transport_close","code":1000,"reason":"closed","phase":"waiting","willReconnect":true}`
+— the **CF-Worker relay CLOSES the peer's idle pre-pair WebSocket** (normal 1000), the peer
+auto-reconnects, but the wallet's join arrives during that gap and is LOST → the wallet's
+`waiting_accept` then times out as `peer_closed`. This is exactly the "the relay may silently
+drop the join message (e.g. CF Worker hibernation), leaving both sides stuck in waiting_accept"
+case that `src/services/walletpair-transport.ts`'s `confirmFingerprint` already anticipates.
+
+**Impact:** any pairing where the wallet doesn't join within the relay's short pre-pair idle
+window fails — which a real user scanning a QR + verifying a 4-digit fingerprint can easily
+exceed. WalletPair's ≈0 real-dApp adoption is likely why this went unnoticed. Fix lives in the
+RELAY / `walletpair-sdk` (separate repos), not this app: either keep the pre-pair channel alive
+(server-side idle grace / client keepalive) or have the relay QUEUE + redeliver the join across
+a reconnect. Until then the device concurrent proof reaches **2/4** (extension real-signature ✓,
+no-leak ✓; wp-connected / wp-survived blocked). The harness (`check_concurrent.py` + `wp_peer.mjs`)
+is ready and will hit 4/4 once a WalletPair session can actually be established on the relay.

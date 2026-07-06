@@ -54,7 +54,7 @@ class Peer:
 
     def _drain_err(self):
         for line in self.proc.stderr:
-            pass  # keep the pipe from blocking; peer logs are for its own debugging
+            L('[peer]', line.rstrip())  # surface the peer's own view (join/phase/errors)
 
     def wait_uri(self, timeout=20):
         end = time.time() + timeout
@@ -103,14 +103,12 @@ class Peer:
             pass
 
 
-def enter_uri(d, uri):
-    """Launch the app into the parallel space, navigate to the Connect screen, then
-    type the pairing URI into its TextField and submit.
-
-    Launch pattern: terminate + activate_app (the dev-client launcher auto-loads the
-    last Metro bundle → parallel home; a cold `deepLink` instead lands on the launcher
-    UI and hangs). THEN a WARM `deepLink velawallet://parallel/connect` routes to the
-    Connect screen (verified)."""
+def navigate_to_connect(d):
+    """Launch the app into the parallel space and open the Connect screen (WITHOUT a
+    peer/URI yet). Launch pattern: terminate + activate_app (the dev-client launcher
+    auto-loads the last Metro bundle → parallel home; a cold `deepLink` lands on the
+    launcher UI and hangs). THEN a WARM `deepLink velawallet://parallel/connect` routes
+    to the Connect screen. Returns True once its TextField is present."""
     try:
         d.terminate_app(VELA)
     except Exception:
@@ -131,23 +129,34 @@ def enter_uri(d, uri):
         L('[WARN] parallel home not detected — the sign may hit Face ID')
     d.execute_script('mobile: deepLink', {'url': 'velawallet://parallel/connect', 'bundleId': VELA})
     L('warm deepLink → /parallel/connect')
-    field = None
     for _ in range(12):
         time.sleep(1.5)
         d.switch_to.context('NATIVE_APP')
-        fields = d.find_elements(AppiumBy.IOS_PREDICATE,
-                                 "type == 'XCUIElementTypeTextField' OR type == 'XCUIElementTypeSecureTextField'")
-        if fields:
-            field = fields[0]
-            break
-    if not field:
-        L('[FAIL] Connect screen TextField never appeared')
+        if d.find_elements(AppiumBy.IOS_PREDICATE,
+                           "type == 'XCUIElementTypeTextField' OR type == 'XCUIElementTypeSecureTextField'"):
+            L('Connect screen ready')
+            return True
+    L('[FAIL] Connect screen TextField never appeared')
+    return False
+
+
+def type_uri(d, uri):
+    """Type the pairing URI into the Connect screen's TextField and submit. Called
+    IMMEDIATELY after the peer creates the pairing — the CF-Worker relay drops an idle
+    channel WS within ~tens of seconds, so the wallet must join promptly or the relay
+    reports `peer_closed` and the session never reaches 'connected'."""
+    d.switch_to.context('NATIVE_APP')
+    fields = d.find_elements(AppiumBy.IOS_PREDICATE,
+                             "type == 'XCUIElementTypeTextField' OR type == 'XCUIElementTypeSecureTextField'")
+    if not fields:
+        L('[FAIL] TextField vanished before typing')
         return False
-    field.click()
+    f = fields[0]
+    f.click()
+    time.sleep(0.5)
+    f.send_keys(uri)
     time.sleep(0.6)
-    field.send_keys(uri)
-    time.sleep(0.8)
-    field.send_keys('\n')  # returnKeyType=go → onSubmitEditing → handlePasteConnect
+    f.send_keys('\n')  # returnKeyType=go → onSubmitEditing → handlePasteConnect
     L('entered pairing URI + submitted')
     return True
 
@@ -249,23 +258,27 @@ def ext_sign(d):
 
 
 def main():
-    peer = Peer()
-    uri = peer.wait_uri()
-    if not uri:
-        L('[FAIL] WalletPair peer produced no pairing URI (relay unreachable?)')
-        peer.close()
-        return
-    L('peer pairing URI ready; fingerprint', peer.fingerprint)
-
     d = mk(safari=True)
+    peer = None
     steps = {'wp_connected': False, 'ext_real_sig': False, 'wp_survived': False, 'no_leak': False}
     try:
-        # 1. establish the WalletPair session via the app's Connect UI.
-        if not enter_uri(d, uri):
+        # 1. get the app to the Connect screen FIRST (no peer yet) so the pairing WS
+        #    isn't left idle on the relay during the ~40s app cold-launch (the CF-Worker
+        #    relay drops an idle channel → the wallet's join lands on a dead peer).
+        if not navigate_to_connect(d):
+            raise SystemExit
+        # 2. NOW create the peer + enter the URI immediately (minimal relay idle).
+        peer = Peer()
+        uri = peer.wait_uri()
+        if not uri:
+            L('[FAIL] WalletPair peer produced no pairing URI (relay unreachable?)')
+            raise SystemExit
+        L('peer pairing URI ready; fingerprint', peer.fingerprint)
+        if not type_uri(d, uri):
             raise SystemExit
         if not confirm_fingerprint(d, peer):
             raise SystemExit
-        # 2. wait for the session to go live on BOTH ends.
+        # 3. wait for the session to go live on BOTH ends.
         joined = peer.wait_event('walletJoined', timeout=40)
         time.sleep(2)
         ph = peer.phase()
@@ -290,7 +303,8 @@ def main():
             d.quit()
         except Exception:
             pass
-        peer.close()
+        if peer:
+            peer.close()
 
     L('==================== CONCURRENT-SESSION DEVICE PROOF ====================')
     for k in ('wp_connected', 'ext_real_sig', 'wp_survived', 'no_leak'):
