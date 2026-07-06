@@ -331,6 +331,15 @@ export interface BLEIncomingRequest {
   params: any[];
   origin: string;
   favicon?: string;
+  // Per-request binding for the Safari-extension sign path (see dapp-connection.tsx
+  // beginExtensionSign). Loosely typed to avoid a types.ts → transport import
+  // cycle. __transport routes the response to the owning transport (never a
+  // concurrent WalletPair socket — F2); __chainId is the chain to sign against
+  // (F4); __dapp is the per-request identity shown/recorded (F3). Absent for
+  // ordinary bridge/WalletPair requests (which use the global transport/chain).
+  __transport?: any;
+  __chainId?: number;
+  __dapp?: { name: string; url: string };
 }
 
 export interface BLEOutgoingResponse {
