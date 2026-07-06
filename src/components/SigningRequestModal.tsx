@@ -31,6 +31,7 @@ import {
 } from '@/services/clear-signing';
 import { scaleFont, color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
 import { BundlerFundingView } from '@/components/ui/BundlerFundingModal';
+import { requestChainId as reqChainId, requestDApp } from '@/models/dapp-request-routing';
 import { GasFeeCard } from '@/components/ui/GasFeeCard';
 import { EditableApproveCard } from '@/components/signing/EditableApproveCard';
 import {
@@ -709,9 +710,9 @@ export function SigningRequestModal() {
            requests carry no __chainId/__dapp → fall back to the global state. */
         <SigningSheet
           request={incomingRequest}
-          chainId={incomingRequest.__chainId ?? chainId}
+          chainId={reqChainId(incomingRequest, chainId)}
           account={activeAccount ?? null}
-          dappInfo={incomingRequest.__dapp ?? dappInfo}
+          dappInfo={requestDApp(incomingRequest, dappInfo)}
           isSigning={isSigning}
           signError={signError}
           pendingOpHash={pendingOpHash}

@@ -41,6 +41,7 @@ import {
 } from '@/services/bundler-service';
 import { nativeSymbol } from '@/models/network';
 import type { BLEIncomingRequest } from '@/models/types';
+import { responseTransport, requestChainId as reqChainId, requestDApp } from '@/models/dapp-request-routing';
 
 // ---------------------------------------------------------------------------
 // Storage keys
@@ -597,7 +598,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     // Per-request chain for an extension sign (F4): sign against the origin's
     // granted chain, NOT the global provider chain (which a concurrent WalletPair
     // session owns). Ordinary requests carry no __chainId → use the global chain.
-    const cid = base.__chainId ?? chainIdRef.current;
+    const cid = reqChainId(base, chainIdRef.current);
 
     // Immediate feedback: the gas pre-check below can take up to 15s and the sign
     // is async — flip to the signing state the instant the user taps so Approve is
@@ -654,7 +655,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     let pendingSave: Promise<void> = Promise.resolve();
     // Per-request dApp identity for an extension sign (F3) — the extension origin,
     // never a concurrent WalletPair session's dappInfo.
-    const recordOrigin = base.__dapp?.name ?? dappInfo?.name ?? request.origin ?? '';
+    const recordOrigin = requestDApp(base, dappInfo)?.name ?? request.origin ?? '';
     try {
       const result = await handleDAppRequest(
         request, account, account.address, cid, opts?.maxFeePerGas,
@@ -694,7 +695,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       // Route the response to the transport that OWNS the request (per-request,
       // F2) — never a shared transportRef that a concurrent WalletPair session
       // could be sitting on.
-      (base.__transport as DAppTransport | undefined ?? transportRef.current)?.sendResponse(request.id, result);
+      responseTransport(base, transportRef.current)?.sendResponse(request.id, result);
 
       // For txs, flip the already-persisted pending record to confirmed in place
       // (same id) — never a second record, never a lost pending→confirmed race.
@@ -765,7 +766,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           .catch(() => {});
       }
       setSignError(msg);
-      (base.__transport as DAppTransport | undefined ?? transportRef.current)?.sendResponse(request.id, undefined, { code: -32603, message: msg });
+      responseTransport(base, transportRef.current)?.sendResponse(request.id, undefined, { code: -32603, message: msg });
       // Keep modal open so user can see the error — they dismiss manually
     } finally {
       approveInFlightRef.current = false; // release the re-entrancy lock on every exit
@@ -781,7 +782,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     // abort before it submits — otherwise a swipe/reject would 4001 the dApp while
     // the tx still broadcasts + returns a success for the same id (BUG-2).
     signCancelledRef.current = true;
-    (incomingRequest.__transport as DAppTransport | undefined ?? transportRef.current)?.sendResponse(incomingRequest.id, undefined, { code: 4001, message: 'User rejected' });
+    responseTransport(incomingRequest, transportRef.current)?.sendResponse(incomingRequest.id, undefined, { code: 4001, message: 'User rejected' });
     setIncomingRequest(null);
     setSignError(null);
     setPendingOpHash(null);
@@ -804,7 +805,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     // (an extension sign may be on a different chain than the global one — F4);
     // clearing the wrong chain would re-read the stale balance and loop funding.
     const account = activeAccountRef.current;
-    const retryChainId = incomingRequest?.__chainId ?? chainIdRef.current;
+    const retryChainId = reqChainId(incomingRequest, chainIdRef.current);
     if (account) clearBundlerCache(retryChainId, account.address);
     // Retry approve with the SAME opts (esp. the capped paramsOverride) so funding
     // never resubmits the original (possibly unbounded) request.
@@ -815,7 +816,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const handleFundingCancel = useCallback(() => {
     setFundingNeeded(null);
     if (incomingRequest) {
-      (incomingRequest.__transport as DAppTransport | undefined ?? transportRef.current)?.sendResponse(incomingRequest.id, undefined, { code: -32603, message: 'Gas account funding cancelled' });
+      responseTransport(incomingRequest, transportRef.current)?.sendResponse(incomingRequest.id, undefined, { code: -32603, message: 'Gas account funding cancelled' });
       setIncomingRequest(null);
     }
   }, [incomingRequest]);

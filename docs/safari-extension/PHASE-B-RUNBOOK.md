@@ -76,5 +76,19 @@ Phase-B sign path runs unattended. The fixture Safe used is `Parallel One`
    real sign (kill / evict / reject / concurrent) instead of the R1 fake. Rows 1/8
    (happy/reject) + concurrent are runnable now on the signature methods (no funds);
    kill/evict during a send need #1.
-3. **Concurrent-session proof** — a live WalletPair session + an extension sign at the
-   same time; neither answers the other (the two-slot raison d'être). No funds needed.
+3. **Concurrent-session proof** — the two-slot raison d'être: a live WalletPair session +
+   an extension sign at once, neither answering the other. ✅ **PROVEN (headless, 2026-07-06)**
+   at the fund-safety-critical level — the response ROUTING isolation (F2/F3/F4). The
+   provider now routes every per-request decision through one seam
+   (`src/models/dapp-request-routing.ts`: `responseTransport` / `requestChainId` /
+   `requestDApp`), and `src/__tests__/concurrent-session.test.ts` drives the REAL
+   `ExtensionBridgeTransport` against a live-WalletPair stand-in to prove: an extension
+   signature is answered on the extension's own result file and NEVER over the WalletPair
+   socket (no leak — F2); a WalletPair reply never lands in the extension's file or settles
+   its rid (no mis-settle — F2); each carries its own chain (F4) + dApp identity (F3); and
+   the extension transport settles only on its own response. 6/6 green; jest 1075 total.
+   The pure-node jest env can't render `DAppConnectionProvider`, so this proves the routing
+   logic (the actual F2 fund-risk) deterministically; the remaining "beginExtensionSign never
+   disconnects a live WalletPair" invariant is inspection- + adversarial-review-verified. A
+   FULLY-LIVE on-device run (real WalletPair WebSocket + real App-Group extension sign at
+   once) would need a new WalletPair-pairing Appium harness — a follow-up, not blocking.
