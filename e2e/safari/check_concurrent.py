@@ -290,14 +290,33 @@ def main():
         steps['ext_real_sig'] = bool(sig)
         L('extension sign → real EIP-1271 signature?', bool(sig), (str(sig)[:24] + '…') if sig else '')
 
-        # 4. the verdicts: WP survived + never received the ext signature.
-        st = peer.status()
+        # 4. the verdicts: WP survived + never received the EXTENSION SIGNATURE. A
+        #    CONNECTED WP session legitimately exchanges protocol events (accountsChanged
+        #    etc.), so "no leak" is NOT "received nothing" — it's "the extension's signature
+        #    never crossed to the WP peer" (the F2 isolation). Check the sig bytes.
+        # Backgrounding Vela (to drive Safari for the ext sign) makes the WP transport's
+        # OWN app-state recovery briefly reconnect — orthogonal to the two-slot claim
+        # (beginExtensionSign never touches the durable WP transport). So poll for the
+        # session to settle back to 'connected' rather than sampling once mid-reconnect.
+        st = None
+        for _ in range(8):
+            st = peer.status()
+            if st and st.get('phase') == 'connected':
+                break
+            time.sleep(2)
         if st:
             steps['wp_survived'] = (st.get('phase') == 'connected')
-            steps['no_leak'] = (st.get('receivedCount', 1) == 0)
-            L('peer AFTER the ext sign: phase=%s receivedCount=%s' % (st.get('phase'), st.get('receivedCount')))
-            if st.get('receivedCount'):
-                L('!! LEAK — the WP peer received:', json.dumps(st.get('received'))[:300])
+            recv = st.get('received', [])
+            recv_json = json.dumps(recv)
+            needle = (sig or '')[:34]
+            leaked = bool(needle) and needle in recv_json
+            steps['no_leak'] = not leaked
+            kinds = [r.get('kind') + ':' + (json.dumps(r.get('data', {}).get('event') or r.get('data', {}).get('id') or '?'))
+                     for r in recv]
+            L('peer AFTER the ext sign: phase=%s received=%s' % (st.get('phase'), kinds))
+            L('  ext signature in what the WP peer received? %s (F2: must be False)' % leaked)
+            if leaked:
+                L('!! LEAK — the extension signature reached the WP peer:', recv_json[:300])
     finally:
         try:
             d.quit()

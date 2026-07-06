@@ -37,8 +37,12 @@ const session = new DAppSession({
     url: 'https://wp-peer.test',
     icon: 'https://wp-peer.test/icon.png',
   },
-  methods: ['personal_sign', 'eth_sendTransaction'],
-  chains: ['eip155:100', 'eip155:8453', 'eip155:1'],
+  // Declare WalletPair-native method names (the app's wallet declares wallet_* per
+  // buildCapabilities, NOT the EVM aliases personal_sign/eth_sendTransaction) — a dApp
+  // that declares a method the wallet doesn't list is rejected 'unsupported_capability'.
+  // Keep this a SUBSET of what the app declares.
+  methods: ['wallet_signMessage', 'wallet_signTypedData', 'wallet_sendTransaction'],
+  chains: ['eip155:1', 'eip155:100', 'eip155:8453'],
 });
 
 session.on('phase', (p) => { phase = p; log('phase →', p); out({ type: 'phase', phase: p }); });

@@ -17,7 +17,10 @@ const REAL = process.env.WP_UPSTREAM || 'wss://relay.walletpair.org/v1';
 const PORT = Number(process.env.WP_PROXY_PORT || 9999);
 const start = Date.now();
 const ts = () => ((Date.now() - start) / 1000).toFixed(2) + 's';
-const short = (s) => (s.length > 260 ? s.slice(0, 260) + '…(' + s.length + ')' : s);
+const FULL = process.env.WP_FULL === '1';
+const short = (s) => (FULL || s.length <= 260 ? s : s.slice(0, 260) + '…(' + s.length + ')');
+// tag a connection by the first frame it sends: create=dApp/peer, join=wallet/app
+const roleOf = (s) => (s.includes('"t":"create"') ? 'PEER' : s.includes('"t":"join"') ? 'APP ' : '????');
 
 const wss = new WebSocket.Server({ host: '0.0.0.0', port: PORT });
 let cid = 0;
@@ -33,6 +36,7 @@ wss.on('connection', (client, req) => {
   console.log(`${ts()} [${id}] CLIENT connected  url=${path}  hdrs.origin=${req.headers.origin || '-'} ua=${(req.headers['user-agent'] || '-').slice(0, 40)}`);
   const upstream = new WebSocket(upstreamUrl);
   const queue = [];
+  let role = '????';
 
   upstream.on('open', () => {
     console.log(`${ts()} [${id}] UPSTREAM open → ${REAL}${path}`);
@@ -41,13 +45,14 @@ wss.on('connection', (client, req) => {
   });
   client.on('message', (d) => {
     const s = typeof d === 'string' ? d : d.toString();
-    console.log(`${ts()} [${id}] C→R ${short(s)}`);
+    if (role === '????') role = roleOf(s);
+    console.log(`${ts()} [${id}:${role}] C→R ${short(s)}`);
     if (upstream.readyState === WebSocket.OPEN) upstream.send(d);
     else queue.push(d);
   });
   upstream.on('message', (d) => {
     const s = typeof d === 'string' ? d : d.toString();
-    console.log(`${ts()} [${id}] R→C ${short(s)}`);
+    console.log(`${ts()} [${id}:${role}] R→C ${short(s)}`);
     if (client.readyState === WebSocket.OPEN) client.send(d);
   });
   client.on('close', (code, reason) => {

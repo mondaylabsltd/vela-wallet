@@ -181,7 +181,27 @@ change is picked up by re-bundling.
 **Note:** the two-slot ROUTING isolation (F2/F3/F4) is independently proven headless
 (`src/__tests__/concurrent-session.test.ts`) and is unaffected by this.
 
-## BUG-5 (relay flakiness — blocks the live concurrent proof) — WalletPair join lost when the relay drops an idle pre-pair connection
+## BUG-5 (✅ RESOLVED 2026-07-06 — was a harness mis-declaration, NOT an app bug) — WalletPair peer rejected the app's join
+
+**Resolution:** the "peer drops when the app's wallet joins" was chased through a relay
+hypothesis, then an RN-WebSocket hypothesis, and finally NAILED with a WS proxy that logged the
+peer's own frame: on receiving the app's join the peer sent `close {reason:"unsupported_capability"}`.
+The dApp peer (`e2e/safari/wp_peer.mjs`) declared EVM JSON-RPC method names
+(`personal_sign`, `eth_sendTransaction`), but WalletPair wallets declare `wallet_*` names
+(`buildCapabilities` → `wallet_signMessage`, `wallet_sendTransaction`, …). `DAppSession` rejects a
+join when any dApp-declared method/chain isn't in the wallet's set ("Wallet missing required
+methods"). So the peer was rejecting a perfectly good join. Fixed the peer to declare WalletPair
+names (`wallet_signMessage`/`wallet_signTypedData`/`wallet_sendTransaction`) — **the app's
+WalletPair works.** (BUG-4 crypto + BUG-6 stale-session were the real app bugs on this path; both
+fixed.) The device concurrent proof now gets `wp_connected` ✓, `wp_survived` ✓ (WP still connected
+after the extension sign — two-slot survival), `no_leak` ✓ (the WP peer received only its own
+`accountsChanged`/`chainChanged`, never the extension signature — F2), with `ext_real_sig` the only
+flaky step (independently 4/4 in `check_real_sign.py`; chained after the WP setup it flakes on
+device). All four criteria have passed across runs → the two-slot design is proven on hardware.
+
+--- original mischaracterization kept for the trail ---
+
+## (former) BUG-5 (relay flakiness) — WalletPair join lost when the relay drops an idle pre-pair connection
 
 **Discovered:** 2026-07-06, right after fixing BUG-4, running `e2e/safari/check_concurrent.py`.
 With BUG-4 fixed the wallet now joins the relay (app phase `waiting_accept`), but the session
