@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Vela Wallet",
+  "version": "1.0.0",
+  "description": "Vela Wallet — connect and sign on Ethereum dApps directly from Safari.",
+  "permissions": ["nativeMessaging", "storage", "tabs"],
+  "host_permissions": ["*://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["inpage.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": ["*://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inpage.js"],
+      "matches": ["*://*/*"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Vela Wallet"
+  }
+}

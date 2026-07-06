@@ -16,12 +16,15 @@ import {
 import { WalletProvider } from '@/models/wallet-state';
 import { DAppConnectionProvider } from '@/models/dapp-connection';
 import { SigningRequestModal } from '@/components/SigningRequestModal';
+import { AccountFileWriter } from '@/components/AccountFileWriter';
 import { AlertProvider } from '@/components/ui/AppAlert';
 import { IdenticonViewerProvider } from '@/components/ui/IdenticonViewerProvider';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { installFaultConsole } from '@/services/dev/fault-injection';
 import { installMetricsConsole } from '@/services/metrics';
 import { installParallelConsole, applyParallelSpaceOnBoot } from '@/services/dev/parallel-space';
+// Increment 2 Safari spike — App Group echo probe (DEV-only, no UI).
+import { runAppGroupEcho } from '@/services/dev/app-group-echo';
 import { ParallelSpaceBadge } from '@/components/dev/ParallelSpaceBadge';
 import { hasPendingUploads, loadLocalePrefs, loadRpcProviders, loadServiceEndpoints } from '@/services/storage';
 import { loadAvatarStyle } from '@/services/avatar-style';
@@ -103,10 +106,18 @@ function AppShell() {
               <Stack.Screen name="add-token" options={{ presentation: 'modal' }} />
               <Stack.Screen name="history" options={{ presentation: 'modal' }} />
               <Stack.Screen name="about" options={{ presentation: 'modal' }} />
+              {/* NOT presentation:'modal' — sign.tsx is a headless controller; the
+                  global <SigningRequestModal/> (an RN Modal in the root) must render
+                  ABOVE it. A native modal route here creates a competing modal VC
+                  that hides the sheet when /sign is opened warm (F5). */}
+              <Stack.Screen name="sign" />
               {__DEV__ && <Stack.Screen name="parallel" />}
             </Stack>
             </IdenticonViewerProvider>
             <SigningRequestModal />
+            {/* Keeps the Safari extension's account cache (vela.ext.account.json)
+                in sync so it can answer connect/read/state in-Safari, zero hop. */}
+            <AccountFileWriter />
             {/* Self-gating (renders null unless parallel mode is armed). Must NOT be
                 behind __DEV__: a production build can still enter the parallel space
                 via `dev_unlocked`, and the fixture wallet must never be mistakable
@@ -141,7 +152,7 @@ export default function RootLayout() {
   }, [fontError]);
 
   useEffect(() => {
-    if (__DEV__) { installFaultConsole(); installMetricsConsole(); installParallelConsole(); }
+    if (__DEV__) { installFaultConsole(); installMetricsConsole(); installParallelConsole(); void runAppGroupEcho(); }
     Promise.all([
       // Parallel space: re-arm the fixed-key signer before the wallet mounts so a
       // reload inside the test environment stays in it (and keeps the badge on).

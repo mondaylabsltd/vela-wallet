@@ -75,6 +75,7 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "@bacons/apple-targets": "4.0.7",
     "@playwright/test": "^1.60.0",
     "@types/jest": "^30.0.0",
     "@types/qrcode": "^1.5.6",

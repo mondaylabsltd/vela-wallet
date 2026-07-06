@@ -1,0 +1,19 @@
+{
+  "_comment_HOSTING": "getvela.app's AASA is NOT a static file — it is served DYNAMICALLY by a SvelteKit endpoint IN THIS REPO: getvela.app/src/routes/.well-known/apple-app-site-association/+server.ts (SvelteKit → Cloudflare Worker `getvela`). Today its GET returns only the `webcredentials` block (passkeys). To add Universal Links: merge the `applinks` block below into that same json({...}) — do NOT drop `webcredentials` (breaks passkey sign-in) — then `cd getvela.app && bun run deploy`. This .json file is just the canonical merged shape; the +server.ts is the source of truth. appID = <TEAMID>.<bundleId> = F9W689P9NE.app.getvela.VelaWallet.",
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["F9W689P9NE.app.getvela.VelaWallet"],
+        "components": [
+          {
+            "/": "/sign",
+            "comment": "Safari-extension sign hand-off (query ?rid=… ignored by the path matcher; routes to app/sign.tsx)"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["F9W689P9NE.app.getvela.VelaWallet"]
+  }
+}

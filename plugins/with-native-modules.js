@@ -57,13 +57,40 @@ function withIOSEntitlements(config) {
     // Re-add it here AND enable the iCloud KV capability on the App ID together,
     // only when cloud sync is actually shipped.
 
-    // Associated Domains for passkeys
+    // Associated Domains: passkeys (webcredentials) + Universal Links (applinks).
+    // Both resolve against getvela.app's AASA. applinks powers the Safari
+    // extension's one-tap sign hand-off (https://getvela.app/sign?rid=…) — the
+    // extension only USES it once the app has attested the association resolves on
+    // this device (see app-group-account-sync.ts), so shipping the entitlement is
+    // harmless (the capability is already granted for webcredentials).
+    //
+    // DEV BYPASS: on iOS ≥14 devices fetch the AASA from Apple's CDN, which can lag
+    // hours. Set VELA_AASA_DEV_MODE=1 at prebuild to emit `applinks:getvela.app?mode=developer`
+    // instead — with iPhone Settings › Developer › Associated Domains Development ON,
+    // swcd fetches getvela.app directly, so a server AASA edit is live immediately.
+    // Env-gated so a normal/distribution build NEVER carries ?mode=developer (which
+    // distribution ignores anyway, but must not linger as an unvalidated path).
     if (!Array.isArray(mod.modResults['com.apple.developer.associated-domains'])) {
       mod.modResults['com.apple.developer.associated-domains'] = [];
     }
     const domains = mod.modResults['com.apple.developer.associated-domains'];
-    if (!domains.includes('webcredentials:getvela.app')) {
-      domains.push('webcredentials:getvela.app');
+    const applinks =
+      process.env.VELA_AASA_DEV_MODE === '1' ? 'applinks:getvela.app?mode=developer' : 'applinks:getvela.app';
+    for (const d of ['webcredentials:getvela.app', applinks]) {
+      if (!domains.includes(d)) domains.push(d);
+    }
+
+    // App Group shared with the Safari Web Extension target (Safari R1 spike).
+    // The extension target declares the SAME group in targets/safari/expo-target.config.js.
+    // Both App IDs (app.getvela.VelaWallet + app.getvela.VelaWallet.safari) must enable
+    // App Groups in the Apple Developer portal, or Release codesign fails — same class of
+    // warning as the iCloud-KV note above.
+    if (!Array.isArray(mod.modResults['com.apple.security.application-groups'])) {
+      mod.modResults['com.apple.security.application-groups'] = ['group.app.getvela.wallet'];
+    } else if (
+      !mod.modResults['com.apple.security.application-groups'].includes('group.app.getvela.wallet')
+    ) {
+      mod.modResults['com.apple.security.application-groups'].push('group.app.getvela.wallet');
     }
 
     return mod;
@@ -85,7 +112,8 @@ function withIOSSourceFiles(config) {
       const destDir = path.join(projectRoot, 'ios', projectName);
 
       // vela-cloud-sync is intentionally omitted — it has no JS consumer yet.
-      const modules = ['vela-passkey'];
+      // vela-app-group: App Group shared-container IPC (Increment 2 Safari spike).
+      const modules = ['vela-passkey', 'vela-app-group'];
       for (const moduleName of modules) {
         const srcDir = path.join(projectRoot, 'modules', moduleName, 'ios');
         if (!fs.existsSync(srcDir)) continue;
@@ -343,6 +371,8 @@ function withXcodeProjectFiles(config) {
     const nativeFiles = [
       'VelaPasskeyModule.swift',
       'VelaPasskeyModule.m',
+      'VelaAppGroupModule.swift',
+      'VelaAppGroupModule.m',
     ];
 
     for (const fileName of nativeFiles) {

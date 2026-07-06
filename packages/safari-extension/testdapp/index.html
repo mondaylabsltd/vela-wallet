@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Vela Provider Test dApp</title>
+    <style>
+      body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 16px; color: #111; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      .muted { color: #6b7280; font-size: 13px; }
+      button { display: block; width: 100%; margin: 8px 0; padding: 14px; font-size: 16px;
+        border: 0; border-radius: 12px; background: #111; color: #fff; font-weight: 600; }
+      button.accent { background: #E8572A; }
+      pre { background: #f4f4f5; border-radius: 10px; padding: 12px; white-space: pre-wrap;
+        word-break: break-all; font-size: 13px; min-height: 44px; }
+      .k { color: #6b7280; }
+    </style>
+  </head>
+  <body>
+    <h1>Vela Provider Test dApp</h1>
+    <p class="muted">EIP-6963 / EIP-1193 conformance harness. Every result lands in <code>#result</code>.</p>
+
+    <div><span class="k">6963 providers:</span> <span id="eip6963">(discovering…)</span></div>
+    <div><span class="k">selected:</span> <span id="selected">none</span></div>
+
+    <button id="btn-connect" class="accent">1 · Connect (eth_requestAccounts)</button>
+    <button id="btn-chainid">2 · eth_chainId</button>
+    <button id="btn-accounts">3 · eth_accounts</button>
+    <button id="btn-balance">4 · eth_getBalance</button>
+    <button id="btn-sign" class="accent">5 · personal_sign</button>
+    <button id="btn-typed" class="accent">6 · eth_signTypedData_v4</button>
+    <button id="btn-tx" class="accent">7 · eth_sendTransaction</button>
+
+    <div class="k">last result:</div>
+    <pre id="result">(none)</pre>
+    <div class="k">events:</div>
+    <pre id="events"></pre>
+
+    <script>
+      (function () {
+        var providers = [];
+        var selected = null;
+
+        function announceList() {
+          document.getElementById('eip6963').textContent =
+            providers.length ? providers.map(function (p) { return p.info.rdns; }).join(', ') : '(none)';
+        }
+        function pick() {
+          // Prefer Vela's announced provider; fall back to window.ethereum.
+          var vela = providers.find(function (p) { return p.info.rdns === 'app.getvela'; });
+          selected = (vela && vela.provider) || window.ethereum || null;
+          document.getElementById('selected').textContent =
+            selected ? (selected.isVela ? 'Vela (isVela)' : 'window.ethereum') : 'none';
+          if (selected && !selected.__wired) {
+            selected.__wired = true;
+            ['accountsChanged', 'chainChanged', 'connect', 'disconnect'].forEach(function (ev) {
+              try {
+                selected.on(ev, function (a) {
+                  var e = document.getElementById('events');
+                  e.textContent = ev + ' ' + JSON.stringify(a) + '\n' + e.textContent;
+                });
+              } catch (_) {}
+            });
+          }
+          return selected;
+        }
+
+        window.addEventListener('eip6963:announceProvider', function (ev) {
+          if (!providers.some(function (p) { return p.info.uuid === ev.detail.info.uuid; })) {
+            providers.push(ev.detail);
+          }
+          announceList();
+          pick();
+        });
+        window.dispatchEvent(new Event('eip6963:requestProvider'));
+        // Also try again shortly (the provider may install at document_start after us).
+        setTimeout(function () { window.dispatchEvent(new Event('eip6963:requestProvider')); pick(); }, 300);
+
+        // window.__velaTestResult always mirrors #result so a driver can await it.
+        function show(method, promise) {
+          var out = document.getElementById('result');
+          out.textContent = method + ' …';
+          return Promise.resolve(promise).then(
+            function (value) {
+              var r = { method: method, ok: true, value: value };
+              out.textContent = JSON.stringify(r, null, 2);
+              window.__velaTestResult = r;
+              return r;
+            },
+            function (err) {
+              var r = { method: method, ok: false, code: err && err.code, message: err && err.message };
+              out.textContent = JSON.stringify(r, null, 2);
+              window.__velaTestResult = r;
+              return r;
+            }
+          );
+        }
+        function req(method, params) {
+          var p = pick();
+          if (!p) return show(method, Promise.reject({ code: -1, message: 'no provider' }));
+          return show(method, p.request({ method: method, params: params || [] }));
+        }
+
+        function addr() { return (selected && selected.selectedAddress) || '0x0000000000000000000000000000000000000000'; }
+
+        document.getElementById('btn-connect').onclick = function () { req('eth_requestAccounts'); };
+        document.getElementById('btn-chainid').onclick = function () { req('eth_chainId'); };
+        document.getElementById('btn-accounts').onclick = function () { req('eth_accounts'); };
+        document.getElementById('btn-balance').onclick = function () { req('eth_getBalance', [addr(), 'latest']); };
+        document.getElementById('btn-sign').onclick = function () {
+          // personal_sign = [message(hex), address]
+          req('personal_sign', ['0x48656c6c6f2c2056656c61', addr()]);
+        };
+        document.getElementById('btn-typed').onclick = function () {
+          var typed = {
+            types: { EIP712Domain: [{ name: 'name', type: 'string' }], Msg: [{ name: 'contents', type: 'string' }] },
+            primaryType: 'Msg', domain: { name: 'Vela Test' }, message: { contents: 'hello' },
+          };
+          // eth_signTypedData_v4 = [address, typedData] (address FIRST)
+          req('eth_signTypedData_v4', [addr(), JSON.stringify(typed)]);
+        };
+        document.getElementById('btn-tx').onclick = async function () {
+          // On-chain test: send 0.001 xDAI on Gnosis (100) from the active Safe to the
+          // Parallel Two fixture. Switch chain first (answered in-Safari, no app hop),
+          // then the eth_sendTransaction sign-req carries chainId=100 (F4).
+          var p = pick();
+          if (!p) return;
+          try {
+            await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x64' }] });
+          } catch (e) { /* already on Gnosis, or switch refused */ }
+          req('eth_sendTransaction', [{
+            from: addr(),
+            to: '0x031d7D57c99CAF891e1C250554691Fd12D84772b', // Parallel Two
+            value: '0x38D7EA4C68000', // 0.001 xDAI
+          }]);
+        };
+      })();
+    </script>
+  </body>
+</html>
