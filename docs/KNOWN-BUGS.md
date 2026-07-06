@@ -135,3 +135,39 @@ approve entry points (Approve button, funding Continue, any future one) at the p
 matters — the submit function — rather than per-button. Verified: typecheck + jest 1058/1058;
 the adversarial deadlock lens found no path that strands the lock (`serializeAssetSim` can't
 throw; the pre-check is `try`-wrapped; all returns release). **File:** `dapp-connection.tsx`.
+
+## BUG-4 (HIGH — WalletPair broken on device) — pairing throws "crypto.getRandomValues must be defined"
+
+**Discovered:** 2026-07-06, building the concurrent-session DEVICE harness
+(`e2e/safari/check_concurrent.py` — the first time a REAL WalletPair session was
+established on the device; WalletPair has ≈0 real dApp adoption, which is *why* the
+Safari extension exists, so this path was never device-tested before).
+
+**Symptom:** on the device (parallel space, DEV build), entering a valid pairing URI
+on the Connect screen → **"连接失败 · crypto.getRandomValues must be defined"**.
+`WalletPairTransport.prepare()` → `session.prepareJoin()` → X25519 keygen throws.
+Reproduces on a FRESH app start (not stale state). The Node peer + the real relay work
+fine — the failure is entirely app-side crypto.
+
+**Root cause:** `@noble/hashes/crypto` captures `globalThis.crypto` **once at module
+evaluation** (`@noble/hashes/utils.js`: `const crypto_1 = require('@noble/hashes/crypto')`,
+then at call time `crypto_1.crypto.getRandomValues`). If that module evaluates BEFORE
+`react-native-get-random-values` installs `globalThis.crypto`, noble holds `undefined`
+forever. The pod IS linked (`ios/Podfile.lock` has `react-native-get-random-values 1.11.0`)
+and `src/polyfills.ts` imports it as `_layout.tsx`'s first line — yet on device it still
+loses the race (some module imports @noble before `_layout`'s polyfills line, or the native
+RNG isn't installing `getRandomValues` at import). `polyfills.ts`'s own comment already warns
+"Without these, WalletPair (Vela Connect) pairing throws on the first scan."
+
+**Fix approach (needs a native rebuild to verify):** guarantee `react-native-get-random-values`
+runs before ANY `@noble/*` module — e.g. a custom entry `index.js` (`import '@/polyfills';
+import 'expo-router/entry';`) set as `package.json` `main`, instead of relying on `_layout`
+import order; OR at the top of `polyfills.ts` assert `globalThis.crypto?.getRandomValues` is a
+function after the import and install a fallback (e.g. `expo-crypto`) if not. Then re-run
+`e2e/safari/check_concurrent.py` — the harness is ready and drives the full flow (parallel arm →
+Connect screen → URI entry → connectToWalletPair → fingerprint → concurrent extension sign →
+assert WP survives + no leak); it currently stops at this crypto throw.
+
+**Note:** the two-slot ROUTING isolation (F2/F3/F4) is independently proven headless
+(`src/__tests__/concurrent-session.test.ts`) and is unaffected by this — BUG-4 blocks only the
+live on-device concurrent demonstration.
