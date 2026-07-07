@@ -1,0 +1,9 @@
+# Per-machine Appium/WDA install + Python venv — not committed (see README setup)
+venv/
+node_modules/
+package.json
+package-lock.json
+__pycache__/
+*.log
+# Locally-regenerated device screenshots (verification artifacts, not source)
+*.png
