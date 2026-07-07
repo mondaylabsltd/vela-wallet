@@ -36,6 +36,7 @@ import { fetchBundlerAccountInfo, fetchSplitterInfo } from './bundler-service';
 import {
   isTempoChain,
   tempoReimbursement,
+  tempoSettlementSplit,
   tempoCallGasLimit,
   tempoExpectedGas,
   TEMPO_DEFAULT_FEE_TOKEN,
@@ -665,6 +666,17 @@ async function sendUserOpTempo(
     throw new Error('The Tempo gas relayer is unavailable right now. Please try again.');
   }
 
+  // Tempo's fee is an ERC-20 (pathUSD), so the native VelaGasSettlementSplitter can't split it
+  // (its receive() only fires on native value). Instead we split in-band: the fee is divided
+  // into an EOA cost-floor transfer + a treasury surplus transfer. Best-effort — if the treasury
+  // is unavailable, the whole fee stays on the EOA (unchanged behaviour, never a rejection).
+  const splitterInfo = await fetchSplitterInfo(chainId);
+  const treasuryAddr = splitterInfo?.treasury;
+  const splitEnabled = !!treasuryAddr
+    && /^0x[0-9a-fA-F]{40}$/.test(treasuryAddr)
+    && treasuryAddr.toLowerCase() !== feeCollector.toLowerCase();
+  const reimbursementSubCalls = splitEnabled ? 2 : 1;
+
   _gasPriceCache.delete(chainId);
   const [deployed, nonceResult, gasPrices] = await Promise.all([
     isDeployed(safeAddress, chainId),
@@ -675,19 +687,31 @@ async function sendUserOpTempo(
   const initCode: Uint8Array = deployed ? new Uint8Array(0) : buildInitCode(publicKeyHex);
   const nonce: string = deployed ? nonceResult : '0x0';
 
-  // Build the batch with a placeholder reimbursement (the transfer VALUE doesn't
-  // affect gas), estimate, then bake the real amount derived from that estimate.
-  const buildBatch = (reimbursement: bigint): Uint8Array =>
-    buildMultiSendExecuteCallData([
-      ...innerCalls,
-      { to: feeToken, value: '0', data: encodeErc20Transfer(feeCollector, reimbursement) },
-    ]);
+  // Realistic gas for PRICING the reimbursement — includes the reimbursement transfer(s):
+  // one to the EOA, plus one to the treasury when splitting.
+  const expectedGas = tempoExpectedGas(deployed, innerCalls.length + reimbursementSubCalls);
 
-  // The MultiSend batch executes innerCalls + the appended reimbursement transfer.
-  // Floor callGasLimit per sub-call: TIP-20 transfers meter high and the bundler's
-  // estimate under-reports (handleOps swallows the inner OOG), so a 100k floor lets
-  // the atomic batch run out of gas and revert. See services/tempo.ts.
-  const callGasFloor = tempoCallGasLimit(innerCalls.length + 1);
+  // Build the batch with a placeholder reimbursement (the transfer VALUE doesn't affect gas),
+  // estimate, then bake the real amounts. When splitting, the fee is divided into an EOA
+  // cost-floor transfer + a treasury surplus transfer (see tempoSettlementSplit).
+  const buildBatch = (reimbursement: bigint): Uint8Array => {
+    const split = splitEnabled
+      ? tempoSettlementSplit(reimbursement, expectedGas, gasPrices.gasPrice)
+      : { eoa: reimbursement, treasury: 0n };
+    const calls: MultiSendCall[] = [
+      ...innerCalls,
+      { to: feeToken, value: '0', data: encodeErc20Transfer(feeCollector, split.eoa) },
+    ];
+    if (splitEnabled) {
+      calls.push({ to: feeToken, value: '0', data: encodeErc20Transfer(treasuryAddr!, split.treasury) });
+    }
+    return buildMultiSendExecuteCallData(calls);
+  };
+
+  // Floor callGasLimit per sub-call: TIP-20 transfers meter high and the bundler's estimate
+  // under-reports (handleOps swallows the inner OOG), so a per-sub-call floor lets the atomic
+  // batch run out of gas and revert. Includes the reimbursement transfer(s). See services/tempo.ts.
+  const callGasFloor = tempoCallGasLimit(innerCalls.length + reimbursementSubCalls);
 
   const userOp: UserOperation = {
     sender: safeAddress,
@@ -714,13 +738,12 @@ async function sendUserOpTempo(
     console.error('[Tempo] Gas estimation failed, using defaults:', err instanceof Error ? err.message : String(err));
   }
 
-  // Price the reimbursement off the REALISTIC gas the 0x76 will burn — NOT the padded
-  // UserOp limits (callGasLimit/verificationGasLimit stay high for OOG safety, but the
-  // user shouldn't pay 2–4× for that headroom). The batch runs innerCalls + 1 transfer.
-  const expectedGas = tempoExpectedGas(deployed, innerCalls.length + 1);
+  // Price the reimbursement off the REALISTIC gas the 0x76 will burn (expectedGas, computed
+  // above) — NOT the padded UserOp limits (callGasLimit/verificationGasLimit stay high for OOG
+  // safety, but the user shouldn't pay 2–4× for that headroom).
   const reimbursement = tempoReimbursement(expectedGas, gasPrices.gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
   userOp.callData = buildBatch(reimbursement);
-  console.log(`[Tempo] feeToken=${feeToken} reimbursement=${reimbursement} expectedGas=${expectedGas} collector=${feeCollector}`);
+  console.log(`[Tempo] feeToken=${feeToken} reimbursement=${reimbursement} expectedGas=${expectedGas} split=${splitEnabled} collector=${feeCollector} treasury=${treasuryAddr ?? 'n/a'}`);
 
   // Sign the SafeOp (over the FINAL callData) and submit, telling the bundler which
   // stablecoin to charge for the outer 0x76.

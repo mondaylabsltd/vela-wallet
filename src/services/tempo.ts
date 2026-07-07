@@ -155,3 +155,40 @@ export function tempoReimbursement(
   const withMargin = (base * TEMPO_FEE_MARGIN_NUM) / TEMPO_FEE_MARGIN_DEN;
   return withMargin > 0n ? withMargin : 1n;
 }
+
+/**
+ * Gas buffer the BUNDLER adds to the real simulated gas when computing the cost the EOA
+ * reimbursement transfer must clear (bundler rejects if `reimbursed_to_EOA < (gasUsed + this) × price`).
+ * MUST match TEMPO_COST_BUFFER_GAS in vela-bundler/shared/tempo.ts.
+ */
+export const TEMPO_COST_BUFFER_GAS = 80_000n;
+
+/** Extra cushion on the EOA floor over the bundler's buffer, so estimate variance never
+ *  causes a rejection when we route the surplus to the treasury. */
+export const TEMPO_SPLIT_SAFETY_GAS = 20_000n;
+
+/**
+ * Split the Tempo reimbursement between the bundler EOA and the treasury — the Tempo analog of
+ * the native VelaGasSettlementSplitter, done atomically in-band (Tempo's fee is an ERC-20, so a
+ * receive()-based contract can't split it). The EOA is floored at the bundler's cost
+ * (realistic gas + the bundler's buffer + a safety cushion) so the transfer always clears the
+ * bundler's accept check; the surplus (the profit) goes to the treasury. When the margin is too
+ * thin to cover the floor, everything stays on the EOA (treasury 0) so the tx is never rejected.
+ *
+ * With the default 2× fee margin this routes ~40–50% of a healthy fee to the treasury, matching
+ * the native 50/50 intent while respecting Tempo's hard "EOA must be made whole" constraint.
+ */
+export function tempoSettlementSplit(
+  reimbursement: bigint,
+  expectedGas: bigint,
+  gasPriceAtto: bigint,
+  decimals: number = TEMPO_FEE_TOKEN_DECIMALS,
+): { eoa: bigint; treasury: bigint } {
+  const price = gasPriceAtto > 0n ? gasPriceAtto : TEMPO_BASE_FEE_ATTO;
+  const eoaFloor = attoToTokenUnits(
+    (expectedGas + TEMPO_COST_BUFFER_GAS + TEMPO_SPLIT_SAFETY_GAS) * price,
+    decimals,
+  );
+  if (reimbursement <= eoaFloor) return { eoa: reimbursement, treasury: 0n };
+  return { eoa: eoaFloor, treasury: reimbursement - eoaFloor };
+}
