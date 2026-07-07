@@ -41,12 +41,12 @@ class WalletWebViewManager : SimpleViewManager<WalletWebView>() {
         when (commandId) {
             "respond" -> view.deliverResponse(
                 args?.getString(0) ?: "",
-                if (args != null && args.size() > 1 && !args.isNull(1)) args.getString(1) else "",
-                if (args != null && args.size() > 2 && !args.isNull(2)) args.getString(2) else "",
+                if (args != null && args.size() > 1 && !args.isNull(1)) (args.getString(1) ?: "") else "",
+                if (args != null && args.size() > 2 && !args.isNull(2)) (args.getString(2) ?: "") else "",
             )
             "emitProviderEvent" -> view.deliverEvent(
                 args?.getString(0) ?: "",
-                if (args != null && args.size() > 1 && !args.isNull(1)) args.getString(1) else "",
+                if (args != null && args.size() > 1 && !args.isNull(1)) (args.getString(1) ?: "") else "",
             )
             "goBack" -> if (view.canGoBack()) view.goBack()
             "goForward" -> if (view.canGoForward()) view.goForward()
