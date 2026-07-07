@@ -103,8 +103,8 @@ export const TEMPO_FEE_MARGIN_DEN = 1n;
  * (initCode) ≈ 3.9–4.1M, and one in-batch TIP-20 transfer ≈ 90–120k.
  */
 export const TEMPO_DEPLOYED_GAS_EST = 250_000n;
-export const TEMPO_DEPLOY_GAS_EST = 4_100_000n;
-export const TEMPO_PER_SUBCALL_GAS_EST = 95_000n;
+export const TEMPO_DEPLOY_GAS_EST = 4_150_000n;
+export const TEMPO_PER_SUBCALL_GAS_EST = 110_000n;
 
 /** Realistic total gas for a batch of `subCalls` inner calls (incl. the reimbursement). */
 export function tempoExpectedGas(deployed: boolean, subCalls: number): bigint {
@@ -163,9 +163,26 @@ export function tempoReimbursement(
  */
 export const TEMPO_COST_BUFFER_GAS = 80_000n;
 
-/** Extra cushion on the EOA floor over the bundler's buffer, so estimate variance never
- *  causes a rejection when we route the surplus to the treasury. */
+/** Minimum extra cushion on the EOA floor over the bundler's buffer, so estimate variance
+ *  never causes a rejection when we route the surplus to the treasury. */
 export const TEMPO_SPLIT_SAFETY_GAS = 20_000n;
+
+/**
+ * Proportional cushion (basis points of the priced gas) added on top of the flat
+ * TEMPO_SPLIT_SAFETY_GAS. A FLAT cushion is fine for a ~450k simple send but is a rounding
+ * error next to a ~4.4M-gas Safe deploy, where the wallet's realistic-gas model can drift
+ * from the bundler's actual simulated gas by tens of thousands of gas — larger than 20k, so
+ * the EOA floor fell below the bundler's cost and the op was rejected (reimbursed < cost).
+ * 3% of the priced gas scales the cushion with the op, so the floor clears the bundler cost
+ * regardless of tx size. The surplus above the floor still goes to the treasury.
+ */
+export const TEMPO_SPLIT_SAFETY_BPS = 300n;
+
+/** The EOA-floor cushion (gas) for a given priced gas: max(flat, proportional). */
+export function tempoSplitSafetyGas(expectedGas: bigint): bigint {
+  const proportional = (expectedGas * TEMPO_SPLIT_SAFETY_BPS) / 10_000n;
+  return proportional > TEMPO_SPLIT_SAFETY_GAS ? proportional : TEMPO_SPLIT_SAFETY_GAS;
+}
 
 /**
  * Split the Tempo reimbursement between the bundler EOA and the treasury — the Tempo analog of
@@ -186,7 +203,7 @@ export function tempoSettlementSplit(
 ): { eoa: bigint; treasury: bigint } {
   const price = gasPriceAtto > 0n ? gasPriceAtto : TEMPO_BASE_FEE_ATTO;
   const eoaFloor = attoToTokenUnits(
-    (expectedGas + TEMPO_COST_BUFFER_GAS + TEMPO_SPLIT_SAFETY_GAS) * price,
+    (expectedGas + TEMPO_COST_BUFFER_GAS + tempoSplitSafetyGas(expectedGas)) * price,
     decimals,
   );
   if (reimbursement <= eoaFloor) return { eoa: reimbursement, treasury: 0n };

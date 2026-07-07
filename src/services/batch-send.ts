@@ -164,3 +164,28 @@ export function reserveNativeGas(tokens: MultiTokenSpec[], reserveWei: bigint): 
     return [{ ...tk, amount: fromBaseUnits(left, tk.decimals) }];
   });
 }
+
+/**
+ * Trim a multiSelect's Tempo FEE-TOKEN line (pathUSD) by `reserveUnits` so the Safe keeps
+ * enough to pay the batched gas reimbursement. Tempo has no native coin — gas is settled by an
+ * in-band feeToken.transfer, drawn from the SAME balance being swept. reserveNativeGas can't do
+ * this: pathUSD is a TIP-20 with a non-null address, so it looks like any other ERC-20 and is
+ * left untouched — sweeping it at full balance would leave nothing for the reimbursement and the
+ * op would revert. Only the line whose address matches `feeTokenAddress` is trimmed; other TIP-20
+ * lines (gas isn't paid in them) pass through. The fee-token line is dropped entirely if its
+ * whole balance is needed for gas. A non-positive reserve is a no-op.
+ */
+export function reserveTempoFeeToken(
+  tokens: MultiTokenSpec[],
+  feeTokenAddress: string,
+  reserveUnits: bigint,
+): MultiTokenSpec[] {
+  if (reserveUnits <= 0n) return tokens;
+  const fee = feeTokenAddress.toLowerCase();
+  return tokens.flatMap((tk) => {
+    if (tk.tokenAddress?.toLowerCase() !== fee) return [tk]; // not the gas token
+    const left = toBaseUnits(tk.amount, tk.decimals) - reserveUnits;
+    if (left <= 0n) return []; // whole fee-token balance is needed for gas — don't sweep it
+    return [{ ...tk, amount: fromBaseUnits(left, tk.decimals) }];
+  });
+}
