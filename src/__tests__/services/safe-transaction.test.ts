@@ -14,7 +14,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 import {
   formatWeiToEth, calcMaxFeePerGas, GAS_TIER_MULTIPLIERS,
   encodeErc20Transfer, buildExecuteCallData, buildMultiSendExecuteCallData, buildInitCode,
-  parseHexUInt64, parseExistingUserOpHash,
+  parseHexUInt64, parseExistingUserOpHash, isPlainTransferCall,
   deriveChainGasPrice, isQuoteAbusive, MAX_QUOTE_VS_CHAIN_MULTIPLE,
 } from '@/services/safe-transaction';
 import type { GasTier, ChainGasPrice } from '@/services/safe-transaction';
@@ -258,6 +258,33 @@ describe('safe-transaction', () => {
 
     test('zero amount encodes a zero word', () => {
       expect(word(encodeErc20Transfer(USDC, 0n), 1)).toBe(zeroWord);
+    });
+  });
+
+  describe('isPlainTransferCall (Tempo heavy-call guard classifier)', () => {
+    const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+
+    test('native value transfer (empty data) is a plain transfer', () => {
+      expect(isPlainTransferCall({ data: new Uint8Array(0) })).toBe(true);
+    });
+
+    test('a standard ERC-20 transfer is a plain transfer', () => {
+      expect(isPlainTransferCall({ data: encodeErc20Transfer(USDC, 1_000_000n) })).toBe(true);
+    });
+
+    // The whole point of shape-vs-size: a HEAVY call can have TINY calldata. These must NOT be
+    // classified as transfers, or a Tempo op that can't be estimated would submit on the too-low
+    // per-sub-call floor and revert after the passkey.
+    test('small-calldata contract calls are NOT plain transfers', () => {
+      expect(isPlainTransferCall({ data: new Uint8Array([0x4e, 0x71, 0xd9, 0x2d]) })).toBe(false); // claim() = 4 bytes
+      expect(isPlainTransferCall({ data: new Uint8Array(36) })).toBe(false); // deposit(uint256) = 36 bytes
+      expect(isPlainTransferCall({ data: new Uint8Array(100) })).toBe(false); // exactly 100 bytes (old >100 gate missed this)
+    });
+
+    test('a 68-byte blob with a non-transfer selector is NOT a plain transfer', () => {
+      const approve68 = new Uint8Array(68);
+      approve68.set([0x09, 0x5e, 0xa7, 0xb3]); // approve(address,uint256) selector
+      expect(isPlainTransferCall({ data: approve68 })).toBe(false);
     });
   });
 
