@@ -20,16 +20,19 @@ import {
   SAFE_4337_MODULE,
   SAFE_PROXY_FACTORY,
   SAFE_SINGLETON,
+  VELA_SPLITTER_FACTORY,
   WEBAUTHN_SIGNER,
   calculateSaltNonce,
+  computeSplitterAddress,
   encodeMultiSendTx,
   encodeSetupData,
+  encodeSplitterDeployCall,
   parsePublicKey
 } from './safe-address';
 
 import { derSignatureToRaw } from './attestation-parser';
 import { rpcCall } from './rpc-adapter';
-import { fetchBundlerAccountInfo } from './bundler-service';
+import { fetchBundlerAccountInfo, fetchSplitterInfo } from './bundler-service';
 import {
   isTempoChain,
   tempoReimbursement,
@@ -115,7 +118,7 @@ export async function sendNative(
     // (gas is paid in the default stablecoin, not the value being moved).
     return sendUserOpTempo(from, [{ to, value: valueWei, data: new Uint8Array(0) }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
-  const callData = buildExecuteCallData(to, valueWei, new Uint8Array(0));
+  const callData = await buildNativeCallData([{ to, value: valueWei, data: new Uint8Array(0) }], chainId, false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -145,7 +148,7 @@ export async function sendERC20(
     return sendUserOpTempo(from, [{ to: tokenAddress, value: '0', data: transferData }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
 
-  const callData = buildExecuteCallData(tokenAddress, '0', transferData);
+  const callData = await buildNativeCallData([{ to: tokenAddress, value: '0', data: transferData }], chainId, false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -164,7 +167,7 @@ export async function sendContractCall(
     // dApp / contract call: pay gas in the default stablecoin (pathUSD).
     return sendUserOpTempo(from, [{ to, value: valueWei, data }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
-  const callData = buildExecuteCallData(to, valueWei, data);
+  const callData = await buildNativeCallData([{ to, value: valueWei, data }], chainId, false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -192,7 +195,7 @@ export async function sendBatchCalls(
     return sendUserOpTempo(from, byteCalls, TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
 
-  const callData = buildMultiSendExecuteCallData(byteCalls);
+  const callData = await buildNativeCallData(byteCalls, chainId, true);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -838,6 +841,62 @@ export function buildMultiSendExecuteCallData(calls: MultiSendCall[]): Uint8Arra
     multiSendPayload,
     new Uint8Array(dataPadding),
   );
+}
+
+// ---------------------------------------------------------------------------
+// VelaGasSettlementSplitter — in-batch deploy on native chains
+// ---------------------------------------------------------------------------
+
+/**
+ * The MultiSend sub-call that CREATE2-deploys the VelaGasSettlementSplitter, or null if it is
+ * already deployed / can't be safely determined. NATIVE chains only — on Tempo the beneficiary
+ * stays the EOA, so there is nothing to deploy (Tempo sends never reach this path).
+ *
+ * The splitter address and deploy calldata are computed LOCALLY from embedded constants; only
+ * the treasury (20 bytes) is bundler-supplied. We cross-check the bundler's reported address
+ * against the local derivation and skip on any mismatch — the wallet never blindly includes
+ * bundler-provided deploy calldata. Fails safe: a missing split beats a reverting/mis-routed op.
+ */
+async function splitterDeployCallIfNeeded(chainId: number): Promise<MultiSendCall | null> {
+  try {
+    const info = await fetchSplitterInfo(chainId);
+    if (!info) return null;
+
+    const splitter = computeSplitterAddress(info.treasury);
+    if (splitter.toLowerCase() !== info.address.toLowerCase()) {
+      console.warn('[Splitter] bundler address mismatch — skipping in-batch deploy', {
+        local: splitter, bundler: info.address,
+      });
+      return null;
+    }
+    if (await isDeployed(splitter, chainId)) return null;
+
+    return { to: VELA_SPLITTER_FACTORY, value: '0', data: encodeSplitterDeployCall(info.treasury) };
+  } catch (err) {
+    console.warn('[Splitter] deploy-check failed — proceeding without in-batch deploy:', err);
+    return null;
+  }
+}
+
+/**
+ * Build the UserOp callData for a NATIVE-chain send, prepending the splitter CREATE2 deploy as
+ * the FIRST sub-call when the splitter isn't on-chain yet — so it exists before the EntryPoint
+ * pays the beneficiary. When no deploy is needed the encoding is unchanged: a lone call stays a
+ * single executeUserOp (unless `alwaysMultiSend`), a batch stays a MultiSend.
+ */
+async function buildNativeCallData(
+  innerCalls: MultiSendCall[],
+  chainId: number,
+  alwaysMultiSend: boolean,
+): Promise<Uint8Array> {
+  const deployCall = await splitterDeployCallIfNeeded(chainId);
+  const calls = deployCall ? [deployCall, ...innerCalls] : innerCalls;
+
+  if (calls.length === 1 && !alwaysMultiSend) {
+    const only = calls[0]!;
+    return buildExecuteCallData(only.to, only.value, only.data);
+  }
+  return buildMultiSendExecuteCallData(calls);
 }
 
 /** Encode ERC-20 transfer(address,uint256) calldata. */
