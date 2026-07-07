@@ -33,6 +33,12 @@ import { SAFE_PROXY_RUNTIME_CODE } from './safe-address';
 (WalletPairSDK as { setDisconnectLogSink?: (fn: (e: unknown) => void) => void }).setDisconnectLogSink?.(
   (entry) => console.log('[WalletPair][disconnect]', entry),
 );
+// DEV-only: verbose SDK tracing (WS handshake, frames, phase) to Metro so we can see
+// exactly what the wallet-side connection does — BUG-5 (docs/KNOWN-BUGS.md): the app's
+// wallet joining drops the dApp peer even though a pure Node↔Node pairing works.
+if (__DEV__) {
+  (WalletPairSDK as { setWalletpairDebugLogging?: (on: boolean) => void }).setWalletpairDebugLogging?.(true);
+}
 
 // ---------------------------------------------------------------------------
 // Constants
