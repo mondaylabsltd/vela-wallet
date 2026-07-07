@@ -3,6 +3,7 @@ import {
   attoToTokenUnits,
   tempoFeeTokenUnits,
   tempoReimbursement,
+  tempoSettlementSplit,
   tempoCallGasLimit,
   tempoExpectedGas,
   TEMPO_DEFAULT_FEE_TOKEN,
@@ -13,6 +14,8 @@ import {
   TEMPO_DEPLOYED_GAS_EST,
   TEMPO_DEPLOY_GAS_EST,
   TEMPO_PER_SUBCALL_GAS_EST,
+  TEMPO_COST_BUFFER_GAS,
+  TEMPO_SPLIT_SAFETY_GAS,
 } from '@/services/tempo';
 
 describe('tempo gas model', () => {
@@ -80,6 +83,43 @@ describe('tempo gas model', () => {
     });
     it('is never zero (transfer must move a non-zero amount)', () => {
       expect(tempoReimbursement(0n, 0n, 6)).toBeGreaterThan(0n);
+    });
+  });
+
+  describe('tempoSettlementSplit', () => {
+    const price = TEMPO_BASE_FEE_ATTO;
+    const gas = 500_000n;
+
+    it('floors the EOA at the bundler cost (expectedGas + buffer + safety) and gives treasury the surplus', () => {
+      const reimbursement = tempoReimbursement(gas, price, 6); // = 2× base
+      const split = tempoSettlementSplit(reimbursement, gas, price, 6);
+      const expectedFloor = attoToTokenUnits((gas + TEMPO_COST_BUFFER_GAS + TEMPO_SPLIT_SAFETY_GAS) * price, 6);
+      expect(split.eoa).toBe(expectedFloor);
+      expect(split.treasury).toBe(reimbursement - expectedFloor);
+    });
+
+    it('conserves the total (eoa + treasury == reimbursement)', () => {
+      const reimbursement = tempoReimbursement(gas, price, 6);
+      const split = tempoSettlementSplit(reimbursement, gas, price, 6);
+      expect(split.eoa + split.treasury).toBe(reimbursement);
+    });
+
+    it("the EOA share always clears the bundler's cost (realGas + buffer)", () => {
+      const reimbursement = tempoReimbursement(gas, price, 6);
+      const split = tempoSettlementSplit(reimbursement, gas, price, 6);
+      // Bundler requires reimbursed_to_EOA >= (gasUsed + TEMPO_COST_BUFFER_GAS) * price.
+      // With gasUsed ~= expectedGas, the floor beats it by the safety cushion.
+      const bundlerCost = attoToTokenUnits((gas + TEMPO_COST_BUFFER_GAS) * price, 6);
+      expect(split.eoa).toBeGreaterThanOrEqual(bundlerCost);
+      expect(split.treasury).toBeGreaterThan(0n);
+    });
+
+    it('keeps everything on the EOA (treasury 0) when the margin is too thin — never a rejection', () => {
+      const floor = attoToTokenUnits((gas + TEMPO_COST_BUFFER_GAS + TEMPO_SPLIT_SAFETY_GAS) * price, 6);
+      const thin = floor - 1n; // reimbursement below the floor
+      const split = tempoSettlementSplit(thin, gas, price, 6);
+      expect(split.eoa).toBe(thin);
+      expect(split.treasury).toBe(0n);
     });
   });
 
