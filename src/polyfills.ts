@@ -33,3 +33,15 @@ const g = globalThis as unknown as {
 if (typeof g.btoa !== 'function') g.btoa = base64.encode;
 if (typeof g.atob !== 'function') g.atob = base64.decode;
 if (typeof g.Buffer === 'undefined') g.Buffer = Buffer;
+
+// Fail LOUD if the RNG polyfill didn't install `crypto.getRandomValues`: @noble captures
+// `globalThis.crypto` at module-load, so a miss here means WalletPair pairing will throw
+// "crypto.getRandomValues must be defined" (docs/KNOWN-BUGS.md BUG-4). This file loads
+// first (via index.js, before any @noble import), so the check should always pass; the
+// warning only fires if the native RNG module itself failed to install.
+{
+  const cg = (globalThis as { crypto?: { getRandomValues?: unknown } }).crypto;
+  if (!cg || typeof cg.getRandomValues !== 'function') {
+    console.error('[polyfills] globalThis.crypto.getRandomValues MISSING after react-native-get-random-values — WalletPair/@noble crypto will fail. Check the native RNG module.');
+  }
+}
