@@ -20,7 +20,7 @@ import { ConnectionFlowStates } from '@/components/ConnectionFlowStates';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { chainName } from '@/models/network';
-import { parseRemoteInjectURL } from '@/services/dapp-transport';
+import { parseRemoteInjectURL, isHttpUrl } from '@/services/dapp-transport';
 import { isWalletPairURI } from '@/services/walletpair-transport';
 import { showAlert } from '@/services/platform';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
@@ -54,11 +54,16 @@ export default function ConnectScreen() {
 
     const parsed = parseRemoteInjectURL(trimmed);
     if (!parsed) {
+      // Not a pairing link but a real web URL → open the in-app dApp browser.
+      if (isHttpUrl(trimmed)) {
+        router.push({ pathname: '/browser', params: { url: trimmed } });
+        return;
+      }
       showAlert(t('connect.list.invalidLinkTitle'), t('connect.list.invalidLinkBody'));
       return;
     }
     connectToBridge(parsed);
-  }, [connectToBridge, connectToWalletPair]);
+  }, [connectToBridge, connectToWalletPair, router, t]);
 
   const handleScan = useCallback((data: string) => {
     setShowScanner(false);

@@ -284,3 +284,20 @@ export function parseRemoteInjectURL(raw: string): RemoteInjectSession | null {
     return null;
   }
 }
+
+/**
+ * True for a plain web-page URL the in-app dApp browser can load.
+ *
+ * Used as the FALLBACK branch after parseRemoteInjectURL returns null: a
+ * remote-inject connect link is itself an https:// URL (it carries `n`+`k`), so
+ * this must run only once that returns null — any remaining http(s) URL opens in
+ * the in-app WalletWebView. See docs/dapp-browser/ARCHITECTURE.md §7.
+ */
+export function isHttpUrl(raw: string): boolean {
+  try {
+    const u = new URL(raw.trim());
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}

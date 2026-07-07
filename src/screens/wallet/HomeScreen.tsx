@@ -68,7 +68,7 @@ import { useLocalePrefs } from '@/services/locale-format';
 import { deleteConnectionEvents, deleteTransaction, type LocalTransaction } from '@/services/storage';
 import { getAccountBalance, getAccountBalances, setAccountBalance } from '@/services/balance-cache';
 import { currencyMeta, shouldShowDecimals } from '@/services/currency';
-import { parseRemoteInjectURL } from '@/services/dapp-transport';
+import { parseRemoteInjectURL, isHttpUrl } from '@/services/dapp-transport';
 import { parseEIP681 } from '@/services/eip681';
 import { copyToClipboard, hapticLight, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
@@ -574,8 +574,13 @@ export default function HomeScreen() {
       setTab('connections');
       return true;
     }
+    // Any remaining http(s) URL → open the in-app dApp browser (WalletWebView).
+    if (isHttpUrl(trimmed)) {
+      router.push({ pathname: '/browser', params: { url: trimmed } });
+      return true;
+    }
     return false;
-  }, [connectToWalletPair, connectToBridge]);
+  }, [connectToWalletPair, connectToBridge, router]);
 
   const onScan = useCallback((data: string) => {
     setShowScanner(false);

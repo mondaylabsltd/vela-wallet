@@ -113,7 +113,8 @@ function withIOSSourceFiles(config) {
 
       // vela-cloud-sync is intentionally omitted — it has no JS consumer yet.
       // vela-app-group: App Group shared-container IPC (Increment 2 Safari spike).
-      const modules = ['vela-passkey', 'vela-app-group'];
+      // vela-wallet-webview: the in-app dApp browser's WKWebView native view.
+      const modules = ['vela-passkey', 'vela-app-group', 'vela-wallet-webview'];
       for (const moduleName of modules) {
         const srcDir = path.join(projectRoot, 'modules', moduleName, 'ios');
         if (!fs.existsSync(srcDir)) continue;
@@ -226,6 +227,7 @@ function withAndroidSourceFiles(config) {
       // Copy Kotlin files for each module (vela-cloud-sync omitted — no JS consumer)
       const moduleMappings = [
         { name: 'vela-passkey', subdir: 'passkey' },
+        { name: 'vela-wallet-webview', subdir: 'webview' },
       ];
 
       for (const { name, subdir } of moduleMappings) {
@@ -306,10 +308,12 @@ function registerAndroidPackages(projectRoot) {
   // vela-cloud-sync omitted — no JS consumer yet.
   const imports = [
     'import com.velawallet.passkey.VelaPasskeyPackage',
+    'import com.velawallet.webview.WalletWebViewPackage',
   ];
 
   const packageRegistrations = [
     'add(VelaPasskeyPackage())',
+    'add(WalletWebViewPackage())',
   ];
 
   // Add imports (after the last existing import line)
@@ -373,6 +377,9 @@ function withXcodeProjectFiles(config) {
       'VelaPasskeyModule.m',
       'VelaAppGroupModule.swift',
       'VelaAppGroupModule.m',
+      'WalletWebView.swift',
+      'WalletWebViewManager.swift',
+      'WalletWebViewManager.m',
     ];
 
     for (const fileName of nativeFiles) {
@@ -411,6 +418,8 @@ function withAndroidDependencies(config) {
         'implementation("androidx.credentials:credentials:1.5.0")',
         'implementation("androidx.credentials:credentials-play-services-auth:1.5.0")',
         'implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")',
+        // In-app dApp browser WebView: document-start injection + WebMessageListener.
+        'implementation("androidx.webkit:webkit:1.11.0")',
       ];
 
       for (const dep of deps) {

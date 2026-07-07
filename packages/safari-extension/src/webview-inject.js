@@ -20,15 +20,17 @@ import { CHANNEL } from './lib/protocol.js';
   // + isMainFrame itself (it must NEVER trust an origin in this JS payload).
   function nativePost(payload) {
     const s = typeof payload === 'string' ? payload : JSON.stringify(payload);
-    try {
-      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.velaBridge) {
-        window.webkit.messageHandlers.velaBridge.postMessage(s); // iOS WKScriptMessageHandler
-      } else if (window.velaBridge && typeof window.velaBridge.postMessage === 'function') {
-        window.velaBridge.postMessage(s); // Android addWebMessageListener("velaBridge")
-      }
-    } catch (_) {
-      /* host channel not ready — provider's request will time out, which is safe */
+    // Android: AndroidX WebMessageListener injects window.velaBridge.
+    if (window.velaBridge && typeof window.velaBridge.postMessage === 'function') {
+      try { window.velaBridge.postMessage(s); } catch (_) {}
+      return;
     }
+    // iOS: window.prompt() interception via WKUIDelegate — the most reliable
+    // JS→native channel (it always invokes the UI delegate). Used INSTEAD of
+    // webkit.messageHandlers, which does not deliver under the RN New-Architecture
+    // interop view (verified on-device). Native reads the payload and dismisses
+    // the prompt without showing UI.
+    try { window.prompt('velawvbridge:' + s, ''); } catch (_) {}
   }
 
   window.addEventListener('message', (ev) => {
