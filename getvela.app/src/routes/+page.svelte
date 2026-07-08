@@ -108,6 +108,9 @@
 
 	let rpcs = [...FALLBACK_RPCS];
 	let displayCount = $state(0);
+	let countReady = $state(false); // true once a count (even 0) has been read
+	let countFailed = $state(false); // true after repeated failures with no read yet
+	let failCount = 0;
 	let rpcIndex = 0;
 
 	async function refreshRpcs() {
@@ -118,7 +121,9 @@
 				.filter((r: { url: string }) => r.url.startsWith('https://') && !r.url.includes('${'))
 				.map((r: { url: string }) => r.url);
 			if (urls.length > 0) {
-				rpcs = urls;
+				// Augment, don't replace: always keep the vetted built-ins in the pool so
+				// a degraded community list can't shadow the known-good endpoints.
+				rpcs = [...new Set([...urls, ...FALLBACK_RPCS])];
 				rpcIndex = 0;
 			}
 		} catch {
@@ -173,7 +178,17 @@
 
 	async function poll() {
 		const count = await fetchCount();
-		if (count !== null) animateCount(count);
+		if (count !== null) {
+			failCount = 0;
+			countFailed = false;
+			countReady = true;
+			animateCount(count);
+		} else if (!countReady) {
+			// Stop shimmering after a run of failures with no successful read, so the
+			// chip doesn't loop forever; a later successful poll self-heals it.
+			failCount++;
+			if (failCount >= 4) countFailed = true;
+		}
 	}
 
 	$effect(() => {
@@ -290,7 +305,9 @@
 			<a href="#pricing">Pricing</a>
 			<a href="#faq">FAQ</a>
 
-			<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener">GitHub</a>
+			<a href="https://github.com/mondaylabsltd/vela-wallet" target="_blank" rel="noopener"
+				>GitHub</a
+			>
 			<a
 				href="https://wallet.getvela.app/onboarding"
 				target="_blank"
@@ -746,16 +763,16 @@
 					rel="noopener">Safe v1.4.1</a
 				> — audited, unmodified
 			</div>
-			{#if displayCount > 0}
+			{#if !countFailed}
 				<div class="trust-chip">
 					<span class="live-dot"></span>
-					<a
-						href="https://gnosisscan.io/address/0xdd93420bd49baabdff4a363ddd300622ae87e9c3#readContract#F14"
-						target="_blank"
-						rel="noopener"
-					>
-						<span class="stat-number">{displayCount.toLocaleString()}</span>
-					</a>
+					{#if countReady}
+						<a href={resolve('/registry')} data-rybbit-event="registry_open">
+							<span class="stat-number">{displayCount.toLocaleString()}</span>
+						</a>
+					{:else}
+						<span class="stat-skeleton" aria-label="Loading wallet count"></span>
+					{/if}
 
 					wallets created on-chain
 				</div>
@@ -770,8 +787,8 @@
 		<div class="does-less-content">
 			<h2>A wallet that does less — on purpose.</h2>
 			<p>
-				No NFT gallery. No built-in swaps. No DeFi dashboard. No in-app dApp browser pulling you
-				toward the next thing to click.
+				No NFT gallery. No built-in swaps. No DeFi dashboard. Nothing engineered to pull you toward
+				the next thing to click.
 			</p>
 			<p>
 				Vela holds ETH and ERC-20s. When you want to use a dApp, you connect to the one you choose
@@ -915,7 +932,7 @@
 						><td class="yes">Yes</td><td class="warn">At risk</td><td class="warn">At risk</td></tr
 					>
 					<tr
-						><td>No NFT / DeFi / dApp-browser bloat</td><td class="yes">Minimal</td><td class="warn"
+						><td>No NFT / DeFi / swap bloat</td><td class="yes">Minimal</td><td class="warn"
 							>Lots</td
 						><td class="warn">Lots</td><td class="warn">Lots</td><td class="warn">Lots</td></tr
 					>
@@ -963,7 +980,8 @@
 				<h3>Sign a transaction</h3>
 				<p>
 					The app builds a transaction and sends a signing challenge to your device. Your device
-					signs it with the passkey and sends back just the signature — Vela never sees the key. The signed transaction goes on-chain through an <a
+					signs it with the passkey and sends back just the signature — Vela never sees the key. The
+					signed transaction goes on-chain through an <a
 						href="https://eips.ethereum.org/EIPS/eip-4337"
 						target="_blank"
 						rel="noopener">ERC-4337</a
@@ -1569,6 +1587,24 @@
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 		color: var(--accent);
+	}
+	/* Placeholder shown while the on-chain count is still loading. */
+	.stat-skeleton {
+		display: inline-block;
+		width: 26px;
+		height: 0.72rem;
+		border-radius: 4px;
+		background: linear-gradient(90deg, var(--border), var(--border-strong), var(--border));
+		background-size: 200% 100%;
+		animation: stat-shimmer 1.3s ease-in-out infinite;
+	}
+	@keyframes stat-shimmer {
+		0% {
+			background-position: 200% 0;
+		}
+		100% {
+			background-position: -200% 0;
+		}
 	}
 	@keyframes pulse-dot {
 		0%,
