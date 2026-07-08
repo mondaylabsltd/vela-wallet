@@ -263,7 +263,7 @@
 									<dt>Wallet</dt>
 									<dd>
 										<a
-											href={`https://gnosisscan.io/address/${r.walletAddress}`}
+											href={`https://blockscan.com/address/${r.walletAddress}`}
 											target="_blank"
 											rel="noopener"
 											class="mono">{r.walletAddress} ↗</a
