@@ -77,5 +77,16 @@
       "contentMissing": "이 요청의 내용은 기록되지 않았습니다.",
       "offChainNote": "오프체인 서명 — 온체인으로 전송된 내용은 없습니다."
     }
+  },
+  "signHandoff": {
+    "signing": "Vela에서 확인",
+    "signed": "전송됨",
+    "rejected": "취소됨",
+    "pending": "Vela 활동에서 확인하세요",
+    "expired": "이 서명 요청이 만료되었습니다",
+    "returnHint": "Safari로 돌아가세요 — 이 페이지는 새로고침되지 않습니다",
+    "oneTapTitle": "원탭 서명이 활성화되었습니다",
+    "oneTapHint": "이제 Safari에서 서명하면 Vela가 바로 열립니다. 왼쪽 위 ‹ Safari로 돌아가세요.",
+    "done": "완료"
   }
 }

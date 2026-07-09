@@ -77,5 +77,16 @@
       "contentMissing": "Il contenuto di questa richiesta non è stato registrato.",
       "offChainNote": "Firma off-chain — non è stato inviato nulla on-chain."
     }
+  },
+  "signHandoff": {
+    "signing": "Conferma in Vela",
+    "signed": "Inviato",
+    "rejected": "Annullato",
+    "pending": "Controlla nell'attività di Vela",
+    "expired": "Questa richiesta di firma è scaduta",
+    "returnHint": "Torna a Safari — questa pagina non verrà ricaricata",
+    "oneTapTitle": "Firma con un tocco attivata",
+    "oneTapHint": "Firmare in Safari ora aprirà Vela direttamente. Tocca ‹ Safari in alto a sinistra per tornare.",
+    "done": "Fatto"
   }
 }

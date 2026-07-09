@@ -77,5 +77,16 @@
       "contentMissing": "Konten untuk permintaan ini tidak tercatat.",
       "offChainNote": "Tanda tangan off-chain — tidak ada yang dikirim ke on-chain."
     }
+  },
+  "signHandoff": {
+    "signing": "Konfirmasi di Vela",
+    "signed": "Terkirim",
+    "rejected": "Dibatalkan",
+    "pending": "Periksa di Aktivitas Vela",
+    "expired": "Permintaan tanda tangan ini kedaluwarsa",
+    "returnHint": "Kembali ke Safari — halaman ini tidak akan dimuat ulang",
+    "oneTapTitle": "Tanda tangan satu ketuk aktif",
+    "oneTapHint": "Menandatangani di Safari kini langsung membuka Vela. Ketuk ‹ Safari di kiri atas untuk kembali.",
+    "done": "Selesai"
   }
 }

@@ -77,5 +77,16 @@
       "contentMissing": "Für diese Anfrage wurde kein Inhalt gespeichert.",
       "offChainNote": "Off-Chain-Signatur — es wurde nichts on-chain gesendet."
     }
+  },
+  "signHandoff": {
+    "signing": "In Vela bestätigen",
+    "signed": "Gesendet",
+    "rejected": "Abgebrochen",
+    "pending": "In der Vela-Aktivität prüfen",
+    "expired": "Diese Signaturanfrage ist abgelaufen",
+    "returnHint": "Zurück zu Safari — diese Seite wird nicht neu geladen",
+    "oneTapTitle": "Ein-Tipp-Signieren aktiviert",
+    "oneTapHint": "Das Signieren in Safari öffnet Vela jetzt direkt. Tippe oben links auf ‹ Safari, um zurückzukehren.",
+    "done": "Fertig"
   }
 }

@@ -1,9 +1,15 @@
 # Vela Safari-extension E2E regression (Appium + WebDriverAgent)
 
-Fully-automated on-device regression for the R1 sign return-path (the spike proven
-2026-07-05, conditional GO). Drives Safari + the native app on a physical iPhone
-and reads the page-side verdict. Reusable to catch regressions in the sign
-round-trip (injection → launch → sign → return → result reaches the page).
+Fully-automated on-device regression for the sign return-path. Drives Safari + the
+native app on a physical iPhone and reads the page-side verdict. Catches regressions
+in the sign round-trip (injection → launch → sign → return → result reaches the page).
+
+`run_matrix.py` drives the **REAL** production sign pipeline (content.js hand-off →
+deep-link → `sign.tsx` → `ExtensionBridgeTransport` → `SigningRequestModal` →
+fixed-key `Passkey.sign` → `sign-result` file → focus-poll → dApp promise), NOT the
+retired R1 fake-sign stub. It runs `personal_sign` (no funds move — the matrix
+stresses the return CHANNEL, which is method-independent) in the parallel space
+(fixed-key signer, no Face ID).
 
 ## What it proves (the 4 fund-safety invariants)
 - **(a) never silently lose** a result — `run_matrix.py` rows `3 kill` (app killed
@@ -66,6 +72,8 @@ Env overrides: `VELA_UDID`, `VELA_TEAM`, `VELA_WDA_BID`, `VELA_APP_BID`,
   churn on re-rendering RN screens.
 
 Note: `venv/` and any Appium `node_modules/` are gitignored — only the scripts are
-tracked. The scripts fake the sign (spike); once the real SigningRequestModal +
-passkey + bundler are wired in (ARCHITECTURE §12), the same matrix validates the
-real path (add a fixed-key/parallel-space signer so it runs unattended).
+tracked. `run_matrix.py` and `check_real_sign.py` drive the REAL SigningRequestModal +
+passkey (fixed-key, via the parallel space) + result-file return path, so they run
+unattended and validate the actual §12.5 fund-safety invariants — no fake-sign stub.
+Requires a build carrying the CURRENT extension bundle + `sign.tsx` (rebuild after
+any change to `packages/safari-extension/src/*` or `src/app/sign.tsx`).

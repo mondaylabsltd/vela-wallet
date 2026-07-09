@@ -77,5 +77,16 @@
       "contentMissing": "Content wasn’t recorded for this request.",
       "offChainNote": "Off-chain signature — nothing was sent on-chain."
     }
+  },
+  "signHandoff": {
+    "signing": "Confirm in Vela",
+    "signed": "Signed",
+    "rejected": "Cancelled",
+    "pending": "Check this in Vela Activity",
+    "expired": "This signing request expired",
+    "returnHint": "Return to Safari — this page won't refresh",
+    "oneTapTitle": "One-tap signing enabled",
+    "oneTapHint": "Signing in Safari will now open Vela directly. Tap ‹ Safari (top-left) to go back.",
+    "done": "Done"
   }
 }

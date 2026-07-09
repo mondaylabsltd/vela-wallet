@@ -77,5 +77,16 @@
       "contentMissing": "此請求的內容未被記錄。",
       "offChainNote": "鏈下簽署 — 未向鏈上發送任何內容。"
     }
+  },
+  "signHandoff": {
+    "signing": "喺 Vela 度確認",
+    "signed": "已傳送",
+    "rejected": "已取消",
+    "pending": "請喺 Vela 活動度查看",
+    "expired": "呢個簽署請求已經過期",
+    "returnHint": "返去 Safari 查看，版面唔會重新整理",
+    "oneTapTitle": "一撳簽署已啟用",
+    "oneTapHint": "之後喺 Safari 簽署會直接開 Vela。撳左上角「‹ Safari」就返到去。",
+    "done": "完成"
   }
 }

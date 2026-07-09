@@ -204,6 +204,48 @@ test('sign reject: app returns rejected → dApp gets 4001 (only on a real rejec
   expect(r.code).toBe(4001); // 4001 ONLY because native said rejected
 });
 
+test('sign-req carries the granted address (§12.1.6 — app signs from the connected account)', async ({ page }) => {
+  await page.click('#btn-connect');
+  await page.waitForFunction(() => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('cta'));
+  await page.evaluate(() => (document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('cta').click());
+  await expect(page.locator('#result')).toContainText('eth_requestAccounts');
+
+  await page.click('#btn-sign');
+  await page.waitForFunction(() => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('cta'));
+  await page.evaluate(() => (document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('cta').click());
+  await page.waitForFunction(() => (window as any).__native.writes.length > 0);
+  const req = await page.evaluate(() => { const w = (window as any).__native.writes; return w[w.length - 1].request; });
+  expect((req.address || '').toLowerCase()).toBe(ADDR.toLowerCase()); // the granted account rides the sign-req
+});
+
+test('dead-poll floor: no result on return → sheet shows recoverable "check Vela", ring never hangs, no false 4001', async ({ page }) => {
+  await page.click('#btn-connect');
+  await page.waitForFunction(() => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('cta'));
+  await page.evaluate(() => (document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('cta').click());
+  await expect(page.locator('#result')).toContainText('eth_requestAccounts');
+
+  await page.click('#btn-sign');
+  await page.waitForFunction(() => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('cta'));
+  await page.evaluate(() => (document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('cta').click());
+  await page.waitForFunction(() => (window as any).__native.writes.length > 0);
+
+  // The app NEVER writes a result (evicted worker / lost hand-off). Return focus and
+  // let the bounded poll cycle run — the sheet must swap the ring for a recoverable
+  // "check Vela" affordance (dataset.state='checking'), NOT hang the ring, NOT 4001.
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await page.waitForFunction(
+    () => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('sheet')?.dataset.state === 'checking',
+    undefined,
+    { timeout: 15_000 },
+  );
+  // A "return to Vela" re-open affordance exists (never a dead end), and NO result
+  // reached the dApp — the promise is still pending (no false decline).
+  const hasReopen = await page.evaluate(() => !!(document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('reopen'));
+  expect(hasReopen).toBe(true);
+  const settled = await page.evaluate(() => (window as any).__velaTestResult && (window as any).__velaTestResult.method === 'personal_sign');
+  expect(settled).toBeFalsy(); // still pending — never resolved, never a 4001
+});
+
 test('eth_signTransaction is refused by the real router (never proxied to RPC)', async ({ page }) => {
   const r = await page.evaluate(
     (addr) =>

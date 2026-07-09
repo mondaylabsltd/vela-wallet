@@ -1,5 +1,25 @@
 # Known bugs
 
+## BUG-7 (✅ FIXED 2026-07-09, fund-path) — an extension sign could be double-submitted on a re-launch
+
+**Symptom / risk:** the App-Group sign mailbox had no lifecycle — `sign-req-<rid>.json`
+was never consumed, had no TTL, and the app never checked whether a result already
+existed for the rid. So a **cold relaunch of the same rid** (the app killed right after
+submitting, or the user tapping "返回 Vela" while the result was still in transit)
+re-read the still-present sign-req and re-rendered `SigningRequestModal` → a second
+approve could submit the **same transaction twice**. Violated the §12.5 GO/NO-GO gate
+(d) "no double-submission across the concurrent/reload matrix".
+
+**Fix (`src/services/extension-bridge-transport.ts`):** `connect()` now reads
+`sign-result-<rid>.json` FIRST; if a result already exists the sign is done — it
+**replays the prior outcome and never re-emits the request** (no second modal, no
+re-sign; `alreadySettled` drives `sign.tsx` straight to the settled state). Added a
+5-minute request-payload TTL (§12.1.4) so a stale/leaked rid is refused, never signed.
+Covered by 6 unit tests (`src/__tests__/extension-bridge-transport.test.ts`). Related
+hardening the same day: funding retry is now request-id-bound (can't replay old params
+under a new id), and the extension sign reconciles to the origin's GRANTED account
+before signing (§12.1.6 — never silently sign from the wrong account).
+
 ## BUG-1 (✅ FIXED 2026-07-06, fund-path) — a send that needs gas-account funding silently did nothing
 
 **Discovered:** 2026-07-06, while device-testing `eth_sendTransaction` from the Safari

@@ -77,5 +77,16 @@
       "contentMissing": "此请求的内容未被记录。",
       "offChainNote": "链下签名 — 未向链上发送任何内容。"
     }
+  },
+  "signHandoff": {
+    "signing": "在 Vela 中确认",
+    "signed": "已发送",
+    "rejected": "已取消",
+    "pending": "请在 Vela 活动中查看",
+    "expired": "此签名请求已过期",
+    "returnHint": "返回 Safari 查看，页面不会刷新",
+    "oneTapTitle": "一键签名已启用",
+    "oneTapHint": "以后在 Safari 里签名会直接打开 Vela。点左上角「‹ Safari」返回即可。",
+    "done": "完成"
   }
 }

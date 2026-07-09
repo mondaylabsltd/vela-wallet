@@ -77,5 +77,16 @@
       "contentMissing": "O conteúdo desta solicitação não foi registrado.",
       "offChainNote": "Assinatura off-chain — nada foi enviado on-chain."
     }
+  },
+  "signHandoff": {
+    "signing": "Confirmar no Vela",
+    "signed": "Enviado",
+    "rejected": "Cancelado",
+    "pending": "Confira na Atividade do Vela",
+    "expired": "Esta solicitação de assinatura expirou",
+    "returnHint": "Volte ao Safari — esta página não será recarregada",
+    "oneTapTitle": "Assinatura com um toque ativada",
+    "oneTapHint": "Assinar no Safari agora abrirá o Vela diretamente. Toque em ‹ Safari (canto superior esquerdo) para voltar.",
+    "done": "Concluído"
   }
 }

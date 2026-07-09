@@ -55,3 +55,22 @@ export function requestDApp(
 ): DAppInfo | null {
   return (req && req.__dapp) || globalDApp;
 }
+
+/**
+ * §12.1.6 — the account index to sign an extension request from: the one matching the
+ * origin's GRANTED address, so the app never silently signs from whatever account the
+ * user happens to have active. Falls back to the current active index when there is no
+ * granted address, or the granted account isn't owned (the sheet then shows the real
+ * signer — VISIBLE, never silent; the extension background drops grants for removed
+ * accounts, so an unowned grant at sign time is rare). Pure + case-insensitive.
+ */
+export function signAccountIndex(
+  accounts: { address: string }[],
+  activeIndex: number,
+  grantedAddress: string | undefined | null,
+): number {
+  if (!grantedAddress) return activeIndex;
+  const want = grantedAddress.toLowerCase();
+  const idx = accounts.findIndex((a) => (a.address || '').toLowerCase() === want);
+  return idx >= 0 ? idx : activeIndex;
+}

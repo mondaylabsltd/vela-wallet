@@ -7,6 +7,7 @@ const {
 } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -439,6 +440,54 @@ function withAndroidDependencies(config) {
 }
 
 // ---------------------------------------------------------------------------
+// iOS – Build the Safari Web Extension web bundle into targets/safari/assets/
+// ---------------------------------------------------------------------------
+//
+// packages/safari-extension/ is an esbuild bundle whose output (targets/safari/
+// assets/: content.js/inpage.js/background.js/popup.js + manifest.json/popup.html)
+// is .gitignored and read by @bacons/apple-targets as the extension's synchronized
+// Resources folder at Xcode build time. Nothing else ran that build, so a clean
+// checkout / EAS cloud prebuild produced an appex with NO manifest or JS — a
+// silently-broken extension. Run it here, inside prebuild, so both `expo run:ios`
+// and EAS always package a real bundle. Prebuild runs before xcodebuild, and the
+// folder is synchronized (read at build time), so the assets are guaranteed present.
+function withSafariExtensionBuild(config) {
+  return withDangerousMod(config, [
+    'ios',
+    (mod) => {
+      const projectRoot = mod.modRequest.projectRoot;
+      const targetDir = path.join(projectRoot, 'targets', 'safari');
+      // If the Safari target isn't scaffolded (feature not set up in this checkout),
+      // there is no extension to build — skip quietly.
+      if (!fs.existsSync(targetDir)) return mod;
+      try {
+        execSync('node packages/safari-extension/build.mjs', {
+          cwd: projectRoot,
+          stdio: 'inherit',
+        });
+      } catch (e) {
+        // The extension IS expected here (targetDir exists) — a failed build must
+        // NOT silently ship an empty appex. Fail prebuild loudly so it's fixed.
+        throw new Error(
+          '[with-native-modules] Safari extension bundle build FAILED — refusing to ' +
+            'prebuild an empty extension. Run `node packages/safari-extension/build.mjs` ' +
+            'to see the error.\n' + (e && e.message ? e.message : String(e)),
+        );
+      }
+      // Sanity: the manifest must exist after a successful build.
+      const manifest = path.join(targetDir, 'assets', 'manifest.json');
+      if (!fs.existsSync(manifest)) {
+        throw new Error(
+          '[with-native-modules] Safari extension build ran but ' + manifest +
+            ' is missing — the appex would ship without a manifest.',
+        );
+      }
+      return mod;
+    },
+  ]);
+}
+
+// ---------------------------------------------------------------------------
 // Main plugin – composes all sub-plugins
 // ---------------------------------------------------------------------------
 
@@ -476,6 +525,7 @@ function withNativeModules(config) {
   // iOS
   config = withIOSInfoPlist(config);
   config = withIOSEntitlements(config);
+  config = withSafariExtensionBuild(config);
   config = withIOSSourceFiles(config);
   config = withXcodeProjectFiles(config);
   config = withMetroHostInjection(config);

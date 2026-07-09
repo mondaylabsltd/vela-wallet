@@ -193,14 +193,17 @@ import { t as tr, pickLocale } from './lib/i18n.js';
         .primary { background: var(--vela-accent); color: #fff; }
         .primary:active { filter: brightness(.94); }
         .ghost { background: var(--vela-bg-sunken); color: var(--vela-fg-base); }
+        /* §12.3: a BREATHING ring, never a spinner — nothing happens on THIS page
+           (the sign is in the app), so a rotating spinner would lie about progress.
+           A solid accent ring that pulses opacity+scale reads as "waiting", honest. */
         .ring { width: 42px; height: 42px; margin: 14px auto 16px; border-radius: 50%;
-          border: 3px solid var(--vela-accent-soft); border-top-color: var(--vela-accent);
-          animation: spin .9s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+          border: 3px solid var(--vela-accent);
+          animation: vela-breathe 1.6s ease-in-out infinite; }
+        @keyframes vela-breathe { 0%,100% { opacity: .3; transform: scale(.9); } 50% { opacity: 1; transform: scale(1.04); } }
         @keyframes vela-fade { to { opacity: 1; } }
         @keyframes vela-rise { to { transform: translateY(0); } }
         @media (prefers-reduced-motion: reduce) {
-          .backdrop, .sheet { animation-duration: .01ms; }
+          .backdrop, .sheet, .ring { animation-duration: .01ms; animation-iteration-count: 1; }
         }
         .center { text-align: center; }
         .big { font-size: 30px; text-align: center; margin: 10px 0 4px;
@@ -342,18 +345,45 @@ import { t as tr, pickLocale } from './lib/i18n.js';
       </div>`;
     // Post-launch: dismiss only — NEVER resolve 4001 (the app may have submitted).
     root.getElementById('closereq').onclick = () => dismissWaiting();
-    root.getElementById('reopen').onclick = (e) => {
-      e.preventDefault();
-      const rid = activeSignRid;
-      if (!rid) return;
-      const entry = signMap.get(rid) || {};
-      // Mirror onSignLaunch: stamp UL_PENDING before a UL nav so this path also
-      // self-heals if the association broke since the first launch.
-      if (entry.ulVerified && hasStorage) {
-        try { browser.storage.local.set({ [UL_PENDING_KEY]: { ts: Date.now(), origin: ORIGIN } }); } catch (_) { /* best-effort */ }
-      }
-      window.location.href = signLaunchUrl(rid, entry.ulVerified);
-    };
+    root.getElementById('reopen').onclick = (e) => { e.preventDefault(); reopenActiveSign(); };
+  }
+
+  // §12.3 dead-worker floor: after ~one poll cycle (~6s) returns nothing, the
+  // waiting sheet must STOP implying progress — swap the breathing ring for a
+  // recoverable "check Vela Activity" affordance. The rid stays pending (re-polls
+  // on the next focus and can still settle submitted/rejected), so this is NOT a
+  // terminal state and NEVER resolves 4001 — the ring just never hangs (gate c).
+  function showSignChecking() {
+    if (!sheetHost) return; // user dismissed → don't reopen the sheet
+    const root = sheetHost.__root;
+    const sheet = root.getElementById('sheet');
+    if (!sheet || sheet.dataset.state === 'checking') return; // already shown — no re-render churn
+    sheet.dataset.state = 'checking';
+    sheet.innerHTML = `
+      <div class="big wrap" style="color:var(--vela-warning);background:var(--vela-accent-soft)">!</div>
+      <div class="center" style="font-weight:600;font-size:17px">${esc(L('sign.notConfirmed'))}</div>
+      <p class="sub center">${esc(L('sign.notConfirmedSub'))}</p>
+      <div class="actions">
+        <button class="btn ghost" id="closereq">${esc(L('sign.closeContinue'))}</button>
+        <a class="btn primary" id="reopen" href="#">${esc(L('sign.backToVela'))}</a>
+      </div>`;
+    root.getElementById('closereq').onclick = () => dismissWaiting();
+    root.getElementById('reopen').onclick = (e) => { e.preventDefault(); reopenActiveSign(); };
+  }
+
+  // Re-fire the app launch for the active rid (State C "返回 Vela" / the check floor).
+  // Consumed only on RESULT read, so a re-open is safe (sign.tsx de-dupes + the
+  // transport replays an existing result rather than re-signing).
+  function reopenActiveSign() {
+    const rid = activeSignRid;
+    if (!rid) return;
+    const entry = signMap.get(rid) || {};
+    // Mirror onSignLaunch: stamp UL_PENDING before a UL nav so this path self-heals
+    // if the association broke since the first launch.
+    if (entry.ulVerified && hasStorage) {
+      try { browser.storage.local.set({ [UL_PENDING_KEY]: { ts: Date.now(), origin: ORIGIN } }); } catch (_) { /* best-effort */ }
+    }
+    window.location.href = signLaunchUrl(rid, entry.ulVerified);
   }
 
   function showSignResolved(kind, info) {
@@ -523,7 +553,11 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     }
     const attestedAt = (c && c.ulVerifiedAt) || 0;
     const useUL = !!(c && c.ulVerified) && (brokenAt === 0 || attestedAt > brokenAt);
-    signMap.set(rid, { rpcId, method, params, chainId: c.chainId, ulVerified: useUL });
+    // Carry the origin's GRANTED address so the app can sign from the account the
+    // dApp is actually connected to — not whatever account happens to be active
+    // (§12.1.6: never silently sign from the wrong account).
+    const grantedAddress = (c.result && c.result[0]) || null;
+    signMap.set(rid, { rpcId, method, params, chainId: c.chainId, address: grantedAddress, ulVerified: useUL });
     activeSignRid = rid;
 
     // Durable mirror BEFORE any launch (survives reload/tab-discard). set() does
@@ -547,7 +581,7 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     if (!entry) return;
     // chainId is ADDITIVE + optional on the frozen sign-req contract (Swift writes
     // the dict verbatim; old readers ignore it). It carries the origin's granted chain.
-    const request = { rid, method: entry.method, params: entry.params, origin: ORIGIN, ts: Date.now(), chainId: entry.chainId };
+    const request = { rid, method: entry.method, params: entry.params, origin: ORIGIN, ts: Date.now(), chainId: entry.chainId, address: entry.address };
     try {
       browser.runtime.sendMessage({ type: 'writeSignRequest', rid, request }).catch(() => {});
     } catch (_) { /* worker evicted mid-flight; launch still proceeds */ }
@@ -696,6 +730,10 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     } else {
       await setMirror(rid, { state: 'CHECK_VELA' });
       mirrorStatus('check-vela', rid);
+      // ~6s floor (one poll cycle elapsed with no result): the VISIBLE sheet swaps
+      // the breathing ring for a recoverable "check Vela" affordance so the ring
+      // never hangs. Stays pending — re-polls on the next focus (gate c).
+      if (activeSignRid === rid) showSignChecking();
     }
   }
 

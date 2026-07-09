@@ -77,5 +77,16 @@
       "contentMissing": "Bu istek için içerik kaydedilmedi.",
       "offChainNote": "Zincir dışı imza — zincire hiçbir şey gönderilmedi."
     }
+  },
+  "signHandoff": {
+    "signing": "Vela'da onayla",
+    "signed": "Gönderildi",
+    "rejected": "İptal edildi",
+    "pending": "Vela Etkinliği'nde kontrol et",
+    "expired": "Bu imza isteğinin süresi doldu",
+    "returnHint": "Safari'ye dönün — bu sayfa yenilenmeyecek",
+    "oneTapTitle": "Tek dokunuşla imzalama etkin",
+    "oneTapHint": "Artık Safari'de imzalamak Vela'yı doğrudan açacak. Dönmek için sol üstteki ‹ Safari'ye dokunun.",
+    "done": "Bitti"
   }
 }

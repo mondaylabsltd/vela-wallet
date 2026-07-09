@@ -77,5 +77,16 @@
       "contentMissing": "Le contenu de cette demande n'a pas été enregistré.",
       "offChainNote": "Signature hors chaîne — rien n'a été envoyé on-chain."
     }
+  },
+  "signHandoff": {
+    "signing": "Confirmer dans Vela",
+    "signed": "Envoyé",
+    "rejected": "Annulé",
+    "pending": "À vérifier dans l'activité Vela",
+    "expired": "Cette demande de signature a expiré",
+    "returnHint": "Revenez à Safari — cette page ne sera pas rechargée",
+    "oneTapTitle": "Signature en un geste activée",
+    "oneTapHint": "Signer dans Safari ouvrira désormais Vela directement. Touchez ‹ Safari en haut à gauche pour revenir.",
+    "done": "Terminé"
   }
 }
