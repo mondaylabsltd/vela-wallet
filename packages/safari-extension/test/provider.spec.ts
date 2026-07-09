@@ -94,7 +94,7 @@ test('EIP-6963 announces Vela; provider === window.ethereum, isVela, rdns', asyn
           resolve({
             rdns: e.detail.info.rdns,
             name: e.detail.info.name,
-            hasIcon: /^data:image\/svg/.test(e.detail.info.icon),
+            hasIcon: /^data:image\/(png|svg\+xml|jpeg);/.test(e.detail.info.icon) && e.detail.info.icon.length > 500,
             uuidLen: String(e.detail.info.uuid).length,
             same: e.detail.provider === (window as any).ethereum,
             isVela: !!e.detail.provider.isVela,
