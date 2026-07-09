@@ -88,5 +88,22 @@
     "oneTapTitle": "Firma con un tocco attivata",
     "oneTapHint": "Firmare in Safari ora aprirà Vela direttamente. Tocca ‹ Safari in alto a sinistra per tornare.",
     "done": "Fatto"
+  },
+  "safariExt": {
+    "navTitle": "Estensione Safari",
+    "heroTitle": "Usa Vela in Safari",
+    "heroBody": "Su Safari per iPhone, quasi ogni dApp può connettersi direttamente a Vela. Connessione e lettura avvengono in Safari — solo la firma passa a Vela per una conferma con Face ID. Nessun cambio di app, nessuna seed phrase.",
+    "stepsLabel": "Attivala una volta",
+    "step1": "Apri il sito di una dApp in Safari.",
+    "step2": "Tocca «Aa» nella barra degli indirizzi → Gestisci estensioni e attiva Vela Wallet.",
+    "step3": "Tocca «Aa» → Vela Wallet → Consenti (basta consentire una volta per sito).",
+    "step4": "Nell’elenco «Connetti wallet» del sito, scegli Vela Wallet.",
+    "oneTapTitle": "Firma con un tocco",
+    "oneTapBody": "Quando firmi, Vela si apre per una rapida conferma con Face ID e poi torna alla pagina. Attiva il tocco singolo (da «Prova la firma con un tocco» nel popup dell’estensione) e sparisce anche la richiesta «Aprire in Vela?».",
+    "cta": "Apri getvela.app in Safari",
+    "ctaHint": "Apre Safari, dove trovi il menu «Aa» e l’interruttore Vela.",
+    "sectionLabel": "Browser",
+    "settingsTitle": "Usa Vela in Safari",
+    "settingsSubtitle": "Connettiti a qualsiasi dApp nel browser"
   }
 }

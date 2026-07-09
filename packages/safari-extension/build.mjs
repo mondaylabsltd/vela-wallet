@@ -40,7 +40,7 @@ await build({
 });
 
 // Static assets: copy verbatim.
-for (const f of ['manifest.json', 'popup.html']) {
+for (const f of ['manifest.json', 'popup.html', 'vela-icon.png']) {
   copyFileSync(resolve(SRC, f), resolve(OUT, f));
 }
 

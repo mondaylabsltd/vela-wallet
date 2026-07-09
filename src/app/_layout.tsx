@@ -113,6 +113,7 @@ function AppShell() {
               <Stack.Screen name="add-token" options={{ presentation: 'modal' }} />
               <Stack.Screen name="history" options={{ presentation: 'modal' }} />
               <Stack.Screen name="about" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="safari-extension" options={{ presentation: 'modal' }} />
               {/* sign.tsx is a TRAMPOLINE, not a screen: it hands the rid to the root
                   <ExtensionSignController> and immediately returns to the wallet, so the
                   whole sign flow (SigningRequestModal sheet + result confirmation) renders

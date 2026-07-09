@@ -88,5 +88,22 @@
     "oneTapTitle": "Tek dokunuşla imzalama etkin",
     "oneTapHint": "Artık Safari'de imzalamak Vela'yı doğrudan açacak. Dönmek için sol üstteki ‹ Safari'ye dokunun.",
     "done": "Bitti"
+  },
+  "safariExt": {
+    "navTitle": "Safari Uzantısı",
+    "heroTitle": "Vela’yı Safari’de kullan",
+    "heroBody": "iPhone Safari’de neredeyse her dApp doğrudan Vela’ya bağlanabilir. Bağlanma ve okuma Safari içinde olur — yalnızca imzalama, Face ID onayı için Vela’ya geçer. Cüzdan uygulaması değiştirmek yok, kurtarma ifadesi yok.",
+    "stepsLabel": "Bir kez etkinleştirin",
+    "step1": "Safari’de bir dApp sitesi açın.",
+    "step2": "Adres çubuğundaki “Aa” → Uzantıları Yönet’e dokunun ve Vela Wallet’ı açın.",
+    "step3": "“Aa” → Vela Wallet → İzin Ver’e dokunun (site başına bir kez izin vermek yeterli).",
+    "step4": "Sitenin “Cüzdan Bağla” listesinde Vela Wallet’ı seçin.",
+    "oneTapTitle": "Tek dokunuşla imza",
+    "oneTapBody": "İmzalarken Vela açılır, Face ID ile hızlıca onaylar ve sayfaya geri döner. Tek dokunuşu (uzantı açılır penceresindeki “Tek dokunuşla imzayı test et”) açarsanız, “Vela’da açılsın mı?” sorusu bile kaybolur.",
+    "cta": "getvela.app’i Safari’de aç",
+    "ctaHint": "Safari açılır; “Aa” menüsü ve Vela anahtarı oradadır.",
+    "sectionLabel": "Tarayıcı",
+    "settingsTitle": "Vela’yı Safari’de kullan",
+    "settingsSubtitle": "Tarayıcıda her dApp’e bağlan"
   }
 }

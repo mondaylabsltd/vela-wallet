@@ -88,5 +88,22 @@
     "oneTapTitle": "One-tap signing enabled",
     "oneTapHint": "Signing in Safari will now open Vela directly. Tap ‹ Safari (top-left) to go back.",
     "done": "Done"
+  },
+  "safariExt": {
+    "navTitle": "Safari Extension",
+    "heroTitle": "Use Vela in Safari",
+    "heroBody": "On iPhone Safari, almost any dApp can connect to Vela directly. Connecting and reading happen right in Safari — only signing hops to Vela for a Face ID confirmation. No wallet-app switching, no seed phrase.",
+    "stepsLabel": "Enable it once",
+    "step1": "Open a dApp website in Safari.",
+    "step2": "Tap “Aa” in the address bar → Manage Extensions, and turn on Vela Wallet.",
+    "step3": "Tap “Aa” → Vela Wallet → Allow (allowing once on a site is enough).",
+    "step4": "On the site’s Connect Wallet list, choose Vela Wallet.",
+    "oneTapTitle": "One-tap signing",
+    "oneTapBody": "When you sign, Vela opens for a quick Face ID confirmation, then returns to the page. Enable one-tap (via “Test one-tap signing” in the extension popup) and even the “Open in Vela?” prompt disappears.",
+    "cta": "Open getvela.app in Safari",
+    "ctaHint": "Opens Safari, where the “Aa” menu and the Vela toggle live.",
+    "sectionLabel": "Browser",
+    "settingsTitle": "Use Vela in Safari",
+    "settingsSubtitle": "Connect to any dApp in the browser"
   }
 }

@@ -88,5 +88,22 @@
     "oneTapTitle": "Tanda tangan satu ketuk aktif",
     "oneTapHint": "Menandatangani di Safari kini langsung membuka Vela. Ketuk ‹ Safari di kiri atas untuk kembali.",
     "done": "Selesai"
+  },
+  "safariExt": {
+    "navTitle": "Ekstensi Safari",
+    "heroTitle": "Gunakan Vela di Safari",
+    "heroBody": "Di Safari iPhone, hampir semua dApp bisa terhubung langsung ke Vela. Menghubungkan dan membaca terjadi di dalam Safari — hanya penandatanganan yang beralih ke Vela untuk konfirmasi Face ID. Tanpa berganti aplikasi dompet, tanpa seed phrase.",
+    "stepsLabel": "Aktifkan sekali saja",
+    "step1": "Buka situs dApp di Safari.",
+    "step2": "Ketuk “Aa” di bilah alamat → Kelola Ekstensi, lalu aktifkan Vela Wallet.",
+    "step3": "Ketuk “Aa” → Vela Wallet → Izinkan (cukup izinkan sekali per situs).",
+    "step4": "Di daftar “Hubungkan Dompet” situs, pilih Vela Wallet.",
+    "oneTapTitle": "Tanda tangan satu ketuk",
+    "oneTapBody": "Saat menandatangani, Vela terbuka untuk konfirmasi Face ID cepat, lalu kembali ke halaman. Aktifkan satu ketuk (lewat “Uji tanda tangan satu ketuk” di popup ekstensi) dan bahkan prompt “Buka di Vela?” pun hilang.",
+    "cta": "Buka getvela.app di Safari",
+    "ctaHint": "Membuka Safari, tempat menu “Aa” dan sakelar Vela berada.",
+    "sectionLabel": "Browser",
+    "settingsTitle": "Gunakan Vela di Safari",
+    "settingsSubtitle": "Terhubung ke dApp mana pun di browser"
   }
 }

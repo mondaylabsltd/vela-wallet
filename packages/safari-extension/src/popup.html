@@ -34,11 +34,10 @@
     margin: 0; padding: 16px; width: 306px; background: var(--bg-base);
     -webkit-font-smoothing: antialiased;
   }
-  header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-  .logo { width: 24px; height: 24px; border-radius: 7px; background: var(--accent-soft);
-    display: grid; place-items: center; }
-  .logo svg { display: block; }
-  .brand { font-weight: 700; font-size: 15px; letter-spacing: -.01em; }
+  header { display: flex; align-items: center; gap: 9px; margin-bottom: 16px; }
+  .logo { width: 28px; height: 28px; border-radius: 8px; display: block; object-fit: cover;
+    box-shadow: 0 0 0 1px var(--border) inset; }
+  .brand { font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
 
   .card { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 14px;
     padding: 13px; margin-bottom: 12px; }
@@ -86,10 +85,7 @@
 </style>
 <body>
   <header>
-    <span class="logo">
-      <svg width="15" height="15" viewBox="0 0 96 96"><path d="M30 30 L48 66 L66 30" fill="none"
-        stroke="#E8572A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </span>
+    <img class="logo" src="vela-icon.png" width="28" height="28" alt="" />
     <span class="brand">Vela Wallet</span>
   </header>
 
