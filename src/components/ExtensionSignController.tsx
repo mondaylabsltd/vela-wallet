@@ -32,6 +32,7 @@ import { color, space, text, inter } from '@/constants/theme';
 import { signAccountIndex } from '@/models/dapp-request-routing';
 import { onExtensionSign } from '@/services/extension-sign-bus';
 import { ExtensionBridgeTransport } from '@/services/extension-bridge-transport';
+import { hapticSuccess, hapticWarning, hapticSelection } from '@/services/platform';
 
 type Phase = 'idle' | 'connecting' | 'signing' | 'done' | 'missing' | 'selftest';
 type Outcome = 'submitted' | 'rejected' | 'unknown';
@@ -134,6 +135,23 @@ export function ExtensionSignController(): React.ReactElement {
 
   const close = () => { setPhase('idle'); setRid(null); startedRef.current = null; };
 
+  // Settle feedback: a haptic matched to the outcome (success = the make-or-break
+  // moment) + a gentle auto-dismiss on success so a lingering sheet never goes stale
+  // (the user is on their way back to Safari). Reject/timeout/expired stay until
+  // tapped — the user may need to read them.
+  useEffect(() => {
+    if (phase === 'selftest') { hapticSuccess(); return; }
+    if (phase === 'missing') { hapticWarning(); return; }
+    if (phase !== 'done') return;
+    if (outcome === 'submitted') {
+      hapticSuccess();
+      const id = setTimeout(() => { setPhase('idle'); setRid(null); startedRef.current = null; }, 2600);
+      return () => clearTimeout(id);
+    }
+    if (outcome === 'rejected') hapticSelection();
+    else hapticWarning(); // unknown / check-Vela
+  }, [phase, outcome]);
+
   // Offscreen machine-readable line for the harness — always present, never seen.
   const harnessLine = (
     <Text
@@ -156,14 +174,18 @@ export function ExtensionSignController(): React.ReactElement {
   // (§12.3): success = submitted, neutral = user-chosen reject, amber = ambiguous.
   let glyph = '', glyphColor: string = color.fg.subtle, glyphBg: string = color.bg.sunken;
   let title = '', hint = '';
+  // `positive` = a clean, good outcome (submitted / one-tap enabled) → accent CTA.
+  // Neutral/ambiguous outcomes (reject / expired / check-Vela) get a muted CTA so
+  // the color never overstates the result (§12.3 grammar; red reserved for money-loss).
+  let positive = false;
   if (phase === 'selftest') {
-    glyph = '✓'; glyphColor = color.success.base; glyphBg = color.success.soft;
+    glyph = '✓'; glyphColor = color.success.base; glyphBg = color.success.soft; positive = true;
     title = t('signHandoff.oneTapTitle'); hint = t('signHandoff.oneTapHint');
   } else if (phase === 'missing') {
     glyph = '!'; glyphColor = color.fg.subtle; glyphBg = color.bg.sunken;
     title = t('signHandoff.expired'); hint = t('signHandoff.returnHint');
   } else if (outcome === 'submitted') {
-    glyph = '✓'; glyphColor = color.success.base; glyphBg = color.success.soft;
+    glyph = '✓'; glyphColor = color.success.base; glyphBg = color.success.soft; positive = true;
     title = t('signHandoff.signed'); hint = t('signHandoff.returnHint');
   } else if (outcome === 'rejected') {
     glyph = '✕'; glyphColor = color.fg.subtle; glyphBg = color.bg.sunken;
@@ -174,7 +196,7 @@ export function ExtensionSignController(): React.ReactElement {
   }
 
   return (
-    <View style={styles.hostOverlay}>
+    <View style={styles.hostOverlay} accessibilityViewIsModal accessibilityRole="alert">
       {harnessLine}
       {/* Tap the dimmed wallet behind to dismiss the confirmation. */}
       <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityLabel={t('signHandoff.done')} />
@@ -186,11 +208,11 @@ export function ExtensionSignController(): React.ReactElement {
         <Text style={styles.title}>{title}</Text>
         {!!hint && <Text style={styles.hint}>{hint}</Text>}
         <Pressable
-          style={({ pressed }) => [styles.doneBtn, pressed && styles.doneBtnPressed]}
+          style={({ pressed }) => [styles.doneBtn, positive ? styles.doneBtnAccent : styles.doneBtnNeutral, pressed && styles.doneBtnPressed]}
           onPress={close}
           accessibilityRole="button"
         >
-          <Text style={styles.doneLabel}>{t('signHandoff.done')}</Text>
+          <Text style={[styles.doneLabel, positive ? styles.doneLabelAccent : styles.doneLabelNeutral]}>{t('signHandoff.done')}</Text>
         </Pressable>
       </View>
     </View>
@@ -216,8 +238,12 @@ const styles = StyleSheet.create({
   glyph: { fontSize: 28, lineHeight: 34, ...inter.bold },
   title: { fontSize: text.xl, color: color.fg.base, textAlign: 'center', ...inter.bold },
   hint: { fontSize: text.base, color: color.fg.muted, textAlign: 'center', marginTop: space.md, lineHeight: 20, maxWidth: 300, ...inter.regular },
-  doneBtn: { alignSelf: 'stretch', marginTop: space['3xl'], paddingVertical: space.xl, borderRadius: 15, backgroundColor: color.accent.base, alignItems: 'center' },
+  doneBtn: { alignSelf: 'stretch', marginTop: space['3xl'], paddingVertical: space.xl, borderRadius: 15, alignItems: 'center' },
+  doneBtnAccent: { backgroundColor: color.accent.base },
+  doneBtnNeutral: { backgroundColor: color.bg.sunken },
   doneBtnPressed: { opacity: 0.92 },
-  doneLabel: { fontSize: text.lg, color: '#fff', ...inter.semibold },
+  doneLabel: { fontSize: text.lg, ...inter.semibold },
+  doneLabelAccent: { color: '#fff' },
+  doneLabelNeutral: { color: color.fg.base },
   offscreen: { position: 'absolute', left: -9999, top: -9999, width: 1, height: 1, opacity: 0 },
 });

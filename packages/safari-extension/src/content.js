@@ -113,6 +113,11 @@ import { t as tr, pickLocale } from './lib/i18n.js';
   // ---- 3a. sheet host (open shadow root, CSS-isolated) ----------------------
   let sheetHost = null;
   let busy = false; // one connect/sign sheet at a time
+  // Tap-outside-to-dismiss: each sheet state assigns what a backdrop tap does — the
+  // grab handle + scrim imply dismissability, so this makes it real. Pre-launch states
+  // (connect / sign intent) route to Cancel/reject (safe 4001); post-launch (waiting /
+  // checking) route to dismissWaiting (NEVER 4001 — the app may have submitted).
+  let sheetOnBackdrop = null;
   // The app's color-scheme preference ('auto'|'light'|'dark'), learned from the
   // connect/sign background round-trip (which reads the app-written cache). Applied
   // to the sheet so it matches the app EXACTLY — a forced-dark app shows a dark sheet
@@ -210,9 +215,15 @@ import { t as tr, pickLocale } from './lib/i18n.js';
           width: 52px; height: 52px; line-height: 52px; border-radius: 50%; }
         .big.wrap { margin: 10px auto 6px; }
       </style>
-      <div class="backdrop" id="backdrop"><div class="sheet"><div class="grab"></div><div id="sheet"></div></div></div>`;
+      <div class="backdrop" id="backdrop"><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div id="sheet"></div></div></div>`;
     sheetHost.__root = root;
     applyHostTheme();
+    // Backdrop tap (only the dimmed area outside the sheet) → the current state's
+    // dismiss action. e.target===bd excludes taps that bubbled up from the sheet.
+    const bd = root.getElementById('backdrop');
+    if (bd) bd.addEventListener('click', (e) => {
+      if (e.target === bd && typeof sheetOnBackdrop === 'function') sheetOnBackdrop();
+    });
     (document.body || document.documentElement).appendChild(sheetHost);
     return root;
   }
@@ -221,6 +232,7 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     if (sheetHost) sheetHost.remove();
     sheetHost = null;
     busy = false;
+    sheetOnBackdrop = null;
   }
 
   function esc(s) {
@@ -255,6 +267,8 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     const sheet = root.getElementById('sheet');
     const label = hostLabel(ORIGIN);
     const fav = favMarkup(label);
+    // Backdrop tap = Cancel (nothing granted yet — safe to reject the request).
+    sheetOnBackdrop = () => { closeSheet(); onCancel && onCancel(); };
 
     if (emptyState) {
       sheet.innerHTML = `
@@ -312,17 +326,19 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     const summary = signSummary(method, params);
     // Custom-scheme launch shows an "Open in Vela?" banner (R3: one extra tap);
     // a REAL tap on this anchor is the user gesture iOS needs (FACT-1).
+    // Human summary only — no raw RPC method row (jargon like 'eth_sendTransaction').
+    // The authoritative, fully-decoded detail is the native SigningRequestModal one tap
+    // away; this hand-off is a tight "confirm in Vela" preview.
     sheet.innerHTML = `
       <div class="brow"><div class="fav">${fav}</div><div class="host">${esc(label)}</div></div>
       <div class="title">${esc(L('sign.title'))}</div>
       <p class="sub">${esc(summary)}</p>
-      <div class="divider"></div>
-      <div class="row"><span class="muted">${esc(L('sign.method'))}</span><span class="mono">${esc(method)}</span></div>
       <div class="actions">
         <button class="btn ghost" id="cancel">${esc(L('common.cancel'))}</button>
         <button class="btn primary" id="cta">${esc(L('sign.confirmInVela'))}</button>
       </div>`;
     root.getElementById('cancel').onclick = () => onSignReject(rid); // pre-launch, safe 4001
+    sheetOnBackdrop = () => onSignReject(rid); // tap outside = cancel (pre-launch, safe)
     // A BUTTON + imperative location.href (the R1-proven launch), NOT an <a href>:
     // onSignLaunch swaps the sheet to the waiting state, which would detach an
     // anchor mid-click and cancel its default navigation. location.href fires
@@ -346,6 +362,7 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     // Post-launch: dismiss only — NEVER resolve 4001 (the app may have submitted).
     root.getElementById('closereq').onclick = () => dismissWaiting();
     root.getElementById('reopen').onclick = (e) => { e.preventDefault(); reopenActiveSign(); };
+    sheetOnBackdrop = () => dismissWaiting(); // tap outside = hide (post-launch, never 4001)
   }
 
   // §12.3 dead-worker floor: after ~one poll cycle (~6s) returns nothing, the
@@ -359,16 +376,20 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     const sheet = root.getElementById('sheet');
     if (!sheet || sheet.dataset.state === 'checking') return; // already shown — no re-render churn
     sheet.dataset.state = 'checking';
+    // In-progress framing (NOT the terminal "didn't hear back" copy): this state is
+    // still polling and fully recoverable, so it must read as "taking a moment / here's
+    // how to check", distinct from the 3-min timeout's terminal notConfirmed.
     sheet.innerHTML = `
       <div class="big wrap" style="color:var(--vela-warning);background:var(--vela-accent-soft)">!</div>
-      <div class="center" style="font-weight:600;font-size:17px">${esc(L('sign.notConfirmed'))}</div>
-      <p class="sub center">${esc(L('sign.notConfirmedSub'))}</p>
+      <div class="center" style="font-weight:600;font-size:17px">${esc(L('sign.completeInVela'))}</div>
+      <p class="sub center">${esc(L('sign.checkingSub'))}</p>
       <div class="actions">
         <button class="btn ghost" id="closereq">${esc(L('sign.closeContinue'))}</button>
         <a class="btn primary" id="reopen" href="#">${esc(L('sign.backToVela'))}</a>
       </div>`;
     root.getElementById('closereq').onclick = () => dismissWaiting();
     root.getElementById('reopen').onclick = (e) => { e.preventDefault(); reopenActiveSign(); };
+    sheetOnBackdrop = () => dismissWaiting(); // tap outside = hide (post-launch, never 4001)
   }
 
   // Re-fire the app launch for the active rid (State C "返回 Vela" / the check floor).
@@ -390,6 +411,7 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     if (!sheetHost) { closeSheet(); return; }
     const root = sheetHost.__root;
     const sheet = root.getElementById('sheet');
+    sheetOnBackdrop = () => closeSheet(); // tap outside = dismiss the resolved sheet
     if (kind === 'signed') {
       sheet.innerHTML = `<div class="big wrap ok" style="background:var(--vela-success-soft)">✓</div>
         <div class="center" style="font-weight:600;font-size:17px">${esc(L('sign.sent'))}</div>
