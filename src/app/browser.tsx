@@ -458,8 +458,9 @@ export default function BrowserScreen() {
         </Pressable>
       </View>
 
-      {/* Connect-consent sheet */}
-      <AppModal visible={!!consent} onClose={rejectConsent}>
+      {/* Connect-consent sheet — content-height: a full pageSheet towers over the
+          page for four rows of content (and on Android used to cover it entirely). */}
+      <AppModal visible={!!consent} onClose={rejectConsent} fit>
         <View style={styles.sheet}>
           <Text style={styles.sheetTitle}>
             {t('connect.browser.title', { host: consent ? hostOf(consent.origin) : '' })}
@@ -543,7 +544,7 @@ const styles = createStyles(() => ({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: color.border.base,
   },
-  sheet: { gap: space.md, paddingHorizontal: space.xl, paddingTop: space.sm },
+  sheet: { gap: space.md, paddingHorizontal: space.xl, paddingTop: space.sm, paddingBottom: space.lg },
   sheetTitle: { color: color.fg.base, fontSize: textScale.lg, fontWeight: '700' },
   sheetBody: { color: color.fg.muted, fontSize: textScale.sm, lineHeight: 20 },
   acctRow: {

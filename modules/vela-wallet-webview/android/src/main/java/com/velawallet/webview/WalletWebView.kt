@@ -17,6 +17,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.webkit.JsPromptResult
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -28,7 +29,8 @@ import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactContext
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
-import com.facebook.react.uimanager.events.RCTEventEmitter
+import com.facebook.react.uimanager.UIManagerHelper
+import com.facebook.react.uimanager.events.Event
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -44,10 +46,21 @@ class WalletWebView(context: Context) : WebView(context) {
     private var lastSeq = 0 // highest processed outbox seq (native <- RN deliveries)
 
     init {
+        // Debug builds only: expose this WebView to chrome://inspect so on-device
+        // page geometry / provider issues are diagnosable (the dApp browser is the
+        // least observable surface in the app). No-op in release.
+        if ((context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            setWebContentsDebuggingEnabled(true)
+        }
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
         settings.mediaPlaybackRequiresUserGesture = true
+        // In-app-browser viewport parity with react-native-webview's scalesPageToFit
+        // default: honor the page's <meta viewport>. (Not related to the vh/dvh=0 bug
+        // — that was a WRAP_CONTENT LayoutParams issue, fixed in onSizeChanged.)
+        settings.useWideViewPort = true
+        settings.loadWithOverviewMode = true
         // window.open / target=_blank: route the new-window request into THIS view
         // (single-tab), matching iOS createWebViewWith. Without this Android silently
         // no-ops window.open (returns null), breaking dApps that use it for OAuth /
@@ -111,6 +124,32 @@ class WalletWebView(context: Context) : WebView(context) {
 
         // window.open → load in this same view (single-tab browser).
         webChromeClient = object : android.webkit.WebChromeClient() {
+            // Fallback page→native channel: on devices without WEB_MESSAGE_LISTENER
+            // the shim calls window.prompt('velawvbridge:' + payload) — same channel
+            // iOS uses (WKUIDelegate). Without this override the payload dies in the
+            // un-handled prompt and every provider request silently hangs.
+            override fun onJsPrompt(
+                view: WebView?, url: String?, message: String?, defaultValue: String?, result: JsPromptResult?,
+            ): Boolean {
+                if (message != null && message.startsWith(BRIDGE_PROMPT_PREFIX)) {
+                    // SECURITY: stamp the origin from the INITIATING frame's url (a
+                    // framework value, not the payload). isMainFrame: the frame's
+                    // origin must match the top document's — a same-origin iframe is
+                    // the same principal; a cross-origin one stamps false and is
+                    // rejected downstream (4100), matching the iOS prompt path.
+                    val frameOrigin = originOf(url)
+                    val topOrigin = originOf(this@WalletWebView.url)
+                    onBridgePayload(
+                        message.removePrefix(BRIDGE_PROMPT_PREFIX),
+                        frameOrigin,
+                        frameOrigin.isNotEmpty() && frameOrigin == topOrigin,
+                    )
+                    result?.cancel() // dismiss without showing a dialog (prompt → null)
+                    return true
+                }
+                return super.onJsPrompt(view, url, message, defaultValue, result)
+            }
+
             override fun onCreateWindow(
                 view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?,
             ): Boolean {
@@ -142,6 +181,33 @@ class WalletWebView(context: Context) : WebView(context) {
         }
     }
 
+    // vh/dvh = 0 fix — a real on-device bug (verified via chrome://inspect against
+    // Uniswap / PancakeSwap / 1inch / Sushi): every viewport-height CSS unit resolved
+    // to 0 in this WebView, so any dApp bottom sheet positioned with dvh (a wallet
+    // drawer, a cookie banner) slid entirely below the viewport and the user saw only
+    // its dim scrim. ROOT CAUSE: RN gives this legacy view a default LayoutParams
+    // height of WRAP_CONTENT, and Android WebView (AwContents) reads a wrap_content
+    // height as "size to content" — which pins the viewport-percentage basis to 0
+    // regardless of the EXACTLY measure spec, the correct laid-out height, or
+    // window.innerHeight (all of which stay right). Pin the LayoutParams height to the
+    // real laid-out size so the vh basis tracks the visible viewport. RN keeps driving
+    // position via layout(); this only changes the height the WebView reports to
+    // Chromium.
+    override fun onSizeChanged(w: Int, h: Int, oldW: Int, oldH: Int) {
+        super.onSizeChanged(w, h, oldW, oldH)
+        if (w > 0 && h > 0) {
+            val lp = layoutParams
+            if (lp != null && lp.height != h) {
+                lp.height = h
+                layoutParams = lp
+            }
+            // First real size — run the initial load that loadIfReady held back until
+            // the view had a viewport, so Chromium fixes the vh basis at the visible
+            // height on the very first layout.
+            loadIfReady()
+        }
+    }
+
     // --- props (from the view manager) --------------------------------------
 
     fun setInjectedJavaScriptSource(source: String) {
@@ -165,6 +231,15 @@ class WalletWebView(context: Context) : WebView(context) {
     private fun loadIfReady() {
         val url = pendingUrl ?: return
         if (injectedSource == null) return // wait for the provider bundle prop
+        // vh/dvh fix (part 2 — the load-time half). Chromium fixes the basis for
+        // viewport-percentage units (vh/dvh/svh) when the main frame is FIRST laid
+        // out, and never revises it. Under Fabric interop this view has size 0 at the
+        // moment BrowserScreen mounts and sets the props, so loading now would freeze
+        // the vh basis at 0 for this WebView's whole life (a reload does NOT reset it
+        // — it's frame-level, not document-level). Wait for the first real size
+        // (onSizeChanged → loadIfReady) so the basis is established at the visible
+        // height and 100dvh resolves correctly.
+        if (width <= 0 || height <= 0) return
         pendingUrl = null
         loadUrl(url)
     }
@@ -229,6 +304,13 @@ class WalletWebView(context: Context) : WebView(context) {
 
     private fun onBridgeMessage(message: WebMessageCompat, sourceOrigin: String, isMainFrame: Boolean) {
         val raw = message.data ?: return
+        onBridgePayload(raw, sourceOrigin, isMainFrame)
+    }
+
+    /** One page→native `vela-1193` request envelope, from either channel
+     *  (WebMessageListener or the prompt fallback). `sourceOrigin`/`isMainFrame`
+     *  are TRUSTED, framework-derived values — never read from the payload. */
+    private fun onBridgePayload(raw: String, sourceOrigin: String, isMainFrame: Boolean) {
         val obj = try { JSONObject(raw) } catch (e: Exception) { return }
         if (obj.optString("dir") != "req") return // ignore the "ready" ping etc.
 
@@ -239,7 +321,7 @@ class WalletWebView(context: Context) : WebView(context) {
             putString("origin", sourceOrigin)       // TRUSTED — from the framework, not the page
             putBoolean("isMainFrame", isMainFrame)
         }
-        emitEvent("onProviderRequest", payload)
+        emitEvent(EVENT_PROVIDER_REQUEST, payload)
     }
 
     // `error` always reflects the LATCHED main-frame error: onReceivedError sets
@@ -256,7 +338,7 @@ class WalletWebView(context: Context) : WebView(context) {
             putString("error", lastError)
             putString("favicon", lastFavicon)
         }
-        emitEvent("onNavigationChange", payload)
+        emitEvent(EVENT_NAVIGATION_CHANGE, payload)
     }
 
     /** Resolve the page's declared favicon (absolute URL) and re-emit navigation. */
@@ -281,11 +363,52 @@ class WalletWebView(context: Context) : WebView(context) {
             "(function(){try{var s=['link[rel~=\"icon\"]','link[rel=\"shortcut icon\"]'," +
                 "'link[rel=\"apple-touch-icon\"]'];for(var i=0;i<s.length;i++){var l=document.querySelector(s[i]);" +
                 "if(l&&l.href)return l.href;}return location.origin+'/favicon.ico';}catch(e){return '';}})()"
+
+        private const val BRIDGE_PROMPT_PREFIX = "velawvbridge:"
+
+        // Native emit names must be "top"-prefixed under Fabric/interop event
+        // normalization (same convention react-native-webview relies on); the view
+        // manager maps them to the JS registration names onProviderRequest /
+        // onNavigationChange.
+        const val EVENT_PROVIDER_REQUEST = "topProviderRequest"
+        const val EVENT_NAVIGATION_CHANGE = "topNavigationChange"
+
+        /** `scheme://host[:port]` of a URL string; "" when unparsable. */
+        private fun originOf(url: String?): String {
+            if (url.isNullOrEmpty()) return ""
+            return try {
+                val u = Uri.parse(url)
+                val scheme = u.scheme ?: return ""
+                val host = u.host ?: return ""
+                val port = u.port
+                val isDefault = port == -1 ||
+                    (scheme == "https" && port == 443) || (scheme == "http" && port == 80)
+                if (isDefault) "$scheme://$host" else "$scheme://$host:$port"
+            } catch (_: Exception) {
+                ""
+            }
+        }
+    }
+
+    /** A direct event carrying a WritableMap payload (onProviderRequest /
+     *  onNavigationChange). Dispatched through UIManagerHelper — the supported
+     *  path under RN bridgeless; the legacy RCTEventEmitter.receiveEvent hop is
+     *  deprecated and slated to stop working when interop is disabled. */
+    private class WalletWebViewEvent(
+        surfaceId: Int,
+        viewId: Int,
+        private val name: String,
+        private val payload: WritableMap,
+    ) : Event<WalletWebViewEvent>(surfaceId, viewId) {
+        override fun getEventName(): String = name
+        override fun getEventData(): WritableMap = payload
     }
 
     private fun emitEvent(name: String, payload: WritableMap) {
         val reactContext = context as ReactContext
-        reactContext.getJSModule(RCTEventEmitter::class.java).receiveEvent(id, name, payload)
+        val surfaceId = UIManagerHelper.getSurfaceId(this)
+        UIManagerHelper.getEventDispatcherForReactTag(reactContext, id)
+            ?.dispatchEvent(WalletWebViewEvent(surfaceId, id, name, payload))
     }
 
     // --- JSON -> RN writable conversion -------------------------------------

@@ -31,10 +31,12 @@ class WalletWebViewManager : SimpleViewManager<WalletWebView>() {
         if (json != null) view.setOutboxSource(json)
     }
 
+    // Keys are the NATIVE emit names (top-prefixed, Fabric/interop convention —
+    // see WalletWebView.EVENT_*); registrationName is the JS-side prop.
     override fun getExportedCustomDirectEventTypeConstants(): Map<String, Any> =
         MapBuilder.of(
-            "onProviderRequest", MapBuilder.of("registrationName", "onProviderRequest"),
-            "onNavigationChange", MapBuilder.of("registrationName", "onNavigationChange"),
+            WalletWebView.EVENT_PROVIDER_REQUEST, MapBuilder.of("registrationName", "onProviderRequest"),
+            WalletWebView.EVENT_NAVIGATION_CHANGE, MapBuilder.of("registrationName", "onNavigationChange"),
         )
 
     override fun receiveCommand(view: WalletWebView, commandId: String, args: ReadableArray?) {
