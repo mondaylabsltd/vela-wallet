@@ -16,12 +16,16 @@ import {
 import { WalletProvider } from '@/models/wallet-state';
 import { DAppConnectionProvider } from '@/models/dapp-connection';
 import { SigningRequestModal } from '@/components/SigningRequestModal';
+import { AccountFileWriter } from '@/components/AccountFileWriter';
+import { ExtensionSignController } from '@/components/ExtensionSignController';
 import { AlertProvider } from '@/components/ui/AppAlert';
 import { IdenticonViewerProvider } from '@/components/ui/IdenticonViewerProvider';
 import { retryPendingUploads } from '@/services/public-key-upload';
 import { installFaultConsole } from '@/services/dev/fault-injection';
 import { installMetricsConsole } from '@/services/metrics';
 import { installParallelConsole, applyParallelSpaceOnBoot } from '@/services/dev/parallel-space';
+// Increment 2 Safari spike — App Group echo probe (DEV-only, no UI).
+import { runAppGroupEcho } from '@/services/dev/app-group-echo';
 import { ParallelSpaceBadge } from '@/components/dev/ParallelSpaceBadge';
 import { hasPendingUploads, loadLocalePrefs, loadRpcProviders, loadServiceEndpoints } from '@/services/storage';
 import { loadAvatarStyle } from '@/services/avatar-style';
@@ -39,6 +43,12 @@ import {
   ColorSchemeProvider,
   useColorSchemePreference,
 } from '@/constants/color-scheme';
+
+// The wallet tabs are the navigation anchor: a deep link into /sign (the Safari
+// extension sign hand-off) pushes ON TOP of the wallet, so the wallet is always
+// behind the transparent sign overlay and dismissing it returns there — never a
+// dead-end page — on both cold and warm launch.
+export const unstable_settings = { initialRouteName: '(tabs)' };
 
 // ---------------------------------------------------------------------------
 // Error boundary — catches unhandled errors to prevent white screen
@@ -103,10 +113,26 @@ function AppShell() {
               <Stack.Screen name="add-token" options={{ presentation: 'modal' }} />
               <Stack.Screen name="history" options={{ presentation: 'modal' }} />
               <Stack.Screen name="about" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="safari-extension" options={{ presentation: 'modal' }} />
+              {/* sign.tsx is a TRAMPOLINE, not a screen: it hands the rid to the root
+                  <ExtensionSignController> and immediately returns to the wallet, so the
+                  whole sign flow (SigningRequestModal sheet + result confirmation) renders
+                  as OVERLAYS over the HOME — never a standalone page. Plain route (NOT any
+                  'modal' presentation): a modal route here presents a competing VC that
+                  HIDES the SigningRequestModal — device-verified regression (4/4 → 2/4).
+                  initialRouteName '(tabs)' (above) anchors the wallet behind it. */}
+              <Stack.Screen name="sign" />
               {__DEV__ && <Stack.Screen name="parallel" />}
             </Stack>
             </IdenticonViewerProvider>
             <SigningRequestModal />
+            {/* Drives the Safari-extension sign hand-off as OVERLAYS over the wallet
+                home (the sign sheet + result confirmation) — /sign is a trampoline that
+                hands the rid here, so the user is never taken to a standalone page. */}
+            <ExtensionSignController />
+            {/* Keeps the Safari extension's account cache (vela.ext.account.json)
+                in sync so it can answer connect/read/state in-Safari, zero hop. */}
+            <AccountFileWriter />
             {/* Self-gating (renders null unless parallel mode is armed). Must NOT be
                 behind __DEV__: a production build can still enter the parallel space
                 via `dev_unlocked`, and the fixture wallet must never be mistakable
@@ -141,7 +167,7 @@ export default function RootLayout() {
   }, [fontError]);
 
   useEffect(() => {
-    if (__DEV__) { installFaultConsole(); installMetricsConsole(); installParallelConsole(); }
+    if (__DEV__) { installFaultConsole(); installMetricsConsole(); installParallelConsole(); void runAppGroupEcho(); }
     Promise.all([
       // Parallel space: re-arm the fixed-key signer before the wallet mounts so a
       // reload inside the test environment stays in it (and keeps the badge on).

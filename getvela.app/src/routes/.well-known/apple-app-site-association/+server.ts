@@ -5,6 +5,7 @@ export const GET: RequestHandler = async () => {
 	return json({
 		webcredentials: {
 			apps: ['F9W689P9NE.app.getvela.VelaWallet']
-		}
+		},
+		applinks: { details: [{ appIDs: ['F9W689P9NE.app.getvela.VelaWallet'], components: [{ '/': '/sign' }] }] }
 	});
 };

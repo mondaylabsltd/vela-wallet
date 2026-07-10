@@ -11,6 +11,7 @@
  */
 
 import { nativeSymbol } from '@/models/network';
+import { fundingShouldForce } from './dev/fault-injection';
 import { formatWeiToEth } from './format-eth';
 import { getActiveBundlerBaseUrl, getChainRpcUrl, isUsingBuiltinBundler, poolRpcCall } from './rpc-pool';
 import { loadServiceEndpoints } from './storage';
@@ -137,7 +138,10 @@ export async function checkBundlerFunding(
 
   console.log(`[BundlerFunding] threshold=${threshold} spendable=${info.spendableBalance} sufficient=${info.spendableBalance >= threshold} (gasCost=${estimatedGasCostWei ?? 'default'})`);
 
-  if (info.spendableBalance >= threshold) return null;
+  // Dev-only: `vela.forceFunding()` makes the gas account read as underfunded so
+  // the in-sheet funding UX (docs/KNOWN-BUGS.md BUG-1) can be exercised without
+  // draining a real gas account. `fundingShouldForce` is always false in prod.
+  if (!fundingShouldForce(chainId) && info.spendableBalance >= threshold) return null;
 
   // Balance insufficient — return info for the funding modal.
   // Sponsorship is NOT attempted here; the modal lets the user explicitly

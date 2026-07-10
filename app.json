@@ -16,6 +16,7 @@
     "ios": {
       "icon": "./assets/images/icon.png",
       "bundleIdentifier": "app.getvela.VelaWallet",
+      "appleTeamId": "F9W689P9NE",
       "infoPlist": {
         "NSCameraUsageDescription": "Vela Wallet uses the camera to scan QR codes for wallet addresses.",
         "ITSAppUsesNonExemptEncryption": false
@@ -79,7 +80,8 @@
       ],
       "expo-localization",
       "./plugins/with-native-modules",
-      "./plugins/with-release-signing"
+      "./plugins/with-release-signing",
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": true,

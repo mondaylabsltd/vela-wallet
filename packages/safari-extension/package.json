@@ -1,0 +1,15 @@
+{
+  "name": "@vela/safari-extension",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test:unit": "node --test test/protocol.test.mjs",
+    "test:provider": "node build.mjs && playwright test --config playwright.config.ts",
+    "test": "npm run test:unit && npm run test:provider"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.0"
+  }
+}

@@ -6,3 +6,5 @@ assets/
 Info.plist
 generated.entitlements
 Assets.xcassets/
+
+# Committed source in this dir: SafariWebExtensionHandler.swift, expo-target.config.js

@@ -7,6 +7,7 @@ const {
 } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -57,13 +58,40 @@ function withIOSEntitlements(config) {
     // Re-add it here AND enable the iCloud KV capability on the App ID together,
     // only when cloud sync is actually shipped.
 
-    // Associated Domains for passkeys
+    // Associated Domains: passkeys (webcredentials) + Universal Links (applinks).
+    // Both resolve against getvela.app's AASA. applinks powers the Safari
+    // extension's one-tap sign hand-off (https://getvela.app/sign?rid=…) — the
+    // extension only USES it once the app has attested the association resolves on
+    // this device (see app-group-account-sync.ts), so shipping the entitlement is
+    // harmless (the capability is already granted for webcredentials).
+    //
+    // DEV BYPASS: on iOS ≥14 devices fetch the AASA from Apple's CDN, which can lag
+    // hours. Set VELA_AASA_DEV_MODE=1 at prebuild to emit `applinks:getvela.app?mode=developer`
+    // instead — with iPhone Settings › Developer › Associated Domains Development ON,
+    // swcd fetches getvela.app directly, so a server AASA edit is live immediately.
+    // Env-gated so a normal/distribution build NEVER carries ?mode=developer (which
+    // distribution ignores anyway, but must not linger as an unvalidated path).
     if (!Array.isArray(mod.modResults['com.apple.developer.associated-domains'])) {
       mod.modResults['com.apple.developer.associated-domains'] = [];
     }
     const domains = mod.modResults['com.apple.developer.associated-domains'];
-    if (!domains.includes('webcredentials:getvela.app')) {
-      domains.push('webcredentials:getvela.app');
+    const applinks =
+      process.env.VELA_AASA_DEV_MODE === '1' ? 'applinks:getvela.app?mode=developer' : 'applinks:getvela.app';
+    for (const d of ['webcredentials:getvela.app', applinks]) {
+      if (!domains.includes(d)) domains.push(d);
+    }
+
+    // App Group shared with the Safari Web Extension target (Safari R1 spike).
+    // The extension target declares the SAME group in targets/safari/expo-target.config.js.
+    // Both App IDs (app.getvela.VelaWallet + app.getvela.VelaWallet.safari) must enable
+    // App Groups in the Apple Developer portal, or Release codesign fails — same class of
+    // warning as the iCloud-KV note above.
+    if (!Array.isArray(mod.modResults['com.apple.security.application-groups'])) {
+      mod.modResults['com.apple.security.application-groups'] = ['group.app.getvela.wallet'];
+    } else if (
+      !mod.modResults['com.apple.security.application-groups'].includes('group.app.getvela.wallet')
+    ) {
+      mod.modResults['com.apple.security.application-groups'].push('group.app.getvela.wallet');
     }
 
     return mod;
@@ -85,7 +113,8 @@ function withIOSSourceFiles(config) {
       const destDir = path.join(projectRoot, 'ios', projectName);
 
       // vela-cloud-sync is intentionally omitted — it has no JS consumer yet.
-      const modules = ['vela-passkey'];
+      // vela-app-group: App Group shared-container IPC (Increment 2 Safari spike).
+      const modules = ['vela-passkey', 'vela-app-group'];
       for (const moduleName of modules) {
         const srcDir = path.join(projectRoot, 'modules', moduleName, 'ios');
         if (!fs.existsSync(srcDir)) continue;
@@ -343,6 +372,8 @@ function withXcodeProjectFiles(config) {
     const nativeFiles = [
       'VelaPasskeyModule.swift',
       'VelaPasskeyModule.m',
+      'VelaAppGroupModule.swift',
+      'VelaAppGroupModule.m',
     ];
 
     for (const fileName of nativeFiles) {
@@ -409,6 +440,60 @@ function withAndroidDependencies(config) {
 }
 
 // ---------------------------------------------------------------------------
+// iOS – Build the Safari Web Extension web bundle into targets/safari/assets/
+// ---------------------------------------------------------------------------
+//
+// packages/safari-extension/ is an esbuild bundle whose output (targets/safari/
+// assets/: content.js/inpage.js/background.js/popup.js + manifest.json/popup.html)
+// is .gitignored and read by @bacons/apple-targets as the extension's synchronized
+// Resources folder at Xcode build time. Nothing else ran that build, so a clean
+// checkout / EAS cloud prebuild produced an appex with NO manifest or JS — a
+// silently-broken extension. Run it here, inside prebuild, so both `expo run:ios`
+// and EAS always package a real bundle. Prebuild runs before xcodebuild, and the
+// folder is synchronized (read at build time), so the assets are guaranteed present.
+function withSafariExtensionBuild(config) {
+  return withDangerousMod(config, [
+    'ios',
+    (mod) => {
+      const projectRoot = mod.modRequest.projectRoot;
+      const targetDir = path.join(projectRoot, 'targets', 'safari');
+      // If the Safari target isn't scaffolded (feature not set up in this checkout),
+      // there is no extension to build — skip quietly.
+      if (!fs.existsSync(targetDir)) return mod;
+      try {
+        execSync('node packages/safari-extension/build.mjs', {
+          cwd: projectRoot,
+          stdio: 'inherit',
+        });
+      } catch (e) {
+        // The extension IS expected here (targetDir exists) — a failed build must
+        // NOT silently ship an empty appex. Fail prebuild loudly so it's fixed.
+        // COMMON CAUSE on EAS: build.mjs imports esbuild, which must be a ROOT
+        // devDependency (there are no npm workspaces, so EAS never installs the
+        // packages/safari-extension sub-package's node_modules). If you see
+        // ERR_MODULE_NOT_FOUND 'esbuild', run: npm i -D esbuild@0.25.0 (at the repo root).
+        throw new Error(
+          '[with-native-modules] Safari extension bundle build FAILED — refusing to ' +
+            'prebuild an empty extension. Run `node packages/safari-extension/build.mjs` ' +
+            'to see the error. If it is ERR_MODULE_NOT_FOUND esbuild, add esbuild to the ' +
+            'ROOT package.json devDependencies (EAS does not install the sub-package).\n' +
+            (e && e.message ? e.message : String(e)),
+        );
+      }
+      // Sanity: the manifest must exist after a successful build.
+      const manifest = path.join(targetDir, 'assets', 'manifest.json');
+      if (!fs.existsSync(manifest)) {
+        throw new Error(
+          '[with-native-modules] Safari extension build ran but ' + manifest +
+            ' is missing — the appex would ship without a manifest.',
+        );
+      }
+      return mod;
+    },
+  ]);
+}
+
+// ---------------------------------------------------------------------------
 // Main plugin – composes all sub-plugins
 // ---------------------------------------------------------------------------
 
@@ -446,6 +531,7 @@ function withNativeModules(config) {
   // iOS
   config = withIOSInfoPlist(config);
   config = withIOSEntitlements(config);
+  config = withSafariExtensionBuild(config);
   config = withIOSSourceFiles(config);
   config = withXcodeProjectFiles(config);
   config = withMetroHostInjection(config);

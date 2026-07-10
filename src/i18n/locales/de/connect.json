@@ -77,5 +77,33 @@
       "contentMissing": "Für diese Anfrage wurde kein Inhalt gespeichert.",
       "offChainNote": "Off-Chain-Signatur — es wurde nichts on-chain gesendet."
     }
+  },
+  "signHandoff": {
+    "signing": "In Vela bestätigen",
+    "signed": "Gesendet",
+    "rejected": "Abgebrochen",
+    "pending": "In der Vela-Aktivität prüfen",
+    "expired": "Diese Signaturanfrage ist abgelaufen",
+    "returnHint": "Zurück zu Safari — diese Seite wird nicht neu geladen",
+    "oneTapTitle": "Ein-Tipp-Signieren aktiviert",
+    "oneTapHint": "Das Signieren in Safari öffnet Vela jetzt direkt. Tippe oben links auf ‹ Safari, um zurückzukehren.",
+    "done": "Fertig"
+  },
+  "safariExt": {
+    "navTitle": "Safari-Erweiterung",
+    "heroTitle": "Vela in Safari nutzen",
+    "heroBody": "In Safari auf dem iPhone kann sich fast jede dApp direkt mit Vela verbinden. Verbinden und Lesen passieren in Safari — nur das Signieren wechselt kurz zu Vela für eine Face-ID-Bestätigung. Kein Wallet-App-Wechsel, keine Seed Phrase.",
+    "stepsLabel": "Einmal aktivieren",
+    "step1": "Öffne eine dApp-Website in Safari.",
+    "step2": "Tippe auf „Aa“ in der Adressleiste → Erweiterungen verwalten und aktiviere Vela Wallet.",
+    "step3": "Tippe auf „Aa“ → Vela Wallet → Erlauben (einmal pro Website genügt).",
+    "step4": "Wähle in der „Wallet verbinden“-Liste der Website Vela Wallet.",
+    "oneTapTitle": "Signieren mit einem Tipp",
+    "oneTapBody": "Beim Signieren öffnet sich Vela für eine kurze Face-ID-Bestätigung und kehrt dann zur Seite zurück. Aktiviere One-Tap (über „One-Tap-Signieren testen“ im Erweiterungs-Popup), und selbst die Abfrage „In Vela öffnen?“ verschwindet.",
+    "cta": "getvela.app in Safari öffnen",
+    "ctaHint": "Öffnet Safari — dort findest du das „Aa“-Menü und den Vela-Schalter.",
+    "sectionLabel": "Browser",
+    "settingsTitle": "Vela in Safari nutzen",
+    "settingsSubtitle": "Mit jeder dApp im Browser verbinden"
   }
 }

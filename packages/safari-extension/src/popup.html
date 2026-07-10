@@ -1,0 +1,106 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vela Wallet</title>
+<style>
+  /* Vela tokens — kept in sync with src/constants/theme.ts (canonical: lib/theme.js).
+     Light by default; dark under the OS setting UNLESS the app forced a scheme via
+     <html data-theme>; forced light/dark win over the OS. popup.js sets data-theme
+     from the app's stored preference so the popup matches the app exactly. */
+  :root {
+    --fg-base: #1A1A18; --fg-muted: #6E6B62; --fg-subtle: #8C887E;
+    --bg-base: #FAFAF8; --bg-raised: #FFFFFF; --bg-sunken: #F5F3EF;
+    --accent: #E8572A; --accent-soft: #FFF0EB;
+    --success: #2D8E5F; --border: #ECEBE4; --border-strong: #D8D6CE;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --fg-base: #E8E6E1; --fg-muted: #9A9790; --fg-subtle: #85827A;
+      --bg-base: #141412; --bg-raised: #1E1E1B; --bg-sunken: #0F0F0D;
+      --accent: #E8572A; --accent-soft: #2C1A12;
+      --success: #3DA872; --border: #2C2C28; --border-strong: #3E3E38;
+    }
+  }
+  :root[data-theme="dark"] {
+    --fg-base: #E8E6E1; --fg-muted: #9A9790; --fg-subtle: #85827A;
+    --bg-base: #141412; --bg-raised: #1E1E1B; --bg-sunken: #0F0F0D;
+    --accent: #E8572A; --accent-soft: #2C1A12;
+    --success: #3DA872; --border: #2C2C28; --border-strong: #3E3E38;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    font: 14px/1.45 -apple-system, "SF Pro Text", system-ui, sans-serif; color: var(--fg-base);
+    margin: 0; padding: 16px; width: 306px; background: var(--bg-base);
+    -webkit-font-smoothing: antialiased;
+  }
+  header { display: flex; align-items: center; gap: 9px; margin-bottom: 16px; }
+  .logo { width: 28px; height: 28px; border-radius: 8px; display: block; object-fit: cover;
+    box-shadow: 0 0 0 1px var(--border) inset; }
+  .brand { font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
+
+  .card { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 14px;
+    padding: 13px; margin-bottom: 12px; }
+  .acct-name { font-weight: 600; font-size: 15px; }
+  .acct-addr { color: var(--fg-muted); font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12.5px; font-variant-numeric: tabular-nums; margin-top: 3px; }
+  .acct-chain { display: inline-flex; align-items: center; margin-top: 10px; padding: 3px 9px; font-size: 12px;
+    font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 999px; }
+  .empty { color: var(--fg-muted); line-height: 1.5; }
+
+  .row-title { font-size: 11.5px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase;
+    color: var(--fg-subtle); margin: 0 2px 7px; }
+
+  #site-status { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .dot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+  .dot.on { background: var(--success); } .dot.off { background: var(--border-strong); }
+  .site-host { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+  .conn { font-size: 12px; color: var(--success); font-weight: 600; }
+  .conn.muted, .muted { color: var(--fg-muted); font-weight: 400; }
+
+  .site { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 9px 0; border-top: 1px solid var(--border); }
+  .site:first-child { border-top: 0; }
+
+  button.disconnect { margin-left: auto; flex: none; white-space: nowrap;
+    border: 1px solid var(--border-strong); background: transparent;
+    color: var(--fg-muted); border-radius: 9px; padding: 5px 11px; font-size: 12px; font-weight: 600;
+    -webkit-tap-highlight-color: transparent; }
+  button.disconnect:active { background: var(--bg-sunken); }
+  button.disconnect:disabled { opacity: 0.4; }
+
+  #ul-status { margin: 6px 2px 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ul-ok { font-size: 12px; color: var(--success); font-weight: 600; }
+  .ul-reverify { margin-left: auto; border: 0; background: transparent; color: var(--fg-muted);
+    font-size: 12px; text-decoration: underline; padding: 2px 0; }
+  .ul-hint { font-size: 12px; color: var(--fg-muted); line-height: 1.45; margin-bottom: 8px; flex-basis: 100%; }
+  button.ul-test { width: 100%; border: 1px solid var(--accent); background: transparent; color: var(--accent);
+    border-radius: 11px; padding: 10px; font-size: 13px; font-weight: 600; }
+  button.ul-test:active { background: var(--accent-soft); }
+
+  #open { width: 100%; border: 0; border-radius: 13px; background: var(--accent); color: #fff;
+    font-weight: 700; font-size: 15px; padding: 13px; -webkit-tap-highlight-color: transparent;
+    transition: filter .12s ease; }
+  #open:active { filter: brightness(0.94); }
+</style>
+<body>
+  <header>
+    <img class="logo" src="vela-icon.png" width="28" height="28" alt="" />
+    <span class="brand">Vela Wallet</span>
+  </header>
+
+  <div class="card" id="account"></div>
+
+  <div class="row-title" id="site-label">Current site</div>
+  <div class="card" id="site-status"></div>
+
+  <div class="row-title" id="sites-title" style="display:none"></div>
+  <div id="sites"></div>
+
+  <div id="ul-status"></div>
+
+  <button id="open">Open Vela</button>
+
+  <script src="popup.js"></script>
+</body>
+</html>

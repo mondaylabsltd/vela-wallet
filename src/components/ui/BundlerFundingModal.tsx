@@ -34,6 +34,12 @@ interface Props {
   onCancel: () => void;
 }
 
+interface ViewProps {
+  funding: FundingNeeded;
+  onFunded: () => void;
+  onCancel: () => void;
+}
+
 const POLL_INTERVAL = 10_000;
 
 type Step = 'choose' | 'self-fund';
@@ -50,9 +56,24 @@ function denialKey(reason?: string): string {
   return 'componentsUi.funding.denialDefault';
 }
 
-export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Props) {
+/**
+ * The funding UI content WITHOUT a modal wrapper. Rendered two ways:
+ *  - standalone as <BundlerFundingModal> (its own AppModal) — the Send screen;
+ *  - as an in-sheet content swap inside the signing sheet's AppModal
+ *    (SigningRequestModal). iOS will NOT present a second native modal over an
+ *    already-presented one, so a stacked funding modal rendered invisibly behind
+ *    the sign sheet and tapping Approve silently did nothing (docs/KNOWN-BUGS.md
+ *    BUG-1). Swapping the sheet's content keeps it on the single presented modal.
+ */
+export function BundlerFundingView({ funding, onFunded, onCancel }: ViewProps) {
   const { t } = useTranslation();
-  const [step, setStep] = useState<Step>('choose');
+  // Parallel-space test env: the fixture Safe isn't registered with the real
+  // bundler, so free sponsorship is always denied (no_passkey_registered). Skip
+  // the "choose" step and lead with self-fund (fund the gas-account EOA directly)
+  // — the intended test path (founder decision 2026-07-06; docs/KNOWN-BUGS.md BUG-1).
+  // Lightweight global read, same pattern as ParallelSpaceBadge (false in prod).
+  const isTestEnv = !!(globalThis as { __VELA_PARALLEL__?: boolean }).__VELA_PARALLEL__;
+  const [step, setStep] = useState<Step>(isTestEnv ? 'self-fund' : 'choose');
   const [requesting, setRequesting] = useState(false);
   const [denialReason, setDenialReason] = useState<string | undefined>();
 
@@ -81,10 +102,12 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
   }, [funding.chainId, funding.safeAddress, requiredWei]);
 
   useEffect(() => {
-    if (!visible || step !== 'self-fund') return;
+    // Poll only on the self-fund step. The view is mounted only while shown
+    // (both call sites conditionally render it), so no extra `visible` gate.
+    if (step !== 'self-fund') return;
     pollRef.current = setInterval(checkBalance, POLL_INTERVAL);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [visible, step, checkBalance]);
+  }, [step, checkBalance]);
 
   const handleFreeActivation = async () => {
     setRequesting(true);
@@ -127,7 +150,6 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
   const activationAmount = formatWei(displayAmount);
 
   return (
-    <AppModal visible={visible} onClose={onCancel}>
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
@@ -249,6 +271,19 @@ export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Pr
           </Pressable>
         )}
       </View>
+  );
+}
+
+/**
+ * Standalone funding modal — its own native <AppModal>. Used by the Send screen,
+ * where nothing else is presented so a native pageSheet is fine. The signing
+ * sheet does NOT use this (it would stack a second native modal — BUG-1); it
+ * renders <BundlerFundingView> directly inside its own sheet instead.
+ */
+export function BundlerFundingModal({ visible, funding, onFunded, onCancel }: Props) {
+  return (
+    <AppModal visible={visible} onClose={onCancel}>
+      <BundlerFundingView funding={funding} onFunded={onFunded} onCancel={onCancel} />
     </AppModal>
   );
 }

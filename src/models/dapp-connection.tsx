@@ -41,6 +41,7 @@ import {
 } from '@/services/bundler-service';
 import { nativeSymbol } from '@/models/network';
 import type { BLEIncomingRequest } from '@/models/types';
+import { responseTransport, requestChainId as reqChainId, requestDApp } from '@/models/dapp-request-routing';
 
 // ---------------------------------------------------------------------------
 // Storage keys
@@ -96,6 +97,10 @@ interface DAppConnectionContextValue {
   incomingRequest: BLEIncomingRequest | null;
   /** Whether a signing operation is in progress. */
   isSigning: boolean;
+  /** True once the passkey/submit phase has STARTED (past the gas pre-check). At
+   *  this point the tx is committed — a swipe-dismiss must dismiss (the op proceeds),
+   *  never reject, or a "cancelled" tx would still broadcast (BUG-2 submit window). */
+  isSubmitting: boolean;
   /** Last signing error message. */
   signError: string | null;
   /** UserOp hash once a tx is submitted, while awaiting the on-chain receipt. */
@@ -116,6 +121,12 @@ interface DAppConnectionContextValue {
   cancelFingerprint: () => void;
   /** Disconnect from the current bridge. */
   disconnectBridge: () => void;
+  /**
+   * Begin a Safari-extension sign: install a one-shot ExtensionBridgeTransport
+   * into the transient sign slot (never clobbers a live WalletPair/bridge session)
+   * and render the real SigningRequestModal for it. Used only by src/app/sign.tsx.
+   */
+  beginExtensionSign: (transport: DAppTransport) => void;
   /** Force an immediate reconnect of the active session ("Reconnect now"). */
   reconnect: () => void;
   /** True once an auto-reconnect has dragged on long enough to prompt the user. */
@@ -147,6 +158,7 @@ const DAppConnectionContext = createContext<DAppConnectionContextValue>({
   dappInfo: null,
   incomingRequest: null,
   isSigning: false,
+  isSubmitting: false,
   signError: null,
   pendingOpHash: null,
   chainId: 1,
@@ -157,6 +169,7 @@ const DAppConnectionContext = createContext<DAppConnectionContextValue>({
   confirmFingerprint: async () => {},
   cancelFingerprint: () => {},
   disconnectBridge: () => {},
+  beginExtensionSign: () => {},
   reconnect: () => {},
   reconnectStuck: false,
   approveRequest: async () => {},
@@ -187,6 +200,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const [dappInfo, setDappInfo] = useState<DAppInfo | null>(null);
   const [incomingRequest, setIncomingRequest] = useState<BLEIncomingRequest | null>(null);
   const [isSigning, setIsSigning] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
   const [pendingOpHash, setPendingOpHash] = useState<string | null>(null);
   const [chainId, setChainId] = useState(1);
@@ -219,7 +233,29 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const transportRef = useRef<DAppTransport | null>(null);
   /** Holds WalletPairTransport during fingerprint verification (before connect). */
   const pendingWpTransportRef = useRef<WalletPairTransport | null>(null);
+  /**
+   * Transient slot for a Safari-extension sign transport (beginExtensionSign).
+   * SEPARATE from transportRef so a live WalletPair/bridge session is NOT clobbered
+   * by an extension sign. Responses route per-request (incomingRequest.__transport),
+   * never through this ref, so concurrency can't misroute a signature.
+   */
+  const signTransportRef = useRef<DAppTransport | null>(null);
   const lastApproveOptsRef = useRef<{ maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null } | undefined>(undefined);
+  // The request id the pending funding view belongs to. lastApproveOptsRef is a
+  // single shared ref; without pinning the rid, a funding "Continue" could replay
+  // the OLD request's (capped) opts under a DIFFERENT request that has since taken
+  // the sheet — submitting the wrong params under the wrong id. handleFundingComplete
+  // bails if the current request no longer matches.
+  const fundingRidRef = useRef<string | null>(null);
+  // Fund-safety guards on the single submit path (approveRequest):
+  //  - approveInFlightRef: synchronous re-entrancy lock so a double-tap (Approve or
+  //    the funding "Continue") can't fire two concurrent approves → two submits
+  //    (BUG-3). isSigning is async React state, useless for a same-tick second tap.
+  //  - signCancelledRef: set by rejectRequest so a reject/swipe DURING an in-flight
+  //    approve (e.g. the ≤15s gas pre-check) aborts before submit — never a "rejected"
+  //    tx that still broadcasts + a contradictory success response (BUG-2).
+  const approveInFlightRef = useRef(false);
+  const signCancelledRef = useRef(false);
   const addressRef = useRef(address);
   const chainIdRef = useRef(chainId);
   const accountNameRef = useRef(accountName);
@@ -245,29 +281,53 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   }, [address, chainId, accountName, status, state.accounts]);
 
   // --- Handle incoming request ---
-  const handleIncoming = useCallback((id: string, method: string, params: any[], origin: string) => {
+  const handleIncoming = useCallback((
+    id: string,
+    method: string,
+    params: any[],
+    origin: string,
+    meta?: { transport?: DAppTransport; chainId?: number; dapp?: DAppInfo },
+  ) => {
     const addr = addressRef.current;
     const cid = chainIdRef.current;
+    // The transport that OWNS this request. Responses MUST route here, never a
+    // shared transportRef — with a concurrent WalletPair session live, using
+    // transportRef would deliver an extension signature over the WP socket (F2).
+    const owner = meta?.transport ?? transportRef.current;
 
     if (isSigningMethod(method)) {
-      // Extract chain ID embedded in the request (e.g. typedData.domain.chainId, tx.chainId)
+      // A fresh signing request supersedes any funding prompt left over from a
+      // prior request (e.g. one abandoned mid-pre-check) — the sheet swaps to the
+      // funding view on `fundingNeeded`, so a stale value would hijack this sheet.
+      setFundingNeeded(null);
+      if (meta?.chainId != null) {
+        // EXTENSION sign: chain is per-request (F4). Do NOT touch the global
+        // chainId — it is shared with any live WalletPair session. Validate, then
+        // stamp the owning transport + chain + identity on the request so the
+        // sheet, sign, response and history are fully self-contained (F2/F3/F4).
+        try {
+          assertChainSupported(meta.chainId);
+        } catch (err: any) {
+          owner?.sendResponse(id, undefined, { code: err.code ?? 4902, message: err.message ?? `Unsupported chain: ${meta.chainId}` });
+          return;
+        }
+        setIncomingRequest({ id, method, params, origin, __transport: meta.transport, __chainId: meta.chainId, __dapp: meta.dapp });
+        return;
+      }
+      // Ordinary bridge/WalletPair request — auto-switch the global chain to match
+      // an embedded request chainId (typedData.domain.chainId, tx.chainId, …).
       const requestChainId = extractRequestChainId(method, params);
       if (requestChainId != null && requestChainId !== chainIdRef.current) {
         try {
           assertChainSupported(requestChainId);
         } catch (err: any) {
-          // Wallet doesn't support this chain — reject immediately
-          transportRef.current?.sendResponse(id, undefined, {
-            code: err.code ?? 4902,
-            message: err.message ?? `Unsupported chain: ${requestChainId}`,
-          });
+          owner?.sendResponse(id, undefined, { code: err.code ?? 4902, message: err.message ?? `Unsupported chain: ${requestChainId}` });
           return;
         }
-        // Auto-switch wallet chain to match request
         chainIdRef.current = requestChainId;
         setChainId(requestChainId);
       }
-      setIncomingRequest({ id, method, params, origin });
+      setIncomingRequest({ id, method, params, origin, __transport: meta?.transport });
       return;
     }
 
@@ -278,13 +338,13 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
         : NaN;
       if (isNaN(nc)) {
         // Missing/malformed chainId — don't report a phantom success.
-        transportRef.current?.sendResponse(id, undefined, { code: -32602, message: 'Invalid params: missing chainId' });
+        owner?.sendResponse(id, undefined, { code: -32602, message: 'Invalid params: missing chainId' });
         return;
       }
       try {
         assertChainSupported(nc);
       } catch (err: any) {
-        transportRef.current?.sendResponse(id, undefined, {
+        owner?.sendResponse(id, undefined, {
           code: err.code ?? 4902,
           message: err.message ?? `Unsupported chain: ${nc}`,
         });
@@ -292,7 +352,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       }
       chainIdRef.current = nc;
       setChainId(nc);
-      transportRef.current?.sendResponse(id, null);
+      owner?.sendResponse(id, null);
       return;
     }
 
@@ -302,11 +362,11 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       ? handleReadOnlyRPC(method, params, addr, cid)
       : gateReadOnly(readOnlyKey(cid, addr, method, params), () => handleReadOnlyRPC(method, params, addr, cid));
     dispatch.then(res => {
-      if (res.handled) transportRef.current?.sendResponse(id, res.result);
-      else transportRef.current?.sendResponse(id, undefined, { code: -32603, message: `RPC failed: ${method}` });
+      if (res.handled) owner?.sendResponse(id, res.result);
+      else owner?.sendResponse(id, undefined, { code: -32603, message: `RPC failed: ${method}` });
     }).catch((err: any) => {
       // Gate overflow (too many concurrent reads) — answer with a retryable error.
-      transportRef.current?.sendResponse(id, undefined, { code: err?.code ?? -32603, message: err?.message ?? `RPC failed: ${method}` });
+      owner?.sendResponse(id, undefined, { code: err?.code ?? -32603, message: err?.message ?? `RPC failed: ${method}` });
     });
   }, []);
 
@@ -330,7 +390,12 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       clearReconnectGrace();
       setStatus('disconnected');
       setConnectionType(null);
-      setIncomingRequest(null);
+      // Owner-aware: only clear a request THIS transport owns. Otherwise a terminal
+      // WalletPair/bridge drop would tear down a concurrent extension sign's modal
+      // (which lives in the same shared incomingRequest but is owned by the ext
+      // transport). Mirrors the per-request sendResponse routing. Fund-safe either
+      // way (no sendResponse fires here), but this keeps the sign UI on screen.
+      setIncomingRequest((prev) => (prev && prev.__transport && prev.__transport !== transport ? prev : null));
       transportRef.current = null;
     });
 
@@ -347,7 +412,10 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       }, RECONNECT_GRACE_MS);
     });
 
-    transport.on('request', handleIncoming);
+    // Stamp the OWNING transport on every inbound request so responses route back
+    // to it, not a shared ref (matters once a second transport — the extension
+    // sign slot — can be live at the same time; see F2).
+    transport.on('request', (id, method, params, origin) => handleIncoming(id, method, params, origin, { transport }));
 
     transport.on('error', (msg) => {
       setErrorMessage(msg);
@@ -483,11 +551,44 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     transport.reconnect?.().catch(() => { /* SDK keeps retrying; UI stays reconnecting */ });
   }, [clearReconnectGrace]);
 
+  // --- Begin an extension sign (Safari extension → App Group) ---
+  // Installs `transport` into the TRANSIENT signTransportRef, NOT transportRef, and
+  // does NOT call disconnectCurrent — so a live WalletPair/bridge session survives.
+  // It wires ONLY 'request' (stamping the owning transport + per-request chain +
+  // identity onto incomingRequest for F2/F3/F4) and a scoped, identity-guarded
+  // 'disconnected' that clears just its own slot — NEVER incomingRequest, NEVER
+  // transportRef. Deliberately not wireTransport(), whose 'disconnected' handler
+  // would null transportRef + clear incomingRequest mid-sign.
+  const beginExtensionSign = useCallback((transport: DAppTransport) => {
+    transport.on('request', (id, method, params, origin) => {
+      let host = origin;
+      try { host = new URL(origin).host || origin; } catch { /* keep origin */ }
+      handleIncoming(id, method, params, origin, {
+        transport,
+        chainId: (transport as { requestChainId?: number }).requestChainId,
+        dapp: { name: host, url: origin },
+      });
+    });
+    transport.on('disconnected', () => {
+      if (signTransportRef.current === transport) signTransportRef.current = null;
+    });
+    transport.on('error', (msg) => setErrorMessage(msg));
+    signTransportRef.current = transport;
+  }, [handleIncoming]);
+
   // --- Approve ---
   const approveRequest = useCallback(async (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null }) => {
     const base = incomingRequest;
     const account = activeAccountRef.current;
     if (!base || !account) return;
+
+    // Re-entrancy lock: a rapid second tap (Approve, or the funding "Continue")
+    // must not start a SECOND concurrent approve → two passkey prompts / two
+    // submits (BUG-3). isSigning is async React state — it hasn't flipped yet on a
+    // same-tick second tap — so guard on a synchronous ref. Released on every exit.
+    if (approveInFlightRef.current) return;
+    approveInFlightRef.current = true;
+    signCancelledRef.current = false; // fresh approve — not (yet) cancelled
 
     // The modal may hand us rewritten params (e.g. an approval capped to a finite
     // amount). Sign/submit/record THOSE, never the original unbounded request.
@@ -500,7 +601,18 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     // Remember opts so a funding-driven retry resubmits the SAME (capped) request.
     lastApproveOptsRef.current = opts;
 
-    const cid = chainIdRef.current;
+    // Per-request chain for an extension sign (F4): sign against the origin's
+    // granted chain, NOT the global provider chain (which a concurrent WalletPair
+    // session owns). Ordinary requests carry no __chainId → use the global chain.
+    const cid = reqChainId(base, chainIdRef.current);
+
+    // Immediate feedback: the gas pre-check below can take up to 15s and the sign
+    // is async — flip to the signing state the instant the user taps so Approve is
+    // never a silent dead zone (BUG-1 secondary). Cleared again below if we hand
+    // off to the funding view.
+    setIsSigning(true);
+    setSignError(null);
+    setPendingOpHash(null);
 
     // Proactive gas-account pre-check — mirror the Send flow so the top-up modal
     // appears BEFORE the passkey prompt + submit, not after a failed UserOp. Raced
@@ -513,22 +625,44 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           new Promise<FundingNeeded | null>(resolve => setTimeout(() => resolve(null), 15_000)),
         ]);
         if (funding) {
-          setFundingNeeded(funding); // keep request pending; retried after funding
+          // Hand off to the funding view — rendered IN-SHEET (BUG-1 primary), not
+          // stacked over the sheet. Drop the signing spinner; the request stays
+          // pending and handleFundingComplete retries it after top-up.
+          setIsSigning(false);
+          setFundingNeeded(funding);
+          fundingRidRef.current = request.id; // pin funding to THIS request
+          approveInFlightRef.current = false; // released — the funding retry re-acquires
           return;
         }
       } catch { /* proceed to submit */ }
     }
 
-    setIsSigning(true);
-    setSignError(null);
-    setPendingOpHash(null);
+    // Abort if the user rejected / swipe-dismissed DURING the (async) gas pre-check:
+    // rejectRequest already sent 4001 and cleared the request, so submitting now
+    // would broadcast a "rejected" tx and send a contradictory success response for
+    // the same id (BUG-2). Checked here — after the only pre-submit await.
+    if (signCancelledRef.current) {
+      setIsSigning(false);
+      approveInFlightRef.current = false;
+      return;
+    }
+
+    // Entering the passkey/submit phase: the tx is now committed once the user
+    // authenticates. From here a swipe-dismiss must DISMISS (the op proceeds + its
+    // real result is delivered), never reject — else a "cancelled" tx would still
+    // broadcast + send a contradictory success (BUG-2 submit window). onClose reads
+    // this to route to dismissRequest. Reset in the finally.
+    setIsSubmitting(true);
+
     // For eth_sendTransaction, the op is recorded 'pending' the moment the bundler
     // accepts it (in onSubmitted) — BEFORE the long on-chain receipt wait — so the
     // Connections panel shows it immediately and closing the sheet (or reloading
     // the page) can't lose its status. We patch it to confirmed/failed below.
     let pendingRecordId: string | null = null;
     let pendingSave: Promise<void> = Promise.resolve();
-    const recordOrigin = dappInfo?.name ?? request.origin ?? '';
+    // Per-request dApp identity for an extension sign (F3) — the extension origin,
+    // never a concurrent WalletPair session's dappInfo.
+    const recordOrigin = requestDApp(base, dappInfo)?.name ?? request.origin ?? '';
     try {
       const result = await handleDAppRequest(
         request, account, account.address, cid, opts?.maxFeePerGas,
@@ -546,21 +680,12 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           pendingSave = saveTransaction(pending).catch(e => console.warn('[DAppConnection] Failed to save pending record:', e));
         },
       );
-      transportRef.current?.sendResponse(request.id, result);
-
-      // Record EVERY approved dApp operation to local history (see dapp-history)
-      // so the Connections panel shows it and its detail. Awaited before clearing
-      // the request so the panel's refresh reads up-to-date storage.
-      if (pendingRecordId) {
-        // Wait for the pending write to land, then flip it to confirmed in place
-        // (same id) — never a second record, never a lost pending→confirmed race.
-        await pendingSave;
-        await updateTransaction(pendingRecordId, {
-          status: 'confirmed',
-          txHash: typeof result === 'string' ? result : '',
-        }).catch(e => console.warn('[DAppConnection] Failed to confirm record:', e));
-      } else {
-        // Signatures and batches (no receipt wait) — record on completion.
+      // §4: the DURABLE, app-owned record must precede the result the extension
+      // polls, for EVERY method. eth_sendTransaction already persisted its pending
+      // record in onSubmitted (above) before this point; signatures/batches (no
+      // onSubmitted) are persisted HERE, before sendResponse, so the extension's
+      // result file never lands before Vela Activity has the record.
+      if (!pendingRecordId) {
         const record = buildSigningRecord({
           method: request.method,
           params: request.params,
@@ -572,6 +697,21 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           assetChanges,
         });
         await saveTransaction(record).catch(e => console.warn('[DAppConnection] Failed to save record:', e));
+      }
+
+      // Route the response to the transport that OWNS the request (per-request,
+      // F2) — never a shared transportRef that a concurrent WalletPair session
+      // could be sitting on.
+      responseTransport(base, transportRef.current)?.sendResponse(request.id, result);
+
+      // For txs, flip the already-persisted pending record to confirmed in place
+      // (same id) — never a second record, never a lost pending→confirmed race.
+      if (pendingRecordId) {
+        await pendingSave;
+        await updateTransaction(pendingRecordId, {
+          status: 'confirmed',
+          txHash: typeof result === 'string' ? result : '',
+        }).catch(e => console.warn('[DAppConnection] Failed to confirm record:', e));
       }
 
       setIncomingRequest(null);
@@ -633,20 +773,27 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           .catch(() => {});
       }
       setSignError(msg);
-      transportRef.current?.sendResponse(request.id, undefined, { code: -32603, message: msg });
+      responseTransport(base, transportRef.current)?.sendResponse(request.id, undefined, { code: -32603, message: msg });
       // Keep modal open so user can see the error — they dismiss manually
     } finally {
+      approveInFlightRef.current = false; // release the re-entrancy lock on every exit
       setIsSigning(false);
+      setIsSubmitting(false);
     }
   }, [incomingRequest]);
 
   // --- Reject ---
   const rejectRequest = useCallback(() => {
     if (!incomingRequest) return;
-    transportRef.current?.sendResponse(incomingRequest.id, undefined, { code: 4001, message: 'User rejected' });
+    // Signal any approve that's mid-flight (e.g. inside the ≤15s gas pre-check) to
+    // abort before it submits — otherwise a swipe/reject would 4001 the dApp while
+    // the tx still broadcasts + returns a success for the same id (BUG-2).
+    signCancelledRef.current = true;
+    responseTransport(incomingRequest, transportRef.current)?.sendResponse(incomingRequest.id, undefined, { code: 4001, message: 'User rejected' });
     setIncomingRequest(null);
     setSignError(null);
     setPendingOpHash(null);
+    setFundingNeeded(null);
   }, [incomingRequest]);
 
   // --- Dismiss (after error, response already sent) ---
@@ -654,25 +801,36 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     setIncomingRequest(null);
     setSignError(null);
     setPendingOpHash(null);
+    setFundingNeeded(null);
   }, []);
 
   // --- Bundler funding complete → retry the pending request ---
   const handleFundingComplete = useCallback(() => {
     setFundingNeeded(null);
+    // Request-bind: only replay if the request that asked for funding is STILL the
+    // one on the sheet. If it changed (a new sign took the slot), the pinned opts
+    // (lastApproveOptsRef) belong to the old request — replaying them would submit
+    // the wrong params under the wrong id. Bail rather than mis-submit.
+    const pinnedRid = fundingRidRef.current;
+    fundingRidRef.current = null;
+    if (pinnedRid && incomingRequest && incomingRequest.id !== pinnedRid) return;
     // Drop the cached (stale, underfunded) balance so the pre-check on retry reads
-    // the freshly-funded amount instead of re-prompting.
+    // the freshly-funded amount instead of re-prompting. Clear the REQUEST's chain
+    // (an extension sign may be on a different chain than the global one — F4);
+    // clearing the wrong chain would re-read the stale balance and loop funding.
     const account = activeAccountRef.current;
-    if (account) clearBundlerCache(chainIdRef.current, account.address);
+    const retryChainId = reqChainId(incomingRequest, chainIdRef.current);
+    if (account) clearBundlerCache(retryChainId, account.address);
     // Retry approve with the SAME opts (esp. the capped paramsOverride) so funding
     // never resubmits the original (possibly unbounded) request.
     approveRequest(lastApproveOptsRef.current);
-  }, [approveRequest]);
+  }, [approveRequest, incomingRequest]);
 
   // --- Bundler funding cancelled → reject the pending request ---
   const handleFundingCancel = useCallback(() => {
     setFundingNeeded(null);
     if (incomingRequest) {
-      transportRef.current?.sendResponse(incomingRequest.id, undefined, { code: -32603, message: 'Gas account funding cancelled' });
+      responseTransport(incomingRequest, transportRef.current)?.sendResponse(incomingRequest.id, undefined, { code: -32603, message: 'Gas account funding cancelled' });
       setIncomingRequest(null);
     }
   }, [incomingRequest]);
@@ -781,18 +939,18 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
 
   const value = React.useMemo(() => ({
     status, errorMessage, session, dappInfo,
-    incomingRequest, isSigning, signError, pendingOpHash, chainId,
+    incomingRequest, isSigning, isSubmitting, signError, pendingOpHash, chainId,
     connectionType, pendingFingerprint,
     connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
-    disconnectBridge, reconnect, reconnectStuck,
+    disconnectBridge, beginExtensionSign, reconnect, reconnectStuck,
     approveRequest, rejectRequest, dismissRequest, switchChain,
     fundingNeeded, handleFundingComplete, handleFundingCancel,
   }), [
     status, errorMessage, session, dappInfo,
-    incomingRequest, isSigning, signError, pendingOpHash, chainId,
+    incomingRequest, isSigning, isSubmitting, signError, pendingOpHash, chainId,
     connectionType, pendingFingerprint,
     connectToBridge, connectToWalletPair, confirmFingerprint, cancelFingerprint,
-    disconnectBridge, reconnect, reconnectStuck,
+    disconnectBridge, beginExtensionSign, reconnect, reconnectStuck,
     approveRequest, rejectRequest, dismissRequest, switchChain,
     fundingNeeded, handleFundingComplete, handleFundingCancel,
   ]);

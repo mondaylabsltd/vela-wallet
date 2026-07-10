@@ -153,6 +153,12 @@ function AndroidSheet({ visible, onClose, children }: { visible: boolean; onClos
 
 function DragHandle({ onClose }: { onClose?: () => void }) {
   const pan = useRef(new Animated.Value(0)).current;
+  // PanResponder is created once; read the LATEST onClose through a ref — the sign
+  // sheet swaps onClose from reject→dismiss once submitting (BUG-2), and a stale
+  // closure here would drag-dismiss a submitting tx as a reject. (Same fix the
+  // AndroidSheet already applies.)
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   const responder = useRef(
     PanResponder.create({
@@ -161,7 +167,7 @@ function DragHandle({ onClose }: { onClose?: () => void }) {
       onPanResponderMove: (_, g) => { if (g.dy > 0) pan.setValue(g.dy); },
       onPanResponderRelease: (_, g) => {
         if (g.dy > 80 || g.vy > 0.5) {
-          onClose?.();
+          onCloseRef.current?.();
         }
         Animated.spring(pan, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }).start();
       },

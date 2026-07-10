@@ -30,6 +30,8 @@ interface Faults {
   rpcFailRate: number; // 0..1
   priceNullAll: boolean;
   priceNullChains: Set<number>;
+  fundingForceAll: boolean;
+  fundingForceChains: Set<number>;
 }
 
 const faults: Faults = {
@@ -41,6 +43,8 @@ const faults: Faults = {
   rpcFailRate: 0,
   priceNullAll: false,
   priceNullChains: new Set(),
+  fundingForceAll: false,
+  fundingForceChains: new Set(),
 };
 
 /** Fast-path flag, recomputed on every mutation so hooks cost one boolean read. */
@@ -55,7 +59,9 @@ function recompute(): void {
     faults.rpcLatencyMs > 0 ||
     faults.rpcFailRate > 0 ||
     faults.priceNullAll ||
-    faults.priceNullChains.size > 0;
+    faults.priceNullChains.size > 0 ||
+    faults.fundingForceAll ||
+    faults.fundingForceChains.size > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +96,14 @@ export function priceShouldNull(chainId: number): boolean {
   return faults.priceNullAll || faults.priceNullChains.has(chainId);
 }
 
+/** True if the gas-account funding check on this chain should be forced to report
+ *  "deposit needed" — so the in-sheet funding UX (docs/KNOWN-BUGS.md BUG-1) can be
+ *  verified without draining a real gas account. Dev-only; false in production. */
+export function fundingShouldForce(chainId: number): boolean {
+  if (!active) return false;
+  return faults.fundingForceAll || faults.fundingForceChains.has(chainId);
+}
+
 // ---------------------------------------------------------------------------
 // Console API
 // ---------------------------------------------------------------------------
@@ -113,6 +127,8 @@ function describe(): string[] {
   if (faults.rpcFailRate) lines.push(`• RPC flaky: ${Math.round(faults.rpcFailRate * 100)}% of calls fail`);
   if (faults.priceNullAll) lines.push('• Prices: nulled on ALL chains (tokens show, total drops)');
   else if (faults.priceNullChains.size) lines.push(`• Prices: nulled on ${[...faults.priceNullChains].map(chainLabel).join(', ')}`);
+  if (faults.fundingForceAll) lines.push('• Funding: forced "deposit needed" on ALL chains (in-sheet funding UX)');
+  else if (faults.fundingForceChains.size) lines.push(`• Funding: forced "deposit needed" on ${[...faults.fundingForceChains].map(chainLabel).join(', ')}`);
   return lines;
 }
 
@@ -124,6 +140,7 @@ const HELP = [
   '  vela.slowRpc(ms)                add latency to every RPC call',
   '  vela.flakyRpc(rate 0..1)        randomly fail that fraction of RPC calls',
   "  vela.nullPrice(chainId | 'all') tokens load but have no price → total undercounts",
+  "  vela.forceFunding(chain|'all')  force the gas-account check to report 'deposit needed' → funding UX",
   '  vela.clear()                    reset all faults',
   '  vela.status()                   show active faults',
   '  vela.help()                     show this help',
@@ -141,7 +158,7 @@ type ChainArg = number | 'all';
 export function installFaultConsole(): void {
   const g = globalThis as any;
 
-  const toggleChain = (set: Set<number>, allKey: 'rpcFailAll' | 'rpcRateLimitAll' | 'priceNullAll', arg: ChainArg) => {
+  const toggleChain = (set: Set<number>, allKey: 'rpcFailAll' | 'rpcRateLimitAll' | 'priceNullAll' | 'fundingForceAll', arg: ChainArg) => {
     if (arg === 'all') { faults[allKey] = true; }
     else { set.add(arg); }
     recompute();
@@ -170,6 +187,10 @@ export function installFaultConsole(): void {
       toggleChain(faults.priceNullChains, 'priceNullAll', chain);
       return api.status();
     },
+    forceFunding(chain: ChainArg) {
+      toggleChain(faults.fundingForceChains, 'fundingForceAll', chain);
+      return api.status();
+    },
     clear() {
       faults.rpcFailAll = false;
       faults.rpcFailChains.clear();
@@ -179,6 +200,8 @@ export function installFaultConsole(): void {
       faults.rpcFailRate = 0;
       faults.priceNullAll = false;
       faults.priceNullChains.clear();
+      faults.fundingForceAll = false;
+      faults.fundingForceChains.clear();
       recompute();
       console.log('[vela] faults cleared');
       return 'cleared';
@@ -213,6 +236,7 @@ export function installFaultConsole(): void {
     if (fn === 'failRpc') { if (arg === 'all') faults.rpcFailAll = true; else faults.rpcFailChains.add(Number(arg)); }
     else if (fn === 'rateLimitRpc') { if (arg === 'all') faults.rpcRateLimitAll = true; else faults.rpcRateLimitChains.add(Number(arg)); }
     else if (fn === 'nullPrice') { if (arg === 'all') faults.priceNullAll = true; else faults.priceNullChains.add(Number(arg)); }
+    else if (fn === 'forceFunding') { if (arg === 'all') faults.fundingForceAll = true; else faults.fundingForceChains.add(Number(arg)); }
     else if (fn === 'slowRpc') faults.rpcLatencyMs = Math.max(0, Number(arg) | 0);
     else if (fn === 'flakyRpc') faults.rpcFailRate = Math.min(1, Math.max(0, Number(arg)));
   }
