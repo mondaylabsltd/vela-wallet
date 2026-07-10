@@ -7,14 +7,24 @@
 type Listener = (rid: string) => void;
 
 let listener: Listener | null = null;
+// A rid that arrived BEFORE the controller subscribed (cold start: the deep link /
+// UL fires requestExtensionSign while the root controller is still mounting). Buffer
+// it and deliver on subscribe, so the sign is never silently dropped → app-on-home.
+let pending: string | null = null;
 
 export function onExtensionSign(fn: Listener): () => void {
   listener = fn;
+  if (pending !== null) {
+    const rid = pending;
+    pending = null;
+    fn(rid);
+  }
   return () => {
     if (listener === fn) listener = null;
   };
 }
 
 export function requestExtensionSign(rid: string): void {
-  listener?.(rid);
+  if (listener) listener(rid);
+  else pending = rid; // deliver when the controller subscribes
 }

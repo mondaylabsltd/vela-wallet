@@ -30,12 +30,27 @@ describe('extension-sign-bus', () => {
     expect(second).toHaveBeenCalledWith('rid-2');
   });
 
-  it('the returned unsubscribe clears the listener — later requests are no-ops', () => {
+  it('the returned unsubscribe clears the listener — the detached fn no longer fires', () => {
     const fn = jest.fn();
     const unsubscribe = onExtensionSign(fn);
     unsubscribe();
     requestExtensionSign('rid-3');
     expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('COLD START: a rid requested BEFORE any listener subscribes is BUFFERED and delivered on subscribe', () => {
+    // The exact race that dropped a real sign: the deep-link trampoline / UL handler
+    // fires requestExtensionSign while the root <ExtensionSignController> is still
+    // mounting (not yet subscribed). The rid must NOT be lost — the app would open to
+    // home with no sign sheet. It is buffered and delivered the moment a listener attaches.
+    requestExtensionSign('rid-cold'); // no listener yet
+    const seen: string[] = [];
+    onExtensionSign((rid) => seen.push(rid)); // controller subscribes late
+    expect(seen).toEqual(['rid-cold']);
+    // Delivered exactly once — a second subscribe does not re-fire the drained rid.
+    const second = jest.fn();
+    onExtensionSign(second);
+    expect(second).not.toHaveBeenCalled();
   });
 
   it("unsubscribe only clears if it is still the current listener (a stale unsub can't detach a newer one)", () => {

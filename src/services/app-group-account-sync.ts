@@ -88,7 +88,13 @@ export interface ExtAccountCache {
   name: string;
   accounts: { name: string; address: string }[];
   chainId: number;
-  chains: Record<string, { name: string; rpcUrl: string; bundlerUrl: string }>;
+  chains: Record<string, {
+    name: string; rpcUrl: string; bundlerUrl: string;
+    /** Public chain badge data so the in-Safari connect sheet shows a real network
+     *  logo (logoURL) with a colored-monogram fallback (iconLabel on iconBg/iconColor),
+     *  exactly like the app's ChainLogo. */
+    iconLabel?: string; iconColor?: string; iconBg?: string; logoURL?: string;
+  }>;
   updatedAt: number;
   /** True once a getvela.app /sign Universal Link has resolved to the app on this
    *  device AND the attestation is within its TTL; the extension launches the sign
@@ -114,6 +120,10 @@ export function buildChainsMap(): ExtAccountCache['chains'] {
       name: n.displayName,
       rpcUrl: n.rpcURL,
       bundlerUrl: n.bundlerURL,
+      iconLabel: n.iconLabel,
+      iconColor: n.iconColor,
+      iconBg: n.iconBg,
+      logoURL: n.logoURL,
     };
   }
   return chains;

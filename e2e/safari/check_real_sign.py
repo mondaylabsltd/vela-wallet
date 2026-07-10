@@ -201,9 +201,13 @@ def main():
         sheet_shadow_click(d, 'cta')   # fires onSignLaunch → writeSignRequest (sign-req written)
         time.sleep(1.5)                # let the write reach native (races the launch)
         if rid:
+            # VELA_LAUNCH=scheme (default) tests velawallet://sign → /sign trampoline;
+            # VELA_LAUNCH=ul tests https://getvela.app/sign?rid → AccountFileWriter routing.
+            launch = os.environ.get('VELA_LAUNCH', 'scheme')
+            url = ('https://getvela.app/sign?rid=' if launch == 'ul' else 'velawallet://sign?rid=') + rid
             try:
-                d.execute_script('mobile: deepLink', {'url': 'velawallet://sign?rid=' + rid, 'bundleId': VELA})
-                L('launched /sign via deepLink')
+                d.execute_script('mobile: deepLink', {'url': url, 'bundleId': VELA})
+                L('launched via deepLink [%s]:' % launch, url[:48])
             except Exception as e:
                 L('deepLink err:', str(e)[:50])
         time.sleep(3.0)  # app routes /sign, reads sign-req, renders SigningRequestModal

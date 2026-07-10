@@ -190,6 +190,14 @@ import { t as tr, pickLocale } from './lib/i18n.js';
         select { font: inherit; color: var(--vela-fg-base); padding: 7px 10px; border-radius: 10px;
           border: 1px solid var(--vela-border-strong); background: var(--vela-bg-raised);
           -webkit-appearance: none; appearance: none; }
+        .netpick { display: inline-flex; align-items: center; gap: 8px; }
+        .netbadge { position: relative; width: 22px; height: 22px; flex: none; }
+        .netbadge .netmono { position: absolute; inset: 0; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center; overflow: hidden;
+          font-size: 8.5px; font-weight: 700; letter-spacing: -.03em; line-height: 1;
+          background: var(--vela-bg-sunken); color: var(--vela-fg-muted); }
+        .netbadge img { position: absolute; inset: 0; width: 100%; height: 100%;
+          border-radius: 50%; object-fit: cover; }
         .actions { display: flex; gap: 10px; margin-top: 20px; }
         .btn { flex: 1; text-align: center; padding: 15px 16px; border-radius: 15px; font-size: 16px;
           font-weight: 600; border: 0; cursor: pointer; text-decoration: none; box-sizing: border-box;
@@ -240,6 +248,20 @@ import { t as tr, pickLocale } from './lib/i18n.js';
   }
   function truncAddr(a) {
     return a && a.length > 12 ? a.slice(0, 6) + '…' + a.slice(-4) : a || '';
+  }
+
+  // A network badge for the connect sheet: the chain's real logo (logoURL) with a
+  // colored-monogram fallback (iconLabel on iconBg/iconColor) — mirrors the app's
+  // ChainLogo. Data rides the account cache (app-group-account-sync buildChainsMap).
+  function chainBadge(chains, cid) {
+    const c = (chains && (chains[String(cid)] || chains[cid])) || {};
+    const mono = esc(String(c.iconLabel || c.name || '?').slice(0, 3));
+    const bg = esc(c.iconBg || '');
+    const fg = esc(c.iconColor || '');
+    const img = c.logoURL
+      ? `<img src="${esc(c.logoURL)}" alt="" onerror="this.remove()">`
+      : '';
+    return `<span class="netmono" style="${bg ? 'background:' + bg + ';' : ''}${fg ? 'color:' + fg + ';' : ''}">${mono}</span>${img}`;
   }
 
   // The dApp's own favicon makes the sheet feel native to the site; fall back to a
@@ -298,7 +320,8 @@ import { t as tr, pickLocale } from './lib/i18n.js';
       <div class="title">${esc(L('connect.wantsToConnect', { host: label }))}</div>
       <div class="row"><span class="muted">${esc(L('connect.account'))}</span>
         <span><b>${esc(account.name || 'Account')}</b> <span class="mono">${esc(truncAddr(account.address))}</span></span></div>
-      <div class="row"><span class="muted">${esc(L('connect.network'))}</span><select id="chain">${options}</select></div>
+      <div class="row"><span class="muted">${esc(L('connect.network'))}</span>
+        <span class="netpick"><span class="netbadge" id="netbadge">${chainBadge(chains, curCid)}</span><select id="chain">${options}</select></span></div>
       <div class="divider"></div>
       <div class="perm"><span class="i ok">✓</span><span>${esc(L('connect.permView'))}</span></div>
       <div class="perm"><span class="i ok">✓</span><span>${esc(L('connect.permSign'))}</span></div>
@@ -309,9 +332,14 @@ import { t as tr, pickLocale } from './lib/i18n.js';
       </div>`;
 
     root.getElementById('cancel').onclick = () => { closeSheet(); onCancel && onCancel(); };
+    // Keep the network badge in sync with the selected chain.
+    const chainSel = root.getElementById('chain');
+    if (chainSel) chainSel.onchange = () => {
+      const badge = root.getElementById('netbadge');
+      if (badge) badge.innerHTML = chainBadge(chains, chainSel.value);
+    };
     root.getElementById('cta').onclick = () => {
-      const sel = root.getElementById('chain');
-      const cid = parseChainId(sel ? sel.value : curCid) || account.chainId || 1;
+      const cid = parseChainId(chainSel ? chainSel.value : curCid) || account.chainId || 1;
       closeSheet();
       onConfirm && onConfirm(account.address, cid);
     };
