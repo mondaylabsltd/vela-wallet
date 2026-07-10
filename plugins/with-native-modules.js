@@ -468,10 +468,16 @@ function withSafariExtensionBuild(config) {
       } catch (e) {
         // The extension IS expected here (targetDir exists) — a failed build must
         // NOT silently ship an empty appex. Fail prebuild loudly so it's fixed.
+        // COMMON CAUSE on EAS: build.mjs imports esbuild, which must be a ROOT
+        // devDependency (there are no npm workspaces, so EAS never installs the
+        // packages/safari-extension sub-package's node_modules). If you see
+        // ERR_MODULE_NOT_FOUND 'esbuild', run: npm i -D esbuild@0.25.0 (at the repo root).
         throw new Error(
           '[with-native-modules] Safari extension bundle build FAILED — refusing to ' +
             'prebuild an empty extension. Run `node packages/safari-extension/build.mjs` ' +
-            'to see the error.\n' + (e && e.message ? e.message : String(e)),
+            'to see the error. If it is ERR_MODULE_NOT_FOUND esbuild, add esbuild to the ' +
+            'ROOT package.json devDependencies (EAS does not install the sub-package).\n' +
+            (e && e.message ? e.message : String(e)),
         );
       }
       // Sanity: the manifest must exist after a successful build.

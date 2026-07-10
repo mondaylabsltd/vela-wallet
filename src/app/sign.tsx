@@ -6,7 +6,7 @@
 // is — never a standalone page you get stranded on. It shows no UI of its own beyond a
 // one-frame app-background flash.
 import { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { color } from '@/constants/theme';
 import { requestExtensionSign } from '@/services/extension-sign-bus';
@@ -23,9 +23,7 @@ export default function SignTrampoline(): React.ReactElement {
     else router.replace('/');
   }, [rid, router]);
 
-  return <View style={styles.bg} />;
+  // Inline bg (read at render, not a frozen module-level StyleSheet) so the one-frame
+  // flash matches the current light/dark scheme.
+  return <View style={{ flex: 1, backgroundColor: color.bg.base }} />;
 }
-
-const styles = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: color.bg.base },
-});

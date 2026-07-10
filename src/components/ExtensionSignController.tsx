@@ -26,9 +26,11 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { Check, X as XIcon, AlertTriangle } from 'lucide-react-native';
 import { useWallet } from '@/models/wallet-state';
 import { useDAppConnection } from '@/models/dapp-connection';
-import { color, space, text, inter } from '@/constants/theme';
+import { color, space, text, inter, createStyles } from '@/constants/theme';
+import { useColorSchemePreference } from '@/constants/color-scheme';
 import { signAccountIndex } from '@/models/dapp-request-routing';
 import { onExtensionSign } from '@/services/extension-sign-bus';
 import { ExtensionBridgeTransport } from '@/services/extension-bridge-transport';
@@ -66,6 +68,10 @@ export function ExtensionSignController(): React.ReactElement {
   const { beginExtensionSign } = useDAppConnection();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  // This overlay renders OUTSIDE the Stack (which remounts on scheme change), so it
+  // must subscribe to the color scheme itself to re-render — otherwise the confirmation
+  // sheet stays frozen in the launch-time theme (was rendering light over a dark app).
+  useColorSchemePreference();
 
   const [rid, setRid] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
@@ -172,26 +178,28 @@ export function ExtensionSignController(): React.ReactElement {
 
   // Settled → a bottom-sheet CONFIRMATION over the dimmed wallet. Color grammar
   // (§12.3): success = submitted, neutral = user-chosen reject, amber = ambiguous.
-  let glyph = '', glyphColor: string = color.fg.subtle, glyphBg: string = color.bg.sunken;
+  // Glyphs are real lucide icons (Check / X / AlertTriangle), not text characters.
+  let Icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }> = AlertTriangle;
+  let glyphColor: string = color.fg.subtle, glyphBg: string = color.bg.sunken;
   let title = '', hint = '';
   // `positive` = a clean, good outcome (submitted / one-tap enabled) → accent CTA.
   // Neutral/ambiguous outcomes (reject / expired / check-Vela) get a muted CTA so
   // the color never overstates the result (§12.3 grammar; red reserved for money-loss).
   let positive = false;
   if (phase === 'selftest') {
-    glyph = '✓'; glyphColor = color.success.base; glyphBg = color.success.soft; positive = true;
+    Icon = Check; glyphColor = color.success.base; glyphBg = color.success.soft; positive = true;
     title = t('signHandoff.oneTapTitle'); hint = t('signHandoff.oneTapHint');
   } else if (phase === 'missing') {
-    glyph = '!'; glyphColor = color.fg.subtle; glyphBg = color.bg.sunken;
+    Icon = AlertTriangle; glyphColor = color.fg.subtle; glyphBg = color.bg.sunken;
     title = t('signHandoff.expired'); hint = t('signHandoff.returnHint');
   } else if (outcome === 'submitted') {
-    glyph = '✓'; glyphColor = color.success.base; glyphBg = color.success.soft; positive = true;
+    Icon = Check; glyphColor = color.success.base; glyphBg = color.success.soft; positive = true;
     title = t('signHandoff.signed'); hint = t('signHandoff.returnHint');
   } else if (outcome === 'rejected') {
-    glyph = '✕'; glyphColor = color.fg.subtle; glyphBg = color.bg.sunken;
+    Icon = XIcon; glyphColor = color.fg.subtle; glyphBg = color.bg.sunken;
     title = t('signHandoff.rejected'); hint = t('signHandoff.returnHint');
   } else {
-    glyph = '!'; glyphColor = color.warning.base; glyphBg = color.warning.soft;
+    Icon = AlertTriangle; glyphColor = color.warning.base; glyphBg = color.warning.soft;
     title = t('signHandoff.pending'); hint = t('signHandoff.returnHint');
   }
 
@@ -203,7 +211,7 @@ export function ExtensionSignController(): React.ReactElement {
       <View style={[styles.sheet, { paddingBottom: space['3xl'] + insets.bottom }]}>
         <View style={styles.grab} />
         <View style={[styles.badge, { backgroundColor: glyphBg }]}>
-          <Text style={[styles.glyph, { color: glyphColor }]}>{glyph}</Text>
+          <Icon size={26} color={glyphColor} strokeWidth={2.75} />
         </View>
         <Text style={styles.title}>{title}</Text>
         {!!hint && <Text style={styles.hint}>{hint}</Text>}
@@ -219,11 +227,14 @@ export function ExtensionSignController(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
+// createStyles (NOT StyleSheet.create): the factory re-reads the mutable color tokens
+// whenever the scheme changes, so the sheet follows the app's light/dark. Paired with
+// the useColorSchemePreference() subscription above that triggers the re-render.
+const styles = createStyles(() => ({
   // Non-blocking host while idle: zero-size, lets all wallet touches through.
   hostIdle: { position: 'absolute', width: 0, height: 0 },
   // Full-screen dimmed overlay OVER the wallet home for the confirmation.
-  hostOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', backgroundColor: 'rgba(20,20,18,0.32)' },
+  hostOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
   sheet: {
     backgroundColor: color.bg.raised,
     borderTopLeftRadius: 24,
@@ -231,11 +242,12 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
     paddingHorizontal: space['4xl'],
     alignItems: 'center',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: color.border.base,
     shadowColor: '#000', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.14, shadowRadius: 24, elevation: 16,
   },
   grab: { width: 36, height: 5, borderRadius: 3, backgroundColor: color.border.strong, opacity: 0.8, marginBottom: space['2xl'] },
   badge: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginBottom: space['xl'] },
-  glyph: { fontSize: 28, lineHeight: 34, ...inter.bold },
   title: { fontSize: text.xl, color: color.fg.base, textAlign: 'center', ...inter.bold },
   hint: { fontSize: text.base, color: color.fg.muted, textAlign: 'center', marginTop: space.md, lineHeight: 20, maxWidth: 300, ...inter.regular },
   doneBtn: { alignSelf: 'stretch', marginTop: space['3xl'], paddingVertical: space.xl, borderRadius: 15, alignItems: 'center' },
@@ -246,4 +258,4 @@ const styles = StyleSheet.create({
   doneLabelAccent: { color: '#fff' },
   doneLabelNeutral: { color: color.fg.base },
   offscreen: { position: 'absolute', left: -9999, top: -9999, width: 1, height: 1, opacity: 0 },
-});
+}));

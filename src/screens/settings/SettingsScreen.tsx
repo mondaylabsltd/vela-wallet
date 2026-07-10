@@ -45,6 +45,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -1450,13 +1451,17 @@ export default function SettingsScreen() {
             right={<ExternalLink size={16} color={color.fg.subtle} />} />
         </Animated.View>
 
-        {/* Browser — use Vela in Safari on any dApp */}
-        <Animated.View style={styles.sectionContainer} entering={fadeInDown(75, 300)}>
-          <SectionLabel style={styles.sectionLabel}>{t('safariExt.sectionLabel')}</SectionLabel>
-          <SettingsRow s={styles} icon={Puzzle}
-            title={t('safariExt.settingsTitle')} subtitle={t('safariExt.settingsSubtitle')}
-            showDivider={false} onPress={() => router.push('/safari-extension')} />
-        </Animated.View>
+        {/* Browser — use Vela in Safari on any dApp. iOS ONLY: the Safari Web
+            Extension exists only on iOS; the web wallet and Android have no such
+            surface, so the row would be misleading there. */}
+        {Platform.OS === 'ios' && (
+          <Animated.View style={styles.sectionContainer} entering={fadeInDown(75, 300)}>
+            <SectionLabel style={styles.sectionLabel}>{t('safariExt.sectionLabel')}</SectionLabel>
+            <SettingsRow s={styles} icon={Puzzle}
+              title={t('safariExt.settingsTitle')} subtitle={t('safariExt.settingsSubtitle')}
+              showDivider={false} onPress={() => router.push('/safari-extension')} />
+          </Animated.View>
+        )}
 
         {/* Appearance */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(100, 300)}>
