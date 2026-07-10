@@ -40,6 +40,7 @@ class WalletWebView(context: Context) : WebView(context) {
     private var pendingUrl: String? = null
     private var isLoading = false
     private var lastFavicon = "" // resolved favicon URL for the current document
+    private var lastError = "" // latched main-frame load error (cleared on next load start)
     private var lastSeq = 0 // highest processed outbox seq (native <- RN deliveries)
 
     init {
@@ -47,11 +48,18 @@ class WalletWebView(context: Context) : WebView(context) {
         settings.domStorageEnabled = true
         settings.databaseEnabled = true
         settings.mediaPlaybackRequiresUserGesture = true
+        // window.open / target=_blank: route the new-window request into THIS view
+        // (single-tab), matching iOS createWebViewWith. Without this Android silently
+        // no-ops window.open (returns null), breaking dApps that use it for OAuth /
+        // WalletConnect deep links.
+        settings.setSupportMultipleWindows(true)
+        settings.javaScriptCanOpenWindowsAutomatically = true
 
         webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 isLoading = true
                 lastFavicon = "" // new document — drop the previous page's favicon
+                lastError = "" // new load — clear any prior error so the overlay hides
                 // Fallback for pre-DOCUMENT_START_SCRIPT devices: inject as early as we
                 // can (not before the first byte, but before most dApps read ethereum).
                 if (!documentStartSupported) {
@@ -66,13 +74,18 @@ class WalletWebView(context: Context) : WebView(context) {
                 resolveFavicon(view) // async — re-emits nav once the favicon is known
             }
 
-            // http(s) loads here; every other scheme is handed to the OS (mailto:,
-            // tel:, wc:, itms-apps:, app links) or dropped (javascript:/file:/data:).
+            // http(s) loads here. Every other scheme is handed to the OS — but ONLY
+            // for a real MAIN-FRAME navigation WITH a user gesture, so a hidden
+            // cross-origin iframe or a programmatic redirect cannot silently launch
+            // an external app or our own velawallet:// deep link. javascript:/file:/
+            // data: are neither navigated nor opened.
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val uri = request?.url ?: return false
                 val scheme = uri.scheme?.lowercase() ?: ""
                 if (scheme == "http" || scheme == "https" || scheme == "about") return false
-                if (scheme != "javascript" && scheme != "file" && scheme != "data") {
+                if (scheme != "javascript" && scheme != "file" && scheme != "data" && scheme != "velawallet" &&
+                    request.isForMainFrame && request.hasGesture()
+                ) {
                     try {
                         context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -85,13 +98,35 @@ class WalletWebView(context: Context) : WebView(context) {
             override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                 if (request?.isForMainFrame != true) return // ignore sub-resource failures
                 isLoading = false
-                emitNavigation(false, error?.description?.toString() ?: "Failed to load")
+                lastError = error?.description?.toString() ?: "Failed to load"
+                emitNavigation(false)
             }
 
             // SPA client-side routing (history.pushState/replaceState) fires this but
             // NOT onPageStarted/Finished — refresh the URL bar + canGoBack for it.
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                 emitNavigation(isLoading)
+            }
+        }
+
+        // window.open → load in this same view (single-tab browser).
+        webChromeClient = object : android.webkit.WebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView?, isDialog: Boolean, isUserGesture: Boolean, resultMsg: android.os.Message?,
+            ): Boolean {
+                val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                // A throwaway WebView that captures the target URL and loads it in the main view.
+                val capture = WebView(context)
+                capture.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(v: WebView?, req: WebResourceRequest?): Boolean {
+                        req?.url?.let { pendingUrl = it.toString(); loadUrl(it.toString()) }
+                        capture.destroy()
+                        return true
+                    }
+                }
+                transport.webView = capture
+                resultMsg.sendToTarget()
+                return true
             }
         }
 
@@ -207,14 +242,18 @@ class WalletWebView(context: Context) : WebView(context) {
         emitEvent("onProviderRequest", payload)
     }
 
-    private fun emitNavigation(loading: Boolean, error: String = "") {
+    // `error` always reflects the LATCHED main-frame error: onReceivedError sets
+    // lastError, and every later emit (onPageFinished / doUpdateVisitedHistory /
+    // favicon) carries it forward instead of clobbering it with "" — otherwise the
+    // guaranteed onPageFinished after a failed load would hide the error overlay.
+    private fun emitNavigation(loading: Boolean) {
         val payload = Arguments.createMap().apply {
             putString("url", url ?: "")
             putString("title", title ?: "")
             putBoolean("canGoBack", canGoBack())
             putBoolean("canGoForward", canGoForward())
             putBoolean("loading", loading)
-            putString("error", error)
+            putString("error", lastError)
             putString("favicon", lastFavicon)
         }
         emitEvent("onNavigationChange", payload)

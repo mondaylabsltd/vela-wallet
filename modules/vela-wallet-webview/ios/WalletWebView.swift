@@ -236,10 +236,14 @@ class WalletWebView: UIView, WKScriptMessageHandler, WKNavigationDelegate, WKUID
     }
 
     // External scheme (mailto:, tel:, wc:, itms-apps:, https-app-links, …): hand to
-    // the OS instead of failing silently in the WebView. Dangerous local schemes
-    // (javascript:, file:, data:) are neither loaded nor opened — just cancelled.
+    // the OS — but ONLY for a real main-frame link tap. A programmatic redirect
+    // (`location.href='facetime://…'`) or a hidden cross-origin iframe is
+    // navigationType .other / a subframe, and must NOT be able to launch external
+    // apps or our own velawallet:// deep link without a user gesture. Dangerous
+    // local schemes (javascript:, file:, data:) are never loaded nor opened.
     decisionHandler(.cancel)
-    if scheme != "javascript", scheme != "file", scheme != "data" {
+    let userTapped = navigationAction.navigationType == .linkActivated && navigationAction.sourceFrame.isMainFrame
+    if userTapped, scheme != "javascript", scheme != "file", scheme != "data", scheme != "velawallet" {
       UIApplication.shared.open(url, options: [:], completionHandler: nil)
     }
   }
@@ -278,8 +282,10 @@ class WalletWebView: UIView, WKScriptMessageHandler, WKNavigationDelegate, WKUID
   /// Resolve the page's declared favicon (absolute URL) and re-emit navigation so
   /// the URL bar can show it. Falls back to /favicon.ico.
   private func resolveFavicon() {
-    webView?.evaluateJavaScript(FAVICON_JS) { [weak self] result, _ in
-      guard let self = self else { return }
+    guard let wv = webView else { return }
+    let urlAtCall = wv.url
+    wv.evaluateJavaScript(FAVICON_JS) { [weak self] result, _ in
+      guard let self = self, let w = self.webView, w.url == urlAtCall else { return } // navigated away — drop the stale result
       if let href = result as? String, !href.isEmpty {
         self.lastFavicon = href
         self.emitNavigation(loading: false)

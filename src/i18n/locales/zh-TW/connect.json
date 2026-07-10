@@ -95,7 +95,16 @@
       "retry": "重試",
       "disconnect": "中斷連線",
       "disconnectTitle": "中斷與此網站的連線？",
-      "disconnectBody": "此網站需要重新連線後才能查看你的地址或要求你簽署。"
+      "disconnectBody": "此網站需要重新連線後才能查看你的地址或要求你簽署。",
+      "a11ySecure": "安全網站",
+      "a11yInsecure": "不安全網站 — 未加密",
+      "historyTitle": "最近的 dApp",
+      "historyOpen": "最近開啟",
+      "historyEmpty": "還沒有最近的 dApp",
+      "clearAll": "清除",
+      "clearAllTitle": "清除記錄？",
+      "clearAllBody": "這會移除所有最近開啟的 dApp。",
+      "a11yDeleteHistory": "從記錄中移除"
     }
   },
   "signHandoff": {

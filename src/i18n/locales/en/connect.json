@@ -95,7 +95,16 @@
       "retry": "Try again",
       "disconnect": "Disconnect",
       "disconnectTitle": "Disconnect this site?",
-      "disconnectBody": "The site will need to reconnect before it can see your address or ask you to sign."
+      "disconnectBody": "The site will need to reconnect before it can see your address or ask you to sign.",
+      "a11ySecure": "Secure site",
+      "a11yInsecure": "Insecure site — not encrypted",
+      "historyTitle": "Recent dApps",
+      "historyOpen": "Recent",
+      "historyEmpty": "No recent dApps yet",
+      "clearAll": "Clear all",
+      "clearAllTitle": "Clear history?",
+      "clearAllBody": "This removes all recently-opened dApps.",
+      "a11yDeleteHistory": "Remove from history"
     }
   },
   "signHandoff": {

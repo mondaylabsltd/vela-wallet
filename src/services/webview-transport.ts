@@ -37,6 +37,15 @@ export class WebViewTransport implements DAppTransport {
   private _connected = false;
   private _dapp: DAppInfo | null;
   private readonly bridge: WalletWebViewBridge;
+  /**
+   * The chain the in-app browser is currently on. Read by `beginExtensionSign` so a
+   * forwarded signing request takes handleIncoming's PER-REQUEST-chain path (F4):
+   *   - the sign sheet / SIWE anti-phishing shows THIS dApp (`__dapp`), not a
+   *     concurrent relay session's global dappInfo, and
+   *   - a browser tx never mutates the GLOBAL chainId shared with a relay session.
+   * The browser screen keeps this in sync with the wallet's active chain.
+   */
+  requestChainId?: number;
   /** Requests emitted upstream but not yet responded to — bounds memory + makes
    *  sendResponse idempotent (exactly one response per request id). */
   private readonly pending = new Set<string>();

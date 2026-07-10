@@ -21,7 +21,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import {
-  AlertTriangle, ArrowRight, ChevronDown, ChevronRight, EyeOff, Inbox, Plug, RefreshCw, Settings, Trash2,
+  AlertTriangle, ArrowRight, ChevronDown, ChevronRight, EyeOff, History, Inbox, Plug, RefreshCw, Settings, Trash2,
 } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -43,6 +43,8 @@ import { NetworkFilterButton, NetworkFilterSheet } from '@/components/ui/Network
 import { TransactionDetailSheet } from '@/components/ui/TransactionDetailSheet';
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
 import { SigningReplaySheet } from '@/components/ui/SigningReplaySheet';
+import { BrowserHistorySheet } from '@/components/ui/BrowserHistorySheet';
+import { getBrowserHistory } from '@/services/browser-history';
 import { VelaCard } from '@/components/ui/VelaCard';
 import { VelaRefresh } from '@/components/ui/VelaRefresh';
 import { WalletAvatar } from '@/components/ui/WalletAvatar';
@@ -1080,12 +1082,22 @@ function ConnectionsView({
   onDeleteEvent: (id: string) => void;
 }) {
   const { t } = useTranslation();
+  const router = useRouter();
   const [linkInput, setLinkInput] = useState('');
   const submitPaste = () => {
     if (!linkInput.trim()) return;
     onPasteConnect(linkInput);
     setLinkInput('');
   };
+
+  // Recently-opened dApps — hidden behind the clock icon (the icon only appears once
+  // there's history, so a fresh install stays clean).
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyCount, setHistoryCount] = useState(0);
+  const refreshHistoryCount = useCallback(() => {
+    void getBrowserHistory().then((h) => setHistoryCount(h.length));
+  }, []);
+  useEffect(() => { refreshHistoryCount(); }, [refreshHistoryCount]);
 
   // Pairing in progress (fingerprint / waiting) or failed — shown inline so the
   // user never leaves the Connections panel while connecting.
@@ -1129,6 +1141,25 @@ function ConnectionsView({
             <ArrowRight size={18} color={!linkInput.trim() ? color.fg.subtle : color.fg.inverse} strokeWidth={2.5} />
           </Pressable>
         </View>
+
+        {/* Recently-opened dApps — one tap to reveal, only shown once there's history. */}
+        {historyCount > 0 ? (
+          <Pressable
+            style={styles.connHistoryBtn}
+            onPress={() => setShowHistory(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('connect.browser.historyTitle')}
+          >
+            <History size={15} color={color.fg.muted} strokeWidth={2} />
+            <Text style={styles.connHistoryText}>{t('connect.browser.historyOpen')}</Text>
+          </Pressable>
+        ) : null}
+
+        <BrowserHistorySheet
+          visible={showHistory}
+          onClose={() => { setShowHistory(false); refreshHistoryCount(); }}
+          onOpen={(url) => { setShowHistory(false); router.push({ pathname: '/browser', params: { url } }); }}
+        />
       </View>
     );
   }
@@ -1402,6 +1433,8 @@ const styles = createStyles(() => ({
   connOrText: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
   connPasteHint: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, textAlign: 'center', marginBottom: space.sm },
   connPasteRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, alignSelf: 'stretch', paddingHorizontal: space.xl },
+  connHistoryBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.xl, paddingVertical: space.xs },
+  connHistoryText: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
   connPasteInput: {
     flex: 1, fontSize: text.sm, fontWeight: '500', fontFamily: font.mono,
     color: color.fg.base, padding: space.lg,

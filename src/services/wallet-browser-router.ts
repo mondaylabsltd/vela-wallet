@@ -68,18 +68,45 @@ const SIGNING_METHODS = new Set([
 ]);
 
 /**
- * A PUBLIC http (non-TLS) origin, where a MITM can inject page script. localhost,
- * loopback, `.local`, and private-LAN hosts are exempt so local/dev dApps (and the
+ * A loopback / private-LAN / link-local host — the ONLY http origins exempt from
+ * the insecure-signing block (dev + the on-device test dApp served over the LAN).
+ *
+ * Matches EXACT IPs only (a fully-anchored dotted quad or IPv6), never a hostname
+ * that merely starts with those digits: `10.0.0.1.evil.com` is a public FQDN an
+ * attacker can register (DNS labels may start with a digit) and MUST NOT be exempt.
+ */
+function isLoopbackOrPrivateHost(host: string): boolean {
+  // URL.hostname returns IPv6 in bracketed form ("[::1]") — strip the brackets.
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+  if (h === 'localhost' || h.endsWith('.local')) return true;
+  // IPv6
+  if (h === '::1') return true;
+  if (/^f[cd][0-9a-f]{2}:/.test(h)) return true; // fc00::/7 unique-local
+  if (/^fe80:/.test(h)) return true; // link-local
+  // IPv4 — must be a complete dotted quad, each octet 0–255
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false;
+  const o = m.slice(1, 5).map(Number);
+  if (o.some((n) => n > 255)) return false;
+  const [a, b] = o;
+  if (a === 127) return true; // loopback
+  if (a === 10) return true; // private
+  if (a === 192 && b === 168) return true; // private
+  if (a === 172 && b >= 16 && b <= 31) return true; // private
+  if (a === 169 && b === 254) return true; // link-local
+  return false;
+}
+
+/**
+ * A PUBLIC http (non-TLS) origin, where a MITM can inject page script. Loopback /
+ * private-LAN / link-local hosts and `.local` are exempt so local/dev dApps (and the
  * on-device test dApp, served over the LAN) still work.
  */
 export function isInsecurePublicOrigin(origin: string): boolean {
   try {
     const u = new URL(origin);
     if (u.protocol !== 'http:') return false;
-    const h = u.hostname;
-    if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || h.endsWith('.local')) return false;
-    if (/^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
-    return true;
+    return !isLoopbackOrPrivateHost(u.hostname);
   } catch {
     return true; // unparseable origin → treat as insecure
   }

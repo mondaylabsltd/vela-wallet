@@ -66,19 +66,33 @@ describe('isInsecurePublicOrigin', () => {
     expect(isInsecurePublicOrigin('http://1.2.3.4')).toBe(true); // public IP
   });
 
-  test('localhost / loopback / .local / private-LAN http are exempt (dev + on-device test dApp)', () => {
+  test('localhost / loopback / .local / private-LAN / link-local http are exempt (dev + on-device test dApp)', () => {
     expect(isInsecurePublicOrigin('http://localhost:3000')).toBe(false);
     expect(isInsecurePublicOrigin('http://127.0.0.1:8080')).toBe(false);
+    expect(isInsecurePublicOrigin('http://127.5.5.5')).toBe(false);
     expect(isInsecurePublicOrigin('http://mac.local')).toBe(false);
     expect(isInsecurePublicOrigin('http://192.168.1.42:19006')).toBe(false);
     expect(isInsecurePublicOrigin('http://10.0.0.5')).toBe(false);
     expect(isInsecurePublicOrigin('http://172.16.0.9')).toBe(false);
     expect(isInsecurePublicOrigin('http://172.31.255.255')).toBe(false);
+    expect(isInsecurePublicOrigin('http://169.254.1.1')).toBe(false); // link-local
+    expect(isInsecurePublicOrigin('http://[::1]:3000')).toBe(false);
+    expect(isInsecurePublicOrigin('http://[fe80::1]')).toBe(false);
+    expect(isInsecurePublicOrigin('http://[fd00::1]')).toBe(false);
   });
 
-  test('172.x outside 16–31 is public', () => {
+  test('a PUBLIC FQDN that merely STARTS with a private range is NOT exempt (the bypass)', () => {
+    // DNS labels may start with a digit — an attacker can register these.
+    expect(isInsecurePublicOrigin('http://10.0.0.1.evil.com')).toBe(true);
+    expect(isInsecurePublicOrigin('http://192.168.1.1.attacker.com')).toBe(true);
+    expect(isInsecurePublicOrigin('http://127.0.0.1.example.com')).toBe(true);
+    expect(isInsecurePublicOrigin('http://172.16.0.1x.com')).toBe(true);
+  });
+
+  test('172.x outside 16–31, and octets > 255, are public', () => {
     expect(isInsecurePublicOrigin('http://172.15.0.1')).toBe(true);
     expect(isInsecurePublicOrigin('http://172.32.0.1')).toBe(true);
+    expect(isInsecurePublicOrigin('http://10.300.0.1')).toBe(true); // 300 > 255 → not a valid IP
   });
 
   test('unparseable origin is treated as insecure', () => {

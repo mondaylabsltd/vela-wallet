@@ -95,7 +95,16 @@
       "retry": "再試一次",
       "disconnect": "斷開連接",
       "disconnectTitle": "斷開同呢個網站嘅連接？",
-      "disconnectBody": "呢個網站要重新連接先至睇到你嘅地址或者要求你簽署。"
+      "disconnectBody": "呢個網站要重新連接先至睇到你嘅地址或者要求你簽署。",
+      "a11ySecure": "安全網站",
+      "a11yInsecure": "唔安全嘅網站 — 未加密",
+      "historyTitle": "最近嘅 dApp",
+      "historyOpen": "最近開過",
+      "historyEmpty": "仲未有最近嘅 dApp",
+      "clearAll": "清除",
+      "clearAllTitle": "清除記錄？",
+      "clearAllBody": "呢個會移除晒所有最近開過嘅 dApp。",
+      "a11yDeleteHistory": "喺記錄度移除"
     }
   },
   "signHandoff": {

@@ -22,7 +22,7 @@ import { ActivityIndicator, BackHandler, Image, Platform, Pressable, StyleSheet,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ExternalLink, Lock, RotateCw, TriangleAlert, X } from 'lucide-react-native';
+import { ArrowLeft, ExternalLink, Lock, Plug, RotateCw, TriangleAlert, X } from 'lucide-react-native';
 
 import { useWallet } from '@/models/wallet-state';
 import { useDAppConnection } from '@/models/dapp-connection';
@@ -35,6 +35,7 @@ import {
 } from '@/modules/webview';
 import { WebViewTransport, type WalletWebViewBridge } from '@/services/webview-transport';
 import { coerceBrowserUrl } from '@/services/dapp-transport';
+import { recordBrowserVisit } from '@/services/browser-history';
 import { getGrant, resolveGranted, revokeGrant, setGrant, shouldDropGrant, type DAppGrant } from '@/services/dapp-permissions';
 import { decideBrowserRequest } from '@/services/wallet-browser-router';
 import { openBrowser, showAlert } from '@/services/platform';
@@ -143,6 +144,13 @@ export default function BrowserScreen() {
     return () => sub.remove();
   }, [nav?.canGoBack]);
 
+  // Keep the transport's chain current so a forwarded signing request takes the
+  // per-request-chain path (F4): the sign sheet / SIWE shows THIS dApp (not a
+  // concurrent relay session's), and a browser tx never mutates the global chain.
+  useEffect(() => {
+    transport.requestChainId = chainId;
+  }, [transport, chainId]);
+
   // Live channel: forward global chain changes (incl. a granted wallet_switchEthereumChain)
   // to the connected page as `chainChanged`. Only when connected and only on an
   // actual change — never emit the address here (no accountsChanged leak).
@@ -154,13 +162,18 @@ export default function BrowserScreen() {
     prevChainRef.current = chainId;
   }, [chainId, connectedAddr, bridge]);
 
+  // ALL wallet addresses (not just the active one). A grant is pinned to the address
+  // it was made for, so resolveGranted and shouldDropGrant must both judge against the
+  // full set — otherwise a grant to a non-active account reads as disconnected while
+  // still being kept, re-prompting every request. null while loading → cold-load safe.
+  const walletAddresses = useMemo(() => state.accounts?.map((a) => a.address) ?? null, [state.accounts]);
+
   const refreshGrant = useCallback(
     async (origin: string) => {
       const grant = await getGrant(origin);
-      const addresses = activeAccount ? [activeAccount.address] : [];
-      setConnectedAddr(resolveGranted(grant, addresses)[0] ?? null);
+      setConnectedAddr(resolveGranted(grant, walletAddresses)[0] ?? null);
     },
-    [activeAccount],
+    [walletAddresses],
   );
 
   const onProviderRequest = useCallback(
@@ -168,13 +181,11 @@ export default function BrowserScreen() {
       // §5.2 — a cross-origin iframe never sees accounts or triggers connect: it gets
       // a disconnected view (granted = []), so the pure decision rejects/limits it.
       const grant = req.isMainFrame ? await getGrant(req.origin) : null;
-      const addresses = activeAccount ? [activeAccount.address] : [];
-      // Physically clean up a grant whose account was DELETED from the wallet
-      // (checked against ALL accounts, so a grant for a non-active account survives).
-      if (grant && shouldDropGrant(grant, state.accounts?.map((a) => a.address) ?? null)) {
+      // Physically clean up a grant whose account was DELETED from the wallet.
+      if (grant && shouldDropGrant(grant, walletAddresses)) {
         void revokeGrant(req.origin);
       }
-      const granted = req.isMainFrame ? resolveGranted(grant, addresses) : [];
+      const granted = req.isMainFrame ? resolveGranted(grant, walletAddresses) : [];
       const decision = decideBrowserRequest({
         method: req.method,
         origin: req.origin,
@@ -203,7 +214,7 @@ export default function BrowserScreen() {
           return;
       }
     },
-    [transport, bridge, activeAccount, state.accounts, setConsentBoth],
+    [transport, bridge, activeAccount, walletAddresses, setConsentBoth],
   );
 
   const approveConsent = useCallback(async () => {
@@ -216,6 +227,10 @@ export default function BrowserScreen() {
       grantedAt: Date.now(),
     };
     await setGrant(grant);
+    // A navigation during the await already rejected+cleared this consent (nav
+    // guard) — don't respond or push accountsChanged to a document that has since
+    // navigated to a different origin.
+    if (consentRef.current !== c) return;
     // Answer every coalesced request with its method-appropriate result.
     for (const r of c.requests) {
       const result =
@@ -266,6 +281,13 @@ export default function BrowserScreen() {
     (n: NavigationChangeEvent) => {
       setNav(n);
       if (n.url) transport.setDAppInfo({ name: n.title || hostOf(n.url), url: n.url });
+
+      // Record the visit once the page has settled (deduped by origin in the store).
+      // Fires on load-finish and again when the favicon resolves, so the entry ends
+      // up with the best title + favicon we saw.
+      if (n.url && !n.loading && !n.error) {
+        void recordBrowserVisit({ url: n.url, title: n.title, favicon: n.favicon }, Date.now());
+      }
 
       // A fresh document load (reload or cross-origin) starts. SPA pushState does
       // NOT set loading, so same-page route changes keep their pending state.
@@ -321,17 +343,22 @@ export default function BrowserScreen() {
 
       {/* Top bar: site favicon / security indicator + host/title + connection chip + close */}
       <View style={styles.topBar}>
-        {!secure ? (
-          <TriangleAlert size={14} color={color.warning.base} />
-        ) : showFavicon ? (
-          <Image
-            source={{ uri: nav!.favicon }}
-            style={styles.favicon}
-            onError={() => setFaviconBroken(true)}
-          />
-        ) : (
-          <Lock size={14} color={color.fg.muted} />
-        )}
+        <View
+          accessibilityRole="image"
+          accessibilityLabel={secure ? t('connect.browser.a11ySecure') : t('connect.browser.a11yInsecure')}
+        >
+          {!secure ? (
+            <TriangleAlert size={14} color={color.warning.base} />
+          ) : showFavicon ? (
+            <Image
+              source={{ uri: nav!.favicon }}
+              style={styles.favicon}
+              onError={() => setFaviconBroken(true)}
+            />
+          ) : (
+            <Lock size={14} color={color.fg.muted} />
+          )}
+        </View>
         <View style={styles.hostWrap}>
           <Text style={styles.host} numberOfLines={1}>{host}</Text>
           {nav?.title ? <Text style={styles.title} numberOfLines={1}>{nav.title}</Text> : null}
@@ -384,10 +411,17 @@ export default function BrowserScreen() {
             </View>
           ) : null}
         </View>
-      ) : (
+      ) : state.isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={color.accent.base} />
           <Text style={styles.dim}>{t('connect.browser.preparing')}</Text>
+        </View>
+      ) : (
+        // Wallet finished loading but there's none yet (e.g. reached via deep link
+        // before onboarding) — don't spin forever pretending to load.
+        <View style={styles.center}>
+          <Plug size={26} color={color.fg.subtle} strokeWidth={2} />
+          <Text style={styles.dim}>{t('connect.list.noWallet')}</Text>
         </View>
       )}
 
