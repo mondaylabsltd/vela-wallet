@@ -97,5 +97,33 @@
       "disconnectTitle": "斷開同呢個網站嘅連接？",
       "disconnectBody": "呢個網站要重新連接先至睇到你嘅地址或者要求你簽署。"
     }
+  },
+  "signHandoff": {
+    "signing": "喺 Vela 度確認",
+    "signed": "已傳送",
+    "rejected": "已取消",
+    "pending": "請喺 Vela 活動度查看",
+    "expired": "呢個簽署請求已經過期",
+    "returnHint": "返去 Safari 查看，版面唔會重新整理",
+    "oneTapTitle": "一撳簽署已啟用",
+    "oneTapHint": "之後喺 Safari 簽署會直接開 Vela。撳左上角「‹ Safari」就返到去。",
+    "done": "完成"
+  },
+  "safariExt": {
+    "navTitle": "Safari 擴展功能",
+    "heroTitle": "喺 Safari 度用 Vela",
+    "heroBody": "喺 iPhone 嘅 Safari 度，差唔多任何 dApp 都可以直接連接 Vela。連接同讀取都喺 Safari 內完成，淨係簽署會跳去 Vela 用 Face ID 確認——唔使換銀包 App，亦冇助記詞。",
+    "stepsLabel": "啟用一次就得",
+    "step1": "喺 Safari 度開一個 dApp 網站。",
+    "step2": "撳網址列嘅「Aa」→「管理擴展功能」，開啟 Vela Wallet。",
+    "step3": "再撳「Aa」→ Vela Wallet →「允許」（喺嗰個網站允許一次就得）。",
+    "step4": "喺網站嘅「連接銀包」度揀 Vela Wallet。",
+    "oneTapTitle": "一撳簽署",
+    "oneTapBody": "簽署時 Vela 會打開俾你用 Face ID 快速確認，跟住自動返返網頁。啟用一撳直達之後（擴展功能彈窗裡嘅「測試一撳簽署」），連「打開 Vela？」提示都唔使撳。",
+    "cta": "喺 Safari 度開 getvela.app",
+    "ctaHint": "會打開 Safari，「Aa」選單同 Vela 開關都喺嗰度。",
+    "sectionLabel": "瀏覽器",
+    "settingsTitle": "喺 Safari 度用 Vela",
+    "settingsSubtitle": "喺瀏覽器度連接任何 dApp"
   }
 }

@@ -298,6 +298,45 @@ export async function fetchBundlerAccountInfo(
   }
 }
 
+// Splitter info is constant per bundler (a pure function of the operator secret), so cache
+// per base URL indefinitely.
+const splitterInfoCache = new Map<string, { address: string; treasury: string }>();
+
+/**
+ * Fetch the VelaGasSettlementSplitter address + its treasury from the SAME bundler the pool
+ * submits to (getActiveBundlerBaseUrl) — a per-network override may use a different operator
+ * secret and thus a different splitter. The wallet uses `treasury` to compute the splitter's
+ * CREATE2 address LOCALLY (it never trusts bundler-supplied deploy calldata). Returns null on
+ * any failure so callers fail safe (skip the in-batch deploy rather than deploy something wrong).
+ */
+export async function fetchSplitterInfo(
+  chainId: number,
+): Promise<{ address: string; treasury: string } | null> {
+  await ensureEndpoints();
+  try {
+    const baseUrl = await getActiveBundlerBaseUrl(chainId);
+    const cached = splitterInfoCache.get(baseUrl);
+    if (cached) return cached;
+
+    const url = `${baseUrl}/v1/splitter`;
+    const res = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, { timeoutMs: NET_TIMEOUTS.bundlerRest });
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const address = String(data.address ?? '');
+    const treasury = String(data.treasury ?? '');
+    const isAddr = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
+    if (!isAddr(address) || !isAddr(treasury)) return null;
+
+    const info = { address, treasury };
+    splitterInfoCache.set(baseUrl, info);
+    return info;
+  } catch (err) {
+    console.warn(`[Splitter] Failed to fetch splitter info for chain=${chainId}:`, err);
+    return null;
+  }
+}
+
 /** Clear cached account info (e.g. after funding). */
 export function clearBundlerCache(chainId: number, safeAddress?: string): void {
   if (safeAddress) {

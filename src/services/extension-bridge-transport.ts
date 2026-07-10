@@ -41,6 +41,10 @@ export interface ExtSignRequest {
   ts: number;
   /** ADDITIVE (Phase B): the origin's granted chainId — the chain to sign against. */
   chainId?: number;
+  /** ADDITIVE (§12.1.6): the origin's granted address — the account the dApp is
+   *  connected to. The app reconciles the active account to THIS before signing so
+   *  it never silently signs from a different account the user switched to. */
+  address?: string;
 }
 
 /** The frozen result the app writes back for the extension to poll. */
@@ -58,6 +62,10 @@ function hostOf(origin: string): string {
     return origin;
   }
 }
+
+/** Request-payload TTL (§12.1.4): a sign-req older than this is stale and must
+ *  never be signed (decoupled from the result TTL, which persists for hours). */
+const REQUEST_TTL_MS = 5 * 60 * 1000;
 
 export class ExtensionBridgeTransport implements DAppTransport {
   readonly name = 'Safari Extension';
@@ -89,13 +97,47 @@ export class ExtensionBridgeTransport implements DAppTransport {
     return this.request?.origin;
   }
 
+  /** The address the origin was granted (§12.1.6) — the account to sign from. */
+  get requestAddress(): string | undefined {
+    return this.request?.address;
+  }
+
+  /** True when connect() short-circuited because this rid was already signed. */
+  private _alreadySettled = false;
+  get alreadySettled(): boolean {
+    return this._alreadySettled;
+  }
+
   /** Read the handed-off request (racing the cold-launch write) and emit it. */
   async connect(): Promise<void> {
+    // ANTI-DOUBLE-SUBMIT (§12.5 gate d). The sign-req is never consumed, so a cold
+    // relaunch of the SAME rid — the app was killed after submitting, or the user
+    // taps "返回 Vela" while the result is still in transit — would otherwise re-read
+    // it and render the signing modal AGAIN, letting the user approve the SAME tx
+    // twice. If a result already exists for this rid, the sign is DONE: replay its
+    // outcome, never re-emit the request. (The content-side focus-poll delivers the
+    // already-written result to the dApp; the app must not re-sign.)
+    const prior = await this.readExistingResult();
+    if (prior) {
+      this._outcome = prior.status;
+      this._settled = true; // block any later sendResponse from rewriting the result
+      this._alreadySettled = true;
+      // Surface it to sign.tsx WITHOUT a 'request' (no modal). It reads `outcome`
+      // in connect().then and shows the settled state; no signing UI ever renders.
+      return;
+    }
+
     const req = await this.readSignRequest();
     if (!req) {
       // No payload within the window — surface as an error, never a phantom sign.
       this.emit('error', 'Sign request not found or expired');
       throw new Error('sign-req not found');
+    }
+    // Request-payload TTL (§12.1.4): never sign a stale request (a leaked/replayed
+    // rid whose payload has aged past the window). Result TTL is separate (hours).
+    if (typeof req.ts === 'number' && Date.now() - req.ts > REQUEST_TTL_MS) {
+      this.emit('error', 'Sign request expired');
+      throw new Error('sign-req expired');
     }
     this.request = req;
     this._connected = true;
@@ -103,6 +145,19 @@ export class ExtensionBridgeTransport implements DAppTransport {
     // The global SigningRequestModal renders the moment incomingRequest is set by
     // the provider's handleIncoming (fired here). rid IS the request id.
     this.emit('request', req.rid, req.method, req.params as any[], req.origin);
+  }
+
+  /** A frozen result already written for this rid (the sign completed on a prior
+   *  launch), or null. Used to short-circuit a re-launch and prevent re-signing. */
+  private async readExistingResult(): Promise<ExtSignResult | null> {
+    try {
+      const json = await AppGroup.readFile(`sign-result-${this.rid}.json`);
+      if (!json) return null;
+      const r = JSON.parse(json) as ExtSignResult;
+      return r && (r.status === 'submitted' || r.status === 'rejected') ? r : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

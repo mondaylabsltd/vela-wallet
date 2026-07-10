@@ -40,11 +40,12 @@ import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from '@/services/tempo';
 import { fetchTokens } from '@/services/wallet-api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { AlertTriangle, Banknote, BookUser, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, RefreshCw, Server, Sun, Trash2, User as UserIcon, X, XCircle, Zap } from 'lucide-react-native';
+import { AlertTriangle, Banknote, BookUser, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, Hash, Info as InfoIcon, Key, Languages, LogOut as LogOutIcon, MessageSquare, Monitor, Moon, Globe as NetworkIcon, Plus, Puzzle, RefreshCw, Server, Sun, Trash2, User as UserIcon, X, XCircle, Zap } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -1449,6 +1450,18 @@ export default function SettingsScreen() {
             showDivider={false} onPress={() => setShowBugReport(true)}
             right={<ExternalLink size={16} color={color.fg.subtle} />} />
         </Animated.View>
+
+        {/* Browser — use Vela in Safari on any dApp. iOS ONLY: the Safari Web
+            Extension exists only on iOS; the web wallet and Android have no such
+            surface, so the row would be misleading there. */}
+        {Platform.OS === 'ios' && (
+          <Animated.View style={styles.sectionContainer} entering={fadeInDown(75, 300)}>
+            <SectionLabel style={styles.sectionLabel}>{t('safariExt.sectionLabel')}</SectionLabel>
+            <SettingsRow s={styles} icon={Puzzle}
+              title={t('safariExt.settingsTitle')} subtitle={t('safariExt.settingsSubtitle')}
+              showDivider={false} onPress={() => router.push('/safari-extension')} />
+          </Animated.View>
+        )}
 
         {/* Appearance */}
         <Animated.View style={styles.sectionContainer} entering={fadeInDown(100, 300)}>

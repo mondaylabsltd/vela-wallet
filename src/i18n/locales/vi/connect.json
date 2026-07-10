@@ -77,5 +77,33 @@
       "contentMissing": "Nội dung của yêu cầu này chưa được ghi lại.",
       "offChainNote": "Chữ ký off-chain — không có gì được gửi lên chain."
     }
+  },
+  "signHandoff": {
+    "signing": "Xác nhận trong Vela",
+    "signed": "Đã gửi",
+    "rejected": "Đã hủy",
+    "pending": "Kiểm tra trong Hoạt động Vela",
+    "expired": "Yêu cầu ký này đã hết hạn",
+    "returnHint": "Quay lại Safari — trang này sẽ không tải lại",
+    "oneTapTitle": "Đã bật ký một chạm",
+    "oneTapHint": "Từ giờ ký trong Safari sẽ mở Vela trực tiếp. Chạm ‹ Safari ở góc trên bên trái để quay lại.",
+    "done": "Xong"
+  },
+  "safariExt": {
+    "navTitle": "Tiện ích Safari",
+    "heroTitle": "Dùng Vela trong Safari",
+    "heroBody": "Trên Safari của iPhone, hầu như mọi dApp đều có thể kết nối trực tiếp với Vela. Việc kết nối và đọc diễn ra ngay trong Safari — chỉ khi ký mới chuyển sang Vela để xác nhận bằng Face ID. Không cần đổi app ví, không cần cụm từ khôi phục.",
+    "stepsLabel": "Chỉ bật một lần",
+    "step1": "Mở một trang dApp trong Safari.",
+    "step2": "Chạm “Aa” trên thanh địa chỉ → Quản lý tiện ích, và bật Vela Wallet.",
+    "step3": "Chạm “Aa” → Vela Wallet → Cho phép (mỗi trang chỉ cần cho phép một lần).",
+    "step4": "Trong danh sách “Kết nối ví” của trang, chọn Vela Wallet.",
+    "oneTapTitle": "Ký một chạm",
+    "oneTapBody": "Khi ký, Vela mở ra để xác nhận nhanh bằng Face ID rồi quay lại trang. Bật một chạm (qua “Kiểm tra ký một chạm” trong cửa sổ tiện ích) thì ngay cả lời nhắc “Mở trong Vela?” cũng biến mất.",
+    "cta": "Mở getvela.app trong Safari",
+    "ctaHint": "Mở Safari, nơi có menu “Aa” và công tắc Vela.",
+    "sectionLabel": "Trình duyệt",
+    "settingsTitle": "Dùng Vela trong Safari",
+    "settingsSubtitle": "Kết nối tới mọi dApp trong trình duyệt"
   }
 }

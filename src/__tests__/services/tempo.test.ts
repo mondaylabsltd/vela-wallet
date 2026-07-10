@@ -3,8 +3,10 @@ import {
   attoToTokenUnits,
   tempoFeeTokenUnits,
   tempoReimbursement,
+  tempoSettlementSplit,
   tempoCallGasLimit,
   tempoExpectedGas,
+  tempoSplitSafetyGas,
   TEMPO_DEFAULT_FEE_TOKEN,
   TEMPO_FEE_TOKEN_DECIMALS,
   TEMPO_BASE_FEE_ATTO,
@@ -13,7 +15,17 @@ import {
   TEMPO_DEPLOYED_GAS_EST,
   TEMPO_DEPLOY_GAS_EST,
   TEMPO_PER_SUBCALL_GAS_EST,
+  TEMPO_COST_BUFFER_GAS,
+  TEMPO_SPLIT_SAFETY_GAS,
+  TEMPO_SPLIT_SAFETY_BPS,
 } from '@/services/tempo';
+
+/** Bundler's accept-check cost basis: ceilDiv((simGas + COST_BUFFER) × price → fee units). */
+function bundlerCostUnits(simGas: bigint, price: bigint, decimals = 6): bigint {
+  const atto = (simGas + TEMPO_COST_BUFFER_GAS) * price;
+  const num = atto * 10n ** BigInt(decimals);
+  return (num + 10n ** 18n - 1n) / 10n ** 18n; // ceilDiv — matches vela-bundler tempoCostInFeeToken
+}
 
 describe('tempo gas model', () => {
   describe('isTempoChain', () => {
@@ -80,6 +92,82 @@ describe('tempo gas model', () => {
     });
     it('is never zero (transfer must move a non-zero amount)', () => {
       expect(tempoReimbursement(0n, 0n, 6)).toBeGreaterThan(0n);
+    });
+  });
+
+  describe('tempoSettlementSplit', () => {
+    const price = TEMPO_BASE_FEE_ATTO;
+    const gas = 500_000n;
+
+    it('floors the EOA at the bundler cost (expectedGas + buffer + safety) and gives treasury the surplus', () => {
+      const reimbursement = tempoReimbursement(gas, price, 6); // = 2× base
+      const split = tempoSettlementSplit(reimbursement, gas, price, 6);
+      const expectedFloor = attoToTokenUnits((gas + TEMPO_COST_BUFFER_GAS + TEMPO_SPLIT_SAFETY_GAS) * price, 6);
+      expect(split.eoa).toBe(expectedFloor);
+      expect(split.treasury).toBe(reimbursement - expectedFloor);
+    });
+
+    it('conserves the total (eoa + treasury == reimbursement)', () => {
+      const reimbursement = tempoReimbursement(gas, price, 6);
+      const split = tempoSettlementSplit(reimbursement, gas, price, 6);
+      expect(split.eoa + split.treasury).toBe(reimbursement);
+    });
+
+    it("the EOA share always clears the bundler's cost (realGas + buffer)", () => {
+      const reimbursement = tempoReimbursement(gas, price, 6);
+      const split = tempoSettlementSplit(reimbursement, gas, price, 6);
+      // Bundler requires reimbursed_to_EOA >= (gasUsed + TEMPO_COST_BUFFER_GAS) * price.
+      // With gasUsed ~= expectedGas, the floor beats it by the safety cushion.
+      const bundlerCost = attoToTokenUnits((gas + TEMPO_COST_BUFFER_GAS) * price, 6);
+      expect(split.eoa).toBeGreaterThanOrEqual(bundlerCost);
+      expect(split.treasury).toBeGreaterThan(0n);
+    });
+
+    it('keeps everything on the EOA (treasury 0) when the margin is too thin — never a rejection', () => {
+      const floor = attoToTokenUnits((gas + TEMPO_COST_BUFFER_GAS + TEMPO_SPLIT_SAFETY_GAS) * price, 6);
+      const thin = floor - 1n; // reimbursement below the floor
+      const split = tempoSettlementSplit(thin, gas, price, 6);
+      expect(split.eoa).toBe(thin);
+      expect(split.treasury).toBe(0n);
+    });
+
+    // Regression for the reported Tempo deploy rejection (reimbursed=89700 < cost=90025).
+    // The OLD tests fed the SAME gas to both the wallet floor and the bundler cost, so they
+    // could never catch the real failure: the wallet prices its floor off a realistic-gas
+    // ESTIMATE while the bundler prices its cost off a HIGHER simulated gas. Here the wallet
+    // estimate is deliberately BELOW the bundler's simGas — the proportional cushion must still
+    // carry the EOA floor over the bundler cost.
+    it('EOA floor clears the bundler cost when the wallet estimate is BELOW the bundler simGas (deploy failure mode)', () => {
+      const walletGas = 4_385_000n; // wallet's realistic model for a 3-sub-call undeployed send
+      const bundlerSimGas = 4_421_208n; // the bundler's actual simulated gas — 36,208 higher
+      const reimbursement = tempoReimbursement(walletGas, price, 6);
+      const split = tempoSettlementSplit(reimbursement, walletGas, price, 6);
+      expect(split.eoa).toBeGreaterThanOrEqual(bundlerCostUnits(bundlerSimGas, price));
+      // And with the exact numbers from the incident, the floor must beat the 90,025 it was rejected under.
+      expect(split.eoa).toBeGreaterThan(90_025n);
+      expect(split.treasury).toBeGreaterThan(0n); // still routes surplus to the treasury
+    });
+
+    it('clears the bundler cost across a wide range of estimate error, up to +5% simGas drift', () => {
+      for (const walletGas of [500_000n, 1_500_000n, 4_385_000n, 6_000_000n]) {
+        const reimbursement = tempoReimbursement(walletGas, price, 6);
+        const split = tempoSettlementSplit(reimbursement, walletGas, price, 6);
+        // Bundler simGas up to 3% above the wallet estimate (proportional cushion is 3%).
+        const simGas = walletGas + (walletGas * 3n) / 100n;
+        expect(split.eoa).toBeGreaterThanOrEqual(bundlerCostUnits(simGas, price));
+      }
+    });
+  });
+
+  describe('tempoSplitSafetyGas', () => {
+    it('is the flat minimum for small ops (proportional share below the floor)', () => {
+      // 500k × 3% = 15k < 20k flat → flat wins. Keeps small-send behaviour identical.
+      expect(tempoSplitSafetyGas(500_000n)).toBe(TEMPO_SPLIT_SAFETY_GAS);
+    });
+    it('scales with the op for large ops (a flat 20k is a rounding error next to a ~4.4M deploy)', () => {
+      const gas = 4_385_000n;
+      expect(tempoSplitSafetyGas(gas)).toBe((gas * TEMPO_SPLIT_SAFETY_BPS) / 10_000n);
+      expect(tempoSplitSafetyGas(gas)).toBeGreaterThan(130_000n); // >> the 36k estimate error
     });
   });
 

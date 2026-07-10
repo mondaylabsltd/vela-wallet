@@ -16,7 +16,7 @@ import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
 import { sendERC20, sendNative, sendBatchCalls, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, rawBundlerGasCost, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
-import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
+import { isTempoChain, isTempoFeeToken, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
 import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
 import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
 import { findAccountByCredentialId, saveTransactions, updateTransactions } from '@/services/storage';
@@ -28,7 +28,7 @@ import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, format
 import { AmountText } from '@/components/ui/AmountText';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { MultiRecipientEditor, makeRecipientId, recipientsAreValid, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
-import { buildSplitCalls, sumSplitBaseUnits, buildMultiTokenCalls, toMultiTokenSpecs, reserveNativeGas, BATCH_MAX_RECIPIENTS } from '@/services/batch-send';
+import { buildSplitCalls, sumSplitBaseUnits, buildMultiTokenCalls, toMultiTokenSpecs, reserveNativeGas, reserveTempoFeeToken, BATCH_MAX_RECIPIENTS } from '@/services/batch-send';
 import { resolveTokenAmount } from '@/services/fiat-convert';
 import { BatchImportSheet } from '@/components/send/BatchImportSheet';
 import { useTokenMultiSelect } from '@/hooks/use-token-multi-select';
@@ -630,11 +630,18 @@ export default function SendScreen() {
   // (non-Tempo, no paymaster). Used by BOTH the simulation and the submit so the
   // preview matches what gets signed. The native line drops out if it can't even
   // cover the reserve.
-  const multiTokenSpecs = (chainId: number) =>
-    reserveNativeGas(
-      toMultiTokenSpecs(pickedTokens),
-      !isTempoChain(chainId) && feeEstimate ? feeEstimate.totalWei * 3n : 0n,
-    );
+  const multiTokenSpecs = (chainId: number) => {
+    const specs = toMultiTokenSpecs(pickedTokens);
+    if (isTempoChain(chainId)) {
+      // Tempo pays gas from the pathUSD balance being swept, so trim that line — reserveNativeGas
+      // can't (pathUSD is a non-null-address TIP-20). Reserve 2× the quoted fee: the sweep batches
+      // more sub-calls than the 2-sub-call quote and may also deploy the Safe, so the live
+      // reimbursement runs higher; over-reserving a little pathUSD is harmless.
+      const feeUnits = feeEstimate ? feeEstimate.totalWei / 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS) : 0n;
+      return reserveTempoFeeToken(specs, TEMPO_DEFAULT_FEE_TOKEN, feeUnits * 2n);
+    }
+    return reserveNativeGas(specs, feeEstimate ? feeEstimate.totalWei * 3n : 0n);
+  };
 
   // Confirmed selection → advance. ONE token is a normal amount-send (not a
   // full-balance multiSelect); TWO+ is a multiSelect. The first token carries chain/gas context.
@@ -798,7 +805,34 @@ export default function SendScreen() {
       }
     }
 
-    // ERC-20 tokens: gas is paid in native token, so full balance is sendable
+    // Tempo fee token (pathUSD): unlike a normal ERC-20, gas is paid FROM this balance via
+    // the reimbursement transfer batched into the UserOp — so Max must leave enough to cover
+    // it, exactly like a native coin. Gated on isTempoFeeToken: a NON-fee TIP-20 pays gas from
+    // the SEPARATE pathUSD balance, so its Max stays full balance (falls through below).
+    if (isTempoFeeToken(tokenChainId(selectedToken), selectedToken.tokenAddress) && activeAccount) {
+      try {
+        const chainId = tokenChainId(selectedToken);
+        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId, gasTier);
+        // fee.totalWei is attodollars (USD×1e-18); recover the pathUSD reimbursement (6 dec).
+        const feeUnits = fee.totalWei / 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS);
+        // Reserve 1.5× the fee: +50% for gas-price/estimate variance (the send-time
+        // reimbursement is re-priced off the bundler's live estimate and may exceed this quote,
+        // especially when this send also deploys the Safe). Leaves a margin so the pre-check clears.
+        const reserveUnits = (feeUnits * 3n) / 2n;
+        const balUnits = balanceToWei(selectedToken.balance, selectedToken.decimals);
+        if (balUnits > reserveUnits) {
+          setAmount(fromBaseUnits(balUnits - reserveUnits, selectedToken.decimals));
+          return;
+        }
+        setAmount('0');
+        return;
+      } catch {
+        // Estimation failed — fall through to full balance (the pre-check still warns).
+      }
+    }
+
+    // ERC-20 tokens: gas is paid in native token (or a separate pathUSD balance on Tempo),
+    // so full balance is sendable.
     setAmount(selectedToken.balance || '0');
   };
 
@@ -1340,7 +1374,10 @@ export default function SendScreen() {
               {pickedTokens.map((tk) => {
                 const amt = amountOf(tk);
                 const usd = amt * (tk.priceUsd ?? 0);
-                const reserved = isNativeToken(tk) && amt < tokenBalanceDouble(tk);
+                // Trimmed for gas: sent amount is below full balance. True for the native coin
+                // AND for Tempo's pathUSD fee token (whose line reserveTempoFeeToken trims) — the
+                // old isNativeToken gate hid the badge on Tempo sweeps.
+                const reserved = amt < tokenBalanceDouble(tk);
                 return (
                   <View key={tokenId(tk)}>
                     <View style={styles.mtSep} />
@@ -1479,7 +1516,10 @@ export default function SendScreen() {
                       {pickedTokens.map((tk) => {
                         const amt = amountOf(tk);
                         const usd = amt * (tk.priceUsd ?? 0);
-                        const reserved = isNativeToken(tk) && amt < tokenBalanceDouble(tk);
+                        // Trimmed for gas: sent amount is below full balance. True for the native coin
+                // AND for Tempo's pathUSD fee token (whose line reserveTempoFeeToken trims) — the
+                // old isNativeToken gate hid the badge on Tempo sweeps.
+                const reserved = amt < tokenBalanceDouble(tk);
                         return (
                           <View key={tokenId(tk)} style={styles.transferTokenRow}>
                             <TokenLogo symbol={tk.symbol} logoUrls={tokenLogoURLs(tk)} chain={tokenBadgeNetwork(tk)} size={36} />

@@ -94,7 +94,7 @@ test('EIP-6963 announces Vela; provider === window.ethereum, isVela, rdns', asyn
           resolve({
             rdns: e.detail.info.rdns,
             name: e.detail.info.name,
-            hasIcon: /^data:image\/svg/.test(e.detail.info.icon),
+            hasIcon: /^data:image\/(png|svg\+xml|jpeg);/.test(e.detail.info.icon) && e.detail.info.icon.length > 500,
             uuidLen: String(e.detail.info.uuid).length,
             same: e.detail.provider === (window as any).ethereum,
             isVela: !!e.detail.provider.isVela,
@@ -229,4 +229,78 @@ test('double-delivery of a response is ignored (dedupe by rpcId)', async ({ page
     return first;
   });
   expect(r).toBe('0x1');
+});
+
+test('never emits accountsChanged([]) on a cold/ungranted warm read (inpage.js:110-116)', async ({ page }) => {
+  // MOCK_BRIDGE starts granted=false, so the eager warm eth_accounts resolves [].
+  // applyAccounts([]) sees no change from the initial [] cache → it must NOT emit
+  // accountsChanged (a spurious accountsChanged([]) logs the dApp out / confuses UIs).
+  // Wait until the provider has warmed (chainId sync prop is set from warm eth_chainId).
+  await page.waitForFunction(() => (window as any).ethereum && (window as any).ethereum.chainId === '0x1');
+  // selectedAddress is null (ungranted) and no accountsChanged reached the dApp.
+  expect(await page.evaluate(() => (window as any).ethereum.selectedAddress)).toBe(null);
+  expect(await page.locator('#events').textContent()).not.toContain('accountsChanged');
+
+  // Re-reading eth_accounts (still []) must also stay silent — no change, no emit.
+  await page.click('#btn-accounts');
+  await expect(page.locator('#result')).toContainText('"method": "eth_accounts"');
+  expect(await page.evaluate(() => (window as any).__velaTestResult.value)).toEqual([]);
+  expect(await page.locator('#events').textContent()).not.toContain('accountsChanged');
+});
+
+test('legacy sendAsync: single + batch resolve via callback with matching ids', async ({ page }) => {
+  // Single: sendAsync({id,method}, cb) → cb(null, { id, result }).
+  const single = await page.evaluate(
+    () =>
+      new Promise<any>((resolve) =>
+        (window as any).ethereum.sendAsync({ id: 7, method: 'eth_chainId' }, (err: any, res: any) => resolve({ err, res })),
+      ),
+  );
+  expect(single.err).toBeNull();
+  expect(single.res.id).toBe(7);
+  expect(single.res.result).toBe('0x1');
+
+  // Batch: an array payload resolves each independently, ids preserved + ordered.
+  const batch = await page.evaluate(
+    () =>
+      new Promise<any>((resolve) =>
+        (window as any).ethereum.sendAsync(
+          [
+            { id: 1, method: 'eth_chainId' },
+            { id: 2, method: 'net_version' },
+          ],
+          (err: any, res: any) => resolve({ err, res }),
+        ),
+      ),
+  );
+  expect(batch.err).toBeNull();
+  expect(Array.isArray(batch.res)).toBe(true);
+  expect(batch.res.map((r: any) => r.id)).toEqual([1, 2]);
+  expect(batch.res[0].result).toBe('0x1'); // eth_chainId
+  expect(batch.res[1].result).toBe('1'); // net_version
+});
+
+test('legacy send(): string form resolves, sync object form throws 4200, callback form invokes cb', async ({ page }) => {
+  const out = await page.evaluate(async () => {
+    const eth = (window as any).ethereum;
+    // (1) send(method, params) → Promise (async request path).
+    const stringForm = await eth.send('eth_chainId', []);
+    // (2) send({ method }) with an unsupported method → SYNC throw, code 4200.
+    let syncCode: number | null = null;
+    try {
+      eth.send({ method: 'eth_gasPrice' });
+    } catch (e: any) {
+      syncCode = e.code;
+    }
+    // (3) send({ id, method }, cb) → routed through sendAsync → cb(null, { id, result }).
+    const cbForm = await new Promise<any>((resolve) =>
+      eth.send({ id: 1, method: 'eth_getBalance' }, (err: any, res: any) => resolve({ err, res })),
+    );
+    return { stringForm, syncCode, cbForm };
+  });
+  expect(out.stringForm).toBe('0x1');
+  expect(out.syncCode).toBe(4200); // UNSUPPORTED_METHOD — sync send only serves pure state reads
+  expect(out.cbForm.err).toBeNull();
+  expect(out.cbForm.res.id).toBe(1);
+  expect(out.cbForm.res.result).toBe('0x1234'); // eth_getBalance via the mock bridge
 });

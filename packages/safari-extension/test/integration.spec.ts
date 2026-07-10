@@ -204,6 +204,48 @@ test('sign reject: app returns rejected → dApp gets 4001 (only on a real rejec
   expect(r.code).toBe(4001); // 4001 ONLY because native said rejected
 });
 
+test('sign-req carries the granted address (§12.1.6 — app signs from the connected account)', async ({ page }) => {
+  await page.click('#btn-connect');
+  await page.waitForFunction(() => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('cta'));
+  await page.evaluate(() => (document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('cta').click());
+  await expect(page.locator('#result')).toContainText('eth_requestAccounts');
+
+  await page.click('#btn-sign');
+  await page.waitForFunction(() => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('cta'));
+  await page.evaluate(() => (document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('cta').click());
+  await page.waitForFunction(() => (window as any).__native.writes.length > 0);
+  const req = await page.evaluate(() => { const w = (window as any).__native.writes; return w[w.length - 1].request; });
+  expect((req.address || '').toLowerCase()).toBe(ADDR.toLowerCase()); // the granted account rides the sign-req
+});
+
+test('dead-poll floor: no result on return → sheet shows recoverable "check Vela", ring never hangs, no false 4001', async ({ page }) => {
+  await page.click('#btn-connect');
+  await page.waitForFunction(() => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('cta'));
+  await page.evaluate(() => (document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('cta').click());
+  await expect(page.locator('#result')).toContainText('eth_requestAccounts');
+
+  await page.click('#btn-sign');
+  await page.waitForFunction(() => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('cta'));
+  await page.evaluate(() => (document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('cta').click());
+  await page.waitForFunction(() => (window as any).__native.writes.length > 0);
+
+  // The app NEVER writes a result (evicted worker / lost hand-off). Return focus and
+  // let the bounded poll cycle run — the sheet must swap the ring for a recoverable
+  // "check Vela" affordance (dataset.state='checking'), NOT hang the ring, NOT 4001.
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await page.waitForFunction(
+    () => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('sheet')?.dataset.state === 'checking',
+    undefined,
+    { timeout: 15_000 },
+  );
+  // A "return to Vela" re-open affordance exists (never a dead end), and NO result
+  // reached the dApp — the promise is still pending (no false decline).
+  const hasReopen = await page.evaluate(() => !!(document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('reopen'));
+  expect(hasReopen).toBe(true);
+  const settled = await page.evaluate(() => (window as any).__velaTestResult && (window as any).__velaTestResult.method === 'personal_sign');
+  expect(settled).toBeFalsy(); // still pending — never resolved, never a 4001
+});
+
 test('eth_signTransaction is refused by the real router (never proxied to RPC)', async ({ page }) => {
   const r = await page.evaluate(
     (addr) =>
@@ -215,4 +257,156 @@ test('eth_signTransaction is refused by the real router (never proxied to RPC)',
   );
   expect(r.ok).toBe(false);
   expect(r.code).toBe(4200); // UNSUPPORTED_METHOD — allowlist, no fail-open
+});
+
+const PERM_PREFIX = 'vela.perm.';
+
+// §12.4 grant re-validation (background.js validGrantedAddress:88-97). A stored grant
+// must SURVIVE a cold-cache miss (evicted worker / getAccount not-found) but be dropped
+// once the cache is PRESENT and no longer lists the granted address.
+test('cold-cache miss KEEPS a prior grant: eth_accounts + wallet_getPermissions still list the address', async ({ page }) => {
+  const origin = await page.evaluate(() => location.origin);
+  // Seed a prior grant for this origin directly into the extension's storage.local.
+  await page.evaluate(
+    ([key, addr]) => (window as any).browser.storage.local.set({ [key]: { origin: location.origin, address: addr, chainId: 1 } }),
+    [PERM_PREFIX + origin, ADDR],
+  );
+  // Simulate a cold account cache: native getAccount now reports not-found.
+  await page.evaluate(() => {
+    (window as any).__native.handle = async function (msg: any) {
+      if (msg.type === 'getAccount') return { type: 'account', found: false };
+      if (msg.type === 'writeSignRequest') { (window as any).__native.writes.push(msg); return { type: 'sign-req-ack', rid: msg.rid }; }
+      if (msg.type === 'pollSignResult') { const r = (window as any).__native.signResults[msg.rid]; return { type: 'sign-result', rid: msg.rid, found: !!r, result: r || {} }; }
+      return { type: 'error' };
+    };
+  });
+  // The background memos the last good account for ACCT_TTL (4s); flush any in-flight
+  // warm fetch, then wait out the memo so the not-found path actually yields cache=null.
+  await page.click('#btn-chainid');
+  await expect(page.locator('#result')).toContainText('"method": "eth_chainId"');
+  await page.waitForTimeout(4200);
+
+  await page.click('#btn-accounts');
+  await expect(page.locator('#result')).toContainText('"method": "eth_accounts"');
+  // Grant NOT dropped on a cold miss — the dApp stays connected.
+  expect(await page.evaluate(() => (window as any).__velaTestResult.value)).toEqual([ADDR]);
+
+  const perms = await page.evaluate(() =>
+    (window as any).ethereum.request({ method: 'wallet_getPermissions' }),
+  );
+  const accountsCaveat = perms
+    .find((p: any) => p.parentCapability === 'eth_accounts')
+    ?.caveats?.find((c: any) => c.type === 'restrictReturnedAccounts');
+  expect(accountsCaveat.value).toEqual([ADDR]);
+});
+
+test('since-removed granted account IS dropped: eth_accounts returns [] once the cache no longer owns it', async ({ page }) => {
+  const origin = await page.evaluate(() => location.origin);
+  const OTHER = '0x2222222222222222222222222222222222222222';
+  await page.evaluate(
+    ([key, addr]) => (window as any).browser.storage.local.set({ [key]: { origin: location.origin, address: addr, chainId: 1 } }),
+    [PERM_PREFIX + origin, ADDR],
+  );
+  // The app now owns a DIFFERENT account — the granted ADDR is gone. (The background
+  // memo holds the same live account object, so this mutation is reflected at once.)
+  await page.evaluate((other) => { (window as any).__native.account.accounts = [{ name: 'Other', address: other }]; }, OTHER);
+
+  await page.click('#btn-accounts');
+  await expect(page.locator('#result')).toContainText('"method": "eth_accounts"');
+  expect(await page.evaluate(() => (window as any).__velaTestResult.value)).toEqual([]);
+});
+
+test('sign WITHOUT a prior connect is refused 4100; no sign-req is written (content.js:531-534)', async ({ page }) => {
+  await page.click('#btn-sign'); // never connected → no grant for this origin
+  // Wait for the SETTLED result deterministically (avoids a parallel-load race where
+  // #result shows the method label before the rejection is recorded).
+  await page.waitForFunction(
+    () => { const r = (window as any).__velaTestResult; return r && r.method === 'personal_sign' && r.ok === false; },
+    null,
+    { timeout: 5000 },
+  );
+  const r = await page.evaluate(() => (window as any).__velaTestResult);
+  expect(r.ok).toBe(false);
+  expect(r.code).toBe(4100); // UNAUTHORIZED — must call eth_requestAccounts first
+  // Refused BEFORE any launch — nothing was handed to native.
+  expect(await page.evaluate(() => (window as any).__native.writes.length)).toBe(0);
+  // No hand-off sheet was shown either.
+  expect(await page.evaluate(() => !!document.getElementById('vela-sheet-host'))).toBe(false);
+});
+
+test('wallet_switchEthereumChain: unknown chain → 4902; known chain → chainChanged + chainId updates (background.js:177-188)', async ({ page }) => {
+  // Add a SECOND chain the app owns so we can switch to a genuinely different one.
+  await page.evaluate(() => {
+    (window as any).__native.account.chains['137'] = { name: 'Polygon', rpcUrl: 'http://rpc.test/137', bundlerUrl: 'http://bundler.test/137' };
+  });
+  // Connect first (connect's fresh cache read refreshes the background memo to include 137).
+  await page.click('#btn-connect');
+  await page.waitForFunction(() => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('cta'));
+  await page.evaluate(() => (document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('cta').click());
+  await expect(page.locator('#result')).toContainText('eth_requestAccounts');
+  expect(await page.evaluate(() => (window as any).ethereum.chainId)).toBe('0x1');
+
+  // (a) Switch to a chain the app does NOT own → 4902 CHAIN_NOT_ADDED.
+  const unknown = await page.evaluate(() =>
+    (window as any).ethereum
+      .request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] }) // 56 — not owned
+      .then(() => ({ ok: true }))
+      .catch((e: any) => ({ ok: false, code: e.code })),
+  );
+  expect(unknown.ok).toBe(false);
+  expect(unknown.code).toBe(4902);
+  expect(await page.evaluate(() => (window as any).ethereum.chainId)).toBe('0x1'); // unchanged
+
+  // (b) Switch to a chain the app DOES own (137) → chainChanged + sync prop updates.
+  await page.evaluate(() =>
+    (window as any).ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x89' }] }),
+  );
+  await expect(page.locator('#events')).toContainText('chainChanged');
+  await page.waitForFunction(() => (window as any).ethereum.chainId === '0x89');
+  await page.click('#btn-chainid');
+  await expect(page.locator('#result')).toContainText('"method": "eth_chainId"');
+  expect(await page.evaluate(() => (window as any).__velaTestResult.value)).toBe('0x89');
+});
+
+test('sign ceiling: an unresolved sign past the ~3min floor settles 4900 (NOT 4001) + TIMEOUT mirror (content.js:719-729)', async ({ page }) => {
+  // connect first (sign requires a grant)
+  await page.click('#btn-connect');
+  await page.waitForFunction(() => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('cta'));
+  await page.evaluate(() => (document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('cta').click());
+  await expect(page.locator('#result')).toContainText('eth_requestAccounts');
+
+  // Launch the sign → durable mirror + signMap entry created; app never returns a result.
+  await page.click('#btn-sign');
+  await page.waitForFunction(() => (document.getElementById('vela-sheet-host') as any)?.shadowRoot?.getElementById('cta'));
+  await page.evaluate(() => (document.getElementById('vela-sheet-host') as any).shadowRoot.getElementById('cta').click());
+  await page.waitForFunction(() => (window as any).__native.writes.length > 0);
+  const rid = await page.evaluate(() => { const w = (window as any).__native.writes; return w[w.length - 1].rid; });
+
+  // Backdate the durable mirror's arm timestamps beyond the ~3min ceiling (no fake
+  // clock): serviceRid reads launchedAt || pendingStoredAt as firstArm. __native
+  // stays empty (no result), so after the bounded poll the ceiling branch fires.
+  await page.evaluate(async (r) => {
+    const key = 'vela.sign.' + r;
+    const cur = (await (window as any).browser.storage.local.get(key))[key] || {};
+    const past = Date.now() - 4 * 60 * 1000;
+    await (window as any).browser.storage.local.set({ [key]: { ...cur, launchedAt: past, pendingStoredAt: past } });
+  }, rid);
+
+  // Return focus → the poll runs, finds nothing, and the ceiling settles the promise.
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await page.waitForFunction(
+    () => (window as any).__velaTestResult && (window as any).__velaTestResult.method === 'personal_sign',
+    undefined,
+    { timeout: 15_000 },
+  );
+  const r = await page.evaluate(() => (window as any).__velaTestResult);
+  expect(r.ok).toBe(false);
+  expect(r.code).toBe(4900); // UNKNOWN_PENDING — a stuck-but-maybe-submitted tx is NEVER a clean 4001
+  // The durable mirror records the terminal timeout (check Vela Activity).
+  const mirror = await page.evaluate(async (rr) => {
+    const key = 'vela.sign.' + rr;
+    return (await (window as any).browser.storage.local.get(key))[key];
+  }, rid);
+  expect(mirror.state).toBe('TIMEOUT');
+  expect(mirror.resolveCode).toBe(4900);
 });

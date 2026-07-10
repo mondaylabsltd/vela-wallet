@@ -241,6 +241,12 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
    */
   const signTransportRef = useRef<DAppTransport | null>(null);
   const lastApproveOptsRef = useRef<{ maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null } | undefined>(undefined);
+  // The request id the pending funding view belongs to. lastApproveOptsRef is a
+  // single shared ref; without pinning the rid, a funding "Continue" could replay
+  // the OLD request's (capped) opts under a DIFFERENT request that has since taken
+  // the sheet — submitting the wrong params under the wrong id. handleFundingComplete
+  // bails if the current request no longer matches.
+  const fundingRidRef = useRef<string | null>(null);
   // Fund-safety guards on the single submit path (approveRequest):
   //  - approveInFlightRef: synchronous re-entrancy lock so a double-tap (Approve or
   //    the funding "Continue") can't fire two concurrent approves → two submits
@@ -624,6 +630,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           // pending and handleFundingComplete retries it after top-up.
           setIsSigning(false);
           setFundingNeeded(funding);
+          fundingRidRef.current = request.id; // pin funding to THIS request
           approveInFlightRef.current = false; // released — the funding retry re-acquires
           return;
         }
@@ -800,6 +807,13 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   // --- Bundler funding complete → retry the pending request ---
   const handleFundingComplete = useCallback(() => {
     setFundingNeeded(null);
+    // Request-bind: only replay if the request that asked for funding is STILL the
+    // one on the sheet. If it changed (a new sign took the slot), the pinned opts
+    // (lastApproveOptsRef) belong to the old request — replaying them would submit
+    // the wrong params under the wrong id. Bail rather than mis-submit.
+    const pinnedRid = fundingRidRef.current;
+    fundingRidRef.current = null;
+    if (pinnedRid && incomingRequest && incomingRequest.id !== pinnedRid) return;
     // Drop the cached (stale, underfunded) balance so the pre-check on retry reads
     // the freshly-funded amount instead of re-prompting. Clear the REQUEST's chain
     // (an extension sign may be on a different chain than the global one — F4);

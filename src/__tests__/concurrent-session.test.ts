@@ -21,7 +21,7 @@ jest.mock('@/modules/app-group', () => ({
 }));
 
 import { ExtensionBridgeTransport } from '@/services/extension-bridge-transport';
-import { responseTransport, requestChainId, requestDApp } from '@/models/dapp-request-routing';
+import { responseTransport, requestChainId, requestDApp, signAccountIndex } from '@/models/dapp-request-routing';
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
@@ -126,9 +126,35 @@ test('F3: the extension sheet uses the extension origin, not the concurrent Wall
   expect(requestDApp(reqWP, wpDApp)).toBe(wpDApp);
 });
 
+describe('§12.1.6 signAccountIndex — never silently sign from the wrong account', () => {
+  const accounts = [
+    { address: '0xAAAAaaaaAAAAaaaaAAAAaaaaAAAAaaaaAAAAaaaa' },
+    { address: '0xBBBBbbbbBBBBbbbbBBBBbbbbBBBBbbbbBBBBbbbb' },
+    { address: '0xCCCCccccCCCCccccCCCCccccCCCCccccCCCCcccc' },
+  ];
+  test('switches to the granted account when it differs from the active one (case-insensitive)', () => {
+    expect(signAccountIndex(accounts, 0, '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')).toBe(1);
+    expect(signAccountIndex(accounts, 2, accounts[0].address)).toBe(0);
+  });
+  test('stays on the active account when it already matches the grant', () => {
+    expect(signAccountIndex(accounts, 1, accounts[1].address)).toBe(1);
+  });
+  test('falls back to the active account when there is no granted address', () => {
+    expect(signAccountIndex(accounts, 2, undefined)).toBe(2);
+    expect(signAccountIndex(accounts, 1, null)).toBe(1);
+  });
+  test('falls back to the active account when the granted address is not owned (rare; sheet shows the real signer)', () => {
+    expect(signAccountIndex(accounts, 0, '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef')).toBe(0);
+  });
+});
+
 test('the extension transport settles ONLY on its own response — a concurrent WalletPair reply never settles it', async () => {
-  readFile.mockResolvedValueOnce(
-    JSON.stringify({ rid: 'rid-ext', method: 'personal_sign', params: [], origin: 'https://app.uniswap.org', ts: 1 }),
+  // Name-keyed: no existing result (sign-result → null so connect doesn't replay),
+  // a fresh sign-req (ts = now, inside the 5-min TTL).
+  readFile.mockImplementation(async (name: string) =>
+    name === 'sign-req-rid-ext.json'
+      ? JSON.stringify({ rid: 'rid-ext', method: 'personal_sign', params: [], origin: 'https://app.uniswap.org', ts: Date.now() })
+      : null,
   );
   const wp = mockWalletPair();
   const ext = new ExtensionBridgeTransport('rid-ext');

@@ -113,6 +113,11 @@ import { t as tr, pickLocale } from './lib/i18n.js';
   // ---- 3a. sheet host (open shadow root, CSS-isolated) ----------------------
   let sheetHost = null;
   let busy = false; // one connect/sign sheet at a time
+  // Tap-outside-to-dismiss: each sheet state assigns what a backdrop tap does — the
+  // grab handle + scrim imply dismissability, so this makes it real. Pre-launch states
+  // (connect / sign intent) route to Cancel/reject (safe 4001); post-launch (waiting /
+  // checking) route to dismissWaiting (NEVER 4001 — the app may have submitted).
+  let sheetOnBackdrop = null;
   // The app's color-scheme preference ('auto'|'light'|'dark'), learned from the
   // connect/sign background round-trip (which reads the app-written cache). Applied
   // to the sheet so it matches the app EXACTLY — a forced-dark app shows a dark sheet
@@ -185,6 +190,14 @@ import { t as tr, pickLocale } from './lib/i18n.js';
         select { font: inherit; color: var(--vela-fg-base); padding: 7px 10px; border-radius: 10px;
           border: 1px solid var(--vela-border-strong); background: var(--vela-bg-raised);
           -webkit-appearance: none; appearance: none; }
+        .netpick { display: inline-flex; align-items: center; gap: 8px; }
+        .netbadge { position: relative; width: 22px; height: 22px; flex: none; }
+        .netbadge .netmono { position: absolute; inset: 0; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center; overflow: hidden;
+          font-size: 8.5px; font-weight: 700; letter-spacing: -.03em; line-height: 1;
+          background: var(--vela-bg-sunken); color: var(--vela-fg-muted); }
+        .netbadge img { position: absolute; inset: 0; width: 100%; height: 100%;
+          border-radius: 50%; object-fit: cover; }
         .actions { display: flex; gap: 10px; margin-top: 20px; }
         .btn { flex: 1; text-align: center; padding: 15px 16px; border-radius: 15px; font-size: 16px;
           font-weight: 600; border: 0; cursor: pointer; text-decoration: none; box-sizing: border-box;
@@ -193,23 +206,32 @@ import { t as tr, pickLocale } from './lib/i18n.js';
         .primary { background: var(--vela-accent); color: #fff; }
         .primary:active { filter: brightness(.94); }
         .ghost { background: var(--vela-bg-sunken); color: var(--vela-fg-base); }
+        /* §12.3: a BREATHING ring, never a spinner — nothing happens on THIS page
+           (the sign is in the app), so a rotating spinner would lie about progress.
+           A solid accent ring that pulses opacity+scale reads as "waiting", honest. */
         .ring { width: 42px; height: 42px; margin: 14px auto 16px; border-radius: 50%;
-          border: 3px solid var(--vela-accent-soft); border-top-color: var(--vela-accent);
-          animation: spin .9s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+          border: 3px solid var(--vela-accent);
+          animation: vela-breathe 1.6s ease-in-out infinite; }
+        @keyframes vela-breathe { 0%,100% { opacity: .3; transform: scale(.9); } 50% { opacity: 1; transform: scale(1.04); } }
         @keyframes vela-fade { to { opacity: 1; } }
         @keyframes vela-rise { to { transform: translateY(0); } }
         @media (prefers-reduced-motion: reduce) {
-          .backdrop, .sheet { animation-duration: .01ms; }
+          .backdrop, .sheet, .ring { animation-duration: .01ms; animation-iteration-count: 1; }
         }
         .center { text-align: center; }
         .big { font-size: 30px; text-align: center; margin: 10px 0 4px;
           width: 52px; height: 52px; line-height: 52px; border-radius: 50%; }
         .big.wrap { margin: 10px auto 6px; }
       </style>
-      <div class="backdrop" id="backdrop"><div class="sheet"><div class="grab"></div><div id="sheet"></div></div></div>`;
+      <div class="backdrop" id="backdrop"><div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div id="sheet"></div></div></div>`;
     sheetHost.__root = root;
     applyHostTheme();
+    // Backdrop tap (only the dimmed area outside the sheet) → the current state's
+    // dismiss action. e.target===bd excludes taps that bubbled up from the sheet.
+    const bd = root.getElementById('backdrop');
+    if (bd) bd.addEventListener('click', (e) => {
+      if (e.target === bd && typeof sheetOnBackdrop === 'function') sheetOnBackdrop();
+    });
     (document.body || document.documentElement).appendChild(sheetHost);
     return root;
   }
@@ -218,6 +240,7 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     if (sheetHost) sheetHost.remove();
     sheetHost = null;
     busy = false;
+    sheetOnBackdrop = null;
   }
 
   function esc(s) {
@@ -225,6 +248,20 @@ import { t as tr, pickLocale } from './lib/i18n.js';
   }
   function truncAddr(a) {
     return a && a.length > 12 ? a.slice(0, 6) + '…' + a.slice(-4) : a || '';
+  }
+
+  // A network badge for the connect sheet: the chain's real logo (logoURL) with a
+  // colored-monogram fallback (iconLabel on iconBg/iconColor) — mirrors the app's
+  // ChainLogo. Data rides the account cache (app-group-account-sync buildChainsMap).
+  function chainBadge(chains, cid) {
+    const c = (chains && (chains[String(cid)] || chains[cid])) || {};
+    const mono = esc(String(c.iconLabel || c.name || '?').slice(0, 3));
+    const bg = esc(c.iconBg || '');
+    const fg = esc(c.iconColor || '');
+    const img = c.logoURL
+      ? `<img src="${esc(c.logoURL)}" alt="" onerror="this.remove()">`
+      : '';
+    return `<span class="netmono" style="${bg ? 'background:' + bg + ';' : ''}${fg ? 'color:' + fg + ';' : ''}">${mono}</span>${img}`;
   }
 
   // The dApp's own favicon makes the sheet feel native to the site; fall back to a
@@ -252,6 +289,8 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     const sheet = root.getElementById('sheet');
     const label = hostLabel(ORIGIN);
     const fav = favMarkup(label);
+    // Backdrop tap = Cancel (nothing granted yet — safe to reject the request).
+    sheetOnBackdrop = () => { closeSheet(); onCancel && onCancel(); };
 
     if (emptyState) {
       sheet.innerHTML = `
@@ -281,7 +320,8 @@ import { t as tr, pickLocale } from './lib/i18n.js';
       <div class="title">${esc(L('connect.wantsToConnect', { host: label }))}</div>
       <div class="row"><span class="muted">${esc(L('connect.account'))}</span>
         <span><b>${esc(account.name || 'Account')}</b> <span class="mono">${esc(truncAddr(account.address))}</span></span></div>
-      <div class="row"><span class="muted">${esc(L('connect.network'))}</span><select id="chain">${options}</select></div>
+      <div class="row"><span class="muted">${esc(L('connect.network'))}</span>
+        <span class="netpick"><span class="netbadge" id="netbadge">${chainBadge(chains, curCid)}</span><select id="chain">${options}</select></span></div>
       <div class="divider"></div>
       <div class="perm"><span class="i ok">✓</span><span>${esc(L('connect.permView'))}</span></div>
       <div class="perm"><span class="i ok">✓</span><span>${esc(L('connect.permSign'))}</span></div>
@@ -292,9 +332,14 @@ import { t as tr, pickLocale } from './lib/i18n.js';
       </div>`;
 
     root.getElementById('cancel').onclick = () => { closeSheet(); onCancel && onCancel(); };
+    // Keep the network badge in sync with the selected chain.
+    const chainSel = root.getElementById('chain');
+    if (chainSel) chainSel.onchange = () => {
+      const badge = root.getElementById('netbadge');
+      if (badge) badge.innerHTML = chainBadge(chains, chainSel.value);
+    };
     root.getElementById('cta').onclick = () => {
-      const sel = root.getElementById('chain');
-      const cid = parseChainId(sel ? sel.value : curCid) || account.chainId || 1;
+      const cid = parseChainId(chainSel ? chainSel.value : curCid) || account.chainId || 1;
       closeSheet();
       onConfirm && onConfirm(account.address, cid);
     };
@@ -309,17 +354,19 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     const summary = signSummary(method, params);
     // Custom-scheme launch shows an "Open in Vela?" banner (R3: one extra tap);
     // a REAL tap on this anchor is the user gesture iOS needs (FACT-1).
+    // Human summary only — no raw RPC method row (jargon like 'eth_sendTransaction').
+    // The authoritative, fully-decoded detail is the native SigningRequestModal one tap
+    // away; this hand-off is a tight "confirm in Vela" preview.
     sheet.innerHTML = `
       <div class="brow"><div class="fav">${fav}</div><div class="host">${esc(label)}</div></div>
       <div class="title">${esc(L('sign.title'))}</div>
       <p class="sub">${esc(summary)}</p>
-      <div class="divider"></div>
-      <div class="row"><span class="muted">${esc(L('sign.method'))}</span><span class="mono">${esc(method)}</span></div>
       <div class="actions">
         <button class="btn ghost" id="cancel">${esc(L('common.cancel'))}</button>
         <button class="btn primary" id="cta">${esc(L('sign.confirmInVela'))}</button>
       </div>`;
     root.getElementById('cancel').onclick = () => onSignReject(rid); // pre-launch, safe 4001
+    sheetOnBackdrop = () => onSignReject(rid); // tap outside = cancel (pre-launch, safe)
     // A BUTTON + imperative location.href (the R1-proven launch), NOT an <a href>:
     // onSignLaunch swaps the sheet to the waiting state, which would detach an
     // anchor mid-click and cancel its default navigation. location.href fires
@@ -342,24 +389,57 @@ import { t as tr, pickLocale } from './lib/i18n.js';
       </div>`;
     // Post-launch: dismiss only — NEVER resolve 4001 (the app may have submitted).
     root.getElementById('closereq').onclick = () => dismissWaiting();
-    root.getElementById('reopen').onclick = (e) => {
-      e.preventDefault();
-      const rid = activeSignRid;
-      if (!rid) return;
-      const entry = signMap.get(rid) || {};
-      // Mirror onSignLaunch: stamp UL_PENDING before a UL nav so this path also
-      // self-heals if the association broke since the first launch.
-      if (entry.ulVerified && hasStorage) {
-        try { browser.storage.local.set({ [UL_PENDING_KEY]: { ts: Date.now(), origin: ORIGIN } }); } catch (_) { /* best-effort */ }
-      }
-      window.location.href = signLaunchUrl(rid, entry.ulVerified);
-    };
+    root.getElementById('reopen').onclick = (e) => { e.preventDefault(); reopenActiveSign(); };
+    sheetOnBackdrop = () => dismissWaiting(); // tap outside = hide (post-launch, never 4001)
+  }
+
+  // §12.3 dead-worker floor: after ~one poll cycle (~6s) returns nothing, the
+  // waiting sheet must STOP implying progress — swap the breathing ring for a
+  // recoverable "check Vela Activity" affordance. The rid stays pending (re-polls
+  // on the next focus and can still settle submitted/rejected), so this is NOT a
+  // terminal state and NEVER resolves 4001 — the ring just never hangs (gate c).
+  function showSignChecking() {
+    if (!sheetHost) return; // user dismissed → don't reopen the sheet
+    const root = sheetHost.__root;
+    const sheet = root.getElementById('sheet');
+    if (!sheet || sheet.dataset.state === 'checking') return; // already shown — no re-render churn
+    sheet.dataset.state = 'checking';
+    // In-progress framing (NOT the terminal "didn't hear back" copy): this state is
+    // still polling and fully recoverable, so it must read as "taking a moment / here's
+    // how to check", distinct from the 3-min timeout's terminal notConfirmed.
+    sheet.innerHTML = `
+      <div class="big wrap" style="color:var(--vela-warning);background:var(--vela-accent-soft)">!</div>
+      <div class="center" style="font-weight:600;font-size:17px">${esc(L('sign.completeInVela'))}</div>
+      <p class="sub center">${esc(L('sign.checkingSub'))}</p>
+      <div class="actions">
+        <button class="btn ghost" id="closereq">${esc(L('sign.closeContinue'))}</button>
+        <a class="btn primary" id="reopen" href="#">${esc(L('sign.backToVela'))}</a>
+      </div>`;
+    root.getElementById('closereq').onclick = () => dismissWaiting();
+    root.getElementById('reopen').onclick = (e) => { e.preventDefault(); reopenActiveSign(); };
+    sheetOnBackdrop = () => dismissWaiting(); // tap outside = hide (post-launch, never 4001)
+  }
+
+  // Re-fire the app launch for the active rid (State C "返回 Vela" / the check floor).
+  // Consumed only on RESULT read, so a re-open is safe (sign.tsx de-dupes + the
+  // transport replays an existing result rather than re-signing).
+  function reopenActiveSign() {
+    const rid = activeSignRid;
+    if (!rid) return;
+    const entry = signMap.get(rid) || {};
+    // Mirror onSignLaunch: stamp UL_PENDING before a UL nav so this path self-heals
+    // if the association broke since the first launch.
+    if (entry.ulVerified && hasStorage) {
+      try { browser.storage.local.set({ [UL_PENDING_KEY]: { ts: Date.now(), origin: ORIGIN } }); } catch (_) { /* best-effort */ }
+    }
+    window.location.href = signLaunchUrl(rid, entry.ulVerified);
   }
 
   function showSignResolved(kind, info) {
     if (!sheetHost) { closeSheet(); return; }
     const root = sheetHost.__root;
     const sheet = root.getElementById('sheet');
+    sheetOnBackdrop = () => closeSheet(); // tap outside = dismiss the resolved sheet
     if (kind === 'signed') {
       sheet.innerHTML = `<div class="big wrap ok" style="background:var(--vela-success-soft)">✓</div>
         <div class="center" style="font-weight:600;font-size:17px">${esc(L('sign.sent'))}</div>
@@ -523,7 +603,11 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     }
     const attestedAt = (c && c.ulVerifiedAt) || 0;
     const useUL = !!(c && c.ulVerified) && (brokenAt === 0 || attestedAt > brokenAt);
-    signMap.set(rid, { rpcId, method, params, chainId: c.chainId, ulVerified: useUL });
+    // Carry the origin's GRANTED address so the app can sign from the account the
+    // dApp is actually connected to — not whatever account happens to be active
+    // (§12.1.6: never silently sign from the wrong account).
+    const grantedAddress = (c.result && c.result[0]) || null;
+    signMap.set(rid, { rpcId, method, params, chainId: c.chainId, address: grantedAddress, ulVerified: useUL });
     activeSignRid = rid;
 
     // Durable mirror BEFORE any launch (survives reload/tab-discard). set() does
@@ -547,7 +631,7 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     if (!entry) return;
     // chainId is ADDITIVE + optional on the frozen sign-req contract (Swift writes
     // the dict verbatim; old readers ignore it). It carries the origin's granted chain.
-    const request = { rid, method: entry.method, params: entry.params, origin: ORIGIN, ts: Date.now(), chainId: entry.chainId };
+    const request = { rid, method: entry.method, params: entry.params, origin: ORIGIN, ts: Date.now(), chainId: entry.chainId, address: entry.address };
     try {
       browser.runtime.sendMessage({ type: 'writeSignRequest', rid, request }).catch(() => {});
     } catch (_) { /* worker evicted mid-flight; launch still proceeds */ }
@@ -696,6 +780,10 @@ import { t as tr, pickLocale } from './lib/i18n.js';
     } else {
       await setMirror(rid, { state: 'CHECK_VELA' });
       mirrorStatus('check-vela', rid);
+      // ~6s floor (one poll cycle elapsed with no result): the VISIBLE sheet swaps
+      // the breathing ring for a recoverable "check Vela" affordance so the ring
+      // never hangs. Stays pending — re-polls on the next focus (gate c).
+      if (activeSignRid === rid) showSignChecking();
     }
   }
 

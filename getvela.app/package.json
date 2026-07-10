@@ -49,5 +49,8 @@
 		"vitest": "^4.1.0",
 		"vitest-browser-svelte": "^2.0.2",
 		"wrangler": "4.28"
+	},
+	"dependencies": {
+		"viem": "^2.54.6"
 	}
 }

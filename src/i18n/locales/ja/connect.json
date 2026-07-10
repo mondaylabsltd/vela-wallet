@@ -77,5 +77,33 @@
       "contentMissing": "このリクエストの内容は記録されていません。",
       "offChainNote": "オフチェーン署名 — オンチェーンには何も送信されていません。"
     }
+  },
+  "signHandoff": {
+    "signing": "Vela で確認",
+    "signed": "送信しました",
+    "rejected": "キャンセルしました",
+    "pending": "Vela のアクティビティで確認してください",
+    "expired": "この署名リクエストは期限切れです",
+    "returnHint": "Safari に戻ってください — このページは再読み込みされません",
+    "oneTapTitle": "ワンタップ署名が有効になりました",
+    "oneTapHint": "今後、Safari での署名は Vela を直接開きます。左上の「‹ Safari」で戻れます。",
+    "done": "完了"
+  },
+  "safariExt": {
+    "navTitle": "Safari 拡張機能",
+    "heroTitle": "Safari で Vela を使う",
+    "heroBody": "iPhone の Safari では、ほとんどの dApp が Vela に直接接続できます。接続と読み取りは Safari 内で完結し、署名のときだけ Vela に移動して Face ID で確認します。ウォレットアプリの切り替えもシードフレーズも不要です。",
+    "stepsLabel": "一度だけ有効化",
+    "step1": "Safari で dApp のサイトを開きます。",
+    "step2": "アドレスバーの「ぁあ」→「機能拡張を管理」で Vela Wallet をオンにします。",
+    "step3": "もう一度「ぁあ」→ Vela Wallet →「許可」（サイトごとに一度許可すれば OK）。",
+    "step4": "サイトの「ウォレットを接続」一覧で Vela Wallet を選びます。",
+    "oneTapTitle": "ワンタップ署名",
+    "oneTapBody": "署名時は Vela が開いて Face ID で素早く確認し、ページに戻ります。ワンタップ（拡張機能ポップアップの「ワンタップ署名をテスト」）を有効にすれば、「Vela で開きますか？」の確認も不要になります。",
+    "cta": "Safari で getvela.app を開く",
+    "ctaHint": "Safari が開きます。「ぁあ」メニューと Vela のスイッチはそこにあります。",
+    "sectionLabel": "ブラウザ",
+    "settingsTitle": "Safari で Vela を使う",
+    "settingsSubtitle": "ブラウザで任意の dApp に接続"
   }
 }

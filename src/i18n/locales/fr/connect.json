@@ -77,5 +77,33 @@
       "contentMissing": "Le contenu de cette demande n'a pas été enregistré.",
       "offChainNote": "Signature hors chaîne — rien n'a été envoyé on-chain."
     }
+  },
+  "signHandoff": {
+    "signing": "Confirmer dans Vela",
+    "signed": "Envoyé",
+    "rejected": "Annulé",
+    "pending": "À vérifier dans l'activité Vela",
+    "expired": "Cette demande de signature a expiré",
+    "returnHint": "Revenez à Safari — cette page ne sera pas rechargée",
+    "oneTapTitle": "Signature en un geste activée",
+    "oneTapHint": "Signer dans Safari ouvrira désormais Vela directement. Touchez ‹ Safari en haut à gauche pour revenir.",
+    "done": "Terminé"
+  },
+  "safariExt": {
+    "navTitle": "Extension Safari",
+    "heroTitle": "Utiliser Vela dans Safari",
+    "heroBody": "Dans Safari sur iPhone, presque toutes les dApps peuvent se connecter directement à Vela. La connexion et la lecture se font dans Safari — seule la signature bascule vers Vela pour une confirmation Face ID. Aucun changement d’app, aucune phrase de récupération.",
+    "stepsLabel": "À activer une seule fois",
+    "step1": "Ouvrez un site dApp dans Safari.",
+    "step2": "Touchez « Aa » dans la barre d’adresse → Gérer les extensions, puis activez Vela Wallet.",
+    "step3": "Touchez « Aa » → Vela Wallet → Autoriser (autoriser une fois par site suffit).",
+    "step4": "Dans la liste « Connecter un portefeuille » du site, choisissez Vela Wallet.",
+    "oneTapTitle": "Signature en un geste",
+    "oneTapBody": "À la signature, Vela s’ouvre pour une confirmation Face ID rapide, puis revient à la page. Activez le mode un geste (via « Tester la signature en un geste » dans la fenêtre de l’extension) et même l’invite « Ouvrir dans Vela ? » disparaît.",
+    "cta": "Ouvrir getvela.app dans Safari",
+    "ctaHint": "Ouvre Safari, où se trouvent le menu « Aa » et l’interrupteur Vela.",
+    "sectionLabel": "Navigateur",
+    "settingsTitle": "Utiliser Vela dans Safari",
+    "settingsSubtitle": "Se connecter à toute dApp dans le navigateur"
   }
 }

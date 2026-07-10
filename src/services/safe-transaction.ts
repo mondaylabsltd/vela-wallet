@@ -20,19 +20,23 @@ import {
   SAFE_4337_MODULE,
   SAFE_PROXY_FACTORY,
   SAFE_SINGLETON,
+  VELA_SPLITTER_FACTORY,
   WEBAUTHN_SIGNER,
   calculateSaltNonce,
+  computeSplitterAddress,
   encodeMultiSendTx,
   encodeSetupData,
+  encodeSplitterDeployCall,
   parsePublicKey
 } from './safe-address';
 
 import { derSignatureToRaw } from './attestation-parser';
 import { rpcCall } from './rpc-adapter';
-import { fetchBundlerAccountInfo } from './bundler-service';
+import { fetchBundlerAccountInfo, fetchSplitterInfo } from './bundler-service';
 import {
   isTempoChain,
   tempoReimbursement,
+  tempoSettlementSplit,
   tempoCallGasLimit,
   tempoExpectedGas,
   TEMPO_DEFAULT_FEE_TOKEN,
@@ -115,7 +119,7 @@ export async function sendNative(
     // (gas is paid in the default stablecoin, not the value being moved).
     return sendUserOpTempo(from, [{ to, value: valueWei, data: new Uint8Array(0) }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
-  const callData = buildExecuteCallData(to, valueWei, new Uint8Array(0));
+  const callData = await buildNativeCallData([{ to, value: valueWei, data: new Uint8Array(0) }], chainId, false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -145,7 +149,7 @@ export async function sendERC20(
     return sendUserOpTempo(from, [{ to: tokenAddress, value: '0', data: transferData }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
 
-  const callData = buildExecuteCallData(tokenAddress, '0', transferData);
+  const callData = await buildNativeCallData([{ to: tokenAddress, value: '0', data: transferData }], chainId, false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -164,7 +168,7 @@ export async function sendContractCall(
     // dApp / contract call: pay gas in the default stablecoin (pathUSD).
     return sendUserOpTempo(from, [{ to, value: valueWei, data }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
-  const callData = buildExecuteCallData(to, valueWei, data);
+  const callData = await buildNativeCallData([{ to, value: valueWei, data }], chainId, false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -192,7 +196,7 @@ export async function sendBatchCalls(
     return sendUserOpTempo(from, byteCalls, TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
 
-  const callData = buildMultiSendExecuteCallData(byteCalls);
+  const callData = await buildNativeCallData(byteCalls, chainId, true);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -298,16 +302,62 @@ async function estimateTempoFee(
   from: string,
   chainId: number,
   tier: GasTier,
+  // The actual call (dApp tx). Omitted for simple transfers. Passing the real call makes the
+  // DISPLAYED fee accurate for contract calls, whose gas dwarfs a transfer's flat estimate.
+  tx?: { to: string; value?: string; data?: string },
 ): Promise<TransactionFeeEstimate> {
   const [deployed, { gasPrice }] = await Promise.all([
     isDeployed(from, chainId),
     getGasPrices(chainId),
   ]);
 
-  // Mirror sendUserOpTempo's pricing: the displayed fee is the reimbursement, priced off
-  // the REALISTIC gas (tempoExpectedGas) for a simple send (1 transfer + 1 reimbursement
-  // = 2 sub-calls), NOT the padded UserOp limits. Keeps the quote == what's charged.
-  const expectedGas = tempoExpectedGas(deployed, 2);
+  // Mirror sendUserOpTempo's pricing: the displayed fee is the reimbursement, priced off the
+  // REALISTIC gas, NOT the padded UserOp limits. A simple send is 1 transfer + 1 reimbursement
+  // (2 sub-calls); a dApp call adds its own sub-call (→ 3, allowing the treasury-split transfer).
+  const hasCall = !!tx?.to && !!tx.data && tx.data !== '0x';
+  let expectedGas = tempoExpectedGas(deployed, hasCall ? 3 : 2);
+
+  // For a contract call on a DEPLOYED Safe, refine off the bundler's own estimate of the REAL
+  // call (same basis sendUserOpTempo prices against) so the quote tracks what's charged instead
+  // of showing a transfer-sized fee. Undeployed → the deploy cost dominates; keep the static model.
+  if (hasCall && deployed) {
+    try {
+      const innerCall: MultiSendCall = {
+        to: tx!.to,
+        value: stripHexPrefix(tx!.value ?? '0') || '0',
+        data: tx!.data && tx!.data !== '0x' ? fromHex(stripHexPrefix(tx!.data)) : new Uint8Array(0),
+      };
+      // Representative batch: the call + two placeholder reimbursement transfers (EOA + treasury,
+      // the split case — so the quote doesn't under-count when splitting; value doesn't affect
+      // gas). estimateGas returns un-padded limits ≈ the bundler's simGas.
+      const callData = buildMultiSendExecuteCallData([
+        innerCall,
+        { to: TEMPO_DEFAULT_FEE_TOKEN, value: '0', data: encodeErc20Transfer(from, 1n) },
+        { to: TEMPO_DEFAULT_FEE_TOKEN, value: '0', data: encodeErc20Transfer(from, 1n) },
+      ]);
+      const dummyOp: UserOperation = {
+        sender: from,
+        nonce: '0x0',
+        initCode: new Uint8Array(0),
+        callData,
+        verificationGasLimit: VERIFICATION_GAS_DEPLOYED,
+        callGasLimit: tempoCallGasLimit(3),
+        preVerificationGas: PRE_VERIFICATION_GAS,
+        maxFeePerGas: 0n,
+        maxPriorityFeePerGas: 0n,
+        paymasterAndData: new Uint8Array(0),
+        signature: buildDummySignature(),
+      };
+      const est = await estimateGas(dummyOp, chainId);
+      expectedGas = bigintMax(expectedGas, est.verificationGasLimit + est.callGasLimit + est.preVerificationGas);
+    } catch (err) {
+      // A contract call we can't estimate: surface it (the confirm screen shows "couldn't
+      // estimate" + retry) instead of a misleading transfer-sized fee that sendUserOpTempo would
+      // then reject/overcharge. Consistent with the native estimate + the submit-side guard.
+      throw err instanceof Error ? err : new Error('Gas estimation failed');
+    }
+  }
+
   const reimbursement = tempoReimbursement(expectedGas, gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
   const totalWei = reimbursement * 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS);
 
@@ -334,8 +384,9 @@ export async function estimateTransactionFee(
   // calls and deploys, whose callGasLimit/preVerificationGas dwarf a transfer's.
   tx?: { to: string; value?: string; data?: string },
 ): Promise<TransactionFeeEstimate> {
-  // Tempo pays gas in a stablecoin, not the native coin — separate model.
-  if (isTempoChain(chainId)) return estimateTempoFee(from, chainId, tier);
+  // Tempo pays gas in a stablecoin, not the native coin — separate model. Forward the tx so a
+  // dApp contract call is quoted off its REAL gas, not a transfer-sized default.
+  if (isTempoChain(chainId)) return estimateTempoFee(from, chainId, tier, tx);
 
   // The bundler is the single source of truth for the price. getBundlerGasQuote
   // throws GasQuoteTooHighError (propagated here = refuse) if the quote is abusive,
@@ -368,15 +419,18 @@ export async function estimateTransactionFee(
   }
 
   // Estimate against the REAL call when we have it (dApp tx); otherwise a minimal
-  // ERC-20-sized dummy. Built identically to sendContractCall so the displayed
-  // estimate matches what's actually submitted.
-  const estCallData = tx?.to
-    ? buildExecuteCallData(
-        tx.to,
-        stripHexPrefix(tx.value ?? '0') || '0',
-        tx.data && tx.data !== '0x' ? fromHex(stripHexPrefix(tx.data)) : new Uint8Array(0),
-      )
-    : buildExecuteCallData(from, '0', new Uint8Array(68));
+  // ERC-20-sized dummy. Routed through buildNativeCallData — the SAME builder the real send
+  // uses — so the estimate carries the VelaGasSettlementSplitter CREATE2 deploy sub-call that
+  // gets prepended on a chain's first-ever tx. Without this the estimate (and the "Max" reserve
+  // built from it) omitted the splitter-deploy gas and under-reserved the first send.
+  const innerEstCall: MultiSendCall = tx?.to
+    ? {
+        to: tx.to,
+        value: stripHexPrefix(tx.value ?? '0') || '0',
+        data: tx.data && tx.data !== '0x' ? fromHex(stripHexPrefix(tx.data)) : new Uint8Array(0),
+      }
+    : { to: from, value: '0', data: new Uint8Array(68) };
+  const estCallData = await buildNativeCallData([innerEstCall], chainId, false);
 
   // Try to get accurate gas estimates from the bundler. This catches high-gas chains
   // (e.g. Monad) where actual gas usage is 3-10x higher than the static defaults below.
@@ -634,6 +688,24 @@ async function sendUserOp(
 // ---------------------------------------------------------------------------
 
 /**
+ * True if a sub-call is a plain value/token transfer — a native send (no data) or a standard
+ * ERC-20 `transfer(address,uint256)` (4-byte selector 0xa9059cbb + two 32-byte args = 68 bytes).
+ *
+ * Used to decide whether an un-estimatable Tempo batch is safe to submit on the flat per-sub-call
+ * gas floor (transfers meter predictably) or must be refused (a contract call whose real gas the
+ * floor can't bound). Keys off the call SHAPE, not calldata SIZE: a heavy call can have tiny
+ * calldata (`claim()` = 4 bytes, `deposit(uint256)` = 36 bytes), which a length threshold would
+ * wrongly wave through onto the too-low floor.
+ */
+export function isPlainTransferCall(c: { data: Uint8Array }): boolean {
+  if (c.data.length === 0) return true; // native value transfer
+  return (
+    c.data.length === 68 &&
+    c.data[0] === 0xa9 && c.data[1] === 0x05 && c.data[2] === 0x9c && c.data[3] === 0xbb
+  );
+}
+
+/**
  * Send a UserOperation on Tempo. Tempo has no native coin, so:
  *   - the UserOp is signed with maxFeePerGas = maxPriorityFeePerGas = 0 (EntryPoint's
  *     native prefund/refund becomes a no-op — avoids AA21), and
@@ -662,6 +734,17 @@ async function sendUserOpTempo(
     throw new Error('The Tempo gas relayer is unavailable right now. Please try again.');
   }
 
+  // Tempo's fee is an ERC-20 (pathUSD), so the native VelaGasSettlementSplitter can't split it
+  // (its receive() only fires on native value). Instead we split in-band: the fee is divided
+  // into an EOA cost-floor transfer + a treasury surplus transfer. Best-effort — if the treasury
+  // is unavailable, the whole fee stays on the EOA (unchanged behaviour, never a rejection).
+  const splitterInfo = await fetchSplitterInfo(chainId);
+  const treasuryAddr = splitterInfo?.treasury;
+  const splitEnabled = !!treasuryAddr
+    && /^0x[0-9a-fA-F]{40}$/.test(treasuryAddr)
+    && treasuryAddr.toLowerCase() !== feeCollector.toLowerCase();
+  const reimbursementSubCalls = splitEnabled ? 2 : 1;
+
   _gasPriceCache.delete(chainId);
   const [deployed, nonceResult, gasPrices] = await Promise.all([
     isDeployed(safeAddress, chainId),
@@ -672,25 +755,40 @@ async function sendUserOpTempo(
   const initCode: Uint8Array = deployed ? new Uint8Array(0) : buildInitCode(publicKeyHex);
   const nonce: string = deployed ? nonceResult : '0x0';
 
-  // Build the batch with a placeholder reimbursement (the transfer VALUE doesn't
-  // affect gas), estimate, then bake the real amount derived from that estimate.
-  const buildBatch = (reimbursement: bigint): Uint8Array =>
-    buildMultiSendExecuteCallData([
-      ...innerCalls,
-      { to: feeToken, value: '0', data: encodeErc20Transfer(feeCollector, reimbursement) },
-    ]);
+  // Static realistic-gas model — a floor/fallback for PRICING the reimbursement. Includes the
+  // reimbursement transfer(s): one to the EOA, plus one to the treasury when splitting. This is
+  // only a guess; the bundler's own estimate (below) supersedes it when available.
+  const staticGas = tempoExpectedGas(deployed, innerCalls.length + reimbursementSubCalls);
 
-  // The MultiSend batch executes innerCalls + the appended reimbursement transfer.
-  // Floor callGasLimit per sub-call: TIP-20 transfers meter high and the bundler's
-  // estimate under-reports (handleOps swallows the inner OOG), so a 100k floor lets
-  // the atomic batch run out of gas and revert. See services/tempo.ts.
-  const callGasFloor = tempoCallGasLimit(innerCalls.length + 1);
+  // Build the batch with a placeholder reimbursement (the transfer VALUE doesn't affect gas),
+  // estimate, then bake the real amounts. When splitting, the fee is divided into an EOA
+  // cost-floor transfer + a treasury surplus transfer (see tempoSettlementSplit). `gasBasis` is
+  // the gas the split floors the EOA share against — it MUST track the bundler's simulated gas
+  // so the EOA transfer always clears the bundler's accept-check.
+  const buildBatch = (reimbursement: bigint, gasBasis: bigint): Uint8Array => {
+    const split = splitEnabled
+      ? tempoSettlementSplit(reimbursement, gasBasis, gasPrices.gasPrice)
+      : { eoa: reimbursement, treasury: 0n };
+    const calls: MultiSendCall[] = [
+      ...innerCalls,
+      { to: feeToken, value: '0', data: encodeErc20Transfer(feeCollector, split.eoa) },
+    ];
+    if (splitEnabled) {
+      calls.push({ to: feeToken, value: '0', data: encodeErc20Transfer(treasuryAddr!, split.treasury) });
+    }
+    return buildMultiSendExecuteCallData(calls);
+  };
+
+  // Floor callGasLimit per sub-call: TIP-20 transfers meter high and the bundler's estimate
+  // under-reports (handleOps swallows the inner OOG), so a per-sub-call floor lets the atomic
+  // batch run out of gas and revert. Includes the reimbursement transfer(s). See services/tempo.ts.
+  const callGasFloor = tempoCallGasLimit(innerCalls.length + reimbursementSubCalls);
 
   const userOp: UserOperation = {
     sender: safeAddress,
     nonce,
     initCode,
-    callData: buildBatch(1n),
+    callData: buildBatch(1n, staticGas),
     verificationGasLimit: deployed ? VERIFICATION_GAS_DEPLOYED : TEMPO_VERIFICATION_GAS_UNDEPLOYED,
     callGasLimit: callGasFloor,
     preVerificationGas: PRE_VERIFICATION_GAS,
@@ -700,8 +798,22 @@ async function sendUserOpTempo(
     signature: buildDummySignature(),
   };
 
+  // The bundler's own un-padded estimate (verification + call + preVerification) tracks the
+  // gas the bundler will actually simulate (`simGas`) far more tightly than the static model.
+  // Capturing it is what stops the reimbursement drifting below the bundler's cost — for both
+  // a Safe DEPLOY (whose real gas the flat model under-counted → the reported rejection) and a
+  // heavy dApp contract call (whose real gas dwarfs the flat per-sub-call estimate).
+  // A batch carrying a real contract call (not just transfers) can burn far more than the
+  // per-sub-call floor. `tempoCallGasLimit`'s flat 380k/sub-call is sized for TIP-20 transfers;
+  // if estimation fails for such a call we must NOT submit a doomed op that OOGs on-chain
+  // (wasting a passkey prompt and the bundler's gas). Pure-transfer batches keep the floor
+  // fallback — the floor covers them. Classify by call SHAPE (isPlainTransferCall), so a heavy
+  // call with tiny calldata (claim()/deposit()) is still caught. Mirrors native's large-calldata guard.
+  const hasContractCall = innerCalls.some((c) => !isPlainTransferCall(c));
+  let estActualGas: bigint | null = null;
   try {
     const est = await estimateGas(userOp, chainId);
+    estActualGas = est.verificationGasLimit + est.callGasLimit + est.preVerificationGas;
     userOp.verificationGasLimit = deployed
       ? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
       : bigintMax((est.verificationGasLimit * 15n) / 10n, TEMPO_VERIFICATION_GAS_UNDEPLOYED);
@@ -709,15 +821,20 @@ async function sendUserOpTempo(
     userOp.preVerificationGas = est.preVerificationGas + 10_000n;
   } catch (err) {
     console.error('[Tempo] Gas estimation failed, using defaults:', err instanceof Error ? err.message : String(err));
+    if (hasContractCall) {
+      throw new Error('Could not estimate gas for this transaction. The network may be busy — please try again.');
+    }
   }
 
-  // Price the reimbursement off the REALISTIC gas the 0x76 will burn — NOT the padded
-  // UserOp limits (callGasLimit/verificationGasLimit stay high for OOG safety, but the
-  // user shouldn't pay 2–4× for that headroom). The batch runs innerCalls + 1 transfer.
-  const expectedGas = tempoExpectedGas(deployed, innerCalls.length + 1);
-  const reimbursement = tempoReimbursement(expectedGas, gasPrices.gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
-  userOp.callData = buildBatch(reimbursement);
-  console.log(`[Tempo] feeToken=${feeToken} reimbursement=${reimbursement} expectedGas=${expectedGas} collector=${feeCollector}`);
+  // Price the reimbursement + the EOA-floor split off the REALISTIC gas the 0x76 will burn —
+  // the bundler's estimate when we have it, else the static model, whichever is HIGHER (never
+  // under-price the bundler). This is still NOT the padded UserOp limits
+  // (callGasLimit/verificationGasLimit stay high for OOG safety, but the user shouldn't pay 2–4×
+  // for that headroom). `bigintMax` guards the case where estimateGas throws (estActualGas null).
+  const realisticGas = estActualGas !== null ? bigintMax(staticGas, estActualGas) : staticGas;
+  const reimbursement = tempoReimbursement(realisticGas, gasPrices.gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
+  userOp.callData = buildBatch(reimbursement, realisticGas);
+  console.log(`[Tempo] feeToken=${feeToken} reimbursement=${reimbursement} realisticGas=${realisticGas} staticGas=${staticGas} est=${estActualGas ?? 'n/a'} split=${splitEnabled} collector=${feeCollector} treasury=${treasuryAddr ?? 'n/a'}`);
 
   // Sign the SafeOp (over the FINAL callData) and submit, telling the bundler which
   // stablecoin to charge for the outer 0x76.
@@ -838,6 +955,62 @@ export function buildMultiSendExecuteCallData(calls: MultiSendCall[]): Uint8Arra
     multiSendPayload,
     new Uint8Array(dataPadding),
   );
+}
+
+// ---------------------------------------------------------------------------
+// VelaGasSettlementSplitter — in-batch deploy on native chains
+// ---------------------------------------------------------------------------
+
+/**
+ * The MultiSend sub-call that CREATE2-deploys the VelaGasSettlementSplitter, or null if it is
+ * already deployed / can't be safely determined. NATIVE chains only — on Tempo the beneficiary
+ * stays the EOA, so there is nothing to deploy (Tempo sends never reach this path).
+ *
+ * The splitter address and deploy calldata are computed LOCALLY from embedded constants; only
+ * the treasury (20 bytes) is bundler-supplied. We cross-check the bundler's reported address
+ * against the local derivation and skip on any mismatch — the wallet never blindly includes
+ * bundler-provided deploy calldata. Fails safe: a missing split beats a reverting/mis-routed op.
+ */
+async function splitterDeployCallIfNeeded(chainId: number): Promise<MultiSendCall | null> {
+  try {
+    const info = await fetchSplitterInfo(chainId);
+    if (!info) return null;
+
+    const splitter = computeSplitterAddress(info.treasury);
+    if (splitter.toLowerCase() !== info.address.toLowerCase()) {
+      console.warn('[Splitter] bundler address mismatch — skipping in-batch deploy', {
+        local: splitter, bundler: info.address,
+      });
+      return null;
+    }
+    if (await isDeployed(splitter, chainId)) return null;
+
+    return { to: VELA_SPLITTER_FACTORY, value: '0', data: encodeSplitterDeployCall(info.treasury) };
+  } catch (err) {
+    console.warn('[Splitter] deploy-check failed — proceeding without in-batch deploy:', err);
+    return null;
+  }
+}
+
+/**
+ * Build the UserOp callData for a NATIVE-chain send, prepending the splitter CREATE2 deploy as
+ * the FIRST sub-call when the splitter isn't on-chain yet — so it exists before the EntryPoint
+ * pays the beneficiary. When no deploy is needed the encoding is unchanged: a lone call stays a
+ * single executeUserOp (unless `alwaysMultiSend`), a batch stays a MultiSend.
+ */
+async function buildNativeCallData(
+  innerCalls: MultiSendCall[],
+  chainId: number,
+  alwaysMultiSend: boolean,
+): Promise<Uint8Array> {
+  const deployCall = await splitterDeployCallIfNeeded(chainId);
+  const calls = deployCall ? [deployCall, ...innerCalls] : innerCalls;
+
+  if (calls.length === 1 && !alwaysMultiSend) {
+    const only = calls[0]!;
+    return buildExecuteCallData(only.to, only.value, only.data);
+  }
+  return buildMultiSendExecuteCallData(calls);
 }
 
 /** Encode ERC-20 transfer(address,uint256) calldata. */

@@ -33,6 +33,10 @@ import {
   markUniversalLinkVerified,
   DEFAULT_EXT_CHAIN_ID,
 } from '@/services/app-group-account-sync';
+import { requestExtensionSign } from '@/services/extension-sign-bus';
+
+// The UL attestation probe rid (getvela.app/sign?rid=ul-selftest) — not a real sign.
+const UL_SELFTEST_RID = 'ul-selftest';
 
 // A getvela.app /sign Universal Link resolving to the app PROVES the applinks
 // association is live on this device for THE EXACT PATH the extension launches
@@ -93,14 +97,21 @@ export function AccountFileWriter(): null {
     return () => subscription.remove();
   }, []);
 
-  // (c) Universal-Link attestation: if the app was opened (cold or warm) via a
-  // https://getvela.app UL, mark it verified and re-write the cache immediately so
-  // the extension can start using the UL launch on the very next sign. Additive to
-  // expo-router's own URL handling (multiple listeners are fine).
+  // (c) Universal-Link sign + attestation: if the app was opened (cold or warm) via a
+  // https://getvela.app/sign?rid UL, (1) drive the extension sign for that rid, and
+  // (2) mark UL verified. CRITICAL: expo-router maps only the velawallet:// scheme to
+  // the /sign route — the getvela.app DOMAIN is NOT a router prefix, so a UL launch
+  // would otherwise open the app to HOME and never show the sign sheet. This handler
+  // is the ONLY thing that routes a UL sign into the flow (via the same bus the
+  // /sign trampoline uses for the scheme path). ul-selftest is the attestation probe,
+  // not a real sign — skip driving a sign for it.
   useEffect(() => {
     let mounted = true;
     const onUrl = async (url: string | null) => {
       if (!url || !GETVELA_SIGN_UL.test(url)) return;
+      let rid: string | null = null;
+      try { rid = new URL(url).searchParams.get('rid'); } catch { /* no rid */ }
+      if (rid && rid !== UL_SELFTEST_RID) requestExtensionSign(rid); // buffered if the controller isn't up yet
       await markUniversalLinkVerified(); // fresh timestamp — also refreshes the TTL
       if (mounted) sync(latest.current); // re-write; writeAccountCache re-reads the flag
     };
