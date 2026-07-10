@@ -38,10 +38,6 @@ export interface BundlerAccountInfo {
 }
 
 export interface FundingNeeded {
-  /** Why funding is needed. */
-  reason: 'deposit_needed' | 'wallet_balance_too_low';
-  /** Whether this network supports sponsored activation. */
-  sponsorshipAvailable: boolean;
   /** Deposit address for the bundler EOA. */
   depositAddress: string;
   /** The Safe wallet address (needed to re-query bundler API). */
@@ -60,6 +56,15 @@ export interface FundingNeeded {
   recommendedFormatted: string;
   /** Human-readable current balance. */
   currentFormatted: string;
+  /**
+   * How the funding sheet should open. 'topup' = ask the user to deposit
+   * (sponsorship was denied — carry `denialReason`); 'confirming' = money is
+   * already on its way (sponsorship granted or possibly-landed) — the sheet
+   * just waits for the balance to reflect it. Set by attemptSilentSponsorship.
+   */
+  presentation?: 'topup' | 'confirming';
+  /** Server denial reason from the silent sponsorship attempt, if any. */
+  denialReason?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,18 +148,12 @@ export async function checkBundlerFunding(
   // draining a real gas account. `fundingShouldForce` is always false in prod.
   if (!fundingShouldForce(chainId) && info.spendableBalance >= threshold) return null;
 
-  // Balance insufficient — return info for the funding modal.
-  // Sponsorship is NOT attempted here; the modal lets the user explicitly
-  // request it so they understand what's happening.
+  // Balance insufficient — return info for the caller to resolve, normally by
+  // calling attemptSilentSponsorship() and only surfacing the funding sheet if
+  // sponsorship is denied.
   const recommendedWei = recommendedFundingWei(threshold, info.spendableBalance);
 
-  // Sponsorship is always available — the bundler decides whether to sponsor
-  // based on treasury balance, nonce limits, and Safe wallet balance.
   return {
-    reason: 'deposit_needed',
-    // Sponsorship works on every chain: Tempo sponsors a pathUSD float to the gas
-    // account via a 0x76; other chains transfer native from the treasury.
-    sponsorshipAvailable: true,
     depositAddress: info.depositAddress,
     safeAddress,
     chainId,
@@ -169,7 +168,7 @@ export async function checkBundlerFunding(
 
 /**
  * Request gas sponsorship from the bundler's treasury.
- * Exposed for the funding modal to call on user action.
+ * Exposed for the funding sheet's retry affordance.
  */
 export async function requestGasSponsorship(
   chainId: number,
@@ -179,10 +178,167 @@ export async function requestGasSponsorship(
   return requestSponsorship(chainId, safeAddress, requiredWei);
 }
 
+// ---------------------------------------------------------------------------
+// Silent sponsorship
+// ---------------------------------------------------------------------------
+
+export type SilentSponsorship =
+  /** Gas account is usable — proceed without any funding UI. `sponsored` is
+   *  true when the treasury actually granted funds in THIS attempt (drives the
+   *  "covered by Vela" note on the confirm screen). */
+  | { outcome: 'funded'; sponsored: boolean }
+  /** Funds are (probably) on their way but the balance read hasn't caught up —
+   *  open the sheet in its waiting state, never as a denial. */
+  | { outcome: 'confirming' }
+  /** Sponsorship refused — open the sheet in top-up mode with the reason. */
+  | { outcome: 'denied'; denialReason?: string };
+
+/** Client-side politeness throttle: identical DENIED attempts within this
+ *  window return the cached denial instead of re-hitting the endpoint (the
+ *  user re-tapping Continue after a cancel shouldn't spam the treasury gate).
+ *  Success/confirming outcomes are never cached — balances move. */
+const SILENT_DENY_TTL = 25_000;
+const silentDenials = new Map<string, { reason?: string; at: number }>();
+
+/**
+ * Try to make the gas account usable with no UI: request treasury sponsorship
+ * and re-verify the balance. This is the ONLY automatic treasury touchpoint —
+ * it runs when the user is demonstrably about to transact (Continue/approve),
+ * never speculatively, so the wallet adds no treasury exposure beyond the
+ * server's own eligibility gates.
+ */
+export async function attemptSilentSponsorship(
+  funding: FundingNeeded,
+  opts?: { force?: boolean },
+): Promise<SilentSponsorship> {
+  const { chainId, safeAddress, thresholdWei } = funding;
+
+  // Dev seams: `vela.forceFunding()` exists to exercise the funding sheet, and
+  // parallel-space fixture Safes are never registered with the real bundler —
+  // in both cases skip the doomed/counterproductive network round-trip and go
+  // straight to the sheet (founder decision 2026-07-06 for the test env).
+  if (fundingShouldForce(chainId) || (globalThis as { __VELA_PARALLEL__?: boolean }).__VELA_PARALLEL__) {
+    return { outcome: 'denied' };
+  }
+
+  const key = `${chainId}:${safeAddress.toLowerCase()}`;
+  const recent = silentDenials.get(key);
+  if (!opts?.force && recent && Date.now() - recent.at < SILENT_DENY_TTL) {
+    return { outcome: 'denied', denialReason: recent.reason };
+  }
+
+  const verify = async (): Promise<boolean> => {
+    clearBundlerCache(chainId, safeAddress);
+    const info = await fetchBundlerAccountInfo(chainId, safeAddress);
+    return !!info && info.spendableBalance >= thresholdWei;
+  };
+
+  const result = await requestGasSponsorship(chainId, safeAddress, thresholdWei);
+
+  if (result.sponsored || result.reason === 'already_funded') {
+    // The bundler waits (≤15s) for the transfer receipt before answering, so
+    // the money is normally on-chain already; a lagging balance read must
+    // surface as "confirming", NEVER as a denial (the old flow showed a
+    // successful sponsorship as "Free activation unavailable" + a payment QR).
+    silentDenials.delete(key);
+    if (await verify()) return { outcome: 'funded', sponsored: result.sponsored };
+    return { outcome: 'confirming' };
+  }
+
+  if (result.reason === 'pending_unknown' || result.reason === 'already_in_progress') {
+    // pending_unknown: timeout mid-transfer — the treasury tx may have landed;
+    // a second request would risk a double-spend. already_in_progress: another
+    // grant for this account is literally in flight. Either way money may be
+    // arriving: the sheet's poll reconciles.
+    silentDenials.delete(key);
+    return { outcome: 'confirming' };
+  }
+
+  silentDenials.set(key, { reason: result.reason, at: Date.now() });
+  return { outcome: 'denied', denialReason: result.reason };
+}
+
+// ---------------------------------------------------------------------------
+// Sponsorship probe (dry run)
+// ---------------------------------------------------------------------------
+
+export type SponsorProbe =
+  /** Server says the gates pass — defer the actual grant to the moment of
+   *  maximum commitment (the confirm slide), so the treasury only ever funds
+   *  transactions that are about to execute and recoup. */
+  | { outcome: 'eligible' }
+  /** An old server without dryRun support performed the real grant — fine,
+   *  that is simply the pre-dryRun behavior. */
+  | { outcome: 'granted' }
+  /** Grant outcome unknown (timeout mid-transfer on an old server). */
+  | { outcome: 'confirming' }
+  | { outcome: 'denied'; reason?: string };
+
+/**
+ * Ask the bundler whether sponsorship WOULD succeed, without moving money
+ * (body `dryRun: true`). Lets the Send flow route denials to the funding
+ * sheet at Continue (where an external deposit is still a graceful ask)
+ * while delaying the actual treasury transfer to the confirm slide.
+ *
+ * Backward compatible: a server that predates dryRun ignores the flag and
+ * grants for real — mapped to 'granted', which callers treat as sponsored.
+ */
+export async function probeGasSponsorship(funding: FundingNeeded): Promise<SponsorProbe> {
+  const { chainId, safeAddress, thresholdWei } = funding;
+  if (fundingShouldForce(chainId) || (globalThis as { __VELA_PARALLEL__?: boolean }).__VELA_PARALLEL__) {
+    return { outcome: 'denied' };
+  }
+  try {
+    await ensureEndpoints();
+    const baseUrl = await getActiveBundlerBaseUrl(chainId);
+    const url = `${baseUrl}/v1/sponsor/${chainId}/${safeAddress.toLowerCase()}`;
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requiredWei: '0x' + thresholdWei.toString(16), dryRun: true }),
+      },
+      // Sponsor-tier timeout, NOT the short REST one: an old server without
+      // dryRun support performs the REAL grant here (waits ≤15s for the
+      // receipt) — timing it out would map to 'eligible' and fire a duplicate
+      // attempt at confirm time.
+      { timeoutMs: NET_TIMEOUTS.bundlerSponsor },
+    );
+    if (!res.ok) {
+      let reason = res.status === 503 || res.status === 429 ? 'service_unavailable' : 'request_failed';
+      try {
+        const body = await res.json();
+        if (body && typeof body.reason === 'string' && body.reason) reason = body.reason;
+      } catch { /* keep status-derived reason */ }
+      return { outcome: 'denied', reason };
+    }
+    const body = await res.json();
+    if (body.sponsored) return { outcome: 'granted' };
+    if (body.dryRun) {
+      // Defensive: a server that reports "needs no grant" reasons as
+      // ineligible must not bounce a payable user to the funding sheet.
+      if (body.eligible || body.reason === 'already_funded' || body.reason === 'amount_too_small') {
+        return { outcome: 'eligible' };
+      }
+      return { outcome: 'denied', reason: body.reason };
+    }
+    // Old server, real attempt: mirror attemptSilentSponsorship's mapping.
+    if (body.reason === 'pending_unknown' || body.reason === 'already_in_progress') return { outcome: 'confirming' };
+    if (body.reason === 'already_funded') return { outcome: 'eligible' };
+    return { outcome: 'denied', reason: body.reason };
+  } catch {
+    // The probe is advisory — on any transport failure defer the decision to
+    // the real grant at confirm time (whose failure path shows the sheet).
+    return { outcome: 'eligible' };
+  }
+}
+
 /**
  * Request auto-sponsorship of the gas account from the bundler's treasury.
- * The bundler checks eligibility (nonce ≤ 3, WebAuthn registration, treasury balance)
- * and transfers ETH from the treasury to the gas account if all conditions are met.
+ * The bundler checks eligibility (relayer nonce ≤ 6, Safe balance ≥ 2× the
+ * sponsor amount on native chains, WebAuthn index registration, treasury
+ * balance) and transfers from the treasury to the gas account if all pass.
  */
 async function requestSponsorship(
   chainId: number,
@@ -217,7 +373,18 @@ async function requestSponsorship(
       },
       { timeoutMs: NET_TIMEOUTS.bundlerSponsor },
     );
-    if (!res.ok) return { sponsored: false, reason: 'request_failed' };
+    if (!res.ok) {
+      // Prefer the server's structured reason — a 503 carries
+      // 'passkey_index_unavailable', which the server documents as "retry
+      // later" infrastructure trouble, NOT a business rejection. Collapsing it
+      // to a generic failure used to dead-end users who were fully eligible.
+      let reason = res.status === 503 || res.status === 429 ? 'service_unavailable' : 'request_failed';
+      try {
+        const body = await res.json();
+        if (body && typeof body.reason === 'string' && body.reason) reason = body.reason;
+      } catch { /* keep the status-derived reason */ }
+      return { sponsored: false, reason };
+    }
     return await res.json();
   } catch (err) {
     // A timeout is NOT a definitive failure: the treasury transfer may have gone
@@ -392,6 +559,20 @@ export interface BundlerUnderfunded {
   depositAddress?: string;
   /** What the gas account is denominated in: 'pathUSD' on Tempo, else native. */
   asset: 'native' | 'pathUSD';
+}
+
+/**
+ * The threshold (18-dec wei-scale) implied by a parsed underfunded error.
+ * Tempo reports pathUSD amounts in 6-dec units while account info scales
+ * balances to 18 decimals — comparing across units would make any dust
+ * balance read as "funded" and loop the submit. Returns null when the
+ * message carried no required amount.
+ */
+export function underfundedRequiredWei(underfunded: BundlerUnderfunded): bigint | null {
+  if (underfunded.requiredWei == null) return null;
+  return underfunded.asset === 'pathUSD'
+    ? underfunded.requiredWei * 10n ** 12n
+    : underfunded.requiredWei;
 }
 
 /**

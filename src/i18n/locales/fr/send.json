@@ -15,7 +15,7 @@
     "recipientLabel": "Destinataire",
     "recipientPlaceholder": "Adresse 0x...",
     "velaUser": "Utilisateur Vela",
-    "lowBalanceWarning": "Solde insuffisant pour couvrir les frais de réseau. Ajoutez davantage de {{nativeSym}} à votre portefeuille avant d'envoyer.",
+    "gasSponsoredNote": "Premiers frais de réseau — pris en charge par Vela",
     "preparing": "Préparation...",
     "continueBtn": "Continuer",
     "alertInvalidAddressTitle": "Adresse invalide",

@@ -702,6 +702,7 @@ export function SigningRequestModal() {
           funding={fundingNeeded}
           onFunded={handleFundingComplete}
           onCancel={handleFundingCancel}
+          dappVariant
         />
       ) : (
         /* Per-request chain/identity for a Safari-extension sign (F3/F4): sign +

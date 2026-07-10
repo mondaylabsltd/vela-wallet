@@ -15,7 +15,7 @@
     "recipientLabel": "送金先",
     "recipientPlaceholder": "0x... のアドレス",
     "velaUser": "Vela ユーザー",
-    "lowBalanceWarning": "ネットワーク手数料を支払うための残高が不足しています。送金する前に {{nativeSym}} をウォレットに追加してください。",
+    "gasSponsoredNote": "初回のネットワーク手数料 — Vela が負担します",
     "preparing": "準備中...",
     "continueBtn": "次へ",
     "alertInvalidAddressTitle": "無効なアドレス",

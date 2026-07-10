@@ -15,7 +15,7 @@
     "recipientLabel": "Alıcı",
     "recipientPlaceholder": "0x... adresi",
     "velaUser": "Vela Kullanıcısı",
-    "lowBalanceWarning": "Ağ ücretlerini karşılamak için bakiye yetersiz. Göndermeden önce cüzdanınıza biraz daha {{nativeSym}} ekleyin.",
+    "gasSponsoredNote": "İlk ağ ücreti — Vela tarafından karşılanır",
     "preparing": "Hazırlanıyor...",
     "continueBtn": "Devam Et",
     "alertInvalidAddressTitle": "Geçersiz Adres",

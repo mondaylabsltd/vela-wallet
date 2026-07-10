@@ -15,7 +15,7 @@
     "recipientLabel": "Destinatário",
     "recipientPlaceholder": "Endereço 0x...",
     "velaUser": "Usuário Vela",
-    "lowBalanceWarning": "Saldo insuficiente para cobrir as taxas de rede. Adicione mais {{nativeSym}} à sua carteira antes de enviar.",
+    "gasSponsoredNote": "Primeira taxa de rede — por conta da Vela",
     "preparing": "Preparando...",
     "continueBtn": "Continuar",
     "alertInvalidAddressTitle": "Endereço inválido",

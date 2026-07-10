@@ -15,7 +15,7 @@
     "recipientLabel": "Получатель",
     "recipientPlaceholder": "Адрес 0x…",
     "velaUser": "Пользователь Vela",
-    "lowBalanceWarning": "Недостаточно средств для оплаты сетевой комиссии. Добавьте {{nativeSym}} в кошелёк перед отправкой.",
+    "gasSponsoredNote": "Первая сетевая комиссия — за счёт Vela",
     "preparing": "Подготовка…",
     "continueBtn": "Продолжить",
     "alertInvalidAddressTitle": "Неверный адрес",

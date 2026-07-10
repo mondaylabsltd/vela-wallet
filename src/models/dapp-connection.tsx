@@ -31,11 +31,13 @@ import { buildSigningRecord } from '@/services/dapp-history';
 import { serializeAssetSim, type AssetSimResult } from '@/services/tx-simulation';
 import { waitForReceipt } from '@/services/safe-transaction';
 import {
+  attemptSilentSponsorship,
   fetchBundlerAccountInfo,
   clearBundlerCache,
   checkBundlerFunding,
   parseBundlerUnderfunded,
   recommendedFundingWei,
+  underfundedRequiredWei,
   formatWei,
   type FundingNeeded,
 } from '@/services/bundler-service';
@@ -199,6 +201,11 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<RemoteInjectSession | null>(null);
   const [dappInfo, setDappInfo] = useState<DAppInfo | null>(null);
   const [incomingRequest, setIncomingRequest] = useState<BLEIncomingRequest | null>(null);
+  // Synchronous mirror for guards inside long-running async recovery (the
+  // reactive silent-sponsorship attempt can take ~25s — the request on the
+  // sheet may have changed by the time it resolves).
+  const incomingRequestRef = useRef<BLEIncomingRequest | null>(null);
+  useEffect(() => { incomingRequestRef.current = incomingRequest; }, [incomingRequest]);
   const [isSigning, setIsSigning] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [signError, setSignError] = useState<string | null>(null);
@@ -614,25 +621,43 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     setSignError(null);
     setPendingOpHash(null);
 
-    // Proactive gas-account pre-check — mirror the Send flow so the top-up modal
-    // appears BEFORE the passkey prompt + submit, not after a failed UserOp. Raced
-    // with a timeout so a slow RPC can't hang approval; on timeout/error we fall
-    // through to submit and the post-submit catch below is the safety net.
-    if (request.method === 'eth_sendTransaction') {
+    // Proactive gas-account pre-check — mirror the Send flow so funding is
+    // resolved BEFORE the passkey prompt + submit, not after a failed UserOp.
+    // Raced with a timeout so a slow RPC can't hang approval; on timeout/error
+    // we fall through to submit and the post-submit catch below is the safety
+    // net. Covers wallet_sendCalls too (EIP-5792 batches previously only hit
+    // the reactive path after a doomed submit).
+    if (request.method === 'eth_sendTransaction' || request.method === 'wallet_sendCalls') {
       try {
         const funding = await Promise.race([
           checkBundlerFunding(cid, account.address, opts?.bundlerCostWei),
           new Promise<FundingNeeded | null>(resolve => setTimeout(() => resolve(null), 15_000)),
         ]);
         if (funding) {
-          // Hand off to the funding view — rendered IN-SHEET (BUG-1 primary), not
-          // stacked over the sheet. Drop the signing spinner; the request stays
-          // pending and handleFundingComplete retries it after top-up.
-          setIsSigning(false);
-          setFundingNeeded(funding);
-          fundingRidRef.current = request.id; // pin funding to THIS request
-          approveInFlightRef.current = false; // released — the funding retry re-acquires
-          return;
+          // Silent sponsorship first: the approve tap IS the commitment moment
+          // on the dApp path (the passkey prompt and submit follow immediately,
+          // so the grant starts recouping via the settlement split right away).
+          // Only a non-funded outcome surfaces any UI.
+          const silent = await attemptSilentSponsorship(funding);
+          if (signCancelledRef.current) {
+            setIsSigning(false);
+            approveInFlightRef.current = false;
+            return;
+          }
+          if (silent.outcome !== 'funded') {
+            // Hand off to the funding view — rendered IN-SHEET (BUG-1 primary),
+            // not stacked over the sheet. Drop the signing spinner; the request
+            // stays pending and handleFundingComplete retries it after top-up.
+            setIsSigning(false);
+            setFundingNeeded(
+              silent.outcome === 'confirming'
+                ? { ...funding, presentation: 'confirming' }
+                : { ...funding, presentation: 'topup', denialReason: silent.denialReason },
+            );
+            fundingRidRef.current = request.id; // pin funding to THIS request
+            approveInFlightRef.current = false; // released — the funding retry re-acquires
+            return;
+          }
         }
       } catch { /* proceed to submit */ }
     }
@@ -732,7 +757,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
       // even if the follow-up account lookup fails.
       const underfunded = parseBundlerUnderfunded(msg);
       if (underfunded) {
-        console.log('[DAppConnection] Bundler needs funding, showing modal');
+        console.log('[DAppConnection] Bundler needs funding');
         setIsSigning(false);
         try {
           const addr = account.address;
@@ -745,19 +770,41 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
             const thresholdWei = underfunded.requiredWei ?? currentBalance + 100_000_000_000_000n;
             const recommendedWei = recommendedFundingWei(thresholdWei, currentBalance);
             const nativeSym = info?.nativeSym ?? (underfunded.asset === 'pathUSD' ? 'pathUSD' : nativeSymbol(cid));
-            setFundingNeeded({
-              reason: 'deposit_needed',
-              sponsorshipAvailable: true,
+            const funding: FundingNeeded = {
               depositAddress,
               safeAddress: addr,
               chainId: cid,
               nativeSym,
-              thresholdWei,
+              thresholdWei: underfundedRequiredWei(underfunded) ?? thresholdWei,
               recommendedWei,
               currentBalance,
               recommendedFormatted: formatWei(recommendedWei),
               currentFormatted: formatWei(currentBalance),
-            });
+            };
+            // The user may have rejected while the account lookup ran — a
+            // treasury grant must not fire for an abandoned request.
+            if (signCancelledRef.current) return;
+            // Try to heal silently before asking the user for anything (the
+            // typical reactive cause is a gas spike past the funded float).
+            // Success shows the sheet's confirming state, whose first poll
+            // flips to the funded beat and replays this request.
+            const silent = await attemptSilentSponsorship(funding, { force: true });
+            // The recovery took a while — only surface the funding sheet if
+            // the user hasn't rejected meanwhile (4001 already sent) and THIS
+            // request still owns the sheet; a late sheet over a NEWER request
+            // would cancel the wrong one (BUG-2 family).
+            if (signCancelledRef.current) return;
+            if (incomingRequestRef.current && incomingRequestRef.current.id !== request.id) {
+              // A new request took the slot — fall through to the generic
+              // error response for THIS request instead of hijacking the UI.
+              throw err;
+            }
+            setFundingNeeded(
+              silent.outcome === 'denied'
+                ? { ...funding, presentation: 'topup', denialReason: silent.denialReason }
+                : { ...funding, presentation: 'confirming' },
+            );
+            fundingRidRef.current = request.id; // pin funding to THIS request
             return; // Don't send error to dApp — keep request pending
           }
         } catch { /* fall through to generic error */ }

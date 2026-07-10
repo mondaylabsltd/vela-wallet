@@ -24,7 +24,7 @@ import { ContactPicker } from '@/components/contacts/ContactPicker';
 import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { saveContact } from '@/services/contacts';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
-import { checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, parseBundlerUnderfunded, recommendedFundingWei, type FundingNeeded } from '@/services/bundler-service';
+import { attemptSilentSponsorship, checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, parseBundlerUnderfunded, probeGasSponsorship, recommendedFundingWei, underfundedRequiredWei, type FundingNeeded } from '@/services/bundler-service';
 import { AmountText } from '@/components/ui/AmountText';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { MultiRecipientEditor, makeRecipientId, recipientsAreValid, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
@@ -52,7 +52,7 @@ import Animated, {
   Layout,
 } from 'react-native-reanimated';
 import { fadeInDown } from '@/constants/entering';
-import { ArrowLeft, X, BookUser, ScanLine, AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Copy, Check, Globe, Plus, FileUp } from 'lucide-react-native';
+import { ArrowLeft, X, BookUser, ScanLine, AlertCircle, ArrowUpDown, ChevronDown, ChevronUp, RefreshCw, Copy, Check, Gift, Globe, Plus, FileUp } from 'lucide-react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
@@ -204,6 +204,11 @@ export default function SendScreen() {
 
   const hasPreselection = !!(params.prefilledRecipient || params.preselectedMulti || (params.preselectedSymbol && params.preselectedNetwork));
   const [step, setStep] = useState<Step>(hasPreselection ? 'enter-details' : 'select-token');
+  // Synchronous mirror of `step` for guards inside long-running async flows
+  // (the Phase-2 sponsorship grant can take ~20s — the user may back out of
+  // the confirm screen meanwhile, and a passkey prompt must NOT resurrect).
+  const stepRef = useRef(step);
+  useEffect(() => { stepRef.current = step; }, [step]);
 
   // EIP-681 locked-request resolution + the exceptions it can hit.
   type LockError =
@@ -240,6 +245,16 @@ export default function SendScreen() {
   const [estimatingGas, setEstimatingGas] = useState(false);
   const [fundingNeeded, setFundingNeeded] = useState<FundingNeeded | null>(null);
   const fundingRetryCount = useRef(0);
+  // Two-phase silent sponsorship: set when the Continue-time dryRun probe said
+  // "eligible"; consumed by executeTransaction to fire the REAL grant right
+  // after the confirm slide (see handleContinue for the rationale).
+  const pendingSponsorship = useRef<FundingNeeded | null>(null);
+  const sendInFlightRef = useRef(false);
+  // Set by the confirm screen's cancel button; checked after every pre-sign
+  // await in executeTransaction (mirrors dapp-connection's signCancelledRef).
+  const sendCancelledRef = useRef(false);
+  // Drives the quiet "first network fee — covered by Vela" line on confirm.
+  const [gasSponsored, setGasSponsored] = useState(false);
   // Guards UI state updates that run after an `await` in the submit flow, so a
   // user who navigates away mid-send doesn't trigger updates on an unmounted
   // screen. Persistence (DB writes) still runs regardless — only UI is gated.
@@ -741,6 +756,8 @@ export default function SendScreen() {
       // This ensures the user never sees a flash-back from confirm to enter-details.
       setEstimatingGas(true);
       setFeeEstimate(null);
+      setGasSponsored(false);
+      pendingSponsorship.current = null;
 
       try {
         // Race with a timeout — pool init for new chains can stall on slow RPCs.
@@ -761,9 +778,26 @@ export default function SendScreen() {
         const timeout = new Promise<null>(r => setTimeout(() => r(null), 15_000));
         const funding = await Promise.race([preCheck(), timeout]);
         if (funding) {
-          setFundingNeeded(funding);
-          setEstimatingGas(false);
-          return;
+          // Two-phase silent sponsorship. Phase 1 (here): a dryRun probe asks
+          // whether the treasury WOULD sponsor, without moving money — denials
+          // surface the funding sheet now, while an external deposit is still
+          // a graceful ask. Phase 2 (executeTransaction): the real grant fires
+          // after the confirm slide, seconds before the fee-paying tx that
+          // starts recouping it — the treasury never funds an abandoned flow.
+          const probe = await probeGasSponsorship(funding);
+          if (!mountedRef.current) return;
+          if (probe.outcome === 'denied' || probe.outcome === 'confirming') {
+            setFundingNeeded(
+              probe.outcome === 'confirming'
+                ? { ...funding, presentation: 'confirming' }
+                : { ...funding, presentation: 'topup', denialReason: probe.reason },
+            );
+            setEstimatingGas(false);
+            return;
+          }
+          if (probe.outcome === 'granted') clearBundlerCache(chainId, activeAccount.address);
+          pendingSponsorship.current = probe.outcome === 'eligible' ? funding : null;
+          setGasSponsored(true);
         }
       } catch { /* proceed */ }
 
@@ -846,11 +880,14 @@ export default function SendScreen() {
     await executeTransaction();
   };
 
-  /** Called when user taps "Send Transaction" in the funding modal after funding. */
+  /** Called when the funding sheet reaches its funded state (auto-advance). */
   const handleFundingComplete = () => {
     if (selectedToken && activeAccount) {
       clearBundlerCache(tokenChainId(selectedToken), activeAccount.address);
     }
+    // A 'confirming' sheet means a treasury grant was in flight — surface the
+    // same quiet "covered by Vela" note the fully-silent path shows.
+    if (fundingNeeded?.presentation === 'confirming') setGasSponsored(true);
     setFundingNeeded(null);
     // Go straight to confirm — the modal already verified balance >= threshold.
     // Re-running handleContinue would re-estimate gas (potentially getting a higher
@@ -860,6 +897,12 @@ export default function SendScreen() {
 
   const executeTransaction = async () => {
     if (!selectedToken || !activeAccount) return;
+    // Synchronous re-entry lock: `sending` is async React state, so a rapid
+    // second slide in the same tick would start a concurrent submit. The
+    // Phase-2 grant await widens that window to ~20s — guard on a ref.
+    if (sendInFlightRef.current) return;
+    sendInFlightRef.current = true;
+    sendCancelledRef.current = false;
     setSending(true);
     setTxStatus('preparing');
     setTxHash(null);
@@ -868,6 +911,37 @@ export default function SendScreen() {
     setReceiptFailed(false);
     try {
       const chainId = tokenChainId(selectedToken);
+
+      // Phase 2 of silent sponsorship: the user just slid to confirm, so the
+      // fee-paying tx is seconds away — the grant made now starts recouping
+      // (via the settlement split) almost immediately. A denial here is a race
+      // (treasury drained between probe and slide): fall to the funding sheet
+      // rather than a doomed submit. 'confirming' proceeds — the bundler
+      // waited for the transfer receipt, so the on-chain balance is real even
+      // if our read lags; the reactive catch below is the safety net.
+      const planned = pendingSponsorship.current;
+      if (planned) {
+        const grant = await attemptSilentSponsorship(planned, { force: true });
+        if (!mountedRef.current) return;
+        // The user cancelled (TxCancelButton) or backed out during the grant —
+        // do not resurrect a passkey prompt or a funding sheet over whatever
+        // they're doing now. The grant (if it happened) stays in their float.
+        if (sendCancelledRef.current || stepRef.current !== 'confirm') {
+          setSending(false);
+          setTxStatus('idle');
+          return;
+        }
+        if (grant.outcome === 'denied') {
+          pendingSponsorship.current = null;
+          setGasSponsored(false);
+          setSending(false);
+          setTxStatus('idle');
+          setFundingNeeded({ ...planned, presentation: 'topup', denialReason: grant.denialReason });
+          return;
+        }
+        pendingSponsorship.current = null;
+      }
+
       // Use prefetched account if available, otherwise fetch now
       const stored = prefetchedAccount.current ?? await findAccountByCredentialId(activeAccount.id);
       if (!stored?.publicKeyHex) {
@@ -1043,8 +1117,9 @@ export default function SendScreen() {
             if (depositAddress) {
               const currentBalance = info?.spendableBalance ?? underfunded.spendableWei ?? 0n;
               let thresholdWei: bigint;
-              if (underfunded.requiredWei != null) {
-                thresholdWei = underfunded.requiredWei;
+              const requiredFromError = underfundedRequiredWei(underfunded);
+              if (requiredFromError != null) {
+                thresholdWei = requiredFromError;
               } else {
                 const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId, gasTier);
                 // Match the server's raw gasPrice calculation (tier markup removed)
@@ -1052,9 +1127,7 @@ export default function SendScreen() {
               }
               const recommendedWei = recommendedFundingWei(thresholdWei, currentBalance);
               const nativeSym = info?.nativeSym ?? (underfunded.asset === 'pathUSD' ? 'pathUSD' : nativeSymbol(chainId));
-              setFundingNeeded({
-                reason: 'deposit_needed',
-                sponsorshipAvailable: true,
+              const funding: FundingNeeded = {
                 depositAddress,
                 safeAddress: activeAccount!.address,
                 chainId,
@@ -1064,7 +1137,21 @@ export default function SendScreen() {
                 currentBalance,
                 recommendedFormatted: formatWei(recommendedWei),
                 currentFormatted: formatWei(currentBalance),
-              });
+              };
+              // Try to heal silently (typical cause: gas spiked past the
+              // funded float) before asking the user for anything. Success
+              // lands the sheet in its confirming state, whose first poll
+              // flips straight to the funded beat.
+              const silent = await attemptSilentSponsorship(funding, { force: true });
+              if (!mountedRef.current) return;
+              // txStatus is 'idle' during this recovery, so Back works — don't
+              // resurrect the sheet over a screen the user has left.
+              if (sendCancelledRef.current || stepRef.current !== 'confirm') return;
+              setFundingNeeded(
+                silent.outcome === 'denied'
+                  ? { ...funding, presentation: 'topup', denialReason: silent.denialReason }
+                  : { ...funding, presentation: 'confirming' },
+              );
               return;
             }
           } catch { /* fall through */ }
@@ -1080,6 +1167,7 @@ export default function SendScreen() {
         setTxStatus('error'); hapticError();
       }
     } finally {
+      sendInFlightRef.current = false;
       setSending(false);
     }
   };
@@ -1428,20 +1516,12 @@ export default function SendScreen() {
           </>);
           })()}
 
-          {fundingNeeded?.reason === 'wallet_balance_too_low' && (
-            <View style={styles.lowBalanceWarning}>
-              <Text style={styles.lowBalanceText}>
-                {t('send.lowBalanceWarning', { nativeSym: fundingNeeded.nativeSym })}
-              </Text>
-            </View>
-          )}
-
           <VelaButton
             title={estimatingGas ? t('send.preparing') : t('send.continueBtn')}
             onPress={handleContinue}
             loading={estimatingGas}
             style={styles.continueBtn}
-            disabled={(splitMode ? !recipientsAreValid(recipients) : multiSelectMode ? (!isValidAddress(recipient) || pickedTokens.length === 0) : (!recipient || !amount)) || estimatingGas || fundingNeeded?.reason === 'wallet_balance_too_low' || (locked && !!amountWarning)}
+            disabled={(splitMode ? !recipientsAreValid(recipients) : multiSelectMode ? (!isValidAddress(recipient) || pickedTokens.length === 0) : (!recipient || !amount)) || estimatingGas || (locked && !!amountWarning)}
           />
         </Animated.View>
       </ScrollView>
@@ -1597,6 +1677,15 @@ export default function SendScreen() {
             selfTransfer={!!activeAccount && recipient.toLowerCase() === activeAccount.address.toLowerCase()}
           />
 
+          {/* First-send trust moment: the treasury covered (or is about to
+              cover) this wallet's gas float — say so, quietly. */}
+          {gasSponsored && (
+            <View style={styles.sponsoredRow}>
+              <Gift size={13} color={color.fg.subtle} strokeWidth={2} />
+              <Text style={styles.sponsoredText}>{t('send.gasSponsoredNote')}</Text>
+            </View>
+          )}
+
           {/* Gas Details — collapsed by default, fee shown in toggle row */}
           <Pressable onPress={() => setGasExpanded(!gasExpanded)} style={styles.gasToggleRow}>
             <Text style={styles.gasToggleLabel}>{t('send.estFeeLabel')}</Text>
@@ -1721,7 +1810,16 @@ export default function SendScreen() {
                      t('send.txSubmitting')}
                   </Text>
                   {(txStatus === 'preparing' || txStatus === 'signing') && (
-                    <TxCancelButton onCancel={() => { Passkey.cancelSign(); setTxStatus('idle'); setSending(false); }} />
+                    <TxCancelButton onCancel={() => {
+                      // Signal the in-flight executeTransaction too: during the
+                      // Phase-2 grant await there is no passkey prompt to abort
+                      // yet — without the ref, the flow would resurrect a
+                      // passkey prompt (or a funding sheet) AFTER this cancel.
+                      sendCancelledRef.current = true;
+                      Passkey.cancelSign();
+                      setTxStatus('idle');
+                      setSending(false);
+                    }} />
                   )}
                 </View>
               )}
@@ -1861,7 +1959,7 @@ export default function SendScreen() {
         onClose={() => setShowScanner(false)}
       />
 
-      {fundingNeeded && fundingNeeded.reason !== 'wallet_balance_too_low' && (
+      {fundingNeeded && (
         <BundlerFundingModal
           visible={!!fundingNeeded}
           funding={fundingNeeded}
@@ -2336,18 +2434,17 @@ const styles = createStyles(() => ({
   continueBtn: {
     marginTop: space.lg,
   },
-  lowBalanceWarning: {
-    backgroundColor: color.warning.soft,
-    borderRadius: radius.lg,
-    padding: space.lg,
-    marginTop: space.lg,
+  sponsoredRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: space.sm,
+    paddingHorizontal: space.xs,
+    marginBottom: space.sm,
   },
-  lowBalanceText: {
-    fontSize: text.sm,
-    ...inter.medium,
-    color: color.warning.base,
-    lineHeight: 20,
-    textAlign: 'center' as const,
+  sponsoredText: {
+    fontSize: text.xs,
+    ...inter.regular,
+    color: color.fg.subtle,
   },
 
   // Confirm — transfer review, open on the page (de-boxed)

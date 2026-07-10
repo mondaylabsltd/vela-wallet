@@ -15,7 +15,7 @@
     "recipientLabel": "收款人",
     "recipientPlaceholder": "0x... 地址",
     "velaUser": "Vela 用户",
-    "lowBalanceWarning": "余额不足以支付网络手续费。请先向钱包充入更多 {{nativeSym}}。",
+    "gasSponsoredNote": "首次网络费 — 由 Vela 承担",
     "preparing": "准备中...",
     "continueBtn": "继续",
     "alertInvalidAddressTitle": "地址无效",

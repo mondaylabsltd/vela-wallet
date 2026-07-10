@@ -15,7 +15,7 @@
     "recipientLabel": "Recipient",
     "recipientPlaceholder": "0x... address",
     "velaUser": "Vela User",
-    "lowBalanceWarning": "Insufficient balance to cover network fees. Add more {{nativeSym}} to your wallet before sending.",
+    "gasSponsoredNote": "First network fee — covered by Vela",
     "preparing": "Preparing...",
     "continueBtn": "Continue",
     "alertInvalidAddressTitle": "Invalid Address",

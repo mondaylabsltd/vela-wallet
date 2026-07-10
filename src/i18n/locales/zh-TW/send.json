@@ -15,7 +15,7 @@
     "recipientLabel": "收款人",
     "recipientPlaceholder": "0x… 地址",
     "velaUser": "Vela 使用者",
-    "lowBalanceWarning": "餘額不足以支付網路手續費。請先在錢包中增加 {{nativeSym}} 再發送。",
+    "gasSponsoredNote": "首次網路費 — 由 Vela 承擔",
     "preparing": "準備中…",
     "continueBtn": "繼續",
     "alertInvalidAddressTitle": "地址無效",
