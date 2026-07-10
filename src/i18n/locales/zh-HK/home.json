@@ -42,7 +42,7 @@
     "switchAccountTitle": "切換帳戶",
     "switcherAccountCount": "{{count}} 個帳戶 · ",
     "connEmptyTitle": "沒有有效連接",
-    "connEmptySub": "掃描 dApp QR 碼以連接。",
+    "connEmptySub": "掃碼，或輸入連結 / 網址",
     "connScanBtn": "掃描以連接",
     "connDefaultName": "已連接的 dApp",
     "connActive": "有效",

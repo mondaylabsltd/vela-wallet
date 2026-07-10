@@ -1110,18 +1110,11 @@ function ConnectionsView({
       <View style={styles.connEmpty}>
         <View style={styles.connEmptyIcon}><Plug size={26} color={color.fg.subtle} strokeWidth={2} /></View>
         <Text style={styles.connEmptyTitle}>{t('home.connEmptyTitle')}</Text>
+        {/* One line covers it all — scan (bottom FAB) or paste/type below, for a
+            dApp or any site. Keeps the empty state calm instead of stacked text. */}
         <Text style={styles.connEmptySub}>{t('home.connEmptySub')}</Text>
 
-        {/* No dedicated scan button here — the bottom scan FAB already covers it.
-            Paste a pairing URI when scanning isn't handy. */}
-        <View style={styles.connOrRow}>
-          <View style={styles.connOrLine} />
-          <Text style={styles.connOrText}>{t('connect.list.orDivider')}</Text>
-          <View style={styles.connOrLine} />
-        </View>
-
-        <Text style={styles.connPasteHint}>{t('connect.list.pasteHint')}</Text>
-        <View style={styles.connPasteRow}>
+        <View style={[styles.connPasteRow, styles.connPasteRowSpaced]}>
           <TextInput
             style={styles.connPasteInput}
             value={linkInput}
@@ -1433,6 +1426,7 @@ const styles = createStyles(() => ({
   connOrText: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
   connPasteHint: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, textAlign: 'center', marginBottom: space.sm },
   connPasteRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, alignSelf: 'stretch', paddingHorizontal: space.xl },
+  connPasteRowSpaced: { marginTop: space.xl },
   connHistoryBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.xl, paddingVertical: space.xs },
   connHistoryText: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
   connPasteInput: {

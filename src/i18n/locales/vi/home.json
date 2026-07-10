@@ -27,7 +27,7 @@
     "switchAccountTitle": "Chuyển tài khoản",
     "switcherAccountCount": "{{count}} tài khoản · ",
     "connEmptyTitle": "Chưa có kết nối nào",
-    "connEmptySub": "Quét mã QR của dApp để kết nối.",
+    "connEmptySub": "Quét mã, hoặc nhập liên kết / URL",
     "connScanBtn": "Quét để kết nối",
     "connDefaultName": "dApp đã kết nối",
     "connActive": "Đang hoạt động",

@@ -42,7 +42,7 @@
     "switchAccountTitle": "Сменить аккаунт",
     "switcherAccountCount": "Аккаунтов: {{count}} · ",
     "connEmptyTitle": "Нет активных подключений",
-    "connEmptySub": "Отсканируйте QR-код dApp, чтобы подключиться.",
+    "connEmptySub": "Отсканируйте или введите ссылку / URL",
     "connScanBtn": "Сканировать для подключения",
     "connDefaultName": "Подключённое dApp",
     "connActive": "Активно",

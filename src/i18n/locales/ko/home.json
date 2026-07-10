@@ -27,7 +27,7 @@
     "switchAccountTitle": "계정 전환",
     "switcherAccountCount": "계정 {{count}}개 · ",
     "connEmptyTitle": "활성 연결 없음",
-    "connEmptySub": "dApp QR 코드를 스캔해 연결하세요.",
+    "connEmptySub": "스캔하거나 링크 / URL 입력",
     "connScanBtn": "스캔하여 연결",
     "connDefaultName": "연결된 dApp",
     "connActive": "활성",

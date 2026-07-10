@@ -27,7 +27,7 @@
     "switchAccountTitle": "Ganti Akun",
     "switcherAccountCount": "{{count}} akun · ",
     "connEmptyTitle": "Tidak ada koneksi aktif",
-    "connEmptySub": "Pindai kode QR dApp untuk menghubungkan.",
+    "connEmptySub": "Pindai, atau masukkan tautan / URL",
     "connScanBtn": "Pindai untuk menghubungkan",
     "connDefaultName": "dApp Terhubung",
     "connActive": "Aktif",
