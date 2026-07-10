@@ -12,8 +12,10 @@
 //   - legacy shims: send / sendAsync / enable; sync props selectedAddress /
 //     chainId / networkVersion / isConnected() backed by an inpage session cache
 //   - reconcile {chainId, accounts} on every response; dedupe delivery per rpcId
-//   - never spoof isMetaMask (rely on 6963); reject nothing here that the router
-//     can answer — the router owns policy (eth_sign refusal, etc.)
+//   - spoof isMetaMask on the LEGACY window.ethereum singleton for MM-only dApps,
+//     while EIP-6963 keeps announcing the true Vela identity (see the provider
+//     object); reject nothing here that the router can answer — the router owns
+//     policy (eth_sign refusal, etc.)
 /* global browser, chrome */
 import { CHANNEL, RDNS, WALLET_NAME, ERR, rpcError, toHexChainId } from './lib/protocol.js';
 
@@ -271,6 +273,22 @@ import { CHANNEL, RDNS, WALLET_NAME, ERR, rpcError, toHexChainId } from './lib/p
   // ---- the provider object --------------------------------------------------
   const provider = {
     isVela: true,
+    // MetaMask-compat flag on the LEGACY window.ethereum singleton. Many older (and
+    // some lazy newer) dApps hard-gate on `window.ethereum.isMetaMask` and never
+    // implement EIP-6963, so without it they show no wallet / refuse to connect.
+    // Industry-standard for non-MetaMask wallets (Rabby, Coinbase, OKX, Trust, Brave
+    // all set it). We spoof ONLY this legacy boolean: EIP-6963 still announces our
+    // TRUE identity (name "Vela Wallet", rdns app.getvela — see `info` below), so
+    // modern multi-wallet dApps discover Vela, not MetaMask, and we never collide
+    // with real MetaMask's 6963 broadcast. `isVela` stays for dApps that want the
+    // real wallet. (Supersedes the earlier "never spoof isMetaMask" stance — that
+    // left legacy MM-only dApps unusable, which defeats the Safari-extension goal
+    // of making nearly every iPhone-Safari dApp work.)
+    isMetaMask: true,
+    // Some dApps call `ethereum._metamask.isUnlocked()` once they see isMetaMask;
+    // stub it so the call resolves instead of throwing on `undefined`. Vela unlocks
+    // per-signature via passkey, so "unlocked" is the honest steady state.
+    _metamask: Object.freeze({ isUnlocked: () => Promise.resolve(true) }),
     request,
     on,
     removeListener,
