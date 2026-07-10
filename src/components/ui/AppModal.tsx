@@ -9,6 +9,12 @@
  *   whole-sheet drag-to-dismiss with a threshold haptic. The drag initiates from
  *   the top handle region only, so it never fights an inner ScrollView.
  * - Web: portal to #root with slide-up animation, backdrop + drag dismiss.
+ *
+ * `fit` — content-height bottom sheet (backdrop + card hugging its content),
+ * for short prompts (e.g. the dApp connect consent) where a near-full-screen
+ * pageSheet reads as broken. Native-only branch; web already hugs content.
+ * Core RN Modal has no detent API (no sheetAllowedDetents in RN 0.83), so this
+ * is a transparent Modal with our own backdrop fade + slide + drag-dismiss.
  */
 import React, { useEffect, useState, useRef } from 'react';
 import {
@@ -19,6 +25,8 @@ import {
   Animated,
   Dimensions,
   KeyboardAvoidingView,
+  Pressable,
+  StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { hapticLight } from '@/services/platform';
@@ -35,11 +43,16 @@ interface Props {
   visible: boolean;
   children: React.ReactNode;
   onClose?: () => void;
+  /** Content-height bottom sheet instead of a (near-)full-screen page sheet. */
+  fit?: boolean;
 }
 
-export function AppModal({ visible, children, onClose }: Props) {
+export function AppModal({ visible, children, onClose, fit }: Props) {
   if (Platform.OS === 'web') {
     return <WebModal visible={visible} onClose={onClose}>{children}</WebModal>;
+  }
+  if (fit) {
+    return <FitSheet visible={visible} onClose={onClose}>{children}</FitSheet>;
   }
   if (Platform.OS === 'android') {
     return <AndroidSheet visible={visible} onClose={onClose}>{children}</AndroidSheet>;
@@ -138,6 +151,88 @@ function AndroidSheet({ visible, onClose, children }: { visible: boolean; onClos
           </View>
           <KeyboardAvoidingView style={styles.nativeContent} behavior="padding">
             <SafeAreaView style={styles.nativeContent} edges={['bottom']}>
+              {children}
+            </SafeAreaView>
+          </KeyboardAvoidingView>
+        </Animated.View>
+      </View>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fit sheet (iOS + Android) — a content-height bottom card over a dimmed
+// backdrop. Stays mounted through the exit animation (same trick as WebModal):
+// the parent flips `visible` off immediately, we animate out, then unmount.
+// ---------------------------------------------------------------------------
+
+function FitSheet({ visible, onClose, children }: { visible: boolean; onClose?: () => void; children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(visible);
+  /** 0 = hidden (backdrop clear, sheet off-screen), 1 = shown. */
+  const progress = useRef(new Animated.Value(0)).current;
+  const dragY = useRef(new Animated.Value(0)).current;
+  // Slide from the sheet's own measured height; screen height before first layout.
+  const [sheetH, setSheetH] = useState(SCREEN_H);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      dragY.setValue(0);
+      Animated.timing(progress, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    } else {
+      Animated.timing(progress, { toValue: 0, duration: 180, useNativeDriver: true }).start(
+        ({ finished }) => { if (finished) setMounted(false); },
+      );
+    }
+  }, [visible, progress, dragY]);
+
+  const armed = useRef(false);
+  const responder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 4 && g.dy > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => {
+        const dy = Math.max(0, g.dy);
+        dragY.setValue(dy);
+        if (!armed.current && dy > DISMISS_DY) { armed.current = true; hapticLight(); }
+        else if (armed.current && dy <= DISMISS_DY) { armed.current = false; }
+      },
+      onPanResponderRelease: (_, g) => {
+        armed.current = false;
+        if (g.dy > DISMISS_DY || g.vy > DISMISS_VY) {
+          onCloseRef.current?.(); // parent flips visible → exit animation runs
+        } else {
+          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        armed.current = false;
+        Animated.spring(dragY, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }).start();
+      },
+    }),
+  ).current;
+
+  if (!mounted) return null;
+
+  const slideY = progress.interpolate({ inputRange: [0, 1], outputRange: [sheetH, 0] });
+
+  return (
+    <Modal visible transparent statusBarTranslucent animationType="none" onRequestClose={onClose}>
+      <View style={styles.fitRoot}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
+          <Animated.View style={[styles.fitBackdrop, { opacity: progress }]} />
+        </Pressable>
+        <Animated.View
+          style={[styles.fitSheet, { transform: [{ translateY: Animated.add(slideY, dragY) }] }]}
+          onLayout={(e) => setSheetH(Math.max(1, e.nativeEvent.layout.height))}
+        >
+          <View style={styles.handleArea} {...responder.panHandlers}>
+            <View style={styles.handleBar} />
+          </View>
+          <KeyboardAvoidingView behavior="padding">
+            <SafeAreaView edges={['bottom']}>
               {children}
             </SafeAreaView>
           </KeyboardAvoidingView>
@@ -266,6 +361,14 @@ function WebModal({ visible, onClose, children }: { visible: boolean; onClose?: 
 
 const styles = createStyles(() => ({
   nativeRoot: { flex: 1, backgroundColor: color.bg.base },
+  fitRoot: { flex: 1, justifyContent: 'flex-end' },
+  fitBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
+  fitSheet: {
+    backgroundColor: color.bg.base,
+    borderTopLeftRadius: radius['2xl'],
+    borderTopRightRadius: radius['2xl'],
+    maxHeight: SCREEN_H * 0.92,
+  },
   sheetInner: { flex: 1 },
   nativeContent: { flex: 1 },
   handleArea: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
