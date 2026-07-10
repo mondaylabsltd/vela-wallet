@@ -9,8 +9,11 @@
 // `vela-1193` req/res/evt envelope over window.postMessage. Only the LAST hop
 // differs — here it is a native message channel instead of browser.runtime.
 //
-// Injected at DOCUMENT START, main frame only (iOS WKUserScript(.atDocumentStart,
-// forMainFrameOnly:true); Android WebViewCompat.addDocumentStartJavaScript).
+// Injected at DOCUMENT START, main frame only. iOS scopes natively
+// (WKUserScript(.atDocumentStart, forMainFrameOnly:true)); Android
+// addDocumentStartJavaScript runs in EVERY frame, so build.mjs wraps this whole
+// bundle in a `window !== window.top → return` guard (it must wrap the bundle:
+// import hoisting runs inpage.js before any code in this file).
 import './inpage.js'; // side-effect: installs window.ethereum + the vela-1193 listener
 import { CHANNEL } from './lib/protocol.js';
 

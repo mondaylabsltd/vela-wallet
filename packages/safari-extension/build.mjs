@@ -63,6 +63,13 @@ const injectResult = await build({
   sourcemap: false,
   write: false,
   logLevel: 'info',
+  // MAIN FRAME ONLY, enforced in-bundle: iOS scopes via WKUserScript
+  // forMainFrameOnly, but Android's addDocumentStartJavaScript(setOf("*")) runs in
+  // EVERY frame — a subframe would get a half-functional provider (responses are
+  // always evaluated in the main frame, so its requests hang). The guard must wrap
+  // the whole bundle (import hoisting runs inpage.js before any entry-file code).
+  banner: { js: '(() => { try { if (window !== window.top) return; } catch (_) { return; }' },
+  footer: { js: '})();' },
 });
 const injectSrc = injectResult.outputFiles[0].text;
 const genDir = resolve(repoRoot, 'src', 'modules', 'webview');
