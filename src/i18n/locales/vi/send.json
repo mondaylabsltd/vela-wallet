@@ -15,7 +15,7 @@
     "recipientLabel": "Người nhận",
     "recipientPlaceholder": "Địa chỉ 0x...",
     "velaUser": "Người dùng Vela",
-    "lowBalanceWarning": "Số dư không đủ để trả phí mạng. Hãy nạp thêm {{nativeSym}} vào ví trước khi gửi.",
+    "gasSponsoredNote": "Phí mạng đầu tiên — Vela trả giúp bạn",
     "preparing": "Đang chuẩn bị...",
     "continueBtn": "Tiếp tục",
     "alertInvalidAddressTitle": "Địa chỉ không hợp lệ",

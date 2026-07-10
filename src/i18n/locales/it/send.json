@@ -15,7 +15,7 @@
     "recipientLabel": "Destinatario",
     "recipientPlaceholder": "Indirizzo 0x…",
     "velaUser": "Utente Vela",
-    "lowBalanceWarning": "Saldo insufficiente per coprire le commissioni di rete. Aggiungi {{nativeSym}} al tuo wallet prima di inviare.",
+    "gasSponsoredNote": "Prima commissione di rete — a carico di Vela",
     "preparing": "Preparazione…",
     "continueBtn": "Continua",
     "alertInvalidAddressTitle": "Indirizzo non valido",

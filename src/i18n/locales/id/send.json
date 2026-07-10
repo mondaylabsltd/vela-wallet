@@ -15,7 +15,7 @@
     "recipientLabel": "Penerima",
     "recipientPlaceholder": "Alamat 0x...",
     "velaUser": "Pengguna Vela",
-    "lowBalanceWarning": "Saldo tidak cukup untuk menutup biaya jaringan. Tambahkan {{nativeSym}} ke dompet Anda sebelum mengirim.",
+    "gasSponsoredNote": "Biaya jaringan pertama — ditanggung Vela",
     "preparing": "Menyiapkan...",
     "continueBtn": "Lanjutkan",
     "alertInvalidAddressTitle": "Alamat Tidak Valid",

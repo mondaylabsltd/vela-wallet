@@ -15,7 +15,7 @@
     "recipientLabel": "Destinatario",
     "recipientPlaceholder": "Dirección 0x...",
     "velaUser": "Usuario de Vela",
-    "lowBalanceWarning": "No tienes saldo suficiente para cubrir las comisiones de red. Agrega más {{nativeSym}} a tu billetera antes de enviar.",
+    "gasSponsoredNote": "Primera comisión de red — la cubre Vela",
     "preparing": "Preparando...",
     "continueBtn": "Continuar",
     "alertInvalidAddressTitle": "Dirección inválida",

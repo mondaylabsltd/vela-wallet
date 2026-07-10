@@ -15,7 +15,7 @@
     "recipientLabel": "받는 사람",
     "recipientPlaceholder": "0x... 주소",
     "velaUser": "Vela 사용자",
-    "lowBalanceWarning": "네트워크 수수료를 충당할 잔액이 부족합니다. 보내기 전에 {{nativeSym}}을(를) 더 추가하세요.",
+    "gasSponsoredNote": "첫 네트워크 수수료 — Vela가 부담합니다",
     "preparing": "준비 중...",
     "continueBtn": "계속",
     "alertInvalidAddressTitle": "잘못된 주소",

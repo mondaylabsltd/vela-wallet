@@ -15,7 +15,7 @@
     "recipientLabel": "Empfänger",
     "recipientPlaceholder": "Adresse 0x ...",
     "velaUser": "Vela-Nutzer",
-    "lowBalanceWarning": "Guthaben reicht nicht für die Netzwerkgebühren. Laden Sie mehr {{nativeSym}} in Ihre Wallet, bevor Sie senden.",
+    "gasSponsoredNote": "Erste Netzwerkgebühr — Vela übernimmt sie",
     "preparing": "Wird vorbereitet ...",
     "continueBtn": "Weiter",
     "alertInvalidAddressTitle": "Ungültige Adresse",
