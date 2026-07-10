@@ -74,6 +74,15 @@ export interface VelaScrollProps {
   overScrollMode: 'never';
   /** iOS: keep the (now custom) refresh region honest about the content top. */
   contentInsetAdjustmentBehavior: 'never';
+  /** Keyboard avoidance, unified for every VelaRefresh scroll — a mid-screen input
+   *  (e.g. the connect paste box) must never be hidden behind the keyboard. iOS
+   *  insets the scroll + brings the focused field above the keyboard; on Android
+   *  this is a no-op (windowSoftInputMode=adjustResize already resizes the window). */
+  automaticallyAdjustKeyboardInsets: boolean;
+  /** A tap on a button/row lands while the keyboard is up instead of just dismissing it. */
+  keyboardShouldPersistTaps: 'handled';
+  /** Drag to dismiss the keyboard (iOS follows the finger; no-op on Android). */
+  keyboardDismissMode: 'interactive';
 }
 
 interface VelaRefreshProps {
@@ -269,6 +278,9 @@ export function VelaRefresh({ refreshing, onRefresh, children, style, enabled = 
     bounces: false,
     overScrollMode: 'never',
     contentInsetAdjustmentBehavior: 'never',
+    automaticallyAdjustKeyboardInsets: true,
+    keyboardShouldPersistTaps: 'handled',
+    keyboardDismissMode: 'interactive',
   };
 
   return (

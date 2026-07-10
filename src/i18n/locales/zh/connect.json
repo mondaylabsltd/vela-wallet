@@ -12,7 +12,7 @@
       "step3Subtitle": "请求将自动出现在这里",
       "scanQR": "扫描二维码",
       "orDivider": "或",
-      "pastePlaceholder": "粘贴 walletpair:?... URI",
+      "pastePlaceholder": "walletpair 链接或网址",
       "verifyTitle": "验证连接",
       "verifyHint": "请确认此码与 dApp 显示的一致：",
       "encryptedBadge": "端到端加密",
@@ -31,7 +31,8 @@
       "scanAgain": "重新扫描",
       "retry": "重试",
       "invalidLinkTitle": "无效链接",
-      "invalidLinkBody": "不是有效的连接链接。支持：WalletPair URI 或 远程注入链接。"
+      "invalidLinkBody": "不是有效的连接链接。支持：WalletPair URI 或 远程注入链接。",
+      "pasteHint": "连接 dApp，或打开任意网页"
     },
     "dapp": {
       "noWallet": "请先创建钱包",
@@ -76,6 +77,34 @@
       "contentCallData": "调用数据",
       "contentMissing": "此请求的内容未被记录。",
       "offChainNote": "链下签名 — 未向链上发送任何内容。"
+    },
+    "browser": {
+      "unsupported": "内置浏览器仅在 iOS 和 Android 上可用。",
+      "noUrl": "没有可打开的网址。",
+      "preparing": "正在准备钱包…",
+      "title": "连接到 {{host}}",
+      "body": "该网站想查看你的地址并请求你签名。未经你批准，它无法转移任何资金。",
+      "cancel": "取消",
+      "connect": "连接",
+      "a11yClose": "关闭浏览器",
+      "a11yBack": "返回",
+      "a11yReload": "重新加载页面",
+      "a11yOpenSystem": "在系统浏览器中打开",
+      "a11yDisconnect": "断开与该网站的连接",
+      "loadFailed": "无法加载此页面",
+      "retry": "重试",
+      "disconnect": "断开连接",
+      "disconnectTitle": "断开与该网站的连接？",
+      "disconnectBody": "该网站需要重新连接后才能查看你的地址或请求签名。",
+      "a11ySecure": "安全站点",
+      "a11yInsecure": "不安全站点 — 未加密",
+      "historyTitle": "最近的 dApp",
+      "historyOpen": "最近打开",
+      "historyEmpty": "还没有最近的 dApp",
+      "clearAll": "清空",
+      "clearAllTitle": "清空记录？",
+      "clearAllBody": "这会移除所有最近打开的 dApp。",
+      "a11yDeleteHistory": "从记录中移除"
     }
   },
   "signHandoff": {

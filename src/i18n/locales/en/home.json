@@ -42,7 +42,7 @@
     "switchAccountTitle": "Switch Account",
     "switcherAccountCount": "{{count}} accounts · ",
     "connEmptyTitle": "No active connection",
-    "connEmptySub": "Scan a dApp QR code to connect.",
+    "connEmptySub": "Scan, or enter a link / URL",
     "connScanBtn": "Scan to connect",
     "connDefaultName": "Connected dApp",
     "connActive": "Active",

@@ -20,7 +20,7 @@ import { ConnectionFlowStates } from '@/components/ConnectionFlowStates';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet, shortAddress } from '@/models/wallet-state';
 import { chainName } from '@/models/network';
-import { parseRemoteInjectURL } from '@/services/dapp-transport';
+import { parseRemoteInjectURL, coerceBrowserUrl } from '@/services/dapp-transport';
 import { isWalletPairURI } from '@/services/walletpair-transport';
 import { showAlert } from '@/services/platform';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
@@ -54,11 +54,18 @@ export default function ConnectScreen() {
 
     const parsed = parseRemoteInjectURL(trimmed);
     if (!parsed) {
+      // Not a pairing link but a web address (full URL or a bare host like
+      // app.uniswap.org) → open the in-app dApp browser.
+      const browserUrl = coerceBrowserUrl(trimmed);
+      if (browserUrl) {
+        router.push({ pathname: '/browser', params: { url: browserUrl } });
+        return;
+      }
       showAlert(t('connect.list.invalidLinkTitle'), t('connect.list.invalidLinkBody'));
       return;
     }
     connectToBridge(parsed);
-  }, [connectToBridge, connectToWalletPair]);
+  }, [connectToBridge, connectToWalletPair, router, t]);
 
   const handleScan = useCallback((data: string) => {
     setShowScanner(false);
@@ -140,7 +147,8 @@ export default function ConnectScreen() {
                 <View style={styles.dividerLine} />
               </View>
 
-              {/* Paste link input */}
+              {/* Paste link input — accepts a walletpair pairing link OR a web URL */}
+              <Text style={styles.linkHint}>{t('connect.list.pasteHint')}</Text>
               <View style={styles.linkInputRow}>
                 <TextInput
                   style={styles.linkInput}
@@ -350,6 +358,13 @@ const styles = createStyles(() => ({
   },
 
   // Link input
+  linkHint: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.subtle,
+    textAlign: 'center',
+    marginBottom: space.sm,
+  },
   linkInputRow: {
     flexDirection: 'row',
     alignItems: 'center',

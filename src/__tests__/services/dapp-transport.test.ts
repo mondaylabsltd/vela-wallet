@@ -5,7 +5,7 @@
  * return null (→ "invalid pairing link") for anything missing a piece, so a
  * malformed QR can never open a half-formed session.
  */
-import { parseRemoteInjectURL } from '@/services/dapp-transport';
+import { parseRemoteInjectURL, coerceBrowserUrl } from '@/services/dapp-transport';
 
 describe('parseRemoteInjectURL', () => {
   test('path format: /s/{sessionId}?n=&k=', () => {
@@ -52,5 +52,47 @@ describe('parseRemoteInjectURL', () => {
     expect(parseRemoteInjectURL('not a url')).toBeNull();
     expect(parseRemoteInjectURL('')).toBeNull();
     expect(parseRemoteInjectURL('wc:deadbeef@2?relay=x')).toBeNull();
+  });
+});
+
+/**
+ * coerceBrowserUrl — the FALLBACK predicate for the two in-app browser entry
+ * points (scan / paste). It must open a bare host like `app.uniswap.org` (the
+ * common "type a URL" case), pass full http(s) URLs through, and reject anything
+ * that isn't a web address so the caller still shows "invalid link".
+ */
+describe('coerceBrowserUrl', () => {
+  test('full http(s) URL passes through', () => {
+    expect(coerceBrowserUrl('https://app.uniswap.org/swap')).toBe('https://app.uniswap.org/swap');
+    expect(coerceBrowserUrl('http://example.com')).toBe('http://example.com/');
+  });
+
+  test('bare host defaults to https (the core "type a URL" fix)', () => {
+    expect(coerceBrowserUrl('app.uniswap.org')).toBe('https://app.uniswap.org/');
+    expect(coerceBrowserUrl('uniswap.org/swap')).toBe('https://uniswap.org/swap');
+    expect(coerceBrowserUrl('  opensea.io  ')).toBe('https://opensea.io/'); // trims first
+  });
+
+  test('non-web schemes are rejected (never loaded in the WebView)', () => {
+    expect(coerceBrowserUrl('javascript:alert(1)')).toBeNull();
+    expect(coerceBrowserUrl('file:///etc/passwd')).toBeNull();
+    expect(coerceBrowserUrl('ftp://host/x')).toBeNull();
+    expect(coerceBrowserUrl('velawallet://sign')).toBeNull();
+    expect(coerceBrowserUrl('data:text/html,<h1>x</h1>')).toBeNull();
+  });
+
+  test('non-addresses (no dot / whitespace / empty) → null', () => {
+    expect(coerceBrowserUrl('hello')).toBeNull();
+    expect(coerceBrowserUrl('two words')).toBeNull();
+    expect(coerceBrowserUrl('')).toBeNull();
+    expect(coerceBrowserUrl('   ')).toBeNull();
+  });
+
+  test('order coupling: a remote-inject pairing link is https, so it must be caught by parseRemoteInjectURL FIRST', () => {
+    // Guards the load-bearing branch order in Connect/Home: coerceBrowserUrl would
+    // happily open the pairing link as a web page if it ran before the parser.
+    const link = 'https://relay.example.com/s/sess123?n=NONCE&k=SECRET';
+    expect(parseRemoteInjectURL(link)).not.toBeNull(); // parser claims it first
+    expect(coerceBrowserUrl(link)).toBe(link); // but is also a valid URL — hence order matters
   });
 });
