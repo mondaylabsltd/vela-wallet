@@ -32,6 +32,8 @@ interface Faults {
   priceNullChains: Set<number>;
   fundingForceAll: boolean;
   fundingForceChains: Set<number>;
+  gasQuoteZeroAll: boolean;
+  gasQuoteZeroChains: Set<number>;
 }
 
 const faults: Faults = {
@@ -45,6 +47,8 @@ const faults: Faults = {
   priceNullChains: new Set(),
   fundingForceAll: false,
   fundingForceChains: new Set(),
+  gasQuoteZeroAll: false,
+  gasQuoteZeroChains: new Set(),
 };
 
 /** Fast-path flag, recomputed on every mutation so hooks cost one boolean read. */
@@ -61,7 +65,9 @@ function recompute(): void {
     faults.priceNullAll ||
     faults.priceNullChains.size > 0 ||
     faults.fundingForceAll ||
-    faults.fundingForceChains.size > 0;
+    faults.fundingForceChains.size > 0 ||
+    faults.gasQuoteZeroAll ||
+    faults.gasQuoteZeroChains.size > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +110,15 @@ export function fundingShouldForce(chainId: number): boolean {
   return faults.fundingForceAll || faults.fundingForceChains.has(chainId);
 }
 
+/** True if the bundler gas quote on this chain should be forced to 0x0 — the
+ *  degenerate quote behind the "预估费用 ~0 ETH" + "maxFeePerGas must be > 0"
+ *  dApp-tx failure. Validates that the fee falls back to a local estimate
+ *  (never "~0") and the signed op keeps a positive price. Dev-only. */
+export function gasQuoteShouldZero(chainId: number): boolean {
+  if (!active) return false;
+  return faults.gasQuoteZeroAll || faults.gasQuoteZeroChains.has(chainId);
+}
+
 // ---------------------------------------------------------------------------
 // Console API
 // ---------------------------------------------------------------------------
@@ -129,6 +144,8 @@ function describe(): string[] {
   else if (faults.priceNullChains.size) lines.push(`• Prices: nulled on ${[...faults.priceNullChains].map(chainLabel).join(', ')}`);
   if (faults.fundingForceAll) lines.push('• Funding: forced "deposit needed" on ALL chains (in-sheet funding UX)');
   else if (faults.fundingForceChains.size) lines.push(`• Funding: forced "deposit needed" on ${[...faults.fundingForceChains].map(chainLabel).join(', ')}`);
+  if (faults.gasQuoteZeroAll) lines.push('• Gas quote: forced 0x0 on ALL chains (fee must fall back, never "~0")');
+  else if (faults.gasQuoteZeroChains.size) lines.push(`• Gas quote: forced 0x0 on ${[...faults.gasQuoteZeroChains].map(chainLabel).join(', ')}`);
   return lines;
 }
 
@@ -141,6 +158,7 @@ const HELP = [
   '  vela.flakyRpc(rate 0..1)        randomly fail that fraction of RPC calls',
   "  vela.nullPrice(chainId | 'all') tokens load but have no price → total undercounts",
   "  vela.forceFunding(chain|'all')  force the gas-account check to report 'deposit needed' → funding UX",
+  "  vela.zeroGasQuote(chain|'all')  force bundler gas quote to 0x0 → fee must fall back, never '~0'",
   '  vela.clear()                    reset all faults',
   '  vela.status()                   show active faults',
   '  vela.help()                     show this help',
@@ -158,7 +176,7 @@ type ChainArg = number | 'all';
 export function installFaultConsole(): void {
   const g = globalThis as any;
 
-  const toggleChain = (set: Set<number>, allKey: 'rpcFailAll' | 'rpcRateLimitAll' | 'priceNullAll' | 'fundingForceAll', arg: ChainArg) => {
+  const toggleChain = (set: Set<number>, allKey: 'rpcFailAll' | 'rpcRateLimitAll' | 'priceNullAll' | 'fundingForceAll' | 'gasQuoteZeroAll', arg: ChainArg) => {
     if (arg === 'all') { faults[allKey] = true; }
     else { set.add(arg); }
     recompute();
@@ -191,6 +209,10 @@ export function installFaultConsole(): void {
       toggleChain(faults.fundingForceChains, 'fundingForceAll', chain);
       return api.status();
     },
+    zeroGasQuote(chain: ChainArg) {
+      toggleChain(faults.gasQuoteZeroChains, 'gasQuoteZeroAll', chain);
+      return api.status();
+    },
     clear() {
       faults.rpcFailAll = false;
       faults.rpcFailChains.clear();
@@ -202,6 +224,8 @@ export function installFaultConsole(): void {
       faults.priceNullChains.clear();
       faults.fundingForceAll = false;
       faults.fundingForceChains.clear();
+      faults.gasQuoteZeroAll = false;
+      faults.gasQuoteZeroChains.clear();
       recompute();
       console.log('[vela] faults cleared');
       return 'cleared';
@@ -237,6 +261,7 @@ export function installFaultConsole(): void {
     else if (fn === 'rateLimitRpc') { if (arg === 'all') faults.rpcRateLimitAll = true; else faults.rpcRateLimitChains.add(Number(arg)); }
     else if (fn === 'nullPrice') { if (arg === 'all') faults.priceNullAll = true; else faults.priceNullChains.add(Number(arg)); }
     else if (fn === 'forceFunding') { if (arg === 'all') faults.fundingForceAll = true; else faults.fundingForceChains.add(Number(arg)); }
+    else if (fn === 'zeroGasQuote') { if (arg === 'all') faults.gasQuoteZeroAll = true; else faults.gasQuoteZeroChains.add(Number(arg)); }
     else if (fn === 'slowRpc') faults.rpcLatencyMs = Math.max(0, Number(arg) | 0);
     else if (fn === 'flakyRpc') faults.rpcFailRate = Math.min(1, Math.max(0, Number(arg)));
   }

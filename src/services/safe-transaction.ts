@@ -32,6 +32,7 @@ import {
 
 import { derSignatureToRaw } from './attestation-parser';
 import { rpcCall } from './rpc-adapter';
+import { gasQuoteShouldZero } from './dev/fault-injection';
 import { fetchBundlerAccountInfo, fetchSplitterInfo } from './bundler-service';
 import {
   isTempoChain,
@@ -550,13 +551,16 @@ async function sendUserOp(
   //     Guard: maxFeeOverride is typed bigint, but the type is erased at runtime — a
   //     mis-wired caller (e.g. onPress={approveRequest} passing a gesture event) could
   //     hand us a non-bigint, which would serialize to "0x[object Object]" and blow up
-  //     bundler estimation and the SafeOp hash. So type-check before trusting it.
+  //     bundler estimation and the SafeOp hash. And a zero/negative override (a
+  //     degenerate upstream quote leaking through the confirm screen) would sign an
+  //     op the bundler MUST reject ("maxFeePerGas must be > 0") — so validate, don't
+  //     just type-check, and re-derive the price instead of trusting it.
   //  2. The bundler's OWN quote (tip-inclusive, the same source that accepts/rejects).
   //     This covers override-less callers — notably dApp wallet_sendCalls — so they
   //     never under-price on chains where the wallet's per-chain RPC drops the tip.
   //  3. Local estimate off getGasPrices(), only if the bundler can't quote.
   let maxFee: bigint;
-  if (typeof maxFeeOverride === 'bigint') {
+  if (isUsableFeeOverride(maxFeeOverride)) {
     maxFee = maxFeeOverride;
   } else {
     const quote = await getBundlerGasQuote(chainId).catch(() => null);
@@ -1535,6 +1539,17 @@ async function getGasPrices(chainId: number): Promise<ChainGasPrice> {
 }
 
 /**
+ * A caller-supplied maxFee override is only usable when it is a REAL positive
+ * bigint. The type is erased at runtime (a mis-wired caller can pass anything),
+ * and a zero/negative value — e.g. a degenerate 0x0 upstream quote echoed back
+ * through the confirm screen — would sign a UserOp the bundler must reject
+ * ("maxFeePerGas must be > 0"). Unusable → the send path re-derives the price.
+ */
+export function isUsableFeeOverride(v: unknown): v is bigint {
+  return typeof v === 'bigint' && v > 0n;
+}
+
+/**
  * Calculate UserOp maxFeePerGas = gasPrice × speedTier × BUNDLER_MARGIN.
  *
  * Speed tier controls how much the bundler bids for on-chain inclusion.
@@ -1661,10 +1676,26 @@ export async function getBundlerGasQuote(
     return null;
   }
 
+  // Dev fault seam (vela.zeroGasQuote): replay the degenerate 0x0 quote that
+  // produced "预估费用 ~0 ETH" + a signed op the bundler rejects, so the guard
+  // below stays verifiable in the test env. Always false in production.
+  if (gasQuoteShouldZero(chainId)) {
+    resp = { result: { [tier]: { maxFeePerGas: '0x0', maxPriorityFeePerGas: '0x0', networkFeePerGas: '0x0', relayerFeePerGas: '0x0' } } };
+  }
+
   const t = resp.result?.[tier];
   if (resp.error || !t?.maxFeePerGas) return null;
 
   const maxFeePerGas = parseHexUInt64(t.maxFeePerGas as string);
+  // A zero quote is degenerate, not authoritative: "0x0" is a truthy string (it
+  // passes the check above) but pricing an op at 0 is self-refuting — the bundler's
+  // own validation rejects maxFeePerGas = 0. Seen when a quote endpoint sits on a
+  // zero-gas chain/fork or a broken RPC. Treat as "can't quote" → local fallback
+  // (which floors at a real price) instead of displaying ~0 and signing a doomed op.
+  if (maxFeePerGas <= 0n) {
+    console.warn(`[Gas] Bundler quoted ${tier} maxFeePerGas = 0 on chain ${chainId} — ignoring quote, using local estimate.`);
+    return null;
+  }
   const maxPriorityFeePerGas = parseHexUInt64((t.maxPriorityFeePerGas ?? t.maxFeePerGas) as string);
   // The bundler's OWN network-cost basis (Vela extension). 0n when a generic bundler omits it.
   const reportedNetworkFee = t.networkFeePerGas ? parseHexUInt64(t.networkFeePerGas as string) : 0n;

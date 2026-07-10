@@ -126,17 +126,16 @@ export function extractRequestChainId(method: string, params: any[]): number | u
         if (!isNaN(n) && n > 0) return n;
       }
     } else if (method === 'eth_sendTransaction') {
-      const tx = params[0] as Record<string, string> | undefined;
-      if (tx?.chainId) {
-        const n = tx.chainId.startsWith('0x') ? parseInt(tx.chainId, 16) : parseInt(tx.chainId, 10);
-        if (!isNaN(n) && n > 0) return n;
-      }
+      // Same coercion as the submit-side resolveChainId (string hex/dec OR number) —
+      // if this pre-check misses a numeric chainId the modal estimates/displays on
+      // the wallet's current chain while the submit goes to the tx's chain.
+      const tx = params[0] as { chainId?: string | number } | undefined;
+      const n = resolveChainId(0, tx?.chainId);
+      if (n > 0) return n;
     } else if (method === 'wallet_sendCalls') {
-      const payload = params[0] as { chainId?: string } | undefined;
-      if (payload?.chainId) {
-        const n = payload.chainId.startsWith('0x') ? parseInt(payload.chainId, 16) : parseInt(payload.chainId, 10);
-        if (!isNaN(n) && n > 0) return n;
-      }
+      const payload = params[0] as { chainId?: string | number } | undefined;
+      const n = resolveChainId(0, payload?.chainId);
+      if (n > 0) return n;
     }
   } catch { /* malformed params — ignore */ }
   return undefined;
