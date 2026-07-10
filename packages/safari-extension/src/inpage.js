@@ -16,6 +16,7 @@
 //     can answer — the router owns policy (eth_sign refusal, etc.)
 /* global browser, chrome */
 import { CHANNEL, RDNS, WALLET_NAME, ERR, rpcError, toHexChainId } from './lib/protocol.js';
+import { VELA_ICON } from './lib/brand-icon.js';
 
 (() => {
   // World guard. This file must run in the page's MAIN world (window.ethereum has
@@ -54,15 +55,9 @@ import { CHANNEL, RDNS, WALLET_NAME, ERR, rpcError, toHexChainId } from './lib/p
     (window.crypto && window.crypto.randomUUID && window.crypto.randomUUID()) ||
     'vela-' + Date.now().toString(16) + Math.floor(Math.random() * 1e9).toString(16);
 
-  // Data-URI icon (scalable SVG, satisfies the "≥96²" 6963 guidance). Vela accent.
-  const ICON =
-    'data:image/svg+xml;base64,' +
-    btoa(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">' +
-        '<rect width="96" height="96" rx="22" fill="#111"/>' +
-        '<path d="M30 30 L48 66 L66 30" fill="none" stroke="#E8572A" stroke-width="9" ' +
-        'stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    );
+  // The real Vela brand mark (sailboat) — shown in every dApp's EIP-6963 wallet
+  // picker. (Was a hand-drawn 'V' that looked nothing like the brand.)
+  const ICON = VELA_ICON;
 
   // ---- tiny event emitter (EIP-1193 events) ---------------------------------
   const listeners = new Map(); // event -> Set<fn>

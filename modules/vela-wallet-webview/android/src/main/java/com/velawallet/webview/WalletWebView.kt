@@ -14,7 +14,11 @@ package com.velawallet.webview
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebMessageCompat
@@ -31,8 +35,11 @@ import org.json.JSONObject
 @SuppressLint("SetJavaScriptEnabled")
 class WalletWebView(context: Context) : WebView(context) {
 
-    private var providerScriptInstalled = false
+    private var injectedSource: String? = null // provider bundle (readiness signal)
+    private var documentStartSupported = false // false → late-inject fallback on old WebView
     private var pendingUrl: String? = null
+    private var isLoading = false
+    private var lastFavicon = "" // resolved favicon URL for the current document
     private var lastSeq = 0 // highest processed outbox seq (native <- RN deliveries)
 
     init {
@@ -42,8 +49,50 @@ class WalletWebView(context: Context) : WebView(context) {
         settings.mediaPlaybackRequiresUserGesture = true
 
         webViewClient = object : WebViewClient() {
-            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) = emitNavigation(true)
-            override fun onPageFinished(view: WebView?, url: String?) = emitNavigation(false)
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                isLoading = true
+                lastFavicon = "" // new document — drop the previous page's favicon
+                // Fallback for pre-DOCUMENT_START_SCRIPT devices: inject as early as we
+                // can (not before the first byte, but before most dApps read ethereum).
+                if (!documentStartSupported) {
+                    injectedSource?.let { view?.evaluateJavascript(it, null) }
+                }
+                emitNavigation(true)
+            }
+
+            override fun onPageFinished(view: WebView?, url: String?) {
+                isLoading = false
+                emitNavigation(false)
+                resolveFavicon(view) // async — re-emits nav once the favicon is known
+            }
+
+            // http(s) loads here; every other scheme is handed to the OS (mailto:,
+            // tel:, wc:, itms-apps:, app links) or dropped (javascript:/file:/data:).
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val uri = request?.url ?: return false
+                val scheme = uri.scheme?.lowercase() ?: ""
+                if (scheme == "http" || scheme == "https" || scheme == "about") return false
+                if (scheme != "javascript" && scheme != "file" && scheme != "data") {
+                    try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, uri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        })
+                    } catch (_: Exception) { /* no handler app — swallow */ }
+                }
+                return true // never navigate the WebView to a non-web scheme
+            }
+
+            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                if (request?.isForMainFrame != true) return // ignore sub-resource failures
+                isLoading = false
+                emitNavigation(false, error?.description?.toString() ?: "Failed to load")
+            }
+
+            // SPA client-side routing (history.pushState/replaceState) fires this but
+            // NOT onPageStarted/Finished — refresh the URL bar + canGoBack for it.
+            override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                emitNavigation(isLoading)
+            }
         }
 
         // page -> native: the injected shim calls window.velaBridge.postMessage(string).
@@ -61,11 +110,14 @@ class WalletWebView(context: Context) : WebView(context) {
     // --- props (from the view manager) --------------------------------------
 
     fun setInjectedJavaScriptSource(source: String) {
-        if (providerScriptInstalled || source.isEmpty()) return
+        if (injectedSource != null || source.isEmpty()) return
+        injectedSource = source
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(this, source, setOf("*"))
-            providerScriptInstalled = true
+            documentStartSupported = true
         }
+        // Load regardless of feature support — an old WebView still browses (with the
+        // onPageStarted late-inject fallback) instead of hanging on a blank screen.
         loadIfReady()
     }
 
@@ -77,7 +129,7 @@ class WalletWebView(context: Context) : WebView(context) {
 
     private fun loadIfReady() {
         val url = pendingUrl ?: return
-        if (!providerScriptInstalled) return
+        if (injectedSource == null) return // wait for the provider bundle prop
         pendingUrl = null
         loadUrl(url)
     }
@@ -155,15 +207,41 @@ class WalletWebView(context: Context) : WebView(context) {
         emitEvent("onProviderRequest", payload)
     }
 
-    private fun emitNavigation(loading: Boolean) {
+    private fun emitNavigation(loading: Boolean, error: String = "") {
         val payload = Arguments.createMap().apply {
             putString("url", url ?: "")
             putString("title", title ?: "")
             putBoolean("canGoBack", canGoBack())
             putBoolean("canGoForward", canGoForward())
             putBoolean("loading", loading)
+            putString("error", error)
+            putString("favicon", lastFavicon)
         }
         emitEvent("onNavigationChange", payload)
+    }
+
+    /** Resolve the page's declared favicon (absolute URL) and re-emit navigation. */
+    private fun resolveFavicon(view: WebView?) {
+        view?.evaluateJavascript(FAVICON_JS) { raw ->
+            val href = try {
+                if (raw.isNullOrEmpty() || raw == "null") "" else JSONArray("[$raw]").optString(0, "")
+            } catch (e: Exception) {
+                ""
+            }
+            if (href.isNotEmpty()) {
+                lastFavicon = href
+                emitNavigation(isLoading)
+            }
+        }
+    }
+
+    companion object {
+        // Shared verbatim with the iOS view — reads the best-declared favicon as an
+        // absolute URL (link.href resolves relatives), falling back to /favicon.ico.
+        private const val FAVICON_JS =
+            "(function(){try{var s=['link[rel~=\"icon\"]','link[rel=\"shortcut icon\"]'," +
+                "'link[rel=\"apple-touch-icon\"]'];for(var i=0;i<s.length;i++){var l=document.querySelector(s[i]);" +
+                "if(l&&l.href)return l.href;}return location.origin+'/favicon.ico';}catch(e){return '';}})()"
     }
 
     private fun emitEvent(name: String, payload: WritableMap) {

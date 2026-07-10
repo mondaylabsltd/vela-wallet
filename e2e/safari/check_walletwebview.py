@@ -124,13 +124,19 @@ def main():
         wait_for(['connectcalled', 'flowerr'], 25)
         time.sleep(1.2)
         shot(d, '/tmp/wv_1_connect.png')
-        L('tap Connect:', tap_label(d, 'Connect'))
+        # The Connect button label follows the app language — match every shipped
+        # locale (连接 = zh, 連接 = zh-Hant, 接続 = ja, plus English).
+        L('tap Connect:', tap_label(d, 'Connect') or tap_label(d, '连接')
+          or tap_label(d, '連接') or tap_label(d, '接続'))
 
         # Phase 2 — accounts granted + personal_sign brings up the signing sheet.
         wait_for(['signcalled', 'accounts', 'flowerr'], 15)
         time.sleep(1.8)
         shot(d, '/tmp/wv_2_sign.png')
-        approved = tap_label(d, '签名') or tap_label(d, 'Sign') or tap_label(d, 'Approve')
+        # The Sign button label follows the DEVICE language — match every locale we
+        # ship (署名 = ja, 簽署/簽名 = zh-Hant, 签名 = zh, plus English).
+        approved = (tap_label(d, '签名') or tap_label(d, '署名') or tap_label(d, '簽署')
+                    or tap_label(d, '簽名') or tap_label(d, 'Sign') or tap_label(d, 'Approve'))
         L('tap Approve:', approved)
 
         # Phase 3 — signature returns to the dApp.
@@ -151,11 +157,20 @@ def main():
         L('=== on-device results ===')
         for name, ok in stages:
             L(('  PASS ' if ok else '  ---- '), name, R.get(name, ''))
-        core_ok = all(ok for name, ok in stages[:4])
-        L('CORE (inject/6963/round-trip):', 'PASS ✅' if core_ok else 'FAIL ❌',
-          '| connect:', 'ok' if stages[4][1] else 'n/a', '| sign:', 'ok' if stages[5][1] else 'n/a',
+        # The exit gate covers the WHOLE claimed flow — inject + round-trip AND the
+        # two interactions this PR is actually about (connect sheet → accounts, and
+        # personal_sign → signature). The parallel-space mock passkey signs without
+        # biometrics, so both are deterministic here. Set VELA_SKIP_SIGN=1 to relax
+        # the signature stage when running against a build without a registered key.
+        require_sign = os.environ.get('VELA_SKIP_SIGN') != '1'
+        gate = stages if require_sign else stages[:5]
+        passed = all(ok for _name, ok in gate)
+        L('GATE', '(inject/6963/round-trip/connect' + ('/sign)' if require_sign else ')'),
+          ':', 'PASS ✅' if passed else 'FAIL ❌',
+          '| connect:', 'ok' if stages[4][1] else 'FAIL',
+          '| sign:', ('ok' if stages[5][1] else ('skip' if not require_sign else 'FAIL')),
           '| flowerr:', R.get('flowerr', '-'))
-        return 0 if core_ok else 1
+        return 0 if passed else 1
     finally:
         try: d.quit()
         except Exception: pass

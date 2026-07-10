@@ -68,7 +68,7 @@ import { useLocalePrefs } from '@/services/locale-format';
 import { deleteConnectionEvents, deleteTransaction, type LocalTransaction } from '@/services/storage';
 import { getAccountBalance, getAccountBalances, setAccountBalance } from '@/services/balance-cache';
 import { currencyMeta, shouldShowDecimals } from '@/services/currency';
-import { parseRemoteInjectURL, isHttpUrl } from '@/services/dapp-transport';
+import { parseRemoteInjectURL, coerceBrowserUrl } from '@/services/dapp-transport';
 import { parseEIP681 } from '@/services/eip681';
 import { copyToClipboard, hapticLight, hapticSuccess, isAppActive, showAlert } from '@/services/platform';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
@@ -574,9 +574,10 @@ export default function HomeScreen() {
       setTab('connections');
       return true;
     }
-    // Any remaining http(s) URL → open the in-app dApp browser (WalletWebView).
-    if (isHttpUrl(trimmed)) {
-      router.push({ pathname: '/browser', params: { url: trimmed } });
+    // Any remaining web address (full URL or bare host) → open the in-app browser.
+    const browserUrl = coerceBrowserUrl(trimmed);
+    if (browserUrl) {
+      router.push({ pathname: '/browser', params: { url: browserUrl } });
       return true;
     }
     return false;
@@ -1107,6 +1108,7 @@ function ConnectionsView({
           <View style={styles.connOrLine} />
         </View>
 
+        <Text style={styles.connPasteHint}>{t('connect.list.pasteHint')}</Text>
         <View style={styles.connPasteRow}>
           <TextInput
             style={styles.connPasteInput}
@@ -1398,6 +1400,7 @@ const styles = createStyles(() => ({
   connOrRow: { flexDirection: 'row', alignItems: 'center', gap: space.lg, alignSelf: 'stretch', paddingHorizontal: space.xl, marginTop: space.md },
   connOrLine: { flex: 1, height: 1, backgroundColor: color.border.base },
   connOrText: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
+  connPasteHint: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, textAlign: 'center', marginBottom: space.sm },
   connPasteRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, alignSelf: 'stretch', paddingHorizontal: space.xl },
   connPasteInput: {
     flex: 1, fontSize: text.sm, fontWeight: '500', fontFamily: font.mono,

@@ -12,7 +12,7 @@
       "step3Subtitle": "請求會自動顯示在這裡",
       "scanQR": "掃描 QR 碼",
       "orDivider": "或",
-      "pastePlaceholder": "貼上 walletpair:?… URI",
+      "pastePlaceholder": "walletpair 連結或網址",
       "verifyTitle": "驗證連線",
       "verifyHint": "確認此驗證碼與 dApp 顯示的相符：",
       "encryptedBadge": "端對端加密",
@@ -31,7 +31,8 @@
       "scanAgain": "重新掃描",
       "retry": "重試",
       "invalidLinkTitle": "連結無效",
-      "invalidLinkBody": "不是有效的連線連結。支援格式：WalletPair URI 或 Remote Inject 網址。"
+      "invalidLinkBody": "不是有效的連線連結。支援格式：WalletPair URI 或 Remote Inject 網址。",
+      "pasteHint": "連線 dApp，或開啟任意網頁"
     },
     "dapp": {
       "noWallet": "請先建立錢包",
@@ -76,6 +77,25 @@
       "contentCallData": "呼叫資料",
       "contentMissing": "此請求的內容未被記錄。",
       "offChainNote": "鏈下簽署 — 未向鏈上發送任何內容。"
+    },
+    "browser": {
+      "unsupported": "內建瀏覽器僅在 iOS 和 Android 上可用。",
+      "noUrl": "沒有可開啟的網址。",
+      "preparing": "正在準備錢包…",
+      "title": "連線到 {{host}}",
+      "body": "此網站想查看你的地址並要求你簽署。未經你批准，它無法轉移任何資金。",
+      "cancel": "取消",
+      "connect": "連線",
+      "a11yClose": "關閉瀏覽器",
+      "a11yBack": "返回",
+      "a11yReload": "重新載入頁面",
+      "a11yOpenSystem": "在系統瀏覽器中開啟",
+      "a11yDisconnect": "中斷與此網站的連線",
+      "loadFailed": "無法載入此頁面",
+      "retry": "重試",
+      "disconnect": "中斷連線",
+      "disconnectTitle": "中斷與此網站的連線？",
+      "disconnectBody": "此網站需要重新連線後才能查看你的地址或要求你簽署。"
     }
   }
 }

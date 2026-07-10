@@ -46,6 +46,10 @@ export interface NavigationChangeEvent {
   canGoBack: boolean;
   canGoForward: boolean;
   loading: boolean;
+  /** Non-empty when the main-frame load failed (DNS/offline/etc.); '' otherwise. */
+  error: string;
+  /** Absolute URL of the page's favicon ('' until resolved / on failure). */
+  favicon: string;
 }
 
 interface NativeProps extends ViewProps {
@@ -93,8 +97,19 @@ export const WalletWebView = forwardRef<WalletWebViewHandle, WalletWebViewProps>
       seqRef.current += 1;
       queueRef.current.push({ seq: seqRef.current, ...item });
       // Bounded tail — native processes each prop update promptly by seq, so a
-      // small window is always enough; this just caps memory.
-      if (queueRef.current.length > 64) queueRef.current = queueRef.current.slice(-64);
+      // generous window is always enough; this just caps memory. If we ever hit the
+      // cap, the trim is surfaced (not silent) — a dropped low-seq delivery would
+      // leave a page promise hanging, so it must be visible in dev, not swallowed.
+      const CAP = 256;
+      if (queueRef.current.length > CAP) {
+        if (__DEV__) {
+          console.warn(
+            `[WalletWebView] outbox exceeded ${CAP} undelivered items — trimming oldest; ` +
+              'a page request may hang. This implies native is not draining the prop.',
+          );
+        }
+        queueRef.current = queueRef.current.slice(-CAP);
+      }
       setOutbox(JSON.stringify(queueRef.current));
     }, []);
 

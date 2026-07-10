@@ -301,3 +301,34 @@ export function isHttpUrl(raw: string): boolean {
     return false;
   }
 }
+
+/**
+ * Coerce a user/scanned input into a loadable http(s) URL for the in-app browser,
+ * or null if it isn't a web address.
+ *
+ * Accepts a full `http(s)://…` URL as-is, and — critically for the "type a URL"
+ * entry point — a BARE host like `app.uniswap.org` or `uniswap.org/swap`, which it
+ * defaults to `https://`. Everything else (other schemes, whitespace, or a token
+ * with no dot such as a plain word) returns null so the caller shows "invalid link".
+ * Used as the FALLBACK after parseRemoteInjectURL returns null (a remote-inject
+ * link is itself https, so order matters — see ARCHITECTURE.md §7).
+ */
+export function coerceBrowserUrl(raw: string): string | null {
+  const s = raw.trim();
+  if (!s) return null;
+  // Already a full URL: only http(s) is browsable (reject ftp:/javascript:/file:/…).
+  try {
+    const u = new URL(s);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.toString() : null;
+  } catch {
+    /* not a full URL — fall through to the bare-host path */
+  }
+  // Bare host: must have a dot and no whitespace; default the scheme to https.
+  if (/\s/.test(s) || !s.includes('.')) return null;
+  try {
+    const u = new URL('https://' + s);
+    return u.hostname.includes('.') ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}

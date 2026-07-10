@@ -15,8 +15,18 @@
 // This is a classic RN view (legacy RCTViewManager), copied into the app target
 // by plugins/with-native-modules.js, mirroring vela-passkey / vela-app-group.
 import Foundation
+import UIKit
 import WebKit
 import React
+
+/// Reads the page's best-declared favicon as an ABSOLUTE url (link.href resolves
+/// relative paths), falling back to the origin's /favicon.ico. Shared verbatim with
+/// the Android view so both platforms report the same thing.
+private let FAVICON_JS = """
+(function(){try{var s=['link[rel~="icon"]','link[rel="shortcut icon"]','link[rel="apple-touch-icon"]'];\
+for(var i=0;i<s.length;i++){var l=document.querySelector(s[i]);if(l&&l.href)return l.href;}\
+return location.origin+'/favicon.ico';}catch(e){return '';}})()
+"""
 
 @objc(WalletWebView)
 class WalletWebView: UIView, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
@@ -29,6 +39,7 @@ class WalletWebView: UIView, WKScriptMessageHandler, WKNavigationDelegate, WKUID
   private var pendingURL: URL?
   private var providerScriptInstalled = false
   private var lastSeq = 0 // highest processed outbox seq (native ← RN deliveries)
+  private var lastFavicon = "" // resolved favicon URL for the current document
 
   // MARK: Lifecycle
 
@@ -56,23 +67,18 @@ class WalletWebView: UIView, WKScriptMessageHandler, WKNavigationDelegate, WKUID
     // works), a script-message-handler added to the pre-init controller does NOT —
     // which is exactly why injection succeeded but messages never arrived.
     // `.postMessage` in the shim then lands in userContentController(_:didReceive:).
-    wv.configuration.userContentController.add(self, name: "velaBridge")
+    //
+    // Register via a WEAK proxy: WKUserContentController retains its message handler
+    // strongly, and self owns the webView (→ configuration → userContentController),
+    // so registering `self` directly is a retain cycle that leaks the whole WKWebView
+    // on every browser open (deinit never runs). The proxy holds self weakly.
+    wv.configuration.userContentController.add(WeakScriptMessageHandler(self), name: "velaBridge")
     wv.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-    wv.navigationDelegate = self
-    wv.uiDelegate = self // for the prompt()-based page→native bridge
+    wv.navigationDelegate = self // weak on WKWebView — no cycle
+    wv.uiDelegate = self // weak on WKWebView — for the prompt()-based page→native bridge
     wv.allowsBackForwardNavigationGestures = true
     addSubview(wv)
     webView = wv
-    // Timer diagnostic (fires regardless of delegates): 3s after setup, report ON
-    // THE VISIBLE PAGE whether this webview's delegates point to self + callback is
-    // wired. If __delck never arrives, self.webView is a DIFFERENT instance than the
-    // page the dApp runs in (a two-instance interop problem).
-    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-      guard let self = self, let w = self.webView else { return }
-      let navOk = (w.navigationDelegate as AnyObject?) === self
-      let uiOk = (w.uiDelegate as AnyObject?) === self
-      w.evaluateJavaScript("window.__delck={nav:\(navOk ? 1 : 0),ui:\(uiOk ? 1 : 0),cb:\(self.onProviderRequest != nil ? 1 : 0),eth:!!window.ethereum};", completionHandler: nil)
-    }
   }
 
   // MARK: Props (set by the view manager)
@@ -80,7 +86,6 @@ class WalletWebView: UIView, WKScriptMessageHandler, WKNavigationDelegate, WKUID
   /// The full injected bundle (INJECTED_PROVIDER_JS). Registered as a
   /// document-start user script the first time it is set.
   @objc func setInjectedJavaScript(_ source: NSString?) {
-    NSLog("[VelaWV] setInjectedJavaScript (control: this path is known to run)")
     guard !providerScriptInstalled, let source = source as String?, !source.isEmpty else { return }
     let script = WKUserScript(source: source, injectionTime: .atDocumentStart, forMainFrameOnly: true)
     webView?.configuration.userContentController.addUserScript(script)
@@ -158,7 +163,9 @@ class WalletWebView: UIView, WKScriptMessageHandler, WKNavigationDelegate, WKUID
   func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
     // Kept as a fallback; on-device the interop-registered WKScriptMessageHandler
     // does not deliver, so the shim uses the custom-scheme channel (below) instead.
-    if message.name == "velaBridge", let raw = message.body as? String { processBridge(raw, in: message.webView) }
+    if message.name == "velaBridge", let raw = message.body as? String {
+      processBridge(raw, from: message.frameInfo)
+    }
   }
 
   /// WKUIDelegate: the prompt()-based page→native bridge. The shim calls
@@ -166,40 +173,35 @@ class WalletWebView: UIView, WKScriptMessageHandler, WKNavigationDelegate, WKUID
   func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String,
                defaultText: String?, initiatedByFrame frame: WKFrameInfo,
                completionHandler: @escaping (String?) -> Void) {
-    NSLog("[VelaWV] prompt (uiDelegate fired) prefix=%@", String(prompt.prefix(20)))
     if prompt.hasPrefix("velawvbridge:") {
-      processBridge(String(prompt.dropFirst("velawvbridge:".count)), in: webView)
+      // SECURITY: stamp origin/isMainFrame from the INITIATING frame, so a
+      // cross-origin subframe that calls window.prompt('velawvbridge:…') directly
+      // (it can — prompt is a native global, no shim needed) cannot masquerade as
+      // the main frame. The WebViewTransport 4100s any isMainFrame=false request.
+      processBridge(String(prompt.dropFirst("velawvbridge:".count)), from: frame)
       completionHandler(nil) // dismiss without showing a dialog
       return
     }
-    completionHandler(defaultText)
+    // Not our bridge — a real page prompt(). Return nil (= user dismissed) rather
+    // than defaultText (which falsely reports "user confirmed the default value").
+    completionHandler(nil)
   }
 
   /// Process one page→native `vela-1193` request envelope (from either channel).
-  private func processBridge(_ raw: String, in wv: WKWebView?) {
-    // JS-observable diagnostic on the ACTUAL firing webview (unambiguous even if
-    // two view instances exist): __nativeGot>0 proves a bridge fired on the page.
-    wv?.evaluateJavaScript("window.__nativeGot=(window.__nativeGot||0)+1;window.__hasCb=\(onProviderRequest != nil ? 1 : 0);", completionHandler: nil)
+  /// `frame` is the WKFrameInfo the request actually came from — its
+  /// `securityOrigin` and `isMainFrame` are the TRUSTED source of both fields
+  /// (never a value the page put in the payload, never the top-frame URL).
+  private func processBridge(_ raw: String, from frame: WKFrameInfo) {
     guard let data = raw.data(using: .utf8),
           let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
           (obj["dir"] as? String) == "req" else { return } // ignore the "ready" ping etc.
-    // TRUSTED origin from the committed main-frame URL — never from the payload.
-    // The shim is injected forMainFrameOnly, so every message is a main-frame message.
     onProviderRequest?([
       "requestId": obj["id"] as? String ?? "",
       "method": obj["method"] as? String ?? "",
       "params": obj["params"] ?? [],
-      "origin": currentOrigin(wv),
-      "isMainFrame": true,
+      "origin": originString(from: frame.securityOrigin),
+      "isMainFrame": frame.isMainFrame,
     ])
-  }
-
-  private func currentOrigin(_ wv: WKWebView?) -> String {
-    guard let u = wv?.url, let scheme = u.scheme, let host = u.host else { return "" }
-    if let port = u.port, !((scheme == "https" && port == 443) || (scheme == "http" && port == 80)) {
-      return "\(scheme)://\(host):\(port)"
-    }
-    return "\(scheme)://\(host)"
   }
 
   // MARK: WKNavigationDelegate (navigation lifecycle)
@@ -208,34 +210,97 @@ class WalletWebView: UIView, WKScriptMessageHandler, WKNavigationDelegate, WKUID
   /// navigates a throwaway iframe to (the WKScriptMessageHandler doesn't fire
   /// under the RN New-Arch interop view).
   func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-    if let url = navigationAction.request.url, url.scheme == "velawvbridge" {
+    guard let url = navigationAction.request.url else { decisionHandler(.allow); return }
+    let scheme = url.scheme?.lowercased() ?? ""
+
+    // Reliable JS→native channel: the shim navigates a throwaway iframe to this
+    // custom scheme (the WKScriptMessageHandler doesn't fire under the RN interop).
+    if scheme == "velawvbridge" {
       let full = url.absoluteString
       if let r = full.range(of: "velawvbridge://m/") {
         let enc = String(full[r.upperBound...])
-        if let decoded = enc.removingPercentEncoding { processBridge(decoded, in: webView) }
+        // SECURITY: stamp from navigationAction.sourceFrame (the frame that issued
+        // the bridge navigation), not the top frame — same guard as the prompt path.
+        if let decoded = enc.removingPercentEncoding {
+          processBridge(decoded, from: navigationAction.sourceFrame)
+        }
       }
       decisionHandler(.cancel)
       return
     }
-    decisionHandler(.allow)
+
+    // Normal web content loads in the WebView.
+    if scheme == "http" || scheme == "https" || scheme == "about" || scheme == "blob" {
+      decisionHandler(.allow)
+      return
+    }
+
+    // External scheme (mailto:, tel:, wc:, itms-apps:, https-app-links, …): hand to
+    // the OS instead of failing silently in the WebView. Dangerous local schemes
+    // (javascript:, file:, data:) are neither loaded nor opened — just cancelled.
+    decisionHandler(.cancel)
+    if scheme != "javascript", scheme != "file", scheme != "data" {
+      UIApplication.shared.open(url, options: [:], completionHandler: nil)
+    }
   }
 
-  func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-    NSLog("[VelaWV] didCommit (nav delegate fired) url=%@", webView.url?.absoluteString ?? "?")
+  /// target=_blank / window.open — WKWebView otherwise does nothing (targetFrame
+  /// is nil). Load the request in THIS view so "view tx / docs / twitter" links work.
+  func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+               for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+    if navigationAction.targetFrame == nil, let url = navigationAction.request.url,
+       let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+      webView.load(URLRequest(url: url))
+    }
+    return nil
+  }
+
+  func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+    lastFavicon = "" // new document — drop the previous page's favicon
+    // Emit loading EARLY (before didCommit) so the DNS/TLS/first-byte wait — the
+    // slowest phase — shows a progress bar instead of a blank screen.
     emitNavigation(loading: true)
   }
-  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { emitNavigation(loading: false) }
-  func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { emitNavigation(loading: false) }
-  func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { emitNavigation(loading: false) }
+  func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    emitNavigation(loading: true)
+  }
+  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    emitNavigation(loading: false)
+    resolveFavicon() // async — emits a follow-up nav update once the URL is known
+  }
+  func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+    emitNavigation(loading: false, error: error)
+  }
+  func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+    emitNavigation(loading: false, error: error)
+  }
 
-  private func emitNavigation(loading: Bool) {
+  /// Resolve the page's declared favicon (absolute URL) and re-emit navigation so
+  /// the URL bar can show it. Falls back to /favicon.ico.
+  private func resolveFavicon() {
+    webView?.evaluateJavaScript(FAVICON_JS) { [weak self] result, _ in
+      guard let self = self else { return }
+      if let href = result as? String, !href.isEmpty {
+        self.lastFavicon = href
+        self.emitNavigation(loading: false)
+      }
+    }
+  }
+
+  private func emitNavigation(loading: Bool, error: Error? = nil) {
     guard let wv = webView else { return }
+    // Ignore the benign "cancelled" that fires when we redirect an external scheme
+    // or start a new load over an in-flight one — it isn't a real page failure.
+    let ns = error as NSError?
+    let isCancel = ns?.domain == NSURLErrorDomain && ns?.code == NSURLErrorCancelled
     onNavigationChange?([
       "url": wv.url?.absoluteString ?? "",
       "title": wv.title ?? "",
       "canGoBack": wv.canGoBack,
       "canGoForward": wv.canGoForward,
       "loading": loading,
+      "error": (error != nil && !isCancel) ? (ns?.localizedDescription ?? "Failed to load") : "",
+      "favicon": lastFavicon,
     ])
   }
 
@@ -272,5 +337,18 @@ class WalletWebView: UIView, WKScriptMessageHandler, WKNavigationDelegate, WKUID
 
   deinit {
     webView?.configuration.userContentController.removeScriptMessageHandler(forName: "velaBridge")
+    webView?.stopLoading()
+  }
+}
+
+/// A weak forwarder so WKUserContentController (which retains its message handler
+/// strongly) does not retain the WalletWebView — otherwise self → webView →
+/// configuration → userContentController → self is a cycle that leaks the whole
+/// WKWebView on every browser open. See setUpWebView().
+private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+  private weak var delegate: WKScriptMessageHandler?
+  init(_ delegate: WKScriptMessageHandler) { self.delegate = delegate }
+  func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+    delegate?.userContentController(controller, didReceive: message)
   }
 }

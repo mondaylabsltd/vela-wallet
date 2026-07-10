@@ -54,3 +54,86 @@ export function classifyBrowserRequest(method: string, granted: string[]): Brows
 export function isConnectMethod(method: string): boolean {
   return CONNECT_METHODS.has(method);
 }
+
+/** Methods that move value or produce a signature. */
+const SIGNING_METHODS = new Set([
+  'eth_sendTransaction',
+  'personal_sign',
+  'eth_sign',
+  'eth_signTypedData',
+  'eth_signTypedData_v1',
+  'eth_signTypedData_v3',
+  'eth_signTypedData_v4',
+  'wallet_sendCalls',
+]);
+
+/**
+ * A PUBLIC http (non-TLS) origin, where a MITM can inject page script. localhost,
+ * loopback, `.local`, and private-LAN hosts are exempt so local/dev dApps (and the
+ * on-device test dApp, served over the LAN) still work.
+ */
+export function isInsecurePublicOrigin(origin: string): boolean {
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== 'http:') return false;
+    const h = u.hostname;
+    if (h === 'localhost' || h === '127.0.0.1' || h === '::1' || h.endsWith('.local')) return false;
+    if (/^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
+    return true;
+  } catch {
+    return true; // unparseable origin → treat as insecure
+  }
+}
+
+/** Whether a signing/value-moving request must be refused on this origin (insecure http). */
+export function shouldBlockInsecureSigning(method: string, origin: string): boolean {
+  return SIGNING_METHODS.has(method) && isInsecurePublicOrigin(origin);
+}
+
+/**
+ * The FULL browser decision for one provider request — the single source of truth
+ * the BrowserScreen executes. Pure (no storage / no UI) so every branch is unit-
+ * testable; the screen only performs the side effect the decision names.
+ *
+ * `granted` is the post-isMainFrame exposure ([] for a subframe), `pendingConsentOrigin`
+ * is the origin of the connect sheet already open (or null).
+ */
+export type BrowserDecision =
+  | { kind: 'respond'; result: unknown }
+  | { kind: 'reject'; code: number; message: string }
+  | { kind: 'open-consent' } // show a fresh connect sheet
+  | { kind: 'merge-consent' } // coalesce into the sheet already open for this origin
+  | { kind: 'forward' }; // hand to the WebViewTransport → signing pipeline
+
+export function decideBrowserRequest(input: {
+  method: string;
+  origin: string;
+  isMainFrame: boolean;
+  granted: string[];
+  hasActiveAccount: boolean;
+  pendingConsentOrigin: string | null;
+}): BrowserDecision {
+  const { method, origin, isMainFrame, granted, hasActiveAccount, pendingConsentOrigin } = input;
+  const action = classifyBrowserRequest(method, granted);
+
+  if (action.kind === 'respond') return { kind: 'respond', result: action.result };
+
+  if (action.kind === 'consent') {
+    // §5.2 — a cross-origin iframe can never request accounts.
+    if (!isMainFrame) return { kind: 'reject', code: 4100, message: 'Unauthorized frame' };
+    if (!hasActiveAccount) return { kind: 'reject', code: 4001, message: 'No account available' };
+    // Coalesce duplicate prompts from the same origin so the earlier promise never hangs;
+    // reject a colliding second origin (a page can't queue two connect sheets).
+    if (pendingConsentOrigin === origin) return { kind: 'merge-consent' };
+    if (pendingConsentOrigin != null) {
+      return { kind: 'reject', code: 4001, message: 'Another connection request is pending' };
+    }
+    return { kind: 'open-consent' };
+  }
+
+  // forward: read-only RPC / chain switch / signing — but never sign on insecure http.
+  if (shouldBlockInsecureSigning(method, origin)) {
+    return { kind: 'reject', code: 4100, message: 'Signing is disabled on insecure (http) sites' };
+  }
+  return { kind: 'forward' };
+}

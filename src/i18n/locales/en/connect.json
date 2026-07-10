@@ -12,7 +12,7 @@
       "step3Subtitle": "Requests appear here automatically",
       "scanQR": "Scan QR Code",
       "orDivider": "or",
-      "pastePlaceholder": "Paste walletpair:?... URI",
+      "pastePlaceholder": "walletpair link or web address",
       "verifyTitle": "Verify Connection",
       "verifyHint": "Confirm this code matches what the dApp displays:",
       "encryptedBadge": "End-to-end encrypted",
@@ -31,7 +31,8 @@
       "scanAgain": "Scan Again",
       "retry": "Retry",
       "invalidLinkTitle": "Invalid Link",
-      "invalidLinkBody": "Not a valid connection link. Supported: WalletPair URI or Remote Inject URL."
+      "invalidLinkBody": "Not a valid connection link. Supported: WalletPair URI or Remote Inject URL.",
+      "pasteHint": "Connect a dApp, or open any website"
     },
     "dapp": {
       "noWallet": "Create a wallet first",
@@ -76,6 +77,25 @@
       "contentCallData": "Call data",
       "contentMissing": "Content wasn’t recorded for this request.",
       "offChainNote": "Off-chain signature — nothing was sent on-chain."
+    },
+    "browser": {
+      "unsupported": "The in-app browser is only available on iOS and Android.",
+      "noUrl": "No URL to open.",
+      "preparing": "Preparing wallet…",
+      "title": "Connect to {{host}}",
+      "body": "This site wants to see your address and ask you to sign. It can’t move funds without your approval.",
+      "cancel": "Cancel",
+      "connect": "Connect",
+      "a11yClose": "Close browser",
+      "a11yBack": "Go back",
+      "a11yReload": "Reload page",
+      "a11yOpenSystem": "Open in system browser",
+      "a11yDisconnect": "Disconnect this site",
+      "loadFailed": "Couldn’t load this page",
+      "retry": "Try again",
+      "disconnect": "Disconnect",
+      "disconnectTitle": "Disconnect this site?",
+      "disconnectBody": "The site will need to reconnect before it can see your address or ask you to sign."
     }
   }
 }

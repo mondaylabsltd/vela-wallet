@@ -304,11 +304,24 @@ v1 is **single-tab** (one live `WalletWebView`). Multi-tab is deferred; the cont
 ## 9. Browser-completeness backlog (harden after the vertical slice works)
 
 Cookies / `localStorage` / cache persistence · camera / geolocation / file-picker permission prompts bridged
-to native · `window.open` / `target=_blank` (open same tab or a new tab) · downloads & uploads · full-screen
+to native · downloads & uploads · full-screen
 video · SSL-error and Safe-Browsing UI · renderer-crash recovery (`webViewWebContentProcessDidTerminate` /
-`onRenderProcessGone`) · deep links from the page (`wc:`, `ethereum:`, `tel:`, `mailto:`) · optional
+`onRenderProcessGone`) · optional
 phishing blocklist (e.g. eth-phishing-detect). Each item is a native capability the wallet must decide to
 grant — that's the point of owning the WebView.
+
+### 9.1 Post-review hardening (2026-07-10)
+
+Applied after the multi-agent review of PR #67 (JS: typecheck + unit tests green; iOS Swift: compiled for the simulator; Android Kotlin + on-device e2e: NOT yet run):
+
+- **Origin/isMainFrame from the initiating frame (iOS).** `processBridge` now stamps both from the request's own `WKFrameInfo` (`securityOrigin` / `isMainFrame`) across all three channels (prompt, `velawvbridge://` scheme, message handler) — a subframe can no longer forge a main-frame request (§5.1/§5.2). Connect/state methods in `browser.tsx` are gated on `isMainFrame` too.
+- **`target=_blank` / `window.open`** → loads in the same view (iOS `createWebViewWith`; Android default). **External schemes** (`mailto:`, `tel:`, `wc:`, app links) → handed to the OS; `javascript:`/`file:`/`data:` navigations are dropped.
+- **Load-error state** surfaced to RN (`NavigationChangeEvent.error`) with a branded retry screen; earlier loading feedback (iOS `didStartProvisionalNavigation`).
+- **Insecure-origin signing gate** (public `http://` blocked, localhost/LAN exempt); **route-param re-validated** as http(s) so the `velawallet://browser?url=` deep link can't load a non-web scheme.
+- **iOS WKWebView leak fixed** (weak message-handler proxy); Android white-screen fixed (page loads even without `DOCUMENT_START_SCRIPT`, with a late-inject fallback); Android SPA URL bar via `doUpdateVisitedHistory`.
+- Connect-consent now coalesces duplicate prompts, clears on navigation, and pushes `chainChanged`; debug scaffolding removed; full i18n (en + zh/zh-TW/zh-HK; other 10 locales fall back to `en` pending translation).
+
+Still open: iOS SPA `pushState` URL tracking, camera/file-picker prompts, renderer-crash recovery, phishing blocklist, and a device run of the Android path + the on-device e2e.
 
 ---
 
