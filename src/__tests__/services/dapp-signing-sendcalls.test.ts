@@ -224,4 +224,82 @@ describe('handleSendCalls (EIP-5792 wallet_sendCalls)', () => {
     expect(rpcCallMock).toHaveBeenCalledWith('eth_getUserOperationReceipt', ['0xunknown-id'], 137);
     expect((res as any).result.chainId).toBe('0x89');
   });
+
+  // ── eth_getTransactionReceipt / eth_getTransactionByHash translation ───────
+  // A dApp that polls a receipt by a hash the wallet handed back (a userOpHash)
+  // must be translated to the real bundle tx via the bundler, on the ORIGINAL
+  // chain — otherwise it hits the public RPC where the userOpHash matches nothing
+  // and polls forever ("submitted but never confirms").
+
+  test('eth_getTransactionReceipt(userOpHash) → real bundle receipt on the submit chain', async () => {
+    // Submit on chain 1 so the userOpHash is tracked → chain 1.
+    sendNativeMock.mockResolvedValue({ userOpHash: '0xuop-recpt' });
+    await handleSendCalls(
+      req([{ chainId: '0x1', calls: [{ to: '0xdead', value: '0x0', data: '0x' }] }]),
+      ACCOUNT, SAFE, 1,
+    );
+
+    // Wallet has since switched to 137. The dApp polls the receipt by the userOpHash.
+    rpcCallMock.mockImplementation((method: string) => {
+      if (method === 'eth_getUserOperationReceipt') {
+        return Promise.resolve({ result: { success: true, receipt: { transactionHash: '0xrealbundle' } } });
+      }
+      if (method === 'eth_getTransactionReceipt') {
+        return Promise.resolve({ result: { transactionHash: '0xrealbundle', status: '0x1', blockNumber: '0x10' } });
+      }
+      return Promise.resolve({ result: null });
+    });
+
+    const res = await handleReadOnlyRPC('eth_getTransactionReceipt', ['0xuop-recpt'], SAFE, 137);
+    expect(res.handled).toBe(true);
+    expect((res as any).result.transactionHash).toBe('0xrealbundle');
+    // Resolved the userOpHash on the ORIGINAL chain (1), then fetched the authentic
+    // receipt for the REAL bundle hash — also on chain 1, not the current 137.
+    expect(rpcCallMock).toHaveBeenCalledWith('eth_getUserOperationReceipt', ['0xuop-recpt'], 1);
+    expect(rpcCallMock).toHaveBeenCalledWith('eth_getTransactionReceipt', ['0xrealbundle'], 1);
+  });
+
+  test('eth_getTransactionReceipt(userOpHash) → null while the op has not landed yet', async () => {
+    sendNativeMock.mockResolvedValue({ userOpHash: '0xuop-pending' });
+    await handleSendCalls(
+      req([{ chainId: '0x1', calls: [{ to: '0xdead', value: '0x0', data: '0x' }] }]),
+      ACCOUNT, SAFE, 1,
+    );
+    // Bundler has no receipt yet → translation returns null so the dApp keeps polling.
+    rpcCallMock.mockResolvedValue({ result: null });
+    const res = await handleReadOnlyRPC('eth_getTransactionReceipt', ['0xuop-pending'], SAFE, 1);
+    expect(res.handled).toBe(true);
+    expect((res as any).result).toBeNull();
+    // Never forwarded a getTransactionReceipt for a real hash (there isn't one yet).
+    expect(rpcCallMock).not.toHaveBeenCalledWith('eth_getTransactionReceipt', expect.anything(), expect.anything());
+  });
+
+  test('eth_getTransactionByHash(userOpHash) is translated the same way', async () => {
+    sendNativeMock.mockResolvedValue({ userOpHash: '0xuop-bytx' });
+    await handleSendCalls(
+      req([{ chainId: '0x1', calls: [{ to: '0xdead', value: '0x0', data: '0x' }] }]),
+      ACCOUNT, SAFE, 1,
+    );
+    rpcCallMock.mockImplementation((method: string) => {
+      if (method === 'eth_getUserOperationReceipt') {
+        return Promise.resolve({ result: { success: true, receipt: { transactionHash: '0xrealbundle2' } } });
+      }
+      if (method === 'eth_getTransactionByHash') {
+        return Promise.resolve({ result: { hash: '0xrealbundle2', blockNumber: '0x10' } });
+      }
+      return Promise.resolve({ result: null });
+    });
+    const res = await handleReadOnlyRPC('eth_getTransactionByHash', ['0xuop-bytx'], SAFE, 1);
+    expect((res as any).result.hash).toBe('0xrealbundle2');
+    expect(rpcCallMock).toHaveBeenCalledWith('eth_getTransactionByHash', ['0xrealbundle2'], 1);
+  });
+
+  test('eth_getTransactionReceipt for a hash we never issued forwards untouched', async () => {
+    rpcCallMock.mockResolvedValue({ result: { transactionHash: '0xnormaltx', status: '0x1' } });
+    const res = await handleReadOnlyRPC('eth_getTransactionReceipt', ['0xnormaltx'], SAFE, 137);
+    expect((res as any).result.transactionHash).toBe('0xnormaltx');
+    // Plain forward on the current chain — no bundler translation, no chain rewrite.
+    expect(rpcCallMock).toHaveBeenCalledWith('eth_getTransactionReceipt', ['0xnormaltx'], 137);
+    expect(rpcCallMock).not.toHaveBeenCalledWith('eth_getUserOperationReceipt', expect.anything(), expect.anything());
+  });
 });
