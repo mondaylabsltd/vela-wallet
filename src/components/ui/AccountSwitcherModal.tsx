@@ -22,6 +22,7 @@ import { IdenticonViewerProvider } from '@/components/ui/IdenticonViewerProvider
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { WalletAvatar } from '@/components/ui/WalletAvatar';
+import type { Account } from '@/models/types';
 import { shortAddress, useWallet } from '@/models/wallet-state';
 import { useBalancePrivacy } from '@/hooks/use-balance-privacy';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
@@ -49,10 +50,19 @@ type Props = {
   loading?: boolean;
   /** Show the "create / sign in" actions (Settings only). */
   showCreateActions?: boolean;
+  /**
+   * Fired alongside the SWITCH_ACCOUNT dispatch with the NEWLY-selected account, so
+   * a caller can react to the switch (e.g. the in-app browser re-points its dApp
+   * grant + emits accountsChanged). Receives the account directly so it needn't wait
+   * for the async wallet-state update.
+   */
+  onSwitch?: (index: number, account: Account) => void;
+  /** Extra content rendered below the account list (e.g. a "close page" row). */
+  footer?: React.ReactNode;
 };
 
 export function AccountSwitcherModal({
-  visible, onClose, title, formatSubtitle, balances, loading, showCreateActions,
+  visible, onClose, title, formatSubtitle, balances, loading, showCreateActions, onSwitch, footer,
 }: Props) {
   const { t } = useTranslation();
   const { state, dispatch } = useWallet();
@@ -107,7 +117,7 @@ export function AccountSwitcherModal({
                 {pos > 0 && <View style={styles.sep} />}
                 <Pressable
                   style={styles.item}
-                  onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); hapticSuccess(); onClose(); }}
+                  onPress={() => { dispatch({ type: 'SWITCH_ACCOUNT', index }); hapticSuccess(); onSwitch?.(index, account); onClose(); }}
                 >
                   <WalletAvatar name={account.name} address={account.address} size={40} letterSize={text.base} enlargeable />
                   <View style={styles.info}>
@@ -131,6 +141,8 @@ export function AccountSwitcherModal({
               <VelaButton title={t('settingsModals.account.signInExisting')} variant="secondary" onPress={() => { onClose(); router.push('/onboarding'); }} />
             </View>
           )}
+
+          {footer}
         </ScrollView>
       </View>
       </IdenticonViewerProvider>

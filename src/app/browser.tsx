@@ -44,6 +44,8 @@ import { openBrowser, showAlert } from '@/services/platform';
 import { color, space, text as textScale, createStyles } from '@/constants/theme';
 import { AppModal } from '@/components/ui/AppModal';
 import { VelaButton } from '@/components/ui/VelaButton';
+import { WalletAvatar } from '@/components/ui/WalletAvatar';
+import { AccountSwitcherModal } from '@/components/ui/AccountSwitcherModal';
 
 /** One connect prompt, coalescing duplicate requests from the same origin. */
 interface ConsentRequest {
@@ -107,6 +109,7 @@ export default function BrowserScreen() {
   const [nav, setNav] = useState<NavigationChangeEvent | null>(null);
   const [consent, setConsent] = useState<ConsentRequest | null>(null);
   const [connectedAddr, setConnectedAddr] = useState<string | null>(null);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   // Reset when the favicon URL changes so a broken icon on page A doesn't hide the
   // (valid) icon on page B.
   const [faviconBroken, setFaviconBroken] = useState(false);
@@ -285,6 +288,24 @@ export default function BrowserScreen() {
     ]);
   }, [t, disconnectOrigin]);
 
+  // Switching the active account inside the browser must be REAL, not cosmetic: the
+  // account switcher only changes the wallet's active account, but the page still
+  // sees the old grant/`eth_accounts`. So re-point the per-origin grant to the new
+  // address AND emit `accountsChanged` — but ONLY for the connected main-frame origin
+  // (never leak an address to a site that never connected). The signer already uses
+  // the active account, so this reconciles grant + page + signer.
+  const handleBrowserSwitch = useCallback(
+    (_index: number, account: { address: string }) => {
+      if (!connectedAddr) return; // not connected → switching only the wallet is fine, don't emit
+      const origin = originRef.current || originOf(initialUrl);
+      if (!origin) return;
+      void setGrant({ origin, address: account.address, chainId, grantedAt: Date.now() });
+      bridge.emitEvent('accountsChanged', [account.address]);
+      setConnectedAddr(account.address);
+    },
+    [connectedAddr, initialUrl, chainId, bridge],
+  );
+
   const onNavigationChange = useCallback(
     (n: NavigationChangeEvent) => {
       setNav(n);
@@ -374,27 +395,6 @@ export default function BrowserScreen() {
           <Text style={styles.host} numberOfLines={1}>{host}</Text>
           {nav?.title ? <Text style={styles.title} numberOfLines={1}>{nav.title}</Text> : null}
         </View>
-        {connectedAddr ? (
-          <Pressable
-            hitSlop={8}
-            onPress={confirmDisconnect}
-            style={styles.chip}
-            accessibilityRole="button"
-            accessibilityLabel={t('connect.browser.a11yDisconnect')}
-          >
-            <View style={styles.chipDot} />
-            <Text style={styles.chipText}>{shortAddr(connectedAddr)}</Text>
-          </Pressable>
-        ) : null}
-        <Pressable
-          hitSlop={10}
-          onPress={() => router.back()}
-          style={styles.iconBtn}
-          accessibilityRole="button"
-          accessibilityLabel={t('connect.browser.a11yClose')}
-        >
-          <X size={20} color={color.fg.base} />
-        </Pressable>
       </View>
 
       {nav?.loading ? <View style={styles.loadingBar} /> : null}
@@ -457,6 +457,26 @@ export default function BrowserScreen() {
         >
           <RotateCw size={20} color={color.fg.muted} />
         </Pressable>
+
+        {/* Account pill — wallet avatar + address, right of refresh. Tap → account
+            switcher (same as the home screen), which also hosts the close-page action
+            and re-points the connected dApp. A green dot marks an active connection. */}
+        {activeAccount ? (
+          <Pressable
+            hitSlop={8}
+            onPress={() => setSwitcherOpen(true)}
+            style={styles.acctPill}
+            accessibilityRole="button"
+            accessibilityLabel={t('connect.browser.a11yAccount')}
+          >
+            <WalletAvatar name={activeAccount.name} address={activeAccount.address} size={20} letterSize={11} />
+            <Text style={styles.acctPillText} numberOfLines={1}>
+              {shortAddr((connectedAddr ?? activeAccount.address))}
+            </Text>
+            {connectedAddr ? <View style={styles.acctPillDot} /> : null}
+          </Pressable>
+        ) : null}
+
         <View style={styles.flex} />
         <Pressable
           hitSlop={8}
@@ -489,6 +509,33 @@ export default function BrowserScreen() {
           </View>
         </View>
       </AppModal>
+
+      {/* Account switcher (home-screen style) — reused here to switch the connected
+          account, and to host the page-level actions (disconnect + close) that used
+          to live in the top bar. onSwitch re-points the dApp (handleBrowserSwitch). */}
+      <AccountSwitcherModal
+        visible={switcherOpen}
+        onClose={() => setSwitcherOpen(false)}
+        title={t('connect.browser.switchAccount')}
+        onSwitch={handleBrowserSwitch}
+        footer={
+          <View style={styles.switcherFooter}>
+            {connectedAddr ? (
+              <>
+                <Pressable style={styles.footerRow} onPress={() => { setSwitcherOpen(false); confirmDisconnect(); }}>
+                  <Plug size={18} color={color.error.base} strokeWidth={2} />
+                  <Text style={[styles.footerRowText, { color: color.error.base }]}>{t('connect.browser.disconnect')}</Text>
+                </Pressable>
+                <View style={styles.footerSep} />
+              </>
+            ) : null}
+            <Pressable style={styles.footerRow} onPress={() => { setSwitcherOpen(false); router.back(); }}>
+              <X size={18} color={color.fg.base} strokeWidth={2} />
+              <Text style={styles.footerRowText}>{t('connect.browser.closePage')}</Text>
+            </Pressable>
+          </View>
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -523,17 +570,27 @@ const styles = createStyles(() => ({
   host: { color: color.fg.base, fontSize: textScale.sm, fontWeight: '600' },
   title: { color: color.fg.subtle, fontSize: 11 },
   iconBtn: { padding: space.xs },
-  chip: {
+  // Account pill in the bottom bar (avatar + address). Sits in a quiet sunken chip;
+  // the green dot signals an active dApp connection.
+  acctPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.xs,
-    paddingHorizontal: space.sm,
+    gap: space.sm,
+    paddingLeft: 4,
+    paddingRight: space.md,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: color.accent.soft,
+    backgroundColor: color.bg.sunken,
   },
-  chipDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: color.success.base },
-  chipText: { color: color.accent.base, fontSize: 12, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  acctPillText: { color: color.fg.base, fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'], maxWidth: 130 },
+  acctPillDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: color.success.base },
+  switcherFooter: {
+    paddingHorizontal: space.xl, marginTop: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border.base,
+  },
+  footerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.lg },
+  footerRowText: { fontSize: textScale.base, fontWeight: '600', color: color.fg.base },
+  footerSep: { height: 1, backgroundColor: color.border.base, marginLeft: 18 + space.md },
   loadingBar: { height: 2, backgroundColor: color.accent.base },
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,
