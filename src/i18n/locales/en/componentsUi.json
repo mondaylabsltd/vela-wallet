@@ -114,6 +114,7 @@
       "contractTag": "Contract",
       "holdToConfirm": "Hold to confirm",
       "advancedToggle": "Advanced — view raw data",
+      "noNetworkFee": "No network fee — off-chain signature",
       "batchIntent": "Batch",
       "intentApprove": "Approve",
       "intentTransferNft": "Transfer NFT",

@@ -678,6 +678,14 @@ export function SigningSheet({
             />
           )}
 
+          {/* Zone 4 (cost) for signatures — an off-chain signature has no gas, but the
+              cost zone must still be present so every screen keeps the same skeleton. */}
+          {!isTx && !isBatch && !readOnly && (
+            <View style={styles.noFeeRow}>
+              <Text style={styles.noFeeLabel}>{t('componentsUi.signing.noNetworkFee', { defaultValue: 'No network fee — off-chain signature' })}</Text>
+            </View>
+          )}
+
           {/* Gas estimation failed — block the blind submit that would otherwise
               hang for 2 min on the bundler. Retry lives in the gas card above. */}
           {gasEstimateFailed && !isSigning && !readOnly && (
@@ -1083,7 +1091,7 @@ function ApprovalView({ approval, meta, choice, onChange, chainId, walletAddress
 
   return (
     <View>
-      <IntentHeader intent={verb} color={verbColor} />
+      <IntentHeader intent={verb} color={verbColor} variant={approval.isReducing ? 'eyebrow' : 'hero'} />
 
       <EditableApproveCard
         key={requestId}
@@ -1188,7 +1196,7 @@ function PermitSignView({ approval, meta, clearSign }: {
 
   return (
     <View>
-      <IntentHeader intent={verb} color={verbColor} />
+      <IntentHeader intent={verb} color={verbColor} variant={approval.isReducing ? 'eyebrow' : 'hero'} />
 
       <View style={[styles.tokenCard, dangerous && { backgroundColor: color.error.soft }]}>
         <TokenLogo symbol={approval.tokenAddress ? symbol : '?'} logoUrls={logoUrls} size={40} />
@@ -1414,7 +1422,6 @@ function BlindTransactionView({ tx, chainId, simConfident }: {
   simConfident?: boolean;
 }) {
   const { t } = useTranslation();
-  const [showRaw, setShowRaw] = useState(false);
   const sym = nativeSymbol(chainId);
   const value = formatTxValue(tx.value, chainId);
   const hasData = tx.data && tx.data !== '0x';
@@ -1461,40 +1468,17 @@ function BlindTransactionView({ tx, chainId, simConfident }: {
       {/* Descriptor-absence notice. With a confident simulation it's a calm caption
           that points at the preview below; without one it stays a hard blind-sign
           warning (genuinely opaque — no descriptor AND no simulated outcome). */}
+      {/* Zone 3 — the descriptor-absence caution. The raw calldata lives in the
+          shared Advanced panel below (no duplicate toggle here, which also kept the
+          sim ✓ from rendering after it). */}
       {hasData && (
-        <>
-          <WarningBanner
-            severity={calm ? 'caution' : 'danger'}
-            text={calm
-              ? t('componentsUi.signing.blindButSimulated', { defaultValue: "Vela couldn't read this contract's details, but the preview below shows exactly what this transaction does." })
-              : t('componentsUi.signing.blindDecodeWarning', { bytes: dataSize })}
-          />
-
-          {/* Raw data toggle */}
-          <Pressable
-            style={styles.detailsToggle}
-            onPress={() => setShowRaw(!showRaw)}
-          >
-            <Text style={styles.detailsToggleText}>
-              {t('componentsUi.signing.rawCalldataToggle', { bytes: dataSize })}
-            </Text>
-            <ChevronDown
-              size={12}
-              color={color.fg.subtle}
-              strokeWidth={2}
-              style={showRaw ? { transform: [{ rotate: '180deg' }] } : undefined}
-            />
-          </Pressable>
-          {showRaw && (
-            <ScrollView horizontal={false} style={styles.rawBlock}>
-              <Text style={styles.rawText}>
-                {tx.data.slice(0, 200)}{tx.data.length > 200 ? '...' : ''}
-              </Text>
-            </ScrollView>
-          )}
-        </>
+        <WarningBanner
+          severity={calm ? 'caution' : 'danger'}
+          text={calm
+            ? t('componentsUi.signing.blindButSimulated', { defaultValue: "Vela couldn't read this contract's details, but the preview below shows exactly what this transaction does." })
+            : t('componentsUi.signing.blindDecodeWarning', { bytes: dataSize })}
+        />
       )}
-
     </View>
   );
 }
@@ -2375,6 +2359,8 @@ const styles = createStyles(() => ({
     marginTop: space.sm,
   },
   buttonFlex: { flex: 1 },
+  noFeeRow: { paddingTop: space.lg, alignItems: 'center' },
+  noFeeLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle },
   // Danger signing stacks the full-width slide over a full-width Reject.
   dangerStack: { flex: 1, gap: space.md },
 

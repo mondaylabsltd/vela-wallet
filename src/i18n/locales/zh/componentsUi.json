@@ -91,6 +91,7 @@
       "contractTag": "合约",
       "holdToConfirm": "长按确认",
       "advancedToggle": "高级 — 查看原始数据",
+      "noNetworkFee": "无网络费用 — 链下签名",
       "batchIntent": "批量",
       "intentApprove": "授权",
       "intentTransferNft": "转移 NFT",
