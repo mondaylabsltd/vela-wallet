@@ -546,6 +546,22 @@ export const styles = createStyles(() => ({
     padding: space.lg,
     maxHeight: 260,
   },
+  // Expert-layer address rows: full 0x with copy + explorer (the actions the calm
+  // default view no longer shows inline). Boxed affordances are fine here — density
+  // is welcome behind the 技术细节 disclosure.
+  advAddrRow: {
+    flexDirection: 'row', alignItems: 'center', gap: space.sm,
+    paddingVertical: space.sm,
+    borderBottomWidth: 1, borderBottomColor: color.border.base,
+  },
+  advAddrLabel: {
+    fontSize: scaleFont(10), ...inter.semibold, color: color.fg.subtle,
+    textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2,
+  },
+  advAddrValue: {
+    fontSize: scaleFont(12), fontFamily: font.mono, fontWeight: '400' as const,
+    color: color.fg.base,
+  },
 
   // ===== Token-card USD line =====
   tokenSubRow: {

@@ -100,7 +100,7 @@
       "summaryPermit": "你在签一个授权签名——{{spender}} 之后最多能替你动用 {{amount}}。",
       "summaryPermitUnlimited": "你在签一个授权签名——{{spender}} 可动用你全部的 {{token}}，且无法在此设上限。",
       "holdToConfirm": "长按确认",
-      "advancedToggle": "高级 — 查看原始数据",
+      "advancedToggle": "技术细节 — 地址、calldata、原始数据",
       "noNetworkFee": "无网络费用 — 链下签名",
       "batchIntent": "批量",
       "intentApprove": "授权",

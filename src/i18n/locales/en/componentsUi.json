@@ -123,7 +123,7 @@
       "summaryPermit": "You're signing a permit — {{spender}} can later spend up to {{amount}} on your behalf.",
       "summaryPermitUnlimited": "You're signing a permit — {{spender}} can spend ALL your {{token}}, and it can't be capped here.",
       "holdToConfirm": "Hold to confirm",
-      "advancedToggle": "Advanced — view raw data",
+      "advancedToggle": "Technical details — addresses, calldata, raw data",
       "noNetworkFee": "No network fee — off-chain signature",
       "batchIntent": "Batch",
       "intentApprove": "Approve",
