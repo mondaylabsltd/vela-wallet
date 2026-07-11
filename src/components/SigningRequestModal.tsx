@@ -45,6 +45,7 @@ import { resolveRecipientRisk, type RecipientRisk } from '@/services/recipient-r
 import { parseSiwe, checkSiweDomainBinding, siweHost, type SiweBinding } from '@/services/siwe';
 import { readErc20Allowance } from '@/services/token-reads';
 import { knownTokenSymbol } from '@/services/tokens';
+import { knownContract } from '@/services/local-descriptors';
 import { fetchChainlinkPrices, resolveChainlinkPrice } from '@/services/price-service';
 import { formatTokenAmount as formatRawTokenAmount } from '@/services/approval-guard';
 import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
@@ -539,8 +540,13 @@ export function SigningSheet({
     }
     if (isPersonalSign || isTypedData) return t('componentsUi.signing.signLabel');
     if (isBatch) return t('componentsUi.signing.confirmLabel');
-    // Catch-all (plain send, blind contract call, eth_sign): a neutral "确认",
-    // never "授权" — that verb belongs only to an actual token approval.
+    // A plain native send (value, no calldata) reads as "Confirm Send", matching the
+    // eyebrow — same as the decoded ERC-20 transfer.
+    if (isTx && (!params?.[0]?.data || params[0].data === '0x')) {
+      return t('componentsUi.signing.confirmIntentLabel', { intent: localizeIntent('send') });
+    }
+    // Catch-all (blind contract call, eth_sign): a neutral "确认", never "授权" —
+    // that verb belongs only to an actual token approval.
     return t('componentsUi.signing.confirmLabel');
   };
 
@@ -1271,16 +1277,19 @@ function PermitSignView({ approval, meta, clearSign }: {
         {dangerous && <AlertTriangle size={14} color={riskColors().danger} strokeWidth={2} />}
       </View>
 
+      {/* Resolve each row from its OWN address — never the EIP-712 domain name
+          (clearSign.contractName), which for a Permit2 is "Permit2" and for an
+          ERC-2612 permit is the token name, i.e. wrong on the spender row. */}
       <ContractBar
         label={t('componentsUi.signingApprove.spenderLabel')}
-        name={clearSign?.contractName}
+        name={knownContract(approval.spender)?.name}
         address={approval.spender}
         verified={false}
       />
       {approval.tokenAddress && (
         <ContractBar
           label={t('componentsUi.signingApprove.tokenLabel')}
-          name={clearSign?.contractName ?? (meta?.verified ? meta.symbol : undefined)}
+          name={(meta?.verified ? meta.symbol : undefined) ?? knownTokenSymbol(approval.tokenAddress) ?? knownContract(approval.tokenAddress)?.name}
           address={approval.tokenAddress}
           verified={clearSign?.verified ?? false}
         />
@@ -1491,7 +1500,9 @@ function BlindTransactionView({ tx, chainId, simConfident }: {
 
   return (
     <View>
-      {/* context shown in dApp banner */}
+      {/* context shown in dApp banner. A plain native send is a benign value
+          transfer, so it cedes the headline to the amount (eyebrow) exactly like
+          the descriptor path; a contract call / blind keeps the big hero. */}
       <IntentHeader
         intent={!hasData
           ? t('componentsUi.signing.intentSend')
@@ -1499,6 +1510,7 @@ function BlindTransactionView({ tx, chainId, simConfident }: {
             ? t('componentsUi.signing.intentContractCall', { defaultValue: 'Contract interaction' })
             : t('componentsUi.signing.intentUnknown')}
         color={hasData && !calm ? color.error.base : color.fg.base}
+        variant={!hasData ? 'eyebrow' : 'hero'}
       />
 
       {/* Value card */}
@@ -1509,14 +1521,16 @@ function BlindTransactionView({ tx, chainId, simConfident }: {
         />
       )}
 
-      {hasData && <FlowArrow danger={!calm} />}
+      {(hasData || value !== `0 ${sym}`) && <FlowArrow danger={hasData && !calm} />}
 
-      {/* Contract */}
+      {/* Contract / recipient. A plain send goes to a wallet, so run the recipient
+          risk check (identicon + first-time / contract note), same as a decoded send. */}
       <ContractBar
         label={hasData ? t('componentsUi.signing.unverifiedLabel') : t('componentsUi.signing.recipientLabel')}
         address={tx.to}
         verified={false}
         warning={hasData && !calm}
+        riskCheck={!hasData}
       />
 
       {/* Descriptor-absence notice. With a confident simulation it's a calm caption
@@ -2303,7 +2317,9 @@ const styles = createStyles(() => ({
   },
   genValue: {
     fontSize: text.sm, ...inter.semibold, color: color.fg.base,
-    textAlign: 'right', flex: 1,
+    // minWidth:0 lets a long unbreakable value (e.g. a raw address) wrap/truncate
+    // within the row instead of overflowing off the right edge.
+    textAlign: 'right', flex: 1, minWidth: 0,
     fontFamily: font.mono, fontWeight: '500' as const,
   },
 
