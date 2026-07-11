@@ -27,7 +27,7 @@ jest.mock('@/i18n', () => ({
   default: { t: (k: string) => k, language: 'en' },
 }));
 
-import { loadActivityItems } from '@/services/activity';
+import { loadActivityItems, loadConnectionEvents } from '@/services/activity';
 import type { LocalTransaction } from '@/services/storage';
 
 const ADDR = '0x' + '11'.repeat(20);
@@ -83,6 +83,38 @@ describe('activity - loadActivityItems de-dup', () => {
 
     const items = await loadActivityItems(ADDR);
     expect(items.map((i) => i.id)).toEqual(['0xaaa', '0xbbb']); // newest first, both kept
+  });
+});
+
+describe('activity - loadConnectionEvents (issue #88: dApp tx reviewable when disconnected)', () => {
+  const dappRecord = (
+    id: string,
+    timestamp: number,
+    type: LocalTransaction['type'],
+    from = ADDR,
+  ): LocalTransaction => ({
+    id, userOpHash: id, txHash: '', from, to: '0x' + '22'.repeat(20),
+    value: '0', symbol: '', decimals: 18, chainId: 1, timestamp,
+    status: 'pending', type, dappOrigin: 'app.uniswap.org',
+  });
+
+  test('returns dApp records for the address regardless of live connection status', async () => {
+    seed([
+      dappRecord('0xtx', 3000, 'dapp_tx'),
+      dappRecord('0xconn', 2000, 'connect'),
+      sendRecord('0xsend', 1500),                       // value transfer → not a connection event
+      dappRecord('0xother', 1000, 'dapp_tx', '0x' + '99'.repeat(20)), // different owner
+    ]);
+    const events = await loadConnectionEvents(ADDR);
+    expect(events.map((e) => e.id)).toEqual(['0xtx', '0xconn']); // newest-first, only my dApp records
+    expect(events[0].tx.id).toBe('0xtx'); // carries the full tx for the review sheet
+  });
+
+  test('a just-signed pending dApp tx is present (nothing to review → something to review)', async () => {
+    seed([dappRecord('0xpending', 5000, 'dapp_tx')]);
+    const events = await loadConnectionEvents(ADDR);
+    expect(events).toHaveLength(1);
+    expect(events[0].status).toBe('pending');
   });
 });
 
