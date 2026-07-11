@@ -78,13 +78,16 @@ export function localizeLabel(raw?: string): string {
 }
 
 /**
- * Intent-header color. Restrained on purpose: color = meaning. Benign actions
- * (send, sign, deploy) read in neutral ink; only caution (amber) and danger
- * (red) get a hue, so a colored headline always signals real risk.
+ * Intent-header color. Restrained on purpose: color = meaning, and the headline
+ * is the loudest thing on the sheet. Only REAL danger (unlimited grant, phishing,
+ * expected-fail) warms the headline — and only to red. A mere caution (unverified
+ * / best-effort decode, expired) reads in neutral ink; its amber lives in the
+ * WarningBanner, where amber is a semantic status, not a headline hue. Orange is
+ * reserved for the slide-to-confirm alone, so a colored *headline* is always red
+ * and always means "this can lose you money".
  */
 export function intentColor(risk: SigningRisk): string {
   if (risk === 'danger') return color.error.base;
-  if (risk === 'caution') return color.warning.base;
   return color.fg.base;
 }
 

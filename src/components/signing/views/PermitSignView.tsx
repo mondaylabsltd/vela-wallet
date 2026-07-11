@@ -19,7 +19,6 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { AlertTriangle } from 'lucide-react-native';
 import { styles, riskColors, SigningChainContext } from '../signing-core';
 import { IntentHeader } from '../IntentHeader';
-import { ContractBar } from '../ContractBar';
 import { WarningBanner } from '../WarningBanner';
 import { SummaryLine } from '../SummaryLine';
 
@@ -44,9 +43,12 @@ export function PermitSignView({ approval, meta, clearSign }: {
   const verb = approval.isReducing
     ? t('componentsUi.signingApprove.verbRevoke')
     : t('componentsUi.signingApprove.verbApprove');
+  // Only real danger (an unlimited grant) warms the headline, and only to red; a
+  // safe revoke reads green. A bounded permit is routine → ink (amber is reserved
+  // for the slide-to-confirm, not headlines).
   const verbColor = approval.isReducing
     ? color.success.base
-    : approval.isUnbounded ? color.error.base : color.warning.base;
+    : approval.isUnbounded ? color.error.base : color.fg.base;
 
   // What the dApp's permit will be authorized to spend.
   const amountText = approval.isBooleanGrant
@@ -85,17 +87,9 @@ export function PermitSignView({ approval, meta, clearSign }: {
         {dangerous && <AlertTriangle size={14} color={riskColors().danger} strokeWidth={2} />}
       </View>
 
-      {/* Resolve each row from its OWN address — never the EIP-712 domain name
-          (clearSign.contractName), which for a Permit2 is "Permit2" and for an
-          ERC-2612 permit is the token name, i.e. wrong on the spender row. */}
-      <ContractBar
-        label={t('componentsUi.signingApprove.spenderLabel')}
-        name={knownContract(approval.spender)?.name}
-        address={approval.spender}
-        verified={false}
-        identity="contract"
-      />
-      {/* Token row dropped — the symbol is already in the amount card + the summary. */}
+      {/* No boxed spender/token rows: the spender is already named in the summary
+          and the permit's full struct (spender, token, deadline) is one tap away
+          under 技术细节. A grey identity box here would just repeat it. */}
 
       {expired && <WarningBanner severity="caution" text={t('componentsUi.signingApprove.expired')} />}
 
@@ -105,17 +99,16 @@ export function PermitSignView({ approval, meta, clearSign }: {
         <WarningBanner severity="caution" text={t('componentsUi.signingApprove.decimalsUnverified')} />
       )}
 
-      {/* Only the actionable advice remains — the plain "it's a permit / spends up to
-          X on your behalf" is already the summary line under the hero (no duplicate). */}
+      {/* Only the actionable advice remains. The "unlimited / spends all your tokens"
+          alarm is already screaming from the red hero + red summary + the red
+          "Unlimited" card above — a fourth red banner repeating it was pure noise.
+          What's NOT said elsewhere is WHY it can't be capped + what to do instead. */}
       {dangerous && (
-        <>
-          <WarningBanner severity="danger" text={t('componentsUi.signing.unlimitedWarning')} />
-          <Text style={styles.permitHint}>
-            {t('componentsUi.signingApprove.permitCantCap', {
-              defaultValue: "A permit is a signature — its amount can't be capped here. To limit spending, use an on-chain Approve instead.",
-            })}
-          </Text>
-        </>
+        <Text style={styles.permitHint}>
+          {t('componentsUi.signingApprove.permitCantCap', {
+            defaultValue: "A permit is a signature — its amount can't be capped here. To limit spending, use an on-chain Approve instead.",
+          })}
+        </Text>
       )}
     </View>
   );
