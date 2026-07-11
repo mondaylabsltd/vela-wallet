@@ -667,6 +667,19 @@ export default function HomeScreen() {
     ]);
   }, [address, t]);
 
+  // Disconnect is irreversible (tears down the transport AND wipes the persisted
+  // session, so the dApp must re-pair), so gate it behind a confirm — a bare tap
+  // shouldn't silently drop a live connection. Mirrors the in-app browser's
+  // confirmDisconnect and the clear-events dialog above. Reuses the already-
+  // localized connect.browser.disconnect* strings (no new keys across 14 locales).
+  const confirmDisconnect = useCallback(() => {
+    hapticLight();
+    showAlert(t('connect.browser.disconnectTitle'), t('connect.browser.disconnectBody'), [
+      { text: t('home.cancel'), style: 'cancel' },
+      { text: t('home.connDisconnect'), style: 'destructive', onPress: conn.disconnectBridge },
+    ]);
+  }, [t, conn.disconnectBridge]);
+
   const deleteConnEvent = useCallback((id: string) => {
     // Optimistic remove + tombstone until the async storage write commits, so a
     // concurrent background reload can't repaint the just-deleted event.
@@ -905,7 +918,7 @@ export default function HomeScreen() {
                   dappName={conn.dappInfo?.name ?? null}
                   dappUrl={conn.dappInfo?.url ?? null}
                   events={connEvents}
-                  onDisconnect={conn.disconnectBridge}
+                  onDisconnect={confirmDisconnect}
                   onReconnect={conn.reconnect}
                   onConnect={() => setShowScanner(true)}
                   onPasteConnect={onPasteConnect}
