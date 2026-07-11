@@ -200,7 +200,8 @@ const styles = createStyles(() => ({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: space.lg,
-    paddingHorizontal: space.sm,
+    // No horizontal inset — the fee row shares the sheet's left edge with the
+    // eyebrow / hero / summary / 技术细节 (they were 4px apart).
     marginBottom: space.sm,
   },
   toggleLabel: {

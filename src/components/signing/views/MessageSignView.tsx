@@ -6,7 +6,7 @@ import { View, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { color } from '@/constants/theme';
 import { parseSiwe, checkSiweDomainBinding, siweHost, type SiweBinding } from '@/services/siwe';
-import { Pen, ShieldCheck } from 'lucide-react-native';
+import { ShieldCheck } from 'lucide-react-native';
 import { styles, riskColors } from '../signing-core';
 import { IntentHeader } from '../IntentHeader';
 import { WarningBanner } from '../WarningBanner';
@@ -83,11 +83,9 @@ export function MessageSignView({ hexMsg, requestOrigin }: {
       {/* context shown in dApp banner */}
       <IntentHeader intent={t('componentsUi.signing.signMessage')} color={color.fg.base} variant="eyebrow" />
 
+      {/* Just the message — the "personal_sign · no gas fee" tag was redundant noise
+          (a signature obviously costs no gas). */}
       <View style={styles.msgBubble}>
-        <View style={styles.msgTag}>
-          <Pen size={10} color={color.fg.subtle} strokeWidth={2} />
-          <Text style={styles.msgTagText}>{t('componentsUi.signing.personalSignTag')}</Text>
-        </View>
         <Text style={styles.msgText}>{decoded}</Text>
       </View>
 

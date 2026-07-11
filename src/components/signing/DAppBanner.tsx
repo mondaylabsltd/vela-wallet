@@ -2,11 +2,13 @@
  * dApp banner — the "who's asking" header at the top of every signing sheet.
  */
 import React, { useEffect, useState } from 'react';
-import { View, Text, Image } from 'react-native';
+import { View, Text, Image, Pressable } from 'react-native';
 import { shortAddr } from '@/models/types';
 import { chainName, DEFAULT_NETWORKS } from '@/models/network';
+import { color } from '@/constants/theme';
 import { ChainLogo } from '@/components/ChainLogo';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
+import { ChevronDown } from 'lucide-react-native';
 import { styles } from './signing-core';
 
 /**
@@ -40,6 +42,10 @@ export function DAppBanner({ name, domain, icon, chainId, accountName, accountAd
   useEffect(() => { setLogoFailed(false); }, [logoUri]);
   const showLogo = !!logoUri && !logoFailed;
 
+  // The FROM account collapses to just its identicon + name — the raw 0x is noise on
+  // every screen; tap to reveal it when you actually want to verify.
+  const [acctOpen, setAcctOpen] = useState(false);
+
   return (
     <View style={styles.dappBanner}>
       {/* Row 1: dApp identity ←→ chain */}
@@ -65,15 +71,21 @@ export function DAppBanner({ name, domain, icon, chainId, accountName, accountAd
         </View>
       </View>
 
-      {/* Row 2: FROM — the signing wallet, with its own nimiq identicon so the
-          "from" account is as recognizable as the "to". */}
+      {/* Row 2: FROM — the signing wallet. Collapsed to identicon + name; the raw 0x
+          is revealed on tap (verify-when-you-want, quiet by default). */}
       {accountName && (
-        <View style={styles.dappAccountRow}>
+        <Pressable style={styles.dappAccountRow} onPress={() => setAcctOpen((o) => !o)} hitSlop={6}>
           {accountAddress ? <ContactAvatar name={accountName} address={accountAddress} size={18} /> : null}
           <Text style={styles.dappAccountLine} numberOfLines={1}>
-            {accountName}{accountAddress ? `  ·  ${shortAddr(accountAddress)}` : ''}
+            {accountName}{acctOpen && accountAddress ? `  ·  ${shortAddr(accountAddress)}` : ''}
           </Text>
-        </View>
+          {accountAddress ? (
+            <ChevronDown
+              size={12} color={color.fg.subtle} strokeWidth={2}
+              style={acctOpen ? { transform: [{ rotate: '180deg' }] } : undefined}
+            />
+          ) : null}
+        </Pressable>
       )}
     </View>
   );

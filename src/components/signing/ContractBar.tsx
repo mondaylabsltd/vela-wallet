@@ -99,25 +99,25 @@ export function ContractBar({ label, name, address, verified, warning, identity 
     <View style={[styles.contractBar, warning && styles.contractBarWarning]}>
       {avatar}
       <View style={styles.contractInfo}>
-        <Text style={styles.contractLabel}>{label}</Text>
+        {/* A recipient needs no 'RECIPIENT' kicker — the summary above already says
+            "sending to vitalik.eth", and the identicon + name carry it. A spender /
+            token row keeps its label (which of several counterparties it is). */}
+        {identity !== 'auto' && <Text style={styles.contractLabel}>{label}</Text>}
         <View style={styles.contractAddrRow}>
           {shownName ? (
-            <>
-              {/* Verified descriptor name keeps trust-green; a resolved ENS / plain
-                  name stays neutral so color always means "verified". */}
-              <Text style={[styles.contractName, !verified && styles.contractNameNeutral]} numberOfLines={1}>
-                {shownName}
-              </Text>
-              {!name && ident && <Text style={styles.sourceTag}>{ident.source}</Text>}
-            </>
+            // Verified descriptor name keeps trust-green; a resolved ENS / plain name
+            // stays neutral so color always means "verified". (The name's source lives
+            // in the Advanced drawer — a clean row, not an "ENS" tag competing here.)
+            <Text style={[styles.contractName, !verified && styles.contractNameNeutral]} numberOfLines={1}>
+              {shownName}
+            </Text>
           ) : (
             // No name to show — the short address is the primary identity (full 0x
             // lives in the Advanced drawer).
             address ? <Text style={[styles.contractAddr, styles.contractNameNeutral]} numberOfLines={1}>{shortAddr(address)}</Text> : null
           )}
         </View>
-        {/* Poisoning signal — a never-before-seen recipient. The wallet/contract
-            distinction is now the chip, so this stays a single clean note. */}
+        {/* Poisoning signal — a never-before-seen recipient, in plain words. */}
         {showFirstTime && (
           <Text style={styles.riskNote}>{t('componentsUi.signing.firstTimeTag')}</Text>
         )}

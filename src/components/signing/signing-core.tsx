@@ -145,22 +145,24 @@ export const styles = createStyles(() => ({
   },
 
   // ===== Intent Header =====
+  // Left-aligned to the sheet's content edge — the whole sheet shares ONE left edge
+  // (eyebrow, hero, summary, rows, fee), so nothing reads as ragged/centered (the mock).
   intentHeader: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingTop: space.lg,
-    paddingBottom: space['2xl'],
+    paddingBottom: space.lg,
   },
   intentText: {
     fontSize: text['5xl'],
     ...inter.bold,
-    textAlign: 'center',
+    textAlign: 'left',
     letterSpacing: -1,
   },
   // Eyebrow kicker — a small colored verb that cedes the headline to the asset flow.
   intentEyebrow: {
-    alignSelf: 'center',
+    alignSelf: 'flex-start',
     paddingTop: space.md,
-    paddingBottom: space.lg,
+    paddingBottom: space.xs,
   },
   intentEyebrowText: {
     fontSize: text.sm,
@@ -213,6 +215,12 @@ export const styles = createStyles(() => ({
     color: color.fg.base,
     letterSpacing: -0.6,
   },
+  // Logo-less hero amount (the mock): left-aligned, number in ink + ticker muted, so
+  // the whole sheet keeps one clean left edge. No 'Amount' sub-label — the summary
+  // right below carries the ≈ \$ and the direction.
+  heroRow: { flexDirection: 'row', alignItems: 'center', paddingTop: space.xs, paddingBottom: space.sm, gap: space.md },
+  heroAmount: { fontSize: text['5xl'], ...inter.bold, color: color.fg.base, letterSpacing: -1.2 },
+  heroTicker: { fontSize: text['2xl'], ...inter.bold, color: color.fg.muted },
   tokenLabel: {
     fontSize: text.sm,
     ...inter.medium,
@@ -423,12 +431,12 @@ export const styles = createStyles(() => ({
   detailsToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     gap: space.sm,
-    paddingVertical: space.md,
+    paddingVertical: space.lg,
   },
   detailsToggleText: {
-    fontSize: text.xs, ...inter.semibold, color: color.fg.subtle,
+    fontSize: text.sm, ...inter.medium, color: color.fg.muted,
   },
 
   // ===== Raw Data =====
@@ -549,22 +557,30 @@ export const styles = createStyles(() => ({
     padding: space.lg,
     maxHeight: 260,
   },
-  // Expert-layer address rows: full 0x with copy + explorer (the actions the calm
-  // default view no longer shows inline). Boxed affordances are fine here — density
-  // is welcome behind the 技术细节 disclosure.
-  advAddrRow: {
-    flexDirection: 'row', alignItems: 'center', gap: space.sm,
-    paddingVertical: space.sm,
-    borderBottomWidth: 1, borderBottomColor: color.border.base,
+  // Expert-layer 技术细节 — ONE grey rounded card holding every technical row
+  // (the mock), not a scatter of bordered rows. Addresses are truncated to a single
+  // line with a subtle copy; the raw calldata sits at the bottom.
+  drawerCard: {
+    backgroundColor: color.bg.sunken,
+    borderRadius: radius.xl,
+    paddingHorizontal: space.lg,
+    marginTop: space.sm,
   },
-  advAddrLabel: {
-    fontSize: scaleFont(10), ...inter.semibold, color: color.fg.subtle,
-    textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 2,
+  drawerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: space.md,
+    paddingVertical: space.md,
+    borderTopWidth: 1, borderTopColor: color.border.base,
   },
-  advAddrValue: {
-    fontSize: scaleFont(12), fontFamily: font.mono, fontWeight: '400' as const,
+  drawerRowFirst: { borderTopWidth: 0 },
+  drawerLabel: {
+    fontSize: scaleFont(10.5), ...inter.semibold, color: color.fg.subtle,
+    letterSpacing: 0.3, marginBottom: 3,
+  },
+  drawerValue: {
+    fontSize: scaleFont(12.5), fontFamily: font.mono, fontWeight: '400' as const,
     color: color.fg.base,
   },
+  drawerCopy: { padding: space.xs },
 
   // ===== Token-card USD line =====
   tokenSubRow: {
@@ -582,8 +598,10 @@ export const styles = createStyles(() => ({
 
   // ===== Recipient-risk tags (first-time / contract) =====
   // One restrained caution line (warning ink, no chip) — informs without shouting.
+  // "First time sending here" is INFORMATION, not an alarm — grey, not amber. Color
+  // is reserved for meaning (green = safe, red = danger, orange = the confirm button).
   riskNote: {
-    fontSize: text.xs, ...inter.medium, color: color.warning.base, marginTop: 1,
+    fontSize: text.xs, ...inter.medium, color: color.fg.muted, marginTop: 1,
   },
 
   // ===== increaseAllowance resulting total =====

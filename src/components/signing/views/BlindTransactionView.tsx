@@ -64,6 +64,7 @@ export function BlindTransactionView({ tx, chainId, simConfident, nativeUsdPrice
           field={{ label: t('componentsUi.signing.valueLabel'), value, format: 'amount', role: 'send-amount', usd }}
           variant={hasData && !calm ? 'danger' : 'send'}
           hideSign={!hasData}
+          hero={!hasData}
         />
       )}
 

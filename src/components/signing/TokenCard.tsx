@@ -12,7 +12,7 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { AlertTriangle, ArrowDown } from 'lucide-react-native';
 import { styles, riskColors, localizeLabel, SigningChainContext } from './signing-core';
 
-export function TokenCard({ field, variant, hideSign }: {
+export function TokenCard({ field, variant, hideSign, hero }: {
   field: ClearSignField;
   variant: 'send' | 'receive' | 'caution' | 'danger';
   /** Drop the leading −/+ on a lone amount (a plain send hero) — the eyebrow and the
@@ -20,6 +20,10 @@ export function TokenCard({ field, variant, hideSign }: {
    *  friendlier than a "−1,000" that a novice can misread as an error. A swap keeps
    *  its signs, since ± is what distinguishes pay from receive. */
   hideSign?: boolean;
+  /** The single-amount hero: render logo-less and left-aligned (number in ink, ticker
+   *  muted) so the sheet keeps one clean left edge, like the mock. Not for swap rows
+   *  (they need the logo + label to tell pay from receive). */
+  hero?: boolean;
 }) {
   // Wise-style de-container: benign amounts sit on an OPEN row (no card), letting
   // the number breathe; only caution/danger get a tinted card, so a filled card
@@ -47,6 +51,22 @@ export function TokenCard({ field, variant, hideSign }: {
   const incoming = variant === 'receive';
   const sign = incoming ? '+' : '−';
   const amountTint = incoming ? color.success.base : color.fg.base;
+
+  // Logo-less hero: one clean left edge, number in ink + ticker muted (the mock).
+  if (hero && !tinted) {
+    const val = hideSign ? field.value : `${sign}${field.value}`;
+    const cut = val.lastIndexOf(' ');
+    const num = cut > 0 ? val.slice(0, cut) : val;
+    const ticker = cut > 0 ? val.slice(cut + 1) : '';
+    return (
+      <View style={styles.heroRow}>
+        <Text style={[styles.heroAmount, { color: amountTint }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
+          {num}{ticker ? <Text style={styles.heroTicker}> {ticker}</Text> : null}
+        </Text>
+        {field.warning && <AlertTriangle size={16} color={riskColors().danger} strokeWidth={2} />}
+      </View>
+    );
+  }
 
   return (
     <View style={[tinted ? styles.tokenCard : styles.tokenRow, tinted && tintBg]}>

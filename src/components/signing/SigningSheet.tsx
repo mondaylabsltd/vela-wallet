@@ -577,14 +577,6 @@ export function SigningSheet({
             />
           )}
 
-          {/* Zone 4 (cost) for signatures — an off-chain signature has no gas, but the
-              cost zone must still be present so every screen keeps the same skeleton. */}
-          {!isTx && !isBatch && !readOnly && (
-            <View style={styles.noFeeRow}>
-              <Text style={styles.noFeeLabel}>{t('componentsUi.signing.noNetworkFee', { defaultValue: 'No network fee — off-chain signature' })}</Text>
-            </View>
-          )}
-
           {/* Gas estimation failed — block the blind submit that would otherwise
               hang for 2 min on the bundler. Retry lives in the gas card above. */}
           {gasEstimateFailed && !isSigning && !readOnly && (
