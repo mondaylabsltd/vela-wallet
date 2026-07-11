@@ -9,8 +9,9 @@ import { color } from '@/constants/theme';
 import { type DetectedApproval, type ApprovalChoice } from '@/services/approval-guard';
 import { type ClearSignResult } from '@/services/clear-signing';
 import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
+import { knownContract } from '@/services/local-descriptors';
 import { ShieldAlert } from 'lucide-react-native';
-import { styles, riskColors, SigningChainContext } from '../signing-core';
+import { styles, riskColors, SigningChainContext, localizeIntent } from '../signing-core';
 import { EditableApproveCard } from '../EditableApproveCard';
 import { IntentHeader } from '../IntentHeader';
 import { WarningBanner } from '../WarningBanner';
@@ -84,8 +85,11 @@ export function BatchCallsView({ items, choices, onChoiceChange, metaByToken, ed
 
       {items.map((it, i) => {
         const ap = it.approval;
+        // Localize the descriptor's English intent ("Approve" → "授权"); fall back to
+        // the approve verb or a generic "contract call".
         const title = it.clearSign?.intent
-          ?? (ap ? t('componentsUi.signingApprove.verbApprove') : t('componentsUi.signing.batchCall'));
+          ? localizeIntent(it.clearSign.intent)
+          : (ap ? t('componentsUi.signingApprove.verbApprove') : t('componentsUi.signing.batchCall'));
 
         // Editable approval leg → inline spending-cap editor (same control single
         // approvals use), so an unlimited approve can be capped here, not only rejected.
@@ -106,7 +110,7 @@ export function BatchCallsView({ items, choices, onChoiceChange, metaByToken, ed
                 decimals={meta?.decimals ?? 18}
                 decimalsVerified={meta?.verified ?? false}
                 logoUrls={logoUrls}
-                spenderLabel={it.clearSign?.contractName ?? shortAddr(ap.spender)}
+                spenderLabel={it.clearSign?.contractName ?? knownContract(ap.spender)?.name ?? shortAddr(ap.spender)}
                 choice={choices[i] ?? null}
                 onChange={(c) => onChoiceChange(i, c)}
               />

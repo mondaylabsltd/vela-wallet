@@ -530,7 +530,7 @@ export const styles = createStyles(() => ({
   // ===== Batch (EIP-5792) breakdown =====
   batchSub: {
     fontSize: text.sm, ...inter.regular, color: color.fg.muted,
-    textAlign: 'center', marginTop: -space.md, marginBottom: space.lg,
+    textAlign: 'left', marginBottom: space.lg,
   },
   batchRow: {
     flexDirection: 'row', alignItems: 'center', gap: space.lg,
