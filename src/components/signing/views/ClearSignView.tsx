@@ -12,12 +12,15 @@ import { ContractBar } from '../ContractBar';
 import { WarningBanner, GenericFieldRow } from '../WarningBanner';
 import { SummaryLine, useResolvedName } from '../SummaryLine';
 
-export function ClearSignView({ cs, simConfident }: {
+export function ClearSignView({ cs, simConfident, walletAddress }: {
   cs: ClearSignResult;
   /** The tx was simulated and is not expected to revert — a best-effort (4byte)
    *  decode then reads as a calm "here's the gist" note instead of a "carefully
    *  check every detail" nag, because the preview below proves the real effect. */
   simConfident?: boolean;
+  /** The signing wallet — lets us call out a swap whose output goes somewhere OTHER
+   *  than your own address (a real "where did my tokens go" risk). */
+  walletAddress?: string;
 }) {
   const { t } = useTranslation();
   const rc = intentColor(cs.risk);
@@ -56,8 +59,14 @@ export function ClearSignView({ cs, simConfident }: {
   // recipient (descriptor name → ENS → short address, resolved async & cached).
   const recipient = recipients[0];
   const toName = useResolvedName(recipient?.address, recipient?.address ? undefined : recipient?.value);
+  // A swap normally lands in your own wallet; if the output recipient is someone
+  // ELSE, say so — that's the security-relevant fact ("where did my tokens go").
+  const swapToOther = isSwapLayout && recipient?.address && !!toName
+    && (!walletAddress || recipient.address.toLowerCase() !== walletAddress.toLowerCase());
   const summary = isSwapLayout
-    ? t('componentsUi.signing.summarySwap', { pay: sendAmounts[0]?.value, receive: receiveAmounts[0]?.value })
+    ? (swapToOther
+        ? t('componentsUi.signing.summarySwapTo', { pay: sendAmounts[0]?.value, receive: receiveAmounts[0]?.value, to: toName })
+        : t('componentsUi.signing.summarySwap', { pay: sendAmounts[0]?.value, receive: receiveAmounts[0]?.value }))
     : (sendAmounts.length > 0 && recipients.length > 0 && toName)
       ? t('componentsUi.signing.summarySend', { amount: sendAmounts[0].value, to: toName })
       : undefined;
@@ -65,24 +74,29 @@ export function ClearSignView({ cs, simConfident }: {
   // and Zone-3 warnings carry the risk color, so the sentence doesn't double up.
   const summaryTone = sendVariant === 'danger' ? 'danger' : 'neutral';
 
+  // When there's an asset amount, IT is the hero — the verb is a mere eyebrow (even
+  // when caution/danger: the amount card carries the risk colour). Only an amount-less
+  // action keeps a big verb.
+  const hasAmount = sendAmounts.length > 0 || receiveAmounts.length > 0;
+
   return (
     <View>
       {/* ZONE 1 — the action + the ONE hero. Benign → eyebrow; risk → big hero. */}
       <IntentHeader
         intent={localizeIntent(cs.intent)}
         color={rc}
-        variant={cs.risk === 'normal' ? 'eyebrow' : 'hero'}
+        variant={hasAmount || cs.risk === 'normal' ? 'eyebrow' : 'hero'}
       />
       {isSwapLayout ? (
         <>
           {sendAmounts.map((f, i) => (
-            <TokenCard key={`s${i}`} field={f} variant="send" />
+            <TokenCard key={`s${i}`} field={f} variant="send" hero heroLabel />
           ))}
           <FlowArrow />
           {receiveAmounts.map((f, i) => (
-            <TokenCard key={`r${i}`} field={f} variant="receive" />
+            <TokenCard key={`r${i}`} field={f} variant="receive" hero heroLabel />
           ))}
-          <SummaryLine text={summary} tone={summaryTone} emphasize={[sendAmounts[0]?.value, receiveAmounts[0]?.value]} />
+          <SummaryLine text={summary} tone={summaryTone} emphasize={[sendAmounts[0]?.value, receiveAmounts[0]?.value, swapToOther ? toName : undefined]} />
         </>
       ) : sendAmounts.length > 0 ? (
         <>
@@ -90,6 +104,21 @@ export function ClearSignView({ cs, simConfident }: {
             <TokenCard key={`s${i}`} field={f} variant={sendVariant} hideSign hero />
           ))}
           <SummaryLine text={summary} tone={summaryTone} emphasize={[sendAmounts[0]?.value, toName]} />
+        </>
+      ) : receiveAmounts.length > 0 ? (
+        // Pure inflow (a vault withdraw / redeem) — the arriving amount IS the hero.
+        // Without this it fell through to nothing (F7 made it a receive-amount).
+        <>
+          {receiveAmounts.map((f, i) => (
+            // Always the receive direction (green "+"), even when unverified — it's an
+            // INFLOW; the "couldn't verify" caveat is the warning below, not a "−".
+            <TokenCard key={`r${i}`} field={f} variant="receive" hero />
+          ))}
+          <SummaryLine
+            text={t('componentsUi.signing.summaryReceive', { amount: receiveAmounts[0].value, defaultValue: "You'll receive {{amount}}." })}
+            tone={summaryTone}
+            emphasize={[receiveAmounts[0]?.value]}
+          />
         </>
       ) : null}
 
@@ -104,19 +133,26 @@ export function ClearSignView({ cs, simConfident }: {
           identity="contract"
         />
       ))}
-      {recipients.map((f, i) => (
-        <ContractBar
-          key={`re${i}`}
-          label={t('componentsUi.signing.recipientLabel')}
-          name={f.address ? undefined : f.value}
-          address={f.address}
-          verified={false}
-          identity="auto"
-          // Sending a token to its own contract burns it — turn the recipient row
-          // itself red so Zone 2 contradicts the benign read, not just a Zone-3 banner.
-          warning={sendingToTokenContract && !!f.address && f.address === cs.contractAddress}
-        />
-      ))}
+      {recipients.map((f, i) => {
+        // A swap that lands back in your OWN wallet needs no recipient row at all.
+        const isSelf = !!f.address && !!walletAddress && f.address.toLowerCase() === walletAddress.toLowerCase();
+        if (isSwapLayout && isSelf) return null;
+        return (
+          <ContractBar
+            key={`re${i}`}
+            label={t('componentsUi.signing.recipientLabel')}
+            name={f.address ? undefined : f.value}
+            address={f.address}
+            verified={false}
+            identity="auto"
+            // The name is already in the summary → collapse to one quiet line.
+            compact={!!summary}
+            // Sending a token to its own contract burns it — turn the recipient row
+            // itself red so Zone 2 contradicts the benign read, not just a Zone-3 banner.
+            warning={sendingToTokenContract && !!f.address && f.address === cs.contractAddress}
+          />
+        );
+      })}
       {!hasRecipient && cs.contractAddress && (
         <ContractBar
           label={t('componentsUi.signing.interactingLabel')}

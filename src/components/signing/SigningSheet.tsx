@@ -373,7 +373,7 @@ export function SigningSheet({
       );
     }
     if (clearSign) {
-      return <ClearSignView cs={clearSign} simConfident={simConfident} />;
+      return <ClearSignView cs={clearSign} simConfident={simConfident} walletAddress={addr} />;
     }
     // EIP-5792 batch — list each call, with an editable spending cap on every
     // approval leg (so an unlimited approve can be capped instead of only rejected).

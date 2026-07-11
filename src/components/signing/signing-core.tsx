@@ -271,6 +271,11 @@ export const styles = createStyles(() => ({
     borderRadius: radius.xl,
     marginVertical: space.md,
   },
+  // Compact recipient — one quiet line when the name is already in the summary.
+  contractCompact: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.md },
+  contractGlyphSm: { width: 20, height: 20, borderRadius: radius.md, backgroundColor: color.bg.sunken, alignItems: 'center', justifyContent: 'center' },
+  contractCompactText: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
+
   contractInfo: { flex: 1, gap: 2 },
   contractLabel: {
     fontSize: scaleFont(10), ...inter.semibold,
@@ -581,6 +586,8 @@ export const styles = createStyles(() => ({
     color: color.fg.base,
   },
   drawerCopy: { padding: space.xs },
+  // Full typed-data JSON / message — the whole payload being signed, scrollable.
+  drawerRaw: { maxHeight: 300, marginTop: 4 },
 
   // ===== Token-card USD line =====
   tokenSubRow: {

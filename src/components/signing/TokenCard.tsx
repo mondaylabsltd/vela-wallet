@@ -1,18 +1,18 @@
 /**
  * Token card / flow arrow — the asset-amount hero of a signing surface.
  */
-import React from 'react';
-import { View, Text } from 'react-native';
-import { color } from '@/constants/theme';
-import { type ClearSignField } from '@/services/clear-signing';
-import { nativeSymbol, nativeCoinLogoURL } from '@/models/network';
-import { tokenLogoURLsByAddress } from '@/models/types';
-import { knownTokenSymbol } from '@/services/tokens';
 import { TokenLogo } from '@/components/TokenLogo';
+import { color } from '@/constants/theme';
+import { nativeCoinLogoURL, nativeSymbol } from '@/models/network';
+import { tokenLogoURLsByAddress } from '@/models/types';
+import { type ClearSignField } from '@/services/clear-signing';
+import { knownTokenSymbol } from '@/services/tokens';
 import { AlertTriangle, ArrowDown } from 'lucide-react-native';
-import { styles, riskColors, localizeLabel, SigningChainContext } from './signing-core';
+import React from 'react';
+import { Text, View } from 'react-native';
+import { localizeLabel, riskColors, SigningChainContext, styles } from './signing-core';
 
-export function TokenCard({ field, variant, hideSign, hero }: {
+export function TokenCard({ field, variant, hideSign, hero ,heroLabel}: {
   field: ClearSignField;
   variant: 'send' | 'receive' | 'caution' | 'danger';
   /** Drop the leading −/+ on a lone amount (a plain send hero) — the eyebrow and the
@@ -20,10 +20,12 @@ export function TokenCard({ field, variant, hideSign, hero }: {
    *  friendlier than a "−1,000" that a novice can misread as an error. A swap keeps
    *  its signs, since ± is what distinguishes pay from receive. */
   hideSign?: boolean;
-  /** The single-amount hero: render logo-less and left-aligned (number in ink, ticker
-   *  muted) so the sheet keeps one clean left edge, like the mock. Not for swap rows
-   *  (they need the logo + label to tell pay from receive). */
+  /** The amount hero: render logo-less and left-aligned (number in ink, ticker muted)
+   *  so the sheet keeps one clean left edge, like the mock. */
   hero?: boolean;
+  /** Keep the label + fiat sub-line under a hero amount (a swap's 支付 / 最少收到，which
+   *  a plain send doesn't need — its summary already says "sending"). */
+  heroLabel?: boolean;
 }) {
   // Wise-style de-container: benign amounts sit on an OPEN row (no card), letting
   // the number breathe; only caution/danger get a tinted card, so a filled card
@@ -60,9 +62,17 @@ export function TokenCard({ field, variant, hideSign, hero }: {
     const ticker = cut > 0 ? val.slice(cut + 1) : '';
     return (
       <View style={styles.heroRow}>
-        <Text style={[styles.heroAmount, { color: amountTint }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
-          {num}{ticker ? <Text style={styles.heroTicker}> {ticker}</Text> : null}
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.heroAmount, { color: amountTint }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
+            {num}{ticker ? <Text style={styles.heroTicker}> {ticker}</Text> : null}
+          </Text>
+          {heroLabel && (
+            <View style={styles.tokenSubRow}>
+              <Text style={styles.tokenLabel}>{localizeLabel(field.label)}</Text>
+              {!!field.usd && <Text style={styles.tokenUsd}>≈ {field.usd}</Text>}
+            </View>
+          )}
+        </View>
         {field.warning && <AlertTriangle size={16} color={riskColors().danger} strokeWidth={2} />}
       </View>
     );

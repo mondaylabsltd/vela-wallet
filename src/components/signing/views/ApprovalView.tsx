@@ -142,13 +142,16 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
         identity="contract"
       />
 
-      {approval.tokenAddress && (
+      {/* An ERC-20 token row is redundant — the symbol is already in the spending-cap
+          card + the summary. Keep only the NFT COLLECTION row (which collection you're
+          granting access to isn't stated anywhere else). */}
+      {approval.tokenAddress && isNft && (
         <ContractBar
-          label={isNft ? t('componentsUi.signingApprove.collectionLabel') : t('componentsUi.signingApprove.tokenLabel')}
-          name={clearSign?.contractName ?? (meta?.verified ? meta.symbol : undefined)}
+          label={t('componentsUi.signingApprove.collectionLabel')}
+          name={clearSign?.contractName}
           address={approval.tokenAddress}
           verified={clearSign?.verified ?? false}
-          identity="asset"
+          identity="contract"
         />
       )}
 

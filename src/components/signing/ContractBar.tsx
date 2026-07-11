@@ -21,7 +21,7 @@ import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { ShieldCheck, ShieldAlert, FileText } from 'lucide-react-native';
 import { styles, riskColors, SigningChainContext } from './signing-core';
 
-export function ContractBar({ label, name, address, verified, warning, identity = 'contract' }: {
+export function ContractBar({ label, name, address, verified, warning, identity = 'contract', compact }: {
   label: string;
   name?: string;
   address?: string;
@@ -32,6 +32,9 @@ export function ContractBar({ label, name, address, verified, warning, identity 
    *  'contract' — a known contract counterparty (spender / operator / router).
    *  'asset'    — a token / collection; no wallet-vs-contract identity chip. */
   identity?: 'auto' | 'contract' | 'asset';
+  /** The name is already stated in the summary above — collapse to a single quiet
+   *  line (small identicon + "Wallet · first time"), no name repeat, no big block. */
+  compact?: boolean;
 }) {
   const { t } = useTranslation();
   const isRecipient = identity === 'auto';
@@ -94,6 +97,12 @@ export function ContractBar({ label, name, address, verified, warning, identity 
       : isContract === false
         ? { box: styles.idChipWallet, txt: styles.idChipWalletText, label: t('componentsUi.signing.walletTag', { defaultValue: 'Wallet' }) }
         : null;
+
+  // Compact: the summary already names the recipient and the sim confirms "nothing
+  // else leaves", so the whole recipient row is redundant — drop it. The genuinely
+  // dangerous case (sending a token to its own contract) still shows its red warning
+  // row below (compact only applies when there's no warning).
+  if (compact && !warning) return null;
 
   return (
     <View style={[styles.contractBar, warning && styles.contractBarWarning]}>

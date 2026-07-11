@@ -116,6 +116,8 @@
       "verifiedTag": "Verified",
       "summarySend": "You're sending {{amount}} to {{to}}.",
       "summarySwap": "You're swapping {{pay}} for {{receive}}.",
+      "summarySwapTo": "You're swapping {{pay}} for {{receive}} — sent to {{to}}.",
+      "summaryReceive": "You'll receive {{amount}}.",
       "summaryApprove": "You're letting {{spender}} spend up to {{amount}} later — nothing leaves your wallet now.",
       "summaryApproveUnlimited": "You're letting {{spender}} spend ALL your {{token}}, with no limit.",
       "summaryApproveNft": "You're letting {{operator}} move every NFT you own in this collection.",

@@ -80,6 +80,8 @@ export function BlindTransactionView({ tx, chainId, simConfident, nativeUsdPrice
         // A plain send goes to a wallet-or-contract recipient (probe it); a call with
         // data is by definition a contract.
         identity={hasData ? 'contract' : 'auto'}
+        // Plain send names the recipient in its summary → compact.
+        compact={!hasData && !!summary}
       />
 
       {/* Descriptor-absence notice. With a confident simulation it's a calm caption

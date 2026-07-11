@@ -14,7 +14,6 @@ import { type DetectedApproval, formatTokenAmount as formatRawTokenAmount } from
 import { type ClearSignResult } from '@/services/clear-signing';
 import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
 import { knownContract } from '@/services/local-descriptors';
-import { knownTokenSymbol } from '@/services/tokens';
 import { TokenLogo } from '@/components/TokenLogo';
 import { AlertTriangle } from 'lucide-react-native';
 import { styles, riskColors, SigningChainContext } from '../signing-core';
@@ -93,15 +92,7 @@ export function PermitSignView({ approval, meta, clearSign }: {
         verified={false}
         identity="contract"
       />
-      {approval.tokenAddress && (
-        <ContractBar
-          label={t('componentsUi.signingApprove.tokenLabel')}
-          name={(meta?.verified ? meta.symbol : undefined) ?? knownTokenSymbol(approval.tokenAddress) ?? knownContract(approval.tokenAddress)?.name}
-          address={approval.tokenAddress}
-          verified={clearSign?.verified ?? false}
-          identity="asset"
-        />
-      )}
+      {/* Token row dropped — the symbol is already in the amount card + the summary. */}
 
       {expired && <WarningBanner severity="caution" text={t('componentsUi.signingApprove.expired')} />}
 

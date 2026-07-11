@@ -143,11 +143,19 @@ export function AdvancedPanel({ method, params, clearSign }: {
               {r.copy && <CopyBtn value={r.copy} />}
             </View>
           ))}
-          {/* Non-tx (typed data / message): the exact bytes/JSON, scrollable. */}
-          {!!raw && rows.length === 0 && (
-            <ScrollView style={{ maxHeight: 240, paddingVertical: 8 }} nestedScrollEnabled>
-              <Text style={styles.drawerValue} selectable>{raw}</Text>
-            </ScrollView>
+          {/* Signature (typed data / message): the FULL, exact payload being signed —
+              the whole point of a 712 review — as a complete, scrollable, copyable
+              block, not one lone address. */}
+          {!!raw && (
+            <View style={[styles.drawerRow, rows.length === 0 && styles.drawerRowFirst]}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.drawerLabel}>{method.includes('signTypedData') ? 'JSON' : t('componentsUi.signing.signMessage')}</Text>
+                <ScrollView style={styles.drawerRaw} nestedScrollEnabled>
+                  <Text style={styles.drawerValue} selectable>{raw}</Text>
+                </ScrollView>
+                <CopyBtn value={raw} />
+              </View>
+            </View>
           )}
         </View>
       )}
