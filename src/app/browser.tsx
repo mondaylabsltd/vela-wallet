@@ -22,7 +22,7 @@ import { ActivityIndicator, BackHandler, Image, Platform, Pressable, StyleSheet,
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ExternalLink, Lock, Plug, RotateCw, TriangleAlert, X } from 'lucide-react-native';
+import { ArrowLeft, ExternalLink, Globe, Lock, Plug, RotateCw, TriangleAlert, X } from 'lucide-react-native';
 
 import { useWallet } from '@/models/wallet-state';
 import { useDAppConnection } from '@/models/dapp-connection';
@@ -35,6 +35,7 @@ import {
 } from '@/modules/webview';
 import { WebViewTransport, type WalletWebViewBridge } from '@/services/webview-transport';
 import { coerceBrowserUrl } from '@/services/dapp-transport';
+import { faviconForHost } from '@/services/favicon';
 import { recordBrowserVisit } from '@/services/browser-history';
 import { buildConnectionRecord } from '@/services/dapp-history';
 import { saveTransaction } from '@/services/storage';
@@ -114,6 +115,9 @@ export default function BrowserScreen() {
   // (valid) icon on page B.
   const [faviconBroken, setFaviconBroken] = useState(false);
   useEffect(() => { setFaviconBroken(false); }, [nav?.favicon]);
+  // Same, but for the connect-consent sheet's logo (keyed on the origin it's for).
+  const [consentLogoBroken, setConsentLogoBroken] = useState(false);
+  useEffect(() => { setConsentLogoBroken(false); }, [consent?.origin]);
 
   // consentRef is the SYNCHRONOUS source of truth (updated on the same tick as the
   // state) so back-to-back connect requests and onNavigationChange never race a
@@ -493,6 +497,18 @@ export default function BrowserScreen() {
           page for four rows of content (and on Android used to cover it entirely). */}
       <AppModal visible={!!consent} onClose={rejectConsent} fit>
         <View style={styles.sheet}>
+          {/* dApp logo: the page's captured favicon, else the site's own
+              /favicon.ico (no third-party service), else a globe fallback. */}
+          {(() => {
+            const logoUri = nav?.favicon ?? faviconForHost(consent?.origin);
+            return logoUri && !consentLogoBroken ? (
+              <Image source={{ uri: logoUri }} style={styles.sheetLogo} onError={() => setConsentLogoBroken(true)} />
+            ) : (
+              <View style={[styles.sheetLogo, styles.sheetLogoFallback]}>
+                <Globe size={24} color={color.fg.muted} strokeWidth={2} />
+              </View>
+            );
+          })()}
           <Text style={styles.sheetTitle}>
             {t('connect.browser.title', { host: consent ? hostOf(consent.origin) : '' })}
           </Text>
@@ -613,6 +629,8 @@ const styles = createStyles(() => ({
     borderTopColor: color.border.base,
   },
   sheet: { gap: space.md, paddingHorizontal: space.xl, paddingTop: space.sm, paddingBottom: space.lg },
+  sheetLogo: { width: 44, height: 44, borderRadius: 12 },
+  sheetLogoFallback: { backgroundColor: color.bg.raised, alignItems: 'center', justifyContent: 'center' },
   sheetTitle: { color: color.fg.base, fontSize: textScale.lg, fontWeight: '700' },
   sheetBody: { color: color.fg.muted, fontSize: textScale.sm, lineHeight: 20 },
   acctRow: {

@@ -142,6 +142,24 @@ describe('batch/split send carries the recipient name to the address book (issue
   });
 });
 
+describe('WalletPair disconnect confirmation (issue #85)', () => {
+  it('Home Connections tab gates disconnect behind a confirm, not a bare tap', () => {
+    const src = read('src/screens/wallet/HomeScreen.tsx');
+    // The disconnect control must route through confirmDisconnect (showAlert),
+    // never wire conn.disconnectBridge straight to onDisconnect.
+    expect(src).toContain('onDisconnect={confirmDisconnect}');
+    expect(src).not.toContain('onDisconnect={conn.disconnectBridge}');
+    expect(src).toMatch(/const confirmDisconnect = useCallback[\s\S]*?showAlert\(/);
+  });
+
+  it('legacy /connect screen also confirms before disconnecting', () => {
+    const src = read('src/screens/connect/ConnectScreen.tsx');
+    expect(src).toContain('onPress={confirmDisconnect}');
+    expect(src).not.toContain('onPress={disconnectBridge}');
+    expect(src).toMatch(/const confirmDisconnect = useCallback[\s\S]*?showAlert\(/);
+  });
+});
+
 describe('AppModal in-sheet gestures (issue #87 — slide-to-confirm)', () => {
   const src = read('src/components/ui/AppModal.tsx');
 
