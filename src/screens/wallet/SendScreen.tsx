@@ -995,7 +995,7 @@ export default function SendScreen() {
           recipients.map((r) => ({ address: r.address.trim(), amount: r.amount })),
         );
         result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn, maxFee);
-        lines = recipients.map((r) => ({ to: r.address.trim(), amount: r.amount, symbol: selectedToken!.symbol, decimals: selectedToken!.decimals, priceUsd: selectedToken!.priceUsd ?? 0, logoUrls: tokenLogoURLs(selectedToken!) }));
+        lines = recipients.map((r) => ({ to: r.address.trim(), toName: r.name?.trim() || undefined, amount: r.amount, symbol: selectedToken!.symbol, decimals: selectedToken!.decimals, priceUsd: selectedToken!.priceUsd ?? 0, logoUrls: tokenLogoURLs(selectedToken!) }));
       } else {
         const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
         const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
