@@ -111,6 +111,8 @@ const LABEL_L10N: Record<string, string> = {
   'you receive (min)': 'labelMinReceived', 'you receive (minimum)': 'labelMinReceived',
   'you pay': 'labelPay', pay: 'labelPay',
   'you receive': 'labelReceived', 'amount received': 'labelReceived', shares: 'labelShares',
+  'deposit asset': 'labelAmount', 'withdraw asset': 'labelAmount',
+  'mint shares': 'labelShares', 'redeem shares': 'labelShares',
   chain: 'labelChain', 'chain id': 'labelChain', nonce: 'labelNonce',
 };
 /** Localize a canonical ERC-7730 English intent; unknown → the raw string. */
