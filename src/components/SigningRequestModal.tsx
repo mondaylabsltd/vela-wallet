@@ -537,13 +537,29 @@ export function SigningSheet({
   // the user caps/revokes it, the hold (and the unlimited banner) drop away.
   const batchHasDanger =
     isBatch && (batch?.some((it, i) => legGrantsBroad(it.approval, batchChoices[i]) || it.clearSign?.risk === 'danger') ?? false);
+  // Lift the SIWE domain-binding check to the sheet level: a sign-in whose message
+  // domain ≠ the request origin is the canonical phishing pattern, and it must drive
+  // the footer (reject-dominant), not just an in-body banner the user can breeze past.
+  const siwePhishing =
+    isPersonalSign && !!params?.[0] &&
+    (() => {
+      const s = parseSiwe(decodePersonalMessage(params[0]));
+      return !!s && checkSiweDomainBinding(s.domain, dappInfo?.url ?? incomingRequest.origin) === 'mismatch';
+    })();
+
   const requiresHold =
     isEthSign ||
     clearSign?.risk === 'danger' ||
     (!!approval?.editable && approveChoice?.type === 'grant') ||
     isGrantingApproval(approval) ||
     permitGrantsBroad ||
-    batchHasDanger;
+    batchHasDanger ||
+    siwePhishing;
+
+  // When the wallet has itself concluded "this looks like phishing — reject it",
+  // the SAFE action must dominate: Reject is a solid primary on top, and signing is
+  // demoted behind a deliberate slide. (requiresHold-only danger keeps slide-on-top.)
+  const recommendReject = siwePhishing;
 
   const confirm = () => {
     // For an edited approval, re-encode to the chosen finite amount BEFORE submit.
@@ -691,6 +707,24 @@ export function SigningSheet({
               variant="secondary"
               style={styles.buttonFlex}
             />
+          ) : recommendReject ? (
+            // Detected phishing: the wallet recommends rejecting, so the SAFE action
+            // dominates — a solid Reject on top, signing demoted behind a slide.
+            <View style={styles.dangerStack}>
+              <VelaButton
+                title={t('componentsUi.signing.reject')}
+                onPress={onReject}
+                variant="primary"
+                disabled={isSigning}
+              />
+              <SlideToConfirmButton
+                title={buttonLabel()}
+                hint={t('componentsUi.signing.slideToConfirm', { defaultValue: 'Slide to confirm' })}
+                onConfirm={confirm}
+                loading={isSigning || resolving}
+                disabled={confirmDisabled}
+              />
+            </View>
           ) : requiresHold ? (
             // Danger-level signing: a full-width slide-to-confirm gets its own row
             // (a slide needs the width to be usable), with Reject as a secondary

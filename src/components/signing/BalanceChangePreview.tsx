@@ -134,12 +134,13 @@ function ChangeRow({ change, chainId }: { change: AssetChange; chainId: number }
 }
 
 const styles = createStyles(() => ({
+  // De-containered (Wise): the balance-change list sits on an open block split
+  // from the content above by a hairline, not a gray card.
   card: {
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.xl,
     paddingVertical: space.lg,
-    paddingHorizontal: space.xl,
-    marginVertical: space.md,
+    borderTopWidth: 1,
+    borderTopColor: color.border.base,
+    marginTop: space.md,
     gap: space.sm,
   },
   title: {
