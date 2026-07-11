@@ -47,3 +47,5 @@ images-de
 e2e/screenshots/
 test-results/
 .ux-audit/
+
+.cs-shots
