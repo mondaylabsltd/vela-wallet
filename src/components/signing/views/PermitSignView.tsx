@@ -111,7 +111,9 @@ export function PermitSignView({ approval, meta, clearSign }: {
         <WarningBanner severity="caution" text={t('componentsUi.signingApprove.decimalsUnverified')} />
       )}
 
-      {dangerous ? (
+      {/* Only the actionable advice remains — the plain "it's a permit / spends up to
+          X on your behalf" is already the summary line under the hero (no duplicate). */}
+      {dangerous && (
         <>
           <WarningBanner severity="danger" text={t('componentsUi.signing.unlimitedWarning')} />
           <Text style={styles.permitHint}>
@@ -120,13 +122,7 @@ export function PermitSignView({ approval, meta, clearSign }: {
             })}
           </Text>
         </>
-      ) : !approval.isReducing ? (
-        <Text style={styles.permitHint}>
-          {t('componentsUi.signingApprove.permitNote', {
-            defaultValue: "You're signing a spending permit — the dApp can move up to this amount on your behalf.",
-          })}
-        </Text>
-      ) : null}
+      )}
     </View>
   );
 }

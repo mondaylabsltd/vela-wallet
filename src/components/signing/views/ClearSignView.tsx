@@ -90,7 +90,6 @@ export function ClearSignView({ cs, simConfident }: {
             <TokenCard key={`s${i}`} field={f} variant={sendVariant} hideSign />
           ))}
           <SummaryLine text={summary} tone={summaryTone} />
-          {hasRecipient && <FlowArrow />}
         </>
       ) : null}
 

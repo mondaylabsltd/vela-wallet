@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { color } from '@/constants/theme';
 import { nativeSymbol } from '@/models/network';
 import { IntentHeader } from '../IntentHeader';
-import { TokenCard, FlowArrow } from '../TokenCard';
+import { TokenCard } from '../TokenCard';
 import { ContractBar } from '../ContractBar';
 import { WarningBanner } from '../WarningBanner';
 import { SummaryLine, useResolvedName } from '../SummaryLine';
@@ -68,8 +68,6 @@ export function BlindTransactionView({ tx, chainId, simConfident, nativeUsdPrice
       )}
 
       {!hasData && <SummaryLine text={summary} />}
-
-      {(hasData || hasValue) && <FlowArrow danger={hasData && !calm} />}
 
       {/* Contract / recipient. A plain send goes to a wallet, so run the recipient
           risk check (identicon + first-time / contract note), same as a decoded send. */}

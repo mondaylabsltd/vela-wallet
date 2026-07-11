@@ -9,7 +9,7 @@
 import React from 'react';
 import i18n from '@/i18n';
 import { type SigningRisk } from '@/services/clear-signing';
-import { scaleFont, color, text, inter, space, radius, font, shadow, createStyles } from '@/constants/theme';
+import { scaleFont, color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 
 /** Chain id for the active signing sheet — lets leaf rows build explorer links. */
 export const SigningChainContext = React.createContext<number>(1);
@@ -228,15 +228,15 @@ export const styles = createStyles(() => ({
     marginVertical: -space.sm,
     zIndex: 1,
   },
+  // Lightened: a quiet sunken dot, no border/shadow — it connects pay→receive on a
+  // swap without becoming its own object (was a bordered, shadowed circle).
   flowCircle: {
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: color.bg.raised,
-    borderWidth: 2, borderColor: color.border.base,
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: color.bg.sunken,
     alignItems: 'center', justifyContent: 'center',
-    ...shadow.sm,
   },
   flowCircleDanger: {
-    borderColor: color.error.base,
+    backgroundColor: color.error.soft,
   },
 
   // ===== Contract Bar =====
