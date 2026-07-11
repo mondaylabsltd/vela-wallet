@@ -584,7 +584,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   }, [handleIncoming]);
 
   // --- Approve ---
-  const approveRequest = useCallback(async (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null }) => {
+  const approveRequest = useCallback(async (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null; intent?: string }) => {
     const base = incomingRequest;
     const account = activeAccountRef.current;
     if (!base || !account) return;
@@ -699,7 +699,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           const pending = buildSigningRecord({
             method: request.method, params: request.params, result: '',
             from: account.address, chainId: cid, dappOrigin: recordOrigin,
-            nowMs: Date.now(), status: 'pending', userOpHash: hash, assetChanges,
+            nowMs: Date.now(), status: 'pending', userOpHash: hash, assetChanges, intent: opts?.intent,
           });
           pendingRecordId = pending.id;
           pendingSave = saveTransaction(pending).catch(e => console.warn('[DAppConnection] Failed to save pending record:', e));
@@ -720,6 +720,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           dappOrigin: recordOrigin,
           nowMs: Date.now(),
           assetChanges,
+          intent: opts?.intent,
         });
         await saveTransaction(record).catch(e => console.warn('[DAppConnection] Failed to save record:', e));
       }

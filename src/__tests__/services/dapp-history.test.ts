@@ -15,7 +15,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 jest.mock('@/modules/passkey', () => ({}));
 
-import { buildSigningRecord, capRequest, decodeSignMessage, extractSignedContent } from '@/services/dapp-history';
+import { buildConnectionRecord, buildSigningRecord, capRequest, decodeSignMessage, extractSignedContent } from '@/services/dapp-history';
 import { isSigningMethod } from '@/hooks/use-dapp-signing';
 
 const FROM = '0x1111111111111111111111111111111111111111';
@@ -169,5 +169,42 @@ describe('capRequest — replay payload capture', () => {
     const { signedRequest, requestTruncated } = capRequest('eth_sendTransaction', [circular]);
     expect(requestTruncated).toBe(true);
     expect(signedRequest.params).toEqual([]);
+  });
+});
+
+describe('buildSigningRecord — intent persistence', () => {
+  it('persists a provided clear-signing intent (so the label is not generic)', () => {
+    const r = buildSigningRecord({
+      method: 'eth_sendTransaction', params: [{ to: '0xrouter', data: '0xabcd', value: '0x0' }],
+      result: '0xtx', from: FROM, chainId: 1, dappOrigin: 'app', nowMs: 1000, intent: 'Swap',
+    });
+    expect(r.intent).toBe('Swap');
+    expect(r.type).toBe('dapp_tx');
+  });
+
+  it('leaves intent undefined when none is supplied (label falls back)', () => {
+    const r = buildSigningRecord({
+      method: 'eth_sendTransaction', params: [{ to: '0xrouter', data: '0xabcd' }],
+      result: '0xtx', from: FROM, chainId: 1, dappOrigin: 'app', nowMs: 1000,
+    });
+    expect(r.intent).toBeUndefined();
+  });
+});
+
+describe('buildConnectionRecord', () => {
+  it('builds a connect-type audit record with no signature/tx', () => {
+    const r = buildConnectionRecord({ from: FROM, chainId: 56, dappOrigin: 'pancakeswap.finance', nowMs: 5000 });
+    expect(r.type).toBe('connect');
+    expect(r.id).toBe('dapp-5000-connect');
+    expect(r.status).toBe('confirmed');
+    expect(r.dappOrigin).toBe('pancakeswap.finance');
+    expect(r.chainId).toBe(56);
+    expect(r.from).toBe(FROM);
+    // No signed content, no tx hash, no value — it's a session marker.
+    expect(r.txHash).toBe('');
+    expect(r.userOpHash).toBe('');
+    expect(r.signedContent).toBeUndefined();
+    expect(r.signedRequest).toBeUndefined();
+    expect(r.timestamp).toBe(5); // floor(5000 / 1000)
   });
 });

@@ -36,6 +36,8 @@ import {
 import { WebViewTransport, type WalletWebViewBridge } from '@/services/webview-transport';
 import { coerceBrowserUrl } from '@/services/dapp-transport';
 import { recordBrowserVisit } from '@/services/browser-history';
+import { buildConnectionRecord } from '@/services/dapp-history';
+import { saveTransaction } from '@/services/storage';
 import { getGrant, resolveGranted, revokeGrant, setGrant, shouldDropGrant, type DAppGrant } from '@/services/dapp-permissions';
 import { decideBrowserRequest } from '@/services/wallet-browser-router';
 import { openBrowser, showAlert } from '@/services/platform';
@@ -227,6 +229,12 @@ export default function BrowserScreen() {
       grantedAt: Date.now(),
     };
     await setGrant(grant);
+    // Log a "Connected to <app>" audit row so the in-app browser leaves a session
+    // trail (previously it wrote only a silent grant). The consent sheet only opens
+    // for a not-yet-granted origin, so this fires once per connection, not on revisit.
+    void saveTransaction(
+      buildConnectionRecord({ from: activeAccount.address, chainId, dappOrigin: hostOf(c.origin), nowMs: Date.now() }),
+    ).catch((e) => console.warn('[Browser] Failed to save connect record:', e));
     // A navigation during the await already rejected+cleared this consent (nav
     // guard) — don't respond or push accountsChanged to a document that has since
     // navigated to a different origin.

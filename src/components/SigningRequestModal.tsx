@@ -117,7 +117,7 @@ export interface SigningSheetProps {
   isSigning: boolean;
   signError: string | null;
   pendingOpHash: string | null;
-  onApprove: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null }) => void;
+  onApprove: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null; intent?: string }) => void;
   onReject: () => void;
   onDismiss: () => void;
   /**
@@ -511,6 +511,10 @@ export function SigningSheet({
       // The "what moved" preview the user just saw — persisted with the record so
       // the Connections-panel replay can show it without re-simulating stale state.
       assetSim: sim,
+      // The resolved clear-signing intent (e.g. "Swap", "Approve") — persisted so
+      // the Connections list/detail label the op meaningfully, not "Contract
+      // interaction". Undefined for plain signatures / blind txs (label falls back).
+      intent: clearSign?.intent,
     });
   };
 
