@@ -170,6 +170,18 @@ export const styles = createStyles(() => ({
     textTransform: 'uppercase',
   },
 
+  // ===== Plain-language summary (the novice's one-sentence read) =====
+  summaryLine: {
+    fontSize: scaleFont(15),
+    lineHeight: 22,
+    ...inter.medium,
+    color: color.fg.muted,
+    paddingTop: space.sm,
+    paddingBottom: space.lg,
+  },
+  summaryCaution: { color: color.warning.base },
+  summaryDanger: { color: color.error.base },
+
   // ===== Token Card =====
   // Open row (Wise de-container) for benign amounts — no card, just the number
   // breathing next to its logo, aligned to the sheet's content edge.

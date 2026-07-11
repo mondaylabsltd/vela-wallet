@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { color } from '@/constants/theme';
 import { type DetectedApproval, formatTokenAmount as formatRawTokenAmount } from '@/services/approval-guard';
 import { type ClearSignResult } from '@/services/clear-signing';
-import { tokenLogoURLsByAddress } from '@/models/types';
+import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
 import { knownContract } from '@/services/local-descriptors';
 import { knownTokenSymbol } from '@/services/tokens';
 import { TokenLogo } from '@/components/TokenLogo';
@@ -21,6 +21,7 @@ import { styles, riskColors, SigningChainContext } from '../signing-core';
 import { IntentHeader } from '../IntentHeader';
 import { ContractBar } from '../ContractBar';
 import { WarningBanner } from '../WarningBanner';
+import { SummaryLine } from '../SummaryLine';
 
 export function PermitSignView({ approval, meta, clearSign }: {
   approval: DetectedApproval;
@@ -56,9 +57,20 @@ export function PermitSignView({ approval, meta, clearSign }: {
         ? t('componentsUi.signingApprove.unlimitedValue', { defaultValue: 'Unlimited' })
         : `${formatRawTokenAmount(approval.amountRaw ?? 0n, decimals)} ${symbol}`;
 
+  // Plain-language one-liner — a permit is a signature the dApp redeems later.
+  const spenderName = knownContract(approval.spender)?.name ?? shortAddr(approval.spender);
+  const summary = approval.isReducing
+    ? t('componentsUi.signing.summaryRevoke', { spender: spenderName, token: symbol })
+    : dangerous
+      ? t('componentsUi.signing.summaryPermitUnlimited', { spender: spenderName, token: symbol })
+      : t('componentsUi.signing.summaryPermit', { spender: spenderName, amount: amountText });
+  const summaryTone = dangerous ? 'danger' : 'neutral';
+
   return (
     <View>
       <IntentHeader intent={verb} color={verbColor} variant={approval.isReducing ? 'eyebrow' : 'hero'} />
+
+      <SummaryLine text={summary} tone={summaryTone} />
 
       <View style={[styles.tokenCard, dangerous && { backgroundColor: color.error.soft }]}>
         <TokenLogo symbol={approval.tokenAddress ? symbol : '?'} logoUrls={logoUrls} size={40} />

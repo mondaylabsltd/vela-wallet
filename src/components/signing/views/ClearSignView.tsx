@@ -10,6 +10,7 @@ import { IntentHeader } from '../IntentHeader';
 import { TokenCard, FlowArrow } from '../TokenCard';
 import { ContractBar } from '../ContractBar';
 import { WarningBanner, GenericFieldRow } from '../WarningBanner';
+import { SummaryLine, useResolvedName } from '../SummaryLine';
 
 export function ClearSignView({ cs, simConfident }: {
   cs: ClearSignResult;
@@ -51,6 +52,19 @@ export function ClearSignView({ cs, simConfident }: {
   const sendVariant: 'send' | 'caution' | 'danger' =
     heroDanger ? 'danger' : (heroCaution || cs.risk === 'caution') ? 'caution' : 'send';
 
+  // Plain-language one-liner under the hero — the novice's first read. Names the
+  // recipient (descriptor name → ENS → short address, resolved async & cached).
+  const recipient = recipients[0];
+  const toName = useResolvedName(recipient?.address, recipient?.address ? undefined : recipient?.value);
+  const summary = isSwapLayout
+    ? t('componentsUi.signing.summarySwap', { pay: sendAmounts[0]?.value, receive: receiveAmounts[0]?.value })
+    : (sendAmounts.length > 0 && recipients.length > 0 && toName)
+      ? t('componentsUi.signing.summarySend', { amount: sendAmounts[0].value, to: toName })
+      : undefined;
+  // Restraint: the summary stays neutral ink; only genuine danger warms it. The hero
+  // and Zone-3 warnings carry the risk color, so the sentence doesn't double up.
+  const summaryTone = sendVariant === 'danger' ? 'danger' : 'neutral';
+
   return (
     <View>
       {/* ZONE 1 — the action + the ONE hero. Benign → eyebrow; risk → big hero. */}
@@ -68,12 +82,14 @@ export function ClearSignView({ cs, simConfident }: {
           {receiveAmounts.map((f, i) => (
             <TokenCard key={`r${i}`} field={f} variant="receive" />
           ))}
+          <SummaryLine text={summary} tone={summaryTone} />
         </>
       ) : sendAmounts.length > 0 ? (
         <>
           {sendAmounts.map((f, i) => (
             <TokenCard key={`s${i}`} field={f} variant={sendVariant} />
           ))}
+          <SummaryLine text={summary} tone={summaryTone} />
           {hasRecipient && <FlowArrow />}
         </>
       ) : null}

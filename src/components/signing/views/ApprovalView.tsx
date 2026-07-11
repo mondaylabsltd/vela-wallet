@@ -18,6 +18,7 @@ import { IntentHeader } from '../IntentHeader';
 import { EditableApproveCard } from '../EditableApproveCard';
 import { ContractBar } from '../ContractBar';
 import { WarningBanner } from '../WarningBanner';
+import { SummaryLine } from '../SummaryLine';
 
 export function ApprovalView({ approval, meta, choice, onChange, chainId, walletAddress, clearSign, requestId }: {
   approval: DetectedApproval;
@@ -71,9 +72,23 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
     ? tokenLogoURLsByAddress(chainId, approval.tokenAddress)
     : undefined;
 
+  // Plain-language one-liner — what this approval actually lets the spender do.
+  const spenderName = clearSign?.contractName ?? knownContract(approval.spender)?.name ?? shortAddr(approval.spender);
+  const summary = approval.isReducing
+    ? t('componentsUi.signing.summaryRevoke', { spender: spenderName, token: symbol })
+    : isNft && approval.isUnbounded
+      ? t('componentsUi.signing.summaryApproveNft', { operator: spenderName })
+      : approval.isUnbounded
+        ? t('componentsUi.signing.summaryApproveUnlimited', { spender: spenderName, token: symbol })
+        : t('componentsUi.signing.summaryApprove', { spender: spenderName, amount: `${formatRawTokenAmount(approval.amountRaw ?? 0n, decimals)} ${symbol}` });
+  // Neutral by default; only an unbounded grant warms the sentence to red.
+  const summaryTone = approval.isUnbounded && !approval.isReducing ? 'danger' : 'neutral';
+
   return (
     <View>
       <IntentHeader intent={verb} color={verbColor} variant={approval.isReducing ? 'eyebrow' : 'hero'} />
+
+      <SummaryLine text={summary} tone={summaryTone} />
 
       <EditableApproveCard
         key={requestId}
