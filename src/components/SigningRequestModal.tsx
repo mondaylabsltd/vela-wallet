@@ -718,6 +718,7 @@ export function SigningSheet({
               onConfirm={confirm}
               loading={isSigning || resolving}
               disabled={confirmDisabled}
+              style={styles.buttonFlex}
             />
           )}
         </View>
