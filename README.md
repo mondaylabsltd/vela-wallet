@@ -124,7 +124,7 @@ Configure custom endpoints in **Settings > Advanced > Service Endpoints**.
 | **Chain Data Index**     | Network info, token data, chain logos             | [atshelchin/ethereum-data](https://github.com/atshelchin/ethereum-data)                                                         |
 | **Passkey Index**        | Public key storage for cross-device recovery      | [atshelchin/webauthnp256-publickey-index.biubiu.tools](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools) |
 | **Bundler Service**      | ERC-4337 transaction bundler                      | [atshelchin/vela-bundler](https://github.com/atshelchin/vela-bundler)                                                           |
-| **Exchange-Rate Source** | USD-based fiat rates that drive the currency list | [Frankfurter](https://frankfurter.dev) (FOSS, self-hostable via Docker)                                                         |
+| **Exchange-Rate Source** | USD-based fiat rates that drive the currency list | [mondaylabsltd/vela-currency](https://github.com/mondaylabsltd/vela-currency) (self-hosted [Frankfurter](https://frankfurter.dev), FOSS)              |
 
 The first three are Vela services that each expose a `/api/health` endpoint. The wallet validates three checks before accepting a custom endpoint for them:
 
@@ -132,7 +132,7 @@ The first three are Vela services that each expose a `/api/health` endpoint. The
 2. **Reachable** — server responds within 10 seconds
 3. **Valid response** — `/api/health` returns the correct `service` identifier and `status: "ok"`
 
-The **Exchange-Rate Source** is any USD-based FX API — the default is Frankfurter's public instance, `https://api.frankfurter.dev/v2/rates?base=USD`. It's validated by returning a parseable USD-based rate set (not `/api/health`). Frankfurter is open source and self-hostable with Docker — see [frankfurter.dev](https://frankfurter.dev). Pin the base to USD (`?base=USD`), or every conversion is silently wrong. For the response shapes Vela accepts, the Chainlink fallback, and a porting guide, see [docs/fiat-price.md](docs/fiat-price.md).
+The **Exchange-Rate Source** is any USD-based FX API — the default is Vela's self-hosted Frankfurter instance, `https://vela-currency.getvela.app/v2/rates?base=USD` ([mondaylabsltd/vela-currency](https://github.com/mondaylabsltd/vela-currency)). It's validated by returning a parseable USD-based rate set (not `/api/health`). Frankfurter is open source and self-hostable with Docker — see [frankfurter.dev](https://frankfurter.dev). Pin the base to USD (`?base=USD`), or every conversion is silently wrong. For the response shapes Vela accepts, the Chainlink fallback, and a porting guide, see [docs/fiat-price.md](docs/fiat-price.md).
 
 ## Gas & Fee Model
 
