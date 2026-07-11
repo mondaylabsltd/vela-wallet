@@ -1229,6 +1229,12 @@ function PermitSignView({ approval, meta, clearSign }: {
 
       {expired && <WarningBanner severity="caution" text={t('componentsUi.signingApprove.expired')} />}
 
+      {/* A bounded permit shows a scaled amount from meta.decimals — if that wasn't
+          verified on-chain, flag it (its on-chain-approve sibling already does). */}
+      {!approval.isBooleanGrant && !approval.isUnbounded && !meta?.verified && (
+        <WarningBanner severity="caution" text={t('componentsUi.signingApprove.decimalsUnverified')} />
+      )}
+
       {dangerous ? (
         <>
           <WarningBanner severity="danger" text={t('componentsUi.signing.unlimitedWarning')} />
@@ -1279,14 +1285,14 @@ function MessageSignView({ hexMsg, requestOrigin }: {
 
         <View style={styles.genericFields}>
           <View style={styles.genRow}>
-            <Text style={styles.genLabel}>{t('componentsUi.signing.siweDomain')}</Text>
+            <Text style={styles.contractLabel}>{t('componentsUi.signing.siweDomain')}</Text>
             <Text style={[styles.genValue, binding === 'mismatch' && { color: riskColors().danger }]} numberOfLines={1}>
               {siweHost(siwe.domain) ?? siwe.domain}
             </Text>
           </View>
           {!!siwe.statement && (
             <View style={styles.genRow}>
-              <Text style={styles.genLabel}>{t('componentsUi.signing.siweStatement')}</Text>
+              <Text style={styles.contractLabel}>{t('componentsUi.signing.siweStatement')}</Text>
               <Text style={styles.genValue} numberOfLines={3}>{siwe.statement}</Text>
             </View>
           )}
@@ -1372,24 +1378,13 @@ function BlindTypedDataView({ params }: {
 
   return (
     <View>
-      {/* context shown in dApp banner */}
+      {/* ZONE 1 — hero: the typed data itself (Type + fields). */}
       <IntentHeader intent={t('componentsUi.signing.signTypedData')} color={color.warning.base} />
-
-      {/* Domain info */}
-      {domain && (
-        <ContractBar
-          label={t('componentsUi.signing.signingFor')}
-          name={domain.name}
-          address={domain.verifyingContract?.toLowerCase()}
-          verified={false}
-        />
-      )}
-
-      {/* Primary type + fields */}
       <View style={styles.genericFields}>
         {primaryType && (
           <View style={styles.genRow}>
-            <Text style={styles.genLabel}>{t('componentsUi.signing.typeLabel')}</Text>
+            {/* fixed label → uppercase kicker; the dynamic struct keys below stay as data */}
+            <Text style={styles.contractLabel}>{t('componentsUi.signing.typeLabel')}</Text>
             <Text style={styles.genValue}>{primaryType}</Text>
           </View>
         )}
@@ -1401,6 +1396,17 @@ function BlindTypedDataView({ params }: {
         ))}
       </View>
 
+      {/* ZONE 2 — who you're signing for. */}
+      {domain && (
+        <ContractBar
+          label={t('componentsUi.signing.signingFor')}
+          name={domain.name}
+          address={domain.verifyingContract?.toLowerCase()}
+          verified={false}
+        />
+      )}
+
+      {/* ZONE 3 — undecodable caution. */}
       <WarningBanner
         severity="caution"
         text={t('componentsUi.signing.blindTypedWarning')}
