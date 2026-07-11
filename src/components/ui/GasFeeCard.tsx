@@ -58,6 +58,8 @@ interface GasFeeCardProps {
   /** The real tx being signed — passed so tier-change/refresh re-estimates the
    *  actual call (dApp tx), not a dummy transfer. Omit for simple transfers. */
   tx?: { to: string; value?: string; data?: string };
+  /** An EIP-5792 batch's calls — estimate against the whole MultiSend. */
+  batchCalls?: { to: string; value?: string; data?: string }[];
   /** Called when user changes tier. Parent should re-estimate and update feeEstimate. */
   onTierChange: (tier: GasTier) => void;
   /** Called when fee estimate is updated (after refresh or tier change). */
@@ -70,7 +72,7 @@ interface GasFeeCardProps {
 
 export function GasFeeCard({
   feeEstimate, estimating, nativeSymbol: sym, nativeUsdPrice,
-  safeAddress, chainId, gasTier, tx, onTierChange, onFeeUpdate,
+  safeAddress, chainId, gasTier, tx, batchCalls, onTierChange, onFeeUpdate,
 }: GasFeeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -83,19 +85,19 @@ export function GasFeeCard({
     setRefreshing(true);
     try {
       await refreshGasPrice(chainId);
-      const fee = await estimateTransactionFee(safeAddress, chainId, gasTier, tx);
+      const fee = await estimateTransactionFee(safeAddress, chainId, gasTier, tx, batchCalls);
       onFeeUpdate(fee);
     } catch { /* ignore */ }
     setRefreshing(false);
-  }, [chainId, safeAddress, gasTier, tx, refreshing, onFeeUpdate]);
+  }, [chainId, safeAddress, gasTier, tx, batchCalls, refreshing, onFeeUpdate]);
 
   const handleTierChange = useCallback(async (tier: GasTier) => {
     onTierChange(tier);
     try {
-      const fee = await estimateTransactionFee(safeAddress, chainId, tier, tx);
+      const fee = await estimateTransactionFee(safeAddress, chainId, tier, tx, batchCalls);
       onFeeUpdate(fee);
     } catch { /* ignore */ }
-  }, [safeAddress, chainId, tx, onTierChange, onFeeUpdate]);
+  }, [safeAddress, chainId, tx, batchCalls, onTierChange, onFeeUpdate]);
 
   const { t } = useTranslation();
 

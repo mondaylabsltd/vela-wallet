@@ -284,6 +284,15 @@ export function SigningSheet({
       simulateAssetChanges(simFromOverride ?? activeAccount.address, simCalls, chainId)
         .then((r) => { if (!cancelled) setSim(r); })
         .catch(() => { if (!cancelled) setSim(null); });
+
+      // Gas fee for the WHOLE bundle — a batch is an on-chain UserOp; estimate against
+      // the same MultiSend of every call that sendBatchCalls submits.
+      setEstimatingGas(true);
+      setGasEstimateFailed(false);
+      estimateTransactionFee(activeAccount.address, chainId, 'standard', undefined, simCalls)
+        .then((f) => { if (!cancelled) { setFeeEstimate(f); setGasEstimateFailed(false); } })
+        .catch(() => { if (!cancelled) { setFeeEstimate(null); setGasEstimateFailed(true); } })
+        .finally(() => { if (!cancelled) setEstimatingGas(false); });
     }
     return () => { cancelled = true; };
   }, [incomingRequest, chainId, activeAccount?.address, readOnly, simFromOverride]);
@@ -561,8 +570,8 @@ export function SigningSheet({
               power users who want to verify exactly what's being signed. */}
           <AdvancedPanel method={method} params={params} clearSign={clearSign} />
 
-          {/* Gas fee card — only for eth_sendTransaction, and only live (not replay) */}
-          {isTx && activeAccount?.address && !readOnly && (
+          {/* Gas fee card — for an on-chain tx OR a batch (both cost gas), live only. */}
+          {(isTx || isBatch) && activeAccount?.address && !readOnly && (
             <GasFeeCard
               feeEstimate={feeEstimate}
               estimating={estimatingGas}
@@ -571,7 +580,8 @@ export function SigningSheet({
               safeAddress={activeAccount.address}
               chainId={chainId}
               gasTier={gasTier}
-              tx={txForEstimate}
+              tx={isBatch ? undefined : txForEstimate}
+              batchCalls={isBatch ? params?.[0]?.calls : undefined}
               onTierChange={setGasTier}
               onFeeUpdate={(f) => { setFeeEstimate(f); setGasEstimateFailed(false); }}
             />
