@@ -331,6 +331,15 @@ describe('approval-guard', () => {
       // format → parse round-trips despite the grouping commas
       expect(parseTokenAmount(formatTokenAmount(1234_500000n, 6), 6)).toBe(1234_500000n);
     });
+    test('localizes with injected separators (no precision loss)', () => {
+      const dc = { group: '.', decimal: ',' }; // European (dot_comma)
+      expect(formatTokenAmount(1234_500000n, 6, 6, dc)).toBe('1.234,5');
+      expect(formatTokenAmount(1000_000000n, 6, 6, dc)).toBe('1.000');
+      const sp = { group: ' ', decimal: ',' }; // space_comma
+      expect(formatTokenAmount(1234567_000000n, 6, 6, sp)).toBe('1 234 567');
+      const ind = { group: ',', decimal: '.', indian: true }; // Indian 2-3 grouping
+      expect(formatTokenAmount(1234567_000000n, 6, 6, ind)).toBe('12,34,567');
+    });
   });
 });
 

@@ -461,17 +461,29 @@ export function parseTokenAmount(human: string, decimals: number): bigint | null
 /** Format raw base units back to a human string for `decimals` (trims zeros). */
 /** Group the integer part with thousands separators (Hermes-safe, no Intl) so a
  *  permit/approve amount reads "1,000" like every other amount, not "1000" (F4). */
-function groupThousands(n: bigint): string {
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+function groupThousands(n: bigint, group = ',', indian = false): string {
+  const digits = n.toString();
+  if (digits.length <= 3) return digits;
+  if (!indian) return digits.replace(/\B(?=(\d{3})+(?!\d))/g, group);
+  const head = digits.slice(0, -3);
+  const tail = digits.slice(-3);
+  return head.replace(/\B(?=(\d{2})+(?!\d))/g, group) + group + tail;
 }
 
-export function formatTokenAmount(raw: bigint, decimals: number, maxFrac = 6): string {
-  if (decimals === 0) return groupThousands(raw);
+/** `sep` (from `numberSeparators()`) localizes grouping + decimal WITHOUT casting the
+ *  bigint to a number — defaults reproduce the canonical `1,234.5` (tests + input). */
+export function formatTokenAmount(
+  raw: bigint,
+  decimals: number,
+  maxFrac = 6,
+  sep: { group: string; decimal: string; indian?: boolean } = { group: ',', decimal: '.' },
+): string {
+  if (decimals === 0) return groupThousands(raw, sep.group, sep.indian);
   const base = 10n ** BigInt(decimals);
   const whole = raw / base;
   const frac = raw % base;
-  const wholeStr = groupThousands(whole);
+  const wholeStr = groupThousands(whole, sep.group, sep.indian);
   if (frac === 0n) return wholeStr;
   const fracStr = frac.toString().padStart(decimals, '0').slice(0, maxFrac).replace(/0+$/, '');
-  return fracStr ? `${wholeStr}.${fracStr}` : wholeStr;
+  return fracStr ? `${wholeStr}${sep.decimal}${fracStr}` : wholeStr;
 }

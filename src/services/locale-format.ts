@@ -123,6 +123,17 @@ export function numberSeparators(key?: NumberFormatKey): { group: string; decima
   return { group: s.group, decimal: s.decimal };
 }
 
+/**
+ * Group an INTEGER DIGIT STRING with the chosen preset's grouping (incl. Indian
+ * 2-3), WITHOUT routing through a JS `number`. This is the bigint-safe entry point
+ * for the token/amount formatters — a uint256 base-unit string must never become a
+ * `number` (precision loss on a security surface).
+ */
+export function groupDigits(digits: string, key?: NumberFormatKey): string {
+  const style = NUMBER_STYLES[resolveNumber(key ?? getLocalePrefs().numberFormat)];
+  return groupInteger(digits, style.group, style.indian);
+}
+
 interface NumberOpts { minimumFractionDigits?: number; maximumFractionDigits?: number; key?: NumberFormatKey }
 
 /** Format a number using the chosen (or current) preset's separators/grouping. */

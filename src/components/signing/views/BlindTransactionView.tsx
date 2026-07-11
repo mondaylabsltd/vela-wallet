@@ -6,6 +6,7 @@ import { View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { color } from '@/constants/theme';
 import { nativeSymbol } from '@/models/network';
+import { useLocalePrefs, numberSeparators, formatNumber } from '@/services/locale-format';
 import { IntentHeader } from '../IntentHeader';
 import { TokenCard } from '../TokenCard';
 import { ContractBar } from '../ContractBar';
@@ -23,6 +24,7 @@ export function BlindTransactionView({ tx, chainId, simConfident, nativeUsdPrice
   nativeUsdPrice?: number;
 }) {
   const { t } = useTranslation();
+  useLocalePrefs();
   const sym = nativeSymbol(chainId);
   const value = formatTxValue(tx.value, chainId);
   const hasData = tx.data && tx.data !== '0x';
@@ -32,8 +34,9 @@ export function BlindTransactionView({ tx, chainId, simConfident, nativeUsdPrice
   const calm = hasData && !!simConfident;
   const hasValue = value !== `0 ${sym}`;
 
-  // Native fiat for the hero (F3) — the ETH send should show ≈ $ like every ERC-20.
-  const usd = nativeFiat(tx.value, nativeUsdPrice);
+  // Native USD magnitude for the hero (F3) — TokenCard formats it in the user's
+  // display currency (€/¥/etc.), like every ERC-20.
+  const usdValue = nativeUsd(tx.value, nativeUsdPrice);
 
   // A plain native send (no calldata) is a wallet-to-wallet transfer — resolve the
   // recipient and give it the same plain-language one-liner as the descriptor path.
@@ -61,7 +64,7 @@ export function BlindTransactionView({ tx, chainId, simConfident, nativeUsdPrice
           direction); a blind call with a value keeps it. */}
       {hasValue && (
         <TokenCard
-          field={{ label: t('componentsUi.signing.valueLabel'), value, format: 'amount', role: 'send-amount', usd }}
+          field={{ label: t('componentsUi.signing.valueLabel'), value, format: 'amount', role: 'send-amount', usdValue }}
           variant={hasData && !calm ? 'danger' : 'send'}
           hideSign={!hasData}
           hero={!hasData}
@@ -107,24 +110,21 @@ function formatTxValue(value: string | undefined, cid: number): string {
     const wei = BigInt('0x' + clean);
     const eth = Number(wei) / 1e18;
     if (eth === 0) return `0 ${sym}`;
-    if (eth < 0.0001) return `< 0.0001 ${sym}`;
-    return eth.toFixed(4).replace(/\.?0+$/, '') + ' ' + sym;
+    if (eth < 0.0001) return `< 0${numberSeparators().decimal}0001 ${sym}`;
+    return `${formatNumber(eth, { maximumFractionDigits: 4 })} ${sym}`;
   } catch {
     return value ?? '0';
   }
 }
 
-/** "$X,XXX.XX" for a native value, or undefined when price/value is unavailable.
- *  Manual grouping (Hermes has no reliable Intl). */
-function nativeFiat(value: string | undefined, price?: number): string | undefined {
+/** USD magnitude for a native value (TokenCard formats it into the display
+ *  currency), or undefined when price/value is unavailable. */
+function nativeUsd(value: string | undefined, price?: number): number | undefined {
   if (!price || price <= 0 || !value || value === '0x0' || value === '0x') return undefined;
   try {
     const wei = BigInt(value.startsWith('0x') ? value : `0x${value}`);
-    const eth = Number(wei) / 1e18;
-    const n = eth * price;
-    if (!(n > 0)) return undefined;
-    const [int, dec] = n.toFixed(2).split('.');
-    return `$${int.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${dec}`;
+    const n = (Number(wei) / 1e18) * price;
+    return n > 0 ? n : undefined;
   } catch {
     return undefined;
   }

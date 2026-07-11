@@ -145,8 +145,12 @@ export function deriveAssetDeltas(logs: SimLog[], user: string): AssetDelta[] {
 // Display formatting (pure)
 // ---------------------------------------------------------------------------
 
-function withCommas(intStr: string): string {
-  return intStr.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+function withCommas(intStr: string, group = ',', indian = false): string {
+  if (intStr.length <= 3) return intStr;
+  if (!indian) return intStr.replace(/\B(?=(\d{3})+(?!\d))/g, group);
+  const head = intStr.slice(0, -3);
+  const tail = intStr.slice(-3);
+  return head.replace(/\B(?=(\d{2})+(?!\d))/g, group) + group + tail;
 }
 
 /**
@@ -155,22 +159,27 @@ function withCommas(intStr: string): string {
  * carry it. Mirrors the token formatting used in clear signing so amounts read
  * consistently across the signing surfaces.
  */
-export function formatTokenAmount(abs: bigint, decimals: number, maxFrac = 6): string {
+export function formatTokenAmount(
+  abs: bigint,
+  decimals: number,
+  maxFrac = 6,
+  sep: { group: string; decimal: string; indian?: boolean } = { group: ',', decimal: '.' },
+): string {
   if (abs < 0n) abs = -abs;
   if (abs === 0n) return '0';
   const d = decimals > 0 ? decimals : 0;
   const divisor = 10n ** BigInt(d);
   const whole = abs / divisor;
   const frac = abs % divisor;
-  if (frac === 0n || d === 0) return withCommas(whole.toString());
+  if (frac === 0n || d === 0) return withCommas(whole.toString(), sep.group, sep.indian);
 
   const fracStr = frac.toString().padStart(d, '0');
   const trimmed = fracStr.slice(0, Math.min(maxFrac, d)).replace(/0+$/, '');
   if (!trimmed) {
     // Amount is non-zero but rounds below display precision — show a small marker.
-    return whole === 0n ? `<0.${'0'.repeat(Math.max(0, Math.min(maxFrac, d) - 1))}1` : withCommas(whole.toString());
+    return whole === 0n ? `<0${sep.decimal}${'0'.repeat(Math.max(0, Math.min(maxFrac, d) - 1))}1` : withCommas(whole.toString(), sep.group, sep.indian);
   }
-  return `${withCommas(whole.toString())}.${trimmed}`;
+  return `${withCommas(whole.toString(), sep.group, sep.indian)}${sep.decimal}${trimmed}`;
 }
 
 // ---------------------------------------------------------------------------

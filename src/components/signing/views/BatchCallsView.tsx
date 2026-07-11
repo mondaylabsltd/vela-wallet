@@ -10,6 +10,7 @@ import { type DetectedApproval, type ApprovalChoice, formatTokenAmount as format
 import { type ClearSignResult } from '@/services/clear-signing';
 import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
 import { knownContract } from '@/services/local-descriptors';
+import { useLocalePrefs, numberSeparators } from '@/services/locale-format';
 import { ShieldAlert } from 'lucide-react-native';
 import { styles, riskColors, SigningChainContext, localizeIntent } from '../signing-core';
 import { EditableApproveCard } from '../EditableApproveCard';
@@ -62,6 +63,8 @@ export function BatchCallsView({ items, choices, onChoiceChange, metaByToken, ed
 }) {
   const { t } = useTranslation();
   const chainId = React.useContext(SigningChainContext);
+  useLocalePrefs();
+  const sep = numberSeparators();
   // Banner reflects the EFFECTIVE state: only still-uncapped grants are flagged.
   const anyUncapped = editable
     ? items.some((it, i) => legGrantsBroad(it.approval, choices[i]))
@@ -119,7 +122,7 @@ export function BatchCallsView({ items, choices, onChoiceChange, metaByToken, ed
         // counterparty (spender for an approve, recipient for a send).
         const danger = legGrantsBroad(ap, choices[i]);
         const detail = ap && ap.tokenAddress
-          ? `${t('componentsUi.signingApprove.spendingCap')} · ${formatRawTokenAmount(ap.amountRaw ?? 0n, meta?.decimals ?? 18)} ${meta?.symbol ?? ''}`.trim()
+          ? `${t('componentsUi.signingApprove.spendingCap')} · ${formatRawTokenAmount(ap.amountRaw ?? 0n, meta?.decimals ?? 18, 6, sep)} ${meta?.symbol ?? ''}`.trim()
           : batchSummary(it);
         const counterparty = ap ? spenderName : (it.to ? shortAddr(it.to) : '—');
         return (

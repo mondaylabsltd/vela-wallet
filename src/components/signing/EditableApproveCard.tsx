@@ -22,6 +22,8 @@ import {
   formatTokenAmount,
   isUnboundedAmount,
 } from '@/services/approval-guard';
+import { useLocalePrefs, numberSeparators } from '@/services/locale-format';
+import { useDisplayCurrency } from '@/hooks/use-display-currency';
 
 interface Props {
   approval: DetectedApproval;
@@ -54,6 +56,9 @@ function AmountCard({
   approval, symbol, decimals, decimalsVerified, logoUrls, spenderLabel, usdPrice, onChange,
 }: Props) {
   const { t } = useTranslation();
+  useLocalePrefs();
+  const sep = numberSeparators();
+  const dc = useDisplayCurrency();
   const requested = approval.amountRaw ?? 0n;
   const requestedFinite = !approval.isUnbounded && requested > 0n;
 
@@ -115,14 +120,14 @@ function AmountCard({
       ) : (
         <Pressable style={styles.valueRow} onPress={() => setMode('custom')}>
           <Text style={[styles.amountValue, mode === 'revoke' && { color: color.success.base }]} numberOfLines={1}>
-            {mode === 'revoke' ? t('componentsUi.signingApprove.revokeValue') : `${formatTokenAmount(displayRaw ?? 0n, decimals)} ${symbol}`}
+            {mode === 'revoke' ? t('componentsUi.signingApprove.revokeValue') : `${formatTokenAmount(displayRaw ?? 0n, decimals, 6, sep)} ${symbol}`}
           </Text>
           {mode !== 'revoke' && <Pencil size={15} color={color.fg.subtle} strokeWidth={2} />}
         </Pressable>
       )}
 
       {usd != null && mode !== 'revoke' && !error && (
-        <Text style={styles.usd}>≈ ${usd < 0.01 ? usd.toFixed(4) : usd.toFixed(2)}</Text>
+        <Text style={styles.usd}>≈ {dc.fmt(usd)}</Text>
       )}
 
       {/* Presets */}
@@ -161,7 +166,7 @@ function AmountCard({
           {mode === 'revoke'
             ? t('componentsUi.signingApprove.revokeSummary', { spender: spenderLabel })
             : choice
-              ? t('componentsUi.signingApprove.capSummary', { spender: spenderLabel, amount: `${formatTokenAmount((choice as any).amountRaw, decimals)} ${symbol}` })
+              ? t('componentsUi.signingApprove.capSummary', { spender: spenderLabel, amount: `${formatTokenAmount((choice as any).amountRaw, decimals, 6, sep)} ${symbol}` })
               : t('componentsUi.signingApprove.choosePrompt')}
         </Text>
       )}

@@ -11,6 +11,7 @@ import { View, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { color } from '@/constants/theme';
 import { type DetectedApproval, formatTokenAmount as formatRawTokenAmount } from '@/services/approval-guard';
+import { useLocalePrefs, numberSeparators } from '@/services/locale-format';
 import { type ClearSignResult } from '@/services/clear-signing';
 import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
 import { knownContract } from '@/services/local-descriptors';
@@ -29,6 +30,8 @@ export function PermitSignView({ approval, meta, clearSign }: {
 }) {
   const { t } = useTranslation();
   const chainId = React.useContext(SigningChainContext);
+  useLocalePrefs();
+  const sep = numberSeparators();
 
   const symbol = meta?.symbol ?? '…';
   const decimals = meta?.decimals ?? 18;
@@ -54,7 +57,7 @@ export function PermitSignView({ approval, meta, clearSign }: {
       ? t('componentsUi.signingApprove.multiplePermits', { defaultValue: 'Multiple tokens' })
       : approval.isUnbounded
         ? t('componentsUi.signingApprove.unlimitedValue', { defaultValue: 'Unlimited' })
-        : `${formatRawTokenAmount(approval.amountRaw ?? 0n, decimals)} ${symbol}`;
+        : `${formatRawTokenAmount(approval.amountRaw ?? 0n, decimals, 6, sep)} ${symbol}`;
 
   // Plain-language one-liner — a permit is a signature the dApp redeems later.
   const spenderName = knownContract(approval.spender)?.name ?? shortAddr(approval.spender);

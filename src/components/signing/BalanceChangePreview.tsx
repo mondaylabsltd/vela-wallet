@@ -20,6 +20,7 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
 import { nativeSymbol, nativeCoinLogoURL } from '@/models/network';
 import { formatTokenAmount } from '@/services/sim-assets';
+import { useLocalePrefs, numberSeparators } from '@/services/locale-format';
 import type { AssetChange, AssetSimResult } from '@/services/tx-simulation';
 import { scaleFont, color, text, inter, space, radius, createStyles } from '@/constants/theme';
 
@@ -130,6 +131,8 @@ export function BalanceChangePreview({ result, chainId, selfTransfer, heroFlows 
 
 function ChangeRow({ change, chainId }: { change: AssetChange; chainId: number }) {
   const { t } = useTranslation();
+  useLocalePrefs();
+  const sep = numberSeparators();
   const received = change.delta > 0n;
   const tint = received ? color.success.base : color.fg.base;
   // Native coins get the real coin logo (ETH on Base → Ethereum's), ERC-20s the
@@ -157,7 +160,7 @@ function ChangeRow({ change, chainId }: { change: AssetChange; chainId: number }
           </>
         ) : (
           <Text style={[styles.amount, { color: tint }]} numberOfLines={1}>
-            {received ? '+' : '−'}{formatTokenAmount(change.delta, change.decimals ?? 18)}
+            {received ? '+' : '−'}{formatTokenAmount(change.delta, change.decimals ?? 18, 6, sep)}
             {change.symbol ? ` ${change.symbol}` : ''}
           </Text>
         )}

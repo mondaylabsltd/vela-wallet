@@ -12,6 +12,7 @@ import {
 import { type ClearSignResult } from '@/services/clear-signing';
 import { readErc20Allowance } from '@/services/token-reads';
 import { knownContract } from '@/services/local-descriptors';
+import { useLocalePrefs, numberSeparators } from '@/services/locale-format';
 import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
 import { styles } from '../signing-core';
 import { IntentHeader } from '../IntentHeader';
@@ -66,12 +67,17 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
   const nowSec = Math.floor(Date.now() / 1000);
   const expired = deadlineSec > 0 && deadlineSec < nowSec;
 
+  useLocalePrefs();
+  const sep = numberSeparators();
   const symbol = meta?.symbol ?? '…';
   const decimals = meta?.decimals ?? 18;
   const logoUrls = approval.tokenAddress
     ? tokenLogoURLsByAddress(chainId, approval.tokenAddress)
     : undefined;
 
+  // Amount in the user's number format — computed ONCE so the summary text and the
+  // SummaryLine `emphasize` substring stay identical (verbatim match bolds it).
+  const approveAmount = `${formatRawTokenAmount(approval.amountRaw ?? 0n, decimals, 6, sep)} ${symbol}`;
   // Plain-language one-liner — what this approval actually lets the spender do.
   const spenderName = clearSign?.contractName ?? knownContract(approval.spender)?.name ?? shortAddr(approval.spender);
   const summary = approval.isReducing
@@ -80,7 +86,7 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
       ? t('componentsUi.signing.summaryApproveNft', { operator: spenderName })
       : approval.isUnbounded
         ? t('componentsUi.signing.summaryApproveUnlimited', { spender: spenderName, token: symbol })
-        : t('componentsUi.signing.summaryApprove', { spender: spenderName, amount: `${formatRawTokenAmount(approval.amountRaw ?? 0n, decimals)} ${symbol}` });
+        : t('componentsUi.signing.summaryApprove', { spender: spenderName, amount: approveAmount });
   // Neutral by default; only an unbounded grant warms the sentence to red.
   const summaryTone = approval.isUnbounded && !approval.isReducing ? 'danger' : 'neutral';
 
@@ -94,7 +100,7 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
       <SummaryLine
         text={summary}
         tone={summaryTone}
-        emphasize={[spenderName, `${formatRawTokenAmount(approval.amountRaw ?? 0n, decimals)} ${symbol}`, symbol]}
+        emphasize={[spenderName, approveAmount, symbol]}
       />
 
       <EditableApproveCard
@@ -121,11 +127,11 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
             <Text style={styles.allowanceTotalLabel}>{t('componentsUi.signingApprove.resultingTotal')}</Text>
             {currentAllowance !== null ? (
               <Text style={styles.allowanceTotalValue}>
-                {`${formatRawTokenAmount(currentAllowance, dec)} + ${formatRawTokenAmount(increment, dec)} = ${formatRawTokenAmount(currentAllowance + increment, dec)} ${sym}`}
+                {`${formatRawTokenAmount(currentAllowance, dec, 6, sep)} + ${formatRawTokenAmount(increment, dec, 6, sep)} = ${formatRawTokenAmount(currentAllowance + increment, dec, 6, sep)} ${sym}`}
               </Text>
             ) : (
               <Text style={styles.allowanceTotalUnknown}>
-                {t('componentsUi.signingApprove.resultingTotalUnknown', { amount: `${formatRawTokenAmount(increment, dec)} ${sym}` })}
+                {t('componentsUi.signingApprove.resultingTotalUnknown', { amount: `${formatRawTokenAmount(increment, dec, 6, sep)} ${sym}` })}
               </Text>
             )}
           </View>

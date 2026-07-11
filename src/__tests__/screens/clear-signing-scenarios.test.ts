@@ -7,6 +7,8 @@
 jest.mock('@/services/storage', () => ({
   getEthereumDataURL: () => 'https://ethereum-data.awesometools.dev',
   loadTransactions: async () => [],
+  getLocalePrefs: () => ({ numberFormat: 'comma_dot', dateFormat: 'auto', timeFormat: 'auto' }),
+  subscribeLocalePrefs: () => () => {},
 }));
 
 const mockPoolRpcCall = jest.fn(async (_m: string, _p: any[], _c: number): Promise<any> => { throw new Error('no rpc'); });
@@ -159,7 +161,7 @@ describe('clear-signing harness scenarios', () => {
     const amount = r!.fields.find((f) => f.role === 'send-amount')!;
     // Regression: a malformed (over-padded) amount word once rendered "3.9062".
     expect(amount.value).toBe('1,000 USDC');
-    expect(amount.usd).toBe('$1,000.00');
+    expect(amount.usdValue).toBe(1000);
   });
 
   it('every scenario calldata is ABI word-aligned (selector + N×32 bytes)', () => {

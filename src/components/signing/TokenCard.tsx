@@ -10,6 +10,8 @@ import { knownTokenSymbol } from '@/services/tokens';
 import { AlertTriangle, ArrowDown } from 'lucide-react-native';
 import React from 'react';
 import { Text, View } from 'react-native';
+import { useLocalePrefs } from '@/services/locale-format';
+import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { localizeLabel, riskColors, SigningChainContext, styles } from './signing-core';
 
 export function TokenCard({ field, variant, hideSign, hero ,heroLabel}: {
@@ -27,6 +29,9 @@ export function TokenCard({ field, variant, hideSign, hero ,heroLabel}: {
    *  a plain send doesn't need — its summary already says "sending"). */
   heroLabel?: boolean;
 }) {
+  // Re-render on number-format preset change; format fiat in the user's currency.
+  useLocalePrefs();
+  const dc = useDisplayCurrency();
   // Wise-style de-container: benign amounts sit on an OPEN row (no card), letting
   // the number breathe; only caution/danger get a tinted card, so a filled card
   // always means "pay attention".
@@ -69,7 +74,7 @@ export function TokenCard({ field, variant, hideSign, hero ,heroLabel}: {
           {heroLabel && (
             <View style={styles.tokenSubRow}>
               <Text style={styles.tokenLabel}>{localizeLabel(field.label)}</Text>
-              {!!field.usd && <Text style={styles.tokenUsd}>≈ {field.usd}</Text>}
+              {field.usdValue != null && <Text style={styles.tokenUsd}>≈ {dc.fmt(field.usdValue)}</Text>}
             </View>
           )}
         </View>
@@ -96,7 +101,7 @@ export function TokenCard({ field, variant, hideSign, hero ,heroLabel}: {
         </Text>
         <View style={styles.tokenSubRow}>
           <Text style={styles.tokenLabel}>{localizeLabel(field.label)}</Text>
-          {!!field.usd && <Text style={styles.tokenUsd}>≈ {field.usd}</Text>}
+          {field.usdValue != null && <Text style={styles.tokenUsd}>≈ {dc.fmt(field.usdValue)}</Text>}
         </View>
       </View>
       {field.warning && (

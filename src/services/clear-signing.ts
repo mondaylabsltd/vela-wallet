@@ -19,6 +19,7 @@ import { keccak256, create2Address } from '@/services/eth-crypto';
 import { toHex, fromHex } from '@/services/hex';
 import { decodeCalldata, matchSelector, parseSignature, type AbiParam, type DecodedValue } from '@/services/abi-decode';
 import { lookupSelector } from '@/services/selector-registry';
+import { groupDigits, numberSeparators, formatNumber, formatDateTime as localeFormatDateTime } from '@/services/locale-format';
 import { localDescriptor, knownContract, interfaceDescriptor, INTERFACE_IDS, type TokenStandard } from '@/services/local-descriptors';
 import { knownTokenSymbol, knownTokenDecimals } from '@/services/tokens';
 import type { TypedData } from '@/services/eip712';
@@ -85,8 +86,9 @@ export interface ClearSignField {
   expired?: boolean;
   /** Full lowercased address for addressName fields (identity/risk lookups). */
   address?: string;
-  /** Pre-formatted USD valuation (e.g. "$1,000.00"), when cheaply known. */
-  usd?: string;
+  /** USD magnitude, when cheaply known — formatted into the user's display currency
+   *  at render via useDisplayCurrency().fmt (no baked "$", so € / ¥ / etc. work). */
+  usdValue?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -528,7 +530,7 @@ function formatGenericValue(v: DecodedValue, type: string): string {
     return `[${items.join(', ')}${v.length > 4 ? `, +${v.length - 4}` : ''}]`;
   }
   if (typeof v === 'boolean') return v ? 'true' : 'false';
-  if (typeof v === 'bigint') return formatWithCommas(v.toString());
+  if (typeof v === 'bigint') return groupDigits(v.toString());
   const s = String(v);
   if (/^0x[0-9a-fA-F]{40}$/.test(s)) return `${s.slice(0, 8)}…${s.slice(-6)}`; // address
   return shortHex(s);
@@ -899,7 +901,7 @@ interface FormattedField {
   unverified?: boolean;
   expired?: boolean;
   address?: string;
-  usd?: string;
+  usdValue?: number;
 }
 
 function formatField(
@@ -1027,8 +1029,10 @@ function formatTokenAmount(
   // Cheap, exact USD for stablecoins (≈ $1) — covers the common case (approve /
   // transfer / swap of USDC/USDT/DAI) with zero network cost. Other ERC-20s need
   // a price engine and are intentionally left without a ≈$ line.
-  const usd = verified && symbol && STABLE_SYMBOLS.has(symbol)
-    ? formatUsdValue(amount, decimals)
+  // Numeric USD magnitude (peg = $1) — the component formats it into the user's
+  // display currency at render time (no baked "$", so € / ¥ / etc. work).
+  const usdValue = verified && symbol && STABLE_SYMBOLS.has(symbol)
+    ? usdMagnitude(amount, decimals)
     : undefined;
 
   return {
@@ -1036,22 +1040,20 @@ function formatTokenAmount(
     format: 'tokenAmount',
     tokenAddress: tokenAddr, // normalized + validated above (or undefined)
     ...(verified ? {} : { unverified: true }),
-    ...(usd ? { usd } : {}),
+    ...(usdValue != null ? { usdValue } : {}),
   };
 }
 
 /** USD pegged stablecoins we can value at ~$1 with no price lookup. */
 const STABLE_SYMBOLS = new Set(['USDC', 'USDT', 'DAI', 'USDC.e', 'USD₮0', 'BUSD', 'TUSD', 'USDP', 'FRAX', 'LUSD', 'GUSD', 'PYUSD']);
 
-/** Format raw stablecoin base units as a "$1,234.56" string (peg = $1, rounded). */
-function formatUsdValue(raw: bigint, decimals: number): string {
+/** Raw stablecoin base units → a USD magnitude (peg = $1, rounded to cents). */
+function usdMagnitude(raw: bigint, decimals: number): number {
   const base = 10n ** BigInt(decimals);
-  let whole = raw / base;
+  const whole = raw / base;
   const frac = raw % base;
-  // Round (not truncate) to cents, carrying into the whole part on overflow.
-  let cents = Number((frac * 100n + base / 2n) / base);
-  if (cents >= 100) { whole += 1n; cents -= 100; }
-  return `$${formatWithCommas(whole.toString())}.${cents.toString().padStart(2, '0')}`;
+  const cents = Number((frac * 100n + base / 2n) / base); // round to cents
+  return Number(whole) + cents / 100;
 }
 
 function formatAddress(rawValue: DecodedValue | undefined): FormattedField | null {
@@ -1082,7 +1084,7 @@ function formatNftName(rawValue: DecodedValue | undefined): FormattedField | nul
   if (rawValue === undefined || rawValue === null) return { value: 'NFT', format: 'nftName' };
   const s = String(rawValue);
   // Numeric token ids get a "#" prefix; anything else (a name) passes through.
-  return { value: /^\d+$/.test(s) ? `#${formatWithCommas(s)}` : s, format: 'nftName' };
+  return { value: /^\d+$/.test(s) ? `#${groupDigits(s)}` : s, format: 'nftName' };
 }
 
 // Year ~2100 in unix seconds — anything beyond is a "no deadline" sentinel
@@ -1101,8 +1103,9 @@ function formatDate(rawValue: DecodedValue | undefined, params: any): FormattedF
   try {
     const date = new Date(ts * 1000);
     if (!Number.isFinite(date.getTime())) return null;
-    const formatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    return { value: expired ? `${formatted} (expired)` : formatted, format: 'date', ...(expired ? { expired: true } : {}) };
+    // User's date+time preset (no hardcoded en-US); the "(expired)" English literal
+    // is dropped — the field tints + a localized expiredWarning banner carries it.
+    return { value: localeFormatDateTime(date), format: 'date', ...(expired ? { expired: true } : {}) };
   } catch {
     return { value: String(ts), format: 'date' };
   }
@@ -1133,7 +1136,9 @@ function formatUnit(rawValue: DecodedValue | undefined, params: any): FormattedF
   const decimals = params?.decimals ?? 0;
   const base = params?.base ?? '';
   const prefix = params?.prefix ?? false;
-  const display = decimals > 0 ? (num / Math.pow(10, decimals)).toFixed(decimals) : String(num);
+  const display = decimals > 0
+    ? formatNumber(num / Math.pow(10, decimals), { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+    : formatNumber(num, { maximumFractionDigits: 0 });
   const formatted = prefix ? `${base}${display}` : `${display}${base}`;
   return { value: formatted.trim(), format: 'unit' };
 }
@@ -1157,12 +1162,12 @@ function toBigInt(v: DecodedValue | undefined): bigint {
 
 function formatWeiAmount(wei: bigint): string {
   if (wei === 0n) return '0';
-  const eth = Number(wei) / 1e18;
+  const eth = Number(wei) / 1e18; // native amount — already a JS number path, no new loss
   if (eth >= 0.0001) {
-    return eth.toFixed(6).replace(/\.?0+$/, '');
+    return formatNumber(eth, { maximumFractionDigits: 6 });
   }
   if (wei < 1000000n) return `${wei} wei`;
-  return eth.toFixed(8).replace(/\.?0+$/, '');
+  return formatNumber(eth, { maximumFractionDigits: 8 });
 }
 
 function guessTokenDecimals(chainId: number, tokenAddr: string | undefined): { decimals: number; verified: boolean } {
@@ -1188,18 +1193,14 @@ function formatTokenValue(raw: bigint, decimals: number): string {
   const frac = raw % divisor;
 
   if (frac === 0n) {
-    return formatWithCommas(whole.toString());
+    return groupDigits(whole.toString());
   }
 
   const fracStr = frac.toString().padStart(decimals, '0');
   // Show up to 4 significant fractional digits, trim trailing zeros
   const trimmed = fracStr.slice(0, Math.min(4, decimals)).replace(/0+$/, '');
-  if (!trimmed) return formatWithCommas(whole.toString());
-  return `${formatWithCommas(whole.toString())}.${trimmed}`;
-}
-
-function formatWithCommas(n: string): string {
-  return n.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (!trimmed) return groupDigits(whole.toString());
+  return `${groupDigits(whole.toString())}${numberSeparators().decimal}${trimmed}`;
 }
 
 function truncateHex(s: string): string {
