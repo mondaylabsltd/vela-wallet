@@ -42,6 +42,7 @@ import { resolveTokenMetadata } from '@/services/token-metadata';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
 import { resolveRecipientRisk, type RecipientRisk } from '@/services/recipient-risk';
 import { parseSiwe, checkSiweDomainBinding, siweHost, type SiweBinding } from '@/services/siwe';
+import { decodePersonalMessage } from '@/services/decode-sign-message';
 import { readErc20Allowance } from '@/services/token-reads';
 import { knownTokenSymbol } from '@/services/tokens';
 import { fetchChainlinkPrices, resolveChainlinkPrice } from '@/services/price-service';
@@ -1835,18 +1836,6 @@ function AdvancedPanel({ method, params, clearSign }: {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function decodePersonalMessage(hexMsg: string): string {
-  try {
-    const clean = hexMsg.startsWith('0x') ? hexMsg.slice(2) : hexMsg;
-    const bytes = new Uint8Array(clean.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
-    const decoded = new TextDecoder().decode(bytes);
-    if (/^[\x20-\x7E\n\r\t]+$/.test(decoded)) return decoded;
-    return `0x${clean.slice(0, 64)}${clean.length > 64 ? '...' : ''}`;
-  } catch {
-    return hexMsg.slice(0, 66) + (hexMsg.length > 66 ? '...' : '');
-  }
-}
 
 function formatTxValue(value: string | undefined, cid: number): string {
   const sym = nativeSymbol(cid);
