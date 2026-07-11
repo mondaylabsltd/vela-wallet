@@ -115,6 +115,7 @@
       "advancedToggle": "Advanced — view raw data",
       "batchIntent": "Batch",
       "intentApprove": "Approve",
+      "intentTransferNft": "Transfer NFT",
       "intentSwap": "Swap",
       "intentDeposit": "Deposit",
       "intentWithdraw": "Withdraw",

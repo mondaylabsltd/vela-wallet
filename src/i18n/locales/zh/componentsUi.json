@@ -92,6 +92,7 @@
       "advancedToggle": "高级 — 查看原始数据",
       "batchIntent": "批量",
       "intentApprove": "授权",
+      "intentTransferNft": "转移 NFT",
       "intentSwap": "兑换",
       "intentDeposit": "存入",
       "intentWithdraw": "取出",

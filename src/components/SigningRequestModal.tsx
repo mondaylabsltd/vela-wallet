@@ -52,6 +52,7 @@ import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview'
 import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { ChainLogo } from '@/components/ChainLogo';
 import { TokenLogo } from '@/components/TokenLogo';
+import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import {
   estimateTransactionFee,
   rawBundlerGasCost,
@@ -90,6 +91,7 @@ function riskColors(): Record<SigningRisk, string> {
 // ---------------------------------------------------------------------------
 const INTENT_L10N: Record<string, string> = {
   send: 'intentSend', transfer: 'intentSend',
+  'transfer nft': 'intentTransferNft', 'send nft': 'intentTransferNft',
   approve: 'intentApprove', 'set allowance': 'intentApprove', 'increase allowance': 'intentApprove',
   swap: 'intentSwap', exchange: 'intentSwap', trade: 'intentSwap',
   deposit: 'intentDeposit', supply: 'intentDeposit',
@@ -1829,8 +1831,19 @@ function ContractBar({ label, name, address, verified, warning, riskCheck }: {
     setTimeout(() => setCopied(false), 1500);
   }, [address]);
 
+  // A first-ever interaction is the real address-poisoning signal; being a contract
+  // only matters as a caveat ON a first-time send (a known/repeat recipient that's a
+  // contract — e.g. a swap router — is expected, so don't badge it). This keeps the
+  // row to at most ONE subtle risk note instead of two competing chips.
+  const showFirstTime = !!risk?.firstInteraction;
+  const showContractCaveat = risk?.isContract === true && showFirstTime;
+
   return (
     <View style={[styles.contractBar, warning && styles.contractBarWarning]}>
+      {/* Identicon only for a wallet recipient (riskCheck rows) — a token has its
+          own logo and a contract (spender/operator/collection) isn't a personal
+          identity, so a nimiq identicon there is noise. */}
+      {riskCheck && address ? <ContactAvatar name={shownName ?? ''} address={address} size={36} /> : null}
       <View style={styles.contractInfo}>
         <Text style={styles.contractLabel}>{label}</Text>
         <View style={styles.contractAddrRow}>
@@ -1845,16 +1858,15 @@ function ContractBar({ label, name, address, verified, warning, riskCheck }: {
           {address && (
             <Text style={styles.contractAddr}>{shortAddr(address)}</Text>
           )}
-          {/* First-ever interaction with this address → address-poisoning hint. */}
-          {risk?.firstInteraction && (
-            <Text style={[styles.riskTag, styles.riskTagWarn]}>{t('componentsUi.signing.firstTimeTag')}</Text>
-          )}
-          {/* Contract vs wallet — a contract recipient for a plain transfer is
-              worth a glance (could be unintended). */}
-          {risk?.isContract === true && (
-            <Text style={styles.riskTag}>{t('componentsUi.signing.contractTag')}</Text>
-          )}
         </View>
+        {/* One restrained safety line, not two chips — first-time is the poisoning
+            signal, "· contract" a caveat only when it's also a first-time send. */}
+        {showFirstTime && (
+          <Text style={styles.riskNote}>
+            {t('componentsUi.signing.firstTimeTag')}
+            {showContractCaveat ? ` · ${t('componentsUi.signing.contractTag')}` : ''}
+          </Text>
+        )}
         <RecipientTrust address={address} compact />
       </View>
       {address && (
@@ -2296,10 +2308,14 @@ const styles = createStyles(() => ({
   },
 
   // ===== Message Bubble =====
+  // De-containered (Wise): the signed message sits on an open block framed by
+  // hairlines (top + bottom) — the payload boundary without a gray card.
   msgBubble: {
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius['2xl'],
-    padding: space['2xl'],
+    paddingVertical: space.xl,
+    borderTopWidth: 1,
+    borderTopColor: color.border.base,
+    borderBottomWidth: 1,
+    borderBottomColor: color.border.base,
     marginVertical: space.md,
   },
   msgTag: {
@@ -2472,14 +2488,9 @@ const styles = createStyles(() => ({
   siweOkText: { fontSize: text.xs, ...inter.medium, color: color.success.base },
 
   // ===== Recipient-risk tags (first-time / contract) =====
-  riskTag: {
-    fontSize: scaleFont(9), ...inter.semibold, color: color.fg.subtle,
-    backgroundColor: color.bg.raised, overflow: 'hidden',
-    paddingHorizontal: 5, paddingVertical: 1, borderRadius: radius.sm,
-    textTransform: 'uppercase', letterSpacing: 0.3,
-  },
-  riskTagWarn: {
-    color: color.warning.base, backgroundColor: color.warning.soft,
+  // One restrained caution line (warning ink, no chip) — informs without shouting.
+  riskNote: {
+    fontSize: text.xs, ...inter.medium, color: color.warning.base, marginTop: 1,
   },
 
   // ===== increaseAllowance resulting total =====
