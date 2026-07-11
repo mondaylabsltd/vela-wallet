@@ -25,7 +25,7 @@ import { useDAppConnection } from '@/models/dapp-connection';
 import { useWallet } from '@/models/wallet-state';
 import { shortAddr, isAddress, tokenLogoURLsByAddress, type BLEIncomingRequest } from '@/models/types';
 import { chainName, nativeSymbol, nativeCoinLogoURL, explorerBaseURL, DEFAULT_NETWORKS } from '@/models/network';
-import { openBrowser } from '@/services/platform';
+import { openBrowser, hapticLight, hapticSuccess, hapticError, hapticWarning } from '@/services/platform';
 import {
   resolveTransaction, resolveTypedData,
   type ClearSignResult, type ClearSignField, type SigningRisk,
@@ -235,6 +235,26 @@ export function SigningSheet({
     () => (incomingRequest ? detectApproval(incomingRequest.method, incomingRequest.params) : null),
     [incomingRequest],
   );
+
+  // --- Branded haptic feedback (no-op on web) ---
+  // A danger sheet (opaque eth_sign, or an unbounded approval) buzzes on open — a
+  // physical "pay attention" that lands before the eye reaches the warning.
+  useEffect(() => {
+    if (readOnly) return;
+    const m = incomingRequest?.method;
+    const p = incomingRequest?.params?.[0];
+    const siwePhish = m === 'personal_sign' && !!p && (() => {
+      const s = parseSiwe(decodePersonalMessage(p));
+      return !!s && checkSiweDomainBinding(s.domain, dappInfo?.url ?? incomingRequest?.origin) === 'mismatch';
+    })();
+    const dangerous = m === 'eth_sign' || (!!approval?.isUnbounded && !approval.isReducing) || siwePhish;
+    if (dangerous) hapticWarning();
+  }, [incomingRequest, approval, readOnly, dappInfo?.url]);
+  // Physical confirmation of the outcome — success buzz when the signature lands,
+  // error buzz when it's rejected or fails.
+  useEffect(() => { if (pendingOpHash) hapticSuccess(); }, [pendingOpHash]);
+  useEffect(() => { if (signError) hapticError(); }, [signError]);
+
   const [approveChoice, setApproveChoice] = useState<ApprovalChoice | null>(null);
   const [approveTokenMeta, setApproveTokenMeta] = useState<{ symbol: string; decimals: number; verified: boolean } | null>(null);
 
@@ -562,6 +582,7 @@ export function SigningSheet({
   const recommendReject = siwePhishing;
 
   const confirm = () => {
+    hapticLight(); // tactile acknowledgement the moment the user commits to signing
     // For an edited approval, re-encode to the chosen finite amount BEFORE submit.
     // The independent guard re-checks at the submit chokepoint, so a rewrite
     // failure fails closed (never unbounded).
