@@ -85,7 +85,8 @@ The endpoint must return **USD-based** rates in one of two shapes. Both are acce
 
 | Provider | URL | Currencies | Shape | Notes |
 |---|---|---|---|---|
-| **Frankfurter v2** (default) | `https://api.frankfurter.dev/v2/rates?base=USD` | ~160 (84 central banks, incl. VND) | array | FOSS, self-hostable, no key. **`?base=USD` is mandatory** — without it the base is EUR (wrong). |
+| **Vela Frankfurter** (default) | `https://vela-currency.getvela.app/v2/rates?base=USD` | ~160 (84 central banks, incl. VND) | array | Vela's self-hosted Frankfurter ([mondaylabsltd/vela-currency](https://github.com/mondaylabsltd/vela-currency)). Same v2 API as below. **`?base=USD` is mandatory** — without it the base is EUR (wrong). |
+| Frankfurter v2 (public) | `https://api.frankfurter.dev/v2/rates?base=USD` | ~160 (84 central banks, incl. VND) | array | FOSS, self-hostable, no key. |
 | Frankfurter v1 | `https://api.frankfurter.dev/v1/latest?base=USD` | 29 (ECB only, **no VND**) | object | |
 | open.er-api | `https://open.er-api.com/v6/latest/USD` | ~160 (incl. VND) | object | Free tier, not self-hostable. |
 | self-hosted | your URL | your choice | either | Run Frankfurter via Docker, or proxy any source — just return one of the two shapes, USD-based. |
