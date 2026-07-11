@@ -140,7 +140,7 @@ function MockSigningModal({ request, onClose }: {
         request={request}
         chainId={1}
         account={activeAccount ?? { name: "Wallet" }}
-        dappInfo={{ name: "Test dApp", url: "https://clear-signing-test" }}
+        dappInfo={{ name: "PancakeSwap", url: "https://pancakeswap.finance" }}
         isSigning={false}
         signError={null}
         pendingOpHash={null}

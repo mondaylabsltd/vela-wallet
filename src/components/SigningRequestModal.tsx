@@ -739,6 +739,19 @@ export function SigningRequestModal() {
 // dApp Banner
 // ===========================================================================
 
+/**
+ * The site's OWN favicon, derived from its host — no third-party favicon service,
+ * so signing a tx never leaks the dApp you're on to Google/DuckDuckGo/etc. Returns
+ * undefined for non-registrable hosts (the test harness `clear-signing-test`,
+ * `localhost`, bare IPs) so the banner falls back to a letter monogram.
+ */
+function faviconForHost(domain?: string): string | undefined {
+  if (!domain) return undefined;
+  const host = domain.replace(/^[a-z]+:\/\//i, '').split('/')[0].split(':')[0].trim();
+  if (!host || !host.includes('.') || /^\d+(\.\d+){3}$/.test(host)) return undefined;
+  return `https://${host}/favicon.ico`;
+}
+
 function DAppBanner({ name, domain, icon, chainId, accountName, accountAddress }: {
   name: string;
   domain?: string;
@@ -749,12 +762,24 @@ function DAppBanner({ name, domain, icon, chainId, accountName, accountAddress }
 }) {
   const net = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
 
+  // Prefer an explicit icon (e.g. the in-app browser's captured favicon); otherwise
+  // derive the site's own /favicon.ico. Fall back to a letter monogram if the image
+  // fails to load (404 / not an image). Reset the failure flag when the target changes.
+  const logoUri = icon ?? faviconForHost(domain);
+  const [logoFailed, setLogoFailed] = useState(false);
+  useEffect(() => { setLogoFailed(false); }, [logoUri]);
+  const showLogo = !!logoUri && !logoFailed;
+
   return (
     <View style={styles.dappBanner}>
       {/* Row 1: dApp identity ←→ chain */}
       <View style={styles.dappRow1}>
-        {icon ? (
-          <Image source={{ uri: icon }} style={styles.dappLogo} />
+        {showLogo ? (
+          <Image
+            source={{ uri: logoUri }}
+            style={styles.dappLogo}
+            onError={() => setLogoFailed(true)}
+          />
         ) : (
           <View style={[styles.dappLogo, styles.dappLogoFallback]}>
             <Text style={styles.dappLogoText}>{(name[0] ?? '?').toUpperCase()}</Text>

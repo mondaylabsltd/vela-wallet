@@ -280,7 +280,10 @@ export default function BrowserScreen() {
   const onNavigationChange = useCallback(
     (n: NavigationChangeEvent) => {
       setNav(n);
-      if (n.url) transport.setDAppInfo({ name: n.title || hostOf(n.url), url: n.url });
+      // Pass the page's real captured favicon so the signing sheet shows the actual
+      // site logo (not a letter). Empty until it resolves → the sheet then derives
+      // /favicon.ico from the host, then falls back to a monogram.
+      if (n.url) transport.setDAppInfo({ name: n.title || hostOf(n.url), url: n.url, icon: n.favicon || undefined });
 
       // Record the visit once the page has settled (deduped by origin in the store).
       // Fires on load-finish and again when the favicon resolves, so the entry ends
