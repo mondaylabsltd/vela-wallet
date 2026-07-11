@@ -120,3 +120,24 @@ describe('camera permanent-denial escape (audit low)', () => {
     expect(src).toContain('canAskAgain');
   });
 });
+
+describe('batch/split send carries the recipient name to the address book (issue #81)', () => {
+  it('RecipientDraft can carry an optional name', () => {
+    const src = read('src/components/send/MultiRecipientEditor.tsx');
+    expect(src).toMatch(/interface RecipientDraft[\s\S]*?name\?: string/);
+  });
+
+  it('the payroll importer keeps the parsed name when building drafts', () => {
+    const src = read('src/components/send/BatchImportSheet.tsx');
+    // apply() must forward r.name, not drop it.
+    expect(src).toMatch(/makeRecipientId\(\)[\s\S]*?name: r\.name/);
+  });
+
+  it('the split-send path sets toName so deriveFromHistory can surface it', () => {
+    const src = read('src/screens/wallet/SendScreen.tsx');
+    // The split-mode lines map (recipients.map) must set toName from the draft
+    // name — mirroring the single/multiSelect branches. (contacts.test.ts already
+    // proves a persisted toName becomes the auto-contact's resolvedName.)
+    expect(src).toContain('toName: r.name?.trim() || undefined');
+  });
+});

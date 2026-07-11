@@ -24,6 +24,9 @@ export interface RecipientDraft {
   id: string;
   address: string;
   amount: string; // human decimal string
+  /** Optional label carried from the payroll importer's name column, so a split
+   *  send records the recipient's name in the address book (not just the address). */
+  name?: string;
 }
 
 const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;

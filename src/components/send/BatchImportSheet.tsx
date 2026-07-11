@@ -181,7 +181,7 @@ export function BatchImportSheet({ visible, onClose, token, currencyCode, curren
   };
 
   const apply = () => {
-    const recipients: RecipientDraft[] = capped.map((r) => ({ id: makeRecipientId(), address: r.address, amount: r.tokenAmount }));
+    const recipients: RecipientDraft[] = capped.map((r) => ({ id: makeRecipientId(), address: r.address, amount: r.tokenAmount, name: r.name }));
     hapticSuccess();
     onApply(recipients);
   };
