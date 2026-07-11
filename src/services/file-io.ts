@@ -42,8 +42,36 @@ export async function pickTable(): Promise<PickedFile | null> {
   return { name, text: await file.text() };
 }
 
-/** Write `content` to a cache file and hand it to the OS share sheet. */
+/**
+ * Save `content` as a file the user keeps.
+ *
+ * - Android: use the Storage Access Framework so the user picks a real folder
+ *   (Files / Downloads / …) and the file is written there. Android's share sheet
+ *   (ACTION_SEND) only offers "send to app" targets, never "save to storage", so
+ *   without SAF there was no way to actually keep the file (issue #79). If the
+ *   user cancels the folder picker or SAF is unavailable, fall through to share.
+ * - iOS: the share sheet already includes "Save to Files", so sharing is the
+ *   native save path.
+ * - Web: see file-io.web.ts (anchor download).
+ */
 export async function saveTextFile(name: string, content: string, mime = 'text/plain'): Promise<void> {
+  const { Platform } = await import('react-native');
+  if (Platform.OS === 'android') {
+    try {
+      const { StorageAccessFramework } = await import('expo-file-system/legacy');
+      const perm = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (perm.granted) {
+        const destUri = await StorageAccessFramework.createFileAsync(perm.directoryUri, name, mime);
+        await StorageAccessFramework.writeAsStringAsync(destUri, content);
+        return;
+      }
+      // Folder picker cancelled → fall through to the share sheet.
+    } catch {
+      // SAF unavailable / write failed → fall through so the user can still Share.
+    }
+  }
+
+  // iOS save path + Android fallback: write to cache and hand to the OS share sheet.
   const { File, Paths } = await import('expo-file-system');
   const file = new File(Paths.cache, name);
   try {
