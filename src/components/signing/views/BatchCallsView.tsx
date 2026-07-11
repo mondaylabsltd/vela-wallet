@@ -6,7 +6,7 @@ import React from 'react';
 import { View, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { color } from '@/constants/theme';
-import { type DetectedApproval, type ApprovalChoice } from '@/services/approval-guard';
+import { type DetectedApproval, type ApprovalChoice, formatTokenAmount as formatRawTokenAmount } from '@/services/approval-guard';
 import { type ClearSignResult } from '@/services/clear-signing';
 import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
 import { knownContract } from '@/services/local-descriptors';
@@ -51,11 +51,6 @@ function legGrantsBroad(ap: DetectedApproval | null, choice: ApprovalChoice | nu
   return false;
 }
 
-/** Is this leg an editable, amount/grant-bearing approval that gets the inline cap editor? */
-function legIsEditableApproval(ap: DetectedApproval | null): boolean {
-  return !!ap && ap.editable && !ap.isReducing;
-}
-
 export function BatchCallsView({ items, choices, onChoiceChange, metaByToken, editable, requestId }: {
   items: BatchItem[];
   choices: Record<number, ApprovalChoice | null>;
@@ -91,17 +86,19 @@ export function BatchCallsView({ items, choices, onChoiceChange, metaByToken, ed
           ? localizeIntent(it.clearSign.intent)
           : (ap ? t('componentsUi.signingApprove.verbApprove') : t('componentsUi.signing.batchCall'));
 
-        // Editable approval leg → inline spending-cap editor (same control single
-        // approvals use), so an unlimited approve can be capped here, not only rejected.
-        if (editable && legIsEditableApproval(ap) && ap) {
-          const meta = ap.tokenAddress ? metaByToken.get(ap.tokenAddress.toLowerCase()) : undefined;
+        const meta = ap?.tokenAddress ? metaByToken.get(ap.tokenAddress.toLowerCase()) : undefined;
+        const spenderName = ap ? (it.clearSign?.contractName ?? knownContract(ap.spender)?.name ?? shortAddr(ap.spender)) : undefined;
+
+        // Only an UNBOUNDED / grant-all approve needs the inline cap editor (to force a
+        // finite amount). A bounded approve is already capped, so — like a send or a
+        // plain call — it's a consistent compact row, not a big open editor.
+        const needsEditor = editable && ap && ap.editable && !ap.isReducing && (ap.isUnbounded || ap.isBooleanGrant);
+        if (needsEditor && ap) {
           const logoUrls = ap.tokenAddress ? tokenLogoURLsByAddress(chainId, ap.tokenAddress) : undefined;
           return (
             <View key={`${requestId}-${i}`} style={styles.batchEditLeg}>
               <View style={styles.batchEditHead}>
-                <View style={styles.batchNum}>
-                  <Text style={styles.batchNumText}>{i + 1}</Text>
-                </View>
+                <View style={styles.batchNum}><Text style={styles.batchNumText}>{i + 1}</Text></View>
                 <Text style={styles.batchEditTitle} numberOfLines={1}>{title}</Text>
               </View>
               <EditableApproveCard
@@ -110,7 +107,7 @@ export function BatchCallsView({ items, choices, onChoiceChange, metaByToken, ed
                 decimals={meta?.decimals ?? 18}
                 decimalsVerified={meta?.verified ?? false}
                 logoUrls={logoUrls}
-                spenderLabel={it.clearSign?.contractName ?? knownContract(ap.spender)?.name ?? shortAddr(ap.spender)}
+                spenderLabel={spenderName ?? shortAddr(ap.spender)}
                 choice={choices[i] ?? null}
                 onChange={(c) => onChoiceChange(i, c)}
               />
@@ -118,18 +115,20 @@ export function BatchCallsView({ items, choices, onChoiceChange, metaByToken, ed
           );
         }
 
-        // Non-approval / reducing / read-only leg → compact summary row.
+        // Every other leg → one consistent compact row: number · verb · amount ·
+        // counterparty (spender for an approve, recipient for a send).
         const danger = legGrantsBroad(ap, choices[i]);
-        const summary = batchSummary(it);
+        const detail = ap && ap.tokenAddress
+          ? `${t('componentsUi.signingApprove.spendingCap')} · ${formatRawTokenAmount(ap.amountRaw ?? 0n, meta?.decimals ?? 18)} ${meta?.symbol ?? ''}`.trim()
+          : batchSummary(it);
+        const counterparty = ap ? spenderName : (it.to ? shortAddr(it.to) : '—');
         return (
           <View key={i} style={[styles.batchRow, danger && styles.batchRowDanger]}>
-            <View style={styles.batchNum}>
-              <Text style={styles.batchNumText}>{i + 1}</Text>
-            </View>
+            <View style={styles.batchNum}><Text style={styles.batchNumText}>{i + 1}</Text></View>
             <View style={styles.batchInfo}>
               <Text style={styles.batchTitle} numberOfLines={1}>{title}</Text>
-              {!!summary && <Text style={styles.batchDetail} numberOfLines={1}>{summary}</Text>}
-              <Text style={styles.batchAddr} numberOfLines={1}>{it.to ? shortAddr(it.to) : '—'}</Text>
+              {!!detail && <Text style={styles.batchDetail} numberOfLines={1}>{detail}</Text>}
+              {!!counterparty && <Text style={styles.batchAddr} numberOfLines={1}>{counterparty}</Text>}
             </View>
             {danger && <ShieldAlert size={14} color={riskColors().danger} strokeWidth={2} />}
           </View>

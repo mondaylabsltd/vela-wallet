@@ -95,7 +95,7 @@
       "summarySwap": "你用 {{pay}} 换 {{receive}}。",
       "summarySwapTo": "你用 {{pay}} 换 {{receive}}，收款方 {{to}}。",
       "summaryReceive": "你将收到 {{amount}}。",
-      "summaryApprove": "你允许 {{spender}} 之后最多动用你的 {{amount}}；现在不会拿走任何资产。",
+      "summaryApprove": "你允许 {{spender}} 之后最多动用你的 {{amount}}。",
       "summaryApproveUnlimited": "你允许 {{spender}} 动用你全部的 {{token}}，金额不设上限。",
       "summaryApproveNft": "你允许 {{operator}} 转移这个合集里你的每一个 NFT。",
       "summaryRevoke": "你在撤销 {{spender}} 动用你 {{token}} 的权限。",
