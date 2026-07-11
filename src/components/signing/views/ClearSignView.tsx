@@ -86,6 +86,7 @@ export function ClearSignView({ cs, simConfident }: {
           name={f.value}
           address={cs.contractAddress}
           verified={cs.verified}
+          identity="contract"
         />
       ))}
       {recipients.map((f, i) => (
@@ -95,7 +96,7 @@ export function ClearSignView({ cs, simConfident }: {
           name={f.address ? undefined : f.value}
           address={f.address}
           verified={false}
-          riskCheck
+          identity="auto"
           // Sending a token to its own contract burns it — turn the recipient row
           // itself red so Zone 2 contradicts the benign read, not just a Zone-3 banner.
           warning={sendingToTokenContract && !!f.address && f.address === cs.contractAddress}
@@ -107,6 +108,7 @@ export function ClearSignView({ cs, simConfident }: {
           name={cs.contractName ? `${cs.contractName}${cs.owner ? ` · ${cs.owner}` : ''}` : undefined}
           address={cs.contractAddress}
           verified={cs.verified}
+          identity="contract"
         />
       )}
 

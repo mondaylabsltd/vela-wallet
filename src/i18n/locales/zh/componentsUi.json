@@ -89,6 +89,8 @@
       "ethSignWarning": "无法核实的请求 — 正规应用几乎从不使用 eth_sign。除非你十分确定，否则请拒绝。",
       "firstTimeTag": "首次交互",
       "contractTag": "合约",
+      "walletTag": "钱包",
+      "verifiedTag": "已验证",
       "holdToConfirm": "长按确认",
       "advancedToggle": "高级 — 查看原始数据",
       "noNetworkFee": "无网络费用 — 链下签名",

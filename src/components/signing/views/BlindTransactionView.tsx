@@ -60,7 +60,9 @@ export function BlindTransactionView({ tx, chainId, simConfident }: {
         address={tx.to}
         verified={false}
         warning={hasData && !calm}
-        riskCheck={!hasData}
+        // A plain send goes to a wallet-or-contract recipient (probe it); a call with
+        // data is by definition a contract.
+        identity={hasData ? 'contract' : 'auto'}
       />
 
       {/* Descriptor-absence notice. With a confident simulation it's a calm caption

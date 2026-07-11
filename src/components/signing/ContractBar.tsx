@@ -1,36 +1,44 @@
 /**
- * Contract / recipient bar — the "to whom / what" row of a signing surface,
- * with identity resolution, recipient-risk signals, copy + explorer actions.
+ * Counterparty row — the "who / what" of a signing surface. Answers, at a glance,
+ * whether you're interacting with a PERSON'S WALLET or a CONTRACT, and whether that
+ * contract is verified. Identity drives the visuals:
+ *   - wallet (EOA, incl. EIP-7702 delegated) → nimiq identicon + 「钱包」 chip
+ *   - contract (spender / router / operator) → neutral glyph + 「合约」 chip, never
+ *     an identicon (which reads as a personal identity)
+ *   - asset (token / collection)             → no identity chip; it's a thing, not a who
+ * The raw 0x address and explorer/copy actions live in the Advanced 技术细节 drawer,
+ * not here — the default view stays calm and readable for a first-time user.
  */
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import * as Clipboard from 'expo-clipboard';
 import { shortAddr, isAddress } from '@/models/types';
-import { explorerBaseURL } from '@/models/network';
-import { openBrowser } from '@/services/platform';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
 import { resolveRecipientRisk, type RecipientRisk } from '@/services/recipient-risk';
 import { color } from '@/constants/theme';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import { RecipientTrust } from '@/components/contacts/RecipientTrust';
-import { Copy, Check, ShieldCheck, ShieldAlert, ExternalLink } from 'lucide-react-native';
+import { ShieldCheck, ShieldAlert, FileText } from 'lucide-react-native';
 import { styles, riskColors, SigningChainContext } from './signing-core';
 
-export function ContractBar({ label, name, address, verified, warning, riskCheck }: {
+export function ContractBar({ label, name, address, verified, warning, identity = 'contract' }: {
   label: string;
   name?: string;
   address?: string;
   verified: boolean;
   warning?: boolean;
-  /** Resolve recipient-risk signals (first-interaction + contract/EOA). */
-  riskCheck?: boolean;
+  /** How to read this counterparty:
+   *  'auto'     — a recipient; probe on-chain whether it's a wallet or a contract.
+   *  'contract' — a known contract counterparty (spender / operator / router).
+   *  'asset'    — a token / collection; no wallet-vs-contract identity chip. */
+  identity?: 'auto' | 'contract' | 'asset';
 }) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  // Resolve an on-chain name (ENS / Basename / SPACE ID) when the descriptor
-  // didn't supply one — turns a raw hex address into a recognizable identity and
-  // helps catch address-poisoning. Cached in the service; descriptor name wins.
+  const isRecipient = identity === 'auto';
+
+  // Resolve an on-chain name (ENS / Basename / SPACE ID) when the descriptor didn't
+  // supply one — turns raw hex into a recognizable identity and helps catch address
+  // poisoning. Cached in the service; a descriptor-supplied name always wins.
   const [ident, setIdent] = useState<RecipientIdentity | null>(null);
   useEffect(() => {
     setIdent(null);
@@ -43,82 +51,92 @@ export function ContractBar({ label, name, address, verified, warning, riskCheck
 
   const chainId = React.useContext(SigningChainContext);
 
-  // Recipient-risk: "first time" (address-poisoning defense) + contract/EOA.
+  // Recipient-risk: "first time" (poisoning defense) + wallet/contract (7702-aware).
   const [risk, setRisk] = useState<RecipientRisk | null>(null);
   useEffect(() => {
     setRisk(null);
-    if (!riskCheck || !isAddress(address)) return;
+    if (!isRecipient || !isAddress(address)) return;
     let cancelled = false;
     resolveRecipientRisk(chainId, address).then((r) => { if (!cancelled) setRisk(r); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [riskCheck, address, chainId]);
+  }, [isRecipient, address, chainId]);
 
-  const explorerBase = explorerBaseURL(chainId);
-  const isFullAddr = isAddress(address);
-  const explorerUrl = explorerBase && isFullAddr ? `${explorerBase}/address/${address}` : undefined;
+  // Contract-ness: 'contract' rows are contracts by definition; 'asset' rows aren't
+  // a who; 'auto' rows come from the probe (null = still resolving / RPC unreachable).
+  const isContract: boolean | null =
+    identity === 'contract' ? true
+    : identity === 'asset' ? null
+    : risk?.isContract ?? null;
 
-  const handleCopy = useCallback(async () => {
-    if (!address) return;
-    await Clipboard.setStringAsync(address);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }, [address]);
-
-  // A first-ever interaction is the real address-poisoning signal; being a contract
-  // only matters as a caveat ON a first-time send (a known/repeat recipient that's a
-  // contract — e.g. a swap router — is expected, so don't badge it). This keeps the
-  // row to at most ONE subtle risk note instead of two competing chips.
   const showFirstTime = !!risk?.firstInteraction;
-  const showContractCaveat = risk?.isContract === true && showFirstTime;
+
+  // Avatar: a real contract gets a neutral glyph; a wallet (or a still-unknown
+  // recipient — the identicon is a useful fingerprint regardless) gets its identicon;
+  // an asset gets nothing (its symbol/logo lives in the amount hero).
+  const avatar =
+    identity === 'asset' ? null
+    : isContract === true
+      ? (
+        <View style={styles.contractGlyph}>
+          <FileText size={17} color={color.fg.subtle} strokeWidth={2} />
+        </View>
+      )
+      : isRecipient && address
+        ? <ContactAvatar name={shownName ?? ''} address={address} size={36} />
+        : null;
+
+  // Identity chips answer "who is this". Wallet / Contract, plus Verified when the
+  // descriptor vouches for the contract.
+  const idChip =
+    identity === 'asset' ? null
+    : isContract === true
+      ? { box: styles.idChipContract, txt: styles.idChipContractText, label: t('componentsUi.signing.contractTag') }
+      : isContract === false
+        ? { box: styles.idChipWallet, txt: styles.idChipWalletText, label: t('componentsUi.signing.walletTag', { defaultValue: 'Wallet' }) }
+        : null;
 
   return (
     <View style={[styles.contractBar, warning && styles.contractBarWarning]}>
-      {/* Identicon only for a wallet recipient (riskCheck rows) — a token has its
-          own logo and a contract (spender/operator/collection) isn't a personal
-          identity, so a nimiq identicon there is noise. */}
-      {riskCheck && address ? <ContactAvatar name={shownName ?? ''} address={address} size={36} /> : null}
+      {avatar}
       <View style={styles.contractInfo}>
         <Text style={styles.contractLabel}>{label}</Text>
         <View style={styles.contractAddrRow}>
-          {/* Verified descriptor name keeps the trust-green; a resolved ENS / raw
-              address stays neutral so color always means "verified". */}
-          {shownName && (
-            <Text style={[styles.contractName, !verified && styles.contractNameNeutral]} numberOfLines={1}>
-              {shownName}
-            </Text>
-          )}
-          {!name && ident && <Text style={styles.sourceTag}>{ident.source}</Text>}
-          {address && (
-            <Text style={styles.contractAddr}>{shortAddr(address)}</Text>
+          {shownName ? (
+            <>
+              {/* Verified descriptor name keeps trust-green; a resolved ENS / plain
+                  name stays neutral so color always means "verified". */}
+              <Text style={[styles.contractName, !verified && styles.contractNameNeutral]} numberOfLines={1}>
+                {shownName}
+              </Text>
+              {!name && ident && <Text style={styles.sourceTag}>{ident.source}</Text>}
+            </>
+          ) : (
+            // No name to show — the short address is the primary identity (full 0x
+            // lives in the Advanced drawer).
+            address ? <Text style={[styles.contractAddr, styles.contractNameNeutral]} numberOfLines={1}>{shortAddr(address)}</Text> : null
           )}
         </View>
-        {/* One restrained safety line, not two chips — first-time is the poisoning
-            signal, "· contract" a caveat only when it's also a first-time send. */}
+        {/* Poisoning signal — a never-before-seen recipient. The wallet/contract
+            distinction is now the chip, so this stays a single clean note. */}
         {showFirstTime && (
-          <Text style={styles.riskNote}>
-            {t('componentsUi.signing.firstTimeTag')}
-            {showContractCaveat ? ` · ${t('componentsUi.signing.contractTag')}` : ''}
-          </Text>
+          <Text style={styles.riskNote}>{t('componentsUi.signing.firstTimeTag')}</Text>
         )}
         <RecipientTrust address={address} compact />
       </View>
-      {address && (
-        <Pressable onPress={handleCopy} hitSlop={8} style={[styles.copyBtn, copied && styles.copyBtnDone]}>
-          {copied
-            ? <Check size={12} color={color.success.base} strokeWidth={2.5} />
-            : <Copy size={12} color={color.fg.muted} strokeWidth={2} />
-          }
-        </Pressable>
-      )}
-      {/* Jump out to the block explorer to audit the contract / address. */}
-      {explorerUrl && (
-        <Pressable onPress={() => openBrowser(explorerUrl)} hitSlop={8} style={styles.copyBtn}>
-          <ExternalLink size={12} color={color.fg.muted} strokeWidth={2} />
-        </Pressable>
-      )}
-      {verified && (
-        <View style={styles.verifiedBadge}>
-          <ShieldCheck size={12} color={color.success.base} strokeWidth={2} />
+
+      {(idChip || verified) && (
+        <View style={styles.idChips}>
+          {idChip && (
+            <View style={[styles.idChip, idChip.box]}>
+              <Text style={[styles.idChipText, idChip.txt]}>{idChip.label}</Text>
+            </View>
+          )}
+          {verified && (
+            <View style={[styles.idChip, styles.idChipVerified]}>
+              <ShieldCheck size={11} color={color.success.base} strokeWidth={2.5} />
+              <Text style={[styles.idChipText, styles.idChipVerifiedText]}>{t('componentsUi.signing.verifiedTag', { defaultValue: 'Verified' })}</Text>
+            </View>
+          )}
         </View>
       )}
       {warning && (

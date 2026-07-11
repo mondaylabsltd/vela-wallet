@@ -289,6 +289,28 @@ export const styles = createStyles(() => ({
     width: 24, height: 24,
     alignItems: 'center', justifyContent: 'center',
   },
+  // A contract counterparty gets a neutral rounded-square glyph, NEVER a nimiq
+  // identicon (which reads as a personal wallet). Same 36px footprint so the row
+  // height matches a wallet row.
+  contractGlyph: {
+    width: 36, height: 36, borderRadius: radius.lg,
+    backgroundColor: color.bg.sunken,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  // Identity chips answer "who is this" at a glance — 钱包 / 合约 / 已验证. Small,
+  // restrained; stacked at the row's trailing edge.
+  idChips: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 128 },
+  idChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full,
+  },
+  idChipText: { fontSize: scaleFont(10), ...inter.semibold, letterSpacing: 0.2 },
+  idChipWallet: { backgroundColor: color.info.soft },
+  idChipWalletText: { color: color.info.base },
+  idChipContract: { backgroundColor: color.bg.sunken },
+  idChipContractText: { color: color.fg.muted },
+  idChipVerified: { backgroundColor: color.success.soft },
+  idChipVerifiedText: { color: color.success.base },
 
   // ===== Warning Banner =====
   warnBanner: {

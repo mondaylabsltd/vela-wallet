@@ -11,6 +11,7 @@ import {
 } from '@/services/approval-guard';
 import { type ClearSignResult } from '@/services/clear-signing';
 import { readErc20Allowance } from '@/services/token-reads';
+import { knownContract } from '@/services/local-descriptors';
 import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
 import { styles } from '../signing-core';
 import { IntentHeader } from '../IntentHeader';
@@ -111,8 +112,12 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
 
       <ContractBar
         label={isNft ? t('componentsUi.signingApprove.operatorLabel') : t('componentsUi.signingApprove.spenderLabel')}
+        // Name the spender/operator from the same known-contract table the permit
+        // view uses, so the Universal Router isn't a raw 0x here but named there (F11).
+        name={clearSign?.contractName ?? knownContract(approval.spender)?.name}
         address={approval.spender}
         verified={false}
+        identity="contract"
       />
 
       {approval.tokenAddress && (
@@ -121,6 +126,7 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
           name={clearSign?.contractName ?? (meta?.verified ? meta.symbol : undefined)}
           address={approval.tokenAddress}
           verified={clearSign?.verified ?? false}
+          identity="asset"
         />
       )}
 

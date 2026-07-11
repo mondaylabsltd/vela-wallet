@@ -43,6 +43,7 @@ export function BlindTypedDataView({ params }: {
           name={domain.name}
           address={domain.verifyingContract?.toLowerCase()}
           verified={false}
+          identity="contract"
         />
       )}
 

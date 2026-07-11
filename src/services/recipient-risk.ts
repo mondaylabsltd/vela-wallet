@@ -39,6 +39,14 @@ async function isContractAddress(chainId: number, addr: string): Promise<boolean
     if (res?.error) return null;
     const code = res?.result;
     if (typeof code !== 'string') return null;
+    // EIP-7702: a delegated EOA carries code `0xef0100 ++ implAddr` (exactly 23
+    // bytes). It is a WALLET with smart-account features — a person's account, not
+    // a contract — so it must NOT be badged "Contract". This is increasingly common
+    // (smart EOAs; Vela's own accounts delegate), and vitalik.eth already does it.
+    if (/^0xef0100[0-9a-fA-F]{40}$/i.test(code)) {
+      codeCache.set(key, false);
+      return false;
+    }
     const isContract = code !== '0x' && code.length > 2;
     codeCache.set(key, isContract);
     return isContract;

@@ -112,6 +112,8 @@
       "ethSignWarning": "Unverifiable request — most legitimate apps never use eth_sign. Reject unless you're certain.",
       "firstTimeTag": "First time",
       "contractTag": "Contract",
+      "walletTag": "Wallet",
+      "verifiedTag": "Verified",
       "holdToConfirm": "Hold to confirm",
       "advancedToggle": "Advanced — view raw data",
       "noNetworkFee": "No network fee — off-chain signature",

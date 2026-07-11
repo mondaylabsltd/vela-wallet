@@ -79,6 +79,7 @@ export function PermitSignView({ approval, meta, clearSign }: {
         name={knownContract(approval.spender)?.name}
         address={approval.spender}
         verified={false}
+        identity="contract"
       />
       {approval.tokenAddress && (
         <ContractBar
@@ -86,6 +87,7 @@ export function PermitSignView({ approval, meta, clearSign }: {
           name={(meta?.verified ? meta.symbol : undefined) ?? knownTokenSymbol(approval.tokenAddress) ?? knownContract(approval.tokenAddress)?.name}
           address={approval.tokenAddress}
           verified={clearSign?.verified ?? false}
+          identity="asset"
         />
       )}
 
