@@ -15,6 +15,7 @@ import {
   selectAllValuable,
   reserveNativeGas,
   reserveTempoFeeToken,
+  maxNativeSendable,
   BatchSendError,
   type SplitRecipient,
   type MultiTokenSpec,
@@ -195,6 +196,38 @@ describe('reserveNativeGas (native multiSelect keeps gas for the EntryPoint pref
 
   it('is a no-op for a non-positive reserve (e.g. Tempo)', () => {
     expect(reserveNativeGas([erc20, native], 0n)).toEqual([erc20, native]);
+  });
+});
+
+describe('maxNativeSendable (single-send "Max" = balance − reserve, string-exact)', () => {
+  const DEC = 18;
+  const wei = (s: string) => toBaseUnits(s, DEC);
+
+  // The reported bug: the old `Number(maxWei)/1e18 + toFixed(18)` path produced
+  // values like 2500.546999999999570719 / 1.497000000000000108 that overshoot
+  // balance−reserve and trip the "insufficient for gas" guard. The invariant
+  // below is what makes the guard pass: toBaseUnits(max) + reserve === balance.
+  const reserve = 3_000_000_000_000_000n; // 0.003 (≈ 3× a typical gas estimate)
+  for (const bal of ['1.5', '2500.55', '12345.6789', '0.5', '100.123456789012345678']) {
+    it(`round-trips exactly for balance ${bal} (no float garbage)`, () => {
+      const max = maxNativeSendable(wei(bal), reserve, DEC);
+      // Exact: the sent amount plus the reserve equals the whole balance.
+      expect(toBaseUnits(max, DEC) + reserve).toBe(wei(bal));
+      // Never overshoots balance − reserve (the old lossy path did).
+      expect(toBaseUnits(max, DEC)).toBe(wei(bal) - reserve);
+      // No trailing float-garbage run of zeros+digits.
+      expect(max).not.toMatch(/0{6,}\d+$/);
+    });
+  }
+
+  it('returns "0" when the balance cannot even cover the reserve', () => {
+    expect(maxNativeSendable(wei('0.001'), reserve, DEC)).toBe('0');
+    expect(maxNativeSendable(reserve, reserve, DEC)).toBe('0'); // exactly equal → nothing left
+  });
+
+  it('respects non-18-decimal tokens (no hardcoded 1e18)', () => {
+    // 6-decimal coin, balance 5.0, reserve 1.25 → 3.75
+    expect(maxNativeSendable(5_000_000n, 1_250_000n, 6)).toBe('3.75');
   });
 });
 

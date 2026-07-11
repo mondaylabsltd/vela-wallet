@@ -47,6 +47,51 @@ describe('EIP-712', () => {
     );
   });
 
+  // Issue #83: dApps (viem/ethers/MetaMask) routinely omit EIP712Domain from
+  // `types` because it's derivable from the domain fields present. The hasher
+  // used to throw "Unknown type: EIP712Domain".
+  test('derives EIP712Domain when the dApp omits it — matches the spec hash', () => {
+    const { EIP712Domain, ...typesWithoutDomain } = mailTypedData.types;
+    expect(EIP712Domain).toBeDefined(); // (sanity: we actually removed something)
+    const withoutDomain: TypedData = { ...mailTypedData, types: typesWithoutDomain };
+    // The derived domain type must reproduce the exact spec hash, proving the
+    // derivation matches what the dApp's own verifier computes.
+    expect(toHex(hashTypedData(withoutDomain))).toBe(
+      'be609aee343fb3c4b28e1df9e632fca64fcfaede20f02e86244efddf30957bd2'
+    );
+  });
+
+  test('omitting EIP712Domain equals supplying it explicitly (any domain shape)', () => {
+    const permitLike: TypedData = {
+      types: {
+        Mail: [{ name: 'contents', type: 'string' }],
+      },
+      primaryType: 'Mail',
+      domain: { name: 'biubiu', version: '1', chainId: 8453 }, // no verifyingContract/salt
+      message: { contents: 'gm' },
+    };
+    const explicit: TypedData = {
+      ...permitLike,
+      types: {
+        EIP712Domain: [
+          { name: 'name', type: 'string' },
+          { name: 'version', type: 'string' },
+          { name: 'chainId', type: 'uint256' },
+        ],
+        Mail: permitLike.types.Mail,
+      },
+    };
+    expect(() => hashTypedData(permitLike)).not.toThrow();
+    expect(toHex(hashTypedData(permitLike))).toBe(toHex(hashTypedData(explicit)));
+  });
+
+  test('supplying EIP712Domain explicitly is unchanged (no derivation)', () => {
+    // The canonical example already supplies it; assert the derivation path is a
+    // no-op by comparing against a deep copy that also supplies it.
+    const copy: TypedData = JSON.parse(JSON.stringify(mailTypedData));
+    expect(toHex(hashTypedData(copy))).toBe(toHex(hashTypedData(mailTypedData)));
+  });
+
   test('handles typed data with only domain', () => {
     const simple: TypedData = {
       types: {

@@ -166,6 +166,19 @@ export function reserveNativeGas(tokens: MultiTokenSpec[], reserveWei: bigint): 
 }
 
 /**
+ * The exact "Max" amount for a single native-coin (or Tempo fee-token) send:
+ * `balance − reserve`, string-formatted with no float precision loss. Returns
+ * '0' when the balance can't even cover the gas reserve. Kept string-exact
+ * (bigint subtraction + fromBaseUnits) so `toBaseUnits(result) + reserve ===
+ * balance` and the send screen's own "insufficient for gas" pre-check never
+ * trips on its own Max fill. See reserveNativeGas for the multiSelect analogue.
+ */
+export function maxNativeSendable(balanceWei: bigint, reserveWei: bigint, decimals: number): string {
+  if (balanceWei <= reserveWei) return '0';
+  return fromBaseUnits(balanceWei - reserveWei, decimals);
+}
+
+/**
  * Trim a multiSelect's Tempo FEE-TOKEN line (pathUSD) by `reserveUnits` so the Safe keeps
  * enough to pay the batched gas reimbursement. Tempo has no native coin — gas is settled by an
  * in-band feeToken.transfer, drawn from the SAME balance being swept. reserveNativeGas can't do
