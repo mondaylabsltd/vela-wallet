@@ -1812,10 +1812,12 @@ export async function waitForReceipt(
   // from "bundler unreachable, status unknown" (we never got an answer at all).
   let sawCleanResponse = false;
   let rpcFailures = 0;
+  let polls = 0;
 
   while (Date.now() - start < timeout) {
     // Caller cancelled (e.g. the send screen unmounted) — stop polling.
     if (signal?.aborted) throw makeAbortError();
+    polls++;
 
     try {
       const response = await rpcCall(
@@ -1838,6 +1840,13 @@ export async function waitForReceipt(
           if (result.success === false) {
             throw new Error('Transaction was dropped from the network. Try again with a higher gas price.');
           }
+          console.log('[UserOp] Receipt landed', {
+            userOpHash: `${userOpHash.slice(0, 10)}…`,
+            chainId,
+            txHash: result.receipt.transactionHash,
+            afterMs: Date.now() - start,
+            polls,
+          });
           return result.receipt.transactionHash;
         }
       }
@@ -1858,6 +1867,9 @@ export async function waitForReceipt(
   if (!sawCleanResponse && rpcFailures > 0) {
     // We never reached the bundler — the op's fate is genuinely unknown, not a
     // confirmed pending. Mark it as such so the caller can reconcile/retry later.
+    console.warn('[UserOp] Bundler UNREACHABLE — status unknown', {
+      userOpHash: shortOp, chainId, afterMs: Date.now() - start, polls, rpcFailures,
+    });
     throw new Error(
       `Couldn't reach the bundler to confirm transaction ${shortOp}; its status is unknown. ` +
       `Check the explorer in a few minutes before retrying.`,
@@ -1866,6 +1878,13 @@ export async function waitForReceipt(
   // Submitted and accepted by the bundler, but no on-chain receipt in time. The op
   // is NOT lost — it may still land (or the bundler's gas account couldn't fund the
   // bundle). Say so, and surface the hash, instead of implying outright failure.
+  // NOTE: "bundler answered cleanly for the full window but never produced a receipt"
+  // is the signature of a bundler that ACCEPTS the op but never lands the bundle on
+  // this chain (e.g. an unfunded/misconfigured chain-56 gas account) — a bundler-side
+  // condition, NOT a wallet bug. Grep this line to tell it apart from the reach case.
+  console.warn('[UserOp] ACCEPTED but NOT landed within timeout — bundler is not settling this chain', {
+    userOpHash: shortOp, chainId, timeoutMs: timeout, polls, rpcFailures, sawCleanResponse,
+  });
   throw new Error(
     `Transaction submitted (${shortOp}) but not confirmed within ${Math.round(timeout / 1000)}s. ` +
     `It may still land on-chain — check the explorer before retrying.`,

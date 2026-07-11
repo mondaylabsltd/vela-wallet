@@ -28,30 +28,35 @@ export interface DAppRequest {
 const UNSUPPORTED_CHAIN_ERROR_CODE = 4902; // EIP-3085: unrecognized chain ID
 const UNSUPPORTED_CAPABILITY_ERROR_CODE = 5700; // EIP-5792: unsupported non-optional capability
 
-// ── EIP-5792 batch → chain tracking ────────────────────────────────────────
+// ── Submitted UserOp → chain tracking ──────────────────────────────────────
 //
-// wallet_getCallsStatus must query the chain the batch was submitted on, even if
-// the wallet has since switched networks. Batch ids are opaque (and must stay
-// equal to the userOpHash for the bundler receipt lookup), so we remember the
-// id → chainId mapping at wallet_sendCalls time rather than encoding it in the id.
-const batchChainIds = new Map<string, number>();
-const MAX_TRACKED_BATCHES = 200;
+// Two readers need the chain a userOp was submitted on, even after the wallet
+// has since switched networks:
+//   • wallet_getCallsStatus — looks up the EIP-5792 batch id (== userOpHash).
+//   • eth_getTransactionReceipt / eth_getTransactionByHash — a dApp that polls a
+//     receipt by a hash we handed back (a wallet_sendCalls batch id, or an
+//     eth_sendTransaction userOpHash) matches nothing on the public RPC and would
+//     poll forever; translate it to the real bundle tx via the bundler, on the
+//     ORIGINAL chain, not the current one.
+// Hashes are opaque, so we remember hash → chainId at submit time.
+const userOpChainIds = new Map<string, number>();
+const MAX_TRACKED_USEROPS = 200;
 
-function rememberBatchChain(id: string, chainId: number): void {
-  const key = id.toLowerCase();
+function rememberUserOpChain(userOpHash: string, chainId: number): void {
+  const key = userOpHash.toLowerCase();
   // Bound memory: drop the oldest entry once we exceed the cap (Map keeps
   // insertion order, so the first key is the oldest).
-  if (!batchChainIds.has(key) && batchChainIds.size >= MAX_TRACKED_BATCHES) {
-    const oldest = batchChainIds.keys().next().value;
-    if (oldest !== undefined) batchChainIds.delete(oldest);
+  if (!userOpChainIds.has(key) && userOpChainIds.size >= MAX_TRACKED_USEROPS) {
+    const oldest = userOpChainIds.keys().next().value;
+    if (oldest !== undefined) userOpChainIds.delete(oldest);
   }
-  batchChainIds.set(key, chainId);
+  userOpChainIds.set(key, chainId);
 }
 
-/** Resolve the chain a batch id was submitted on; falls back to the current chain. */
-function resolveBatchChain(id: string | undefined, fallback: number): number {
-  if (!id) return fallback;
-  return batchChainIds.get(id.toLowerCase()) ?? fallback;
+/** The chain a userOp/batch was submitted on, or undefined if we didn't issue it. */
+function resolveUserOpChain(userOpHash: string | undefined): number | undefined {
+  if (!userOpHash) return undefined;
+  return userOpChainIds.get(userOpHash.toLowerCase());
 }
 
 /**
@@ -275,6 +280,9 @@ export async function handleSendTransaction(
   }
 
   // Op is signed + accepted by the bundler here; the receipt wait can take a while.
+  // Remember the chain so a later eth_getTransactionReceipt(userOpHash) poll can be
+  // translated to the real bundle tx on the ORIGINAL chain (not the current one).
+  rememberUserOpChain(txResult.userOpHash, effectiveChainId);
   // Report the hash so the UI can show "submitted, waiting" instead of a blank spin.
   onSubmitted?.(txResult.userOpHash);
   return await txResult.waitForTxHash();
@@ -412,7 +420,7 @@ export async function handleSendCalls(
       const txData = fromHex(stripHexPrefix(dataHex));
       txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn);
     }
-    rememberBatchChain(txResult.userOpHash, effectiveChainId);
+    rememberUserOpChain(txResult.userOpHash, effectiveChainId);
     return txResult.userOpHash;
   }
 
@@ -429,7 +437,7 @@ export async function handleSendCalls(
     publicKeyHex,
     signFn,
   );
-  rememberBatchChain(txResult.userOpHash, effectiveChainId);
+  rememberUserOpChain(txResult.userOpHash, effectiveChainId);
   return txResult.userOpHash;
 }
 
@@ -528,7 +536,7 @@ export async function handleReadOnlyRPC(
       const id = params?.[0] as string | undefined;
       // Resolve the chain the batch was submitted on (the wallet may have since
       // switched networks); fall back to the current chain for unknown ids.
-      const batchChain = resolveBatchChain(id, chainId);
+      const batchChain = resolveUserOpChain(id) ?? chainId;
       const hexChain = '0x' + batchChain.toString(16);
       const pending = { version: '2.0.0', id: id ?? '0x', chainId: hexChain, status: 100, atomic: true, receipts: [] as unknown[] };
       if (!id) return { handled: true, result: pending };
@@ -562,6 +570,38 @@ export async function handleReadOnlyRPC(
         } };
       } catch {
         return { handled: true, result: pending };
+      }
+    }
+    // A dApp polling a receipt by a hash WE handed back (a wallet_sendCalls batch
+    // id, or a userOpHash) would otherwise hit the public RPC — where that hash
+    // matches no on-chain tx — and poll forever ("submitted but never confirms").
+    // Translate our hashes to the real bundle tx via the bundler, on the chain the
+    // op was submitted on, and forward the AUTHENTIC on-chain receipt (never a
+    // synthesized one) so the dApp gets a complete, spec-shaped result.
+    case 'eth_getTransactionReceipt':
+    case 'eth_getTransactionByHash': {
+      const hash = params?.[0] as string | undefined;
+      const opChain = resolveUserOpChain(hash);
+      if (hash && opChain !== undefined) {
+        try {
+          const opRes = await rpcCall('eth_getUserOperationReceipt', [hash], opChain);
+          const realHash = (opRes.result as { receipt?: { transactionHash?: string } } | null)
+            ?.receipt?.transactionHash;
+          // Not landed yet (or a transient bundler blip) — return null so the dApp
+          // keeps polling, exactly as it would for an unmined tx.
+          if (!realHash) return { handled: true, result: null };
+          const real = await rpcCall(method, [realHash], opChain);
+          return { handled: true, result: real.result ?? null };
+        } catch {
+          return { handled: true, result: null };
+        }
+      }
+      // Not one of our hashes — forward untouched on the current chain.
+      try {
+        const res = await rpcCall(method, params ?? [], chainId);
+        return { handled: true, result: res.result ?? null };
+      } catch {
+        return { handled: false };
       }
     }
     default:
