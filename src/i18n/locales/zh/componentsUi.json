@@ -204,7 +204,7 @@
       "decimalsUnverified": "代币精度无法验证 — 请仔细核对金额。",
       "allNfts": "全部 NFT",
       "fullBalance": "全部余额",
-      "setApprovalAllWarn": "这将允许 {{operator}} 转移该系列中的每一个 NFT。如可能，请只授权单个 NFT。",
+      "setApprovalAllWarn": "如可能，请只授权单个 NFT，而不是整个合集。",
       "daiWarn": "这将授予 {{spender}} 访问你该代币全部余额的权限。",
       "revokeAccess": "撤销访问权限",
       "grantAllAnyway": "仍要授权全部",

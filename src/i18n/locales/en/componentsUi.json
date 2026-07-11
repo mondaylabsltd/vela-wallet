@@ -227,7 +227,7 @@
       "decimalsUnverified": "Token decimals couldn’t be verified — double-check the amount.",
       "allNfts": "All NFTs",
       "fullBalance": "Full balance",
-      "setApprovalAllWarn": "This lets {{operator}} transfer every NFT in this collection. Grant access to a single item instead when you can.",
+      "setApprovalAllWarn": "Grant access to a single item instead when you can.",
       "daiWarn": "This grants {{spender}} access to your entire balance of this token.",
       "revokeAccess": "Revoke access",
       "grantAllAnyway": "Grant access to all",

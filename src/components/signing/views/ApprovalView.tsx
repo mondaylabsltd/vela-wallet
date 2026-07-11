@@ -17,7 +17,6 @@ import { shortAddr, tokenLogoURLsByAddress } from '@/models/types';
 import { styles } from '../signing-core';
 import { IntentHeader } from '../IntentHeader';
 import { EditableApproveCard } from '../EditableApproveCard';
-import { ContractBar } from '../ContractBar';
 import { WarningBanner } from '../WarningBanner';
 import { SummaryLine } from '../SummaryLine';
 
@@ -138,28 +137,10 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
         );
       })()}
 
-      <ContractBar
-        label={isNft ? t('componentsUi.signingApprove.operatorLabel') : t('componentsUi.signingApprove.spenderLabel')}
-        // Name the spender/operator from the same known-contract table the permit
-        // view uses, so the Universal Router isn't a raw 0x here but named there (F11).
-        name={clearSign?.contractName ?? knownContract(approval.spender)?.name}
-        address={approval.spender}
-        verified={false}
-        identity="contract"
-      />
-
-      {/* An ERC-20 token row is redundant — the symbol is already in the spending-cap
-          card + the summary. Keep only the NFT COLLECTION row (which collection you're
-          granting access to isn't stated anywhere else). */}
-      {approval.tokenAddress && isNft && (
-        <ContractBar
-          label={t('componentsUi.signingApprove.collectionLabel')}
-          name={clearSign?.contractName}
-          address={approval.tokenAddress}
-          verified={clearSign?.verified ?? false}
-          identity="contract"
-        />
-      )}
+      {/* No standalone spender/operator/collection rows: the spender is already
+          named in the summary + the cap card, and every raw address (spender,
+          operator, collection contract) lives one tap away under 技术细节. Boxed
+          identity rows here would just repeat what's already stated in plain words. */}
 
       {expired && (
         <WarningBanner severity="caution" text={t('componentsUi.signingApprove.expired')} />
