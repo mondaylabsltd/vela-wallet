@@ -353,13 +353,16 @@ export function getRpcProviderKeys(): RpcProviderKeys {
  * Off-chain (signature only, no txHash):
  *   - sign_message:    personal_sign (e.g. login, verify ownership)
  *   - sign_typed_data: eth_signTypedData_v4 (e.g. Permit, order, gasless approval)
+ *   - connect:         a dApp connection/session grant (no signature, no tx) — the
+ *                      "Connected to <app>" audit row for a session's start
  */
 export type TransactionType =
   | 'send'
   | 'receive'
   | 'dapp_tx'
   | 'sign_message'
-  | 'sign_typed_data';
+  | 'sign_typed_data'
+  | 'connect';
 
 export interface LocalTransaction {
   id: string;
@@ -545,7 +548,7 @@ export async function deleteTransaction(id: string): Promise<void> {
  */
 export async function deleteConnectionEvents(address: string): Promise<void> {
   const lc = address.toLowerCase();
-  const dappTypes = new Set<TransactionType>(['dapp_tx', 'sign_message', 'sign_typed_data']);
+  const dappTypes = new Set<TransactionType>(['dapp_tx', 'sign_message', 'sign_typed_data', 'connect']);
   return withTxLock(async () => {
     const txs = await loadTransactions();
     const next = txs.filter(

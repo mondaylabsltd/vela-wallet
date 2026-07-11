@@ -134,6 +134,13 @@ export interface SigningRecordInput {
   userOpHash?: string;
   /** Sign-time asset-change simulation (predicted balance changes), JSON-safe. */
   assetChanges?: StoredAssetSim;
+  /**
+   * ERC-7730 / best-effort clear-signing intent (e.g. "Swap", "Approve", "Permit"),
+   * captured at approve time. Persisted so the Connections list + detail view show a
+   * meaningful operation label instead of the generic "Contract interaction". The
+   * signing sheet re-derives intent live at replay time; this is the recorded copy.
+   */
+  intent?: string;
 }
 
 /**
@@ -143,13 +150,13 @@ export interface SigningRecordInput {
  * recipient/value/hash; everything else is a signature.
  */
 export function buildSigningRecord(input: SigningRecordInput): LocalTransaction {
-  const { method, params, result, from, chainId, dappOrigin, nowMs, status = 'confirmed', userOpHash = '', assetChanges } = input;
+  const { method, params, result, from, chainId, dappOrigin, nowMs, status = 'confirmed', userOpHash = '', assetChanges, intent } = input;
   const now = Math.floor(nowMs / 1000);
   const signedContent = extractSignedContent(method, params);
   const { signedRequest, requestTruncated } = capRequest(method, params);
   const base = {
     userOpHash, from, chainId, timestamp: now,
-    status, dappOrigin, signedContent, signedRequest, requestTruncated, assetChanges,
+    status, dappOrigin, signedContent, signedRequest, requestTruncated, assetChanges, intent,
   };
 
   if (method === 'eth_sendTransaction' || method === 'wallet_sendCalls') {
@@ -164,4 +171,36 @@ export function buildSigningRecord(input: SigningRecordInput): LocalTransaction 
   }
   // personal_sign, eth_sign, and any other approved signing method.
   return { ...base, id: `dapp-${nowMs}-msg`, txHash: '', to: '', value: '0', symbol: '', decimals: 0, type: 'sign_message' };
+}
+
+/**
+ * Build the "Connected to <app>" audit record for a dApp session grant. Unlike a
+ * signing record this carries no signature/tx — it just marks that a connection to
+ * `dappOrigin` was authorized at `nowMs`, so every surface has a tappable session
+ * trail (the in-app browser previously left only a silent grant). Written once per
+ * user-approved connection (the consent moment is naturally deduped), never on an
+ * auto-reconnect. Reuses the single transactionHistory store.
+ */
+export function buildConnectionRecord(input: {
+  from: string;
+  chainId: number;
+  dappOrigin: string;
+  nowMs: number;
+}): LocalTransaction {
+  const { from, chainId, dappOrigin, nowMs } = input;
+  return {
+    id: `dapp-${nowMs}-connect`,
+    userOpHash: '',
+    txHash: '',
+    from,
+    to: '',
+    value: '0',
+    symbol: '',
+    decimals: 0,
+    chainId,
+    timestamp: Math.floor(nowMs / 1000),
+    status: 'confirmed',
+    type: 'connect',
+    dappOrigin,
+  };
 }

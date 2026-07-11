@@ -493,7 +493,7 @@ export async function loadActivityTransactions(address: string): Promise<LocalTr
 /** dApp signing / tx-request events that belong under Connections. */
 export async function loadConnectionEvents(address: string): Promise<ConnectionEvent[]> {
   const txs = await loadTransactions();
-  const dappTypes = new Set(['dapp_tx', 'sign_message', 'sign_typed_data']);
+  const dappTypes = new Set(['dapp_tx', 'sign_message', 'sign_typed_data', 'connect']);
   return txs
     .filter((t) => t.from.toLowerCase() === address.toLowerCase())
     .filter((t) => dappTypes.has(t.type ?? ''))
@@ -511,6 +511,7 @@ export async function loadConnectionEvents(address: string): Promise<ConnectionE
 function connectionEventLabel(tx: LocalTransaction): string {
   // tx.intent comes from the dApp (already human-readable) — keep it; localize the fallbacks.
   switch (tx.type) {
+    case 'connect': return i18n.t('activity.connected', { defaultValue: 'Connected' });
     case 'sign_message': return i18n.t('activity.signatureRequest');
     case 'sign_typed_data': return tx.intent || i18n.t('activity.typedDataSignature');
     case 'dapp_tx': return tx.intent || i18n.t('activity.dappTransaction');

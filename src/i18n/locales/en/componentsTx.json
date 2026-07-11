@@ -43,6 +43,7 @@
       "statusSucceeded": "Succeeded",
       "statusPending": "Pending",
       "opContractInteraction": "Contract interaction",
+      "opConnected": "Connected",
       "opSignature": "Signature",
       "opTypedDataSignature": "Typed-data signature",
       "opTransfer": "Transfer",

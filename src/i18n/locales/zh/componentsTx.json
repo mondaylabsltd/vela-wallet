@@ -43,6 +43,7 @@
       "statusSucceeded": "成功",
       "statusPending": "处理中",
       "opContractInteraction": "合约交互",
+      "opConnected": "已连接",
       "opSignature": "签名",
       "opTypedDataSignature": "结构化数据签名",
       "opTransfer": "转账",

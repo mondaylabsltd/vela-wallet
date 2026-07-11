@@ -13,14 +13,16 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import {
-  ArrowLeftRight, Check, Copy, FileText, Globe, PenLine, X,
+  ArrowLeftRight, Check, Copy, FileText, Globe, Link2, PenLine, X,
 } from 'lucide-react-native';
 import { AppModal } from '@/components/ui/AppModal';
 import { DetailRow as Row, Divider } from '@/components/ui/DetailRow';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { TxStatusBadge } from '@/components/ui/TxStatusBadge';
+import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
 import { ChainLogo } from '@/components/ChainLogo';
 import { chainName, getAllNetworksSync, explorerTxURL, explorerAddressURL } from '@/models/network';
+import { deserializeAssetSim } from '@/services/tx-simulation';
 import type { LocalTransaction } from '@/services/storage';
 import { shortAddress } from '@/models/wallet-state';
 import { copyToClipboard, openBrowser } from '@/services/platform';
@@ -33,9 +35,10 @@ interface Props {
   onClose: () => void;
 }
 
-type Kind = 'message' | 'typed' | 'tx';
+type Kind = 'message' | 'typed' | 'tx' | 'connect';
 
 function kindOf(tx: LocalTransaction): Kind {
+  if (tx.type === 'connect') return 'connect';
   if (tx.type === 'sign_message') return 'message';
   if (tx.type === 'sign_typed_data') return 'typed';
   return 'tx';
@@ -43,6 +46,7 @@ function kindOf(tx: LocalTransaction): Kind {
 
 /** Operation title — reuses the canonical operation labels. */
 function titleKey(tx: LocalTransaction, kind: Kind): string {
+  if (kind === 'connect') return 'componentsTx.detail.opConnected';
   if (kind === 'message') return 'componentsTx.detail.opSignature';
   if (kind === 'typed') return tx.intent || 'componentsTx.detail.opTypedDataSignature';
   return tx.intent || 'componentsTx.detail.opContractInteraction';
@@ -79,13 +83,16 @@ export function ConnectionEventDetailSheet({ visible, tx, onClose }: Props) {
         const net = getAllNetworksSync().find((n) => n.chainId === tx.chainId);
         const title = t(titleKey(tx, kind), { defaultValue: titleKey(tx, kind) });
         const amount = kind === 'tx' ? formatTxValue(tx.value, tx.symbol) : '';
-        const HeroIcon = kind === 'message' ? PenLine : kind === 'typed' ? FileText : ArrowLeftRight;
+        const HeroIcon = kind === 'connect' ? Link2 : kind === 'message' ? PenLine : kind === 'typed' ? FileText : ArrowLeftRight;
         const contentLabel = kind === 'message'
           ? t('connect.detail.contentMessage')
           : kind === 'typed'
             ? t('connect.detail.contentTypedData')
             : t('connect.detail.contentCallData');
-        const offChain = kind !== 'tx';
+        // A signature is off-chain; a connect grant is neither on- nor off-chain, so
+        // it shows no "off-chain signature" note and no signed-content block.
+        const offChain = kind === 'message' || kind === 'typed';
+        const replaySim = kind === 'tx' && tx.assetChanges ? deserializeAssetSim(tx.assetChanges) : null;
 
         return (
           <View style={styles.sheet}>
@@ -117,23 +124,33 @@ export function ConnectionEventDetailSheet({ visible, tx, onClose }: Props) {
                 <Text style={styles.offChainNote}>{t('connect.detail.offChainNote')}</Text>
               ) : null}
 
+              {/* What moved — the same sign-time balance-change preview the user saw
+                  when they approved. A prediction (not the confirmed on-chain result),
+                  shown only for txs that captured one. */}
+              {replaySim ? <BalanceChangePreview result={replaySim} chainId={tx.chainId} /> : null}
+
               {/* Signed content — the "what did I authorize". A legible code block
-                  (light bg.sunken, no border/shadow), not a "card pile" panel. */}
-              <SectionLabel>{contentLabel}</SectionLabel>
-              {tx.signedContent ? (
-                <View style={styles.contentBlock}>
-                  <ScrollView style={styles.contentScroll} nestedScrollEnabled showsVerticalScrollIndicator>
-                    <Text style={styles.contentText} selectable>{tx.signedContent}</Text>
-                  </ScrollView>
-                  <Pressable onPress={() => copy('content', tx.signedContent!)} hitSlop={10} style={styles.copyBtn}>
-                    {copied === 'content'
-                      ? <Check size={16} color={color.success.base} strokeWidth={2.6} />
-                      : <Copy size={16} color={color.fg.subtle} strokeWidth={2} />}
-                  </Pressable>
-                </View>
-              ) : (
-                <Text style={styles.contentMissing}>{t('connect.detail.contentMissing')}</Text>
-              )}
+                  (light bg.sunken, no border/shadow), not a "card pile" panel. A
+                  connect grant has nothing signed, so the block is skipped entirely. */}
+              {kind !== 'connect' ? (
+                <>
+                  <SectionLabel>{contentLabel}</SectionLabel>
+                  {tx.signedContent ? (
+                    <View style={styles.contentBlock}>
+                      <ScrollView style={styles.contentScroll} nestedScrollEnabled showsVerticalScrollIndicator>
+                        <Text style={styles.contentText} selectable>{tx.signedContent}</Text>
+                      </ScrollView>
+                      <Pressable onPress={() => copy('content', tx.signedContent!)} hitSlop={10} style={styles.copyBtn}>
+                        {copied === 'content'
+                          ? <Check size={16} color={color.success.base} strokeWidth={2.6} />
+                          : <Copy size={16} color={color.fg.subtle} strokeWidth={2} />}
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Text style={styles.contentMissing}>{t('connect.detail.contentMissing')}</Text>
+                  )}
+                </>
+              ) : null}
 
               {/* Metadata trail */}
               <SectionLabel>{t('componentsTx.detail.sectionTitle')}</SectionLabel>
