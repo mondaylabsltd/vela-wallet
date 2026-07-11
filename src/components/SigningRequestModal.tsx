@@ -16,6 +16,7 @@ import {
   View, Text, ScrollView, Image, Pressable, ActivityIndicator,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import * as Clipboard from 'expo-clipboard';
 import { AppModal } from '@/components/ui/AppModal';
 import { VelaButton } from '@/components/ui/VelaButton';
@@ -76,6 +77,51 @@ function riskColors(): Record<SigningRisk, string> {
     caution: color.warning.base,
     danger: color.error.base,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Descriptor label/intent localization.
+//
+// ERC-7730 descriptors carry English intents ("Send", "Swap") and field labels
+// ("Amount", "To") by spec, so a descriptor-driven screen would render half-
+// English inside a localized UI (the "确认Send" / "Amount" problem). Map the
+// common canonical values to the user's language; anything unrecognized falls
+// through to the raw descriptor string (an honest, if English, label).
+// ---------------------------------------------------------------------------
+const INTENT_L10N: Record<string, string> = {
+  send: 'intentSend', transfer: 'intentSend',
+  approve: 'intentApprove', 'set allowance': 'intentApprove', 'increase allowance': 'intentApprove',
+  swap: 'intentSwap', exchange: 'intentSwap', trade: 'intentSwap',
+  deposit: 'intentDeposit', supply: 'intentDeposit',
+  withdraw: 'intentWithdraw', redeem: 'intentWithdraw',
+  mint: 'intentMint', burn: 'intentBurn',
+  stake: 'intentStake', unstake: 'intentUnstake',
+  claim: 'intentClaim', 'claim rewards': 'intentClaim',
+  bridge: 'intentBridge', wrap: 'intentWrap', unwrap: 'intentUnwrap',
+  borrow: 'intentBorrow', repay: 'intentRepay', revoke: 'intentRevoke',
+};
+const LABEL_L10N: Record<string, string> = {
+  amount: 'labelAmount', value: 'labelAmount', assets: 'labelAmount',
+  to: 'labelTo', recipient: 'labelTo', receiver: 'labelTo', beneficiary: 'labelTo', destination: 'labelTo',
+  from: 'labelFrom', sender: 'labelFrom', owner: 'labelOwner',
+  spender: 'labelSpender', operator: 'labelSpender',
+  token: 'labelToken', 'token id': 'labelTokenId', tokenid: 'labelTokenId',
+  deadline: 'labelDeadline',
+  'min received': 'labelMinReceived', 'minimum received': 'labelMinReceived', 'min amount out': 'labelMinReceived',
+  'amount received': 'labelReceived', shares: 'labelShares',
+  chain: 'labelChain', 'chain id': 'labelChain', nonce: 'labelNonce',
+};
+/** Localize a canonical ERC-7730 English intent; unknown → the raw string. */
+function localizeIntent(raw?: string): string {
+  if (!raw) return '';
+  const suffix = INTENT_L10N[raw.trim().toLowerCase()];
+  return suffix ? String(i18n.t(('componentsUi.signing.' + suffix) as any, { defaultValue: raw })) : raw;
+}
+/** Localize a canonical ERC-7730 English field label; unknown → the raw string. */
+function localizeLabel(raw?: string): string {
+  if (!raw) return '';
+  const suffix = LABEL_L10N[raw.trim().toLowerCase()];
+  return suffix ? String(i18n.t(('componentsUi.signing.' + suffix) as any, { defaultValue: raw })) : raw;
 }
 
 /**
@@ -449,14 +495,17 @@ export function SigningSheet({
     }
     if (clearSign) {
       if (clearSign.type === 'signature') return t('componentsUi.signing.signLabel');
-      const i = clearSign.intent;
-      // Truncate long intents: "Manage operator rights for" → "Confirm"
-      if (i.length > 12) return t('componentsUi.signing.confirmLabel');
-      return t('componentsUi.signing.confirmIntentLabel', { intent: i.charAt(0).toUpperCase() + i.slice(1) });
+      // Localize the descriptor intent so the button reads "确认兑换", never
+      // "确认Swap"/"确认Send". Long or unrecognized intents → neutral "确认".
+      const li = localizeIntent(clearSign.intent);
+      if (!li || li.length > 12) return t('componentsUi.signing.confirmLabel');
+      return t('componentsUi.signing.confirmIntentLabel', { intent: li });
     }
     if (isPersonalSign || isTypedData) return t('componentsUi.signing.signLabel');
     if (isBatch) return t('componentsUi.signing.confirmLabel');
-    return t('componentsUi.signingApprove.verbApprove');
+    // Catch-all (plain send, blind contract call, eth_sign): a neutral "确认",
+    // never "授权" — that verb belongs only to an actual token approval.
+    return t('componentsUi.signing.confirmLabel');
   };
 
   const buttonVariant = (): 'accent' | 'secondary' => 'accent';
@@ -848,7 +897,7 @@ function ClearSignView({ cs, simConfident }: {
       {/* context shown in dApp banner */}
 
       {/* L1: Intent */}
-      <IntentHeader intent={cs.intent} color={rc} />
+      <IntentHeader intent={localizeIntent(cs.intent)} color={rc} />
 
       {/* Best-effort decode (recovered from a 4-byte selector DB, no verified
           descriptor) — show what it does, but be honest it isn't verified. With a
@@ -1595,7 +1644,7 @@ function TokenCard({ field, variant }: {
       <View style={styles.tokenInfo}>
         <Text style={styles.tokenAmount} numberOfLines={1}>{field.value}</Text>
         <View style={styles.tokenSubRow}>
-          <Text style={styles.tokenLabel}>{field.label}</Text>
+          <Text style={styles.tokenLabel}>{localizeLabel(field.label)}</Text>
           {!!field.usd && <Text style={styles.tokenUsd}>≈ {field.usd}</Text>}
         </View>
       </View>
@@ -1750,7 +1799,7 @@ function WarningBanner({ severity, text: msg }: {
 function GenericFieldRow({ field }: { field: ClearSignField }) {
   return (
     <View style={[styles.genRow, field.warning && styles.genRowWarning]}>
-      <Text style={styles.genLabel}>{field.label}</Text>
+      <Text style={styles.genLabel}>{localizeLabel(field.label)}</Text>
       <Text
         style={[
           styles.genValue,
@@ -1815,7 +1864,7 @@ function AdvancedPanel({ method, params, clearSign }: {
         <View style={styles.advancedBody}>
           {detailFields.map((f, i) => (
             <View key={i} style={styles.genRow}>
-              <Text style={styles.genLabel}>{f.label}</Text>
+              <Text style={styles.genLabel}>{localizeLabel(f.label)}</Text>
               <Text style={styles.genValue} numberOfLines={4}>{f.value}</Text>
             </View>
           ))}

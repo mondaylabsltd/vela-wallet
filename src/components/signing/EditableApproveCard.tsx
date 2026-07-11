@@ -275,7 +275,10 @@ const styles = createStyles(() => ({
   amountValue: { fontSize: text['3xl'], ...inter.bold, color: color.fg.base, letterSpacing: -0.5, flexShrink: 1 },
   inputRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
   amountInput: {
-    flex: 1, fontSize: text['3xl'], ...inter.bold, letterSpacing: -0.5, padding: 0,
+    // minWidth:0 lets the flex input shrink below its intrinsic content width;
+    // without it a long value overflows and horizontally scrolls the whole sheet,
+    // clipping the detail rows (被授权方/代币) on the left edge.
+    flex: 1, minWidth: 0, fontSize: text['3xl'], ...inter.bold, letterSpacing: -0.5, padding: 0,
   },
   usd: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, marginTop: -space.xs },
 
