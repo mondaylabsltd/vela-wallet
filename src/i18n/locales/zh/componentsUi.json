@@ -145,6 +145,7 @@
       "spendingCap": "授权上限",
       "reduceBy": "减少",
       "requested": "请求额度",
+      "balanceCap": "按余额",
       "custom": "自定义",
       "revoke": "撤销",
       "revokeValue": "撤销 (0)",

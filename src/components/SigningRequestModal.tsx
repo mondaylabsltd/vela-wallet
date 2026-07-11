@@ -44,7 +44,7 @@ import { resolveRecipientRisk, type RecipientRisk } from '@/services/recipient-r
 import { parseSiwe, checkSiweDomainBinding, siweHost, type SiweBinding } from '@/services/siwe';
 import { faviconForHost } from '@/services/favicon';
 import { decodePersonalMessage } from '@/services/decode-sign-message';
-import { readErc20Allowance } from '@/services/token-reads';
+import { readErc20Allowance, readErc20Balance } from '@/services/token-reads';
 import { knownTokenSymbol } from '@/services/tokens';
 import { fetchChainlinkPrices, resolveChainlinkPrice } from '@/services/price-service';
 import { formatTokenAmount as formatRawTokenAmount } from '@/services/approval-guard';
@@ -989,6 +989,21 @@ function ApprovalView({ approval, meta, choice, onChange, chainId, walletAddress
     return () => { cancelled = true; };
   }, [approval.kind, approval.tokenAddress, approval.spender, walletAddress, chainId]);
 
+  // The wallet's balance of the token — powers EditableApproveCard's one-tap
+  // finite "Balance" cap (issue #86: an unbounded approve request, e.g. Uniswap's
+  // USDT approve, otherwise leaves a blank field with no workable amount). Degrades
+  // gracefully to no preset on any read failure. Not read for NFT grants.
+  const [tokenBalance, setTokenBalance] = useState<bigint | null>(null);
+  useEffect(() => {
+    setTokenBalance(null);
+    if (isNft || !walletAddress || !approval.tokenAddress) return;
+    let cancelled = false;
+    readErc20Balance(chainId, approval.tokenAddress, walletAddress)
+      .then((b) => { if (!cancelled) setTokenBalance(b); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isNft, approval.tokenAddress, walletAddress, chainId]);
+
   const verb = approval.isReducing
     ? t('componentsUi.signingApprove.verbRevoke')
     : isNft && approval.isUnbounded
@@ -1023,6 +1038,7 @@ function ApprovalView({ approval, meta, choice, onChange, chainId, walletAddress
         decimalsVerified={meta?.verified ?? false}
         logoUrls={logoUrls}
         spenderLabel={clearSign?.contractName ?? shortAddr(approval.spender)}
+        balanceRaw={tokenBalance}
         choice={choice}
         onChange={onChange}
       />
