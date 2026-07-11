@@ -222,7 +222,9 @@ export const CLEAR_SIGNING_SCENARIOS: ClearSigningScenario[] = [
         // ERC fallback, and not in any 4-byte DB → genuinely blind. Exercises the
         // (most important) blind-sign warning surface, not a rich decode.
         to: '0x4e1dC6fd6f2EBa9bE43C1f0d54F8E9A5E4B6A9C1',
-        data: '0x1a2b3c4d00000000000000000000000000000000000000000000000000000000deadbeef0000000000000000000000000000000000000000000000000de0b6b3a7640000',
+        // A REAL selector (mint(address,uint256)) on an undescribed contract — the
+        // realistic blind case: 4-byte still names the function even with no descriptor.
+        data: '0x40c10f1900000000000000000000000000000000000000000000000000000000deadbeef0000000000000000000000000000000000000000000000000de0b6b3a7640000',
         value: '0x0',
       }],
       origin: 'clear-signing-test',

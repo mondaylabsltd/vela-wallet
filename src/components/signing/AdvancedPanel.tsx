@@ -24,6 +24,7 @@ const KNOWN_SELECTORS: Record<string, string> = {
   '0x095ea7b3': 'approve(address,uint256)',
   '0x23b872dd': 'transferFrom(address,address,uint256)',
   '0xa22cb465': 'setApprovalForAll(address,bool)',
+  '0x40c10f19': 'mint(address,uint256)',
   '0x39509351': 'increaseAllowance(address,uint256)',
   '0x42842e0e': 'safeTransferFrom(address,address,uint256)',
   '0xb88d4fde': 'safeTransferFrom(address,address,uint256,bytes)',
@@ -93,7 +94,17 @@ export function AdvancedPanel({ method, params, clearSign }: {
       for (const f of clearSign.fields) if (f.address) push(localizeLabel(f.label), f.address);
       push(t('componentsUi.signing.interactingLabel'), clearSign.contractAddress);
     }
-    if (method === 'eth_sendTransaction') push(t('componentsUi.signing.labelTo', { defaultValue: 'To' }), params?.[0]?.to);
+    if (method === 'eth_sendTransaction') {
+      // tx.to with calldata is the CONTRACT you're calling (matches the main view's
+      // "interacting with"), not a "recipient" — only a plain value transfer is a "to".
+      const hasCallData = params?.[0]?.data && params[0].data !== '0x';
+      push(hasCallData ? t('componentsUi.signing.interactingLabel') : t('componentsUi.signing.labelTo', { defaultValue: 'To' }), params?.[0]?.to);
+    }
+    // EIP-5792 batch: each call's target contract.
+    if (method === 'wallet_sendCalls') {
+      const calls = params?.[0]?.calls;
+      if (Array.isArray(calls)) calls.forEach((c: any, i: number) => push(`${t('componentsUi.signing.batchCall')} ${i + 1}`, c?.to));
+    }
     return out;
   }, [clearSign, method, params, t]);
 
@@ -106,6 +117,7 @@ export function AdvancedPanel({ method, params, clearSign }: {
       }
       if (method === 'personal_sign') return String(params?.[0] ?? '');
       if (method === 'eth_sign') return String((params?.length > 1 ? params[1] : params?.[0]) ?? '');
+      if (method === 'wallet_sendCalls') return JSON.stringify(params?.[0]?.calls ?? params?.[0] ?? [], null, 2);
       return '';
     } catch { return ''; }
   }, [method, params]);
@@ -117,7 +129,7 @@ export function AdvancedPanel({ method, params, clearSign }: {
   const rows: { label: string; value: string; copy?: string }[] = [
     ...addresses.map((a) => ({ label: a.label, value: midTrunc(a.address), copy: a.address })),
     ...detailFields.map((f) => ({ label: localizeLabel(f.label), value: f.value })),
-    ...(functionSig || selector ? [{ label: t('componentsUi.signing.techFunction', { defaultValue: 'Function' }), value: functionSig ?? selector! }] : []),
+    ...(selector ? [{ label: t('componentsUi.signing.techFunction', { defaultValue: 'Function' }), value: functionSig ?? `${selector} · ${t('componentsUi.signing.techUnknownFn', { defaultValue: 'unrecognized' })}` }] : []),
     ...(data ? [{ label: `CALLDATA · ${dataBytes} BYTES`, value: midTrunc(data, 18, 6), copy: data }] : []),
   ];
 
@@ -149,7 +161,7 @@ export function AdvancedPanel({ method, params, clearSign }: {
           {!!raw && (
             <View style={[styles.drawerRow, rows.length === 0 && styles.drawerRowFirst]}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.drawerLabel}>{method.includes('signTypedData') ? 'JSON' : t('componentsUi.signing.signMessage')}</Text>
+                <Text style={styles.drawerLabel}>{method.includes('signTypedData') || method === 'wallet_sendCalls' ? 'JSON' : t('componentsUi.signing.signMessage')}</Text>
                 <ScrollView style={styles.drawerRaw} nestedScrollEnabled>
                   <Text style={styles.drawerValue} selectable>{raw}</Text>
                 </ScrollView>

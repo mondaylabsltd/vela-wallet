@@ -126,6 +126,7 @@
       "summaryPermitUnlimited": "You're signing a permit — {{spender}} can spend ALL your {{token}}, and it can't be capped here.",
       "hexMessageWarning": "This isn't readable text — it could be a transaction or approval in disguise. Only sign if you fully trust this site.",
       "techFunction": "Function",
+      "techUnknownFn": "unrecognized",
       "holdToConfirm": "Hold to confirm",
       "advancedToggle": "Technical details",
       "noNetworkFee": "No network fee — off-chain signature",

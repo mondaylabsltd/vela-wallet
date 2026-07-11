@@ -103,6 +103,7 @@
       "summaryPermitUnlimited": "你在签一个授权签名——{{spender}} 可动用你全部的 {{token}}，且无法在此设上限。",
       "hexMessageWarning": "这不是可读文本——可能是伪装的交易或授权。只有完全信任该网站才签名。",
       "techFunction": "函数",
+      "techUnknownFn": "未识别",
       "holdToConfirm": "长按确认",
       "advancedToggle": "技术细节",
       "noNetworkFee": "无网络费用 — 链下签名",
