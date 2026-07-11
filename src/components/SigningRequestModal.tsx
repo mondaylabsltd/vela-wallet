@@ -358,6 +358,15 @@ export function SigningSheet({
 
   // Choose which view to render — wait for descriptor resolution before showing content
   const renderContent = () => {
+    // Engine-verified confidence: the tx was simulated and is NOT expected to revert.
+    // A sim's SENT side can't be understated (the real token emits its own transfer
+    // log), so this is a trustworthy "here's what actually leaves your wallet" signal
+    // that stands independent of any ERC-7730 descriptor. When present, the sheet
+    // leads with the outcome and calms the descriptor-absence alarms; RECEIVED amounts
+    // still read as 'unverified' (spoofable) per the asymmetric model in tx-simulation.
+    const activeSim = readOnly ? replaySim : sim;
+    const simConfident = !!activeSim && activeSim.ok === true;
+
     // Off-chain permit signature (Permit2 / ERC-2612 / DAI). The dApp redeems its
     // OWN struct on-chain, so we can't cap it — capping the signed amount only
     // desyncs the signature and reverts the dApp's tx. Surface the real risk and
@@ -390,7 +399,7 @@ export function SigningSheet({
       );
     }
     if (clearSign) {
-      return <ClearSignView cs={clearSign} />;
+      return <ClearSignView cs={clearSign} simConfident={simConfident} />;
     }
     // EIP-5792 batch — list each call, with an editable spending cap on every
     // approval leg (so an unlimited approve can be capped instead of only rejected).
@@ -420,7 +429,7 @@ export function SigningSheet({
       return <BlindTypedDataView params={params} />;
     }
     if (isTx && params?.[0]) {
-      return <BlindTransactionView tx={params[0]} chainId={chainId} />;
+      return <BlindTransactionView tx={params[0]} chainId={chainId} simConfident={simConfident} />;
     }
     return (
       <View style={styles.fallback}>
@@ -775,8 +784,12 @@ function DAppBanner({ name, domain, icon, chainId, accountName, accountAddress }
 // Clear Sign View (descriptor found)
 // ===========================================================================
 
-function ClearSignView({ cs }: {
+function ClearSignView({ cs, simConfident }: {
   cs: ClearSignResult;
+  /** The tx was simulated and is not expected to revert — a best-effort (4byte)
+   *  decode then reads as a calm "here's the gist" note instead of a "carefully
+   *  check every detail" nag, because the preview below proves the real effect. */
+  simConfident?: boolean;
 }) {
   const { t } = useTranslation();
   const rc = intentColor(cs.risk);
@@ -809,11 +822,15 @@ function ClearSignView({ cs }: {
       <IntentHeader intent={cs.intent} color={rc} />
 
       {/* Best-effort decode (recovered from a 4-byte selector DB, no verified
-          descriptor) — show what it does, but be honest it isn't verified. */}
+          descriptor) — show what it does, but be honest it isn't verified. With a
+          confident simulation the wording drops the "check every detail" nag (the
+          preview below is the real proof); without one it keeps the full caution. */}
       {cs.bestEffort && (
         <WarningBanner
           severity="caution"
-          text={t('componentsUi.signing.bestEffortWarning')}
+          text={simConfident
+            ? t('componentsUi.signing.bestEffortSimulated', { defaultValue: 'Decoded from the function signature (not a verified descriptor). The preview below shows the actual effect.' })
+            : t('componentsUi.signing.bestEffortWarning')}
         />
       )}
 
@@ -1296,9 +1313,13 @@ function BlindTypedDataView({ params }: {
 // Blind Transaction View (no descriptor)
 // ===========================================================================
 
-function BlindTransactionView({ tx, chainId }: {
+function BlindTransactionView({ tx, chainId, simConfident }: {
   tx: any;
   chainId: number;
+  /** The tx was simulated and is not expected to revert — the balance-change preview
+   *  below shows what actually happens, so the descriptor-absence is a calm note, not
+   *  a red alarm. */
+  simConfident?: boolean;
 }) {
   const { t } = useTranslation();
   const [showRaw, setShowRaw] = useState(false);
@@ -1306,39 +1327,50 @@ function BlindTransactionView({ tx, chainId }: {
   const value = formatTxValue(tx.value, chainId);
   const hasData = tx.data && tx.data !== '0x';
   const dataSize = hasData ? Math.floor((tx.data.length - 2) / 2) : 0;
+  // A simulated, non-reverting contract call reads as a neutral "contract
+  // interaction", not a red "Unknown" — the preview below carries the real meaning.
+  const calm = hasData && !!simConfident;
 
   return (
     <View>
       {/* context shown in dApp banner */}
       <IntentHeader
-        intent={hasData ? t('componentsUi.signing.intentUnknown') : t('componentsUi.signing.intentSend')}
-        color={hasData ? color.error.base : color.fg.base}
+        intent={!hasData
+          ? t('componentsUi.signing.intentSend')
+          : calm
+            ? t('componentsUi.signing.intentContractCall', { defaultValue: 'Contract interaction' })
+            : t('componentsUi.signing.intentUnknown')}
+        color={hasData && !calm ? color.error.base : color.fg.base}
       />
 
       {/* Value card */}
       {value !== `0 ${sym}` && (
         <TokenCard
           field={{ label: t('componentsUi.signing.valueLabel'), value, format: 'amount', role: 'send-amount' }}
-          variant={hasData ? 'danger' : 'send'}
+          variant={hasData && !calm ? 'danger' : 'send'}
         />
       )}
 
-      {hasData && <FlowArrow danger />}
+      {hasData && <FlowArrow danger={!calm} />}
 
       {/* Contract */}
       <ContractBar
         label={hasData ? t('componentsUi.signing.unverifiedLabel') : t('componentsUi.signing.recipientLabel')}
         address={tx.to}
         verified={false}
-        warning={hasData}
+        warning={hasData && !calm}
       />
 
-      {/* Blind sign warning */}
+      {/* Descriptor-absence notice. With a confident simulation it's a calm caption
+          that points at the preview below; without one it stays a hard blind-sign
+          warning (genuinely opaque — no descriptor AND no simulated outcome). */}
       {hasData && (
         <>
           <WarningBanner
-            severity="danger"
-            text={t('componentsUi.signing.blindDecodeWarning', { bytes: dataSize })}
+            severity={calm ? 'caution' : 'danger'}
+            text={calm
+              ? t('componentsUi.signing.blindButSimulated', { defaultValue: "Vela couldn't read this contract's details, but the preview below shows exactly what this transaction does." })
+              : t('componentsUi.signing.blindDecodeWarning', { bytes: dataSize })}
           />
 
           {/* Raw data toggle */}
@@ -2092,12 +2124,14 @@ const styles = createStyles(() => ({
     backgroundColor: color.bg.sunken,
     borderRadius: radius.lg,
     padding: space.lg,
-    maxHeight: 80,
+    maxHeight: 160,
     marginBottom: space.lg,
   },
   rawText: {
-    fontSize: scaleFont(9), fontFamily: font.mono, fontWeight: '400' as const,
-    color: color.fg.subtle, lineHeight: 14,
+    // Readable calldata: 9px + lowest-contrast ink made the raw viewer illegible.
+    // 12px mono on fg.muted stays quiet without forcing a squint.
+    fontSize: scaleFont(12), fontFamily: font.mono, fontWeight: '400' as const,
+    color: color.fg.muted, lineHeight: 18,
   },
 
   // ===== Fallback =====
@@ -2199,7 +2233,7 @@ const styles = createStyles(() => ({
     backgroundColor: color.bg.sunken,
     borderRadius: radius.lg,
     padding: space.lg,
-    maxHeight: 180,
+    maxHeight: 260,
   },
 
   // ===== Token-card USD line =====
