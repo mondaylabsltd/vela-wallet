@@ -1636,14 +1636,13 @@ function TokenCard({ field, variant }: {
   field: ClearSignField;
   variant: 'send' | 'receive' | 'caution' | 'danger';
 }) {
-  // Calm by default: benign amounts sit on a neutral card; color is reserved for
-  // caution/danger so a tinted card always means "pay attention".
-  const bgMap = {
-    send: { backgroundColor: color.bg.sunken },
-    receive: { backgroundColor: color.bg.sunken },
-    caution: { backgroundColor: color.warning.soft },
-    danger: { backgroundColor: color.error.soft },
-  };
+  // Wise-style de-container: benign amounts sit on an OPEN row (no card), letting
+  // the number breathe; only caution/danger get a tinted card, so a filled card
+  // always means "pay attention".
+  const tinted = variant === 'caution' || variant === 'danger';
+  const tintBg = variant === 'caution'
+    ? { backgroundColor: color.warning.soft }
+    : { backgroundColor: color.error.soft };
 
   const chainId = React.useContext(SigningChainContext);
   // A `amount`-format field with no token address is the chain's native coin
@@ -1665,7 +1664,7 @@ function TokenCard({ field, variant }: {
   const amountTint = incoming ? color.success.base : color.fg.base;
 
   return (
-    <View style={[styles.tokenCard, bgMap[variant]]}>
+    <View style={[tinted ? styles.tokenCard : styles.tokenRow, tinted && tintBg]}>
       <TokenLogo
         symbol={symbol ?? '?'}
         logoUrls={logoUrls}
@@ -2052,6 +2051,15 @@ const styles = createStyles(() => ({
   },
 
   // ===== Token Card =====
+  // Open row (Wise de-container) for benign amounts — no card, just the number
+  // breathing next to its logo, aligned to the sheet's content edge.
+  tokenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xl,
+    paddingVertical: space.lg,
+  },
+  // Tinted card — caution/danger only, so a filled surface always means "attention".
   tokenCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2100,19 +2108,25 @@ const styles = createStyles(() => ({
   },
 
   // ===== Contract Bar =====
+  // De-containered (Wise): an open recipient/contract row separated from the
+  // asset flow above by a hairline, not a gray card.
   contractBar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.md,
     paddingVertical: space.lg,
-    paddingHorizontal: space.xl,
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.xl,
-    marginVertical: space.md,
+    borderTopWidth: 1,
+    borderTopColor: color.border.base,
   },
+  // A flagged recipient DOES get a tinted card back — danger should contain itself.
   contractBarWarning: {
+    borderTopWidth: 0,
+    paddingHorizontal: space.xl,
+    backgroundColor: color.error.soft,
     borderWidth: 1,
     borderColor: color.error.base,
+    borderRadius: radius.xl,
+    marginVertical: space.md,
   },
   contractInfo: { flex: 1, gap: 2 },
   contractLabel: {
@@ -2180,21 +2194,24 @@ const styles = createStyles(() => ({
 
   // ===== Generic Fields =====
   genericFields: {
-    gap: space.sm,
     marginVertical: space.md,
   },
+  // De-containered (Wise): open rows split by hairlines, not stacked gray cards.
   genRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingVertical: space.lg,
-    paddingHorizontal: space.xl,
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.lg,
+    paddingVertical: space.md,
+    borderTopWidth: 1,
+    borderTopColor: color.border.base,
     gap: space.lg,
   },
   genRowWarning: {
+    marginHorizontal: -space.xl,
+    paddingHorizontal: space.xl,
+    borderTopWidth: 0,
     backgroundColor: color.warning.soft,
+    borderRadius: radius.lg,
   },
   genLabel: {
     fontSize: text.sm, ...inter.medium, color: color.fg.muted,
