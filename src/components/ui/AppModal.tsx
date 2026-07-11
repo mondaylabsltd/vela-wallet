@@ -29,6 +29,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { hapticLight } from '@/services/platform';
 import { color, createStyles, radius } from '@/constants/theme';
 import { useWebDialog } from '@/hooks/use-web-dialog';
@@ -69,7 +70,11 @@ export function AppModal({ visible, children, onClose, fit }: Props) {
       allowSwipeDismissal
       onRequestClose={onClose}
     >
-      <View style={styles.nativeRoot}>
+      {/* GestureHandlerRootView: RN core <Modal> mounts a detached native root
+          that is NOT under the app-root GestureHandlerRootView, so RNGH gestures
+          inside the sheet (the slide-to-confirm knob) get no touches without our
+          own root here — same pattern QRScanner uses. */}
+      <GestureHandlerRootView style={styles.nativeRoot}>
         <View style={styles.handleArea}>
           <View style={styles.handleBar} />
         </View>
@@ -81,7 +86,7 @@ export function AppModal({ visible, children, onClose, fit }: Props) {
             {children}
           </SafeAreaView>
         </KeyboardAvoidingView>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -144,7 +149,9 @@ function AndroidSheet({ visible, onClose, children }: { visible: boolean; onClos
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       {/* Static full-screen backdrop in the sheet color — the inner content
           translates over it, so the revealed area above stays seamless. */}
-      <View style={styles.nativeRoot}>
+      {/* GestureHandlerRootView so in-sheet RNGH gestures (slide-to-confirm)
+          receive touches inside RN's detached Modal root (see iOS note). */}
+      <GestureHandlerRootView style={styles.nativeRoot}>
         <Animated.View style={[styles.sheetInner, { transform: [{ translateY: pan }] }]}>
           <View style={styles.handleArea} {...responder.panHandlers}>
             <View style={styles.handleBar} />
@@ -155,7 +162,7 @@ function AndroidSheet({ visible, onClose, children }: { visible: boolean; onClos
             </SafeAreaView>
           </KeyboardAvoidingView>
         </Animated.View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -220,7 +227,7 @@ function FitSheet({ visible, onClose, children }: { visible: boolean; onClose?: 
 
   return (
     <Modal visible transparent statusBarTranslucent animationType="none" onRequestClose={onClose}>
-      <View style={styles.fitRoot}>
+      <GestureHandlerRootView style={styles.fitRoot}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
           <Animated.View style={[styles.fitBackdrop, { opacity: progress }]} />
         </Pressable>
@@ -237,7 +244,7 @@ function FitSheet({ visible, onClose, children }: { visible: boolean; onClose?: 
             </SafeAreaView>
           </KeyboardAvoidingView>
         </Animated.View>
-      </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
