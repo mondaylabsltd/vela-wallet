@@ -550,46 +550,10 @@ export function SigningSheet({
     return t('componentsUi.signing.confirmLabel');
   };
 
-  const buttonVariant = (): 'accent' | 'secondary' => 'accent';
-
-  // Danger actions must not be one tap from a normal transfer: an unlimited/
-  // grant-all approval or an opaque eth_sign requires a deliberate press-and-hold.
-  // This covers single requests AND every leg of an EIP-5792 batch / a
-  // non-editable unbounded approval (e.g. permit2-batch), which would otherwise
-  // slip through the gate even though the submit guard rejects them.
-  const isGrantingApproval = (a: DetectedApproval | null | undefined) =>
-    !!a?.isUnbounded && !a.isReducing && !a.isBooleanGrant;
-  // An unbounded off-chain permit signature (incl. DAI full-balance / Permit2
-  // batch) is signed verbatim, so its only safety gate is a deliberate hold.
-  const permitGrantsBroad =
-    !!approval && approval.locus.type === 'typed-path' && approval.isUnbounded && !approval.isReducing;
-  // A batch leg counts as danger only while it STILL grants broad access — once
-  // the user caps/revokes it, the hold (and the unlimited banner) drop away.
-  const batchHasDanger =
-    isBatch && (batch?.some((it, i) => legGrantsBroad(it.approval, batchChoices[i]) || it.clearSign?.risk === 'danger') ?? false);
-  // Lift the SIWE domain-binding check to the sheet level: a sign-in whose message
-  // domain ≠ the request origin is the canonical phishing pattern, and it must drive
-  // the footer (reject-dominant), not just an in-body banner the user can breeze past.
-  const siwePhishing =
-    isPersonalSign && !!params?.[0] &&
-    (() => {
-      const s = parseSiwe(decodePersonalMessage(params[0]));
-      return !!s && checkSiweDomainBinding(s.domain, dappInfo?.url ?? incomingRequest.origin) === 'mismatch';
-    })();
-
-  const requiresHold =
-    isEthSign ||
-    clearSign?.risk === 'danger' ||
-    (!!approval?.editable && approveChoice?.type === 'grant') ||
-    isGrantingApproval(approval) ||
-    permitGrantsBroad ||
-    batchHasDanger ||
-    siwePhishing;
-
-  // When the wallet has itself concluded "this looks like phishing — reject it",
-  // the SAFE action must dominate: Reject is a solid primary on top, and signing is
-  // demoted behind a deliberate slide. (requiresHold-only danger keeps slide-on-top.)
-  const recommendReject = siwePhishing;
+  // The footer is a single uniform slide-to-confirm for EVERY request (the deliberate
+  // slide is the friction; closing the sheet rejects) — danger no longer branches the
+  // footer. Phishing/eth_sign still buzz a warning haptic on open (see the effect
+  // above) and flag in-body via MessageSignView / EthSignDangerView.
 
   const confirm = () => {
     hapticLight(); // tactile acknowledgement the moment the user commits to signing
@@ -741,61 +705,20 @@ export function SigningSheet({
               variant="secondary"
               style={styles.buttonFlex}
             />
-          ) : recommendReject ? (
-            // Detected phishing: the wallet recommends rejecting, so the SAFE action
-            // dominates — a solid Reject on top, signing demoted behind a slide.
-            <View style={styles.dangerStack}>
-              <VelaButton
-                title={t('componentsUi.signing.reject')}
-                onPress={onReject}
-                variant="primary"
-                disabled={isSigning}
-              />
-              <SlideToConfirmButton
-                title={buttonLabel()}
-                hint={t('componentsUi.signing.slideToConfirm', { defaultValue: 'Slide to confirm' })}
-                onConfirm={confirm}
-                loading={isSigning || resolving}
-                disabled={confirmDisabled}
-              />
-            </View>
-          ) : requiresHold ? (
-            // Danger-level signing: a full-width slide-to-confirm gets its own row
-            // (a slide needs the width to be usable), with Reject as a secondary
-            // full-width button beneath it.
-            <View style={styles.dangerStack}>
-              <SlideToConfirmButton
-                title={buttonLabel()}
-                hint={t('componentsUi.signing.slideToConfirm', { defaultValue: 'Slide to confirm' })}
-                onConfirm={confirm}
-                loading={isSigning || resolving}
-                disabled={confirmDisabled}
-              />
-              <VelaButton
-                title={t('componentsUi.signing.reject')}
-                onPress={onReject}
-                variant="secondary"
-                disabled={isSigning}
-              />
-            </View>
           ) : (
-            <>
-              <VelaButton
-                title={t('componentsUi.signing.reject')}
-                onPress={onReject}
-                variant="secondary"
-                disabled={isSigning}
-                style={styles.buttonFlex}
-              />
-              <VelaButton
-                title={buttonLabel()}
-                onPress={confirm}
-                variant={buttonVariant()}
-                loading={isSigning || resolving}
-                disabled={confirmDisabled}
-                style={styles.buttonFlex}
-              />
-            </>
+            // Unified: ONE slide-to-confirm for every request, benign or dangerous.
+            // There is no Reject button — dismissing the sheet (swipe down / tap
+            // outside) already rejects the request (AppModal onClose → rejectRequest),
+            // so a deliberate slide is the only way to APPROVE and closing is the easy,
+            // safe default. requiresHold/recommendReject no longer branch the footer;
+            // the slide itself is the friction, uniformly.
+            <SlideToConfirmButton
+              title={buttonLabel()}
+              hint={t('componentsUi.signing.slideToConfirm', { defaultValue: 'Slide to confirm' })}
+              onConfirm={confirm}
+              loading={isSigning || resolving}
+              disabled={confirmDisabled}
+            />
           )}
         </View>
       </View>
@@ -976,13 +899,13 @@ function ClearSignView({ cs, simConfident }: {
       {/* Context: chain + account */}
       {/* context shown in dApp banner */}
 
-      {/* L1: Intent. A benign, decoded value transfer cedes the headline to the
-          asset flow below (verb → eyebrow); anything with elevated risk keeps the
-          big hero so the colored headline still shouts. */}
+      {/* L1: Intent. A benign action cedes the headline to its content (verb →
+          eyebrow); only elevated risk (caution/danger) keeps the big colored hero
+          so a shouting headline always means "pay attention". */}
       <IntentHeader
         intent={localizeIntent(cs.intent)}
         color={rc}
-        variant={cs.risk === 'normal' && (sendAmounts.length > 0 || receiveAmounts.length > 0) ? 'eyebrow' : 'hero'}
+        variant={cs.risk === 'normal' ? 'eyebrow' : 'hero'}
       />
 
       {/* Best-effort decode (recovered from a 4-byte selector DB, no verified
@@ -1342,6 +1265,7 @@ function MessageSignView({ hexMsg, requestOrigin }: {
         <IntentHeader
           intent={t('componentsUi.signing.signInIntent')}
           color={binding === 'mismatch' ? color.error.base : color.fg.base}
+          variant={binding === 'mismatch' ? 'hero' : 'eyebrow'}
         />
 
         <View style={styles.genericFields}>
@@ -1378,7 +1302,7 @@ function MessageSignView({ hexMsg, requestOrigin }: {
   return (
     <View>
       {/* context shown in dApp banner */}
-      <IntentHeader intent={t('componentsUi.signing.signMessage')} color={color.fg.base} />
+      <IntentHeader intent={t('componentsUi.signing.signMessage')} color={color.fg.base} variant="eyebrow" />
 
       <View style={styles.msgBubble}>
         <View style={styles.msgTag}>
@@ -1510,7 +1434,7 @@ function BlindTransactionView({ tx, chainId, simConfident }: {
             ? t('componentsUi.signing.intentContractCall', { defaultValue: 'Contract interaction' })
             : t('componentsUi.signing.intentUnknown')}
         color={hasData && !calm ? color.error.base : color.fg.base}
-        variant={!hasData ? 'eyebrow' : 'hero'}
+        variant={hasData && !calm ? 'hero' : 'eyebrow'}
       />
 
       {/* Value card */}
@@ -1629,7 +1553,7 @@ function BatchCallsView({ items, choices, onChoiceChange, metaByToken, editable,
 
   return (
     <View>
-      <IntentHeader intent={t('componentsUi.signing.batchIntent')} color={color.fg.base} />
+      <IntentHeader intent={t('componentsUi.signing.batchIntent')} color={color.fg.base} variant="eyebrow" />
       <Text style={styles.batchSub}>{t('componentsUi.signing.batchSubtitle', { count: items.length })}</Text>
 
       {items.map((it, i) => {
@@ -1702,10 +1626,11 @@ function IntentHeader({ intent, color: intentColor, variant = 'hero' }: {
   variant?: 'hero' | 'eyebrow';
 }) {
   if (variant === 'eyebrow') {
+    // A clean uppercase kicker (no dot) — a quiet label that names the action and
+    // cedes the headline to the content below. Benign only, so it's always neutral.
     return (
       <View style={styles.intentEyebrow}>
-        <View style={[styles.intentEyebrowDot, { backgroundColor: intentColor }]} />
-        <Text style={[styles.intentEyebrowText, { color: intentColor }]}>{intent}</Text>
+        <Text style={styles.intentEyebrowText}>{intent}</Text>
       </View>
     );
   }
@@ -2134,18 +2059,16 @@ const styles = createStyles(() => ({
   },
   // Eyebrow kicker — a small colored verb that cedes the headline to the asset flow.
   intentEyebrow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     alignSelf: 'center',
-    gap: space.sm,
     paddingTop: space.md,
     paddingBottom: space.lg,
   },
-  intentEyebrowDot: { width: 7, height: 7, borderRadius: 4 },
   intentEyebrowText: {
-    fontSize: text.base,
+    fontSize: text.sm,
     ...inter.semibold,
-    letterSpacing: 0.2,
+    color: color.fg.subtle,
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
   },
 
   // ===== Token Card =====
