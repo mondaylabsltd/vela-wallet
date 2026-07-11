@@ -181,6 +181,14 @@ export interface SigningSheetProps {
    * `sim`; replay can't (state has moved on), so the host passes the stored one.
    */
   replaySim?: AssetSimResult | null;
+  /**
+   * TEST-HARNESS ONLY: simulate the transaction from this address instead of the
+   * signer. The clear-signing demo signs with an empty parallel-space passkey, so
+   * a real mainnet sim would revert on balance ("expected to fail"); pointing the
+   * sim at a funded address lets the benign scenarios preview green as intended.
+   * Never set in production — the sim must reflect the real signer's balances.
+   */
+  simFromOverride?: string;
 }
 
 export function SigningSheet({
@@ -196,6 +204,7 @@ export function SigningSheet({
   onDismiss,
   readOnly = false,
   replaySim = null,
+  simFromOverride,
 }: SigningSheetProps) {
   const { t } = useTranslation();
 
@@ -298,8 +307,9 @@ export function SigningSheet({
           .finally(() => setEstimatingGas(false));
 
         // Simulate the inner Safe→target call: revert pre-check + net balance changes.
+        // simFromOverride is a test-harness stand-in only; production uses the signer.
         simulateAssetChanges(
-          activeAccount.address,
+          simFromOverride ?? activeAccount.address,
           [{ to: params[0].to, data: params[0].data, value: params[0].value }],
           chainId,
         )
@@ -323,7 +333,7 @@ export function SigningSheet({
       setClearSign(null);
     }
     return () => { cancelled = true; };
-  }, [incomingRequest, chainId, activeAccount?.address, readOnly]);
+  }, [incomingRequest, chainId, activeAccount?.address, readOnly, simFromOverride]);
 
   // Real tx for accurate gas estimation in the fee card (re-runs on tier change/refresh).
   const txForEstimate = useMemo(() => {
@@ -355,12 +365,12 @@ export function SigningSheet({
     // read-only replay (a historical batch isn't being simulated for submission).
     if (activeAccount?.address && !readOnly) {
       const simCalls = calls.map((c: any) => ({ to: c.to, data: c.data, value: c.value }));
-      simulateAssetChanges(activeAccount.address, simCalls, chainId)
+      simulateAssetChanges(simFromOverride ?? activeAccount.address, simCalls, chainId)
         .then((r) => { if (!cancelled) setSim(r); })
         .catch(() => { if (!cancelled) setSim(null); });
     }
     return () => { cancelled = true; };
-  }, [incomingRequest, chainId, activeAccount?.address, readOnly]);
+  }, [incomingRequest, chainId, activeAccount?.address, readOnly, simFromOverride]);
 
   // Resolve symbol/decimals for every token approved across the batch's legs, so
   // each leg's spending-cap editor can show and parse real token amounts.

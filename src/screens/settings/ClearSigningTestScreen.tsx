@@ -147,6 +147,10 @@ function MockSigningModal({ request, onClose }: {
         onApprove={() => { showAlert(t("clearSigning.alertSignedTitle"), t("clearSigning.alertSignedBody")); onClose(); }}
         onReject={onClose}
         onDismiss={onClose}
+        // Demo-only: simulate from a funded mainnet address (holds USDC + ETH) so the
+        // benign scenarios preview green instead of "expected to fail" — the parallel-
+        // space passkey account is empty. Never used in production.
+        simFromOverride="0x28C6c06298d514Db089934071355E5743bf21d60"
       />
     </AppModal>
   );
