@@ -16,9 +16,13 @@ interface Props {
   selected: string;
   onSelect: (code: string) => void;
   onClose: () => void;
+  /** Header text. Defaults to "Display currency" (the app-wide setting). Pass a
+   *  distinct title for a scoped picker (e.g. the payroll "Priced in" currency)
+   *  so it doesn't read as the global display-currency setting (issue #80). */
+  title?: string;
 }
 
-export function CurrencySheet({ visible, selected, onSelect, onClose }: Props) {
+export function CurrencySheet({ visible, selected, onSelect, onClose, title }: Props) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   // Paint instantly from the cached/static list, then refresh from the endpoint
@@ -66,7 +70,7 @@ export function CurrencySheet({ visible, selected, onSelect, onClose }: Props) {
   return (
     <AppModal visible={visible} onClose={onClose}>
       <View style={styles.sheet}>
-        <Text style={styles.title}>{t('componentsUi.currency.title')}</Text>
+        <Text style={styles.title}>{title ?? t('componentsUi.currency.title')}</Text>
 
         <View style={styles.searchBox}>
           <Search size={18} color={color.fg.subtle} strokeWidth={2.2} />
