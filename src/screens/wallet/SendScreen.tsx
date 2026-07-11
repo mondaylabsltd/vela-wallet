@@ -10,6 +10,7 @@ import { scaleFont, color, text, inter, space, radius, font, shadow, motion, cre
 import { chainName, nativeSymbol, networkForChainId, networkId, tokenBadgeNetwork } from '@/models/network';
 import { addCustomNetworkByChainId } from '@/services/add-network';
 import { parseEIP681, fromBaseUnits, toBaseUnits } from '@/services/eip681';
+import { createReentryLock } from '@/services/reentry-lock';
 import { resolveTokenMetadata } from '@/services/token-metadata';
 import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenChainId, tokenId, tokenLogoURLs, tokenUsdValue } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
@@ -249,7 +250,10 @@ export default function SendScreen() {
   // "eligible"; consumed by executeTransaction to fire the REAL grant right
   // after the confirm slide (see handleContinue for the rationale).
   const pendingSponsorship = useRef<FundingNeeded | null>(null);
-  const sendInFlightRef = useRef(false);
+  // Single-flight re-entry lock with a generation token. A cancelled send
+  // releases it immediately (so a retry isn't a silent no-op) while the cancelled
+  // promise's stale `end()` must not clear a newer send's lock (issue #91).
+  const sendLock = useRef(createReentryLock()).current;
   // Set by the confirm screen's cancel button; checked after every pre-sign
   // await in executeTransaction (mirrors dapp-connection's signCancelledRef).
   const sendCancelledRef = useRef(false);
@@ -771,6 +775,15 @@ export default function SendScreen() {
           const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
           setFeeEstimate(fee);
 
+          // Tempo settles gas IN-BAND from the user's own pathUSD (sendUserOpTempo
+          // batches the fee-token reimbursement), so the bundler gas-account funding
+          // gate + silent-sponsorship probe don't apply. A new, undeployed Tempo
+          // account holds ~0 in its bundler gas account, so this gate would route it
+          // into a doomed sponsorship grant that hangs ~20s and dead-ends with no
+          // feedback (issue #91). We still estimate + show the fee above; we just
+          // don't gate the send on gas-account funding. pathUSD sufficiency is
+          // already enforced by the amount-warning check and priced by sendUserOpTempo.
+          if (isTempoChain(chainId)) return null;
           // Compare against the bundler's raw gas cost (tier markup removed).
           const bundlerCost = fee ? rawBundlerGasCost(fee) : undefined;
           return checkBundlerFunding(chainId, activeAccount!.address, bundlerCost);
@@ -897,8 +910,8 @@ export default function SendScreen() {
     // Synchronous re-entry lock: `sending` is async React state, so a rapid
     // second slide in the same tick would start a concurrent submit. The
     // Phase-2 grant await widens that window to ~20s — guard on a ref.
-    if (sendInFlightRef.current) return;
-    sendInFlightRef.current = true;
+    const sendGen = sendLock.begin();
+    if (sendGen === null) return; // a send is already in flight
     sendCancelledRef.current = false;
     setSending(true);
     setTxStatus('preparing');
@@ -1164,8 +1177,10 @@ export default function SendScreen() {
         setTxStatus('error'); hapticError();
       }
     } finally {
-      sendInFlightRef.current = false;
-      setSending(false);
+      // Release only if this is still the current send. A cancelled send already
+      // released the lock (and bumped the generation), so this stale finally must
+      // not clear a newer in-flight send's lock or its spinner (issue #91).
+      if (sendLock.end(sendGen)) setSending(false);
     }
   };
 
@@ -1813,6 +1828,11 @@ export default function SendScreen() {
                       // yet — without the ref, the flow would resurrect a
                       // passkey prompt (or a funding sheet) AFTER this cancel.
                       sendCancelledRef.current = true;
+                      // Release the re-entry lock so a retry starts (instead of
+                      // silently no-op'ing until the cancelled promise settles);
+                      // cancel() also invalidates that promise's stale finally so
+                      // it won't clear the retry's lock (issue #91).
+                      sendLock.cancel();
                       Passkey.cancelSign();
                       setTxStatus('idle');
                       setSending(false);
