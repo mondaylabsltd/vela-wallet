@@ -34,14 +34,46 @@ export interface TypedDataField {
  * Returns the 32-byte hash: keccak256("\x19\x01" || domainSeparator || structHash)
  */
 export function hashTypedData(typedData: TypedData): Uint8Array {
-  const domainSeparator = hashStruct('EIP712Domain', typedData.domain, typedData.types);
-  const messageHash = hashStruct(typedData.primaryType, typedData.message, typedData.types);
+  const types = ensureDomainType(typedData);
+  const domainSeparator = hashStruct('EIP712Domain', typedData.domain, types);
+  const messageHash = hashStruct(typedData.primaryType, typedData.message, types);
 
   return keccak256(concatBytes(
     new Uint8Array([0x19, 0x01]),
     domainSeparator,
     messageHash,
   ));
+}
+
+/**
+ * Canonical EIP712Domain fields, in the order EIP-712 mandates. A field belongs
+ * to the domain type iff it is actually present in `domain`.
+ */
+const DOMAIN_FIELDS: TypedDataField[] = [
+  { name: 'name', type: 'string' },
+  { name: 'version', type: 'string' },
+  { name: 'chainId', type: 'uint256' },
+  { name: 'verifyingContract', type: 'address' },
+  { name: 'salt', type: 'bytes32' },
+];
+
+/**
+ * Ensure the types map has an `EIP712Domain` entry.
+ *
+ * Our hasher looks the domain type up by name, but valid payloads routinely omit
+ * `EIP712Domain` from `types` because it's derivable from the domain fields
+ * present — that's what viem, ethers and MetaMask do, and what biubiu sends
+ * (issue #83: signing threw "Unknown type: EIP712Domain"). When it's absent,
+ * synthesize it from the domain fields actually present, in EIP-712 canonical
+ * order, so the derived typeHash matches what the dApp's verifier expects. If the
+ * dApp already supplied `EIP712Domain`, the types are returned untouched
+ * (byte-identical behavior — no change for those payloads).
+ */
+function ensureDomainType(typedData: TypedData): Record<string, TypedDataField[]> {
+  if (typedData.types.EIP712Domain) return typedData.types;
+  const domain = typedData.domain ?? {};
+  const domainType = DOMAIN_FIELDS.filter((f) => domain[f.name] != null);
+  return { ...typedData.types, EIP712Domain: domainType };
 }
 
 // ---------------------------------------------------------------------------
