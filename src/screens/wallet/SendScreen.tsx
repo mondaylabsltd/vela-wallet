@@ -28,7 +28,7 @@ import { attemptSilentSponsorship, checkBundlerFunding, clearBundlerCache, fetch
 import { AmountText } from '@/components/ui/AmountText';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { MultiRecipientEditor, makeRecipientId, recipientsAreValid, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
-import { buildSplitCalls, sumSplitBaseUnits, buildMultiTokenCalls, toMultiTokenSpecs, reserveNativeGas, reserveTempoFeeToken, BATCH_MAX_RECIPIENTS } from '@/services/batch-send';
+import { buildSplitCalls, sumSplitBaseUnits, buildMultiTokenCalls, toMultiTokenSpecs, reserveNativeGas, reserveTempoFeeToken, maxNativeSendable, BATCH_MAX_RECIPIENTS } from '@/services/batch-send';
 import { resolveTokenAmount } from '@/services/fiat-convert';
 import { BatchImportSheet } from '@/components/send/BatchImportSheet';
 import { useTokenMultiSelect } from '@/hooks/use-token-multi-select';
@@ -824,15 +824,12 @@ export default function SendScreen() {
         const balanceWei = balanceToWei(selectedToken.balance, selectedToken.decimals);
         // Reserve 3x estimated gas (200% margin for gas price volatility)
         const reserveWei = fee.totalWei * 3n;
-        if (balanceWei > reserveWei) {
-          const maxWei = balanceWei - reserveWei;
-          const maxEth = Number(maxWei) / 1e18;
-          // Show enough decimals without trailing zeros
-          setAmount(maxEth.toFixed(18).replace(/\.?0+$/, ''));
-          return;
-        }
-        // Balance too low to cover gas — set to 0
-        setAmount('0');
+        // String-exact `balance − reserve` (no float precision loss). Matches the
+        // Tempo fee-token branch below and reserveNativeGas in batch-send.ts, so
+        // amountWei + reserveWei === balanceWei exactly and the "insufficient for
+        // gas" pre-check no longer trips on its own Max fill. Returns '0' when the
+        // balance can't cover the gas reserve.
+        setAmount(maxNativeSendable(balanceWei, reserveWei, selectedToken.decimals));
         return;
       } catch {
         // Estimation failed — fall through to full balance (tx may fail but user sees the error)
