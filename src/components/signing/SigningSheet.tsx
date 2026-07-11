@@ -403,7 +403,7 @@ export function SigningSheet({
       return <BlindTypedDataView params={params} />;
     }
     if (isTx && params?.[0]) {
-      return <BlindTransactionView tx={params[0]} chainId={chainId} simConfident={simConfident} />;
+      return <BlindTransactionView tx={params[0]} chainId={chainId} simConfident={simConfident} nativeUsdPrice={nativeUsdPrice} />;
     }
     return (
       <View style={styles.fallback}>
@@ -541,10 +541,18 @@ export function SigningSheet({
               heroFlows={
                 (approval || isBatch)
                   ? []
-                  : (clearSign?.fields
-                      .filter(f => f.role === 'send-amount' || f.role === 'receive-amount')
-                      .map(f => ({ token: f.tokenAddress?.toLowerCase(), dir: (f.role === 'send-amount' ? 'out' : 'in') as 'out' | 'in' }))
-                      ?? [])
+                  : clearSign
+                    ? (clearSign.fields
+                        .filter(f => f.role === 'send-amount' || f.role === 'receive-amount')
+                        .map(f => ({ token: f.tokenAddress?.toLowerCase(), dir: (f.role === 'send-amount' ? 'out' : 'in') as 'out' | 'in' }))
+                        ?? [])
+                    // Plain native send (value, no calldata, no descriptor): the hero
+                    // already shows the −native amount, so the sim's matching outflow
+                    // collapses to a quiet ✓ instead of repeating it (F2). Any UNmatched
+                    // change still expands the full list (per-token reconciliation).
+                    : (isTx && params?.[0]?.value && params[0].value !== '0x0' && (!params[0].data || params[0].data === '0x'))
+                      ? [{ token: undefined, dir: 'out' as const }]
+                      : []
               }
             />
           )}

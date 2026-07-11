@@ -324,10 +324,12 @@ describe('approval-guard', () => {
       expect(parseTokenAmount('abc', 18)).toBeNull();
       expect(parseTokenAmount('1.2.3', 18)).toBeNull();
     });
-    test('round-trips', () => {
-      expect(formatTokenAmount(1234_500000n, 6)).toBe('1234.5');
-      expect(formatTokenAmount(1000_000000n, 6)).toBe('1000');
+    test('round-trips (with thousands separators)', () => {
+      expect(formatTokenAmount(1234_500000n, 6)).toBe('1,234.5');
+      expect(formatTokenAmount(1000_000000n, 6)).toBe('1,000');
       expect(formatTokenAmount(0n, 6)).toBe('0');
+      // format → parse round-trips despite the grouping commas
+      expect(parseTokenAmount(formatTokenAmount(1234_500000n, 6), 6)).toBe(1234_500000n);
     });
   });
 });

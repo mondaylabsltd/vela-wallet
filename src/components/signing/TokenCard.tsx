@@ -12,9 +12,14 @@ import { TokenLogo } from '@/components/TokenLogo';
 import { AlertTriangle, ArrowDown } from 'lucide-react-native';
 import { styles, riskColors, localizeLabel, SigningChainContext } from './signing-core';
 
-export function TokenCard({ field, variant }: {
+export function TokenCard({ field, variant, hideSign }: {
   field: ClearSignField;
   variant: 'send' | 'receive' | 'caution' | 'danger';
+  /** Drop the leading −/+ on a lone amount (a plain send hero) — the eyebrow and the
+   *  plain-language summary already say "sending", so a bare "1,000 USDC" reads
+   *  friendlier than a "−1,000" that a novice can misread as an error. A swap keeps
+   *  its signs, since ± is what distinguishes pay from receive. */
+  hideSign?: boolean;
 }) {
   // Wise-style de-container: benign amounts sit on an OPEN row (no card), letting
   // the number breathe; only caution/danger get a tinted card, so a filled card
@@ -57,7 +62,7 @@ export function TokenCard({ field, variant }: {
           adjustsFontSizeToFit
           minimumFontScale={0.6}
         >
-          {sign}{field.value}
+          {hideSign ? field.value : `${sign}${field.value}`}
         </Text>
         <View style={styles.tokenSubRow}>
           <Text style={styles.tokenLabel}>{localizeLabel(field.label)}</Text>

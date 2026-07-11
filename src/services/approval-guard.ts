@@ -459,12 +459,19 @@ export function parseTokenAmount(human: string, decimals: number): bigint | null
 }
 
 /** Format raw base units back to a human string for `decimals` (trims zeros). */
+/** Group the integer part with thousands separators (Hermes-safe, no Intl) so a
+ *  permit/approve amount reads "1,000" like every other amount, not "1000" (F4). */
+function groupThousands(n: bigint): string {
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 export function formatTokenAmount(raw: bigint, decimals: number, maxFrac = 6): string {
-  if (decimals === 0) return raw.toString();
+  if (decimals === 0) return groupThousands(raw);
   const base = 10n ** BigInt(decimals);
   const whole = raw / base;
   const frac = raw % base;
-  if (frac === 0n) return whole.toString();
+  const wholeStr = groupThousands(whole);
+  if (frac === 0n) return wholeStr;
   const fracStr = frac.toString().padStart(decimals, '0').slice(0, maxFrac).replace(/0+$/, '');
-  return fracStr ? `${whole}.${fracStr}` : whole.toString();
+  return fracStr ? `${wholeStr}.${fracStr}` : wholeStr;
 }
