@@ -917,50 +917,25 @@ function ClearSignView({ cs, simConfident }: {
     !!cs.contractAddress &&
     recipients.some(f => f.address && f.address === cs.contractAddress);
 
+  // Unified 5-zone order: Zone 1 (intent + ONE hero) → Zone 2 (counterparty) →
+  // Zone 3 (all warnings, danger→caution) → detail. Warnings never sit above the
+  // hero; instead the hero itself carries risk weight so an alert below the fold is
+  // never the sole signal (safety invariants A3/A5): a descriptor-unlimited grant
+  // tints the amount danger, and an unverified/best-effort/partial decode without a
+  // confident sim tints it caution.
+  const heroDanger = cs.fields.some(f => f.warning);
+  const heroCaution = (cs.bestEffort || cs.partial || cs.fields.some(f => f.unverified)) && !simConfident;
+  const sendVariant: 'send' | 'caution' | 'danger' =
+    heroDanger ? 'danger' : (heroCaution || cs.risk === 'caution') ? 'caution' : 'send';
+
   return (
     <View>
-      {/* Context: chain + account */}
-      {/* context shown in dApp banner */}
-
-      {/* L1: Intent. A benign action cedes the headline to its content (verb →
-          eyebrow); only elevated risk (caution/danger) keeps the big colored hero
-          so a shouting headline always means "pay attention". */}
+      {/* ZONE 1 — the action + the ONE hero. Benign → eyebrow; risk → big hero. */}
       <IntentHeader
         intent={localizeIntent(cs.intent)}
         color={rc}
         variant={cs.risk === 'normal' ? 'eyebrow' : 'hero'}
       />
-
-      {/* Best-effort decode (recovered from a 4-byte selector DB, no verified
-          descriptor) — show what it does, but be honest it isn't verified. With a
-          confident simulation the wording drops the "check every detail" nag (the
-          preview below is the real proof); without one it keeps the full caution. */}
-      {cs.bestEffort && (
-        <WarningBanner
-          severity="caution"
-          text={simConfident
-            ? t('componentsUi.signing.bestEffortSimulated', { defaultValue: 'Decoded from the function signature (not a verified descriptor). The preview below shows the actual effect.' })
-            : t('componentsUi.signing.bestEffortWarning')}
-        />
-      )}
-
-      {/* Incomplete decode — the user must not assume they've seen everything */}
-      {cs.partial && (
-        <WarningBanner
-          severity="caution"
-          text={t('componentsUi.signing.partialWarning')}
-        />
-      )}
-
-      {/* Amount shown with unverified decimals (on-chain lookup failed) */}
-      {!cs.partial && cs.fields.some(f => f.unverified) && (
-        <WarningBanner
-          severity="caution"
-          text={t('componentsUi.signing.unverifiedWarning')}
-        />
-      )}
-
-      {/* L2: Token cards + flow */}
       {isSwapLayout ? (
         <>
           {sendAmounts.map((f, i) => (
@@ -974,13 +949,13 @@ function ClearSignView({ cs, simConfident }: {
       ) : sendAmounts.length > 0 ? (
         <>
           {sendAmounts.map((f, i) => (
-            <TokenCard key={`s${i}`} field={f} variant={cs.risk === 'caution' ? 'caution' : 'send'} />
+            <TokenCard key={`s${i}`} field={f} variant={sendVariant} />
           ))}
           {hasRecipient && <FlowArrow />}
         </>
       ) : null}
 
-      {/* Spender / recipient */}
+      {/* ZONE 2 — to whom / what: spender, recipient, or the interacting contract. */}
       {spenders.map((f, i) => (
         <ContractBar
           key={`sp${i}`}
@@ -998,43 +973,11 @@ function ClearSignView({ cs, simConfident }: {
           address={f.address}
           verified={false}
           riskCheck
+          // Sending a token to its own contract burns it — turn the recipient row
+          // itself red so Zone 2 contradicts the benign read, not just a Zone-3 banner.
+          warning={sendingToTokenContract && !!f.address && f.address === cs.contractAddress}
         />
       ))}
-
-      {/* Sending a token to its own contract → irreversible loss. */}
-      {sendingToTokenContract && (
-        <WarningBanner
-          severity="danger"
-          text={t('componentsUi.signing.tokenToContractWarning')}
-        />
-      )}
-
-      {/* An already-expired deadline (swap/permit) — the tx will revert. */}
-      {cs.fields.some(f => f.expired) && (
-        <WarningBanner
-          severity="caution"
-          text={t('componentsUi.signing.expiredWarning')}
-        />
-      )}
-
-      {/* Warning for unlimited approvals etc. */}
-      {cs.fields.some(f => f.warning) && (
-        <WarningBanner
-          severity="danger"
-          text={t('componentsUi.signing.unlimitedWarning')}
-        />
-      )}
-
-      {/* Generic fields */}
-      {generic.length > 0 && (
-        <View style={styles.genericFields}>
-          {generic.map((f, i) => (
-            <GenericFieldRow key={i} field={f} />
-          ))}
-        </View>
-      )}
-
-      {/* Contract bar (if not already shown via spender/recipient) */}
       {!hasRecipient && cs.contractAddress && (
         <ContractBar
           label={t('componentsUi.signing.interactingLabel')}
@@ -1042,6 +985,41 @@ function ClearSignView({ cs, simConfident }: {
           address={cs.contractAddress}
           verified={cs.verified}
         />
+      )}
+
+      {/* ZONE 3 — every active warning, danger first then caution. Stacked, never
+          "most-severe only": a permit can be expired AND unverified at once. */}
+      {sendingToTokenContract && (
+        <WarningBanner severity="danger" text={t('componentsUi.signing.tokenToContractWarning')} />
+      )}
+      {heroDanger && (
+        <WarningBanner severity="danger" text={t('componentsUi.signing.unlimitedWarning')} />
+      )}
+      {cs.fields.some(f => f.expired) && (
+        <WarningBanner severity="caution" text={t('componentsUi.signing.expiredWarning')} />
+      )}
+      {cs.bestEffort && (
+        <WarningBanner
+          severity="caution"
+          text={simConfident
+            ? t('componentsUi.signing.bestEffortSimulated', { defaultValue: 'Decoded from the function signature (not a verified descriptor). The preview below shows the actual effect.' })
+            : t('componentsUi.signing.bestEffortWarning')}
+        />
+      )}
+      {cs.partial && (
+        <WarningBanner severity="caution" text={t('componentsUi.signing.partialWarning')} />
+      )}
+      {!cs.partial && cs.fields.some(f => f.unverified) && (
+        <WarningBanner severity="caution" text={t('componentsUi.signing.unverifiedWarning')} />
+      )}
+
+      {/* Detail — raw decoded params, last so they never split the zones above. */}
+      {generic.length > 0 && (
+        <View style={styles.genericFields}>
+          {generic.map((f, i) => (
+            <GenericFieldRow key={i} field={f} />
+          ))}
+        </View>
       )}
     </View>
   );
