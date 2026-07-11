@@ -78,6 +78,17 @@ export default function ConnectScreen() {
     setLinkInput('');
   }, [linkInput, handleConnect]);
 
+  // Confirm before the irreversible disconnect (tears down the session; the dApp
+  // must re-pair). A bare tap shouldn't silently drop a live connection — mirrors
+  // Home's confirmDisconnect and the in-app browser. Reuses the already-localized
+  // connect.browser.disconnect* strings.
+  const confirmDisconnect = useCallback(() => {
+    showAlert(t('connect.browser.disconnectTitle'), t('connect.browser.disconnectBody'), [
+      { text: t('connect.browser.cancel'), style: 'cancel' },
+      { text: t('connect.list.disconnect'), style: 'destructive', onPress: disconnectBridge },
+    ]);
+  }, [t, disconnectBridge]);
+
   if (!state.hasWallet) {
     return (
       <ScreenContainer>
@@ -244,7 +255,7 @@ export default function ConnectScreen() {
             <View style={styles.disconnectSection}>
               <VelaButton
                 title={t('connect.list.disconnect')}
-                onPress={disconnectBridge}
+                onPress={confirmDisconnect}
                 variant="secondary"
               />
             </View>
