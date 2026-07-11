@@ -108,7 +108,9 @@ const LABEL_L10N: Record<string, string> = {
   token: 'labelToken', 'token id': 'labelTokenId', tokenid: 'labelTokenId',
   deadline: 'labelDeadline',
   'min received': 'labelMinReceived', 'minimum received': 'labelMinReceived', 'min amount out': 'labelMinReceived',
-  'amount received': 'labelReceived', shares: 'labelShares',
+  'you receive (min)': 'labelMinReceived', 'you receive (minimum)': 'labelMinReceived',
+  'you pay': 'labelPay', pay: 'labelPay',
+  'you receive': 'labelReceived', 'amount received': 'labelReceived', shares: 'labelShares',
   chain: 'labelChain', 'chain id': 'labelChain', nonce: 'labelNonce',
 };
 /** Localize a canonical ERC-7730 English intent; unknown → the raw string. */
@@ -896,8 +898,14 @@ function ClearSignView({ cs, simConfident }: {
       {/* Context: chain + account */}
       {/* context shown in dApp banner */}
 
-      {/* L1: Intent */}
-      <IntentHeader intent={localizeIntent(cs.intent)} color={rc} />
+      {/* L1: Intent. A benign, decoded value transfer cedes the headline to the
+          asset flow below (verb → eyebrow); anything with elevated risk keeps the
+          big hero so the colored headline still shouts. */}
+      <IntentHeader
+        intent={localizeIntent(cs.intent)}
+        color={rc}
+        variant={cs.risk === 'normal' && (sendAmounts.length > 0 || receiveAmounts.length > 0) ? 'eyebrow' : 'hero'}
+      />
 
       {/* Best-effort decode (recovered from a 4-byte selector DB, no verified
           descriptor) — show what it does, but be honest it isn't verified. With a
@@ -1599,7 +1607,22 @@ function BatchCallsView({ items, choices, onChoiceChange, metaByToken, editable,
 // Shared sub-components
 // ===========================================================================
 
-function IntentHeader({ intent, color: intentColor }: { intent: string; color: string }) {
+function IntentHeader({ intent, color: intentColor, variant = 'hero' }: {
+  intent: string;
+  color: string;
+  /** 'hero' = the big headline verb (opaque/risky actions own the screen).
+   *  'eyebrow' = a small kicker above an asset-flow hero (benign, decoded
+   *  value transfers — the money movement is the headline, not the verb). */
+  variant?: 'hero' | 'eyebrow';
+}) {
+  if (variant === 'eyebrow') {
+    return (
+      <View style={styles.intentEyebrow}>
+        <View style={[styles.intentEyebrowDot, { backgroundColor: intentColor }]} />
+        <Text style={[styles.intentEyebrowText, { color: intentColor }]}>{intent}</Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.intentHeader}>
       <Text style={[styles.intentText, { color: intentColor }]}>
@@ -1634,15 +1657,29 @@ function TokenCard({ field, variant }: {
     ? tokenLogoURLsByAddress(chainId, field.tokenAddress)
     : isNative ? [nativeCoinLogoURL(chainId)] : undefined;
 
+  // Directional framing (MetaMask/Rainbow "estimated changes" convention, shared
+  // with BalanceChangePreview): "+" green for what arrives, "−" neutral ink for
+  // what leaves. The signed amount is the hero of a benign transfer.
+  const incoming = variant === 'receive';
+  const sign = incoming ? '+' : '−';
+  const amountTint = incoming ? color.success.base : color.fg.base;
+
   return (
     <View style={[styles.tokenCard, bgMap[variant]]}>
       <TokenLogo
         symbol={symbol ?? '?'}
         logoUrls={logoUrls}
-        size={40}
+        size={44}
       />
       <View style={styles.tokenInfo}>
-        <Text style={styles.tokenAmount} numberOfLines={1}>{field.value}</Text>
+        <Text
+          style={[styles.tokenAmount, { color: amountTint }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+        >
+          {sign}{field.value}
+        </Text>
         <View style={styles.tokenSubRow}>
           <Text style={styles.tokenLabel}>{localizeLabel(field.label)}</Text>
           {!!field.usd && <Text style={styles.tokenUsd}>≈ {field.usd}</Text>}
@@ -1998,6 +2035,21 @@ const styles = createStyles(() => ({
     textAlign: 'center',
     letterSpacing: -1,
   },
+  // Eyebrow kicker — a small colored verb that cedes the headline to the asset flow.
+  intentEyebrow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: space.sm,
+    paddingTop: space.md,
+    paddingBottom: space.lg,
+  },
+  intentEyebrowDot: { width: 7, height: 7, borderRadius: 4 },
+  intentEyebrowText: {
+    fontSize: text.base,
+    ...inter.semibold,
+    letterSpacing: 0.2,
+  },
 
   // ===== Token Card =====
   tokenCard: {
@@ -2009,12 +2061,14 @@ const styles = createStyles(() => ({
     borderRadius: radius['2xl'],
     marginVertical: space.sm,
   },
-  tokenInfo: { flex: 1 },
+  tokenInfo: { flex: 1, minWidth: 0 },
   tokenAmount: {
+    // The hero of a benign transfer now that the verb is a mere eyebrow.
+    // adjustsFontSizeToFit shrinks long amounts so the ticker never clips.
     fontSize: text['3xl'],
     ...inter.bold,
     color: color.fg.base,
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
   },
   tokenLabel: {
     fontSize: text.sm,

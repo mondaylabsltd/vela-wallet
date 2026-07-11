@@ -116,6 +116,7 @@
       "labelDeadline": "截止时间",
       "labelMinReceived": "最少收到",
       "labelReceived": "收到",
+      "labelPay": "支付",
       "labelShares": "份额",
       "labelChain": "链",
       "labelNonce": "序号",

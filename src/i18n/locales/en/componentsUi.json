@@ -139,6 +139,7 @@
       "labelDeadline": "Deadline",
       "labelMinReceived": "Min received",
       "labelReceived": "Received",
+      "labelPay": "Pay",
       "labelShares": "Shares",
       "labelChain": "Chain",
       "labelNonce": "Nonce",
