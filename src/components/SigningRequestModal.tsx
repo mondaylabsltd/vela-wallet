@@ -2024,12 +2024,14 @@ const styles = createStyles(() => ({
   },
 
   // ===== dApp Banner =====
+  // De-containered (Wise): an open "who's asking" header, separated from the
+  // action below by a hairline instead of a gray card.
   dappBanner: {
-    paddingVertical: space.lg,
-    paddingHorizontal: space.xl,
-    backgroundColor: color.bg.sunken,
-    borderRadius: radius.xl,
-    marginBottom: space['2xl'],
+    paddingTop: space.sm,
+    paddingBottom: space.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: color.border.base,
+    marginBottom: space.xl,
     gap: space.md,
   },
   dappRow1: {
