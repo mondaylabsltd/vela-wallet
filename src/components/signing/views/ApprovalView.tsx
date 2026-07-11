@@ -86,7 +86,10 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
 
   return (
     <View>
-      <IntentHeader intent={verb} color={verbColor} variant={approval.isReducing ? 'eyebrow' : 'hero'} />
+      {/* Only an UNBOUNDED grant owns the screen with a big verb; a bounded approve
+          is routine, so it cedes the headline to the amount + summary (like the mock's
+          '最多 500 USDC' hero) with just a quiet kicker. */}
+      <IntentHeader intent={verb} color={verbColor} variant={approval.isUnbounded && !approval.isReducing ? 'hero' : 'eyebrow'} />
 
       <SummaryLine
         text={summary}
@@ -101,7 +104,7 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
         decimals={decimals}
         decimalsVerified={meta?.verified ?? false}
         logoUrls={logoUrls}
-        spenderLabel={clearSign?.contractName ?? shortAddr(approval.spender)}
+        spenderLabel={spenderName}
         choice={choice}
         onChange={onChange}
       />

@@ -68,7 +68,7 @@ export function PermitSignView({ approval, meta, clearSign }: {
 
   return (
     <View>
-      <IntentHeader intent={verb} color={verbColor} variant={approval.isReducing ? 'eyebrow' : 'hero'} />
+      <IntentHeader intent={verb} color={verbColor} variant={approval.isUnbounded && !approval.isReducing ? 'hero' : 'eyebrow'} />
 
       <SummaryLine text={summary} tone={summaryTone} emphasize={[spenderName, amountText, symbol]} />
 

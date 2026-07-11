@@ -254,15 +254,21 @@ function PresetChip({ label, active, onPress, tone }: {
 }
 
 const styles = createStyles(() => ({
+  // De-containered (Wise / the mock): a routine bounded approve sits OPEN, aligned
+  // to the sheet edge — no tinted box competing for attention. Only the genuinely
+  // dangerous unbounded grant (cardDanger) gets a contained red alarm box.
   card: {
-    backgroundColor: color.accent.soft,
+    paddingVertical: space.md,
+    gap: space.md,
+  },
+  cardSafe: {},
+  cardDanger: {
+    backgroundColor: color.error.soft,
+    borderWidth: 1, borderColor: color.error.base + '40',
     borderRadius: radius['2xl'],
     padding: space['2xl'],
     marginVertical: space.sm,
-    gap: space.md,
   },
-  cardSafe: { backgroundColor: color.success.soft },
-  cardDanger: { backgroundColor: color.error.soft, borderWidth: 1, borderColor: color.error.base + '40' },
 
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   symbol: { fontSize: text.base, ...inter.bold, color: color.fg.base },
