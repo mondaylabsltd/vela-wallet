@@ -42,6 +42,7 @@ import { resolveTokenMetadata } from '@/services/token-metadata';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
 import { resolveRecipientRisk, type RecipientRisk } from '@/services/recipient-risk';
 import { parseSiwe, checkSiweDomainBinding, siweHost, type SiweBinding } from '@/services/siwe';
+import { faviconForHost } from '@/services/favicon';
 import { decodePersonalMessage } from '@/services/decode-sign-message';
 import { readErc20Allowance } from '@/services/token-reads';
 import { knownTokenSymbol } from '@/services/tokens';
@@ -743,19 +744,6 @@ export function SigningRequestModal() {
 // ===========================================================================
 // dApp Banner
 // ===========================================================================
-
-/**
- * The site's OWN favicon, derived from its host — no third-party favicon service,
- * so signing a tx never leaks the dApp you're on to Google/DuckDuckGo/etc. Returns
- * undefined for non-registrable hosts (the test harness `clear-signing-test`,
- * `localhost`, bare IPs) so the banner falls back to a letter monogram.
- */
-function faviconForHost(domain?: string): string | undefined {
-  if (!domain) return undefined;
-  const host = domain.replace(/^[a-z]+:\/\//i, '').split('/')[0].split(':')[0].trim();
-  if (!host || !host.includes('.') || /^\d+(\.\d+){3}$/.test(host)) return undefined;
-  return `https://${host}/favicon.ico`;
-}
 
 function DAppBanner({ name, domain, icon, chainId, accountName, accountAddress }: {
   name: string;
