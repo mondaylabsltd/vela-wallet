@@ -171,14 +171,17 @@ export const styles = createStyles(() => ({
   },
 
   // ===== Plain-language summary (the novice's one-sentence read) =====
+  // Ink, not muted — it's the entry point, so it reads clearly; the key facts
+  // (amount, counterparty) come in semibold for a scannable emphasis.
   summaryLine: {
     fontSize: scaleFont(15),
-    lineHeight: 22,
+    lineHeight: 23,
     ...inter.medium,
-    color: color.fg.muted,
+    color: color.fg.base,
     paddingTop: space.sm,
     paddingBottom: space.lg,
   },
+  summaryBold: { ...inter.semibold, color: color.fg.base },
   summaryCaution: { color: color.warning.base },
   summaryDanger: { color: color.error.base },
 

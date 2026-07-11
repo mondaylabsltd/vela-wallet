@@ -82,14 +82,14 @@ export function ClearSignView({ cs, simConfident }: {
           {receiveAmounts.map((f, i) => (
             <TokenCard key={`r${i}`} field={f} variant="receive" />
           ))}
-          <SummaryLine text={summary} tone={summaryTone} />
+          <SummaryLine text={summary} tone={summaryTone} emphasize={[sendAmounts[0]?.value, receiveAmounts[0]?.value]} />
         </>
       ) : sendAmounts.length > 0 ? (
         <>
           {sendAmounts.map((f, i) => (
             <TokenCard key={`s${i}`} field={f} variant={sendVariant} hideSign />
           ))}
-          <SummaryLine text={summary} tone={summaryTone} />
+          <SummaryLine text={summary} tone={summaryTone} emphasize={[sendAmounts[0]?.value, toName]} />
         </>
       ) : null}
 

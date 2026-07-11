@@ -11,22 +11,33 @@ import { isAddress, shortAddr } from '@/models/types';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
 import { styles } from './signing-core';
 
-export function SummaryLine({ text, tone = 'neutral' }: {
+export function SummaryLine({ text, tone = 'neutral', emphasize }: {
   text?: string;
   /** 'caution'/'danger' warm the sentence slightly so a risky action's summary
    *  doesn't read as calmly as a benign one. */
   tone?: 'neutral' | 'caution' | 'danger';
+  /** Substrings to render in semibold (amount, counterparty). Matched verbatim in
+   *  the already-localized sentence, so it's language-agnostic — no <Trans> markup. */
+  emphasize?: (string | undefined)[];
 }) {
   if (!text) return null;
-  return (
-    <Text style={[
-      styles.summaryLine,
-      tone === 'danger' && styles.summaryDanger,
-      tone === 'caution' && styles.summaryCaution,
-    ]}>
-      {text}
-    </Text>
-  );
+  const toned = [
+    styles.summaryLine,
+    tone === 'danger' && styles.summaryDanger,
+    tone === 'caution' && styles.summaryCaution,
+  ];
+  const subs = (emphasize ?? []).filter((s): s is string => !!s && s.length > 0);
+  if (!subs.length) return <Text style={toned}>{text}</Text>;
+  return <Text style={toned}>{splitEmphasis(text, subs).map((p, i) =>
+    p.bold ? <Text key={i} style={styles.summaryBold}>{p.t}</Text> : p.t,
+  )}</Text>;
+}
+
+/** Split a sentence into bold/plain runs by matching the emphasize substrings. */
+function splitEmphasis(text: string, subs: string[]): { t: string; bold: boolean }[] {
+  const escaped = subs.map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp(`(${escaped.join('|')})`, 'g');
+  return text.split(re).filter((s) => s !== '').map((s) => ({ t: s, bold: subs.includes(s) }));
 }
 
 /**

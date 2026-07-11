@@ -110,15 +110,17 @@ export function GasFeeCard({
         <Text style={styles.toggleLabel}>{t('componentsUi.gas.estFee')}</Text>
         <View style={styles.toggleRight}>
           <View style={styles.toggleValues}>
+            {/* Fiat-first: for a novice a fee means "$X". The native amount drops to a
+                quiet sub-line (and the full gas breakdown is one tap away). */}
             <Text style={[styles.toggleValue, failed && styles.toggleValueFailed]}>
               {estimating || refreshing
                 ? t('componentsUi.gas.estimating')
                 : feeEstimate
-                  ? `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}`
+                  ? (feeUsd > 0.001 ? `≈ ${formatUsd(feeUsd)}` : `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}`)
                   : t('componentsUi.gas.estimateFailed')}
             </Text>
-            {!estimating && !failed && feeUsd > 0.001 && (
-              <Text style={styles.toggleSub}>≈ {formatUsd(feeUsd)}</Text>
+            {!estimating && !failed && feeEstimate && feeUsd > 0.001 && (
+              <Text style={styles.toggleSub}>~{formatWeiToEth(feeEstimate.totalWei)} {sym}</Text>
             )}
           </View>
           {failed ? (

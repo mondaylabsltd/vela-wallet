@@ -70,7 +70,7 @@ export function PermitSignView({ approval, meta, clearSign }: {
     <View>
       <IntentHeader intent={verb} color={verbColor} variant={approval.isReducing ? 'eyebrow' : 'hero'} />
 
-      <SummaryLine text={summary} tone={summaryTone} />
+      <SummaryLine text={summary} tone={summaryTone} emphasize={[spenderName, amountText, symbol]} />
 
       <View style={[styles.tokenCard, dangerous && { backgroundColor: color.error.soft }]}>
         <TokenLogo symbol={approval.tokenAddress ? symbol : '?'} logoUrls={logoUrls} size={40} />

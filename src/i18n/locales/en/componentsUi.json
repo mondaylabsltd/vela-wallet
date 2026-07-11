@@ -181,7 +181,7 @@
       "zoomLabel": "Zoom"
     },
     "gas": {
-      "estFee": "Est. Fee",
+      "estFee": "Network fee",
       "estimating": "Estimating...",
       "estimateFailed": "Tap to retry",
       "gasPrice": "Gas Price",

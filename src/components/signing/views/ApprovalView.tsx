@@ -88,7 +88,11 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
     <View>
       <IntentHeader intent={verb} color={verbColor} variant={approval.isReducing ? 'eyebrow' : 'hero'} />
 
-      <SummaryLine text={summary} tone={summaryTone} />
+      <SummaryLine
+        text={summary}
+        tone={summaryTone}
+        emphasize={[spenderName, `${formatRawTokenAmount(approval.amountRaw ?? 0n, decimals)} ${symbol}`, symbol]}
+      />
 
       <EditableApproveCard
         key={requestId}

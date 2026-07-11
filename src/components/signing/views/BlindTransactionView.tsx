@@ -67,7 +67,7 @@ export function BlindTransactionView({ tx, chainId, simConfident, nativeUsdPrice
         />
       )}
 
-      {!hasData && <SummaryLine text={summary} />}
+      {!hasData && <SummaryLine text={summary} emphasize={[value, toName]} />}
 
       {/* Contract / recipient. A plain send goes to a wallet, so run the recipient
           risk check (identicon + first-time / contract note), same as a decoded send. */}
