@@ -1123,6 +1123,14 @@ function ConnectionsView({
             placeholderTextColor={color.fg.subtle}
             autoCapitalize="none"
             autoCorrect={false}
+            // Multiline so a long walletpair link / URL wraps and stays fully visible
+            // instead of scrolling out of a cramped one-line field. blurOnSubmit keeps
+            // the return key a submit (not a newline) — the ArrowRight button is the
+            // primary submit either way.
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+            blurOnSubmit
             returnKeyType="go"
             onSubmitEditing={submitPaste}
           />
@@ -1425,16 +1433,18 @@ const styles = createStyles(() => ({
   connOrLine: { flex: 1, height: 1, backgroundColor: color.border.base },
   connOrText: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
   connPasteHint: { fontSize: text.sm, ...inter.regular, color: color.fg.subtle, textAlign: 'center', marginBottom: space.sm },
-  connPasteRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, alignSelf: 'stretch', paddingHorizontal: space.xl },
+  connPasteRow: { flexDirection: 'row', alignItems: 'flex-end', gap: space.md, alignSelf: 'stretch', paddingHorizontal: space.xl },
   connPasteRowSpaced: { marginTop: space.xl },
   connHistoryBtn: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.xl, paddingVertical: space.xs },
   connHistoryText: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
   connPasteInput: {
-    flex: 1, fontSize: text.sm, fontWeight: '500', fontFamily: font.mono,
-    color: color.fg.base, padding: space.lg,
+    // Taller, wider, larger type + multiline wrapping so a long link is readable.
+    flex: 1, fontSize: text.base, fontWeight: '500', fontFamily: font.mono, lineHeight: 20,
+    color: color.fg.base, paddingHorizontal: space.lg, paddingVertical: space.md,
+    minHeight: 56, maxHeight: 108,
     backgroundColor: color.bg.sunken, borderRadius: radius.lg,
     borderWidth: 1, borderColor: color.border.base,
   },
-  connPasteBtn: { width: 44, height: 44, borderRadius: radius.lg, backgroundColor: color.accent.base, alignItems: 'center', justifyContent: 'center' },
+  connPasteBtn: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: color.accent.base, alignItems: 'center', justifyContent: 'center' },
   connPasteBtnDisabled: { backgroundColor: color.bg.sunken },
 }));
