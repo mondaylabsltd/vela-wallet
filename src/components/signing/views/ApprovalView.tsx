@@ -55,11 +55,13 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
     : isNft && approval.isUnbounded
       ? t('componentsUi.signingApprove.verbApproveAll')
       : t('componentsUi.signingApprove.verbApprove');
+  // Headline hue = meaning: green revoke, red only for a real-danger unbounded
+  // grant, ink for a routine bounded approve (amber is reserved for the slider).
   const verbColor = approval.isReducing
     ? color.success.base
     : approval.isUnbounded
       ? color.error.base
-      : color.warning.base;
+      : color.fg.base;
 
   // Expiry classification (UI-side; the pure resolver injects `now` for tests).
   const deadlineSec = approval.deadline ? Number(approval.deadline) : 0;
