@@ -28,6 +28,8 @@ import { gateReadOnly, readOnlyKey } from '@/services/readonly-rpc-gate';
 import { PasskeyErrorCode } from '@/modules/passkey';
 import { saveTransaction, updateTransaction, loadTransactions } from '@/services/storage';
 import { buildSigningRecord } from '@/services/dapp-history';
+import { rpcCall } from '@/services/rpc-adapter';
+import { autoAddReceivedTokens } from '@/services/token-autoadd';
 import { serializeAssetSim, type AssetSimResult } from '@/services/tx-simulation';
 import { waitForReceipt } from '@/services/safe-transaction';
 import {
@@ -685,6 +687,9 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     // the page) can't lose its status. We patch it to confirmed/failed below.
     let pendingRecordId: string | null = null;
     let pendingSave: Promise<void> = Promise.resolve();
+    // Captured in onSubmitted so the confirm step can fetch the AUTHENTIC receipt
+    // logs and silently list any token this tx delivered (see token-autoadd).
+    let submittedOpHash = '';
     // Per-request dApp identity for an extension sign (F3) — the extension origin,
     // never a concurrent WalletPair session's dappInfo.
     const recordOrigin = requestDApp(base, dappInfo)?.name ?? request.origin ?? '';
@@ -696,6 +701,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
         // state survives the sheet closing.
         (hash) => {
           setPendingOpHash(hash);
+          submittedOpHash = hash;
           const pending = buildSigningRecord({
             method: request.method, params: request.params, result: '',
             from: account.address, chainId: cid, dappOrigin: recordOrigin,
@@ -738,6 +744,24 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           status: 'confirmed',
           txHash: typeof result === 'string' ? result : '',
         }).catch(e => console.warn('[DAppConnection] Failed to confirm record:', e));
+
+        // Silently list any token this tx delivered (e.g. a swap output), so it just
+        // appears on the next balance sync — no user action. Sourced from the
+        // AUTHENTIC receipt logs (never the spoofable sign-time sim). Detached so it
+        // never blocks closing the sheet; the tx-reconciler is the backstop if this
+        // races/fails. This path handles dApp swaps, which the reconciler skips once
+        // this confirm sets a txHash.
+        if (submittedOpHash) {
+          const opHash = submittedOpHash;
+          const from = account.address;
+          void (async () => {
+            try {
+              const res = await rpcCall('eth_getUserOperationReceipt', [opHash], cid);
+              const logs = (res.result as { receipt?: { logs?: any[] } } | null)?.receipt?.logs;
+              await autoAddReceivedTokens(from, cid, logs);
+            } catch { /* reconciler backstop */ }
+          })();
+        }
       }
 
       setIncomingRequest(null);

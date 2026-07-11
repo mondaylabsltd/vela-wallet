@@ -24,6 +24,7 @@
 
 import { loadTransactions, updateTransaction } from './storage';
 import { rpcCall } from './rpc-adapter';
+import { autoAddReceivedTokens, type ReceiptLog } from './token-autoadd';
 
 /** Stop re-polling a pending submission after this age (it stays pending = unknown). */
 const RECONCILE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -35,7 +36,7 @@ let _lastRunAt = 0;
 
 interface UserOpReceipt {
   success?: boolean;
-  receipt?: { transactionHash?: string };
+  receipt?: { transactionHash?: string; logs?: ReceiptLog[] };
 }
 
 export interface UserOpResolution {
@@ -105,6 +106,10 @@ export async function reconcilePendingTransactions(address: string): Promise<num
           await updateTransaction(tx.id, { status: 'failed' }).catch(() => {});
         } else {
           await updateTransaction(tx.id, { status: 'confirmed', txHash }).catch(() => {});
+          // Silently list any token this tx net-delivered, from the AUTHENTIC receipt
+          // logs (backstop for txs that confirmed while the app was closed). A pure
+          // send has no positive delta for `from`, so it adds nothing.
+          await autoAddReceivedTokens(tx.from, tx.chainId, r.receipt?.logs).catch(() => {});
         }
         resolved++;
       } catch {
