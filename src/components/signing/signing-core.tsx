@@ -143,6 +143,20 @@ export const styles = createStyles(() => ({
     color: color.fg.muted,
     flexShrink: 1,
   },
+  // Signing-from account — a quiet bottom row (below the fee), label-left like the
+  // other bottom rows, identicon+name on the right; tap reveals the full 0x.
+  signAccountRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: space.md, paddingVertical: space.lg,
+    borderTopWidth: 1, borderTopColor: color.border.base,
+  },
+  signAccountLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
+  signAccountRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1 },
+  signAccountName: { fontSize: text.sm, ...inter.semibold, color: color.fg.base, flexShrink: 1 },
+  signAccountAddr: {
+    fontSize: text.xs, fontFamily: font.mono, color: color.fg.muted,
+    textAlign: 'right', marginTop: space.xs,
+  },
 
   // ===== Intent Header =====
   // Left-aligned to the sheet's content edge — the whole sheet shares ONE left edge

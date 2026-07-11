@@ -41,7 +41,7 @@ import {
 } from '@/services/safe-transaction';
 import { Shield, AlertTriangle, Pen } from 'lucide-react-native';
 import { styles, localizeIntent, SigningChainContext } from './signing-core';
-import { DAppBanner } from './DAppBanner';
+import { DAppBanner, SigningAccountRow } from './DAppBanner';
 import { AdvancedPanel } from './AdvancedPanel';
 import { WarningBanner } from './WarningBanner';
 import { ClearSignView } from './views/ClearSignView';
@@ -517,8 +517,6 @@ export function SigningSheet({
             domain={displayDomain}
             icon={dappInfo?.icon}
             chainId={chainId}
-            accountName={activeAccount?.name}
-            accountAddress={addr}
           />
 
           {/* Read-only replay banner — "you're looking back at a past signature". */}
@@ -593,6 +591,16 @@ export function SigningSheet({
             <WarningBanner
               severity="caution"
               text={t('componentsUi.signing.gasEstimateFailed')}
+            />
+          )}
+
+          {/* Signing account — the wallet you're signing FROM. A quiet row right
+              above the confirm action (below the fee): collapsed to identicon + name,
+              tap to reveal the 0x. Shown for every signature type, not just txs. */}
+          {!readOnly && (
+            <SigningAccountRow
+              accountName={activeAccount?.name}
+              accountAddress={addr}
             />
           )}
 

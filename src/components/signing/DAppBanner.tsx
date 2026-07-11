@@ -1,9 +1,11 @@
 /**
- * dApp banner — the "who's asking" header at the top of every signing sheet.
+ * dApp banner — the "who's asking" header at the top of every signing sheet, plus
+ * the FROM-account row (SigningAccountRow) which lives at the BOTTOM (below the fee),
+ * near the confirm action, not crowding the banner.
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, Image, Pressable } from 'react-native';
-import { shortAddr } from '@/models/types';
+import { useTranslation } from 'react-i18next';
 import { chainName, DEFAULT_NETWORKS } from '@/models/network';
 import { color } from '@/constants/theme';
 import { ChainLogo } from '@/components/ChainLogo';
@@ -24,13 +26,11 @@ function faviconForHost(domain?: string): string | undefined {
   return `https://${host}/favicon.ico`;
 }
 
-export function DAppBanner({ name, domain, icon, chainId, accountName, accountAddress }: {
+export function DAppBanner({ name, domain, icon, chainId }: {
   name: string;
   domain?: string;
   icon?: string;
   chainId: number;
-  accountName?: string;
-  accountAddress?: string;
 }) {
   const net = DEFAULT_NETWORKS.find(n => n.chainId === chainId);
 
@@ -42,13 +42,9 @@ export function DAppBanner({ name, domain, icon, chainId, accountName, accountAd
   useEffect(() => { setLogoFailed(false); }, [logoUri]);
   const showLogo = !!logoUri && !logoFailed;
 
-  // The FROM account collapses to just its identicon + name — the raw 0x is noise on
-  // every screen; tap to reveal it when you actually want to verify.
-  const [acctOpen, setAcctOpen] = useState(false);
-
   return (
     <View style={styles.dappBanner}>
-      {/* Row 1: dApp identity ←→ chain */}
+      {/* dApp identity ←→ chain (the FROM account now lives at the bottom). */}
       <View style={styles.dappRow1}>
         {showLogo ? (
           <Image
@@ -70,23 +66,39 @@ export function DAppBanner({ name, domain, icon, chainId, accountName, accountAd
           <Text style={styles.dappChainName}>{chainName(chainId)}</Text>
         </View>
       </View>
+    </View>
+  );
+}
 
-      {/* Row 2: FROM — the signing wallet. Collapsed to identicon + name; the raw 0x
-          is revealed on tap (verify-when-you-want, quiet by default). */}
-      {accountName && (
-        <Pressable style={styles.dappAccountRow} onPress={() => setAcctOpen((o) => !o)} hitSlop={6}>
+/**
+ * The wallet you're signing FROM — a quiet row at the bottom of the sheet (below the
+ * fee), near the confirm action. Collapsed to identicon + name; tap reveals the 0x.
+ */
+export function SigningAccountRow({ accountName, accountAddress }: {
+  accountName?: string;
+  accountAddress?: string;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  if (!accountName) return null;
+  return (
+    <>
+      <Pressable style={styles.signAccountRow} onPress={() => setOpen((o) => !o)} hitSlop={6}>
+        <Text style={styles.signAccountLabel}>{t('componentsUi.signing.signingAccount')}</Text>
+        <View style={styles.signAccountRight}>
           {accountAddress ? <ContactAvatar name={accountName} address={accountAddress} size={18} /> : null}
-          <Text style={styles.dappAccountLine} numberOfLines={1}>
-            {accountName}{acctOpen && accountAddress ? `  ·  ${shortAddr(accountAddress)}` : ''}
-          </Text>
+          <Text style={styles.signAccountName} numberOfLines={1}>{accountName}</Text>
           {accountAddress ? (
             <ChevronDown
-              size={12} color={color.fg.subtle} strokeWidth={2}
-              style={acctOpen ? { transform: [{ rotate: '180deg' }] } : undefined}
+              size={13} color={color.fg.subtle} strokeWidth={2}
+              style={open ? { transform: [{ rotate: '180deg' }] } : undefined}
             />
           ) : null}
-        </Pressable>
+        </View>
+      </Pressable>
+      {open && accountAddress && (
+        <Text style={styles.signAccountAddr} selectable>{accountAddress}</Text>
       )}
-    </View>
+    </>
   );
 }
