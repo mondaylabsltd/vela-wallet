@@ -1272,7 +1272,13 @@ function inferFieldRoles(fields: ClearSignField[], intent: string): ClearSignFie
     // Amount roles
     if (f.format === 'tokenAmount' || f.format === 'amount') {
       if (/receive|output|min|return|get/.test(label)) return { ...f, role: 'receive-amount' as const };
-      if (/send|pay|input|deposit|spend|stake|amount|value/.test(label)) return { ...f, role: 'send-amount' as const };
+      if (/send|pay|input|deposit|spend|stake/.test(label)) return { ...f, role: 'send-amount' as const };
+      // Withdraw / redeem / unstake / claim bring assets INTO your wallet — their
+      // amount is a receive, not a send, even when the field is just labelled
+      // "amount"/"shares". Without this a vault withdraw shows "−1" (leaving) when it
+      // actually arrives (F7).
+      if (/withdraw|redeem|unstake|claim/.test(i) || /withdraw|redeem/.test(label)) return { ...f, role: 'receive-amount' as const };
+      if (/amount|value/.test(label)) return { ...f, role: 'send-amount' as const };
       // For approve/permit: the amount is what's being approved
       if (/approve|swap/.test(i)) return { ...f, role: 'send-amount' as const };
       return { ...f, role: 'send-amount' as const };

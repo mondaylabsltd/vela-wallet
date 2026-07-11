@@ -112,7 +112,7 @@ export const CLEAR_SIGNING_SCENARIOS: ClearSigningScenario[] = [
             spender: '0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD',
             value: '1000000000', // 1000 USDC (6 decimals)
             nonce: '0',
-            deadline: '1750000000',
+            deadline: '1900000000', // far future — a valid (non-expired) permit demo
           },
         }),
       ],

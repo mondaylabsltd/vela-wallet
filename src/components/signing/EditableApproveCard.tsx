@@ -298,7 +298,9 @@ const styles = createStyles(() => ({
   summary: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, lineHeight: 18 },
   unverified: { fontSize: text.xs, ...inter.regular, color: color.warning.base },
 
-  booleanWarn: { fontSize: text.sm, ...inter.medium, color: color.error.base, lineHeight: 19 },
+  // Restraint: red heading (the "All NFTs" symbol) carries the alarm; the body reads
+  // in ink so the card isn't a wall of red (matches the eth_sign danger card).
+  booleanWarn: { fontSize: text.sm, ...inter.medium, color: color.fg.base, lineHeight: 19 },
   boolBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
     paddingVertical: space.lg, borderRadius: radius.lg, borderWidth: 1,

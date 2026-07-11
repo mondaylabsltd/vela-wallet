@@ -18,6 +18,18 @@ export function MessageSignView({ hexMsg, requestOrigin }: {
   const { t } = useTranslation();
   const decoded = decodePersonalMessage(hexMsg);
 
+  // Non-printable hex isn't a human message — it can be a disguised hash (a transfer
+  // or approval hidden behind personal_sign). Legit apps sign readable text; flag the
+  // hex case so it never reads as calmly as a login prompt (F9).
+  const nonPrintable = useMemo(() => {
+    try {
+      const clean = hexMsg.startsWith('0x') ? hexMsg.slice(2) : hexMsg;
+      if (!/^[0-9a-fA-F]+$/.test(clean) || clean.length < 2) return false;
+      const bytes = new Uint8Array(clean.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
+      return !/^[\x20-\x7E\n\r\t]+$/.test(new TextDecoder().decode(bytes));
+    } catch { return false; }
+  }, [hexMsg]);
+
   // Sign-In with Ethereum: bind the domain inside the message to the request
   // origin. A mismatch is the canonical phishing pattern.
   const siwe = useMemo(() => parseSiwe(decoded), [decoded]);
@@ -78,6 +90,15 @@ export function MessageSignView({ hexMsg, requestOrigin }: {
         </View>
         <Text style={styles.msgText}>{decoded}</Text>
       </View>
+
+      {nonPrintable && (
+        <WarningBanner
+          severity="caution"
+          text={t('componentsUi.signing.hexMessageWarning', {
+            defaultValue: "This isn't readable text — it could be a transaction or approval in disguise. Only sign if you fully trust this site.",
+          })}
+        />
+      )}
     </View>
   );
 }

@@ -70,6 +70,12 @@ export function BatchCallsView({ items, choices, onChoiceChange, metaByToken, ed
   const anyUncapped = editable
     ? items.some((it, i) => legGrantsBroad(it.approval, choices[i]))
     : items.some((it) => it.approval?.isUnbounded && !it.approval.isReducing && !it.approval.isBooleanGrant);
+  // A leg that sends a token to its OWN contract burns it — the same fat-finger the
+  // single-send path flags, easy to miss buried in a batch (F13).
+  const anyToOwnToken = items.some((it) => {
+    const to = it.to?.toLowerCase();
+    return !!to && (it.clearSign?.fields.some((f) => f.role === 'recipient' && f.address?.toLowerCase() === to) ?? false);
+  });
 
   return (
     <View>
@@ -126,6 +132,9 @@ export function BatchCallsView({ items, choices, onChoiceChange, metaByToken, ed
         );
       })}
 
+      {anyToOwnToken && (
+        <WarningBanner severity="danger" text={t('componentsUi.signing.tokenToContractWarning')} />
+      )}
       {anyUncapped && (
         <WarningBanner severity="danger" text={t('componentsUi.signing.unlimitedWarning')} />
       )}
