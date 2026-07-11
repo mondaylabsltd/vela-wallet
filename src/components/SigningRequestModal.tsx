@@ -636,15 +636,18 @@ export function SigningSheet({
 
           {renderContent()}
 
-          {/* Advanced — full untruncated payload + any detail-only fields, for
-              power users who want to verify exactly what's being signed. */}
-          <AdvancedPanel method={method} params={params} clearSign={clearSign} />
-
           {/* Simulation summary — revert pre-check + net balance changes, one
               render path shared with Send's confirm step. Live mode shows the fresh
               sim; a read-only replay shows the one persisted at sign time (state has
-              moved on, so it can't be recomputed) — same component either way. */}
+              moved on, so it can't be recomputed) — same component either way.
+              Kept ABOVE the raw-data escape hatch: the "what actually changes" is the
+              outcome that matters (especially when the contract couldn't be decoded),
+              not something to bury under an Advanced toggle. */}
           {(isTx || isBatch) && <BalanceChangePreview result={readOnly ? replaySim : sim} chainId={chainId} />}
+
+          {/* Advanced — full untruncated payload + any detail-only fields, for
+              power users who want to verify exactly what's being signed. */}
+          <AdvancedPanel method={method} params={params} clearSign={clearSign} />
 
           {/* Gas fee card — only for eth_sendTransaction, and only live (not replay) */}
           {isTx && activeAccount?.address && !readOnly && (
