@@ -642,9 +642,19 @@ export function SigningSheet({
             <BalanceChangePreview
               result={readOnly ? replaySim : sim}
               chainId={chainId}
-              // The decoded hero already shows these amounts, so a matching sim
-              // collapses to a quiet ✓ instead of repeating them.
-              heroFlowCount={clearSign?.fields.filter(f => f.role === 'send-amount' || f.role === 'receive-amount').length ?? 0}
+              // The decoded hero's asset flows (token + direction) — a matching sim
+              // collapses to a quiet ✓ instead of repeating them. Approvals/permits/
+              // batches never corroborate a balance move (an approve cap is decoded as
+              // a send-amount, so a malicious approve()-that-also-transfers must never
+              // collapse), so they pass [].
+              heroFlows={
+                (approval || isBatch)
+                  ? []
+                  : (clearSign?.fields
+                      .filter(f => f.role === 'send-amount' || f.role === 'receive-amount')
+                      .map(f => ({ token: f.tokenAddress?.toLowerCase(), dir: (f.role === 'send-amount' ? 'out' : 'in') as 'out' | 'in' }))
+                      ?? [])
+              }
             />
           )}
 

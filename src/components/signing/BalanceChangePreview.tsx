@@ -23,18 +23,21 @@ import { formatTokenAmount } from '@/services/sim-assets';
 import type { AssetChange, AssetSimResult } from '@/services/tx-simulation';
 import { scaleFont, color, text, inter, space, radius, createStyles } from '@/constants/theme';
 
-export function BalanceChangePreview({ result, chainId, selfTransfer, heroFlowCount = 0 }: {
+export function BalanceChangePreview({ result, chainId, selfTransfer, heroFlows = [] }: {
   result: AssetSimResult | null;
   chainId: number;
   /** Recipient == sender. A self-send nets to zero, so say so honestly instead
       of the generic "no assets leave your wallet" (which reads as nonsense when
       you're clearly sending a token to yourself). */
   selfTransfer?: boolean;
-  /** How many asset movements the decoded HERO already shows (send + receive
-      amount fields). When the simulation moves no MORE than that, it's pure
-      corroboration → collapse to a quiet ✓ instead of repeating the amounts.
-      If the sim reveals extra/unexpected movement it still expands in full. */
-  heroFlowCount?: number;
+  /** The asset movements the decoded HERO already shows, each as {token, dir}
+      (token lowercased; undefined = native coin). The sim collapses to a quiet ✓
+      ONLY when EVERY simulated change is corroborated by a same-token, same-
+      direction hero flow AND none is `unverified` — so an undeclared outflow, a
+      swapped-token identity mismatch, or an unverified-decimals caution can never
+      hide behind the checkmark. Any unmatched movement expands the full list.
+      Approvals / permits / batches pass [] (they never corroborate a balance move). */
+  heroFlows?: { token?: string; dir: 'out' | 'in' }[];
 }) {
   const { t } = useTranslation();
   if (!result) return null;
@@ -84,14 +87,26 @@ export function BalanceChangePreview({ result, chainId, selfTransfer, heroFlowCo
     );
   }
 
-  // The hero already showed the decoded flow and the sim moved no more than it —
-  // pure corroboration. Collapse to a quiet ✓ instead of repeating the amounts
-  // (the flagship de-duplication). Extra/unexpected movement (changes beyond what
-  // the hero showed) is NOT corroboration → fall through to the full list.
-  if (!underfunded && heroFlowCount > 0 && changes!.length <= heroFlowCount) {
+  // Collapse to a quiet ✓ ONLY when the simulation is pure corroboration of the
+  // decoded hero: every change maps to a same-token, same-direction hero flow and
+  // none is unverified. A count budget would let an undeclared outflow, a swapped
+  // output token, or an unverified-decimals caution hide behind the ✓ — this checks
+  // identity + direction per change instead, so any unmatched movement expands below.
+  const corroborated =
+    heroFlows.length > 0 &&
+    !changes!.some((c) => c.unverified) &&
+    changes!.every((c) =>
+      heroFlows.some((h) =>
+        h.token === (c.token?.toLowerCase() ?? undefined) &&
+        (h.dir === 'out' ? c.delta < 0n : c.delta > 0n),
+      ),
+    );
+  if (!underfunded && corroborated) {
     return (
       <View style={styles.okRow}>
         <ShieldCheck size={13} color={color.success.base} strokeWidth={2} />
+        {/* Outflows only — the received side is spoofable, so we never imply it
+            was corroborated (safety review). */}
         <Text style={styles.okText}>{t('componentsUi.signing.balanceMatchesHero')}</Text>
       </View>
     );
