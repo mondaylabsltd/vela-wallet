@@ -638,7 +638,15 @@ export function SigningSheet({
               Kept ABOVE the raw-data escape hatch: the "what actually changes" is the
               outcome that matters (especially when the contract couldn't be decoded),
               not something to bury under an Advanced toggle. */}
-          {(isTx || isBatch) && <BalanceChangePreview result={readOnly ? replaySim : sim} chainId={chainId} />}
+          {(isTx || isBatch) && (
+            <BalanceChangePreview
+              result={readOnly ? replaySim : sim}
+              chainId={chainId}
+              // The decoded hero already shows these amounts, so a matching sim
+              // collapses to a quiet ✓ instead of repeating them.
+              heroFlowCount={clearSign?.fields.filter(f => f.role === 'send-amount' || f.role === 'receive-amount').length ?? 0}
+            />
+          )}
 
           {/* Advanced — full untruncated payload + any detail-only fields, for
               power users who want to verify exactly what's being signed. */}
@@ -852,11 +860,15 @@ function DAppBanner({ name, domain, icon, chainId, accountName, accountAddress }
         </View>
       </View>
 
-      {/* Row 2: wallet name · address */}
+      {/* Row 2: FROM — the signing wallet, with its own nimiq identicon so the
+          "from" account is as recognizable as the "to". */}
       {accountName && (
-        <Text style={styles.dappAccountLine} numberOfLines={1}>
-          {accountName}{accountAddress ? `  ·  ${shortAddr(accountAddress)}` : ''}
-        </Text>
+        <View style={styles.dappAccountRow}>
+          {accountAddress ? <ContactAvatar name={accountName} address={accountAddress} size={18} /> : null}
+          <Text style={styles.dappAccountLine} numberOfLines={1}>
+            {accountName}{accountAddress ? `  ·  ${shortAddr(accountAddress)}` : ''}
+          </Text>
+        </View>
       )}
     </View>
   );
@@ -2040,10 +2052,11 @@ const styles = createStyles(() => ({
   dappChainName: {
     fontSize: text.xs, ...inter.semibold, color: color.fg.base,
   },
+  dappAccountRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   dappAccountLine: {
     fontSize: text.xs, fontWeight: '500' as const, fontFamily: font.mono,
     color: color.fg.muted,
-    paddingLeft: space.sm,
+    flexShrink: 1,
   },
 
   // ===== Intent Header =====

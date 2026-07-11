@@ -73,6 +73,7 @@
       "simWillFailReason": "预计会失败：{{reason}} — 但仍会扣除 gas。",
       "balanceChangesTitle": "余额变化",
       "balanceNoAssetsMove": "没有资产离开你的钱包",
+      "balanceMatchesHero": "已模拟 — 没有其他资产变动",
       "balanceUnverifiedToken": "未验证代币",
       "balanceUnderfundedNative": "{{symbol}} 余额不足以支付这笔转账 — 预计会在链上失败。",
       "tokenToContractWarning": "这是把代币转给该代币自己的合约 — 转出后将永久无法找回。",

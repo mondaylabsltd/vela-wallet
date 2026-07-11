@@ -96,6 +96,7 @@
       "simWillFailReason": "Expected to fail: {{reason}} — you’d still pay gas.",
       "balanceChangesTitle": "Balance changes",
       "balanceNoAssetsMove": "No assets leave your wallet",
+      "balanceMatchesHero": "Simulated — nothing else leaves your wallet",
       "balanceUnverifiedToken": "Unverified token",
       "balanceUnderfundedNative": "Not enough {{symbol}} to cover this transfer — it's expected to fail on-chain.",
       "tokenToContractWarning": "This sends tokens to the token's own contract — they'd be lost forever.",

@@ -23,13 +23,18 @@ import { formatTokenAmount } from '@/services/sim-assets';
 import type { AssetChange, AssetSimResult } from '@/services/tx-simulation';
 import { scaleFont, color, text, inter, space, radius, createStyles } from '@/constants/theme';
 
-export function BalanceChangePreview({ result, chainId, selfTransfer }: {
+export function BalanceChangePreview({ result, chainId, selfTransfer, heroFlowCount = 0 }: {
   result: AssetSimResult | null;
   chainId: number;
   /** Recipient == sender. A self-send nets to zero, so say so honestly instead
       of the generic "no assets leave your wallet" (which reads as nonsense when
       you're clearly sending a token to yourself). */
   selfTransfer?: boolean;
+  /** How many asset movements the decoded HERO already shows (send + receive
+      amount fields). When the simulation moves no MORE than that, it's pure
+      corroboration → collapse to a quiet ✓ instead of repeating the amounts.
+      If the sim reveals extra/unexpected movement it still expands in full. */
+  heroFlowCount?: number;
 }) {
   const { t } = useTranslation();
   if (!result) return null;
@@ -75,6 +80,19 @@ export function BalanceChangePreview({ result, chainId, selfTransfer }: {
       <View style={styles.okRow}>
         <ShieldCheck size={13} color={color.success.base} strokeWidth={2} />
         <Text style={styles.okText}>{msg}</Text>
+      </View>
+    );
+  }
+
+  // The hero already showed the decoded flow and the sim moved no more than it —
+  // pure corroboration. Collapse to a quiet ✓ instead of repeating the amounts
+  // (the flagship de-duplication). Extra/unexpected movement (changes beyond what
+  // the hero showed) is NOT corroboration → fall through to the full list.
+  if (!underfunded && heroFlowCount > 0 && changes!.length <= heroFlowCount) {
+    return (
+      <View style={styles.okRow}>
+        <ShieldCheck size={13} color={color.success.base} strokeWidth={2} />
+        <Text style={styles.okText}>{t('componentsUi.signing.balanceMatchesHero')}</Text>
       </View>
     );
   }
