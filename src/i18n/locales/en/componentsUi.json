@@ -125,6 +125,7 @@
       "summaryReceive": "You'll receive {{amount}}.",
       "summaryApprove": "You're letting {{spender}} spend up to {{amount}} later.",
       "summaryApproveUnlimited": "You're letting {{spender}} spend ALL your {{token}}, with no limit.",
+      "summaryTransferNft": "You're sending NFT {{id}} to {{to}}.",
       "summaryApproveNft": "You're letting {{operator}} move every NFT you own in this collection.",
       "summaryRevoke": "You're revoking {{spender}}'s access to your {{token}}.",
       "summaryPermit": "You're signing a permit — {{spender}} can later spend up to {{amount}} on your behalf.",

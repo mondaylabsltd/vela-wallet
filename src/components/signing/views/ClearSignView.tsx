@@ -2,7 +2,7 @@
  * Clear Sign View — the descriptor-found, human-readable signing surface.
  */
 import React from 'react';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { type ClearSignResult } from '@/services/clear-signing';
 import { styles, intentColor, localizeIntent } from '../signing-core';
@@ -30,9 +30,11 @@ export function ClearSignView({ cs, simConfident, walletAddress }: {
   const receiveAmounts = cs.fields.filter(f => f.role === 'receive-amount');
   const recipients = cs.fields.filter(f => f.role === 'recipient');
   const spenders = cs.fields.filter(f => f.role === 'spender');
-  // Detail-flagged generics (best-effort raw params) live under the Advanced
-  // panel, not the headline body — only body-level generics render here.
-  const generic = cs.fields.filter(f => f.role === 'generic' && !f.detail);
+  // Body generics: detail-flagged (best-effort raw params) AND address-valued
+  // ones (e.g. transferFrom's `from`) live under 技术细节 instead — the panel
+  // renders addresses with full identity (name + icon + explorer), so a bare
+  // hex row up here would just be a decluttered duplicate.
+  const generic = cs.fields.filter(f => f.role === 'generic' && !f.detail && !f.address);
 
   // Determine if this is a swap-like layout (send → receive)
   const isSwapLayout = sendAmounts.length > 0 && receiveAmounts.length > 0;
@@ -63,13 +65,19 @@ export function ClearSignView({ cs, simConfident, walletAddress }: {
   // ELSE, say so — that's the security-relevant fact ("where did my tokens go").
   const swapToOther = isSwapLayout && recipient?.address && !!toName
     && (!walletAddress || recipient.address.toLowerCase() !== walletAddress.toLowerCase());
+  // An NFT transfer has no fungible amount — its "amount" is the token id (an
+  // nftName field like "#6,529"). Give it the same plain-language one-liner.
+  const nftIdField = !isSwapLayout && sendAmounts.length === 0 && recipients.length > 0
+    ? generic.find(f => /^#/.test(f.value)) : undefined;
   const summary = isSwapLayout
     ? (swapToOther
         ? t('componentsUi.signing.summarySwapTo', { pay: sendAmounts[0]?.value, receive: receiveAmounts[0]?.value, to: toName })
         : t('componentsUi.signing.summarySwap', { pay: sendAmounts[0]?.value, receive: receiveAmounts[0]?.value }))
     : (sendAmounts.length > 0 && recipients.length > 0 && toName)
       ? t('componentsUi.signing.summarySend', { amount: sendAmounts[0].value, to: toName })
-      : undefined;
+      : (nftIdField && toName)
+        ? t('componentsUi.signing.summaryTransferNft', { id: nftIdField.value, to: toName, defaultValue: "You're sending NFT {{id}} to {{to}}." })
+        : undefined;
   // Restraint: the summary stays neutral ink; only genuine danger warms it. The hero
   // and Zone-3 warnings carry the risk color, so the sentence doesn't double up.
   const summaryTone = sendVariant === 'danger' ? 'danger' : 'neutral';
@@ -117,6 +125,18 @@ export function ClearSignView({ cs, simConfident, walletAddress }: {
             tone={summaryTone}
             emphasize={[receiveAmounts[0]?.value]}
           />
+        </>
+      ) : nftIdField ? (
+        // NFT: the token id IS the hero (principle 06 — a screen's protagonist).
+        // The collection names it; the plain sentence says where it's going.
+        <>
+          <View style={styles.heroRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.heroAmount} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{nftIdField.value}</Text>
+              {cs.contractName ? <Text style={styles.tokenLabel}>{cs.contractName}</Text> : null}
+            </View>
+          </View>
+          <SummaryLine text={summary} tone={summaryTone} emphasize={[nftIdField.value, toName]} />
         </>
       ) : null}
 
@@ -190,10 +210,11 @@ export function ClearSignView({ cs, simConfident, walletAddress }: {
         <WarningBanner severity="caution" text={t('componentsUi.signing.unverifiedWarning')} />
       )}
 
-      {/* Detail — raw decoded params, last so they never split the zones above. */}
-      {generic.length > 0 && (
+      {/* Detail — raw decoded params, last so they never split the zones above.
+          The NFT id is excluded here — it's the hero above, not a repeated row. */}
+      {generic.filter(f => f !== nftIdField).length > 0 && (
         <View style={styles.genericFields}>
-          {generic.map((f, i) => (
+          {generic.filter(f => f !== nftIdField).map((f, i) => (
             <GenericFieldRow key={i} field={f} />
           ))}
         </View>
