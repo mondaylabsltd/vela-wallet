@@ -5,6 +5,7 @@
  */
 import * as PublicKeyIndex from './public-key-index';
 import { getRelyingPartyId } from '@/modules/passkey';
+import { computeAddress } from './safe-address';
 import { fromHex } from './hex';
 import { loadPendingUploads, removePendingUpload } from './storage';
 
@@ -109,8 +110,29 @@ export async function uploadPublicKey(params: {
   }
   console.log('[PublicKeyUpload] Verified on server for:', name);
 
-  // 3. Confirmed present on the server — clear the pending entry.
-  await removePendingUpload(credentialId);
+  // 3. The credentialId record exists — but that is NOT the signal that the key
+  //    is usable for GAS SPONSORSHIP. The bundler grants sponsorship only once the
+  //    key resolves BY walletRef (the Safe address), which lands after the index's
+  //    async on-chain commit-reveal — minutes later, and sometimes stuck. Clearing
+  //    the pending upload on credentialId-confirmation alone abandoned those
+  //    registrations, so the bundler never saw the key and the funded treasury
+  //    never paid out (issue #89). Only clear once walletRef resolves; until then
+  //    keep it pending so retryPendingUploads re-drives it (createRecord is
+  //    idempotent and re-queues a stuck reveal). Never throw here: the credentialId
+  //    is confirmed, the wallet is fully usable locally, and onboarding must not be
+  //    blocked on the slow reveal (saveAccount still gates on credentialId only).
+  try {
+    const resolvedByWalletRef = await PublicKeyIndex.queryByWalletRef(computeAddress(publicKeyHex));
+    if (resolvedByWalletRef) {
+      await removePendingUpload(credentialId);
+      console.log('[PublicKeyUpload] walletRef resolved — registration complete:', name);
+    } else {
+      console.log('[PublicKeyUpload] credentialId stored; walletRef pending on-chain reveal — keeping for retry:', name);
+    }
+  } catch (err) {
+    // walletRef check failed (index/RPC down) — keep it pending, retry next launch.
+    console.warn('[PublicKeyUpload] walletRef check failed; leaving pending:', err instanceof Error ? err.message : String(err));
+  }
 }
 
 /**

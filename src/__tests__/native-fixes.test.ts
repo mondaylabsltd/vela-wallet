@@ -120,3 +120,64 @@ describe('camera permanent-denial escape (audit low)', () => {
     expect(src).toContain('canAskAgain');
   });
 });
+
+describe('batch/split send carries the recipient name to the address book (issue #81)', () => {
+  it('RecipientDraft can carry an optional name', () => {
+    const src = read('src/components/send/MultiRecipientEditor.tsx');
+    expect(src).toMatch(/interface RecipientDraft[\s\S]*?name\?: string/);
+  });
+
+  it('the payroll importer keeps the parsed name when building drafts', () => {
+    const src = read('src/components/send/BatchImportSheet.tsx');
+    // apply() must forward r.name, not drop it.
+    expect(src).toMatch(/makeRecipientId\(\)[\s\S]*?name: r\.name/);
+  });
+
+  it('the split-send path sets toName so deriveFromHistory can surface it', () => {
+    const src = read('src/screens/wallet/SendScreen.tsx');
+    // The split-mode lines map (recipients.map) must set toName from the draft
+    // name — mirroring the single/multiSelect branches. (contacts.test.ts already
+    // proves a persisted toName becomes the auto-contact's resolvedName.)
+    expect(src).toContain('toName: r.name?.trim() || undefined');
+  });
+});
+
+describe('WalletPair disconnect confirmation (issue #85)', () => {
+  it('Home Connections tab gates disconnect behind a confirm, not a bare tap', () => {
+    const src = read('src/screens/wallet/HomeScreen.tsx');
+    // The disconnect control must route through confirmDisconnect (showAlert),
+    // never wire conn.disconnectBridge straight to onDisconnect.
+    expect(src).toContain('onDisconnect={confirmDisconnect}');
+    expect(src).not.toContain('onDisconnect={conn.disconnectBridge}');
+    expect(src).toMatch(/const confirmDisconnect = useCallback[\s\S]*?showAlert\(/);
+  });
+
+  it('legacy /connect screen also confirms before disconnecting', () => {
+    const src = read('src/screens/connect/ConnectScreen.tsx');
+    expect(src).toContain('onPress={confirmDisconnect}');
+    expect(src).not.toContain('onPress={disconnectBridge}');
+    expect(src).toMatch(/const confirmDisconnect = useCallback[\s\S]*?showAlert\(/);
+  });
+});
+
+describe('AppModal in-sheet gestures (issue #87 — slide-to-confirm)', () => {
+  const src = read('src/components/ui/AppModal.tsx');
+
+  it('imports GestureHandlerRootView', () => {
+    expect(src).toContain("import { GestureHandlerRootView } from 'react-native-gesture-handler'");
+  });
+
+  it('wraps every native <Modal> root in a GestureHandlerRootView, not a bare View', () => {
+    // RN core <Modal> mounts a native root detached from the app-root
+    // GestureHandlerRootView, so RNGH gestures inside (the approve slide-to-
+    // confirm knob) die unless each native branch nests its own root.
+    // There are 3 native branches (iOS pageSheet, Android sheet, fit sheet).
+    const opens = src.match(/<GestureHandlerRootView/g) ?? [];
+    const closes = src.match(/<\/GestureHandlerRootView>/g) ?? [];
+    expect(opens.length).toBe(3);
+    expect(closes.length).toBe(3);
+    // The old bug: a bare <View> as the native modal root.
+    expect(src).not.toContain('<View style={styles.nativeRoot}>');
+    expect(src).not.toContain('<View style={styles.fitRoot}>');
+  });
+});

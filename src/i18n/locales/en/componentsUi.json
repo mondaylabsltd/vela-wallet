@@ -223,6 +223,7 @@
       "spendingCap": "Spending cap",
       "reduceBy": "Reduce by",
       "requested": "Requested",
+      "balanceCap": "Balance",
       "custom": "Custom",
       "revoke": "Revoke",
       "revokeValue": "Revoke (0)",

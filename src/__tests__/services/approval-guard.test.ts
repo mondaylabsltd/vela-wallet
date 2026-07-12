@@ -103,6 +103,18 @@ describe('approval-guard', () => {
       expect(isUnboundedAmount(10n ** 33n, 160)).toBe(false);
       expect(isUnboundedAmount(500_000_000n, 256)).toBe(false);
     });
+    test('a "cap at balance" (issue #86) is always finite — even a whale balance', () => {
+      // The one-tap Balance cap sets the allowance to the user's actual balance.
+      // A whale holding 1e9 USDT (6 dp) = 1e15 ≈ 2^50; even 1e12 ETH-equiv @18dp
+      // ≈ 2^100 — both are far below UNLIMITED_CAP_256 (2^200) / _160 (2^152), so
+      // the finite Balance cap ALWAYS passes the never-unlimited guard.
+      const whaleUsdt = 1_000_000_000n * 10n ** 6n;        // 1e15
+      const whaleEth = 1_000_000_000_000n * 10n ** 18n;    // 1e30
+      expect(isUnboundedAmount(whaleUsdt, 256)).toBe(false);
+      expect(isUnboundedAmount(whaleUsdt, 160)).toBe(false);
+      expect(isUnboundedAmount(whaleEth, 256)).toBe(false);
+      expect(isUnboundedAmount(whaleEth, 160)).toBe(false);
+    });
   });
 
   describe('detectApproval — calldata', () => {

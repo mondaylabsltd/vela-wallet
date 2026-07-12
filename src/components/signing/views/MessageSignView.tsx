@@ -10,6 +10,11 @@ import { ShieldCheck } from 'lucide-react-native';
 import { styles, riskColors } from '../signing-core';
 import { IntentHeader } from '../IntentHeader';
 import { WarningBanner } from '../WarningBanner';
+// Unicode-aware decoder (issue #82) — a re-export so SigningSheet keeps importing
+// `decodePersonalMessage` from this view, but the logic lives in one shared module
+// (emoji / CJK / accents decode as text instead of falling back to raw hex).
+export { decodePersonalMessage } from '@/services/decode-sign-message';
+import { decodePersonalMessage } from '@/services/decode-sign-message';
 
 export function MessageSignView({ hexMsg, requestOrigin }: {
   hexMsg: string;
@@ -113,14 +118,3 @@ function hostLabel(value: string | undefined): string {
   }
 }
 
-export function decodePersonalMessage(hexMsg: string): string {
-  try {
-    const clean = hexMsg.startsWith('0x') ? hexMsg.slice(2) : hexMsg;
-    const bytes = new Uint8Array(clean.match(/.{1,2}/g)!.map(b => parseInt(b, 16)));
-    const decoded = new TextDecoder().decode(bytes);
-    if (/^[\x20-\x7E\n\r\t]+$/.test(decoded)) return decoded;
-    return `0x${clean.slice(0, 64)}${clean.length > 64 ? '...' : ''}`;
-  } catch {
-    return hexMsg.slice(0, 66) + (hexMsg.length > 66 ? '...' : '');
-  }
-}

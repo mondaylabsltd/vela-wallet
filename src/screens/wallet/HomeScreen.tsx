@@ -667,6 +667,19 @@ export default function HomeScreen() {
     ]);
   }, [address, t]);
 
+  // Disconnect is irreversible (tears down the transport AND wipes the persisted
+  // session, so the dApp must re-pair), so gate it behind a confirm — a bare tap
+  // shouldn't silently drop a live connection. Mirrors the in-app browser's
+  // confirmDisconnect and the clear-events dialog above. Reuses the already-
+  // localized connect.browser.disconnect* strings (no new keys across 14 locales).
+  const confirmDisconnect = useCallback(() => {
+    hapticLight();
+    showAlert(t('connect.browser.disconnectTitle'), t('connect.browser.disconnectBody'), [
+      { text: t('home.cancel'), style: 'cancel' },
+      { text: t('home.connDisconnect'), style: 'destructive', onPress: conn.disconnectBridge },
+    ]);
+  }, [t, conn.disconnectBridge]);
+
   const deleteConnEvent = useCallback((id: string) => {
     // Optimistic remove + tombstone until the async storage write commits, so a
     // concurrent background reload can't repaint the just-deleted event.
@@ -905,7 +918,7 @@ export default function HomeScreen() {
                   dappName={conn.dappInfo?.name ?? null}
                   dappUrl={conn.dappInfo?.url ?? null}
                   events={connEvents}
-                  onDisconnect={conn.disconnectBridge}
+                  onDisconnect={confirmDisconnect}
                   onReconnect={conn.reconnect}
                   onConnect={() => setShowScanner(true)}
                   onPasteConnect={onPasteConnect}
@@ -1099,6 +1112,62 @@ function ConnectionsView({
   }, []);
   useEffect(() => { refreshHistoryCount(); }, [refreshHistoryCount]);
 
+  // The persisted signing-activity list. Rendered in the connected branch AND —
+  // crucially (issue #88) — in the disconnected branch, because dApp transactions
+  // signed through the in-app browser / extension leave conn.status as
+  // 'disconnected', so without this a just-signed tx would be invisible with
+  // nothing to review. In `historyMode` (no live session) it renders only when
+  // there are events, so a fresh install's empty state stays clean; the delete/
+  // clear handlers act on stored ids and are safe regardless of status.
+  const renderEvents = (historyMode = false) => {
+    if (historyMode && events.length === 0) return null;
+    return (
+      <View style={historyMode ? styles.connHistorySection : undefined}>
+        <View style={styles.connEventsHeadRow}>
+          <Text style={styles.connEventsHead}>{t('home.connEventsHead', { count: events.length })}</Text>
+          {events.length > 0 && (
+            <Pressable style={styles.connClearBtn} onPress={onClearEvents} hitSlop={8}>
+              <Trash2 size={13} color={color.fg.subtle} strokeWidth={2} />
+              <Text style={styles.connClearText}>{t('home.connClear')}</Text>
+            </Pressable>
+          )}
+        </View>
+        {events.length === 0 ? (
+          <Text style={styles.connNoEvents}>{t('home.connNoEvents')}</Text>
+        ) : (
+          events.map((e) => (
+            <Swipeable
+              key={e.id}
+              overshootRight={false}
+              renderRightActions={() => (
+                <Pressable style={styles.eventDelete} onPress={() => onDeleteEvent(e.id)}>
+                  <Trash2 size={18} color={color.fg.inverse} strokeWidth={2.2} />
+                  <Text style={styles.eventDeleteText}>{t('home.connDelete')}</Text>
+                </Pressable>
+              )}
+            >
+              <Pressable style={styles.eventRow} onPress={() => onOpenEvent(e.tx)}>
+                <View style={styles.eventInfo}>
+                  <Text style={styles.eventLabel} numberOfLines={1}>{e.label}</Text>
+                  <Text style={styles.eventSub} numberOfLines={1}>{e.subtitle}</Text>
+                </View>
+                {e.status !== 'confirmed' && (
+                  <View style={[styles.eventPill, e.status === 'failed' ? styles.eventPillFailed : styles.eventPillPending]}>
+                    <Text style={[styles.eventPillText, e.status === 'failed' ? styles.eventPillTextFailed : styles.eventPillTextPending]}>
+                      {t(e.status === 'failed' ? 'home.connFailed' : 'home.connPending')}
+                    </Text>
+                  </View>
+                )}
+                <Text style={styles.eventTime}>{relativeTime(e.timestamp)}</Text>
+                <ChevronRight size={16} color={color.fg.subtle} strokeWidth={2} />
+              </Pressable>
+            </Swipeable>
+          ))
+        )}
+      </View>
+    );
+  };
+
   // Pairing in progress (fingerprint / waiting) or failed — shown inline so the
   // user never leaves the Connections panel while connecting.
   if (status === 'connecting' || status === 'error') {
@@ -1107,6 +1176,7 @@ function ConnectionsView({
 
   if (status === 'disconnected') {
     return (
+      <View>
       <View style={styles.connEmpty}>
         <View style={styles.connEmptyIcon}><Plug size={26} color={color.fg.subtle} strokeWidth={2} /></View>
         <Text style={styles.connEmptyTitle}>{t('home.connEmptyTitle')}</Text>
@@ -1162,6 +1232,10 @@ function ConnectionsView({
           onOpen={(url) => { setShowHistory(false); router.push({ pathname: '/browser', params: { url } }); }}
         />
       </View>
+      {/* Signing history stays reviewable even with no live session — a browser/
+          extension-signed dApp tx lands here (conn.status is 'disconnected'). */}
+      {renderEvents(true)}
+      </View>
     );
   }
 
@@ -1192,47 +1266,7 @@ function ConnectionsView({
         </Pressable>
       </VelaCard>
 
-      <View style={styles.connEventsHeadRow}>
-        <Text style={styles.connEventsHead}>{t('home.connEventsHead', { count: events.length })}</Text>
-        {events.length > 0 && (
-          <Pressable style={styles.connClearBtn} onPress={onClearEvents} hitSlop={8}>
-            <Trash2 size={13} color={color.fg.subtle} strokeWidth={2} />
-            <Text style={styles.connClearText}>{t('home.connClear')}</Text>
-          </Pressable>
-        )}
-      </View>
-      {events.length === 0 ? (
-        <Text style={styles.connNoEvents}>{t('home.connNoEvents')}</Text>
-      ) : (
-        events.map((e) => (
-          <Swipeable
-            key={e.id}
-            overshootRight={false}
-            renderRightActions={() => (
-              <Pressable style={styles.eventDelete} onPress={() => onDeleteEvent(e.id)}>
-                <Trash2 size={18} color={color.fg.inverse} strokeWidth={2.2} />
-                <Text style={styles.eventDeleteText}>{t('home.connDelete')}</Text>
-              </Pressable>
-            )}
-          >
-            <Pressable style={styles.eventRow} onPress={() => onOpenEvent(e.tx)}>
-              <View style={styles.eventInfo}>
-                <Text style={styles.eventLabel} numberOfLines={1}>{e.label}</Text>
-                <Text style={styles.eventSub} numberOfLines={1}>{e.subtitle}</Text>
-              </View>
-              {e.status !== 'confirmed' && (
-                <View style={[styles.eventPill, e.status === 'failed' ? styles.eventPillFailed : styles.eventPillPending]}>
-                  <Text style={[styles.eventPillText, e.status === 'failed' ? styles.eventPillTextFailed : styles.eventPillTextPending]}>
-                    {t(e.status === 'failed' ? 'home.connFailed' : 'home.connPending')}
-                  </Text>
-                </View>
-              )}
-              <Text style={styles.eventTime}>{relativeTime(e.timestamp)}</Text>
-              <ChevronRight size={16} color={color.fg.subtle} strokeWidth={2} />
-            </Pressable>
-          </Swipeable>
-        ))
-      )}
+      {renderEvents()}
     </View>
   );
 }
@@ -1425,6 +1459,7 @@ const styles = createStyles(() => ({
   eventPillTextPending: { color: color.info.base },
   eventPillTextFailed: { color: color.error.base },
 
+  connHistorySection: { marginTop: space['3xl'] },
   connEmpty: { alignItems: 'center', paddingTop: space['4xl'], gap: space.md },
   connEmptyIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: color.bg.sunken, alignItems: 'center', justifyContent: 'center' },
   connEmptyTitle: { fontSize: text.xl, ...inter.semibold, color: color.fg.base },

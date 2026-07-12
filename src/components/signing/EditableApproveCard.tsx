@@ -2,10 +2,15 @@
  * EditableApproveCard — the founder mandate made tangible.
  *
  * Replaces the passive "Unlimited ⚠" banner with an active control: the user
- * picks a FINITE spending cap (or revokes). There is intentionally no "Max" /
- * "Unlimited" preset anywhere, and for an unbounded incoming request the confirm
- * button stays disabled until the user makes a finite choice (reported as a
- * non-null `choice` to the parent).
+ * picks a FINITE spending cap (or revokes). There is intentionally no "Unlimited"
+ * preset, and for an unbounded incoming request the confirm button stays disabled
+ * until the user makes a finite choice (reported as a non-null `choice`).
+ *
+ * When the wallet's token balance is known, a one-tap "Balance" preset offers a
+ * finite cap at that balance (issue #86): enough to let a swap proceed — a dApp
+ * like Uniswap that requests an unlimited approve still gets a workable allowance
+ * — but never more than the user holds, and always below the never-unlimited cap.
+ * That is a bounded cap, NOT the forbidden "unlimited" grant.
  *
  * Pure presentational: all encoding/guarding lives in services/approval-guard.
  */
@@ -36,11 +41,15 @@ interface Props {
   spenderLabel: string;
   /** Token USD price for the ≈$ line (omit to hide it). */
   usdPrice?: number;
+  /** The wallet's on-chain balance of this token (raw units), if read. Powers the
+   *  one-tap "Balance" cap — a FINITE safe max that lets a swap proceed without
+   *  ever granting unlimited (issue #86). */
+  balanceRaw?: bigint | null;
   choice: ApprovalChoice | null;
   onChange: (choice: ApprovalChoice | null) => void;
 }
 
-type Mode = 'requested' | 'custom' | 'revoke';
+type Mode = 'requested' | 'balance' | 'custom' | 'revoke';
 
 export function EditableApproveCard(props: Props) {
   if (props.approval.isBooleanGrant) return <BooleanGrantCard {...props} />;
@@ -53,7 +62,7 @@ export function EditableApproveCard(props: Props) {
 // ---------------------------------------------------------------------------
 
 function AmountCard({
-  approval, symbol, decimals, decimalsVerified, logoUrls, spenderLabel, usdPrice, onChange,
+  approval, symbol, decimals, decimalsVerified, logoUrls, spenderLabel, usdPrice, balanceRaw, onChange,
 }: Props) {
   const { t } = useTranslation();
   useLocalePrefs();
@@ -61,6 +70,11 @@ function AmountCard({
   const dc = useDisplayCurrency();
   const requested = approval.amountRaw ?? 0n;
   const requestedFinite = !approval.isUnbounded && requested > 0n;
+  const isReducing = approval.kind === 'decreaseAllowance';
+  // A one-tap FINITE cap at the user's balance: enough for any swap, never more
+  // than they hold, and always well below the never-unlimited cap. Not offered on
+  // a decrease (capping a reduction by balance is meaningless).
+  const hasBalanceCap = !isReducing && balanceRaw != null && balanceRaw > 0n;
 
   // Initial mode: a finite, reasonable request is pre-accepted; an unbounded
   // request forces a deliberate choice (custom).
@@ -73,6 +87,8 @@ function AmountCard({
   const { choice, error, displayRaw } = useMemo(() => {
     if (mode === 'revoke') return { choice: { type: 'revoke' } as ApprovalChoice, error: null, displayRaw: 0n };
     if (mode === 'requested') return { choice: { type: 'amount', amountRaw: requested } as ApprovalChoice, error: null, displayRaw: requested };
+    // A finite cap at the user's balance — always below the never-unlimited cap.
+    if (mode === 'balance' && hasBalanceCap) return { choice: { type: 'amount', amountRaw: balanceRaw! } as ApprovalChoice, error: null, displayRaw: balanceRaw! };
     // custom
     const trimmed = customText.trim();
     if (trimmed === '') return { choice: null, error: null as string | null, displayRaw: null as bigint | null };
@@ -82,11 +98,10 @@ function AmountCard({
       return { choice: null, error: t('componentsUi.signingApprove.unlimitedDisabled'), displayRaw: raw };
     }
     return { choice: { type: 'amount', amountRaw: raw } as ApprovalChoice, error: null, displayRaw: raw };
-  }, [mode, customText, requested, decimals, approval.amountBits, t]);
+  }, [mode, customText, requested, decimals, approval.amountBits, hasBalanceCap, balanceRaw, t]);
 
   useEffect(() => { onChange(choice); }, [choice]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const isReducing = approval.kind === 'decreaseAllowance';
   const accent = isReducing ? color.success.base : color.accent.base;
   const usd = displayRaw != null && usdPrice ? (Number(displayRaw) / 10 ** decimals) * usdPrice : null;
 
@@ -137,6 +152,13 @@ function AmountCard({
             label={t('componentsUi.signingApprove.requested')}
             active={mode === 'requested'}
             onPress={() => { setMode('requested'); setCustomText(formatTokenAmount(requested, decimals)); }}
+          />
+        )}
+        {hasBalanceCap && (
+          <PresetChip
+            label={t('componentsUi.signingApprove.balanceCap', { defaultValue: 'Balance' })}
+            active={mode === 'balance'}
+            onPress={() => { setMode('balance'); setCustomText(formatTokenAmount(balanceRaw!, decimals)); }}
           />
         )}
         <PresetChip

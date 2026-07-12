@@ -52,6 +52,7 @@ import {
   type FundingNeeded,
 } from '@/services/bundler-service';
 import { fundingShouldForce } from '@/services/dev/fault-injection';
+import { queryByWalletRef } from '@/services/public-key-index';
 
 interface Props {
   visible: boolean;
@@ -234,6 +235,32 @@ export function BundlerFundingView({ funding, onFunded, onCancel, dappVariant }:
     }, delay);
     return () => clearTimeout(timer);
   }, [mode, denialReason, retryFree]);
+
+  // `no_passkey_registered` clears only once the new wallet's P-256 key resolves
+  // BY walletRef on-chain, which can take minutes — beyond the fixed [30s,60s]
+  // window, after which the sheet would otherwise degrade to a manual top-up even
+  // though the free grant WILL become available (issue #89). Poll walletRef and,
+  // the instant it resolves, retry the free grant so a user who simply waits gets
+  // sponsored. Bounded so it can't poll forever.
+  useEffect(() => {
+    if (mode !== 'topup' || denialReason !== 'no_passkey_registered') return;
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 36; // ~3 min at 5s
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      if (cancelled || attempts >= MAX_ATTEMPTS) return;
+      attempts += 1;
+      try {
+        const resolved = await queryByWalletRef(funding.safeAddress);
+        if (cancelled) return;
+        if (resolved) { retryFree(true); return; } // key is now bundler-visible → grant should pay out
+      } catch { /* index/RPC blip — keep polling */ }
+      if (!cancelled) timer = setTimeout(tick, 5_000);
+    };
+    timer = setTimeout(tick, 5_000);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [mode, denialReason, funding.safeAddress, retryFree]);
 
   const copyAddress = () => {
     hapticLight();

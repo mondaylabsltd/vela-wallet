@@ -181,7 +181,7 @@ export function BatchImportSheet({ visible, onClose, token, currencyCode, curren
   };
 
   const apply = () => {
-    const recipients: RecipientDraft[] = capped.map((r) => ({ id: makeRecipientId(), address: r.address, amount: r.tokenAmount }));
+    const recipients: RecipientDraft[] = capped.map((r) => ({ id: makeRecipientId(), address: r.address, amount: r.tokenAmount, name: r.name }));
     hapticSuccess();
     onApply(recipients);
   };
@@ -400,6 +400,10 @@ export function BatchImportSheet({ visible, onClose, token, currencyCode, curren
       <CurrencySheet
         visible={showCurrency}
         selected={fiatCode}
+        // Scoped, per-batch "priced in" currency — NOT the app-wide display
+        // currency. A distinct title keeps it from reading as the global setting
+        // (issue #80: the two pickers looked identical and seemed out of sync).
+        title={t('send.batchCurrencyLabel', { defaultValue: 'Priced in' })}
         onSelect={(code) => { setFiatCode(code); setRateEdited(false); }}
         onClose={() => setShowCurrency(false)}
       />
