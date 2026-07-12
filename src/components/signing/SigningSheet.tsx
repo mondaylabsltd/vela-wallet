@@ -507,6 +507,22 @@ export function SigningSheet({
     // chosen) before the bundle can be confirmed — mirrors the single-tx rule.
     || (isBatch && (batch?.some((it, i) => legNeedsChoice(it.approval, batchChoices[i])) ?? false));
 
+  // Simulation result + the decoded hero's asset flows — shared by the loud
+  // BalanceChangePreview (unexpected changes / reverts) and the quiet factual
+  // "模拟结果" row now shown inside 技术细节 instead of a green promise up top.
+  const simResult = readOnly ? replaySim : sim;
+  const heroFlows: { token?: string; dir: 'out' | 'in' }[] =
+    (approval || isBatch)
+      ? []
+      : clearSign
+        ? (clearSign.fields
+            .filter(f => f.role === 'send-amount' || f.role === 'receive-amount')
+            .map(f => ({ token: f.tokenAddress?.toLowerCase(), dir: (f.role === 'send-amount' ? 'out' : 'in') as 'out' | 'in' }))
+            ?? [])
+        : (isTx && params?.[0]?.value && params[0].value !== '0x0' && (!params[0].data || params[0].data === '0x'))
+          ? [{ token: undefined, dir: 'out' as const }]
+          : [];
+
   return (
       <SigningChainContext.Provider value={chainId}>
       <View style={styles.container}>
@@ -536,37 +552,23 @@ export function SigningSheet({
               Kept ABOVE the raw-data escape hatch: the "what actually changes" is the
               outcome that matters (especially when the contract couldn't be decoded),
               not something to bury under an Advanced toggle. */}
+          {/* The loud states only — an expected-to-fail revert, an underfunded
+              send, or UNEXPECTED balance changes the hero didn't declare. The
+              quiet "everything matched / nothing else moved" case no longer shows
+              a green promise here; it's a factual "模拟结果" row in 技术细节 below. */}
           {(isTx || isBatch) && (
-            <BalanceChangePreview
-              result={readOnly ? replaySim : sim}
-              chainId={chainId}
-              // The decoded hero's asset flows (token + direction) — a matching sim
-              // collapses to a quiet ✓ instead of repeating them. Approvals/permits/
-              // batches never corroborate a balance move (an approve cap is decoded as
-              // a send-amount, so a malicious approve()-that-also-transfers must never
-              // collapse), so they pass [].
-              heroFlows={
-                (approval || isBatch)
-                  ? []
-                  : clearSign
-                    ? (clearSign.fields
-                        .filter(f => f.role === 'send-amount' || f.role === 'receive-amount')
-                        .map(f => ({ token: f.tokenAddress?.toLowerCase(), dir: (f.role === 'send-amount' ? 'out' : 'in') as 'out' | 'in' }))
-                        ?? [])
-                    // Plain native send (value, no calldata, no descriptor): the hero
-                    // already shows the −native amount, so the sim's matching outflow
-                    // collapses to a quiet ✓ instead of repeating it (F2). Any UNmatched
-                    // change still expands the full list (per-token reconciliation).
-                    : (isTx && params?.[0]?.value && params[0].value !== '0x0' && (!params[0].data || params[0].data === '0x'))
-                      ? [{ token: undefined, dir: 'out' as const }]
-                      : []
-              }
-            />
+            <BalanceChangePreview result={simResult} chainId={chainId} heroFlows={heroFlows} hideReassurance />
           )}
 
-          {/* Advanced — full untruncated payload + any detail-only fields, for
-              power users who want to verify exactly what's being signed. */}
-          <AdvancedPanel method={method} params={params} clearSign={clearSign} />
+          {/* Advanced — full untruncated payload, resolved addresses, and the
+              factual simulation result (net balance changes). */}
+          <AdvancedPanel
+            method={method}
+            params={params}
+            clearSign={clearSign}
+            simResult={(isTx || isBatch) ? simResult : null}
+            heroFlows={heroFlows}
+          />
 
           {/* Gas fee card — for an on-chain tx OR a batch (both cost gas), live only. */}
           {(isTx || isBatch) && activeAccount?.address && !readOnly && (

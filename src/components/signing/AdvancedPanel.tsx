@@ -16,10 +16,13 @@ import { type ClearSignResult } from '@/services/clear-signing';
 import { lookupSelector } from '@/services/selector-registry';
 import { explorerBaseURL, explorerAddressURL } from '@/models/network';
 import { openURL } from '@/services/platform';
+import { useLocalePrefs, numberSeparators } from '@/services/locale-format';
+import type { AssetSimResult } from '@/services/tx-simulation';
 import { ChevronDown, Copy, Check, FileText, ExternalLink } from 'lucide-react-native';
 import { Identicon } from '@/components/ui/Identicon';
 import { styles, localizeLabel, SigningChainContext } from './signing-core';
 import { useAddressIdentity, type AddrKind } from './use-address-identity';
+import { summariseSimResult } from './BalanceChangePreview';
 
 // Instant signatures for the common selectors, so the 函数 row fills without a
 // round-trip; anything else is resolved async via the shared selector registry.
@@ -73,14 +76,20 @@ function CopyBtn({ value }: { value: string }) {
   );
 }
 
-export function AdvancedPanel({ method, params, clearSign }: {
+export function AdvancedPanel({ method, params, clearSign, simResult = null, heroFlows = [] }: {
   method: string;
   params: any[];
   clearSign: ClearSignResult | null;
+  /** Simulation result, rendered as a factual "模拟结果" row (net balance changes)
+      instead of a green promise in the main view. */
+  simResult?: AssetSimResult | null;
+  heroFlows?: { token?: string; dir: 'out' | 'in' }[];
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const chainId = useContext(SigningChainContext);
+  useLocalePrefs();
+  const sep = numberSeparators();
 
   const tx = method === 'eth_sendTransaction' ? params?.[0] ?? {} : null;
   const data: string | undefined = tx?.data && tx.data !== '0x' ? tx.data : undefined;
@@ -137,6 +146,18 @@ export function AdvancedPanel({ method, params, clearSign }: {
   const detailFields = clearSign?.fields.filter((f) => f.detail) ?? [];
   const dataBytes = data ? Math.floor((data.length - 2) / 2) : 0;
 
+  // Factual simulation result — "−1,000 USDC · 无其他变动" — the calm, non-
+  // promissory replacement for the green "nothing leaves your wallet" line.
+  const simSummary = useMemo(() => {
+    const s = summariseSimResult(simResult, heroFlows, sep);
+    if (!s) return null;
+    if (s.noChange) return t('componentsUi.signing.simResultNoChange', { defaultValue: 'No asset changes' });
+    const base = s.parts.join(' · ');
+    return s.corroborated
+      ? `${base} · ${t('componentsUi.signing.simResultNoOther', { defaultValue: 'no other changes' })}`
+      : base;
+  }, [simResult, heroFlows, sep, t]);
+
   // Non-address rows (decoded params, function signature, raw calldata) — the
   // address rows render above these with their resolved identity.
   const otherRows: { label: string; value: string; copy?: string }[] = [
@@ -145,7 +166,7 @@ export function AdvancedPanel({ method, params, clearSign }: {
     ...(data ? [{ label: `CALLDATA · ${dataBytes} BYTES`, value: midTrunc(data, 18, 6), copy: data }] : []),
   ];
 
-  if (addresses.length === 0 && otherRows.length === 0 && !raw) return null;
+  if (!simSummary && addresses.length === 0 && otherRows.length === 0 && !raw) return null;
 
   return (
     <View>
@@ -158,13 +179,23 @@ export function AdvancedPanel({ method, params, clearSign }: {
       </Pressable>
       {open && (
         <View style={styles.drawerCard}>
+          {/* Simulation result — the factual net balance change, replacing the
+              green "nothing leaves your wallet" promise in the main view. */}
+          {!!simSummary && (
+            <View style={[styles.drawerRow, styles.drawerRowFirst]}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.drawerLabel}>{t('componentsUi.signing.simResultLabel', { defaultValue: 'Simulation result' })}</Text>
+                <Text style={styles.drawerValue} numberOfLines={2}>{simSummary}</Text>
+              </View>
+            </View>
+          )}
           {/* Identity-enriched address rows — a resolved name + identicon/glyph
               + explorer link, with the raw hex kept as ground truth. */}
           {addresses.map((a, i) => (
-            <AddressRow key={`a${i}`} entry={a} chainId={chainId} first={i === 0} />
+            <AddressRow key={`a${i}`} entry={a} chainId={chainId} first={!simSummary && i === 0} />
           ))}
           {otherRows.map((r, i) => (
-            <View key={`o${i}`} style={[styles.drawerRow, addresses.length === 0 && i === 0 && styles.drawerRowFirst]}>
+            <View key={`o${i}`} style={[styles.drawerRow, !simSummary && addresses.length === 0 && i === 0 && styles.drawerRowFirst]}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.drawerLabel}>{r.label}</Text>
                 <Text style={styles.drawerValue} numberOfLines={1}>{r.value}</Text>
@@ -176,7 +207,7 @@ export function AdvancedPanel({ method, params, clearSign }: {
               the whole point of a 712 review — as a complete, scrollable, copyable
               block, not one lone address. */}
           {!!raw && (
-            <View style={[styles.drawerRow, addresses.length === 0 && otherRows.length === 0 && styles.drawerRowFirst]}>
+            <View style={[styles.drawerRow, !simSummary && addresses.length === 0 && otherRows.length === 0 && styles.drawerRowFirst]}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.drawerLabel}>{method.includes('signTypedData') || method === 'wallet_sendCalls' ? 'JSON' : t('componentsUi.signing.signMessage')}</Text>
                 <ScrollView style={styles.drawerRaw} nestedScrollEnabled>
