@@ -141,7 +141,10 @@
       "labelPay": "支払",
       "labelShares": "シェア",
       "labelChain": "チェーン",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "シミュレーション結果",
+      "simResultNoChange": "資産の変動なし",
+      "simResultNoOther": "他に変動なし"
     },
     "signingApprove": {
       "resultingTotal": "新しい承認上限",

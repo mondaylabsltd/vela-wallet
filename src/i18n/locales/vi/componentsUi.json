@@ -141,7 +141,10 @@
       "labelPay": "Trả",
       "labelShares": "Cổ phần",
       "labelChain": "Chuỗi",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "Kết quả mô phỏng",
+      "simResultNoChange": "Không có thay đổi tài sản",
+      "simResultNoOther": "không có thay đổi nào khác"
     },
     "signingApprove": {
       "resultingTotal": "Tổng hạn mức mới",

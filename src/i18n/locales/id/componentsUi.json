@@ -141,7 +141,10 @@
       "labelPay": "Bayar",
       "labelShares": "Bagian",
       "labelChain": "Jaringan",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "Hasil simulasi",
+      "simResultNoChange": "Tidak ada perubahan aset",
+      "simResultNoOther": "tidak ada perubahan lain"
     },
     "signingApprove": {
       "resultingTotal": "Total izin belanja baru",

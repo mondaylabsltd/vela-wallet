@@ -141,7 +141,10 @@
       "labelPay": "Zahlen",
       "labelShares": "Anteile",
       "labelChain": "Chain",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "Simulationsergebnis",
+      "simResultNoChange": "Keine Vermögensänderungen",
+      "simResultNoOther": "keine weiteren Änderungen"
     },
     "signingApprove": {
       "resultingTotal": "Neue Gesamtfreigabe",

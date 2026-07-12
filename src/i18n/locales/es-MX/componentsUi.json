@@ -141,7 +141,10 @@
       "labelPay": "Pagas",
       "labelShares": "Participaciones",
       "labelChain": "Cadena",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "Resultado de la simulación",
+      "simResultNoChange": "Sin cambios de activos",
+      "simResultNoOther": "sin otros cambios"
     },
     "signingApprove": {
       "resultingTotal": "Nuevo límite total",

@@ -141,7 +141,10 @@
       "labelPay": "Ödenen",
       "labelShares": "Paylar",
       "labelChain": "Zincir",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "Simülasyon sonucu",
+      "simResultNoChange": "Varlık değişikliği yok",
+      "simResultNoOther": "başka değişiklik yok"
     },
     "signingApprove": {
       "resultingTotal": "Yeni toplam izin",

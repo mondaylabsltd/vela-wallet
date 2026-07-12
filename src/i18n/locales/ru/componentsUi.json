@@ -141,7 +141,10 @@
       "labelPay": "Платите",
       "labelShares": "Доли",
       "labelChain": "Сеть",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "Результат симуляции",
+      "simResultNoChange": "Нет изменений активов",
+      "simResultNoOther": "нет других изменений"
     },
     "signingApprove": {
       "resultingTotal": "Новый общий лимит",

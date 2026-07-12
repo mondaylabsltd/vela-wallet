@@ -141,7 +141,10 @@
       "labelPay": "Pagar",
       "labelShares": "Cotas",
       "labelChain": "Rede",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "Resultado da simulação",
+      "simResultNoChange": "Sem alterações de ativos",
+      "simResultNoOther": "sem outras alterações"
     },
     "signingApprove": {
       "resultingTotal": "Novo limite total",

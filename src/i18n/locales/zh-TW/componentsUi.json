@@ -141,7 +141,10 @@
       "labelPay": "支付",
       "labelShares": "份額",
       "labelChain": "鏈",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "模擬結果",
+      "simResultNoChange": "無資產變動",
+      "simResultNoOther": "無其他變動"
     },
     "currency": {
       "title": "顯示貨幣",

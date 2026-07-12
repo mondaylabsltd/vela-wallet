@@ -141,7 +141,10 @@
       "labelPay": "지불",
       "labelShares": "지분",
       "labelChain": "체인",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "시뮬레이션 결과",
+      "simResultNoChange": "자산 변동 없음",
+      "simResultNoOther": "다른 변동 없음"
     },
     "signingApprove": {
       "resultingTotal": "새 총 승인 한도",

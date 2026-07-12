@@ -141,7 +141,10 @@
       "labelPay": "Paga",
       "labelShares": "Quote",
       "labelChain": "Chain",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "Risultato della simulazione",
+      "simResultNoChange": "Nessuna variazione di asset",
+      "simResultNoOther": "nessun’altra variazione"
     },
     "signingApprove": {
       "resultingTotal": "Nuovo limite totale",

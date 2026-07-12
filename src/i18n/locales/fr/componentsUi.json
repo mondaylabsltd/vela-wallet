@@ -141,7 +141,10 @@
       "labelPay": "Payer",
       "labelShares": "Parts",
       "labelChain": "Chaîne",
-      "labelNonce": "Nonce"
+      "labelNonce": "Nonce",
+      "simResultLabel": "Résultat de la simulation",
+      "simResultNoChange": "Aucun changement d’actif",
+      "simResultNoOther": "aucun autre changement"
     },
     "signingApprove": {
       "resultingTotal": "Nouvelle autorisation totale",
