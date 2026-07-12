@@ -125,9 +125,19 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
           resulting total so "increase by 100" can't read as "cap at 100". When the
           current allowance couldn't be read, still say the increment ADDS to it. */}
       {approval.kind === 'increaseAllowance' && allowanceResolved && (() => {
-        const increment = choice?.type === 'amount' ? choice.amountRaw : (approval.amountRaw ?? 0n);
         const dec = meta?.decimals ?? 18;
         const sym = meta?.symbol ?? '';
+        // Revoke zeroes the allowance outright — the increment math no longer
+        // applies, so the resulting total is simply 0 (not "current + increment").
+        if (choice?.type === 'revoke') {
+          return (
+            <View style={styles.allowanceTotalRow}>
+              <Text style={styles.allowanceTotalLabel}>{t('componentsUi.signingApprove.resultingTotal')}</Text>
+              <Text style={styles.allowanceTotalValue}>{`0 ${sym}`}</Text>
+            </View>
+          );
+        }
+        const increment = choice?.type === 'amount' ? choice.amountRaw : (approval.amountRaw ?? 0n);
         return (
           <View style={styles.allowanceTotalRow}>
             <Text style={styles.allowanceTotalLabel}>{t('componentsUi.signingApprove.resultingTotal')}</Text>

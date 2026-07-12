@@ -493,9 +493,15 @@ function buildBestEffortFields(decoded: Record<string, DecodedValue>, params: Ab
     const key = p.name || `_${i}`;
     const raw = decoded[key];
     if (raw === undefined) return;
+    // An address param carries its full 0x so the detail panel can resolve its
+    // name (a known contract/token), draw its identity, and link it to an explorer
+    // — instead of a bare truncated hex string with no meaning.
+    const addrHex = /^address$/.test(p.type) && typeof raw === 'string' && /^0x[0-9a-fA-F]{40}$/.test(raw)
+      ? raw.toLowerCase() : undefined;
     fields.push({
       label: p.name || prettyType(p.type),
       value: formatGenericValue(raw, p.type),
+      ...(addrHex ? { address: addrHex } : {}),
       format: 'raw',
       role: 'generic',
       // Best-effort raw params are unverified guesses at meaning and aren't

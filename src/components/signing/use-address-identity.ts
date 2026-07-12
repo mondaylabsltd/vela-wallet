@@ -1,17 +1,18 @@
 /**
- * useAddressIdentity — resolve an address to a human label for the technical-
- * details panel. ADDITIVE ONLY: the caller always keeps the raw address on
- * screen; this is a convenience name, never a replacement for the ground-truth
+ * useAddressIdentity — resolve an address to a human label AND its kind for the
+ * technical-details panel. ADDITIVE ONLY: the caller always keeps the raw address
+ * on screen; this is a convenience name, never a replacement for the ground-truth
  * bytes (a look-alike ENS or a mis-saved contact must never hide the hex).
  *
- * Wallet priority:   saved contact  →  my own account  →  ENS / Basename / passkey
- * Contract priority: descriptor name → known contract → known token symbol → on-chain symbol()
+ * Resolution (sync first, then async upgrade — the panel renders synchronously):
+ *   token    — known token symbol → on-chain symbol()               [logo]
+ *   contract — descriptor name → known protocol contract            [glyph]
+ *   wallet   — my own account → saved contact → ENS/Basename/passkey [identicon]
  *
- * Two-phase, because the panel renders synchronously: the sync sources (my
- * accounts, the known-address maps, a descriptor name already on the field) seed
- * an immediate label; the async sources (the contacts cache, the ENS reverse
- * lookup, on-chain token metadata) upgrade it via effect. Mirrors the same
- * pattern as useResolvedName / ContractBar.
+ * The known-address maps + my accounts are checked for EVERY address regardless of
+ * the caller's hint, so a spender/operator that a best-effort decode left untyped
+ * still resolves to "Uniswap Universal Router" (contract) rather than a nameless
+ * identicon. The returned `kind` drives which avatar the row draws.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { isAddress } from '@/models/types';
@@ -23,60 +24,61 @@ import { getSavedContact, contactDisplayName } from '@/services/contacts';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
 
 export type AddrKind = 'wallet' | 'contract';
+export type ResolvedKind = 'wallet' | 'contract' | 'token';
 
 export function useAddressIdentity(
   address: string | undefined,
   chainId: number,
-  kind: AddrKind,
+  hintKind: AddrKind,
   /** A name already known for this exact address (e.g. clearSign.contractName). */
   seedName?: string,
-): { name?: string } {
+): { name?: string; kind: ResolvedKind } {
   const { state } = useWallet();
 
-  // Sync seed — available on first render, no round-trip.
-  const sync = useMemo<string | undefined>(() => {
-    if (!address || !isAddress(address)) return undefined;
-    if (seedName) return seedName;
-    if (kind === 'contract') {
-      return knownContract(address)?.name || knownTokenSymbol(address) || undefined;
-    }
-    // Wallet: is it one of MY accounts? (self / inter-account send)
-    const lower = address.toLowerCase();
-    return state.accounts.find((a) => a.address.toLowerCase() === lower)?.name;
-  }, [address, kind, seedName, state.accounts]);
+  // Sync — available on the first render, no round-trip. Known maps win over the
+  // caller's hint (they're definitive about token vs contract vs wallet).
+  const sync = useMemo<{ name?: string; kind: ResolvedKind }>(() => {
+    if (!address || !isAddress(address)) return { name: seedName, kind: hintKind };
+    const sym = knownTokenSymbol(address);
+    if (sym) return { name: seedName ?? sym, kind: 'token' };
+    const contractName = seedName ?? knownContract(address)?.name;
+    if (contractName) return { name: contractName, kind: 'contract' };
+    const own = state.accounts.find((a) => a.address.toLowerCase() === address.toLowerCase())?.name;
+    if (own) return { name: own, kind: 'wallet' };
+    return { name: undefined, kind: hintKind };
+  }, [address, hintKind, seedName, state.accounts]);
 
   const [asyncName, setAsyncName] = useState<string | undefined>(undefined);
+  const [asyncKind, setAsyncKind] = useState<ResolvedKind | undefined>(undefined);
 
   useEffect(() => {
     setAsyncName(undefined);
-    if (!address || !isAddress(address)) return;
+    setAsyncKind(undefined);
+    if (!address || !isAddress(address) || sync.name) return; // already named synchronously
     let cancelled = false;
     (async () => {
-      if (kind === 'wallet') {
-        // A saved contact is the highest-trust label and OVERRIDES the account seed.
+      if (hintKind === 'wallet') {
+        // A saved contact is the highest-trust label for a wallet.
         try {
           const c = await getSavedContact(address);
           const cn = c ? contactDisplayName(c) : '';
-          if (cn) { if (!cancelled) setAsyncName(cn); return; }
+          if (cn) { if (!cancelled) { setAsyncName(cn); setAsyncKind('wallet'); } return; }
         } catch { /* fall through */ }
-        // Already named by one of my accounts → keep it (don't downgrade to ENS).
-        if (sync) return;
         try {
           const id = await resolveRecipientIdentity(address);
-          if (id?.name && !cancelled) setAsyncName(id.name);
+          if (id?.name && !cancelled) { setAsyncName(id.name); setAsyncKind('wallet'); }
         } catch { /* leave as address */ }
       } else {
-        if (sync) return; // already named from a sync map / descriptor
+        // Unknown contract → try its on-chain token symbol (→ a token row w/ logo).
         try {
           const meta = await resolveTokenMetadata(chainId, [address]);
           const sym = meta.get(address.toLowerCase())?.symbol;
-          if (sym && !cancelled) setAsyncName(sym);
+          if (sym && !cancelled) { setAsyncName(sym); setAsyncKind('token'); }
         } catch { /* leave as address */ }
       }
     })();
     return () => { cancelled = true; };
-  }, [address, chainId, kind, sync]);
+  }, [address, chainId, hintKind, sync.name]);
 
-  // Async (contact / ENS / on-chain symbol) wins when present; else the sync seed.
-  return { name: asyncName ?? sync };
+  return { name: asyncName ?? sync.name, kind: asyncKind ?? sync.kind };
 }

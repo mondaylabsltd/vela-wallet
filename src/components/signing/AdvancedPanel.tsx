@@ -13,7 +13,6 @@ import * as Clipboard from 'expo-clipboard';
 import { color } from '@/constants/theme';
 import { isAddress, tokenLogoURLsByAddress } from '@/models/types';
 import { type ClearSignResult } from '@/services/clear-signing';
-import { knownToken } from '@/services/tokens';
 import { lookupSelector } from '@/services/selector-registry';
 import { TokenLogo } from '@/components/TokenLogo';
 import { explorerBaseURL, explorerAddressURL } from '@/models/network';
@@ -103,12 +102,13 @@ export function AdvancedPanel({ method, params, clearSign, simResult = null, her
   // contract) — the full 0x stays visible either way.
   const addresses = useMemo(() => {
     const seen = new Set<string>();
-    const out: { label: string; address: string; kind: AddrKind; seedName?: string; isToken?: boolean }[] = [];
-    // isToken → render the real token logo (name-sized) instead of a contract glyph.
-    const push = (label: string, a: string | undefined, kind: AddrKind, seedName?: string, isToken?: boolean) => {
+    // kind is a HINT — useAddressIdentity resolves the real kind (token/contract/
+    // wallet) from the known maps regardless, and drives the avatar from that.
+    const out: { label: string; address: string; kind: AddrKind; seedName?: string }[] = [];
+    const push = (label: string, a: string | undefined, kind: AddrKind, seedName?: string) => {
       if (a && isAddress(a) && !seen.has(a.toLowerCase())) {
         seen.add(a.toLowerCase());
-        out.push({ label, address: a, kind, seedName, isToken: isToken ?? (kind === 'contract' && !!knownToken(a)) });
+        out.push({ label, address: a, kind, seedName });
       }
     };
     if (clearSign) {
@@ -117,11 +117,11 @@ export function AdvancedPanel({ method, params, clearSign, simResult = null, her
       // not a bare "interacting with". Deduped against the interacting contract.
       for (const f of clearSign.fields) {
         if ((f.role === 'send-amount' || f.role === 'receive-amount') && f.tokenAddress) {
-          push(t('componentsUi.signing.labelToken', { defaultValue: 'Token' }), f.tokenAddress, 'contract', undefined, true);
+          push(t('componentsUi.signing.labelToken', { defaultValue: 'Token' }), f.tokenAddress, 'contract');
         }
       }
       // A spender is a contract (router/protocol); recipients/owners/generic are
-      // treated as wallets (identicon + name), the safer, more useful default.
+      // treated as wallets, but a known-contract lookup can still reclassify them.
       for (const f of clearSign.fields) if (f.address) push(localizeLabel(f.label), f.address, f.role === 'spender' ? 'contract' : 'wallet');
       push(t('componentsUi.signing.interactingLabel'), clearSign.contractAddress, 'contract', clearSign.contractName);
     }
@@ -157,7 +157,9 @@ export function AdvancedPanel({ method, params, clearSign, simResult = null, her
     } catch { return ''; }
   }, [method, params]);
 
-  const detailFields = clearSign?.fields.filter((f) => f.detail) ?? [];
+  // Detail fields EXCEPT address-valued ones — those render above as full identity
+  // rows (name + icon + explorer), not as a bare truncated hex value.
+  const detailFields = clearSign?.fields.filter((f) => f.detail && !f.address) ?? [];
   const dataBytes = data ? Math.floor((data.length - 2) / 2) : 0;
 
   // Factual simulation result — "−1,000 USDC · 无其他变动" — the calm, non-
@@ -173,10 +175,13 @@ export function AdvancedPanel({ method, params, clearSign, simResult = null, her
   }, [simResult, heroFlows, sep, t]);
 
   // Non-address rows (decoded params, function signature, raw calldata) — the
-  // address rows render above these with their resolved identity.
-  const otherRows: { label: string; value: string; copy?: string }[] = [
-    ...detailFields.map((f) => ({ label: localizeLabel(f.label), value: f.value })),
-    ...(selector ? [{ label: t('componentsUi.signing.techFunction', { defaultValue: 'Function' }), value: functionSig ?? `${selector} · ${t('componentsUi.signing.techUnknownFn', { defaultValue: 'unrecognized' })}` }] : []),
+  // address rows render above these with their resolved identity. `wrap` rows
+  // (a decoded param, a full function signature) show in full over multiple lines
+  // instead of truncating; only the raw calldata stays a single mid-ellipsised
+  // line (it has its own copy button for the exact bytes).
+  const otherRows: { label: string; value: string; copy?: string; wrap?: boolean }[] = [
+    ...detailFields.map((f) => ({ label: localizeLabel(f.label), value: f.value, wrap: true })),
+    ...(selector ? [{ label: t('componentsUi.signing.techFunction', { defaultValue: 'Function' }), value: functionSig ?? `${selector} · ${t('componentsUi.signing.techUnknownFn', { defaultValue: 'unrecognized' })}`, wrap: true }] : []),
     ...(data ? [{ label: `CALLDATA · ${dataBytes} BYTES`, value: midTrunc(data, 18, 6), copy: data }] : []),
   ];
 
@@ -212,7 +217,7 @@ export function AdvancedPanel({ method, params, clearSign, simResult = null, her
             <View key={`o${i}`} style={[styles.drawerRow, !simSummary && addresses.length === 0 && i === 0 && styles.drawerRowFirst]}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.drawerLabel}>{r.label}</Text>
-                <Text style={styles.drawerValue} numberOfLines={1}>{r.value}</Text>
+                <Text style={styles.drawerValue} numberOfLines={r.wrap ? undefined : 1}>{r.value}</Text>
               </View>
               {r.copy && <CopyBtn value={r.copy} />}
             </View>
@@ -245,19 +250,19 @@ export function AdvancedPanel({ method, params, clearSign, simResult = null, her
  * shown, so a spoofed label can't hide the address.
  */
 function AddressRow({ entry, chainId, first }: {
-  entry: { label: string; address: string; kind: AddrKind; seedName?: string; isToken?: boolean };
+  entry: { label: string; address: string; kind: AddrKind; seedName?: string };
   chainId: number;
   first: boolean;
 }) {
-  const { name } = useAddressIdentity(entry.address, chainId, entry.kind, entry.seedName);
+  const { name, kind } = useAddressIdentity(entry.address, chainId, entry.kind, entry.seedName);
   const trunc = midTrunc(entry.address);
   const explorer = explorerBaseURL(chainId) ? explorerAddressURL(chainId, entry.address) : null;
 
-  // A token → its real logo at name size; a wallet → its identicon fingerprint;
-  // any other contract → a neutral glyph.
-  const avatar = entry.isToken
+  // Driven by the RESOLVED kind: a token → its real logo at name size; a wallet →
+  // its identicon fingerprint; any other contract → a neutral glyph.
+  const avatar = kind === 'token'
     ? <TokenLogo symbol={name ?? '?'} logoUrls={tokenLogoURLsByAddress(chainId, entry.address)} size={18} />
-    : entry.kind === 'wallet'
+    : kind === 'wallet'
       ? <Identicon seed={entry.address} size={18} />
       : <View style={styles.drawerContractGlyph}><FileText size={11} color={color.fg.muted} strokeWidth={2} /></View>;
 
