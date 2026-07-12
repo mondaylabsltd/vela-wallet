@@ -13,6 +13,8 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native';
 import { VelaCard } from './VelaCard';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
+import { useDisplayCurrency } from '@/hooks/use-display-currency';
+import { useLocalePrefs, numberSeparators, formatNumber } from '@/services/locale-format';
 import {
   estimateTransactionFee,
   refreshGasPrice,
@@ -24,16 +26,12 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatWeiToEth(wei: bigint): string {
+/** Native fee amount in the user's number format (decimal mark + grouping). */
+function formatNativeFee(wei: bigint, sep: { group: string; decimal: string; indian?: boolean }): string {
   const eth = Number(wei) / 1e18;
   if (eth === 0) return '0';
-  if (eth < 0.0001) return '< 0.0001';
-  return eth.toFixed(4).replace(/\.?0+$/, '');
-}
-
-function formatUsd(v: number): string {
-  if (v < 0.01) return `$${v.toFixed(4)}`;
-  return `$${v.toFixed(2)}`;
+  if (eth < 0.0001) return `< 0${sep.decimal}0001`;
+  return formatNumber(eth, { maximumFractionDigits: 4 });
 }
 
 // ---------------------------------------------------------------------------
@@ -77,8 +75,17 @@ export function GasFeeCard({
   const [expanded, setExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Region format: fiat in the chosen display currency (€/¥/…) + the number
+  // format's grouping/decimal marks, matching the amounts everywhere else.
+  const dc = useDisplayCurrency();
+  useLocalePrefs();
+  const sep = numberSeparators();
+
   const feeNative = feeEstimate ? Number(feeEstimate.totalWei) / 1e18 : 0;
   const feeUsd = feeNative * nativeUsdPrice;
+  // Show fiat only when it renders as a meaningful non-zero (formatFiat rounds to
+  // 2 dp) — below that the native amount is the honest primary.
+  const showFiat = feeUsd >= 0.005;
 
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
@@ -118,11 +125,11 @@ export function GasFeeCard({
               {estimating || refreshing
                 ? t('componentsUi.gas.estimating')
                 : feeEstimate
-                  ? (feeUsd > 0.001 ? `≈ ${formatUsd(feeUsd)}` : `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}`)
+                  ? (showFiat ? `≈ ${dc.fmt(feeUsd)}` : `~${formatNativeFee(feeEstimate.totalWei, sep)} ${sym}`)
                   : t('componentsUi.gas.estimateFailed')}
             </Text>
-            {!estimating && !failed && feeEstimate && feeUsd > 0.001 && (
-              <Text style={styles.toggleSub}>~{formatWeiToEth(feeEstimate.totalWei)} {sym}</Text>
+            {!estimating && !failed && feeEstimate && showFiat && (
+              <Text style={styles.toggleSub}>~{formatNativeFee(feeEstimate.totalWei, sep)} {sym}</Text>
             )}
           </View>
           {failed ? (

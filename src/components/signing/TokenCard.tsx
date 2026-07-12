@@ -70,10 +70,15 @@ export function TokenCard({ field, variant, hideSign, hero ,heroLabel}: {
         <View style={{ flex: 1 }}>
           <View style={styles.heroAmountLine}>
             <Text style={[styles.heroAmount, { color: amountTint, flexShrink: 1 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
-              {num}{ticker ? <Text style={styles.heroTicker}> {ticker}</Text> : null}
+              {num}
             </Text>
-            {/* Token logo beside the ticker — the asset's face, ~ticker-sized. */}
-            {(logoUrls || isNative) && <TokenLogo symbol={symbol ?? '?'} logoUrls={logoUrls} size={26} />}
+            {/* [logo · ticker] — logo to the LEFT of the symbol, aligned with it. */}
+            {ticker ? (
+              <View style={styles.heroTickerGroup}>
+                {(logoUrls || isNative) && <TokenLogo symbol={symbol ?? '?'} logoUrls={logoUrls} size={24} />}
+                <Text style={styles.heroTicker}>{ticker}</Text>
+              </View>
+            ) : null}
           </View>
           {heroLabel && (
             <View style={styles.tokenSubRow}>
