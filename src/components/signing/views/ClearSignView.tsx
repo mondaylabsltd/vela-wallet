@@ -74,18 +74,16 @@ export function ClearSignView({ cs, simConfident, walletAddress }: {
   // and Zone-3 warnings carry the risk color, so the sentence doesn't double up.
   const summaryTone = sendVariant === 'danger' ? 'danger' : 'neutral';
 
-  // When there's an asset amount, IT is the hero — the verb is a mere eyebrow (even
-  // when caution/danger: the amount card carries the risk colour). Only an amount-less
-  // action keeps a big verb.
-  const hasAmount = sendAmounts.length > 0 || receiveAmounts.length > 0;
-
   return (
     <View>
-      {/* ZONE 1 — the action + the ONE hero. Benign → eyebrow; risk → big hero. */}
+      {/* ZONE 1 — the action kicker. Always a small eyebrow so the hero (amount /
+          summary / fields) owns the screen; danger keeps its red hue, not a size
+          that competes for focus. */}
       <IntentHeader
         intent={localizeIntent(cs.intent)}
         color={rc}
-        variant={hasAmount || cs.risk === 'normal' ? 'eyebrow' : 'hero'}
+        variant="eyebrow"
+        colorEyebrow={cs.risk === 'danger'}
       />
       {isSwapLayout ? (
         <>

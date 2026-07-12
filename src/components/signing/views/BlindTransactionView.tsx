@@ -57,7 +57,8 @@ export function BlindTransactionView({ tx, chainId, simConfident, nativeUsdPrice
             ? t('componentsUi.signing.intentContractCall', { defaultValue: 'Contract interaction' })
             : t('componentsUi.signing.intentUnknown')}
         color={hasData && !calm ? color.error.base : color.fg.base}
-        variant={hasData && !calm ? 'hero' : 'eyebrow'}
+        variant="eyebrow"
+        colorEyebrow={hasData && !calm}
       />
 
       {/* Value card — a plain send drops the −/+ (the eyebrow + summary carry

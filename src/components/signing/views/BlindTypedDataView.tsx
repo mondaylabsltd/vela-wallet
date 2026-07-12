@@ -18,10 +18,9 @@ export function BlindTypedDataView({ params }: {
 
   return (
     <View>
-      {/* ZONE 1 — hero: the typed data itself (Type + fields). Ink, not amber:
-          the caution lives in the banner below; orange stays reserved for the
-          slide-to-confirm. */}
-      <IntentHeader intent={t('componentsUi.signing.signTypedData')} color={color.fg.base} />
+      {/* ZONE 1 — the fields are the hero, so the action is just a small kicker.
+          Neutral grey: the caution lives in the banner below. */}
+      <IntentHeader intent={t('componentsUi.signing.signTypedData')} color={color.fg.base} variant="eyebrow" />
       <View style={styles.genericFields}>
         {primaryType && (
           <View style={styles.genRow}>

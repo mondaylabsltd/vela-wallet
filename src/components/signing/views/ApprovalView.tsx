@@ -93,10 +93,15 @@ export function ApprovalView({ approval, meta, choice, onChange, chainId, wallet
 
   return (
     <View>
-      {/* Only an UNBOUNDED grant owns the screen with a big verb; a bounded approve
-          is routine, so it cedes the headline to the amount + summary (like the mock's
-          '最多 500 USDC' hero) with just a quiet kicker. */}
-      <IntentHeader intent={verb} color={verbColor} variant={approval.isUnbounded && !approval.isReducing ? 'hero' : 'eyebrow'} />
+      {/* The verb is always a small kicker — the summary + cap card are the
+          headline. A dangerous unbounded grant (red) or a safe revoke (green)
+          keeps its hue, but not a giant size that fights the summary for focus. */}
+      <IntentHeader
+        intent={verb}
+        color={verbColor}
+        variant="eyebrow"
+        colorEyebrow={approval.isUnbounded || approval.isReducing}
+      />
 
       <SummaryLine
         text={summary}
