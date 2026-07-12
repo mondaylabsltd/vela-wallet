@@ -19,7 +19,7 @@
     },
     "rpcProviders": {
       "modalTitle": "Provider RPC",
-      "description": "Aggiungi una chiave API per instradare le reti supportate tramite il tuo provider. Priorità: RPC per singola rete, poi i tuoi provider, quindi l’integrato Vela e infine l’indice delle catene.",
+      "description": "Aggiungi una chiave API per instradare le reti supportate tramite il tuo provider. Priorità: RPC per singola rete, poi i tuoi provider, quindi l’integrato Vela e infine l’indice delle reti.",
       "getKey": "Ottieni una chiave",
       "test": "Prova",
       "notSet": "Non impostato",

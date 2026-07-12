@@ -111,7 +111,7 @@
     }
   },
   "signHandoff": {
-    "signing": "Confirmar no Vela",
+    "signing": "Confirmar na Vela",
     "signed": "Assinado",
     "rejected": "Cancelado",
     "pending": "Confira na Atividade do Vela",

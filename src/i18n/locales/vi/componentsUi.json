@@ -206,7 +206,7 @@
       "zoomLabel": "Thu phóng"
     },
     "gas": {
-      "estFee": "Phí ước tính",
+      "estFee": "Phí mạng",
       "gasPrice": "Giá Gas",
       "gasPriceUserOp": "Giá Gas (UserOp)",
       "networkFee": "Phí mạng",

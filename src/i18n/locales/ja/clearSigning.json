@@ -38,7 +38,7 @@
     "modalLoading": "読み込み中...",
     "modalLoadingDescriptor": "ディスクリプターを読み込み中...",
     "modalSignMessage": "メッセージに署名",
-    "modalMsgTag": "personal_sign · Gas 手数料なし",
+    "modalMsgTag": "personal_sign · ガス代なし",
     "modalSignTypedData": "型付きデータに署名",
     "modalNoDescriptor": "ディスクリプターが見つかりません。内容を慎重にご確認ください。",
     "modalIntentUnknown": "不明",

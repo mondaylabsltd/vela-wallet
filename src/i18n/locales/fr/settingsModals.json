@@ -23,7 +23,7 @@
       "getKey": "Obtenir une clé",
       "test": "Tester",
       "notSet": "Non défini",
-      "checkKey": "Vérifiez la clé",
+      "checkKey": "Vérifier la clé",
       "activeNetworks": "{{count}} réseaux",
       "supportsCount": "Prend en charge {{count}} réseaux sur {{total}}",
       "unavailable": "Indisponible"

@@ -22,6 +22,7 @@ import { lookupSelector } from '@/services/selector-registry';
 import { groupDigits, numberSeparators, formatNumber, formatDateTime as localeFormatDateTime } from '@/services/locale-format';
 import { localDescriptor, knownContract, interfaceDescriptor, INTERFACE_IDS, type TokenStandard } from '@/services/local-descriptors';
 import { knownTokenSymbol, knownTokenDecimals } from '@/services/tokens';
+import { nativeSymbol } from '@/models/network';
 import type { TypedData } from '@/services/eip712';
 import { poolRpcCall } from '@/services/rpc-pool';
 import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
@@ -931,7 +932,7 @@ function formatField(
       return formatAddress(rawValue);
 
     case 'amount':
-      return formatNativeAmount(rawValue);
+      return formatNativeAmount(rawValue, chainId);
 
     case 'raw':
       return formatRaw(rawValue);
@@ -1076,10 +1077,12 @@ function formatAddress(rawValue: DecodedValue | undefined): FormattedField | nul
   };
 }
 
-function formatNativeAmount(rawValue: DecodedValue | undefined): FormattedField | null {
+function formatNativeAmount(rawValue: DecodedValue | undefined, chainId: number): FormattedField | null {
   const amount = toBigInt(rawValue);
   if (amount === 0n) return null;
-  return { value: formatWeiAmount(amount), format: 'amount' };
+  // Include the native symbol so the hero shows a ticker (+ logo) and the summary
+  // reads "0.5 ETH", not a bare "0.5" — matches how tokenAmount carries its symbol.
+  return { value: `${formatWeiAmount(amount)} ${nativeSymbol(chainId)}`, format: 'amount' };
 }
 
 function formatRaw(rawValue: DecodedValue | undefined): FormattedField | null {

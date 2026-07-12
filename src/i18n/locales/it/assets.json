@@ -17,7 +17,7 @@
     "rpcFixSaveBtn": "Salva e riprova",
     "errorSaveRpc": "Impossibile salvare l'URL RPC.",
     "rpcFixUnreachable": "Impossibile raggiungere quell'RPC. Controlla l'URL e riprova.",
-    "rpcFixWrongChain": "Quell'RPC serve una rete diversa (rete {{actual}}, prevista {{expected}}).",
+    "rpcFixWrongChain": "Quell'RPC risponde per una rete diversa (rete {{actual}}, prevista {{expected}}).",
     "rpcProvidersTitle": "Dove trovare un RPC affidabile",
     "rpcProvidersHint": "Endpoint gratuiti — registrati, copia il tuo URL e incollalo qui sopra.",
     "rpcReport": "Ancora non funziona? Segnalalo",

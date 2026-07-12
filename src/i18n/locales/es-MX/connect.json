@@ -81,7 +81,7 @@
     "browser": {
       "unsupported": "El navegador integrado solo está disponible en iOS y Android.",
       "noUrl": "No hay ninguna URL para abrir.",
-      "preparing": "Preparando la wallet…",
+      "preparing": "Preparando la billetera…",
       "title": "Conectar con {{host}}",
       "body": "Este sitio quiere ver tu dirección y pedirte que firmes. No puede mover fondos sin tu aprobación.",
       "cancel": "Cancelar",

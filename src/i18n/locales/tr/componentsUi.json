@@ -206,7 +206,7 @@
       "zoomLabel": "Yakınlaştır"
     },
     "gas": {
-      "estFee": "Tahmini Ücret",
+      "estFee": "Ağ ücreti",
       "gasPrice": "Gas Fiyatı",
       "gasPriceUserOp": "Gas Fiyatı (UserOp)",
       "networkFee": "Ağ ücreti",

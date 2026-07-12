@@ -2,7 +2,7 @@
   "settingsModals": {
     "network": {
       "modalTitle": "网络",
-      "chainId": "Chain {{chainId}}",
+      "chainId": "链 {{chainId}}",
       "fieldRpcUrl": "RPC URL",
       "fieldExplorer": "区块浏览器",
       "fieldBundler": "打包器",

@@ -21,7 +21,7 @@ import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { ShieldCheck, ShieldAlert, FileText } from 'lucide-react-native';
 import { styles, riskColors, SigningChainContext } from './signing-core';
 
-export function ContractBar({ label, name, address, verified, warning, identity = 'contract', compact }: {
+export function ContractBar({ label, name, address, verified, warning, identity = 'contract', compact, inflow }: {
   label: string;
   name?: string;
   address?: string;
@@ -35,6 +35,9 @@ export function ContractBar({ label, name, address, verified, warning, identity 
   /** The name is already stated in the summary above — collapse to a single quiet
    *  line (small identicon + "Wallet · first time"), no name repeat, no big block. */
   compact?: boolean;
+  /** This counterparty RECEIVES assets (a withdraw/redeem receiver), so the
+   *  first-time note reads "first time using this address", not "…sending here". */
+  inflow?: boolean;
 }) {
   const { t } = useTranslation();
   const isRecipient = identity === 'auto';
@@ -126,9 +129,14 @@ export function ContractBar({ label, name, address, verified, warning, identity 
             address ? <Text style={[styles.contractAddr, styles.contractNameNeutral]} numberOfLines={1}>{shortAddr(address)}</Text> : null
           )}
         </View>
-        {/* Poisoning signal — a never-before-seen recipient, in plain words. */}
+        {/* Poisoning signal — a never-before-seen counterparty, in plain words.
+            Reworded for an inflow (you're receiving, not sending). */}
         {showFirstTime && (
-          <Text style={styles.riskNote}>{t('componentsUi.signing.firstTimeTag')}</Text>
+          <Text style={styles.riskNote}>
+            {inflow
+              ? t('componentsUi.signing.firstTimeTagNeutral', { defaultValue: 'First time using this address' })
+              : t('componentsUi.signing.firstTimeTag')}
+          </Text>
         )}
         <RecipientTrust address={address} compact />
       </View>

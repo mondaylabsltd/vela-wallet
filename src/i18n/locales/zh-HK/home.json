@@ -17,7 +17,7 @@
     "lastUpdated": "上次更新 · {{ago}}",
     "rescanButton": "重新掃描",
     "rescanTitle": "重新掃描近期動態",
-    "rescanSubtitle": "收不到某筆款項？直接向區塊鏈重新查詢近期轉帳。",
+    "rescanSubtitle": "收唔到某筆款項？直接向區塊鏈重新查詢近期轉帳。",
     "rescanWindow10m": "最近 10 分鐘",
     "rescanWindow1h": "最近 1 小時",
     "rescanWindow6h": "最近 6 小時",

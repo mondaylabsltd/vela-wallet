@@ -115,6 +115,7 @@
       "ethSignTitle": "eth_sign — raw hash",
       "ethSignBody": "This signs an opaque hash. A malicious site can hide a token transfer or approval behind it. Only continue if you fully trust this site and know exactly what you're signing.",
       "ethSignWarning": "Unverifiable request — most legitimate apps never use eth_sign. Reject unless you're certain.",
+      "firstTimeTagNeutral": "First time using this address",
       "firstTimeTag": "First time sending here",
       "contractTag": "Contract",
       "walletTag": "Wallet",

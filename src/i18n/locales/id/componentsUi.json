@@ -71,10 +71,10 @@
       "ethSignTitle": "eth_sign — hash mentah",
       "ethSignBody": "Ini menandatangani hash yang tidak transparan. Situs jahat bisa menyembunyikan transfer atau persetujuan token di baliknya. Lanjutkan hanya jika Anda sepenuhnya memercayai situs ini dan tahu persis apa yang Anda tanda tangani.",
       "ethSignWarning": "Permintaan tidak dapat diverifikasi — hampir semua aplikasi tepercaya tidak pernah memakai eth_sign. Tolak kecuali Anda benar-benar yakin.",
-      "firstTimeTag": "Pertama kali",
+      "firstTimeTag": "Pertama kali kirim ke sini",
       "contractTag": "Kontrak",
       "holdToConfirm": "Tahan untuk konfirmasi",
-      "advancedToggle": "Lanjutan — lihat data mentah",
+      "advancedToggle": "Detail teknis",
       "batchIntent": "Batch",
       "batchSubtitle": "{{count}} transaksi, ditandatangani bersamaan",
       "batchCall": "Panggilan kontrak",
@@ -206,7 +206,7 @@
       "zoomLabel": "Zoom"
     },
     "gas": {
-      "estFee": "Est. Biaya",
+      "estFee": "Biaya jaringan",
       "gasPrice": "Harga Gas",
       "gasPriceUserOp": "Harga Gas (UserOp)",
       "networkFee": "Biaya jaringan",

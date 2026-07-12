@@ -170,6 +170,9 @@ export function ClearSignView({ cs, simConfident, walletAddress }: {
             address={f.address}
             verified={false}
             identity="auto"
+            // A pure inflow (withdraw/redeem) — this address RECEIVES, so the
+            // first-time note shouldn't say "sending here".
+            inflow={receiveAmounts.length > 0 && sendAmounts.length === 0}
             // The name is already in the summary → collapse to one quiet line.
             compact={!!summary}
             // Sending a token to its own contract burns it — turn the recipient row

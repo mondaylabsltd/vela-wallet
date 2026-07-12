@@ -71,7 +71,7 @@
       "ethSignTitle": "eth_sign — hash sin procesar",
       "ethSignBody": "Esto firma un hash opaco. Un sitio malicioso puede ocultar detrás de él una transferencia de tokens o una autorización. Continúa solo si confías por completo en este sitio y sabes exactamente qué estás firmando.",
       "ethSignWarning": "Solicitud no verificable; casi ninguna app legítima usa eth_sign. Recházala salvo que estés seguro.",
-      "firstTimeTag": "Primera vez",
+      "firstTimeTag": "Primer envío aquí",
       "contractTag": "Contrato",
       "holdToConfirm": "Mantén presionado para confirmar",
       "advancedToggle": "Detalles técnicos",

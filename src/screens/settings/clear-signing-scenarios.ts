@@ -528,4 +528,55 @@ export const CLEAR_SIGNING_SCENARIOS: ClearSigningScenario[] = [
     },
     simOverride: { ok: true, engine: 'rpc', changes: [] },
   },
+  {
+    // Identity (03): the recipient is a SAVED CONTACT — resolves to its address-
+    // book name ("Alice Chen"), the highest-trust label.
+    id: 'send-contact',
+    labelKey: 'clearSigning.scenarioSendContact',
+    subtitleKey: 'clearSigning.scenarioSendContactSub',
+    request: {
+      id: 'test-send-contact',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+        // transfer(Alice 0x1234…5678, 500 USDC) — 500e6 = 0x1DCD6500
+        data: '0xa9059cbb0000000000000000000000001234567890abcdef1234567890abcdef12345678000000000000000000000000000000000000000000000000000000001dcd6500',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+  {
+    // A native-input swap: you pay ETH (msg.value), receive a token. Tests the
+    // native-coin pay hero + the two-token swap layout in one.
+    id: 'native-swap',
+    labelKey: 'clearSigning.scenarioNativeSwap',
+    subtitleKey: 'clearSigning.scenarioNativeSwapSub',
+    request: {
+      id: 'test-native-swap',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2 Router
+        // swapExactETHForTokens(minOut 1200 USDC, [WETH,USDC], ParallelOne, deadline)
+        data: '0x7ff36ab5' +
+          '0000000000000000000000000000000000000000000000000000000047868c00' + // amountOutMin 1200e6
+          '0000000000000000000000000000000000000000000000000000000000000080' + // path offset
+          '000000000000000000000000d400866e00b055b20752a826cd5c89b811de130b' + // to = Parallel One
+          '00000000000000000000000000000000000000000000000000000000ffffffff' + // deadline
+          '0000000000000000000000000000000000000000000000000000000000000002' + // path length
+          '000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' + // WETH
+          '000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',  // USDC
+        value: '0x6f05b59d3b20000', // 0.5 ETH
+      }],
+      origin: 'clear-signing-test',
+    },
+    simOverride: {
+      ok: true,
+      engine: 'rpc',
+      changes: [
+        { kind: 'native', symbol: 'ETH', decimals: 18, delta: -500000000000000000n },
+        { kind: 'erc20', token: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', symbol: 'USDC', decimals: 6, delta: 1200000000n },
+      ],
+    },
+  },
 ];

@@ -17,7 +17,7 @@
       "checking": "確認中…",
       "retryFree": "無料入金を再試行",
       "retrying": "リクエスト中…",
-      "detailsTitle": "このお金はどこへ行くの？",
+      "detailsTitle": "このお金はどこへ行きますか？",
       "detailsBody": "Vela があなたのために管理する専用のネットワーク手数料積み立て（ネットワークごとに1つ）に入ります。取引のオンチェーン費用を立て替え、各取引の手数料から補充されます。ネットワーク手数料の支払いにのみ使われ、引き出すことはできません。",
       "continue": "続ける",
       "cancel": "あとで",
@@ -206,7 +206,7 @@
       "zoomLabel": "ズーム"
     },
     "gas": {
-      "estFee": "推定手数料",
+      "estFee": "ネットワーク手数料",
       "gasPrice": "Gas 価格",
       "gasPriceUserOp": "Gas 価格（UserOp）",
       "networkFee": "ネットワーク手数料",

@@ -42,6 +42,38 @@ const K_BACKUP = 'vela.parallelSpace.realWalletBackup';
 const K_REMOTE_SESSION = 'vela.remoteInjectSession';
 const K_WALLETPAIR_SESSION = 'vela.walletpairSession';
 
+// A fixture address-book entry so the "send to a saved contact" demo resolves a
+// name. Seeded on enter/boot, removed by exact address on exit (never touches the
+// user's real contacts).
+const K_CONTACTS = 'vela.contacts';
+const FIXTURE_CONTACT = {
+  address: '0x1234567890abcdef1234567890abcdef12345678',
+  name: 'Alice Chen',
+  kind: 'eoa' as const,
+};
+
+async function seedFixtureContact(): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(K_CONTACTS);
+    const list: any[] = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(list)) return;
+    if (list.some((c) => c?.address === FIXTURE_CONTACT.address)) return;
+    list.push(FIXTURE_CONTACT);
+    await AsyncStorage.setItem(K_CONTACTS, JSON.stringify(list));
+  } catch { /* storage unavailable */ }
+}
+
+async function removeFixtureContact(): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(K_CONTACTS);
+    if (!raw) return;
+    const list: any[] = JSON.parse(raw);
+    if (!Array.isArray(list)) return;
+    const next = list.filter((c) => c?.address !== FIXTURE_CONTACT.address);
+    if (next.length !== list.length) await AsyncStorage.setItem(K_CONTACTS, JSON.stringify(next));
+  } catch { /* storage unavailable */ }
+}
+
 const FIXTURE_CREATED_AT = '2025-01-01T00:00:00.000Z';
 
 // ---------------------------------------------------------------------------
@@ -153,6 +185,7 @@ export async function enterParallelSpace(): Promise<void> {
     [K_FLAG, '1'],
     ['dev_unlocked', '1'],
   ]);
+  await seedFixtureContact();
 }
 
 /**
@@ -180,6 +213,7 @@ export async function exitParallelSpace(): Promise<void> {
   }
 
   await AsyncStorage.multiRemove([K_BACKUP, K_FLAG, K_REMOTE_SESSION, K_WALLETPAIR_SESSION]);
+  await removeFixtureContact();
 }
 
 /**
@@ -191,7 +225,7 @@ export async function exitParallelSpace(): Promise<void> {
  */
 export async function applyParallelSpaceOnBoot(): Promise<void> {
   try {
-    if ((await AsyncStorage.getItem(K_FLAG)) === '1') installMockPasskey();
+    if ((await AsyncStorage.getItem(K_FLAG)) === '1') { installMockPasskey(); await seedFixtureContact(); }
   } catch {
     /* storage unavailable — stay in real space */
   }

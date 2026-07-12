@@ -92,6 +92,7 @@
       "ethSignTitle": "eth_sign — 原始哈希",
       "ethSignBody": "这会对一段无法识别的哈希进行签名。恶意站点可能借此隐藏一笔代币转账或授权。只有在你完全信任该站点、且清楚自己正在签署什么时，才可继续。",
       "ethSignWarning": "无法核实的请求 — 正规应用几乎从不使用 eth_sign。除非你十分确定，否则请拒绝。",
+      "firstTimeTagNeutral": "第一次使用这个地址",
       "firstTimeTag": "第一次给这个地址转账",
       "contractTag": "合约",
       "walletTag": "钱包",
