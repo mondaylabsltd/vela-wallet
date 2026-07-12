@@ -44,7 +44,8 @@ export function MessageSignView({ hexMsg, requestOrigin }: {
         <IntentHeader
           intent={t('componentsUi.signing.signInIntent')}
           color={binding === 'mismatch' ? color.error.base : color.fg.base}
-          variant={binding === 'mismatch' ? 'hero' : 'eyebrow'}
+          variant="eyebrow"
+          colorEyebrow={binding === 'mismatch'}
         />
 
         <View style={styles.genericFields}>

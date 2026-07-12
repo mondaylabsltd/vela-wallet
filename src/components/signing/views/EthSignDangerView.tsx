@@ -15,7 +15,10 @@ export function EthSignDangerView({ dataHex }: { dataHex: string }) {
   const hash = typeof dataHex === 'string' ? dataHex : String(dataHex ?? '');
   return (
     <View>
-      <IntentHeader intent={t('componentsUi.signing.ethSignIntent')} color={color.error.base} />
+      {/* A small red kicker, not a giant headline — the danger CARD (with the
+          explanation + the opaque hash) is the protagonist, consistent with every
+          other screen's eyebrow sizing. Red still says "real danger". */}
+      <IntentHeader intent={t('componentsUi.signing.ethSignIntent')} color={color.error.base} variant="eyebrow" colorEyebrow />
 
       <View style={styles.ethSignCard}>
         <View style={styles.ethSignHeader}>
