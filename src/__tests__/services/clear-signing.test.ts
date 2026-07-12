@@ -9,6 +9,9 @@
 const mockDescriptorCache = new Map<string, any>();
 jest.mock('@/services/storage', () => ({
   getEthereumDataURL: () => 'https://ethereum-data.awesometools.dev',
+  // Deterministic number/date presets so localized amounts render '1,000' etc.
+  getLocalePrefs: () => ({ numberFormat: 'comma_dot', dateFormat: 'auto', timeFormat: 'auto' }),
+  subscribeLocalePrefs: () => () => {},
 }));
 
 // Mock the RPC pool so on-chain reads (ERC-165 supportsInterface, decimals()) are
@@ -465,8 +468,8 @@ describe('ERC-7730 Clear Signing', () => {
       const amount = r!.fields.find((f) => f.role === 'send-amount');
       expect(amount!.value).toContain('USDT');
       expect(amount!.value).toContain('100');
-      // Stablecoin → cheap ≈$ valuation (peg $1), no price engine.
-      expect(amount!.usd).toBe('$100.00');
+      // Stablecoin → cheap USD valuation (peg $1), no price engine.
+      expect(amount!.usdValue).toBe(100);
     });
 
     it('renders ERC-721 transferFrom as an NFT token id (ERC-165 = 0x80ac58cd)', async () => {

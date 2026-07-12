@@ -12,7 +12,7 @@
       "step3Subtitle": "요청이 여기에 자동으로 표시됩니다",
       "scanQR": "QR 코드 스캔",
       "orDivider": "또는",
-      "pastePlaceholder": "walletpair:?... URI 붙여넣기",
+      "pastePlaceholder": "walletpair 링크 또는 웹 주소",
       "verifyTitle": "연결 확인",
       "verifyHint": "이 코드가 dApp에 표시된 것과 일치하는지 확인하세요:",
       "encryptedBadge": "종단간 암호화",
@@ -31,7 +31,8 @@
       "scanAgain": "다시 스캔",
       "retry": "재시도",
       "invalidLinkTitle": "잘못된 링크",
-      "invalidLinkBody": "올바른 연결 링크가 아닙니다. 지원: WalletPair URI 또는 Remote Inject URL."
+      "invalidLinkBody": "올바른 연결 링크가 아닙니다. 지원: WalletPair URI 또는 Remote Inject URL.",
+      "pasteHint": "dApp을 연결하거나 아무 웹사이트나 열어 보세요"
     },
     "dapp": {
       "noWallet": "먼저 지갑을 만드세요",
@@ -93,6 +94,9 @@
       "loadFailed": "이 페이지를 불러오지 못했습니다",
       "retry": "다시 시도",
       "disconnect": "연결 해제",
+      "a11yAccount": "계정",
+      "switchAccount": "계정 전환",
+      "closePage": "페이지 닫기",
       "disconnectTitle": "이 사이트의 연결을 해제할까요?",
       "disconnectBody": "이 사이트가 회원님의 주소를 확인하거나 서명을 요청하려면 다시 연결해야 합니다.",
       "a11ySecure": "보안 사이트",

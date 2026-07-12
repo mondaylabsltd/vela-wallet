@@ -43,6 +43,7 @@
       "statusSucceeded": "Riuscita",
       "statusPending": "In attesa",
       "opContractInteraction": "Interazione con il contratto",
+      "opConnected": "Connessione",
       "opSignature": "Firma",
       "opTypedDataSignature": "Firma di dati tipizzati",
       "opTransfer": "Trasferimento",

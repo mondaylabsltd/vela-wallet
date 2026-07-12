@@ -39,6 +39,18 @@ export const KNOWN_CONTRACTS: Record<string, ContractInfo> = {
   '0xdef1c0ded9bec7f1a1670819833240f027b25eff': { name: '0x Exchange Proxy', owner: '0x' },
   '0x9008d19f58aabd9ed0d60971565aa8510560ab41': { name: 'CoW Protocol', owner: 'CoW' },
   '0xe66b31678d6c16e9ebf358268a790b763c133750': { name: 'Coinbase Smart Wallet', owner: 'Coinbase' },
+  // DEX routers / aggregators decoded above (labels here for the "Interacting with" row).
+  '0x10ed43c718714eb63d5aa57b78b54704e256024e': { name: 'PancakeSwap V2 Router', owner: 'PancakeSwap' },
+  '0x1b81d678ffb9c0263b24a97847620c99d213eb14': { name: 'PancakeSwap V3 Router', owner: 'PancakeSwap' },
+  '0x13f4ea83d0bd40e75c8222255bc855a974568dd4': { name: 'PancakeSwap Smart Router', owner: 'PancakeSwap' },
+  '0xd9c500dff816a1da21a48a732d3498bf09dc9aeb': { name: 'PancakeSwap Universal Router', owner: 'PancakeSwap' },
+  '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f': { name: 'SushiSwap Router', owner: 'SushiSwap' },
+  // Label-only (calldata decoded best-effort until a descriptor is added): stable
+  // cross-chain addresses of major aggregators/venues, so the "who" is never a bare hex.
+  '0xba12222222228d8ba445958a75a0704d566bf2c8': { name: 'Balancer Vault', owner: 'Balancer' },
+  '0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae': { name: 'LI.FI', owner: 'LI.FI' },
+  '0x6131b5fae19ea4f9d964eac0408e4408b66337b5': { name: 'KyberSwap Router', owner: 'KyberSwap' },
+  '0x1111111254fb6c44bac0bed2854e76f90643097d': { name: '1inch Router (V4)', owner: '1inch' },
 };
 
 export function knownContract(addr: string | undefined): ContractInfo | undefined {
@@ -73,20 +85,29 @@ const SEAPORT_DESCRIPTOR = {
 };
 
 /** Address → ERC-7730-shaped descriptor (display.formats keyed by named signature). */
-export const LOCAL_DESCRIPTORS: Record<string, any> = {
-  // ---- Uniswap V2 Router ----
-  '0x7a250d5630b4cf539739df2c5dacb4c659f2488d': {
-    metadata: { contractName: 'Uniswap V2 Router', owner: 'Uniswap' },
+// Uniswap-V2-style router: the classic swap ABI is shared verbatim by every V2
+// fork (PancakeSwap, SushiSwap, …). Identical function signatures → identical
+// selectors, so reusing this decodes a fork's swaps exactly — no per-fork guessing,
+// no risk of a wrong selector mis-decoding. Includes the fee-on-transfer variants
+// (common on BSC/L2 tokens), which share the field layout of their base function.
+function v2RouterDescriptor(contractName: string, owner: string) {
+  const payIn = { path: 'amountIn', label: 'You pay', format: 'tokenAmount', params: { tokenPath: 'path.0' } };
+  const recvMin = { path: 'amountOutMin', label: 'You receive (min)', format: 'tokenAmount', params: { tokenPath: 'path.-1' } };
+  const tokensForTokens = { intent: 'Swap', fields: [payIn, recvMin, recipientField, deadlineField] };
+  const ethForTokens = {
+    intent: 'Swap',
+    fields: [{ path: '@.value', label: 'You pay', format: 'amount' }, recvMin, recipientField, deadlineField],
+  };
+  const tokensForEth = {
+    intent: 'Swap',
+    fields: [payIn, { path: 'amountOutMin', label: 'You receive (min)', format: 'amount' }, recipientField, deadlineField],
+  };
+  return {
+    metadata: { contractName, owner },
     display: {
       formats: {
-        'swapExactTokensForTokens(uint256 amountIn,uint256 amountOutMin,address[] path,address to,uint256 deadline)': {
-          intent: 'Swap',
-          fields: [
-            { path: 'amountIn', label: 'You pay', format: 'tokenAmount', params: { tokenPath: 'path.0' } },
-            { path: 'amountOutMin', label: 'You receive (min)', format: 'tokenAmount', params: { tokenPath: 'path.-1' } },
-            recipientField, deadlineField,
-          ],
-        },
+        'swapExactTokensForTokens(uint256 amountIn,uint256 amountOutMin,address[] path,address to,uint256 deadline)': tokensForTokens,
+        'swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn,uint256 amountOutMin,address[] path,address to,uint256 deadline)': tokensForTokens,
         'swapTokensForExactTokens(uint256 amountOut,uint256 amountInMax,address[] path,address to,uint256 deadline)': {
           intent: 'Swap',
           fields: [
@@ -95,25 +116,56 @@ export const LOCAL_DESCRIPTORS: Record<string, any> = {
             recipientField, deadlineField,
           ],
         },
-        'swapExactETHForTokens(uint256 amountOutMin,address[] path,address to,uint256 deadline)': {
+        'swapExactETHForTokens(uint256 amountOutMin,address[] path,address to,uint256 deadline)': ethForTokens,
+        'swapExactETHForTokensSupportingFeeOnTransferTokens(uint256 amountOutMin,address[] path,address to,uint256 deadline)': ethForTokens,
+        'swapExactTokensForETH(uint256 amountIn,uint256 amountOutMin,address[] path,address to,uint256 deadline)': tokensForEth,
+        'swapExactTokensForETHSupportingFeeOnTransferTokens(uint256 amountIn,uint256 amountOutMin,address[] path,address to,uint256 deadline)': tokensForEth,
+      },
+    },
+  };
+}
+
+// Uniswap-V3-style router02 (no deadline in the struct) — shared by PancakeSwap V3
+// and other V3 forks whose SwapRouter02 ABI matches Uniswap's verbatim.
+function v3Router02Descriptor(contractName: string, owner: string) {
+  return {
+    metadata: { contractName, owner },
+    display: {
+      formats: {
+        'exactInputSingle((address tokenIn,address tokenOut,uint24 fee,address recipient,uint256 amountIn,uint256 amountOutMinimum,uint160 sqrtPriceLimitX96) params)': {
           intent: 'Swap',
           fields: [
-            { path: '@.value', label: 'You pay', format: 'amount' },
-            { path: 'amountOutMin', label: 'You receive (min)', format: 'tokenAmount', params: { tokenPath: 'path.-1' } },
-            recipientField, deadlineField,
+            { path: 'params.amountIn', label: 'You pay', format: 'tokenAmount', params: { tokenPath: 'params.tokenIn' } },
+            { path: 'params.amountOutMinimum', label: 'You receive (min)', format: 'tokenAmount', params: { tokenPath: 'params.tokenOut' } },
+            { path: 'params.recipient', label: 'Recipient', format: 'addressName' },
           ],
         },
-        'swapExactTokensForETH(uint256 amountIn,uint256 amountOutMin,address[] path,address to,uint256 deadline)': {
+        'exactInput((bytes path,address recipient,uint256 amountIn,uint256 amountOutMinimum) params)': {
           intent: 'Swap',
           fields: [
-            { path: 'amountIn', label: 'You pay', format: 'tokenAmount', params: { tokenPath: 'path.0' } },
-            { path: 'amountOutMin', label: 'You receive (min)', format: 'amount' },
-            recipientField, deadlineField,
+            { path: 'params.amountIn', label: 'You pay', format: 'tokenAmount', params: { tokenPath: 'params.path[0:20]' } },
+            { path: 'params.amountOutMinimum', label: 'You receive (min)', format: 'tokenAmount', params: { tokenPath: 'params.path[-20:]' } },
+            { path: 'params.recipient', label: 'Recipient', format: 'addressName' },
           ],
         },
       },
     },
-  },
+  };
+}
+
+export const LOCAL_DESCRIPTORS: Record<string, any> = {
+  // ---- Uniswap V2 Router ----
+  '0x7a250d5630b4cf539739df2c5dacb4c659f2488d': v2RouterDescriptor('Uniswap V2 Router', 'Uniswap'),
+
+  // ---- PancakeSwap V2 Router (BSC) — UniswapV2Router02 fork, identical ABI ----
+  '0x10ed43c718714eb63d5aa57b78b54704e256024e': v2RouterDescriptor('PancakeSwap V2 Router', 'PancakeSwap'),
+
+  // ---- SushiSwap Router (mainnet) — UniswapV2Router02 fork ----
+  '0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f': v2RouterDescriptor('SushiSwap Router', 'SushiSwap'),
+
+  // ---- PancakeSwap V3 Router / SmartRouter (BSC) — Uniswap V3 SwapRouter02 ABI ----
+  '0x1b81d678ffb9c0263b24a97847620c99d213eb14': v3Router02Descriptor('PancakeSwap V3 Router', 'PancakeSwap'),
+  '0x13f4ea83d0bd40e75c8222255bc855a974568dd4': v3Router02Descriptor('PancakeSwap Smart Router', 'PancakeSwap'),
 
   // ---- Wrapped Ether ----
   '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2': {
@@ -360,6 +412,22 @@ const ERC20_INTERFACE_DESCRIPTOR = {
         intent: 'Approve',
         fields: [
           { path: 'amount', label: 'Amount', format: 'tokenAmount', params: { tokenPath: '@.to', threshold: UNLIMITED_THRESHOLD } },
+          { path: 'spender', label: 'Spender', format: 'addressName' },
+        ],
+      },
+      // ERC-20 allowance extensions — decode like approve so the amount is scaled
+      // to the token (not a raw base-units integer) and the spender is named.
+      'increaseAllowance(address spender,uint256 addedValue)': {
+        intent: 'Approve',
+        fields: [
+          { path: 'addedValue', label: 'Amount', format: 'tokenAmount', params: { tokenPath: '@.to' } },
+          { path: 'spender', label: 'Spender', format: 'addressName' },
+        ],
+      },
+      'decreaseAllowance(address spender,uint256 subtractedValue)': {
+        intent: 'Revoke',
+        fields: [
+          { path: 'subtractedValue', label: 'Amount', format: 'tokenAmount', params: { tokenPath: '@.to' } },
           { path: 'spender', label: 'Spender', format: 'addressName' },
         ],
       },

@@ -43,6 +43,7 @@
       "statusSucceeded": "Concluída",
       "statusPending": "Pendente",
       "opContractInteraction": "Interação com contrato",
+      "opConnected": "Conectado",
       "opSignature": "Assinatura",
       "opTypedDataSignature": "Assinatura de dados tipados",
       "opTransfer": "Transferência",

@@ -12,7 +12,7 @@
       "step3Subtitle": "Запросы появятся здесь автоматически",
       "scanQR": "Сканировать QR-код",
       "orDivider": "или",
-      "pastePlaceholder": "Вставьте URI walletpair:?…",
+      "pastePlaceholder": "Ссылка walletpair или адрес сайта",
       "verifyTitle": "Подтвердите подключение",
       "verifyHint": "Убедитесь, что этот код совпадает с тем, что показывает dApp:",
       "encryptedBadge": "Сквозное шифрование",
@@ -31,7 +31,8 @@
       "scanAgain": "Сканировать снова",
       "retry": "Повторить",
       "invalidLinkTitle": "Неверная ссылка",
-      "invalidLinkBody": "Это недопустимая ссылка для подключения. Поддерживаются: URI WalletPair или URL Remote Inject."
+      "invalidLinkBody": "Это недопустимая ссылка для подключения. Поддерживаются: URI WalletPair или URL Remote Inject.",
+      "pasteHint": "Подключите dApp или откройте любой сайт"
     },
     "dapp": {
       "noWallet": "Сначала создайте кошелёк",
@@ -93,6 +94,9 @@
       "loadFailed": "Не удалось загрузить эту страницу",
       "retry": "Повторить",
       "disconnect": "Отключить",
+      "a11yAccount": "Аккаунт",
+      "switchAccount": "Сменить аккаунт",
+      "closePage": "Закрыть страницу",
       "disconnectTitle": "Отключить этот сайт?",
       "disconnectBody": "Сайту потребуется подключиться заново, прежде чем он сможет видеть ваш адрес или просить вас подписать.",
       "a11ySecure": "Безопасный сайт",

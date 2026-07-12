@@ -12,7 +12,7 @@
     "warningCounterfactual": "Seu endereço é o mesmo em todas as redes compatíveis. Os fundos enviados para cá estão seguros e são seus — mesmo antes de sua carteira ser implantada.",
     "networksLabel": "Redes compatíveis",
     "networksLine": "Um endereço em todas as {{count}} redes",
-    "networkDetail": "{{name}} · ID da cadeia {{id}}",
+    "networkDetail": "{{name}} · Chain ID {{id}}",
     "viewOnExplorer": "Ver {{name}} no explorador",
     "shareCardHeadline": "Escaneie para me enviar cripto",
     "shareDialogTitle": "Endereço da carteira {{name}}",

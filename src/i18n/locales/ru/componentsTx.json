@@ -43,6 +43,7 @@
       "statusSucceeded": "Выполнена",
       "statusPending": "В обработке",
       "opContractInteraction": "Взаимодействие с контрактом",
+      "opConnected": "Подключено",
       "opSignature": "Подпись",
       "opTypedDataSignature": "Подпись типизированных данных",
       "opTransfer": "Перевод",

@@ -27,6 +27,8 @@ import {
   formatTokenAmount,
   isUnboundedAmount,
 } from '@/services/approval-guard';
+import { useLocalePrefs, numberSeparators } from '@/services/locale-format';
+import { useDisplayCurrency } from '@/hooks/use-display-currency';
 
 interface Props {
   approval: DetectedApproval;
@@ -63,6 +65,9 @@ function AmountCard({
   approval, symbol, decimals, decimalsVerified, logoUrls, spenderLabel, usdPrice, balanceRaw, onChange,
 }: Props) {
   const { t } = useTranslation();
+  useLocalePrefs();
+  const sep = numberSeparators();
+  const dc = useDisplayCurrency();
   const requested = approval.amountRaw ?? 0n;
   const requestedFinite = !approval.isUnbounded && requested > 0n;
   const isReducing = approval.kind === 'decreaseAllowance';
@@ -130,14 +135,14 @@ function AmountCard({
       ) : (
         <Pressable style={styles.valueRow} onPress={() => setMode('custom')}>
           <Text style={[styles.amountValue, mode === 'revoke' && { color: color.success.base }]} numberOfLines={1}>
-            {mode === 'revoke' ? t('componentsUi.signingApprove.revokeValue') : `${formatTokenAmount(displayRaw ?? 0n, decimals)} ${symbol}`}
+            {mode === 'revoke' ? t('componentsUi.signingApprove.revokeValue') : `${formatTokenAmount(displayRaw ?? 0n, decimals, 6, sep)} ${symbol}`}
           </Text>
           {mode !== 'revoke' && <Pencil size={15} color={color.fg.subtle} strokeWidth={2} />}
         </Pressable>
       )}
 
       {usd != null && mode !== 'revoke' && !error && (
-        <Text style={styles.usd}>≈ ${usd < 0.01 ? usd.toFixed(4) : usd.toFixed(2)}</Text>
+        <Text style={styles.usd}>≈ {dc.fmt(usd)}</Text>
       )}
 
       {/* Presets */}
@@ -183,7 +188,7 @@ function AmountCard({
           {mode === 'revoke'
             ? t('componentsUi.signingApprove.revokeSummary', { spender: spenderLabel })
             : choice
-              ? t('componentsUi.signingApprove.capSummary', { spender: spenderLabel, amount: `${formatTokenAmount((choice as any).amountRaw, decimals)} ${symbol}` })
+              ? t('componentsUi.signingApprove.capSummary', { spender: spenderLabel, amount: `${formatTokenAmount((choice as any).amountRaw, decimals, 6, sep)} ${symbol}` })
               : t('componentsUi.signingApprove.choosePrompt')}
         </Text>
       )}
@@ -276,15 +281,21 @@ function PresetChip({ label, active, onPress, tone }: {
 }
 
 const styles = createStyles(() => ({
+  // De-containered (Wise / the mock): a routine bounded approve sits OPEN, aligned
+  // to the sheet edge — no tinted box competing for attention. Only the genuinely
+  // dangerous unbounded grant (cardDanger) gets a contained red alarm box.
   card: {
-    backgroundColor: color.accent.soft,
+    paddingVertical: space.md,
+    gap: space.md,
+  },
+  cardSafe: {},
+  cardDanger: {
+    backgroundColor: color.error.soft,
+    borderWidth: 1, borderColor: color.error.base + '40',
     borderRadius: radius['2xl'],
     padding: space['2xl'],
     marginVertical: space.sm,
-    gap: space.md,
   },
-  cardSafe: { backgroundColor: color.success.soft },
-  cardDanger: { backgroundColor: color.error.soft, borderWidth: 1, borderColor: color.error.base + '40' },
 
   header: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   symbol: { fontSize: text.base, ...inter.bold, color: color.fg.base },
@@ -297,7 +308,10 @@ const styles = createStyles(() => ({
   amountValue: { fontSize: text['3xl'], ...inter.bold, color: color.fg.base, letterSpacing: -0.5, flexShrink: 1 },
   inputRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
   amountInput: {
-    flex: 1, fontSize: text['3xl'], ...inter.bold, letterSpacing: -0.5, padding: 0,
+    // minWidth:0 lets the flex input shrink below its intrinsic content width;
+    // without it a long value overflows and horizontally scrolls the whole sheet,
+    // clipping the detail rows (被授权方/代币) on the left edge.
+    flex: 1, minWidth: 0, fontSize: text['3xl'], ...inter.bold, letterSpacing: -0.5, padding: 0,
   },
   usd: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, marginTop: -space.xs },
 
@@ -317,7 +331,9 @@ const styles = createStyles(() => ({
   summary: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, lineHeight: 18 },
   unverified: { fontSize: text.xs, ...inter.regular, color: color.warning.base },
 
-  booleanWarn: { fontSize: text.sm, ...inter.medium, color: color.error.base, lineHeight: 19 },
+  // Restraint: red heading (the "All NFTs" symbol) carries the alarm; the body reads
+  // in ink so the card isn't a wall of red (matches the eth_sign danger card).
+  booleanWarn: { fontSize: text.sm, ...inter.medium, color: color.fg.base, lineHeight: 19 },
   boolBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
     paddingVertical: space.lg, borderRadius: radius.lg, borderWidth: 1,

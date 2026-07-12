@@ -9,7 +9,7 @@ jest.mock('@/services/storage', () => ({
 }));
 
 import {
-  formatNumber, formatDate, formatTime, formatDateTime, numberSeparators,
+  formatNumber, formatDate, formatTime, formatDateTime, numberSeparators, groupDigits,
   formatCompact, formatTokenAmount,
 } from '@/services/locale-format';
 
@@ -41,6 +41,16 @@ describe('locale-format: numbers', () => {
   it('exposes the current preset separators', () => {
     expect(numberSeparators()).toEqual({ group: ',', decimal: '.' });
     expect(numberSeparators('dot_comma')).toEqual({ group: '.', decimal: ',' });
+  });
+
+  it('groupDigits groups a bigint-safe digit string per preset', () => {
+    expect(groupDigits('1234567', 'comma_dot')).toBe('1,234,567');
+    expect(groupDigits('1234567', 'dot_comma')).toBe('1.234.567');
+    const sp = numberSeparators('space_comma').group; // fr-FR uses a special space
+    expect(groupDigits('1234567', 'space_comma')).toBe(`1${sp}234${sp}567`);
+    expect(groupDigits('1234567', 'indian')).toBe('12,34,567');
+    expect(groupDigits('12', 'comma_dot')).toBe('12'); // short passes through
+    expect(groupDigits('0', 'dot_comma')).toBe('0');
   });
 });
 

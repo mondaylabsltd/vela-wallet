@@ -19,8 +19,10 @@ import { keccak256, create2Address } from '@/services/eth-crypto';
 import { toHex, fromHex } from '@/services/hex';
 import { decodeCalldata, matchSelector, parseSignature, type AbiParam, type DecodedValue } from '@/services/abi-decode';
 import { lookupSelector } from '@/services/selector-registry';
+import { groupDigits, numberSeparators, formatNumber, formatDateTime as localeFormatDateTime } from '@/services/locale-format';
 import { localDescriptor, knownContract, interfaceDescriptor, INTERFACE_IDS, type TokenStandard } from '@/services/local-descriptors';
 import { knownTokenSymbol, knownTokenDecimals } from '@/services/tokens';
+import { nativeSymbol } from '@/models/network';
 import type { TypedData } from '@/services/eip712';
 import { poolRpcCall } from '@/services/rpc-pool';
 import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
@@ -85,8 +87,9 @@ export interface ClearSignField {
   expired?: boolean;
   /** Full lowercased address for addressName fields (identity/risk lookups). */
   address?: string;
-  /** Pre-formatted USD valuation (e.g. "$1,000.00"), when cheaply known. */
-  usd?: string;
+  /** USD magnitude, when cheaply known — formatted into the user's display currency
+   *  at render via useDisplayCurrency().fmt (no baked "$", so € / ¥ / etc. work). */
+  usdValue?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +245,8 @@ async function detectTokenStandard(chainId: number, addr: string): Promise<Token
 const SEL_TRANSFER = '0xa9059cbb';
 const SEL_TRANSFER_FROM = '0x23b872dd';
 const SEL_APPROVE = '0x095ea7b3';
+const SEL_INCREASE_ALLOWANCE = '0x39509351'; // increaseAllowance(address,uint256)
+const SEL_DECREASE_ALLOWANCE = '0xa457c2d7'; // decreaseAllowance(address,uint256)
 const SEL_SAFE_TRANSFER_721 = '0x42842e0e';      // safeTransferFrom(addr,addr,uint256)
 const SEL_SAFE_TRANSFER_721_DATA = '0xb88d4fde'; // safeTransferFrom(addr,addr,uint256,bytes)
 const SEL_SET_APPROVAL_ALL = '0xa22cb465';
@@ -250,6 +255,7 @@ const SEL_SAFE_BATCH_1155 = '0x2eb2c2d6';        // safeBatchTransferFrom(...)
 
 const TOKEN_STD_SELECTORS = new Set([
   SEL_TRANSFER, SEL_TRANSFER_FROM, SEL_APPROVE,
+  SEL_INCREASE_ALLOWANCE, SEL_DECREASE_ALLOWANCE,
   SEL_SAFE_TRANSFER_721, SEL_SAFE_TRANSFER_721_DATA, SEL_SET_APPROVAL_ALL,
   SEL_SAFE_TRANSFER_1155, SEL_SAFE_BATCH_1155,
 ]);
@@ -275,8 +281,8 @@ async function resolveTokenStandard(
     kind = 'erc1155';
   } else if (selector === SEL_SAFE_TRANSFER_721 || selector === SEL_SAFE_TRANSFER_721_DATA) {
     kind = 'erc721';
-  } else if (selector === SEL_TRANSFER) {
-    kind = 'erc20'; // ERC-20 only — never an NFT
+  } else if (selector === SEL_TRANSFER || selector === SEL_INCREASE_ALLOWANCE || selector === SEL_DECREASE_ALLOWANCE) {
+    kind = 'erc20'; // ERC-20 only — transfer + the (in|de)creaseAllowance extensions
   } else {
     // transferFrom / approve / setApprovalForAll — query the chain.
     kind = await detectTokenStandard(chainId, toAddr);
@@ -491,9 +497,15 @@ function buildBestEffortFields(decoded: Record<string, DecodedValue>, params: Ab
     const key = p.name || `_${i}`;
     const raw = decoded[key];
     if (raw === undefined) return;
+    // An address param carries its full 0x so the detail panel can resolve its
+    // name (a known contract/token), draw its identity, and link it to an explorer
+    // — instead of a bare truncated hex string with no meaning.
+    const addrHex = /^address$/.test(p.type) && typeof raw === 'string' && /^0x[0-9a-fA-F]{40}$/.test(raw)
+      ? raw.toLowerCase() : undefined;
     fields.push({
       label: p.name || prettyType(p.type),
       value: formatGenericValue(raw, p.type),
+      ...(addrHex ? { address: addrHex } : {}),
       format: 'raw',
       role: 'generic',
       // Best-effort raw params are unverified guesses at meaning and aren't
@@ -528,7 +540,7 @@ function formatGenericValue(v: DecodedValue, type: string): string {
     return `[${items.join(', ')}${v.length > 4 ? `, +${v.length - 4}` : ''}]`;
   }
   if (typeof v === 'boolean') return v ? 'true' : 'false';
-  if (typeof v === 'bigint') return formatWithCommas(v.toString());
+  if (typeof v === 'bigint') return groupDigits(v.toString());
   const s = String(v);
   if (/^0x[0-9a-fA-F]{40}$/.test(s)) return `${s.slice(0, 8)}…${s.slice(-6)}`; // address
   return shortHex(s);
@@ -899,7 +911,7 @@ interface FormattedField {
   unverified?: boolean;
   expired?: boolean;
   address?: string;
-  usd?: string;
+  usdValue?: number;
 }
 
 function formatField(
@@ -920,7 +932,7 @@ function formatField(
       return formatAddress(rawValue);
 
     case 'amount':
-      return formatNativeAmount(rawValue);
+      return formatNativeAmount(rawValue, chainId);
 
     case 'raw':
       return formatRaw(rawValue);
@@ -1027,8 +1039,10 @@ function formatTokenAmount(
   // Cheap, exact USD for stablecoins (≈ $1) — covers the common case (approve /
   // transfer / swap of USDC/USDT/DAI) with zero network cost. Other ERC-20s need
   // a price engine and are intentionally left without a ≈$ line.
-  const usd = verified && symbol && STABLE_SYMBOLS.has(symbol)
-    ? formatUsdValue(amount, decimals)
+  // Numeric USD magnitude (peg = $1) — the component formats it into the user's
+  // display currency at render time (no baked "$", so € / ¥ / etc. work).
+  const usdValue = verified && symbol && STABLE_SYMBOLS.has(symbol)
+    ? usdMagnitude(amount, decimals)
     : undefined;
 
   return {
@@ -1036,22 +1050,20 @@ function formatTokenAmount(
     format: 'tokenAmount',
     tokenAddress: tokenAddr, // normalized + validated above (or undefined)
     ...(verified ? {} : { unverified: true }),
-    ...(usd ? { usd } : {}),
+    ...(usdValue != null ? { usdValue } : {}),
   };
 }
 
 /** USD pegged stablecoins we can value at ~$1 with no price lookup. */
 const STABLE_SYMBOLS = new Set(['USDC', 'USDT', 'DAI', 'USDC.e', 'USD₮0', 'BUSD', 'TUSD', 'USDP', 'FRAX', 'LUSD', 'GUSD', 'PYUSD']);
 
-/** Format raw stablecoin base units as a "$1,234.56" string (peg = $1, rounded). */
-function formatUsdValue(raw: bigint, decimals: number): string {
+/** Raw stablecoin base units → a USD magnitude (peg = $1, rounded to cents). */
+function usdMagnitude(raw: bigint, decimals: number): number {
   const base = 10n ** BigInt(decimals);
-  let whole = raw / base;
+  const whole = raw / base;
   const frac = raw % base;
-  // Round (not truncate) to cents, carrying into the whole part on overflow.
-  let cents = Number((frac * 100n + base / 2n) / base);
-  if (cents >= 100) { whole += 1n; cents -= 100; }
-  return `$${formatWithCommas(whole.toString())}.${cents.toString().padStart(2, '0')}`;
+  const cents = Number((frac * 100n + base / 2n) / base); // round to cents
+  return Number(whole) + cents / 100;
 }
 
 function formatAddress(rawValue: DecodedValue | undefined): FormattedField | null {
@@ -1065,10 +1077,12 @@ function formatAddress(rawValue: DecodedValue | undefined): FormattedField | nul
   };
 }
 
-function formatNativeAmount(rawValue: DecodedValue | undefined): FormattedField | null {
+function formatNativeAmount(rawValue: DecodedValue | undefined, chainId: number): FormattedField | null {
   const amount = toBigInt(rawValue);
   if (amount === 0n) return null;
-  return { value: formatWeiAmount(amount), format: 'amount' };
+  // Include the native symbol so the hero shows a ticker (+ logo) and the summary
+  // reads "0.5 ETH", not a bare "0.5" — matches how tokenAmount carries its symbol.
+  return { value: `${formatWeiAmount(amount)} ${nativeSymbol(chainId)}`, format: 'amount' };
 }
 
 function formatRaw(rawValue: DecodedValue | undefined): FormattedField | null {
@@ -1082,7 +1096,7 @@ function formatNftName(rawValue: DecodedValue | undefined): FormattedField | nul
   if (rawValue === undefined || rawValue === null) return { value: 'NFT', format: 'nftName' };
   const s = String(rawValue);
   // Numeric token ids get a "#" prefix; anything else (a name) passes through.
-  return { value: /^\d+$/.test(s) ? `#${formatWithCommas(s)}` : s, format: 'nftName' };
+  return { value: /^\d+$/.test(s) ? `#${groupDigits(s)}` : s, format: 'nftName' };
 }
 
 // Year ~2100 in unix seconds — anything beyond is a "no deadline" sentinel
@@ -1101,8 +1115,9 @@ function formatDate(rawValue: DecodedValue | undefined, params: any): FormattedF
   try {
     const date = new Date(ts * 1000);
     if (!Number.isFinite(date.getTime())) return null;
-    const formatted = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    return { value: expired ? `${formatted} (expired)` : formatted, format: 'date', ...(expired ? { expired: true } : {}) };
+    // User's date+time preset (no hardcoded en-US); the "(expired)" English literal
+    // is dropped — the field tints + a localized expiredWarning banner carries it.
+    return { value: localeFormatDateTime(date), format: 'date', ...(expired ? { expired: true } : {}) };
   } catch {
     return { value: String(ts), format: 'date' };
   }
@@ -1133,7 +1148,9 @@ function formatUnit(rawValue: DecodedValue | undefined, params: any): FormattedF
   const decimals = params?.decimals ?? 0;
   const base = params?.base ?? '';
   const prefix = params?.prefix ?? false;
-  const display = decimals > 0 ? (num / Math.pow(10, decimals)).toFixed(decimals) : String(num);
+  const display = decimals > 0
+    ? formatNumber(num / Math.pow(10, decimals), { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+    : formatNumber(num, { maximumFractionDigits: 0 });
   const formatted = prefix ? `${base}${display}` : `${display}${base}`;
   return { value: formatted.trim(), format: 'unit' };
 }
@@ -1157,12 +1174,12 @@ function toBigInt(v: DecodedValue | undefined): bigint {
 
 function formatWeiAmount(wei: bigint): string {
   if (wei === 0n) return '0';
-  const eth = Number(wei) / 1e18;
+  const eth = Number(wei) / 1e18; // native amount — already a JS number path, no new loss
   if (eth >= 0.0001) {
-    return eth.toFixed(6).replace(/\.?0+$/, '');
+    return formatNumber(eth, { maximumFractionDigits: 6 });
   }
   if (wei < 1000000n) return `${wei} wei`;
-  return eth.toFixed(8).replace(/\.?0+$/, '');
+  return formatNumber(eth, { maximumFractionDigits: 8 });
 }
 
 function guessTokenDecimals(chainId: number, tokenAddr: string | undefined): { decimals: number; verified: boolean } {
@@ -1188,18 +1205,14 @@ function formatTokenValue(raw: bigint, decimals: number): string {
   const frac = raw % divisor;
 
   if (frac === 0n) {
-    return formatWithCommas(whole.toString());
+    return groupDigits(whole.toString());
   }
 
   const fracStr = frac.toString().padStart(decimals, '0');
   // Show up to 4 significant fractional digits, trim trailing zeros
   const trimmed = fracStr.slice(0, Math.min(4, decimals)).replace(/0+$/, '');
-  if (!trimmed) return formatWithCommas(whole.toString());
-  return `${formatWithCommas(whole.toString())}.${trimmed}`;
-}
-
-function formatWithCommas(n: string): string {
-  return n.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  if (!trimmed) return groupDigits(whole.toString());
+  return `${groupDigits(whole.toString())}${numberSeparators().decimal}${trimmed}`;
 }
 
 function truncateHex(s: string): string {
@@ -1272,7 +1285,13 @@ function inferFieldRoles(fields: ClearSignField[], intent: string): ClearSignFie
     // Amount roles
     if (f.format === 'tokenAmount' || f.format === 'amount') {
       if (/receive|output|min|return|get/.test(label)) return { ...f, role: 'receive-amount' as const };
-      if (/send|pay|input|deposit|spend|stake|amount|value/.test(label)) return { ...f, role: 'send-amount' as const };
+      if (/send|pay|input|deposit|spend|stake/.test(label)) return { ...f, role: 'send-amount' as const };
+      // Withdraw / redeem / unstake / claim bring assets INTO your wallet — their
+      // amount is a receive, not a send, even when the field is just labelled
+      // "amount"/"shares". Without this a vault withdraw shows "−1" (leaving) when it
+      // actually arrives (F7).
+      if (/withdraw|redeem|unstake|claim/.test(i) || /withdraw|redeem/.test(label)) return { ...f, role: 'receive-amount' as const };
+      if (/amount|value/.test(label)) return { ...f, role: 'send-amount' as const };
       // For approve/permit: the amount is what's being approved
       if (/approve|swap/.test(i)) return { ...f, role: 'send-amount' as const };
       return { ...f, role: 'send-amount' as const };

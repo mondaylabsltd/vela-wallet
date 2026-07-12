@@ -6,13 +6,22 @@
  * presentation (icons); this file owns the request fixtures.
  */
 import type { BLEIncomingRequest } from '@/models/types';
+import type { AssetSimResult } from '@/services/tx-simulation';
 
 export interface ClearSigningScenario {
   id: string;
   labelKey: string;
   subtitleKey: string;
   request: BLEIncomingRequest;
+  /** Test-only: pre-baked simulation the harness feeds instead of a live sim
+   *  (for states the mainnet sim can't produce on demand, e.g. a scam drain). */
+  simOverride?: AssetSimResult;
 }
+
+// Fixtures reused across the new coverage scenarios. (Parallel Two, own account
+// #2 = 0x031d7D57…, is embedded in the send-own-account calldata below.)
+const USDT = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+const WETH = '0xC02aaa39b223FE8D0A0e5C4F27eAD9083C756Cc2';
 
 export const CLEAR_SIGNING_SCENARIOS: ClearSigningScenario[] = [
   {
@@ -112,7 +121,7 @@ export const CLEAR_SIGNING_SCENARIOS: ClearSigningScenario[] = [
             spender: '0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD',
             value: '1000000000', // 1000 USDC (6 decimals)
             nonce: '0',
-            deadline: '1750000000',
+            deadline: '1900000000', // far future — a valid (non-expired) permit demo
           },
         }),
       ],
@@ -222,7 +231,9 @@ export const CLEAR_SIGNING_SCENARIOS: ClearSigningScenario[] = [
         // ERC fallback, and not in any 4-byte DB → genuinely blind. Exercises the
         // (most important) blind-sign warning surface, not a rich decode.
         to: '0x4e1dC6fd6f2EBa9bE43C1f0d54F8E9A5E4B6A9C1',
-        data: '0x1a2b3c4d00000000000000000000000000000000000000000000000000000000deadbeef0000000000000000000000000000000000000000000000000de0b6b3a7640000',
+        // A REAL selector (mint(address,uint256)) on an undescribed contract — the
+        // realistic blind case: 4-byte still names the function even with no descriptor.
+        data: '0x40c10f1900000000000000000000000000000000000000000000000000000000deadbeef0000000000000000000000000000000000000000000000000de0b6b3a7640000',
         value: '0x0',
       }],
       origin: 'clear-signing-test',
@@ -450,6 +461,122 @@ export const CLEAR_SIGNING_SCENARIOS: ClearSigningScenario[] = [
         value: '0x0',
       }],
       origin: 'clear-signing-test',
+    },
+  },
+
+  // --- New coverage scenarios (gaps in the six principles) ---
+
+  {
+    // Identity (03): the recipient is one of YOUR OWN accounts — resolves to
+    // "Parallel Two" (account name), not a raw 0x / ENS.
+    id: 'send-own-account',
+    labelKey: 'clearSigning.scenarioSendOwnAccount',
+    subtitleKey: 'clearSigning.scenarioSendOwnAccountSub',
+    request: {
+      id: 'test-send-own-account',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+        // transfer(Parallel Two, 250 USDC) — 250e6 = 0x0EE6B280
+        data: '0xa9059cbb000000000000000000000000031d7d57c99caf891e1c250554691fd12d84772b000000000000000000000000000000000000000000000000000000000ee6b280',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+  {
+    // Sim-as-protagonist (06) + danger (05): a call that LOOKS innocent ("claim()")
+    // but whose simulation reveals an UNDECLARED drain — the loud, uncorroborated
+    // balance-change list is the whole point.
+    id: 'scam-drain',
+    labelKey: 'clearSigning.scenarioScamDrain',
+    subtitleKey: 'clearSigning.scenarioScamDrainSub',
+    request: {
+      id: 'test-scam-drain',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0x1A2b3C4d5E6f7081920a1B2c3D4e5f6071829304', // unknown (not a known protocol)
+        data: '0x4e71d92d', // claim()
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+    simOverride: {
+      ok: true,
+      engine: 'rpc',
+      changes: [
+        { kind: 'erc20', token: USDT, symbol: 'USDT', decimals: 6, delta: -5000000000n },
+        { kind: 'erc20', token: WETH, symbol: 'WETH', decimals: 18, delta: -1500000000000000000n },
+      ],
+    },
+  },
+  {
+    // The calm deploy path (06): a contract creation reads as "Deploy contract /
+    // no assets leave", not a scary red "Unknown".
+    id: 'deploy-contract',
+    labelKey: 'clearSigning.scenarioDeployContract',
+    subtitleKey: 'clearSigning.scenarioDeployContractSub',
+    request: {
+      id: 'test-deploy-contract',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '', // no recipient → contract creation
+        data: '0x608060405234801561001057600080fd5b5060f78061001f6000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c80632e64cec114602d575b600080fd5b60336047565b604051603e91906059565b60405180910390f35b60005490565b6000819050919050565b6053816047565b82525050565b6000602082019050606c6000830184604c565b9291505056fea2646970667358221220',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+    simOverride: { ok: true, engine: 'rpc', changes: [] },
+  },
+  {
+    // Identity (03): the recipient is a SAVED CONTACT — resolves to its address-
+    // book name ("Alice Chen"), the highest-trust label.
+    id: 'send-contact',
+    labelKey: 'clearSigning.scenarioSendContact',
+    subtitleKey: 'clearSigning.scenarioSendContactSub',
+    request: {
+      id: 'test-send-contact',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+        // transfer(Alice 0x1234…5678, 500 USDC) — 500e6 = 0x1DCD6500
+        data: '0xa9059cbb0000000000000000000000001234567890abcdef1234567890abcdef12345678000000000000000000000000000000000000000000000000000000001dcd6500',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+  {
+    // A native-input swap: you pay ETH (msg.value), receive a token. Tests the
+    // native-coin pay hero + the two-token swap layout in one.
+    id: 'native-swap',
+    labelKey: 'clearSigning.scenarioNativeSwap',
+    subtitleKey: 'clearSigning.scenarioNativeSwapSub',
+    request: {
+      id: 'test-native-swap',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D', // Uniswap V2 Router
+        // swapExactETHForTokens(minOut 1200 USDC, [WETH,USDC], ParallelOne, deadline)
+        data: '0x7ff36ab5' +
+          '0000000000000000000000000000000000000000000000000000000047868c00' + // amountOutMin 1200e6
+          '0000000000000000000000000000000000000000000000000000000000000080' + // path offset
+          '000000000000000000000000d400866e00b055b20752a826cd5c89b811de130b' + // to = Parallel One
+          '00000000000000000000000000000000000000000000000000000000ffffffff' + // deadline
+          '0000000000000000000000000000000000000000000000000000000000000002' + // path length
+          '000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2' + // WETH
+          '000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',  // USDC
+        value: '0x6f05b59d3b20000', // 0.5 ETH
+      }],
+      origin: 'clear-signing-test',
+    },
+    simOverride: {
+      ok: true,
+      engine: 'rpc',
+      changes: [
+        { kind: 'native', symbol: 'ETH', decimals: 18, delta: -500000000000000000n },
+        { kind: 'erc20', token: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', symbol: 'USDC', decimals: 6, delta: 1200000000n },
+      ],
     },
   },
 ];

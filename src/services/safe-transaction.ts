@@ -384,6 +384,10 @@ export async function estimateTransactionFee(
   // dummy is used. Passing the real tx makes the estimate accurate for contract
   // calls and deploys, whose callGasLimit/preVerificationGas dwarf a transfer's.
   tx?: { to: string; value?: string; data?: string },
+  // An EIP-5792 batch (wallet_sendCalls) — estimate against the WHOLE MultiSend of
+  // every call, the same bundle sendBatchCalls submits, so the batch fee is accurate.
+  // Takes precedence over `tx` when non-empty.
+  batchCalls?: { to: string; value?: string; data?: string }[],
 ): Promise<TransactionFeeEstimate> {
   // Tempo pays gas in a stablecoin, not the native coin — separate model. Forward the tx so a
   // dApp contract call is quoted off its REAL gas, not a transfer-sized default.
@@ -431,7 +435,15 @@ export async function estimateTransactionFee(
         data: tx.data && tx.data !== '0x' ? fromHex(stripHexPrefix(tx.data)) : new Uint8Array(0),
       }
     : { to: from, value: '0', data: new Uint8Array(68) };
-  const estCallData = await buildNativeCallData([innerEstCall], chainId, false);
+  // A batch estimates against ALL its calls (the real MultiSend); otherwise the single call.
+  const estCalls: MultiSendCall[] = batchCalls && batchCalls.length > 0
+    ? batchCalls.map((c) => ({
+        to: c.to,
+        value: stripHexPrefix(c.value ?? '0') || '0',
+        data: c.data && c.data !== '0x' ? fromHex(stripHexPrefix(c.data)) : new Uint8Array(0),
+      }))
+    : [innerEstCall];
+  const estCallData = await buildNativeCallData(estCalls, chainId, false);
 
   // Try to get accurate gas estimates from the bundler. This catches high-gas chains
   // (e.g. Monad) where actual gas usage is 3-10x higher than the static defaults below.

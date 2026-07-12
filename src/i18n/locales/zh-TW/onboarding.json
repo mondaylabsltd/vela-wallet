@@ -75,7 +75,7 @@
       "alertSignInFailedBody": "{{message}}\n\n請確認您的裝置已設定 Face ID、Touch ID 或指紋後再試一次。",
       "alertIncompatibleBodyCreate": "您裝置的身分提供者與此錢包不相容。請至系統設定切換為 Google 密碼管理工具後再試一次。",
       "recoverOfferTitle": "找回錢包",
-      "recoverOfferBody": "伺服器暫無這枚通行密鑰的記錄。再確認一次簽名，即可在本機重建公鑰和錢包地址。",
+      "recoverOfferBody": "伺服器暫無這枚通行密鑰的記錄。再確認一次簽章，即可在本機重建公鑰和錢包地址。",
       "recoverConfirm": "立即找回",
       "recoverCancel": "暫時不要",
       "recoverFailedTitle": "找回未成功",

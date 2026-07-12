@@ -64,10 +64,10 @@ export default function ClearSigningTestScreen() {
   const router = useRouter();
 
   // Tapping a scenario opens a local modal that drives the real <SigningSheet>.
-  const [mockRequest, setMockRequest] = useState<BLEIncomingRequest | null>(null);
+  const [mockScenario, setMockScenario] = useState<typeof SCENARIOS[number] | null>(null);
 
   const handleScenario = useCallback((scenario: typeof SCENARIOS[number]) => {
-    setMockRequest(scenario.request);
+    setMockScenario(scenario);
   }, []);
 
   return (
@@ -112,10 +112,11 @@ export default function ClearSigningTestScreen() {
       </ScrollView>
 
       {/* Mock signing modal — renders independently from DAppConnection */}
-      {mockRequest && (
+      {mockScenario && (
         <MockSigningModal
-          request={mockRequest}
-          onClose={() => setMockRequest(null)}
+          request={mockScenario.request}
+          simOverride={mockScenario.simOverride ?? null}
+          onClose={() => setMockScenario(null)}
         />
       )}
     </ScreenContainer>
@@ -128,8 +129,9 @@ export default function ClearSigningTestScreen() {
 // (no passkey / no transport), so the harness can never drift from production.
 // ---------------------------------------------------------------------------
 
-function MockSigningModal({ request, onClose }: {
+function MockSigningModal({ request, simOverride, onClose }: {
   request: BLEIncomingRequest;
+  simOverride?: import('@/services/tx-simulation').AssetSimResult | null;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -138,6 +140,7 @@ function MockSigningModal({ request, onClose }: {
     <AppModal visible={true} onClose={onClose}>
       <SigningSheet
         request={request}
+        simOverride={simOverride}
         chainId={1}
         account={activeAccount ?? { name: "Wallet" }}
         dappInfo={{ name: "PancakeSwap", url: "https://pancakeswap.finance" }}
@@ -147,6 +150,10 @@ function MockSigningModal({ request, onClose }: {
         onApprove={() => { showAlert(t("clearSigning.alertSignedTitle"), t("clearSigning.alertSignedBody")); onClose(); }}
         onReject={onClose}
         onDismiss={onClose}
+        // Demo-only: simulate from a funded mainnet address (holds USDC + ETH) so the
+        // benign scenarios preview green instead of "expected to fail" — the parallel-
+        // space passkey account is empty. Never used in production.
+        simFromOverride="0x28C6c06298d514Db089934071355E5743bf21d60"
       />
     </AppModal>
   );

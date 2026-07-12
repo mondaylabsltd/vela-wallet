@@ -12,7 +12,7 @@
       "step3Subtitle": "Permintaan muncul di sini secara otomatis",
       "scanQR": "Pindai Kode QR",
       "orDivider": "atau",
-      "pastePlaceholder": "Tempel URI walletpair:?...",
+      "pastePlaceholder": "Tautan walletpair atau alamat web",
       "verifyTitle": "Verifikasi Koneksi",
       "verifyHint": "Pastikan kode ini cocok dengan yang ditampilkan dApp:",
       "encryptedBadge": "Terenkripsi end-to-end",
@@ -31,7 +31,8 @@
       "scanAgain": "Pindai Lagi",
       "retry": "Coba Lagi",
       "invalidLinkTitle": "Tautan Tidak Valid",
-      "invalidLinkBody": "Bukan tautan koneksi yang valid. Didukung: URI WalletPair atau URL Remote Inject."
+      "invalidLinkBody": "Bukan tautan koneksi yang valid. Didukung: URI WalletPair atau URL Remote Inject.",
+      "pasteHint": "Hubungkan dApp, atau buka situs web apa pun"
     },
     "dapp": {
       "noWallet": "Buat dompet terlebih dahulu",
@@ -93,6 +94,9 @@
       "loadFailed": "Tidak dapat memuat halaman ini",
       "retry": "Coba lagi",
       "disconnect": "Putuskan",
+      "a11yAccount": "Akun",
+      "switchAccount": "Ganti akun",
+      "closePage": "Tutup halaman",
       "disconnectTitle": "Putuskan situs ini?",
       "disconnectBody": "Situs perlu terhubung kembali sebelum dapat melihat alamat Anda atau meminta Anda menandatangani.",
       "a11ySecure": "Situs aman",

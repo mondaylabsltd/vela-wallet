@@ -1753,7 +1753,8 @@ export default function SendScreen() {
                   <>
                     <SectionLabel>{t('send.gasSpeedLabel', { defaultValue: 'Speed' })}</SectionLabel>
                     <View style={styles.tierRow}>
-                      {(['slow', 'standard', 'rapid', 'fast'] as GasTier[]).map((tier) => (
+                      {/* Three tiers to match the dApp signing sheet's GasFeeCard. */}
+                      {(['slow', 'standard', 'fast'] as GasTier[]).map((tier) => (
                         <Pressable
                           key={tier}
                           style={[styles.tierBtn, gasTier === tier && styles.tierBtnActive]}

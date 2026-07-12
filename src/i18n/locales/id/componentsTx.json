@@ -43,6 +43,7 @@
       "statusSucceeded": "Berhasil",
       "statusPending": "Tertunda",
       "opContractInteraction": "Interaksi kontrak",
+      "opConnected": "Terhubung",
       "opSignature": "Tanda tangan",
       "opTypedDataSignature": "Tanda tangan typed data",
       "opTransfer": "Transfer",

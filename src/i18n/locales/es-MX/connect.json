@@ -12,7 +12,7 @@
       "step3Subtitle": "Las solicitudes aparecen aquí automáticamente",
       "scanQR": "Escanear código QR",
       "orDivider": "o",
-      "pastePlaceholder": "Pega la URI walletpair:?...",
+      "pastePlaceholder": "enlace walletpair o dirección web",
       "verifyTitle": "Verificar conexión",
       "verifyHint": "Confirma que este código coincide con el que muestra la dApp:",
       "encryptedBadge": "Cifrado de extremo a extremo",
@@ -31,7 +31,8 @@
       "scanAgain": "Escanear de nuevo",
       "retry": "Reintentar",
       "invalidLinkTitle": "Enlace inválido",
-      "invalidLinkBody": "No es un enlace de conexión válido. Compatibles: URI de WalletPair o URL de Remote Inject."
+      "invalidLinkBody": "No es un enlace de conexión válido. Compatibles: URI de WalletPair o URL de Remote Inject.",
+      "pasteHint": "Conecta una dApp o abre cualquier sitio web"
     },
     "dapp": {
       "noWallet": "Primero crea una billetera",
@@ -80,7 +81,7 @@
     "browser": {
       "unsupported": "El navegador integrado solo está disponible en iOS y Android.",
       "noUrl": "No hay ninguna URL para abrir.",
-      "preparing": "Preparando la wallet…",
+      "preparing": "Preparando la billetera…",
       "title": "Conectar con {{host}}",
       "body": "Este sitio quiere ver tu dirección y pedirte que firmes. No puede mover fondos sin tu aprobación.",
       "cancel": "Cancelar",
@@ -93,6 +94,9 @@
       "loadFailed": "No se pudo cargar esta página",
       "retry": "Reintentar",
       "disconnect": "Desconectar",
+      "a11yAccount": "Cuenta",
+      "switchAccount": "Cambiar de cuenta",
+      "closePage": "Cerrar página",
       "disconnectTitle": "¿Desconectar este sitio?",
       "disconnectBody": "El sitio deberá volver a conectarse antes de poder ver tu dirección o pedirte que firmes.",
       "a11ySecure": "Sitio seguro",
@@ -108,7 +112,7 @@
   },
   "signHandoff": {
     "signing": "Confirmar en Vela",
-    "signed": "Enviado",
+    "signed": "Firmado",
     "rejected": "Cancelado",
     "pending": "Revísalo en la Actividad de Vela",
     "expired": "Esta solicitud de firma expiró",

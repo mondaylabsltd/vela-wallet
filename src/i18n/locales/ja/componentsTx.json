@@ -43,6 +43,7 @@
       "statusSucceeded": "成功",
       "statusPending": "保留中",
       "opContractInteraction": "コントラクトの操作",
+      "opConnected": "接続",
       "opSignature": "署名",
       "opTypedDataSignature": "型付きデータの署名",
       "opTransfer": "送金",

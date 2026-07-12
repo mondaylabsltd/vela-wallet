@@ -12,7 +12,7 @@
       "step3Subtitle": "Les requêtes apparaissent ici automatiquement",
       "scanQR": "Scanner le QR code",
       "orDivider": "ou",
-      "pastePlaceholder": "Coller l'URI walletpair:?...",
+      "pastePlaceholder": "lien walletpair ou adresse web",
       "verifyTitle": "Vérifier la connexion",
       "verifyHint": "Confirmez que ce code correspond à celui affiché par la dApp :",
       "encryptedBadge": "Chiffré de bout en bout",
@@ -31,7 +31,8 @@
       "scanAgain": "Scanner à nouveau",
       "retry": "Réessayer",
       "invalidLinkTitle": "Lien invalide",
-      "invalidLinkBody": "Lien de connexion non valide. Pris en charge : URI WalletPair ou URL Remote Inject."
+      "invalidLinkBody": "Lien de connexion non valide. Pris en charge : URI WalletPair ou URL Remote Inject.",
+      "pasteHint": "Connectez une dApp, ou ouvrez n'importe quel site web"
     },
     "dapp": {
       "noWallet": "Créez d'abord un portefeuille",
@@ -93,6 +94,9 @@
       "loadFailed": "Impossible de charger cette page",
       "retry": "Réessayer",
       "disconnect": "Déconnecter",
+      "a11yAccount": "Compte",
+      "switchAccount": "Changer de compte",
+      "closePage": "Fermer la page",
       "disconnectTitle": "Déconnecter ce site ?",
       "disconnectBody": "Le site devra se reconnecter avant de pouvoir voir votre adresse ou vous demander de signer.",
       "a11ySecure": "Site sécurisé",

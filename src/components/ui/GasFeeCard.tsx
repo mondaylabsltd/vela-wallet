@@ -13,6 +13,8 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native';
 import { VelaCard } from './VelaCard';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
+import { useDisplayCurrency } from '@/hooks/use-display-currency';
+import { useLocalePrefs, numberSeparators, formatNumber } from '@/services/locale-format';
 import {
   estimateTransactionFee,
   refreshGasPrice,
@@ -24,16 +26,12 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatWeiToEth(wei: bigint): string {
+/** Native fee amount in the user's number format (decimal mark + grouping). */
+function formatNativeFee(wei: bigint, sep: { group: string; decimal: string; indian?: boolean }): string {
   const eth = Number(wei) / 1e18;
   if (eth === 0) return '0';
-  if (eth < 0.0001) return '< 0.0001';
-  return eth.toFixed(4).replace(/\.?0+$/, '');
-}
-
-function formatUsd(v: number): string {
-  if (v < 0.01) return `$${v.toFixed(4)}`;
-  return `$${v.toFixed(2)}`;
+  if (eth < 0.0001) return `< 0${sep.decimal}0001`;
+  return formatNumber(eth, { maximumFractionDigits: 4 });
 }
 
 // ---------------------------------------------------------------------------
@@ -58,6 +56,8 @@ interface GasFeeCardProps {
   /** The real tx being signed — passed so tier-change/refresh re-estimates the
    *  actual call (dApp tx), not a dummy transfer. Omit for simple transfers. */
   tx?: { to: string; value?: string; data?: string };
+  /** An EIP-5792 batch's calls — estimate against the whole MultiSend. */
+  batchCalls?: { to: string; value?: string; data?: string }[];
   /** Called when user changes tier. Parent should re-estimate and update feeEstimate. */
   onTierChange: (tier: GasTier) => void;
   /** Called when fee estimate is updated (after refresh or tier change). */
@@ -70,32 +70,41 @@ interface GasFeeCardProps {
 
 export function GasFeeCard({
   feeEstimate, estimating, nativeSymbol: sym, nativeUsdPrice,
-  safeAddress, chainId, gasTier, tx, onTierChange, onFeeUpdate,
+  safeAddress, chainId, gasTier, tx, batchCalls, onTierChange, onFeeUpdate,
 }: GasFeeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Region format: fiat in the chosen display currency (€/¥/…) + the number
+  // format's grouping/decimal marks, matching the amounts everywhere else.
+  const dc = useDisplayCurrency();
+  useLocalePrefs();
+  const sep = numberSeparators();
+
   const feeNative = feeEstimate ? Number(feeEstimate.totalWei) / 1e18 : 0;
   const feeUsd = feeNative * nativeUsdPrice;
+  // Show fiat only when it renders as a meaningful non-zero (formatFiat rounds to
+  // 2 dp) — below that the native amount is the honest primary.
+  const showFiat = feeUsd >= 0.005;
 
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
     setRefreshing(true);
     try {
       await refreshGasPrice(chainId);
-      const fee = await estimateTransactionFee(safeAddress, chainId, gasTier, tx);
+      const fee = await estimateTransactionFee(safeAddress, chainId, gasTier, tx, batchCalls);
       onFeeUpdate(fee);
     } catch { /* ignore */ }
     setRefreshing(false);
-  }, [chainId, safeAddress, gasTier, tx, refreshing, onFeeUpdate]);
+  }, [chainId, safeAddress, gasTier, tx, batchCalls, refreshing, onFeeUpdate]);
 
   const handleTierChange = useCallback(async (tier: GasTier) => {
     onTierChange(tier);
     try {
-      const fee = await estimateTransactionFee(safeAddress, chainId, tier, tx);
+      const fee = await estimateTransactionFee(safeAddress, chainId, tier, tx, batchCalls);
       onFeeUpdate(fee);
     } catch { /* ignore */ }
-  }, [safeAddress, chainId, tx, onTierChange, onFeeUpdate]);
+  }, [safeAddress, chainId, tx, batchCalls, onTierChange, onFeeUpdate]);
 
   const { t } = useTranslation();
 
@@ -110,15 +119,17 @@ export function GasFeeCard({
         <Text style={styles.toggleLabel}>{t('componentsUi.gas.estFee')}</Text>
         <View style={styles.toggleRight}>
           <View style={styles.toggleValues}>
+            {/* Fiat-first: for a novice a fee means "$X". The native amount drops to a
+                quiet sub-line (and the full gas breakdown is one tap away). */}
             <Text style={[styles.toggleValue, failed && styles.toggleValueFailed]}>
               {estimating || refreshing
                 ? t('componentsUi.gas.estimating')
                 : feeEstimate
-                  ? `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}`
+                  ? (showFiat ? `≈ ${dc.fmt(feeUsd)}` : `~${formatNativeFee(feeEstimate.totalWei, sep)} ${sym}`)
                   : t('componentsUi.gas.estimateFailed')}
             </Text>
-            {!estimating && !failed && feeUsd > 0.001 && (
-              <Text style={styles.toggleSub}>≈ {formatUsd(feeUsd)}</Text>
+            {!estimating && !failed && feeEstimate && showFiat && (
+              <Text style={styles.toggleSub}>~{formatNativeFee(feeEstimate.totalWei, sep)} {sym}</Text>
             )}
           </View>
           {failed ? (
@@ -198,7 +209,8 @@ const styles = createStyles(() => ({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: space.lg,
-    paddingHorizontal: space.sm,
+    // No horizontal inset — the fee row shares the sheet's left edge with the
+    // eyebrow / hero / summary / 技术细节 (they were 4px apart).
     marginBottom: space.sm,
   },
   toggleLabel: {
