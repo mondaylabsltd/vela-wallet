@@ -6,7 +6,7 @@
  * the "A 叠加式" expert view — an expert sees more, and the safety framing (summary
  * + warnings) is still all there above it.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
@@ -14,8 +14,12 @@ import { color } from '@/constants/theme';
 import { isAddress } from '@/models/types';
 import { type ClearSignResult } from '@/services/clear-signing';
 import { lookupSelector } from '@/services/selector-registry';
-import { ChevronDown, Copy, Check } from 'lucide-react-native';
-import { styles, localizeLabel } from './signing-core';
+import { explorerBaseURL, explorerAddressURL } from '@/models/network';
+import { openURL } from '@/services/platform';
+import { ChevronDown, Copy, Check, FileText, ExternalLink } from 'lucide-react-native';
+import { Identicon } from '@/components/ui/Identicon';
+import { styles, localizeLabel, SigningChainContext } from './signing-core';
+import { useAddressIdentity, type AddrKind } from './use-address-identity';
 
 // Instant signatures for the common selectors, so the 函数 row fills without a
 // round-trip; anything else is resolved async via the shared selector registry.
@@ -76,34 +80,42 @@ export function AdvancedPanel({ method, params, clearSign }: {
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const chainId = useContext(SigningChainContext);
 
   const tx = method === 'eth_sendTransaction' ? params?.[0] ?? {} : null;
   const data: string | undefined = tx?.data && tx.data !== '0x' ? tx.data : undefined;
   const selector = data ? data.slice(0, 10) : undefined;
   const functionSig = useFunctionSig(selector);
 
-  // Every address involved, labelled + truncated to one line — the full 0x the calm
-  // rows tuck away here.
+  // Every address involved, tagged wallet vs contract so each row can show the
+  // right identity (identicon + ENS/contact for a wallet, glyph + name for a
+  // contract) — the full 0x stays visible either way.
   const addresses = useMemo(() => {
     const seen = new Set<string>();
-    const out: { label: string; address: string }[] = [];
-    const push = (label: string, a?: string) => {
-      if (a && isAddress(a) && !seen.has(a.toLowerCase())) { seen.add(a.toLowerCase()); out.push({ label, address: a }); }
+    const out: { label: string; address: string; kind: AddrKind; seedName?: string }[] = [];
+    const push = (label: string, a: string | undefined, kind: AddrKind, seedName?: string) => {
+      if (a && isAddress(a) && !seen.has(a.toLowerCase())) { seen.add(a.toLowerCase()); out.push({ label, address: a, kind, seedName }); }
     };
     if (clearSign) {
-      for (const f of clearSign.fields) if (f.address) push(localizeLabel(f.label), f.address);
-      push(t('componentsUi.signing.interactingLabel'), clearSign.contractAddress);
+      // A spender is a contract (router/protocol); recipients/owners/generic are
+      // treated as wallets (identicon + name), the safer, more useful default.
+      for (const f of clearSign.fields) if (f.address) push(localizeLabel(f.label), f.address, f.role === 'spender' ? 'contract' : 'wallet');
+      push(t('componentsUi.signing.interactingLabel'), clearSign.contractAddress, 'contract', clearSign.contractName);
     }
     if (method === 'eth_sendTransaction') {
       // tx.to with calldata is the CONTRACT you're calling (matches the main view's
       // "interacting with"), not a "recipient" — only a plain value transfer is a "to".
       const hasCallData = params?.[0]?.data && params[0].data !== '0x';
-      push(hasCallData ? t('componentsUi.signing.interactingLabel') : t('componentsUi.signing.labelTo', { defaultValue: 'To' }), params?.[0]?.to);
+      push(
+        hasCallData ? t('componentsUi.signing.interactingLabel') : t('componentsUi.signing.labelTo', { defaultValue: 'To' }),
+        params?.[0]?.to,
+        hasCallData ? 'contract' : 'wallet',
+      );
     }
     // EIP-5792 batch: each call's target contract.
     if (method === 'wallet_sendCalls') {
       const calls = params?.[0]?.calls;
-      if (Array.isArray(calls)) calls.forEach((c: any, i: number) => push(`${t('componentsUi.signing.batchCall')} ${i + 1}`, c?.to));
+      if (Array.isArray(calls)) calls.forEach((c: any, i: number) => push(`${t('componentsUi.signing.batchCall')} ${i + 1}`, c?.to, 'contract'));
     }
     return out;
   }, [clearSign, method, params, t]);
@@ -125,15 +137,15 @@ export function AdvancedPanel({ method, params, clearSign }: {
   const detailFields = clearSign?.fields.filter((f) => f.detail) ?? [];
   const dataBytes = data ? Math.floor((data.length - 2) / 2) : 0;
 
-  // Structured rows shown inside the one grey card.
-  const rows: { label: string; value: string; copy?: string }[] = [
-    ...addresses.map((a) => ({ label: a.label, value: midTrunc(a.address), copy: a.address })),
+  // Non-address rows (decoded params, function signature, raw calldata) — the
+  // address rows render above these with their resolved identity.
+  const otherRows: { label: string; value: string; copy?: string }[] = [
     ...detailFields.map((f) => ({ label: localizeLabel(f.label), value: f.value })),
     ...(selector ? [{ label: t('componentsUi.signing.techFunction', { defaultValue: 'Function' }), value: functionSig ?? `${selector} · ${t('componentsUi.signing.techUnknownFn', { defaultValue: 'unrecognized' })}` }] : []),
     ...(data ? [{ label: `CALLDATA · ${dataBytes} BYTES`, value: midTrunc(data, 18, 6), copy: data }] : []),
   ];
 
-  if (rows.length === 0 && !raw) return null;
+  if (addresses.length === 0 && otherRows.length === 0 && !raw) return null;
 
   return (
     <View>
@@ -146,8 +158,13 @@ export function AdvancedPanel({ method, params, clearSign }: {
       </Pressable>
       {open && (
         <View style={styles.drawerCard}>
-          {rows.map((r, i) => (
-            <View key={i} style={[styles.drawerRow, i === 0 && styles.drawerRowFirst]}>
+          {/* Identity-enriched address rows — a resolved name + identicon/glyph
+              + explorer link, with the raw hex kept as ground truth. */}
+          {addresses.map((a, i) => (
+            <AddressRow key={`a${i}`} entry={a} chainId={chainId} first={i === 0} />
+          ))}
+          {otherRows.map((r, i) => (
+            <View key={`o${i}`} style={[styles.drawerRow, addresses.length === 0 && i === 0 && styles.drawerRowFirst]}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.drawerLabel}>{r.label}</Text>
                 <Text style={styles.drawerValue} numberOfLines={1}>{r.value}</Text>
@@ -159,7 +176,7 @@ export function AdvancedPanel({ method, params, clearSign }: {
               the whole point of a 712 review — as a complete, scrollable, copyable
               block, not one lone address. */}
           {!!raw && (
-            <View style={[styles.drawerRow, rows.length === 0 && styles.drawerRowFirst]}>
+            <View style={[styles.drawerRow, addresses.length === 0 && otherRows.length === 0 && styles.drawerRowFirst]}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.drawerLabel}>{method.includes('signTypedData') || method === 'wallet_sendCalls' ? 'JSON' : t('componentsUi.signing.signMessage')}</Text>
                 <ScrollView style={styles.drawerRaw} nestedScrollEnabled>
@@ -171,6 +188,49 @@ export function AdvancedPanel({ method, params, clearSign }: {
           )}
         </View>
       )}
+    </View>
+  );
+}
+
+/**
+ * One address row in the technical panel: role label, resolved identity
+ * (identicon + ENS/contact/account name for a wallet; glyph + token/contract
+ * name for a contract), the raw hex kept underneath as ground truth, plus copy
+ * and block-explorer actions. The name is ADDITIVE — the exact bytes are always
+ * shown, so a spoofed label can't hide the address.
+ */
+function AddressRow({ entry, chainId, first }: {
+  entry: { label: string; address: string; kind: AddrKind; seedName?: string };
+  chainId: number;
+  first: boolean;
+}) {
+  const { name } = useAddressIdentity(entry.address, chainId, entry.kind, entry.seedName);
+  const trunc = midTrunc(entry.address);
+  const explorer = explorerBaseURL(chainId) ? explorerAddressURL(chainId, entry.address) : null;
+
+  const avatar = entry.kind === 'wallet'
+    ? <Identicon seed={entry.address} size={18} />
+    : <View style={styles.drawerContractGlyph}><FileText size={11} color={color.fg.muted} strokeWidth={2} /></View>;
+
+  return (
+    <View style={[styles.drawerRow, first && styles.drawerRowFirst]}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.drawerLabel}>{entry.label}</Text>
+        <View style={styles.drawerIdentityRow}>
+          {avatar}
+          {name
+            ? <Text style={styles.drawerName} numberOfLines={1}>{name}</Text>
+            : <Text style={styles.drawerValue} numberOfLines={1}>{trunc}</Text>}
+        </View>
+        {/* When a name resolved, the exact address still shows — right below it. */}
+        {!!name && <Text style={styles.drawerAddrSub} numberOfLines={1}>{trunc}</Text>}
+      </View>
+      {explorer && (
+        <Pressable onPress={() => openURL(explorer)} hitSlop={10} style={styles.drawerCopy}>
+          <ExternalLink size={14} color={color.fg.muted} strokeWidth={2} />
+        </Pressable>
+      )}
+      <CopyBtn value={entry.address} />
     </View>
   );
 }

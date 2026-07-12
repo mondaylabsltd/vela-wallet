@@ -603,6 +603,19 @@ export const styles = createStyles(() => ({
     color: color.fg.base,
   },
   drawerCopy: { padding: space.xs },
+  // Identity-enriched address rows: a circular identicon (wallet) or contract
+  // glyph, a resolved name, and the raw hex kept underneath as ground truth.
+  drawerIdentityRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  drawerName: { fontSize: scaleFont(13), ...inter.semibold, color: color.fg.base, flexShrink: 1 },
+  drawerContractGlyph: {
+    width: 18, height: 18, borderRadius: radius.sm,
+    backgroundColor: color.bg.raised, alignItems: 'center', justifyContent: 'center',
+  },
+  // The raw address tucked under a resolved name — indented to sit past the icon.
+  drawerAddrSub: {
+    fontSize: scaleFont(11.5), fontFamily: font.mono, color: color.fg.muted,
+    marginTop: 2, marginLeft: 18 + space.sm,
+  },
   // Full typed-data JSON / message — the whole payload being signed, scrollable.
   drawerRaw: { maxHeight: 300, marginTop: 4 },
 
