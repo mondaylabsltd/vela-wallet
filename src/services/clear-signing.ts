@@ -244,6 +244,8 @@ async function detectTokenStandard(chainId: number, addr: string): Promise<Token
 const SEL_TRANSFER = '0xa9059cbb';
 const SEL_TRANSFER_FROM = '0x23b872dd';
 const SEL_APPROVE = '0x095ea7b3';
+const SEL_INCREASE_ALLOWANCE = '0x39509351'; // increaseAllowance(address,uint256)
+const SEL_DECREASE_ALLOWANCE = '0xa457c2d7'; // decreaseAllowance(address,uint256)
 const SEL_SAFE_TRANSFER_721 = '0x42842e0e';      // safeTransferFrom(addr,addr,uint256)
 const SEL_SAFE_TRANSFER_721_DATA = '0xb88d4fde'; // safeTransferFrom(addr,addr,uint256,bytes)
 const SEL_SET_APPROVAL_ALL = '0xa22cb465';
@@ -252,6 +254,7 @@ const SEL_SAFE_BATCH_1155 = '0x2eb2c2d6';        // safeBatchTransferFrom(...)
 
 const TOKEN_STD_SELECTORS = new Set([
   SEL_TRANSFER, SEL_TRANSFER_FROM, SEL_APPROVE,
+  SEL_INCREASE_ALLOWANCE, SEL_DECREASE_ALLOWANCE,
   SEL_SAFE_TRANSFER_721, SEL_SAFE_TRANSFER_721_DATA, SEL_SET_APPROVAL_ALL,
   SEL_SAFE_TRANSFER_1155, SEL_SAFE_BATCH_1155,
 ]);
@@ -277,8 +280,8 @@ async function resolveTokenStandard(
     kind = 'erc1155';
   } else if (selector === SEL_SAFE_TRANSFER_721 || selector === SEL_SAFE_TRANSFER_721_DATA) {
     kind = 'erc721';
-  } else if (selector === SEL_TRANSFER) {
-    kind = 'erc20'; // ERC-20 only — never an NFT
+  } else if (selector === SEL_TRANSFER || selector === SEL_INCREASE_ALLOWANCE || selector === SEL_DECREASE_ALLOWANCE) {
+    kind = 'erc20'; // ERC-20 only — transfer + the (in|de)creaseAllowance extensions
   } else {
     // transferFrom / approve / setApprovalForAll — query the chain.
     kind = await detectTokenStandard(chainId, toAddr);

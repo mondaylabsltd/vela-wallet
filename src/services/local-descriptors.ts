@@ -415,6 +415,22 @@ const ERC20_INTERFACE_DESCRIPTOR = {
           { path: 'spender', label: 'Spender', format: 'addressName' },
         ],
       },
+      // ERC-20 allowance extensions — decode like approve so the amount is scaled
+      // to the token (not a raw base-units integer) and the spender is named.
+      'increaseAllowance(address spender,uint256 addedValue)': {
+        intent: 'Approve',
+        fields: [
+          { path: 'addedValue', label: 'Amount', format: 'tokenAmount', params: { tokenPath: '@.to' } },
+          { path: 'spender', label: 'Spender', format: 'addressName' },
+        ],
+      },
+      'decreaseAllowance(address spender,uint256 subtractedValue)': {
+        intent: 'Revoke',
+        fields: [
+          { path: 'subtractedValue', label: 'Amount', format: 'tokenAmount', params: { tokenPath: '@.to' } },
+          { path: 'spender', label: 'Spender', format: 'addressName' },
+        ],
+      },
     },
   },
 };
