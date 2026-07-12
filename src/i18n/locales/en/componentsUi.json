@@ -105,6 +105,7 @@
       "balanceUnderfundedNative": "Not enough {{symbol}} to cover this transfer — it's expected to fail on-chain.",
       "tokenToContractWarning": "This sends tokens to the token's own contract — they'd be lost forever.",
       "expiredWarning": "The deadline on this transaction has already passed — it's expected to fail.",
+      "expiredTag": "Expired",
       "signInIntent": "Sign in",
       "siweDomain": "Site",
       "siweStatement": "Statement",

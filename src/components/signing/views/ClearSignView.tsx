@@ -169,7 +169,10 @@ export function ClearSignView({ cs, simConfident, walletAddress }: {
       {heroDanger && (
         <WarningBanner severity="danger" text={t('componentsUi.signing.unlimitedWarning')} />
       )}
-      {cs.fields.some(f => f.expired) && (
+      {/* Only banner the expiry when it ISN'T already shown on a visible field row
+          (which now carries its own "已过期" tag) — otherwise it's a third copy of
+          the same fact, next to the deadline row and the expected-to-fail result. */}
+      {cs.fields.some(f => f.expired) && !generic.some(f => f.expired) && (
         <WarningBanner severity="caution" text={t('componentsUi.signing.expiredWarning')} />
       )}
       {cs.bestEffort && (

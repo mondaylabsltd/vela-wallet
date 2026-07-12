@@ -82,6 +82,7 @@
       "balanceUnderfundedNative": "{{symbol}} 余额不足以支付这笔转账 — 预计会在链上失败。",
       "tokenToContractWarning": "这是把代币转给该代币自己的合约 — 转出后将永久无法找回。",
       "expiredWarning": "这笔交易的截止时间已过 — 预计会失败。",
+      "expiredTag": "已过期",
       "signInIntent": "登录",
       "siweDomain": "站点",
       "siweStatement": "声明",
