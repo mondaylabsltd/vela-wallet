@@ -12,7 +12,7 @@
       "step3Subtitle": "İstekler burada otomatik olarak görünür",
       "scanQR": "QR Kodu Tara",
       "orDivider": "veya",
-      "pastePlaceholder": "walletpair:?... URI'sini yapıştırın",
+      "pastePlaceholder": "walletpair bağlantısı veya web adresi",
       "verifyTitle": "Bağlantıyı Doğrula",
       "verifyHint": "Bu kodun dApp'in gösterdiğiyle eşleştiğini onaylayın:",
       "encryptedBadge": "Uçtan uca şifreli",
@@ -31,7 +31,8 @@
       "scanAgain": "Tekrar Tara",
       "retry": "Yeniden Dene",
       "invalidLinkTitle": "Geçersiz Bağlantı",
-      "invalidLinkBody": "Geçerli bir bağlantı linki değil. Desteklenenler: WalletPair URI veya Remote Inject URL."
+      "invalidLinkBody": "Geçerli bir bağlantı linki değil. Desteklenenler: WalletPair URI veya Remote Inject URL.",
+      "pasteHint": "Bir dApp'e bağlanın ya da herhangi bir web sitesini açın"
     },
     "dapp": {
       "noWallet": "Önce bir cüzdan oluşturun",
@@ -93,6 +94,9 @@
       "loadFailed": "Bu sayfa yüklenemedi",
       "retry": "Tekrar dene",
       "disconnect": "Bağlantıyı kes",
+      "a11yAccount": "Hesap",
+      "switchAccount": "Hesap değiştir",
+      "closePage": "Sayfayı kapat",
       "disconnectTitle": "Bu sitenin bağlantısı kesilsin mi?",
       "disconnectBody": "Sitenin adresinizi görebilmesi veya imzalamanızı isteyebilmesi için yeniden bağlanması gerekir.",
       "a11ySecure": "Güvenli site",

@@ -64,10 +64,10 @@ export default function ClearSigningTestScreen() {
   const router = useRouter();
 
   // Tapping a scenario opens a local modal that drives the real <SigningSheet>.
-  const [mockRequest, setMockRequest] = useState<BLEIncomingRequest | null>(null);
+  const [mockScenario, setMockScenario] = useState<typeof SCENARIOS[number] | null>(null);
 
   const handleScenario = useCallback((scenario: typeof SCENARIOS[number]) => {
-    setMockRequest(scenario.request);
+    setMockScenario(scenario);
   }, []);
 
   return (
@@ -112,10 +112,11 @@ export default function ClearSigningTestScreen() {
       </ScrollView>
 
       {/* Mock signing modal — renders independently from DAppConnection */}
-      {mockRequest && (
+      {mockScenario && (
         <MockSigningModal
-          request={mockRequest}
-          onClose={() => setMockRequest(null)}
+          request={mockScenario.request}
+          simOverride={mockScenario.simOverride ?? null}
+          onClose={() => setMockScenario(null)}
         />
       )}
     </ScreenContainer>
@@ -128,8 +129,9 @@ export default function ClearSigningTestScreen() {
 // (no passkey / no transport), so the harness can never drift from production.
 // ---------------------------------------------------------------------------
 
-function MockSigningModal({ request, onClose }: {
+function MockSigningModal({ request, simOverride, onClose }: {
   request: BLEIncomingRequest;
+  simOverride?: import('@/services/tx-simulation').AssetSimResult | null;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -138,6 +140,7 @@ function MockSigningModal({ request, onClose }: {
     <AppModal visible={true} onClose={onClose}>
       <SigningSheet
         request={request}
+        simOverride={simOverride}
         chainId={1}
         account={activeAccount ?? { name: "Wallet" }}
         dappInfo={{ name: "PancakeSwap", url: "https://pancakeswap.finance" }}

@@ -85,6 +85,12 @@ export interface SigningSheetProps {
    * Never set in production — the sim must reflect the real signer's balances.
    */
   simFromOverride?: string;
+  /**
+   * TEST-HARNESS ONLY: use this pre-baked simulation result instead of running a
+   * live sim — lets a scenario demo a state the mainnet sim can't produce on
+   * demand (e.g. a scam's undeclared outflow). Never set in production.
+   */
+  simOverride?: AssetSimResult | null;
 }
 
 export function SigningSheet({
@@ -101,6 +107,7 @@ export function SigningSheet({
   readOnly = false,
   replaySim = null,
   simFromOverride,
+  simOverride,
 }: SigningSheetProps) {
   const { t } = useTranslation();
 
@@ -347,7 +354,7 @@ export function SigningSheet({
     // that stands independent of any ERC-7730 descriptor. When present, the sheet
     // leads with the outcome and calms the descriptor-absence alarms; RECEIVED amounts
     // still read as 'unverified' (spoofable) per the asymmetric model in tx-simulation.
-    const activeSim = readOnly ? replaySim : sim;
+    const activeSim = simOverride ?? (readOnly ? replaySim : sim);
     const simConfident = !!activeSim && activeSim.ok === true;
 
     // Off-chain permit signature (Permit2 / ERC-2612 / DAI). The dApp redeems its
@@ -510,7 +517,7 @@ export function SigningSheet({
   // Simulation result + the decoded hero's asset flows — shared by the loud
   // BalanceChangePreview (unexpected changes / reverts) and the quiet factual
   // "模拟结果" row now shown inside 技术细节 instead of a green promise up top.
-  const simResult = readOnly ? replaySim : sim;
+  const simResult = simOverride ?? (readOnly ? replaySim : sim);
   const heroFlows: { token?: string; dir: 'out' | 'in' }[] =
     (approval || isBatch)
       ? []

@@ -69,6 +69,9 @@ export function ClearSignView({ cs, simConfident, walletAddress }: {
   // nftName field like "#6,529"). Give it the same plain-language one-liner.
   const nftIdField = !isSwapLayout && sendAmounts.length === 0 && recipients.length > 0
     ? generic.find(f => /^#/.test(f.value)) : undefined;
+  // A contract deployment has no counterparty/amount — give it a plain sentence so
+  // the screen isn't just a lone grey eyebrow (principle 06).
+  const isDeploy = cs.intent === 'Deploy contract';
   const summary = isSwapLayout
     ? (swapToOther
         ? t('componentsUi.signing.summarySwapTo', { pay: sendAmounts[0]?.value, receive: receiveAmounts[0]?.value, to: toName })
@@ -77,7 +80,9 @@ export function ClearSignView({ cs, simConfident, walletAddress }: {
       ? t('componentsUi.signing.summarySend', { amount: sendAmounts[0].value, to: toName })
       : (nftIdField && toName)
         ? t('componentsUi.signing.summaryTransferNft', { id: nftIdField.value, to: toName, defaultValue: "You're sending NFT {{id}} to {{to}}." })
-        : undefined;
+        : isDeploy
+          ? t('componentsUi.signing.summaryDeploy', { defaultValue: "You're deploying a new contract. No assets leave your wallet." })
+          : undefined;
   // Restraint: the summary stays neutral ink; only genuine danger warms it. The hero
   // and Zone-3 warnings carry the risk color, so the sentence doesn't double up.
   const summaryTone = sendVariant === 'danger' ? 'danger' : 'neutral';
@@ -138,6 +143,8 @@ export function ClearSignView({ cs, simConfident, walletAddress }: {
           </View>
           <SummaryLine text={summary} tone={summaryTone} emphasize={[nftIdField.value, toName]} />
         </>
+      ) : isDeploy ? (
+        <SummaryLine text={summary} />
       ) : null}
 
       {/* ZONE 2 — to whom / what: spender, recipient, or the interacting contract. */}

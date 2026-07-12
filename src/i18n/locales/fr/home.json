@@ -8,7 +8,7 @@
     "balanceDetailNetworksNote": "Ces réseaux sont injoignables ; votre solde en cache est affiché jusqu'à leur rétablissement.",
     "balanceDetailUnpricedLabel": "Jetons sans prix",
     "balanceDetailUnpricedNote": "Ces soldes sont corrects — il n'y a simplement pas de source de prix pour le moment, ils ne sont donc pas comptés dans votre total.",
-    "balanceDetailStatusRetrying": "Débit limité · nouvelle tentative automatique",
+    "balanceDetailStatusRetrying": "Limite de requêtes · nouvelle tentative automatique",
     "balanceDetailStatusFailed": "RPC indisponible",
     "balanceDetailRetry": "Réessayer maintenant",
     "balanceDetailNoPrice": "Pas de prix",

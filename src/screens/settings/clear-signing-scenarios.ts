@@ -6,13 +6,22 @@
  * presentation (icons); this file owns the request fixtures.
  */
 import type { BLEIncomingRequest } from '@/models/types';
+import type { AssetSimResult } from '@/services/tx-simulation';
 
 export interface ClearSigningScenario {
   id: string;
   labelKey: string;
   subtitleKey: string;
   request: BLEIncomingRequest;
+  /** Test-only: pre-baked simulation the harness feeds instead of a live sim
+   *  (for states the mainnet sim can't produce on demand, e.g. a scam drain). */
+  simOverride?: AssetSimResult;
 }
+
+// Fixtures reused across the new coverage scenarios. (Parallel Two, own account
+// #2 = 0x031d7D57…, is embedded in the send-own-account calldata below.)
+const USDT = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+const WETH = '0xC02aaa39b223FE8D0A0e5C4F27eAD9083C756Cc2';
 
 export const CLEAR_SIGNING_SCENARIOS: ClearSigningScenario[] = [
   {
@@ -453,5 +462,70 @@ export const CLEAR_SIGNING_SCENARIOS: ClearSigningScenario[] = [
       }],
       origin: 'clear-signing-test',
     },
+  },
+
+  // --- New coverage scenarios (gaps in the six principles) ---
+
+  {
+    // Identity (03): the recipient is one of YOUR OWN accounts — resolves to
+    // "Parallel Two" (account name), not a raw 0x / ENS.
+    id: 'send-own-account',
+    labelKey: 'clearSigning.scenarioSendOwnAccount',
+    subtitleKey: 'clearSigning.scenarioSendOwnAccountSub',
+    request: {
+      id: 'test-send-own-account',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+        // transfer(Parallel Two, 250 USDC) — 250e6 = 0x0EE6B280
+        data: '0xa9059cbb000000000000000000000000031d7d57c99caf891e1c250554691fd12d84772b000000000000000000000000000000000000000000000000000000000ee6b280',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+  },
+  {
+    // Sim-as-protagonist (06) + danger (05): a call that LOOKS innocent ("claim()")
+    // but whose simulation reveals an UNDECLARED drain — the loud, uncorroborated
+    // balance-change list is the whole point.
+    id: 'scam-drain',
+    labelKey: 'clearSigning.scenarioScamDrain',
+    subtitleKey: 'clearSigning.scenarioScamDrainSub',
+    request: {
+      id: 'test-scam-drain',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '0x1A2b3C4d5E6f7081920a1B2c3D4e5f6071829304', // unknown (not a known protocol)
+        data: '0x4e71d92d', // claim()
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+    simOverride: {
+      ok: true,
+      engine: 'rpc',
+      changes: [
+        { kind: 'erc20', token: USDT, symbol: 'USDT', decimals: 6, delta: -5000000000n },
+        { kind: 'erc20', token: WETH, symbol: 'WETH', decimals: 18, delta: -1500000000000000000n },
+      ],
+    },
+  },
+  {
+    // The calm deploy path (06): a contract creation reads as "Deploy contract /
+    // no assets leave", not a scary red "Unknown".
+    id: 'deploy-contract',
+    labelKey: 'clearSigning.scenarioDeployContract',
+    subtitleKey: 'clearSigning.scenarioDeployContractSub',
+    request: {
+      id: 'test-deploy-contract',
+      method: 'eth_sendTransaction',
+      params: [{
+        to: '', // no recipient → contract creation
+        data: '0x608060405234801561001057600080fd5b5060f78061001f6000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c80632e64cec114602d575b600080fd5b60336047565b604051603e91906059565b60405180910390f35b60005490565b6000819050919050565b6053816047565b82525050565b6000602082019050606c6000830184604c565b9291505056fea2646970667358221220',
+        value: '0x0',
+      }],
+      origin: 'clear-signing-test',
+    },
+    simOverride: { ok: true, engine: 'rpc', changes: [] },
   },
 ];

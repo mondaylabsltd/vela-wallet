@@ -94,6 +94,9 @@
       "loadFailed": "載入唔到呢個版面",
       "retry": "再試一次",
       "disconnect": "斷開連接",
+      "a11yAccount": "帳戶",
+      "switchAccount": "切換帳戶",
+      "closePage": "閂版面",
       "disconnectTitle": "斷開同呢個網站嘅連接？",
       "disconnectBody": "呢個網站要重新連接先至睇到你嘅地址或者要求你簽署。",
       "a11ySecure": "安全網站",
@@ -109,7 +112,7 @@
   },
   "signHandoff": {
     "signing": "喺 Vela 度確認",
-    "signed": "已傳送",
+    "signed": "已簽署",
     "rejected": "已取消",
     "pending": "請喺 Vela 活動度查看",
     "expired": "呢個簽署請求已經過期",

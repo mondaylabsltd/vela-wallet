@@ -5,10 +5,12 @@
  * counterparty row. The sentence is the novice's entry point; the zones below are
  * the detail.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Text } from 'react-native';
 import { isAddress, shortAddr } from '@/models/types';
 import { resolveRecipientIdentity } from '@/services/recipient-identity';
+import { useWallet } from '@/models/wallet-state';
+import { getSavedContact, contactDisplayName } from '@/services/contacts';
 import { styles } from './signing-core';
 
 export function SummaryLine({ text, tone = 'neutral', emphasize }: {
@@ -42,21 +44,40 @@ function splitEmphasis(text: string, subs: string[]): { t: string; bold: boolean
 
 /**
  * Best human label for a counterparty, for use inside a summary sentence:
- * descriptor name → resolved ENS/Basename → short address. Resolves async (cached);
- * shows the short address until a name arrives so the sentence is never hex-only for
- * long. Returns undefined only when there's no address at all.
+ * descriptor name → saved contact → your own account → ENS/Basename → short
+ * address. Resolves async (cached); shows the own-account name or short address
+ * until a better name arrives so the sentence is never hex-only for long. Returns
+ * undefined only when there's no address at all. (Same priority as
+ * useAddressIdentity — a send to "Parallel Two" must read as the name, not a 0x.)
  */
 export function useResolvedName(address?: string, descriptorName?: string): string | undefined {
-  const [name, setName] = useState<string | undefined>(descriptorName);
+  const { state } = useWallet();
+  // Own account is a sync, high-trust label — seed it before any round-trip.
+  const ownName = useMemo(() => {
+    if (descriptorName || !isAddress(address)) return undefined;
+    return state.accounts.find((a) => a.address.toLowerCase() === address!.toLowerCase())?.name;
+  }, [address, descriptorName, state.accounts]);
+
+  const [name, setName] = useState<string | undefined>(descriptorName ?? ownName);
   useEffect(() => {
     if (descriptorName) { setName(descriptorName); return; }
     if (!isAddress(address)) { setName(undefined); return; }
-    setName(shortAddr(address));
+    setName(ownName ?? shortAddr(address));
     let cancelled = false;
-    resolveRecipientIdentity(address!)
-      .then((r) => { if (!cancelled && r?.name) setName(r.name); })
-      .catch(() => {});
+    (async () => {
+      // A saved contact is your own label → wins over ENS.
+      try {
+        const c = await getSavedContact(address!);
+        const cn = c ? contactDisplayName(c) : '';
+        if (cn) { if (!cancelled) setName(cn); return; }
+      } catch { /* fall through */ }
+      if (ownName) return; // keep your account name over a reverse-ENS lookup
+      try {
+        const r = await resolveRecipientIdentity(address!);
+        if (!cancelled && r?.name) setName(r.name);
+      } catch { /* keep short address */ }
+    })();
     return () => { cancelled = true; };
-  }, [address, descriptorName]);
+  }, [address, descriptorName, ownName]);
   return name;
 }

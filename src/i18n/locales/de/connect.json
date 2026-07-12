@@ -12,7 +12,7 @@
       "step3Subtitle": "Anfragen erscheinen hier automatisch",
       "scanQR": "QR-Code scannen",
       "orDivider": "oder",
-      "pastePlaceholder": "walletpair:?... URI einfügen",
+      "pastePlaceholder": "WalletPair-Link oder Webadresse",
       "verifyTitle": "Verbindung überprüfen",
       "verifyHint": "Bestätigen Sie, dass dieser Code mit dem in der dApp angezeigten übereinstimmt:",
       "encryptedBadge": "Ende-zu-Ende-verschlüsselt",
@@ -31,7 +31,8 @@
       "scanAgain": "Erneut scannen",
       "retry": "Erneut versuchen",
       "invalidLinkTitle": "Ungültiger Link",
-      "invalidLinkBody": "Kein gültiger Verbindungslink. Unterstützt: WalletPair-URI oder Remote-Inject-URL."
+      "invalidLinkBody": "Kein gültiger Verbindungslink. Unterstützt: WalletPair-URI oder Remote-Inject-URL.",
+      "pasteHint": "Eine dApp verbinden oder eine beliebige Website öffnen"
     },
     "dapp": {
       "noWallet": "Erstellen Sie zuerst eine Wallet",
@@ -82,7 +83,7 @@
       "noUrl": "Keine URL zum Öffnen.",
       "preparing": "Wallet wird vorbereitet…",
       "title": "Mit {{host}} verbinden",
-      "body": "Diese Website möchte deine Adresse sehen und dich um eine Signatur bitten. Ohne deine Zustimmung kann sie keine Gelder bewegen.",
+      "body": "Diese Website möchte Ihre Adresse sehen und Sie um eine Signatur bitten. Ohne Ihre Zustimmung kann sie keine Gelder bewegen.",
       "cancel": "Abbrechen",
       "connect": "Verbinden",
       "a11yClose": "Browser schließen",
@@ -93,8 +94,11 @@
       "loadFailed": "Diese Seite konnte nicht geladen werden",
       "retry": "Erneut versuchen",
       "disconnect": "Trennen",
+      "a11yAccount": "Konto",
+      "switchAccount": "Konto wechseln",
+      "closePage": "Seite schließen",
       "disconnectTitle": "Verbindung zu dieser Website trennen?",
-      "disconnectBody": "Die Website muss sich erneut verbinden, bevor sie deine Adresse sehen oder dich um eine Signatur bitten kann.",
+      "disconnectBody": "Die Website muss sich erneut verbinden, bevor sie Ihre Adresse sehen oder Sie um eine Signatur bitten kann.",
       "a11ySecure": "Sichere Website",
       "a11yInsecure": "Unsichere Website – nicht verschlüsselt",
       "historyTitle": "Zuletzt genutzte dApps",
@@ -108,7 +112,7 @@
   },
   "signHandoff": {
     "signing": "In Vela bestätigen",
-    "signed": "Gesendet",
+    "signed": "Signiert",
     "rejected": "Abgebrochen",
     "pending": "In der Vela-Aktivität prüfen",
     "expired": "Diese Signaturanfrage ist abgelaufen",
@@ -120,7 +124,7 @@
   "safariExt": {
     "navTitle": "Safari-Erweiterung",
     "heroTitle": "Vela in Safari nutzen",
-    "heroBody": "Fast jede dApp verbindet sich direkt in Safari mit Vela — nur zum Signieren wechselst du kurz zu Vela für Face ID.",
+    "heroBody": "Fast jede dApp verbindet sich direkt in Safari mit Vela — nur zum Signieren wechseln Sie kurz zu Vela für Face ID.",
     "stepsLabel": "Einmal aktivieren",
     "step1": "Öffne eine dApp-Website in Safari.",
     "step2": "Tippe auf „Aa“ → Erweiterungen verwalten und aktiviere Vela Wallet.",
@@ -129,7 +133,7 @@
     "oneTapTitle": "Signieren mit einem Tipp",
     "oneTapBody": "Nach der Face-ID-Bestätigung geht’s automatisch zurück zur Seite. Tippe im Erweiterungs-Popup einmal auf „One-Tap-Signieren testen“ — dann entfällt sogar die Abfrage „In Vela öffnen?“.",
     "cta": "getvela.app in Safari öffnen",
-    "ctaHint": "Dort findest du das „Aa“-Menü.",
+    "ctaHint": "Dort finden Sie das „Aa“-Menü.",
     "sectionLabel": "Browser",
     "settingsTitle": "Vela in Safari nutzen",
     "settingsSubtitle": "Mit jeder dApp im Browser verbinden"

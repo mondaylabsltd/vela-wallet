@@ -12,7 +12,7 @@
       "step3Subtitle": "As solicitações aparecem aqui automaticamente",
       "scanQR": "Escanear QR code",
       "orDivider": "ou",
-      "pastePlaceholder": "Cole o URI walletpair:?...",
+      "pastePlaceholder": "link walletpair ou endereço web",
       "verifyTitle": "Verificar conexão",
       "verifyHint": "Confirme que este código é igual ao que o dApp exibe:",
       "encryptedBadge": "Criptografia de ponta a ponta",
@@ -31,7 +31,8 @@
       "scanAgain": "Escanear de novo",
       "retry": "Tentar de novo",
       "invalidLinkTitle": "Link inválido",
-      "invalidLinkBody": "Não é um link de conexão válido. Compatíveis: URI WalletPair ou Remote Inject URL."
+      "invalidLinkBody": "Não é um link de conexão válido. Compatíveis: URI WalletPair ou Remote Inject URL.",
+      "pasteHint": "Conecte um dApp ou abra qualquer site"
     },
     "dapp": {
       "noWallet": "Crie uma carteira primeiro",
@@ -93,6 +94,9 @@
       "loadFailed": "Não foi possível carregar esta página",
       "retry": "Tentar novamente",
       "disconnect": "Desconectar",
+      "a11yAccount": "Conta",
+      "switchAccount": "Trocar de conta",
+      "closePage": "Fechar página",
       "disconnectTitle": "Desconectar este site?",
       "disconnectBody": "O site precisará se reconectar antes de poder ver seu endereço ou pedir que você assine.",
       "a11ySecure": "Site seguro",
@@ -108,7 +112,7 @@
   },
   "signHandoff": {
     "signing": "Confirmar no Vela",
-    "signed": "Enviado",
+    "signed": "Assinado",
     "rejected": "Cancelado",
     "pending": "Confira na Atividade do Vela",
     "expired": "Esta solicitação de assinatura expirou",

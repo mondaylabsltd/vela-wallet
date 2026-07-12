@@ -43,6 +43,7 @@
       "statusSucceeded": "Başarılı",
       "statusPending": "Beklemede",
       "opContractInteraction": "Sözleşme etkileşimi",
+      "opConnected": "Bağlandı",
       "opSignature": "İmza",
       "opTypedDataSignature": "Yapılandırılmış Veri İmzası",
       "opTransfer": "Transfer",

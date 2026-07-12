@@ -12,7 +12,7 @@
       "step3Subtitle": "リクエストはここに自動で表示されます",
       "scanQR": "QR コードをスキャン",
       "orDivider": "または",
-      "pastePlaceholder": "walletpair:?... の URI を貼り付け",
+      "pastePlaceholder": "walletpair リンクまたはウェブアドレス",
       "verifyTitle": "接続を確認",
       "verifyHint": "このコードが dApp に表示されているものと一致するか確認してください:",
       "encryptedBadge": "エンドツーエンド暗号化",
@@ -31,7 +31,8 @@
       "scanAgain": "もう一度スキャン",
       "retry": "再試行",
       "invalidLinkTitle": "無効なリンク",
-      "invalidLinkBody": "有効な接続リンクではありません。対応形式: WalletPair URI または Remote Inject URL。"
+      "invalidLinkBody": "有効な接続リンクではありません。対応形式: WalletPair URI または Remote Inject URL。",
+      "pasteHint": "dApp に接続、または任意のウェブサイトを開く"
     },
     "dapp": {
       "noWallet": "先にウォレットを作成してください",
@@ -93,6 +94,9 @@
       "loadFailed": "このページを読み込めませんでした",
       "retry": "再試行",
       "disconnect": "切断",
+      "a11yAccount": "アカウント",
+      "switchAccount": "アカウントを切り替える",
+      "closePage": "ページを閉じる",
       "disconnectTitle": "このサイトを切断しますか？",
       "disconnectBody": "このサイトがあなたのアドレスを確認したり署名を求めたりするには、再接続が必要になります。",
       "a11ySecure": "安全なサイト",

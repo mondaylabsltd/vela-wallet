@@ -12,7 +12,7 @@
       "step3Subtitle": "Các yêu cầu sẽ tự động xuất hiện tại đây",
       "scanQR": "Quét mã QR",
       "orDivider": "hoặc",
-      "pastePlaceholder": "Dán URI walletpair:?...",
+      "pastePlaceholder": "Liên kết walletpair hoặc địa chỉ web",
       "verifyTitle": "Xác minh kết nối",
       "verifyHint": "Xác nhận mã này khớp với mã mà dApp hiển thị:",
       "encryptedBadge": "Mã hóa đầu cuối",
@@ -31,7 +31,8 @@
       "scanAgain": "Quét lại",
       "retry": "Thử lại",
       "invalidLinkTitle": "Liên kết không hợp lệ",
-      "invalidLinkBody": "Không phải liên kết kết nối hợp lệ. Hỗ trợ: URI WalletPair hoặc URL Remote Inject."
+      "invalidLinkBody": "Không phải liên kết kết nối hợp lệ. Hỗ trợ: URI WalletPair hoặc URL Remote Inject.",
+      "pasteHint": "Kết nối một dApp, hoặc mở bất kỳ trang web nào"
     },
     "dapp": {
       "noWallet": "Hãy tạo ví trước",
@@ -93,6 +94,9 @@
       "loadFailed": "Không thể tải trang này",
       "retry": "Thử lại",
       "disconnect": "Ngắt kết nối",
+      "a11yAccount": "Tài khoản",
+      "switchAccount": "Chuyển tài khoản",
+      "closePage": "Đóng trang",
       "disconnectTitle": "Ngắt kết nối trang này?",
       "disconnectBody": "Trang web sẽ cần kết nối lại trước khi có thể xem địa chỉ của bạn hoặc yêu cầu bạn ký.",
       "a11ySecure": "Trang an toàn",
@@ -108,7 +112,7 @@
   },
   "signHandoff": {
     "signing": "Xác nhận trong Vela",
-    "signed": "Đã gửi",
+    "signed": "Đã ký",
     "rejected": "Đã hủy",
     "pending": "Kiểm tra trong Hoạt động Vela",
     "expired": "Yêu cầu ký này đã hết hạn",

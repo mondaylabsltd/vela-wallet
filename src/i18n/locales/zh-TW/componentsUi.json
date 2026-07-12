@@ -72,6 +72,7 @@
       "balanceUnderfundedNative": "{{symbol}} 餘額不足以支付這筆轉帳 — 預計會在鏈上失敗。",
       "tokenToContractWarning": "這會把代幣發送到該代幣自己的合約 — 它們將永遠遺失。",
       "expiredWarning": "這筆交易的期限已過 — 預計會失敗。",
+      "expiredTag": "已過期",
       "signInIntent": "登入",
       "siweDomain": "網站",
       "siweStatement": "聲明",
@@ -104,6 +105,7 @@
       "summaryReceive": "你將收到 {{amount}}。",
       "summaryApprove": "你允許 {{spender}} 之後最多動用你的 {{amount}}。",
       "summaryApproveUnlimited": "你允許 {{spender}} 動用你全部的 {{token}}，且無任何上限。",
+      "summaryTransferNft": "你正把 NFT {{id}} 轉給 {{to}}。",
       "summaryApproveNft": "你允許 {{operator}} 轉移這個系列中你擁有的每一個 NFT。",
       "summaryRevoke": "你正撤銷 {{spender}} 動用你 {{token}} 的權限。",
       "summaryPermit": "你正在簽署授權簽章——{{spender}} 之後最多能代你動用 {{amount}}。",
@@ -181,7 +183,7 @@
     },
     "dock": {
       "receive": "收款",
-      "send": "轉賬",
+      "send": "發送",
       "scan": "掃描"
     },
     "networkFilter": {

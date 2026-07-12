@@ -113,8 +113,8 @@ async function resolveScenario(req: any): Promise<ClearSignResult | null> {
 }
 
 describe('clear-signing harness scenarios', () => {
-  it('covers all 22 scenarios', () => {
-    expect(CLEAR_SIGNING_SCENARIOS.length).toBe(22);
+  it('covers all 25 scenarios', () => {
+    expect(CLEAR_SIGNING_SCENARIOS.length).toBe(25);
   });
 
   // Every scenario must resolve + detect approvals without throwing, and never
@@ -166,13 +166,16 @@ describe('clear-signing harness scenarios', () => {
 
   it('every scenario calldata is ABI word-aligned (selector + N×32 bytes)', () => {
     const bad: string[] = [];
-    const check = (id: string, data?: string) => {
+    const check = (id: string, data?: string, to?: string) => {
       if (!data || data === '0x') return;
+      // A contract creation (no `to`) carries init bytecode, not ABI calldata — the
+      // word-alignment rule doesn't apply.
+      if (!to) return;
       const body = data.slice(2 + 8); // strip 0x + 4-byte selector
       if (body.length % 64 !== 0) bad.push(`${id} (body ${body.length} hex, rem ${body.length % 64})`);
     };
     for (const s of CLEAR_SIGNING_SCENARIOS) {
-      if (s.request.method === 'eth_sendTransaction') check(s.id, s.request.params[0].data);
+      if (s.request.method === 'eth_sendTransaction') check(s.id, s.request.params[0].data, s.request.params[0].to);
       if (s.request.method === 'wallet_sendCalls') {
         (s.request.params[0].calls ?? []).forEach((c: any, i: number) => check(`${s.id}#${i}`, c.data));
       }

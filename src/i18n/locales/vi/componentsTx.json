@@ -43,6 +43,7 @@
       "statusSucceeded": "Thành công",
       "statusPending": "Đang chờ",
       "opContractInteraction": "Tương tác hợp đồng",
+      "opConnected": "Đã kết nối",
       "opSignature": "Chữ ký",
       "opTypedDataSignature": "Chữ ký dữ liệu có cấu trúc",
       "opTransfer": "Chuyển",
