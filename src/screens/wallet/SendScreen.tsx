@@ -33,7 +33,7 @@ import { buildSplitCalls, sumSplitBaseUnits, buildMultiTokenCalls, toMultiTokenS
 import { resolveTokenAmount } from '@/services/fiat-convert';
 import { BatchImportSheet } from '@/components/send/BatchImportSheet';
 import { useTokenMultiSelect } from '@/hooks/use-token-multi-select';
-import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
+import { formatTokenAmount, useLocalePrefs, numberSeparators, parseLocaleNumber } from '@/services/locale-format';
 import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { TransactionReceipt, type ReceiptTransfer } from '@/components/ui/TransactionReceipt';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
@@ -1314,11 +1314,14 @@ export default function SendScreen() {
                   style={[styles.amountInput, { fontSize: amountFontSize(amount) }]}
                   placeholder="0"
                   placeholderTextColor={color.fg.subtle}
-                  value={amount}
+                  // Stored canonical (dot); shown with the locale decimal so a
+                  // dot_comma user sees "47,28" and can type a comma — every
+                  // downstream parseFloat(amount) keeps its canonical input.
+                  value={amount.replace('.', numberSeparators().decimal)}
                   editable={!amountLocked}
                   onChangeText={(t) => {
                     const maxDec = inputInUsd ? fiatDecimals : selectedToken.decimals;
-                    const sanitized = sanitizeAmountInput(t, maxDec);
+                    const sanitized = sanitizeAmountInput(parseLocaleNumber(t), maxDec);
                     if (sanitized !== null) setAmount(sanitized);
                   }}
                   keyboardType="decimal-pad"

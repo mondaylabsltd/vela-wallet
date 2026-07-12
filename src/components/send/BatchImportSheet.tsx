@@ -34,7 +34,7 @@ import { getRate } from '@/services/currency';
 import { currencyMeta } from '@/services/currency-catalog';
 import { pickTable, saveTextFile } from '@/services/file-io';
 import { makeRecipientId, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
-import { formatTokenAmount } from '@/services/locale-format';
+import { formatTokenAmount, useLocalePrefs, numberSeparators, parseLocaleNumber } from '@/services/locale-format';
 import { showAlert, hapticSuccess, hapticLight } from '@/services/platform';
 
 const TEMPLATE_CSV =
@@ -59,6 +59,7 @@ interface Props {
 
 export function BatchImportSheet({ visible, onClose, token, currencyCode, currencySymbol, onApply, maxRecipients }: Props) {
   const { t } = useTranslation();
+  useLocalePrefs(); // re-render on number-format change
   const priced = !!token.priceUsd && token.priceUsd > 0;
 
   const [unit, setUnit] = useState<Unit>(priced ? 'fiat' : 'token');
@@ -288,13 +289,13 @@ export function BatchImportSheet({ visible, onClose, token, currencyCode, curren
                   accessibilityElementsHidden
                   importantForAccessibility="no-hide-descendants"
                 >
-                  {rateInput || '0'}
+                  {(rateInput || '0').replace('.', numberSeparators().decimal)}
                 </Text>
                 <TextInput
                   testID="batch-rate"
                   style={[styles.rateInput, { width: Math.max(28, rateInputWidth + 6) }]}
-                  value={rateInput}
-                  onChangeText={(v) => { setRateInput(v.replace(/[^0-9.]/g, '')); setRateEdited(true); }}
+                  value={rateInput.replace('.', numberSeparators().decimal)}
+                  onChangeText={(v) => { setRateInput(parseLocaleNumber(v).replace(/[^0-9.]/g, '')); setRateEdited(true); }}
                   keyboardType="decimal-pad"
                   placeholder="0"
                   placeholderTextColor={color.fg.subtle}

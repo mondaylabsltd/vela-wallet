@@ -16,6 +16,7 @@ import { color, createStyles, inter, radius, space, text } from '@/constants/the
 import { chainName, networkForChainId, tokenBadgeNetwork } from '@/models/network';
 import { tokenChainId, tokenLogoURLs, type APIToken } from '@/models/types';
 import { buildEIP681, buildPayLink } from '@/services/eip681';
+import { useLocalePrefs, numberSeparators, parseLocaleNumber } from '@/services/locale-format';
 import { hapticLight } from '@/services/platform';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { ChevronDown } from 'lucide-react-native';
@@ -45,6 +46,7 @@ function sanitizeAmount(text: string, maxDecimals: number): string {
 
 export function ReceiveRequestControls({ recipient, onChange }: Props) {
   const { t } = useTranslation();
+  useLocalePrefs(); // re-render on number-format change
 
   const [asset, setAsset] = useState<APIToken>(defaultAsset);
   const [amount, setAmount] = useState('');
@@ -115,8 +117,8 @@ export function ReceiveRequestControls({ recipient, onChange }: Props) {
       <View style={styles.amountRow}>
         <TextInput
           style={styles.amountInput}
-          value={amount}
-          onChangeText={(txt) => setAmount(sanitizeAmount(txt, asset.decimals))}
+          value={amount.replace('.', numberSeparators().decimal)}
+          onChangeText={(txt) => setAmount(sanitizeAmount(parseLocaleNumber(txt), asset.decimals))}
           placeholder={t('receive.request.amountPlaceholder')}
           placeholderTextColor={color.fg.subtle}
           keyboardType="decimal-pad"

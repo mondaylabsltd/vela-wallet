@@ -10,7 +10,7 @@ jest.mock('@/services/storage', () => ({
 
 import {
   formatNumber, formatDate, formatTime, formatDateTime, numberSeparators, groupDigits,
-  formatCompact, formatTokenAmount,
+  formatCompact, formatTokenAmount, inputSeparators, parseLocaleNumber,
 } from '@/services/locale-format';
 
 describe('locale-format: numbers', () => {
@@ -51,6 +51,38 @@ describe('locale-format: numbers', () => {
     expect(groupDigits('1234567', 'indian')).toBe('12,34,567');
     expect(groupDigits('12', 'comma_dot')).toBe('12'); // short passes through
     expect(groupDigits('0', 'dot_comma')).toBe('0');
+  });
+});
+
+describe('locale-format: numeric INPUT (seed + parse)', () => {
+  it('inputSeparators: locale decimal, no grouping', () => {
+    expect(inputSeparators('comma_dot')).toEqual({ group: '', decimal: '.' });
+    expect(inputSeparators('dot_comma')).toEqual({ group: '', decimal: ',' });
+    expect(inputSeparators('space_comma')).toEqual({ group: '', decimal: ',' });
+    expect(inputSeparators('indian')).toEqual({ group: '', decimal: '.' });
+  });
+
+  it('parseLocaleNumber → canonical (dot decimal, no grouping)', () => {
+    // comma_dot: strip comma groups, keep dot decimal
+    expect(parseLocaleNumber('1,234.56', 'comma_dot')).toBe('1234.56');
+    expect(parseLocaleNumber('47.284177', 'comma_dot')).toBe('47.284177');
+    // dot_comma (EU): the reported case — comma decimal → dot
+    expect(parseLocaleNumber('47,284177', 'dot_comma')).toBe('47.284177');
+    expect(parseLocaleNumber('1.234,56', 'dot_comma')).toBe('1234.56');
+    // space_comma (fr): any space is grouping, comma is decimal
+    expect(parseLocaleNumber('1 234,56', 'space_comma')).toBe('1234.56');
+    expect(parseLocaleNumber('1 234,56', 'space_comma')).toBe('1234.56'); // NBSP
+    // indian grouping
+    expect(parseLocaleNumber('12,34,567.8', 'indian')).toBe('1234567.8');
+    // Arabic-Indic digits → ASCII
+    expect(parseLocaleNumber('٤٧,٥', 'dot_comma')).toBe('47.5');
+  });
+
+  it('parse round-trips a dot_comma-seeded input value', () => {
+    // A dot_comma field seeds the value with a comma decimal + no grouping, e.g.
+    // "47,284177"; parsing must recover the canonical form for parseTokenAmount.
+    const seeded = '47,284177';
+    expect(parseLocaleNumber(seeded, 'dot_comma')).toBe('47.284177');
   });
 });
 
