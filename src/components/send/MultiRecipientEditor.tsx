@@ -19,6 +19,7 @@ import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { sumSplitBaseUnits } from '@/services/batch-send';
 import { toBaseUnits, fromBaseUnits } from '@/services/eip681';
+import { useLocalePrefs, numberSeparators, parseLocaleNumber } from '@/services/locale-format';
 
 export interface RecipientDraft {
   id: string;
@@ -76,6 +77,7 @@ export function MultiRecipientEditor({
   recipients, onChange, tokenSymbol, decimals, priceUsd, balance, formatUsd, onPickContact, onImport, maxRecipients = 20,
 }: Props) {
   const { t } = useTranslation();
+  useLocalePrefs(); // re-render on number-format change
 
   const patch = (id: string, change: Partial<RecipientDraft>) =>
     onChange(recipients.map((r) => (r.id === id ? { ...r, ...change } : r)));
@@ -132,8 +134,8 @@ export function MultiRecipientEditor({
             <View style={styles.amountRow}>
               <TextInput
                 style={styles.amountInput}
-                value={r.amount}
-                onChangeText={(v) => patch(r.id, { amount: sanitizeAmount(v, decimals) })}
+                value={r.amount.replace('.', numberSeparators().decimal)}
+                onChangeText={(v) => patch(r.id, { amount: sanitizeAmount(parseLocaleNumber(v), decimals) })}
                 placeholder="0"
                 placeholderTextColor={color.fg.subtle}
                 keyboardType="decimal-pad"

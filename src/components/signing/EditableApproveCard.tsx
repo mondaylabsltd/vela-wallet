@@ -27,7 +27,7 @@ import {
   formatTokenAmount,
   isUnboundedAmount,
 } from '@/services/approval-guard';
-import { useLocalePrefs, numberSeparators } from '@/services/locale-format';
+import { useLocalePrefs, numberSeparators, inputSeparators, parseLocaleNumber } from '@/services/locale-format';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 
 interface Props {
@@ -67,6 +67,10 @@ function AmountCard({
   const { t } = useTranslation();
   useLocalePrefs();
   const sep = numberSeparators();
+  // Editable input uses the locale decimal mark (no grouping) so it reads the same
+  // as the display value — "47,284177", not the canonical "47.284177".
+  const inSep = inputSeparators();
+  const seedInput = (raw: bigint) => formatTokenAmount(raw, decimals, 6, inSep);
   const dc = useDisplayCurrency();
   const requested = approval.amountRaw ?? 0n;
   const requestedFinite = !approval.isUnbounded && requested > 0n;
@@ -80,7 +84,7 @@ function AmountCard({
   // request forces a deliberate choice (custom).
   const [mode, setMode] = useState<Mode>(requestedFinite ? 'requested' : 'custom');
   const [customText, setCustomText] = useState<string>(
-    requestedFinite ? formatTokenAmount(requested, decimals) : '',
+    requestedFinite ? seedInput(requested) : '',
   );
 
   // Derive the chosen amount + validity from mode/customText.
@@ -92,7 +96,7 @@ function AmountCard({
     // custom
     const trimmed = customText.trim();
     if (trimmed === '') return { choice: null, error: null as string | null, displayRaw: null as bigint | null };
-    const raw = parseTokenAmount(trimmed, decimals);
+    const raw = parseTokenAmount(parseLocaleNumber(trimmed), decimals);
     if (raw === null) return { choice: null, error: t('componentsUi.signingApprove.invalidAmount'), displayRaw: null };
     if (isUnboundedAmount(raw, approval.amountBits ?? 256)) {
       return { choice: null, error: t('componentsUi.signingApprove.unlimitedDisabled'), displayRaw: raw };
@@ -151,14 +155,14 @@ function AmountCard({
           <PresetChip
             label={t('componentsUi.signingApprove.requested')}
             active={mode === 'requested'}
-            onPress={() => { setMode('requested'); setCustomText(formatTokenAmount(requested, decimals)); }}
+            onPress={() => { setMode('requested'); setCustomText(seedInput(requested)); }}
           />
         )}
         {hasBalanceCap && (
           <PresetChip
             label={t('componentsUi.signingApprove.balanceCap', { defaultValue: 'Balance' })}
             active={mode === 'balance'}
-            onPress={() => { setMode('balance'); setCustomText(formatTokenAmount(balanceRaw!, decimals)); }}
+            onPress={() => { setMode('balance'); setCustomText(seedInput(balanceRaw!)); }}
           />
         )}
         <PresetChip

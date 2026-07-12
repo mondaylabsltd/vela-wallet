@@ -124,6 +124,36 @@ export function numberSeparators(key?: NumberFormatKey): { group: string; decima
 }
 
 /**
+ * Separators for seeding an EDITABLE numeric input: the preset's decimal mark,
+ * but NO grouping — thousands separators shouldn't jump around while typing.
+ * Pass this as the `sep` to a token/amount formatter so the field shows e.g.
+ * "1234,56" (locale decimal) instead of the canonical "1234.56".
+ */
+export function inputSeparators(key?: NumberFormatKey): { group: string; decimal: string } {
+  return { group: '', decimal: numberSeparators(key).decimal };
+}
+
+/**
+ * Normalize a user-typed, locale-formatted amount into a CANONICAL numeric string
+ * (ASCII digits, '.' decimal, no grouping) that parseTokenAmount / parseFloat /
+ * BigInt can consume. Strips the preset's group separator (any whitespace kind for
+ * space grouping) and converts its decimal mark to '.'. Also maps Arabic-Indic
+ * digits to ASCII. A field that shows "1 234,56" or "١٢٣٤,٥٦" parses correctly;
+ * a plain "1234.56" (foreign keyboard) still works under comma_dot/indian.
+ */
+export function parseLocaleNumber(text: string, key?: NumberFormatKey): string {
+  const { group, decimal } = numberSeparators(key);
+  let s = String(text ?? '').trim();
+  // Arabic-Indic (U+0660–0669) + Extended (U+06F0–06F9) digits → ASCII.
+  s = s.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+       .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06F0));
+  if (/\s/.test(group)) s = s.replace(/\s/g, ''); // space grouping: strip every whitespace kind
+  else if (group) s = s.split(group).join('');
+  if (decimal !== '.') s = s.split(decimal).join('.');
+  return s;
+}
+
+/**
  * Group an INTEGER DIGIT STRING with the chosen preset's grouping (incl. Indian
  * 2-3), WITHOUT routing through a JS `number`. This is the bigint-safe entry point
  * for the token/amount formatters — a uint256 base-unit string must never become a
