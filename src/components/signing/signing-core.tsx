@@ -236,6 +236,9 @@ export const styles = createStyles(() => ({
   // the whole sheet keeps one clean left edge. No 'Amount' sub-label — the summary
   // right below carries the ≈ \$ and the direction.
   heroRow: { flexDirection: 'row', alignItems: 'center', paddingTop: space.xs, paddingBottom: space.sm, gap: space.md },
+  // Amount + a small token logo sitting beside the ticker (the token's "name"),
+  // sized ~the ticker so it identifies the asset without competing with the number.
+  heroAmountLine: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   heroAmount: { fontSize: text['5xl'], ...inter.bold, color: color.fg.base, letterSpacing: -1.2 },
   heroTicker: { fontSize: text['2xl'], ...inter.bold, color: color.fg.muted },
   tokenLabel: {

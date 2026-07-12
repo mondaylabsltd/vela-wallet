@@ -11,9 +11,11 @@ import { View, Text, Pressable, ScrollView } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as Clipboard from 'expo-clipboard';
 import { color } from '@/constants/theme';
-import { isAddress } from '@/models/types';
+import { isAddress, tokenLogoURLsByAddress } from '@/models/types';
 import { type ClearSignResult } from '@/services/clear-signing';
+import { knownToken } from '@/services/tokens';
 import { lookupSelector } from '@/services/selector-registry';
+import { TokenLogo } from '@/components/TokenLogo';
 import { explorerBaseURL, explorerAddressURL } from '@/models/network';
 import { openURL } from '@/services/platform';
 import { useLocalePrefs, numberSeparators } from '@/services/locale-format';
@@ -101,11 +103,23 @@ export function AdvancedPanel({ method, params, clearSign, simResult = null, her
   // contract) — the full 0x stays visible either way.
   const addresses = useMemo(() => {
     const seen = new Set<string>();
-    const out: { label: string; address: string; kind: AddrKind; seedName?: string }[] = [];
-    const push = (label: string, a: string | undefined, kind: AddrKind, seedName?: string) => {
-      if (a && isAddress(a) && !seen.has(a.toLowerCase())) { seen.add(a.toLowerCase()); out.push({ label, address: a, kind, seedName }); }
+    const out: { label: string; address: string; kind: AddrKind; seedName?: string; isToken?: boolean }[] = [];
+    // isToken → render the real token logo (name-sized) instead of a contract glyph.
+    const push = (label: string, a: string | undefined, kind: AddrKind, seedName?: string, isToken?: boolean) => {
+      if (a && isAddress(a) && !seen.has(a.toLowerCase())) {
+        seen.add(a.toLowerCase());
+        out.push({ label, address: a, kind, seedName, isToken: isToken ?? (kind === 'contract' && !!knownToken(a)) });
+      }
     };
     if (clearSign) {
+      // Token contracts referenced by amount fields (transfer token, swap in/out) —
+      // pushed FIRST so a token op's contract shows as its token (logo + address),
+      // not a bare "interacting with". Deduped against the interacting contract.
+      for (const f of clearSign.fields) {
+        if ((f.role === 'send-amount' || f.role === 'receive-amount') && f.tokenAddress) {
+          push(t('componentsUi.signing.labelToken', { defaultValue: 'Token' }), f.tokenAddress, 'contract', undefined, true);
+        }
+      }
       // A spender is a contract (router/protocol); recipients/owners/generic are
       // treated as wallets (identicon + name), the safer, more useful default.
       for (const f of clearSign.fields) if (f.address) push(localizeLabel(f.label), f.address, f.role === 'spender' ? 'contract' : 'wallet');
@@ -231,7 +245,7 @@ export function AdvancedPanel({ method, params, clearSign, simResult = null, her
  * shown, so a spoofed label can't hide the address.
  */
 function AddressRow({ entry, chainId, first }: {
-  entry: { label: string; address: string; kind: AddrKind; seedName?: string };
+  entry: { label: string; address: string; kind: AddrKind; seedName?: string; isToken?: boolean };
   chainId: number;
   first: boolean;
 }) {
@@ -239,9 +253,13 @@ function AddressRow({ entry, chainId, first }: {
   const trunc = midTrunc(entry.address);
   const explorer = explorerBaseURL(chainId) ? explorerAddressURL(chainId, entry.address) : null;
 
-  const avatar = entry.kind === 'wallet'
-    ? <Identicon seed={entry.address} size={18} />
-    : <View style={styles.drawerContractGlyph}><FileText size={11} color={color.fg.muted} strokeWidth={2} /></View>;
+  // A token → its real logo at name size; a wallet → its identicon fingerprint;
+  // any other contract → a neutral glyph.
+  const avatar = entry.isToken
+    ? <TokenLogo symbol={name ?? '?'} logoUrls={tokenLogoURLsByAddress(chainId, entry.address)} size={18} />
+    : entry.kind === 'wallet'
+      ? <Identicon seed={entry.address} size={18} />
+      : <View style={styles.drawerContractGlyph}><FileText size={11} color={color.fg.muted} strokeWidth={2} /></View>;
 
   return (
     <View style={[styles.drawerRow, first && styles.drawerRowFirst]}>
