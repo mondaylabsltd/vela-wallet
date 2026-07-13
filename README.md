@@ -14,7 +14,8 @@ Runs on **iOS**, **Android**, and **Web** from a single codebase.
 - **Multi-chain portfolio** — Balances and USD prices across all chains in one view. Native tokens, stablecoins, wrapped assets, and custom ERC-20s.
 - **On-chain pricing** — DEX quotes (Uniswap V3, PancakeSwap, Aerodrome) with Chainlink oracle fallback. No third-party price API dependency.
 - **Deposit detection** — Real-time balance monitoring with haptic notification when incoming transfers land.
-- **DApp Connect** — Pair with the Vela browser extension over Bluetooth to sign transactions from your desktop.
+- **DApp Connect** — Pair with compatible dApps over WalletPair's encrypted WebSocket relay to sign transactions from Vela.
+- **HTTPS Web Wallet** — dApps can integrate `@vela-wallet/sdk` and open `wallet.getvela.app` for account consent and passkey signing, without a native app or extension.
 - **Cross-device recovery** — Cloud-synced passkey backup via iCloud (iOS) or Google BlockStore (Android).
 - **Fully self-hostable** — All three backend services (chain data, passkey index, bundler) are open source and can be self-deployed.
 

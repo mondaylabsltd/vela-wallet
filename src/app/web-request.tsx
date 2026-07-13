@@ -1,0 +1,264 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
+import { ShieldCheck, X } from 'lucide-react-native';
+import { useWallet } from '@/models/wallet-state';
+import { useDAppConnection } from '@/models/dapp-connection';
+import { getGrant, resolveGranted, setGrant } from '@/services/dapp-permissions';
+import { signAccountIndex } from '@/models/dapp-request-routing';
+import { assertChainSupported } from '@/hooks/use-dapp-signing';
+import { WebPopupTransport, isAllowedWebDAppOrigin, type WebPopupPeer } from '@/services/web-popup-transport';
+import { color, font, inter, space, text as textSize } from '@/constants/theme';
+import {
+  VELA_WEB_CHANNEL,
+  VELA_WEB_READY,
+  VELA_WEB_RESPONSE,
+  isVelaWebInit,
+  type VelaWebReadyMessage,
+  type VelaWebResponseMessage,
+} from '../../packages/vela-sdk/src/protocol';
+
+type Phase = 'waiting' | 'consent' | 'processing' | 'done' | 'error' | 'no-wallet';
+
+function hostOf(origin: string): string {
+  try { return new URL(origin).host; } catch { return origin; }
+}
+
+function closePopupSoon(): void {
+  if (typeof window === 'undefined') return;
+  window.setTimeout(() => window.close(), 250);
+}
+
+export default function WebRequestScreen(): React.ReactElement {
+  const { session } = useLocalSearchParams<{ session?: string }>();
+  const sessionId = typeof session === 'string' ? session : '';
+  const { state, activeAccount, dispatch } = useWallet();
+  const { beginExtensionSign } = useDAppConnection();
+  const [phase, setPhase] = useState<Phase>('waiting');
+  const [peer, setPeer] = useState<WebPopupPeer | null>(null);
+  const [error, setError] = useState('');
+  const acceptedRef = useRef(false);
+  const processedRef = useRef(false);
+  const peerRef = useRef<WebPopupPeer | null>(null);
+
+  const respond = useCallback((target: WebPopupPeer, result?: unknown, rpcError?: { code: number; message: string }) => {
+    const message: VelaWebResponseMessage = {
+      channel: VELA_WEB_CHANNEL,
+      type: VELA_WEB_RESPONSE,
+      sessionId: target.sessionId,
+      id: target.request.id,
+      ...(rpcError ? { error: rpcError } : { result: result ?? null }),
+    };
+    target.port.postMessage(message);
+    target.port.close();
+    peerRef.current = null;
+    setPhase(rpcError ? 'error' : 'done');
+    if (rpcError) setError(rpcError.message);
+    closePopupSoon();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !sessionId) {
+      setPhase('error');
+      setError('Invalid Vela request session.');
+      return;
+    }
+    const opener = window.opener;
+    if (!opener) {
+      setPhase('error');
+      setError('Open this page from a dApp using the Vela SDK.');
+      return;
+    }
+
+    const ready: VelaWebReadyMessage = {
+      channel: VELA_WEB_CHANNEL,
+      type: VELA_WEB_READY,
+      sessionId,
+    };
+    const announce = () => {
+      if (!acceptedRef.current) opener.postMessage(ready, '*');
+    };
+    announce();
+    const announceTimer = window.setInterval(announce, 300);
+
+    const onMessage = (event: MessageEvent) => {
+      if (acceptedRef.current || event.source !== opener || !isAllowedWebDAppOrigin(event.origin) ||
+          !isVelaWebInit(event.data) || event.data.sessionId !== sessionId || !event.ports[0]) return;
+      acceptedRef.current = true;
+      window.clearInterval(announceTimer);
+
+      const incoming: WebPopupPeer = {
+        sessionId,
+        origin: event.origin,
+        dapp: {
+          // Metadata is presentation-only. The security identity is always event.origin.
+          name: event.data.dapp.name.trim().slice(0, 80) || hostOf(event.origin),
+          url: event.origin,
+          icon: event.data.dapp.icon,
+        },
+        request: event.data.request,
+        port: event.ports[0],
+      };
+      incoming.port.start();
+      peerRef.current = incoming;
+      setPeer(incoming);
+    };
+
+    window.addEventListener('message', onMessage);
+    return () => {
+      window.clearInterval(announceTimer);
+      window.removeEventListener('message', onMessage);
+    };
+  }, [sessionId]);
+
+  // The SDK normally completes its handshake before AsyncStorage has finished
+  // restoring the wallet. Hold the accepted capability port until wallet state is
+  // ready; otherwise a cold popup would accept INIT and then strand it forever.
+  useEffect(() => {
+    if (!peer || state.isLoading || processedRef.current) return;
+    processedRef.current = true;
+
+    void (async () => {
+      if (!state.hasWallet || !activeAccount) {
+        setPhase('no-wallet');
+        respond(peer, undefined, { code: 4100, message: 'Set up or recover Vela Wallet first' });
+        return;
+      }
+
+      try {
+        assertChainSupported(peer.request.chainId);
+      } catch (chainError: any) {
+        respond(peer, undefined, {
+          code: typeof chainError?.code === 'number' ? chainError.code : 4902,
+          message: chainError?.message ?? `Unsupported chain: ${peer.request.chainId}`,
+        });
+        return;
+      }
+
+      const grant = await getGrant(peer.origin);
+      const currentAddresses = state.accounts.map((account) => account.address);
+      const granted = resolveGranted(grant, currentAddresses);
+      const isConnect = peer.request.method === 'eth_requestAccounts' || peer.request.method === 'wallet_requestPermissions';
+
+      if (isConnect) {
+        if (granted.length > 0) {
+          const result = peer.request.method === 'wallet_requestPermissions'
+            ? [{ parentCapability: 'eth_accounts' }]
+            : granted;
+          respond(peer, result);
+        } else {
+          setPhase('consent');
+        }
+        return;
+      }
+
+      if (granted.length === 0) {
+        respond(peer, undefined, { code: 4100, message: 'Connect Vela Wallet to this site first' });
+        return;
+      }
+      if (peer.request.address && peer.request.address.toLowerCase() !== granted[0].toLowerCase()) {
+        respond(peer, undefined, { code: 4100, message: 'The requested account is no longer authorized' });
+        return;
+      }
+
+      const transport = new WebPopupTransport(peer);
+      transport.on('disconnected', () => {
+        peerRef.current = null;
+        setPhase('done');
+        closePopupSoon();
+      });
+      const nextIndex = signAccountIndex(state.accounts, state.activeAccountIndex, granted[0]);
+      if (nextIndex !== state.activeAccountIndex) dispatch({ type: 'SWITCH_ACCOUNT', index: nextIndex });
+      beginExtensionSign(transport);
+      setPhase('processing');
+      // Let a reconciled account reach DAppConnectionProvider's active-account ref
+      // before the approval sheet can be acted on.
+      window.setTimeout(() => void transport.connect(), 0);
+    })();
+  }, [peer, state.isLoading, state.hasWallet, state.accounts, state.activeAccountIndex, activeAccount, beginExtensionSign, dispatch, respond]);
+
+  useEffect(() => () => {
+    const pending = peerRef.current;
+    if (pending) respond(pending, undefined, { code: 4001, message: 'Vela request was closed' });
+  }, [respond]);
+
+  const approveConnection = async () => {
+    if (!peer || !activeAccount) return;
+    setPhase('processing');
+    await setGrant({
+      origin: peer.origin,
+      address: activeAccount.address,
+      chainId: peer.request.chainId,
+      grantedAt: Date.now(),
+    });
+    const result = peer.request.method === 'wallet_requestPermissions'
+      ? [{ parentCapability: 'eth_accounts' }]
+      : [activeAccount.address];
+    respond(peer, result);
+  };
+
+  const rejectConnection = () => {
+    if (peer) respond(peer, undefined, { code: 4001, message: 'User rejected the connection' });
+    else closePopupSoon();
+  };
+
+  const dappName = peer?.dapp.name ?? 'dApp';
+  const dappHost = peer ? hostOf(peer.origin) : '';
+
+  return (
+    <View style={styles.page}>
+      <View style={styles.card}>
+        <View style={styles.logo}><Text style={styles.logoText}>V</Text></View>
+        {phase === 'consent' ? (
+          <>
+            <Text style={styles.title}>Connect to Vela Wallet?</Text>
+            <Text style={styles.subtitle}>{dappName}</Text>
+            <View style={styles.originPill}><ShieldCheck size={15} color={color.success.base} /><Text style={styles.origin}>{dappHost}</Text></View>
+            <View style={styles.accountBox}>
+              <Text style={styles.accountLabel}>Account</Text>
+              <Text style={styles.accountName}>{activeAccount?.name ?? 'Wallet'}</Text>
+              <Text style={styles.address} numberOfLines={1}>{activeAccount?.address}</Text>
+            </View>
+            <Text style={styles.note}>This site can view your wallet address and request signatures. Every signature still requires your approval.</Text>
+            <Pressable style={styles.primaryButton} onPress={() => void approveConnection()}><Text style={styles.primaryText}>Connect</Text></Pressable>
+            <Pressable style={styles.secondaryButton} onPress={rejectConnection}><Text style={styles.secondaryText}>Cancel</Text></Pressable>
+          </>
+        ) : phase === 'error' || phase === 'no-wallet' ? (
+          <>
+            <View style={styles.errorIcon}><X size={22} color={color.error.base} /></View>
+            <Text style={styles.title}>Request unavailable</Text>
+            <Text style={styles.note}>{error || 'Set up or recover Vela Wallet, then try again from the dApp.'}</Text>
+            <Pressable style={styles.secondaryButton} onPress={closePopupSoon}><Text style={styles.secondaryText}>Close</Text></Pressable>
+          </>
+        ) : (
+          <>
+            <ActivityIndicator size="small" color={color.accent.base} />
+            <Text style={styles.title}>{phase === 'done' ? 'Done' : phase === 'processing' ? 'Confirm in Vela' : 'Connecting securely…'}</Text>
+            <Text style={styles.note}>{phase === 'processing' ? 'Review the request in the Vela confirmation sheet.' : 'You can close this window after it finishes.'}</Text>
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  page: { flex: 1, minHeight: 560, alignItems: 'center', justifyContent: 'center', padding: 20, backgroundColor: color.bg.base },
+  card: { width: '100%', maxWidth: 390, gap: space.md, alignItems: 'center', padding: 24, borderRadius: 24, backgroundColor: color.bg.raised, borderWidth: 1, borderColor: color.border.base },
+  logo: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: color.accent.base },
+  logoText: { color: '#fff', fontSize: 25, ...inter.bold },
+  title: { color: color.fg.base, fontSize: textSize.xl, ...inter.bold, textAlign: 'center' },
+  subtitle: { color: color.fg.base, fontSize: textSize.lg, ...inter.semibold },
+  originPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: color.success.soft },
+  origin: { color: color.success.base, fontSize: textSize.sm, ...inter.medium },
+  accountBox: { width: '100%', padding: 16, gap: 4, borderRadius: 16, backgroundColor: color.bg.sunken },
+  accountLabel: { color: color.fg.subtle, fontSize: textSize.xs, ...inter.medium },
+  accountName: { color: color.fg.base, fontSize: textSize.base, ...inter.semibold },
+  address: { color: color.fg.muted, fontSize: textSize.sm, fontFamily: font.mono },
+  note: { color: color.fg.muted, fontSize: textSize.sm, lineHeight: 20, textAlign: 'center' },
+  primaryButton: { width: '100%', alignItems: 'center', paddingVertical: 14, borderRadius: 14, backgroundColor: color.accent.base },
+  primaryText: { color: '#fff', fontSize: textSize.base, ...inter.semibold },
+  secondaryButton: { width: '100%', alignItems: 'center', paddingVertical: 12 },
+  secondaryText: { color: color.fg.muted, fontSize: textSize.base, ...inter.medium },
+  errorIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: color.error.soft },
+});
