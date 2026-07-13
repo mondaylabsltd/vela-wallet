@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { ShieldCheck, X } from 'lucide-react-native';
+import { Link2, ShieldCheck, X } from 'lucide-react-native';
 import { useWallet } from '@/models/wallet-state';
 import { useDAppConnection } from '@/models/dapp-connection';
 import { getGrant, resolveGranted, setGrant } from '@/services/dapp-permissions';
@@ -20,8 +20,25 @@ import {
 
 type Phase = 'waiting' | 'consent' | 'processing' | 'done' | 'error' | 'no-wallet';
 
+const VELA_LOGO = require('../../assets/images/icon.png');
+
 function hostOf(origin: string): string {
   try { return new URL(origin).host; } catch { return origin; }
+}
+
+/** Only load a dApp logo from the exact requesting origin. Metadata can suggest a
+ * path, but it cannot turn the wallet into a third-party tracking-image client. */
+function trustedDAppLogo(icon: string | undefined, origin: string | undefined): string | null {
+  if (!icon || !origin) return null;
+  try {
+    const originUrl = new URL(origin);
+    const iconUrl = new URL(icon, originUrl);
+    const secure = iconUrl.protocol === 'https:' ||
+      (iconUrl.protocol === 'http:' && (iconUrl.hostname === 'localhost' || iconUrl.hostname === '127.0.0.1'));
+    return secure && iconUrl.origin === originUrl.origin ? iconUrl.href : null;
+  } catch {
+    return null;
+  }
 }
 
 function closePopupSoon(): void {
@@ -37,6 +54,7 @@ export default function WebRequestScreen(): React.ReactElement {
   const [phase, setPhase] = useState<Phase>('waiting');
   const [peer, setPeer] = useState<WebPopupPeer | null>(null);
   const [error, setError] = useState('');
+  const [dappLogoFailed, setDappLogoFailed] = useState(false);
   const acceptedRef = useRef(false);
   const processedRef = useRef(false);
   const peerRef = useRef<WebPopupPeer | null>(null);
@@ -204,15 +222,37 @@ export default function WebRequestScreen(): React.ReactElement {
 
   const dappName = peer?.dapp.name ?? 'dApp';
   const dappHost = peer ? hostOf(peer.origin) : '';
+  const dappLogo = trustedDAppLogo(peer?.dapp.icon, peer?.origin);
+
+  useEffect(() => setDappLogoFailed(false), [dappLogo]);
+
+  const velaBrand = (
+    <View style={styles.walletBrand}>
+      <Image source={VELA_LOGO} style={styles.brandLogo} resizeMode="cover" />
+      <Text style={styles.brandName}>Vela Wallet</Text>
+    </View>
+  );
 
   return (
     <View style={styles.page}>
       <View style={styles.card}>
-        <View style={styles.logo}><Text style={styles.logoText}>V</Text></View>
         {phase === 'consent' ? (
           <>
-            <Text style={styles.title}>Connect to Vela Wallet?</Text>
-            <Text style={styles.subtitle}>{dappName}</Text>
+            <View style={styles.identityRow}>
+              {velaBrand}
+              <View style={styles.connectionMark}><Link2 size={19} color={color.accent.base} strokeWidth={2.4} /></View>
+              <View style={styles.walletBrand}>
+                {dappLogo && !dappLogoFailed ? (
+                  <Image source={{ uri: dappLogo }} style={styles.brandLogo} resizeMode="cover" onError={() => setDappLogoFailed(true)} />
+                ) : (
+                  <View style={[styles.brandLogo, styles.dappLogoFallback]}>
+                    <Text style={styles.dappLogoText}>{dappName.slice(0, 3).toUpperCase()}</Text>
+                  </View>
+                )}
+                <Text style={styles.brandName} numberOfLines={1}>{dappName}</Text>
+              </View>
+            </View>
+            <Text style={styles.title}>Connect with Vela</Text>
             <View style={styles.originPill}><ShieldCheck size={15} color={color.success.base} /><Text style={styles.origin}>{dappHost}</Text></View>
             <View style={styles.accountBox}>
               <Text style={styles.accountLabel}>Account</Text>
@@ -225,6 +265,7 @@ export default function WebRequestScreen(): React.ReactElement {
           </>
         ) : phase === 'error' || phase === 'no-wallet' ? (
           <>
+            {velaBrand}
             <View style={styles.errorIcon}><X size={22} color={color.error.base} /></View>
             <Text style={styles.title}>Request unavailable</Text>
             <Text style={styles.note}>{error || 'Set up or recover Vela Wallet, then try again from the dApp.'}</Text>
@@ -232,6 +273,7 @@ export default function WebRequestScreen(): React.ReactElement {
           </>
         ) : (
           <>
+            {velaBrand}
             <ActivityIndicator size="small" color={color.accent.base} />
             <Text style={styles.title}>{phase === 'done' ? 'Done' : phase === 'processing' ? 'Confirm in Vela' : 'Connecting securely…'}</Text>
             <Text style={styles.note}>{phase === 'processing' ? 'Review the request in the Vela confirmation sheet.' : 'You can close this window after it finishes.'}</Text>
@@ -245,10 +287,14 @@ export default function WebRequestScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   page: { flex: 1, minHeight: 560, alignItems: 'center', justifyContent: 'center', padding: 20, backgroundColor: color.bg.base },
   card: { width: '100%', maxWidth: 390, gap: space.md, alignItems: 'center', padding: 24, borderRadius: 24, backgroundColor: color.bg.raised, borderWidth: 1, borderColor: color.border.base },
-  logo: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: color.accent.base },
-  logoText: { color: '#fff', fontSize: 25, ...inter.bold },
+  identityRow: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 16 },
+  walletBrand: { width: 96, alignItems: 'center', gap: 8 },
+  brandLogo: { width: 68, height: 68, borderRadius: 19, borderWidth: 1, borderColor: color.border.base, backgroundColor: color.bg.sunken },
+  brandName: { width: 96, color: color.fg.base, fontSize: textSize.sm, ...inter.semibold, textAlign: 'center' },
+  connectionMark: { width: 38, height: 38, marginTop: 15, borderRadius: 19, alignItems: 'center', justifyContent: 'center', backgroundColor: color.accent.soft, borderWidth: 1, borderColor: color.border.base },
+  dappLogoFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#0B0E0C' },
+  dappLogoText: { color: '#99F6B7', fontSize: textSize.base, ...inter.bold },
   title: { color: color.fg.base, fontSize: textSize.xl, ...inter.bold, textAlign: 'center' },
-  subtitle: { color: color.fg.base, fontSize: textSize.lg, ...inter.semibold },
   originPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: color.success.soft },
   origin: { color: color.success.base, fontSize: textSize.sm, ...inter.medium },
   accountBox: { width: '100%', padding: 16, gap: 4, borderRadius: 16, backgroundColor: color.bg.sunken },
