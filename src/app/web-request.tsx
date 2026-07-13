@@ -146,8 +146,14 @@ export default function WebRequestScreen(): React.ReactElement {
     processedRef.current = true;
 
     void (async () => {
-      // Validate the chain before onboarding so a first-time user is never
-      // asked to create a wallet for a request Vela cannot fulfill.
+      if (!state.hasWallet || !activeAccount) {
+        // Wallet setup comes first even when the requested chain may not be
+        // supported. Preserve the original request, then validate its chain
+        // after creation or recovery completes.
+        setPhase('onboarding');
+        return;
+      }
+
       try {
         assertChainSupported(peer.request.chainId);
       } catch (chainError: any) {
@@ -157,13 +163,6 @@ export default function WebRequestScreen(): React.ReactElement {
           chainId: peer.request.chainId,
         });
         setPhase('unsupported-chain');
-        return;
-      }
-
-      if (!state.hasWallet || !activeAccount) {
-        // Keep the capability-bound MessagePort alive while the user creates or
-        // recovers a wallet. Onboarding resumes this exact request on completion.
-        setPhase('onboarding');
         return;
       }
 
