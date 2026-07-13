@@ -4,6 +4,8 @@ import { useLocalSearchParams } from 'expo-router';
 import { Link2, ShieldCheck, X } from 'lucide-react-native';
 import { useWallet } from '@/models/wallet-state';
 import { useDAppConnection } from '@/models/dapp-connection';
+import OnboardingScreen from '@/screens/onboarding/OnboardingScreen';
+import { getAllNetworksSync } from '@/models/network';
 import { getGrant, resolveGranted, setGrant } from '@/services/dapp-permissions';
 import { signAccountIndex } from '@/models/dapp-request-routing';
 import { assertChainSupported } from '@/hooks/use-dapp-signing';
@@ -18,7 +20,13 @@ import {
   type VelaWebResponseMessage,
 } from '../../packages/vela-sdk/src/protocol';
 
-type Phase = 'waiting' | 'consent' | 'processing' | 'done' | 'error' | 'no-wallet';
+type Phase = 'waiting' | 'onboarding' | 'consent' | 'unsupported-chain' | 'processing' | 'done' | 'error';
+
+interface UnsupportedNetwork {
+  code: number;
+  message: string;
+  chainId: number;
+}
 
 const VELA_LOGO = require('../../assets/images/icon.png');
 
@@ -54,6 +62,7 @@ export default function WebRequestScreen(): React.ReactElement {
   const [phase, setPhase] = useState<Phase>('waiting');
   const [peer, setPeer] = useState<WebPopupPeer | null>(null);
   const [error, setError] = useState('');
+  const [unsupportedNetwork, setUnsupportedNetwork] = useState<UnsupportedNetwork | null>(null);
   const [dappLogoFailed, setDappLogoFailed] = useState(false);
   const acceptedRef = useRef(false);
   const processedRef = useRef(false);
@@ -138,18 +147,21 @@ export default function WebRequestScreen(): React.ReactElement {
 
     void (async () => {
       if (!state.hasWallet || !activeAccount) {
-        setPhase('no-wallet');
-        respond(peer, undefined, { code: 4100, message: 'Set up or recover Vela Wallet first' });
+        // Keep the capability-bound MessagePort alive while the user creates or
+        // recovers a wallet. Onboarding resumes this exact request on completion.
+        setPhase('onboarding');
         return;
       }
 
       try {
         assertChainSupported(peer.request.chainId);
       } catch (chainError: any) {
-        respond(peer, undefined, {
+        setUnsupportedNetwork({
           code: typeof chainError?.code === 'number' ? chainError.code : 4902,
           message: chainError?.message ?? `Unsupported chain: ${peer.request.chainId}`,
+          chainId: peer.request.chainId,
         });
+        setPhase('unsupported-chain');
         return;
       }
 
@@ -220,6 +232,22 @@ export default function WebRequestScreen(): React.ReactElement {
     else closePopupSoon();
   };
 
+  const resumeAfterOnboarding = () => {
+    processedRef.current = false;
+    setPhase('waiting');
+    // Trigger request evaluation even when React batches the wallet dispatch
+    // performed immediately before this callback.
+    setPeer((current) => current ? { ...current } : current);
+  };
+
+  const closeUnsupportedNetwork = () => {
+    if (peer && unsupportedNetwork) {
+      respond(peer, undefined, { code: unsupportedNetwork.code, message: unsupportedNetwork.message });
+    } else {
+      closePopupSoon();
+    }
+  };
+
   const dappName = peer?.dapp.name ?? 'dApp';
   const dappHost = peer ? hostOf(peer.origin) : '';
   const dappLogo = trustedDAppLogo(peer?.dapp.icon, peer?.origin);
@@ -233,25 +261,44 @@ export default function WebRequestScreen(): React.ReactElement {
     </View>
   );
 
+  const identity = peer ? (
+    <View style={styles.identityRow}>
+      {velaBrand}
+      <View style={styles.connectionMark}><Link2 size={19} color={color.accent.base} strokeWidth={2.4} /></View>
+      <View style={styles.walletBrand}>
+        {dappLogo && !dappLogoFailed ? (
+          <Image source={{ uri: dappLogo }} style={styles.brandLogo} resizeMode="cover" onError={() => setDappLogoFailed(true)} />
+        ) : (
+          <View style={[styles.brandLogo, styles.dappLogoFallback]}>
+            <Text style={styles.dappLogoText}>{dappName.slice(0, 3).toUpperCase()}</Text>
+          </View>
+        )}
+        <Text style={styles.brandName} numberOfLines={1}>{dappName}</Text>
+      </View>
+    </View>
+  ) : velaBrand;
+
+  if (phase === 'onboarding') {
+    return (
+      <View style={styles.onboardingPage}>
+        <View style={styles.onboardingContext}>
+          {identity}
+          <Text style={styles.onboardingTitle}>Set up Vela to continue</Text>
+          <Text style={styles.note}>Create or recover your wallet. Your connection request from {dappName} will continue automatically.</Text>
+        </View>
+        <View style={styles.onboardingContent}>
+          <OnboardingScreen onComplete={resumeAfterOnboarding} />
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.page}>
       <View style={styles.card}>
         {phase === 'consent' ? (
           <>
-            <View style={styles.identityRow}>
-              {velaBrand}
-              <View style={styles.connectionMark}><Link2 size={19} color={color.accent.base} strokeWidth={2.4} /></View>
-              <View style={styles.walletBrand}>
-                {dappLogo && !dappLogoFailed ? (
-                  <Image source={{ uri: dappLogo }} style={styles.brandLogo} resizeMode="cover" onError={() => setDappLogoFailed(true)} />
-                ) : (
-                  <View style={[styles.brandLogo, styles.dappLogoFallback]}>
-                    <Text style={styles.dappLogoText}>{dappName.slice(0, 3).toUpperCase()}</Text>
-                  </View>
-                )}
-                <Text style={styles.brandName} numberOfLines={1}>{dappName}</Text>
-              </View>
-            </View>
+            {identity}
             <Text style={styles.title}>Connect with Vela</Text>
             <View style={styles.originPill}><ShieldCheck size={15} color={color.success.base} /><Text style={styles.origin}>{dappHost}</Text></View>
             <View style={styles.accountBox}>
@@ -263,7 +310,19 @@ export default function WebRequestScreen(): React.ReactElement {
             <Pressable style={styles.primaryButton} onPress={() => void approveConnection()}><Text style={styles.primaryText}>Connect</Text></Pressable>
             <Pressable style={styles.secondaryButton} onPress={rejectConnection}><Text style={styles.secondaryText}>Cancel</Text></Pressable>
           </>
-        ) : phase === 'error' || phase === 'no-wallet' ? (
+        ) : phase === 'unsupported-chain' ? (
+          <>
+            {identity}
+            <View style={styles.errorIcon}><X size={22} color={color.error.base} /></View>
+            <Text style={styles.title}>Network not supported</Text>
+            <Text style={styles.note}>{dappName} requested Chain ID {unsupportedNetwork?.chainId}. Vela cannot safely process this request.</Text>
+            <View style={styles.networkBox}>
+              <Text style={styles.accountLabel}>Networks available in Vela</Text>
+              <Text style={styles.networkList}>{getAllNetworksSync().map((network) => `${network.displayName} (${network.chainId})`).join(' · ')}</Text>
+            </View>
+            <Pressable style={styles.secondaryButton} onPress={closeUnsupportedNetwork}><Text style={styles.secondaryText}>Close</Text></Pressable>
+          </>
+        ) : phase === 'error' ? (
           <>
             {velaBrand}
             <View style={styles.errorIcon}><X size={22} color={color.error.base} /></View>
@@ -285,6 +344,10 @@ export default function WebRequestScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
+  onboardingPage: { flex: 1, minHeight: 640, alignItems: 'center', backgroundColor: color.bg.base },
+  onboardingContext: { width: '100%', maxWidth: 480, alignItems: 'center', gap: space.sm, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 8 },
+  onboardingContent: { flex: 1, width: '100%', maxWidth: 480 },
+  onboardingTitle: { color: color.fg.base, fontSize: textSize.lg, ...inter.bold, textAlign: 'center' },
   page: { flex: 1, minHeight: 560, alignItems: 'center', justifyContent: 'center', padding: 20, backgroundColor: color.bg.base },
   card: { width: '100%', maxWidth: 390, gap: space.md, alignItems: 'center', padding: 24, borderRadius: 24, backgroundColor: color.bg.raised, borderWidth: 1, borderColor: color.border.base },
   identityRow: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', gap: 16 },
@@ -298,6 +361,8 @@ const styles = StyleSheet.create({
   originPill: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: color.success.soft },
   origin: { color: color.success.base, fontSize: textSize.sm, ...inter.medium },
   accountBox: { width: '100%', padding: 16, gap: 4, borderRadius: 16, backgroundColor: color.bg.sunken },
+  networkBox: { width: '100%', padding: 16, gap: 7, borderRadius: 16, backgroundColor: color.bg.sunken },
+  networkList: { color: color.fg.muted, fontSize: textSize.xs, lineHeight: 18, textAlign: 'left' },
   accountLabel: { color: color.fg.subtle, fontSize: textSize.xs, ...inter.medium },
   accountName: { color: color.fg.base, fontSize: textSize.base, ...inter.semibold },
   address: { color: color.fg.muted, fontSize: textSize.sm, fontFamily: font.mono },

@@ -272,8 +272,8 @@ export function CreateWalletScreen({ onCreated, onBack, onOpenSettings }: Props)
     const pending = pendingRef.current;
     if (!pending || loading) return;
     dispatch({ type: 'ADD_ACCOUNT', account: pending.account });
-    onCreated?.(pending.account.address, pending.account.name);
-    router.replace('/(tabs)/wallet');
+    if (onCreated) onCreated(pending.account.address, pending.account.name);
+    else router.replace('/(tabs)/wallet');
   }
 
   return (

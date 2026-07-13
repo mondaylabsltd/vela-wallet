@@ -27,7 +27,7 @@ export interface VelaWalletSDKConfig {
   appUrl?: string;
   /** Defaults to the production Vela Web wallet request page. */
   walletUrl?: string;
-  /** Popup response timeout. Defaults to five minutes. */
+  /** Popup response timeout. Defaults to fifteen minutes so first-time users can finish wallet setup. */
   timeoutMs?: number;
   /** Initial chain for a new connection. Defaults to Ethereum mainnet. */
   chainId?: number;
@@ -77,7 +77,7 @@ class Provider implements VelaProvider {
     if (this.walletUrl.protocol !== 'https:' && this.walletUrl.hostname !== 'localhost') {
       throw new Error('Vela walletUrl must use HTTPS');
     }
-    this.timeoutMs = config.timeoutMs ?? 5 * 60_000;
+    this.timeoutMs = config.timeoutMs ?? 15 * 60_000;
     this.dapp = {
       name: config.appName.trim(),
       url: config.appUrl ?? (typeof location !== 'undefined' ? location.origin : undefined),

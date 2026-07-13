@@ -39,7 +39,13 @@ async function isPasskeyIndexReachable(url: string): Promise<boolean> {
   }
 }
 
-export default function OnboardingScreen() {
+interface OnboardingScreenProps {
+  /** Embedded flows (for example the HTTPS dApp popup) can finish onboarding
+   * without navigating away and continue the request that brought the user here. */
+  onComplete?: () => void;
+}
+
+export default function OnboardingScreen({ onComplete }: OnboardingScreenProps = {}) {
   const { t } = useTranslation();
   // Deep-link: /onboarding?mode=create jumps straight to the create form.
   // Any other value (or none, incl. ?mode=signin) stays on the welcome screen,
@@ -52,6 +58,10 @@ export default function OnboardingScreen() {
   const healthCheckDone = useRef(false);
   const router = useRouter();
   const { dispatch } = useWallet();
+  const completeOnboarding = () => {
+    if (onComplete) onComplete();
+    else router.replace('/(tabs)/wallet');
+  };
 
   // Auto-detect Passkey Index reachability — retry 3 times before flagging
   useEffect(() => {
@@ -119,7 +129,7 @@ export default function OnboardingScreen() {
           accounts: localAccounts,
           activeIndex: localAccounts.indexOf(local),
         });
-        router.replace('/(tabs)/wallet');
+        completeOnboarding();
         return;
       }
       __DEV__ && console.log('[Login] Not found locally');
@@ -154,7 +164,7 @@ export default function OnboardingScreen() {
       };
       await saveAccount(account);
       dispatch({ type: 'ADD_ACCOUNT', account });
-      router.replace('/(tabs)/wallet');
+      completeOnboarding();
 
     } catch (error) {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
@@ -226,7 +236,7 @@ export default function OnboardingScreen() {
       // unlike creation, where blocking prevents funding an unsynced wallet.
       uploadPublicKey({ credentialId: first.credentialId, publicKeyHex, name: userName }).catch(() => {});
 
-      router.replace('/(tabs)/wallet');
+      completeOnboarding();
     } catch (error) {
       if (error instanceof PasskeyError && error.code === PasskeyErrorCode.CANCELLED) {
         // User cancelled the second signature — stay on the welcome screen
@@ -245,7 +255,7 @@ export default function OnboardingScreen() {
       <>
         <CreateWalletScreen
           onBack={() => setStep('welcome')}
-          onCreated={() => router.replace('/(tabs)/wallet')}
+          onCreated={completeOnboarding}
           onOpenSettings={openSettings}
         />
         <OnboardingSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} unreachable={endpointUnreachable} />
