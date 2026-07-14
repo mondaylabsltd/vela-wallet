@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Approve Safe recovery</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="mark">V</div>
+        <div>
+          <p class="eyebrow">VELA SAFE RECOVERY</p>
+          <h1>Approve with your passkey</h1>
+        </div>
+      </header>
+
+      <section id="loading" class="card loading">Loading the Safe transaction…</section>
+      <section id="details" class="card hidden">
+        <div class="risk" id="operation-warning"></div>
+        <dl>
+          <div><dt>Network</dt><dd id="network"></dd></div>
+          <div><dt>Safe</dt><dd id="safe" class="mono"></dd></div>
+          <div><dt>Destination</dt><dd id="to" class="mono"></dd></div>
+          <div><dt>Value (wei)</dt><dd id="value" class="mono"></dd></div>
+          <div><dt>Data selector</dt><dd id="selector" class="mono"></dd></div>
+          <div><dt>Safe nonce</dt><dd id="nonce" class="mono"></dd></div>
+          <div><dt>Passkey domain</dt><dd id="rp" class="mono"></dd></div>
+        </dl>
+        <p class="explain">
+          Your passkey signs this exact SafeTx hash. The gas account can broadcast it, but cannot change it or control the Safe.
+        </p>
+        <button id="sign" class="primary">Verify and sign</button>
+        <button id="cancel" class="secondary">Cancel</button>
+      </section>
+      <section id="error" class="card hidden error-card">
+        <h2>Could not sign</h2>
+        <p id="error-message"></p>
+        <button id="close" class="secondary">Close</button>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
