@@ -40,28 +40,33 @@ function render(view: SignRequestView) {
   $('selector').textContent = view.dataSelector;
   $('nonce').textContent = view.nonce;
   $('rp').textContent = view.rpId;
+  $('choose-passkey').classList.toggle('hidden', !view.credentialId);
   const warning = $('operation-warning');
   if (view.operation === 0) {
     warning.textContent = 'Standard Safe CALL transaction';
-    warning.classList.add('normal');
+    warning.classList.remove('warning');
   } else {
     warning.textContent = `Warning: Safe operation ${view.operation} (DELEGATECALL). Review the destination carefully.`;
+    warning.classList.add('warning');
   }
   $('loading').classList.add('hidden');
   $('details').classList.remove('hidden');
 }
 
-async function sign(view: SignRequestView) {
+async function sign(view: SignRequestView, chooseAnother = false) {
   const button = $('sign') as HTMLButtonElement;
+  const chooserButton = $('choose-passkey') as HTMLButtonElement;
   button.disabled = true;
-  button.textContent = 'Waiting for passkey…';
+  chooserButton.disabled = true;
+  const activeButton = chooseAnother ? chooserButton : button;
+  activeButton.textContent = 'Waiting for passkey…';
   try {
     const publicKey: PublicKeyCredentialRequestOptions = {
       challenge: hexToBuffer(view.challengeHex),
       rpId: view.rpId,
       userVerification: 'required',
     };
-    if (view.credentialId) {
+    if (view.credentialId && !chooseAnother) {
       publicKey.allowCredentials = [{ type: 'public-key', id: hexToBuffer(view.credentialId as Hex) }];
     }
     const credential = await navigator.credentials.get({ publicKey }) as PublicKeyCredential | null;
@@ -82,7 +87,9 @@ async function sign(view: SignRequestView) {
     showError(cancelled ? 'The passkey request was cancelled.' : (domError?.message ?? 'Passkey failed.'));
   } finally {
     button.disabled = false;
-    button.textContent = 'Verify and sign';
+    chooserButton.disabled = false;
+    button.textContent = 'Sign with passkey';
+    chooserButton.textContent = 'Choose another passkey';
   }
 }
 
@@ -94,4 +101,5 @@ $('cancel').addEventListener('click', () => {
 load().then((view) => {
   render(view);
   $('sign').addEventListener('click', () => void sign(view));
+  $('choose-passkey').addEventListener('click', () => void sign(view, true));
 }).catch((error) => showError(error?.message ?? 'This request is no longer active.'));

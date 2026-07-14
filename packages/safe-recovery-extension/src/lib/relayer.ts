@@ -333,6 +333,81 @@ function parseQuantity(value: string | undefined, fallback = 0n): bigint {
   }
 }
 
+export async function sendGasOnlyTransaction(
+  rpcUrl: string,
+  chainId: number,
+  privateKey: Hex,
+  transaction: { to: string; data: Hex },
+): Promise<Hex> {
+  if (!isAddress(transaction.to) || !isHex(transaction.data)) {
+    throw providerError(-32602, 'Gas transaction target or calldata is invalid.');
+  }
+  const to = getAddress(transaction.to);
+  const account = privateKeyToAccount(privateKey);
+  const call = { from: account.address, to, data: transaction.data, value: '0x0' };
+
+  // Simulate the exact Safe call before the local gas account signs anything.
+  await rpcCallAt(rpcUrl, 'eth_call', [call, 'pending']);
+
+  const [nonceHex, estimateHex, balanceHex, pendingBlock, priorityHex, gasPriceHex] = await Promise.all([
+    rpcCallAt<string>(rpcUrl, 'eth_getTransactionCount', [account.address, 'pending']),
+    rpcCallAt<string>(rpcUrl, 'eth_estimateGas', [call]),
+    rpcCallAt<string>(rpcUrl, 'eth_getBalance', [account.address, 'pending']),
+    rpcCallAt<{ baseFeePerGas?: string }>(rpcUrl, 'eth_getBlockByNumber', ['pending', false]),
+    rpcCallAt<string>(rpcUrl, 'eth_maxPriorityFeePerGas', []).catch(() => '0x0'),
+    rpcCallAt<string>(rpcUrl, 'eth_gasPrice', []),
+  ]);
+
+  const nonce = parseQuantity(nonceHex);
+  const estimatedGas = parseQuantity(estimateHex);
+  const gas = (estimatedGas * 125n + 99n) / 100n;
+  const balance = parseQuantity(balanceHex);
+  const gasPrice = parseQuantity(gasPriceHex);
+  const baseFee = parseQuantity(pendingBlock?.baseFeePerGas, 0n);
+  const suggestedPriority = parseQuantity(priorityHex, 0n);
+
+  let serialized: Hex;
+  let maximumCost: bigint;
+  if (baseFee > 0n) {
+    const priority = suggestedPriority > 0n ? suggestedPriority : gasPrice > baseFee ? gasPrice - baseFee : 1_000_000_000n;
+    const maxFeePerGas = baseFee * 2n + priority;
+    maximumCost = gas * maxFeePerGas;
+    serialized = await account.signTransaction({
+      chainId,
+      type: 'eip1559',
+      to,
+      data: transaction.data,
+      value: 0n,
+      nonce: Number(nonce),
+      gas,
+      maxFeePerGas,
+      maxPriorityFeePerGas: priority,
+    });
+  } else {
+    maximumCost = gas * gasPrice;
+    serialized = await account.signTransaction({
+      chainId,
+      type: 'legacy',
+      to,
+      data: transaction.data,
+      value: 0n,
+      nonce: Number(nonce),
+      gas,
+      gasPrice,
+    });
+  }
+  if (balance < maximumCost) {
+    throw providerError(
+      -32000,
+      `Vela gas account ${account.address} needs native gas. Balance ${balance}, required up to ${maximumCost} wei.`,
+    );
+  }
+
+  const txHash = await rpcCallAt<Hex>(rpcUrl, 'eth_sendRawTransaction', [serialized]);
+  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) throw providerError(-32603, 'RPC returned an invalid transaction hash.');
+  return txHash;
+}
+
 export async function relaySafeExecution(
   rpcUrl: string,
   chainId: number,
@@ -342,10 +417,10 @@ export async function relaySafeExecution(
 ): Promise<Hex> {
   if (!transaction.to || !isAddress(transaction.to)) throw providerError(-32602, 'Transaction has no valid Safe target.');
   if (!transaction.data || !isHex(transaction.data) || !transaction.data.toLowerCase().startsWith(EXEC_TRANSACTION_SELECTOR.toLowerCase())) {
-    throw providerError(4200, 'Recovery relayer only submits Safe execTransaction calls.');
+    throw providerError(4200, 'Vela Wallet only submits Safe execTransaction calls.');
   }
   const value = parseQuantity(transaction.value, 0n);
-  if (value !== 0n) throw providerError(4200, 'Recovery relayer refuses outer transactions with value.');
+  if (value !== 0n) throw providerError(4200, 'Vela Wallet refuses outer transactions with value.');
 
   const safeAddress = getAddress(transaction.to);
   const safe = await assertRecoverySafe(rpcUrl, safeAddress);
@@ -384,71 +459,10 @@ export async function relaySafeExecution(
   }
   assertSafeContractSignature(signatures, safe.owners, safe.threshold);
 
-  const account = privateKeyToAccount(privateKey);
-  const call = { from: account.address, to: safeAddress, data: transaction.data, value: '0x0' };
-
-  // This executes the full Safe call in a read-only EVM context. A bad passkey
-  // signature, wrong nonce, missing threshold signature, or reverting inner call
-  // fails before the gas-only relayer spends anything.
-  await rpcCallAt(rpcUrl, 'eth_call', [call, 'pending']);
-
-  const [nonceHex, estimateHex, balanceHex, pendingBlock, priorityHex, gasPriceHex] = await Promise.all([
-    rpcCallAt<string>(rpcUrl, 'eth_getTransactionCount', [account.address, 'pending']),
-    rpcCallAt<string>(rpcUrl, 'eth_estimateGas', [call]),
-    rpcCallAt<string>(rpcUrl, 'eth_getBalance', [account.address, 'pending']),
-    rpcCallAt<{ baseFeePerGas?: string }>(rpcUrl, 'eth_getBlockByNumber', ['pending', false]),
-    rpcCallAt<string>(rpcUrl, 'eth_maxPriorityFeePerGas', []).catch(() => '0x0'),
-    rpcCallAt<string>(rpcUrl, 'eth_gasPrice', []),
-  ]);
-
-  const nonce = parseQuantity(nonceHex);
-  const estimatedGas = parseQuantity(estimateHex);
-  const gas = (estimatedGas * 125n + 99n) / 100n;
-  const balance = parseQuantity(balanceHex);
-  const gasPrice = parseQuantity(gasPriceHex);
-  const baseFee = parseQuantity(pendingBlock?.baseFeePerGas, 0n);
-  const suggestedPriority = parseQuantity(priorityHex, 0n);
-
-  let serialized: Hex;
-  let maximumCost: bigint;
-  if (baseFee > 0n) {
-    const priority = suggestedPriority > 0n ? suggestedPriority : gasPrice > baseFee ? gasPrice - baseFee : 1_000_000_000n;
-    const maxFeePerGas = baseFee * 2n + priority;
-    maximumCost = gas * maxFeePerGas;
-    serialized = await account.signTransaction({
-      chainId,
-      type: 'eip1559',
-      to: safeAddress,
-      data: transaction.data,
-      value: 0n,
-      nonce: Number(nonce),
-      gas,
-      maxFeePerGas,
-      maxPriorityFeePerGas: priority,
-    });
-  } else {
-    maximumCost = gas * gasPrice;
-    serialized = await account.signTransaction({
-      chainId,
-      type: 'legacy',
-      to: safeAddress,
-      data: transaction.data,
-      value: 0n,
-      nonce: Number(nonce),
-      gas,
-      gasPrice,
-    });
-  }
-  if (balance < maximumCost) {
-    throw providerError(
-      -32000,
-      `Recovery gas account ${account.address} needs native gas. Balance ${balance}, required up to ${maximumCost} wei.`,
-    );
-  }
-
-  const txHash = await rpcCallAt<Hex>(rpcUrl, 'eth_sendRawTransaction', [serialized]);
-  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) throw providerError(-32603, 'RPC returned an invalid transaction hash.');
-  return txHash;
+  return sendGasOnlyTransaction(rpcUrl, chainId, privateKey, {
+    to: safeAddress,
+    data: transaction.data!,
+  });
 }
 
 export function relayerAddress(privateKey: Hex): string {

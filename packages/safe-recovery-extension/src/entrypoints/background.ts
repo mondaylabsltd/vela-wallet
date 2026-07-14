@@ -18,6 +18,10 @@ import {
   type SafeTypedData,
 } from '@/lib/signatures';
 import {
+  bindCredentialIdToSafe,
+  clearCredentialIdForSafe,
+  credentialBindingKey,
+  credentialIdForSafe,
   getSettings,
   localConfirmations as getLocalConfirmations,
   patchSettings,
@@ -176,12 +180,13 @@ async function signCanonicalSafeTypedData(
 ): Promise<Hex> {
   const challenge = hashSafeTypedData(typedData);
   const requestId = crypto.randomUUID();
+  const safeAddress = getAddress(typedData.domain.verifyingContract!);
   const view = signRequestView(
     typedData,
     challenge,
     requestId,
     settings.rpId,
-    settings.credentialId,
+    credentialIdForSafe(settings, safeAddress),
     settings.chainNames[String(settings.chainId)] ?? `Chain ${settings.chainId}`,
   );
   const assertion = await openPasskeyWindow(view);
@@ -203,10 +208,18 @@ async function signCanonicalSafeTypedData(
     data: signerResult,
   });
   if (magicValue.toLowerCase() !== ERC1271_MAGIC_VALUE) {
+    const key = credentialBindingKey(safeAddress);
+    const latest = await getSettings();
+    if (latest.credentialIds[key] === assertion.credentialId) {
+      const credentialIds = clearCredentialIdForSafe(latest.credentialIds, safeAddress);
+      const next = await patchSettings({ credentialIds });
+      void broadcastState(next);
+    }
     throw providerError(4100, 'The passkey signature does not match this Safe\'s configured WebAuthn key.');
   }
+  const latest = await getSettings();
   const next = await patchSettings({
-    credentialId: assertion.credentialId,
+    credentialIds: bindCredentialIdToSafe(latest.credentialIds, safeAddress, assertion.credentialId),
     lastSafeAddress: view.safeAddress,
   });
   void broadcastState(next);
@@ -284,18 +297,18 @@ async function handleProviderRequest(request: Eip1193Request): Promise<unknown> 
   if (method === 'eth_accounts') return settings.enabled ? [SHARED_WEBAUTHN_OWNER] : [];
   if (method === 'eth_requestAccounts') {
     if (!settings.enabled) {
-      throw providerError(4100, 'Open Vela Safe Recovery and enable recovery mode first.');
+      throw providerError(4100, 'Open Vela Wallet and enable Safe access first.');
     }
     return [SHARED_WEBAUTHN_OWNER];
   }
   if (method === 'eth_chainId') return `0x${settings.chainId.toString(16)}`;
   if (method === 'net_version') return String(settings.chainId);
-  if (method === 'web3_clientVersion') return 'VelaSafeRecovery/0.1.0';
+  if (method === 'web3_clientVersion') return 'VelaWalletSafeIntegration/0.2.0';
   if (method === 'wallet_getPermissions') {
     return settings.enabled ? [{ parentCapability: 'eth_accounts', caveats: [] }] : [];
   }
   if (method === 'wallet_requestPermissions') {
-    if (!settings.enabled) throw providerError(4100, 'Enable recovery mode in the extension first.');
+    if (!settings.enabled) throw providerError(4100, 'Enable Safe access in Vela Wallet first.');
     return [{ parentCapability: 'eth_accounts', caveats: [] }];
   }
   if (method === 'wallet_revokePermissions') {
@@ -304,7 +317,7 @@ async function handleProviderRequest(request: Eip1193Request): Promise<unknown> 
     return null;
   }
 
-  if (!settings.enabled) throw providerError(4100, 'Recovery provider is disabled.');
+  if (!settings.enabled) throw providerError(4100, 'Vela Wallet Safe access is disabled.');
 
   if (method === 'wallet_switchEthereumChain') {
     const chain = firstParam<{ chainId?: string }>(params)?.chainId;
@@ -342,13 +355,13 @@ async function handleProviderRequest(request: Eip1193Request): Promise<unknown> 
     return saveSignedSafeTx(typedData, signature, settings);
   }
   if (method === 'personal_sign' || method === 'eth_sign' || method === 'eth_signTypedData_v3') {
-    throw providerError(4200, 'Recovery mode signs canonical SafeTx EIP-712 requests only.');
+    throw providerError(4200, 'Vela Wallet signs canonical SafeTx EIP-712 requests only.');
   }
   if (method === 'eth_sendTransaction') {
     const transaction = firstParam<Record<string, any>>(params);
     if (!transaction) throw providerError(-32602, 'Missing transaction.');
     if (typeof transaction.from !== 'string' || !isAddress(transaction.from) || getAddress(transaction.from) !== getAddress(SHARED_WEBAUTHN_OWNER)) {
-      throw providerError(4100, 'Recovery transaction must originate from the shared signer identity.');
+      throw providerError(4100, 'The Safe transaction must originate from the Vela shared signer identity.');
     }
     const rpcUrl = rpcUrlFor(settings);
     const txHash = await enqueueRelay(settings.chainId, () => relaySafeExecution(
@@ -365,7 +378,7 @@ async function handleProviderRequest(request: Eip1193Request): Promise<unknown> 
     return txHash;
   }
   if (method === 'eth_sendRawTransaction' || method.startsWith('wallet_')) {
-    throw providerError(4200, `${method} is not supported in recovery mode.`);
+    throw providerError(4200, `${method} is not supported by the Vela Wallet Safe integration.`);
   }
 
   return rpcCallAt(rpcUrlFor(settings), method, params ?? []);
@@ -410,7 +423,11 @@ async function handleExtensionAction(message: any): Promise<unknown> {
     return toPublicState(settings);
   }
   if (message.action === 'popup-clear-credential') {
-    const next = await patchSettings({ credentialId: undefined });
+    const settings = await getSettings();
+    const credentialIds = settings.lastSafeAddress
+      ? clearCredentialIdForSafe(settings.credentialIds, settings.lastSafeAddress)
+      : settings.credentialIds;
+    const next = await patchSettings({ credentialIds, credentialId: undefined });
     await broadcastState(next);
     return toPublicState(next);
   }

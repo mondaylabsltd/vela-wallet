@@ -83,6 +83,8 @@ export function createRecoveryProvider(postMessage: PostMessage, hooks: Provider
   };
 
   const provider: Record<string, any> = {
+    isVelaWallet: true,
+    // Compatibility flag for integrations that detected the original name.
     isVelaSafeRecovery: true,
     request,
     enable: () => request({ method: 'eth_requestAccounts' }),
@@ -154,7 +156,7 @@ export function createRecoveryProvider(postMessage: PostMessage, hooks: Provider
     if (previous.enabled !== next.enabled) {
       emit('accountsChanged', accounts);
       if (next.enabled && !wasConnected) emit('connect', { chainId });
-      if (!next.enabled && wasConnected) emit('disconnect', new ProviderRpcError(4900, 'Recovery provider disabled.'));
+      if (!next.enabled && wasConnected) emit('disconnect', new ProviderRpcError(4900, 'Vela Wallet Safe access disabled.'));
     }
   };
 

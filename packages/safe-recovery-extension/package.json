@@ -1,8 +1,8 @@
 {
   "name": "vela-safe-recovery-extension",
-  "description": "Service-independent Safe recovery signer for Vela passkeys",
+  "description": "Use existing Vela Safe accounts with passkeys in Safe Wallet",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",

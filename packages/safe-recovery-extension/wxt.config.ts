@@ -17,9 +17,15 @@ const rpcHosts = [
 export default defineConfig({
   srcDir: 'src',
   manifest: {
-    name: 'Vela Safe Recovery',
-    short_name: 'Vela Recovery',
-    description: 'Control a Vela Safe with its getvela.app passkey, without any Vela service.',
+    name: 'Vela Wallet for Safe',
+    short_name: 'Vela Safe',
+    description: 'Connect an existing Vela Safe to Safe Wallet and approve transactions with its passkey.',
+    icons: {
+      16: 'icon/16.png',
+      32: 'icon/32.png',
+      48: 'icon/48.png',
+      128: 'icon/128.png',
+    },
     permissions: ['storage', 'windows'],
     host_permissions: [
       'https://app.safe.global/*',

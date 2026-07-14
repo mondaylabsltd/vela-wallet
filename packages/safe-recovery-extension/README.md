@@ -1,7 +1,8 @@
-# Vela Safe Recovery
+# Vela Wallet for Safe
 
-This unpacked WXT/Chrome extension is a service-independent recovery wallet for
-Safes whose owner list contains Vela's shared WebAuthn signer contract:
+This unpacked WXT/Chrome extension lets an existing Vela Safe sign and execute
+transactions in Safe Wallet with its Vela passkey. The Safe owner list must
+contain Vela's shared WebAuthn signer contract:
 
 `0x94a4F6affBd8975951142c3999aEAB7ecee555c2`
 
@@ -25,6 +26,12 @@ placeholder, reads the current Safe nonce, verifies its reconstructed EIP-712
 hash against `Safe.getTransactionHash`, opens the passkey approval window, and
 replaces that slot with the `v=0` WebAuthn contract signature before relaying.
 Already signed executions are relayed without asking for the passkey twice.
+
+Passkeys are remembered by Safe address only. The shared signer owner address
+is therefore never used as the credential-selection key. The
+first signature for a new Safe leaves WebAuthn `allowCredentials` unset so the
+browser can show that RP's discoverable passkeys; the approval window also
+offers **Choose another passkey** for replacing a stale or incorrect binding.
 
 The relayer key is generated locally and stored in `chrome.storage.local`. It
 only controls native funds held by the gas address; it is not a Safe owner.
@@ -71,7 +78,7 @@ npm run build
 
 Load the generated `.output/chrome-mv3` directory from `chrome://extensions`
 with Developer mode enabled. Open the extension popup, grant the selected RPC
-and `getvela.app` host permissions, verify the chain, and enable recovery mode.
+and `getvela.app` host permissions, verify the chain, and enable Safe access.
 Fund the displayed gas address with a small amount of that chain's native coin.
 After every extension install or reload, fully reload the open Safe page before
 connecting. Safe memoizes whether an owner has contract code; an already-open
@@ -85,11 +92,11 @@ fetch shim makes the shared validator look EOA-like during Safe's owner
 classification lookup; the background worker still uses the real bytecode and
 requires the contract signature before relaying.
 
-## Recovery limitations
+## Limitations
 
 - The selected Safe must already contain the shared WebAuthn signer and have a
   passkey/public-key registration understood by that signer contract.
-- This version intentionally supports Safe `execTransaction` recovery only; it
+- This version intentionally supports Safe `execTransaction` only; it
   does not impersonate an EOA, approve arbitrary typed data, or submit raw
   transactions.
 - **Sign / queue confirmation** is a local extension overlay, not a hosted Safe
@@ -100,5 +107,6 @@ requires the contract signature before relaying.
   shared signer slot with other signatures already present in calldata.
 - Keep the relayer key backed up separately if the gas balance matters. Rotate
   it only after exporting or emptying the old gas address.
-- The browser extension is a recovery tool. Review the Safe confirmation and
-  the passkey approval window before authorizing a transaction.
+- Safe creation and wallet management remain in Vela Wallet at `getvela.app`.
+  Review the Safe confirmation and passkey approval window before authorizing a
+  transaction.

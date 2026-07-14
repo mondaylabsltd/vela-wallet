@@ -1,32 +1,84 @@
 :root {
   color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #121310;
-  color: #f4f0e8;
+  background: #06111e;
+  color: #f7fbff;
+  font-synthesis: none;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 20% 0%, #2b211a 0, #121310 38%); }
-main { padding: 24px; }
-header { display: flex; gap: 14px; align-items: center; margin-bottom: 22px; }
-.mark { width: 48px; height: 48px; border-radius: 15px; display: grid; place-items: center; background: #f15a35; color: white; font-weight: 800; font-size: 22px; }
-.eyebrow { margin: 0 0 3px; color: #f58a6e; font-size: 10px; font-weight: 800; letter-spacing: .14em; }
-h1 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
-h2 { margin-top: 0; }
-.card { border: 1px solid #35362f; background: rgba(30, 31, 27, .94); border-radius: 18px; padding: 18px; box-shadow: 0 20px 55px rgba(0,0,0,.28); }
-.hidden { display: none; }
-.loading { color: #aaa99f; text-align: center; padding: 44px 18px; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 85% -10%, rgba(27, 154, 225, .25), transparent 36%),
+    linear-gradient(180deg, #071a2c, #06111e);
+}
+button { font: inherit; }
+main { padding: 22px; }
+
+header { display: flex; align-items: center; gap: 13px; margin-bottom: 19px; }
+.mark {
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  box-shadow: 0 9px 25px rgba(0, 0, 0, .28);
+}
+.eyebrow { margin: 0 0 3px; color: #64ccff; font-size: 9px; font-weight: 850; letter-spacing: .17em; }
+h1 { margin: 0; font-size: 22px; letter-spacing: -.035em; }
+h2 { margin: 0 0 8px; font-size: 16px; }
+
+.card {
+  padding: 18px;
+  border: 1px solid rgba(151, 192, 219, .17);
+  border-radius: 18px;
+  background: rgba(10, 30, 47, .92);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .2);
+}
+.loading { color: #a9c0cf; font-size: 12px; }
+.hidden { display: none !important; }
+
+.risk {
+  margin-bottom: 13px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: #123a2d;
+  color: #91e2bd;
+  font-size: 11.5px;
+  font-weight: 720;
+}
+.risk.warning { background: #403416; color: #f6d77f; }
+
 dl { margin: 0; }
-dl div { padding: 11px 0; border-bottom: 1px solid #30312b; }
-dt { color: #929187; font-size: 11px; font-weight: 650; margin-bottom: 4px; }
-dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
-.mono { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11.5px; }
-.risk { padding: 10px 12px; margin-bottom: 8px; border-radius: 10px; background: #33261c; color: #ffc09f; font-size: 12px; }
-.risk.normal { background: #1c3025; color: #8fe0ad; }
-.explain { color: #aaa99f; font-size: 12px; line-height: 1.55; margin: 16px 0; }
-button { width: 100%; border: 0; border-radius: 12px; padding: 12px 14px; font: inherit; font-size: 14px; font-weight: 720; cursor: pointer; }
-button:disabled { cursor: wait; opacity: .55; }
-.primary { background: #f15a35; color: white; }
-.primary:hover { background: #ff6b45; }
-.secondary { margin-top: 9px; background: transparent; color: #bdbbb1; border: 1px solid #3a3b35; }
-.error-card p { color: #ffb49f; line-height: 1.5; }
+dl div { padding: 10px 0; border-bottom: 1px solid rgba(151, 192, 219, .13); }
+dt { margin-bottom: 4px; color: #7f99aa; font-size: 9.5px; font-weight: 750; }
+dd { margin: 0; color: #eef8fd; font-size: 11.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 10px; }
+.explain { margin: 14px 0; color: #91a9b9; font-size: 10.5px; line-height: 1.5; }
+
+button {
+  width: 100%;
+  min-height: 43px;
+  margin-top: 8px;
+  border: 1px solid rgba(151, 192, 219, .2);
+  border-radius: 12px;
+  background: #102b40;
+  color: #edf8fe;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+button:disabled { opacity: .55; cursor: not-allowed; }
+.primary {
+  border: 0;
+  background: linear-gradient(135deg, #29b7fb, #148ad1);
+  color: #fff;
+  box-shadow: 0 10px 22px rgba(12, 132, 201, .23);
+}
+.secondary:hover { border-color: rgba(101, 201, 255, .55); }
+.error-card { border-color: rgba(240, 101, 84, .4); }
+.error-card p { color: #ffb0a6; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}

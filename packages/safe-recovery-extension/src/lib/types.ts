@@ -6,6 +6,8 @@ export interface RecoverySettings {
   chainId: number;
   rpcUrls: Record<string, string>;
   chainNames: Record<string, string>;
+  credentialIds: Record<string, string>;
+  /** Legacy global credential, migrated to credentialIds on read. */
   credentialId?: string;
   relayerPrivateKey: Hex;
   lastSafeAddress?: string;

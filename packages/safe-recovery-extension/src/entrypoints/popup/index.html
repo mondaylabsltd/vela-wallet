@@ -3,72 +3,121 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vela Safe Recovery</title>
+    <title>Vela Wallet for Safe</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main>
-      <header>
-        <div class="mark">V</div>
-        <div><p>DISASTER RECOVERY</p><h1>Vela Safe Recovery</h1></div>
+      <header class="brand">
+        <img src="/icon/128.png" alt="" />
+        <div>
+          <p>SAFE INTEGRATION</p>
+          <h1>Vela Wallet</h1>
+        </div>
       </header>
 
-      <section class="mode-card">
-        <div><strong>Recovery mode</strong><span>Only active on app.safe.global</span></div>
-        <label class="switch"><input id="enabled" type="checkbox" /><i></i></label>
-      </section>
-
-      <section class="card execute-note">
-        <strong>Execute and local queue signing are enabled</strong>
-        <p>Sponsored uses Gnosis relay; Connected wallet uses the local gas account below. “Sign” stores a browser-local confirmation: only this extension profile can see and later execute it.</p>
-      </section>
-
-      <section class="card">
-        <label>Safe owner</label>
-        <div id="owner" class="readout mono"></div>
-        <p class="hint">This is the shared WebAuthn validator contract. It never sends the outer transaction.</p>
-      </section>
-
-      <section class="card">
-        <div class="section-title"><strong>Network & passkey</strong><span id="rpc-state"></span></div>
-        <div class="grid">
-          <label>Chain ID<input id="chain-id" inputmode="numeric" /></label>
-          <label>Chain name<input id="chain-name" /></label>
+      <section class="hero">
+        <div class="hero-copy">
+          <h2>Use your Vela Safe in Safe Wallet</h2>
+          <p>Sign with the passkey already linked to this Safe.</p>
         </div>
-        <label>RPC URL<input id="rpc-url" type="url" spellcheck="false" /></label>
-        <label>Passkey domain (RP ID)<input id="rp-id" spellcheck="false" /></label>
-        <p class="hint">Defaults to getvela.app. You may enter another HTTPS domain whose passkeys were created for that RP ID.</p>
-        <button id="save" class="primary">Test and save</button>
-      </section>
-
-      <section class="card">
-        <div class="section-title"><strong>Gas-only relayer</strong><span id="balance"></span></div>
-        <div id="relayer" class="readout mono"></div>
-        <p class="hint">Fund this address with a small amount of the selected chain's native coin. It pays gas only; the passkey remains the Safe authorization.</p>
-        <div class="actions">
-          <button id="copy-relayer">Copy address</button>
-          <button id="refresh">Refresh</button>
-        </div>
-        <details>
-          <summary>Relayer backup</summary>
-          <p class="danger">This key controls only funds held by the gas address. It does not control the Safe. Keep it private.</p>
-          <button id="export-key">Reveal private key</button>
-          <pre id="private-key" class="hidden"></pre>
-          <label>Restore relayer key<input id="import-key" type="password" placeholder="0x…" spellcheck="false" /></label>
-          <div class="actions">
-            <button id="restore-key">Restore key</button>
-            <button id="rotate-key" class="danger-btn">New key</button>
+        <div class="access-row">
+          <div>
+            <strong>Safe access</strong>
+            <span id="access-state">Loading…</span>
           </div>
-        </details>
+          <label class="switch" aria-label="Enable Safe Wallet access">
+            <input id="enabled" type="checkbox" />
+            <i></i>
+          </label>
+        </div>
+        <a class="safe-link" href="https://app.safe.global" target="_blank">
+          Open Safe Wallet <span aria-hidden="true">↗</span>
+        </a>
       </section>
 
-      <section class="card compact">
-        <div><strong>Passkey selection</strong><span id="credential-state"></span></div>
-        <button id="clear-credential">Choose another passkey next time</button>
+      <section class="overview" aria-label="Wallet status">
+        <div class="overview-row">
+          <span>Network</span>
+          <strong id="network-summary">Loading…</strong>
+        </div>
+        <div class="overview-row">
+          <span>Passkey</span>
+          <strong id="credential-state">Loading…</strong>
+        </div>
+        <div class="overview-row">
+          <span>Gas fees</span>
+          <strong>Sponsored or local</strong>
+        </div>
+        <div class="gas-summary">
+          <div>
+            <span>Local gas balance</span>
+            <strong id="balance">Loading…</strong>
+          </div>
+          <div class="mini-actions">
+            <button id="copy-relayer" title="Copy local gas address">Copy address</button>
+            <button id="refresh" title="Refresh network status">Refresh</button>
+          </div>
+        </div>
       </section>
 
-      <div id="status" role="status"></div>
-      <a class="safe-link" href="https://app.safe.global" target="_blank">Open Safe Wallet ↗</a>
+      <details class="advanced">
+        <summary>
+          <span><strong>Advanced settings</strong><small>Network, passkey and gas account</small></span>
+          <i aria-hidden="true"></i>
+        </summary>
+        <div class="advanced-body">
+          <section class="settings-section">
+            <div class="section-title">
+              <strong>Network & passkey domain</strong>
+              <span id="rpc-state"></span>
+            </div>
+            <div class="grid">
+              <label>Chain ID<input id="chain-id" inputmode="numeric" /></label>
+              <label>Chain name<input id="chain-name" /></label>
+            </div>
+            <label>RPC URL<input id="rpc-url" type="url" spellcheck="false" /></label>
+            <label>Passkey domain (RP ID)<input id="rp-id" spellcheck="false" /></label>
+            <p class="hint">Keep getvela.app unless your Vela Wallet passkey was created for a custom domain.</p>
+            <button id="save" class="primary">Test and save</button>
+          </section>
+
+          <section class="settings-section">
+            <div class="section-title"><strong>Passkey for the current Safe</strong></div>
+            <label>Last signed Safe</label>
+            <div id="last-safe" class="readout mono">None yet</div>
+            <p class="hint">Each Safe remembers its own passkey. Reset this only if the wrong one is selected.</p>
+            <button id="clear-credential">Choose a different passkey next time</button>
+          </section>
+
+          <section class="settings-section">
+            <div class="section-title"><strong>Local gas account</strong></div>
+            <div id="relayer" class="readout mono"></div>
+            <p class="hint">Used only when you choose “Connected wallet” in Safe. Sponsored transactions use Gnosis instead.</p>
+            <details class="backup">
+              <summary>Back up or replace gas key</summary>
+              <p class="danger">This key controls funds held by the gas address, not your Safe. Keep it private.</p>
+              <button id="export-key">Reveal private key</button>
+              <pre id="private-key" class="hidden"></pre>
+              <label>Restore gas key<input id="import-key" type="password" placeholder="0x…" spellcheck="false" /></label>
+              <div class="actions">
+                <button id="restore-key">Restore key</button>
+                <button id="rotate-key" class="danger-btn">Create new key</button>
+              </div>
+            </details>
+          </section>
+
+          <section class="settings-section technical">
+            <div class="section-title"><strong>Technical details</strong></div>
+            <label>Shared Safe signer</label>
+            <div id="owner" class="readout mono"></div>
+            <p class="hint">Your passkey authorizes the Safe transaction. This contract validates it; the selected gas payer only broadcasts it.</p>
+          </section>
+        </div>
+      </details>
+
+      <div id="status" role="status" aria-live="polite"></div>
+      <p class="footer-note">Create and manage Vela wallets at <a href="https://getvela.app" target="_blank">getvela.app</a>.</p>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>

@@ -7,6 +7,7 @@ interface PopupState {
   rpcUrl: string;
   relayerAddress: string;
   credentialPinned: boolean;
+  lastSafeAddress?: string;
   balanceWei?: string;
   rpcError?: string;
 }
@@ -39,6 +40,7 @@ function formatBalance(value?: string): string {
 
 function render(state: PopupState) {
   input('enabled').checked = state.enabled;
+  $('access-state').textContent = state.enabled ? 'Ready on app.safe.global' : 'Turn on to connect';
   $('owner').textContent = state.owner;
   input('rp-id').value = state.rpId;
   input('chain-id').value = String(state.chainId);
@@ -46,8 +48,16 @@ function render(state: PopupState) {
   input('rpc-url').value = state.rpcUrl;
   $('relayer').textContent = state.relayerAddress;
   $('balance').textContent = formatBalance(state.balanceWei);
+  $('network-summary').textContent = state.chainName;
   $('rpc-state').textContent = state.rpcError ?? 'RPC connected';
-  $('credential-state').textContent = state.credentialPinned ? 'Pinned' : 'Chooser enabled';
+  $('rpc-state').classList.toggle('error', Boolean(state.rpcError));
+  $('credential-state').textContent = state.credentialPinned
+    ? 'Remembered for this Safe'
+    : state.lastSafeAddress
+      ? 'Choose on next signature'
+      : 'Choose on first signature';
+  $('last-safe').textContent = state.lastSafeAddress ?? 'No Safe signed yet';
+  $<HTMLButtonElement>('clear-credential').disabled = !state.lastSafeAddress || !state.credentialPinned;
 }
 
 async function refresh() {
@@ -70,7 +80,10 @@ function permissionPattern(raw: string): string {
 input('enabled').addEventListener('change', async () => {
   try {
     await action({ action: 'popup-set-enabled', enabled: input('enabled').checked });
-    setStatus(input('enabled').checked ? 'Recovery mode enabled. Reload Safe Wallet if it is already open.' : 'Recovery mode disabled.');
+    setStatus(input('enabled').checked
+      ? 'Safe access is on. Reload Safe Wallet if it is already open.'
+      : 'Safe access is off.');
+    await refresh();
   } catch (error) {
     input('enabled').checked = !input('enabled').checked;
     setStatus((error as Error).message, true);
@@ -93,7 +106,7 @@ $('save').addEventListener('click', async () => {
       rpcUrl,
       rpId,
     });
-    setStatus('RPC verified and recovery configuration saved.');
+    setStatus('Network and passkey settings saved.');
     await refresh();
   } catch (error) {
     setStatus((error as Error).message, true);
@@ -111,7 +124,7 @@ $('refresh').addEventListener('click', () => void refresh());
 $('clear-credential').addEventListener('click', async () => {
   try {
     await action({ action: 'popup-clear-credential' });
-    setStatus('The next signature will show the passkey chooser.');
+    setStatus('The next signature for this Safe will show the passkey chooser.');
     await refresh();
   } catch (error) {
     setStatus((error as Error).message, true);

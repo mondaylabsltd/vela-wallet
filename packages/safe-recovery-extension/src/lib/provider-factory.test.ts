@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { MESSAGE_CHANNEL, SHARED_WEBAUTHN_OWNER } from './constants';
-import { createRecoveryProvider } from './provider-factory';
+import { createRecoveryProvider, PROVIDER_INFO } from './provider-factory';
 import type { BridgeMessage } from './types';
 
 describe('recovery provider connection handshake', () => {
+  it('announces the stable provider identity with Vela Wallet branding', () => {
+    expect(PROVIDER_INFO).toMatchObject({
+      name: 'Vela Wallet',
+      rdns: 'app.getvela.recovery',
+    });
+    expect(PROVIDER_INFO.icon).toMatch(/^data:image\/png;base64,/);
+
+    const { provider } = createRecoveryProvider(() => undefined);
+    expect(provider.isVelaWallet).toBe(true);
+    expect(provider.isVelaSafeRecovery).toBe(true);
+  });
+
   it('becomes connected from eth_requestAccounts even when no state broadcast arrived', async () => {
     const outbound: BridgeMessage[] = [];
     const controller = createRecoveryProvider((message) => outbound.push(message));

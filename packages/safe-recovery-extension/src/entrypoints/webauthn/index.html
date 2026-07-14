@@ -3,16 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Approve Safe recovery</title>
+    <title>Approve with Vela Wallet</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main>
       <header>
-        <div class="mark">V</div>
+        <img class="mark" src="/icon/128.png" alt="" />
         <div>
-          <p class="eyebrow">VELA SAFE RECOVERY</p>
-          <h1>Approve with your passkey</h1>
+          <p class="eyebrow">VELA WALLET</p>
+          <h1>Review and sign</h1>
         </div>
       </header>
 
@@ -31,7 +31,8 @@
         <p class="explain">
           Your passkey signs this exact SafeTx hash. The gas account can broadcast it, but cannot change it or control the Safe.
         </p>
-        <button id="sign" class="primary">Verify and sign</button>
+        <button id="sign" class="primary">Sign with passkey</button>
+        <button id="choose-passkey" class="secondary hidden">Choose another passkey</button>
         <button id="cancel" class="secondary">Cancel</button>
       </section>
       <section id="error" class="card hidden error-card">

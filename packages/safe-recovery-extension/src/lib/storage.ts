@@ -17,31 +17,76 @@ function defaults(): RecoverySettings {
     chainId: 1,
     rpcUrls: Object.fromEntries(Object.entries(DEFAULT_RPC_URLS)),
     chainNames: Object.fromEntries(Object.entries(DEFAULT_CHAIN_NAMES)),
+    credentialIds: {},
     relayerPrivateKey: generatePrivateKey(),
     localConfirmations: {},
   };
 }
 
 export async function getSettings(): Promise<RecoverySettings> {
-  const stored = (await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY] as Partial<RecoverySettings> | undefined;
+  const stored = (await chrome.storage.local.get(STORAGE_KEY))[STORAGE_KEY] as
+    | (Partial<RecoverySettings> & { createdSafes?: unknown })
+    | undefined;
   const base = defaults();
   const merged: RecoverySettings = {
-    ...base,
-    ...stored,
+    enabled: stored?.enabled ?? base.enabled,
+    rpId: stored?.rpId ?? base.rpId,
+    chainId: stored?.chainId ?? base.chainId,
     rpcUrls: { ...base.rpcUrls, ...(stored?.rpcUrls ?? {}) },
     chainNames: { ...base.chainNames, ...(stored?.chainNames ?? {}) },
+    credentialIds: { ...(stored?.credentialIds ?? {}) },
+    credentialId: stored?.credentialId,
+    relayerPrivateKey: stored?.relayerPrivateKey ?? base.relayerPrivateKey,
+    lastSafeAddress: stored?.lastSafeAddress,
     localConfirmations: { ...(stored?.localConfirmations ?? {}) },
   };
+  let shouldSave = !stored || Boolean(stored && 'createdSafes' in stored);
+
+  // Collapse the short-lived RP/chain/Safe binding format to a Safe-only key.
+  // Prefer the binding for the last active configuration if several old keys
+  // point at the same Safe address.
+  const preferredOldKey = stored?.lastSafeAddress
+    ? `${(stored.rpId ?? merged.rpId).toLowerCase()}:${stored.chainId ?? merged.chainId}:${stored.lastSafeAddress.toLowerCase()}`
+    : undefined;
+  const credentialEntries = Object.entries(merged.credentialIds);
+  const safeOnlyEntries = credentialEntries.filter(([key]) => /^0x[0-9a-f]{40}$/i.test(key));
+  const preferredEntries = credentialEntries.filter(([key]) =>
+    key === preferredOldKey && !/^0x[0-9a-f]{40}$/i.test(key));
+  const remainingEntries = credentialEntries.filter(([key]) =>
+    !/^0x[0-9a-f]{40}$/i.test(key) && key !== preferredOldKey);
+  const credentialIds: Record<string, string> = {};
+  for (const [storedKey, credentialId] of [...safeOnlyEntries, ...preferredEntries, ...remainingEntries]) {
+    const safeAddress = storedKey.match(/0x[0-9a-f]{40}$/i)?.[0];
+    if (!safeAddress) {
+      credentialIds[storedKey] = credentialId;
+      continue;
+    }
+    const key = credentialBindingKey(safeAddress);
+    credentialIds[key] ??= credentialId;
+    if (key !== storedKey) shouldSave = true;
+  }
+  merged.credentialIds = credentialIds;
+
+  // Earlier versions pinned one credential globally. Preserve that successful
+  // association only for the last Safe, then remove the global pin so another
+  // Safe can discover its own passkey.
+  if (stored?.credentialId) {
+    if (stored.lastSafeAddress) {
+      const key = credentialBindingKey(stored.lastSafeAddress);
+      merged.credentialIds[key] ??= stored.credentialId;
+    }
+    delete merged.credentialId;
+    shouldSave = true;
+  }
 
   try {
     privateKeyToAccount(merged.relayerPrivateKey);
   } catch {
     merged.relayerPrivateKey = generatePrivateKey();
+    shouldSave = true;
   }
 
-  if (!stored || stored.relayerPrivateKey !== merged.relayerPrivateKey) {
-    await saveSettings(merged);
-  }
+  if (shouldSave) await saveSettings(merged);
   return merged;
 }
 
@@ -53,6 +98,34 @@ export async function patchSettings(patch: Partial<RecoverySettings>): Promise<R
   const current = await getSettings();
   const next = { ...current, ...patch };
   await saveSettings(next);
+  return next;
+}
+
+export function credentialBindingKey(safeAddress: string): string {
+  return safeAddress.toLowerCase();
+}
+
+export function credentialIdForSafe(
+  settings: RecoverySettings,
+  safeAddress: string,
+): string | undefined {
+  return settings.credentialIds[credentialBindingKey(safeAddress)];
+}
+
+export function bindCredentialIdToSafe(
+  credentialIds: Record<string, string>,
+  safeAddress: string,
+  credentialId: string,
+): Record<string, string> {
+  return { ...credentialIds, [credentialBindingKey(safeAddress)]: credentialId };
+}
+
+export function clearCredentialIdForSafe(
+  credentialIds: Record<string, string>,
+  safeAddress: string,
+): Record<string, string> {
+  const next = { ...credentialIds };
+  delete next[credentialBindingKey(safeAddress)];
   return next;
 }
 
@@ -87,6 +160,9 @@ export async function saveLocalConfirmation(
 }
 
 export function toPublicState(settings: RecoverySettings): PublicRecoveryState {
+  const credentialPinned = settings.lastSafeAddress
+    ? Boolean(credentialIdForSafe(settings, settings.lastSafeAddress))
+    : false;
   return {
     enabled: settings.enabled,
     owner: SHARED_WEBAUTHN_OWNER,
@@ -95,7 +171,7 @@ export function toPublicState(settings: RecoverySettings): PublicRecoveryState {
     chainName: settings.chainNames[String(settings.chainId)] ?? `Chain ${settings.chainId}`,
     rpcUrl: settings.rpcUrls[String(settings.chainId)] ?? '',
     relayerAddress: privateKeyToAccount(settings.relayerPrivateKey).address,
-    credentialPinned: Boolean(settings.credentialId),
+    credentialPinned,
     lastSafeAddress: settings.lastSafeAddress,
   };
 }

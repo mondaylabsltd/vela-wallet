@@ -135,7 +135,7 @@ export async function validateAssertion(
   if (authData.length < 37) throw providerError(-32602, 'Passkey authenticatorData is too short.');
   const expectedRpHash = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rpId)));
   if (!equalBytes(authData.slice(0, 32), expectedRpHash)) {
-    throw providerError(-32602, 'Passkey RP ID hash does not match the configured recovery domain.');
+    throw providerError(-32602, 'Passkey RP ID hash does not match the configured Vela Wallet domain.');
   }
   const flags = authData[32]!;
   if ((flags & 0x01) === 0 || (flags & 0x04) === 0) {
@@ -203,7 +203,7 @@ export function parseAndValidateSafeTypedData(raw: unknown, selectedChainId: num
     throw providerError(-32602, 'Typed data is not valid JSON.');
   }
   if (!typedData || typedData.primaryType !== 'SafeTx') {
-    throw providerError(4200, 'Recovery mode signs SafeTx typed data only.');
+    throw providerError(4200, 'Vela Wallet signs SafeTx typed data only.');
   }
   const fields = typedData.types?.SafeTx;
   const validFields = fields?.length === SAFE_TX_FIELDS.length && fields.every((field, index) => {
@@ -216,7 +216,7 @@ export function parseAndValidateSafeTypedData(raw: unknown, selectedChainId: num
   if (!safeAddress || !isAddress(safeAddress)) throw providerError(-32602, 'SafeTx has no valid Safe address.');
   const chainId = parseChainId(typedData.domain.chainId);
   if (chainId !== selectedChainId) {
-    throw providerError(4901, `SafeTx is for chain ${chainId}, but the recovery provider is on ${selectedChainId}.`);
+    throw providerError(4901, `SafeTx is for chain ${chainId}, but Vela Wallet is on ${selectedChainId}.`);
   }
   if (!isAddress(String(typedData.message?.to ?? ''))) {
     throw providerError(-32602, 'SafeTx destination is invalid.');

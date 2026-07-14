@@ -46,6 +46,8 @@ export default defineContentScript({
         // EIP-6963 remains the primary discovery path when another wallet locks window.ethereum.
       }
     }
+    Object.defineProperty(window, 'velaWallet', { value: provider, configurable: false });
+    // Keep the original global for pages that integrated before the rebrand.
     Object.defineProperty(window, 'velaSafeRecovery', { value: provider, configurable: false });
     window.postMessage({ type: 'recovery-provider-ready', channel: MESSAGE_CHANNEL }, '*');
   },
