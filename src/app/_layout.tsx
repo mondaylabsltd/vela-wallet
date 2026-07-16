@@ -122,6 +122,10 @@ function AppShell() {
                   HIDES the SigningRequestModal — device-verified regression (4/4 → 2/4).
                   initialRouteName '(tabs)' (above) anchors the wallet behind it. */}
               <Stack.Screen name="sign" />
+              {/* HTTPS dApp → Vela Web popup request surface. The route performs an
+                  origin-bound MessageChannel handshake; signing still uses the global
+                  clear-signing modal and the same passkey/UserOp pipeline. */}
+              <Stack.Screen name="web-request" />
               {__DEV__ && <Stack.Screen name="parallel" />}
             </Stack>
             </IdenticonViewerProvider>

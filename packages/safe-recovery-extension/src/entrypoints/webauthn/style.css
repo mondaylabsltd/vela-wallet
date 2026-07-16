@@ -1,0 +1,89 @@
+@import '../../styles/vela-theme.css';
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--vela-bg-base);
+  color: var(--vela-fg-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+button { font: inherit; }
+main { padding: 22px; }
+
+header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.mark {
+  width: 50px;
+  height: 50px;
+  border: 1px solid var(--vela-border);
+  border-radius: 14px;
+  box-shadow: var(--vela-shadow);
+}
+.eyebrow {
+  margin: 0 0 3px;
+  color: var(--vela-fg-subtle);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .16em;
+}
+h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -.03em; }
+h2 { margin: 0 0 8px; font-size: 16px; font-weight: 700; }
+
+.card {
+  padding: 18px;
+  border: 1px solid var(--vela-border);
+  border-radius: 16px;
+  background: var(--vela-bg-raised);
+  box-shadow: var(--vela-shadow);
+}
+.loading { color: var(--vela-fg-muted); font-size: 12px; }
+.hidden { display: none !important; }
+
+.risk {
+  margin-bottom: 13px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: var(--vela-success-soft);
+  color: var(--vela-success);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.risk.warning {
+  border-color: var(--vela-warning-border);
+  background: var(--vela-warning-soft);
+  color: var(--vela-warning);
+}
+
+dl { margin: 0; }
+dl div { padding: 10px 0; border-bottom: 1px solid var(--vela-border); }
+dt { margin-bottom: 4px; color: var(--vela-fg-subtle); font-size: 9.5px; font-weight: 600; }
+dd { margin: 0; color: var(--vela-fg-base); font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 10px; }
+.explain { margin: 14px 0; color: var(--vela-fg-muted); font-size: 10.5px; line-height: 1.55; }
+
+button {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  border: 1px solid var(--vela-border-strong);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--vela-fg-base);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .12s ease, transform .12s ease;
+}
+button:hover { background: var(--vela-bg-sunken); }
+button:active { transform: scale(.985); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.primary {
+  border-color: transparent;
+  background: var(--vela-accent);
+  color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(26, 26, 24, .08);
+}
+.primary:hover { background: var(--vela-accent-hover); }
+.error-card { border-color: var(--vela-error); background: var(--vela-error-soft); }
+.error-card p { color: var(--vela-error); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }

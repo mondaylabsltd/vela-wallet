@@ -14,7 +14,8 @@ Runs on **iOS**, **Android**, and **Web** from a single codebase.
 - **Multi-chain portfolio** — Balances and USD prices across all chains in one view. Native tokens, stablecoins, wrapped assets, and custom ERC-20s.
 - **On-chain pricing** — DEX quotes (Uniswap V3, PancakeSwap, Aerodrome) with Chainlink oracle fallback. No third-party price API dependency.
 - **Deposit detection** — Real-time balance monitoring with haptic notification when incoming transfers land.
-- **DApp Connect** — Pair with the Vela browser extension over Bluetooth to sign transactions from your desktop.
+- **DApp Connect** — Pair with compatible dApps over WalletPair's encrypted WebSocket relay to sign transactions from Vela.
+- **HTTPS Web Wallet** — dApps can integrate `@vela-wallet/sdk` and open `wallet.getvela.app` for account consent and passkey signing, without a native app or extension.
 - **Cross-device recovery** — Cloud-synced passkey backup via iCloud (iOS) or Google BlockStore (Android).
 - **Fully self-hostable** — All three backend services (chain data, passkey index, bundler) are open source and can be self-deployed.
 
@@ -218,6 +219,15 @@ Result flows back: webauthn.js → background → bridge → inject → page
 - The `clientDataJSON.origin` in the WebAuthn response will be `chrome-extension://<id>`, not the page origin. Your relying party server must accept this origin when validating credentials created through the extension.
 - The extension sets `window.__VELA_WEBAUTHN_PROXY_RPID__` in the page context. The app's `getRelyingPartyId()` reads this global to ensure public key uploads and server queries use the same rpId as the WebAuthn call.
 - This extension is for development and disaster recovery only. Do not publish it to the Chrome Web Store.
+
+### Safe owner recovery extension
+
+The repository also includes [`packages/safe-recovery-extension`](packages/safe-recovery-extension/README.md),
+which lets `app.safe.global` control a Safe whose owner list contains Vela's
+shared WebAuthn signer contract. The contract owner only authorizes the SafeTx;
+it cannot originate an outer transaction. The extension therefore uses a local,
+gas-only EOA relayer to submit the signed `execTransaction`, after simulating it
+and checking that the Safe calldata contains the WebAuthn contract signature.
 
 ## Recipient Identity Resolution
 

@@ -1,0 +1,96 @@
+/* Exact Vela Wallet palette from src/constants/theme.ts and the Safari extension. */
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('/font/PlusJakartaSans-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('/font/PlusJakartaSans-Medium.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('/font/PlusJakartaSans-SemiBold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Plus Jakarta Sans';
+  src: url('/font/PlusJakartaSans-Bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+  --vela-fg-base: #1A1A18;
+  --vela-fg-muted: #6E6B62;
+  --vela-fg-subtle: #8C887E;
+  --vela-fg-inverse: #FFFFFF;
+  --vela-bg-base: #FAFAF8;
+  --vela-bg-raised: #FFFFFF;
+  --vela-bg-sunken: #F5F3EF;
+  --vela-accent: #E8572A;
+  --vela-accent-hover: #D94D22;
+  --vela-accent-soft: #FFF0EB;
+  --vela-success: #2D8E5F;
+  --vela-success-soft: #EDFAF2;
+  --vela-warning: #92600A;
+  --vela-warning-soft: #FFF8F0;
+  --vela-warning-border: #F0DCC8;
+  --vela-error: #C62828;
+  --vela-error-soft: #FEF2F2;
+  --vela-border: #ECEBE4;
+  --vela-border-strong: #D8D6CE;
+  --vela-shadow: 0 2px 8px rgba(26, 26, 24, .06);
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-synthesis: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --vela-fg-base: #E8E6E1;
+    --vela-fg-muted: #9A9790;
+    --vela-fg-subtle: #85827A;
+    --vela-fg-inverse: #1A1A18;
+    --vela-bg-base: #141412;
+    --vela-bg-raised: #1E1E1B;
+    --vela-bg-sunken: #0F0F0D;
+    --vela-accent: #E8572A;
+    --vela-accent-hover: #F0673D;
+    --vela-accent-soft: #2C1A12;
+    --vela-success: #3DA872;
+    --vela-success-soft: #132A1E;
+    --vela-warning: #D4A54A;
+    --vela-warning-soft: #2A2010;
+    --vela-warning-border: #3D3020;
+    --vela-error: #F87171;
+    --vela-error-soft: #2D1515;
+    --vela-border: #2C2C28;
+    --vela-border-strong: #3E3E38;
+    --vela-shadow: 0 2px 8px rgba(0, 0, 0, .22);
+  }
+}
+
+* { box-sizing: border-box; }
+button, input { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+
+a:focus-visible,
+button:focus-visible,
+[role='switch']:focus-visible,
+summary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--vela-bg-base), 0 0 0 4px var(--vela-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}
