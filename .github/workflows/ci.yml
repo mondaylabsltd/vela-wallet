@@ -33,6 +33,13 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit
+      - name: Install Safe extension dependencies
+        run: npm ci --prefix packages/safe-recovery-extension
+      - name: Check Safe extension
+        run: |
+          npm run check --prefix packages/safe-recovery-extension
+          npm test --prefix packages/safe-recovery-extension
+          npm run build --prefix packages/safe-recovery-extension
       - name: Build HTTPS wallet SDK
         run: npm run build --prefix packages/vela-sdk
       - name: Lint
