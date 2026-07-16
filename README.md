@@ -220,6 +220,15 @@ Result flows back: webauthn.js → background → bridge → inject → page
 - The extension sets `window.__VELA_WEBAUTHN_PROXY_RPID__` in the page context. The app's `getRelyingPartyId()` reads this global to ensure public key uploads and server queries use the same rpId as the WebAuthn call.
 - This extension is for development and disaster recovery only. Do not publish it to the Chrome Web Store.
 
+### Safe owner recovery extension
+
+The repository also includes [`packages/safe-recovery-extension`](packages/safe-recovery-extension/README.md),
+which lets `app.safe.global` control a Safe whose owner list contains Vela's
+shared WebAuthn signer contract. The contract owner only authorizes the SafeTx;
+it cannot originate an outer transaction. The extension therefore uses a local,
+gas-only EOA relayer to submit the signed `execTransaction`, after simulating it
+and checking that the Safe calldata contains the WebAuthn contract signature.
+
 ## Recipient Identity Resolution
 
 When sending tokens, the wallet resolves recipient addresses to human-readable names for verification. Resolution queries run in parallel across multiple name services, returning the first match by priority:
