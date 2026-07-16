@@ -71,7 +71,16 @@ export async function rpcCallAt<T = unknown>(rpcUrl: string, method: string, par
     throw providerError(-32603, 'RPC returned malformed JSON.');
   }
   if (json.error) {
-    throw providerError(json.error.code ?? -32603, json.error.message ?? 'RPC error', json.error.data);
+    const rpcCode = json.error.code ?? -32603;
+    // EIP-1193 4xxx codes describe errors from the injected provider itself.
+    // A remote RPC returning one must not be surfaced as if Vela rejected the
+    // page method (viem would otherwise hide the real failing RPC operation).
+    const code = rpcCode >= 4000 && rpcCode <= 4999 ? -32603 : rpcCode;
+    throw providerError(
+      code,
+      `RPC ${method} failed: ${json.error.message ?? 'unknown RPC error'}`,
+      { rpcCode, rpcData: json.error.data },
+    );
   }
   return json.result as T;
 }

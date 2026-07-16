@@ -6,6 +6,8 @@ import {
   SHARED_WEBAUTHN_OWNER,
 } from '@/lib/constants';
 import { providerError, serializeError } from '@/lib/errors';
+import { configuredNetwork, configuredNetworks } from '@/lib/networks';
+import { isTransactionSubmissionMethod } from '@/lib/provider-methods';
 import { relaySafeExecution } from '@/lib/relayer';
 import { normalizeRpcUrl, permissionPatternForUrl, rpcCallAt, verifyRpcChain } from '@/lib/rpc';
 import {
@@ -126,6 +128,25 @@ async function broadcastLocalConfirmations(settings?: RecoverySettings): Promise
       confirmations,
     }).catch(() => undefined);
   }));
+}
+
+async function switchActiveNetwork(chainId: number): Promise<RecoverySettings> {
+  if (!Number.isSafeInteger(chainId) || chainId <= 0) {
+    throw providerError(-32602, 'Invalid chain ID.');
+  }
+  const settings = await getSettings();
+  const network = configuredNetwork(settings, chainId);
+  if (!network) throw providerError(4902, `No RPC configured for chain ${chainId}.`);
+  const origin = permissionPatternForUrl(network.rpcUrl);
+  const hasPermission = await chrome.permissions.contains({ origins: [origin] });
+  if (!hasPermission) {
+    throw providerError(4100, `RPC access for ${network.chainName} is not granted. Save it again in Advanced settings.`);
+  }
+  await verifyRpcChain(network.rpcUrl, chainId);
+  settings.chainId = chainId;
+  await saveSettings(settings);
+  await broadcastState(settings);
+  return settings;
 }
 
 function normalizeRpId(input: string): string {
@@ -322,10 +343,7 @@ async function handleProviderRequest(request: Eip1193Request): Promise<unknown> 
   if (method === 'wallet_switchEthereumChain') {
     const chain = firstParam<{ chainId?: string }>(params)?.chainId;
     const chainId = typeof chain === 'string' ? Number.parseInt(chain, 16) : 0;
-    if (!Number.isSafeInteger(chainId) || chainId <= 0) throw providerError(-32602, 'Invalid chain ID.');
-    rpcUrlFor(settings, chainId);
-    const next = await patchSettings({ chainId });
-    await broadcastState(next);
+    await switchActiveNetwork(chainId);
     return null;
   }
 
@@ -357,7 +375,10 @@ async function handleProviderRequest(request: Eip1193Request): Promise<unknown> 
   if (method === 'personal_sign' || method === 'eth_sign' || method === 'eth_signTypedData_v3') {
     throw providerError(4200, 'Vela Wallet signs canonical SafeTx EIP-712 requests only.');
   }
-  if (method === 'eth_sendTransaction') {
+  // viem 2.52 can use the wallet namespace for the same JSON-RPC account
+  // submission. Both methods must enter the identical, passkey-gated Safe
+  // relay path; neither gives the page access to the local gas key.
+  if (isTransactionSubmissionMethod(method)) {
     const transaction = firstParam<Record<string, any>>(params);
     if (!transaction) throw providerError(-32602, 'Missing transaction.');
     if (typeof transaction.from !== 'string' || !isAddress(transaction.from) || getAddress(transaction.from) !== getAddress(SHARED_WEBAUTHN_OWNER)) {
@@ -387,6 +408,8 @@ async function handleProviderRequest(request: Eip1193Request): Promise<unknown> 
 async function popupState() {
   const settings = await getSettings();
   const state = toPublicState(settings);
+  const networks = configuredNetworks(settings).map(({ chainId, chainName }) => ({ chainId, chainName }));
+  const nativeSymbol = configuredNetwork(settings, settings.chainId)?.nativeSymbol ?? 'native';
   let balanceWei: string | undefined;
   let rpcError: string | undefined;
   try {
@@ -394,7 +417,7 @@ async function popupState() {
   } catch (error) {
     rpcError = (error as Error)?.message ?? 'RPC unavailable';
   }
-  return { ...state, balanceWei, rpcError };
+  return { ...state, networks, nativeSymbol, balanceWei, rpcError };
 }
 
 async function handleExtensionAction(message: any): Promise<unknown> {
@@ -402,6 +425,10 @@ async function handleExtensionAction(message: any): Promise<unknown> {
   if (message.action === 'popup-set-enabled') {
     const next = await patchSettings({ enabled: Boolean(message.enabled) });
     await broadcastState(next);
+    return toPublicState(next);
+  }
+  if (message.action === 'popup-switch-network') {
+    const next = await switchActiveNetwork(Number(message.chainId));
     return toPublicState(next);
   }
   if (message.action === 'popup-save-config') {
@@ -470,7 +497,14 @@ async function handleExtensionAction(message: any): Promise<unknown> {
 }
 
 export default defineBackground(() => {
+  const configureSidePanel = () => {
+    if (!chrome.sidePanel?.setPanelBehavior) return;
+    void chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => undefined);
+  };
+
+  configureSidePanel();
   chrome.runtime.onInstalled.addListener(() => {
+    configureSidePanel();
     void getSettings();
   });
 

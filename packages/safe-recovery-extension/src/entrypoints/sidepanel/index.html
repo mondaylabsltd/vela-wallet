@@ -39,21 +39,24 @@
       <section class="overview" aria-label="Wallet status">
         <div class="overview-row">
           <span>Network</span>
-          <strong id="network-summary">Loading…</strong>
+          <select id="network-select" class="network-select" aria-label="Active network" disabled>
+            <option>Loading…</option>
+          </select>
         </div>
         <div class="overview-row">
           <span>Passkey</span>
           <strong id="credential-state">Loading…</strong>
         </div>
         <div class="overview-row">
-          <span>Gas fees</span>
-          <strong>Sponsored or local</strong>
+          <span>Gas payer</span>
+          <strong>Safe relay / Vela EOA</strong>
         </div>
         <div class="gas-summary">
           <div>
-            <span>Local gas balance</span>
+            <span>Vela gas account balance</span>
             <strong id="balance">Loading…</strong>
           </div>
+          <p class="payer-note">Used when Safe says “Signer pays.” The WebAuthn signer contract never pays gas.</p>
           <div class="mini-actions">
             <button id="copy-relayer" title="Copy local gas address">Copy address</button>
             <button id="refresh" title="Refresh network status">Refresh</button>

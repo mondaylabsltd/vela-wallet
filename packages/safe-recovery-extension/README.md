@@ -77,8 +77,10 @@ npm run build
 ```
 
 Load the generated `.output/chrome-mv3` directory from `chrome://extensions`
-with Developer mode enabled. Open the extension popup, grant the selected RPC
-and `getvela.app` host permissions, verify the chain, and enable Safe access.
+with Developer mode enabled. Click the extension toolbar icon to open its side
+panel, choose the active network, grant the selected RPC and `getvela.app` host
+permissions, verify the chain, and enable Safe access. Safe Wallet network
+changes and the side-panel selector stay synchronized through `chainChanged`.
 Fund the displayed gas address with a small amount of that chain's native coin.
 After every extension install or reload, fully reload the open Safe page before
 connecting. Safe memoizes whether an owner has contract code; an already-open

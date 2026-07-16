@@ -26,6 +26,9 @@ export default defineConfig({
       48: 'icon/48.png',
       128: 'icon/128.png',
     },
+    action: {
+      default_title: 'Vela Wallet for Safe',
+    },
     permissions: ['storage', 'windows'],
     host_permissions: [
       'https://app.safe.global/*',

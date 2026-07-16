@@ -1,10 +1,12 @@
-interface PopupState {
+interface PanelState {
   enabled: boolean;
   owner: string;
   rpId: string;
   chainId: number;
   chainName: string;
   rpcUrl: string;
+  networks: Array<{ chainId: number; chainName: string }>;
+  nativeSymbol: string;
   relayerAddress: string;
   credentialPinned: boolean;
   lastSafeAddress?: string;
@@ -26,19 +28,19 @@ async function action<T = any>(message: Record<string, unknown>): Promise<T> {
   return response as T;
 }
 
-function formatBalance(value?: string): string {
+function formatBalance(value: string | undefined, nativeSymbol: string): string {
   if (!value) return 'Balance unavailable';
   try {
     const wei = BigInt(value);
     const whole = wei / 10n ** 18n;
     const fraction = ((wei % 10n ** 18n) / 10n ** 12n).toString().padStart(6, '0').replace(/0+$/, '');
-    return `${whole}${fraction ? `.${fraction}` : ''} native`;
+    return `${whole}${fraction ? `.${fraction}` : ''} ${nativeSymbol}`;
   } catch {
     return 'Balance unavailable';
   }
 }
 
-function render(state: PopupState) {
+function render(state: PanelState) {
   input('enabled').checked = state.enabled;
   $('access-state').textContent = state.enabled ? 'Ready on app.safe.global' : 'Turn on to connect';
   $('owner').textContent = state.owner;
@@ -47,8 +49,17 @@ function render(state: PopupState) {
   input('chain-name').value = state.chainName;
   input('rpc-url').value = state.rpcUrl;
   $('relayer').textContent = state.relayerAddress;
-  $('balance').textContent = formatBalance(state.balanceWei);
-  $('network-summary').textContent = state.chainName;
+  $('balance').textContent = formatBalance(state.balanceWei, state.nativeSymbol);
+  const networkSelect = $<HTMLSelectElement>('network-select');
+  const options = state.networks.map((network) => {
+    const option = document.createElement('option');
+    option.value = String(network.chainId);
+    option.textContent = network.chainName;
+    return option;
+  });
+  networkSelect.replaceChildren(...options);
+  networkSelect.value = String(state.chainId);
+  networkSelect.disabled = false;
   $('rpc-state').textContent = state.rpcError ?? 'RPC connected';
   $('rpc-state').classList.toggle('error', Boolean(state.rpcError));
   $('credential-state').textContent = state.credentialPinned
@@ -62,7 +73,7 @@ function render(state: PopupState) {
 
 async function refresh() {
   try {
-    render(await action<PopupState>({ action: 'popup-get-state' }));
+    render(await action<PanelState>({ action: 'popup-get-state' }));
   } catch (error) {
     setStatus((error as Error).message, true);
   }
@@ -87,6 +98,22 @@ input('enabled').addEventListener('change', async () => {
   } catch (error) {
     input('enabled').checked = !input('enabled').checked;
     setStatus((error as Error).message, true);
+  }
+});
+
+$<HTMLSelectElement>('network-select').addEventListener('change', async () => {
+  const select = $<HTMLSelectElement>('network-select');
+  const selectedName = select.selectedOptions[0]?.textContent ?? `Chain ${select.value}`;
+  select.disabled = true;
+  try {
+    await action({ action: 'popup-switch-network', chainId: Number(select.value) });
+    setStatus(`Switched to ${selectedName}. Safe Wallet will follow this network.`);
+    await refresh();
+  } catch (error) {
+    setStatus((error as Error).message, true);
+    await refresh();
+  } finally {
+    select.disabled = false;
   }
 });
 
@@ -166,5 +193,23 @@ $('rotate-key').addEventListener('click', async () => {
     setStatus((error as Error).message, true);
   }
 });
+
+let refreshTimer: number | undefined;
+
+function scheduleRefresh() {
+  if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+  refreshTimer = window.setTimeout(() => {
+    refreshTimer = undefined;
+    void refresh();
+  }, 100);
+}
+
+chrome.storage.onChanged.addListener((_changes, areaName) => {
+  if (areaName === 'local') scheduleRefresh();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') scheduleRefresh();
+});
+window.addEventListener('focus', scheduleRefresh);
 
 void refresh();

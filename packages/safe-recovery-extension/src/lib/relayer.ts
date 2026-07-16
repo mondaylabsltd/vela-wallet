@@ -417,10 +417,10 @@ export async function relaySafeExecution(
 ): Promise<Hex> {
   if (!transaction.to || !isAddress(transaction.to)) throw providerError(-32602, 'Transaction has no valid Safe target.');
   if (!transaction.data || !isHex(transaction.data) || !transaction.data.toLowerCase().startsWith(EXEC_TRANSACTION_SELECTOR.toLowerCase())) {
-    throw providerError(4200, 'Vela Wallet only submits Safe execTransaction calls.');
+    throw providerError(-32602, 'Vela Wallet only submits Safe execTransaction calls.');
   }
   const value = parseQuantity(transaction.value, 0n);
-  if (value !== 0n) throw providerError(4200, 'Vela Wallet refuses outer transactions with value.');
+  if (value !== 0n) throw providerError(-32602, 'Vela Wallet refuses outer transactions with value.');
 
   const safeAddress = getAddress(transaction.to);
   const safe = await assertRecoverySafe(rpcUrl, safeAddress);

@@ -38,6 +38,20 @@ export const DEFAULT_CHAIN_NAMES: Record<number, string> = {
   534352: 'Scroll',
 };
 
+export const DEFAULT_NATIVE_SYMBOLS: Record<number, string> = {
+  1: 'ETH',
+  10: 'ETH',
+  56: 'BNB',
+  100: 'xDAI',
+  137: 'POL',
+  324: 'ETH',
+  8453: 'ETH',
+  42161: 'ETH',
+  43114: 'AVAX',
+  59144: 'ETH',
+  534352: 'ETH',
+};
+
 export const STORAGE_KEY = 'velaSafeRecoverySettings';
 export const REQUEST_TIMEOUT_MS = 3 * 60_000;
 export const RPC_TIMEOUT_MS = 30_000;
