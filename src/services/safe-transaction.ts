@@ -527,6 +527,11 @@ export async function estimateTransactionFee(
   // Try to get accurate gas estimates from the bundler. This catches high-gas chains
   // (e.g. Monad) where actual gas usage is 3-10x higher than the static defaults below.
   let totalGas: bigint | null = null;
+  // The bundler's UN-PADDED estimate for the real call — the in-band CHARGE basis. The padded
+  // `totalGas` (1.5× + floors + L2 adders) is right for the op's gas LIMITS but ~3-10× the real
+  // gas, so pricing the in-band fee off it over-charged the user 8-30× (a maxFee=0 op pays no
+  // EntryPoint gas — the reimbursement IS the whole cost, so it must track REAL gas, not limits).
+  let rawEstGas: bigint | null = null;
   try {
     const verificationGas = deployed ? VERIFICATION_GAS_DEPLOYED : VERIFICATION_GAS_UNDEPLOYED;
     const dummySig = buildDummySignature();
@@ -544,13 +549,14 @@ export async function estimateTransactionFee(
       signature: dummySig,
     };
     const est = await estimateGas(dummyOp, chainId);
+    rawEstGas = est.verificationGasLimit + est.callGasLimit + est.preVerificationGas;
     const estVgl = deployed
       ? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
       : bigintMax((est.verificationGasLimit * 15n) / 10n, 2_000_000n);
     const estCgl = bigintMax((est.callGasLimit * 15n) / 10n, 100_000n);
     const estPvg = est.preVerificationGas + 10_000n;
     totalGas = estVgl + estCgl + estPvg;
-    console.log(`[FeeEstimate] Bundler gas: vgl=${estVgl} cgl=${estCgl} pvg=${estPvg} total=${totalGas}`);
+    console.log(`[FeeEstimate] Bundler gas: vgl=${estVgl} cgl=${estCgl} pvg=${estPvg} total=${totalGas} rawBasis=${rawEstGas}`);
   } catch (err) {
     // For a large/complex op the static fallback would show a misleading number and
     // the submit would be refused anyway (see sendUserOp). Surface the failure so the
@@ -585,20 +591,13 @@ export async function estimateTransactionFee(
   // the 3× markup). On any quote failure/mismatch fall through to the legacy estimate
   // unchanged, so the display never disagrees with what the send path would pay.
   if (await isInBandChain(chainId, from)) {
-    // Charge basis: prefer the bundler's real estimate for the ACTUAL call (un-padded,
-    // ×1.1 headroom) — the padded totalGas + L2 adders over-price several-fold and this
-    // number is what gets SIGNED (displayed = signed). Rough fallback when the tx isn't
-    // known yet (warm-up estimates) or the account is undeployed.
-    let basisGas = totalGas;
-    if (deployed && (tx || (batchCalls && batchCalls.length > 0))) {
-      const inner: MultiSendCall[] = (batchCalls ?? [tx!]).map((c) => ({
-        to: c.to,
-        value: c.value ?? '0',
-        data: typeof c.data === 'string' && c.data.length > 2 ? fromHex(c.data) : new Uint8Array(0),
-      }));
-      const est = await estimateInBandBasisGas(from, inner, gasFeeToken ?? null, chainId);
-      if (est !== null && est > 0n) basisGas = (est * 11n) / 10n;
-    }
+    // Charge basis = the bundler's UN-PADDED estimate for the real call (×1.1 headroom),
+    // captured above from the SAME estimate the limits derive from — NOT the padded totalGas,
+    // which over-priced the in-band fee 8-30× (a maxFee=0 op's whole cost is the reimbursement,
+    // which must track REAL gas). This reuses the one estimate already made (no extra RPC), so a
+    // fee-token switch is also faster. Only the padded totalGas remains as a last-resort fallback
+    // when the bundler couldn't estimate at all (static path).
+    const basisGas = rawEstGas !== null && rawEstGas > 0n ? (rawEstGas * 11n) / 10n : totalGas;
     const nativeCostWei = basisGas * networkFeePerGas;
     const inBandQuote = await fetchInBandGasQuote(chainId, from, nativeCostWei, gasFeeToken);
     const wantToken = gasFeeToken?.toLowerCase() ?? null;
@@ -1078,8 +1077,11 @@ export async function estimateInBandBasisGas(
       verificationGasLimit: VERIFICATION_GAS_DEPLOYED,
       callGasLimit: CALL_GAS_LIMIT,
       preVerificationGas: PRE_VERIFICATION_GAS,
-      maxFeePerGas: 0n,
-      maxPriorityFeePerGas: 0n,
+      // Estimation-only fee — MUST be nonzero: a maxFee=0 draft trips the bundler's AA fee
+      // checks and estimation throws (→ null → the caller over-charged off the padded model).
+      // The op is SIGNED with maxFee=0 separately; the returned gas limits are fee-independent.
+      maxFeePerGas: 1_000_000_000n,
+      maxPriorityFeePerGas: 1_000_000_000n,
       paymasterAndData: new Uint8Array(0),
       signature: buildDummySignature(),
     };

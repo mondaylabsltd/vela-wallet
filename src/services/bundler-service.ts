@@ -625,13 +625,36 @@ export interface InBandGasQuote {
  * Returns null when the quote fails for reasons the caller should fall back on
  * (chain not in-band, token not whitelisted / unpriceable, transient error).
  */
+/** Short-lived cache for in-band quotes (the stablecoin path costs a DEX quoterV2 eth_call on
+ *  the bundler, ~hundreds of ms) so flipping the fee-token chip back and forth doesn't re-hit
+ *  it each time. Keyed by (chain, safe, feeToken, nativeCost bucketed to 1%) — a quote is only
+ *  reused for the same tx sizing. TTL is short: the bundler re-verifies at submit anyway. */
+const QUOTE_CACHE_TTL = 8_000;
+const inBandQuoteCache = new Map<string, { at: number; quote: InBandGasQuote | null }>();
+
+function quoteCacheKey(chainId: number, safe: string, nativeCostWei: bigint, feeToken?: string | null): string {
+  // Bucket the cost to ~1% so tiny basis jitter still hits the cache.
+  const bucket = nativeCostWei > 0n ? nativeCostWei / (nativeCostWei / 100n + 1n) : 0n;
+  return `${chainId}:${safe.toLowerCase()}:${(feeToken ?? 'native').toLowerCase()}:${bucket}`;
+}
+
+export function _resetInBandQuoteCache(): void {
+  inBandQuoteCache.clear();
+}
+
 export async function fetchInBandGasQuote(
   chainId: number,
   safeAddress: string,
   nativeCostWei: bigint,
   feeToken?: string | null,
 ): Promise<InBandGasQuote | null> {
-  return (await fetchInBandGasQuoteDetailed(chainId, safeAddress, nativeCostWei, feeToken)).quote;
+  const key = quoteCacheKey(chainId, safeAddress, nativeCostWei, feeToken);
+  const cached = inBandQuoteCache.get(key);
+  if (cached && Date.now() - cached.at < QUOTE_CACHE_TTL) return cached.quote;
+  const quote = (await fetchInBandGasQuoteDetailed(chainId, safeAddress, nativeCostWei, feeToken)).quote;
+  // Cache only real quotes — a transient null must not stick.
+  if (quote) inBandQuoteCache.set(key, { at: Date.now(), quote });
+  return quote;
 }
 
 /** Like fetchInBandGasQuote but distinguishes a DEFINITIVE "chain is not in-band"

@@ -46,6 +46,7 @@ import {
   fetchInBandGasQuote,
   isInBandChain,
   _resetInBandSupportCache,
+  _resetInBandQuoteCache,
 } from '@/services/bundler-service';
 import {
   buildInBandFeeLeg,
@@ -68,6 +69,7 @@ beforeEach(() => {
   rpcCallMock.mockReset();
   poolBundlerCallMock.mockReset();
   _resetInBandSupportCache();
+  _resetInBandQuoteCache();
 });
 
 // ---------------------------------------------------------------------------
