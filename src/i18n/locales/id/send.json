@@ -114,6 +114,7 @@
     "recipientPickAria": "Pilih penerima atau pindai",
     "scanAria": "Pindai kode QR",
     "multiSendNoFundsAfterGas": "Tidak cukup untuk gas setelah cadangan.",
-    "gasReserved": "gas dicadangkan"
+    "gasReserved": "gas dicadangkan",
+    "feeTokenLabel": "Fee token"
   }
 }

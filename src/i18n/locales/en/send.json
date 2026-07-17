@@ -114,6 +114,7 @@
     "batchImportFailedBody": "Please use a CSV, TSV, TXT, or Excel file.",
     "batchCurrencyLabel": "Priced in",
     "batchOverBalance": "Total exceeds your {{sym}} balance.",
-    "batchClose": "Close"
+    "batchClose": "Close",
+    "feeTokenLabel": "Fee token"
   }
 }

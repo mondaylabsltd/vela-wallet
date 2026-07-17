@@ -13,7 +13,7 @@
 import { nativeSymbol } from '@/models/network';
 import { fundingShouldForce } from './dev/fault-injection';
 import { formatWeiToEth } from './format-eth';
-import { getActiveBundlerBaseUrl, getChainRpcUrl, isUsingBuiltinBundler, poolRpcCall } from './rpc-pool';
+import { getActiveBundlerBaseUrl, getChainRpcUrl, isUsingBuiltinBundler, poolBundlerCall, poolRpcCall } from './rpc-pool';
 import { loadServiceEndpoints } from './storage';
 import { isTempoChain, TEMPO_DEFAULT_FEE_TOKEN } from './tempo';
 import { fetchWithTimeout, isTimeoutError, NET_TIMEOUTS } from './net';
@@ -27,6 +27,12 @@ export interface BundlerAccountInfo {
   chainId: number;
   /** The dedicated bundler EOA address to fund. */
   depositAddress: string;
+  /** Where the in-band gas reimbursement should be sent. Normally equals
+   *  depositAddress; the bundler's TREASURY when its vault mode is enabled
+   *  (vela-bundler docs/pool-queue-architecture.md Stage 2). Absent on old
+   *  bundlers — callers fall back to depositAddress. Funding/deposit flows
+   *  must keep using depositAddress; only the reimbursement leg follows this. */
+  settlementRecipient?: string;
   /** Current on-chain balance (wei). */
   onchainBalance: bigint;
   /** Balance available for spending (on-chain minus reserved). */
@@ -448,9 +454,17 @@ export async function fetchBundlerAccountInfo(
       } catch { /* keep native fallback */ }
     }
 
+    // Accept settlementRecipient only if it is a well-formed address — a corrupted
+    // field must degrade to the depositAddress fallback, never poison the fee leg.
+    const settlementRecipient =
+      typeof data.settlementRecipient === 'string' && /^0x[0-9a-fA-F]{40}$/.test(data.settlementRecipient)
+        ? data.settlementRecipient
+        : undefined;
+
     const info: BundlerAccountInfo = {
       chainId,
       depositAddress: data.activeDepositAddress ?? '',
+      settlementRecipient,
       onchainBalance,
       spendableBalance,
       status: data.status ?? 'UNKNOWN',
@@ -588,6 +602,156 @@ export function underfundedRequiredWei(underfunded: BundlerUnderfunded): bigint 
  * deposit address + required amount are parsed out so callers can open the
  * funding modal even when a follow-up account lookup fails.
  */
+// ---------------------------------------------------------------------------
+// In-band gas settlement (generic chains) — vela-bundler docs/inband-gas-settlement.md
+// ---------------------------------------------------------------------------
+
+/** A sizing quote from `vela_getInBandGasQuote`: transfer exactly `requiredAmount`
+ *  of the chosen asset to `recipient` inside the UserOp batch. The bundler
+ *  re-verifies at submit; the amount already includes its 3× markup and, for
+ *  stablecoins, the $0.01-equivalent floor. */
+export interface InBandGasQuote {
+  recipient: string;
+  asset: 'native' | 'erc20';
+  feeToken: string | null;
+  requiredAmount: bigint;
+  decimals?: number;
+  markupX: number;
+}
+
+/**
+ * Ask the bundler how much to transfer in-band for `nativeCostWei` of estimated
+ * outer gas. `feeToken` null/undefined → native; else a whitelisted stablecoin.
+ * Returns null when the quote fails for reasons the caller should fall back on
+ * (chain not in-band, token not whitelisted / unpriceable, transient error).
+ */
+export async function fetchInBandGasQuote(
+  chainId: number,
+  safeAddress: string,
+  nativeCostWei: bigint,
+  feeToken?: string | null,
+): Promise<InBandGasQuote | null> {
+  return (await fetchInBandGasQuoteDetailed(chainId, safeAddress, nativeCostWei, feeToken)).quote;
+}
+
+/** Like fetchInBandGasQuote but distinguishes a DEFINITIVE "chain is not in-band"
+ *  (bundler says not enabled, or an old bundler without the method) from transient
+ *  failures — only the former may negative-cache the chain's capability. */
+async function fetchInBandGasQuoteDetailed(
+  chainId: number,
+  safeAddress: string,
+  nativeCostWei: bigint,
+  feeToken?: string | null,
+): Promise<{ quote: InBandGasQuote | null; notEnabled: boolean }> {
+  try {
+    const resp = await poolBundlerCall(
+      'vela_getInBandGasQuote',
+      [{
+        safeAddress,
+        nativeCost: '0x' + nativeCostWei.toString(16),
+        ...(feeToken ? { feeToken } : {}),
+      }],
+      chainId,
+    );
+    if (resp.error || !resp.result) {
+      const notEnabled =
+        /not enabled/i.test(resp.error?.message ?? '') ||
+        resp.error?.code === -32601; // method not found — pre-in-band bundler
+      console.log(`[InBand] quote unavailable on chain=${chainId}: ${resp.error?.message ?? 'empty result'}`);
+      return { quote: null, notEnabled };
+    }
+    const r = resp.result;
+    if (!r.recipient || !/^0x[0-9a-fA-F]{40}$/.test(r.recipient)) return { quote: null, notEnabled: false };
+    const requiredAmount = parseBigIntHex(r.requiredAmount);
+    if (requiredAmount <= 0n) return { quote: null, notEnabled: false };
+    return {
+      quote: {
+        recipient: r.recipient,
+        asset: r.asset === 'erc20' ? 'erc20' : 'native',
+        feeToken: r.feeToken ?? null,
+        requiredAmount,
+        decimals: typeof r.decimals === 'number' ? r.decimals : undefined,
+        markupX: typeof r.markupX === 'number' ? r.markupX : 3,
+      },
+      notEnabled: false,
+    };
+  } catch (err) {
+    console.warn(`[InBand] quote failed for chain=${chainId}:`, err);
+    return { quote: null, notEnabled: false };
+  }
+}
+
+/** Per-chain in-band capability, learned from a probe quote. Tempo is always
+ *  in-band; other chains flip when the bundler enables them. */
+const inBandSupport = new Map<number, { at: number; supported: boolean }>();
+const INBAND_SUPPORT_TTL = 5 * 60_000;
+
+export async function isInBandChain(chainId: number, safeAddress: string): Promise<boolean> {
+  if (isTempoChain(chainId)) return true;
+  const cached = inBandSupport.get(chainId);
+  if (cached && Date.now() - cached.at < INBAND_SUPPORT_TTL) return cached.supported;
+  // 1-wei probe. Only a DEFINITIVE outcome may be cached: a transient RPC failure
+  // negative-cached for 5 minutes would route sends down the legacy path (maxFee>0,
+  // prefund gate) against a bundler that expects in-band — every one rejected.
+  const { quote, notEnabled } = await fetchInBandGasQuoteDetailed(chainId, safeAddress, 1n);
+  if (quote !== null) {
+    inBandSupport.set(chainId, { at: Date.now(), supported: true });
+    return true;
+  }
+  if (notEnabled) {
+    inBandSupport.set(chainId, { at: Date.now(), supported: false });
+    return false;
+  }
+  // Transient failure: fall back to the last known answer (even expired), never cache.
+  return cached?.supported ?? false;
+}
+
+/** Test hook: reset the in-band capability cache. */
+export function _resetInBandSupportCache(): void {
+  inBandSupport.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Treasury bootstrap (user-funded relayer float on depleted/dev networks)
+// ---------------------------------------------------------------------------
+
+/** Per-chain treasury status from GET /v1/treasury/:chainId. `bootstrapNeeded`
+ *  means the relayer can't operate until someone funds the treasury directly —
+ *  a NON-REFUNDABLE operator-float contribution, not gas credit. */
+export interface TreasuryStatus {
+  chainId: number;
+  address: string;
+  asset: 'native' | 'pathUSD';
+  balance: bigint;
+  floor: bigint;
+  bootstrapNeeded: boolean;
+}
+
+export async function fetchTreasuryStatus(chainId: number): Promise<TreasuryStatus | null> {
+  try {
+    const baseUrl = await getActiveBundlerBaseUrl(chainId);
+    const res = await fetchWithTimeout(
+      `${baseUrl}/v1/treasury/${chainId}`,
+      { headers: { Accept: 'application/json' } },
+      { timeoutMs: NET_TIMEOUTS.bundlerRest },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.address || !/^0x[0-9a-fA-F]{40}$/.test(data.address)) return null;
+    return {
+      chainId,
+      address: data.address,
+      asset: data.asset === 'pathUSD' ? 'pathUSD' : 'native',
+      balance: parseBigIntHex(data.balance),
+      floor: parseBigIntHex(data.floor),
+      bootstrapNeeded: data.bootstrapNeeded === true,
+    };
+  } catch (err) {
+    console.warn(`[Treasury] status fetch failed for chain=${chainId}:`, err);
+    return null;
+  }
+}
+
 export function parseBundlerUnderfunded(msg: string | undefined | null): BundlerUnderfunded | null {
   if (!msg) return null;
   const isUnderfunded =

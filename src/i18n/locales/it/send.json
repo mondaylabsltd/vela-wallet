@@ -114,6 +114,7 @@
     "batchClose": "Chiudi",
     "batchImportFailedTitle": "Impossibile leggere il file",
     "batchImportFailedBody": "Usa un file CSV, TSV, TXT o Excel.",
-    "batchCurrencyLabel": "Prezzato in"
+    "batchCurrencyLabel": "Prezzato in",
+    "feeTokenLabel": "Fee token"
   }
 }

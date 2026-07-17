@@ -5,7 +5,6 @@ import { VelaButton } from '@/components/ui/VelaButton';
 import { SlideToConfirmButton } from '@/components/ui/SlideToConfirmButton';
 import { TokenSelector } from '@/components/ui/TokenSelector';
 import { SectionLabel } from '@/components/ui/SectionLabel';
-import { Divider } from '@/components/ui/DetailRow';
 import { scaleFont, color, text, inter, space, radius, font, shadow, motion, createStyles } from '@/constants/theme';
 import { chainName, nativeSymbol, networkForChainId, networkId, tokenBadgeNetwork } from '@/models/network';
 import { addCustomNetworkByChainId } from '@/services/add-network';
@@ -16,7 +15,7 @@ import { type APIToken, formatBalance, isNativeToken, tokenBalanceDouble, tokenC
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { fromHex, toHex } from '@/services/hex';
-import { sendERC20, sendNative, sendBatchCalls, estimateTransactionFee, formatWeiToEth, prefetchForSend, refreshGasPrice, rawBundlerGasCost, type TransactionFeeEstimate, type GasTier } from '@/services/safe-transaction';
+import { sendERC20, sendNative, sendBatchCalls, estimateTransactionFee, requoteInBandFee, formatWeiToEth, prefetchForSend, refreshGasPrice, rawBundlerGasCost, type TransactionFeeEstimate } from '@/services/safe-transaction';
 import { isTempoChain, isTempoFeeToken, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
 import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
 import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
@@ -25,7 +24,9 @@ import { ContactPicker } from '@/components/contacts/ContactPicker';
 import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { saveContact } from '@/services/contacts';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
-import { attemptSilentSponsorship, checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, formatWei, parseBundlerUnderfunded, probeGasSponsorship, recommendedFundingWei, underfundedRequiredWei, type FundingNeeded } from '@/services/bundler-service';
+import { attemptSilentSponsorship, checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, fetchTreasuryStatus, formatWei, isInBandChain, parseBundlerUnderfunded, probeGasSponsorship, recommendedFundingWei, underfundedRequiredWei, type FundingNeeded, type TreasuryStatus } from '@/services/bundler-service';
+import { fetchChainTokens } from '@/services/chain-tokens';
+import { TreasuryBootstrapSheet } from '@/components/ui/TreasuryBootstrapSheet';
 import { AmountText } from '@/components/ui/AmountText';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
 import { MultiRecipientEditor, makeRecipientId, recipientsAreValid, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
@@ -250,6 +251,10 @@ export default function SendScreen() {
   // "eligible"; consumed by executeTransaction to fire the REAL grant right
   // after the confirm slide (see handleContinue for the rationale).
   const pendingSponsorship = useRef<FundingNeeded | null>(null);
+  // Monotonic id for fee-token re-quotes: a rapid A→B→A chip tap can resolve out of order, so
+  // only the LATEST request may write feeEstimate — otherwise the fee shown could be a stale
+  // asset while a different one is selected (display/charge mismatch).
+  const feeReqSeq = useRef(0);
   // Single-flight re-entry lock with a generation token. A cancelled send
   // releases it immediately (so a retry isn't a silent no-op) while the cancelled
   // promise's stale `end()` must not clear a newer send's lock (issue #91).
@@ -280,7 +285,16 @@ export default function SendScreen() {
   const [receiptFailed, setReceiptFailed] = useState(false);
   const [inputInUsd, setInputInUsd] = useState(false);
   const [gasExpanded, setGasExpanded] = useState(false);
-  const [gasTier, setGasTier] = useState<GasTier>('standard');
+  // Speed tiers are gone — every estimate/submit runs at 'fast'. What the user
+  // CAN choose (on in-band chains with a DEX) is the fee ASSET: null = native,
+  // else a whitelisted stablecoin contract. Options load when confirm opens;
+  // null options = no selector (legacy chain, or Tempo where pathUSD is fixed).
+  const [gasFeeToken, setGasFeeToken] = useState<string | null>(null);
+  const [feeTokenOptions, setFeeTokenOptions] = useState<{ symbol: string; contract: string | null }[] | null>(null);
+  // Treasury bootstrap sheet (relayer float depleted on this network) — shown
+  // instead of the generic error/funding surface when the treasury reports
+  // bootstrapNeeded. See maybeShowTreasuryBootstrap.
+  const [treasuryBootstrap, setTreasuryBootstrap] = useState<TreasuryStatus | null>(null);
   const [refreshingGas, setRefreshingGas] = useState(false);
   const [showContactPicker, setShowContactPicker] = useState(false);
   const [showBatchImport, setShowBatchImport] = useState(false);
@@ -394,7 +408,7 @@ export default function SendScreen() {
               fetchBundlerAccountInfo(chainId, activeAccount.address).catch(() => {});
               findAccountByCredentialId(activeAccount.id).then((s) => { prefetchedAccount.current = s ?? null; });
               import('@/services/webauthn-verify').then((m) => { webauthnModuleRef.current = m; });
-              estimateTransactionFee(activeAccount.address, chainId, gasTier)
+              estimateTransactionFee(activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken)
                 .then((f) => { if (mountedRef.current) setFeeEstimate(f); })
                 .catch(() => {});
             }
@@ -590,6 +604,80 @@ export default function SendScreen() {
     return () => { cancelled = true; };
   }, [step, selectedToken, recipient]);
 
+  // Fee-asset options for the confirm step. Only on in-band chains WITH a DEX
+  // (no DEX → the bundler can't price stables → native only, no selector), and
+  // never on Tempo (the fee is always pathUSD there — no choice to offer).
+  // Leaving confirm resets the choice so the next entry re-quotes in native.
+  // `tokens` is read through a ref: it is a fresh array reference every render, and
+  // having it in the dep list re-fired this effect each render → setFeeTokenOptions
+  // (new array) → re-render → INFINITE loop that saturated the JS thread ("估算中"
+  // never resolving) and hammered the RPC. Confirm-entry balances are fresh enough.
+  const tokensRef = useRef(tokens);
+  useEffect(() => { tokensRef.current = tokens; }, [tokens]);
+  useEffect(() => {
+    if (step !== 'confirm' || !selectedToken || !activeAccount) {
+      setFeeTokenOptions(null);
+      setGasFeeToken(null);
+      // An erc20 fee estimate carries totalWei=0n — if it outlived the reset of
+      // gasFeeToken, the gas-reserve/warning math downstream would silently read 0.
+      setFeeEstimate((fe) => (fe?.feeAsset?.kind === 'erc20' ? null : fe));
+      return;
+    }
+    const chainId = tokenChainId(selectedToken);
+    if (isTempoChain(chainId)) { setFeeTokenOptions(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const inBand = await isInBandChain(chainId, activeAccount.address);
+        if (!inBand) { if (!cancelled) setFeeTokenOptions(null); return; }
+        const data = await fetchChainTokens(chainId);
+        if (cancelled) return;
+        // The bundler prices stables ONLY via a uniswap-v3 QuoterV2 + wrapped native —
+        // a chain with some other DEX shape would render chips that dead-end at quote
+        // time. Gate on the exact capability, not the mere presence of a dex entry.
+        if (!data?.dex?.contracts?.quoterV2 || !data.wrappedNativeToken || data.stables.length === 0) {
+          setFeeTokenOptions(null);
+          return;
+        }
+        // Offer only stables the user actually HOLDS (balance > 0) — a chip for a
+        // token with a zero balance can only produce a doomed op. The whitelist
+        // (ethereum-data) bounds WHAT can pay gas; the holdings bound what THIS
+        // user can pay with.
+        const heldStables = data.stables.filter((s) => {
+          const held = tokensRef.current.find(
+            (t) => tokenChainId(t) === chainId && t.tokenAddress?.toLowerCase() === s.contract.toLowerCase(),
+          );
+          return !!held && balanceToWei(held.balance, held.decimals) > 0n;
+        });
+        setFeeTokenOptions([
+          { symbol: nativeSymbol(chainId), contract: null },
+          ...heldStables.map((s) => ({ symbol: s.symbol, contract: s.contract })),
+        ]);
+      } catch {
+        if (!cancelled) setFeeTokenOptions(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [step, selectedToken, activeAccount]);
+
+  // Relayer float depleted → offer the community bootstrap sheet instead of a
+  // dead-end error/funding surface. Returns true when the sheet was shown.
+  const maybeShowTreasuryBootstrap = async (chainId: number): Promise<boolean> => {
+    try {
+      // Only where gas settles in-band. On a LEGACY chain the user can still
+      // self-fund their own deposit EOA — the normal funding sheet must keep
+      // that path; a treasury-bootstrap ask would replace a working self-serve
+      // flow with a non-refundable donation.
+      if (!activeAccount || !(await isInBandChain(chainId, activeAccount.address))) return false;
+      const status = await fetchTreasuryStatus(chainId);
+      if (status?.bootstrapNeeded && mountedRef.current) {
+        setTreasuryBootstrap(status);
+        return true;
+      }
+    } catch { /* fall back to the caller's default surface */ }
+    return false;
+  };
+
   // ── ① split-mode (一币多人) helpers ─────────────────────────────────────────
   // Enter split mode seeded with the current single recipient (amount in token
   // units) + one empty row; a converted amount keeps continuity from the hero.
@@ -682,7 +770,7 @@ export default function SendScreen() {
       import('@/services/webauthn-verify').then((m) => { webauthnModuleRef.current = m; });
       // Warm a gas estimate so the detail list can show the native line net of
       // its reserve right away (not just at confirm).
-      estimateTransactionFee(activeAccount.address, chainId, gasTier)
+      estimateTransactionFee(activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken)
         .then((f) => { if (mountedRef.current) setFeeEstimate(f); })
         .catch(() => {});
     }
@@ -766,9 +854,36 @@ export default function SendScreen() {
       try {
         // Race with a timeout — pool init for new chains can stall on slow RPCs.
         // If it takes too long, skip the pre-check and let the bundler reject at submit time.
+        // The REAL call for the charge basis: in-band displayed = signed, so this
+        // estimate must price the actual send, not the padded rough model (which
+        // over-charged ~8× on Arbitrum). Build the ACTUAL send/batch shape so in-band pricing
+        // (estimateInBandBasisGas) sees the real calldata; the fee-reserve amounts don't affect
+        // the gas SHAPE, so batch modes use the raw transfer legs (no circular fee dependency).
+        let estTx: { to: string; value?: string; data?: string } | undefined;
+        let estBatch: { to: string; value?: string; data?: string }[] | undefined;
+        try {
+          if (multiSelectMode) {
+            estBatch = buildMultiTokenCalls(recipient.trim(), toMultiTokenSpecs(pickedTokens));
+          } else if (splitMode) {
+            estBatch = buildSplitCalls(
+              { tokenAddress: isNativeToken(selectedToken!) ? null : selectedToken!.tokenAddress, decimals: selectedToken!.decimals },
+              recipients.map((r) => ({ address: r.address.trim(), amount: r.amount })),
+            );
+          } else if (selectedToken && amount && isValidAddress(recipient)) {
+            const tokenAmt = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
+            const weiHex = amountToWeiHex(tokenAmt, selectedToken.decimals);
+            estTx = isNativeToken(selectedToken)
+              ? { to: recipient.trim(), value: weiHex }
+              : { to: selectedToken.tokenAddress!, data: encErc20Transfer(recipient.trim(), weiHex) };
+          }
+        } catch {
+          // A half-typed amount/recipient → fall back to the rough basis for this estimate.
+          estTx = undefined;
+          estBatch = undefined;
+        }
         const preCheck = async () => {
           const [feeResult] = await Promise.allSettled([
-            estimateTransactionFee(activeAccount!.address, chainId, gasTier),
+            estimateTransactionFee(activeAccount!.address, chainId, 'fast', estTx, estBatch, gasFeeToken),
             fetchBundlerAccountInfo(chainId, activeAccount!.address),
           ]);
 
@@ -784,6 +899,12 @@ export default function SendScreen() {
           // don't gate the send on gas-account funding. pathUSD sufficiency is
           // already enforced by the amount-warning check and priced by sendUserOpTempo.
           if (isTempoChain(chainId)) return null;
+          // Generic in-band chains settle gas the same way — and their per-safe EOA
+          // is the OPERATOR's float, not a user deposit bucket: surfacing the funding
+          // QR here would route the USER's money into operator custody. fee.inBand
+          // covers the normal case; the probe covers an in-band chain whose quote
+          // transiently failed (legacy estimate fallback).
+          if (fee?.inBand || await isInBandChain(chainId, activeAccount!.address)) return null;
           // Compare against the bundler's raw gas cost (tier markup removed).
           const bundlerCost = fee ? rawBundlerGasCost(fee) : undefined;
           return checkBundlerFunding(chainId, activeAccount!.address, bundlerCost);
@@ -800,6 +921,13 @@ export default function SendScreen() {
           const probe = await probeGasSponsorship(funding);
           if (!mountedRef.current) return;
           if (probe.outcome === 'denied' || probe.outcome === 'confirming') {
+            // Treasury drained on this network: a top-up QR can't fix a relayer
+            // with no float — offer the community bootstrap sheet instead.
+            if (probe.outcome === 'denied' && probe.reason === 'treasury_depleted'
+                && await maybeShowTreasuryBootstrap(chainId)) {
+              setEstimatingGas(false);
+              return;
+            }
             setFundingNeeded(
               probe.outcome === 'confirming'
                 ? { ...funding, presentation: 'confirming' }
@@ -832,7 +960,7 @@ export default function SendScreen() {
     if (isNativeToken(selectedToken) && activeAccount) {
       try {
         const chainId = tokenChainId(selectedToken);
-        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId, gasTier);
+        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken);
         // Use string-based conversion to avoid floating-point precision loss
         const balanceWei = balanceToWei(selectedToken.balance, selectedToken.decimals);
         // Reserve 3x estimated gas (200% margin for gas price volatility)
@@ -856,7 +984,7 @@ export default function SendScreen() {
     if (isTempoFeeToken(tokenChainId(selectedToken), selectedToken.tokenAddress) && activeAccount) {
       try {
         const chainId = tokenChainId(selectedToken);
-        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId, gasTier);
+        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId, 'fast');
         // fee.totalWei is attodollars (USD×1e-18); recover the pathUSD reimbursement (6 dec).
         const feeUnits = fee.totalWei / 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS);
         // Reserve 1.5× the fee: +50% for gas-price/estimate variance (the send-time
@@ -870,6 +998,30 @@ export default function SendScreen() {
         }
         setAmount('0');
         return;
+      } catch {
+        // Estimation failed — fall through to full balance (the pre-check still warns).
+      }
+    }
+
+    // ERC-20 Max when the in-band gas fee is paid in the SAME token being swept: the batched
+    // fee leg (stable.transfer(treasury, fee)) needs balance too, so Max must leave the fee
+    // behind — otherwise the op sweeps everything and can't cover its own gas. Only when the
+    // selected fee token matches this token; otherwise gas is paid in native / a separate
+    // balance and full balance is sendable.
+    if (
+      activeAccount && gasFeeToken && selectedToken.tokenAddress &&
+      gasFeeToken.toLowerCase() === selectedToken.tokenAddress.toLowerCase()
+    ) {
+      try {
+        const chainId = tokenChainId(selectedToken);
+        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken);
+        if (fee.feeAsset?.kind === 'erc20' && fee.feeAsset.token.toLowerCase() === gasFeeToken.toLowerCase()) {
+          // Reserve 1.5× the quoted fee (+50% for the send-time re-quote drift the 2× gate absorbs).
+          const reserve = (fee.feeAsset.amount * 3n) / 2n;
+          const balUnits = balanceToWei(selectedToken.balance, selectedToken.decimals);
+          setAmount(balUnits > reserve ? fromBaseUnits(balUnits - reserve, selectedToken.decimals) : '0');
+          return;
+        }
       } catch {
         // Estimation failed — fall through to full balance (the pre-check still warns).
       }
@@ -946,6 +1098,9 @@ export default function SendScreen() {
           setGasSponsored(false);
           setSending(false);
           setTxStatus('idle');
+          // Treasury drained between probe and slide: if this network's relayer
+          // needs a bootstrap, that sheet (not a personal top-up QR) is the ask.
+          if (grant.denialReason === 'treasury_depleted' && await maybeShowTreasuryBootstrap(chainId)) return;
           setFundingNeeded({ ...planned, presentation: 'topup', denialReason: grant.denialReason });
           return;
         }
@@ -982,6 +1137,15 @@ export default function SendScreen() {
 
       setTxStatus('submitting');
       const maxFee = feeEstimate?.maxFeePerGas;
+      // In-band: sign EXACTLY the fee the confirm slide displayed (amount + recipient).
+      // The bundler's 2×-real-cost gate rejects a stale quote loudly; we then re-quote
+      // and the user re-confirms a NEW number — never a silent display/charge mismatch.
+      const quotedFee = feeEstimate?.inBand && feeEstimate.feeRecipient
+        ? {
+            amount: feeEstimate.feeAsset?.kind === 'erc20' ? feeEstimate.feeAsset.amount : feeEstimate.totalWei,
+            recipient: feeEstimate.feeRecipient,
+          }
+        : undefined;
 
       // One send line per output (single = 1, split = N recipients, multiSelect = N
       // tokens). split/multiSelect submit as a single Safe MultiSend UserOp — one
@@ -997,7 +1161,7 @@ export default function SendScreen() {
           throw new Error(t('send.multiSendNoFundsAfterGas', { defaultValue: 'Not enough to cover gas after the reserve.' }));
         }
         const calls = buildMultiTokenCalls(recipient.trim(), specs);
-        result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn, maxFee);
+        result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn, maxFee, gasFeeToken, quotedFee);
         lines = specs.map((spec) => {
           const tk = pickedTokens.find((t) => (isNativeToken(t) ? null : t.tokenAddress) === spec.tokenAddress)!;
           return { to: recipient.trim(), toName: recipientIdentity?.name, amount: spec.amount, symbol: tk.symbol, decimals: tk.decimals, priceUsd: tk.priceUsd ?? 0, logoUrls: tokenLogoURLs(tk) };
@@ -1007,15 +1171,15 @@ export default function SendScreen() {
           { tokenAddress: isNativeToken(selectedToken) ? null : selectedToken.tokenAddress, decimals: selectedToken.decimals },
           recipients.map((r) => ({ address: r.address.trim(), amount: r.amount })),
         );
-        result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn, maxFee);
+        result = await sendBatchCalls(activeAccount.address, calls, chainId, stored.publicKeyHex, signFn, maxFee, gasFeeToken, quotedFee);
         lines = recipients.map((r) => ({ to: r.address.trim(), toName: r.name?.trim() || undefined, amount: r.amount, symbol: selectedToken!.symbol, decimals: selectedToken!.decimals, priceUsd: selectedToken!.priceUsd ?? 0, logoUrls: tokenLogoURLs(selectedToken!) }));
       } else {
         const tokenAmount = resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate);
         const weiHex = amountToWeiHex(tokenAmount, selectedToken.decimals);
         if (isNativeToken(selectedToken)) {
-          result = await sendNative(activeAccount.address, recipient, weiHex, chainId, stored.publicKeyHex, signFn, maxFee);
+          result = await sendNative(activeAccount.address, recipient, weiHex, chainId, stored.publicKeyHex, signFn, maxFee, gasFeeToken, quotedFee);
         } else {
-          result = await sendERC20(activeAccount.address, selectedToken.tokenAddress!, recipient, weiHex, chainId, stored.publicKeyHex, signFn, maxFee);
+          result = await sendERC20(activeAccount.address, selectedToken.tokenAddress!, recipient, weiHex, chainId, stored.publicKeyHex, signFn, maxFee, gasFeeToken, quotedFee);
         }
         lines = [{ to: recipient, toName: recipientIdentity?.name, amount: tokenAmount, symbol: selectedToken.symbol, decimals: selectedToken.decimals, priceUsd: selectedToken.priceUsd ?? 0, logoUrls: tokenLogoURLs(selectedToken) }];
       }
@@ -1104,6 +1268,13 @@ export default function SendScreen() {
       const underfunded = parseBundlerUnderfunded(error?.message);
       if (error?.code === 'PASSKEY_CANCELLED') {
         setTxStatus('idle');
+      } else if (/gas relayer is unavailable/i.test(error?.message ?? '')
+          && await maybeShowTreasuryBootstrap(tokenChainId(selectedToken!))) {
+        // The in-band path found no usable relayer float AND the treasury says
+        // it needs a bootstrap: the community bootstrap sheet is the honest ask —
+        // a generic "try again" would loop forever. A transient relayer blip
+        // (no bootstrapNeeded) falls through to the generic error below.
+        setTxStatus('idle');
       } else if (underfunded) {
         // Bundler says the gas account balance is insufficient — show funding modal.
         // Prefer the server's actual required balance to avoid a threshold mismatch
@@ -1131,7 +1302,7 @@ export default function SendScreen() {
               if (requiredFromError != null) {
                 thresholdWei = requiredFromError;
               } else {
-                const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId, gasTier);
+                const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId, 'fast', undefined, undefined, gasFeeToken);
                 // Match the server's raw gasPrice calculation (tier markup removed)
                 thresholdWei = rawBundlerGasCost(fee);
               }
@@ -1157,6 +1328,9 @@ export default function SendScreen() {
               // txStatus is 'idle' during this recovery, so Back works — don't
               // resurrect the sheet over a screen the user has left.
               if (sendCancelledRef.current || stepRef.current !== 'confirm') return;
+              // Depleted treasury → the bootstrap sheet, not a top-up QR.
+              if (silent.outcome === 'denied' && silent.denialReason === 'treasury_depleted'
+                  && await maybeShowTreasuryBootstrap(chainId)) return;
               setFundingNeeded(
                 silent.outcome === 'denied'
                   ? { ...funding, presentation: 'topup', denialReason: silent.denialReason }
@@ -1701,101 +1875,120 @@ export default function SendScreen() {
             </View>
           )}
 
-          {/* Gas Details — collapsed by default, fee shown in toggle row */}
-          <Pressable onPress={() => setGasExpanded(!gasExpanded)} style={styles.gasToggleRow}>
-            <Text style={styles.gasToggleLabel}>{t('send.estFeeLabel')}</Text>
-            <View style={styles.gasToggleRight}>
-              <View style={styles.gasToggleValues}>
-                <Text style={styles.gasToggleValue}>
-                  {estimatingGas ? t('send.estimatingFee') : feeEstimate ? `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}` : '—'}
-                </Text>
-                {!estimatingGas && feeUsd > 0.001 && (
-                  <Text style={styles.gasToggleSub}>≈ {formatUsd(feeUsd)}</Text>
-                )}
-              </View>
-              {feeEstimate && !estimatingGas && (
-                gasExpanded
-                  ? <ChevronUp size={16} color={color.fg.subtle} strokeWidth={2} />
-                  : <ChevronDown size={16} color={color.fg.subtle} strokeWidth={2} />
-              )}
-            </View>
-          </Pressable>
-          {gasExpanded && feeEstimate && (() => {
-            const bundlerGwei = Number(feeEstimate.bundlerGasPrice) / 1e9;
-            const userOpGwei = Number(feeEstimate.maxFeePerGas) / 1e9;
-            const tempo = isTempoChain(tokenChainId(selectedToken));
-            // Tempo: the "gas price" is attodollars/gas (USD-denominated, protocol-fixed),
-            // not Gwei of a native coin. Show a USD rate; hide the meaningless speed tiers.
-            const tempoGasUsdPer1M = Number(feeEstimate.bundlerGasPrice) / 1e12;
+          {/* Estimated fee — the one gas surface left (tiers + technical rows are
+              gone; every send runs at 'fast'). An in-band stablecoin fee renders
+              in the token's own units with a matching ≈USD subline; otherwise the
+              native formatting stays. Tap to pick the fee asset when this chain
+              offers a choice. */}
+          {(() => {
+            const erc20Fee = feeEstimate?.feeAsset?.kind === 'erc20' ? feeEstimate.feeAsset : null;
+            const erc20Symbol = erc20Fee
+              ? (feeTokenOptions?.find((o) => o.contract?.toLowerCase() === erc20Fee.token.toLowerCase())?.symbol
+                ?? tokens.find((tk) => tk.tokenAddress?.toLowerCase() === erc20Fee.token.toLowerCase())?.symbol
+                ?? shortAddr(erc20Fee.token))
+              : null;
+            const erc20Amount = erc20Fee ? parseFloat(fromBaseUnits(erc20Fee.amount, erc20Fee.decimals)) : 0;
+            const feeValue = feeEstimate
+              ? erc20Fee
+                ? `~${formatTokenAmount(erc20Amount, { compact: true })} ${erc20Symbol}`
+                : `~${formatWeiToEth(feeEstimate.totalWei)} ${sym}`
+              : '—';
+            // A whitelisted fee stable is USD-pegged, so its ≈USD line is the
+            // same number; native keeps the price-derived conversion.
+            const feeUsdShown = erc20Fee ? erc20Amount : feeUsd;
+            const selectable = !!feeTokenOptions && feeTokenOptions.length > 1;
 
             const handleRefreshGas = async () => {
               if (!activeAccount || !selectedToken || refreshingGas) return;
               setRefreshingGas(true);
               try {
                 await refreshGasPrice(tokenChainId(selectedToken));
-                const fee = await estimateTransactionFee(activeAccount.address, tokenChainId(selectedToken), gasTier);
+                const fee = await estimateTransactionFee(activeAccount.address, tokenChainId(selectedToken), 'fast', undefined, undefined, gasFeeToken);
                 setFeeEstimate(fee);
               } catch { /* ignore */ }
               setRefreshingGas(false);
             };
 
-            const handleTierChange = async (tier: GasTier) => {
-              setGasTier(tier);
+            const handleFeeTokenSelect = async (contract: string | null) => {
+              if ((gasFeeToken?.toLowerCase() ?? null) === (contract?.toLowerCase() ?? null)) return;
               if (!activeAccount || !selectedToken) return;
+              const seq = ++feeReqSeq.current;
+              setGasFeeToken(contract);
+              setEstimatingGas(true);
               try {
-                const fee = await estimateTransactionFee(activeAccount.address, tokenChainId(selectedToken), tier);
-                setFeeEstimate(fee);
-              } catch { /* ignore */ }
+                // Fast path: the gas basis is unchanged by an asset switch — re-quote
+                // with ONE bundler RPC instead of re-running the whole estimate pipeline.
+                // HARD 12s ceiling: the spinner must always resolve; a hung quote keeps
+                // the previous estimate and the user can re-tap or refresh.
+                const run = (async () => {
+                  const fast = feeEstimate
+                    ? await requoteInBandFee(feeEstimate, tokenChainId(selectedToken), activeAccount.address, contract)
+                    : null;
+                  return fast ?? await estimateTransactionFee(activeAccount.address, tokenChainId(selectedToken), 'fast', undefined, undefined, contract);
+                })();
+                const fee = await Promise.race([run, new Promise<null>((r) => setTimeout(() => r(null), 12_000))]);
+                // Only the latest tap may write — a superseded response would show a stale asset.
+                if (fee && mountedRef.current && seq === feeReqSeq.current) setFeeEstimate(fee);
+              } catch { /* keep the previous quote — the user can re-tap or refresh */ }
+              if (mountedRef.current && seq === feeReqSeq.current) setEstimatingGas(false);
             };
 
-            return (
-              <View style={styles.gasBlock}>
-                {/* Speed tiers — hidden on Tempo: gas price is a fixed protocol rate with
-                    no priority-fee market, so the tiers do nothing. Light chip selector. */}
-                {!tempo && (
-                  <>
-                    <SectionLabel>{t('send.gasSpeedLabel', { defaultValue: 'Speed' })}</SectionLabel>
-                    <View style={styles.tierRow}>
-                      {/* Three tiers to match the dApp signing sheet's GasFeeCard. */}
-                      {(['slow', 'standard', 'fast'] as GasTier[]).map((tier) => (
+            return (<>
+              <Pressable onPress={() => { if (selectable) setGasExpanded(!gasExpanded); }} style={styles.gasToggleRow}>
+                <Text style={styles.gasToggleLabel}>{t('send.estFeeLabel')}</Text>
+                <View style={styles.gasToggleRight}>
+                  <View style={styles.gasToggleValues}>
+                    <Text style={styles.gasToggleValue}>
+                      {estimatingGas ? t('send.estimatingFee') : feeValue}
+                    </Text>
+                    {!estimatingGas && feeEstimate && feeUsdShown > 0.001 && (
+                      <Text style={styles.gasToggleSub}>≈ {formatUsd(feeUsdShown)}</Text>
+                    )}
+                  </View>
+                  {feeEstimate && !estimatingGas && (
+                    <Pressable onPress={handleRefreshGas} hitSlop={8} style={styles.tierRefresh}>
+                      {refreshingGas ? (
+                        <ActivityIndicator size={14} color={color.fg.muted} />
+                      ) : (
+                        <RefreshCw size={14} color={color.fg.muted} strokeWidth={2} />
+                      )}
+                    </Pressable>
+                  )}
+                  {selectable && feeEstimate && !estimatingGas && (
+                    gasExpanded
+                      ? <ChevronUp size={16} color={color.fg.subtle} strokeWidth={2} />
+                      : <ChevronDown size={16} color={color.fg.subtle} strokeWidth={2} />
+                  )}
+                </View>
+              </Pressable>
+
+              {/* Fee-asset chips — native + whitelisted stables (in-band chains
+                  with a DEX only; never rendered on Tempo or legacy chains). */}
+              {gasExpanded && selectable && (
+                <View style={styles.gasBlock}>
+                  <SectionLabel>{t('send.feeTokenLabel')}</SectionLabel>
+                  <View style={styles.feeTokenRow}>
+                    {feeTokenOptions!.map((opt) => {
+                      const active = (gasFeeToken?.toLowerCase() ?? null) === (opt.contract?.toLowerCase() ?? null);
+                      return (
                         <Pressable
-                          key={tier}
-                          style={[styles.tierBtn, gasTier === tier && styles.tierBtnActive]}
-                          onPress={() => handleTierChange(tier)}
+                          key={opt.contract ?? 'native'}
+                          style={[styles.feeTokenBtn, active && styles.feeTokenBtnActive]}
+                          onPress={() => handleFeeTokenSelect(opt.contract)}
                           accessibilityRole="button"
-                          accessibilityState={{ selected: gasTier === tier }}
-                          accessibilityLabel={t(`send.gasTier.${tier}`)}
+                          accessibilityState={{ selected: active }}
+                          accessibilityLabel={opt.symbol}
                         >
-                          <Text style={[styles.tierBtnText, gasTier === tier && styles.tierBtnTextActive]}>
-                            {t(`send.gasTier.${tier}`)}
+                          <Text style={[styles.feeTokenBtnText, active && styles.feeTokenBtnTextActive]}>
+                            {opt.symbol}
                           </Text>
                         </Pressable>
-                      ))}
-                      <Pressable onPress={handleRefreshGas} hitSlop={8} style={styles.tierRefresh}>
-                        {refreshingGas ? (
-                          <ActivityIndicator size={14} color={color.fg.muted} />
-                        ) : (
-                          <RefreshCw size={14} color={color.fg.muted} strokeWidth={2} />
-                        )}
-                      </Pressable>
-                    </View>
-                  </>
-                )}
-                {tempo ? (
-                  <ConfirmRow label={t('send.gasPriceLabel')} value={`$${tempoGasUsdPer1M.toFixed(2)} / 1M gas`} />
-                ) : (
-                  <>
-                    <ConfirmRow label={t('send.gasPriceLabel')} value={`${bundlerGwei.toFixed(4)} Gwei`} />
-                    <Divider />
-                    <ConfirmRow label={t('send.gasPriceUserOpLabel')} value={`${userOpGwei.toFixed(4)} Gwei`} />
-                  </>
-                )}
-                <Divider />
-                <ConfirmRow label={t('send.gasLimitLabel')} value={feeEstimate.totalGas.toLocaleString()} />
-                <Divider />
-                <ConfirmRow label={t('send.walletDeployedLabel')} value={feeEstimate.deployed ? t('send.walletDeployedYes') : t('send.walletDeployedNo')} />
-              </View>
-            );
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+            </>);
           })()}
 
           {txStatus === 'idle' && (
@@ -1989,6 +2182,15 @@ export default function SendScreen() {
         />
       )}
 
+      {/* Relayer float depleted on this network — community bootstrap ask
+          (non-refundable treasury contribution), shown instead of the generic
+          error / personal top-up surfaces. */}
+      <TreasuryBootstrapSheet
+        visible={!!treasuryBootstrap}
+        status={treasuryBootstrap}
+        onClose={() => setTreasuryBootstrap(null)}
+      />
+
       <ContactPicker
         visible={showContactPicker}
         onClose={() => setShowContactPicker(false)}
@@ -2011,20 +2213,6 @@ export default function SendScreen() {
         />
       )}
     </ScreenContainer>
-  );
-}
-
-function ConfirmRow({ label, value, sub, highlight }: { label: string; value: string; sub?: string; highlight?: boolean }) {
-  return (
-    <View style={styles.confirmRow}>
-      <Text style={styles.confirmLabel}>{label}</Text>
-      <View style={styles.confirmValueWrap}>
-        <Text style={[styles.confirmValue, highlight && styles.confirmValueHighlight]}>
-          {value}
-        </Text>
-        {sub ? <Text style={styles.confirmSub}>{sub}</Text> : null}
-      </View>
-    </View>
   );
 }
 
@@ -2605,68 +2793,36 @@ const styles = createStyles(() => ({
   gasBlock: {
     marginBottom: space.lg,
   },
-  tierRow: {
+  // Fee-asset chips (formerly the speed-tier chips) — wraps when a chain
+  // whitelists several stables.
+  feeTokenRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap' as const,
     alignItems: 'center',
     gap: space.sm,
     paddingBottom: space.lg,
   },
-  tierBtn: {
-    flex: 1,
+  feeTokenBtn: {
     paddingVertical: space.sm,
+    paddingHorizontal: space.lg,
     borderRadius: radius.md,
     alignItems: 'center',
     backgroundColor: color.bg.sunken,
   },
-  // Selected tier — a light accent-soft chip (not a heavy filled box)
-  tierBtnActive: {
+  // Selected fee asset — a light accent-soft chip (not a heavy filled box)
+  feeTokenBtnActive: {
     backgroundColor: color.accent.soft,
   },
-  tierBtnText: {
+  feeTokenBtnText: {
     fontSize: text.xs,
     ...inter.semibold,
     color: color.fg.muted,
   },
-  tierBtnTextActive: {
+  feeTokenBtnTextActive: {
     color: color.accent.base,
   },
   tierRefresh: {
     padding: space.sm,
-  },
-  // Gas detail rows (ConfirmRow) — open rows separated by <Divider/>
-  confirmRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: space.lg,
-  },
-  confirmLabel: {
-    fontSize: text.sm,
-    ...inter.regular,
-    color: color.fg.muted,
-    flexShrink: 0,
-    marginRight: space.lg,
-  },
-  confirmValueWrap: {
-    alignItems: 'flex-end' as const,
-    flexShrink: 1,
-  },
-  confirmValue: {
-    fontSize: text.sm,
-    ...inter.semibold,
-    color: color.fg.base,
-    textAlign: 'right' as const,
-  },
-  confirmSub: {
-    fontSize: text.xs,
-    ...inter.regular,
-    color: color.fg.subtle,
-    marginTop: 2,
-  },
-  confirmValueHighlight: {
-    fontSize: text.lg,
-    ...inter.bold,
-    color: color.accent.base,
   },
   confirmBtn: {
     marginTop: space.md,

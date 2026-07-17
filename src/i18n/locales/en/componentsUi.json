@@ -204,7 +204,8 @@
       "gasLimit": "Gas Limit",
       "walletDeployed": "Wallet Deployed",
       "deployedYes": "Yes",
-      "deployedNo": "No (first tx)"
+      "deployedNo": "No (first tx)",
+      "feeToken": "Fee token"
     },
     "dock": {
       "receive": "Receive",
@@ -265,6 +266,16 @@
       "copied": "Copied",
       "close": "Close",
       "a11yOpen": "View identicon"
+    },
+    "treasuryBootstrap": {
+      "title": "Help start this network's relayer",
+      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
+      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
+      "addressLabel": "Treasury address",
+      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
+      "copyBtn": "Copy address",
+      "copied": "Copied",
+      "closeBtn": "Close"
     }
   }
 }

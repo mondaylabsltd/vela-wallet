@@ -36,7 +36,6 @@ import { BalanceChangePreview } from './BalanceChangePreview';
 import {
   estimateTransactionFee,
   rawBundlerGasCost,
-  type GasTier,
   type TransactionFeeEstimate,
 } from '@/services/safe-transaction';
 import { Shield, AlertTriangle, Pen } from 'lucide-react-native';
@@ -61,7 +60,7 @@ export interface SigningSheetProps {
   isSigning: boolean;
   signError: string | null;
   pendingOpHash: string | null;
-  onApprove: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null; intent?: string }) => void;
+  onApprove: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; gasFeeToken?: string | null; quotedFee?: { amount: bigint; recipient: string }; paramsOverride?: any[]; assetSim?: AssetSimResult | null; intent?: string }) => void;
   onReject: () => void;
   onDismiss: () => void;
   /**
@@ -114,8 +113,12 @@ export function SigningSheet({
   const [clearSign, setClearSign] = useState<ClearSignResult | null>(null);
   const [resolving, setResolving] = useState(false);
 
-  // Gas estimation state (for eth_sendTransaction only)
-  const [gasTier, setGasTier] = useState<GasTier>('standard');
+  // Gas estimation state (for eth_sendTransaction only). Speed tiers are gone —
+  // every estimate/submit runs at 'fast'. The user's remaining choice is the fee
+  // ASSET (null = native, else a whitelisted stablecoin) on in-band chains;
+  // GasFeeCard loads the options, this sheet owns the selection so the approve
+  // path submits exactly what was quoted.
+  const [gasFeeToken, setGasFeeToken] = useState<string | null>(null);
   const [feeEstimate, setFeeEstimate] = useState<TransactionFeeEstimate | null>(null);
   const [estimatingGas, setEstimatingGas] = useState(false);
   // Explicit flag (vs inferring from null feeEstimate) so the confirm guard doesn't
@@ -197,7 +200,7 @@ export function SigningSheet({
     if (!incomingRequest) {
       setClearSign(null);
       setFeeEstimate(null);
-      setGasTier('standard');
+      setGasFeeToken(null);
       setGasEstimateFailed(false);
       setSim(null);
       return;
@@ -208,6 +211,9 @@ export function SigningSheet({
     // the current one's state after it's been replaced.
     let cancelled = false;
     setSim(null);
+    // A new request starts back at the native fee asset (the estimates below
+    // are made without a token, so the displayed quote matches the selection).
+    setGasFeeToken(null);
 
     if (method === 'eth_sendTransaction' && params?.[0]) {
       setResolving(true);
@@ -222,7 +228,7 @@ export function SigningSheet({
       if (activeAccount?.address && !readOnly) {
         setEstimatingGas(true);
         setGasEstimateFailed(false);
-        estimateTransactionFee(activeAccount.address, chainId, 'standard', {
+        estimateTransactionFee(activeAccount.address, chainId, 'fast', {
           to: params[0].to, value: params[0].value, data: params[0].data,
         })
           .then((f) => { setFeeEstimate(f); setGasEstimateFailed(false); })
@@ -296,7 +302,7 @@ export function SigningSheet({
       // the same MultiSend of every call that sendBatchCalls submits.
       setEstimatingGas(true);
       setGasEstimateFailed(false);
-      estimateTransactionFee(activeAccount.address, chainId, 'standard', undefined, simCalls)
+      estimateTransactionFee(activeAccount.address, chainId, 'fast', undefined, simCalls)
         .then((f) => { if (!cancelled) { setFeeEstimate(f); setGasEstimateFailed(false); } })
         .catch(() => { if (!cancelled) { setFeeEstimate(null); setGasEstimateFailed(true); } })
         .finally(() => { if (!cancelled) setEstimatingGas(false); });
@@ -495,6 +501,16 @@ export function SigningSheet({
       maxFeePerGas: feeEstimate?.maxFeePerGas,
       // Raw bundler cost (tier markup removed) drives the funding pre-check.
       bundlerCostWei: feeEstimate ? rawBundlerGasCost(feeEstimate) : undefined,
+      // The fee asset the user picked in the gas card (null = native) — routed
+      // through to the in-band send path so gas is settled in that token.
+      gasFeeToken,
+      // In-band: sign EXACTLY the displayed fee (amount + recipient) — displayed = signed.
+      quotedFee: feeEstimate?.inBand && feeEstimate.feeRecipient
+        ? {
+            amount: feeEstimate.feeAsset?.kind === 'erc20' ? feeEstimate.feeAsset.amount : feeEstimate.totalWei,
+            recipient: feeEstimate.feeRecipient,
+          }
+        : undefined,
       paramsOverride,
       // The "what moved" preview the user just saw — persisted with the record so
       // the Connections-panel replay can show it without re-simulating stale state.
@@ -586,10 +602,10 @@ export function SigningSheet({
               nativeUsdPrice={nativeUsdPrice}
               safeAddress={activeAccount.address}
               chainId={chainId}
-              gasTier={gasTier}
               tx={isBatch ? undefined : txForEstimate}
               batchCalls={isBatch ? params?.[0]?.calls : undefined}
-              onTierChange={setGasTier}
+              gasFeeToken={gasFeeToken}
+              onFeeTokenChange={setGasFeeToken}
               onFeeUpdate={(f) => { setFeeEstimate(f); setGasEstimateFailed(false); }}
             />
           )}

@@ -219,7 +219,8 @@
       "deployedYes": "Да",
       "deployedNo": "Нет (первая транзакция)",
       "estimating": "Оценка…",
-      "estimateFailed": "Нажмите, чтобы повторить"
+      "estimateFailed": "Нажмите, чтобы повторить",
+      "feeToken": "Fee token"
     },
     "dock": {
       "receive": "Получить",
@@ -264,6 +265,16 @@
       "copied": "Скопировано",
       "close": "Закрыть",
       "a11yOpen": "Показать идентикон"
+    },
+    "treasuryBootstrap": {
+      "title": "Help start this network's relayer",
+      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
+      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
+      "addressLabel": "Treasury address",
+      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
+      "copyBtn": "Copy address",
+      "copied": "Copied",
+      "closeBtn": "Close"
     }
   }
 }

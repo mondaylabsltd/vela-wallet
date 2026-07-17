@@ -181,7 +181,8 @@
       "gasLimit": "Gas 上限",
       "walletDeployed": "钱包已部署",
       "deployedYes": "是",
-      "deployedNo": "否（首次交易）"
+      "deployedNo": "否（首次交易）",
+      "feeToken": "手续费币种"
     },
     "dock": {
       "receive": "收款",
@@ -265,6 +266,16 @@
       "copied": "已复制",
       "close": "关闭",
       "a11yOpen": "查看身份图标"
+    },
+    "treasuryBootstrap": {
+      "title": "帮助启动此网络的中继器",
+      "lead": "该网络的中继器暂无运转资金。任何人都可以向其金库捐助，让它恢复可用。",
+      "amountHint": "建议捐助：{{amount}} {{symbol}}",
+      "addressLabel": "金库地址",
+      "disclaimer": "此捐助不可退还，也不是 Gas 抵扣额度——之后的交易仍需正常支付 Gas 费。它仅用于启动该网络的中继器资金池。",
+      "copyBtn": "复制地址",
+      "copied": "已复制",
+      "closeBtn": "关闭"
     }
   }
 }

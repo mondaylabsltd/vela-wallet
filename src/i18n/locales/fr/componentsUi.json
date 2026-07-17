@@ -219,7 +219,8 @@
       "deployedYes": "Oui",
       "deployedNo": "Non (1re tx)",
       "estimating": "Estimation...",
-      "estimateFailed": "Appuyez pour réessayer"
+      "estimateFailed": "Appuyez pour réessayer",
+      "feeToken": "Fee token"
     },
     "dock": {
       "receive": "Recevoir",
@@ -264,6 +265,16 @@
       "copied": "Copié",
       "close": "Fermer",
       "a11yOpen": "Afficher l'identicon"
+    },
+    "treasuryBootstrap": {
+      "title": "Help start this network's relayer",
+      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
+      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
+      "addressLabel": "Treasury address",
+      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
+      "copyBtn": "Copy address",
+      "copied": "Copied",
+      "closeBtn": "Close"
     }
   }
 }

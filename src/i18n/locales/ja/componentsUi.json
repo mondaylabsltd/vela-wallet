@@ -219,7 +219,8 @@
       "deployedYes": "済み",
       "deployedNo": "未デプロイ（初回の取引）",
       "estimating": "見積もり中...",
-      "estimateFailed": "タップして再試行"
+      "estimateFailed": "タップして再試行",
+      "feeToken": "Fee token"
     },
     "dock": {
       "receive": "受け取る",
@@ -264,6 +265,16 @@
       "copied": "コピーしました",
       "close": "閉じる",
       "a11yOpen": "Identicon を表示"
+    },
+    "treasuryBootstrap": {
+      "title": "Help start this network's relayer",
+      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
+      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
+      "addressLabel": "Treasury address",
+      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
+      "copyBtn": "Copy address",
+      "copied": "Copied",
+      "closeBtn": "Close"
     }
   }
 }

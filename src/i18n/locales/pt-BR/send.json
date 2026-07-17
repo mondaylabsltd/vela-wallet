@@ -114,6 +114,7 @@
     "scanAria": "Escanear um QR code",
     "batchImportFailedTitle": "Não foi possível ler o arquivo",
     "batchImportFailedBody": "Use um arquivo CSV, TSV, TXT ou Excel.",
-    "batchCurrencyLabel": "Precificado em"
+    "batchCurrencyLabel": "Precificado em",
+    "feeTokenLabel": "Fee token"
   }
 }

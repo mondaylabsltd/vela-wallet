@@ -114,6 +114,7 @@
     "alertInsufficientBalanceBody": "El total supera tu saldo.",
     "recipientPickAria": "Elegir destinatario o escanear",
     "multiSendNoFundsAfterGas": "No alcanza para el gas tras la reserva.",
-    "gasReserved": "gas reservado"
+    "gasReserved": "gas reservado",
+    "feeTokenLabel": "Fee token"
   }
 }

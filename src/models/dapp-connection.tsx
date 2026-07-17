@@ -137,10 +137,12 @@ interface DAppConnectionContextValue {
   reconnectStuck: boolean;
   /**
    * Approve the current incoming request. For transactions the modal passes the
-   * selected tier's maxFeePerGas plus the raw bundler gas cost (for the funding
-   * pre-check) and, for edited approvals, the rewritten (capped) params.
+   * quoted maxFeePerGas plus the raw bundler gas cost (for the funding
+   * pre-check), the selected fee asset (gasFeeToken: null = native, else a
+   * whitelisted stablecoin on in-band chains) and, for edited approvals, the
+   * rewritten (capped) params.
    */
-  approveRequest: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[] }) => Promise<void>;
+  approveRequest: (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; gasFeeToken?: string | null; quotedFee?: { amount: bigint; recipient: string }; paramsOverride?: any[] }) => Promise<void>;
   /** Reject the current incoming request. */
   rejectRequest: () => void;
   /** Dismiss the modal after an error (response already sent). */
@@ -249,7 +251,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
    * never through this ref, so concurrency can't misroute a signature.
    */
   const signTransportRef = useRef<DAppTransport | null>(null);
-  const lastApproveOptsRef = useRef<{ maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null } | undefined>(undefined);
+  const lastApproveOptsRef = useRef<{ maxFeePerGas?: bigint; bundlerCostWei?: bigint; gasFeeToken?: string | null; quotedFee?: { amount: bigint; recipient: string }; paramsOverride?: any[]; assetSim?: AssetSimResult | null } | undefined>(undefined);
   // The request id the pending funding view belongs to. lastApproveOptsRef is a
   // single shared ref; without pinning the rid, a funding "Continue" could replay
   // the OLD request's (capped) opts under a DIFFERENT request that has since taken
@@ -586,7 +588,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   }, [handleIncoming]);
 
   // --- Approve ---
-  const approveRequest = useCallback(async (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; paramsOverride?: any[]; assetSim?: AssetSimResult | null; intent?: string }) => {
+  const approveRequest = useCallback(async (opts?: { maxFeePerGas?: bigint; bundlerCostWei?: bigint; gasFeeToken?: string | null; quotedFee?: { amount: bigint; recipient: string }; paramsOverride?: any[]; assetSim?: AssetSimResult | null; intent?: string }) => {
     const base = incomingRequest;
     const account = activeAccountRef.current;
     if (!base || !account) return;
@@ -710,6 +712,10 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           pendingRecordId = pending.id;
           pendingSave = saveTransaction(pending).catch(e => console.warn('[DAppConnection] Failed to save pending record:', e));
         },
+        // The fee asset the sheet quoted (null = native) — the in-band send path
+        // settles gas in this token.
+        opts?.gasFeeToken,
+        opts?.quotedFee,
       );
       // §4: the DURABLE, app-owned record must precede the result the extension
       // polls, for EVERY method. eth_sendTransaction already persisted its pending

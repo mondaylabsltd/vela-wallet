@@ -219,7 +219,8 @@
       "deployedYes": "Có",
       "deployedNo": "Chưa (giao dịch đầu tiên)",
       "estimating": "Đang ước tính...",
-      "estimateFailed": "Chạm để thử lại"
+      "estimateFailed": "Chạm để thử lại",
+      "feeToken": "Fee token"
     },
     "dock": {
       "receive": "Nhận",
@@ -264,6 +265,16 @@
       "copied": "Đã sao chép",
       "close": "Đóng",
       "a11yOpen": "Xem identicon"
+    },
+    "treasuryBootstrap": {
+      "title": "Help start this network's relayer",
+      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
+      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
+      "addressLabel": "Treasury address",
+      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
+      "copyBtn": "Copy address",
+      "copied": "Copied",
+      "closeBtn": "Close"
     }
   }
 }

@@ -13,9 +13,15 @@ const src = readFileSync(resolve(__dirname, '../../..', 'src/screens/wallet/Send
 
 describe('SendScreen skips the bundler funding gate on Tempo (issue #91)', () => {
   it('the pre-check short-circuits to null for Tempo before checkBundlerFunding', () => {
-    // The Tempo skip must appear immediately before the checkBundlerFunding call,
-    // so the funding gate + sponsorship probe never run for a Tempo send.
-    expect(src).toMatch(/if \(isTempoChain\(chainId\)\) return null;[\s\S]{0,200}?checkBundlerFunding\(/);
+    // The Tempo skip must appear shortly before the checkBundlerFunding call,
+    // so the funding gate + sponsorship probe never run for a Tempo send. The
+    // in-band skip (generic chains, same settlement model — the per-safe EOA is
+    // operator float, never a user deposit bucket) sits between them.
+    expect(src).toMatch(/if \(isTempoChain\(chainId\)\) return null;[\s\S]{0,800}?checkBundlerFunding\(/);
+  });
+
+  it('the pre-check also short-circuits for generic in-band chains before checkBundlerFunding', () => {
+    expect(src).toMatch(/fee\?\.inBand \|\| await isInBandChain\(chainId,[\s\S]{0,400}?checkBundlerFunding\(/);
   });
 
   it('still estimates the transaction fee (kept out of the skipped block)', () => {

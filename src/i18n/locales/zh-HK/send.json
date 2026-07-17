@@ -114,6 +114,7 @@
     "scanAria": "掃描 QR 碼",
     "batchImportFailedTitle": "無法讀取檔案",
     "batchImportFailedBody": "請使用 CSV、TSV、TXT 或 Excel 檔案。",
-    "batchCurrencyLabel": "計價貨幣"
+    "batchCurrencyLabel": "計價貨幣",
+    "feeTokenLabel": "手续费币种"
   }
 }

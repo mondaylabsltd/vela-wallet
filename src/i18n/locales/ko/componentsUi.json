@@ -219,7 +219,8 @@
       "deployedYes": "예",
       "deployedNo": "아니요 (첫 거래)",
       "estimating": "예상하는 중...",
-      "estimateFailed": "눌러서 다시 시도"
+      "estimateFailed": "눌러서 다시 시도",
+      "feeToken": "Fee token"
     },
     "dock": {
       "receive": "받기",
@@ -264,6 +265,16 @@
       "copied": "복사됨",
       "close": "닫기",
       "a11yOpen": "아이덴티콘 보기"
+    },
+    "treasuryBootstrap": {
+      "title": "Help start this network's relayer",
+      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
+      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
+      "addressLabel": "Treasury address",
+      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
+      "copyBtn": "Copy address",
+      "copied": "Copied",
+      "closeBtn": "Close"
     }
   }
 }

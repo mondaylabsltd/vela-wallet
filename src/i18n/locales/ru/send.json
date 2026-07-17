@@ -120,6 +120,7 @@
     "scanAria": "Сканировать QR-код",
     "batchImportFailedTitle": "Не удалось прочитать файл",
     "batchImportFailedBody": "Используйте файл CSV, TSV, TXT или Excel.",
-    "batchCurrencyLabel": "В валюте"
+    "batchCurrencyLabel": "В валюте",
+    "feeTokenLabel": "Fee token"
   }
 }
