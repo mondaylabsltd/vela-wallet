@@ -28,10 +28,7 @@ import {
   requoteInBandFee,
   type TransactionFeeEstimate,
 } from '@/services/safe-transaction';
-import { isInBandChain } from '@/services/bundler-service';
-import { fetchChainTokens } from '@/services/chain-tokens';
-import { readErc20Balance } from '@/services/token-reads';
-import { isTempoChain } from '@/services/tempo';
+import { useInBandFeeTokenOptions } from '@/hooks/use-inband-fee-tokens';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -86,7 +83,6 @@ export function GasFeeCard({
   const [expanded, setExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   // Fee-asset options: null = no selector (legacy chain / Tempo / no DEX).
-  const [feeTokenOptions, setFeeTokenOptions] = useState<{ symbol: string; contract: string | null }[] | null>(null);
 
   // Region format: fiat in the chosen display currency (€/¥/…) + the number
   // format's grouping/decimal marks, matching the amounts everywhere else.
@@ -94,36 +90,9 @@ export function GasFeeCard({
   useLocalePrefs();
   const sep = numberSeparators();
 
-  // Load fee-asset options — only in-band chains WITH a DEX (no DEX → the
-  // bundler can't price stables → native only, no selector), never on Tempo
-  // (fee is always pathUSD there; no choice to offer).
-  useEffect(() => {
-    setFeeTokenOptions(null);
-    if (!safeAddress || isTempoChain(chainId)) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const inBand = await isInBandChain(chainId, safeAddress);
-        if (!inBand) return;
-        const data = await fetchChainTokens(chainId);
-        // The bundler prices stables ONLY via uniswap-v3 QuoterV2 + wrapped native —
-        // gate on the exact capability so no chip can dead-end at quote time.
-        if (cancelled || !data?.dex?.contracts?.quoterV2 || !data.wrappedNativeToken || data.stables.length === 0) return;
-        // Offer only stables the USER HOLDS — a zero-balance chip can only produce
-        // a doomed op. Read failures exclude the token (fail closed; native always works).
-        const balances = await Promise.all(
-          data.stables.map((s) => readErc20Balance(chainId, s.contract, safeAddress)),
-        );
-        if (cancelled) return;
-        const held = data.stables.filter((_, i) => (balances[i] ?? 0n) > 0n);
-        setFeeTokenOptions([
-          { symbol: sym, contract: null },
-          ...held.map((s) => ({ symbol: s.symbol, contract: s.contract })),
-        ]);
-      } catch { /* no selector */ }
-    })();
-    return () => { cancelled = true; };
-  }, [chainId, safeAddress, sym]);
+  // Fee-asset options — native + held whitelisted stables — from the SHARED loader used by
+  // the Send confirm slide too (one source, can't drift; on-chain balance reads, timing-robust).
+  const feeTokenOptions = useInBandFeeTokenOptions(chainId, safeAddress, true);
 
   // Fee amounts: an in-band stablecoin fee rides in feeAsset (token units, its
   // own decimals — totalWei is 0 then); native keeps the wei-based path.

@@ -26,6 +26,7 @@ import { saveContact } from '@/services/contacts';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
 import { attemptSilentSponsorship, checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, fetchTreasuryStatus, formatWei, isInBandChain, parseBundlerUnderfunded, probeGasSponsorship, recommendedFundingWei, underfundedRequiredWei, type FundingNeeded, type TreasuryStatus } from '@/services/bundler-service';
 import { fetchChainTokens } from '@/services/chain-tokens';
+import { useInBandFeeTokenOptions } from '@/hooks/use-inband-fee-tokens';
 import { TreasuryBootstrapSheet } from '@/components/ui/TreasuryBootstrapSheet';
 import { AmountText } from '@/components/ui/AmountText';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
@@ -290,7 +291,6 @@ export default function SendScreen() {
   // else a whitelisted stablecoin contract. Options load when confirm opens;
   // null options = no selector (legacy chain, or Tempo where pathUSD is fixed).
   const [gasFeeToken, setGasFeeToken] = useState<string | null>(null);
-  const [feeTokenOptions, setFeeTokenOptions] = useState<{ symbol: string; contract: string | null }[] | null>(null);
   // Treasury bootstrap sheet (relayer float depleted on this network) — shown
   // instead of the generic error/funding surface when the treasury reports
   // bootstrapNeeded. See maybeShowTreasuryBootstrap.
@@ -604,61 +604,22 @@ export default function SendScreen() {
     return () => { cancelled = true; };
   }, [step, selectedToken, recipient]);
 
-  // Fee-asset options for the confirm step. Only on in-band chains WITH a DEX
-  // (no DEX → the bundler can't price stables → native only, no selector), and
-  // never on Tempo (the fee is always pathUSD there — no choice to offer).
-  // Leaving confirm resets the choice so the next entry re-quotes in native.
-  // `tokens` is read through a ref: it is a fresh array reference every render, and
-  // having it in the dep list re-fired this effect each render → setFeeTokenOptions
-  // (new array) → re-render → INFINITE loop that saturated the JS thread ("估算中"
-  // never resolving) and hammered the RPC. Confirm-entry balances are fresh enough.
-  const tokensRef = useRef(tokens);
-  useEffect(() => { tokensRef.current = tokens; }, [tokens]);
+  // Fee-asset options — native + held whitelisted stables — from the SHARED loader (the same
+  // one GasFeeCard uses; on-chain balance reads, so it can't miss a stable that hadn't loaded
+  // into the wallet token list yet, the timing bug that dropped the selector on confirm-open).
+  const feeTokenOptions = useInBandFeeTokenOptions(
+    selectedToken ? tokenChainId(selectedToken) : null,
+    activeAccount?.address ?? null,
+    step === 'confirm',
+  );
+  // Leaving confirm resets the fee-asset choice (next entry re-quotes in native) and clears a
+  // stale erc20 estimate (totalWei=0n) so the gas-reserve/warning math downstream never reads 0.
   useEffect(() => {
-    if (step !== 'confirm' || !selectedToken || !activeAccount) {
-      setFeeTokenOptions(null);
+    if (step !== 'confirm') {
       setGasFeeToken(null);
-      // An erc20 fee estimate carries totalWei=0n — if it outlived the reset of
-      // gasFeeToken, the gas-reserve/warning math downstream would silently read 0.
       setFeeEstimate((fe) => (fe?.feeAsset?.kind === 'erc20' ? null : fe));
-      return;
     }
-    const chainId = tokenChainId(selectedToken);
-    if (isTempoChain(chainId)) { setFeeTokenOptions(null); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const inBand = await isInBandChain(chainId, activeAccount.address);
-        if (!inBand) { if (!cancelled) setFeeTokenOptions(null); return; }
-        const data = await fetchChainTokens(chainId);
-        if (cancelled) return;
-        // The bundler prices stables ONLY via a uniswap-v3 QuoterV2 + wrapped native —
-        // a chain with some other DEX shape would render chips that dead-end at quote
-        // time. Gate on the exact capability, not the mere presence of a dex entry.
-        if (!data?.dex?.contracts?.quoterV2 || !data.wrappedNativeToken || data.stables.length === 0) {
-          setFeeTokenOptions(null);
-          return;
-        }
-        // Offer only stables the user actually HOLDS (balance > 0) — a chip for a
-        // token with a zero balance can only produce a doomed op. The whitelist
-        // (ethereum-data) bounds WHAT can pay gas; the holdings bound what THIS
-        // user can pay with.
-        const heldStables = data.stables.filter((s) => {
-          const held = tokensRef.current.find(
-            (t) => tokenChainId(t) === chainId && t.tokenAddress?.toLowerCase() === s.contract.toLowerCase(),
-          );
-          return !!held && balanceToWei(held.balance, held.decimals) > 0n;
-        });
-        setFeeTokenOptions([
-          { symbol: nativeSymbol(chainId), contract: null },
-          ...heldStables.map((s) => ({ symbol: s.symbol, contract: s.contract })),
-        ]);
-      } catch {
-        if (!cancelled) setFeeTokenOptions(null);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [step, selectedToken, activeAccount]);
+  }, [step]);
 
   // Relayer float depleted → offer the community bootstrap sheet instead of a
   // dead-end error/funding surface. Returns true when the sheet was shown.
