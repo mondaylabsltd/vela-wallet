@@ -101,6 +101,7 @@
     "typedDataSignature": "Firma de datos estructurados",
     "dappTransaction": "Transacción de dApp",
     "activity": "Actividad",
-    "delete": "Eliminar"
+    "delete": "Eliminar",
+    "connected": "Conectado"
   }
 }

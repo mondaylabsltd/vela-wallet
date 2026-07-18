@@ -101,6 +101,7 @@
     "typedDataSignature": "Tanda tangan typed data",
     "dappTransaction": "Transaksi dApp",
     "activity": "Aktivitas",
-    "delete": "Hapus"
+    "delete": "Hapus",
+    "connected": "Terhubung"
   }
 }

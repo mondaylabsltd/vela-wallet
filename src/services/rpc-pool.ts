@@ -199,6 +199,14 @@ const PUBLIC_RPCS: Record<number, string[]> = {
   8453:  ['https://base-rpc.publicnode.com', 'https://1rpc.io/base'],
   43114: ['https://avalanche-c-chain-rpc.publicnode.com', 'https://1rpc.io/avax/c'],
   100:   ['https://gnosis-rpc.publicnode.com', 'https://1rpc.io/gnosis'],
+  // X Layer (OKB gas). Alchemy DOES cover X Layer (slug xlayer-mainnet, see rpc-providers.ts), so
+  // the managed provider is now the primary getCode/nonce read; these curated public endpoints are
+  // the FALLBACK. Both matter: without a working RPC here an xLayer send has NO way to read
+  // eth_getCode, and (pre-fix) isDeployed fail-opened to "deployed" → empty initCode → bundler
+  // "AA20 account not deployed". rpc.xlayer.tech is OKX's official endpoint; xlayer.drpc.org is the
+  // same public dRPC endpoint the bundler uses. isDeployed now fails CLOSED, so a total read outage
+  // surfaces as a retryable error instead of a doomed empty-initCode op.
+  196:   ['https://rpc.xlayer.tech', 'https://xlayer.drpc.org'],
 };
 
 // ---------------------------------------------------------------------------
@@ -1012,4 +1020,8 @@ export async function refreshPool(chainId: number): Promise<void> {
 /** Invalidate all pools so they re-read config on next use. */
 export function invalidateAllPools(): void {
   poolInitAt.clear();
+  // Also drop cached "fastest RPC" winners. After a provider-key or service-endpoint
+  // change the old winner (handed to the bundler via X-Rpc-Url) would otherwise
+  // linger for up to an hour, so the new endpoint wouldn't fully take effect.
+  fastestRpcCache.clear();
 }

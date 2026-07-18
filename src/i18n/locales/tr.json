@@ -101,6 +101,7 @@
     "typedDataSignature": "Yapılandırılmış Veri İmzası",
     "dappTransaction": "dApp işlemi",
     "activity": "Etkinlik",
-    "delete": "Sil"
+    "delete": "Sil",
+    "connected": "Bağlandı"
   }
 }

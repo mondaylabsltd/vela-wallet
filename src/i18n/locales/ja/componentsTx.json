@@ -24,7 +24,8 @@
       "statusConfirmed": "確認済み",
       "statusSubmitted": "送信済み",
       "statusFailed": "失敗",
-      "failedHint": "このトランザクションはオンチェーンで失敗しました。"
+      "failedHint": "送金はオンチェーンで失敗し、取り消されました。ご資産は送られていません。ネットワーク手数料のみ差し引かれている場合があります。原因は下のエクスプローラーでご確認いただくか、前の画面に戻ってもう一度お試しください。",
+      "userOpHash": "UserOp ハッシュ"
     },
     "detail": {
       "received": "受け取り",

@@ -181,7 +181,11 @@
       "gasLimit": "Gas 上限",
       "walletDeployed": "钱包已部署",
       "deployedYes": "是",
-      "deployedNo": "否（首次交易）"
+      "deployedNo": "否（首次交易）",
+      "feeToken": "手续费币种",
+      "paidWith": "用 {{symbol}} 支付",
+      "rowBalance": "余额",
+      "rowSpend": "本次消耗"
     },
     "dock": {
       "receive": "收款",
@@ -265,6 +269,18 @@
       "copied": "已复制",
       "close": "关闭",
       "a11yOpen": "查看身份图标"
+    },
+    "treasuryBootstrap": {
+      "title": "启动本网络的中继器",
+      "lead": "这条网络的打包金库 gas 不足，充值后即可恢复发送。",
+      "suggested": "建议充值",
+      "amountHint": "建议充值：{{amount}} {{symbol}}",
+      "addressLabel": "金库地址 · bundler 运营者",
+      "disclaimer": "不可退还。这笔 gas 打给 bundler 运营者（非 Vela 开发者），用于启动本网络的打包服务 —— 不是为你这笔交易付费。",
+      "copyBtn": "复制地址去充值",
+      "copied": "已复制",
+      "retryBtn": "我已充值 · 重试交易",
+      "closeBtn": "关闭"
     }
   }
 }

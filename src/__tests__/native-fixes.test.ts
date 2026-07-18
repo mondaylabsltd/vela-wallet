@@ -134,7 +134,8 @@ describe('batch/split send carries the recipient name to the address book (issue
   });
 
   it('the split-send path sets toName so deriveFromHistory can surface it', () => {
-    const src = read('src/screens/wallet/SendScreen.tsx');
+    // The send-build logic moved from SendScreen.tsx into the extracted controller.
+    const src = read('src/screens/wallet/useSendController.ts');
     // The split-mode lines map (recipients.map) must set toName from the draft
     // name — mirroring the single/multiSelect branches. (contacts.test.ts already
     // proves a persisted toName becomes the auto-contact's resolvedName.)
@@ -149,7 +150,9 @@ describe('WalletPair disconnect confirmation (issue #85)', () => {
     // never wire conn.disconnectBridge straight to onDisconnect.
     expect(src).toContain('onDisconnect={confirmDisconnect}');
     expect(src).not.toContain('onDisconnect={conn.disconnectBridge}');
-    expect(src).toMatch(/const confirmDisconnect = useCallback[\s\S]*?showAlert\(/);
+    // confirmDisconnect's definition now lives in the extracted controller.
+    const ctrl = read('src/screens/wallet/useHomeController.ts');
+    expect(ctrl).toMatch(/const confirmDisconnect = useCallback[\s\S]*?showAlert\(/);
   });
 
   it('legacy /connect screen also confirms before disconnecting', () => {

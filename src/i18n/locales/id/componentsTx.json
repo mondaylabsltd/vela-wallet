@@ -24,7 +24,8 @@
       "statusConfirmed": "Dikonfirmasi",
       "statusSubmitted": "Terkirim",
       "statusFailed": "Gagal",
-      "failedHint": "Transaksi ini gagal diselesaikan on-chain."
+      "failedHint": "Transfer gagal on-chain — dana Anda tidak jadi terkirim. Biaya jaringan mungkin tetap dikenakan. Buka explorer di bawah untuk melihat alasannya, atau kembali dan coba lagi.",
+      "userOpHash": "UserOp Hash"
     },
     "detail": {
       "received": "Diterima",

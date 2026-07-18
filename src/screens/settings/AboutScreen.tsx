@@ -4,11 +4,11 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { scaleFont, color, createStyles, font, inter, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
-import { getAllNetworksSync } from '@/models/network';
+import { useAllNetworks } from '@/hooks/use-networks';
 import { hapticSuccess, openBrowser } from '@/services/platform';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ArrowLeft, ExternalLink } from 'lucide-react-native';
-import React, { useMemo, useRef } from 'react';
+import React, { useRef } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next';
 export default function AboutScreen() {
   const { t } = useTranslation();
   const router = useSafeRouter();
-  const networks = useMemo(() => getAllNetworksSync(), []);
+  const networks = useAllNetworks();
   const devTapRef = useRef({ count: 0, lastTap: 0 });
 
   const handleLogoTap = () => {

@@ -101,6 +101,7 @@
     "typedDataSignature": "簽署結構化資料",
     "dappTransaction": "dApp 交易",
     "activity": "活動",
-    "delete": "刪除"
+    "delete": "刪除",
+    "connected": "已連線"
   }
 }

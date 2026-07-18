@@ -75,7 +75,7 @@
       "alertSignInFailedBody": "{{message}}\n\nCihazınızda Face ID, Touch ID veya parmak izinin ayarlı olduğundan emin olup tekrar deneyin.",
       "alertIncompatibleBodyCreate": "Cihazınızın kimlik sağlayıcısı bu cüzdanla uyumlu değil. Lütfen sistem ayarlarından Google Password Manager'a geçip tekrar deneyin.",
       "recoverOfferTitle": "Cüzdanı kurtar",
-      "recoverOfferBody": "Anahtar sunucusunda bu geçiş anahtarına ait kayıt yok. Bir imza daha onaylayın; genel anahtar ve cüzdan adresiniz bu cihazda yeniden oluşturulsun.",
+      "recoverOfferBody": "Anahtar sunucusunda bu geçiş anahtarına ait kayıt yok. Bir imza daha onaylayın; açık anahtar ve cüzdan adresiniz bu cihazda yeniden oluşturulsun.",
       "recoverConfirm": "Şimdi kurtar",
       "recoverCancel": "Şimdi Değil",
       "recoverFailedTitle": "Kurtarma işe yaramadı",

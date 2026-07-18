@@ -15,7 +15,9 @@ import { View, Text, Pressable, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Plus, X, BookUser, FileUp } from 'lucide-react-native';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
+import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import { RecipientTrust } from '@/components/contacts/RecipientTrust';
+import { RecipientTypeBadge } from '@/components/contacts/RecipientTypeBadge';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { sumSplitBaseUnits } from '@/services/batch-send';
 import { toBaseUnits, fromBaseUnits } from '@/services/eip681';
@@ -128,7 +130,18 @@ export function MultiRecipientEditor({
             </View>
             {addrInvalid
               ? <Text style={styles.rowError}>{t('send.alertInvalidAddressTitle')}</Text>
-              : <View style={styles.badgeWrap}><RecipientTrust address={r.address} compact /></View>}
+              : (
+                <View style={styles.badgeWrap}>
+                  <ContactAvatar name={r.name ?? ''} address={r.address} size={20} />
+                  {/* Same identity treatment as the single-send / confirm row: ink name +
+                      trailing trust marker (green ✓ for any saved contact), so a recipient
+                      never reads differently between single and split modes. */}
+                  <View style={styles.nameRow}>
+                    <RecipientTrust address={r.address} prominent nameOnly />
+                    <RecipientTypeBadge address={r.address} />
+                  </View>
+                </View>
+              )}
 
             {/* Amount */}
             <View style={styles.amountRow}>
@@ -207,7 +220,8 @@ const styles = createStyles(() => ({
     width: 40, height: 40, borderRadius: radius.md,
     alignItems: 'center', justifyContent: 'center', backgroundColor: color.bg.base,
   },
-  badgeWrap: { paddingLeft: space.xs },
+  badgeWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingLeft: space.xs, marginTop: space.xs },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1 },
   rowError: { fontSize: text.xs, ...inter.medium, color: color.error.base, paddingLeft: space.xs },
   amountRow: {
     flexDirection: 'row', alignItems: 'center', gap: space.sm,

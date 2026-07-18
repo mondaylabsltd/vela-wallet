@@ -299,6 +299,8 @@ function NetworkEditorModal({ s, visible, onClose }: { s: S; visible: boolean; o
       { text: t('settingsModals.network.removeConfirm'), style: 'destructive', onPress: async () => {
         await removeCustomNetwork(id);
         await refreshCustomNetworks();
+        // Drop the removed chain's cached endpoint list so nothing keeps querying it.
+        invalidateAllPools();
         setAllNetworks(await getAllNetworks());
         setCustomIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       }},

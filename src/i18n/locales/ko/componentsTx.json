@@ -24,7 +24,8 @@
       "statusConfirmed": "확인됨",
       "statusSubmitted": "제출됨",
       "statusFailed": "실패",
-      "failedHint": "이 거래가 온체인에서 실패했습니다."
+      "failedHint": "전송이 온체인에서 되돌려졌습니다 — 자산은 전송되지 않았습니다. 네트워크 수수료는 부과되었을 수 있습니다. 아래 탐색기에서 원인을 확인하거나, 돌아가서 다시 시도하세요.",
+      "userOpHash": "UserOp 해시"
     },
     "detail": {
       "received": "받음",

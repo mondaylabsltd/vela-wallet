@@ -28,7 +28,7 @@
       "accountNameHint": "Este nome é armazenado junto com sua chave pública on-chain para login em vários dispositivos.",
       "nameTooLong": "Este nome é longo demais para uma passkey — encurte-o, por favor.",
       "technicalDetails": "Detalhes técnicos",
-      "ack0": "Esta é uma carteira self-custody. A chave privada da sua passkey é gerenciada pelo gerenciador de senhas do seu dispositivo (Chaveiro do iCloud / Gerenciador de Senhas do Google). A Vela Wallet não pode acessá-la nem recuperá-la.",
+      "ack0": "Esta é uma carteira de autocustódia. A chave privada da sua passkey é gerenciada pelo gerenciador de senhas do seu dispositivo (Chaveiro do iCloud / Gerenciador de Senhas do Google). A Vela Wallet não pode acessá-la nem recuperá-la.",
       "ack1": "Se você perder o dispositivo, pode restaurar sua carteira em um novo dispositivo pela sua conta do iCloud ou do Google.",
       "ack2": "Se sua conta do iCloud ou do Google for comprometida, o controle da sua carteira também pode ser comprometido. Proteja-a com uma senha forte e 2FA.",
       "ack3": "Concordo com a ",

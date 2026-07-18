@@ -101,6 +101,7 @@
     "typedDataSignature": "型付きデータの署名",
     "dappTransaction": "dApp トランザクション",
     "activity": "アクティビティ",
-    "delete": "削除"
+    "delete": "削除",
+    "connected": "接続"
   }
 }

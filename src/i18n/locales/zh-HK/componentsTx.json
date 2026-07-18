@@ -24,7 +24,8 @@
       "statusConfirmed": "已確認",
       "statusSubmitted": "已提交",
       "statusFailed": "失敗",
-      "failedHint": "此交易未能在鏈上完成。"
+      "failedHint": "此轉帳在鏈上被還原——你的資金並未發出，但可能仍已收取網絡費。可開啟下方的區塊鏈瀏覽器查看原因，或返回再試一次。",
+      "userOpHash": "UserOp 雜湊"
     },
     "detail": {
       "received": "已接收",

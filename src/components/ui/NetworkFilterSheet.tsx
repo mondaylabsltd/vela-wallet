@@ -35,34 +35,38 @@ interface NetworkFilterButtonProps {
 export function NetworkFilterButton({ networks, selected, onPress, onClear }: NetworkFilterButtonProps) {
   const { t } = useTranslation();
   const preview = networks.slice(0, 3);
+  // Container is a plain View (not Pressable) so the main trigger and the clear
+  // control are sibling buttons, never nested — nested <button> is invalid HTML
+  // and warns under React Native Web (accessibilityRole="button" → real <button>).
   return (
-    <Pressable
-      style={styles.trigger}
-      onPress={onPress}
-      hitSlop={6}
-      accessibilityRole="button"
-      accessibilityLabel={`${t('componentsUi.networkFilter.selectChain')}: ${selected ? selected.displayName : t('componentsUi.networkFilter.allNetworks')}`}
-    >
-      {selected ? (
-        <ChainLogo label={selected.iconLabel} color={selected.iconColor} bgColor={selected.iconBg} logoURL={selected.logoURL} size={20} />
-      ) : (
-        <View style={styles.stack}>
-          {preview.map((n, i) => (
-            <View key={n.chainId} style={[styles.stackItem, i > 0 && styles.stackOverlap]}>
-              <ChainLogo label={n.iconLabel} color={n.iconColor} bgColor={n.iconBg} logoURL={n.logoURL} size={20} />
-            </View>
-          ))}
-        </View>
-      )}
-      <Text style={styles.triggerLabel} numberOfLines={1}>{selected ? selected.displayName : 'All'}</Text>
-      {selected ? (
+    <View style={styles.trigger}>
+      <Pressable
+        style={styles.triggerMain}
+        onPress={onPress}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={`${t('componentsUi.networkFilter.selectChain')}: ${selected ? selected.displayName : t('componentsUi.networkFilter.allNetworks')}`}
+      >
+        {selected ? (
+          <ChainLogo label={selected.iconLabel} color={selected.iconColor} bgColor={selected.iconBg} logoURL={selected.logoURL} size={20} />
+        ) : (
+          <View style={styles.stack}>
+            {preview.map((n, i) => (
+              <View key={n.chainId} style={[styles.stackItem, i > 0 && styles.stackOverlap]}>
+                <ChainLogo label={n.iconLabel} color={n.iconColor} bgColor={n.iconBg} logoURL={n.logoURL} size={20} />
+              </View>
+            ))}
+          </View>
+        )}
+        <Text style={styles.triggerLabel} numberOfLines={1}>{selected ? selected.displayName : 'All'}</Text>
+        {!selected && <ChevronDown size={13} color={color.fg.muted} strokeWidth={2.4} />}
+      </Pressable>
+      {selected && (
         <Pressable onPress={onClear} hitSlop={8} style={styles.clearBtn} accessibilityRole="button" accessibilityLabel={t('componentsUi.networkFilter.clearFilter')}>
           <X size={12} color={color.fg.muted} strokeWidth={2.6} />
         </Pressable>
-      ) : (
-        <ChevronDown size={13} color={color.fg.muted} strokeWidth={2.4} />
       )}
-    </Pressable>
+    </View>
   );
 }
 
@@ -187,6 +191,13 @@ const styles = createStyles(() => ({
     paddingVertical: space.md,
     paddingHorizontal: space.lg,
     maxWidth: 150,
+  },
+  // Inner tap area — carries the row layout so the outer chip stays a plain View.
+  triggerMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    flexShrink: 1,
   },
   stack: {
     flexDirection: 'row',

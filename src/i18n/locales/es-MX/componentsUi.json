@@ -186,7 +186,8 @@
       "multiplePermits": "Varios tokens",
       "permitTag": "Permiso de gasto (firma)",
       "permitCantCap": "Un permiso es una firma — su monto no se puede limitar aquí. Para limitar el gasto, usa mejor un Approve on-chain.",
-      "permitNote": "Estás firmando un permiso de gasto — la dApp puede mover hasta este monto en tu nombre."
+      "permitNote": "Estás firmando un permiso de gasto — la dApp puede mover hasta este monto en tu nombre.",
+      "balanceCap": "Saldo"
     },
     "currency": {
       "title": "Moneda de visualización",
@@ -219,7 +220,11 @@
       "deployedYes": "Sí",
       "deployedNo": "No (primera tx)",
       "estimating": "Estimando...",
-      "estimateFailed": "Toca para reintentar"
+      "estimateFailed": "Toca para reintentar",
+      "feeToken": "Token de comisión",
+      "paidWith": "Pagado con {{symbol}}",
+      "rowBalance": "Saldo",
+      "rowSpend": "Costo est."
     },
     "dock": {
       "receive": "Recibir",
@@ -264,6 +269,18 @@
       "copied": "Copiado",
       "close": "Cerrar",
       "a11yOpen": "Ver identicon"
+    },
+    "treasuryBootstrap": {
+      "title": "Inicia el relayer de esta red",
+      "lead": "La tesorería del relayer de esta red tiene poco gas. Finánciala para reanudar los envíos.",
+      "amountHint": "Contribución sugerida: {{amount}} {{symbol}}",
+      "addressLabel": "Tesorería · operador del bundler",
+      "disclaimer": "No reembolsable. Este gas va al operador del bundler (no a Vela) para iniciar el relayer de esta red — no paga tu transacción.",
+      "copyBtn": "Copiar dirección para financiar",
+      "copied": "Copiado",
+      "closeBtn": "Cerrar",
+      "suggested": "Recarga sugerida",
+      "retryBtn": "Ya financié · Reintentar"
     }
   }
 }

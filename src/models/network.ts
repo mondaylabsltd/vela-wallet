@@ -156,9 +156,54 @@ export function networkId(chainId: number): string {
 /** In-memory cache of custom networks for synchronous lookups. */
 let _customNetworkCache: CustomNetwork[] = [];
 
-/** Refresh the custom network cache from storage. Call on app start and after adding/removing. */
+/**
+ * Memoized `default + custom` list. Rebuilt only when the custom-network set
+ * actually changes (via {@link refreshCustomNetworks}), so {@link getAllNetworksSync}
+ * can hand back a stable reference. That stability is required by the
+ * `useSyncExternalStore`-based `useAllNetworks` hook, which would otherwise see a
+ * fresh array every render and loop forever.
+ */
+let _allNetworksSnapshot: Network[] = DEFAULT_NETWORKS;
+
+function rebuildNetworkSnapshot(): void {
+  _allNetworksSnapshot =
+    _customNetworkCache.length === 0
+      ? DEFAULT_NETWORKS
+      : [...DEFAULT_NETWORKS, ..._customNetworkCache.map(customToNetwork)];
+}
+
+/**
+ * Subscribers notified whenever the network set changes (custom network added,
+ * removed, or the cache reloaded). Mirrors the locale-prefs store in storage.ts:
+ * network data is read synchronously during render, so without a notification
+ * nothing tells already-mounted screens (the home chain selector, Receive, the
+ * token pickers) to re-render — a newly added network only showed up after a reload.
+ *
+ * Anchored on `globalThis` so Fast Refresh re-evaluating this module in dev doesn't
+ * swap in a fresh empty set and orphan already-mounted subscribers. Inert in
+ * production — the module is evaluated once.
+ */
+const _networkStore = globalThis as unknown as { __velaNetworkListeners?: Set<() => void> };
+const _networkListeners: Set<() => void> = (_networkStore.__velaNetworkListeners ??= new Set<() => void>());
+
+/** Subscribe to network-set changes. Bridged to React by the `useAllNetworks` hook. */
+export function subscribeNetworks(listener: () => void): () => void {
+  _networkListeners.add(listener);
+  return () => { _networkListeners.delete(listener); };
+}
+
+function notifyNetworkListeners(): void {
+  for (const l of _networkListeners) l();
+}
+
+/**
+ * Refresh the custom network cache from storage, then notify subscribers so every
+ * mounted consumer updates immediately. Call on app start and after adding/removing.
+ */
 export async function refreshCustomNetworks(): Promise<void> {
   _customNetworkCache = await loadCustomNetworks();
+  rebuildNetworkSnapshot();
+  notifyNetworkListeners();
 }
 
 /** Convert a CustomNetwork to the Network interface. */
@@ -179,11 +224,12 @@ export function customToNetwork(cn: CustomNetwork): Network {
 }
 
 /**
- * Get all networks synchronously (uses in-memory cache).
- * Call refreshCustomNetworks() at app start to populate the cache.
+ * Get all networks synchronously (default + custom, from the memoized snapshot).
+ * Returns a stable reference between changes so it's safe as a `useSyncExternalStore`
+ * getSnapshot. Call refreshCustomNetworks() at app start to populate the cache.
  */
 export function getAllNetworksSync(): Network[] {
-  return [...DEFAULT_NETWORKS, ..._customNetworkCache.map(customToNetwork)];
+  return _allNetworksSnapshot;
 }
 
 /** Get all networks: default + custom (refreshes cache first). */

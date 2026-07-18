@@ -12,7 +12,8 @@ import { TokenRow } from '@/components/ui/TokenRow';
 import { VelaButton } from '@/components/ui/VelaButton';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
-import { chainName, getAllNetworksSync, tokenBadgeNetwork } from '@/models/network';
+import { chainName, tokenBadgeNetwork } from '@/models/network';
+import { useAllNetworks } from '@/hooks/use-networks';
 import { isNativeToken, tokenBalanceDouble, tokenChainId, tokenId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
 import { isStable } from '@/services/activity';
 import { isTempoFeeToken } from '@/services/tempo';
@@ -74,7 +75,7 @@ interface Props {
 export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTotals, defaultCategory = 'stable', multiSelect, initialChainId = null }: Props) {
   const { t } = useTranslation();
   const formatUsd = useDisplayCurrency().fmt;
-  const networks = getAllNetworksSync();
+  const networks = useAllNetworks();
   const insets = useSafeAreaInsets();
 
   const [search, setSearch] = useState('');

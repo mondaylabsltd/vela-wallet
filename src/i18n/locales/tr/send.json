@@ -114,6 +114,7 @@
     "scanAria": "QR kod tara",
     "batchImportFailedTitle": "Dosya okunamadı",
     "batchImportFailedBody": "Lütfen bir CSV, TSV, TXT veya Excel dosyası kullanın.",
-    "batchCurrencyLabel": "Fiyat birimi"
+    "batchCurrencyLabel": "Fiyat birimi",
+    "feeTokenLabel": "Ücret token'ı"
   }
 }

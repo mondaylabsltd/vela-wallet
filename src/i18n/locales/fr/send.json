@@ -114,6 +114,7 @@
     "batchRateFailed": "Taux indisponible — saisissez-en un manuellement.",
     "batchOverBalance": "Le total dépasse votre solde de {{sym}}.",
     "batchClose": "Fermer",
-    "scanAria": "Scanner un QR code"
+    "scanAria": "Scanner un QR code",
+    "feeTokenLabel": "Token de frais"
   }
 }

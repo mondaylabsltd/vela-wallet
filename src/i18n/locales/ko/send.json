@@ -114,6 +114,7 @@
     "scanAria": "QR 코드 스캔",
     "batchImportFailedTitle": "파일을 읽을 수 없습니다",
     "batchImportFailedBody": "CSV, TSV, TXT 또는 Excel 파일을 사용하세요.",
-    "batchCurrencyLabel": "기준 통화"
+    "batchCurrencyLabel": "기준 통화",
+    "feeTokenLabel": "수수료 토큰"
   }
 }

@@ -10,7 +10,7 @@ import { hashTypedData, type TypedData } from '@/services/eip712';
 import { fromHex, stripHexPrefix, toHex } from '@/services/hex';
 import * as PublicKeyIndex from '@/services/public-key-index';
 import { rpcCall } from '@/services/rpc-adapter';
-import { sendContractCall, sendNative, buildEip1271Signature, extractClientDataFields, computeSafeMessageHash } from '@/services/safe-transaction';
+import { sendContractCall, sendNative, buildEip1271Signature, extractClientDataFields, computeSafeMessageHash, type QuotedInBandFee } from '@/services/safe-transaction';
 import { enforceNoUnlimited } from '@/services/approval-guard';
 import { findAccountByCredentialId } from '@/services/storage';
 import { SAFE_PROXY_RUNTIME_CODE } from '@/services/safe-address';
@@ -229,6 +229,11 @@ export async function handleSendTransaction(
   chainId: number,
   maxFeeOverride?: bigint,
   onSubmitted?: (userOpHash: string) => void,
+  // In-band chains only: settle gas in this whitelisted stablecoin (null/omitted
+  // = native). Ignored on legacy chains and on Tempo (always pathUSD there).
+  gasFeeToken?: string | null,
+  // In-band: the displayed fee (amount + recipient) — signed verbatim.
+  quotedFee?: QuotedInBandFee,
 ): Promise<string> {
   const txDict = request.params[0] as Record<string, string>;
   const effectiveChainId = resolveChainId(chainId, txDict.chainId);
@@ -273,10 +278,10 @@ export async function handleSendTransaction(
 
   let txResult;
   if (dataHex === '0x' || dataHex === '') {
-    txResult = await sendNative(safeAddress, to, valueClean, effectiveChainId, publicKeyHex, signFn, maxFeeOverride);
+    txResult = await sendNative(safeAddress, to, valueClean, effectiveChainId, publicKeyHex, signFn, maxFeeOverride, gasFeeToken, quotedFee);
   } else {
     const txData = fromHex(stripHexPrefix(dataHex));
-    txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn, maxFeeOverride);
+    txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn, maxFeeOverride, gasFeeToken, quotedFee);
   }
 
   // Op is signed + accepted by the bundler here; the receipt wait can take a while.
@@ -320,6 +325,11 @@ export async function handleDAppRequest(
   chainId: number,
   maxFeeOverride?: bigint,
   onSubmitted?: (userOpHash: string) => void,
+  // In-band chains only: settle gas in this whitelisted stablecoin (null/omitted
+  // = native). Only meaningful for the tx/batch methods.
+  gasFeeToken?: string | null,
+  // In-band: the displayed fee (amount + recipient) — signed verbatim.
+  quotedFee?: QuotedInBandFee,
 ): Promise<any> {
   const { method } = request;
 
@@ -329,9 +339,9 @@ export async function handleDAppRequest(
   enforceNoUnlimited(method, request.params);
 
   if (method === 'eth_sendTransaction') {
-    return handleSendTransaction(request, account, safeAddress, chainId, maxFeeOverride, onSubmitted);
+    return handleSendTransaction(request, account, safeAddress, chainId, maxFeeOverride, onSubmitted, gasFeeToken, quotedFee);
   } else if (method === 'wallet_sendCalls') {
-    return handleSendCalls(request, account, safeAddress, chainId);
+    return handleSendCalls(request, account, safeAddress, chainId, gasFeeToken, quotedFee);
   } else if (method === 'personal_sign') {
     return handlePersonalSign(request, account, safeAddress, chainId);
   } else if (method.includes('signTypedData')) {
@@ -350,6 +360,11 @@ export async function handleSendCalls(
   account: Account,
   safeAddress: string,
   chainId: number,
+  // In-band chains only: settle gas in this whitelisted stablecoin (null/omitted
+  // = native). Ignored on legacy chains and on Tempo (always pathUSD there).
+  gasFeeToken?: string | null,
+  // In-band: the displayed fee (amount + recipient) — signed verbatim.
+  quotedFee?: QuotedInBandFee,
 ): Promise<string> {
   const payload = request.params[0] as {
     calls: Array<{ to: string; value?: string; data?: string; capabilities?: Record<string, { optional?: boolean }> }>;
@@ -415,10 +430,10 @@ export async function handleSendCalls(
 
     let txResult;
     if (dataHex === '0x' || dataHex === '') {
-      txResult = await sendNative(safeAddress, to, valueClean, effectiveChainId, publicKeyHex, signFn);
+      txResult = await sendNative(safeAddress, to, valueClean, effectiveChainId, publicKeyHex, signFn, undefined, gasFeeToken, quotedFee);
     } else {
       const txData = fromHex(stripHexPrefix(dataHex));
-      txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn);
+      txResult = await sendContractCall(safeAddress, to, valueClean, txData, effectiveChainId, publicKeyHex, signFn, undefined, gasFeeToken, quotedFee);
     }
     rememberUserOpChain(txResult.userOpHash, effectiveChainId);
     return txResult.userOpHash;
@@ -436,6 +451,9 @@ export async function handleSendCalls(
     effectiveChainId,
     publicKeyHex,
     signFn,
+    undefined,
+    gasFeeToken,
+    quotedFee,
   );
   rememberUserOpChain(txResult.userOpHash, effectiveChainId);
   return txResult.userOpHash;

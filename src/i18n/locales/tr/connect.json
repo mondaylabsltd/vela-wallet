@@ -112,7 +112,7 @@
   },
   "signHandoff": {
     "signing": "Vela'da onayla",
-    "signed": "Gönderildi",
+    "signed": "İmzalandı",
     "rejected": "İptal edildi",
     "pending": "Vela Etkinliği'nde kontrol et",
     "expired": "Bu imza isteğinin süresi doldu",

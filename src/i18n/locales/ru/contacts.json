@@ -26,7 +26,7 @@
     "saved": "Сохранено",
     "delete": "Удалить",
     "deleteTitle": "Удалить контакт?",
-    "deleteBody": "{{name}} будет удалён из вашей адресной книги.",
+    "deleteBody": "Контакт «{{name}}» будет удалён из вашей адресной книги.",
     "addContact": "Добавить контакт",
     "kindAccount": "Смарт-аккаунт",
     "invalidAddress": "Введите корректный адрес",
@@ -57,6 +57,7 @@
     "importDoneTitle": "Импорт завершён",
     "importDoneBody": "Добавлено: {{added}}, уже существовало: {{skipped}}.",
     "importFailTitle": "Не удалось импортировать",
-    "importFailBody": "Используйте файл контактов в формате JSON или CSV."
+    "importFailBody": "Используйте файл контактов в формате JSON или CSV.",
+    "groupMembers": "{{count}} участников"
   }
 }

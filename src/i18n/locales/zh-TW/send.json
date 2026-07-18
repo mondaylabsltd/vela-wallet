@@ -114,6 +114,7 @@
     "recipientPickAria": "選擇收款人或掃碼",
     "scanAria": "掃描 QR code",
     "multiSendNoFundsAfterGas": "扣除 gas 儲備後餘額不足。",
-    "gasReserved": "已留 gas"
+    "gasReserved": "已留 gas",
+    "feeTokenLabel": "手續費代幣"
   }
 }

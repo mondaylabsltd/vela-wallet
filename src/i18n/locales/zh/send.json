@@ -114,6 +114,7 @@
     "batchImportFailedBody": "请使用 CSV、TSV、TXT 或 Excel 文件。",
     "batchCurrencyLabel": "计价货币",
     "batchOverBalance": "总额超出 {{sym}} 余额。",
-    "batchClose": "关闭"
+    "batchClose": "关闭",
+    "feeTokenLabel": "手续费币种"
   }
 }

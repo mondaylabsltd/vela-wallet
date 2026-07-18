@@ -33,7 +33,7 @@ import {
 import { derSignatureToRaw } from './attestation-parser';
 import { rpcCall } from './rpc-adapter';
 import { gasQuoteShouldZero } from './dev/fault-injection';
-import { fetchBundlerAccountInfo, fetchSplitterInfo } from './bundler-service';
+import { fetchBundlerAccountInfo, fetchSplitterInfo, fetchInBandGasQuote, isInBandChain } from './bundler-service';
 import {
   isTempoChain,
   tempoReimbursement,
@@ -114,11 +114,19 @@ export async function sendNative(
   publicKeyHex: string,
   signFn: SignFn,
   maxFeeOverride?: bigint,
+  // In-band chains only: pay gas in this whitelisted stablecoin (null/omitted = native).
+  gasFeeToken?: string | null,
+  // In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
+  quotedFee?: QuotedInBandFee,
 ): Promise<SubmitResult> {
   if (isTempoChain(chainId)) {
     // Tempo has no native coin; a native send is unusual but routed for consistency
     // (gas is paid in the default stablecoin, not the value being moved).
     return sendUserOpTempo(from, [{ to, value: valueWei, data: new Uint8Array(0) }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
+  }
+  if (await isInBandChain(chainId, from)) {
+    // In-band settlement: gas is repaid by a batched transfer, not a prefunded gas account.
+    return sendUserOpInBand(from, [{ to, value: valueWei, data: new Uint8Array(0) }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
   }
   const callData = await buildNativeCallData([{ to, value: valueWei, data: new Uint8Array(0) }], chainId, false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
@@ -134,6 +142,10 @@ export async function sendERC20(
   publicKeyHex: string,
   signFn: SignFn,
   maxFeeOverride?: bigint,
+  // In-band chains only: pay gas in this whitelisted stablecoin (null/omitted = native).
+  gasFeeToken?: string | null,
+  // In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
+  quotedFee?: QuotedInBandFee,
 ): Promise<SubmitResult> {
   const transferSelector = functionSelector('transfer(address,uint256)');
   const transferData = concatBytes(
@@ -150,6 +162,10 @@ export async function sendERC20(
     return sendUserOpTempo(from, [{ to: tokenAddress, value: '0', data: transferData }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
 
+  if (await isInBandChain(chainId, from)) {
+    return sendUserOpInBand(from, [{ to: tokenAddress, value: '0', data: transferData }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
+  }
+
   const callData = await buildNativeCallData([{ to: tokenAddress, value: '0', data: transferData }], chainId, false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
@@ -164,10 +180,17 @@ export async function sendContractCall(
   publicKeyHex: string,
   signFn: SignFn,
   maxFeeOverride?: bigint,
+  // In-band chains only: pay gas in this whitelisted stablecoin (null/omitted = native).
+  gasFeeToken?: string | null,
+  // In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
+  quotedFee?: QuotedInBandFee,
 ): Promise<SubmitResult> {
   if (isTempoChain(chainId)) {
     // dApp / contract call: pay gas in the default stablecoin (pathUSD).
     return sendUserOpTempo(from, [{ to, value: valueWei, data }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
+  }
+  if (await isInBandChain(chainId, from)) {
+    return sendUserOpInBand(from, [{ to, value: valueWei, data }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
   }
   const callData = await buildNativeCallData([{ to, value: valueWei, data }], chainId, false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
@@ -185,6 +208,10 @@ export async function sendBatchCalls(
   // submits EXACTLY the price it showed — same as single sends. Omitted → sendUserOp
   // re-derives from getGasPrices (also tip-inclusive now), so this never underprices.
   maxFeeOverride?: bigint,
+  // In-band chains only: pay gas in this whitelisted stablecoin (null/omitted = native).
+  gasFeeToken?: string | null,
+  // In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
+  quotedFee?: QuotedInBandFee,
 ): Promise<SubmitResult> {
   const byteCalls: MultiSendCall[] = calls.map(c => ({
     to: c.to,
@@ -195,6 +222,11 @@ export async function sendBatchCalls(
   if (isTempoChain(chainId)) {
     // Tempo signs maxFee=0 (gas paid in stablecoin) — the override doesn't apply.
     return sendUserOpTempo(from, byteCalls, TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
+  }
+
+  if (await isInBandChain(chainId, from)) {
+    // In-band also signs maxFee=0 — the override doesn't apply.
+    return sendUserOpInBand(from, byteCalls, gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
   }
 
   const callData = await buildNativeCallData(byteCalls, chainId, true);
@@ -271,6 +303,50 @@ export interface TransactionFeeEstimate {
   tier: GasTier;
   /** True when the price came from the bundler quote (vs a local fallback). */
   quoted: boolean;
+  /** In-band settlement estimate (generic chains once the bundler enables them). */
+  inBand?: boolean;
+  /** The asset the gas fee is paid in. Absent → native via the legacy model. */
+  feeAsset?: { kind: 'native' } | { kind: 'erc20'; token: string; decimals: number; amount: bigint };
+  /** In-band: the quote's transfer recipient. The submit path signs THIS quote
+   *  (amount + recipient) verbatim — what the confirm slide shows is what executes. */
+  feeRecipient?: string;
+  /** In-band: the native cost basis the quote was priced from — lets a fee-asset
+   *  switch re-quote with a single RPC (same gas, different asset). */
+  nativeCostWei?: bigint;
+}
+
+/** In-band quoted fee as displayed by the confirm UI — the submit path signs exactly
+ *  this (amount + recipient); the bundler's gate re-verifies and rejects loudly if
+ *  stale, so the user re-confirms a NEW number instead of silently paying one. */
+export interface QuotedInBandFee {
+  amount: bigint;
+  recipient: string;
+}
+
+/** Re-quote an existing in-band estimate for a different fee asset with ONE RPC —
+ *  the gas basis (nativeCostWei) is already known, so only the bundler quote runs.
+ *  Returns null when the fast path can't apply (caller falls back to the full
+ *  estimateTransactionFee pipeline). */
+export async function requoteInBandFee(
+  prev: TransactionFeeEstimate,
+  chainId: number,
+  safeAddress: string,
+  gasFeeToken: string | null,
+): Promise<TransactionFeeEstimate | null> {
+  if (!prev.inBand || prev.nativeCostWei === undefined) return null;
+  const q = await fetchInBandGasQuote(chainId, safeAddress, prev.nativeCostWei, gasFeeToken);
+  if (!q) return null;
+  const want = gasFeeToken?.toLowerCase() ?? null;
+  if (want ? (q.asset !== 'erc20' || q.feeToken?.toLowerCase() !== want) : q.asset !== 'native') return null;
+  return {
+    ...prev,
+    totalWei: q.asset === 'native' ? q.requiredAmount : 0n,
+    maxFeePerGas: 0n,
+    feeRecipient: q.recipient,
+    feeAsset: q.asset === 'erc20'
+      ? { kind: 'erc20', token: q.feeToken!, decimals: q.decimals ?? 6, amount: q.requiredAmount }
+      : { kind: 'native' },
+  };
 }
 
 /**
@@ -308,7 +384,10 @@ async function estimateTempoFee(
   tx?: { to: string; value?: string; data?: string },
 ): Promise<TransactionFeeEstimate> {
   const [deployed, { gasPrice }] = await Promise.all([
-    isDeployed(from, chainId),
+    // Estimation is non-binding: a transient RPC blip must NOT kill the fee preview. Fall back
+    // to UNDEPLOYED (conservative — includes deploy gas; too-high beats too-low). The real send
+    // re-checks and fails fast if still indeterminate.
+    isDeployed(from, chainId).catch(() => false),
     getGasPrices(chainId),
   ]);
 
@@ -388,6 +467,9 @@ export async function estimateTransactionFee(
   // every call, the same bundle sendBatchCalls submits, so the batch fee is accurate.
   // Takes precedence over `tx` when non-empty.
   batchCalls?: { to: string; value?: string; data?: string }[],
+  // In-band chains only: quote the gas fee in this whitelisted stablecoin instead of
+  // native (must match the gasFeeToken the send path will use). Ignored elsewhere.
+  gasFeeToken?: string | null,
 ): Promise<TransactionFeeEstimate> {
   // Tempo pays gas in a stablecoin, not the native coin — separate model. Forward the tx so a
   // dApp contract call is quoted off its REAL gas, not a transfer-sized default.
@@ -397,7 +479,9 @@ export async function estimateTransactionFee(
   // throws GasQuoteTooHighError (propagated here = refuse) if the quote is abusive,
   // and returns null only when the bundler can't quote (then we fall back locally).
   const [deployed, { gasPrice }, quote] = await Promise.all([
-    isDeployed(from, chainId),
+    // Estimation is non-binding: a transient RPC blip must NOT kill the fee preview. Fall back
+    // to UNDEPLOYED (conservative — carries deploy gas). The real send re-checks and fails fast.
+    isDeployed(from, chainId).catch(() => false),
     getGasPrices(chainId),
     getBundlerGasQuote(chainId, tier),
   ]);
@@ -448,6 +532,11 @@ export async function estimateTransactionFee(
   // Try to get accurate gas estimates from the bundler. This catches high-gas chains
   // (e.g. Monad) where actual gas usage is 3-10x higher than the static defaults below.
   let totalGas: bigint | null = null;
+  // The bundler's UN-PADDED estimate for the real call — the in-band CHARGE basis. The padded
+  // `totalGas` (1.5× + floors + L2 adders) is right for the op's gas LIMITS but ~3-10× the real
+  // gas, so pricing the in-band fee off it over-charged the user 8-30× (a maxFee=0 op pays no
+  // EntryPoint gas — the reimbursement IS the whole cost, so it must track REAL gas, not limits).
+  let rawEstGas: bigint | null = null;
   try {
     const verificationGas = deployed ? VERIFICATION_GAS_DEPLOYED : VERIFICATION_GAS_UNDEPLOYED;
     const dummySig = buildDummySignature();
@@ -465,13 +554,14 @@ export async function estimateTransactionFee(
       signature: dummySig,
     };
     const est = await estimateGas(dummyOp, chainId);
+    rawEstGas = est.verificationGasLimit + est.callGasLimit + est.preVerificationGas;
     const estVgl = deployed
       ? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
       : bigintMax((est.verificationGasLimit * 15n) / 10n, 2_000_000n);
     const estCgl = bigintMax((est.callGasLimit * 15n) / 10n, 100_000n);
     const estPvg = est.preVerificationGas + 10_000n;
     totalGas = estVgl + estCgl + estPvg;
-    console.log(`[FeeEstimate] Bundler gas: vgl=${estVgl} cgl=${estCgl} pvg=${estPvg} total=${totalGas}`);
+    console.log(`[FeeEstimate] Bundler gas: vgl=${estVgl} cgl=${estCgl} pvg=${estPvg} total=${totalGas} rawBasis=${rawEstGas}`);
   } catch (err) {
     // For a large/complex op the static fallback would show a misleading number and
     // the submit would be refused anyway (see sendUserOp). Surface the failure so the
@@ -497,6 +587,56 @@ export async function estimateTransactionFee(
       totalGas += 600_000n;
     } else if (OP_STACK_CHAIN_IDS.includes(chainId)) {
       totalGas += 150_000n;
+    }
+  }
+
+  // In-band chains: the fee is the bundler's own quote for a batched transfer (native or
+  // stablecoin), not totalGas × maxFee — the signed op pays maxFeePerGas = 0. The cost
+  // basis is totalGas × the bundler's REAL network price for the tier (its quote applies
+  // the 3× markup). On any quote failure/mismatch fall through to the legacy estimate
+  // unchanged, so the display never disagrees with what the send path would pay.
+  if (await isInBandChain(chainId, from)) {
+    // Charge basis = the bundler's UN-PADDED estimate for the real call (×1.1 headroom),
+    // captured above from the SAME estimate the limits derive from — NOT the padded totalGas,
+    // which over-priced the in-band fee 8-30× (a maxFee=0 op's whole cost is the reimbursement,
+    // which must track REAL gas). This reuses the one estimate already made (no extra RPC), so a
+    // fee-token switch is also faster. Only the padded totalGas remains as a last-resort fallback
+    // when the bundler couldn't estimate at all (static path).
+    const basisGas = rawEstGas !== null && rawEstGas > 0n ? (rawEstGas * 11n) / 10n : totalGas;
+    const nativeCostWei = basisGas * networkFeePerGas;
+    const inBandQuote = await fetchInBandGasQuote(chainId, from, nativeCostWei, gasFeeToken);
+    const wantToken = gasFeeToken?.toLowerCase() ?? null;
+    if (inBandQuote) {
+      // feeRecipient + nativeCostWei ride along so (a) the submit path signs EXACTLY
+      // this quote (displayed = signed — never a silent mismatch), and (b) a fee-asset
+      // switch can re-quote with ONE RPC instead of re-running the whole pipeline.
+      const common = {
+        networkFeePerGas, relayerFeePerGas, bundlerGasPrice, totalGas, deployed, tier, quoted,
+        inBand: true, feeRecipient: inBandQuote.recipient, nativeCostWei,
+      };
+      if (inBandQuote.asset === 'erc20' && inBandQuote.feeToken
+          && (!wantToken || inBandQuote.feeToken.toLowerCase() === wantToken)) {
+        return {
+          ...common,
+          totalWei: 0n, // native display not applicable — the fee rides in feeAsset
+          maxFeePerGas: 0n,
+          feeAsset: {
+            kind: 'erc20',
+            token: inBandQuote.feeToken,
+            decimals: inBandQuote.decimals ?? 6,
+            amount: inBandQuote.requiredAmount,
+          },
+        };
+      }
+      if (inBandQuote.asset === 'native' && !wantToken) {
+        return {
+          ...common,
+          totalWei: inBandQuote.requiredAmount,
+          maxFeePerGas: 0n,
+          feeAsset: { kind: 'native' },
+        };
+      }
+      // Quoted asset doesn't match the request — treat as a failed quote.
     }
   }
 
@@ -742,10 +882,12 @@ async function sendUserOpTempo(
 ): Promise<SubmitResult> {
   await verifyChainReady(chainId);
 
-  // The bundler's per-Safe EOA pays the outer 0x76 gas and is the reimbursement
-  // recipient. Resolve it first so the batched transfer targets the right address.
+  // The reimbursement recipient: the bundler's per-Safe EOA (which pays the outer
+  // 0x76 gas), or the bundler's treasury when its vault mode is on — the bundler
+  // tells us which via settlementRecipient (absent on old bundlers → EOA fallback).
+  // MUST come from the same bundler that submits the op (see fetchBundlerAccountInfo).
   const info = await fetchBundlerAccountInfo(chainId, safeAddress);
-  const feeCollector = info?.depositAddress;
+  const feeCollector = info?.settlementRecipient ?? info?.depositAddress;
   if (!feeCollector || !/^0x[0-9a-fA-F]{40}$/.test(feeCollector)) {
     throw new Error('The Tempo gas relayer is unavailable right now. Please try again.');
   }
@@ -764,12 +906,16 @@ async function sendUserOpTempo(
   _gasPriceCache.delete(chainId);
   const [deployed, nonceResult, gasPrices] = await Promise.all([
     isDeployed(safeAddress, chainId),
-    getNonce(safeAddress, chainId).catch(() => '0x0'),
+    getNonce(safeAddress, chainId).catch(() => null),
     getGasPrices(chainId),
   ]);
 
+  // A deployed wallet MUST sign its real nonce — a 0x0 fallback is rejected as AA25. Fail fast.
+  if (deployed && nonceResult === null) {
+    throw new Error('Could not fetch the account nonce — the network may be unstable. Please try again.');
+  }
   const initCode: Uint8Array = deployed ? new Uint8Array(0) : buildInitCode(publicKeyHex);
-  const nonce: string = deployed ? nonceResult : '0x0';
+  const nonce: string = deployed ? (nonceResult as string) : '0x0';
 
   // Static realistic-gas model — a floor/fallback for PRICING the reimbursement. Includes the
   // reimbursement transfer(s): one to the EOA, plus one to the treasury when splitting. This is
@@ -891,6 +1037,236 @@ async function sendUserOpTempo(
 }
 
 // ---------------------------------------------------------------------------
+// In-band UserOp Flow (generic chains — gas settled by a batched transfer)
+// ---------------------------------------------------------------------------
+
+/**
+ * The single fee leg batched into an in-band UserOp: a plain native-value transfer to the
+ * bundler's recipient, or a whitelisted-stablecoin `transfer`. Pure + exported for tests.
+ * The shape must stay a plain CALL to the exact recipient — that is what the bundler's
+ * reimbursement parser counts (vela-bundler docs/inband-gas-settlement.md anti-drain guards).
+ * `value` is hex (MultiSendCall's format — abiEncodeUint256Hex parses it as hex).
+ */
+export function buildInBandFeeLeg(
+  gasFeeToken: string | null,
+  recipient: string,
+  amount: bigint,
+): MultiSendCall {
+  if (gasFeeToken) {
+    return { to: gasFeeToken, value: '0', data: encodeErc20Transfer(recipient, amount) };
+  }
+  return { to: recipient, value: '0x' + amount.toString(16), data: new Uint8Array(0) };
+}
+
+/**
+ * The CHARGE BASIS for an in-band fee quote: the bundler's UN-PADDED gas estimate for
+ * the actual batch (user calls + a placeholder self-transfer fee leg). The padded
+ * display model (verification/call constants + L2 adders) over-prices several-fold —
+ * measured 8× on Arbitrum, because the +600k adder double-counts the L1 data fee that
+ * eth_estimateUserOperationGas already folds into preVerificationGas. Deployed
+ * accounts only (an undeployed draft would need initCode); returns null when
+ * estimation is unavailable — the caller keeps its rough fallback.
+ */
+export async function estimateInBandBasisGas(
+  safeAddress: string,
+  innerCalls: MultiSendCall[],
+  gasFeeToken: string | null,
+  chainId: number,
+): Promise<bigint | null> {
+  try {
+    const nonce = await getNonce(safeAddress, chainId).catch(() => '0x0');
+    const userOp: UserOperation = {
+      sender: safeAddress,
+      nonce,
+      initCode: new Uint8Array(0),
+      callData: buildMultiSendExecuteCallData([
+        ...innerCalls,
+        buildInBandFeeLeg(gasFeeToken, safeAddress, 1n), // self-transfer placeholder — never reverts
+      ]),
+      verificationGasLimit: VERIFICATION_GAS_DEPLOYED,
+      callGasLimit: CALL_GAS_LIMIT,
+      preVerificationGas: PRE_VERIFICATION_GAS,
+      // Estimation-only fee — MUST be nonzero: a maxFee=0 draft trips the bundler's AA fee
+      // checks and estimation throws (→ null → the caller over-charged off the padded model).
+      // The op is SIGNED with maxFee=0 separately; the returned gas limits are fee-independent.
+      maxFeePerGas: 1_000_000_000n,
+      maxPriorityFeePerGas: 1_000_000_000n,
+      paymasterAndData: new Uint8Array(0),
+      signature: buildDummySignature(),
+    };
+    const est = await estimateGas(userOp, chainId);
+    return est.verificationGasLimit + est.callGasLimit + est.preVerificationGas;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Send a UserOperation on a generic in-band chain (vela-bundler
+ * docs/inband-gas-settlement.md — the Tempo model generalized to all EVM chains):
+ *   - the UserOp is signed with maxFeePerGas = maxPriorityFeePerGas = 0 (EntryPoint's
+ *     native prefund/refund becomes a no-op), and
+ *   - an in-band transfer to the bundler's recipient is batched in — native value, or a
+ *     whitelisted-stablecoin `transfer` when the user chose `gasFeeToken`. The exact
+ *     amount comes from the bundler's own quote (vela_getInBandGasQuote, 3× its cost);
+ *     the bundler re-verifies reimbursed ≥ required at submit.
+ *
+ * Same Safe + passkey + EntryPoint as every other chain; only gas settlement differs.
+ * Unlike Tempo there is no feeToken envelope extension and no splitter deploy — the
+ * outer tx is a plain native EIP-1559 raw tx and the recipient does its own split.
+ */
+async function sendUserOpInBand(
+  safeAddress: string,
+  innerCalls: MultiSendCall[],
+  gasFeeToken: string | null, // null = pay gas in native; else whitelisted stablecoin address
+  chainId: number,
+  publicKeyHex: string,
+  signFn: SignFn,
+  /** The fee the confirm UI displayed (amount in the fee asset's own units +
+   *  recipient). Signed VERBATIM — what the user saw is what executes. */
+  quotedFee?: QuotedInBandFee,
+): Promise<SubmitResult> {
+  await verifyChainReady(chainId);
+
+  _gasPriceCache.delete(chainId);
+  const [deployed, nonceResult, gasPrices] = await Promise.all([
+    isDeployed(safeAddress, chainId),
+    getNonce(safeAddress, chainId).catch(() => null),
+    getGasPrices(chainId),
+  ]);
+
+  // A deployed wallet MUST sign its real nonce — falling back to 0x0 burns a passkey prompt on
+  // an op the bundler rejects (AA25). Fail fast instead. Undeployed → nonce IS 0x0.
+  if (deployed && nonceResult === null) {
+    throw new Error('Could not fetch the account nonce — the network may be unstable. Please try again.');
+  }
+  const initCode: Uint8Array = deployed ? new Uint8Array(0) : buildInitCode(publicKeyHex);
+  const nonce: string = deployed ? (nonceResult as string) : '0x0';
+
+  // The batch: the user's calls + ONE fee leg (native value or stablecoin transfer).
+  // No splitter deploy prepend — that belongs to the legacy prefunded route only.
+  const buildBatch = (amount: bigint, recipient: string): Uint8Array =>
+    buildMultiSendExecuteCallData([...innerCalls, buildInBandFeeLeg(gasFeeToken, recipient, amount)]);
+
+  // Build the UserOp with a PLACEHOLDER fee leg (the transfer VALUE doesn't affect gas;
+  // the SAFE ITSELF stands in for the recipient — NOT address(0): standard ERC-20s
+  // revert `transfer(0x0, …)`, which would poison the estimation run for every
+  // stablecoin-fee send. A self-transfer always succeeds and has identical calldata
+  // shape/length to the real leg), estimate, then bake the real quote.
+  const verificationGas = deployed ? VERIFICATION_GAS_DEPLOYED : VERIFICATION_GAS_UNDEPLOYED;
+  const userOp: UserOperation = {
+    sender: safeAddress,
+    nonce,
+    initCode,
+    callData: buildBatch(1n, safeAddress),
+    verificationGasLimit: verificationGas,
+    callGasLimit: CALL_GAS_LIMIT,
+    preVerificationGas: PRE_VERIFICATION_GAS,
+    maxFeePerGas: 0n, // in-band: zero native gas accounting (prefund no-op)
+    maxPriorityFeePerGas: 0n,
+    paymasterAndData: new Uint8Array(0),
+    signature: buildDummySignature(),
+  };
+
+  // A batch carrying a real contract call (not just transfers) can burn far more than the
+  // static defaults; if estimation fails for such a call we must NOT submit a doomed op
+  // that OOGs on-chain. Pure-transfer batches keep the defaults — they cover them.
+  // Classify by call SHAPE (isPlainTransferCall), same as the Tempo path.
+  const hasContractCall = innerCalls.some((c) => !isPlainTransferCall(c));
+  let estActualGas: bigint | null = null;
+  try {
+    const est = await estimateGas(userOp, chainId);
+    estActualGas = est.verificationGasLimit + est.callGasLimit + est.preVerificationGas;
+    userOp.verificationGasLimit = deployed
+      ? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
+      : bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_UNDEPLOYED);
+    userOp.callGasLimit = bigintMax((est.callGasLimit * 15n) / 10n, CALL_GAS_LIMIT);
+    userOp.preVerificationGas = est.preVerificationGas + 10_000n;
+  } catch (err) {
+    console.error('[InBand] Gas estimation failed, using defaults:', err instanceof Error ? err.message : String(err));
+    if (hasContractCall) {
+      throw new Error('Could not estimate gas for this transaction. The network may be busy — please try again.');
+    }
+  }
+
+  // The fee the user pays: EXACTLY what the confirm UI displayed when it is threaded
+  // through (签什么执行什么 — the signature covers the displayed amount + recipient, and
+  // the bundler's own 2×-real-cost gate rejects a stale quote LOUDLY so the UI shows a
+  // NEW number; there is never a silent display/charge mismatch). Only programmatic
+  // callers without a confirm UI fall back to a fresh send-time quote.
+  let feeAmount: bigint;
+  let feeRecipient: string;
+  if (quotedFee && quotedFee.amount > 0n && /^0x[0-9a-fA-F]{40}$/.test(quotedFee.recipient)) {
+    feeAmount = quotedFee.amount;
+    feeRecipient = quotedFee.recipient;
+    console.log(`[InBand] signing DISPLAYED quote: feeToken=${gasFeeToken ?? 'native'} amount=${feeAmount} recipient=${feeRecipient}`);
+  } else {
+    // Cost basis = the bundler's UN-PADDED estimate ×1.1 (the padded limits/static
+    // model over-price several-fold — the user measured 8× on Arbitrum). If the
+    // basis drifts low the bundler's gate rejects and the caller retries.
+    const staticGas = verificationGas + CALL_GAS_LIMIT + PRE_VERIFICATION_GAS;
+    const realisticGas = estActualGas !== null ? (estActualGas * 11n) / 10n : staticGas;
+
+    // realisticGas × the bundler's REAL network price (networkFeePerGas carries no
+    // wallet markup — the 3× markup is the QUOTE's job).
+    const outerQuote = await getBundlerGasQuote(chainId, 'fast').catch(() => null);
+    const outerPrice = outerQuote?.networkFeePerGas ?? gasPrices.gasPrice;
+    const nativeCost = realisticGas * outerPrice;
+
+    const quote = await fetchInBandGasQuote(chainId, safeAddress, nativeCost, gasFeeToken);
+    if (!quote) {
+      throw new Error('The gas relayer is unavailable right now. Please try again.');
+    }
+    // The user chose a stablecoin — never silently pay in a different asset than requested.
+    if (gasFeeToken && (quote.asset !== 'erc20' || quote.feeToken?.toLowerCase() !== gasFeeToken.toLowerCase())) {
+      throw new Error('The gas relayer cannot accept the selected fee token right now. Please pick a different gas asset.');
+    }
+    feeAmount = quote.requiredAmount;
+    feeRecipient = quote.recipient;
+    console.log(`[InBand] feeToken=${gasFeeToken ?? 'native'} amount=${feeAmount} recipient=${feeRecipient} realisticGas=${realisticGas} est=${estActualGas ?? 'n/a'} outerPrice=${outerPrice} markupX=${quote.markupX}`);
+  }
+
+  userOp.callData = buildBatch(feeAmount, feeRecipient);
+
+  // Sign the SafeOp (over the FINAL callData) and submit. No feeToken extension — that
+  // is Tempo-envelope-specific; the generic outer tx is a native raw tx.
+  const safeOpHash = calculateSafeOpHash(userOp, chainId);
+  const assertion = await signFn(safeOpHash);
+  const rawSig = derSignatureToRaw(assertion.signature);
+  if (!rawSig) {
+    throw new Error('Failed to create signature: DER to raw conversion failed');
+  }
+  const clientDataFields = extractClientDataFields(assertion.clientDataJSON);
+  userOp.signature = buildUserOpSignature(
+    assertion.authenticatorData,
+    clientDataFields,
+    rawSig.slice(0, 32),
+    rawSig.slice(32),
+  );
+
+  let userOpHash: string;
+  try {
+    userOpHash = await submitUserOp(userOp, chainId);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    const existingHash = parseExistingUserOpHash(errMsg);
+    if (existingHash) {
+      return {
+        userOpHash: existingHash,
+        waitForTxHash: () => waitForReceipt(existingHash, chainId, 60_000),
+      };
+    }
+    throw err;
+  }
+
+  incrementNonceCache(safeAddress, chainId);
+  return {
+    userOpHash,
+    waitForTxHash: () => waitForReceipt(userOpHash, chainId),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // CallData
 // ---------------------------------------------------------------------------
 
@@ -928,7 +1304,7 @@ export function buildExecuteCallData(
 // ---------------------------------------------------------------------------
 
 /** A single call for MultiSend batching. `value` is a hex string (0x optional). */
-interface MultiSendCall {
+export interface MultiSendCall {
   to: string;
   value: string;
   data: Uint8Array;
@@ -1382,21 +1758,34 @@ async function isDeployed(
   const key = `${chainId}:${address.toLowerCase()}`;
   if (_deployedCache.has(key)) return true;
 
+  // Deployment status is CORRECTNESS-CRITICAL: it decides whether the UserOp carries
+  // initCode. Guessing "deployed" on a transient RPC failure ships an op with EMPTY
+  // initCode for a fresh account → bundler rejects with "AA20 account not deployed"
+  // (every new user's first send fails). Guessing "undeployed" for an already-deployed
+  // account attaches initCode → "AA10 sender already constructed". Neither guess is safe,
+  // so on any INDETERMINATE result we fail fast with a retryable error and let the caller
+  // retry — same philosophy as the deployed-nonce guard in sendUserOp. Only a DEFINITIVE
+  // answer ('0x' = not deployed, or real code = deployed) is trusted.
+  let response;
   try {
-    const response = await rpcCall('eth_getCode', [address, 'latest'], chainId);
-    if (response.error) {
-      console.error('[UserOp] eth_getCode RPC error:', JSON.stringify(response.error));
-      return true;
-    }
-    const result = response.result as string | undefined;
-    const deployed = !!result && result !== '0x' && result.length > 2;
-    console.log('[UserOp] isDeployed:', deployed, 'code length:', result?.length ?? 0);
-    if (deployed) _deployedCache.set(key, true);
-    return deployed;
+    response = await rpcCall('eth_getCode', [address, 'latest'], chainId);
   } catch (err) {
     console.error('[UserOp] eth_getCode failed:', err instanceof Error ? err.message : String(err));
-    return true;
+    throw new Error('Could not verify the account deployment status — the network may be unstable. Please try again.');
   }
+  if (response.error) {
+    console.error('[UserOp] eth_getCode RPC error:', JSON.stringify(response.error));
+    throw new Error('Could not verify the account deployment status — the network may be unstable. Please try again.');
+  }
+  const result = response.result as string | undefined;
+  if (typeof result !== 'string') {
+    console.error('[UserOp] eth_getCode returned no result:', JSON.stringify(response));
+    throw new Error('Could not verify the account deployment status — the network may be unstable. Please try again.');
+  }
+  const deployed = result !== '0x' && result.length > 2;
+  console.log('[UserOp] isDeployed:', deployed, 'code length:', result.length);
+  if (deployed) _deployedCache.set(key, true);
+  return deployed;
 }
 
 // Cache: nonce is valid briefly (invalidated after each tx)
@@ -1422,8 +1811,16 @@ async function getNonce(
     chainId,
   );
 
-  const result = response.result as string | undefined;
-  const nonce = result ?? '0x0';
+  // Same fail-open trap as isDeployed: coercing a missing/errored result to '0x0' makes a
+  // DEPLOYED wallet sign nonce 0 → bundler "AA25 invalid account nonce". A real "no nonce yet"
+  // account returns a valid 0x00..00 result, NOT an error, so throwing here only fires on a
+  // genuine RPC failure. Send paths guard `deployed && nonce===null`; undeployed callers still
+  // safely fall back to 0x0 via their own .catch (an undeployed account's nonce IS 0).
+  if (response.error || typeof response.result !== 'string') {
+    console.error('[UserOp] getNonce RPC error:', JSON.stringify(response.error ?? response));
+    throw new Error('Could not fetch the account nonce — the network may be unstable. Please try again.');
+  }
+  const nonce = response.result as string;
   _nonceCache.set(key, { nonce, at: Date.now() });
   return nonce;
 }
@@ -1770,9 +2167,11 @@ async function submitUserOp(
   extra?: Record<string, string>,
 ): Promise<string> {
   const dict = userOpToDict(userOp, extra);
+  const initCodePresent = userOp.initCode.length >= 20;
   console.log('[UserOp] Submitting:', JSON.stringify({
     sender: dict.sender,
     nonce: dict.nonce,
+    initCodePresent,                        // ← HOP 1 evidence: did the wallet attach the deploy?
     factory: dict.factory ?? '(none)',
     factoryDataLen: dict.factoryData?.length ?? 0,
     callDataLen: dict.callData?.length ?? 0,
@@ -1781,6 +2180,21 @@ async function submitUserOp(
     callGasLimit: dict.callGasLimit,
     maxFeePerGas: dict.maxFeePerGas,
   }));
+
+  // Structural AA20 guard. An undeployed sender + empty initCode is a GUARANTEED
+  // "AA20 account not deployed" on-chain — and worse, it strands funds silently. Rather
+  // than submit a doomed op, verify against the chain and refuse with a clear, retryable
+  // error. This catches a wrong "deployed" read from ANY cause (RPC hiccup, a
+  // mis-configured custom-network RPC pointing at the wrong chain, a stale cache) — the
+  // last line of defence behind isDeployed's fail-fast. On a truly deployed account the
+  // read is cache-hot (the send path already resolved it), so this adds no latency there.
+  if (!initCodePresent) {
+    const deployed = await isDeployed(userOp.sender, chainId); // throws (retryable) if indeterminate
+    if (!deployed) {
+      console.error(`[UserOp] ABORT pre-submit: sender ${userOp.sender} has NO on-chain code but the op carries NO initCode → would revert AA20. Refusing to submit.`);
+      throw new Error('This account is not deployed on this network yet and the transaction is missing its deployment step. Please try again.');
+    }
+  }
 
   // Retry on transient bundler errors (e.g. EOA busy processing another bundle).
   const MAX_RETRIES = 3;

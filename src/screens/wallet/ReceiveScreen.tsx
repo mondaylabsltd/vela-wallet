@@ -9,7 +9,8 @@ import { VelaButton } from '@/components/ui/VelaButton';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, leading, radius, space, text } from '@/constants/theme';
 import { useSafeRouter } from '@/hooks/use-safe-router';
-import { chainName, explorerBaseURL, getAllNetworksSync } from '@/models/network';
+import { chainName, explorerBaseURL } from '@/models/network';
+import { useAllNetworks } from '@/hooks/use-networks';
 import { formatBalance, tokenBalanceDouble, tokenChainId, tokenId, type APIToken } from '@/models/types';
 import { useWallet } from '@/models/wallet-state';
 import { hapticLight, hapticSuccess, isAppActive, openBrowser, showAlert } from '@/services/platform';
@@ -43,7 +44,7 @@ export default function ReceiveScreen() {
   const { activeAccount, state } = useWallet();
   const address = activeAccount?.address ?? state.address;
   const accountName = activeAccount?.name ?? 'Wallet';
-  const networks = getAllNetworksSync();
+  const networks = useAllNetworks();
 
   const [depositDetected, setDepositDetected] = useState(false);
   interface DepositEntry { time: string; items: { symbol: string; amount: string; network: string; usd: string | null }[] }

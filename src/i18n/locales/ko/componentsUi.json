@@ -186,7 +186,8 @@
       "multiplePermits": "여러 토큰",
       "permitTag": "지출 허가 (서명)",
       "permitCantCap": "허가는 서명입니다 — 금액을 여기에서 제한할 수 없습니다. 지출을 제한하려면 온체인 승인(Approve)을 사용하세요.",
-      "permitNote": "지출 허가에 서명하고 있습니다 — dApp이 내 대신 이 금액까지 옮길 수 있습니다."
+      "permitNote": "지출 허가에 서명하고 있습니다 — dApp이 내 대신 이 금액까지 옮길 수 있습니다.",
+      "balanceCap": "잔액"
     },
     "currency": {
       "title": "표시 통화",
@@ -219,7 +220,11 @@
       "deployedYes": "예",
       "deployedNo": "아니요 (첫 거래)",
       "estimating": "예상하는 중...",
-      "estimateFailed": "눌러서 다시 시도"
+      "estimateFailed": "눌러서 다시 시도",
+      "feeToken": "수수료 토큰",
+      "paidWith": "{{symbol}}(으)로 결제",
+      "rowBalance": "잔액",
+      "rowSpend": "예상 비용"
     },
     "dock": {
       "receive": "받기",
@@ -264,6 +269,18 @@
       "copied": "복사됨",
       "close": "닫기",
       "a11yOpen": "아이덴티콘 보기"
+    },
+    "treasuryBootstrap": {
+      "title": "이 네트워크의 릴레이어 시작",
+      "lead": "이 네트워크의 릴레이어 트레저리에 가스가 부족합니다. 충전하면 다시 보낼 수 있습니다.",
+      "amountHint": "권장 기여액: {{amount}} {{symbol}}",
+      "addressLabel": "트레저리 · 번들러 운영자",
+      "disclaimer": "환불되지 않습니다. 이 가스는 (Vela가 아닌) 번들러 운영자에게 전달되어 이 네트워크의 릴레이어를 시작하는 데 쓰이며, 회원님의 거래 비용을 대신 내지는 않습니다.",
+      "copyBtn": "충전할 주소 복사",
+      "copied": "복사됨",
+      "closeBtn": "닫기",
+      "suggested": "권장 충전액",
+      "retryBtn": "충전 완료 · 다시 시도"
     }
   }
 }

@@ -19,12 +19,13 @@
       "copiedTitle": "已複製",
       "copiedImageBody": "收據圖片已複製到剪貼簿。",
       "copiedLinkBody": "區塊鏈瀏覽器連結已複製。",
-      "recipientsCount": "{{n}} 個接收方",
+      "recipientsCount": "{{n}} 位收款人",
       "assetsCount": "{{n}} 種資產",
       "statusConfirmed": "已確認",
       "statusSubmitted": "已提交",
       "statusFailed": "失敗",
-      "failedHint": "此交易在鏈上未能成功。"
+      "failedHint": "這筆交易在鏈上失敗了——你的資金並未送出，但可能仍已收取一筆網路費。你可以點下方的區塊鏈瀏覽器查看原因，或返回再試一次。",
+      "userOpHash": "UserOp 雜湊"
     },
     "detail": {
       "received": "已收到",
