@@ -115,6 +115,6 @@
     "batchImportFailedTitle": "Không đọc được tệp",
     "batchImportFailedBody": "Vui lòng dùng tệp CSV, TSV, TXT hoặc Excel.",
     "batchCurrencyLabel": "Định giá bằng",
-    "feeTokenLabel": "Fee token"
+    "feeTokenLabel": "Token trả phí"
   }
 }

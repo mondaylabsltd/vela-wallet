@@ -24,7 +24,8 @@
       "statusConfirmed": "Đã xác nhận",
       "statusSubmitted": "Đã gửi",
       "statusFailed": "Thất bại",
-      "failedHint": "Giao dịch này không thể hoàn tất on-chain."
+      "failedHint": "Giao dịch bị hoàn ngược on-chain — tiền của bạn chưa được gửi đi. Có thể bạn vẫn bị tính một khoản phí mạng. Mở explorer bên dưới để xem lý do, hoặc quay lại và thử lại.",
+      "userOpHash": "Hash UserOp"
     },
     "detail": {
       "received": "Đã nhận",

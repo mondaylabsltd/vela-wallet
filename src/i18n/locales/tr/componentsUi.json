@@ -186,7 +186,8 @@
       "multiplePermits": "Birden fazla token",
       "permitTag": "Harcama izni (imza)",
       "permitCantCap": "İzin bir imzadır — tutarı burada sınırlandırılamaz. Harcamayı sınırlamak için bunun yerine zincir üzerinde bir Onay kullanın.",
-      "permitNote": "Bir harcama iznini imzalıyorsunuz — dApp sizin adınıza bu tutara kadar hareket ettirebilir."
+      "permitNote": "Bir harcama iznini imzalıyorsunuz — dApp sizin adınıza bu tutara kadar hareket ettirebilir.",
+      "balanceCap": "Bakiye"
     },
     "currency": {
       "title": "Görüntüleme para birimi",
@@ -220,7 +221,10 @@
       "deployedNo": "Hayır (ilk işlem)",
       "estimating": "Tahmin ediliyor...",
       "estimateFailed": "Yeniden denemek için dokun",
-      "feeToken": "Fee token"
+      "feeToken": "Ücret token'ı",
+      "paidWith": "{{symbol}} ile ödendi",
+      "rowBalance": "Bakiye",
+      "rowSpend": "Tahmini maliyet"
     },
     "dock": {
       "receive": "Al",
@@ -249,13 +253,13 @@
       "sending": "Gönderiliyor…",
       "cancel": "İptal",
       "successTitle": "Teşekkürler — bildirildi!",
-      "successBodyNew": "#{{number}} numaralı sorun olarak kaydedildi. Dilediğin zaman takip edebilirsin.",
+      "successBodyNew": "#{{number}} numaralı sorun olarak kaydedildi. Dilediğiniz zaman takip edebilirsiniz.",
       "successBodyDeduped": "Mevcut bir rapora (#{{number}}) eklendi. Ek bilgi için teşekkürler!",
       "viewIssue": "Raporu görüntüle",
       "fallbackTitle": "Bunun yerine GitHub'da aç",
-      "fallbackBody": "Otomatik olarak gönderemedik, ama ayrıntıları içeren bir GitHub formunu senin için doldurduk.",
+      "fallbackBody": "Otomatik olarak gönderemedik, ama ayrıntıları içeren bir GitHub formunu sizin için doldurduk.",
       "openGithub": "GitHub formunu aç",
-      "openGithubForm": "GitHub'ı mı tercih edersin? Sorun formunu aç →",
+      "openGithubForm": "GitHub'ı mı tercih edersiniz? Sorun formunu aç →",
       "done": "Bitti"
     },
     "identiconViewer": {
@@ -267,14 +271,16 @@
       "a11yOpen": "Identicon'u görüntüle"
     },
     "treasuryBootstrap": {
-      "title": "Help start this network's relayer",
-      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
-      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
-      "addressLabel": "Treasury address",
-      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
-      "copyBtn": "Copy address",
-      "copied": "Copied",
-      "closeBtn": "Close"
+      "title": "Bu ağın aktarıcısını başlat",
+      "lead": "Bu ağın aktarıcı hazinesinde gas azaldı. Göndermeye devam etmek için fonlayın.",
+      "amountHint": "Önerilen katkı: {{amount}} {{symbol}}",
+      "addressLabel": "Hazine · bundler operatörü",
+      "disclaimer": "İade edilmez. Bu gas, bu ağın aktarıcısını (relayer) başlatmak için bundler operatörüne gider (Vela'ya değil) — işleminizin ücretini karşılamaz.",
+      "copyBtn": "Fonlamak için adresi kopyala",
+      "copied": "Kopyalandı",
+      "closeBtn": "Kapat",
+      "suggested": "Önerilen ekleme",
+      "retryBtn": "Fonladım · Tekrar dene"
     }
   }
 }

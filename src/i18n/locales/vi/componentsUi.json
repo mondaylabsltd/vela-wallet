@@ -75,7 +75,7 @@
       "firstTimeTag": "Lần đầu",
       "contractTag": "Hợp đồng",
       "holdToConfirm": "Giữ để xác nhận",
-      "advancedToggle": "Nâng cao — xem dữ liệu thô",
+      "advancedToggle": "Chi tiết kỹ thuật",
       "batchIntent": "Gộp",
       "batchSubtitle": "{{count}} giao dịch, ký cùng lúc",
       "batchCall": "Gọi hợp đồng",
@@ -186,7 +186,8 @@
       "multiplePermits": "Nhiều token",
       "permitTag": "Cho phép chi (chữ ký)",
       "permitCantCap": "Một permit là một chữ ký — không thể giới hạn số lượng của nó ở đây. Để giới hạn mức chi, hãy dùng Approve on-chain thay thế.",
-      "permitNote": "Bạn đang ký một quyền cho phép chi — dApp có thể chuyển tối đa số lượng này thay cho bạn."
+      "permitNote": "Bạn đang ký một quyền cho phép chi — dApp có thể chuyển tối đa số lượng này thay cho bạn.",
+      "balanceCap": "Số dư"
     },
     "currency": {
       "title": "Tiền tệ hiển thị",
@@ -220,7 +221,10 @@
       "deployedNo": "Chưa (giao dịch đầu tiên)",
       "estimating": "Đang ước tính...",
       "estimateFailed": "Chạm để thử lại",
-      "feeToken": "Fee token"
+      "feeToken": "Token trả phí",
+      "paidWith": "Trả bằng {{symbol}}",
+      "rowBalance": "Số dư",
+      "rowSpend": "Chi phí ước tính"
     },
     "dock": {
       "receive": "Nhận",
@@ -267,14 +271,16 @@
       "a11yOpen": "Xem identicon"
     },
     "treasuryBootstrap": {
-      "title": "Help start this network's relayer",
-      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
-      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
-      "addressLabel": "Treasury address",
-      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
-      "copyBtn": "Copy address",
-      "copied": "Copied",
-      "closeBtn": "Close"
+      "title": "Khởi động relayer cho mạng này",
+      "lead": "Ngân quỹ relayer của mạng này sắp cạn gas. Hãy nạp thêm để tiếp tục gửi.",
+      "amountHint": "Mức đóng góp đề xuất: {{amount}} {{symbol}}",
+      "addressLabel": "Ngân quỹ · bên vận hành bundler",
+      "disclaimer": "Không hoàn lại. Khoản gas này được chuyển cho bên vận hành bundler (không phải Vela) để khởi động relayer của mạng này — nó không dùng để trả cho giao dịch của bạn.",
+      "copyBtn": "Sao chép địa chỉ để nạp",
+      "copied": "Đã sao chép",
+      "closeBtn": "Đóng",
+      "suggested": "Mức nạp đề xuất",
+      "retryBtn": "Tôi đã nạp · Thử lại"
     }
   }
 }

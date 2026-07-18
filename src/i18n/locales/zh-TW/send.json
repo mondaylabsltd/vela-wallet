@@ -115,6 +115,6 @@
     "scanAria": "掃描 QR code",
     "multiSendNoFundsAfterGas": "扣除 gas 儲備後餘額不足。",
     "gasReserved": "已留 gas",
-    "feeTokenLabel": "手续费币种"
+    "feeTokenLabel": "手續費代幣"
   }
 }

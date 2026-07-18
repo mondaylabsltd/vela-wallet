@@ -186,7 +186,8 @@
       "multiplePermits": "複数のトークン",
       "permitTag": "使用許可（署名）",
       "permitCantCap": "使用許可（permit）は署名であり、その金額をここで上限設定することはできません。使用額を制限するには、代わりにオンチェーンの Approve をご利用ください。",
-      "permitNote": "使用許可（permit）に署名しようとしています — dApp はあなたに代わってこの金額まで移動できます。"
+      "permitNote": "使用許可（permit）に署名しようとしています — dApp はあなたに代わってこの金額まで移動できます。",
+      "balanceCap": "残高"
     },
     "currency": {
       "title": "表示通貨",
@@ -220,7 +221,10 @@
       "deployedNo": "未デプロイ（初回の取引）",
       "estimating": "見積もり中...",
       "estimateFailed": "タップして再試行",
-      "feeToken": "Fee token"
+      "feeToken": "手数料トークン",
+      "paidWith": "{{symbol}} で支払い",
+      "rowBalance": "残高",
+      "rowSpend": "推定コスト"
     },
     "dock": {
       "receive": "受け取る",
@@ -267,14 +271,16 @@
       "a11yOpen": "Identicon を表示"
     },
     "treasuryBootstrap": {
-      "title": "Help start this network's relayer",
-      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
-      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
-      "addressLabel": "Treasury address",
-      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
-      "copyBtn": "Copy address",
-      "copied": "Copied",
-      "closeBtn": "Close"
+      "title": "このネットワークのリレーヤーを起動",
+      "lead": "このネットワークのリレーヤー用トレジャリーのガスが不足しています。入金すると送信を再開できます。",
+      "amountHint": "推奨入金額：{{amount}} {{symbol}}",
+      "addressLabel": "トレジャリー · Bundler 運営者",
+      "disclaimer": "返金不可。このガスは（Vela ではなく）Bundler 運営者に渡り、このネットワークのリレーヤーを起動するために使われます。あなたの取引の支払いには充当されません。",
+      "copyBtn": "入金先アドレスをコピー",
+      "copied": "コピーしました",
+      "closeBtn": "閉じる",
+      "suggested": "推奨入金額",
+      "retryBtn": "入金しました · 再試行"
     }
   }
 }

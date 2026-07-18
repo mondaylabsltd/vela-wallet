@@ -186,7 +186,8 @@
       "multiplePermits": "Più token",
       "permitTag": "Permesso di spesa (firma)",
       "permitCantCap": "Un permesso è una firma — il suo importo non può essere limitato qui. Per limitare la spesa, usa invece un Approve on-chain.",
-      "permitNote": "Stai firmando un permesso di spesa — la dApp può muovere fino a questo importo per tuo conto."
+      "permitNote": "Stai firmando un permesso di spesa — la dApp può muovere fino a questo importo per tuo conto.",
+      "balanceCap": "Saldo"
     },
     "currency": {
       "title": "Valuta di visualizzazione",
@@ -208,7 +209,7 @@
       "zoomLabel": "Zoom"
     },
     "gas": {
-      "estFee": "Comm. stimata",
+      "estFee": "Commissione di rete",
       "gasPrice": "Prezzo del gas",
       "gasPriceUserOp": "Prezzo del gas (UserOp)",
       "networkFee": "Commissione di rete",
@@ -220,7 +221,10 @@
       "deployedNo": "No (prima transazione)",
       "estimating": "Stima in corso…",
       "estimateFailed": "Tocca per riprovare",
-      "feeToken": "Fee token"
+      "feeToken": "Token di commissione",
+      "paidWith": "Pagato con {{symbol}}",
+      "rowBalance": "Saldo",
+      "rowSpend": "Costo stim."
     },
     "dock": {
       "receive": "Ricevi",
@@ -267,14 +271,16 @@
       "a11yOpen": "Visualizza identicon"
     },
     "treasuryBootstrap": {
-      "title": "Help start this network's relayer",
-      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
-      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
-      "addressLabel": "Treasury address",
-      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
-      "copyBtn": "Copy address",
-      "copied": "Copied",
-      "closeBtn": "Close"
+      "title": "Avvia il relayer di questa rete",
+      "lead": "La Treasury del relayer di questa rete è a corto di gas. Ricaricala per riprendere a inviare.",
+      "amountHint": "Contributo consigliato: {{amount}} {{symbol}}",
+      "addressLabel": "Treasury · operatore del bundler",
+      "disclaimer": "Non rimborsabile. Questo gas va all'operatore del bundler (non a Vela) per avviare il relayer di questa rete — non paga la tua transazione.",
+      "copyBtn": "Copia l'indirizzo da ricaricare",
+      "copied": "Copiato",
+      "closeBtn": "Chiudi",
+      "suggested": "Ricarica consigliata",
+      "retryBtn": "Ho ricaricato · Riprova"
     }
   }
 }

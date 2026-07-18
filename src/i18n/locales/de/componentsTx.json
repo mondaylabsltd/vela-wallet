@@ -24,7 +24,8 @@
       "statusConfirmed": "Bestätigt",
       "statusSubmitted": "Übermittelt",
       "statusFailed": "Fehlgeschlagen",
-      "failedHint": "Diese Transaktion konnte nicht bestätigt werden."
+      "failedHint": "Die Überweisung ist on-chain fehlgeschlagen — Ihr Geld wurde nicht gesendet. Eine Netzwerkgebühr kann dennoch angefallen sein. Öffnen Sie unten den Explorer, um den Grund zu sehen, oder gehen Sie zurück und versuchen Sie es erneut.",
+      "userOpHash": "UserOp-Hash"
     },
     "detail": {
       "received": "Empfangen",

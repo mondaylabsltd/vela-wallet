@@ -30,7 +30,7 @@
     },
     "endpoints": {
       "modalTitle": "Endpoints de serviço",
-      "description": "Estes serviços mantêm sua carteira funcionando.\nVocê pode implantar suas próprias instâncias para self-custody total.",
+      "description": "Estes serviços mantêm sua carteira funcionando.\nVocê pode implantar suas próprias instâncias para autocustódia total.",
       "chainDataLabel": "ÍNDICE DE DADOS DA CHAIN",
       "chainDataHint": "Fornece informações de rede, dados de tokens e logos das chains",
       "passkeyLabel": "ÍNDICE DE PASSKEY",

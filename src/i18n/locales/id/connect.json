@@ -112,7 +112,7 @@
   },
   "signHandoff": {
     "signing": "Konfirmasi di Vela",
-    "signed": "Terkirim",
+    "signed": "Ditandatangani",
     "rejected": "Dibatalkan",
     "pending": "Periksa di Aktivitas Vela",
     "expired": "Permintaan tanda tangan ini kedaluwarsa",

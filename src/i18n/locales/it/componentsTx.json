@@ -24,7 +24,8 @@
       "statusConfirmed": "Confermato",
       "statusSubmitted": "Inviato",
       "statusFailed": "Non riuscita",
-      "failedHint": "Questa transazione non è andata a buon fine on-chain."
+      "failedHint": "Il trasferimento è fallito on-chain — i tuoi fondi non sono stati inviati. Potrebbe comunque esserti stata addebitata una commissione di rete. Apri l'explorer qui sotto per scoprirne il motivo, oppure torna indietro e riprova.",
+      "userOpHash": "Hash UserOp"
     },
     "detail": {
       "received": "Ricevuto",

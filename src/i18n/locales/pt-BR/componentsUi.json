@@ -186,7 +186,8 @@
       "multiplePermits": "Vários tokens",
       "permitTag": "Permissão de gasto (assinatura)",
       "permitCantCap": "Uma permissão é uma assinatura — seu valor não pode ser limitado aqui. Para limitar o gasto, use um Approve on-chain.",
-      "permitNote": "Você está assinando uma permissão de gasto — o dApp pode movimentar até este valor em seu nome."
+      "permitNote": "Você está assinando uma permissão de gasto — o dApp pode movimentar até este valor em seu nome.",
+      "balanceCap": "Saldo"
     },
     "currency": {
       "title": "Moeda de exibição",
@@ -220,7 +221,10 @@
       "deployedNo": "Não (primeira tx)",
       "estimating": "Estimando...",
       "estimateFailed": "Toque para tentar de novo",
-      "feeToken": "Fee token"
+      "feeToken": "Token da taxa",
+      "paidWith": "Pago com {{symbol}}",
+      "rowBalance": "Saldo",
+      "rowSpend": "Custo est."
     },
     "dock": {
       "receive": "Receber",
@@ -267,14 +271,16 @@
       "a11yOpen": "Ver identicon"
     },
     "treasuryBootstrap": {
-      "title": "Help start this network's relayer",
-      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
-      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
-      "addressLabel": "Treasury address",
-      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
-      "copyBtn": "Copy address",
-      "copied": "Copied",
-      "closeBtn": "Close"
+      "title": "Ative o relayer desta rede",
+      "lead": "A tesouraria do relayer desta rede está com pouco gas. Adicione fundos para voltar a enviar.",
+      "amountHint": "Contribuição sugerida: {{amount}} {{symbol}}",
+      "addressLabel": "Tesouraria · operador do bundler",
+      "disclaimer": "Não reembolsável. Este gas vai para o operador do bundler (não para a Vela), para ativar o relayer desta rede — ele não paga a sua transação.",
+      "copyBtn": "Copiar endereço para financiar",
+      "copied": "Copiado",
+      "closeBtn": "Fechar",
+      "suggested": "Recarga sugerida",
+      "retryBtn": "Já financiei · Tentar de novo"
     }
   }
 }

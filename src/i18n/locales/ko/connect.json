@@ -112,7 +112,7 @@
   },
   "signHandoff": {
     "signing": "Vela에서 확인",
-    "signed": "전송됨",
+    "signed": "서명됨",
     "rejected": "취소됨",
     "pending": "Vela 활동에서 확인하세요",
     "expired": "이 서명 요청이 만료되었습니다",

@@ -115,6 +115,6 @@
     "batchOverBalance": "Le total dépasse votre solde de {{sym}}.",
     "batchClose": "Fermer",
     "scanAria": "Scanner un QR code",
-    "feeTokenLabel": "Fee token"
+    "feeTokenLabel": "Token de frais"
   }
 }

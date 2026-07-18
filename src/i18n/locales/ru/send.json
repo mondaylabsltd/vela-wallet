@@ -121,6 +121,6 @@
     "batchImportFailedTitle": "Не удалось прочитать файл",
     "batchImportFailedBody": "Используйте файл CSV, TSV, TXT или Excel.",
     "batchCurrencyLabel": "В валюте",
-    "feeTokenLabel": "Fee token"
+    "feeTokenLabel": "Токен комиссии"
   }
 }

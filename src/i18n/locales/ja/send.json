@@ -115,6 +115,6 @@
     "batchClose": "閉じる",
     "scanAria": "QR コードをスキャン",
     "batchCurrencyLabel": "価格の基準通貨",
-    "feeTokenLabel": "Fee token"
+    "feeTokenLabel": "手数料トークン"
   }
 }

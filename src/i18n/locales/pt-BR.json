@@ -101,6 +101,7 @@
     "typedDataSignature": "Assinatura de dados tipados",
     "dappTransaction": "Transação de dApp",
     "activity": "Atividade",
-    "delete": "Excluir"
+    "delete": "Excluir",
+    "connected": "Conectado"
   }
 }

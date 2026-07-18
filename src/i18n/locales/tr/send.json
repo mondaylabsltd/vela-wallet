@@ -115,6 +115,6 @@
     "batchImportFailedTitle": "Dosya okunamadı",
     "batchImportFailedBody": "Lütfen bir CSV, TSV, TXT veya Excel dosyası kullanın.",
     "batchCurrencyLabel": "Fiyat birimi",
-    "feeTokenLabel": "Fee token"
+    "feeTokenLabel": "Ücret token'ı"
   }
 }

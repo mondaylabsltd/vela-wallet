@@ -186,7 +186,8 @@
       "multiplePermits": "Plusieurs tokens",
       "permitTag": "Permission de dépense (signature)",
       "permitCantCap": "Un permit est une signature — son montant ne peut pas être plafonné ici. Pour limiter la dépense, utilisez plutôt une approbation Approve on-chain.",
-      "permitNote": "Vous signez une permission de dépense — la dApp peut déplacer jusqu'à ce montant en votre nom."
+      "permitNote": "Vous signez une permission de dépense — la dApp peut déplacer jusqu'à ce montant en votre nom.",
+      "balanceCap": "Solde"
     },
     "currency": {
       "title": "Devise d'affichage",
@@ -220,7 +221,10 @@
       "deployedNo": "Non (1re tx)",
       "estimating": "Estimation...",
       "estimateFailed": "Appuyez pour réessayer",
-      "feeToken": "Fee token"
+      "feeToken": "Token de frais",
+      "paidWith": "Payé en {{symbol}}",
+      "rowBalance": "Solde",
+      "rowSpend": "Coût estim."
     },
     "dock": {
       "receive": "Recevoir",
@@ -267,14 +271,16 @@
       "a11yOpen": "Afficher l'identicon"
     },
     "treasuryBootstrap": {
-      "title": "Help start this network's relayer",
-      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
-      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
-      "addressLabel": "Treasury address",
-      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
-      "copyBtn": "Copy address",
-      "copied": "Copied",
-      "closeBtn": "Close"
+      "title": "Démarrer le relais de ce réseau",
+      "lead": "La réserve du relais de ce réseau est presque à sec. Approvisionnez-la pour reprendre les envois.",
+      "amountHint": "Contribution suggérée : {{amount}} {{symbol}}",
+      "addressLabel": "Trésorerie · opérateur du bundler",
+      "disclaimer": "Non remboursable. Ce gas est versé à l'opérateur du bundler (pas à Vela) pour démarrer le relais de ce réseau — il ne paie pas votre transaction.",
+      "copyBtn": "Copier l'adresse à approvisionner",
+      "copied": "Copié",
+      "closeBtn": "Fermer",
+      "suggested": "Rechargement suggéré",
+      "retryBtn": "J'ai approvisionné · Réessayer"
     }
   }
 }

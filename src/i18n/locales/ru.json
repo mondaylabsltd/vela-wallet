@@ -101,6 +101,7 @@
     "typedDataSignature": "Подпись типизированных данных",
     "dappTransaction": "Транзакция dApp",
     "activity": "Активность",
-    "delete": "Удалить"
+    "delete": "Удалить",
+    "connected": "Подключено"
   }
 }

@@ -115,6 +115,6 @@
     "scanAria": "Pindai kode QR",
     "multiSendNoFundsAfterGas": "Tidak cukup untuk gas setelah cadangan.",
     "gasReserved": "gas dicadangkan",
-    "feeTokenLabel": "Fee token"
+    "feeTokenLabel": "Token biaya"
   }
 }

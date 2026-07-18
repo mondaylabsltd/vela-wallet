@@ -174,7 +174,7 @@
       "verbApprove": "Genehmigen",
       "verbApproveAll": "Alle genehmigen",
       "verbRevoke": "Widerrufen",
-      "spenderLabel": "Spender",
+      "spenderLabel": "Bevollmächtigter",
       "operatorLabel": "Operator",
       "tokenLabel": "Token",
       "collectionLabel": "Collection",
@@ -186,7 +186,8 @@
       "multiplePermits": "Mehrere Token",
       "permitTag": "Ausgabegenehmigung (Signatur)",
       "permitCantCap": "Ein Permit ist eine Signatur — sein Betrag kann hier nicht begrenzt werden. Verwenden Sie stattdessen ein On-chain-Approve, um die Ausgaben zu begrenzen.",
-      "permitNote": "Sie signieren eine Ausgabegenehmigung — die dApp kann in Ihrem Namen bis zu diesem Betrag bewegen."
+      "permitNote": "Sie signieren eine Ausgabegenehmigung — die dApp kann in Ihrem Namen bis zu diesem Betrag bewegen.",
+      "balanceCap": "Guthaben"
     },
     "currency": {
       "title": "Anzeigewährung",
@@ -220,7 +221,10 @@
       "deployedNo": "Nein (erste Tx)",
       "estimating": "Wird geschätzt …",
       "estimateFailed": "Zum erneuten Versuch tippen",
-      "feeToken": "Fee token"
+      "feeToken": "Gebühren-Token",
+      "paidWith": "Mit {{symbol}} bezahlt",
+      "rowBalance": "Guthaben",
+      "rowSpend": "Gesch. Kosten"
     },
     "dock": {
       "receive": "Empfangen",
@@ -267,14 +271,16 @@
       "a11yOpen": "Identicon ansehen"
     },
     "treasuryBootstrap": {
-      "title": "Help start this network's relayer",
-      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
-      "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
-      "addressLabel": "Treasury address",
-      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
-      "copyBtn": "Copy address",
-      "copied": "Copied",
-      "closeBtn": "Close"
+      "title": "Relayer dieses Netzwerks starten",
+      "lead": "Die Relayer-Treasury dieses Netzwerks hat wenig Gas. Zahlen Sie etwas ein, um wieder senden zu können.",
+      "amountHint": "Empfohlener Beitrag: {{amount}} {{symbol}}",
+      "addressLabel": "Treasury · Bundler-Betreiber",
+      "disclaimer": "Nicht erstattungsfähig. Dieses Gas geht an den Bundler-Betreiber (nicht an Vela), um den Relayer dieses Netzwerks zu starten — es bezahlt nicht Ihre Transaktion.",
+      "copyBtn": "Adresse zum Einzahlen kopieren",
+      "copied": "Kopiert",
+      "closeBtn": "Schließen",
+      "suggested": "Empfohlene Aufladung",
+      "retryBtn": "Eingezahlt · Erneut versuchen"
     }
   }
 }

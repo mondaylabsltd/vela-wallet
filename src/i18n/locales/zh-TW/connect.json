@@ -112,7 +112,7 @@
   },
   "signHandoff": {
     "signing": "在 Vela 中確認",
-    "signed": "已傳送",
+    "signed": "已簽署",
     "rejected": "已取消",
     "pending": "請在 Vela 活動中查看",
     "expired": "此簽署請求已過期",

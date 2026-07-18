@@ -90,7 +90,7 @@
     "minutesShort": "{{n}}分鐘",
     "hoursShort": "{{n}}小時",
     "today": "今日",
-    "yesterday": "尋日"
+    "yesterday": "昨日"
   },
   "activity": {
     "sent": "已發送",
@@ -101,6 +101,7 @@
     "typedDataSignature": "結構化資料簽署",
     "dappTransaction": "dApp 交易",
     "activity": "活動",
-    "delete": "刪除"
+    "delete": "刪除",
+    "connected": "已連接"
   }
 }

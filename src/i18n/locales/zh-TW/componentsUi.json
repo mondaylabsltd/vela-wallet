@@ -182,7 +182,10 @@
       "walletDeployed": "錢包已部署",
       "deployedYes": "是",
       "deployedNo": "否（首筆交易）",
-      "feeToken": "手续费币种"
+      "feeToken": "手續費代幣",
+      "paidWith": "以 {{symbol}} 支付",
+      "rowBalance": "餘額",
+      "rowSpend": "預估費用"
     },
     "dock": {
       "receive": "收款",
@@ -233,7 +236,8 @@
       "multiplePermits": "多種代幣",
       "permitTag": "支出許可（簽章）",
       "permitCantCap": "許可是一項簽章——其金額無法在此設上限。若要限制支出，請改用鏈上 Approve。",
-      "permitNote": "你正在簽署一項支出許可——dApp 可代你動用至多此金額。"
+      "permitNote": "你正在簽署一項支出許可——dApp 可代你動用至多此金額。",
+      "balanceCap": "餘額"
     },
     "bugReport": {
       "title": "回報問題",
@@ -267,14 +271,16 @@
       "a11yOpen": "查看 Identicon"
     },
     "treasuryBootstrap": {
-      "title": "帮助启动此网络的中继器",
-      "lead": "该网络的中继器暂无运转资金。任何人都可以向其金库捐助，让它恢复可用。",
-      "amountHint": "建议捐助：{{amount}} {{symbol}}",
-      "addressLabel": "金库地址",
-      "disclaimer": "此捐助不可退还，也不是 Gas 抵扣额度——之后的交易仍需正常支付 Gas 费。它仅用于启动该网络的中继器资金池。",
-      "copyBtn": "复制地址",
-      "copied": "已复制",
-      "closeBtn": "关闭"
+      "title": "啟動此網路的中繼器",
+      "lead": "此網路的中繼器金庫 Gas 不足，注資後即可恢復發送。",
+      "amountHint": "建議注資 {{amount}} {{symbol}}",
+      "addressLabel": "金庫 · Bundler 營運者",
+      "disclaimer": "款項不可退還。這筆 Gas 會付給 Bundler 營運者（而非 Vela），用於啟動此網路的中繼器；並不會用來支付你這筆交易的費用。",
+      "copyBtn": "複製注資地址",
+      "copied": "已複製",
+      "closeBtn": "關閉",
+      "suggested": "建議注資金額",
+      "retryBtn": "已完成注資 · 重試"
     }
   }
 }

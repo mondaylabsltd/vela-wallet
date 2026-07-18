@@ -112,7 +112,7 @@
   },
   "signHandoff": {
     "signing": "Confirmer dans Vela",
-    "signed": "Envoyé",
+    "signed": "Signé",
     "rejected": "Annulé",
     "pending": "À vérifier dans l'activité Vela",
     "expired": "Cette demande de signature a expiré",

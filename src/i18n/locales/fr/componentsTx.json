@@ -24,7 +24,8 @@
       "statusConfirmed": "Confirmé",
       "statusSubmitted": "Soumis",
       "statusFailed": "Échoué",
-      "failedHint": "Cette transaction a échoué sur la blockchain."
+      "failedHint": "Le transfert a échoué on-chain — vos fonds n'ont pas été envoyés. Des frais de réseau ont pu néanmoins être prélevés. Ouvrez l'explorateur ci-dessous pour en connaître la raison, ou revenez en arrière et réessayez.",
+      "userOpHash": "Hash UserOp"
     },
     "detail": {
       "received": "Reçu",

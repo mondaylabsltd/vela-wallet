@@ -115,6 +115,6 @@
     "batchImportFailedTitle": "Não foi possível ler o arquivo",
     "batchImportFailedBody": "Use um arquivo CSV, TSV, TXT ou Excel.",
     "batchCurrencyLabel": "Precificado em",
-    "feeTokenLabel": "Fee token"
+    "feeTokenLabel": "Token da taxa"
   }
 }
