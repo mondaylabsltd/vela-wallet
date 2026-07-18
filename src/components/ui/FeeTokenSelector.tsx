@@ -80,15 +80,19 @@ export function FeeTokenSelector({ options, selected, onSelect, nativeUsdPrice, 
           ? (nativeUsdPrice > 0 ? feeUsd / nativeUsdPrice : null)
           : Math.max(feeUsd, STABLE_MIN_USD);
         const costLabel = fmtCost(costUnits);
+        // A coin that can't cover the fee (notably the native coin at 0 balance) is SHOWN for
+        // context but not selectable — paying gas in it would only produce a doomed op. It's
+        // insufficient when held ≤ 0, or held < the fee it would cost.
+        const insufficient = holdings <= 0 || (costUnits !== null && holdings < costUnits);
         const pending = busy && pendingKey === k;
         return (
           <Pressable
             key={k}
-            style={[styles.row, busy && !pending && styles.rowDim]}
-            disabled={busy}
-            onPress={() => { setPendingKey(k); onSelect(opt.contract); }}
+            style={[styles.row, (insufficient || (busy && !pending)) && styles.rowDim]}
+            disabled={busy || insufficient}
+            onPress={() => { if (insufficient) return; setPendingKey(k); onSelect(opt.contract); }}
             accessibilityRole="button"
-            accessibilityState={{ selected: active, disabled: busy }}
+            accessibilityState={{ selected: active, disabled: busy || insufficient }}
             accessibilityLabel={opt.symbol}
           >
             <TokenLogo symbol={opt.symbol} logoUrls={opt.logoUrls} size={32} />
