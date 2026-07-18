@@ -15,6 +15,7 @@ import { View, Text, Pressable, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Plus, X, BookUser, FileUp } from 'lucide-react-native';
 import { AutoGrowTextInput } from '@/components/ui/AutoGrowTextInput';
+import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 import { sumSplitBaseUnits } from '@/services/batch-send';
@@ -128,7 +129,7 @@ export function MultiRecipientEditor({
             </View>
             {addrInvalid
               ? <Text style={styles.rowError}>{t('send.alertInvalidAddressTitle')}</Text>
-              : <View style={styles.badgeWrap}><RecipientTrust address={r.address} compact /></View>}
+              : <View style={styles.badgeWrap}><ContactAvatar name="" address={r.address} size={20} /><RecipientTrust address={r.address} compact /></View>}
 
             {/* Amount */}
             <View style={styles.amountRow}>
@@ -207,7 +208,7 @@ const styles = createStyles(() => ({
     width: 40, height: 40, borderRadius: radius.md,
     alignItems: 'center', justifyContent: 'center', backgroundColor: color.bg.base,
   },
-  badgeWrap: { paddingLeft: space.xs },
+  badgeWrap: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingLeft: space.xs, marginTop: space.xs },
   rowError: { fontSize: text.xs, ...inter.medium, color: color.error.base, paddingLeft: space.xs },
   amountRow: {
     flexDirection: 'row', alignItems: 'center', gap: space.sm,

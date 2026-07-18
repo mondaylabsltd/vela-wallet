@@ -288,24 +288,26 @@ async function queryChainAssets(
 
   // --- DEX price queries ---
   const quoteToken = pickQuoteToken(stables);
-  // Track which call index was used for the quote token's decimals
+  // Track which call index was used for the quote token's decimals (used to price custom ERC-20s).
   let quoteTokenDecCallIdx: number | null = null;
   if (quoteToken) {
     const qi = stables.indexOf(quoteToken);
     if (qi >= 0) quoteTokenDecCallIdx = decIdx[1 + qi]; // +1 because native is slot 0
   }
 
-  // Pick a secondary quote token (e.g. USDT if primary is USDC) for fallback
-  const secondaryQuoteToken = stables.find(s => s.contract !== quoteToken?.contract) ?? null;
-
-  // Native price: wrappedNative -> quoteToken (USDC/USDT)
-  const nativePriceCallIdxs: number[] = [];
-  if (quoteToken && wrappedNative && dex) {
+  // Native price: quote 1 wrappedNative against EVERY stable and keep the DEEPEST pool's
+  // result (see extractBestPrice), not the first that happens to return. One stable's pool can
+  // be broken/near-empty and quote a wildly-off price (e.g. X Layer's WOKB/USDC quotes OKB at
+  // ~$5) while another stable holds the liquid pool (WOKB/USD₮0 ≈ $81); taking the first would
+  // lock in the junk. Each stable is its OWN group so its own decimals normalize the amount
+  // (USDC=6 vs DAI=18 must never be compared under one shared scale).
+  const nativeQuoteGroups: { idxs: number[]; decCallIdx: number | null }[] = [];
+  if (wrappedNative && dex) {
     const amountIn = 10n ** BigInt(nativeCurrency.decimals);
-    addDexPriceCalls(dex, wrappedNative, quoteToken.contract, amountIn, nativePriceCallIdxs);
-    // Also try secondary stablecoin (e.g. USDT on BSC where it's more liquid)
-    if (secondaryQuoteToken) {
-      addDexPriceCalls(dex, wrappedNative, secondaryQuoteToken.contract, amountIn, nativePriceCallIdxs);
+    for (let si = 0; si < stables.length; si++) {
+      const idxs: number[] = [];
+      addDexPriceCalls(dex, wrappedNative, stables[si].contract, amountIn, idxs);
+      if (idxs.length > 0) nativeQuoteGroups.push({ idxs, decCallIdx: decIdx[1 + si] }); // +1: native is slot 0
     }
   }
 
@@ -365,9 +367,18 @@ async function queryChainAssets(
   let nativePriceUsd: number | null = null;
   let nativePriceSource = 'none';
 
-  // Try DEX (use correct decoder based on protocol)
+  // Try DEX (use correct decoder based on protocol). Take the DEEPEST pool across ALL stable
+  // quotes — a more-liquid V3 pool returns more output for the same 1-native input (less
+  // slippage), so the max is the least-distorted price and routes around a broken pool. Each
+  // group is normalized by its own stable's decimals before comparing.
   const dexDecoder = dex?.protocol === 'solidly' ? decAmountsOut : decU256;
-  const dexPrice = extractPrice(results, nativePriceCallIdxs, quoteDecimals, dexDecoder);
+  let dexPrice: number | null = null;
+  for (const g of nativeQuoteGroups) {
+    const decR = g.decCallIdx != null ? results[g.decCallIdx] : null;
+    const gDec = decR?.success ? decU8(decR.data) : 6;
+    const p = extractBestPrice(results, g.idxs, gDec, dexDecoder);
+    if (p != null && (dexPrice == null || p > dexPrice)) dexPrice = p;
+  }
 
   // Try on-chain Chainlink feed (queried in same multicall, zero extra cost)
   let onChainClPrice: number | null = null;
@@ -406,8 +417,8 @@ async function queryChainAssets(
   }
 
   // Log summary: which source was used + status of all sources
-  const dexOk = nativePriceCallIdxs.filter(i => results[i]?.success).length;
-  const dexTotal = nativePriceCallIdxs.length;
+  const dexOk = nativeQuoteGroups.reduce((n, g) => n + g.idxs.filter(i => results[i]?.success).length, 0);
+  const dexTotal = nativeQuoteGroups.reduce((n, g) => n + g.idxs.length, 0);
   console.log(
     `[Price] chain=${chainId} ${nativeCurrency.symbol} → $${nativePriceUsd?.toFixed(2) ?? '?'} via ${nativePriceSource}` +
     ` | DEX: ${dexPrice != null ? `$${dexPrice.toFixed(2)}` : `FAIL(${dexOk}/${dexTotal})`}` +
@@ -540,7 +551,9 @@ function mc(target: string, callData: string): Call3 {
 // Price extraction
 // ---------------------------------------------------------------------------
 
-/** Extract a USD price from DEX quote results. Takes the first successful quote. */
+/** Extract a USD price from DEX quote results. Takes the first successful quote. Callers must
+ *  pass only quotes that share `quoteDecimals` (the custom-ERC20 path lumps several stables of
+ *  differing decimals into one array, so it can't take the max — see extractBestPrice). */
 function extractPrice(
   results: McResult[],
   callIdxs: number[],
@@ -557,6 +570,31 @@ function extractPrice(
     }
   }
   return null;
+}
+
+/** Best (deepest-pool) USD price among DEX quotes that share ONE `quoteDecimals`. For a fixed
+ *  input amount, a more-liquid Uniswap-V3 pool returns more output (less slippage), so the max
+ *  output is the least-distorted price — this dodges a broken/near-empty pool that would quote
+ *  a garbage low value. Only safe within a single quote token (same decimals); callers group
+ *  per token and compare the per-token results afterward. */
+function extractBestPrice(
+  results: McResult[],
+  callIdxs: number[],
+  quoteDecimals: number,
+  decoder: (hex: string) => bigint = decU256,
+): number | null {
+  let best: number | null = null;
+  for (const idx of callIdxs) {
+    const r = results[idx];
+    if (r?.success && r.data.length >= 66) {
+      const amountOut = decoder(r.data);
+      if (amountOut > 0n) {
+        const p = Number(amountOut) / 10 ** quoteDecimals;
+        if (best == null || p > best) best = p;
+      }
+    }
+  }
+  return best;
 }
 
 // ---------------------------------------------------------------------------

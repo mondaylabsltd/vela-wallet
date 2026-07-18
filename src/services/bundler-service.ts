@@ -750,7 +750,22 @@ export interface TreasuryStatus {
   bootstrapNeeded: boolean;
 }
 
-export async function fetchTreasuryStatus(chainId: number): Promise<TreasuryStatus | null> {
+/**
+ * Coverage probe for a chain's bundler treasury — distinguishes the three cases the plain
+ * `fetchTreasuryStatus` used to flatten into `null`, so the UI can route them differently:
+ *   - `low-float`  — the bundler serves this chain but its treasury needs a bootstrap deposit
+ *   - `covered`    — serves this chain, treasury healthy
+ *   - `uncovered`  — HTTP 404: this bundler doesn't serve this chain (e.g. a local dev net the
+ *                    official bundler can't reach) → the user must point at their own bundler
+ *   - `unknown`    — 5xx / timeout / network / malformed → TRANSIENT; never route as "uncovered"
+ */
+export type TreasuryProbe =
+  | { kind: 'low-float'; status: TreasuryStatus }
+  | { kind: 'covered'; status: TreasuryStatus }
+  | { kind: 'uncovered' }
+  | { kind: 'unknown' };
+
+export async function probeTreasury(chainId: number): Promise<TreasuryProbe> {
   try {
     const baseUrl = await getActiveBundlerBaseUrl(chainId);
     const res = await fetchWithTimeout(
@@ -758,10 +773,12 @@ export async function fetchTreasuryStatus(chainId: number): Promise<TreasuryStat
       { headers: { Accept: 'application/json' } },
       { timeoutMs: NET_TIMEOUTS.bundlerRest },
     );
-    if (!res.ok) return null;
+    // 404 = this bundler has no service for this chain (uncovered). Any other non-OK is transient.
+    if (res.status === 404) return { kind: 'uncovered' };
+    if (!res.ok) return { kind: 'unknown' };
     const data = await res.json();
-    if (!data.address || !/^0x[0-9a-fA-F]{40}$/.test(data.address)) return null;
-    return {
+    if (!data.address || !/^0x[0-9a-fA-F]{40}$/.test(data.address)) return { kind: 'unknown' };
+    const status: TreasuryStatus = {
       chainId,
       address: data.address,
       asset: data.asset === 'pathUSD' ? 'pathUSD' : 'native',
@@ -769,10 +786,17 @@ export async function fetchTreasuryStatus(chainId: number): Promise<TreasuryStat
       floor: parseBigIntHex(data.floor),
       bootstrapNeeded: data.bootstrapNeeded === true,
     };
+    return status.bootstrapNeeded ? { kind: 'low-float', status } : { kind: 'covered', status };
   } catch (err) {
-    console.warn(`[Treasury] status fetch failed for chain=${chainId}:`, err);
-    return null;
+    console.warn(`[Treasury] status probe failed for chain=${chainId}:`, err);
+    return { kind: 'unknown' };
   }
+}
+
+/** Back-compat adapter: a resolvable treasury status (low-float or covered), else null. */
+export async function fetchTreasuryStatus(chainId: number): Promise<TreasuryStatus | null> {
+  const p = await probeTreasury(chainId);
+  return p.kind === 'low-float' || p.kind === 'covered' ? p.status : null;
 }
 
 export function parseBundlerUnderfunded(msg: string | undefined | null): BundlerUnderfunded | null {

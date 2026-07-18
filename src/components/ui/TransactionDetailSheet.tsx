@@ -20,6 +20,8 @@ import { ChainLogo } from '@/components/ChainLogo';
 import { TokenLogo } from '@/components/TokenLogo';
 import { chainName, getAllNetworksSync, explorerTxURL, explorerAddressURL } from '@/models/network';
 import { updateTransaction, type LocalTransaction } from '@/services/storage';
+import { ContactAvatar } from '@/components/contacts/ContactAvatar';
+import { RecipientTypeBadge } from '@/components/contacts/RecipientTypeBadge';
 import { shortAddress } from '@/models/wallet-state';
 import { copyToClipboard, openBrowser } from '@/services/platform';
 import { formatFiat, type Currency } from '@/services/currency';
@@ -176,15 +178,16 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
                   </View>
                 </View>
               ) : batch.to ? (
-                <Pressable onPress={() => copy('cp', batch.to!)} style={styles.cpRow}>
-                  <Text style={styles.cpLabel}>{t('componentsTx.detail.to')}</Text>
-                  <View style={styles.cpRight}>
-                    {batch.toName ? <Text style={styles.cpAlias} numberOfLines={1}>{batch.toName}</Text> : null}
-                    <View style={styles.cpAddrRow}>
-                      <Text style={styles.cpShort}>{shortAddress(batch.to)}</Text>
-                      {copied === 'cp' ? <Check size={15} color={color.success.base} strokeWidth={2.6} /> : <Copy size={15} color={color.fg.subtle} strokeWidth={2} />}
+                <Pressable onPress={() => copy('cp', batch.to!)} style={styles.cpParty}>
+                  <ContactAvatar name={batch.toName ?? ''} address={batch.to} size={40} />
+                  <View style={styles.cpWho}>
+                    <View style={styles.cpNameRow}>
+                      <Text style={styles.cpName} numberOfLines={1}>{batch.toName || shortAddress(batch.to)}</Text>
+                      <RecipientTypeBadge address={batch.to} size={14} />
                     </View>
+                    <Text style={styles.cpAddr} numberOfLines={1}>{shortAddress(batch.to)}</Text>
                   </View>
+                  {copied === 'cp' ? <Check size={16} color={color.success.base} strokeWidth={2.6} /> : <Copy size={16} color={color.fg.subtle} strokeWidth={2} />}
                 </Pressable>
               ) : null}
 
@@ -199,9 +202,15 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
                       {i > 0 ? <View style={isSplit ? styles.divider : styles.brSep} /> : null}
                       <View style={styles.brRow}>
                         {isSplit ? (
-                          <View style={styles.brLeft}>
-                            <Text style={styles.brPrimary} numberOfLines={1}>{it.toName || shortAddress(it.to)}</Text>
-                            <Text style={styles.brSub} numberOfLines={1}>{shortAddress(it.to)}</Text>
+                          <View style={styles.brParty}>
+                            <ContactAvatar name={it.toName ?? ''} address={it.to} size={32} />
+                            <View style={styles.brWho}>
+                              <View style={styles.cpNameRow}>
+                                <Text style={styles.brPrimary} numberOfLines={1}>{it.toName || shortAddress(it.to)}</Text>
+                                <RecipientTypeBadge address={it.to} size={12} />
+                              </View>
+                              <Text style={styles.brSub} numberOfLines={1}>{shortAddress(it.to)}</Text>
+                            </View>
                           </View>
                         ) : (
                           <View style={styles.brTokenLeft}>
@@ -282,17 +291,19 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
                 ) : null}
               </View>
 
-              {/* Counterparty (the "who" — shown once here, not repeated in Details) */}
+              {/* Counterparty identity card (avatar + resolved name + trust badge) —
+                  the same "who is this" treatment as Send and the receipt. */}
               {counterparty ? (
-                <Pressable onPress={() => copy('cp', counterparty)} style={styles.cpRow}>
-                  <Text style={styles.cpLabel}>{incoming ? t('componentsTx.detail.from') : t('componentsTx.detail.to')}</Text>
-                  <View style={styles.cpRight}>
-                    {alias ? <Text style={styles.cpAlias} numberOfLines={1}>{alias}</Text> : null}
-                    <View style={styles.cpAddrRow}>
-                      <Text style={styles.cpShort}>{shortAddress(counterparty)}</Text>
-                      {copied === 'cp' ? <Check size={15} color={color.success.base} strokeWidth={2.6} /> : <Copy size={15} color={color.fg.subtle} strokeWidth={2} />}
+                <Pressable onPress={() => copy('cp', counterparty)} style={styles.cpParty}>
+                  <ContactAvatar name={alias ?? ''} address={counterparty} size={40} />
+                  <View style={styles.cpWho}>
+                    <View style={styles.cpNameRow}>
+                      <Text style={styles.cpName} numberOfLines={1}>{alias || shortAddress(counterparty)}</Text>
+                      <RecipientTypeBadge address={counterparty} size={14} />
                     </View>
+                    <Text style={styles.cpAddr} numberOfLines={1}>{shortAddress(counterparty)}</Text>
                   </View>
+                  {copied === 'cp' ? <Check size={16} color={color.success.base} strokeWidth={2.6} /> : <Copy size={16} color={color.fg.subtle} strokeWidth={2} />}
                 </Pressable>
               ) : null}
 
@@ -353,16 +364,22 @@ const styles = createStyles(() => ({
   cpRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.lg, paddingVertical: space.md },
   cpLabel: { fontSize: text.base, ...inter.medium, color: color.fg.muted },
   cpRight: { alignItems: 'flex-end', gap: 2 },
-  cpAlias: { fontSize: text.lg, ...inter.semibold, color: color.accent.base },
-  cpAddrRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   cpShort: { fontSize: text.lg, ...inter.bold, color: color.fg.base, fontFamily: font.mono },
+  // Counterparty identity card (avatar + name + trust badge) — matches Send/receipt.
+  cpParty: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.md },
+  cpWho: { flex: 1, minWidth: 0, gap: 2 },
+  cpNameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1, minWidth: 0 },
+  cpName: { fontSize: text.lg, ...inter.bold, color: color.fg.base, flexShrink: 1 },
+  cpAddr: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, fontFamily: font.mono },
+  // Split recipient row: small avatar + name/badge/addr column (shares brRow with the amount).
+  brParty: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: space.md },
+  brWho: { flex: 1, minWidth: 0, gap: 2 },
 
   // Open sections (breakdown / details) — hairline-separated rows, no card.
   section: {},
 
   // Batch breakdown rows
   brRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md, paddingVertical: space.md },
-  brLeft: { flex: 1, minWidth: 0, gap: 2 },
   brTokenLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: space.md },
   brRight: { alignItems: 'flex-end', gap: 2 },
   brPrimary: { fontSize: text.base, ...inter.semibold, color: color.fg.base },

@@ -56,7 +56,8 @@ import { getRateLimitedChains } from '@/services/rpc-pool';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { color, createStyles, font, inter, radius, shadow, space, text } from '@/constants/theme';
 import { useDAppConnection, type ConnectionStatus } from '@/models/dapp-connection';
-import { getAllNetworksSync, type Network } from '@/models/network';
+import { type Network } from '@/models/network';
+import { useAllNetworks } from '@/hooks/use-networks';
 import { shortAddr, isAddress, tokenBalanceDouble, tokenChainId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
 import { useBalancePrivacy } from '@/hooks/use-balance-privacy';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
@@ -235,7 +236,7 @@ export default function HomeScreen() {
   const balancePulse = useSharedValue(0);
   const balanceScaleStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + balancePulse.value * 0.03 }] }));
 
-  const networks = useMemo(() => getAllNetworksSync(), []);
+  const networks = useAllNetworks();
   const selectedNetwork = selectedChainId != null ? networks.find((n) => n.chainId === selectedChainId) ?? null : null;
   const connected = conn.status === 'connected' || conn.status === 'reconnecting';
   // Display currency — set in Settings › Localization; re-read on focus by the

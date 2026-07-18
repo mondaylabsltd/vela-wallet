@@ -8,6 +8,7 @@
       "network": "Network",
       "time": "Time",
       "txHash": "Tx Hash",
+      "userOpHash": "UserOp Hash",
       "confirming": "Confirming…",
       "confirmingHint": "Sent! Confirming on-chain — the explorer link will appear shortly.",
       "scanHint": "Scan to view on explorer",
@@ -24,7 +25,7 @@
       "statusConfirmed": "Confirmed",
       "statusSubmitted": "Submitted",
       "statusFailed": "Failed",
-      "failedHint": "This transaction failed to settle on-chain."
+      "failedHint": "The transfer reverted on-chain — your funds were not sent. A network fee may still have been charged. Open the explorer below for the reason, or go back and try again."
     },
     "detail": {
       "received": "Received",

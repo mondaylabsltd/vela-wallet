@@ -421,9 +421,12 @@ export function BundlerFundingView({ funding, onFunded, onCancel, dappVariant }:
       {showQr && (
         <View style={styles.qrBlock}>
           <View style={styles.qrWrap}>
-            <QRCode value={eip681 ?? funding.depositAddress} size={132} />
+            {/* Bare deposit address — a scanned QR must work everywhere (CEX
+                withdrawal, camera, any wallet); an EIP-681 URI would come out as a
+                junk "address" on non-EIP-681 scanners. Amount auto-fill lives on the
+                on-device "open in wallet" button above instead. */}
+            <QRCode value={funding.depositAddress} size={132} />
           </View>
-          {eip681 && <Text style={styles.qrHint}>{t('componentsUi.funding.qrHint')}</Text>}
         </View>
       )}
 
@@ -621,12 +624,6 @@ const styles = createStyles(() => ({
     backgroundColor: '#FFFFFF',
     borderRadius: radius.xl,
     ...shadow.sm,
-  },
-  qrHint: {
-    fontSize: text.xs,
-    ...inter.regular,
-    color: color.fg.subtle,
-    marginTop: space.sm,
   },
   detailsBody: {
     fontSize: text.sm,

@@ -39,6 +39,26 @@ export async function readErc20Balance(
 }
 
 /**
+ * Read the native-coin balance (`eth_getBalance`) for an address. Returns null on
+ * any failure so callers degrade gracefully. Used by the fee-token selector to show
+ * the native row's balance alongside the whitelisted stablecoins. On chains with no
+ * native coin (Tempo) this is a sentinel — callers gate that out upstream.
+ */
+export async function readNativeBalance(
+  chainId: number,
+  owner: string,
+): Promise<bigint | null> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(owner)) return null;
+  try {
+    const res = await poolRpcCall('eth_getBalance', [owner, 'latest'], chainId);
+    if (res?.error || typeof res?.result !== 'string' || res.result === '0x') return null;
+    return BigInt(res.result);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Read `allowance(owner, spender)` for an ERC-20. Returns null on any failure
  * (RPC down, non-token, reverts) so callers degrade gracefully. Used to show the
  * RESULTING total for `increaseAllowance` (current + increment) instead of a

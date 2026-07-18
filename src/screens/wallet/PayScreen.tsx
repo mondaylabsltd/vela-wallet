@@ -7,6 +7,9 @@
  * wallet (EIP-681 *or* plain-address QR), or copy the details to enter by hand.
  */
 import { ChainLogo } from '@/components/ChainLogo';
+import { ContactAvatar } from '@/components/contacts/ContactAvatar';
+import { RecipientTrust } from '@/components/contacts/RecipientTrust';
+import { RecipientTypeBadge } from '@/components/contacts/RecipientTypeBadge';
 import { QRCode } from '@/components/QRCode';
 import { TokenLogo } from '@/components/TokenLogo';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
@@ -113,8 +116,18 @@ export default function PayScreen() {
             </View>
           )}
 
+          {/* Who you're paying — the shared identity card (avatar + name + trust badge).
+              A Vela/ENS/contact payee reads by name; an unknown one still gets its
+              deterministic avatar + short address. */}
           <Pressable style={styles.addrRow} onPress={() => copy('to', to)}>
-            <Text style={styles.addr} numberOfLines={1}>{short(to)}</Text>
+            <ContactAvatar name="" address={to} size={28} />
+            <View style={styles.payeeWho}>
+              <View style={styles.payeeNameRow}>
+                <RecipientTrust address={to} prominent nameOnly />
+                <RecipientTypeBadge address={to} size={13} />
+              </View>
+              <Text style={styles.addr} numberOfLines={1}>{short(to)}</Text>
+            </View>
             {copiedKey === 'to' ? <Check size={16} color={color.success.base} strokeWidth={2.5} /> : <Copy size={16} color={color.fg.muted} strokeWidth={2} />}
           </Pressable>
 
@@ -204,7 +217,9 @@ const styles = createStyles(() => ({
     alignSelf: 'stretch', marginTop: space.xl, paddingVertical: space.md, paddingHorizontal: space.lg,
     borderRadius: radius.lg, backgroundColor: color.bg.sunken, borderWidth: 1, borderColor: color.border.base,
   },
-  addr: { flex: 1, fontSize: text.sm, ...inter.medium, fontFamily: font.mono, color: color.fg.base },
+  payeeWho: { flex: 1, minWidth: 0, gap: 1 },
+  payeeNameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1, minWidth: 0 },
+  addr: { fontSize: text.sm, ...inter.medium, fontFamily: font.mono, color: color.fg.muted },
   openBtn: { alignSelf: 'stretch', marginTop: space.xl },
   otherBtn: { alignSelf: 'stretch', alignItems: 'center', paddingVertical: space.lg, marginTop: space.sm },
   otherBtnText: { fontSize: text.base, ...inter.semibold, color: color.fg.muted },

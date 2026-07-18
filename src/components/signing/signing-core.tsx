@@ -6,10 +6,10 @@
  * i18n / clear-signing types — never a signing component — so the view and
  * component modules can all depend on it without an import cycle.
  */
-import React from 'react';
+import { color, createStyles, font, inter, radius, scaleFont, space, text } from '@/constants/theme';
 import i18n from '@/i18n';
 import { type SigningRisk } from '@/services/clear-signing';
-import { scaleFont, color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
+import React from 'react';
 
 /** Chain id for the active signing sheet — lets leaf rows build explorer links. */
 export const SigningChainContext = React.createContext<number>(1);
@@ -32,7 +32,7 @@ export function riskColors(): Record<SigningRisk, string> {
 //
 // ERC-7730 descriptors carry English intents ("Send", "Swap") and field labels
 // ("Amount", "To") by spec, so a descriptor-driven screen would render half-
-// English inside a localized UI (the "确认Send" / "Amount" problem). Map the
+// English inside a localized UI (the "确认 Send" / "Amount" problem). Map the
 // common canonical values to the user's language; anything unrecognized falls
 // through to the raw descriptor string (an honest, if English, label).
 // ---------------------------------------------------------------------------
@@ -159,6 +159,7 @@ export const styles = createStyles(() => ({
   signAccountAddr: {
     fontSize: text.xs, fontFamily: font.mono, color: color.fg.muted,
     textAlign: 'right', marginTop: space.xs,
+    paddingRight:space.xl,
   },
 
   // ===== Intent Header =====
@@ -347,7 +348,7 @@ export const styles = createStyles(() => ({
     backgroundColor: color.bg.sunken,
     alignItems: 'center', justifyContent: 'center',
   },
-  // Identity chips answer "who is this" at a glance — 钱包 / 合约 / 已验证. Small,
+  // Identity chips answer "who is this" at a glance — 钱包 / 合约 / 已验证。Small,
   // restrained; stacked at the row's trailing edge.
   idChips: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: 128 },
   idChip: {

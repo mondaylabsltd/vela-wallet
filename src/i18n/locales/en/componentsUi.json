@@ -205,7 +205,10 @@
       "walletDeployed": "Wallet Deployed",
       "deployedYes": "Yes",
       "deployedNo": "No (first tx)",
-      "feeToken": "Fee token"
+      "feeToken": "Fee token",
+      "paidWith": "Paid with {{symbol}}",
+      "rowBalance": "Balance",
+      "rowSpend": "Est. cost"
     },
     "dock": {
       "receive": "Receive",
@@ -268,13 +271,15 @@
       "a11yOpen": "View identicon"
     },
     "treasuryBootstrap": {
-      "title": "Help start this network's relayer",
-      "lead": "This network's relayer has no operating float yet. Anyone can contribute to its treasury to bring it online.",
+      "title": "Start this network's relayer",
+      "lead": "This network's relayer treasury is low on gas. Fund it to resume sending.",
+      "suggested": "Suggested top-up",
       "amountHint": "Suggested contribution: {{amount}} {{symbol}}",
-      "addressLabel": "Treasury address",
-      "disclaimer": "This contribution is NON-REFUNDABLE and is NOT gas credit — your future transactions still pay gas normally. It only bootstraps this network’s relayer float.",
-      "copyBtn": "Copy address",
+      "addressLabel": "Treasury · bundler operator",
+      "disclaimer": "Non-refundable. This gas goes to the bundler operator (not Vela), to start this network's relayer — it does not pay for your transaction.",
+      "copyBtn": "Copy address to fund",
       "copied": "Copied",
+      "retryBtn": "I've funded · Retry",
       "closeBtn": "Close"
     }
   }

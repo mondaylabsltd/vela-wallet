@@ -14,12 +14,11 @@
  * On Tempo no selector renders — the fee is always pathUSD there.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native';
-import { VelaCard } from './VelaCard';
-import { color, createStyles, inter, radius, space, text } from '@/constants/theme';
+import { color, createStyles, inter, space, text } from '@/constants/theme';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { useLocalePrefs, numberSeparators, formatNumber } from '@/services/locale-format';
 import {
@@ -29,6 +28,7 @@ import {
   type TransactionFeeEstimate,
 } from '@/services/safe-transaction';
 import { useInBandFeeTokenOptions } from '@/hooks/use-inband-fee-tokens';
+import { FeeTokenSelector } from './FeeTokenSelector';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -70,6 +70,10 @@ interface GasFeeCardProps {
   onFeeTokenChange?: (token: string | null) => void;
   /** Called when fee estimate is updated (after refresh or fee-asset change). */
   onFeeUpdate: (fee: TransactionFeeEstimate) => void;
+  /** Fires while the card re-quotes internally (fee-asset switch / refresh), so the
+   *  parent can gate its confirm button — the internal re-quote doesn't touch the
+   *  parent's `estimating` flag. */
+  onBusyChange?: (busy: boolean) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,10 +82,15 @@ interface GasFeeCardProps {
 
 export function GasFeeCard({
   feeEstimate, estimating, nativeSymbol: sym, nativeUsdPrice,
-  safeAddress, chainId, tx, batchCalls, gasFeeToken = null, onFeeTokenChange, onFeeUpdate,
+  safeAddress, chainId, tx, batchCalls, gasFeeToken = null, onFeeTokenChange, onFeeUpdate, onBusyChange,
 }: GasFeeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Set the internal re-quote flag AND notify the parent (which gates its confirm button).
+  const setBusy = useCallback((b: boolean) => {
+    setRefreshing(b);
+    onBusyChange?.(b);
+  }, [onBusyChange]);
   // Fee-asset options: null = no selector (legacy chain / Tempo / no DEX).
 
   // Region format: fiat in the chosen display currency (€/¥/…) + the number
@@ -111,33 +120,52 @@ export function GasFeeCard({
   // 2 dp) — below that the native amount is the honest primary.
   const showFiat = feeUsd >= 0.005;
 
+  // Drive the collapsed display from the SELECTION (gasFeeToken), not the quote's own asset —
+  // so switching coins updates INSTANTLY instead of waiting on the bundler re-quote (which still
+  // runs in the background to set the exact signed amount). The USD cost is ~coin-invariant
+  // (uniform bundler markup), converted to the chosen coin; stables carry the $0.01 floor.
+  const selNative = (gasFeeToken ?? null) === null;
+  const selSym = selNative
+    ? sym
+    : (feeTokenOptions?.find((o) => o.contract?.toLowerCase() === gasFeeToken!.toLowerCase())?.symbol ?? feeSym);
+  const selUnits = selNative
+    ? (nativeUsdPrice > 0 ? feeUsd / nativeUsdPrice : feeUnits)
+    : Math.max(feeUsd, 0.01);
+
   const handleRefresh = useCallback(async () => {
     if (refreshing) return;
-    setRefreshing(true);
+    setBusy(true);
     try {
       await refreshGasPrice(chainId);
       const fee = await estimateTransactionFee(safeAddress, chainId, 'fast', tx, batchCalls, gasFeeToken);
       onFeeUpdate(fee);
     } catch { /* ignore */ }
-    setRefreshing(false);
-  }, [chainId, safeAddress, tx, batchCalls, gasFeeToken, refreshing, onFeeUpdate]);
+    setBusy(false);
+  }, [chainId, safeAddress, tx, batchCalls, gasFeeToken, refreshing, onFeeUpdate, setBusy]);
 
   const handleFeeTokenSelect = useCallback(async (contract: string | null) => {
-    if ((gasFeeToken?.toLowerCase() ?? null) === (contract?.toLowerCase() ?? null)) return;
+    const prev = gasFeeToken ?? null;
+    if ((prev?.toLowerCase() ?? null) === (contract?.toLowerCase() ?? null)) return;
+    // Optimistic: the display switches to the new coin instantly (its cost is client-derived).
+    // Confirm stays disabled (setBusy) until the authoritative quote lands, so the SIGNED amount
+    // is never the previous coin's; on failure we revert the selection to keep display == signed.
     onFeeTokenChange?.(contract);
-    setRefreshing(true);
+    setBusy(true);
     try {
       // Fast path: an asset switch doesn't change the gas basis — one bundler RPC.
-      // HARD 12s ceiling so the spinner always resolves (hung quote → keep previous).
+      // HARD 12s ceiling so the flag always resolves (hung quote → revert to previous).
       const run = (async () => {
         const fast = feeEstimate ? await requoteInBandFee(feeEstimate, chainId, safeAddress, contract) : null;
         return fast ?? await estimateTransactionFee(safeAddress, chainId, 'fast', tx, batchCalls, contract);
       })();
       const fee = await Promise.race([run, new Promise<null>((r) => setTimeout(() => r(null), 12_000))]);
       if (fee) onFeeUpdate(fee);
-    } catch { /* keep the previous quote — the user can re-tap or refresh */ }
-    setRefreshing(false);
-  }, [safeAddress, chainId, tx, batchCalls, gasFeeToken, feeEstimate, onFeeTokenChange, onFeeUpdate]);
+      else onFeeTokenChange?.(prev); // re-quote failed → revert so the shown coin matches the quote
+    } catch {
+      onFeeTokenChange?.(prev); // error → revert; the user can re-tap or refresh
+    }
+    setBusy(false);
+  }, [safeAddress, chainId, tx, batchCalls, gasFeeToken, feeEstimate, onFeeTokenChange, onFeeUpdate, setBusy]);
 
   const { t } = useTranslation();
 
@@ -154,20 +182,27 @@ export function GasFeeCard({
         onPress={failed ? handleRefresh : selectable ? () => setExpanded(!expanded) : undefined}
         style={styles.toggleRow}
       >
-        <Text style={styles.toggleLabel}>{t('componentsUi.gas.estFee')}</Text>
+        <View style={styles.toggleLabelCol}>
+          <Text style={styles.toggleLabel}>{t('componentsUi.gas.estFee')}</Text>
+          {selectable && feeEstimate && (
+            <Text style={styles.toggleLabelSub}>{t('componentsUi.gas.paidWith', { symbol: selSym })}</Text>
+          )}
+        </View>
         <View style={styles.toggleRight}>
           <View style={styles.toggleValues}>
-            {/* Fiat-first: for a novice a fee means "$X". The token amount drops to a
-                quiet sub-line. */}
+            {/* Token-first: the PRECISE amount charged in the fee coin leads; the ≈fiat
+                is the derived approximation on the quiet sub-line below. Once a quote exists we
+                keep showing the (selection-derived) amount even while a re-quote is in flight —
+                switching coins never blanks to "Estimating…". */}
             <Text style={[styles.toggleValue, failed && styles.toggleValueFailed]}>
-              {estimating || refreshing
-                ? t('componentsUi.gas.estimating')
-                : feeEstimate
-                  ? (showFiat ? `≈ ${dc.fmt(feeUsd)}` : `~${formatFeeAmount(feeUnits, sep)} ${feeSym}`)
+              {feeEstimate
+                ? `~${formatFeeAmount(selUnits, sep)} ${selSym}`
+                : (estimating || refreshing)
+                  ? t('componentsUi.gas.estimating')
                   : t('componentsUi.gas.estimateFailed')}
             </Text>
-            {!estimating && !failed && feeEstimate && showFiat && (
-              <Text style={styles.toggleSub}>~{formatFeeAmount(feeUnits, sep)} {feeSym}</Text>
+            {!failed && feeEstimate && showFiat && (
+              <Text style={styles.toggleSub}>≈ {dc.fmt(feeUsd)}</Text>
             )}
           </View>
           {failed ? (
@@ -193,29 +228,17 @@ export function GasFeeCard({
         </View>
       </Pressable>
 
-      {/* Expanded fee-asset picker — native + whitelisted stables. */}
+      {/* Expanded fee-asset picker — one row per asset (native + held stables),
+          each with its balance + ≈fiat. Shared with the Send confirm slide. */}
       {expanded && selectable && feeEstimate && (
-        <VelaCard style={styles.gasCard}>
-          <Text style={styles.feeTokenLabel}>{t('componentsUi.gas.feeToken')}</Text>
-          <View style={styles.feeTokenRow}>
-            {feeTokenOptions!.map((opt) => {
-              const active = (gasFeeToken?.toLowerCase() ?? null) === (opt.contract?.toLowerCase() ?? null);
-              return (
-                <Pressable
-                  key={opt.contract ?? 'native'}
-                  style={[styles.feeTokenBtn, active && styles.feeTokenBtnActive]}
-                  onPress={() => handleFeeTokenSelect(opt.contract)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                >
-                  <Text style={[styles.feeTokenBtnText, active && styles.feeTokenBtnTextActive]}>
-                    {opt.symbol}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </VelaCard>
+        <FeeTokenSelector
+          options={feeTokenOptions!}
+          selected={gasFeeToken}
+          onSelect={handleFeeTokenSelect}
+          nativeUsdPrice={nativeUsdPrice}
+          feeUsd={feeUsd}
+          busy={refreshing}
+        />
       )}
     </>
   );
@@ -235,10 +258,18 @@ const styles = createStyles(() => ({
     // eyebrow / hero / summary / 技术细节 (they were 4px apart).
     marginBottom: space.sm,
   },
+  toggleLabelCol: {
+    gap: 2,
+  },
   toggleLabel: {
     fontSize: text.sm,
     ...inter.medium,
     color: color.fg.muted,
+  },
+  toggleLabelSub: {
+    fontSize: text.xs,
+    ...inter.regular,
+    color: color.fg.subtle,
   },
   toggleRight: {
     flexDirection: 'row',
@@ -263,43 +294,5 @@ const styles = createStyles(() => ({
   },
   refreshBtn: {
     padding: space.xs,
-  },
-  gasCard: {
-    padding: space.xl,
-    marginBottom: space.lg,
-  },
-  feeTokenLabel: {
-    fontSize: text.xs,
-    ...inter.semibold,
-    color: color.fg.muted,
-    textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
-    marginBottom: space.md,
-  },
-  // Fee-asset chips (formerly the speed-tier chips) — wraps when a chain
-  // whitelists several stables.
-  feeTokenRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap' as const,
-    alignItems: 'center',
-    gap: space.sm,
-  },
-  feeTokenBtn: {
-    paddingVertical: space.sm,
-    paddingHorizontal: space.lg,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    backgroundColor: color.bg.sunken,
-  },
-  feeTokenBtnActive: {
-    backgroundColor: color.fg.base,
-  },
-  feeTokenBtnText: {
-    fontSize: text.xs,
-    ...inter.semibold,
-    color: color.fg.muted,
-  },
-  feeTokenBtnTextActive: {
-    color: color.fg.inverse,
   },
 }));

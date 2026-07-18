@@ -29,6 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { BadgeCheck, UserRound } from 'lucide-react-native';
 import { getSavedContact, contactDisplayName, updateContact } from '@/services/contacts';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
+import { useRecipientIdentity } from '@/hooks/use-recipient-identity';
 import { color, text, inter, space, radius, createStyles } from '@/constants/theme';
 
 interface Meta {
@@ -42,6 +43,7 @@ export function RecipientTrust({
   identity,
   compact,
   prominent,
+  nameOnly,
 }: {
   address?: string;
   /** Already-resolved live identity, to skip a duplicate lookup and to name a
@@ -49,9 +51,15 @@ export function RecipientTrust({
   identity?: RecipientIdentity | null;
   compact?: boolean;
   prominent?: boolean;
+  /** Render JUST the name (no leading trust icon) — for callers that show the trust
+   *  signal as a separate trailing badge (e.g. RecipientTypeBadge on the confirm row). */
+  nameOnly?: boolean;
 }) {
   const { t } = useTranslation();
   const [meta, setMeta] = useState<Meta | null>(null);
+  // Live identity (Vela/passkey › ENS/name-service), cached + shared, so a name shows even
+  // when the caller (e.g. the split recipient list) passes only an address.
+  const resolvedIdentity = useRecipientIdentity(address, identity ?? undefined);
 
   useEffect(() => {
     setMeta(null);
@@ -82,7 +90,7 @@ export function RecipientTrust({
 
   // Contact name wins over the live identity; fall back to the live identity for a
   // recipient who isn't saved (e.g. a Vela user you've never sent to).
-  const name = meta?.name || identity?.name;
+  const name = meta?.name || resolvedIdentity?.name;
   if (!name) return null;
   const favorite = !!meta?.favorite;
 
@@ -108,6 +116,11 @@ export function RecipientTrust({
   }
 
   if (prominent) {
+    // nameOnly: the trust signal is shown as a separate trailing badge, so drop the
+    // leading icon here and render the bare name.
+    if (nameOnly) {
+      return <Text style={[styles.promName, favorite && styles.promNameFav]} numberOfLines={1}>{name}</Text>;
+    }
     return (
       <View style={styles.promRow}>
         {icon}
@@ -117,8 +130,8 @@ export function RecipientTrust({
   }
 
   // default — inline line with the source tag on the right.
-  const source = identity
-    ? (identity.source === 'passkey' ? t('send.velaUser') : identity.source)
+  const source = resolvedIdentity
+    ? (resolvedIdentity.source === 'passkey' ? t('send.velaUser') : resolvedIdentity.source)
     : undefined;
   return (
     <View style={styles.line}>

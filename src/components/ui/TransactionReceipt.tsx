@@ -4,9 +4,12 @@
  * Native: react-native-view-shot screenshot.
  */
 
-import { ChainLogo } from '@/components/ChainLogo';
 import { QRCode } from '@/components/QRCode';
 import { TokenLogo } from '@/components/TokenLogo';
+import { WalletAvatar } from '@/components/ui/WalletAvatar';
+import { ContactAvatar } from '@/components/contacts/ContactAvatar';
+import { RecipientTrust } from '@/components/contacts/RecipientTrust';
+import { RecipientTypeBadge } from '@/components/contacts/RecipientTypeBadge';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { chainName, getAllNetworksSync, explorerTxURL } from '@/models/network';
 import { formatBalance, shortAddr } from '@/models/types';
@@ -14,12 +17,14 @@ import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
 import { pollUserOpReceipt } from '@/services/tx-reconciler';
 import { formatFiat } from '@/services/currency';
 import { formatDateTime, useLocalePrefs } from '@/services/locale-format';
-import { copyToClipboard, hapticSuccess, openBrowser, showAlert } from '@/services/platform';
+import { copyToClipboard, hapticLight, hapticSuccess, openBrowser, showAlert } from '@/services/platform';
+import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import type { RecipientIdentity } from '@/services/recipient-identity';
-import { ExternalLink, Share2, BookmarkPlus, Check, CheckCircle2, Clock, XCircle } from 'lucide-react-native';
+import { ExternalLink, Share2, BookmarkPlus, Check, CheckCircle2, Clock, XCircle, MoveDown, Copy } from 'lucide-react-native';
 import QRCodeLib from 'qrcode';
 import React, { useEffect, useRef, useState } from 'react';
-import { Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
@@ -513,6 +518,23 @@ export async function renderReceiptToCanvas(props: Props, labels: CanvasLabels):
 // Component
 // ---------------------------------------------------------------------------
 
+/** Soft state tint fading to the card surface — a real gradient hero header, drawn with
+ *  react-native-svg (already a dep) so it needs no native LinearGradient module / rebuild. */
+function TopGradient({ tint }: { tint: string }) {
+  return (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" preserveAspectRatio="none">
+      <Defs>
+        <SvgLinearGradient id="receiptTop" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={tint} />
+          <Stop offset="0.82" stopColor={color.bg.raised} />
+          <Stop offset="1" stopColor={color.bg.raised} />
+        </SvgLinearGradient>
+      </Defs>
+      <Rect x="0" y="0" width="100%" height="100%" fill="url(#receiptTop)" />
+    </Svg>
+  );
+}
+
 export function TransactionReceipt(props: Props) {
   const {
     from, fromName, chainId, txHash, userOpHash, rate, currencyCode, currencySymbol,
@@ -523,6 +545,7 @@ export function TransactionReceipt(props: Props) {
   useLocalePrefs(); // re-render when number/date/time format changes
   const receiptRef = useRef<View>(null);
   const [contactSaved, setContactSaved] = useState(false);
+  const { copied: opCopied, copy: copyOp } = useCopyFeedback();
   const fiatPrefs = { rate, currencyCode, currencySymbol };
   const chain = chainName(chainId);
   const net = getAllNetworksSync().find(n => n.chainId === chainId);
@@ -626,102 +649,178 @@ export function TransactionReceipt(props: Props) {
     <ScrollView style={styles.screen} contentContainerStyle={styles.screenContent} showsVerticalScrollIndicator={false}>
       {/* Capturable receipt card */}
       <View ref={receiptRef} testID="receipt-card" collapsable={false} style={styles.receipt}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>{t('componentsTx.receipt.title')}</Text>
-          <View style={styles.headerNetwork}>
-            {net && <ChainLogo label={net.iconLabel} color={net.iconColor} bgColor={net.iconBg} logoURL={net.logoURL} size={16} />}
-            <Text style={styles.headerChain}>{chain}</Text>
-          </View>
-        </View>
-        <View style={styles.separator} />
-        {batch ? (
-          <>
-            <View style={styles.amountSection}>
-              {batch.kind === 'split' ? (
-                <>
-                  <TokenLogo symbol={batch.splitSymbol ?? ''} logoUrls={batch.items[0].logoUrls} size={44} />
-                  <Text style={styles.amountText}>{batch.splitTotal} {batch.splitSymbol}</Text>
-                  <Text style={styles.amountUsd}>
-                    {recipientsSummary}{batch.totalUsd > 0 ? ` · ${fiat(batch.totalUsd, fiatPrefs)}` : ''}
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <Text style={styles.amountText}>
-                    {batch.totalUsd > 0 ? fiat(batch.totalUsd, fiatPrefs) : assetsSummary}
-                  </Text>
-                  {batch.totalUsd > 0 && <Text style={styles.amountUsd}>{assetsSummary}</Text>}
-                </>
-              )}
+        {/* ── Top: asset identity + settlement status + chain·time (·total for a batch) ── */}
+        <View style={styles.top}>
+          <TopGradient tint={failed ? color.error.soft : pending ? color.warning.soft : color.success.soft} />
+          {batch?.kind === 'multiSelect' ? (
+            <View style={styles.heroStack}>
+              {batch.items.slice(0, 3).map((it, i) => (
+                <View key={i} style={i > 0 ? styles.heroStackOverlap : undefined}>
+                  <TokenLogo symbol={it.symbol} logoUrls={it.logoUrls} chain={net} size={46} />
+                </View>
+              ))}
             </View>
-            <View style={styles.separator} />
-            <View style={styles.breakdown}>
+          ) : (
+            <TokenLogo
+              symbol={batch?.splitSymbol ?? symbol}
+              logoUrls={(batch ? batch.items[0]?.logoUrls : logoUrls) ?? []}
+              chain={net}
+              size={52}
+            />
+          )}
+          <View style={styles.statusRow}>
+            {failed
+              ? <XCircle size={18} color={color.error.base} strokeWidth={2.4} />
+              : pending
+                ? <Clock size={18} color={color.warning.base} strokeWidth={2.4} />
+                : <CheckCircle2 size={18} color={color.success.base} strokeWidth={2.4} />}
+            <Text style={[styles.statusText, { color: failed ? color.error.base : pending ? color.warning.base : color.success.base }]}>
+              {failed ? t('componentsTx.receipt.statusFailed') : pending ? t('componentsTx.receipt.statusSubmitted') : t('componentsTx.receipt.statusConfirmed')}
+            </Text>
+          </View>
+          <Text style={styles.metaLine}>
+            {chain} · {formatDateTime(timestamp)}
+            {batch
+              ? ` · ${batch.kind === 'split'
+                  ? `${batch.splitTotal} ${batch.splitSymbol}`
+                  : batch.totalUsd > 0 ? fiat(batch.totalUsd, fiatPrefs) : assetsSummary}`
+              : ''}
+          </Text>
+        </View>
+
+        {/* ── From → To flow — the SAME identity treatment as the confirm screen ── */}
+        <View style={styles.flow}>
+          {/* From (sender) */}
+          <View style={styles.party}>
+            <WalletAvatar name={fromName ?? ''} address={from} size={38} />
+            <View style={styles.partyWho}>
+              {fromName ? <Text style={styles.partyName} numberOfLines={1}>{fromName}</Text> : null}
+              <Text style={styles.addr}>{shortAddr(from)}</Text>
+            </View>
+            {batch?.kind !== 'multiSelect' && (
+              <View style={styles.amtCol}>
+                <Text style={styles.amtOut} numberOfLines={1}>
+                  −{batch ? batch.splitTotal : formatBalance(parseFloat(amount))} {batch ? batch.splitSymbol : symbol}
+                </Text>
+                {(batch ? batch.totalUsd : (usdValue ?? 0)) > 0 && (
+                  <Text style={styles.amtSub}>≈ {fiat(batch ? batch.totalUsd : usdValue!, fiatPrefs)}</Text>
+                )}
+              </View>
+            )}
+          </View>
+
+          {/* multiSelect: the token list sits between From and To (kept style) */}
+          {batch?.kind === 'multiSelect' && (
+            <View style={styles.tokList}>
               {batch.items.map((it, i) => (
-                <View key={i} style={styles.breakdownRow}>
-                  {batch.kind === 'split' ? (
-                    <Text style={styles.breakdownLabel} numberOfLines={1}>{it.toName || shortAddr(it.to)}</Text>
-                  ) : (
-                    <View style={styles.breakdownTokenCol}>
-                      <TokenLogo symbol={it.symbol} logoUrls={it.logoUrls} size={24} />
-                      <Text style={styles.breakdownLabel} numberOfLines={1}>{it.symbol}</Text>
-                    </View>
-                  )}
-                  <View style={styles.breakdownValueCol}>
-                    <Text style={styles.breakdownAmount}>
-                      {formatBalance(parseFloat(it.amount))}{batch.kind === 'split' ? ` ${it.symbol}` : ''}
-                    </Text>
-                    {it.usdValue != null && it.usdValue > 0 && <Text style={styles.breakdownUsd}>{fiat(it.usdValue, fiatPrefs)}</Text>}
+                <View key={i} style={styles.tokRow}>
+                  <TokenLogo symbol={it.symbol} logoUrls={it.logoUrls} chain={net} size={30} />
+                  <View style={styles.partyWho}>
+                    <Text style={styles.partyName} numberOfLines={1}>{it.symbol}</Text>
+                    <Text style={styles.addr}>{chain}</Text>
+                  </View>
+                  <View style={styles.amtCol}>
+                    <Text style={styles.tokAmt} numberOfLines={1}>{formatBalance(parseFloat(it.amount))}</Text>
+                    {it.usdValue != null && it.usdValue > 0 && <Text style={styles.amtSub}>≈ {fiat(it.usdValue, fiatPrefs)}</Text>}
                   </View>
                 </View>
               ))}
             </View>
-          </>
-        ) : (
-          <View style={styles.amountSection}>
-            <TokenLogo symbol={symbol} logoUrls={logoUrls} size={44} />
-            <Text style={styles.amountText}>{formatBalance(parseFloat(amount))} {symbol}</Text>
-            {usdValue != null && usdValue > 0 && <Text style={styles.amountUsd}>{fiat(usdValue, fiatPrefs)}</Text>}
-          </View>
-        )}
+          )}
 
-        {/* Prominent settlement stamp — success / submitting / failed at a glance */}
-        <View style={[styles.statusStamp, failed ? styles.statusStampFail : pending ? styles.statusStampPending : styles.statusStampOk]}>
-          {failed
-            ? <XCircle size={16} color={color.error.base} strokeWidth={2.4} />
-            : pending
-              ? <Clock size={16} color={color.warning.base} strokeWidth={2.4} />
-              : <CheckCircle2 size={16} color={color.success.base} strokeWidth={2.4} />}
-          <Text style={[styles.statusStampText, { color: failed ? color.error.base : pending ? color.warning.base : color.success.base }]}>
-            {failed ? t('componentsTx.receipt.statusFailed') : pending ? t('componentsTx.receipt.statusSubmitted') : t('componentsTx.receipt.statusConfirmed')}
-          </Text>
+          {/* Connector — for 1→1 and multiSelect (split uses a labelled list). */}
+          {batch?.kind !== 'split' && (
+            <View style={styles.connector}>
+              <MoveDown size={30} color={color.fg.subtle} strokeWidth={1.75} />
+            </View>
+          )}
+
+          {/* To — one recipient (1→1 / multiSelect) or a numbered scrolling list (split). */}
+          {batch?.kind === 'split' ? (
+            <>
+              <Text style={styles.listLabel}>{recipientsSummary}</Text>
+              <ScrollView style={styles.rlist} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                {batch.items.map((it, i) => (
+                  <View key={i} style={[styles.party, styles.rrow]}>
+                    <Text style={styles.idx}>{i + 1}</Text>
+                    <ContactAvatar name={it.toName ?? ''} address={it.to} size={30} />
+                    <View style={styles.partyWho}>
+                      <View style={styles.nameRow}>
+                        <RecipientTrust address={it.to} prominent nameOnly />
+                        <RecipientTypeBadge address={it.to} size={13} />
+                      </View>
+                      <Text style={styles.addr}>{shortAddr(it.to)}</Text>
+                    </View>
+                    <View style={styles.amtCol}>
+                      <Text style={styles.amtIn} numberOfLines={1}>+{formatBalance(parseFloat(it.amount))} {it.symbol}</Text>
+                      {it.usdValue != null && it.usdValue > 0 && <Text style={styles.amtSub}>≈ {fiat(it.usdValue, fiatPrefs)}</Text>}
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+            </>
+          ) : (
+            <View style={styles.party}>
+              <ContactAvatar name={displayToName ?? ''} address={to} size={38} />
+              <View style={styles.partyWho}>
+                <View style={styles.nameRow}>
+                  <RecipientTrust address={to} identity={recipientIdentity} prominent nameOnly />
+                  <RecipientTypeBadge address={to} identity={recipientIdentity} />
+                </View>
+                <Text style={styles.addr}>{shortAddr(to)}</Text>
+              </View>
+              {!batch && (
+                <View style={styles.amtCol}>
+                  <Text style={styles.amtIn} numberOfLines={1}>+{formatBalance(parseFloat(amount))} {symbol}</Text>
+                  {usdValue != null && usdValue > 0 && <Text style={styles.amtSub}>≈ {fiat(usdValue, fiatPrefs)}</Text>}
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
-        <View style={styles.separator} />
-
-        <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.from')}</Text><View style={styles.detailValueCol}>{fromName && <Text style={styles.detailName}>{fromName}</Text>}<Text style={styles.detailAddr}>{shortAddr(from)}</Text></View></View>
-        {batch?.kind === 'split' ? (
-          <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.to')}</Text><Text style={styles.detailValue}>{recipientsSummary}</Text></View>
-        ) : (
-          <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.to')}</Text><View style={styles.detailValueCol}>{displayToName && <Text style={styles.detailName}>{displayToName}</Text>}<Text style={styles.detailAddr}>{shortAddr(to)}</Text></View></View>
+        {/* ── UserOp hash — available the instant the bundler accepts the send (before the
+            on-chain hash resolves); use it to look the op up. Tap to copy. ── */}
+        {!!userOpHash && (
+          <Pressable style={styles.metaRow} onPress={() => { hapticLight(); copyOp(userOpHash); }}>
+            <Text style={styles.metaLabel}>{t('componentsTx.receipt.userOpHash')}</Text>
+            <View style={styles.metaVal}>
+              <Text style={[styles.metaMono, opCopied && styles.metaCopied]}>{shortAddr(userOpHash)}</Text>
+              {opCopied
+                ? <Check size={13} color={color.success.base} strokeWidth={2.6} />
+                : <Copy size={13} color={color.fg.subtle} strokeWidth={2} />}
+            </View>
+          </Pressable>
         )}
-        <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.network')}</Text><Text style={styles.detailValue}>{chain}</Text></View>
-        <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.time')}</Text><Text style={styles.detailValue}>{formatDateTime(timestamp)}</Text></View>
-        <View style={styles.detailRow}><Text style={styles.detailLabel}>{t('componentsTx.receipt.txHash')}</Text>{pending ? <Text style={styles.detailPending}>{t('componentsTx.receipt.confirming')}</Text> : failed ? <Text style={[styles.detailPending, { color: color.error.base }]}>{t('componentsTx.receipt.statusFailed')}</Text> : <Text style={styles.detailAddr}>{shortAddr(effTxHash)}</Text>}</View>
 
+        {/* ── Transaction hash → a tappable explorer link. Shown once the on-chain hash exists —
+            INCLUDING a failed op (included but reverted), so the user can look up why. ── */}
+        {!pending && !!effTxHash && (
+          <Pressable style={styles.metaRow} onPress={handleViewExplorer}>
+            <Text style={styles.metaLabel}>{t('componentsTx.receipt.txHash')}</Text>
+            <View style={styles.metaVal}>
+              <Text style={styles.metaMono}>{shortAddr(effTxHash)}</Text>
+              <ExternalLink size={13} color={color.accent.base} strokeWidth={2} />
+            </View>
+          </Pressable>
+        )}
+
+        {/* ── Settlement detail: QR when confirmed, an actionable hint while pending / on failure ── */}
         {failed ? (
-          <View style={styles.confirmingSection}>
-            <Text style={[styles.confirmingHint, { color: color.error.base }]}>{t('componentsTx.receipt.failedHint')}</Text>
+          <View style={styles.stateBox}>
+            <Text style={[styles.stateHint, { color: color.error.base }]}>{t('componentsTx.receipt.failedHint')}</Text>
           </View>
         ) : pending ? (
-          <View style={styles.confirmingSection}>
-            <Text style={styles.confirmingHint}>{t('componentsTx.receipt.confirmingHint')}</Text>
+          <View style={styles.stateBox}>
+            <Text style={styles.stateHint}>{t('componentsTx.receipt.confirmingHint')}</Text>
           </View>
         ) : (
           <View style={styles.qrSection}>
-            <QRCode value={explorerUrl} size={80} />
+            <QRCode value={explorerUrl} size={72} />
             <Text style={styles.qrHint}>{t('componentsTx.receipt.scanHint')}</Text>
           </View>
         )}
+
         <View style={styles.footer}>
           <Image source={LOGO_ASSET} style={styles.footerLogoImg} resizeMode="contain" />
           <Text style={styles.footerLogo}>{t('componentsTx.receipt.footerBrand')}</Text>
@@ -729,9 +828,10 @@ export function TransactionReceipt(props: Props) {
         </View>
       </View>
 
-      {/* Action buttons — explorer link appears once the on-chain hash resolves */}
+      {/* Action buttons — explorer link appears once the on-chain hash resolves (confirmed OR
+          failed → so a failed op can be inspected for its revert reason). */}
       <View style={styles.actions}>
-        {settle === 'confirmed' && (
+        {!!effTxHash && (
           <Pressable style={styles.actionBtn} onPress={handleViewExplorer}>
             <ExternalLink size={18} color={color.fg.muted} strokeWidth={2} />
             <Text style={styles.actionText}>{t('componentsTx.receipt.explorer')}</Text>
@@ -770,48 +870,58 @@ const styles = createStyles(() => ({
   receipt: {
     backgroundColor: color.bg.raised,
     borderRadius: radius.xl,
-    padding: space['2xl'],
     borderWidth: 1,
     borderColor: color.border.base,
+    overflow: 'hidden',
   },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: space.md },
-  headerTitle: { fontSize: text.sm, ...inter.bold, color: color.fg.base, textTransform: 'uppercase' as const, letterSpacing: 0.5 },
-  headerNetwork: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  headerChain: { fontSize: text.xs, ...inter.medium, color: color.fg.muted },
-  separator: { height: 1, backgroundColor: color.border.base, marginVertical: space.lg },
-  amountSection: { alignItems: 'center', gap: space.sm, paddingVertical: space.lg },
-  amountText: { fontSize: text['3xl'], ...inter.bold, fontFamily: font.display, color: color.fg.base, marginTop: space.sm },
-  amountUsd: { fontSize: text.base, ...inter.medium, color: color.fg.muted },
-  statusStamp: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: space.xs, paddingHorizontal: space.lg, paddingVertical: space.sm, borderRadius: radius.full, marginTop: space.sm },
-  statusStampOk: { backgroundColor: color.success.soft },
-  statusStampPending: { backgroundColor: color.warning.soft },
-  statusStampFail: { backgroundColor: color.error.soft },
-  statusStampText: { fontSize: text.sm, ...inter.semibold },
-  breakdown: { gap: space.xs, paddingVertical: space.xs },
-  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: space.sm, gap: space.md },
-  breakdownTokenCol: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flex: 1, minWidth: 0 },
-  breakdownLabel: { fontSize: text.sm, ...inter.medium, color: color.fg.base, flexShrink: 1 },
-  breakdownValueCol: { alignItems: 'flex-end' as const },
-  breakdownAmount: { fontSize: text.sm, ...inter.semibold, color: color.fg.base, textAlign: 'right' as const },
-  breakdownUsd: { fontSize: text.xs, ...inter.regular, color: color.fg.muted, textAlign: 'right' as const, marginTop: 2 },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: space.md },
-  detailLabel: { fontSize: text.sm, ...inter.regular, color: color.fg.muted, minWidth: 70 },
-  detailValueCol: { alignItems: 'flex-end' as const, flex: 1 },
-  detailName: { fontSize: text.sm, ...inter.semibold, color: color.fg.base, textAlign: 'right' as const },
-  detailAddr: { fontSize: text.sm, ...inter.medium, fontFamily: font.mono, color: color.fg.muted, textAlign: 'right' as const },
-  detailValue: { fontSize: text.sm, ...inter.semibold, color: color.fg.base, textAlign: 'right' as const, flex: 1 },
-  qrSection: { alignItems: 'center', marginTop: space.xl, paddingTop: space.lg, borderTopWidth: 1, borderTopColor: color.border.base, gap: space.sm },
+  // ── Top hero — asset + settlement status, tinted by state, edge-to-edge ──
+  top: { alignItems: 'center', gap: space.sm, paddingTop: space['2xl'], paddingBottom: space.xl, paddingHorizontal: space.lg },
+  heroStack: { flexDirection: 'row' },
+  heroStackOverlap: { marginLeft: -16 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.xs },
+  statusText: { fontSize: text.lg, ...inter.bold },
+  metaLine: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle },
+  // ── From → To flow (shared with the confirm screen) ──
+  flow: { paddingHorizontal: space.lg, paddingTop: space.lg, paddingBottom: space.sm },
+  party: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
+  partyWho: { flex: 1, minWidth: 0, gap: 2 },
+  partyName: { fontSize: text.base, ...inter.bold, color: color.fg.base },
+  addr: { fontSize: text.sm, ...inter.medium, fontFamily: font.mono, color: color.fg.muted },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  amtCol: { alignItems: 'flex-end' as const, gap: 1, flexShrink: 0 },
+  amtOut: { fontSize: text.base, ...inter.bold, fontFamily: font.numeric, color: color.fg.base },
+  amtIn: { fontSize: text.base, ...inter.bold, fontFamily: font.numeric, color: color.success.base },
+  amtSub: { fontSize: text.xs, ...inter.regular, fontFamily: font.numeric, color: color.fg.subtle },
+  connector: { width: 38, alignItems: 'center', paddingVertical: space.xs },
+  // split — numbered scrolling recipient list
+  listLabel: { fontSize: text.xs, ...inter.semibold, color: color.fg.subtle, textTransform: 'uppercase' as const, letterSpacing: 0.6, marginTop: space.xs, marginBottom: space.xs },
+  rlist: { maxHeight: 260 },
+  rrow: { paddingVertical: space.sm },
+  idx: { minWidth: 16, textAlign: 'center' as const, fontSize: text.xs, ...inter.semibold, fontFamily: font.numeric, color: color.fg.subtle },
+  // multi — the token list kept between From and To (open rows under a rule)
+  tokList: { borderLeftWidth: 1.5, borderLeftColor: color.border.strong, marginLeft: 6, paddingLeft: space.lg, marginVertical: space.xs },
+  tokRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
+  tokAmt: { fontSize: text.base, ...inter.bold, fontFamily: font.numeric, color: color.fg.base },
+  // meta — tx hash → explorer
+  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: space.lg, paddingVertical: space.md, borderTopWidth: 1, borderTopColor: color.border.base },
+  metaLabel: { fontSize: text.sm, ...inter.regular, color: color.fg.muted },
+  metaVal: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  metaMono: { fontSize: text.sm, ...inter.medium, fontFamily: font.mono, color: color.fg.base },
+  metaCopied: { color: color.success.base },
+  // settlement detail
+  qrSection: { alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingVertical: space.lg, borderTopWidth: 1, borderTopColor: color.border.base },
   qrHint: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle },
-  detailPending: { fontSize: text.sm, ...inter.medium, color: color.fg.subtle, textAlign: 'right' as const },
-  confirmingSection: { alignItems: 'center', marginTop: space.xl, paddingTop: space.lg, borderTopWidth: 1, borderTopColor: color.border.base },
-  confirmingHint: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, textAlign: 'center' as const },
-  footer: { alignItems: 'center', marginTop: space.xl, gap: 4 },
-  footerLogoImg: { width: 32, height: 32, borderRadius: 16, marginBottom: 4 },
-  footerLogo: { fontSize: text.sm, ...inter.bold, color: color.fg.muted, letterSpacing: 2 },
-  footerUrl: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle },
-  actions: { flexDirection: 'row', justifyContent: 'center', gap: space['5xl'], marginTop: space['2xl'] },
+  stateBox: { paddingHorizontal: space.xl, paddingVertical: space.lg, borderTopWidth: 1, borderTopColor: color.border.base },
+  stateHint: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, textAlign: 'center' as const, lineHeight: 20 },
+  // footer — a calm 3-tier signature block (logo / name / url), generous breathing room.
+  footer: { alignItems: 'center', paddingTop: space['3xl'], paddingBottom: space['2xl'], paddingHorizontal: space.lg, borderTopWidth: 1, borderTopColor: color.border.base },
+  footerLogoImg: { width: 34, height: 34, borderRadius: 17, marginBottom: space.md },
+  footerLogo: { fontSize: text.sm, ...inter.bold, color: color.fg.muted, letterSpacing: 2.5, marginBottom: space.xs },
+  footerUrl: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle, letterSpacing: 0.5 },
+  // actions
+  actions: { flexDirection: 'row', justifyContent: 'center', gap: space['3xl'], marginTop: space['2xl'] },
   actionBtn: { alignItems: 'center', gap: space.sm },
   actionText: { fontSize: text.sm, ...inter.medium, color: color.fg.muted },
-  doneBtn: { backgroundColor: color.fg.base, borderRadius: radius.xl, paddingVertical: space.xl, alignItems: 'center', marginTop: space['2xl'] },
+  doneBtn: { backgroundColor: color.fg.base, borderRadius: radius.xl, paddingVertical: space.xl, alignItems: 'center', marginTop: space.xl },
   doneBtnText: { fontSize: text.lg, ...inter.semibold, color: color.fg.inverse },
 }));

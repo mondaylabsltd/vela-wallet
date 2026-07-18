@@ -1012,4 +1012,8 @@ export async function refreshPool(chainId: number): Promise<void> {
 /** Invalidate all pools so they re-read config on next use. */
 export function invalidateAllPools(): void {
   poolInitAt.clear();
+  // Also drop cached "fastest RPC" winners. After a provider-key or service-endpoint
+  // change the old winner (handed to the bundler via X-Rpc-Url) would otherwise
+  // linger for up to an hour, so the new endpoint wouldn't fully take effect.
+  fastestRpcCache.clear();
 }

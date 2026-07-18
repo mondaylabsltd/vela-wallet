@@ -25,6 +25,8 @@ import { Divider } from '@/components/ui/DetailRow';
 import { SectionLabel } from '@/components/ui/SectionLabel';
 import { SegmentedToggle } from '@/components/ui/SegmentedToggle';
 import { VelaButton } from '@/components/ui/VelaButton';
+import { ContactAvatar } from '@/components/contacts/ContactAvatar';
+import { RecipientTypeBadge } from '@/components/contacts/RecipientTypeBadge';
 import { color, text, inter, space, radius, font, createStyles } from '@/constants/theme';
 import { type APIToken, isAddress, shortAddr } from '@/models/types';
 import { toBaseUnits, fromBaseUnits } from '@/services/eip681';
@@ -328,8 +330,14 @@ export function BatchImportSheet({ visible, onClose, token, currencyCode, curren
             <View style={styles.preview}>
               {preview.map((r, i) => (
                 <View key={`${r.address}-${i}`} style={[styles.pRow, !r.ok && styles.pRowBad]} testID={r.ok ? 'batch-row-ok' : 'batch-row-bad'}>
+                  {/* Identity card avatar — helps catch a pasted/poisoned address by sight
+                      (same avatar-per-address as Send/receipt). */}
+                  <ContactAvatar name={r.name ?? ''} address={r.address} size={32} />
                   <View style={styles.pInfo}>
-                    <Text style={styles.pName} numberOfLines={1}>{r.name || shortAddr(r.address)}</Text>
+                    <View style={styles.pNameRow}>
+                      <Text style={styles.pName} numberOfLines={1}>{r.name || shortAddr(r.address)}</Text>
+                      {r.valid ? <RecipientTypeBadge address={r.address} size={12} /> : null}
+                    </View>
                     {/* Second line only when it adds information: a status, or the
                         address under a NAME — never the address twice. */}
                     {(!r.valid || r.dup || !!r.name) && (
@@ -471,8 +479,9 @@ const styles = createStyles(() => ({
   preview: { marginTop: space.lg, gap: 2 },
   pRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, paddingHorizontal: space.sm, borderRadius: radius.md },
   pRowBad: { opacity: 0.5 },
-  pInfo: { flex: 1, gap: 1 },
-  pName: { fontSize: text.sm, ...inter.semibold, color: color.fg.base },
+  pInfo: { flex: 1, minWidth: 0, gap: 1 },
+  pNameRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1, minWidth: 0 },
+  pName: { fontSize: text.sm, ...inter.semibold, color: color.fg.base, flexShrink: 1 },
   pAddr: { fontSize: text.xs, fontFamily: font.mono, color: color.fg.muted },
   pAmt: { alignItems: 'flex-end', gap: 1 },
   pFiat: { fontSize: text.xs, ...inter.regular, color: color.fg.muted },

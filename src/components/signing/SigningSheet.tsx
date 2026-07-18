@@ -124,6 +124,10 @@ export function SigningSheet({
   // Explicit flag (vs inferring from null feeEstimate) so the confirm guard doesn't
   // flicker in the frame before estimation starts.
   const [gasEstimateFailed, setGasEstimateFailed] = useState(false);
+  // GasFeeCard fires this while it re-quotes internally (fee-asset switch / refresh),
+  // so confirm stays disabled until the displayed quote settles (the internal re-quote
+  // doesn't touch estimatingGas).
+  const [feeBusy, setFeeBusy] = useState(false);
 
   // Native-token USD price (Chainlink, cached 3min) → fiat line on the gas card.
   const [nativeUsdPrice, setNativeUsdPrice] = useState(0);
@@ -525,6 +529,7 @@ export function SigningSheet({
   const confirmDisabled =
     resolving
     || (isTx && (estimatingGas || gasEstimateFailed))
+    || ((isTx || isBatch) && feeBusy)
     || (!!approval?.editable && !approveChoice)
     // Every granting batch leg must be capped/revoked (or its grant deliberately
     // chosen) before the bundle can be confirmed — mirrors the single-tx rule.
@@ -607,6 +612,7 @@ export function SigningSheet({
               gasFeeToken={gasFeeToken}
               onFeeTokenChange={setGasFeeToken}
               onFeeUpdate={(f) => { setFeeEstimate(f); setGasEstimateFailed(false); }}
+              onBusyChange={setFeeBusy}
             />
           )}
 
