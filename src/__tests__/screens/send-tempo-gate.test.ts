@@ -9,7 +9,9 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
-const src = readFileSync(resolve(__dirname, '../../..', 'src/screens/wallet/SendScreen.tsx'), 'utf8');
+// The funding-gate pre-check moved from SendScreen.tsx into the extracted controller
+// (refactor: split SendScreen into controller + view). The guard now lives here.
+const src = readFileSync(resolve(__dirname, '../../..', 'src/screens/wallet/useSendController.ts'), 'utf8');
 
 describe('SendScreen skips the bundler funding gate on Tempo (issue #91)', () => {
   it('the pre-check short-circuits to null for Tempo before checkBundlerFunding', () => {
