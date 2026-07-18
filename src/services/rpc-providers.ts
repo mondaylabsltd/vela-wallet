@@ -76,6 +76,7 @@ const PROVIDER_CHAIN_SLUGS: Record<ProviderId, Record<number, string>> = {
   alchemy: {
     1: 'eth-mainnet',
     56: 'bnb-mainnet',
+    196: 'xlayer-mainnet', // X Layer (OKB gas) — Alchemy DOES cover it; gives a managed getCode/nonce read (parity with BNB), public RPCs stay as fallback
     137: 'polygon-mainnet',
     42161: 'arb-mainnet',
     10: 'opt-mainnet',
