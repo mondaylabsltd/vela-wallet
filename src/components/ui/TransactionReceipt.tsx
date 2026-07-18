@@ -10,6 +10,7 @@ import { WalletAvatar } from '@/components/ui/WalletAvatar';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import { RecipientTrust } from '@/components/contacts/RecipientTrust';
 import { RecipientTypeBadge } from '@/components/contacts/RecipientTypeBadge';
+import { FlowArrow } from '@/components/send/FlowArrow';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 import { chainName, getAllNetworksSync, explorerTxURL } from '@/models/network';
 import { formatBalance, shortAddr } from '@/models/types';
@@ -20,7 +21,7 @@ import { formatDateTime, useLocalePrefs } from '@/services/locale-format';
 import { copyToClipboard, hapticLight, hapticSuccess, openBrowser, showAlert } from '@/services/platform';
 import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import type { RecipientIdentity } from '@/services/recipient-identity';
-import { ExternalLink, Share2, BookmarkPlus, Check, CheckCircle2, Clock, XCircle, MoveDown, Copy } from 'lucide-react-native';
+import { ExternalLink, Share2, BookmarkPlus, Check, CheckCircle2, Clock, XCircle, Copy } from 'lucide-react-native';
 import QRCodeLib from 'qrcode';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -728,12 +729,9 @@ export function TransactionReceipt(props: Props) {
             </View>
           )}
 
-          {/* Connector — for 1→1 and multiSelect (split uses a labelled list). */}
-          {batch?.kind !== 'split' && (
-            <View style={styles.connector}>
-              <MoveDown size={30} color={color.fg.subtle} strokeWidth={1.75} />
-            </View>
-          )}
+          {/* Connector — sender → recipient(s): the same thin flow arrow as the
+              confirm page, now for split too (was omitted). */}
+          <FlowArrow />
 
           {/* To — one recipient (1→1 / multiSelect) or a numbered scrolling list (split). */}
           {batch?.kind === 'split' ? (
@@ -743,7 +741,7 @@ export function TransactionReceipt(props: Props) {
                 {batch.items.map((it, i) => (
                   <View key={i} style={[styles.party, styles.rrow]}>
                     <Text style={styles.idx}>{i + 1}</Text>
-                    <ContactAvatar name={it.toName ?? ''} address={it.to} size={30} />
+                    <ContactAvatar name={it.toName ?? ''} address={it.to} size={32} />
                     <View style={styles.partyWho}>
                       <View style={styles.nameRow}>
                         <RecipientTrust address={it.to} prominent nameOnly />
@@ -892,7 +890,6 @@ const styles = createStyles(() => ({
   amtOut: { fontSize: text.base, ...inter.bold, fontFamily: font.numeric, color: color.fg.base },
   amtIn: { fontSize: text.base, ...inter.bold, fontFamily: font.numeric, color: color.success.base },
   amtSub: { fontSize: text.xs, ...inter.regular, fontFamily: font.numeric, color: color.fg.subtle },
-  connector: { width: 38, alignItems: 'center', paddingVertical: space.xs },
   // split — numbered scrolling recipient list
   listLabel: { fontSize: text.xs, ...inter.semibold, color: color.fg.subtle, textTransform: 'uppercase' as const, letterSpacing: 0.6, marginTop: space.xs, marginBottom: space.xs },
   rlist: { maxHeight: 260 },
