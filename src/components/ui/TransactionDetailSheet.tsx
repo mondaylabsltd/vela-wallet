@@ -22,6 +22,7 @@ import { chainName, getAllNetworksSync, explorerTxURL, explorerAddressURL } from
 import { updateTransaction, type LocalTransaction } from '@/services/storage';
 import { ContactAvatar } from '@/components/contacts/ContactAvatar';
 import { RecipientTypeBadge } from '@/components/contacts/RecipientTypeBadge';
+import { RecipientName } from '@/components/contacts/RecipientName';
 import { shortAddress } from '@/models/wallet-state';
 import { copyToClipboard, openBrowser } from '@/services/platform';
 import { formatFiat, type Currency } from '@/services/currency';
@@ -182,7 +183,7 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
                   <ContactAvatar name={batch.toName ?? ''} address={batch.to} size={40} />
                   <View style={styles.cpWho}>
                     <View style={styles.cpNameRow}>
-                      <Text style={styles.cpName} numberOfLines={1}>{batch.toName || shortAddress(batch.to)}</Text>
+                      <RecipientName address={batch.to} storedName={batch.toName} style={styles.cpName} />
                       <RecipientTypeBadge address={batch.to} size={14} />
                     </View>
                     <Text style={styles.cpAddr} numberOfLines={1}>{shortAddress(batch.to)}</Text>
@@ -206,7 +207,7 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
                             <ContactAvatar name={it.toName ?? ''} address={it.to} size={32} />
                             <View style={styles.brWho}>
                               <View style={styles.cpNameRow}>
-                                <Text style={styles.brPrimary} numberOfLines={1}>{it.toName || shortAddress(it.to)}</Text>
+                                <RecipientName address={it.to} storedName={it.toName} style={styles.brPrimary} />
                                 <RecipientTypeBadge address={it.to} size={12} />
                               </View>
                               <Text style={styles.brSub} numberOfLines={1}>{shortAddress(it.to)}</Text>
@@ -298,7 +299,7 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
                   <ContactAvatar name={alias ?? ''} address={counterparty} size={40} />
                   <View style={styles.cpWho}>
                     <View style={styles.cpNameRow}>
-                      <Text style={styles.cpName} numberOfLines={1}>{alias || shortAddress(counterparty)}</Text>
+                      <RecipientName address={counterparty} storedName={alias} style={styles.cpName} />
                       <RecipientTypeBadge address={counterparty} size={14} />
                     </View>
                     <Text style={styles.cpAddr} numberOfLines={1}>{shortAddress(counterparty)}</Text>

@@ -695,7 +695,7 @@ export function TransactionReceipt(props: Props) {
             <WalletAvatar name={fromName ?? ''} address={from} size={38} />
             <View style={styles.partyWho}>
               {fromName ? <Text style={styles.partyName} numberOfLines={1}>{fromName}</Text> : null}
-              <Text style={styles.addr}>{shortAddr(from)}</Text>
+              <Text style={styles.addr} numberOfLines={1}>{shortAddr(from)}</Text>
             </View>
             {batch?.kind !== 'multiSelect' && (
               <View style={styles.amtCol}>
@@ -749,7 +749,7 @@ export function TransactionReceipt(props: Props) {
                         <RecipientTrust address={it.to} prominent nameOnly />
                         <RecipientTypeBadge address={it.to} size={13} />
                       </View>
-                      <Text style={styles.addr}>{shortAddr(it.to)}</Text>
+                      <Text style={styles.addr} numberOfLines={1}>{shortAddr(it.to)}</Text>
                     </View>
                     <View style={styles.amtCol}>
                       <Text style={styles.amtIn} numberOfLines={1}>+{formatBalance(parseFloat(it.amount))} {it.symbol}</Text>
@@ -767,7 +767,7 @@ export function TransactionReceipt(props: Props) {
                   <RecipientTrust address={to} identity={recipientIdentity} prominent nameOnly />
                   <RecipientTypeBadge address={to} identity={recipientIdentity} />
                 </View>
-                <Text style={styles.addr}>{shortAddr(to)}</Text>
+                <Text style={styles.addr} numberOfLines={1}>{shortAddr(to)}</Text>
               </View>
               {!batch && (
                 <View style={styles.amtCol}>

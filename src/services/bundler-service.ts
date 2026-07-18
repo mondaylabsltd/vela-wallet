@@ -608,8 +608,9 @@ export function underfundedRequiredWei(underfunded: BundlerUnderfunded): bigint 
 
 /** A sizing quote from `vela_getInBandGasQuote`: transfer exactly `requiredAmount`
  *  of the chosen asset to `recipient` inside the UserOp batch. The bundler
- *  re-verifies at submit; the amount already includes its 3× markup and, for
- *  stablecoins, the $0.01-equivalent floor. */
+ *  re-verifies at submit; the amount already includes its 3× markup and the
+ *  per-asset minimum charge — 1e-5 of a native coin for native, or the
+ *  $0.01-equivalent floor for a stablecoin. */
 export interface InBandGasQuote {
   recipient: string;
   asset: 'native' | 'erc20';

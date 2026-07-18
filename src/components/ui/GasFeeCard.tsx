@@ -123,7 +123,9 @@ export function GasFeeCard({
   // Drive the collapsed display from the SELECTION (gasFeeToken), not the quote's own asset —
   // so switching coins updates INSTANTLY instead of waiting on the bundler re-quote (which still
   // runs in the background to set the exact signed amount). The USD cost is ~coin-invariant
-  // (uniform bundler markup), converted to the chosen coin; stables carry the $0.01 floor.
+  // (uniform bundler markup), converted to the chosen coin. The bundler floors the charge per
+  // asset (1e-5 of a native coin, or $0.01 for a stable); the selected native amount already
+  // reflects it via the floored quote, so only the stable floor is applied here.
   const selNative = (gasFeeToken ?? null) === null;
   const selSym = selNative
     ? sym

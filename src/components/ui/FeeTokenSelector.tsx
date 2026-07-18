@@ -11,8 +11,10 @@
  *
  * Per-coin cost is derived CLIENT-SIDE from the current quote's USD value (`feeUsd`): the bundler
  * markup is a uniform 3× across coins, so one quote prices them all — no per-coin bundler RPC.
- * Stables carry the bundler's $0.01 minimum. The exact charge for the SELECTED coin is still the
- * bundler's authoritative quote (signed at submit); the other rows are honest ~estimates.
+ * The bundler applies a per-asset minimum charge (1e-5 of a native coin, or $0.01 for a stable);
+ * only the stable floor surfaces here, since 1e-5 of a coin is below this row's 0.0001 display
+ * precision. The exact charge for the SELECTED coin is still the bundler's authoritative (floored)
+ * quote (signed at submit); the other rows are honest ~estimates.
  *
  * Design: de-boxed (open rows under a hairline, no card), real token logos, and a selected accent
  * check only (the app's picker convention, e.g. CurrencySheet) — no filled tint.
@@ -72,7 +74,8 @@ export function FeeTokenSelector({ options, selected, onSelect, nativeUsdPrice, 
         const k = keyOf(opt.contract);
         const active = k === selectedKey;
         const holdings = Number(opt.balance) / 10 ** opt.decimals;
-        // Cost in this coin: native = feeUSD ÷ native price; stable = feeUSD (1:1) with the $0.01 floor.
+        // Cost in this coin: native = feeUSD ÷ native price (its 1e-5-coin floor is sub-display
+        // precision here); stable = feeUSD (1:1) with the $0.01 floor.
         const costUnits = opt.contract === null
           ? (nativeUsdPrice > 0 ? feeUsd / nativeUsdPrice : null)
           : Math.max(feeUsd, STABLE_MIN_USD);
