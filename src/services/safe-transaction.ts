@@ -384,7 +384,10 @@ async function estimateTempoFee(
   tx?: { to: string; value?: string; data?: string },
 ): Promise<TransactionFeeEstimate> {
   const [deployed, { gasPrice }] = await Promise.all([
-    isDeployed(from, chainId),
+    // Estimation is non-binding: a transient RPC blip must NOT kill the fee preview. Fall back
+    // to UNDEPLOYED (conservative — includes deploy gas; too-high beats too-low). The real send
+    // re-checks and fails fast if still indeterminate.
+    isDeployed(from, chainId).catch(() => false),
     getGasPrices(chainId),
   ]);
 
@@ -476,7 +479,9 @@ export async function estimateTransactionFee(
   // throws GasQuoteTooHighError (propagated here = refuse) if the quote is abusive,
   // and returns null only when the bundler can't quote (then we fall back locally).
   const [deployed, { gasPrice }, quote] = await Promise.all([
-    isDeployed(from, chainId),
+    // Estimation is non-binding: a transient RPC blip must NOT kill the fee preview. Fall back
+    // to UNDEPLOYED (conservative — carries deploy gas). The real send re-checks and fails fast.
+    isDeployed(from, chainId).catch(() => false),
     getGasPrices(chainId),
     getBundlerGasQuote(chainId, tier),
   ]);
@@ -901,12 +906,16 @@ async function sendUserOpTempo(
   _gasPriceCache.delete(chainId);
   const [deployed, nonceResult, gasPrices] = await Promise.all([
     isDeployed(safeAddress, chainId),
-    getNonce(safeAddress, chainId).catch(() => '0x0'),
+    getNonce(safeAddress, chainId).catch(() => null),
     getGasPrices(chainId),
   ]);
 
+  // A deployed wallet MUST sign its real nonce — a 0x0 fallback is rejected as AA25. Fail fast.
+  if (deployed && nonceResult === null) {
+    throw new Error('Could not fetch the account nonce — the network may be unstable. Please try again.');
+  }
   const initCode: Uint8Array = deployed ? new Uint8Array(0) : buildInitCode(publicKeyHex);
-  const nonce: string = deployed ? nonceResult : '0x0';
+  const nonce: string = deployed ? (nonceResult as string) : '0x0';
 
   // Static realistic-gas model — a floor/fallback for PRICING the reimbursement. Includes the
   // reimbursement transfer(s): one to the EOA, plus one to the treasury when splitting. This is
@@ -1122,12 +1131,17 @@ async function sendUserOpInBand(
   _gasPriceCache.delete(chainId);
   const [deployed, nonceResult, gasPrices] = await Promise.all([
     isDeployed(safeAddress, chainId),
-    getNonce(safeAddress, chainId).catch(() => '0x0'),
+    getNonce(safeAddress, chainId).catch(() => null),
     getGasPrices(chainId),
   ]);
 
+  // A deployed wallet MUST sign its real nonce — falling back to 0x0 burns a passkey prompt on
+  // an op the bundler rejects (AA25). Fail fast instead. Undeployed → nonce IS 0x0.
+  if (deployed && nonceResult === null) {
+    throw new Error('Could not fetch the account nonce — the network may be unstable. Please try again.');
+  }
   const initCode: Uint8Array = deployed ? new Uint8Array(0) : buildInitCode(publicKeyHex);
-  const nonce: string = deployed ? nonceResult : '0x0';
+  const nonce: string = deployed ? (nonceResult as string) : '0x0';
 
   // The batch: the user's calls + ONE fee leg (native value or stablecoin transfer).
   // No splitter deploy prepend — that belongs to the legacy prefunded route only.
@@ -1744,21 +1758,34 @@ async function isDeployed(
   const key = `${chainId}:${address.toLowerCase()}`;
   if (_deployedCache.has(key)) return true;
 
+  // Deployment status is CORRECTNESS-CRITICAL: it decides whether the UserOp carries
+  // initCode. Guessing "deployed" on a transient RPC failure ships an op with EMPTY
+  // initCode for a fresh account → bundler rejects with "AA20 account not deployed"
+  // (every new user's first send fails). Guessing "undeployed" for an already-deployed
+  // account attaches initCode → "AA10 sender already constructed". Neither guess is safe,
+  // so on any INDETERMINATE result we fail fast with a retryable error and let the caller
+  // retry — same philosophy as the deployed-nonce guard in sendUserOp. Only a DEFINITIVE
+  // answer ('0x' = not deployed, or real code = deployed) is trusted.
+  let response;
   try {
-    const response = await rpcCall('eth_getCode', [address, 'latest'], chainId);
-    if (response.error) {
-      console.error('[UserOp] eth_getCode RPC error:', JSON.stringify(response.error));
-      return true;
-    }
-    const result = response.result as string | undefined;
-    const deployed = !!result && result !== '0x' && result.length > 2;
-    console.log('[UserOp] isDeployed:', deployed, 'code length:', result?.length ?? 0);
-    if (deployed) _deployedCache.set(key, true);
-    return deployed;
+    response = await rpcCall('eth_getCode', [address, 'latest'], chainId);
   } catch (err) {
     console.error('[UserOp] eth_getCode failed:', err instanceof Error ? err.message : String(err));
-    return true;
+    throw new Error('Could not verify the account deployment status — the network may be unstable. Please try again.');
   }
+  if (response.error) {
+    console.error('[UserOp] eth_getCode RPC error:', JSON.stringify(response.error));
+    throw new Error('Could not verify the account deployment status — the network may be unstable. Please try again.');
+  }
+  const result = response.result as string | undefined;
+  if (typeof result !== 'string') {
+    console.error('[UserOp] eth_getCode returned no result:', JSON.stringify(response));
+    throw new Error('Could not verify the account deployment status — the network may be unstable. Please try again.');
+  }
+  const deployed = result !== '0x' && result.length > 2;
+  console.log('[UserOp] isDeployed:', deployed, 'code length:', result.length);
+  if (deployed) _deployedCache.set(key, true);
+  return deployed;
 }
 
 // Cache: nonce is valid briefly (invalidated after each tx)
@@ -1784,8 +1811,16 @@ async function getNonce(
     chainId,
   );
 
-  const result = response.result as string | undefined;
-  const nonce = result ?? '0x0';
+  // Same fail-open trap as isDeployed: coercing a missing/errored result to '0x0' makes a
+  // DEPLOYED wallet sign nonce 0 → bundler "AA25 invalid account nonce". A real "no nonce yet"
+  // account returns a valid 0x00..00 result, NOT an error, so throwing here only fires on a
+  // genuine RPC failure. Send paths guard `deployed && nonce===null`; undeployed callers still
+  // safely fall back to 0x0 via their own .catch (an undeployed account's nonce IS 0).
+  if (response.error || typeof response.result !== 'string') {
+    console.error('[UserOp] getNonce RPC error:', JSON.stringify(response.error ?? response));
+    throw new Error('Could not fetch the account nonce — the network may be unstable. Please try again.');
+  }
+  const nonce = response.result as string;
   _nonceCache.set(key, { nonce, at: Date.now() });
   return nonce;
 }
@@ -2132,9 +2167,11 @@ async function submitUserOp(
   extra?: Record<string, string>,
 ): Promise<string> {
   const dict = userOpToDict(userOp, extra);
+  const initCodePresent = userOp.initCode.length >= 20;
   console.log('[UserOp] Submitting:', JSON.stringify({
     sender: dict.sender,
     nonce: dict.nonce,
+    initCodePresent,                        // ← HOP 1 evidence: did the wallet attach the deploy?
     factory: dict.factory ?? '(none)',
     factoryDataLen: dict.factoryData?.length ?? 0,
     callDataLen: dict.callData?.length ?? 0,
@@ -2143,6 +2180,21 @@ async function submitUserOp(
     callGasLimit: dict.callGasLimit,
     maxFeePerGas: dict.maxFeePerGas,
   }));
+
+  // Structural AA20 guard. An undeployed sender + empty initCode is a GUARANTEED
+  // "AA20 account not deployed" on-chain — and worse, it strands funds silently. Rather
+  // than submit a doomed op, verify against the chain and refuse with a clear, retryable
+  // error. This catches a wrong "deployed" read from ANY cause (RPC hiccup, a
+  // mis-configured custom-network RPC pointing at the wrong chain, a stale cache) — the
+  // last line of defence behind isDeployed's fail-fast. On a truly deployed account the
+  // read is cache-hot (the send path already resolved it), so this adds no latency there.
+  if (!initCodePresent) {
+    const deployed = await isDeployed(userOp.sender, chainId); // throws (retryable) if indeterminate
+    if (!deployed) {
+      console.error(`[UserOp] ABORT pre-submit: sender ${userOp.sender} has NO on-chain code but the op carries NO initCode → would revert AA20. Refusing to submit.`);
+      throw new Error('This account is not deployed on this network yet and the transaction is missing its deployment step. Please try again.');
+    }
+  }
 
   // Retry on transient bundler errors (e.g. EOA busy processing another bundle).
   const MAX_RETRIES = 3;
