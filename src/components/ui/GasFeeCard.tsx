@@ -14,7 +14,7 @@
  * On Tempo no selector renders — the fee is always pathUSD there.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native';
@@ -168,6 +168,35 @@ export function GasFeeCard({
     }
     setBusy(false);
   }, [safeAddress, chainId, tx, batchCalls, gasFeeToken, feeEstimate, onFeeTokenChange, onFeeUpdate, setBusy]);
+
+  // Auto-default the fee asset to one the user can actually pay with. The selection starts at
+  // native (gasFeeToken=null), but if the native coin can't cover the fee — notably a 0-balance
+  // account (which is common now that gas is paid in a held stablecoin) — that row is
+  // non-selectable, so leaving it selected is a dead-end. Pre-select the first AFFORDABLE option
+  // instead. Runs at most once per (chain, account); a user's later manual pick is never overridden.
+  const didAutoDefaultRef = useRef(false);
+  useEffect(() => { didAutoDefaultRef.current = false; }, [chainId, safeAddress]);
+  useEffect(() => {
+    if (didAutoDefaultRef.current) return;
+    if (!feeTokenOptions || feeTokenOptions.length === 0) return;
+    const affordable = (o: { contract: string | null; balance: bigint; decimals: number }): boolean => {
+      const holdings = Number(o.balance) / 10 ** o.decimals;
+      if (holdings <= 0) return false;           // 0 balance → never (the native-coin case here)
+      if (feeUsd <= 0) return true;              // cost not known yet — don't switch away prematurely
+      const cost = o.contract === null
+        ? (nativeUsdPrice > 0 ? feeUsd / nativeUsdPrice : Infinity)
+        : Math.max(feeUsd, 0.01);
+      return holdings >= cost;
+    };
+    const selKey = gasFeeToken?.toLowerCase() ?? null;
+    const current = feeTokenOptions.find((o) => (o.contract?.toLowerCase() ?? null) === selKey);
+    if (current && affordable(current)) { didAutoDefaultRef.current = true; return; } // current is fine
+    const pick = feeTokenOptions.find(affordable);
+    if (pick) {
+      didAutoDefaultRef.current = true;
+      handleFeeTokenSelect(pick.contract);
+    }
+  }, [feeTokenOptions, feeUsd, nativeUsdPrice, gasFeeToken, handleFeeTokenSelect]);
 
   const { t } = useTranslation();
 
