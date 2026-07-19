@@ -2,7 +2,6 @@ import { ContactPicker } from '@/components/contacts/ContactPicker';
 import { QRScanner } from '@/components/QRScanner';
 import { BatchImportSheet } from '@/components/send/BatchImportSheet';
 import { makeRecipientId } from '@/components/send/MultiRecipientEditor';
-import { BundlerFundingModal } from '@/components/ui/BundlerFundingModal';
 import { ScreenContainer } from '@/components/ui/ScreenContainer';
 import { TokenSelector } from '@/components/ui/TokenSelector';
 import { TransactionReceipt } from '@/components/ui/TransactionReceipt';
@@ -50,9 +49,6 @@ export default function SendScreen() {
     multiSelect,
     showScanner,
     setShowScanner,
-    fundingNeeded,
-    setFundingNeeded,
-    fundingRetryCount,
     txStatus,
     txHash,
     userOpHash,
@@ -73,7 +69,6 @@ export default function SendScreen() {
     seedSplitRecipients,
     applyPickedAddress,
     handleSelectToken,
-    handleFundingComplete,
     handleBack,
     tokenMultiSelect,
   } = c;
@@ -207,15 +202,6 @@ export default function SendScreen() {
         onClose={() => setShowScanner(false)}
       />
 
-      {fundingNeeded && (
-        <BundlerFundingModal
-          visible={!!fundingNeeded}
-          funding={fundingNeeded}
-          onFunded={handleFundingComplete}
-          onCancel={() => { setFundingNeeded(null); fundingRetryCount.current = 0; }}
-        />
-      )}
-
       {/* Relayer float depleted on this network — community bootstrap ask
           (non-refundable treasury contribution), shown instead of the generic
           error / personal top-up surfaces. */}
@@ -223,7 +209,17 @@ export default function SendScreen() {
         visible={!!treasuryBootstrap}
         status={treasuryBootstrap}
         onClose={() => setTreasuryBootstrap(null)}
-        onRetry={() => { setTreasuryBootstrap(null); handleConfirm(); }}
+        onRetry={() => {
+          setTreasuryBootstrap(null);
+          // This sheet can now open from the amount screen. After funding the
+          // relayer, return through the normal pre-confirm flow rather than
+          // submitting directly from enter-details.
+          if (step === 'enter-details') {
+            void c.handleContinue();
+          } else {
+            void handleConfirm();
+          }
+        }}
       />
 
       <ContactPicker

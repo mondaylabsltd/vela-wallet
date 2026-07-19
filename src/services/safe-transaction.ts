@@ -20,24 +20,26 @@ import {
   SAFE_4337_MODULE,
   SAFE_PROXY_FACTORY,
   SAFE_SINGLETON,
-  VELA_SPLITTER_FACTORY,
   WEBAUTHN_SIGNER,
   calculateSaltNonce,
-  computeSplitterAddress,
   encodeMultiSendTx,
   encodeSetupData,
-  encodeSplitterDeployCall,
   parsePublicKey
 } from './safe-address';
 
 import { derSignatureToRaw } from './attestation-parser';
 import { rpcCall } from './rpc-adapter';
 import { gasQuoteShouldZero } from './dev/fault-injection';
-import { fetchBundlerAccountInfo, fetchSplitterInfo, fetchInBandGasQuote, isInBandChain } from './bundler-service';
+import {
+  fetchBundlerAccountInfo,
+  fetchInBandGasQuotes,
+  findInBandGasQuote,
+  isInBandChain,
+  type InBandGasQuote,
+} from './bundler-service';
 import {
   isTempoChain,
   tempoReimbursement,
-  tempoSettlementSplit,
   tempoCallGasLimit,
   tempoExpectedGas,
   TEMPO_DEFAULT_FEE_TOKEN,
@@ -128,7 +130,7 @@ export async function sendNative(
     // In-band settlement: gas is repaid by a batched transfer, not a prefunded gas account.
     return sendUserOpInBand(from, [{ to, value: valueWei, data: new Uint8Array(0) }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
   }
-  const callData = await buildNativeCallData([{ to, value: valueWei, data: new Uint8Array(0) }], chainId, false);
+  const callData = buildNativeCallData([{ to, value: valueWei, data: new Uint8Array(0) }], false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -166,7 +168,7 @@ export async function sendERC20(
     return sendUserOpInBand(from, [{ to: tokenAddress, value: '0', data: transferData }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
   }
 
-  const callData = await buildNativeCallData([{ to: tokenAddress, value: '0', data: transferData }], chainId, false);
+  const callData = buildNativeCallData([{ to: tokenAddress, value: '0', data: transferData }], false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -192,7 +194,7 @@ export async function sendContractCall(
   if (await isInBandChain(chainId, from)) {
     return sendUserOpInBand(from, [{ to, value: valueWei, data }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
   }
-  const callData = await buildNativeCallData([{ to, value: valueWei, data }], chainId, false);
+  const callData = buildNativeCallData([{ to, value: valueWei, data }], false);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -229,7 +231,7 @@ export async function sendBatchCalls(
     return sendUserOpInBand(from, byteCalls, gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
   }
 
-  const callData = await buildNativeCallData(byteCalls, chainId, true);
+  const callData = buildNativeCallData(byteCalls, true);
   return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
 }
 
@@ -310,9 +312,6 @@ export interface TransactionFeeEstimate {
   /** In-band: the quote's transfer recipient. The submit path signs THIS quote
    *  (amount + recipient) verbatim — what the confirm slide shows is what executes. */
   feeRecipient?: string;
-  /** In-band: the native cost basis the quote was priced from — lets a fee-asset
-   *  switch re-quote with a single RPC (same gas, different asset). */
-  nativeCostWei?: bigint;
 }
 
 /** In-band quoted fee as displayed by the confirm UI — the submit path signs exactly
@@ -323,28 +322,83 @@ export interface QuotedInBandFee {
   recipient: string;
 }
 
-/** Re-quote an existing in-band estimate for a different fee asset with ONE RPC —
- *  the gas basis (nativeCostWei) is already known, so only the bundler quote runs.
- *  Returns null when the fast path can't apply (caller falls back to the full
- *  estimateTransactionFee pipeline). */
+const INBAND_MARKUP = 3n;
+const USD_PRICE_DECIMALS = 8;
+const USD_PRICE_SCALE = 10n ** BigInt(USD_PRICE_DECIMALS);
+const STABLE_MIN_USD_SCALED = USD_PRICE_SCALE / 100n; // $0.01
+
+function ceilDiv(numerator: bigint, denominator: bigint): bigint {
+  return (numerator + denominator - 1n) / denominator;
+}
+
+/** Convert the decimal strings returned by the bundler to a fixed USD scale.
+ * Rounding native up and the fee token down ensures conversion never undercharges. */
+function usdPriceScaled(value: string, roundUp: boolean): bigint | null {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim());
+  if (!match) return null;
+  const integer = BigInt(match[1]);
+  const fraction = match[2] ?? '';
+  const kept = (fraction.slice(0, USD_PRICE_DECIMALS)).padEnd(USD_PRICE_DECIMALS, '0');
+  let scaled = integer * USD_PRICE_SCALE + BigInt(kept);
+  if (roundUp && /[1-9]/.test(fraction.slice(USD_PRICE_DECIMALS))) scaled += 1n;
+  return scaled;
+}
+
+/** Calculate the exact in-band reimbursement from the transaction's gas basis.
+ * `requiredAmount` from the RPC is intentionally not used: it is only the
+ * bundler's minimum threshold and will be removed from that endpoint. */
+export function calculateInBandFeeAmount(
+  totalGas: bigint,
+  gasPrice: bigint,
+  feeAsset: Pick<InBandGasQuote, 'asset' | 'decimals' | 'usdPrice'>,
+  nativeAsset: Pick<InBandGasQuote, 'asset' | 'decimals' | 'usdPrice'>,
+): bigint | null {
+  if (totalGas < 0n || gasPrice < 0n || nativeAsset.asset !== 'native') return null;
+  const nativeUnit = 10n ** BigInt(nativeAsset.decimals);
+  // Minimum is 0.00001 native coin. For an unusual native precision below 5,
+  // one base unit is the smallest representable safe floor.
+  const nativeMinimum = nativeAsset.decimals >= 5
+    ? 10n ** BigInt(nativeAsset.decimals - 5)
+    : 1n;
+  const nativeAmount = bigintMax(totalGas * gasPrice * INBAND_MARKUP, nativeMinimum);
+  if (feeAsset.asset === 'native') return nativeAmount;
+
+  const nativeUsdPrice = usdPriceScaled(nativeAsset.usdPrice, true);
+  const feeTokenUsdPrice = usdPriceScaled(feeAsset.usdPrice, false);
+  if (!nativeUsdPrice || !feeTokenUsdPrice) return null;
+  const feeTokenUnit = 10n ** BigInt(feeAsset.decimals);
+  const convertedAmount = ceilDiv(
+    nativeAmount * nativeUsdPrice * feeTokenUnit,
+    nativeUnit * feeTokenUsdPrice,
+  );
+  const stableMinimum = ceilDiv(STABLE_MIN_USD_SCALED * feeTokenUnit, feeTokenUsdPrice);
+  return bigintMax(convertedAmount, stableMinimum);
+}
+
+/** Re-quote an existing in-band estimate for a different fee asset. The bundler
+ * returns all assets in one address-only response; its short-lived shared cache
+ * normally makes a chip switch a local lookup. */
 export async function requoteInBandFee(
   prev: TransactionFeeEstimate,
   chainId: number,
   safeAddress: string,
   gasFeeToken: string | null,
 ): Promise<TransactionFeeEstimate | null> {
-  if (!prev.inBand || prev.nativeCostWei === undefined) return null;
-  const q = await fetchInBandGasQuote(chainId, safeAddress, prev.nativeCostWei, gasFeeToken);
-  if (!q) return null;
-  const want = gasFeeToken?.toLowerCase() ?? null;
-  if (want ? (q.asset !== 'erc20' || q.feeToken?.toLowerCase() !== want) : q.asset !== 'native') return null;
+  if (!prev.inBand) return null;
+  const quotes = await fetchInBandGasQuotes(chainId, safeAddress);
+  if (!quotes) return null;
+  const q = findInBandGasQuote(quotes, gasFeeToken);
+  const nativeQuote = findInBandGasQuote(quotes);
+  if (!q || !nativeQuote) return null;
+  const amount = calculateInBandFeeAmount(prev.totalGas, prev.networkFeePerGas, q, nativeQuote);
+  if (amount === null) return null;
   return {
     ...prev,
-    totalWei: q.asset === 'native' ? q.requiredAmount : 0n,
+    totalWei: q.asset === 'native' ? amount : 0n,
     maxFeePerGas: 0n,
     feeRecipient: q.recipient,
     feeAsset: q.asset === 'erc20'
-      ? { kind: 'erc20', token: q.feeToken!, decimals: q.decimals ?? 6, amount: q.requiredAmount }
+      ? { kind: 'erc20', token: q.feeToken!, decimals: q.decimals, amount }
       : { kind: 'native' },
   };
 }
@@ -384,10 +438,7 @@ async function estimateTempoFee(
   tx?: { to: string; value?: string; data?: string },
 ): Promise<TransactionFeeEstimate> {
   const [deployed, { gasPrice }] = await Promise.all([
-    // Estimation is non-binding: a transient RPC blip must NOT kill the fee preview. Fall back
-    // to UNDEPLOYED (conservative — includes deploy gas; too-high beats too-low). The real send
-    // re-checks and fails fast if still indeterminate.
-    isDeployed(from, chainId).catch(() => false),
+    isDeployed(from, chainId),
     getGasPrices(chainId),
   ]);
 
@@ -402,6 +453,9 @@ async function estimateTempoFee(
   // of showing a transfer-sized fee. Undeployed → the deploy cost dominates; keep the static model.
   if (hasCall && deployed) {
     try {
+      // This field is part of the final UserOp. Never replace a failed read
+      // with nonce 0 in a simulation.
+      const nonce = await getNonce(from, chainId);
       const innerCall: MultiSendCall = {
         to: tx!.to,
         value: stripHexPrefix(tx!.value ?? '0') || '0',
@@ -417,7 +471,7 @@ async function estimateTempoFee(
       ]);
       const dummyOp: UserOperation = {
         sender: from,
-        nonce: '0x0',
+        nonce,
         initCode: new Uint8Array(0),
         callData,
         verificationGasLimit: VERIFICATION_GAS_DEPLOYED,
@@ -470,6 +524,10 @@ export async function estimateTransactionFee(
   // In-band chains only: quote the gas fee in this whitelisted stablecoin instead of
   // native (must match the gasFeeToken the send path will use). Ignored elsewhere.
   gasFeeToken?: string | null,
+  // Required to construct the real initCode when this Safe is not yet deployed.
+  // Without it we deliberately skip the live UserOp simulation rather than send
+  // a draft which cannot match the final operation.
+  publicKeyHex?: string,
 ): Promise<TransactionFeeEstimate> {
   // Tempo pays gas in a stablecoin, not the native coin — separate model. Forward the tx so a
   // dApp contract call is quoted off its REAL gas, not a transfer-sized default.
@@ -478,10 +536,11 @@ export async function estimateTransactionFee(
   // The bundler is the single source of truth for the price. getBundlerGasQuote
   // throws GasQuoteTooHighError (propagated here = refuse) if the quote is abusive,
   // and returns null only when the bundler can't quote (then we fall back locally).
-  const [deployed, { gasPrice }, quote] = await Promise.all([
-    // Estimation is non-binding: a transient RPC blip must NOT kill the fee preview. Fall back
-    // to UNDEPLOYED (conservative — carries deploy gas). The real send re-checks and fails fast.
-    isDeployed(from, chainId).catch(() => false),
+  const [deployed, nonce, { gasPrice }, quote] = await Promise.all([
+    // These are UserOperation correctness fields, not best-effort preview
+    // data. If either lookup fails, propagate the error and do not estimate.
+    isDeployed(from, chainId),
+    getNonce(from, chainId),
     getGasPrices(chainId),
     getBundlerGasQuote(chainId, tier),
   ]);
@@ -509,9 +568,7 @@ export async function estimateTransactionFee(
 
   // Estimate against the REAL call when we have it (dApp tx); otherwise a minimal
   // ERC-20-sized dummy. Routed through buildNativeCallData — the SAME builder the real send
-  // uses — so the estimate carries the VelaGasSettlementSplitter CREATE2 deploy sub-call that
-  // gets prepended on a chain's first-ever tx. Without this the estimate (and the "Max" reserve
-  // built from it) omitted the splitter-deploy gas and under-reserved the first send.
+  // uses, so the estimate matches the final native-chain call shape.
   const innerEstCall: MultiSendCall = tx?.to
     ? {
         to: tx.to,
@@ -527,41 +584,52 @@ export async function estimateTransactionFee(
         data: c.data && c.data !== '0x' ? fromHex(stripHexPrefix(c.data)) : new Uint8Array(0),
       }))
     : [innerEstCall];
-  const estCallData = await buildNativeCallData(estCalls, chainId, false);
+  const estCallData = buildNativeCallData(estCalls, false);
+
+  // Build this before the estimate RPC's fallback handling: account context is
+  // mandatory. A static fee must never mask a missing nonce or initCode.
+  const estimateAccount = deployed
+    ? { nonce, initCode: new Uint8Array(0) }
+    : publicKeyHex
+      ? { nonce: '0x0', initCode: buildInitCode(publicKeyHex) }
+      : null;
+  if (!estimateAccount) {
+    throw new Error('Could not load the passkey public key required to build the UserOperation initCode');
+  }
 
   // Try to get accurate gas estimates from the bundler. This catches high-gas chains
   // (e.g. Monad) where actual gas usage is 3-10x higher than the static defaults below.
   let totalGas: bigint | null = null;
-  // The bundler's UN-PADDED estimate for the real call — the in-band CHARGE basis. The padded
-  // `totalGas` (1.5× + floors + L2 adders) is right for the op's gas LIMITS but ~3-10× the real
-  // gas, so pricing the in-band fee off it over-charged the user 8-30× (a maxFee=0 op pays no
-  // EntryPoint gas — the reimbursement IS the whole cost, so it must track REAL gas, not limits).
-  let rawEstGas: bigint | null = null;
   try {
+    // The preview operation must have the same account context as the one we
+    // eventually sign; its signature is intentionally a dummy value.
+    // A Safe that does not exist yet has nonce 0 and its real initCode. A
+    // deployed Safe carries its current EntryPoint nonce.
     const verificationGas = deployed ? VERIFICATION_GAS_DEPLOYED : VERIFICATION_GAS_UNDEPLOYED;
     const dummySig = buildDummySignature();
     const dummyOp: UserOperation = {
       sender: from,
-      nonce: '0x0',
-      initCode: new Uint8Array(0),
+      nonce: estimateAccount.nonce,
+      initCode: estimateAccount.initCode,
       callData: estCallData,
       verificationGasLimit: verificationGas,
       callGasLimit: CALL_GAS_LIMIT,
       preVerificationGas: PRE_VERIFICATION_GAS,
-      maxFeePerGas: userOpMaxFee,
-      maxPriorityFeePerGas: userOpMaxFee,
+      // In-band settlement has no EntryPoint native prefund. Keep both values
+      // at zero in the simulated draft as requested.
+      maxFeePerGas: 0n,
+      maxPriorityFeePerGas: 0n,
       paymasterAndData: new Uint8Array(0),
       signature: dummySig,
     };
     const est = await estimateGas(dummyOp, chainId);
-    rawEstGas = est.verificationGasLimit + est.callGasLimit + est.preVerificationGas;
     const estVgl = deployed
       ? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
       : bigintMax((est.verificationGasLimit * 15n) / 10n, 2_000_000n);
     const estCgl = bigintMax((est.callGasLimit * 15n) / 10n, 100_000n);
     const estPvg = est.preVerificationGas + 10_000n;
     totalGas = estVgl + estCgl + estPvg;
-    console.log(`[FeeEstimate] Bundler gas: vgl=${estVgl} cgl=${estCgl} pvg=${estPvg} total=${totalGas} rawBasis=${rawEstGas}`);
+    console.log(`[FeeEstimate] Bundler gas: vgl=${estVgl} cgl=${estCgl} pvg=${estPvg} total=${totalGas}`);
   } catch (err) {
     // For a large/complex op the static fallback would show a misleading number and
     // the submit would be refused anyway (see sendUserOp). Surface the failure so the
@@ -590,32 +658,24 @@ export async function estimateTransactionFee(
     }
   }
 
-  // In-band chains: the fee is the bundler's own quote for a batched transfer (native or
-  // stablecoin), not totalGas × maxFee — the signed op pays maxFeePerGas = 0. The cost
-  // basis is totalGas × the bundler's REAL network price for the tier (its quote applies
-  // the 3× markup). On any quote failure/mismatch fall through to the legacy estimate
-  // unchanged, so the display never disagrees with what the send path would pay.
+  // In-band chains: the signed op pays maxFeePerGas = 0. The wallet derives reimbursement from
+  // the displayed gas basis (totalGas × network gas price × 3), applying the native/stable floors;
+  // the address-only quote supplies only the selectable assets, balances, recipient and USD prices.
   if (await isInBandChain(chainId, from)) {
-    // Charge basis = the bundler's UN-PADDED estimate for the real call (×1.1 headroom),
-    // captured above from the SAME estimate the limits derive from — NOT the padded totalGas,
-    // which over-priced the in-band fee 8-30× (a maxFee=0 op's whole cost is the reimbursement,
-    // which must track REAL gas). This reuses the one estimate already made (no extra RPC), so a
-    // fee-token switch is also faster. Only the padded totalGas remains as a last-resort fallback
-    // when the bundler couldn't estimate at all (static path).
-    const basisGas = rawEstGas !== null && rawEstGas > 0n ? (rawEstGas * 11n) / 10n : totalGas;
-    const nativeCostWei = basisGas * networkFeePerGas;
-    const inBandQuote = await fetchInBandGasQuote(chainId, from, nativeCostWei, gasFeeToken);
-    const wantToken = gasFeeToken?.toLowerCase() ?? null;
-    if (inBandQuote) {
-      // feeRecipient + nativeCostWei ride along so (a) the submit path signs EXACTLY
-      // this quote (displayed = signed — never a silent mismatch), and (b) a fee-asset
-      // switch can re-quote with ONE RPC instead of re-running the whole pipeline.
+    const quotes = await fetchInBandGasQuotes(chainId, from);
+    const inBandQuote = quotes ? findInBandGasQuote(quotes, gasFeeToken) : null;
+    const nativeQuote = quotes ? findInBandGasQuote(quotes) : null;
+    const feeAmount = inBandQuote && nativeQuote
+      ? calculateInBandFeeAmount(totalGas, networkFeePerGas, inBandQuote, nativeQuote)
+      : null;
+    if (inBandQuote && feeAmount !== null) {
+      // feeRecipient rides along so the submit path signs EXACTLY this quote (displayed = signed
+      // — never a silent mismatch).
       const common = {
         networkFeePerGas, relayerFeePerGas, bundlerGasPrice, totalGas, deployed, tier, quoted,
-        inBand: true, feeRecipient: inBandQuote.recipient, nativeCostWei,
+        inBand: true, feeRecipient: inBandQuote.recipient,
       };
-      if (inBandQuote.asset === 'erc20' && inBandQuote.feeToken
-          && (!wantToken || inBandQuote.feeToken.toLowerCase() === wantToken)) {
+      if (inBandQuote.asset === 'erc20' && inBandQuote.feeToken) {
         return {
           ...common,
           totalWei: 0n, // native display not applicable — the fee rides in feeAsset
@@ -623,20 +683,19 @@ export async function estimateTransactionFee(
           feeAsset: {
             kind: 'erc20',
             token: inBandQuote.feeToken,
-            decimals: inBandQuote.decimals ?? 6,
-            amount: inBandQuote.requiredAmount,
+            decimals: inBandQuote.decimals,
+            amount: feeAmount,
           },
         };
       }
-      if (inBandQuote.asset === 'native' && !wantToken) {
+      if (inBandQuote.asset === 'native') {
         return {
           ...common,
-          totalWei: inBandQuote.requiredAmount,
+          totalWei: feeAmount,
           maxFeePerGas: 0n,
           feeAsset: { kind: 'native' },
         };
       }
-      // Quoted asset doesn't match the request — treat as a failed quote.
     }
   }
 
@@ -892,17 +951,6 @@ async function sendUserOpTempo(
     throw new Error('The Tempo gas relayer is unavailable right now. Please try again.');
   }
 
-  // Tempo's fee is an ERC-20 (pathUSD), so the native VelaGasSettlementSplitter can't split it
-  // (its receive() only fires on native value). Instead we split in-band: the fee is divided
-  // into an EOA cost-floor transfer + a treasury surplus transfer. Best-effort — if the treasury
-  // is unavailable, the whole fee stays on the EOA (unchanged behaviour, never a rejection).
-  const splitterInfo = await fetchSplitterInfo(chainId);
-  const treasuryAddr = splitterInfo?.treasury;
-  const splitEnabled = !!treasuryAddr
-    && /^0x[0-9a-fA-F]{40}$/.test(treasuryAddr)
-    && treasuryAddr.toLowerCase() !== feeCollector.toLowerCase();
-  const reimbursementSubCalls = splitEnabled ? 2 : 1;
-
   _gasPriceCache.delete(chainId);
   const [deployed, nonceResult, gasPrices] = await Promise.all([
     isDeployed(safeAddress, chainId),
@@ -917,40 +965,28 @@ async function sendUserOpTempo(
   const initCode: Uint8Array = deployed ? new Uint8Array(0) : buildInitCode(publicKeyHex);
   const nonce: string = deployed ? (nonceResult as string) : '0x0';
 
-  // Static realistic-gas model — a floor/fallback for PRICING the reimbursement. Includes the
-  // reimbursement transfer(s): one to the EOA, plus one to the treasury when splitting. This is
-  // only a guess; the bundler's own estimate (below) supersedes it when available.
-  const staticGas = tempoExpectedGas(deployed, innerCalls.length + reimbursementSubCalls);
+  // Static realistic-gas model — a floor/fallback for pricing the reimbursement.
+  // The one reimbursement transfer goes directly to the active bundler recipient.
+  const staticGas = tempoExpectedGas(deployed, innerCalls.length + 1);
 
-  // Build the batch with a placeholder reimbursement (the transfer VALUE doesn't affect gas),
-  // estimate, then bake the real amounts. When splitting, the fee is divided into an EOA
-  // cost-floor transfer + a treasury surplus transfer (see tempoSettlementSplit). `gasBasis` is
-  // the gas the split floors the EOA share against — it MUST track the bundler's simulated gas
-  // so the EOA transfer always clears the bundler's accept-check.
-  const buildBatch = (reimbursement: bigint, gasBasis: bigint): Uint8Array => {
-    const split = splitEnabled
-      ? tempoSettlementSplit(reimbursement, gasBasis, gasPrices.gasPrice)
-      : { eoa: reimbursement, treasury: 0n };
-    const calls: MultiSendCall[] = [
+  // Build the batch with a placeholder reimbursement (the transfer value does
+  // not affect gas), estimate it, then bake in the real amount.
+  const buildBatch = (reimbursement: bigint): Uint8Array =>
+    buildMultiSendExecuteCallData([
       ...innerCalls,
-      { to: feeToken, value: '0', data: encodeErc20Transfer(feeCollector, split.eoa) },
-    ];
-    if (splitEnabled) {
-      calls.push({ to: feeToken, value: '0', data: encodeErc20Transfer(treasuryAddr!, split.treasury) });
-    }
-    return buildMultiSendExecuteCallData(calls);
-  };
+      { to: feeToken, value: '0', data: encodeErc20Transfer(feeCollector, reimbursement) },
+    ]);
 
   // Floor callGasLimit per sub-call: TIP-20 transfers meter high and the bundler's estimate
   // under-reports (handleOps swallows the inner OOG), so a per-sub-call floor lets the atomic
-  // batch run out of gas and revert. Includes the reimbursement transfer(s). See services/tempo.ts.
-  const callGasFloor = tempoCallGasLimit(innerCalls.length + reimbursementSubCalls);
+  // batch run out of gas and revert. Includes the reimbursement transfer. See services/tempo.ts.
+  const callGasFloor = tempoCallGasLimit(innerCalls.length + 1);
 
   const userOp: UserOperation = {
     sender: safeAddress,
     nonce,
     initCode,
-    callData: buildBatch(1n, staticGas),
+    callData: buildBatch(1n),
     verificationGasLimit: deployed ? VERIFICATION_GAS_DEPLOYED : TEMPO_VERIFICATION_GAS_UNDEPLOYED,
     callGasLimit: callGasFloor,
     preVerificationGas: PRE_VERIFICATION_GAS,
@@ -988,15 +1024,15 @@ async function sendUserOpTempo(
     }
   }
 
-  // Price the reimbursement + the EOA-floor split off the REALISTIC gas the 0x76 will burn —
-  // the bundler's estimate when we have it, else the static model, whichever is HIGHER (never
+  // Price the reimbursement off the realistic gas the 0x76 will burn — the bundler's estimate
+  // when we have it, else the static model, whichever is higher (never
   // under-price the bundler). This is still NOT the padded UserOp limits
   // (callGasLimit/verificationGasLimit stay high for OOG safety, but the user shouldn't pay 2–4×
   // for that headroom). `bigintMax` guards the case where estimateGas throws (estActualGas null).
   const realisticGas = estActualGas !== null ? bigintMax(staticGas, estActualGas) : staticGas;
   const reimbursement = tempoReimbursement(realisticGas, gasPrices.gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
-  userOp.callData = buildBatch(reimbursement, realisticGas);
-  console.log(`[Tempo] feeToken=${feeToken} reimbursement=${reimbursement} realisticGas=${realisticGas} staticGas=${staticGas} est=${estActualGas ?? 'n/a'} split=${splitEnabled} collector=${feeCollector} treasury=${treasuryAddr ?? 'n/a'}`);
+  userOp.callData = buildBatch(reimbursement);
+  console.log(`[Tempo] feeToken=${feeToken} reimbursement=${reimbursement} realisticGas=${realisticGas} staticGas=${staticGas} est=${estActualGas ?? 'n/a'} collector=${feeCollector}`);
 
   // Sign the SafeOp (over the FINAL callData) and submit, telling the bundler which
   // stablecoin to charge for the outer 0x76.
@@ -1064,41 +1100,37 @@ export function buildInBandFeeLeg(
  * display model (verification/call constants + L2 adders) over-prices several-fold —
  * measured 8× on Arbitrum, because the +600k adder double-counts the L1 data fee that
  * eth_estimateUserOperationGas already folds into preVerificationGas. Deployed
- * accounts only (an undeployed draft would need initCode); returns null when
- * estimation is unavailable — the caller keeps its rough fallback.
+ * accounts only (an undeployed draft would need initCode). Missing nonce or a
+ * failed bundler simulation is an error; callers must not price a malformed op.
  */
 export async function estimateInBandBasisGas(
   safeAddress: string,
   innerCalls: MultiSendCall[],
   gasFeeToken: string | null,
   chainId: number,
-): Promise<bigint | null> {
-  try {
-    const nonce = await getNonce(safeAddress, chainId).catch(() => '0x0');
-    const userOp: UserOperation = {
-      sender: safeAddress,
-      nonce,
-      initCode: new Uint8Array(0),
-      callData: buildMultiSendExecuteCallData([
-        ...innerCalls,
-        buildInBandFeeLeg(gasFeeToken, safeAddress, 1n), // self-transfer placeholder — never reverts
-      ]),
-      verificationGasLimit: VERIFICATION_GAS_DEPLOYED,
-      callGasLimit: CALL_GAS_LIMIT,
-      preVerificationGas: PRE_VERIFICATION_GAS,
-      // Estimation-only fee — MUST be nonzero: a maxFee=0 draft trips the bundler's AA fee
-      // checks and estimation throws (→ null → the caller over-charged off the padded model).
-      // The op is SIGNED with maxFee=0 separately; the returned gas limits are fee-independent.
-      maxFeePerGas: 1_000_000_000n,
-      maxPriorityFeePerGas: 1_000_000_000n,
-      paymasterAndData: new Uint8Array(0),
-      signature: buildDummySignature(),
-    };
-    const est = await estimateGas(userOp, chainId);
-    return est.verificationGasLimit + est.callGasLimit + est.preVerificationGas;
-  } catch {
-    return null;
-  }
+): Promise<bigint> {
+  // A nonce failure is not permission to simulate as nonce 0.
+  const nonce = await getNonce(safeAddress, chainId);
+  const userOp: UserOperation = {
+    sender: safeAddress,
+    nonce,
+    initCode: new Uint8Array(0),
+    callData: buildMultiSendExecuteCallData([
+      ...innerCalls,
+      buildInBandFeeLeg(gasFeeToken, safeAddress, 1n), // self-transfer placeholder — never reverts
+    ]),
+    verificationGasLimit: VERIFICATION_GAS_DEPLOYED,
+    callGasLimit: CALL_GAS_LIMIT,
+    preVerificationGas: PRE_VERIFICATION_GAS,
+    // Match the in-band UserOperation: native EntryPoint fee accounting is
+    // zero and the reimbursement leg covers the relayer cost.
+    maxFeePerGas: 0n,
+    maxPriorityFeePerGas: 0n,
+    paymasterAndData: new Uint8Array(0),
+    signature: buildDummySignature(),
+  };
+  const est = await estimateGas(userOp, chainId);
+  return est.verificationGasLimit + est.callGasLimit + est.preVerificationGas;
 }
 
 /**
@@ -1129,10 +1161,9 @@ async function sendUserOpInBand(
   await verifyChainReady(chainId);
 
   _gasPriceCache.delete(chainId);
-  const [deployed, nonceResult, gasPrices] = await Promise.all([
+  const [deployed, nonceResult] = await Promise.all([
     isDeployed(safeAddress, chainId),
     getNonce(safeAddress, chainId).catch(() => null),
-    getGasPrices(chainId),
   ]);
 
   // A deployed wallet MUST sign its real nonce — falling back to 0x0 burns a passkey prompt on
@@ -1143,8 +1174,8 @@ async function sendUserOpInBand(
   const initCode: Uint8Array = deployed ? new Uint8Array(0) : buildInitCode(publicKeyHex);
   const nonce: string = deployed ? (nonceResult as string) : '0x0';
 
-  // The batch: the user's calls + ONE fee leg (native value or stablecoin transfer).
-  // No splitter deploy prepend — that belongs to the legacy prefunded route only.
+  // The batch: the user's calls + one fee leg (native value or stablecoin transfer).
+  // No additional deployment call is prepended.
   const buildBatch = (amount: bigint, recipient: string): Uint8Array =>
     buildMultiSendExecuteCallData([...innerCalls, buildInBandFeeLeg(gasFeeToken, recipient, amount)]);
 
@@ -1173,10 +1204,8 @@ async function sendUserOpInBand(
   // that OOGs on-chain. Pure-transfer batches keep the defaults — they cover them.
   // Classify by call SHAPE (isPlainTransferCall), same as the Tempo path.
   const hasContractCall = innerCalls.some((c) => !isPlainTransferCall(c));
-  let estActualGas: bigint | null = null;
   try {
     const est = await estimateGas(userOp, chainId);
-    estActualGas = est.verificationGasLimit + est.callGasLimit + est.preVerificationGas;
     userOp.verificationGasLimit = deployed
       ? bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_DEPLOYED)
       : bigintMax((est.verificationGasLimit * 15n) / 10n, VERIFICATION_GAS_UNDEPLOYED);
@@ -1201,29 +1230,25 @@ async function sendUserOpInBand(
     feeRecipient = quotedFee.recipient;
     console.log(`[InBand] signing DISPLAYED quote: feeToken=${gasFeeToken ?? 'native'} amount=${feeAmount} recipient=${feeRecipient}`);
   } else {
-    // Cost basis = the bundler's UN-PADDED estimate ×1.1 (the padded limits/static
-    // model over-price several-fold — the user measured 8× on Arbitrum). If the
-    // basis drifts low the bundler's gate rejects and the caller retries.
-    const staticGas = verificationGas + CALL_GAS_LIMIT + PRE_VERIFICATION_GAS;
-    const realisticGas = estActualGas !== null ? (estActualGas * 11n) / 10n : staticGas;
-
-    // realisticGas × the bundler's REAL network price (networkFeePerGas carries no
-    // wallet markup — the 3× markup is the QUOTE's job).
-    const outerQuote = await getBundlerGasQuote(chainId, 'fast').catch(() => null);
-    const outerPrice = outerQuote?.networkFeePerGas ?? gasPrices.gasPrice;
-    const nativeCost = realisticGas * outerPrice;
-
-    const quote = await fetchInBandGasQuote(chainId, safeAddress, nativeCost, gasFeeToken);
-    if (!quote) {
+    const quotes = await fetchInBandGasQuotes(chainId, safeAddress);
+    const quote = quotes ? findInBandGasQuote(quotes, gasFeeToken) : null;
+    const nativeQuote = quotes ? findInBandGasQuote(quotes) : null;
+    if (!quote || !nativeQuote) {
+      if (gasFeeToken) {
+        throw new Error('The gas relayer cannot accept the selected fee token right now. Please pick a different gas asset.');
+      }
       throw new Error('The gas relayer is unavailable right now. Please try again.');
     }
-    // The user chose a stablecoin — never silently pay in a different asset than requested.
-    if (gasFeeToken && (quote.asset !== 'erc20' || quote.feeToken?.toLowerCase() !== gasFeeToken.toLowerCase())) {
-      throw new Error('The gas relayer cannot accept the selected fee token right now. Please pick a different gas asset.');
+    const outerQuote = await getBundlerGasQuote(chainId, 'fast').catch(() => null);
+    const gasPrice = outerQuote?.networkFeePerGas ?? (await getGasPrices(chainId)).gasPrice;
+    const totalGas = userOp.verificationGasLimit + userOp.callGasLimit + userOp.preVerificationGas;
+    const amount = calculateInBandFeeAmount(totalGas, gasPrice, quote, nativeQuote);
+    if (amount === null) {
+      throw new Error('Could not calculate the selected gas fee. Please try again.');
     }
-    feeAmount = quote.requiredAmount;
+    feeAmount = amount;
     feeRecipient = quote.recipient;
-    console.log(`[InBand] feeToken=${gasFeeToken ?? 'native'} amount=${feeAmount} recipient=${feeRecipient} realisticGas=${realisticGas} est=${estActualGas ?? 'n/a'} outerPrice=${outerPrice} markupX=${quote.markupX}`);
+    console.log(`[InBand] feeToken=${gasFeeToken ?? 'native'} amount=${feeAmount} recipient=${feeRecipient} gas=${totalGas} gasPrice=${gasPrice}`);
   }
 
   userOp.callData = buildBatch(feeAmount, feeRecipient);
@@ -1349,60 +1374,20 @@ export function buildMultiSendExecuteCallData(calls: MultiSendCall[]): Uint8Arra
   );
 }
 
-// ---------------------------------------------------------------------------
-// VelaGasSettlementSplitter — in-batch deploy on native chains
-// ---------------------------------------------------------------------------
-
 /**
- * The MultiSend sub-call that CREATE2-deploys the VelaGasSettlementSplitter, or null if it is
- * already deployed / can't be safely determined. NATIVE chains only — on Tempo the beneficiary
- * stays the EOA, so there is nothing to deploy (Tempo sends never reach this path).
- *
- * The splitter address and deploy calldata are computed LOCALLY from embedded constants; only
- * the treasury (20 bytes) is bundler-supplied. We cross-check the bundler's reported address
- * against the local derivation and skip on any mismatch — the wallet never blindly includes
- * bundler-provided deploy calldata. Fails safe: a missing split beats a reverting/mis-routed op.
+ * Build the UserOp callData for a native-chain send. A lone call stays a single
+ * executeUserOp (unless `alwaysMultiSend`); a batch stays a MultiSend. This is
+ * intentionally local-only and makes no bundler REST calls.
  */
-async function splitterDeployCallIfNeeded(chainId: number): Promise<MultiSendCall | null> {
-  try {
-    const info = await fetchSplitterInfo(chainId);
-    if (!info) return null;
-
-    const splitter = computeSplitterAddress(info.treasury);
-    if (splitter.toLowerCase() !== info.address.toLowerCase()) {
-      console.warn('[Splitter] bundler address mismatch — skipping in-batch deploy', {
-        local: splitter, bundler: info.address,
-      });
-      return null;
-    }
-    if (await isDeployed(splitter, chainId)) return null;
-
-    return { to: VELA_SPLITTER_FACTORY, value: '0', data: encodeSplitterDeployCall(info.treasury) };
-  } catch (err) {
-    console.warn('[Splitter] deploy-check failed — proceeding without in-batch deploy:', err);
-    return null;
-  }
-}
-
-/**
- * Build the UserOp callData for a NATIVE-chain send, prepending the splitter CREATE2 deploy as
- * the FIRST sub-call when the splitter isn't on-chain yet — so it exists before the EntryPoint
- * pays the beneficiary. When no deploy is needed the encoding is unchanged: a lone call stays a
- * single executeUserOp (unless `alwaysMultiSend`), a batch stays a MultiSend.
- */
-async function buildNativeCallData(
+function buildNativeCallData(
   innerCalls: MultiSendCall[],
-  chainId: number,
   alwaysMultiSend: boolean,
-): Promise<Uint8Array> {
-  const deployCall = await splitterDeployCallIfNeeded(chainId);
-  const calls = deployCall ? [deployCall, ...innerCalls] : innerCalls;
-
-  if (calls.length === 1 && !alwaysMultiSend) {
-    const only = calls[0]!;
+): Uint8Array {
+  if (innerCalls.length === 1 && !alwaysMultiSend) {
+    const only = innerCalls[0]!;
     return buildExecuteCallData(only.to, only.value, only.data);
   }
-  return buildMultiSendExecuteCallData(calls);
+  return buildMultiSendExecuteCallData(innerCalls);
 }
 
 /** Encode ERC-20 transfer(address,uint256) calldata. */

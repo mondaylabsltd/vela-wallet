@@ -56,10 +56,13 @@ const freshChain = () => ++nextChain; // dodge the module-level per-chain caches
 const SIGN_SENTINEL = 'SIGN_REACHED';
 const throwingSignFn = jest.fn(async () => { throw new Error(SIGN_SENTINEL); });
 
-/** The in-band 1-wei capability probe + sizing quote — native, so sendNative routes in-band. */
+/** The address-only all-asset quote — native, so sendNative routes in-band. */
 function nativeQuote() {
   poolBundlerCallMock.mockResolvedValue({
-    result: { recipient: TREASURY, asset: 'native', requiredAmount: '0x64', markupX: 3 },
+    result: [{
+      recipient: TREASURY, asset: 'native', feeToken: null, balance: '0x100', decimals: 18,
+      symbol: 'ETH', usdBalance: '1', usdPrice: '2000',
+    }],
   });
 }
 

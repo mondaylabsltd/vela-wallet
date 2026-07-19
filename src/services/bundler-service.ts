@@ -479,45 +479,6 @@ export async function fetchBundlerAccountInfo(
   }
 }
 
-// Splitter info is constant per bundler (a pure function of the operator secret), so cache
-// per base URL indefinitely.
-const splitterInfoCache = new Map<string, { address: string; treasury: string }>();
-
-/**
- * Fetch the VelaGasSettlementSplitter address + its treasury from the SAME bundler the pool
- * submits to (getActiveBundlerBaseUrl) — a per-network override may use a different operator
- * secret and thus a different splitter. The wallet uses `treasury` to compute the splitter's
- * CREATE2 address LOCALLY (it never trusts bundler-supplied deploy calldata). Returns null on
- * any failure so callers fail safe (skip the in-batch deploy rather than deploy something wrong).
- */
-export async function fetchSplitterInfo(
-  chainId: number,
-): Promise<{ address: string; treasury: string } | null> {
-  await ensureEndpoints();
-  try {
-    const baseUrl = await getActiveBundlerBaseUrl(chainId);
-    const cached = splitterInfoCache.get(baseUrl);
-    if (cached) return cached;
-
-    const url = `${baseUrl}/v1/splitter`;
-    const res = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } }, { timeoutMs: NET_TIMEOUTS.bundlerRest });
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    const address = String(data.address ?? '');
-    const treasury = String(data.treasury ?? '');
-    const isAddr = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
-    if (!isAddr(address) || !isAddr(treasury)) return null;
-
-    const info = { address, treasury };
-    splitterInfoCache.set(baseUrl, info);
-    return info;
-  } catch (err) {
-    console.warn(`[Splitter] Failed to fetch splitter info for chain=${chainId}:`, err);
-    return null;
-  }
-}
-
 /** Clear cached account info (e.g. after funding). */
 export function clearBundlerCache(chainId: number, safeAddress?: string): void {
   if (safeAddress) {
@@ -606,75 +567,107 @@ export function underfundedRequiredWei(underfunded: BundlerUnderfunded): bigint 
 // In-band gas settlement (generic chains) — vela-bundler docs/inband-gas-settlement.md
 // ---------------------------------------------------------------------------
 
-/** A sizing quote from `vela_getInBandGasQuote`: transfer exactly `requiredAmount`
- *  of the chosen asset to `recipient` inside the UserOp batch. The bundler
- *  re-verifies at submit; the amount already includes its 3× markup and the
- *  per-asset minimum charge — 1e-5 of a native coin for native, or the
- *  $0.01-equivalent floor for a stablecoin. */
+/** One fee-asset entry returned by `vela_getInBandGasQuote`. The method now
+ *  accepts only a Safe address and returns every asset the bundler accepts,
+ *  including the Safe balance and USD data used by the wallet to price gas. */
 export interface InBandGasQuote {
   recipient: string;
   asset: 'native' | 'erc20';
   feeToken: string | null;
-  requiredAmount: bigint;
-  decimals?: number;
-  markupX: number;
+  balance: bigint;
+  decimals: number;
+  symbol: string;
+  /** Preserve decimal strings so fee conversion never loses precision. */
+  usdBalance: string;
+  usdPrice: string;
 }
 
-/**
- * Ask the bundler how much to transfer in-band for `nativeCostWei` of estimated
- * outer gas. `feeToken` null/undefined → native; else a whitelisted stablecoin.
- * Returns null when the quote fails for reasons the caller should fall back on
- * (chain not in-band, token not whitelisted / unpriceable, transient error).
- */
-/** Short-lived cache for in-band quotes (the stablecoin path costs a DEX quoterV2 eth_call on
- *  the bundler, ~hundreds of ms) so flipping the fee-token chip back and forth doesn't re-hit
- *  it each time. Keyed by (chain, safe, feeToken, nativeCost bucketed to 1%) — a quote is only
- *  reused for the same tx sizing. TTL is short: the bundler re-verifies at submit anyway. */
+/** Short-lived cache for the complete in-band fee-asset list. In addition to
+ * avoiding a repeat RPC when a user changes chips, the in-flight map coalesces
+ * the estimate and selector requests made during the same render. */
 const QUOTE_CACHE_TTL = 8_000;
-const inBandQuoteCache = new Map<string, { at: number; quote: InBandGasQuote | null }>();
+const inBandQuoteCache = new Map<string, { at: number; quotes: InBandGasQuote[] }>();
+const inBandQuoteRequests = new Map<string, Promise<{ quotes: InBandGasQuote[] | null; notEnabled: boolean }>>();
 
-function quoteCacheKey(chainId: number, safe: string, nativeCostWei: bigint, feeToken?: string | null): string {
-  // Bucket the cost to ~1% so tiny basis jitter still hits the cache.
-  const bucket = nativeCostWei > 0n ? nativeCostWei / (nativeCostWei / 100n + 1n) : 0n;
-  return `${chainId}:${safe.toLowerCase()}:${(feeToken ?? 'native').toLowerCase()}:${bucket}`;
+function quoteCacheKey(chainId: number, safe: string): string {
+  return `${chainId}:${safe.toLowerCase()}`;
 }
 
 export function _resetInBandQuoteCache(): void {
   inBandQuoteCache.clear();
+  inBandQuoteRequests.clear();
 }
 
+/** Fetch every in-band fee asset in a single RPC. Returns null for unavailable,
+ * malformed, or unsupported responses so callers can safely use their legacy
+ * path. */
+export async function fetchInBandGasQuotes(
+  chainId: number,
+  safeAddress: string,
+): Promise<InBandGasQuote[] | null> {
+  const key = quoteCacheKey(chainId, safeAddress);
+  const cached = inBandQuoteCache.get(key);
+  if (cached && Date.now() - cached.at < QUOTE_CACHE_TTL) return cached.quotes;
+  return (await requestInBandGasQuotes(chainId, safeAddress)).quotes;
+}
+
+/** Start (or join) the one address-only quote request. This is shared by the
+ * capability check as well as callers that need the actual quote rows. */
+async function requestInBandGasQuotes(
+  chainId: number,
+  safeAddress: string,
+): Promise<{ quotes: InBandGasQuote[] | null; notEnabled: boolean }> {
+  const key = quoteCacheKey(chainId, safeAddress);
+  const cached = inBandQuoteCache.get(key);
+  if (cached && Date.now() - cached.at < QUOTE_CACHE_TTL) {
+    return { quotes: cached.quotes, notEnabled: false };
+  }
+  const pending = inBandQuoteRequests.get(key);
+  if (pending) return pending;
+  const request = fetchInBandGasQuotesDetailed(chainId, safeAddress)
+    .then((result) => {
+      // Cache only real responses — a transient failure must never stick.
+      if (result.quotes) inBandQuoteCache.set(key, { at: Date.now(), quotes: result.quotes });
+      return result;
+    })
+    .finally(() => { inBandQuoteRequests.delete(key); });
+  inBandQuoteRequests.set(key, request);
+  return request;
+}
+
+/** Select one asset from the complete quote response. `feeToken` null means
+ * native; any contract means that exact ERC-20 asset. */
 export async function fetchInBandGasQuote(
   chainId: number,
   safeAddress: string,
-  nativeCostWei: bigint,
   feeToken?: string | null,
 ): Promise<InBandGasQuote | null> {
-  const key = quoteCacheKey(chainId, safeAddress, nativeCostWei, feeToken);
-  const cached = inBandQuoteCache.get(key);
-  if (cached && Date.now() - cached.at < QUOTE_CACHE_TTL) return cached.quote;
-  const quote = (await fetchInBandGasQuoteDetailed(chainId, safeAddress, nativeCostWei, feeToken)).quote;
-  // Cache only real quotes — a transient null must not stick.
-  if (quote) inBandQuoteCache.set(key, { at: Date.now(), quote });
-  return quote;
+  const quotes = await fetchInBandGasQuotes(chainId, safeAddress);
+  return quotes ? findInBandGasQuote(quotes, feeToken) : null;
 }
 
-/** Like fetchInBandGasQuote but distinguishes a DEFINITIVE "chain is not in-band"
+/** Find the native or requested ERC-20 row in an already-fetched quote set. */
+export function findInBandGasQuote(
+  quotes: InBandGasQuote[],
+  feeToken?: string | null,
+): InBandGasQuote | null {
+  const wanted = feeToken?.toLowerCase() ?? null;
+  return quotes.find((quote) => wanted
+    ? quote.asset === 'erc20' && quote.feeToken?.toLowerCase() === wanted
+    : quote.asset === 'native') ?? null;
+}
+
+/** Like fetchInBandGasQuotes but distinguishes a DEFINITIVE "chain is not in-band"
  *  (bundler says not enabled, or an old bundler without the method) from transient
  *  failures — only the former may negative-cache the chain's capability. */
-async function fetchInBandGasQuoteDetailed(
+async function fetchInBandGasQuotesDetailed(
   chainId: number,
   safeAddress: string,
-  nativeCostWei: bigint,
-  feeToken?: string | null,
-): Promise<{ quote: InBandGasQuote | null; notEnabled: boolean }> {
+): Promise<{ quotes: InBandGasQuote[] | null; notEnabled: boolean }> {
   try {
     const resp = await poolBundlerCall(
       'vela_getInBandGasQuote',
-      [{
-        safeAddress,
-        nativeCost: '0x' + nativeCostWei.toString(16),
-        ...(feeToken ? { feeToken } : {}),
-      }],
+      [{ safeAddress }],
       chainId,
     );
     if (resp.error || !resp.result) {
@@ -682,27 +675,55 @@ async function fetchInBandGasQuoteDetailed(
         /not enabled/i.test(resp.error?.message ?? '') ||
         resp.error?.code === -32601; // method not found — pre-in-band bundler
       console.log(`[InBand] quote unavailable on chain=${chainId}: ${resp.error?.message ?? 'empty result'}`);
-      return { quote: null, notEnabled };
+      return { quotes: null, notEnabled };
     }
-    const r = resp.result;
-    if (!r.recipient || !/^0x[0-9a-fA-F]{40}$/.test(r.recipient)) return { quote: null, notEnabled: false };
-    const requiredAmount = parseBigIntHex(r.requiredAmount);
-    if (requiredAmount <= 0n) return { quote: null, notEnabled: false };
-    return {
-      quote: {
-        recipient: r.recipient,
-        asset: r.asset === 'erc20' ? 'erc20' : 'native',
-        feeToken: r.feeToken ?? null,
-        requiredAmount,
-        decimals: typeof r.decimals === 'number' ? r.decimals : undefined,
-        markupX: typeof r.markupX === 'number' ? r.markupX : 3,
-      },
-      notEnabled: false,
-    };
+    if (!Array.isArray(resp.result)) return { quotes: null, notEnabled: false };
+    const quotes = resp.result.flatMap((r: Record<string, unknown>): InBandGasQuote[] => {
+      if (!r || typeof r !== 'object') return [];
+      const recipient = typeof r.recipient === 'string' && /^0x[0-9a-fA-F]{40}$/.test(r.recipient)
+        ? r.recipient
+        : null;
+      const asset = r.asset === 'native' || r.asset === 'erc20' ? r.asset : null;
+      const feeToken = typeof r.feeToken === 'string' && /^0x[0-9a-fA-F]{40}$/.test(r.feeToken)
+        ? r.feeToken
+        : null;
+      const balance = parseBigIntHex(r.balance);
+      const decimals = typeof r.decimals === 'number' && Number.isSafeInteger(r.decimals) && r.decimals >= 0
+        ? r.decimals
+        : null;
+      const symbol = typeof r.symbol === 'string' && r.symbol.trim() ? r.symbol : null;
+      // `usdBalance` is useful presentation data but it is not required to calculate or pay a
+      // fee (the raw `balance` and `usdPrice` are). Accept older/partial deployments which omit
+      // it, otherwise one optional field would hide every fee-token choice.
+      const usdBalance = parseDecimalString(r.usdBalance) ?? '0';
+      const usdPrice = parseDecimalString(r.usdPrice);
+      if (!recipient || !asset || balance < 0n || decimals === null || !symbol
+        || usdPrice === null || (asset === 'erc20' && !feeToken)) {
+        return [];
+      }
+      return [{
+        recipient,
+        asset,
+        feeToken: asset === 'erc20' ? feeToken : null,
+        balance,
+        decimals,
+        symbol,
+        usdBalance,
+        usdPrice,
+      }];
+    });
+    return { quotes: quotes.length > 0 ? quotes : null, notEnabled: false };
   } catch (err) {
     console.warn(`[InBand] quote failed for chain=${chainId}:`, err);
-    return { quote: null, notEnabled: false };
+    return { quotes: null, notEnabled: false };
   }
+}
+
+function parseDecimalString(value: unknown): string | null {
+  const raw = typeof value === 'string' ? value : typeof value === 'number' ? String(value) : null;
+  if (raw === null) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? raw : null;
 }
 
 /** Per-chain in-band capability, learned from a probe quote. Tempo is always
@@ -714,11 +735,11 @@ export async function isInBandChain(chainId: number, safeAddress: string): Promi
   if (isTempoChain(chainId)) return true;
   const cached = inBandSupport.get(chainId);
   if (cached && Date.now() - cached.at < INBAND_SUPPORT_TTL) return cached.supported;
-  // 1-wei probe. Only a DEFINITIVE outcome may be cached: a transient RPC failure
-  // negative-cached for 5 minutes would route sends down the legacy path (maxFee>0,
-  // prefund gate) against a bundler that expects in-band — every one rejected.
-  const { quote, notEnabled } = await fetchInBandGasQuoteDetailed(chainId, safeAddress, 1n);
-  if (quote !== null) {
+  // The address-only quote doubles as the capability probe. Only a DEFINITIVE outcome may be
+  // cached: a transient RPC failure negative-cached for 5 minutes would route sends down the
+  // legacy path (maxFee>0, prefund gate) against a bundler that expects in-band — every one rejected.
+  const { quotes, notEnabled } = await requestInBandGasQuotes(chainId, safeAddress);
+  if (quotes !== null) {
     inBandSupport.set(chainId, { at: Date.now(), supported: true });
     return true;
   }
