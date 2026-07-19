@@ -8,14 +8,12 @@
  * bundler's address-only quote now supplies balances, prices, and metadata in one response;
  * this loader must not issue separate chain/token/balance reads.
  *
- * Tempo is excluded (its fee is always pathUSD — no choice). Returns null → no selector
- * (native only).
+ * Returns null → no selector (for example, when the relay does not publish fee assets yet).
  */
 
 import { useEffect, useState } from 'react';
 import { nativeLogoURLs, tokenLogoURLsByAddress } from '@/models/types';
 import { fetchInBandGasQuotes } from '@/services/bundler-service';
-import { isTempoChain } from '@/services/tempo';
 
 export interface FeeTokenOption {
   asset: 'native' | 'erc20';
@@ -39,14 +37,13 @@ export interface FeeTokenOption {
 
 /**
  * The pure loader (no React) — returns the fee-asset options for a chain, or null when there
- * is no choice (not in-band or Tempo). It deliberately makes exactly one bundler RPC; the
+ * is no choice (not in-band or unavailable). It deliberately makes exactly one bundler RPC; the
  * result is also shared with fee estimation via the quote cache. Exported for tests.
  */
 export async function loadInBandFeeTokenOptions(
   chainId: number,
   safeAddress: string,
 ): Promise<FeeTokenOption[] | null> {
-  if (isTempoChain(chainId)) return null;
   const quotes = await fetchInBandGasQuotes(chainId, safeAddress);
   if (!quotes) return null;
 

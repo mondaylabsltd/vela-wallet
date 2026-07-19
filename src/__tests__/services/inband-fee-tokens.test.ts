@@ -14,8 +14,6 @@ const fetchInBandGasQuotesMock = jest.fn();
 jest.mock('@/services/bundler-service', () => ({
   fetchInBandGasQuotes: (...a: any[]) => fetchInBandGasQuotesMock(...a),
 }));
-jest.mock('@/services/tempo', () => ({ isTempoChain: (id: number) => id === 4217 || id === 42431 }));
-
 import { loadInBandFeeTokenOptions } from '@/hooks/use-inband-fee-tokens';
 
 const SAFE = '0x' + 'aa'.repeat(20);
@@ -79,7 +77,13 @@ test('unavailable in-band quote means no selector', async () => {
   await expect(loadInBandFeeTokenOptions(ARB, SAFE)).resolves.toBeNull();
 });
 
-test('Tempo has no fee-asset selector and does not call the generic quote API', async () => {
-  await expect(loadInBandFeeTokenOptions(4217, SAFE)).resolves.toBeNull();
-  expect(fetchInBandGasQuotesMock).not.toHaveBeenCalled();
+test('Tempo uses the same relay-published ERC-20 fee options as any other EVM network', async () => {
+  fetchInBandGasQuotesMock.mockResolvedValue([
+    quote({ asset: 'erc20', feeToken: USDC, symbol: 'pathUSD', balance: 2_000_000n, usdBalance: '2' }),
+  ]);
+
+  await expect(loadInBandFeeTokenOptions(4217, SAFE)).resolves.toEqual([
+    expect.objectContaining({ asset: 'erc20', contract: USDC, symbol: 'pathUSD' }),
+  ]);
+  expect(fetchInBandGasQuotesMock).toHaveBeenCalledWith(4217, SAFE);
 });

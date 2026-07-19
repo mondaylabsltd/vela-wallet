@@ -127,8 +127,11 @@ export async function sendNative(
 ): Promise<SubmitResult> {
   if (isTempoChain(chainId)) {
     // Tempo has no native coin; a native send is unusual but routed for consistency
-    // (gas is paid in the default stablecoin, not the value being moved).
-    return sendUserOpTempo(from, [{ to, value: valueWei, data: new Uint8Array(0) }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
+    // (gas is paid in a USD fee token, not the value being moved).
+    return sendUserOpTempo(
+      from, [{ to, value: valueWei, data: new Uint8Array(0) }], gasFeeToken ?? TEMPO_DEFAULT_FEE_TOKEN,
+      chainId, publicKeyHex, signFn, quotedFee,
+    );
   }
   // In-band settlement: gas is repaid by a batched transfer, not a prefunded gas account.
   return sendUserOpInBand(from, [{ to, value: valueWei, data: new Uint8Array(0) }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
@@ -157,11 +160,10 @@ export async function sendERC20(
   );
 
   if (isTempoChain(chainId)) {
-    // Gas is paid in pathUSD (the canonical Tempo fee token). Tempo requires the gas
-    // payer to PRE-HOLD the fee token (a 0-balance account can't submit), so standardising
-    // on one token keeps the bundler gas account to a single float; the Safe needs a small
-    // pathUSD balance, like ETH for gas. See services/tempo.ts.
-    return sendUserOpTempo(from, [{ to: tokenAddress, value: '0', data: transferData }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
+    return sendUserOpTempo(
+      from, [{ to: tokenAddress, value: '0', data: transferData }], gasFeeToken ?? TEMPO_DEFAULT_FEE_TOKEN,
+      chainId, publicKeyHex, signFn, quotedFee,
+    );
   }
 
   return sendUserOpInBand(from, [{ to: tokenAddress, value: '0', data: transferData }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
@@ -183,8 +185,10 @@ export async function sendContractCall(
   quotedFee?: QuotedInBandFee,
 ): Promise<SubmitResult> {
   if (isTempoChain(chainId)) {
-    // dApp / contract call: pay gas in the default stablecoin (pathUSD).
-    return sendUserOpTempo(from, [{ to, value: valueWei, data }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
+    return sendUserOpTempo(
+      from, [{ to, value: valueWei, data }], gasFeeToken ?? TEMPO_DEFAULT_FEE_TOKEN,
+      chainId, publicKeyHex, signFn, quotedFee,
+    );
   }
   return sendUserOpInBand(from, [{ to, value: valueWei, data }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
 }
@@ -212,7 +216,9 @@ export async function sendBatchCalls(
 
   if (isTempoChain(chainId)) {
     // Tempo signs maxFee=0 (gas paid in stablecoin) — the override doesn't apply.
-    return sendUserOpTempo(from, byteCalls, TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
+    return sendUserOpTempo(
+      from, byteCalls, gasFeeToken ?? TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn, quotedFee,
+    );
   }
 
   return sendUserOpInBand(from, byteCalls, gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
@@ -291,10 +297,65 @@ export interface TransactionFeeEstimate {
   /** In-band settlement estimate (generic chains once the bundler enables them). */
   inBand?: boolean;
   /** The asset the gas fee is paid in. Absent → native via the legacy model. */
-  feeAsset?: { kind: 'native' } | { kind: 'erc20'; token: string; decimals: number; amount: bigint };
+  feeAsset?: { kind: 'native' } | {
+    kind: 'erc20';
+    token: string;
+    decimals: number;
+    amount: bigint;
+    /** Optional because a relayer may quote by asset address only. */
+    symbol?: string;
+  };
   /** In-band: the quote's transfer recipient. The submit path signs THIS quote
    *  (amount + recipient) verbatim — what the confirm slide shows is what executes. */
   feeRecipient?: string;
+}
+
+/**
+ * The usable transfer ceiling when the transfer itself and its network fee draw
+ * from the same asset. Returns null when the fee uses a different asset, so a
+ * caller must not apply this reserve to an unrelated token balance.
+ *
+ * `transferAsset` is null for the chain's native asset; ERC-20 addresses are
+ * compared case-insensitively. Keeping this small rule shared prevents the
+ * amount and confirmation screens from drifting into a submit that cannot pay
+ * its own in-band reimbursement.
+ */
+export function sameAssetFeeLimit(
+  fee: TransactionFeeEstimate | null,
+  transferAsset: string | null,
+  balance: bigint,
+): { feeAmount: bigint; maxTransferAmount: bigint } | null {
+  if (!fee || balance < 0n) return null;
+
+  let feeAmount: bigint;
+  if (fee.feeAsset?.kind === 'erc20') {
+    if (!transferAsset || fee.feeAsset.token.toLowerCase() !== transferAsset.toLowerCase()) return null;
+    feeAmount = fee.feeAsset.amount;
+  } else {
+    // Legacy native estimates omit feeAsset; they still consume the native asset.
+    if (transferAsset !== null) return null;
+    feeAmount = fee.totalWei;
+  }
+
+  if (feeAmount < 0n) return null;
+  return {
+    feeAmount,
+    maxTransferAmount: balance > feeAmount ? balance - feeAmount : 0n,
+  };
+}
+
+/**
+ * A user's one-time acknowledgement of an unusually high relayer quote.
+ *
+ * This deliberately binds every value used by the sanity check.  An approval
+ * cannot be reused if the relayer returns a different quote on retry, which
+ * sends the user back to the review step instead of silently accepting a new
+ * price.
+ */
+export interface HighGasQuoteApproval {
+  tier: GasTier;
+  maxFeePerGas: bigint;
+  networkFeePerGas: bigint;
 }
 
 /** In-band quoted fee as displayed by the confirm UI — the submit path signs exactly
@@ -419,38 +480,48 @@ async function estimateTempoFee(
   // The actual call (dApp tx). Omitted for simple transfers. Passing the real call makes the
   // DISPLAYED fee accurate for contract calls, whose gas dwarfs a transfer's flat estimate.
   tx?: { to: string; value?: string; data?: string },
+  // An EIP-5792 batch needs a fee for every actual inner call, not a single-call proxy.
+  batchCalls?: { to: string; value?: string; data?: string }[],
+  feeToken: string = TEMPO_DEFAULT_FEE_TOKEN,
 ): Promise<TransactionFeeEstimate> {
-  const [deployed, { gasPrice }] = await Promise.all([
+  const [deployed, { gasPrice }, info] = await Promise.all([
     isDeployed(from, chainId),
     getGasPrices(chainId),
+    // The recipient is part of the reviewed, signed fee instruction. Fetch it alongside the
+    // chain reads so the confirmation sheet does not add an avoidable extra round trip.
+    fetchBundlerAccountInfo(chainId, from).catch(() => null),
   ]);
 
   // Mirror sendUserOpTempo's pricing: the displayed fee is the reimbursement, priced off the
   // REALISTIC gas, NOT the padded UserOp limits. A simple send is 1 transfer + 1 reimbursement
-  // (2 sub-calls); a dApp call adds its own sub-call (→ 3, allowing the treasury-split transfer).
-  const hasCall = !!tx?.to && !!tx.data && tx.data !== '0x';
-  let expectedGas = tempoExpectedGas(deployed, hasCall ? 3 : 2);
+  // (2 sub-calls); contract calls reserve an extra reimbursement leg for the split case.
+  const actualCalls = batchCalls?.length ? batchCalls : tx?.to ? [tx] : [];
+  const hasContractCall = actualCalls.some((call) => !!call.data && call.data !== '0x');
+  const innerCallCount = Math.max(actualCalls.length, 1);
+  const reimbursementLegs = hasContractCall ? 2 : 1;
+  const subCallCount = innerCallCount + reimbursementLegs;
+  let expectedGas = tempoExpectedGas(deployed, subCallCount);
 
   // For a contract call on a DEPLOYED Safe, refine off the bundler's own estimate of the REAL
   // call (same basis sendUserOpTempo prices against) so the quote tracks what's charged instead
   // of showing a transfer-sized fee. Undeployed → the deploy cost dominates; keep the static model.
-  if (hasCall && deployed) {
+  if (hasContractCall && deployed) {
     try {
       // This field is part of the final UserOp. Never replace a failed read
       // with nonce 0 in a simulation.
       const nonce = await getNonce(from, chainId);
-      const innerCall: MultiSendCall = {
-        to: tx!.to,
-        value: stripHexPrefix(tx!.value ?? '0') || '0',
-        data: tx!.data && tx!.data !== '0x' ? fromHex(stripHexPrefix(tx!.data)) : new Uint8Array(0),
-      };
+      const innerCalls: MultiSendCall[] = actualCalls.map((call) => ({
+        to: call.to,
+        value: stripHexPrefix(call.value ?? '0') || '0',
+        data: call.data && call.data !== '0x' ? fromHex(stripHexPrefix(call.data)) : new Uint8Array(0),
+      }));
       // Representative batch: the call + two placeholder reimbursement transfers (EOA + treasury,
       // the split case — so the quote doesn't under-count when splitting; value doesn't affect
       // gas). estimateGas returns un-padded limits ≈ the bundler's simGas.
       const callData = buildMultiSendExecuteCallData([
-        innerCall,
-        { to: TEMPO_DEFAULT_FEE_TOKEN, value: '0', data: encodeErc20Transfer(from, 1n) },
-        { to: TEMPO_DEFAULT_FEE_TOKEN, value: '0', data: encodeErc20Transfer(from, 1n) },
+        ...innerCalls,
+        { to: feeToken, value: '0', data: encodeErc20Transfer(from, 1n) },
+        { to: feeToken, value: '0', data: encodeErc20Transfer(from, 1n) },
       ]);
       const dummyOp: UserOperation = {
         sender: from,
@@ -458,7 +529,7 @@ async function estimateTempoFee(
         initCode: new Uint8Array(0),
         callData,
         verificationGasLimit: VERIFICATION_GAS_DEPLOYED,
-        callGasLimit: tempoCallGasLimit(3),
+        callGasLimit: tempoCallGasLimit(subCallCount),
         preVerificationGas: PRE_VERIFICATION_GAS,
         maxFeePerGas: 0n,
         maxPriorityFeePerGas: 0n,
@@ -477,6 +548,7 @@ async function estimateTempoFee(
 
   const reimbursement = tempoReimbursement(expectedGas, gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
   const totalWei = reimbursement * 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS);
+  const feeRecipient = info?.settlementRecipient ?? info?.depositAddress;
 
   return {
     totalWei,
@@ -488,6 +560,15 @@ async function estimateTempoFee(
     deployed,
     tier,
     quoted: false,
+    inBand: true,
+    feeAsset: {
+      kind: 'erc20',
+      token: feeToken,
+      decimals: TEMPO_FEE_TOKEN_DECIMALS,
+      amount: reimbursement,
+      symbol: feeToken.toLowerCase() === TEMPO_DEFAULT_FEE_TOKEN.toLowerCase() ? 'pathUSD' : undefined,
+    },
+    feeRecipient: feeRecipient && /^0x[0-9a-fA-F]{40}$/.test(feeRecipient) ? feeRecipient : undefined,
   };
 }
 
@@ -511,13 +592,19 @@ export async function estimateTransactionFee(
   // Without it we deliberately skip the live UserOp simulation rather than send
   // a draft which cannot match the final operation.
   publicKeyHex?: string,
+  // Present only after the UI has shown this exact high quote and the user chose
+  // to review its resulting fee. A changed quote must be acknowledged again.
+  highGasQuoteApproval?: HighGasQuoteApproval,
 ): Promise<TransactionFeeEstimate> {
   // Tempo pays gas in a stablecoin, not the native coin — separate model. Forward the tx so a
-  // dApp contract call is quoted off its REAL gas, not a transfer-sized default.
-  if (isTempoChain(chainId)) return estimateTempoFee(from, chainId, tier, tx);
+  // dApp contract call is quoted off its REAL gas, not a transfer-sized default. The visible
+  // fee asset remains a normal ERC-20; only Tempo's outer transaction envelope differs.
+  if (isTempoChain(chainId)) {
+    return estimateTempoFee(from, chainId, tier, tx, batchCalls, gasFeeToken ?? TEMPO_DEFAULT_FEE_TOKEN);
+  }
 
   // The bundler is the single source of truth for the price. getBundlerGasQuote
-  // throws GasQuoteTooHighError (propagated here = refuse) if the quote is abusive,
+  // asks for an explicit acknowledgement when the quote is above the safety cap,
   // and returns null only when the bundler can't quote (then we fall back locally).
   const [deployed, nonce, { gasPrice }, quote] = await Promise.all([
     // These are UserOperation correctness fields, not best-effort preview
@@ -525,7 +612,7 @@ export async function estimateTransactionFee(
     isDeployed(from, chainId),
     getNonce(from, chainId),
     getGasPrices(chainId),
-    getBundlerGasQuote(chainId, tier),
+    getBundlerGasQuote(chainId, tier, highGasQuoteApproval),
   ]);
 
   let networkFeePerGas: bigint;
@@ -930,6 +1017,7 @@ async function sendUserOpTempo(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
+  quotedFee?: QuotedInBandFee,
 ): Promise<SubmitResult> {
   await verifyChainReady(chainId);
 
@@ -1022,9 +1110,17 @@ async function sendUserOpTempo(
   // (callGasLimit/verificationGasLimit stay high for OOG safety, but the user shouldn't pay 2–4×
   // for that headroom). `bigintMax` guards the case where estimateGas throws (estActualGas null).
   const realisticGas = estActualGas !== null ? bigintMax(staticGas, estActualGas) : staticGas;
-  const reimbursement = tempoReimbursement(realisticGas, gasPrices.gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
+  const calculatedReimbursement = tempoReimbursement(realisticGas, gasPrices.gasPrice, TEMPO_FEE_TOKEN_DECIMALS);
+  // Tempo has the same "sign what was displayed" guarantee as every other in-band chain.
+  // If the active relay changed its recipient, the quote is stale and needs a new review.
+  if (quotedFee && quotedFee.recipient.toLowerCase() !== feeCollector.toLowerCase()) {
+    throw new Error('The gas quote has expired. Please review the updated fee and try again.');
+  }
+  const reimbursement = quotedFee && quotedFee.amount > 0n && /^0x[0-9a-fA-F]{40}$/.test(quotedFee.recipient)
+    ? quotedFee.amount
+    : calculatedReimbursement;
   userOp.callData = buildBatch(reimbursement);
-  console.log(`[Tempo] feeToken=${feeToken} reimbursement=${reimbursement} realisticGas=${realisticGas} staticGas=${staticGas} est=${estActualGas ?? 'n/a'} collector=${feeCollector}`);
+  console.log(`[Tempo] feeToken=${feeToken} reimbursement=${reimbursement} calculated=${calculatedReimbursement} displayed=${quotedFee ? 'yes' : 'no'} realisticGas=${realisticGas} staticGas=${staticGas} est=${estActualGas ?? 'n/a'} collector=${feeCollector}`);
 
   // Sign the SafeOp (over the FINAL callData) and submit, telling the bundler which
   // stablecoin to charge for the outer 0x76.
@@ -1955,16 +2051,29 @@ function exceedsQuoteMultiple(quoted: bigint, baseline: bigint): boolean {
   return quoted * QUOTE_MULTIPLE_SCALE_BPS > baseline * MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS;
 }
 
-/** Thrown when a bundler quotes a gas price above the client-side sanity cap. */
+/** Thrown when a bundler quote needs an explicit user acknowledgement. */
 export class GasQuoteTooHighError extends Error {
-  constructor(quoted: bigint, chainGasPrice: bigint) {
-    super(
-      `The relayer quoted an abnormally high gas price ` +
-        `(${(Number(quoted) / Number(chainGasPrice || 1n)).toFixed(1)}× the network rate). ` +
-        `For your safety, Vela won't submit this transaction. Try again, or switch bundler.`,
-    );
+  readonly approval: HighGasQuoteApproval;
+
+  constructor(tier: GasTier, maxFeePerGas: bigint, networkFeePerGas: bigint) {
+    // This message is intentionally not user-facing. Callers must render the
+    // structured values with their own i18n copy rather than leaking English
+    // service text into a money-flow screen.
+    super('High gas quote requires user acknowledgement');
     this.name = 'GasQuoteTooHighError';
+    this.approval = { tier, maxFeePerGas, networkFeePerGas };
   }
+}
+
+function matchesHighGasQuoteApproval(
+  approval: HighGasQuoteApproval | undefined,
+  tier: GasTier,
+  maxFeePerGas: bigint,
+  networkFeePerGas: bigint,
+): boolean {
+  return approval?.tier === tier
+    && approval.maxFeePerGas === maxFeePerGas
+    && approval.networkFeePerGas === networkFeePerGas;
 }
 
 /**
@@ -2030,12 +2139,14 @@ export interface GasQuoteTier {
  *
  * Returns null when the bundler doesn't support the method (older / generic
  * bundler) so the caller can fall back to a local estimate. Throws
- * GasQuoteTooHighError when the quote exceeds the client-side sanity cap — that
- * is a refusal, not a fallback, so an abusive bundler can't overcharge silently.
+ * GasQuoteTooHighError when the quote exceeds the client-side sanity cap unless
+ * the caller supplies a user acknowledgement for this exact quote. This keeps
+ * the safety rail while allowing a user to review and choose a costly send.
  */
 export async function getBundlerGasQuote(
   chainId: number,
   tier: GasTier = 'standard',
+  highGasQuoteApproval?: HighGasQuoteApproval,
 ): Promise<GasQuoteTier | null> {
   let resp;
   let chain: ChainGasPrice;
@@ -2088,12 +2199,13 @@ export async function getBundlerGasQuote(
   // Client-side hard cap — judged by the BUNDLER's own reported markup (maxFee vs its
   // networkFee), NOT the wallet's per-chain RPC, which must never veto the authoritative
   // quote (that veto is what blanked the fee to "—" and under-priced Gnosis). See isQuoteAbusive.
-  if (isQuoteAbusive(maxFeePerGas, reportedNetworkFee, chain, tier)) {
+  if (isQuoteAbusive(maxFeePerGas, reportedNetworkFee, chain, tier)
+      && !matchesHighGasQuoteApproval(highGasQuoteApproval, tier, maxFeePerGas, networkFeePerGas)) {
     console.warn(
       `[Gas] Bundler quote ${maxFeePerGas} exceeds 2.5× its reported ${tier} ` +
-      `network cost ${networkFeePerGas} — refusing.`,
+      `network cost ${networkFeePerGas} — waiting for user acknowledgement.`,
     );
-    throw new GasQuoteTooHighError(maxFeePerGas, networkFeePerGas);
+    throw new GasQuoteTooHighError(tier, maxFeePerGas, networkFeePerGas);
   }
 
   return { maxFeePerGas, maxPriorityFeePerGas, networkFeePerGas, relayerFeePerGas };

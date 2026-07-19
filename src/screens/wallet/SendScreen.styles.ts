@@ -563,6 +563,39 @@ export const styles = createStyles(() => ({
     // screen has no bottom safe-area edge, so the clearance lives here.
     marginBottom: space['5xl'],
   },
+  sameAssetFeeWarning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: space.md,
+    marginTop: space.sm,
+    marginBottom: space.md,
+    padding: space.lg,
+    borderRadius: radius.lg,
+    backgroundColor: color.error.soft,
+    borderWidth: 1,
+    borderColor: color.error.base,
+  },
+  sameAssetFeeWarningCopy: {
+    flex: 1,
+    gap: space.xs,
+  },
+  sameAssetFeeWarningTitle: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.error.base,
+  },
+  sameAssetFeeWarningBody: {
+    fontSize: text.sm,
+    ...inter.regular,
+    color: color.fg.muted,
+    lineHeight: 20,
+  },
+  sameAssetFeeWarningMax: {
+    fontSize: text.sm,
+    ...inter.semibold,
+    color: color.fg.base,
+    marginTop: 2,
+  },
 
   // Inline tx status
   txStatusWrap: {

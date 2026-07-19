@@ -35,22 +35,8 @@ export function isTempoChain(chainId: number): boolean {
 }
 
 /**
- * True if `tokenAddress` is Tempo's gas/fee token (pathUSD) on a Tempo chain.
- * pathUSD has no native coin to act as "gas", so it plays that role on Tempo —
- * used to categorise it under "Gas" in the token picker.
- */
-export function isTempoFeeToken(chainId: number, tokenAddress?: string | null): boolean {
-  return (
-    isTempoChain(chainId) &&
-    !!tokenAddress &&
-    tokenAddress.toLowerCase() === TEMPO_DEFAULT_FEE_TOKEN.toLowerCase()
-  );
-}
-
-/**
- * Canonical default fee token (pathUSD) — used to pay gas when the sent asset is not
- * itself a usable fee token (e.g. a dApp contract call). TIP-20 fee tokens live in the
- * reserved 0x20c0… range; pathUSD is the protocol-default fee token.
+ * Canonical default fee token (pathUSD) when the relay does not publish a different usable
+ * fee asset. TIP-20 fee tokens live in the reserved 0x20c0… range.
  */
 export const TEMPO_DEFAULT_FEE_TOKEN = '0x20c0000000000000000000000000000000000000';
 

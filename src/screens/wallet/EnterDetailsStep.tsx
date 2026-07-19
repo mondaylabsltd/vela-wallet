@@ -306,8 +306,7 @@ export function EnterDetailsStep({ c }: { c: SendController }) {
                 const amt = amountOf(tk);
                 const usd = amt * (tk.priceUsd ?? 0);
                 // Trimmed for gas: sent amount is below full balance. True for the native coin
-                // AND for Tempo's pathUSD fee token (whose line reserveTempoFeeToken trims) — the
-                // old isNativeToken gate hid the badge on Tempo sweeps.
+                // AND for any ERC-20 fee asset whose line is trimmed for the gas reserve.
                 const reserved = amt < tokenBalanceDouble(tk);
                 return (
                   <View key={tokenId(tk)}>
