@@ -1161,7 +1161,7 @@
 - `e2e/parallel-send.spec.ts:3-11` — 注释:只测 Send 入口,'no funds move and no UserOp is sent',深流程是 backlog
 - `e2e/parallel-onchain.spec.ts:2-13` — '@onchain' 真实 Gnosis 结算说明 + RUN_ONCHAIN=1 + 先给 Parallel One 充 xDAI
 - `e2e/parallel-onchain.spec.ts:42-49` — bundler 从 per-Safe deposit address 付 gas(不是 Safe 余额),gas 账户不足则 skip 并打印充值地址
-- `e2e/support/parallel.ts:131-140` — bundlerGasAccount():查询 vela-bundler.getvela.app 的 depositAddress 与 spendableWei
+- `e2e/support/parallel.ts:131-140` — bundlerGasAccount():查询 vela-relay.getvela.app 的 depositAddress 与 spendableWei
 
 **常见错误**:
 - 【受训者原错】"跑单测就行"——没意识到该测试文件自我声明不覆盖 RPC 路径,gas 改动的主要风险面根本不在单测里。
@@ -1543,7 +1543,6 @@
 ---
 
 **统计**:全库共 40 题 = 6 域 × 6 题(D3/D4/D5-D10/D6-D7/D8-D9/D11-D12)+ 4 道综合题。难度分布(域内):难度1×6、难度2×6、难度3×8、难度4×10、难度5×6。
-
 
 
 

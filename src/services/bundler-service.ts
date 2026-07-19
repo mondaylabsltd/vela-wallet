@@ -1,7 +1,7 @@
 /**
  * Gas account service.
  *
- * When using the built-in bundler (vela-bundler.getvela.app), each Safe wallet
+ * When using the built-in bundler (vela-relay.getvela.app), each Safe wallet
  * has a dedicated gas account (EOA) per chain. The bundler auto-sponsors
  * new users from its treasury; if auto-sponsorship is unavailable the user
  * is prompted to fund the gas account manually.

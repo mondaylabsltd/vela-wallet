@@ -33,7 +33,7 @@ packages/safari-extension/  (esbuild web bundle)      src/services/dapp-transpor
   manifest.json  MV3                                   src/components/SigningRequestModal.tsx (the ONE sign UI)
                                                        src/modules/passkey (native Passkey.sign)
 targets/safari/  (Apple extension target)             src/services/safe-transaction.ts (SafeOp hash)
-  SafariWebExtensionHandler.swift  App Group I/O       vela-bundler.getvela.app         (UserOp submit)
+  SafariWebExtensionHandler.swift  App Group I/O       vela-relay.getvela.app           (UserOp submit)
   Info.plist / entitlements                            src/services/approval-guard.ts   (never-unlimited)
                                                        simulateAssetChanges             (asset preview)
 src/services/extension-bridge-transport.ts  NEW        LocalTransaction persistence     (activity replay)
@@ -109,7 +109,7 @@ The background reuses the **same method classification the app already ships** s
 | **Chain** | `wallet_switchEthereumChain`, `wallet_addEthereumChain`, `wallet_watchAsset` | background (updates cache, emits `chainChanged`); add-chain may show a light in-Safari confirm | no |
 | **Read** | `eth_call`, `eth_getBalance`, `eth_estimateGas`, `eth_getLogs`, receipts, … (the app's `INSTANT_READONLY_METHODS` / `handleReadOnlyRPC` allowlist) | background → Vela RPC endpoints | no |
 
-Background read-proxy hits the same endpoints the app uses (`vela-bundler.getvela.app/<chainId>` for bundler methods; per-network `rpcURL` for node methods). It applies the **same read-only allowlist** as `walletpair-transport.ts` — never proxy a method outside it.
+Background read-proxy hits the same endpoints the app uses (`vela-relay.getvela.app/<chainId>` for bundler methods; per-network `rpcURL` for node methods). It applies the **same read-only allowlist** as `walletpair-transport.ts` — never proxy a method outside it.
 
 ---
 

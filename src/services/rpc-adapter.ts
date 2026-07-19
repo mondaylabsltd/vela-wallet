@@ -5,7 +5,7 @@
  * latency-based sorting, load balancing, and automatic failover.
  *
  * RPC methods  → poolRpcCall     (public RPCs + ethereum-data built-ins)
- * Bundler methods → poolBundlerCall (user bundler + vela-bundler.getvela.app)
+ * Bundler methods → poolBundlerCall (user bundler + vela-relay.getvela.app)
  */
 
 import { poolBundlerCall, poolRpcCall } from './rpc-pool';

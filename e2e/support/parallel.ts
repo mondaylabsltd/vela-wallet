@@ -134,7 +134,7 @@ export async function gnosisBalanceWei(address: string): Promise<bigint> {
  * funded (or a sponsorship). Returns the deposit address + spendable balance (wei).
  */
 export async function bundlerGasAccount(chainId: number, safe: string): Promise<{ depositAddress: string; spendableWei: bigint }> {
-  const r = await fetch(`https://vela-bundler.getvela.app/v1/account/${chainId}/${safe}`);
+  const r = await fetch(`https://vela-relay.getvela.app/v1/account/${chainId}/${safe}`);
   const j = await r.json();
   return { depositAddress: j.activeDepositAddress ?? '', spendableWei: BigInt(j.spendableBalance ?? '0x0') };
 }

@@ -30,7 +30,7 @@ export interface Network {
 /** Base URL for chain logos from ethereum-data.awesometools.dev */
 const CHAIN_LOGO_BASE = 'https://ethereum-data.awesometools.dev/chainlogos';
 /** Base URL of Vela's per-chain ERC-4337 bundler. */
-const BUNDLER_BASE = 'https://vela-bundler.getvela.app';
+const BUNDLER_BASE = 'https://vela-relay.getvela.app';
 
 /**
  * Built-in networks, derived from the canonical {@link CHAINS} table so chainId,

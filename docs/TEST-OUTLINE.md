@@ -47,7 +47,7 @@
 | ID | 依赖 | 具体端点/协议 | 注入点（在哪 mock） | 已有 test double? |
 |----|------|--------------|---------------------|-------------------|
 | **D1** | 区块链 RPC 节点（每链，用户/Alchemy/dRPC/Ankr/Vela/公共/ethereum-data 分级） | JSON-RPC 2.0 over HTTP；带打分、封禁、故障转移 | mock `fetch` | ✅ `rpc-pool.test.ts`（failover/封禁/getLogs cap）+ 签名/模拟测试里 mock |
-| **D2** | Bundler（ERC-4337），`vela-bundler.getvela.app` | JSON-RPC（`eth_sendUserOperation` 等）+ REST（`/v1/account`、`/v1/sponsor`，带 Idempotency-Key） | mock `fetch` | ✅ `bundler-service.test.ts`（含 `parseBundlerUnderfunded`） |
+| **D2** | Bundler（ERC-4337），`vela-relay.getvela.app` | JSON-RPC（`eth_sendUserOperation` 等）+ REST（`/v1/account`、`/v1/sponsor`，带 Idempotency-Key） | mock `fetch` | ✅ `bundler-service.test.ts`（含 `parseBundlerUnderfunded`） |
 | **D3** | Vela 后端：`p256-index.getvela.app`（CF Worker+D1+DO）、`getvela.app/api/bug-report`、`ethereum-data`（缓存 token 列表 + 7730 descriptor） | REST（`/api/query`、`/api/create`；bug-report 代理） | mock `fetch` | ✅ `bug-report.test.ts`；⚠️ public-key-index 仅集成 |
 | **D4** | 行情 / 汇率：Chainlink（链上，经 RPC）、可配 FX endpoint（Frankfurter / er-api / 自定义） | Chainlink 走 RPC `eth_call`；FX 走 HTTP GET | mock RPC + mock `fetch`；或用缓存快照 | ⚠️ 有缓存+回退，多数用快照 |
 | **D5** | dApp relay：remote-inject（SSE + POST）、WalletPair（WebSocket，spec §7/§9.6） | `EventSource` / `WebSocket` | mock `EventSource` / `WebSocket` | ⚠️ 签名逻辑经 `dapp-signing*.test.ts`；transport 内部无独立桩 |
