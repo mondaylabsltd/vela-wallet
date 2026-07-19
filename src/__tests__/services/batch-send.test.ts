@@ -14,7 +14,7 @@ import {
   toMultiTokenSpecs,
   selectAllValuable,
   reserveNativeGas,
-  reserveTempoFeeToken,
+  reserveFeeToken,
   maxNativeSendable,
   BatchSendError,
   type SplitRecipient,
@@ -231,33 +231,33 @@ describe('maxNativeSendable (single-send "Max" = balance − reserve, string-exa
   });
 });
 
-describe('reserveTempoFeeToken (Tempo sweep keeps pathUSD for the in-band gas reimbursement)', () => {
+describe('reserveFeeToken (an in-band ERC-20 fee asset remains available for reimbursement)', () => {
   const PATHUSD = '0x20c0000000000000000000000000000000000000';
   const pathUsd: MultiTokenSpec = { tokenAddress: PATHUSD, decimals: 6, amount: '1' }; // 1e6 units
   const otherTip20: MultiTokenSpec = { tokenAddress: USDC, decimals: 6, amount: '10' };
 
   it('trims only the fee-token (pathUSD) line — other TIP-20s pay no gas and pass through', () => {
-    const out = reserveTempoFeeToken([otherTip20, pathUsd], PATHUSD, 200_000n); // reserve 0.2 pathUSD
+    const out = reserveFeeToken([otherTip20, pathUsd], PATHUSD, 200_000n); // reserve 0.2 pathUSD
     expect(out[0]).toEqual(otherTip20);
     expect(out[1]).toEqual({ tokenAddress: PATHUSD, decimals: 6, amount: '0.8' });
   });
 
   it('matches the fee token case-insensitively', () => {
-    const out = reserveTempoFeeToken([pathUsd], PATHUSD.toUpperCase(), 200_000n);
+    const out = reserveFeeToken([pathUsd], PATHUSD.toUpperCase(), 200_000n);
     expect(out[0].amount).toBe('0.8');
   });
 
   it('drops the pathUSD line if its whole balance is needed for gas', () => {
-    const out = reserveTempoFeeToken([otherTip20, pathUsd], PATHUSD, 5_000_000n); // reserve 5 > 1
+    const out = reserveFeeToken([otherTip20, pathUsd], PATHUSD, 5_000_000n); // reserve 5 > 1
     expect(out).toEqual([otherTip20]);
   });
 
   it('is a no-op when pathUSD is not in the selection', () => {
-    expect(reserveTempoFeeToken([otherTip20], PATHUSD, 200_000n)).toEqual([otherTip20]);
+    expect(reserveFeeToken([otherTip20], PATHUSD, 200_000n)).toEqual([otherTip20]);
   });
 
   it('is a no-op for a non-positive reserve', () => {
-    expect(reserveTempoFeeToken([otherTip20, pathUsd], PATHUSD, 0n)).toEqual([otherTip20, pathUsd]);
+    expect(reserveFeeToken([otherTip20, pathUsd], PATHUSD, 0n)).toEqual([otherTip20, pathUsd]);
   });
 });
 

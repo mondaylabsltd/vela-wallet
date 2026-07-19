@@ -11,7 +11,8 @@
  * The card OWNS the fee-asset option loading (the bundler's all-asset quote);
  * the selected token itself is controlled by the parent (`gasFeeToken` +
  * `onFeeTokenChange`) so the approve/submit path sends exactly what was quoted.
- * On Tempo no selector renders — the fee is always pathUSD there.
+ * Tempo uses the same fee-asset UI. Its special transaction envelope stays in the
+ * service layer, where it belongs.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -28,6 +29,7 @@ import {
   type HighGasQuoteApproval,
   type TransactionFeeEstimate,
 } from '@/services/safe-transaction';
+import { isTempoChain, tempoReimbursement } from '@/services/tempo';
 import { useInBandFeeTokenOptions, type FeeTokenOption } from '@/hooks/use-inband-fee-tokens';
 import { FeeTokenSelector } from './FeeTokenSelector';
 
@@ -127,22 +129,34 @@ export function GasFeeCard({
 
   // The address-only in-band quote carries balances and USD prices for every asset. The shared
   // gas basis derives exact amounts once it is ready; the estimate fallback keeps first render stable.
+  const erc20Fee = feeEstimate?.feeAsset?.kind === 'erc20' ? feeEstimate.feeAsset : null;
+  // Tempo's default is an ERC-20 fee token, not a synthetic native USD balance. Keep it
+  // visibly selected even before the relay publishes additional Tempo fee-token choices.
+  const selectedFeeToken = gasFeeToken ?? (isTempoChain(chainId) ? erc20Fee?.token ?? null : null);
   const selectedOption = feeTokenOptions?.find(
-    (o) => (o.contract?.toLowerCase() ?? null) === (gasFeeToken?.toLowerCase() ?? null),
+    (o) => (o.contract?.toLowerCase() ?? null) === (selectedFeeToken?.toLowerCase() ?? null),
   );
   const nativeOption = feeTokenOptions?.find((o) => o.asset === 'native');
   const feeAmountForOption = useCallback((option: FeeTokenOption): bigint | null => {
-    if (!feeEstimate?.inBand || !nativeOption) return null;
+    if (!feeEstimate?.inBand) return null;
+    if (isTempoChain(chainId)) {
+      // Tempo's outer 0x76 is protocol-specific, but its fee is still a normal USD TIP-20
+      // amount derived from the same gas basis shown to the user.
+      return option.asset === 'erc20'
+        ? tempoReimbursement(feeEstimate.totalGas, feeEstimate.networkFeePerGas, option.decimals)
+        : null;
+    }
+    if (!nativeOption) return null;
     return calculateInBandFeeAmount(
       feeEstimate.totalGas,
       feeEstimate.networkFeePerGas,
       option,
       nativeOption,
     );
-  }, [feeEstimate, nativeOption]);
-  const erc20Fee = feeEstimate?.feeAsset?.kind === 'erc20' ? feeEstimate.feeAsset : null;
+  }, [chainId, feeEstimate, nativeOption]);
   const erc20Symbol = erc20Fee
     ? (feeTokenOptions?.find((o) => o.contract?.toLowerCase() === erc20Fee.token.toLowerCase())?.symbol
+      ?? erc20Fee.symbol
       ?? `${erc20Fee.token.slice(0, 6)}…`)
     : null;
   const selectedFeeAmount = selectedOption ? feeAmountForOption(selectedOption) : null;
@@ -224,7 +238,7 @@ export function GasFeeCard({
       const amount = feeAmountForOption(o);
       return amount !== null && o.balance >= amount;
     };
-    const selKey = gasFeeToken?.toLowerCase() ?? null;
+    const selKey = selectedFeeToken?.toLowerCase() ?? null;
     const current = feeTokenOptions.find((o) => (o.contract?.toLowerCase() ?? null) === selKey);
     if (current && affordable(current)) { didAutoDefaultRef.current = true; return; } // current is fine
     const pick = feeTokenOptions.find(affordable);
@@ -232,7 +246,7 @@ export function GasFeeCard({
       didAutoDefaultRef.current = true;
       handleFeeTokenSelect(pick.contract);
     }
-  }, [feeTokenOptions, gasFeeToken, feeAmountForOption, handleFeeTokenSelect]);
+  }, [feeTokenOptions, selectedFeeToken, feeAmountForOption, handleFeeTokenSelect]);
 
   const { t } = useTranslation();
 
@@ -298,7 +312,7 @@ export function GasFeeCard({
       {expanded && selectable && feeEstimate && (
         <FeeTokenSelector
           options={feeTokenOptions!}
-          selected={gasFeeToken}
+          selected={selectedFeeToken}
           onSelect={handleFeeTokenSelect}
           feeAmountFor={feeAmountForOption}
           busy={refreshing}

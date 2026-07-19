@@ -9,7 +9,7 @@ import { isNativeToken, tokenBalanceDouble, tokenChainId, tokenId, tokenLogoURLs
 import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { addCustomNetworkByChainId } from '@/services/add-network';
-import { buildMultiTokenCalls, buildSplitCalls, maxNativeSendable, reserveNativeGas, reserveTempoFeeToken, sumSplitBaseUnits, toMultiTokenSpecs } from '@/services/batch-send';
+import { buildMultiTokenCalls, buildSplitCalls, maxNativeSendable, reserveFeeToken, reserveNativeGas, sumSplitBaseUnits, toMultiTokenSpecs } from '@/services/batch-send';
 import { probeTreasury, parseBundlerUnderfunded, type TreasuryStatus } from '@/services/bundler-service';
 import { fromBaseUnits, toBaseUnits } from '@/services/eip681';
 import { resolveTokenAmount } from '@/services/fiat-convert';
@@ -30,7 +30,6 @@ import {
   type TransactionFeeEstimate,
 } from '@/services/safe-transaction';
 import { findAccountByCredentialId, saveTransactions, updateTransactions } from '@/services/storage';
-import { isTempoChain, isTempoFeeToken, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
 import { resolveTokenMetadata } from '@/services/token-metadata';
 import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
 import { clearTokenCache, fetchTokens } from '@/services/wallet-api';
@@ -359,41 +358,32 @@ export function useSendController() {
         setAmountWarning(t('send.warnNotEnoughToken', { symbol: selectedToken.symbol }));
         return;
       }
-      if (isTempoChain(chainId)) {
-        // Tempo has no native coin: gas is paid in pathUSD (the canonical fee token).
-        // The sent-token amount is checked above; here ensure pathUSD covers the fee.
-        if (feeEstimate) {
-          // feeEstimate.totalWei is attodollars (USD×1e-18) → pathUSD units (6 dec).
-          const feePathUsd = feeEstimate.totalWei / 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS);
-          const sendingPathUsd =
-            selectedToken.tokenAddress?.toLowerCase() === TEMPO_DEFAULT_FEE_TOKEN.toLowerCase();
-          if (sendingPathUsd) {
-            const balWei = balanceToWei(selectedToken.balance, selectedToken.decimals);
-            const amountWei = BigInt('0x' + amountToWeiHex(tokenAmount, selectedToken.decimals));
-            if (amountWei + feePathUsd > balWei) {
-              setAmountWarning(t('send.warnInsufficientForGas', { sym: 'pathUSD' }));
-              return;
-            }
-          } else {
-            const pathUsd = tokens.find(
-              tk => tk.tokenAddress?.toLowerCase() === TEMPO_DEFAULT_FEE_TOKEN.toLowerCase() &&
-                tokenChainId(tk) === chainId,
-            );
-            const pathBalWei = pathUsd ? balanceToWei(pathUsd.balance, pathUsd.decimals) : 0n;
-            if (pathBalWei < feePathUsd) {
-              setAmountWarning(t('send.warnNeedGas', { sym: 'pathUSD' }));
-              return;
-            }
+      // An ERC-20 fee asset is handled exactly like any other token: when it is being sent,
+      // reserve its fee; otherwise ensure the separate fee-token balance can cover it. This
+      // applies to every in-band network, including Tempo, without naming a special token.
+      const feeAsset = feeEstimate?.feeAsset;
+      if (feeAsset?.kind === 'erc20') {
+        const isFeeToken = selectedToken.tokenAddress?.toLowerCase() === feeAsset.token.toLowerCase();
+        if (isFeeToken) {
+          const balanceUnits = balanceToWei(selectedToken.balance, selectedToken.decimals);
+          const sendUnits = BigInt('0x' + amountToWeiHex(tokenAmount, selectedToken.decimals));
+          if (sendUnits + feeAsset.amount > balanceUnits) {
+            setAmountWarning(t('send.warnInsufficientForGas', { sym: feeAsset.symbol ?? selectedToken.symbol }));
+            return;
+          }
+        } else {
+          const feeToken = tokens.find(
+            tk => tk.tokenAddress?.toLowerCase() === feeAsset.token.toLowerCase() && tokenChainId(tk) === chainId,
+          );
+          const feeBalance = feeToken ? balanceToWei(feeToken.balance, feeToken.decimals) : 0n;
+          if (feeBalance < feeAsset.amount) {
+            setAmountWarning(t('send.warnNeedGas', { sym: feeAsset.symbol ?? feeToken?.symbol ?? 'gas token' }));
+            return;
           }
         }
-        setAmountWarning(null);
-        return;
       }
-      // Generic in-band chain: the gas asset is
-      // chosen on the confirm screen's fee-token selector — the native coin OR a whitelisted
-      // stablecoin the user holds — so the native-coin "insufficient / need <native>" warnings
-      // don't apply here. The selector enforces the chosen fee asset's sufficiency; only the
-      // "not enough of the token being sent" check above still gates this step.
+      // The selected fee asset is rechecked against the final confirmation quote. Only the
+      // transferred-token balance and an already-known ERC-20 fee balance gate this step.
       setAmountWarning(null);
       return;
     }
@@ -558,20 +548,14 @@ export function useSendController() {
   // only shows checkboxes once one is picked), so selection is always one chain.
   const pickedTokens = multiSelect.selectedTokens(tokens);
 
-  // The exact per-token amounts a multiSelect submits: full balance for ERC-20s, and
-  // the native coin minus a gas reserve so the EntryPoint prefund can be paid
-  // (non-Tempo, no paymaster). Used by BOTH the simulation and the submit so the
-  // preview matches what gets signed. The native line drops out if it can't even
-  // cover the reserve.
+  // The exact per-token amounts a multiSelect submits. Reserve whichever asset pays the
+  // displayed fee — native or ERC-20 — so the preview and signed MultiSend stay identical.
   const multiTokenSpecs = (chainId: number) => {
     const specs = toMultiTokenSpecs(pickedTokens);
-    if (isTempoChain(chainId)) {
-      // Tempo pays gas from the pathUSD balance being swept, so trim that line — reserveNativeGas
-      // can't (pathUSD is a non-null-address TIP-20). Reserve 2× the quoted fee: the sweep batches
-      // more sub-calls than the 2-sub-call quote and may also deploy the Safe, so the live
-      // reimbursement runs higher; over-reserving a little pathUSD is harmless.
-      const feeUnits = feeEstimate ? feeEstimate.totalWei / 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS) : 0n;
-      return reserveTempoFeeToken(specs, TEMPO_DEFAULT_FEE_TOKEN, feeUnits * 2n);
+    if (feeEstimate?.feeAsset?.kind === 'erc20') {
+      // Reserve 2× because a sweep contains more sub-calls than its initial fee quote and can
+      // also deploy the Safe. The final signed fee still uses the reviewed quote.
+      return reserveFeeToken(specs, feeEstimate.feeAsset.token, feeEstimate.feeAsset.amount * 2n);
     }
     return reserveNativeGas(specs, feeEstimate ? feeEstimate.totalWei * 3n : 0n);
   };
@@ -805,8 +789,8 @@ export function useSendController() {
         const balanceWei = balanceToWei(selectedToken.balance, selectedToken.decimals);
         // Reserve 3x estimated gas (200% margin for gas price volatility)
         const reserveWei = fee.totalWei * 3n;
-        // String-exact `balance − reserve` (no float precision loss). Matches the
-        // Tempo fee-token branch below and reserveNativeGas in batch-send.ts, so
+        // String-exact `balance − reserve` (no float precision loss). Matches
+        // reserveNativeGas in batch-send.ts, so
         // amountWei + reserveWei === balanceWei exactly and the "insufficient for
         // gas" pre-check no longer trips on its own Max fill. Returns '0' when the
         // balance can't cover the gas reserve.
@@ -817,51 +801,17 @@ export function useSendController() {
       }
     }
 
-    // Tempo fee token (pathUSD): unlike a normal ERC-20, gas is paid FROM this balance via
-    // the reimbursement transfer batched into the UserOp — so Max must leave enough to cover
-    // it, exactly like a native coin. Gated on isTempoFeeToken: a NON-fee TIP-20 pays gas from
-    // the SEPARATE pathUSD balance, so its Max stays full balance (falls through below).
-    if (isTempoFeeToken(tokenChainId(selectedToken), selectedToken.tokenAddress) && activeAccount) {
-      try {
-        const chainId = tokenChainId(selectedToken);
-        const fee = feeEstimate ?? await estimateTransactionFee(
-          activeAccount.address, chainId, 'fast', undefined, undefined, undefined,
-          prefetchedAccount.current?.publicKeyHex,
-        );
-        // fee.totalWei is attodollars (USD×1e-18); recover the pathUSD reimbursement (6 dec).
-        const feeUnits = fee.totalWei / 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS);
-        // Reserve 1.5× the fee: +50% for gas-price/estimate variance (the send-time
-        // reimbursement is re-priced off the bundler's live estimate and may exceed this quote,
-        // especially when this send also deploys the Safe). Leaves a margin so the pre-check clears.
-        const reserveUnits = (feeUnits * 3n) / 2n;
-        const balUnits = balanceToWei(selectedToken.balance, selectedToken.decimals);
-        if (balUnits > reserveUnits) {
-          setAmount(fromBaseUnits(balUnits - reserveUnits, selectedToken.decimals));
-          return;
-        }
-        setAmount('0');
-        return;
-      } catch {
-        // Estimation failed — fall through to full balance (the pre-check still warns).
-      }
-    }
-
-    // ERC-20 Max when the in-band gas fee is paid in the SAME token being swept: the batched
-    // fee leg (stable.transfer(treasury, fee)) needs balance too, so Max must leave the fee
-    // behind — otherwise the op sweeps everything and can't cover its own gas. Only when the
-    // selected fee token matches this token; otherwise gas is paid in native / a separate
-    // balance and full balance is sendable.
-    if (
-      activeAccount && gasFeeToken && selectedToken.tokenAddress &&
-      gasFeeToken.toLowerCase() === selectedToken.tokenAddress.toLowerCase()
-    ) {
+    // ERC-20 Max when the fee is paid in that SAME token: leave a reserve behind for the
+    // in-band reimbursement. This is asset-based rather than network-based, so the rule is
+    // identical for Tempo and ordinary EVM in-band sends.
+    if (activeAccount && selectedToken.tokenAddress) {
       try {
         const chainId = tokenChainId(selectedToken);
         const fee = feeEstimate ?? await estimateTransactionFee(
           activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken,
           prefetchedAccount.current?.publicKeyHex,
         );
-        if (fee.feeAsset?.kind === 'erc20' && fee.feeAsset.token.toLowerCase() === gasFeeToken.toLowerCase()) {
+        if (fee.feeAsset?.kind === 'erc20' && fee.feeAsset.token.toLowerCase() === selectedToken.tokenAddress.toLowerCase()) {
           // Reserve 1.5× the quoted fee (+50% for the send-time re-quote drift the 2× gate absorbs).
           const reserve = (fee.feeAsset.amount * 3n) / 2n;
           const balUnits = balanceToWei(selectedToken.balance, selectedToken.decimals);
@@ -873,8 +823,7 @@ export function useSendController() {
       }
     }
 
-    // ERC-20 tokens: gas is paid in native token (or a separate pathUSD balance on Tempo),
-    // so full balance is sendable.
+    // Gas is paid in native or a separate ERC-20 fee asset, so the full balance is sendable.
     setAmount(selectedToken.balance || '0');
   };
 

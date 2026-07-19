@@ -166,7 +166,7 @@ export function reserveNativeGas(tokens: MultiTokenSpec[], reserveWei: bigint): 
 }
 
 /**
- * The exact "Max" amount for a single native-coin (or Tempo fee-token) send:
+ * The exact "Max" amount for a single fee-paying asset send:
  * `balance − reserve`, string-formatted with no float precision loss. Returns
  * '0' when the balance can't even cover the gas reserve. Kept string-exact
  * (bigint subtraction + fromBaseUnits) so `toBaseUnits(result) + reserve ===
@@ -179,16 +179,13 @@ export function maxNativeSendable(balanceWei: bigint, reserveWei: bigint, decima
 }
 
 /**
- * Trim a multiSelect's Tempo FEE-TOKEN line (pathUSD) by `reserveUnits` so the Safe keeps
- * enough to pay the batched gas reimbursement. Tempo has no native coin — gas is settled by an
- * in-band feeToken.transfer, drawn from the SAME balance being swept. reserveNativeGas can't do
- * this: pathUSD is a TIP-20 with a non-null address, so it looks like any other ERC-20 and is
- * left untouched — sweeping it at full balance would leave nothing for the reimbursement and the
- * op would revert. Only the line whose address matches `feeTokenAddress` is trimmed; other TIP-20
- * lines (gas isn't paid in them) pass through. The fee-token line is dropped entirely if its
- * whole balance is needed for gas. A non-positive reserve is a no-op.
+ * Trim a multiSelect's ERC-20 fee-asset line by `reserveUnits` so the Safe keeps enough for the
+ * batched in-band reimbursement. Unlike a native fee, an ERC-20 fee asset has a non-null address
+ * and therefore is not handled by reserveNativeGas. Only the selected fee-asset line is trimmed;
+ * every other token passes through. The fee-asset line is dropped entirely if its whole balance is
+ * needed for gas. A non-positive reserve is a no-op.
  */
-export function reserveTempoFeeToken(
+export function reserveFeeToken(
   tokens: MultiTokenSpec[],
   feeTokenAddress: string,
   reserveUnits: bigint,

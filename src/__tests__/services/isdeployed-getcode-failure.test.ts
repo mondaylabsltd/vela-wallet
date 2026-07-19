@@ -23,7 +23,6 @@ jest.mock('@/modules/passkey', () => ({}));
 jest.mock('@/services/storage', () => ({ loadServiceEndpoints: jest.fn(async () => ({})) }));
 jest.mock('@/services/tempo', () => ({
   isTempoChain: () => false,
-  isTempoFeeToken: () => false,
   TEMPO_DEFAULT_FEE_TOKEN: '0x20c0000000000000000000000000000000000000',
   TEMPO_FEE_TOKEN_DECIMALS: 6,
 }));

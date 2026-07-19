@@ -16,7 +16,6 @@ import { chainName, tokenBadgeNetwork } from '@/models/network';
 import { useAllNetworks } from '@/hooks/use-networks';
 import { isNativeToken, tokenBalanceDouble, tokenChainId, tokenId, tokenLogoURLs, tokenUsdValue, type APIToken } from '@/models/types';
 import { isStable } from '@/services/activity';
-import { isTempoFeeToken } from '@/services/tempo';
 import { formatTokenAmount } from '@/services/locale-format';
 import { hapticSelection } from '@/services/platform';
 import { Check, Plus, Search } from 'lucide-react-native';
@@ -33,9 +32,9 @@ const TOKEN_LOGO_SIZE = 40;
 
 export function tokenMatchesCategory(tok: APIToken, cat: TokenCategory): boolean {
   if (cat === 'all') return true;
-  // The "gas" token is the chain's native coin — or pathUSD on Tempo, which has no
-  // native coin and pays gas in that stablecoin instead.
-  const isGasTok = isNativeToken(tok) || isTempoFeeToken(tokenChainId(tok), tok.tokenAddress);
+  // "Gas" is an asset category for the chain's native coin. A fee-paid ERC-20 stays a
+  // normal stable/other asset in the picker, regardless of the network's settlement model.
+  const isGasTok = isNativeToken(tok);
   if (cat === 'gas') return isGasTok;
   if (cat === 'stable') return !isGasTok && isStable(tok.symbol);
   return !isGasTok && !isStable(tok.symbol); // 'other'
