@@ -3,12 +3,14 @@ import {
   attoToTokenUnits,
   tempoFeeTokenUnits,
   tempoReimbursement,
+  tempoMinimumFeeTokenUnits,
   tempoSettlementSplit,
   tempoCallGasLimit,
   tempoExpectedGas,
   tempoSplitSafetyGas,
   TEMPO_DEFAULT_FEE_TOKEN,
   TEMPO_FEE_TOKEN_DECIMALS,
+  TEMPO_MIN_FEE_USD_CENTS,
   TEMPO_BASE_FEE_ATTO,
   TEMPO_OUTER_OVERHEAD_GAS,
   TEMPO_CALL_GAS_PER_SUBCALL,
@@ -90,8 +92,16 @@ describe('tempo gas model', () => {
       const raw = attoToTokenUnits(gas * TEMPO_BASE_FEE_ATTO, 6);
       expect(tempoReimbursement(gas, TEMPO_BASE_FEE_ATTO, 6)).toBe(raw * 2n);
     });
-    it('is never zero (transfer must move a non-zero amount)', () => {
-      expect(tempoReimbursement(0n, 0n, 6)).toBeGreaterThan(0n);
+    it('floors every USD stablecoin reimbursement at $0.01', () => {
+      expect(TEMPO_MIN_FEE_USD_CENTS).toBe(1n);
+      expect(tempoMinimumFeeTokenUnits(6)).toBe(10_000n);
+      expect(tempoReimbursement(0n, 0n, 6)).toBe(10_000n);
+      expect(tempoReimbursement(100_000n, 1_000_000_000n, 6)).toBe(10_000n);
+    });
+
+    it('rounds the floor up to a transferable unit for low-decimal assets', () => {
+      expect(tempoMinimumFeeTokenUnits(1)).toBe(1n);
+      expect(tempoReimbursement(0n, 0n, 1)).toBe(1n);
     });
   });
 

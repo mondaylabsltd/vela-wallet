@@ -20,8 +20,9 @@
  * Everything else branches on `isTempoChain(chainId)` exactly once.
  *
  * This module is intentionally dependency-light (only the chain table) so its math is
- * pure and unit-testable. Verified against Tempo testnet: a 50k-gas transfer costs
- * ~$0.001 (= 1000 fee-token units at 6 decimals).
+ * pure and unit-testable. On Tempo testnet, a 50k-gas transfer's raw chain cost can be
+ * ~$0.001 (= 1000 fee-token units at 6 decimals), while Vela's stablecoin reimbursement
+ * is intentionally floored at $0.01.
  */
 
 import { chainMeta } from '@/models/chains';
@@ -42,6 +43,22 @@ export const TEMPO_DEFAULT_FEE_TOKEN = '0x20c00000000000000000000000000000000000
 
 /** Every Tempo TIP-20 USD stablecoin uses 6 decimals (microdollar). */
 export const TEMPO_FEE_TOKEN_DECIMALS = 6;
+
+/** Tempo charges gas in USD stablecoins, never below one cent. */
+export const TEMPO_MIN_FEE_USD_CENTS = 1n;
+
+/**
+ * The smallest representable $0.01 fee for a USD-denominated TIP-20 token.
+ * For Tempo's normal 6-decimal assets this is 10,000 microdollars. A token
+ * with fewer than two decimal places cannot represent one cent, so round up
+ * to its smallest transferable unit rather than undercharge.
+ */
+export function tempoMinimumFeeTokenUnits(
+  decimals: number = TEMPO_FEE_TOKEN_DECIMALS,
+): bigint {
+  const unit = 10n ** BigInt(decimals);
+  return (unit * TEMPO_MIN_FEE_USD_CENTS + 99n) / 100n;
+}
 
 /** Tempo's protocol base fee fallback: 20e9 attodollars (USD×1e-18) per gas. */
 export const TEMPO_BASE_FEE_ATTO = 20_000_000_000n;
@@ -128,8 +145,8 @@ export function tempoFeeTokenUnits(
 /**
  * Stablecoin amount to reimburse the bundler, baked into the UserOp as a batched
  * transfer. `expectedGas` should be the REALISTIC gas (see `tempoExpectedGas`), not the
- * padded UserOp limits. = realistic cost × margin. Always ≥ 1 so the transfer is never a
- * no-op the bundler would reject.
+ * padded UserOp limits. = realistic cost × margin, floored at $0.01 so every
+ * stablecoin fee can meet the relay's minimum reimbursement requirement.
  */
 export function tempoReimbursement(
   expectedGas: bigint,
@@ -139,7 +156,8 @@ export function tempoReimbursement(
   const price = gasPriceAtto > 0n ? gasPriceAtto : TEMPO_BASE_FEE_ATTO;
   const base = attoToTokenUnits(expectedGas * price, decimals);
   const withMargin = (base * TEMPO_FEE_MARGIN_NUM) / TEMPO_FEE_MARGIN_DEN;
-  return withMargin > 0n ? withMargin : 1n;
+  const minimum = tempoMinimumFeeTokenUnits(decimals);
+  return withMargin > minimum ? withMargin : minimum;
 }
 
 /**

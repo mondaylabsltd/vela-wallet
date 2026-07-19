@@ -1098,6 +1098,12 @@ async function sendUserOpTempo(
   if (quotedFee && quotedFee.recipient.toLowerCase() !== feeCollector.toLowerCase()) {
     throw new Error('The gas quote has expired. Please review the updated fee and try again.');
   }
+  // Old client quotes may predate Tempo's $0.01 stablecoin floor. Do not let a cached
+  // sub-minimum amount slip into the signed batch; a fresh confirmation quote will show the
+  // exact floor that is then transferred.
+  if (quotedFee && quotedFee.amount < tempoReimbursement(0n, 0n, TEMPO_FEE_TOKEN_DECIMALS)) {
+    throw new Error('The gas quote has expired. Please review the updated fee and try again.');
+  }
   const reimbursement = quotedFee && quotedFee.amount > 0n && /^0x[0-9a-fA-F]{40}$/.test(quotedFee.recipient)
     ? quotedFee.amount
     : calculatedReimbursement;
