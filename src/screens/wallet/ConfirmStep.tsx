@@ -6,6 +6,7 @@ import { FlowArrow } from '@/components/send/FlowArrow';
 import { BalanceChangePreview } from '@/components/signing/BalanceChangePreview';
 import { GasFeeCard } from '@/components/ui/GasFeeCard';
 import { SlideToConfirmButton } from '@/components/ui/SlideToConfirmButton';
+import { VelaButton } from '@/components/ui/VelaButton';
 import { WalletAvatar } from '@/components/ui/WalletAvatar';
 import { fadeInDown } from '@/constants/entering';
 import { color, space } from '@/constants/theme';
@@ -75,6 +76,8 @@ export function ConfirmStep({ c }: { c: SendController }) {
     sim,
     pickedTokens,
     multiTokenSpecs,
+    sameAssetFeeIssue,
+    handleEditAmount,
     handleConfirm,
   } = c;
 
@@ -89,6 +92,19 @@ export function ConfirmStep({ c }: { c: SendController }) {
     const usdAmount = amountNum * (selectedToken.priceUsd ?? 0);
     const logos = tokenLogoURLs(selectedToken);
     const chain = chainName(tokenChainId(selectedToken));
+    const formatBaseAmount = (value: bigint) => formatBalance(
+      Number(fromBaseUnits(value, selectedToken.decimals)),
+    );
+    const feeIssue = sameAssetFeeIssue
+      ? {
+          ...sameAssetFeeIssue,
+          transfer: formatBaseAmount(sameAssetFeeIssue.transferAmount),
+          fee: formatBaseAmount(sameAssetFeeIssue.feeAmount),
+          total: formatBaseAmount(sameAssetFeeIssue.transferAmount + sameAssetFeeIssue.feeAmount),
+          balance: formatBaseAmount(sameAssetFeeIssue.balance),
+          maximum: formatBaseAmount(sameAssetFeeIssue.maxTransferAmount),
+        }
+      : null;
 
     // The asset shown below the recipient in the single-token modes (1→1 and
     // split). One quiet identity pill; the amount already lives on the From/To
@@ -282,8 +298,8 @@ export function ConfirmStep({ c }: { c: SendController }) {
           {/* Estimated fee + fee-asset selector — the shared GasFeeCard (same
               component the dApp signing sheet uses). It owns the collapsed row,
               the expand, and the per-asset re-quote; this screen just owns the
-              gasFeeToken selection + feeEstimate it threads into submit. On Tempo
-              / legacy chains it collapses to a read-only fee line (no selector). */}
+              gasFeeToken selection + feeEstimate it threads into submit. It collapses to a
+              read-only fee line whenever the relay does not offer another fee asset. */}
           {activeAccount && (
             <GasFeeCard
               feeEstimate={feeEstimate}
@@ -300,19 +316,53 @@ export function ConfirmStep({ c }: { c: SendController }) {
             />
           )}
 
+          {/* The final relay fee can share the asset being transferred. Do not allow a slide
+              whose signed batch is guaranteed to lack the reimbursement balance; name the exact
+              shortfall and provide the only useful recovery: edit the amount. */}
+          {feeIssue && txStatus === 'idle' && (
+            <View style={styles.sameAssetFeeWarning} accessibilityRole="alert">
+              <AlertCircle size={20} color={color.error.base} strokeWidth={2.5} />
+              <View style={styles.sameAssetFeeWarningCopy}>
+                <Text style={styles.sameAssetFeeWarningTitle}>
+                  {t('send.sameFeeTokenTitle', { symbol: feeIssue.symbol })}
+                </Text>
+                <Text style={styles.sameAssetFeeWarningBody}>
+                  {t('send.sameFeeTokenBody', {
+                    amount: feeIssue.transfer,
+                    fee: feeIssue.fee,
+                    total: feeIssue.total,
+                    balance: feeIssue.balance,
+                    symbol: feeIssue.symbol,
+                  })}
+                </Text>
+                <Text style={styles.sameAssetFeeWarningMax}>
+                  {t('send.sameFeeTokenMax', { amount: feeIssue.maximum, symbol: feeIssue.symbol })}
+                </Text>
+              </View>
+            </View>
+          )}
+
           {txStatus === 'idle' && (
             // Every send is a deliberate slide-to-confirm — a stray tap can't fire
             // a payment. A risky destination (never sent here before, or a contract)
             // is signaled by the first-time / contract tags above; the slide itself
             // stays quiet (founder call: never a scary red commit surface).
-            <SlideToConfirmButton
-              title={estimatingGas || feeBusy ? t('send.checkingGas') : t('send.confirmSendBtn')}
-              hint={t('componentsUi.signing.slideToConfirm', { defaultValue: 'Slide to confirm' })}
-              onConfirm={handleConfirm}
-              loading={sending}
-              disabled={estimatingGas || feeBusy}
-              style={styles.confirmBtn}
-            />
+            feeIssue ? (
+              <VelaButton
+                title={t('send.sameFeeTokenEdit')}
+                onPress={handleEditAmount}
+                style={styles.confirmBtn}
+              />
+            ) : (
+              <SlideToConfirmButton
+                title={estimatingGas || feeBusy ? t('send.checkingGas') : t('send.confirmSendBtn')}
+                hint={t('componentsUi.signing.slideToConfirm', { defaultValue: 'Slide to confirm' })}
+                onConfirm={handleConfirm}
+                loading={sending}
+                disabled={estimatingGas || feeBusy}
+                style={styles.confirmBtn}
+              />
+            )
           )}
 
           {txStatus !== 'idle' && (

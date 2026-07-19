@@ -15,9 +15,9 @@ import {
   formatWeiToEth, calcMaxFeePerGas, GAS_TIER_MULTIPLIERS,
   encodeErc20Transfer, buildExecuteCallData, buildMultiSendExecuteCallData, buildInitCode,
   parseHexUInt64, parseExistingUserOpHash, isPlainTransferCall,
-  deriveChainGasPrice, isQuoteAbusive, MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS,
+  deriveChainGasPrice, isQuoteAbusive, MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS, sameAssetFeeLimit,
 } from '@/services/safe-transaction';
-import type { GasTier, ChainGasPrice } from '@/services/safe-transaction';
+import type { GasTier, ChainGasPrice, TransactionFeeEstimate } from '@/services/safe-transaction';
 import { functionSelector } from '@/services/eth-crypto';
 
 /** Uint8Array → lowercase hex (no 0x), for golden-vector assertions. */
@@ -27,6 +27,42 @@ const word = (u: Uint8Array, i: number) => hex(u).slice(8 + i * 64, 8 + (i + 1) 
 const zeroWord = '0'.repeat(64);
 
 describe('safe-transaction', () => {
+  describe('sameAssetFeeLimit', () => {
+    const USDT = '0x' + '11'.repeat(20);
+    const USDC = '0x' + '22'.repeat(20);
+    const erc20Fee: TransactionFeeEstimate = {
+      totalWei: 0n,
+      maxFeePerGas: 0n,
+      networkFeePerGas: 1n,
+      relayerFeePerGas: 0n,
+      bundlerGasPrice: 1n,
+      totalGas: 1n,
+      deployed: true,
+      tier: 'fast',
+      quoted: true,
+      inBand: true,
+      feeAsset: { kind: 'erc20', token: USDT, decimals: 6, amount: 69_800n },
+    };
+
+    test('reserves an ERC-20 fee only when it is the token being transferred', () => {
+      expect(sameAssetFeeLimit(erc20Fee, USDT.toUpperCase(), 15_000_000n)).toEqual({
+        feeAmount: 69_800n,
+        maxTransferAmount: 14_930_200n,
+      });
+      expect(sameAssetFeeLimit(erc20Fee, USDC, 15_000_000n)).toBeNull();
+    });
+
+    test('reserves the native fee only for a native transfer', () => {
+      const nativeFee: TransactionFeeEstimate = { ...erc20Fee, totalWei: 42n, feeAsset: { kind: 'native' } };
+      expect(sameAssetFeeLimit(nativeFee, null, 100n)).toEqual({ feeAmount: 42n, maxTransferAmount: 58n });
+      expect(sameAssetFeeLimit(nativeFee, USDT, 100n)).toBeNull();
+    });
+
+    test('clamps the maximum to zero when the fee itself exhausts the balance', () => {
+      expect(sameAssetFeeLimit(erc20Fee, USDT, 69_800n)).toEqual({ feeAmount: 69_800n, maxTransferAmount: 0n });
+    });
+  });
+
   describe('formatWeiToEth', () => {
     test('formats zero', () => {
       expect(formatWeiToEth(0n)).toBe('0');

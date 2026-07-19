@@ -311,6 +311,40 @@ export interface TransactionFeeEstimate {
 }
 
 /**
+ * The usable transfer ceiling when the transfer itself and its network fee draw
+ * from the same asset. Returns null when the fee uses a different asset, so a
+ * caller must not apply this reserve to an unrelated token balance.
+ *
+ * `transferAsset` is null for the chain's native asset; ERC-20 addresses are
+ * compared case-insensitively. Keeping this small rule shared prevents the
+ * amount and confirmation screens from drifting into a submit that cannot pay
+ * its own in-band reimbursement.
+ */
+export function sameAssetFeeLimit(
+  fee: TransactionFeeEstimate | null,
+  transferAsset: string | null,
+  balance: bigint,
+): { feeAmount: bigint; maxTransferAmount: bigint } | null {
+  if (!fee || balance < 0n) return null;
+
+  let feeAmount: bigint;
+  if (fee.feeAsset?.kind === 'erc20') {
+    if (!transferAsset || fee.feeAsset.token.toLowerCase() !== transferAsset.toLowerCase()) return null;
+    feeAmount = fee.feeAsset.amount;
+  } else {
+    // Legacy native estimates omit feeAsset; they still consume the native asset.
+    if (transferAsset !== null) return null;
+    feeAmount = fee.totalWei;
+  }
+
+  if (feeAmount < 0n) return null;
+  return {
+    feeAmount,
+    maxTransferAmount: balance > feeAmount ? balance - feeAmount : 0n,
+  };
+}
+
+/**
  * A user's one-time acknowledgement of an unusually high relayer quote.
  *
  * This deliberately binds every value used by the sanity check.  An approval

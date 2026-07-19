@@ -23,6 +23,7 @@ import {
   estimateTransactionFee,
   GasQuoteTooHighError,
   prefetchForSend,
+  sameAssetFeeLimit,
   sendBatchCalls,
   sendERC20,
   sendNative,
@@ -149,9 +150,9 @@ export function useSendController() {
   const [receiptFailed, setReceiptFailed] = useState(false);
   const [inputInUsd, setInputInUsd] = useState(false);
   // Speed tiers are gone — every estimate/submit runs at 'fast'. What the user
-  // CAN choose (on in-band chains with a DEX) is the fee ASSET: null = native,
-  // else a whitelisted stablecoin contract. Options load when confirm opens;
-  // null options = no selector (legacy chain, or Tempo where pathUSD is fixed).
+  // CAN choose (when the relay publishes alternatives) is the fee ASSET: null = native,
+  // else a whitelisted stablecoin contract. Options load when confirm opens; null means the
+  // active relay has no alternative to present.
   const [gasFeeToken, setGasFeeToken] = useState<string | null>(null);
   // Treasury bootstrap sheet (relayer float depleted on this network) — shown
   // instead of the generic error/funding surface when the treasury reports
@@ -560,6 +561,40 @@ export function useSendController() {
     return reserveNativeGas(specs, feeEstimate ? feeEstimate.totalWei * 3n : 0n);
   };
 
+  // The final fee is learned only after the user advances to confirmation. If that fee is paid
+  // in the very token being sent, a previously valid amount can become unpayable. Surface a
+  // precise, editable ceiling on the confirmation step instead of allowing a guaranteed failed
+  // UserOperation to reach the passkey/relay.
+  const sameAssetFeeIssue = (() => {
+    if (!selectedToken || multiSelectMode || !feeEstimate) return null;
+    try {
+      const transferAmount = splitMode
+        ? sumSplitBaseUnits(recipients, selectedToken.decimals)
+        : toBaseUnits(
+            resolveTokenAmount(amount, inputInUsd, selectedToken.priceUsd, selectedToken.decimals, dc.rate),
+            selectedToken.decimals,
+          );
+      const balance = balanceToWei(selectedToken.balance, selectedToken.decimals);
+      const limit = sameAssetFeeLimit(
+        feeEstimate,
+        isNativeToken(selectedToken) ? null : selectedToken.tokenAddress ?? null,
+        balance,
+      );
+      if (!limit || transferAmount <= limit.maxTransferAmount) return null;
+      return {
+        symbol: selectedToken.symbol,
+        transferAmount,
+        balance,
+        feeAmount: limit.feeAmount,
+        maxTransferAmount: limit.maxTransferAmount,
+      };
+    } catch {
+      // Input validation owns malformed half-typed amounts; never turn a formatting issue into
+      // a false financial warning on the confirmation page.
+      return null;
+    }
+  })();
+
   // Confirmed selection → advance. ONE token is a normal amount-send (not a
   // full-balance multiSelect); TWO+ is a multiSelect. The first token carries chain/gas context.
   const confirmSelection = () => {
@@ -827,8 +862,25 @@ export function useSendController() {
     setAmount(selectedToken.balance || '0');
   };
 
+  /** Return from a blocked confirmation to the exact amount form, retaining every other choice. */
+  const handleEditAmount = () => {
+    setTxStatus('idle');
+    setTxError(null);
+    setStep('enter-details');
+    // The amount field is mounted only after the step update. A small defer makes the recovery
+    // action feel direct on mobile and web without changing the entered recipient/token.
+    setTimeout(() => amountInputRef.current?.focus(), 100);
+  };
+
   const handleConfirm = async () => {
     if (!selectedToken || !activeAccount) return;
+    // A fee re-quote can turn a previously valid amount into an unpayable same-token send.
+    // Never let the slide reach signing in that state; the confirmation UI gives the user the
+    // actionable "Edit amount" recovery instead.
+    if (sameAssetFeeIssue) {
+      handleEditAmount();
+      return;
+    }
     // Tap haptic fires on the one-tap VelaButton; the hold-to-confirm path
     // provides its own (Medium on press + Success on completion).
 
@@ -1203,10 +1255,12 @@ export function useSendController() {
     applyPickedAddress,
     pickedTokens,
     multiTokenSpecs,
+    sameAssetFeeIssue,
     confirmSelection,
     handleSelectToken,
     handleContinue,
     handleMaxAmount,
+    handleEditAmount,
     handleConfirm,
     executeTransaction,
     handleBack,
