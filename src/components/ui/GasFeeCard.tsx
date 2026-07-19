@@ -162,8 +162,13 @@ export function GasFeeCard({
   const feeUnits = quoteUnits ?? (erc20Fee
     ? Number(erc20Fee.amount) / 10 ** erc20Fee.decimals
     : feeEstimate ? Number(feeEstimate.totalWei) / 1e18 : 0);
-  const feeUsd = selectedOption
-    ? feeUnits * Number(selectedOption.usdPrice)
+  // A native-price feed is optional: gas can still be paid and displayed in the native
+  // asset without a USD conversion. Prefer the wallet's price fallback when available.
+  const selectedUsdPrice = selectedOption?.usdPrice === null || selectedOption?.usdPrice === undefined
+    ? null
+    : Number(selectedOption.usdPrice);
+  const feeUsd = selectedUsdPrice !== null && Number.isFinite(selectedUsdPrice)
+    ? feeUnits * selectedUsdPrice
     : erc20Fee ? feeUnits : feeUnits * nativeUsdPrice;
   const feeSym = selectedOption?.symbol ?? (erc20Fee ? erc20Symbol : sym);
   // Show fiat only when it renders as a meaningful non-zero (formatFiat rounds to

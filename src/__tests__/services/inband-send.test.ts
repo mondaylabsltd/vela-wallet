@@ -156,6 +156,28 @@ describe('fetchInBandGasQuote', () => {
     });
   });
 
+  test('keeps a native fee quote when the network cannot provide a USD price', async () => {
+    poolBundlerCallMock.mockResolvedValue({
+      result: [inBandQuote({ usdPrice: null })],
+    });
+    await expect(fetchInBandGasQuote(freshChain(), SAFE)).resolves.toMatchObject({
+      asset: 'native',
+      usdPrice: null,
+    });
+  });
+
+  test('allows only native gas when the native USD price is unavailable', async () => {
+    poolBundlerCallMock.mockResolvedValue({
+      result: [
+        inBandQuote({ usdPrice: null }),
+        inBandQuote({ asset: 'erc20', usdPrice: '1' }),
+      ],
+    });
+    await expect(fetchInBandGasQuotes(freshChain(), SAFE)).resolves.toEqual([
+      expect.objectContaining({ asset: 'native', usdPrice: null }),
+    ]);
+  });
+
   test('a transport failure → null', async () => {
     poolBundlerCallMock.mockRejectedValue(new Error('All bundler endpoints failed'));
     await expect(fetchInBandGasQuote(freshChain(), SAFE)).resolves.toBeNull();
@@ -169,6 +191,13 @@ describe('calculateInBandFeeAmount', () => {
   test('uses gas × gas price × 3 for native, instead of the RPC requiredAmount', () => {
     expect(calculateInBandFeeAmount(200_000n, 1_000_000_000n, native, native))
       .toBe(600_000_000_000_000n);
+    const nativeWithoutPrice = { asset: 'native' as const, decimals: 18, usdPrice: null };
+    expect(calculateInBandFeeAmount(200_000n, 1_000_000_000n, nativeWithoutPrice, nativeWithoutPrice))
+      .toBe(600_000_000_000_000n);
+    // A stablecoin conversion without an oracle price is unsafe; native payment remains the
+    // usable default until both conversion prices are available.
+    expect(calculateInBandFeeAmount(200_000n, 1_000_000_000n, usdc, nativeWithoutPrice))
+      .toBeNull();
   });
 
   test('converts the native cost to the stablecoin and applies the $0.01 floor', () => {
@@ -415,6 +444,15 @@ describe('estimateTransactionFee — in-band branch', () => {
     expect(est.feeAsset).toEqual({ kind: 'native' });
     // Sign-what-displayed: the estimate carries the recipient from this exact quote.
     expect(est.feeRecipient).toBe(RECIPIENT);
+  });
+
+  test('native gas estimation succeeds when the relay omits the native USD price', async () => {
+    routeRpc();
+    poolBundlerCallMock.mockResolvedValue(quoteResponse(inBandQuote({ usdPrice: null })));
+
+    const est = await estimateTransactionFee(SAFE, freshChain(), 'standard');
+    expect(est.feeAsset).toEqual({ kind: 'native' });
+    expect(est.totalWei).toBeGreaterThan(0n);
   });
 
   test('an unavailable all-asset quote fails closed instead of constructing a legacy UserOp', async () => {

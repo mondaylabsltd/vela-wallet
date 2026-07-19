@@ -363,7 +363,8 @@ function ceilDiv(numerator: bigint, denominator: bigint): bigint {
 
 /** Convert the decimal strings returned by the bundler to a fixed USD scale.
  * Rounding native up and the fee token down ensures conversion never undercharges. */
-function usdPriceScaled(value: string, roundUp: boolean): bigint | null {
+function usdPriceScaled(value: string | null | undefined, roundUp: boolean): bigint | null {
+  if (value === null || value === undefined) return null;
   const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim());
   if (!match) return null;
   const integer = BigInt(match[1]);

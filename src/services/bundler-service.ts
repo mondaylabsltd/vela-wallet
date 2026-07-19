@@ -569,7 +569,7 @@ export function underfundedRequiredWei(underfunded: BundlerUnderfunded): bigint 
 
 /** One fee-asset entry returned by `vela_getInBandGasQuote`. The method now
  *  accepts only a Safe address and returns every asset the bundler accepts,
- *  including the Safe balance and USD data used by the wallet to price gas. */
+ *  including the Safe balance and optional USD display/conversion data. */
 export interface InBandGasQuote {
   recipient: string;
   asset: 'native' | 'erc20';
@@ -579,7 +579,8 @@ export interface InBandGasQuote {
   symbol: string;
   /** Preserve decimal strings so fee conversion never loses precision. */
   usdBalance: string;
-  usdPrice: string;
+  /** Null when this network has no native-coin price source. Native gas still works. */
+  usdPrice: string | null;
 }
 
 /** Short-lived cache for the complete in-band fee-asset list. In addition to
@@ -692,13 +693,14 @@ async function fetchInBandGasQuotesDetailed(
         ? r.decimals
         : null;
       const symbol = typeof r.symbol === 'string' && r.symbol.trim() ? r.symbol : null;
-      // `usdBalance` is useful presentation data but it is not required to calculate or pay a
-      // fee (the raw `balance` and `usdPrice` are). Accept older/partial deployments which omit
-      // it, otherwise one optional field would hide every fee-token choice.
+      // USD values are presentation/conversion metadata. Native in-band gas can be calculated
+      // directly from gas units and price, so it must remain usable when a network has no
+      // native-coin USD feed. A stablecoin quote still needs its own price; otherwise the wallet
+      // cannot safely convert the native gas cost into that asset.
       const usdBalance = parseDecimalString(r.usdBalance) ?? '0';
       const usdPrice = parseDecimalString(r.usdPrice);
       if (!recipient || !asset || balance < 0n || decimals === null || !symbol
-        || usdPrice === null || (asset === 'erc20' && !feeToken)) {
+        || (asset === 'erc20' && (!feeToken || usdPrice === null))) {
         return [];
       }
       return [{
@@ -712,7 +714,15 @@ async function fetchInBandGasQuotesDetailed(
         usdPrice,
       }];
     });
-    return { quotes: quotes.length > 0 ? quotes : null, notEnabled: false };
+    // Stablecoin reimbursement is converted from the native gas cost. If this network has no
+    // native USD price, preserve the payable native row but do not expose a stablecoin option
+    // whose amount cannot be calculated safely. (Tempo has its own USD-native fee model and
+    // does not use this generic quote path.)
+    const nativeQuote = quotes.find((quote) => quote.asset === 'native');
+    const usableQuotes = nativeQuote?.usdPrice === null
+      ? quotes.filter((quote) => quote.asset === 'native')
+      : quotes;
+    return { quotes: usableQuotes.length > 0 ? usableQuotes : null, notEnabled: false };
   } catch (err) {
     console.warn(`[InBand] quote failed for chain=${chainId}:`, err);
     return { quotes: null, notEnabled: false };
