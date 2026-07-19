@@ -31,6 +31,7 @@ describe('safe-transaction', () => {
     const USDT = '0x' + '11'.repeat(20);
     const USDC = '0x' + '22'.repeat(20);
     const erc20Fee: TransactionFeeEstimate = {
+      chainId: 1,
       totalWei: 0n,
       maxFeePerGas: 0n,
       networkFeePerGas: 1n,

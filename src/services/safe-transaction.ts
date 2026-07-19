@@ -276,6 +276,8 @@ const BUNDLER_MARGIN_DEN = 100n;
 
 /** Detailed gas fee estimate for display and max-send calculation. */
 export interface TransactionFeeEstimate {
+  /** Chain this quote was calculated for. Never reuse a quote across networks. */
+  chainId: number;
   /** Total estimated cost in wei (totalGas × maxFeePerGas). */
   totalWei: bigint;
   /** What the user pays per gas — quoted by the bundler (single source of truth). */
@@ -415,7 +417,7 @@ export async function requoteInBandFee(
   safeAddress: string,
   gasFeeToken: string | null,
 ): Promise<TransactionFeeEstimate | null> {
-  if (!prev.inBand) return null;
+  if (!prev.inBand || prev.chainId !== chainId) return null;
   const quotes = await fetchInBandGasQuotes(chainId, safeAddress);
   if (!quotes) return null;
   const q = findInBandGasQuote(quotes, gasFeeToken);
@@ -538,6 +540,7 @@ async function estimateTempoFee(
   const feeRecipient = info?.settlementRecipient ?? info?.depositAddress;
 
   return {
+    chainId,
     totalWei,
     maxFeePerGas: gasPrice,
     networkFeePerGas: gasPrice,
@@ -752,7 +755,7 @@ export async function estimateTransactionFee(
   // feeRecipient rides along so the submit path signs EXACTLY this quote (displayed = signed
   // — never a silent mismatch).
   const common = {
-    networkFeePerGas, relayerFeePerGas, bundlerGasPrice, totalGas, deployed, tier, quoted,
+    chainId, networkFeePerGas, relayerFeePerGas, bundlerGasPrice, totalGas, deployed, tier, quoted,
     inBand: true as const, feeRecipient: inBandQuote.recipient,
   };
   if (inBandQuote.asset === 'erc20' && inBandQuote.feeToken) {

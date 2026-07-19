@@ -1,6 +1,6 @@
 import { makeRecipientId, recipientsAreValid, type RecipientDraft } from '@/components/send/MultiRecipientEditor';
 import { type ReceiptTransfer } from '@/components/ui/TransactionReceipt';
-import { amountToWeiHex, balanceToWei, encErc20Transfer, isValidAddress, synthErc20Token, synthNativeToken } from './send-utils';
+import { amountToWeiHex, balanceToWei, canCoverNativeTransfer, encErc20Transfer, isValidAddress, synthErc20Token, synthNativeToken } from './send-utils';
 import { useDisplayCurrency } from '@/hooks/use-display-currency';
 import { useSafeRouter } from '@/hooks/use-safe-router';
 import { useTokenMultiSelect } from '@/hooks/use-token-multi-select';
@@ -112,6 +112,11 @@ export function useSendController() {
   const [showScanner, setShowScanner] = useState(false);
   const [copiedContract, setCopiedContract] = useState(false);
   const [feeEstimate, setFeeEstimate] = useState<TransactionFeeEstimate | null>(null);
+  // A quote is valid only for the network on which it was calculated. This protects the
+  // amount form while a user switches assets/networks or an earlier async quote resolves late.
+  const selectedFeeEstimate = selectedToken && feeEstimate?.chainId === tokenChainId(selectedToken)
+    ? feeEstimate
+    : null;
   const [estimatingGas, setEstimatingGas] = useState(false);
   // Single-flight re-entry lock with a generation token. A cancelled send
   // releases it immediately (so a retry isn't a silent no-op) while the cancelled
@@ -336,9 +341,11 @@ export function useSendController() {
         return;
       }
       // Also check if gas can be covered (use cached estimate if available)
-      if (feeEstimate) {
-        const reserveWei = feeEstimate.totalWei * 3n;
-        if (amountWei + reserveWei > balanceWei) {
+      if (selectedFeeEstimate) {
+        // totalWei is already the fully marked-up, reviewed in-band reimbursement.
+        // Reserving it once keeps this gate consistent with the amount signed at confirmation.
+        const reserveWei = selectedFeeEstimate.totalWei;
+        if (!canCoverNativeTransfer(amountWei, balanceWei, reserveWei)) {
           setAmountWarning(t('send.warnInsufficientForGas', { sym }));
           return;
         }
@@ -353,7 +360,7 @@ export function useSendController() {
       // An ERC-20 fee asset is handled exactly like any other token: when it is being sent,
       // reserve its fee; otherwise ensure the separate fee-token balance can cover it. This
       // applies to every in-band network, including Tempo, without naming a special token.
-      const feeAsset = feeEstimate?.feeAsset;
+      const feeAsset = selectedFeeEstimate?.feeAsset;
       if (feeAsset?.kind === 'erc20') {
         const isFeeToken = selectedToken.tokenAddress?.toLowerCase() === feeAsset.token.toLowerCase();
         if (isFeeToken) {
@@ -381,7 +388,7 @@ export function useSendController() {
     }
 
     setAmountWarning(null);
-  }, [amount, inputInUsd, selectedToken, tokens, feeEstimate, dc.rate]);
+  }, [amount, inputInUsd, selectedToken, tokens, selectedFeeEstimate, dc.rate]);
 
   // Resolve recipient identity (passkey index → ENS) when a valid address is entered
   useEffect(() => {
@@ -544,12 +551,13 @@ export function useSendController() {
   // displayed fee — native or ERC-20 — so the preview and signed MultiSend stay identical.
   const multiTokenSpecs = (chainId: number) => {
     const specs = toMultiTokenSpecs(pickedTokens);
-    if (feeEstimate?.feeAsset?.kind === 'erc20') {
+    const chainFeeEstimate = feeEstimate?.chainId === chainId ? feeEstimate : null;
+    if (chainFeeEstimate?.feeAsset?.kind === 'erc20') {
       // Reserve 2× because a sweep contains more sub-calls than its initial fee quote and can
       // also deploy the Safe. The final signed fee still uses the reviewed quote.
-      return reserveFeeToken(specs, feeEstimate.feeAsset.token, feeEstimate.feeAsset.amount * 2n);
+      return reserveFeeToken(specs, chainFeeEstimate.feeAsset.token, chainFeeEstimate.feeAsset.amount * 2n);
     }
-    return reserveNativeGas(specs, feeEstimate ? feeEstimate.totalWei * 3n : 0n);
+    return reserveNativeGas(specs, chainFeeEstimate?.totalWei ?? 0n);
   };
 
   // The final fee is learned only after the user advances to confirmation. If that fee is paid
@@ -557,7 +565,7 @@ export function useSendController() {
   // precise, editable ceiling on the confirmation step instead of allowing a guaranteed failed
   // UserOperation to reach the passkey/relay.
   const sameAssetFeeIssue = (() => {
-    if (!selectedToken || multiSelectMode || !feeEstimate) return null;
+    if (!selectedToken || multiSelectMode || !selectedFeeEstimate) return null;
     try {
       const transferAmount = splitMode
         ? sumSplitBaseUnits(recipients, selectedToken.decimals)
@@ -567,7 +575,7 @@ export function useSendController() {
           );
       const balance = balanceToWei(selectedToken.balance, selectedToken.decimals);
       const limit = sameAssetFeeLimit(
-        feeEstimate,
+        selectedFeeEstimate,
         isNativeToken(selectedToken) ? null : selectedToken.tokenAddress ?? null,
         balance,
       );
@@ -618,6 +626,7 @@ export function useSendController() {
 
   const handleSelectToken = (token: APIToken) => {
     setMultiSelectMode(false); // single-token path — normal amount-send, not a multiSelect
+    setFeeEstimate(null); // A prior network's quote must never gate this token's amount.
     setSelectedToken(token);
     setStep('enter-details');
 
@@ -781,18 +790,18 @@ export function useSendController() {
 
     // For native tokens (ETH, BNB, etc.), reserve gas for the EntryPoint prefund.
     // The Safe must hold: transferAmount + prefund, so max = balance - prefund.
-    // We add a 50% gas margin to avoid tx failure from gas price volatility.
+    // The quote's in-band margin has already been included in totalWei.
     if (isNativeToken(selectedToken) && activeAccount) {
       try {
         const chainId = tokenChainId(selectedToken);
-        const fee = feeEstimate ?? await estimateTransactionFee(
+        const fee = selectedFeeEstimate ?? await estimateTransactionFee(
           activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken,
           prefetchedAccount.current?.publicKeyHex,
         );
         // Use string-based conversion to avoid floating-point precision loss
         const balanceWei = balanceToWei(selectedToken.balance, selectedToken.decimals);
-        // Reserve 3x estimated gas (200% margin for gas price volatility)
-        const reserveWei = fee.totalWei * 3n;
+        // totalWei already includes the in-band gas margin shown to the user.
+        const reserveWei = fee.totalWei;
         // String-exact `balance − reserve` (no float precision loss). Matches
         // reserveNativeGas in batch-send.ts, so
         // amountWei + reserveWei === balanceWei exactly and the "insufficient for
@@ -811,7 +820,7 @@ export function useSendController() {
     if (activeAccount && selectedToken.tokenAddress) {
       try {
         const chainId = tokenChainId(selectedToken);
-        const fee = feeEstimate ?? await estimateTransactionFee(
+        const fee = selectedFeeEstimate ?? await estimateTransactionFee(
           activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken,
           prefetchedAccount.current?.publicKeyHex,
         );
@@ -912,14 +921,15 @@ export function useSendController() {
       }
 
       setTxStatus('submitting');
-      const maxFee = feeEstimate?.maxFeePerGas;
+      const currentFeeEstimate = feeEstimate?.chainId === chainId ? feeEstimate : null;
+      const maxFee = currentFeeEstimate?.maxFeePerGas;
       // In-band: sign EXACTLY the fee the confirm slide displayed (amount + recipient).
       // The bundler's 2×-real-cost gate rejects a stale quote loudly; we then re-quote
       // and the user re-confirms a NEW number — never a silent display/charge mismatch.
-      const quotedFee = feeEstimate?.inBand && feeEstimate.feeRecipient
+      const quotedFee = currentFeeEstimate?.inBand && currentFeeEstimate.feeRecipient
         ? {
-            amount: feeEstimate.feeAsset?.kind === 'erc20' ? feeEstimate.feeAsset.amount : feeEstimate.totalWei,
-            recipient: feeEstimate.feeRecipient,
+            amount: currentFeeEstimate.feeAsset?.kind === 'erc20' ? currentFeeEstimate.feeAsset.amount : currentFeeEstimate.totalWei,
+            recipient: currentFeeEstimate.feeRecipient,
           }
         : undefined;
 
@@ -1170,7 +1180,7 @@ export function useSendController() {
     setShowScanner,
     copiedContract,
     setCopiedContract,
-    feeEstimate,
+    feeEstimate: selectedFeeEstimate,
     setFeeEstimate,
     estimatingGas,
     setEstimatingGas,

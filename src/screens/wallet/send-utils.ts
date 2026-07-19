@@ -33,6 +33,11 @@ export function balanceToWei(balance: string, decimals: number): bigint {
   return BigInt('0x' + amountToWeiHex(balance, decimals));
 }
 
+/** Whether a native transfer and its already-quoted in-band fee fit in the Safe. */
+export function canCoverNativeTransfer(amountWei: bigint, balanceWei: bigint, quotedFeeWei: bigint): boolean {
+  return amountWei >= 0n && quotedFeeWei >= 0n && amountWei + quotedFeeWei <= balanceWei;
+}
+
 /** ERC-20 `transfer(address,uint256)` calldata, for the balance-change pre-check. */
 export function encErc20Transfer(to: string, amountHex: string): string {
   const a = to.replace(/^0x/, '').toLowerCase().padStart(64, '0');
