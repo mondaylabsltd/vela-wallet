@@ -166,6 +166,18 @@ describe('fetchInBandGasQuote', () => {
     });
   });
 
+  test('allows only native gas when the native USD price is unavailable', async () => {
+    poolBundlerCallMock.mockResolvedValue({
+      result: [
+        inBandQuote({ usdPrice: null }),
+        inBandQuote({ asset: 'erc20', usdPrice: '1' }),
+      ],
+    });
+    await expect(fetchInBandGasQuotes(freshChain(), SAFE)).resolves.toEqual([
+      expect.objectContaining({ asset: 'native', usdPrice: null }),
+    ]);
+  });
+
   test('a transport failure → null', async () => {
     poolBundlerCallMock.mockRejectedValue(new Error('All bundler endpoints failed'));
     await expect(fetchInBandGasQuote(freshChain(), SAFE)).resolves.toBeNull();

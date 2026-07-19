@@ -714,7 +714,15 @@ async function fetchInBandGasQuotesDetailed(
         usdPrice,
       }];
     });
-    return { quotes: quotes.length > 0 ? quotes : null, notEnabled: false };
+    // Stablecoin reimbursement is converted from the native gas cost. If this network has no
+    // native USD price, preserve the payable native row but do not expose a stablecoin option
+    // whose amount cannot be calculated safely. (Tempo has its own USD-native fee model and
+    // does not use this generic quote path.)
+    const nativeQuote = quotes.find((quote) => quote.asset === 'native');
+    const usableQuotes = nativeQuote?.usdPrice === null
+      ? quotes.filter((quote) => quote.asset === 'native')
+      : quotes;
+    return { quotes: usableQuotes.length > 0 ? usableQuotes : null, notEnabled: false };
   } catch (err) {
     console.warn(`[InBand] quote failed for chain=${chainId}:`, err);
     return { quotes: null, notEnabled: false };
