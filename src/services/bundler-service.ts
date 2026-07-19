@@ -726,35 +726,22 @@ function parseDecimalString(value: unknown): string | null {
   return Number.isFinite(parsed) && parsed >= 0 ? raw : null;
 }
 
-/** Per-chain in-band capability, learned from a probe quote. Tempo is always
- *  in-band; other chains flip when the bundler enables them. */
-const inBandSupport = new Map<number, { at: number; supported: boolean }>();
-const INBAND_SUPPORT_TTL = 5 * 60_000;
-
-export async function isInBandChain(chainId: number, safeAddress: string): Promise<boolean> {
-  if (isTempoChain(chainId)) return true;
-  const cached = inBandSupport.get(chainId);
-  if (cached && Date.now() - cached.at < INBAND_SUPPORT_TTL) return cached.supported;
-  // The address-only quote doubles as the capability probe. Only a DEFINITIVE outcome may be
-  // cached: a transient RPC failure negative-cached for 5 minutes would route sends down the
-  // legacy path (maxFee>0, prefund gate) against a bundler that expects in-band — every one rejected.
-  const { quotes, notEnabled } = await requestInBandGasQuotes(chainId, safeAddress);
-  if (quotes !== null) {
-    inBandSupport.set(chainId, { at: Date.now(), supported: true });
-    return true;
-  }
-  if (notEnabled) {
-    inBandSupport.set(chainId, { at: Date.now(), supported: false });
-    return false;
-  }
-  // Transient failure: fall back to the last known answer (even expired), never cache.
-  return cached?.supported ?? false;
+/**
+ * Vela settles every wallet UserOperation in-band. This deliberately is not a
+ * bundler capability probe: a stale `not enabled` response or a transient
+ * quote failure used to select the legacy maxFeePerGas path, while the relay
+ * still enforced zero native-fee fields and rejected the simulation.
+ *
+ * The fee quote remains mandatory for constructing the reimbursement leg, but
+ * quote availability is an operational error — never a reason to construct a
+ * different kind of UserOperation.
+ */
+export async function isInBandChain(_chainId: number, _safeAddress: string): Promise<boolean> {
+  return true;
 }
 
-/** Test hook: reset the in-band capability cache. */
-export function _resetInBandSupportCache(): void {
-  inBandSupport.clear();
-}
+/** @deprecated Kept as a harmless test seam for callers from older builds. */
+export function _resetInBandSupportCache(): void {}
 
 // ---------------------------------------------------------------------------
 // Treasury bootstrap (user-funded relayer float on depleted/dev networks)

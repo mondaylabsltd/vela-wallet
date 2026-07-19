@@ -10,7 +10,7 @@ import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { addCustomNetworkByChainId } from '@/services/add-network';
 import { buildMultiTokenCalls, buildSplitCalls, maxNativeSendable, reserveNativeGas, reserveTempoFeeToken, sumSplitBaseUnits, toMultiTokenSpecs } from '@/services/batch-send';
-import { isInBandChain, probeTreasury, parseBundlerUnderfunded, type TreasuryStatus } from '@/services/bundler-service';
+import { probeTreasury, parseBundlerUnderfunded, type TreasuryStatus } from '@/services/bundler-service';
 import { fromBaseUnits, toBaseUnits } from '@/services/eip681';
 import { resolveTokenAmount } from '@/services/fiat-convert';
 import { fromHex, toHex } from '@/services/hex';
@@ -148,11 +148,8 @@ export function useSendController() {
   const [showContactPicker, setShowContactPicker] = useState(false);
   const [showBatchImport, setShowBatchImport] = useState(false);
   const [amountWarning, setAmountWarning] = useState<string | null>(null);
-  // Every chain now settles gas IN-BAND (native coin OR a whitelisted stablecoin the user
-  // picks on the confirm screen), like Tempo — so the amount step must NOT block an ERC-20
-  // send on native-coin balance ("您需要 ETH 来支付 Gas 费"). Probe capability (cached) and
-  // default true (all chains migrated) so there's no false native-gas block before it resolves.
-  const [inBandSupported, setInBandSupported] = useState(true);
+  // Every chain settles gas in-band (native coin or a whitelisted stablecoin selected on
+  // the confirm screen), so the amount step must never require a separate native-gas balance.
   const [recipientIdentity, setRecipientIdentity] = useState<RecipientIdentity | null>(null);
   // Recipient-risk signals for the confirm step — "first time" (address-poisoning
   // defense) + contract-vs-EOA. Best-effort, never a false alarm. Same signals the
@@ -306,20 +303,6 @@ export function useSendController() {
       .catch(() => {});
   };
 
-  // Probe in-band capability for the selected chain (cached in bundler-service). Tempo is
-  // always in-band; every other chain has been migrated, so this is normally true — it's the
-  // signal that suppresses the native-coin gas warning below.
-  useEffect(() => {
-    if (!selectedToken || !activeAccount) return;
-    const chainId = tokenChainId(selectedToken);
-    if (isTempoChain(chainId)) { setInBandSupported(true); return; }
-    let cancelled = false;
-    isInBandChain(chainId, activeAccount.address)
-      .then((v) => { if (!cancelled) setInBandSupported(v); })
-      .catch(() => { /* keep the optimistic default — confirm-screen selector is the authority */ });
-    return () => { cancelled = true; };
-  }, [selectedToken, activeAccount]);
-
   // Compute real-time amount warnings
   useEffect(() => {
     if (!selectedToken || !amount) {
@@ -390,33 +373,17 @@ export function useSendController() {
         setAmountWarning(null);
         return;
       }
-      // Generic in-band chain (all non-Tempo chains now settle gas in-band): the gas asset is
+      // Generic in-band chain: the gas asset is
       // chosen on the confirm screen's fee-token selector — the native coin OR a whitelisted
       // stablecoin the user holds — so the native-coin "insufficient / need <native>" warnings
       // don't apply here. The selector enforces the chosen fee asset's sufficiency; only the
       // "not enough of the token being sent" check above still gates this step.
-      if (inBandSupported) {
-        setAmountWarning(null);
-        return;
-      }
-      // Legacy (non-in-band) chain: gas is paid in the native coin.
-      const nativeToken = tokens.find(t => isNativeToken(t) && tokenChainId(t) === chainId);
-      if (feeEstimate) {
-        const nativeBalWei = nativeToken
-          ? balanceToWei(nativeToken.balance, nativeToken.decimals)
-          : 0n;
-        if (nativeBalWei < feeEstimate.totalWei) {
-          setAmountWarning(t('send.warnInsufficientGas', { sym }));
-          return;
-        }
-      } else if (!nativeToken || tokenBalanceDouble(nativeToken) === 0) {
-        setAmountWarning(t('send.warnNeedGas', { sym }));
-        return;
-      }
+      setAmountWarning(null);
+      return;
     }
 
     setAmountWarning(null);
-  }, [amount, inputInUsd, selectedToken, tokens, feeEstimate, dc.rate, inBandSupported]);
+  }, [amount, inputInUsd, selectedToken, tokens, feeEstimate, dc.rate]);
 
   // Resolve recipient identity (passkey index → ENS) when a valid address is entered
   useEffect(() => {
