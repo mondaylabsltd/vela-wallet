@@ -28,6 +28,7 @@ jest.mock('@/services/rpc-adapter', () => ({
 }));
 
 import {
+  GasQuoteTooHighError,
   getBundlerGasQuote,
   isUsableFeeOverride,
 } from '@/services/safe-transaction';
@@ -76,6 +77,13 @@ const HEALTHY_QUOTE = {
   relayerFeePerGas: '0x2540be400',
 };
 
+const HIGH_QUOTE = {
+  maxFeePerGas: '0x60db88400', // 26 gwei (2.6× reported network cost)
+  maxPriorityFeePerGas: '0x60db88400',
+  networkFeePerGas: '0x2540be400', // 10 gwei
+  relayerFeePerGas: '0x3b9aca000',
+};
+
 // getGasPrices/isDeployed cache per chainId at module level — every test uses a
 // fresh chain id so no test reads another's cached price.
 let nextChain = 900_000;
@@ -97,6 +105,28 @@ describe('getBundlerGasQuote — zero-quote guard', () => {
     expect(q).not.toBeNull();
     expect(q!.maxFeePerGas).toBe(20_000_000_000n);
     expect(q!.networkFeePerGas).toBe(10_000_000_000n);
+  });
+
+  test('a high quote requires acknowledgement for this exact tier and price', async () => {
+    routeRpc(HIGH_QUOTE);
+    const chainId = freshChain();
+
+    await expect(getBundlerGasQuote(chainId, 'standard')).rejects.toBeInstanceOf(GasQuoteTooHighError);
+
+    await expect(getBundlerGasQuote(chainId, 'standard', {
+      tier: 'standard',
+      maxFeePerGas: 26_000_000_000n,
+      networkFeePerGas: 10_000_000_000n,
+    })).resolves.toMatchObject({
+      maxFeePerGas: 26_000_000_000n,
+      networkFeePerGas: 10_000_000_000n,
+    });
+
+    await expect(getBundlerGasQuote(chainId, 'standard', {
+      tier: 'standard',
+      maxFeePerGas: 25_000_000_000n,
+      networkFeePerGas: 10_000_000_000n,
+    })).rejects.toBeInstanceOf(GasQuoteTooHighError);
   });
 });
 

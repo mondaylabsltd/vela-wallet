@@ -19,7 +19,16 @@ import { hapticError, hapticSuccess, showAlert } from '@/services/platform';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
 import { resolveRecipientRisk, type RecipientRisk } from '@/services/recipient-risk';
 import { createReentryLock } from '@/services/reentry-lock';
-import { estimateTransactionFee, prefetchForSend, sendBatchCalls, sendERC20, sendNative, type TransactionFeeEstimate } from '@/services/safe-transaction';
+import {
+  estimateTransactionFee,
+  GasQuoteTooHighError,
+  prefetchForSend,
+  sendBatchCalls,
+  sendERC20,
+  sendNative,
+  type HighGasQuoteApproval,
+  type TransactionFeeEstimate,
+} from '@/services/safe-transaction';
 import { findAccountByCredentialId, saveTransactions, updateTransactions } from '@/services/storage';
 import { isTempoChain, isTempoFeeToken, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
 import { resolveTokenMetadata } from '@/services/token-metadata';
@@ -32,6 +41,13 @@ import { TextInput } from 'react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
+
+/** Format a ratio without converting a potentially large wei value to Number. */
+function formatGasQuoteMultiple(approval: HighGasQuoteApproval): string {
+  if (approval.networkFeePerGas <= 0n) return '—';
+  const tenths = (approval.maxFeePerGas * 10n + approval.networkFeePerGas / 2n) / approval.networkFeePerGas;
+  return `${tenths / 10n}.${tenths % 10n}`;
+}
 
 /**
  * All Send-flow state, refs, effects, and handlers. Extracted verbatim from
@@ -606,7 +622,7 @@ export function useSendController() {
     }
   };
 
-  const handleContinue = async () => {
+  const handleContinue = async (highGasQuoteApproval?: HighGasQuoteApproval) => {
     if (multiSelectMode) {
       if (!isValidAddress(recipient)) {
         showAlert(t('send.alertInvalidAddressTitle'), t('send.alertInvalidAddressBody'));
@@ -656,16 +672,16 @@ export function useSendController() {
           ?? null;
       } catch {
         showAlert(
-          t('send.alertEstimateFailedTitle', { defaultValue: 'Could not prepare transaction' }),
-          t('send.alertAccountUnavailableBody', { defaultValue: 'Could not load the account key required to prepare this transaction. Please try again.' }),
+          t('send.alertEstimateFailedTitle'),
+          t('send.alertAccountUnavailableBody'),
         );
         return;
       }
       prefetchedAccount.current = storedForEstimate ?? null;
       if (!storedForEstimate?.publicKeyHex) {
         showAlert(
-          t('send.alertEstimateFailedTitle', { defaultValue: 'Could not prepare transaction' }),
-          t('send.alertAccountUnavailableBody', { defaultValue: 'Could not load the account key required to prepare this transaction. Please try again.' }),
+          t('send.alertEstimateFailedTitle'),
+          t('send.alertAccountUnavailableBody'),
         );
         return;
       }
@@ -713,7 +729,7 @@ export function useSendController() {
           const [fee, bootstrapStatus] = await Promise.all([
             estimateTransactionFee(
               activeAccount!.address, chainId, 'fast', estTx, estBatch, gasFeeToken,
-              storedForEstimate.publicKeyHex,
+              storedForEstimate.publicKeyHex, highGasQuoteApproval,
             ),
             // Do not inspect the user's personal gas account. The sole send
             // gate is the relayer treasury, and a low float replaces the old
@@ -734,9 +750,31 @@ export function useSendController() {
         }
       } catch (err) {
         setEstimatingGas(false);
+        if (err instanceof GasQuoteTooHighError) {
+          const approval = err.approval;
+          showAlert(
+            t('send.highGasQuoteTitle'),
+            t('send.highGasQuoteBody', { multiple: formatGasQuoteMultiple(approval) }),
+            [
+              { text: t('common.cancel'), style: 'cancel' },
+              {
+                text: t('common.tryAgain'),
+                onPress: () => { void handleContinue(); },
+              },
+              {
+                // This only unlocks a fresh estimate for the exact quote above.
+                // The normal confirm slide still shows the final fee and remains
+                // the user's transaction authorization.
+                text: t('send.highGasQuoteReview'),
+                onPress: () => { void handleContinue(approval); },
+              },
+            ],
+          );
+          return;
+        }
         showAlert(
-          t('send.alertEstimateFailedTitle', { defaultValue: 'Could not prepare transaction' }),
-          err instanceof Error ? err.message : t('send.alertEstimateFailedBody', { defaultValue: 'Could not build a valid transaction estimate. Please try again.' }),
+          t('send.alertEstimateFailedTitle'),
+          err instanceof Error ? err.message : t('send.alertEstimateFailedBody'),
         );
         return;
       }

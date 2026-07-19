@@ -297,6 +297,20 @@ export interface TransactionFeeEstimate {
   feeRecipient?: string;
 }
 
+/**
+ * A user's one-time acknowledgement of an unusually high relayer quote.
+ *
+ * This deliberately binds every value used by the sanity check.  An approval
+ * cannot be reused if the relayer returns a different quote on retry, which
+ * sends the user back to the review step instead of silently accepting a new
+ * price.
+ */
+export interface HighGasQuoteApproval {
+  tier: GasTier;
+  maxFeePerGas: bigint;
+  networkFeePerGas: bigint;
+}
+
 /** In-band quoted fee as displayed by the confirm UI — the submit path signs exactly
  *  this (amount + recipient); the bundler's gate re-verifies and rejects loudly if
  *  stale, so the user re-confirms a NEW number instead of silently paying one. */
@@ -511,13 +525,16 @@ export async function estimateTransactionFee(
   // Without it we deliberately skip the live UserOp simulation rather than send
   // a draft which cannot match the final operation.
   publicKeyHex?: string,
+  // Present only after the UI has shown this exact high quote and the user chose
+  // to review its resulting fee. A changed quote must be acknowledged again.
+  highGasQuoteApproval?: HighGasQuoteApproval,
 ): Promise<TransactionFeeEstimate> {
   // Tempo pays gas in a stablecoin, not the native coin — separate model. Forward the tx so a
   // dApp contract call is quoted off its REAL gas, not a transfer-sized default.
   if (isTempoChain(chainId)) return estimateTempoFee(from, chainId, tier, tx);
 
   // The bundler is the single source of truth for the price. getBundlerGasQuote
-  // throws GasQuoteTooHighError (propagated here = refuse) if the quote is abusive,
+  // asks for an explicit acknowledgement when the quote is above the safety cap,
   // and returns null only when the bundler can't quote (then we fall back locally).
   const [deployed, nonce, { gasPrice }, quote] = await Promise.all([
     // These are UserOperation correctness fields, not best-effort preview
@@ -525,7 +542,7 @@ export async function estimateTransactionFee(
     isDeployed(from, chainId),
     getNonce(from, chainId),
     getGasPrices(chainId),
-    getBundlerGasQuote(chainId, tier),
+    getBundlerGasQuote(chainId, tier, highGasQuoteApproval),
   ]);
 
   let networkFeePerGas: bigint;
@@ -1955,16 +1972,29 @@ function exceedsQuoteMultiple(quoted: bigint, baseline: bigint): boolean {
   return quoted * QUOTE_MULTIPLE_SCALE_BPS > baseline * MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS;
 }
 
-/** Thrown when a bundler quotes a gas price above the client-side sanity cap. */
+/** Thrown when a bundler quote needs an explicit user acknowledgement. */
 export class GasQuoteTooHighError extends Error {
-  constructor(quoted: bigint, chainGasPrice: bigint) {
-    super(
-      `The relayer quoted an abnormally high gas price ` +
-        `(${(Number(quoted) / Number(chainGasPrice || 1n)).toFixed(1)}× the network rate). ` +
-        `For your safety, Vela won't submit this transaction. Try again, or switch bundler.`,
-    );
+  readonly approval: HighGasQuoteApproval;
+
+  constructor(tier: GasTier, maxFeePerGas: bigint, networkFeePerGas: bigint) {
+    // This message is intentionally not user-facing. Callers must render the
+    // structured values with their own i18n copy rather than leaking English
+    // service text into a money-flow screen.
+    super('High gas quote requires user acknowledgement');
     this.name = 'GasQuoteTooHighError';
+    this.approval = { tier, maxFeePerGas, networkFeePerGas };
   }
+}
+
+function matchesHighGasQuoteApproval(
+  approval: HighGasQuoteApproval | undefined,
+  tier: GasTier,
+  maxFeePerGas: bigint,
+  networkFeePerGas: bigint,
+): boolean {
+  return approval?.tier === tier
+    && approval.maxFeePerGas === maxFeePerGas
+    && approval.networkFeePerGas === networkFeePerGas;
 }
 
 /**
@@ -2030,12 +2060,14 @@ export interface GasQuoteTier {
  *
  * Returns null when the bundler doesn't support the method (older / generic
  * bundler) so the caller can fall back to a local estimate. Throws
- * GasQuoteTooHighError when the quote exceeds the client-side sanity cap — that
- * is a refusal, not a fallback, so an abusive bundler can't overcharge silently.
+ * GasQuoteTooHighError when the quote exceeds the client-side sanity cap unless
+ * the caller supplies a user acknowledgement for this exact quote. This keeps
+ * the safety rail while allowing a user to review and choose a costly send.
  */
 export async function getBundlerGasQuote(
   chainId: number,
   tier: GasTier = 'standard',
+  highGasQuoteApproval?: HighGasQuoteApproval,
 ): Promise<GasQuoteTier | null> {
   let resp;
   let chain: ChainGasPrice;
@@ -2088,12 +2120,13 @@ export async function getBundlerGasQuote(
   // Client-side hard cap — judged by the BUNDLER's own reported markup (maxFee vs its
   // networkFee), NOT the wallet's per-chain RPC, which must never veto the authoritative
   // quote (that veto is what blanked the fee to "—" and under-priced Gnosis). See isQuoteAbusive.
-  if (isQuoteAbusive(maxFeePerGas, reportedNetworkFee, chain, tier)) {
+  if (isQuoteAbusive(maxFeePerGas, reportedNetworkFee, chain, tier)
+      && !matchesHighGasQuoteApproval(highGasQuoteApproval, tier, maxFeePerGas, networkFeePerGas)) {
     console.warn(
       `[Gas] Bundler quote ${maxFeePerGas} exceeds 2.5× its reported ${tier} ` +
-      `network cost ${networkFeePerGas} — refusing.`,
+      `network cost ${networkFeePerGas} — waiting for user acknowledgement.`,
     );
-    throw new GasQuoteTooHighError(maxFeePerGas, networkFeePerGas);
+    throw new GasQuoteTooHighError(tier, maxFeePerGas, networkFeePerGas);
   }
 
   return { maxFeePerGas, maxPriorityFeePerGas, networkFeePerGas, relayerFeePerGas };
