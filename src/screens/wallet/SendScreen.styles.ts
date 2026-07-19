@@ -394,19 +394,6 @@ export const styles = createStyles(() => ({
   continueBtn: {
     marginTop: space.lg,
   },
-  sponsoredRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: space.sm,
-    paddingHorizontal: space.xs,
-    marginBottom: space.sm,
-  },
-  sponsoredText: {
-    fontSize: text.xs,
-    ...inter.regular,
-    color: color.fg.subtle,
-  },
-
   // Confirm — transfer review, open on the page (de-boxed)
   confirmBlock: {
     marginBottom: space.lg,

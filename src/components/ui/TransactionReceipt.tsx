@@ -15,7 +15,7 @@ import { color, createStyles, font, inter, radius, space, text } from '@/constan
 import { chainName, getAllNetworksSync, explorerTxURL } from '@/models/network';
 import { formatBalance, shortAddr } from '@/models/types';
 import { fetchWithTimeout, NET_TIMEOUTS } from '@/services/net';
-import { pollUserOpReceipt } from '@/services/tx-reconciler';
+import { pollUserOpReceipt, USER_OP_RECEIPT_POLL_INTERVAL_MS } from '@/services/tx-reconciler';
 import { formatFiat } from '@/services/currency';
 import { formatDateTime, useLocalePrefs } from '@/services/locale-format';
 import { copyToClipboard, hapticLight, hapticSuccess, openBrowser, showAlert } from '@/services/platform';
@@ -98,6 +98,14 @@ interface BatchView {
   /** split only: summed token amount (formatted) + its symbol — one token, so summable. */
   splitTotal?: string;
   splitSymbol?: string;
+}
+
+/** The visible progress window is an expectation-setter, not a failure deadline.
+ * We keep checking after it reaches zero because a submitted UserOp can still land. */
+const CONFIRMATION_COUNTDOWN_SECONDS = 60;
+
+function formatCountdown(seconds: number): string {
+  return `00:${String(Math.max(0, seconds)).padStart(2, '0')}`;
 }
 
 /** Effective receipt values: a >1 batch, or the single line (props or a 1-element batch). */
@@ -567,6 +575,29 @@ export function TransactionReceipt(props: Props) {
   const pending = settle === 'submitted';
   const failed = settle === 'failed';
   const explorerUrl = explorerTxURL(chainId, effTxHash);
+  const [confirmationSecondsLeft, setConfirmationSecondsLeft] = useState(CONFIRMATION_COUNTDOWN_SECONDS);
+  const confirmationProgress = Math.min(100, Math.max(
+    0,
+    ((CONFIRMATION_COUNTDOWN_SECONDS - confirmationSecondsLeft) / CONFIRMATION_COUNTDOWN_SECONDS) * 100,
+  ));
+
+  // Give the submitted state a calm, finite-looking progress cue. The countdown stops as soon
+  // as a definitive receipt arrives; after 60 seconds it truthfully says that confirmation is
+  // still ongoing while the receipt poll continues in the background.
+  useEffect(() => {
+    if (!pending || !userOpHash) {
+      setConfirmationSecondsLeft(CONFIRMATION_COUNTDOWN_SECONDS);
+      return;
+    }
+    const startedAt = Date.now();
+    const updateCountdown = () => {
+      const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+      setConfirmationSecondsLeft(Math.max(0, CONFIRMATION_COUNTDOWN_SECONDS - elapsedSeconds));
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 250);
+    return () => clearInterval(timer);
+  }, [pending, userOpHash]);
 
   useEffect(() => {
     if (settle !== 'submitted' || !userOpHash) return;
@@ -583,9 +614,11 @@ export function TransactionReceipt(props: Props) {
         if (r.txHash) setLiveTxHash(r.txHash);
         return; // final — stop polling
       }
-      if (attempts < 60) timer = setTimeout(tick, 4000);
+      if (attempts < 60) timer = setTimeout(tick, USER_OP_RECEIPT_POLL_INTERVAL_MS);
     };
-    timer = setTimeout(tick, 1500);
+    // The background send waiter may already have made the initial request. Wait for the next
+    // shared three-second slot instead of immediately issuing a duplicate receipt RPC.
+    timer = setTimeout(tick, USER_OP_RECEIPT_POLL_INTERVAL_MS);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [settle, userOpHash, chainId]);
 
@@ -811,6 +844,33 @@ export function TransactionReceipt(props: Props) {
         ) : pending ? (
           <View style={styles.stateBox}>
             <Text style={styles.stateHint}>{t('componentsTx.receipt.confirmingHint')}</Text>
+            <View style={styles.confirmationProgress}>
+              <View style={styles.confirmationProgressHeader}>
+                <Text style={styles.confirmationProgressLabel}>
+                  {t('componentsTx.receipt.confirmingProgress')}
+                </Text>
+                <Text style={styles.confirmationCountdown}>
+                  {confirmationSecondsLeft > 0
+                    ? formatCountdown(confirmationSecondsLeft)
+                    : t('componentsTx.receipt.confirmingDelayed')}
+                </Text>
+              </View>
+              <View
+                style={styles.confirmationTrack}
+                accessibilityRole="progressbar"
+                accessibilityValue={{ min: 0, max: 100, now: Math.round(confirmationProgress) }}
+              >
+                <View
+                  style={[
+                    styles.confirmationFill,
+                    { width: confirmationProgress > 0 ? `${Math.max(2, confirmationProgress)}%` : '0%' },
+                  ]}
+                />
+              </View>
+              <Text style={styles.confirmationPollHint}>
+                {t('componentsTx.receipt.confirmingPoll', { seconds: USER_OP_RECEIPT_POLL_INTERVAL_MS / 1000 })}
+              </Text>
+            </View>
           </View>
         ) : (
           <View style={styles.qrSection}>
@@ -910,6 +970,13 @@ const styles = createStyles(() => ({
   qrHint: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle },
   stateBox: { paddingHorizontal: space.xl, paddingVertical: space.lg, borderTopWidth: 1, borderTopColor: color.border.base },
   stateHint: { fontSize: text.sm, ...inter.medium, color: color.fg.muted, textAlign: 'center' as const, lineHeight: 20 },
+  confirmationProgress: { marginTop: space.lg, gap: space.sm },
+  confirmationProgressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  confirmationProgressLabel: { fontSize: text.xs, ...inter.medium, color: color.fg.subtle },
+  confirmationCountdown: { fontSize: text.sm, ...inter.bold, fontFamily: font.numeric, color: color.warning.base },
+  confirmationTrack: { height: 7, borderRadius: 999, overflow: 'hidden', backgroundColor: color.warning.soft },
+  confirmationFill: { height: '100%', borderRadius: 999, backgroundColor: color.warning.base },
+  confirmationPollHint: { fontSize: text.xs, ...inter.regular, color: color.fg.subtle, textAlign: 'center' as const },
   // footer — a calm 3-tier signature block (logo / name / url), generous breathing room.
   footer: { alignItems: 'center', paddingTop: space['3xl'], paddingBottom: space['2xl'], paddingHorizontal: space.lg, borderTopWidth: 1, borderTopColor: color.border.base },
   footerLogoImg: { width: 34, height: 34, borderRadius: 17, marginBottom: space.md },

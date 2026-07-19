@@ -46,7 +46,7 @@ Phase A replaces the R1 spike's stub (`window.__velaR1` + a hardcoded sign butto
   "address": "0x…", "name": "Main",
   "accounts": [{ "name": "Main", "address": "0x…" }],
   "chainId": 1,
-  "chains": { "1": { "name": "Ethereum", "rpcUrl": "https://…", "bundlerUrl": "https://vela-bundler.getvela.app/1" } },
+  "chains": { "1": { "name": "Ethereum", "rpcUrl": "https://…", "bundlerUrl": "https://vela-relay.getvela.app/1" } },
   "updatedAt": 1751800000000
 }
 ```

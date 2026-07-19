@@ -317,7 +317,7 @@ export const DEFAULT_LOCALE_PREFS: LocalePrefs = {
 export const DEFAULT_SERVICE_ENDPOINTS: ServiceEndpoints = {
   ethereumDataURL: 'https://ethereum-data.awesometools.dev',
   passkeyIndexURL: 'https://p256-index.getvela.app',
-  bundlerServiceURL: 'https://vela-bundler.getvela.app',
+  bundlerServiceURL: 'https://vela-relay.getvela.app',
   // Vela's self-hosted Frankfurter instance (github.com/mondaylabsltd/vela-currency):
   // FOSS, no key, ~160 currencies incl. VND. base=USD is required (default base is EUR).
   fiatRatesURL: 'https://vela-currency.getvela.app/v2/rates?base=USD',

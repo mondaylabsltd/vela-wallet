@@ -17,7 +17,7 @@ import * as Passkey from '@/modules/passkey';
 import { sumSplitBaseUnits } from '@/services/batch-send';
 import { fromBaseUnits } from '@/services/eip681';
 import { resolveTokenAmount } from '@/services/fiat-convert';
-import { AlertCircle, Gift, X } from 'lucide-react-native';
+import { AlertCircle, X } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -59,7 +59,6 @@ export function ConfirmStep({ c }: { c: SendController }) {
     estimatingGas,
     sendLock,
     sendCancelledRef,
-    gasSponsored,
     mountedRef,
     txStatus,
     setTxStatus,
@@ -70,6 +69,7 @@ export function ConfirmStep({ c }: { c: SendController }) {
     setGasFeeToken,
     feeBusy,
     setFeeBusy,
+    prefetchedAccount,
     recipientIdentity,
     recipientRisk,
     sim,
@@ -274,15 +274,6 @@ export function ConfirmStep({ c }: { c: SendController }) {
             hideReassurance
           />
 
-          {/* First-send trust moment: the treasury covered (or is about to
-              cover) this wallet's gas float — say so, quietly. */}
-          {gasSponsored && (
-            <View style={styles.sponsoredRow}>
-              <Gift size={13} color={color.fg.subtle} strokeWidth={2} />
-              <Text style={styles.sponsoredText}>{t('send.gasSponsoredNote')}</Text>
-            </View>
-          )}
-
           {/* Estimated fee — the one gas surface left (tiers + technical rows are
               gone; every send runs at 'fast'). An in-band stablecoin fee renders
               in the token's own units with a matching ≈USD subline; otherwise the
@@ -301,6 +292,7 @@ export function ConfirmStep({ c }: { c: SendController }) {
               nativeUsdPrice={nativePrice}
               safeAddress={activeAccount.address}
               chainId={tokenChainId(selectedToken)}
+              publicKeyHex={prefetchedAccount.current?.publicKeyHex}
               gasFeeToken={gasFeeToken}
               onFeeTokenChange={setGasFeeToken}
               onFeeUpdate={(fee) => { if (mountedRef.current) setFeeEstimate(fee); }}

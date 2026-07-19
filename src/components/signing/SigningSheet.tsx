@@ -31,6 +31,7 @@ import {
 import { resolveTokenMetadata } from '@/services/token-metadata';
 import { parseSiwe, checkSiweDomainBinding } from '@/services/siwe';
 import { fetchChainlinkPrices, resolveChainlinkPrice } from '@/services/price-service';
+import { findAccountByCredentialId } from '@/services/storage';
 import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulation';
 import { BalanceChangePreview } from './BalanceChangePreview';
 import {
@@ -55,7 +56,7 @@ import { BatchCallsView, type BatchItem, legNeedsChoice } from './views/BatchCal
 export interface SigningSheetProps {
   request: BLEIncomingRequest;
   chainId: number;
-  account: { address?: string; name?: string } | null;
+  account: { id?: string; address?: string; name?: string } | null;
   dappInfo: { name?: string; url?: string; icon?: string } | null;
   isSigning: boolean;
   signError: string | null;
@@ -128,6 +129,33 @@ export function SigningSheet({
   // so confirm stays disabled until the displayed quote settles (the internal re-quote
   // doesn't touch estimatingGas).
   const [feeBusy, setFeeBusy] = useState(false);
+  // An undeployed Safe's estimate must use the initCode from its persisted
+  // passkey, exactly as the operation we later sign does.
+  const [publicKeyHex, setPublicKeyHex] = useState<string | undefined>();
+  const [publicKeyLoaded, setPublicKeyLoaded] = useState(!activeAccount?.id);
+  useEffect(() => {
+    let cancelled = false;
+    const accountId = activeAccount?.id;
+    if (!accountId) {
+      setPublicKeyHex(undefined);
+      setPublicKeyLoaded(true);
+      return;
+    }
+    setPublicKeyHex(undefined);
+    setPublicKeyLoaded(false);
+    findAccountByCredentialId(accountId)
+      .then((account) => {
+        if (cancelled) return;
+        setPublicKeyHex(account?.publicKeyHex);
+        setPublicKeyLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPublicKeyHex(undefined);
+        setPublicKeyLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [activeAccount?.id]);
 
   // Native-token USD price (Chainlink, cached 3min) → fiat line on the gas card.
   const [nativeUsdPrice, setNativeUsdPrice] = useState(0);
@@ -229,12 +257,12 @@ export function SigningSheet({
       // Estimate gas fee in parallel — against the REAL tx so the displayed fee and
       // the funding pre-check reflect this contract call/deploy, not a dummy transfer.
       // Skipped in read-only replay: a historical signature isn't about to be sent.
-      if (activeAccount?.address && !readOnly) {
+      if (activeAccount?.address && !readOnly && publicKeyLoaded) {
         setEstimatingGas(true);
         setGasEstimateFailed(false);
         estimateTransactionFee(activeAccount.address, chainId, 'fast', {
           to: params[0].to, value: params[0].value, data: params[0].data,
-        })
+        }, undefined, undefined, publicKeyHex)
           .then((f) => { setFeeEstimate(f); setGasEstimateFailed(false); })
           .catch(() => { setFeeEstimate(null); setGasEstimateFailed(true); })
           .finally(() => setEstimatingGas(false));
@@ -266,7 +294,7 @@ export function SigningSheet({
       setClearSign(null);
     }
     return () => { cancelled = true; };
-  }, [incomingRequest, chainId, activeAccount?.address, readOnly, simFromOverride]);
+  }, [incomingRequest, chainId, activeAccount?.address, publicKeyHex, publicKeyLoaded, readOnly, simFromOverride]);
 
   // Real tx for accurate gas estimation in the fee card (re-runs on tier change/refresh).
   const txForEstimate = useMemo(() => {
@@ -296,7 +324,7 @@ export function SigningSheet({
     // e.g. approve + swap nets to −USDC / +WETH), plus the revert + underfunded
     // pre-checks. The engine already accepts the full calls array. Skipped in
     // read-only replay (a historical batch isn't being simulated for submission).
-    if (activeAccount?.address && !readOnly) {
+    if (activeAccount?.address && !readOnly && publicKeyLoaded) {
       const simCalls = calls.map((c: any) => ({ to: c.to, data: c.data, value: c.value }));
       simulateAssetChanges(simFromOverride ?? activeAccount.address, simCalls, chainId)
         .then((r) => { if (!cancelled) setSim(r); })
@@ -306,13 +334,13 @@ export function SigningSheet({
       // the same MultiSend of every call that sendBatchCalls submits.
       setEstimatingGas(true);
       setGasEstimateFailed(false);
-      estimateTransactionFee(activeAccount.address, chainId, 'fast', undefined, simCalls)
+      estimateTransactionFee(activeAccount.address, chainId, 'fast', undefined, simCalls, undefined, publicKeyHex)
         .then((f) => { if (!cancelled) { setFeeEstimate(f); setGasEstimateFailed(false); } })
         .catch(() => { if (!cancelled) { setFeeEstimate(null); setGasEstimateFailed(true); } })
         .finally(() => { if (!cancelled) setEstimatingGas(false); });
     }
     return () => { cancelled = true; };
-  }, [incomingRequest, chainId, activeAccount?.address, readOnly, simFromOverride]);
+  }, [incomingRequest, chainId, activeAccount?.address, publicKeyHex, publicKeyLoaded, readOnly, simFromOverride]);
 
   // Resolve symbol/decimals for every token approved across the batch's legs, so
   // each leg's spending-cap editor can show and parse real token amounts.
@@ -599,7 +627,7 @@ export function SigningSheet({
           />
 
           {/* Gas fee card — for an on-chain tx OR a batch (both cost gas), live only. */}
-          {(isTx || isBatch) && activeAccount?.address && !readOnly && (
+          {(isTx || isBatch) && activeAccount?.address && !readOnly && publicKeyLoaded && (
             <GasFeeCard
               feeEstimate={feeEstimate}
               estimating={estimatingGas}
@@ -607,6 +635,7 @@ export function SigningSheet({
               nativeUsdPrice={nativeUsdPrice}
               safeAddress={activeAccount.address}
               chainId={chainId}
+              publicKeyHex={publicKeyHex}
               tx={isBatch ? undefined : txForEstimate}
               batchCalls={isBatch ? params?.[0]?.calls : undefined}
               gasFeeToken={gasFeeToken}

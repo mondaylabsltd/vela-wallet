@@ -50,6 +50,8 @@ function routeRpc(quoteTier: Record<string, string> | 'unsupported') {
       case 'eth_getCode':
         // Safe + splitter both read as deployed.
         return Promise.resolve({ result: '0x6080' });
+      case 'eth_call':
+        return Promise.resolve({ result: '0x' + '00'.repeat(32) });
       case 'eth_estimateUserOperationGas':
         // Bundler estimation unavailable → static gas fallback (small calldata).
         return Promise.reject(new Error('estimation unavailable'));

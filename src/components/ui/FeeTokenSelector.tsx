@@ -5,16 +5,12 @@
  * slide and the dApp GasFeeCard (via GasFeeCard) so the two can't drift.
  *
  * Presentational only: it never loads options or re-quotes. The parent runs
- * useInBandFeeTokenOptions, owns the selection, and re-prices on `onSelect`. While that re-quote
- * is in flight the parent passes `busy` — the tapped row spins, the rest dim and block taps
+ * useInBandFeeTokenOptions, owns the selection, and applies the selected quote on `onSelect`.
+ * While that update is in flight the parent passes `busy` — the tapped row spins, the rest dim and block taps
  * (which also serialises rapid taps, so no stale-asset race).
  *
- * Per-coin cost is derived CLIENT-SIDE from the current quote's USD value (`feeUsd`): the bundler
- * markup is a uniform 3× across coins, so one quote prices them all — no per-coin bundler RPC.
- * The bundler applies a per-asset minimum charge (1e-5 of a native coin, or $0.01 for a stable);
- * only the stable floor surfaces here, since 1e-5 of a coin is below this row's 0.0001 display
- * precision. The exact charge for the SELECTED coin is still the bundler's authoritative (floored)
- * quote (signed at submit); the other rows are honest ~estimates.
+ * The bundler's address-only quote supplies each row's balance and USD price in one response.
+ * The parent applies the shared gas × gas-price formula to derive each row's exact amount.
  *
  * Design: de-boxed (open rows under a hairline, no card), real token logos, and a selected accent
  * check only (the app's picker convention, e.g. CurrencySheet) — no filled tint.
@@ -29,21 +25,16 @@ import { color, createStyles, font, inter, space, text } from '@/constants/theme
 import { formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import type { FeeTokenOption } from '@/hooks/use-inband-fee-tokens';
 
-/** The bundler's minimum in-band charge for a stablecoin fee. */
-const STABLE_MIN_USD = 0.01;
-
 interface FeeTokenSelectorProps {
   /** Fee-asset options from useInBandFeeTokenOptions (native + held stables). */
   options: FeeTokenOption[];
   /** Current selection: null = native, else a stablecoin contract (case-insensitive). */
   selected: string | null;
-  /** The parent re-quotes on select; the selector only signals intent. */
+  /** The parent applies the selected quote; the selector only signals intent. */
   onSelect: (contract: string | null) => void;
-  /** Native-coin USD price — converts the USD fee into the native coin's amount. */
-  nativeUsdPrice: number;
-  /** The current network fee in USD (from the live quote) — prices every coin's cost. */
-  feeUsd: number;
-  /** A re-quote is in flight (parent-owned) — rows dim + block taps; the tapped row spins. */
+  /** Exact current fee in an option's base units, calculated from the shared gas basis. */
+  feeAmountFor: (option: FeeTokenOption) => bigint | null;
+  /** A parent-owned selection update is in flight — rows dim + block taps; the tapped row spins. */
   busy?: boolean;
 }
 
@@ -57,12 +48,12 @@ function fmtCost(units: number | null): string | null {
   return formatTokenAmount(units, { compact: true });
 }
 
-export function FeeTokenSelector({ options, selected, onSelect, nativeUsdPrice, feeUsd, busy = false }: FeeTokenSelectorProps) {
+export function FeeTokenSelector({ options, selected, onSelect, feeAmountFor, busy = false }: FeeTokenSelectorProps) {
   const { t } = useTranslation();
   useLocalePrefs();
   const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-  // Clear the per-row spinner once the parent's re-quote settles.
+  // Clear the per-row spinner once the parent's selection update settles.
   useEffect(() => { if (!busy) setPendingKey(null); }, [busy]);
 
   const selectedKey = keyOf(selected);
@@ -74,16 +65,13 @@ export function FeeTokenSelector({ options, selected, onSelect, nativeUsdPrice, 
         const k = keyOf(opt.contract);
         const active = k === selectedKey;
         const holdings = Number(opt.balance) / 10 ** opt.decimals;
-        // Cost in this coin: native = feeUSD ÷ native price (its 1e-5-coin floor is sub-display
-        // precision here); stable = feeUSD (1:1) with the $0.01 floor.
-        const costUnits = opt.contract === null
-          ? (nativeUsdPrice > 0 ? feeUsd / nativeUsdPrice : null)
-          : Math.max(feeUsd, STABLE_MIN_USD);
+        const feeAmount = feeAmountFor(opt);
+        const costUnits = feeAmount === null ? null : Number(feeAmount) / 10 ** opt.decimals;
         const costLabel = fmtCost(costUnits);
         // A coin that can't cover the fee (notably the native coin at 0 balance) is SHOWN for
         // context but not selectable — paying gas in it would only produce a doomed op. It's
         // insufficient when held ≤ 0, or held < the fee it would cost.
-        const insufficient = holdings <= 0 || (costUnits !== null && holdings < costUnits);
+        const insufficient = feeAmount === null || opt.balance < feeAmount;
         const pending = busy && pendingKey === k;
         return (
           <Pressable

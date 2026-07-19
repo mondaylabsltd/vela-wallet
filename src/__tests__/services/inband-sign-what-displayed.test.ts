@@ -8,8 +8,8 @@
  * native, the send must REFUSE (never silently pay a different asset).
  *
  * We drive sendNative on an in-band chain with a signFn that throws a sentinel: reaching it
- * proves the pre-sign flow succeeded; whether the sizing quote was fetched (beyond the 1-wei
- * capability probe) is the observable that pins the branch. Full signing/submit is exercised
+ * proves the pre-sign flow succeeded; whether the address-only quote is reused by the send path
+ * is the observable that pins the branch. Full signing/submit is exercised
  * end-to-end by integration; here we pin the money-relevant decision cheaply.
  */
 
@@ -73,17 +73,20 @@ function routeRpc() {
   });
 }
 
-/** The 1-wei capability probe (nativeCost 0x1) vs a real sizing quote. */
+/** New address-only quote response: native plus every accepted stablecoin. */
 function quoteImpl(sizing: { asset: 'native' | 'erc20'; feeToken?: string }) {
-  return async (_m: string, params: any[]) => {
-    const p = params[0];
-    if (p.nativeCost === '0x1') {
-      return { result: { recipient: TREASURY, asset: 'native', requiredAmount: '0x64', markupX: 3 } };
-    }
+  return async () => {
+    const native = {
+      recipient: TREASURY, asset: 'native', feeToken: null, balance: '0x100', decimals: 18,
+      symbol: 'ETH', usdBalance: '1', usdPrice: '2000',
+    };
     if (sizing.asset === 'erc20') {
-      return { result: { recipient: TREASURY, asset: 'erc20', feeToken: sizing.feeToken, requiredAmount: '0x2710', decimals: 6, markupX: 3 } };
+      return { result: [native, {
+        recipient: TREASURY, asset: 'erc20', feeToken: sizing.feeToken, balance: '0x989680', decimals: 6,
+        symbol: 'USDC', usdBalance: '10', usdPrice: '1',
+      }] };
     }
-    return { result: { recipient: TREASURY, asset: 'native', requiredAmount: '0x38d7ea4c68000', markupX: 3 } };
+    return { result: [native] };
   };
 }
 
@@ -93,10 +96,9 @@ beforeEach(() => {
   throwingSignFn.mockClear();
 });
 
-const sizingCalls = () =>
-  poolBundlerCallMock.mock.calls.filter((c) => c[1]?.[0]?.nativeCost !== '0x1').length;
+const quoteCalls = () => poolBundlerCallMock.mock.calls.length;
 
-test('quotedFee present → signs it VERBATIM, no send-time sizing quote', async () => {
+test('quotedFee present → signs it VERBATIM and does not repeat the capability quote', async () => {
   routeRpc();
   poolBundlerCallMock.mockImplementation(quoteImpl({ asset: 'native' }));
 
@@ -104,19 +106,19 @@ test('quotedFee present → signs it VERBATIM, no send-time sizing quote', async
   await expect(
     sendNative(SAFE, TO, '0x64', freshChain(), PUBKEY, throwingSignFn, undefined, null, quotedFee),
   ).rejects.toThrow(SIGN_SENTINEL); // reached signing = the pre-sign flow completed
-  // The capability probe may run, but NO sizing quote — the displayed amount is signed as-is.
-  expect(sizingCalls()).toBe(0);
+  // One address-only request establishes capability; the send reuses it and signs the displayed amount.
+  expect(quoteCalls()).toBe(1);
   expect(throwingSignFn).toHaveBeenCalledTimes(1);
 });
 
-test('no quotedFee (programmatic caller) → a send-time sizing quote IS fetched', async () => {
+test('no quotedFee (programmatic caller) reuses the capability quote as its sizing quote', async () => {
   routeRpc();
   poolBundlerCallMock.mockImplementation(quoteImpl({ asset: 'native' }));
 
   await expect(
     sendNative(SAFE, TO, '0x64', freshChain(), PUBKEY, throwingSignFn),
   ).rejects.toThrow(SIGN_SENTINEL);
-  expect(sizingCalls()).toBe(1);
+  expect(quoteCalls()).toBe(1);
 });
 
 test('stablecoin requested but the send-time quote is native → REFUSE before signing', async () => {

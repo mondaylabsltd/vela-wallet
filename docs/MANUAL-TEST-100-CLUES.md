@@ -1036,7 +1036,7 @@
 
 2) 在 Tempo 上执行一笔发送，观察 gas 估算和扣款是否涉及 stablecoin（不是 native coin）
 3) 验证 Tempo 的 RPC 端点正常工作（pool 初始化、failover 等）
-4) 验证 Tempo 的 bundler URL 被正确设置（vela-bundler.getvela.app/4217）
+4) 验证 Tempo 的 bundler URL 被正确设置（vela-relay.getvela.app/4217）
 
 - **预期结果**：Tempo 链显示，nativeSymbol 为 USD；发送交易走 tempo.ts 流程（可查阅代码或日志）；RPC/bundler 端点管理与其他链无差异；不因特殊 gasModel 而故障
 - **边界/异常**：Tempo RPC 返回 200 但链不可用 → 应被识别（合约检查时缺失）；Tempo bundler 故障 → 应 fallback 到内置而非以 native gas 重试

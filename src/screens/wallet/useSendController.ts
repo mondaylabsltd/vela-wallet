@@ -10,7 +10,7 @@ import { useWallet } from '@/models/wallet-state';
 import * as Passkey from '@/modules/passkey';
 import { addCustomNetworkByChainId } from '@/services/add-network';
 import { buildMultiTokenCalls, buildSplitCalls, maxNativeSendable, reserveNativeGas, reserveTempoFeeToken, sumSplitBaseUnits, toMultiTokenSpecs } from '@/services/batch-send';
-import { attemptSilentSponsorship, checkBundlerFunding, clearBundlerCache, fetchBundlerAccountInfo, probeTreasury, formatWei, isInBandChain, parseBundlerUnderfunded, probeGasSponsorship, recommendedFundingWei, underfundedRequiredWei, type FundingNeeded, type TreasuryStatus } from '@/services/bundler-service';
+import { isInBandChain, probeTreasury, parseBundlerUnderfunded, type TreasuryStatus } from '@/services/bundler-service';
 import { fromBaseUnits, toBaseUnits } from '@/services/eip681';
 import { resolveTokenAmount } from '@/services/fiat-convert';
 import { fromHex, toHex } from '@/services/hex';
@@ -19,7 +19,7 @@ import { hapticError, hapticSuccess, showAlert } from '@/services/platform';
 import { resolveRecipientIdentity, type RecipientIdentity } from '@/services/recipient-identity';
 import { resolveRecipientRisk, type RecipientRisk } from '@/services/recipient-risk';
 import { createReentryLock } from '@/services/reentry-lock';
-import { estimateTransactionFee, prefetchForSend, rawBundlerGasCost, sendBatchCalls, sendERC20, sendNative, type TransactionFeeEstimate } from '@/services/safe-transaction';
+import { estimateTransactionFee, prefetchForSend, sendBatchCalls, sendERC20, sendNative, type TransactionFeeEstimate } from '@/services/safe-transaction';
 import { findAccountByCredentialId, saveTransactions, updateTransactions } from '@/services/storage';
 import { isTempoChain, isTempoFeeToken, TEMPO_DEFAULT_FEE_TOKEN, TEMPO_FEE_TOKEN_DECIMALS } from '@/services/tempo';
 import { resolveTokenMetadata } from '@/services/token-metadata';
@@ -106,12 +106,6 @@ export function useSendController() {
   const [copiedContract, setCopiedContract] = useState(false);
   const [feeEstimate, setFeeEstimate] = useState<TransactionFeeEstimate | null>(null);
   const [estimatingGas, setEstimatingGas] = useState(false);
-  const [fundingNeeded, setFundingNeeded] = useState<FundingNeeded | null>(null);
-  const fundingRetryCount = useRef(0);
-  // Two-phase silent sponsorship: set when the Continue-time dryRun probe said
-  // "eligible"; consumed by executeTransaction to fire the REAL grant right
-  // after the confirm slide (see handleContinue for the rationale).
-  const pendingSponsorship = useRef<FundingNeeded | null>(null);
   // Single-flight re-entry lock with a generation token. A cancelled send
   // releases it immediately (so a retry isn't a silent no-op) while the cancelled
   // promise's stale `end()` must not clear a newer send's lock (issue #91).
@@ -119,8 +113,6 @@ export function useSendController() {
   // Set by the confirm screen's cancel button; checked after every pre-sign
   // await in executeTransaction (mirrors dapp-connection's signCancelledRef).
   const sendCancelledRef = useRef(false);
-  // Drives the quiet "first network fee — covered by Vela" line on confirm.
-  const [gasSponsored, setGasSponsored] = useState(false);
   // Guards UI state updates that run after an `await` in the submit flow, so a
   // user who navigates away mid-send doesn't trigger updates on an unmounted
   // screen. Persistence (DB writes) still runs regardless — only UI is gated.
@@ -267,12 +259,15 @@ export function useSendController() {
             if (activeAccount) {
               const chainId = tokenChainId(picked[0]);
               prefetchForSend(activeAccount.address, chainId);
-              fetchBundlerAccountInfo(chainId, activeAccount.address).catch(() => {});
-              findAccountByCredentialId(activeAccount.id).then((s) => { prefetchedAccount.current = s ?? null; });
-              import('@/services/webauthn-verify').then((m) => { webauthnModuleRef.current = m; });
-              estimateTransactionFee(activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken)
+              findAccountByCredentialId(activeAccount.id).then((s) => {
+                prefetchedAccount.current = s ?? null;
+                return estimateTransactionFee(
+                  activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken, s?.publicKeyHex,
+                );
+              })
                 .then((f) => { if (mountedRef.current) setFeeEstimate(f); })
                 .catch(() => {});
+              import('@/services/webauthn-verify').then((m) => { webauthnModuleRef.current = m; });
             }
           }
           return;
@@ -498,21 +493,31 @@ export function useSendController() {
     }
   }, [step]);
 
+  // Resolve the bootstrap state without changing the UI. The send preflight uses
+  // this so the relayer-funding sheet is presented at the same "before sending"
+  // point as the personal gas-account funding sheet — including on in-band
+  // chains, which otherwise skip the latter gate entirely.
+  const getTreasuryBootstrap = async (chainId: number): Promise<TreasuryStatus | null> => {
+    try {
+      if (!activeAccount) return null;
+      // The bundler's treasury endpoint is the authority (works for ANY chain the bundler serves,
+      // incl. custom / local nets — no isInBandChain gate that mislabels them). A low-float
+      // treasury returns its status; a legacy/uncovered chain 404s (no relayer treasury) → fall
+      // through so the normal self-fund deposit path is preserved. Transient errors never route.
+      const probe = await probeTreasury(chainId);
+      if (probe.kind === 'low-float') return probe.status;
+    } catch { /* fall back to the caller's default surface */ }
+    return null;
+  };
+
   // Relayer float depleted → offer the community bootstrap sheet instead of a
   // dead-end error/funding surface. Returns true when the sheet was shown.
   const maybeShowTreasuryBootstrap = async (chainId: number): Promise<boolean> => {
-    try {
-      if (!activeAccount) return false;
-      // The bundler's treasury endpoint is the authority (works for ANY chain the bundler serves,
-      // incl. custom / local nets — no isInBandChain gate that mislabels them). A low-float
-      // treasury → show the sheet; a legacy/uncovered chain 404s (no relayer treasury) → fall
-      // through so the normal self-fund deposit path is preserved. Transient errors never route.
-      const probe = await probeTreasury(chainId);
-      if (probe.kind === 'low-float' && mountedRef.current) {
-        setTreasuryBootstrap(probe.status);
-        return true;
-      }
-    } catch { /* fall back to the caller's default surface */ }
+    const status = await getTreasuryBootstrap(chainId);
+    if (status && mountedRef.current) {
+      setTreasuryBootstrap(status);
+      return true;
+    }
     return false;
   };
 
@@ -603,14 +608,17 @@ export function useSendController() {
     if (activeAccount) {
       const chainId = tokenChainId(selected[0]);
       prefetchForSend(activeAccount.address, chainId);
-      fetchBundlerAccountInfo(chainId, activeAccount.address).catch(() => {});
-      findAccountByCredentialId(activeAccount.id).then((s) => { prefetchedAccount.current = s ?? null; });
+      findAccountByCredentialId(activeAccount.id).then((s) => {
+        prefetchedAccount.current = s ?? null;
+        return estimateTransactionFee(
+          activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken, s?.publicKeyHex,
+        );
+      })
+        .then((f) => { if (mountedRef.current) setFeeEstimate(f); })
+        .catch(() => {});
       import('@/services/webauthn-verify').then((m) => { webauthnModuleRef.current = m; });
       // Warm a gas estimate so the detail list can show the native line net of
       // its reserve right away (not just at confirm).
-      estimateTransactionFee(activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken)
-        .then((f) => { if (mountedRef.current) setFeeEstimate(f); })
-        .catch(() => {});
     }
   };
 
@@ -626,7 +634,6 @@ export function useSendController() {
     if (activeAccount) {
       const chainId = tokenChainId(token);
       prefetchForSend(activeAccount.address, chainId);
-      fetchBundlerAccountInfo(chainId, activeAccount.address).catch(() => {});
       findAccountByCredentialId(activeAccount.id).then(s => { prefetchedAccount.current = s ?? null; });
       import('@/services/webauthn-verify').then(m => { webauthnModuleRef.current = m; });
     }
@@ -675,23 +682,39 @@ export function useSendController() {
 
       // Ensure prefetch is running (may already be cached from token selection)
       prefetchForSend(activeAccount.address, chainId);
-      if (!prefetchedAccount.current) {
-        findAccountByCredentialId(activeAccount.id).then(s => { prefetchedAccount.current = s ?? null; });
+      let storedForEstimate: { publicKeyHex: string } | null;
+      try {
+        storedForEstimate = prefetchedAccount.current
+          ?? await findAccountByCredentialId(activeAccount.id)
+          ?? null;
+      } catch {
+        showAlert(
+          t('send.alertEstimateFailedTitle', { defaultValue: 'Could not prepare transaction' }),
+          t('send.alertAccountUnavailableBody', { defaultValue: 'Could not load the account key required to prepare this transaction. Please try again.' }),
+        );
+        return;
+      }
+      prefetchedAccount.current = storedForEstimate ?? null;
+      if (!storedForEstimate?.publicKeyHex) {
+        showAlert(
+          t('send.alertEstimateFailedTitle', { defaultValue: 'Could not prepare transaction' }),
+          t('send.alertAccountUnavailableBody', { defaultValue: 'Could not load the account key required to prepare this transaction. Please try again.' }),
+        );
+        return;
       }
       if (!webauthnModuleRef.current) {
         import('@/services/webauthn-verify').then(m => { webauthnModuleRef.current = m; });
       }
 
-      // Estimate gas + check/sponsor bundler funding BEFORE advancing to confirm.
-      // This ensures the user never sees a flash-back from confirm to enter-details.
+      // Estimate gas + check the relayer treasury BEFORE advancing to confirm.
+      // A depleted relayer opens TreasuryBootstrapSheet here, replacing the
+      // personal gas-account funding sheet entirely.
       setEstimatingGas(true);
       setFeeEstimate(null);
-      setGasSponsored(false);
-      pendingSponsorship.current = null;
 
       try {
-        // Race with a timeout — pool init for new chains can stall on slow RPCs.
-        // If it takes too long, skip the pre-check and let the bundler reject at submit time.
+        // The account context and estimate are mandatory. A timeout is surfaced
+        // as an error; never continue with a fabricated UserOperation preview.
         // The REAL call for the charge basis: in-band displayed = signed, so this
         // estimate must price the actual send, not the padded rough model (which
         // over-charged ~8× on Arbitrum). Build the ACTUAL send/batch shape so in-band pricing
@@ -719,66 +742,37 @@ export function useSendController() {
           estTx = undefined;
           estBatch = undefined;
         }
-        const preCheck = async () => {
-          const [feeResult] = await Promise.allSettled([
-            estimateTransactionFee(activeAccount!.address, chainId, 'fast', estTx, estBatch, gasFeeToken),
-            fetchBundlerAccountInfo(chainId, activeAccount!.address),
+        const preCheck = async (): Promise<TreasuryStatus | null> => {
+          const [fee, bootstrapStatus] = await Promise.all([
+            estimateTransactionFee(
+              activeAccount!.address, chainId, 'fast', estTx, estBatch, gasFeeToken,
+              storedForEstimate.publicKeyHex,
+            ),
+            // Do not inspect the user's personal gas account. The sole send
+            // gate is the relayer treasury, and a low float replaces the old
+            // "发送前，还差一步" sheet at this exact point in the flow.
+            getTreasuryBootstrap(chainId),
           ]);
-
-          const fee = feeResult.status === 'fulfilled' ? feeResult.value : null;
           setFeeEstimate(fee);
-
-          // Tempo settles gas IN-BAND from the user's own pathUSD (sendUserOpTempo
-          // batches the fee-token reimbursement), so the bundler gas-account funding
-          // gate + silent-sponsorship probe don't apply. A new, undeployed Tempo
-          // account holds ~0 in its bundler gas account, so this gate would route it
-          // into a doomed sponsorship grant that hangs ~20s and dead-ends with no
-          // feedback (issue #91). We still estimate + show the fee above; we just
-          // don't gate the send on gas-account funding. pathUSD sufficiency is
-          // already enforced by the amount-warning check and priced by sendUserOpTempo.
-          if (isTempoChain(chainId)) return null;
-          // Generic in-band chains settle gas the same way — and their per-safe EOA
-          // is the OPERATOR's float, not a user deposit bucket: surfacing the funding
-          // QR here would route the USER's money into operator custody. fee.inBand
-          // covers the normal case; the probe covers an in-band chain whose quote
-          // transiently failed (legacy estimate fallback).
-          if (fee?.inBand || await isInBandChain(chainId, activeAccount!.address)) return null;
-          // Compare against the bundler's raw gas cost (tier markup removed).
-          const bundlerCost = fee ? rawBundlerGasCost(fee) : undefined;
-          return checkBundlerFunding(chainId, activeAccount!.address, bundlerCost);
+          return bootstrapStatus;
         };
-        const timeout = new Promise<null>(r => setTimeout(() => r(null), 15_000));
-        const funding = await Promise.race([preCheck(), timeout]);
-        if (funding) {
-          // Two-phase silent sponsorship. Phase 1 (here): a dryRun probe asks
-          // whether the treasury WOULD sponsor, without moving money — denials
-          // surface the funding sheet now, while an external deposit is still
-          // a graceful ask. Phase 2 (executeTransaction): the real grant fires
-          // after the confirm slide, seconds before the fee-paying tx that
-          // starts recouping it — the treasury never funds an abandoned flow.
-          const probe = await probeGasSponsorship(funding);
-          if (!mountedRef.current) return;
-          if (probe.outcome === 'denied' || probe.outcome === 'confirming') {
-            // Treasury drained on this network: a top-up QR can't fix a relayer
-            // with no float — offer the community bootstrap sheet instead.
-            if (probe.outcome === 'denied' && probe.reason === 'treasury_depleted'
-                && await maybeShowTreasuryBootstrap(chainId)) {
-              setEstimatingGas(false);
-              return;
-            }
-            setFundingNeeded(
-              probe.outcome === 'confirming'
-                ? { ...funding, presentation: 'confirming' }
-                : { ...funding, presentation: 'topup', denialReason: probe.reason },
-            );
-            setEstimatingGas(false);
-            return;
-          }
-          if (probe.outcome === 'granted') clearBundlerCache(chainId, activeAccount.address);
-          pendingSponsorship.current = probe.outcome === 'eligible' ? funding : null;
-          setGasSponsored(true);
+        const timeout = new Promise<never>((_, reject) => setTimeout(
+          () => reject(new Error('Could not estimate gas in time. Please try again.')), 15_000,
+        ));
+        const bootstrapStatus = await Promise.race([preCheck(), timeout]);
+        if (bootstrapStatus && mountedRef.current) {
+          setTreasuryBootstrap(bootstrapStatus);
+          setEstimatingGas(false);
+          return;
         }
-      } catch { /* proceed */ }
+      } catch (err) {
+        setEstimatingGas(false);
+        showAlert(
+          t('send.alertEstimateFailedTitle', { defaultValue: 'Could not prepare transaction' }),
+          err instanceof Error ? err.message : t('send.alertEstimateFailedBody', { defaultValue: 'Could not build a valid transaction estimate. Please try again.' }),
+        );
+        return;
+      }
 
       setEstimatingGas(false);
       setStep('confirm');
@@ -798,7 +792,10 @@ export function useSendController() {
     if (isNativeToken(selectedToken) && activeAccount) {
       try {
         const chainId = tokenChainId(selectedToken);
-        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken);
+        const fee = feeEstimate ?? await estimateTransactionFee(
+          activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken,
+          prefetchedAccount.current?.publicKeyHex,
+        );
         // Use string-based conversion to avoid floating-point precision loss
         const balanceWei = balanceToWei(selectedToken.balance, selectedToken.decimals);
         // Reserve 3x estimated gas (200% margin for gas price volatility)
@@ -822,7 +819,10 @@ export function useSendController() {
     if (isTempoFeeToken(tokenChainId(selectedToken), selectedToken.tokenAddress) && activeAccount) {
       try {
         const chainId = tokenChainId(selectedToken);
-        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId, 'fast');
+        const fee = feeEstimate ?? await estimateTransactionFee(
+          activeAccount.address, chainId, 'fast', undefined, undefined, undefined,
+          prefetchedAccount.current?.publicKeyHex,
+        );
         // fee.totalWei is attodollars (USD×1e-18); recover the pathUSD reimbursement (6 dec).
         const feeUnits = fee.totalWei / 10n ** BigInt(18 - TEMPO_FEE_TOKEN_DECIMALS);
         // Reserve 1.5× the fee: +50% for gas-price/estimate variance (the send-time
@@ -852,7 +852,10 @@ export function useSendController() {
     ) {
       try {
         const chainId = tokenChainId(selectedToken);
-        const fee = feeEstimate ?? await estimateTransactionFee(activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken);
+        const fee = feeEstimate ?? await estimateTransactionFee(
+          activeAccount.address, chainId, 'fast', undefined, undefined, gasFeeToken,
+          prefetchedAccount.current?.publicKeyHex,
+        );
         if (fee.feeAsset?.kind === 'erc20' && fee.feeAsset.token.toLowerCase() === gasFeeToken.toLowerCase()) {
           // Reserve 1.5× the quoted fee (+50% for the send-time re-quote drift the 2× gate absorbs).
           const reserve = (fee.feeAsset.amount * 3n) / 2n;
@@ -875,24 +878,9 @@ export function useSendController() {
     // Tap haptic fires on the one-tap VelaButton; the hold-to-confirm path
     // provides its own (Medium on press + Success on completion).
 
-    // Funding was already checked before entering the confirm screen.
+    // The relayer treasury was checked before entering the confirm screen.
     // Proceed directly to transaction execution.
     await executeTransaction();
-  };
-
-  /** Called when the funding sheet reaches its funded state (auto-advance). */
-  const handleFundingComplete = () => {
-    if (selectedToken && activeAccount) {
-      clearBundlerCache(tokenChainId(selectedToken), activeAccount.address);
-    }
-    // A 'confirming' sheet means a treasury grant was in flight — surface the
-    // same quiet "covered by Vela" note the fully-silent path shows.
-    if (fundingNeeded?.presentation === 'confirming') setGasSponsored(true);
-    setFundingNeeded(null);
-    // Go straight to confirm — the modal already verified balance >= threshold.
-    // Re-running handleContinue would re-estimate gas (potentially getting a higher
-    // price), causing the modal to reappear in a loop.
-    setStep('confirm');
   };
 
   const executeTransaction = async () => {
@@ -911,39 +899,6 @@ export function useSendController() {
     setReceiptFailed(false);
     try {
       const chainId = tokenChainId(selectedToken);
-
-      // Phase 2 of silent sponsorship: the user just slid to confirm, so the
-      // fee-paying tx is seconds away — the grant made now starts recouping
-      // (via the settlement split) almost immediately. A denial here is a race
-      // (treasury drained between probe and slide): fall to the funding sheet
-      // rather than a doomed submit. 'confirming' proceeds — the bundler
-      // waited for the transfer receipt, so the on-chain balance is real even
-      // if our read lags; the reactive catch below is the safety net.
-      const planned = pendingSponsorship.current;
-      if (planned) {
-        const grant = await attemptSilentSponsorship(planned, { force: true });
-        if (!mountedRef.current) return;
-        // The user cancelled (TxCancelButton) or backed out during the grant —
-        // do not resurrect a passkey prompt or a funding sheet over whatever
-        // they're doing now. The grant (if it happened) stays in their float.
-        if (sendCancelledRef.current || stepRef.current !== 'confirm') {
-          setSending(false);
-          setTxStatus('idle');
-          return;
-        }
-        if (grant.outcome === 'denied') {
-          pendingSponsorship.current = null;
-          setGasSponsored(false);
-          setSending(false);
-          setTxStatus('idle');
-          // Treasury drained between probe and slide: if this network's relayer
-          // needs a bootstrap, that sheet (not a personal top-up QR) is the ask.
-          if (grant.denialReason === 'treasury_depleted' && await maybeShowTreasuryBootstrap(chainId)) return;
-          setFundingNeeded({ ...planned, presentation: 'topup', denialReason: grant.denialReason });
-          return;
-        }
-        pendingSponsorship.current = null;
-      }
 
       // Use prefetched account if available, otherwise fetch now
       const stored = prefetchedAccount.current ?? await findAccountByCredentialId(activeAccount.id);
@@ -973,10 +928,9 @@ export function useSendController() {
         };
       };
 
-      // An in-band send fronts native gas from THIS network's relayer treasury. If it's below its
-      // floor the bundler can ACCEPT the op then silently drop it (no gas to include it) → a dead
-      // "submitted" receipt. Probe first and route to the bootstrap sheet instead of a doomed send.
-      if (feeEstimate?.inBand && await maybeShowTreasuryBootstrap(chainId)) {
+      // Recheck immediately before signing to cover the rare race where the
+      // relayer float falls below its floor after the send-page preflight.
+      if (await maybeShowTreasuryBootstrap(chainId)) {
         setSending(false);
         setTxStatus('idle');
         return;
@@ -1123,69 +1077,14 @@ export function useSendController() {
         // (no bootstrapNeeded) falls through to the generic error below.
         setTxStatus('idle');
       } else if (underfunded) {
-        // Bundler says the gas account balance is insufficient — show funding modal.
-        // Prefer the server's actual required balance to avoid a threshold mismatch
-        // (client estimate vs server's gas price) causing an infinite loop.
-        fundingRetryCount.current += 1;
-        if (fundingRetryCount.current > 3) {
-          // Break infinite loop — show error instead of modal
-          fundingRetryCount.current = 0;
-          setTxError(t('send.txErrorBundlerLoop'));
-          setTxStatus('error'); hapticError();
-        } else {
+        // Never open the personal gas-account top-up sheet from a reactive
+        // bundler error. Recheck only the relayer treasury: if it is depleted,
+        // show the bootstrap sheet; otherwise leave the request as an ordinary
+        // failed send rather than asking the user to fund their own gas bucket.
+        const chainId = tokenChainId(selectedToken!);
+        if (await maybeShowTreasuryBootstrap(chainId)) {
           setTxStatus('idle');
-          try {
-            const chainId = tokenChainId(selectedToken!);
-            clearBundlerCache(chainId, activeAccount!.address);
-            const info = await fetchBundlerAccountInfo(chainId, activeAccount!.address);
-            // User navigated away during the account lookup — don't touch UI state.
-            if (!mountedRef.current) return;
-            // Prefer live account info; fall back to values parsed from the error.
-            const depositAddress = info?.depositAddress || underfunded.depositAddress;
-            if (depositAddress) {
-              const currentBalance = info?.spendableBalance ?? underfunded.spendableWei ?? 0n;
-              let thresholdWei: bigint;
-              const requiredFromError = underfundedRequiredWei(underfunded);
-              if (requiredFromError != null) {
-                thresholdWei = requiredFromError;
-              } else {
-                const fee = feeEstimate ?? await estimateTransactionFee(activeAccount!.address, chainId, 'fast', undefined, undefined, gasFeeToken);
-                // Match the server's raw gasPrice calculation (tier markup removed)
-                thresholdWei = rawBundlerGasCost(fee);
-              }
-              const recommendedWei = recommendedFundingWei(thresholdWei, currentBalance);
-              const nativeSym = info?.nativeSym ?? (underfunded.asset === 'pathUSD' ? 'pathUSD' : nativeSymbol(chainId));
-              const funding: FundingNeeded = {
-                depositAddress,
-                safeAddress: activeAccount!.address,
-                chainId,
-                nativeSym,
-                thresholdWei,
-                recommendedWei,
-                currentBalance,
-                recommendedFormatted: formatWei(recommendedWei),
-                currentFormatted: formatWei(currentBalance),
-              };
-              // Try to heal silently (typical cause: gas spiked past the
-              // funded float) before asking the user for anything. Success
-              // lands the sheet in its confirming state, whose first poll
-              // flips straight to the funded beat.
-              const silent = await attemptSilentSponsorship(funding, { force: true });
-              if (!mountedRef.current) return;
-              // txStatus is 'idle' during this recovery, so Back works — don't
-              // resurrect the sheet over a screen the user has left.
-              if (sendCancelledRef.current || stepRef.current !== 'confirm') return;
-              // Depleted treasury → the bootstrap sheet, not a top-up QR.
-              if (silent.outcome === 'denied' && silent.denialReason === 'treasury_depleted'
-                  && await maybeShowTreasuryBootstrap(chainId)) return;
-              setFundingNeeded(
-                silent.outcome === 'denied'
-                  ? { ...funding, presentation: 'topup', denialReason: silent.denialReason }
-                  : { ...funding, presentation: 'confirming' },
-              );
-              return;
-            }
-          } catch { /* fall through */ }
+        } else {
           setTxError(t('send.txErrorBundlerFund'));
           setTxStatus('error'); hapticError();
         }
@@ -1300,14 +1199,8 @@ export function useSendController() {
     setFeeEstimate,
     estimatingGas,
     setEstimatingGas,
-    fundingNeeded,
-    setFundingNeeded,
-    fundingRetryCount,
-    pendingSponsorship,
     sendLock,
     sendCancelledRef,
-    gasSponsored,
-    setGasSponsored,
     mountedRef,
     txStatus,
     setTxStatus,
@@ -1361,7 +1254,6 @@ export function useSendController() {
     handleContinue,
     handleMaxAmount,
     handleConfirm,
-    handleFundingComplete,
     executeTransaction,
     handleBack,
     tokenMultiSelect,

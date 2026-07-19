@@ -21,7 +21,11 @@ jest.mock('@/services/storage', () => ({
 const rpcCall = jest.fn();
 jest.mock('@/services/rpc-adapter', () => ({ rpcCall: (...a: any[]) => rpcCall(...a) }));
 
-import { reconcilePendingTransactions } from '@/services/tx-reconciler';
+import {
+  _resetUserOpReceiptPollCache,
+  pollUserOpReceipt,
+  reconcilePendingTransactions,
+} from '@/services/tx-reconciler';
 
 const ADDR = '0xWallet';
 function pendingTx(over: Partial<any> = {}) {
@@ -47,6 +51,7 @@ describe('reconcilePendingTransactions', () => {
     loadTransactions.mockReset();
     updateTransaction.mockReset().mockResolvedValue(undefined);
     rpcCall.mockReset();
+    _resetUserOpReceiptPollCache();
     // Defeat the internal throttle between tests by waiting out / mocking time is
     // overkill — instead each test uses a distinct flow and we rely on the first
     // call per test having a fresh-enough window. Add a tiny delay helper:
@@ -80,6 +85,25 @@ describe('reconcilePendingTransactions', () => {
     jest.useRealTimers();
     expect(n).toBe(0);
     expect(updateTransaction).not.toHaveBeenCalled();
+  });
+
+  test('coalesces duplicate pending receipt lookups and waits three seconds before retrying', async () => {
+    jest.useFakeTimers({ now: 10_000 });
+    rpcCall.mockResolvedValue({ result: null });
+
+    await Promise.all([
+      pollUserOpReceipt('0xsame-op', 1),
+      pollUserOpReceipt('0xsame-op', 1),
+    ]);
+    expect(rpcCall).toHaveBeenCalledTimes(1);
+
+    await pollUserOpReceipt('0xsame-op', 1);
+    expect(rpcCall).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(3_000);
+    await pollUserOpReceipt('0xsame-op', 1);
+    expect(rpcCall).toHaveBeenCalledTimes(2);
+    jest.useRealTimers();
   });
 
   test('ignores records without a userOpHash or already-confirmed', async () => {

@@ -4,7 +4,7 @@
  * Endpoints are collected from multiple sources per chain:
  *   RPC:     user override > provider keys (Alchemy/dRPC/Ankr) > Vela built-in
  *            (CHAINS default + curated public) > ethereum-data chain index
- *   Bundler: user-configured > built-in (vela-bundler.getvela.app)
+ *   Bundler: user-configured > built-in (vela-relay.getvela.app)
  *
  * Each endpoint tracks latency and failure stats. Calls are routed to the
  * highest-scoring endpoint first, with automatic failover on connectivity errors.
