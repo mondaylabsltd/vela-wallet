@@ -1834,7 +1834,7 @@ export interface ChainGasPrice {
  * is essentially the whole gas price). The old max(eth_gasPrice, baseFee) dropped the
  * tip, under-pricing a Gnosis UserOp ~40×, so the bundler rejected it ("derived outer
  * price 26 < 20% of chain rate 1219") AND its honest tip-inclusive quote tripped the
- * wallet's own 3× sanity cap, rendering the fee as "—".
+ * wallet's own 2.5× sanity cap, rendering the fee as "—".
  *
  * When the tip is 0 (the chain didn't answer eth_maxPriorityFeePerGas, or it's a Tempo
  * chain we deliberately don't tip-query) we recover it from eth_gasPrice exactly like
@@ -1943,12 +1943,17 @@ export function calcMaxFeePerGas(gasPrice: bigint, tier: GasTier = 'standard'): 
 }
 
 /**
- * Hard client-side cap: refuse any bundler quote above this multiple of the
- * chain's own gas price. The relayer policy is ~2× the on-chain cost; 3× leaves
- * headroom for base-fee volatility between our query and the bundler's, while
- * still blocking an abusive or misconfigured (e.g. third-party) bundler.
+ * Hard client-side cap: refuse any bundler quote above 2.5× the chain's own
+ * gas price. The relayer policy is ~2× the on-chain cost, leaving 25% headroom
+ * for base-fee volatility while still blocking an abusive or misconfigured
+ * (e.g. third-party) bundler.
  */
-export const MAX_QUOTE_VS_CHAIN_MULTIPLE = 3n;
+export const MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS = 25_000n;
+const QUOTE_MULTIPLE_SCALE_BPS = 10_000n;
+
+function exceedsQuoteMultiple(quoted: bigint, baseline: bigint): boolean {
+  return quoted * QUOTE_MULTIPLE_SCALE_BPS > baseline * MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS;
+}
 
 /** Thrown when a bundler quotes a gas price above the client-side sanity cap. */
 export class GasQuoteTooHighError extends Error {
@@ -1984,7 +1989,7 @@ const BUNDLER_QUOTE_TIP_PERCENT: Record<GasTier, bigint> = {
  * unreliable on cheap-gas chains (Gnosis eth_gasPrice ≈ 0, and providers disagree on the
  * priority tip); letting it veto the bundler's honest quote is exactly what blanked the fee
  * to "—" and forced an under-priced local fallback (the chronic "gas price too low 33 <
- * 1225" on Gnosis). Honest Vela markup is 2× (userPrice = 2 × networkPrice); the cap is 3×
+ * 1225" on Gnosis). Honest Vela markup is 2× (userPrice = 2 × networkPrice); the cap is 2.5×
  * for head-room.
  *
  * A generic bundler that omits the networkFee field (reportedNetworkFeePerGas = 0n) gives no
@@ -1999,7 +2004,7 @@ export function isQuoteAbusive(
 ): boolean {
   // Preferred: the bundler's own markup — user price vs its reported network cost.
   if (reportedNetworkFeePerGas > 0n) {
-    return quotedMaxFeePerGas > reportedNetworkFeePerGas * MAX_QUOTE_VS_CHAIN_MULTIPLE;
+    return exceedsQuoteMultiple(quotedMaxFeePerGas, reportedNetworkFeePerGas);
   }
   // Generic bundler, no network-cost signal → cross-check the wallet's own price, but only
   // when trustworthy. Never let an unreliable per-chain RPC veto the bundler's quote.
@@ -2008,7 +2013,7 @@ export function isQuoteAbusive(
   const scaledNetwork = chain.baseFee + (chain.priorityFee * tipMul) / 100n;
   const expectedNetwork = chain.gasPrice > scaledNetwork ? chain.gasPrice : scaledNetwork;
   if (expectedNetwork <= 0n) return false;
-  return quotedMaxFeePerGas > expectedNetwork * MAX_QUOTE_VS_CHAIN_MULTIPLE;
+  return exceedsQuoteMultiple(quotedMaxFeePerGas, expectedNetwork);
 }
 
 export interface GasQuoteTier {
@@ -2085,7 +2090,7 @@ export async function getBundlerGasQuote(
   // quote (that veto is what blanked the fee to "—" and under-priced Gnosis). See isQuoteAbusive.
   if (isQuoteAbusive(maxFeePerGas, reportedNetworkFee, chain, tier)) {
     console.warn(
-      `[Gas] Bundler quote ${maxFeePerGas} exceeds ${MAX_QUOTE_VS_CHAIN_MULTIPLE}× its reported ${tier} ` +
+      `[Gas] Bundler quote ${maxFeePerGas} exceeds 2.5× its reported ${tier} ` +
       `network cost ${networkFeePerGas} — refusing.`,
     );
     throw new GasQuoteTooHighError(maxFeePerGas, networkFeePerGas);
