@@ -545,7 +545,9 @@ describe('estimateInBandBasisGas', () => {
 // ---------------------------------------------------------------------------
 
 describe('requoteInBandFee', () => {
+  const CHAIN_ID = freshChain();
   const base: TransactionFeeEstimate = {
+    chainId: CHAIN_ID,
     totalWei: 3_000n, maxFeePerGas: 0n, networkFeePerGas: 1n, relayerFeePerGas: 0n,
     bundlerGasPrice: 1n, totalGas: 300_000n, deployed: true, tier: 'fast', quoted: true,
     inBand: true, feeRecipient: RECIPIENT, feeAsset: { kind: 'native' },
@@ -553,7 +555,7 @@ describe('requoteInBandFee', () => {
 
   test('switch native → stablecoin selects it from one all-asset quote response', async () => {
     poolBundlerCallMock.mockResolvedValue(quoteResponse(inBandQuote(), inBandQuote({ asset: 'erc20' })));
-    const next = await requoteInBandFee(base, freshChain(), SAFE, USDC);
+    const next = await requoteInBandFee(base, CHAIN_ID, SAFE, USDC);
     expect(next).not.toBeNull();
     expect(next!.feeAsset).toEqual({ kind: 'erc20', token: USDC, decimals: 6, amount: 20_000n });
     expect(next!.totalWei).toBe(0n);
@@ -564,12 +566,17 @@ describe('requoteInBandFee', () => {
 
   test('asset mismatch (asked stable, got native) → null so the caller falls back', async () => {
     poolBundlerCallMock.mockResolvedValue(quoteResponse(inBandQuote()));
-    expect(await requoteInBandFee(base, freshChain(), SAFE, USDC)).toBeNull();
+    expect(await requoteInBandFee(base, CHAIN_ID, SAFE, USDC)).toBeNull();
   });
 
   test('a non-in-band estimate → null (nothing to fast-path)', async () => {
     const legacy = { ...base, inBand: undefined };
-    expect(await requoteInBandFee(legacy, freshChain(), SAFE, USDC)).toBeNull();
+    expect(await requoteInBandFee(legacy, CHAIN_ID, SAFE, USDC)).toBeNull();
+    expect(poolBundlerCallMock).not.toHaveBeenCalled();
+  });
+
+  test('a quote from another network is not re-used', async () => {
+    expect(await requoteInBandFee(base, freshChain(), SAFE, USDC)).toBeNull();
     expect(poolBundlerCallMock).not.toHaveBeenCalled();
   });
 });
