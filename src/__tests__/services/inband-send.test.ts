@@ -2,18 +2,17 @@
  * Generic in-band gas settlement — wallet side (vela-bundler
  * docs/inband-gas-settlement.md).
  *
- * Every sponsored UserOp on an in-band chain signs maxFeePerGas = 0 and batches
+ * Every Vela UserOp signs maxFeePerGas = 0 and batches
  * an in-band transfer (native value, or a whitelisted-stablecoin transfer) to
  * the bundler's recipient, sized by the bundler's own quote
  * (vela_getInBandGasQuote). Under test:
  *
  *   1. fetchInBandGasQuote — quote parse + the fail-to-null guards (error
  *      response, malformed recipient, zero amount).
- *   2. isInBandChain — Tempo is always in-band without probing; other chains
- *      learn capability from a 1-wei probe quote, cached.
+ *   2. isInBandChain — every supported network is in-band without probing.
  *   3. estimateTransactionFee — the in-band branch returns the QUOTED amount
- *      (feeAsset erc20/native, maxFeePerGas 0n) and falls through to the legacy
- *      estimate when the quote fails.
+ *      (feeAsset erc20/native, maxFeePerGas 0n) and fails closed when the
+ *      reimbursement quote is unavailable.
  *   4. buildInBandFeeLeg — the exact MultiSendCall shapes of the fee leg the
  *      bundler's reimbursement parser must count.
  */
@@ -191,43 +190,23 @@ describe('calculateInBandFeeAmount', () => {
 // ---------------------------------------------------------------------------
 
 describe('isInBandChain', () => {
-  test('Tempo chains are always in-band, no probe fired', async () => {
+  test('every chain is in-band, including when a quote endpoint is unavailable', async () => {
+    poolBundlerCallMock.mockResolvedValue({ error: { code: -32601, message: 'not enabled' } });
     await expect(isInBandChain(4217, SAFE)).resolves.toBe(true);
     await expect(isInBandChain(42431, SAFE)).resolves.toBe(true);
+    await expect(isInBandChain(freshChain(), SAFE)).resolves.toBe(true);
     expect(poolBundlerCallMock).not.toHaveBeenCalled();
   });
 
-  test('a successful probe marks the chain in-band and is cached', async () => {
-    poolBundlerCallMock.mockResolvedValue({
-      result: [inBandQuote()],
-    });
-    const chain = freshChain();
-    await expect(isInBandChain(chain, SAFE)).resolves.toBe(true);
-    await expect(isInBandChain(chain, SAFE)).resolves.toBe(true);
-    expect(poolBundlerCallMock).toHaveBeenCalledTimes(1); // second read hit the cache
-  });
-
-  test('capability, native, and stable lookups coalesce into one all-asset request', async () => {
+  test('native and stable quote lookups coalesce into one all-asset request', async () => {
     poolBundlerCallMock.mockResolvedValue(quoteResponse(inBandQuote(), inBandQuote({ asset: 'erc20' })));
     const chain = freshChain();
-    const [supported, all, stable] = await Promise.all([
-      isInBandChain(chain, SAFE),
+    const [all, stable] = await Promise.all([
       fetchInBandGasQuotes(chain, SAFE),
       fetchInBandGasQuote(chain, SAFE, USDC),
     ]);
-    expect(supported).toBe(true);
     expect(all).toHaveLength(2);
     expect(stable?.feeToken).toBe(USDC);
-    expect(poolBundlerCallMock).toHaveBeenCalledTimes(1);
-  });
-
-  test('a definitive "not enabled" is cached as false', async () => {
-    poolBundlerCallMock.mockResolvedValue({
-      error: { code: -32601, message: 'not enabled' },
-    });
-    const chain = freshChain();
-    await expect(isInBandChain(chain, SAFE)).resolves.toBe(false);
-    await expect(isInBandChain(chain, SAFE)).resolves.toBe(false);
     expect(poolBundlerCallMock).toHaveBeenCalledTimes(1);
   });
 });
@@ -285,7 +264,7 @@ describe('estimateTransactionFee — in-band branch', () => {
     expect(rpcCallMock.mock.calls.some(([method]) => method === 'eth_estimateUserOperationGas')).toBe(false);
   });
 
-  test('simulates a deployed regular Safe with its real nonce, executable preview call, and final EntryPoint fee fields', async () => {
+  test('simulates every deployed Safe with its real nonce, reimbursement leg, and zero EntryPoint fee fields', async () => {
     const userOps: Record<string, string>[] = [];
     const nonce = '0x' + '00'.repeat(31) + '07';
     rpcCallMock.mockImplementation((method: string, params: any[]) => {
@@ -311,9 +290,7 @@ describe('estimateTransactionFee — in-band branch', () => {
           return Promise.reject(new Error(`unmocked method ${method}`));
       }
     });
-    // Keep this test on the regular path: its draft must keep the quoted
-    // EntryPoint fee fields that will be signed on submission.
-    poolBundlerCallMock.mockResolvedValue({ error: { code: -32601, message: 'not enabled' } });
+    poolBundlerCallMock.mockResolvedValue(quoteResponse(inBandQuote()));
 
     await estimateTransactionFee(SAFE, freshChain(), 'standard');
 
@@ -321,14 +298,11 @@ describe('estimateTransactionFee — in-band branch', () => {
     expect(userOps[0]).toMatchObject({
       sender: SAFE,
       nonce,
-      maxFeePerGas: HEALTHY_QUOTE.maxFeePerGas,
-      maxPriorityFeePerGas: HEALTHY_QUOTE.maxFeePerGas,
+      maxFeePerGas: '0x0',
+      maxPriorityFeePerGas: '0x0',
     });
-    // The no-transaction preview must not call the Safe itself with zero calldata: that reaches
-    // its fallback and reverts. Identity (precompile 0x04) accepts this 68-byte placeholder.
-    const callData = userOps[0].callData;
-    expect(callData.slice(10, 10 + 64)).toBe('4'.padStart(64, '0'));
-    expect(callData.slice(10 + 4 * 64, 10 + 5 * 64)).toBe((68).toString(16).padStart(64, '0'));
+    // The no-transaction preview carries the same MultiSend reimbursement shape as submit.
+    expect(userOps[0].callData).toContain(RECIPIENT.slice(2));
   });
 
   test('simulates an in-band Safe with the same zero EntryPoint fee fields it will submit', async () => {
@@ -398,7 +372,7 @@ describe('estimateTransactionFee — in-band branch', () => {
           return Promise.reject(new Error(`unmocked method ${method}`));
       }
     });
-    poolBundlerCallMock.mockResolvedValue({ error: { code: -32601, message: 'not enabled' } });
+    poolBundlerCallMock.mockResolvedValue(quoteResponse(inBandQuote()));
 
     await estimateTransactionFee(
       SAFE, freshChain(), 'standard', undefined, undefined, undefined,
@@ -409,8 +383,8 @@ describe('estimateTransactionFee — in-band branch', () => {
     expect(userOps[0]).toMatchObject({
       sender: SAFE,
       nonce: '0x0',
-      maxFeePerGas: HEALTHY_QUOTE.maxFeePerGas,
-      maxPriorityFeePerGas: HEALTHY_QUOTE.maxFeePerGas,
+      maxFeePerGas: '0x0',
+      maxPriorityFeePerGas: '0x0',
     });
     expect(userOps[0].factory).toMatch(/^0x[0-9a-f]+$/i);
     expect(userOps[0].factoryData).toMatch(/^0x[0-9a-f]+$/i);
@@ -443,37 +417,32 @@ describe('estimateTransactionFee — in-band branch', () => {
     expect(est.feeRecipient).toBe(RECIPIENT);
   });
 
-  test('an unavailable all-asset quote → legacy estimate unchanged', async () => {
+  test('an unavailable all-asset quote fails closed instead of constructing a legacy UserOp', async () => {
     routeRpc();
     poolBundlerCallMock.mockResolvedValue({ error: { code: -32000, message: 'rate unavailable' } });
 
-    const est = await estimateTransactionFee(SAFE, freshChain(), 'standard');
-    expect(est.inBand).toBeUndefined();
-    expect(est.feeAsset).toBeUndefined();
-    expect(est.maxFeePerGas).toBe(20_000_000_000n); // legacy: the bundler's quoted user price
-    expect(est.totalWei).toBe(est.totalGas * est.maxFeePerGas);
+    await expect(estimateTransactionFee(SAFE, freshChain(), 'standard'))
+      .rejects.toThrow('Could not load the in-band gas quote');
+    expect(rpcCallMock.mock.calls.some(([method]) => method === 'eth_estimateUserOperationGas')).toBe(false);
   });
 
-  test('chain not in-band at all → legacy estimate, only the probe hits the bundler', async () => {
+  test('a stale "not enabled" response fails closed rather than selecting legacy gas fees', async () => {
     routeRpc();
     poolBundlerCallMock.mockResolvedValue({ error: { code: -32601, message: 'not enabled' } });
 
-    const est = await estimateTransactionFee(SAFE, freshChain(), 'standard');
-    expect(est.inBand).toBeUndefined();
-    expect(est.maxFeePerGas).toBe(20_000_000_000n);
-    expect(poolBundlerCallMock).toHaveBeenCalledTimes(1); // the all-asset capability quote only
+    await expect(estimateTransactionFee(SAFE, freshChain(), 'standard'))
+      .rejects.toThrow('Could not load the in-band gas quote');
+    expect(poolBundlerCallMock).toHaveBeenCalledTimes(1);
   });
 
-  test('requested stablecoin but the bundler quotes a different asset → legacy fallback', async () => {
+  test('requested stablecoin but the bundler quotes a different asset fails closed', async () => {
     routeRpc();
     // The all-asset response does not contain the requested stable — the wallet must NOT
     // display a fee in an asset the send path would refuse to pay.
     poolBundlerCallMock.mockResolvedValue(quoteResponse(inBandQuote()));
 
-    const est = await estimateTransactionFee(SAFE, freshChain(), 'standard', undefined, undefined, USDC);
-    expect(est.inBand).toBeUndefined();
-    expect(est.feeAsset).toBeUndefined();
-    expect(est.maxFeePerGas).toBe(20_000_000_000n);
+    await expect(estimateTransactionFee(SAFE, freshChain(), 'standard', undefined, undefined, USDC))
+      .rejects.toThrow('cannot quote the selected fee token');
   });
 });
 

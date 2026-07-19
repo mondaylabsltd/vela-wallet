@@ -15,7 +15,7 @@ import {
   formatWeiToEth, calcMaxFeePerGas, GAS_TIER_MULTIPLIERS,
   encodeErc20Transfer, buildExecuteCallData, buildMultiSendExecuteCallData, buildInitCode,
   parseHexUInt64, parseExistingUserOpHash, isPlainTransferCall,
-  deriveChainGasPrice, isQuoteAbusive, MAX_QUOTE_VS_CHAIN_MULTIPLE,
+  deriveChainGasPrice, isQuoteAbusive, MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS,
 } from '@/services/safe-transaction';
 import type { GasTier, ChainGasPrice } from '@/services/safe-transaction';
 import { functionSelector } from '@/services/eth-crypto';
@@ -207,7 +207,7 @@ describe('safe-transaction', () => {
     const walletRpcWrongLow: ChainGasPrice = { gasPrice: 27n, baseFee: 17n, priorityFee: 10n, tipMeasured: true };
 
     test('accepts the honest Vela quote regardless of a garbage wallet RPC', () => {
-      // reportedNetworkFee=1821 → markup check governs: 3642 ≤ 1821×3. Wallet RPC ignored.
+      // reportedNetworkFee=1821 → markup check governs: 3642 ≤ 1821×2.5. Wallet RPC ignored.
       expect(isQuoteAbusive(3642n, 1821n, walletRpcGarbage, 'standard')).toBe(false);
       expect(isQuoteAbusive(3642n, 1821n, walletRpcWrongLow, 'standard')).toBe(false);
     });
@@ -215,14 +215,15 @@ describe('safe-transaction', () => {
     test('the OLD wallet-RPC cap would have false-rejected this honest quote', () => {
       // Regression guard: prove both old failure modes (tip-less AND wrong-low measured tip)
       // would have thrown, and the bundler-markup cap does NOT.
-      expect(3642n > walletRpcGarbage.gasPrice * MAX_QUOTE_VS_CHAIN_MULTIPLE).toBe(true); // 3642 > 81 → old throw
+      expect(3642n * 10_000n > walletRpcGarbage.gasPrice * MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS).toBe(true); // 3642 > 67.5 → old throw
       const wrongLowBaseline = walletRpcWrongLow.baseFee + (walletRpcWrongLow.priorityFee * 150n) / 100n; // 32
-      expect(3642n > wrongLowBaseline * MAX_QUOTE_VS_CHAIN_MULTIPLE).toBe(true);           // 3642 > 96 → old throw
+      expect(3642n * 10_000n > wrongLowBaseline * MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS).toBe(true);           // 3642 > 80 → old throw
       expect(isQuoteAbusive(3642n, 1821n, walletRpcWrongLow, 'standard')).toBe(false);      // new → ok
     });
 
-    test('refuses a quote with an inflated markup (maxFee > 3× reported networkFee)', () => {
-      expect(isQuoteAbusive(1821n * 4n, 1821n, walletRpcWrongLow, 'standard')).toBe(true);
+    test('refuses a quote with an inflated markup (maxFee > 2.5× reported networkFee)', () => {
+      expect(isQuoteAbusive(4552n, 1821n, walletRpcWrongLow, 'standard')).toBe(false);
+      expect(isQuoteAbusive(4553n, 1821n, walletRpcWrongLow, 'standard')).toBe(true);
     });
 
     // Generic bundler that omits networkFee (reportedNetworkFee=0): cross-check the wallet's

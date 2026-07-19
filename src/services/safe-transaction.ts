@@ -35,7 +35,6 @@ import {
   fetchBundlerAccountInfo,
   fetchInBandGasQuotes,
   findInBandGasQuote,
-  isInBandChain,
   type InBandGasQuote,
 } from './bundler-service';
 import {
@@ -120,8 +119,8 @@ export async function sendNative(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
-  maxFeeOverride?: bigint,
-  // In-band chains only: pay gas in this whitelisted stablecoin (null/omitted = native).
+  _maxFeeOverride?: bigint,
+  // Pay gas in this whitelisted stablecoin (null/omitted = native).
   gasFeeToken?: string | null,
   // In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
   quotedFee?: QuotedInBandFee,
@@ -131,12 +130,8 @@ export async function sendNative(
     // (gas is paid in the default stablecoin, not the value being moved).
     return sendUserOpTempo(from, [{ to, value: valueWei, data: new Uint8Array(0) }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
-  if (await isInBandChain(chainId, from)) {
-    // In-band settlement: gas is repaid by a batched transfer, not a prefunded gas account.
-    return sendUserOpInBand(from, [{ to, value: valueWei, data: new Uint8Array(0) }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
-  }
-  const callData = buildNativeCallData([{ to, value: valueWei, data: new Uint8Array(0) }], false);
-  return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
+  // In-band settlement: gas is repaid by a batched transfer, not a prefunded gas account.
+  return sendUserOpInBand(from, [{ to, value: valueWei, data: new Uint8Array(0) }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
 }
 
 /** Send ERC-20 token. */
@@ -148,8 +143,8 @@ export async function sendERC20(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
-  maxFeeOverride?: bigint,
-  // In-band chains only: pay gas in this whitelisted stablecoin (null/omitted = native).
+  _maxFeeOverride?: bigint,
+  // Pay gas in this whitelisted stablecoin (null/omitted = native).
   gasFeeToken?: string | null,
   // In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
   quotedFee?: QuotedInBandFee,
@@ -169,12 +164,7 @@ export async function sendERC20(
     return sendUserOpTempo(from, [{ to: tokenAddress, value: '0', data: transferData }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
 
-  if (await isInBandChain(chainId, from)) {
-    return sendUserOpInBand(from, [{ to: tokenAddress, value: '0', data: transferData }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
-  }
-
-  const callData = buildNativeCallData([{ to: tokenAddress, value: '0', data: transferData }], false);
-  return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
+  return sendUserOpInBand(from, [{ to: tokenAddress, value: '0', data: transferData }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
 }
 
 /** Send arbitrary contract call (e.g. dApp interaction like swap). */
@@ -186,8 +176,8 @@ export async function sendContractCall(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
-  maxFeeOverride?: bigint,
-  // In-band chains only: pay gas in this whitelisted stablecoin (null/omitted = native).
+  _maxFeeOverride?: bigint,
+  // Pay gas in this whitelisted stablecoin (null/omitted = native).
   gasFeeToken?: string | null,
   // In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
   quotedFee?: QuotedInBandFee,
@@ -196,11 +186,7 @@ export async function sendContractCall(
     // dApp / contract call: pay gas in the default stablecoin (pathUSD).
     return sendUserOpTempo(from, [{ to, value: valueWei, data }], TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
-  if (await isInBandChain(chainId, from)) {
-    return sendUserOpInBand(from, [{ to, value: valueWei, data }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
-  }
-  const callData = buildNativeCallData([{ to, value: valueWei, data }], false);
-  return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
+  return sendUserOpInBand(from, [{ to, value: valueWei, data }], gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
 }
 
 /** Send batched calls atomically via Safe MultiSend (EIP-5792 wallet_sendCalls). */
@@ -210,12 +196,10 @@ export async function sendBatchCalls(
   chainId: number,
   publicKeyHex: string,
   signFn: SignFn,
-  // The per-gas price the confirm screen quoted & displayed (feeEstimate.maxFeePerGas,
-  // a tip-inclusive bundler quote at the user's tier). Threaded through so the batch
-  // submits EXACTLY the price it showed — same as single sends. Omitted → sendUserOp
-  // re-derives from getGasPrices (also tip-inclusive now), so this never underprices.
-  maxFeeOverride?: bigint,
-  // In-band chains only: pay gas in this whitelisted stablecoin (null/omitted = native).
+  // Retained for source compatibility with existing call sites. In-band UserOps
+  // always sign zero native-fee fields, so no max-fee override is applicable.
+  _maxFeeOverride?: bigint,
+  // Pay gas in this whitelisted stablecoin (null/omitted = native).
   gasFeeToken?: string | null,
   // In-band chains only: the displayed fee (amount + recipient) — signed verbatim.
   quotedFee?: QuotedInBandFee,
@@ -231,13 +215,7 @@ export async function sendBatchCalls(
     return sendUserOpTempo(from, byteCalls, TEMPO_DEFAULT_FEE_TOKEN, chainId, publicKeyHex, signFn);
   }
 
-  if (await isInBandChain(chainId, from)) {
-    // In-band also signs maxFee=0 — the override doesn't apply.
-    return sendUserOpInBand(from, byteCalls, gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
-  }
-
-  const callData = buildNativeCallData(byteCalls, true);
-  return sendUserOp(from, callData, chainId, publicKeyHex, signFn, maxFeeOverride);
+  return sendUserOpInBand(from, byteCalls, gasFeeToken ?? null, chainId, publicKeyHex, signFn, quotedFee);
 }
 
 // ---------------------------------------------------------------------------
@@ -526,8 +504,8 @@ export async function estimateTransactionFee(
   // every call, the same bundle sendBatchCalls submits, so the batch fee is accurate.
   // Takes precedence over `tx` when non-empty.
   batchCalls?: { to: string; value?: string; data?: string }[],
-  // In-band chains only: quote the gas fee in this whitelisted stablecoin instead of
-  // native (must match the gasFeeToken the send path will use). Ignored elsewhere.
+  // Quote the universal in-band fee in this whitelisted stablecoin instead of
+  // native (must match the gasFeeToken the send path will use).
   gasFeeToken?: string | null,
   // Required to construct the real initCode when this Safe is not yet deployed.
   // Without it we deliberately skip the live UserOp simulation rather than send
@@ -550,25 +528,23 @@ export async function estimateTransactionFee(
     getBundlerGasQuote(chainId, tier),
   ]);
 
-  let userOpMaxFee: bigint;
   let networkFeePerGas: bigint;
   let relayerFeePerGas: bigint;
   let bundlerGasPrice: bigint;
   const quoted = quote !== null;
 
   if (quote) {
-    userOpMaxFee = quote.maxFeePerGas;
     networkFeePerGas = quote.networkFeePerGas;
     relayerFeePerGas = quote.relayerFeePerGas;
     bundlerGasPrice = quote.networkFeePerGas;
   } else {
     // Local fallback: bundler doesn't support pimlico_getUserOperationGasPrice.
-    userOpMaxFee = calcMaxFeePerGas(gasPrice, tier);
+    const localMaxFee = calcMaxFeePerGas(gasPrice, tier);
     const m = GAS_TIER_MULTIPLIERS[tier];
     bundlerGasPrice = (gasPrice * m.num) / m.den;
     if (bundlerGasPrice < 1n) bundlerGasPrice = 1n;
     networkFeePerGas = bundlerGasPrice;
-    relayerFeePerGas = userOpMaxFee > bundlerGasPrice ? userOpMaxFee - bundlerGasPrice : 0n;
+    relayerFeePerGas = localMaxFee > bundlerGasPrice ? localMaxFee - bundlerGasPrice : 0n;
   }
 
   // Estimate against the REAL call when we have it (dApp tx); otherwise call the EVM identity
@@ -596,8 +572,6 @@ export async function estimateTransactionFee(
         data: c.data && c.data !== '0x' ? fromHex(stripHexPrefix(c.data)) : new Uint8Array(0),
       }))
     : [innerEstCall];
-  const estimatingBatch = !!batchCalls && batchCalls.length > 0;
-
   // Build this before the estimate RPC's fallback handling: account context is
   // mandatory. A static fee must never mask a missing nonce or initCode.
   const estimateAccount = deployed
@@ -609,30 +583,31 @@ export async function estimateTransactionFee(
     throw new Error('Could not load the passkey public key required to build the UserOperation initCode');
   }
 
-  // The estimate must use the same EntryPoint fee model as the operation that
-  // is later signed. An in-band UserOp has zero native-fee fields; a regular
-  // UserOp must retain the bundler quote. Previously this preview always used
-  // zeroes, so it was not replayable as a regular submitted operation.
+  // The estimate must use the same zero-native-fee EntryPoint model as the
+  // operation that is later signed. Vela Wallet uses in-band settlement on
+  // every supported network.
   //
   // Fetch the response once up front so the in-band placeholder uses the same
   // fee recipient as the final operation. The bottom quote calculation reuses
   // this cached response.
-  const inBand = await isInBandChain(chainId, from);
-  const inBandQuotes = inBand ? await fetchInBandGasQuotes(chainId, from) : null;
+  const inBandQuotes = await fetchInBandGasQuotes(chainId, from);
   const inBandQuote = inBandQuotes ? findInBandGasQuote(inBandQuotes, gasFeeToken) : null;
   const nativeInBandQuote = inBandQuotes ? findInBandGasQuote(inBandQuotes) : null;
+  if (!inBandQuote || !nativeInBandQuote) {
+    if (gasFeeToken) {
+      throw new Error('The gas relayer cannot quote the selected fee token right now. Please pick a different gas asset.');
+    }
+    throw new Error('Could not load the in-band gas quote. Please try again.');
+  }
 
-  // In-band submission always wraps the user's calls and reimbursement in a
+  // Submission always wraps the user's calls and reimbursement in a
   // MultiSend. Its amount is calculated from this estimate, so use one unit as
   // the placeholder; the recipient and every other calldata field match the
-  // submitted operation. For regular wallet_sendCalls, preserve MultiSend even
-  // for a one-call batch, exactly as sendBatchCalls does.
-  const estCallData = inBand
-    ? buildMultiSendExecuteCallData([
-        ...estCalls,
-        buildInBandFeeLeg(gasFeeToken ?? null, inBandQuote?.recipient ?? from, 1n),
-      ])
-    : buildNativeCallData(estCalls, estimatingBatch);
+  // submitted operation.
+  const estCallData = buildMultiSendExecuteCallData([
+    ...estCalls,
+    buildInBandFeeLeg(gasFeeToken ?? null, inBandQuote.recipient, 1n),
+  ]);
 
   // Try to get accurate gas estimates from the bundler. This catches high-gas chains
   // (e.g. Monad) where actual gas usage is 3-10x higher than the static defaults below.
@@ -655,8 +630,8 @@ export async function estimateTransactionFee(
       // Match the final UserOp's settlement semantics. Only the WebAuthn
       // authentication is synthetic; these fee fields are final. The gas-limit
       // fields above are the values requested from this estimator.
-      maxFeePerGas: inBand ? 0n : userOpMaxFee,
-      maxPriorityFeePerGas: inBand ? 0n : userOpMaxFee,
+      maxFeePerGas: 0n,
+      maxPriorityFeePerGas: 0n,
       paymasterAndData: new Uint8Array(0),
       signature: dummySig,
     };
@@ -696,56 +671,38 @@ export async function estimateTransactionFee(
     }
   }
 
-  // In-band chains: the signed op pays maxFeePerGas = 0. The wallet derives reimbursement from
+  // Every signed UserOp pays maxFeePerGas = 0. The wallet derives reimbursement from
   // the displayed gas basis (totalGas × network gas price × 3), applying the native/stable floors;
-  // the address-only quote supplies only the selectable assets, balances, recipient and USD prices.
-  if (inBand) {
-    const feeAmount = inBandQuote && nativeInBandQuote
-      ? calculateInBandFeeAmount(totalGas, networkFeePerGas, inBandQuote, nativeInBandQuote)
-      : null;
-    if (inBandQuote && feeAmount !== null) {
-      // feeRecipient rides along so the submit path signs EXACTLY this quote (displayed = signed
-      // — never a silent mismatch).
-      const common = {
-        networkFeePerGas, relayerFeePerGas, bundlerGasPrice, totalGas, deployed, tier, quoted,
-        inBand: true, feeRecipient: inBandQuote.recipient,
-      };
-      if (inBandQuote.asset === 'erc20' && inBandQuote.feeToken) {
-        return {
-          ...common,
-          totalWei: 0n, // native display not applicable — the fee rides in feeAsset
-          maxFeePerGas: 0n,
-          feeAsset: {
-            kind: 'erc20',
-            token: inBandQuote.feeToken,
-            decimals: inBandQuote.decimals,
-            amount: feeAmount,
-          },
-        };
-      }
-      if (inBandQuote.asset === 'native') {
-        return {
-          ...common,
-          totalWei: feeAmount,
-          maxFeePerGas: 0n,
-          feeAsset: { kind: 'native' },
-        };
-      }
-    }
+  // the address-only quote supplies the selectable assets, balances, recipient and USD prices.
+  const feeAmount = calculateInBandFeeAmount(totalGas, networkFeePerGas, inBandQuote, nativeInBandQuote);
+  if (feeAmount === null) {
+    throw new Error('Could not calculate the in-band gas fee. Please try again.');
   }
 
-  const totalWei = totalGas * userOpMaxFee;
-
+  // feeRecipient rides along so the submit path signs EXACTLY this quote (displayed = signed
+  // — never a silent mismatch).
+  const common = {
+    networkFeePerGas, relayerFeePerGas, bundlerGasPrice, totalGas, deployed, tier, quoted,
+    inBand: true as const, feeRecipient: inBandQuote.recipient,
+  };
+  if (inBandQuote.asset === 'erc20' && inBandQuote.feeToken) {
+    return {
+      ...common,
+      totalWei: 0n, // native display not applicable — the fee rides in feeAsset
+      maxFeePerGas: 0n,
+      feeAsset: {
+        kind: 'erc20' as const,
+        token: inBandQuote.feeToken,
+        decimals: inBandQuote.decimals,
+        amount: feeAmount,
+      },
+    };
+  }
   return {
-    totalWei,
-    maxFeePerGas: userOpMaxFee,
-    networkFeePerGas,
-    relayerFeePerGas,
-    bundlerGasPrice,
-    totalGas,
-    deployed,
-    tier,
-    quoted,
+    ...common,
+    totalWei: feeAmount,
+    maxFeePerGas: 0n,
+    feeAsset: { kind: 'native' as const },
   };
 }
 
@@ -1877,7 +1834,7 @@ export interface ChainGasPrice {
  * is essentially the whole gas price). The old max(eth_gasPrice, baseFee) dropped the
  * tip, under-pricing a Gnosis UserOp ~40×, so the bundler rejected it ("derived outer
  * price 26 < 20% of chain rate 1219") AND its honest tip-inclusive quote tripped the
- * wallet's own 3× sanity cap, rendering the fee as "—".
+ * wallet's own 2.5× sanity cap, rendering the fee as "—".
  *
  * When the tip is 0 (the chain didn't answer eth_maxPriorityFeePerGas, or it's a Tempo
  * chain we deliberately don't tip-query) we recover it from eth_gasPrice exactly like
@@ -1986,12 +1943,17 @@ export function calcMaxFeePerGas(gasPrice: bigint, tier: GasTier = 'standard'): 
 }
 
 /**
- * Hard client-side cap: refuse any bundler quote above this multiple of the
- * chain's own gas price. The relayer policy is ~2× the on-chain cost; 3× leaves
- * headroom for base-fee volatility between our query and the bundler's, while
- * still blocking an abusive or misconfigured (e.g. third-party) bundler.
+ * Hard client-side cap: refuse any bundler quote above 2.5× the chain's own
+ * gas price. The relayer policy is ~2× the on-chain cost, leaving 25% headroom
+ * for base-fee volatility while still blocking an abusive or misconfigured
+ * (e.g. third-party) bundler.
  */
-export const MAX_QUOTE_VS_CHAIN_MULTIPLE = 3n;
+export const MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS = 25_000n;
+const QUOTE_MULTIPLE_SCALE_BPS = 10_000n;
+
+function exceedsQuoteMultiple(quoted: bigint, baseline: bigint): boolean {
+  return quoted * QUOTE_MULTIPLE_SCALE_BPS > baseline * MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS;
+}
 
 /** Thrown when a bundler quotes a gas price above the client-side sanity cap. */
 export class GasQuoteTooHighError extends Error {
@@ -2027,7 +1989,7 @@ const BUNDLER_QUOTE_TIP_PERCENT: Record<GasTier, bigint> = {
  * unreliable on cheap-gas chains (Gnosis eth_gasPrice ≈ 0, and providers disagree on the
  * priority tip); letting it veto the bundler's honest quote is exactly what blanked the fee
  * to "—" and forced an under-priced local fallback (the chronic "gas price too low 33 <
- * 1225" on Gnosis). Honest Vela markup is 2× (userPrice = 2 × networkPrice); the cap is 3×
+ * 1225" on Gnosis). Honest Vela markup is 2× (userPrice = 2 × networkPrice); the cap is 2.5×
  * for head-room.
  *
  * A generic bundler that omits the networkFee field (reportedNetworkFeePerGas = 0n) gives no
@@ -2042,7 +2004,7 @@ export function isQuoteAbusive(
 ): boolean {
   // Preferred: the bundler's own markup — user price vs its reported network cost.
   if (reportedNetworkFeePerGas > 0n) {
-    return quotedMaxFeePerGas > reportedNetworkFeePerGas * MAX_QUOTE_VS_CHAIN_MULTIPLE;
+    return exceedsQuoteMultiple(quotedMaxFeePerGas, reportedNetworkFeePerGas);
   }
   // Generic bundler, no network-cost signal → cross-check the wallet's own price, but only
   // when trustworthy. Never let an unreliable per-chain RPC veto the bundler's quote.
@@ -2051,7 +2013,7 @@ export function isQuoteAbusive(
   const scaledNetwork = chain.baseFee + (chain.priorityFee * tipMul) / 100n;
   const expectedNetwork = chain.gasPrice > scaledNetwork ? chain.gasPrice : scaledNetwork;
   if (expectedNetwork <= 0n) return false;
-  return quotedMaxFeePerGas > expectedNetwork * MAX_QUOTE_VS_CHAIN_MULTIPLE;
+  return exceedsQuoteMultiple(quotedMaxFeePerGas, expectedNetwork);
 }
 
 export interface GasQuoteTier {
@@ -2128,7 +2090,7 @@ export async function getBundlerGasQuote(
   // quote (that veto is what blanked the fee to "—" and under-priced Gnosis). See isQuoteAbusive.
   if (isQuoteAbusive(maxFeePerGas, reportedNetworkFee, chain, tier)) {
     console.warn(
-      `[Gas] Bundler quote ${maxFeePerGas} exceeds ${MAX_QUOTE_VS_CHAIN_MULTIPLE}× its reported ${tier} ` +
+      `[Gas] Bundler quote ${maxFeePerGas} exceeds 2.5× its reported ${tier} ` +
       `network cost ${networkFeePerGas} — refusing.`,
     );
     throw new GasQuoteTooHighError(maxFeePerGas, networkFeePerGas);

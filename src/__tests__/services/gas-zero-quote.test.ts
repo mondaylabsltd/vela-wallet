@@ -1,16 +1,18 @@
 /**
- * Regression tests for the "maxFeePerGas must be > 0" dApp-tx failure:
+ * Regression tests for the legacy "maxFeePerGas must be > 0" dApp-tx failure:
  * a bundler gas quote of exactly 0x0 used to pass every guard — the sheet
  * displayed "预估费用 ~0 ETH" and the UserOp was signed with maxFeePerGas = 0,
  * which the bundler's own validation then rejected.
  *
- * Guards under test:
+ * Guards under test on the legacy quote parser:
  *   1. getBundlerGasQuote treats a 0 quote as "can't quote" (null → local fallback),
  *      instead of returning it as authoritative.
- *   2. estimateTransactionFee therefore never yields maxFeePerGas = 0 / totalWei = 0
- *      (the fee row can no longer read "~0" from a degenerate quote).
- *   3. isUsableFeeOverride — the submit chokepoint only trusts a positive bigint
+ *   2. isUsableFeeOverride — the legacy submit chokepoint only trusts a positive bigint
  *      override; anything else makes sendUserOp re-derive the price.
+ *
+ * UserOperation construction is covered by inband-send.test.ts: every supported
+ * network now uses in-band settlement and therefore deliberately signs both
+ * EntryPoint fee fields as zero.
  */
 
 // Mock react-native + storage so the module imports cleanly under jsdom.
@@ -27,7 +29,6 @@ jest.mock('@/services/rpc-adapter', () => ({
 
 import {
   getBundlerGasQuote,
-  estimateTransactionFee,
   isUsableFeeOverride,
 } from '@/services/safe-transaction';
 
@@ -75,8 +76,6 @@ const HEALTHY_QUOTE = {
   relayerFeePerGas: '0x2540be400',
 };
 
-const FROM = '0x00000000000000000000000000000000000a11ce';
-
 // getGasPrices/isDeployed cache per chainId at module level — every test uses a
 // fresh chain id so no test reads another's cached price.
 let nextChain = 900_000;
@@ -98,24 +97,6 @@ describe('getBundlerGasQuote — zero-quote guard', () => {
     expect(q).not.toBeNull();
     expect(q!.maxFeePerGas).toBe(20_000_000_000n);
     expect(q!.networkFeePerGas).toBe(10_000_000_000n);
-  });
-});
-
-describe('estimateTransactionFee — fee can never be exactly 0', () => {
-  test('zero bundler quote + zero chain reads → local fallback prices > 0 (not "~0 ETH")', async () => {
-    routeRpc(ZERO_QUOTE);
-    const est = await estimateTransactionFee(FROM, freshChain(), 'standard');
-    expect(est.quoted).toBe(false); // the 0x0 quote was discarded
-    expect(est.maxFeePerGas).toBeGreaterThan(0n);
-    expect(est.totalWei).toBeGreaterThan(0n);
-  });
-
-  test('no bundler quote support at all → same non-zero local fallback', async () => {
-    routeRpc('unsupported');
-    const est = await estimateTransactionFee(FROM, freshChain(), 'standard');
-    expect(est.quoted).toBe(false);
-    expect(est.maxFeePerGas).toBeGreaterThan(0n);
-    expect(est.totalWei).toBeGreaterThan(0n);
   });
 });
 

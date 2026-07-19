@@ -106,8 +106,10 @@ test('quotedFee present → signs it VERBATIM and does not repeat the capability
   await expect(
     sendNative(SAFE, TO, '0x64', freshChain(), PUBKEY, throwingSignFn, undefined, null, quotedFee),
   ).rejects.toThrow(SIGN_SENTINEL); // reached signing = the pre-sign flow completed
-  // One address-only request establishes capability; the send reuses it and signs the displayed amount.
-  expect(quoteCalls()).toBe(1);
+  // Universal in-band mode does not need a capability probe. The displayed
+  // quote is already the complete reimbursement instruction, so it is signed
+  // without a second quote request.
+  expect(quoteCalls()).toBe(0);
   expect(throwingSignFn).toHaveBeenCalledTimes(1);
 });
 
