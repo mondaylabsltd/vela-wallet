@@ -26,9 +26,9 @@ export interface FeeTokenOption {
   decimals: number;
   /** Bundler recipient for this fee asset. */
   recipient: string;
-  /** Quote-supplied USD data, used instead of a separate price query. */
+  /** Quote-supplied USD data. Native gas remains payable when the price is unavailable. */
   usdBalance: string;
-  usdPrice: string;
+  usdPrice: string | null;
   /** Logo URL candidates (checksummed → lowercase) resolved by (chain, address) so
    *  the row shows a real token icon, not a letter fallback. Works without a wallet
    *  token list, so the dApp signing sheet gets logos too. */
