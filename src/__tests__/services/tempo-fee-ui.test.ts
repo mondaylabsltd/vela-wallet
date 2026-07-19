@@ -71,6 +71,24 @@ test('a relay-published Tempo fee token flows through the same ERC-20 estimate c
   });
 });
 
+test('Tempo displays at least $0.01 pathUSD when the gas rate is below the floor', async () => {
+  rpcCallMock.mockImplementation((method: string) => {
+    switch (method) {
+      case 'eth_getCode': return Promise.resolve({ result: '0x6080' });
+      case 'eth_gasPrice': return Promise.resolve({ result: '0x3b9aca00' }); // 1 gwei attodollars
+      case 'eth_getBlockByNumber': return Promise.resolve({ result: { baseFeePerGas: '0x3b9aca00' } });
+      default: return Promise.reject(new Error(`unmocked ${method}`));
+    }
+  });
+
+  // Use Moderato's distinct chain cache; mainnet's earlier test deliberately warmed
+  // a 20 gwei price and would no longer exercise this low-rate regression.
+  const fee = await estimateTransactionFee(SAFE, 42431, 'fast');
+  expect(fee.feeAsset).toMatchObject({
+    kind: 'erc20', token: TEMPO_DEFAULT_FEE_TOKEN, decimals: 6, amount: 10_000n,
+  });
+});
+
 test('Tempo batch estimates include every transfer rather than a single-call proxy', async () => {
   const single = await estimateTransactionFee(SAFE, 4217, 'fast');
   const batch = await estimateTransactionFee(SAFE, 4217, 'fast', undefined, [

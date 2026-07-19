@@ -36,9 +36,7 @@ import { simulateAssetChanges, type AssetSimResult } from '@/services/tx-simulat
 import { BalanceChangePreview } from './BalanceChangePreview';
 import {
   estimateTransactionFee,
-  GasQuoteTooHighError,
   rawBundlerGasCost,
-  type HighGasQuoteApproval,
   type TransactionFeeEstimate,
 } from '@/services/safe-transaction';
 import { Shield, AlertTriangle, Pen } from 'lucide-react-native';
@@ -95,12 +93,6 @@ export interface SigningSheetProps {
   simOverride?: AssetSimResult | null;
 }
 
-function formatGasQuoteMultiple(approval: HighGasQuoteApproval): string {
-  if (approval.networkFeePerGas <= 0n) return '—';
-  const tenths = (approval.maxFeePerGas * 10n + approval.networkFeePerGas / 2n) / approval.networkFeePerGas;
-  return `${tenths / 10n}.${tenths % 10n}`;
-}
-
 export function SigningSheet({
   request: incomingRequest,
   chainId,
@@ -137,32 +129,6 @@ export function SigningSheet({
   // so confirm stays disabled until the displayed quote settles (the internal re-quote
   // doesn't touch estimatingGas).
   const [feeBusy, setFeeBusy] = useState(false);
-  // The same acknowledgement mechanism as Send: an exact quote only unlocks
-  // the estimate for review, while the final slide remains the authorization to
-  // sign and submit.
-  const [highGasQuoteApproval, setHighGasQuoteApproval] = useState<HighGasQuoteApproval>();
-  const [highGasQuoteRetry, setHighGasQuoteRetry] = useState(0);
-  const requestHighGasQuoteApproval = useCallback((error: GasQuoteTooHighError) => {
-    const approval = error.approval;
-    showAlert(
-      t('send.highGasQuoteTitle'),
-      t('send.highGasQuoteBody', { multiple: formatGasQuoteMultiple(approval) }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.tryAgain'),
-          onPress: () => {
-            setHighGasQuoteApproval(undefined);
-            setHighGasQuoteRetry((retry) => retry + 1);
-          },
-        },
-        {
-          text: t('send.highGasQuoteReview'),
-          onPress: () => { setHighGasQuoteApproval(approval); },
-        },
-      ],
-    );
-  }, [t]);
   // An undeployed Safe's estimate must use the initCode from its persisted
   // passkey, exactly as the operation we later sign does.
   const [publicKeyHex, setPublicKeyHex] = useState<string | undefined>();
@@ -267,7 +233,6 @@ export function SigningSheet({
       setClearSign(null);
       setFeeEstimate(null);
       setGasFeeToken(null);
-      setHighGasQuoteApproval(undefined);
       setGasEstimateFailed(false);
       setSim(null);
       return;
@@ -297,19 +262,14 @@ export function SigningSheet({
         setGasEstimateFailed(false);
         estimateTransactionFee(activeAccount.address, chainId, 'fast', {
           to: params[0].to, value: params[0].value, data: params[0].data,
-        }, undefined, undefined, publicKeyHex, highGasQuoteApproval)
+        }, undefined, undefined, publicKeyHex)
           .then((f) => {
             if (!cancelled) { setFeeEstimate(f); setGasEstimateFailed(false); }
           })
-          .catch((error) => {
+          .catch(() => {
             if (cancelled) return;
             setFeeEstimate(null);
-            if (error instanceof GasQuoteTooHighError) {
-              setGasEstimateFailed(false);
-              requestHighGasQuoteApproval(error);
-            } else {
-              setGasEstimateFailed(true);
-            }
+            setGasEstimateFailed(true);
           })
           .finally(() => { if (!cancelled) setEstimatingGas(false); });
 
@@ -342,7 +302,7 @@ export function SigningSheet({
     return () => { cancelled = true; };
   }, [
     incomingRequest, chainId, activeAccount?.address, publicKeyHex, publicKeyLoaded, readOnly,
-    simFromOverride, highGasQuoteApproval, highGasQuoteRetry, requestHighGasQuoteApproval,
+    simFromOverride,
   ]);
 
   // Real tx for accurate gas estimation in the fee card (re-runs on tier change/refresh).
@@ -385,25 +345,20 @@ export function SigningSheet({
       setGasEstimateFailed(false);
       estimateTransactionFee(
         activeAccount.address, chainId, 'fast', undefined, simCalls, undefined,
-        publicKeyHex, highGasQuoteApproval,
+        publicKeyHex,
       )
         .then((f) => { if (!cancelled) { setFeeEstimate(f); setGasEstimateFailed(false); } })
-        .catch((error) => {
+        .catch(() => {
           if (cancelled) return;
           setFeeEstimate(null);
-          if (error instanceof GasQuoteTooHighError) {
-            setGasEstimateFailed(false);
-            requestHighGasQuoteApproval(error);
-          } else {
-            setGasEstimateFailed(true);
-          }
+          setGasEstimateFailed(true);
         })
         .finally(() => { if (!cancelled) setEstimatingGas(false); });
     }
     return () => { cancelled = true; };
   }, [
     incomingRequest, chainId, activeAccount?.address, publicKeyHex, publicKeyLoaded, readOnly,
-    simFromOverride, highGasQuoteApproval, highGasQuoteRetry, requestHighGasQuoteApproval,
+    simFromOverride,
   ]);
 
   // Resolve symbol/decimals for every token approved across the batch's legs, so
@@ -700,7 +655,6 @@ export function SigningSheet({
               safeAddress={activeAccount.address}
               chainId={chainId}
               publicKeyHex={publicKeyHex}
-              highGasQuoteApproval={highGasQuoteApproval}
               tx={isBatch ? undefined : txForEstimate}
               batchCalls={isBatch ? params?.[0]?.calls : undefined}
               gasFeeToken={gasFeeToken}
