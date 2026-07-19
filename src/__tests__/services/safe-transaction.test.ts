@@ -15,9 +15,9 @@ import {
   formatWeiToEth, calcMaxFeePerGas, GAS_TIER_MULTIPLIERS,
   encodeErc20Transfer, buildExecuteCallData, buildMultiSendExecuteCallData, buildInitCode,
   parseHexUInt64, parseExistingUserOpHash, isPlainTransferCall,
-  deriveChainGasPrice, isQuoteAbusive, MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS, sameAssetFeeLimit,
+  deriveChainGasPrice, sameAssetFeeLimit,
 } from '@/services/safe-transaction';
-import type { GasTier, ChainGasPrice, TransactionFeeEstimate } from '@/services/safe-transaction';
+import type { GasTier, TransactionFeeEstimate } from '@/services/safe-transaction';
 import { functionSelector } from '@/services/eth-crypto';
 
 /** Uint8Array → lowercase hex (no 0x), for golden-vector assertions. */
@@ -224,56 +224,6 @@ describe('safe-transaction', () => {
         const newBasis = deriveChainGasPrice({ ethGasPrice, baseFee, priorityFee: tip }).gasPrice;
         expect(newBasis).toBe(chainRate);
         expect(bundlerAccepts(newBasis)).toBe(true);
-      });
-    });
-  });
-
-  // --- isQuoteAbusive: judge the quote by the BUNDLER's OWN reported markup, never by the
-  // wallet's per-chain RPC. This is the definitive fix for the chronic Gnosis "gas price
-  // too low 33 < 1225" / "—": on Gnosis the wallet RPC (eth_gasPrice ≈ 0, providers disagree
-  // on the tip) must never be able to veto the bundler's honest quote.
-  describe('isQuoteAbusive (bundler-markup sanity cap)', () => {
-    // Real Gnosis values pulled from the live vela bundler:
-    //   standard maxFeePerGas 0xe3a = 3642, networkFee 0x71d = 1821 (honest 2× markup).
-    // The wallet's own RPC here is GARBAGE (eth_gasPrice ≈ 27, tipMeasured=false) — the exact
-    // condition that used to blank the fee. The cap must still accept the honest quote.
-    const walletRpcGarbage: ChainGasPrice = { gasPrice: 27n, baseFee: 17n, priorityFee: 10n, tipMeasured: false };
-    // ...and here the wallet RPC "measured" a WRONG-LOW tip (provider disagreement) — the
-    // localhost failure mode. A wallet-RPC-anchored cap would still misfire; markup won't.
-    const walletRpcWrongLow: ChainGasPrice = { gasPrice: 27n, baseFee: 17n, priorityFee: 10n, tipMeasured: true };
-
-    test('accepts the honest Vela quote regardless of a garbage wallet RPC', () => {
-      // reportedNetworkFee=1821 → markup check governs: 3642 ≤ 1821×2.5. Wallet RPC ignored.
-      expect(isQuoteAbusive(3642n, 1821n, walletRpcGarbage, 'standard')).toBe(false);
-      expect(isQuoteAbusive(3642n, 1821n, walletRpcWrongLow, 'standard')).toBe(false);
-    });
-
-    test('the OLD wallet-RPC cap would have false-rejected this honest quote', () => {
-      // Regression guard: prove both old failure modes (tip-less AND wrong-low measured tip)
-      // would have thrown, and the bundler-markup cap does NOT.
-      expect(3642n * 10_000n > walletRpcGarbage.gasPrice * MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS).toBe(true); // 3642 > 67.5 → old throw
-      const wrongLowBaseline = walletRpcWrongLow.baseFee + (walletRpcWrongLow.priorityFee * 150n) / 100n; // 32
-      expect(3642n * 10_000n > wrongLowBaseline * MAX_QUOTE_VS_CHAIN_MULTIPLE_BPS).toBe(true);           // 3642 > 80 → old throw
-      expect(isQuoteAbusive(3642n, 1821n, walletRpcWrongLow, 'standard')).toBe(false);      // new → ok
-    });
-
-    test('refuses a quote with an inflated markup (maxFee > 2.5× reported networkFee)', () => {
-      expect(isQuoteAbusive(4552n, 1821n, walletRpcWrongLow, 'standard')).toBe(false);
-      expect(isQuoteAbusive(4553n, 1821n, walletRpcWrongLow, 'standard')).toBe(true);
-    });
-
-    // Generic bundler that omits networkFee (reportedNetworkFee=0): cross-check the wallet's
-    // OWN price, but only when reliably measured; otherwise fail-open (trust the bundler).
-    describe('generic bundler (no reported networkFee)', () => {
-      // Good-RPC chain: baseFee 20g, tip 2g, standard baseline = 20 + 2×1.5 = 23g.
-      const goodRpc: ChainGasPrice = { gasPrice: 22_000_000_000n, baseFee: 20_000_000_000n, priorityFee: 2_000_000_000n, tipMeasured: true };
-      test('cross-checks against the wallet price when measured', () => {
-        expect(isQuoteAbusive(46_000_000_000n, 0n, goodRpc, 'standard')).toBe(false); // ~2× → ok
-        expect(isQuoteAbusive(200_000_000_000n, 0n, goodRpc, 'standard')).toBe(true);  // ~9× → abusive
-      });
-      test('fails open when the wallet price is unmeasured', () => {
-        const unmeasured: ChainGasPrice = { gasPrice: 27n, baseFee: 17n, priorityFee: 10n, tipMeasured: false };
-        expect(isQuoteAbusive(999_999n, 0n, unmeasured, 'standard')).toBe(false);
       });
     });
   });

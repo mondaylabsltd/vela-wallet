@@ -21,13 +21,11 @@ import { resolveRecipientRisk, type RecipientRisk } from '@/services/recipient-r
 import { createReentryLock } from '@/services/reentry-lock';
 import {
   estimateTransactionFee,
-  GasQuoteTooHighError,
   prefetchForSend,
   sameAssetFeeLimit,
   sendBatchCalls,
   sendERC20,
   sendNative,
-  type HighGasQuoteApproval,
   type TransactionFeeEstimate,
 } from '@/services/safe-transaction';
 import { findAccountByCredentialId, saveTransactions, updateTransactions } from '@/services/storage';
@@ -41,13 +39,6 @@ import { TextInput } from 'react-native';
 
 type Step = 'select-token' | 'enter-details' | 'confirm';
 type TxStatus = 'idle' | 'preparing' | 'signing' | 'submitting' | 'confirming' | 'confirmed' | 'error';
-
-/** Format a ratio without converting a potentially large wei value to Number. */
-function formatGasQuoteMultiple(approval: HighGasQuoteApproval): string {
-  if (approval.networkFeePerGas <= 0n) return '—';
-  const tenths = (approval.maxFeePerGas * 10n + approval.networkFeePerGas / 2n) / approval.networkFeePerGas;
-  return `${tenths / 10n}.${tenths % 10n}`;
-}
 
 /**
  * All Send-flow state, refs, effects, and handlers. Extracted verbatim from
@@ -641,7 +632,7 @@ export function useSendController() {
     }
   };
 
-  const handleContinue = async (highGasQuoteApproval?: HighGasQuoteApproval) => {
+  const handleContinue = async () => {
     if (multiSelectMode) {
       if (!isValidAddress(recipient)) {
         showAlert(t('send.alertInvalidAddressTitle'), t('send.alertInvalidAddressBody'));
@@ -748,7 +739,7 @@ export function useSendController() {
           const [fee, bootstrapStatus] = await Promise.all([
             estimateTransactionFee(
               activeAccount!.address, chainId, 'fast', estTx, estBatch, gasFeeToken,
-              storedForEstimate.publicKeyHex, highGasQuoteApproval,
+              storedForEstimate.publicKeyHex,
             ),
             // Do not inspect the user's personal gas account. The sole send
             // gate is the relayer treasury, and a low float replaces the old
@@ -769,28 +760,6 @@ export function useSendController() {
         }
       } catch (err) {
         setEstimatingGas(false);
-        if (err instanceof GasQuoteTooHighError) {
-          const approval = err.approval;
-          showAlert(
-            t('send.highGasQuoteTitle'),
-            t('send.highGasQuoteBody', { multiple: formatGasQuoteMultiple(approval) }),
-            [
-              { text: t('common.cancel'), style: 'cancel' },
-              {
-                text: t('common.tryAgain'),
-                onPress: () => { void handleContinue(); },
-              },
-              {
-                // This only unlocks a fresh estimate for the exact quote above.
-                // The normal confirm slide still shows the final fee and remains
-                // the user's transaction authorization.
-                text: t('send.highGasQuoteReview'),
-                onPress: () => { void handleContinue(approval); },
-              },
-            ],
-          );
-          return;
-        }
         showAlert(
           t('send.alertEstimateFailedTitle'),
           err instanceof Error ? err.message : t('send.alertEstimateFailedBody'),

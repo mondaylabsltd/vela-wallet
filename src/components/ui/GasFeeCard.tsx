@@ -26,7 +26,6 @@ import {
   calculateInBandFeeAmount,
   estimateTransactionFee,
   refreshGasPrice,
-  type HighGasQuoteApproval,
   type TransactionFeeEstimate,
 } from '@/services/safe-transaction';
 import { isTempoChain, tempoReimbursement } from '@/services/tempo';
@@ -63,9 +62,6 @@ interface GasFeeCardProps {
   chainId: number;
   /** Passkey public key used to construct initCode for an undeployed Safe. */
   publicKeyHex?: string;
-  /** A high relayer quote the user explicitly chose to review. It is bound to
-   *  the exact quote, so a changed quote will still require confirmation. */
-  highGasQuoteApproval?: HighGasQuoteApproval;
   /** The real tx being signed — passed so fee-asset change/refresh re-estimates
    *  the actual call (dApp tx), not a dummy transfer. Omit for simple transfers. */
   tx?: { to: string; value?: string; data?: string };
@@ -90,7 +86,7 @@ interface GasFeeCardProps {
 
 export function GasFeeCard({
   feeEstimate, estimating, nativeSymbol: sym, nativeUsdPrice,
-  safeAddress, chainId, publicKeyHex, highGasQuoteApproval, tx, batchCalls, gasFeeToken = null, onFeeTokenChange, onFeeUpdate, onBusyChange,
+  safeAddress, chainId, publicKeyHex, tx, batchCalls, gasFeeToken = null, onFeeTokenChange, onFeeUpdate, onBusyChange,
 }: GasFeeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -180,12 +176,12 @@ export function GasFeeCard({
     try {
       await refreshGasPrice(chainId);
       const fee = await estimateTransactionFee(
-        safeAddress, chainId, 'fast', tx, batchCalls, gasFeeToken, publicKeyHex, highGasQuoteApproval,
+        safeAddress, chainId, 'fast', tx, batchCalls, gasFeeToken, publicKeyHex,
       );
       onFeeUpdate(fee);
     } catch { /* ignore */ }
     setBusy(false);
-  }, [chainId, safeAddress, publicKeyHex, highGasQuoteApproval, tx, batchCalls, gasFeeToken, refreshing, onFeeUpdate, setBusy]);
+  }, [chainId, safeAddress, publicKeyHex, tx, batchCalls, gasFeeToken, refreshing, onFeeUpdate, setBusy]);
 
   const handleFeeTokenSelect = useCallback(async (contract: string | null) => {
     const prev = gasFeeToken ?? null;
@@ -214,7 +210,7 @@ export function GasFeeCard({
         // A quote may have expired while this sheet remained open. Fall back to a full estimate;
         // its quote call still returns all assets in one response.
         const fee = await estimateTransactionFee(
-          safeAddress, chainId, 'fast', tx, batchCalls, contract, publicKeyHex, highGasQuoteApproval,
+          safeAddress, chainId, 'fast', tx, batchCalls, contract, publicKeyHex,
         );
         onFeeUpdate(fee);
       }
@@ -222,7 +218,7 @@ export function GasFeeCard({
       onFeeTokenChange?.(prev); // error → revert; the user can re-tap or refresh
     }
     setBusy(false);
-  }, [safeAddress, chainId, publicKeyHex, highGasQuoteApproval, tx, batchCalls, gasFeeToken, feeEstimate, feeTokenOptions, feeAmountForOption, onFeeTokenChange, onFeeUpdate, setBusy]);
+  }, [safeAddress, chainId, publicKeyHex, tx, batchCalls, gasFeeToken, feeEstimate, feeTokenOptions, feeAmountForOption, onFeeTokenChange, onFeeUpdate, setBusy]);
 
   // Auto-default the fee asset to one the user can actually pay with. The selection starts at
   // native (gasFeeToken=null), but if the native coin can't cover the fee — notably a 0-balance

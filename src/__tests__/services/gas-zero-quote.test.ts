@@ -28,7 +28,6 @@ jest.mock('@/services/rpc-adapter', () => ({
 }));
 
 import {
-  GasQuoteTooHighError,
   getBundlerGasQuote,
   isUsableFeeOverride,
 } from '@/services/safe-transaction';
@@ -107,26 +106,12 @@ describe('getBundlerGasQuote — zero-quote guard', () => {
     expect(q!.networkFeePerGas).toBe(10_000_000_000n);
   });
 
-  test('a high quote requires acknowledgement for this exact tier and price', async () => {
+  test('a high quote is returned for the confirmation UI to display', async () => {
     routeRpc(HIGH_QUOTE);
-    const chainId = freshChain();
-
-    await expect(getBundlerGasQuote(chainId, 'standard')).rejects.toBeInstanceOf(GasQuoteTooHighError);
-
-    await expect(getBundlerGasQuote(chainId, 'standard', {
-      tier: 'standard',
-      maxFeePerGas: 26_000_000_000n,
-      networkFeePerGas: 10_000_000_000n,
-    })).resolves.toMatchObject({
+    await expect(getBundlerGasQuote(freshChain(), 'standard')).resolves.toMatchObject({
       maxFeePerGas: 26_000_000_000n,
       networkFeePerGas: 10_000_000_000n,
     });
-
-    await expect(getBundlerGasQuote(chainId, 'standard', {
-      tier: 'standard',
-      maxFeePerGas: 25_000_000_000n,
-      networkFeePerGas: 10_000_000_000n,
-    })).rejects.toBeInstanceOf(GasQuoteTooHighError);
   });
 });
 
