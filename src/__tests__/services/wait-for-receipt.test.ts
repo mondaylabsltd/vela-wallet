@@ -16,9 +16,13 @@ jest.mock('@/services/rpc-adapter', () => ({
 }));
 
 import { waitForReceipt } from '@/services/safe-transaction';
+import { _resetUserOpReceiptPollCache } from '@/services/tx-reconciler';
 
 describe('waitForReceipt', () => {
-  beforeEach(() => rpcCall.mockReset());
+  beforeEach(() => {
+    rpcCall.mockReset();
+    _resetUserOpReceiptPollCache();
+  });
   afterEach(() => jest.useRealTimers());
 
   test('returns the tx hash on the first successful poll', async () => {

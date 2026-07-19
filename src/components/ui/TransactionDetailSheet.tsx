@@ -27,7 +27,7 @@ import { shortAddress } from '@/models/wallet-state';
 import { copyToClipboard, openBrowser } from '@/services/platform';
 import { formatFiat, type Currency } from '@/services/currency';
 import { txUsdValue, type ActivityBatch } from '@/services/activity';
-import { pollUserOpReceipt } from '@/services/tx-reconciler';
+import { pollUserOpReceipt, USER_OP_RECEIPT_POLL_INTERVAL_MS } from '@/services/tx-reconciler';
 import { formatDateTime, formatTokenAmount, useLocalePrefs } from '@/services/locale-format';
 import { color, createStyles, font, inter, radius, space, text } from '@/constants/theme';
 
@@ -94,9 +94,9 @@ export function TransactionDetailSheet({ visible, tx, batch, alias, rate, curren
         onResolved?.();
         return; // final — stop polling
       }
-      if (attempts < 40) timer = setTimeout(tick, 4000);
+      if (attempts < 40) timer = setTimeout(tick, USER_OP_RECEIPT_POLL_INTERVAL_MS);
     };
-    timer = setTimeout(tick, 1200);
+    timer = setTimeout(tick, USER_OP_RECEIPT_POLL_INTERVAL_MS);
     return () => { cancelled = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, targetKey]);

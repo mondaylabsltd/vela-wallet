@@ -29,6 +29,7 @@ import {
 
 import { derSignatureToRaw } from './attestation-parser';
 import { rpcCall } from './rpc-adapter';
+import { requestUserOpReceipt, USER_OP_RECEIPT_POLL_INTERVAL_MS } from './tx-reconciler';
 import { gasQuoteShouldZero } from './dev/fault-injection';
 import {
   fetchBundlerAccountInfo,
@@ -2215,7 +2216,6 @@ export async function waitForReceipt(
   signal?: AbortSignal,
 ): Promise<string> {
   const start = Date.now();
-  let interval = 1000; // Start fast (1s), then back off
 
   // Track whether we ever got a clean "not ready yet" answer vs. only ever hit
   // RPC/bundler errors. The distinction drives the final message: "submitted but
@@ -2231,34 +2231,28 @@ export async function waitForReceipt(
     polls++;
 
     try {
-      const response = await rpcCall(
-        'eth_getUserOperationReceipt',
-        [userOpHash],
-        chainId,
-      );
-
-      if (response.error) {
-        // The bundler responded with a JSON-RPC error (transient server issue).
-        // Don't abandon the op — it may still land; keep polling.
+      // The submitted-receipt screen and this background waiter can both be active.
+      // They share this request (and its 3-second rate limit), so opening the screen never
+      // doubles eth_getUserOperationReceipt traffic to the bundler.
+      const outcome = await requestUserOpReceipt(userOpHash, chainId);
+      if (!outcome.reachedBundler) {
         rpcFailures++;
       } else {
         sawCleanResponse = true;
-        const result = response.result as
-          | { success?: boolean; receipt?: { transactionHash?: string } }
-          | undefined;
-        if (result?.receipt?.transactionHash) {
+        const result = outcome.resolution;
+        if (result?.txHash) {
           // Check if the UserOp was marked as failed (e.g. tx dropped from mempool)
-          if (result.success === false) {
+          if (result.failed) {
             throw new Error('Transaction was dropped from the network. Try again with a higher gas price.');
           }
           console.log('[UserOp] Receipt landed', {
             userOpHash: `${userOpHash.slice(0, 10)}…`,
             chainId,
-            txHash: result.receipt.transactionHash,
+            txHash: result.txHash,
             afterMs: Date.now() - start,
             polls,
           });
-          return result.receipt.transactionHash;
+          return result.txHash;
         }
       }
     } catch (err) {
@@ -2269,9 +2263,9 @@ export async function waitForReceipt(
       rpcFailures++;
     }
 
-    await sleep(interval);
-    // Adaptive backoff: 1s → 1.5s → 2s → 2.5s → 3s (cap)
-    interval = Math.min(interval + 500, 3000);
+    // Receipt production is asynchronous; a fixed cadence is friendlier to the bundler and
+    // matches the submitted-receipt countdown. The shared poller also coalesces any UI poll.
+    await sleep(USER_OP_RECEIPT_POLL_INTERVAL_MS);
   }
 
   const shortOp = `${userOpHash.slice(0, 10)}…`;
