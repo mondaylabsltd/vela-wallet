@@ -285,7 +285,7 @@ describe('estimateTransactionFee — in-band branch', () => {
     expect(rpcCallMock.mock.calls.some(([method]) => method === 'eth_estimateUserOperationGas')).toBe(false);
   });
 
-  test('simulates a deployed Safe with its real nonce, an executable preview call, and zero EntryPoint fee fields', async () => {
+  test('simulates a deployed regular Safe with its real nonce, executable preview call, and final EntryPoint fee fields', async () => {
     const userOps: Record<string, string>[] = [];
     const nonce = '0x' + '00'.repeat(31) + '07';
     rpcCallMock.mockImplementation((method: string, params: any[]) => {
@@ -311,9 +311,52 @@ describe('estimateTransactionFee — in-band branch', () => {
           return Promise.reject(new Error(`unmocked method ${method}`));
       }
     });
-    // Keep this test on the generic path; the estimate request is identical
-    // before an in-band quote is fetched.
+    // Keep this test on the regular path: its draft must keep the quoted
+    // EntryPoint fee fields that will be signed on submission.
     poolBundlerCallMock.mockResolvedValue({ error: { code: -32601, message: 'not enabled' } });
+
+    await estimateTransactionFee(SAFE, freshChain(), 'standard');
+
+    expect(userOps).toHaveLength(1);
+    expect(userOps[0]).toMatchObject({
+      sender: SAFE,
+      nonce,
+      maxFeePerGas: HEALTHY_QUOTE.maxFeePerGas,
+      maxPriorityFeePerGas: HEALTHY_QUOTE.maxFeePerGas,
+    });
+    // The no-transaction preview must not call the Safe itself with zero calldata: that reaches
+    // its fallback and reverts. Identity (precompile 0x04) accepts this 68-byte placeholder.
+    const callData = userOps[0].callData;
+    expect(callData.slice(10, 10 + 64)).toBe('4'.padStart(64, '0'));
+    expect(callData.slice(10 + 4 * 64, 10 + 5 * 64)).toBe((68).toString(16).padStart(64, '0'));
+  });
+
+  test('simulates an in-band Safe with the same zero EntryPoint fee fields it will submit', async () => {
+    const userOps: Record<string, string>[] = [];
+    const nonce = '0x' + '00'.repeat(31) + '08';
+    rpcCallMock.mockImplementation((method: string, params: any[]) => {
+      switch (method) {
+        case 'pimlico_getUserOperationGasPrice':
+          return Promise.resolve({ result: { slow: HEALTHY_QUOTE, standard: HEALTHY_QUOTE, fast: HEALTHY_QUOTE } });
+        case 'eth_gasPrice':
+        case 'eth_maxPriorityFeePerGas':
+          return Promise.resolve({ result: '0x3b9aca00' });
+        case 'eth_getBlockByNumber':
+          return Promise.resolve({ result: { baseFeePerGas: '0x3b9aca00' } });
+        case 'eth_getCode':
+          return Promise.resolve({ result: '0x6080' });
+        case 'eth_call':
+          return Promise.resolve({ result: nonce });
+        case 'eth_estimateUserOperationGas':
+          userOps.push(params[0]);
+          return Promise.resolve({ result: {
+            verificationGasLimit: '0x186a0', callGasLimit: '0xc350', preVerificationGas: '0x4e20',
+          }});
+        default:
+          return Promise.reject(new Error(`unmocked method ${method}`));
+      }
+    });
+    poolBundlerCallMock.mockResolvedValue(quoteResponse(inBandQuote()));
 
     await estimateTransactionFee(SAFE, freshChain(), 'standard');
 
@@ -324,11 +367,10 @@ describe('estimateTransactionFee — in-band branch', () => {
       maxFeePerGas: '0x0',
       maxPriorityFeePerGas: '0x0',
     });
-    // The no-transaction preview must not call the Safe itself with zero calldata: that reaches
-    // its fallback and reverts. Identity (precompile 0x04) accepts this 68-byte placeholder.
-    const callData = userOps[0].callData;
-    expect(callData.slice(10, 10 + 64)).toBe('4'.padStart(64, '0'));
-    expect(callData.slice(10 + 4 * 64, 10 + 5 * 64)).toBe((68).toString(16).padStart(64, '0'));
+    // In-band submit always uses MultiSend (user calls + reimbursement). The
+    // estimate must use that same outer calldata and real fee recipient, not
+    // a direct Safe self-call that can fail before execution is simulated.
+    expect(userOps[0].callData).toContain(RECIPIENT.slice(2));
   });
 
   test('simulates an undeployed Safe with the same initCode it will submit', async () => {
@@ -367,8 +409,8 @@ describe('estimateTransactionFee — in-band branch', () => {
     expect(userOps[0]).toMatchObject({
       sender: SAFE,
       nonce: '0x0',
-      maxFeePerGas: '0x0',
-      maxPriorityFeePerGas: '0x0',
+      maxFeePerGas: HEALTHY_QUOTE.maxFeePerGas,
+      maxPriorityFeePerGas: HEALTHY_QUOTE.maxFeePerGas,
     });
     expect(userOps[0].factory).toMatch(/^0x[0-9a-f]+$/i);
     expect(userOps[0].factoryData).toMatch(/^0x[0-9a-f]+$/i);

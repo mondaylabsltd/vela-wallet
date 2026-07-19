@@ -575,8 +575,8 @@ export async function estimateTransactionFee(
   // precompile with an ERC-20-sized payload. Do not target `from`: its all-zero payload invokes
   // the Safe fallback and reverts, so it cannot be used as an estimation no-op.
   //
-  // This still goes through buildNativeCallData, the same builder the real send uses, so the
-  // estimate preserves the final native-chain Safe call shape.
+  // The resulting call is later encoded through the same single-call or
+  // MultiSend builders used by the real send path.
   const innerEstCall: MultiSendCall = tx?.to
     ? {
         to: tx.to,
@@ -596,7 +596,7 @@ export async function estimateTransactionFee(
         data: c.data && c.data !== '0x' ? fromHex(stripHexPrefix(c.data)) : new Uint8Array(0),
       }))
     : [innerEstCall];
-  const estCallData = buildNativeCallData(estCalls, false);
+  const estimatingBatch = !!batchCalls && batchCalls.length > 0;
 
   // Build this before the estimate RPC's fallback handling: account context is
   // mandatory. A static fee must never mask a missing nonce or initCode.
@@ -608,6 +608,31 @@ export async function estimateTransactionFee(
   if (!estimateAccount) {
     throw new Error('Could not load the passkey public key required to build the UserOperation initCode');
   }
+
+  // The estimate must use the same EntryPoint fee model as the operation that
+  // is later signed. An in-band UserOp has zero native-fee fields; a regular
+  // UserOp must retain the bundler quote. Previously this preview always used
+  // zeroes, so it was not replayable as a regular submitted operation.
+  //
+  // Fetch the response once up front so the in-band placeholder uses the same
+  // fee recipient as the final operation. The bottom quote calculation reuses
+  // this cached response.
+  const inBand = await isInBandChain(chainId, from);
+  const inBandQuotes = inBand ? await fetchInBandGasQuotes(chainId, from) : null;
+  const inBandQuote = inBandQuotes ? findInBandGasQuote(inBandQuotes, gasFeeToken) : null;
+  const nativeInBandQuote = inBandQuotes ? findInBandGasQuote(inBandQuotes) : null;
+
+  // In-band submission always wraps the user's calls and reimbursement in a
+  // MultiSend. Its amount is calculated from this estimate, so use one unit as
+  // the placeholder; the recipient and every other calldata field match the
+  // submitted operation. For regular wallet_sendCalls, preserve MultiSend even
+  // for a one-call batch, exactly as sendBatchCalls does.
+  const estCallData = inBand
+    ? buildMultiSendExecuteCallData([
+        ...estCalls,
+        buildInBandFeeLeg(gasFeeToken ?? null, inBandQuote?.recipient ?? from, 1n),
+      ])
+    : buildNativeCallData(estCalls, estimatingBatch);
 
   // Try to get accurate gas estimates from the bundler. This catches high-gas chains
   // (e.g. Monad) where actual gas usage is 3-10x higher than the static defaults below.
@@ -627,10 +652,11 @@ export async function estimateTransactionFee(
       verificationGasLimit: verificationGas,
       callGasLimit: CALL_GAS_LIMIT,
       preVerificationGas: PRE_VERIFICATION_GAS,
-      // In-band settlement has no EntryPoint native prefund. Keep both values
-      // at zero in the simulated draft as requested.
-      maxFeePerGas: 0n,
-      maxPriorityFeePerGas: 0n,
+      // Match the final UserOp's settlement semantics. Only the WebAuthn
+      // authentication is synthetic; these fee fields are final. The gas-limit
+      // fields above are the values requested from this estimator.
+      maxFeePerGas: inBand ? 0n : userOpMaxFee,
+      maxPriorityFeePerGas: inBand ? 0n : userOpMaxFee,
       paymasterAndData: new Uint8Array(0),
       signature: dummySig,
     };
@@ -673,12 +699,9 @@ export async function estimateTransactionFee(
   // In-band chains: the signed op pays maxFeePerGas = 0. The wallet derives reimbursement from
   // the displayed gas basis (totalGas × network gas price × 3), applying the native/stable floors;
   // the address-only quote supplies only the selectable assets, balances, recipient and USD prices.
-  if (await isInBandChain(chainId, from)) {
-    const quotes = await fetchInBandGasQuotes(chainId, from);
-    const inBandQuote = quotes ? findInBandGasQuote(quotes, gasFeeToken) : null;
-    const nativeQuote = quotes ? findInBandGasQuote(quotes) : null;
-    const feeAmount = inBandQuote && nativeQuote
-      ? calculateInBandFeeAmount(totalGas, networkFeePerGas, inBandQuote, nativeQuote)
+  if (inBand) {
+    const feeAmount = inBandQuote && nativeInBandQuote
+      ? calculateInBandFeeAmount(totalGas, networkFeePerGas, inBandQuote, nativeInBandQuote)
       : null;
     if (inBandQuote && feeAmount !== null) {
       // feeRecipient rides along so the submit path signs EXACTLY this quote (displayed = signed
@@ -1707,15 +1730,13 @@ function abiEncodeWebAuthnSig(
 
 /** Build a dummy signature for gas estimation. */
 function buildDummySignature(): Uint8Array {
-  const validityPadding = new Uint8Array(12);
-  const rField = abiEncodeAddress(WEBAUTHN_SIGNER);
-  const sField = abiEncodeUint256(65n);
-  const vField = new Uint8Array([0x00]);
-
-  const fakeAuthData = concatBytes(
-    new Uint8Array([0x01]),
-    new Uint8Array(36), // 37 bytes total, right-padded
-  );
+  // Match a real assertion's 37-byte shape exactly:
+  // rpIdHash(32) | flags(UP|UV) | signatureCounter(4). The previous sentinel
+  // placed 0x01 inside rpIdHash and left the flags byte at zero, so a bundler
+  // that parses the WebAuthn envelope could reject it before simulation.
+  const fakeAuthData = new Uint8Array(37);
+  fakeAuthData.set(fromHex('a69533717b230610f14ea657c0bd8231dd6fc7b7108f1215a874fbb1d14df349'));
+  fakeAuthData[32] = 0x05; // user present | user verified
   const fakeClientFields =
     '"origin":"https://getvela.app","crossOrigin":false';
   const fakeR = new Uint8Array(32);
@@ -1723,22 +1744,11 @@ function buildDummySignature(): Uint8Array {
   const fakeS = new Uint8Array(32);
   fakeS[31] = 0x01;
 
-  const dynamicData = abiEncodeWebAuthnSig(
-    fakeAuthData,
-    fakeClientFields,
-    fakeR,
-    fakeS,
-  );
-  const dataLength = abiEncodeUint256(BigInt(dynamicData.length));
-
-  return concatBytes(
-    validityPadding,
-    rField,
-    sField,
-    vField,
-    dataLength,
-    dynamicData,
-  );
+  // Reuse the real encoder so ABI offsets, padding, and the validity window
+  // cannot diverge from a submitted UserOp. r/s intentionally cannot verify
+  // this assertion: producing a valid assertion here would require a passkey
+  // prompt before the user confirms the transaction.
+  return buildUserOpSignature(fakeAuthData, fakeClientFields, fakeR, fakeS);
 }
 
 // ---------------------------------------------------------------------------
