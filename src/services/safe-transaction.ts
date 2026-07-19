@@ -57,6 +57,10 @@ const VERIFICATION_GAS_DEPLOYED = 300_000n;
 const VERIFICATION_GAS_UNDEPLOYED = 2_000_000n;
 const CALL_GAS_LIMIT = 200_000n;  // 200k — simple transfers; bundler estimation may increase
 const PRE_VERIFICATION_GAS = 100_000n; // 100k — must exceed bundler's calculated preVerificationGas
+// The EVM identity precompile accepts arbitrary bytes and always succeeds. It makes the
+// no-transaction fee preview a valid Safe execution without depending on an app contract.
+const ESTIMATION_DUMMY_TARGET = '0x0000000000000000000000000000000000000004';
+const ESTIMATION_DUMMY_DATA_LENGTH = 68; // Same payload size as ERC-20 transfer calldata.
 // Above this callData size the static defaults can't be trusted (a deploy's
 // preVerificationGas scales with calldata; its callGasLimit is unknown). If live
 // estimation fails for such an op we refuse rather than submit a doomed one.
@@ -567,16 +571,23 @@ export async function estimateTransactionFee(
     relayerFeePerGas = userOpMaxFee > bundlerGasPrice ? userOpMaxFee - bundlerGasPrice : 0n;
   }
 
-  // Estimate against the REAL call when we have it (dApp tx); otherwise a minimal
-  // ERC-20-sized dummy. Routed through buildNativeCallData — the SAME builder the real send
-  // uses, so the estimate matches the final native-chain call shape.
+  // Estimate against the REAL call when we have it (dApp tx); otherwise call the EVM identity
+  // precompile with an ERC-20-sized payload. Do not target `from`: its all-zero payload invokes
+  // the Safe fallback and reverts, so it cannot be used as an estimation no-op.
+  //
+  // This still goes through buildNativeCallData, the same builder the real send uses, so the
+  // estimate preserves the final native-chain Safe call shape.
   const innerEstCall: MultiSendCall = tx?.to
     ? {
         to: tx.to,
         value: stripHexPrefix(tx.value ?? '0') || '0',
         data: tx.data && tx.data !== '0x' ? fromHex(stripHexPrefix(tx.data)) : new Uint8Array(0),
       }
-    : { to: from, value: '0', data: new Uint8Array(68) };
+    : {
+        to: ESTIMATION_DUMMY_TARGET,
+        value: '0',
+        data: new Uint8Array(ESTIMATION_DUMMY_DATA_LENGTH),
+      };
   // A batch estimates against ALL its calls (the real MultiSend); otherwise the single call.
   const estCalls: MultiSendCall[] = batchCalls && batchCalls.length > 0
     ? batchCalls.map((c) => ({

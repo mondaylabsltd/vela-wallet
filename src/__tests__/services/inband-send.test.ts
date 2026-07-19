@@ -285,7 +285,7 @@ describe('estimateTransactionFee — in-band branch', () => {
     expect(rpcCallMock.mock.calls.some(([method]) => method === 'eth_estimateUserOperationGas')).toBe(false);
   });
 
-  test('simulates a deployed Safe with its real nonce and zero EntryPoint fee fields', async () => {
+  test('simulates a deployed Safe with its real nonce, an executable preview call, and zero EntryPoint fee fields', async () => {
     const userOps: Record<string, string>[] = [];
     const nonce = '0x' + '00'.repeat(31) + '07';
     rpcCallMock.mockImplementation((method: string, params: any[]) => {
@@ -324,6 +324,11 @@ describe('estimateTransactionFee — in-band branch', () => {
       maxFeePerGas: '0x0',
       maxPriorityFeePerGas: '0x0',
     });
+    // The no-transaction preview must not call the Safe itself with zero calldata: that reaches
+    // its fallback and reverts. Identity (precompile 0x04) accepts this 68-byte placeholder.
+    const callData = userOps[0].callData;
+    expect(callData.slice(10, 10 + 64)).toBe('4'.padStart(64, '0'));
+    expect(callData.slice(10 + 4 * 64, 10 + 5 * 64)).toBe((68).toString(16).padStart(64, '0'));
   });
 
   test('simulates an undeployed Safe with the same initCode it will submit', async () => {
