@@ -1,9 +1,8 @@
 /**
  * Defense-in-depth gate for dApp read-only RPC that is forwarded to the wallet.
  *
- * The updated walletpair-sdk now serves read-only chain-state calls on the dApp
- * side, so they normally never reach the wallet. But older dApps / SDK versions
- * still forward them here, and a buggy or greedy dApp can flood the wallet with
+ * WalletPair v1 permits dApps to request read-only chain state over its encrypted
+ * channel. A buggy or greedy dApp can flood the wallet with
  * reads — saturating the JS thread and the RPC pool, and starving the user's
  * signing confirmation. Signing requests do NOT pass through this gate, so they
  * are never throttled or delayed by read traffic.

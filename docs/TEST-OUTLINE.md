@@ -271,7 +271,7 @@
 | ~~P1~~ ✅ | 组件/旅程交互层——**3/3 条 P0 旅程已建并实机验证**：✅ `onboarding-sync.spec.ts`(US 1.3)、✅ `approval-guard.spec.ts`(US 5.3)、✅ `send-high-risk.spec.ts`(US 3.7 高风险确认，mock 链上余额+合约) | 全 | 真实模式（非 `/test-*` 假路由）：真路由 + localStorage 播种(`vela.accounts`) + `page.route` 阻断/构造 JSON-RPC + **CDP 虚拟 WebAuthn 认证器** + **手编 aggregate3 余额 fixture**（用真实 `decAggregate3` 验证过） |
 | ~~P1~~ ✅ | dApp transport（US 5.1）：✅ `parseRemoteInjectURL`（无效链接→null）+ ✅ `RemoteInjectTransport.connect` SSE 状态机（ready 解析/onerror 未ready拒绝/openTimer 超时/断连 emit）——`dapp-transport.test.ts` 13 tests | M8 | 完成（walletpair 重连边界可后续补） |
 | ~~P1~~ ✅ | `wallet-api.ts`（US 2.1/2.2）：✅ 缓存/in-flight 去重/clearTokenCache（`wallet-api-cache.test.ts`）+ ✅ merge-by-chain（`wallet-api-merge.test.ts`：某链失败不清零健康链余额，aggregate3 fixture） | M4 | 完成 |
-| ⬜ P1 | `walletpair-transport.ts` 重连边界（30s/60s，US 5.1）——深度耦合 walletpair-sdk（WebSocketTransport/session） | M8 | 需 walletpair-sdk mock harness；宜与 transport 测试(`remote-inject-transport.test.ts`)一并建，避免重复 |
+| ✅ P1 | `walletpair-transport.ts` 协议解析、会话快照与重连边界（30s/60s，US 5.1） | M8 | 自包含协议层已补 `walletpair-protocol.test.ts`；后续扩充 fake-relay 重连集成场景 |
 | ⬜ P2 | `share-card.ts` 收款卡截图/保存/分享（view-shot/canvas，纯 IO） | M10 | 快照式测试 |
 | ~~P1~~ ✅ | `transfer-monitor.ts`（US 4.2）：已补 decode 反日志伪造（topics[2]≠本钱包→拒绝）+ <3topics/零值 spam 过滤 + from/value/token 提取 + EIP-7708 native 分类（9 tests） | M6 | 完成 |
 | ~~P2~~ ✅ | `public-key-upload`（US 1.2「verify 为准」四象限 + validateCreateClientData + retry）→ 已补 `public-key-upload.test.ts` | M1 | 完成 |

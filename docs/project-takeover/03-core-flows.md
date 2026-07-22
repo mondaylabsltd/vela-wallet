@@ -37,7 +37,7 @@
 ## 4. dApp 连接与签名
 
 入口 `/(tabs)/connect` 扫码/粘贴 → `src/models/dapp-connection.tsx`(Context)
-两条传输:RemoteInjectTransport(SSE+POST,浏览器插件桥)与 WalletPairTransport(WS relay,`walletpair-sdk`)。会话持久化 `vela.walletpairSession`/`vela.remoteInjectSession`,App 恢复时自动重连(60s reconnecting 宽限)。
+两条传输:RemoteInjectTransport(SSE+POST,浏览器插件桥)与 WalletPairTransport(WS relay,本地 WalletPair v1 协议实现)。会话持久化 `vela.walletpairSession`/`vela.remoteInjectSession`,App 恢复时自动重连(60s reconnecting 宽限)。
 
 签名请求 → `src/hooks/use-dapp-signing.ts` 方法路由(personal_sign / eth_signTypedData_v4 / eth_sendTransaction / wallet_sendCalls EIP-5792)→ 单一 `<SigningSheet>`(`src/components/SigningRequestModal.tsx`,生产与测试 harness 同一渲染路径):
 

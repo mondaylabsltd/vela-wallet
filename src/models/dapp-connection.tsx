@@ -300,11 +300,20 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     meta?: { transport?: DAppTransport; chainId?: number; dapp?: DAppInfo },
   ) => {
     const addr = addressRef.current;
-    const cid = chainIdRef.current;
+    const cid = meta?.chainId ?? chainIdRef.current;
     // The transport that OWNS this request. Responses MUST route here, never a
     // shared transportRef — with a concurrent WalletPair session live, using
     // transportRef would deliver an extension signature over the WP socket (F2).
     const owner = meta?.transport ?? transportRef.current;
+
+    // `eth_accounts` may legitimately be empty, but `eth_requestAccounts` is an
+    // authorization request. Do not try to serialize an absent account as an
+    // undefined array member: reply with an actionable EIP-1193 error immediately
+    // so the dApp never reports a misleading transport timeout.
+    if (method === 'eth_requestAccounts' && !addr) {
+      owner?.sendResponse(id, undefined, { code: 4100, message: 'No active wallet account is available' });
+      return;
+    }
 
     if (isSigningMethod(method)) {
       // A fresh signing request supersedes any funding prompt left over from a
@@ -411,7 +420,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     });
 
     transport.on('reconnecting', () => {
-      // Transient disconnect — SDK is auto-reconnecting. Keep transport ref and
+      // Transient disconnect — WalletPair is auto-reconnecting. Keep transport ref and
       // dApp info intact. Don't flip the indicator immediately: hold "connected"
       // for the grace window so a sub-second blip self-heals invisibly, and only
       // surface "Reconnecting…" if it hasn't recovered by then. Already-pending
@@ -426,7 +435,9 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     // Stamp the OWNING transport on every inbound request so responses route back
     // to it, not a shared ref (matters once a second transport — the extension
     // sign slot — can be live at the same time; see F2).
-    transport.on('request', (id, method, params, origin) => handleIncoming(id, method, params, origin, { transport }));
+    transport.on('request', (id, method, params, origin, requestChainId) => {
+      handleIncoming(id, method, params, origin, { transport, chainId: requestChainId });
+    });
 
     transport.on('error', (msg) => {
       setErrorMessage(msg);
@@ -438,7 +449,12 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
   // --- Disconnect any active transport ---
   const disconnectCurrent = useCallback(() => {
     clearReconnectGrace();
+    // A pairing awaiting fingerprint approval has not persisted a resumable
+    // snapshot, but it already owns an ephemeral X25519 key pair. Replacing it
+    // or disconnecting must release that key explicitly.
+    const pendingWalletPair = pendingWpTransportRef.current;
     pendingWpTransportRef.current = null;
+    pendingWalletPair?.disconnect();
     setPendingFingerprint(null);
     if (transportRef.current) {
       transportRef.current.disconnect();
@@ -526,12 +542,17 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     } catch (err: any) {
       setStatus('error');
       setErrorMessage(err.message ?? 'WalletPair connection failed');
-      transportRef.current = null;
+      // A failed confirmation must not leave a retry loop or join key behind.
+      transport.disconnect();
+      if (transportRef.current === transport) transportRef.current = null;
     }
   }, [wireTransport]);
 
   // --- Cancel fingerprint verification ---
   const cancelFingerprint = useCallback(() => {
+    // prepare() generated a wallet identity even though the relay has not yet
+    // accepted the join. Explicit cancellation must zero it as well.
+    pendingWpTransportRef.current?.disconnect();
     pendingWpTransportRef.current = null;
     setPendingFingerprint(null);
     setStatus('disconnected');
@@ -559,7 +580,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
     setStatus('reconnecting');
     setReconnectStuck(false);
     setReconnectNonce((n) => n + 1); // re-arm the stuck timer even if status was already 'reconnecting'
-    transport.reconnect?.().catch(() => { /* SDK keeps retrying; UI stays reconnecting */ });
+    transport.reconnect?.().catch(() => { /* WalletPair keeps retrying; UI stays reconnecting */ });
   }, [clearReconnectGrace]);
 
   // --- Begin an extension sign (Safari extension → App Group) ---
@@ -963,7 +984,7 @@ export function DAppConnectionProvider({ children }: { children: ReactNode }) {
           setDappInfo(info);
           const dropIfDead = () => {
             // A restored session whose channel is gone (the relay answers a join with
-            // `terminate: channel_not_found`) can NEVER come back. Left alone, the SDK
+            // `terminate: channel_not_found`) can NEVER come back. Left alone, the session
             // treats it as the durable session and the snapshot restore-loops on every
             // launch — and a live reconnect attempt to a dead channel collides with a
             // fresh pairing on the relay (BUG-6, and a contributor to BUG-5). So if it

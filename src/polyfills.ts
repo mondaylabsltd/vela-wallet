@@ -5,8 +5,8 @@
  * Metro-web shims), so the web variant of this file (`polyfills.web.ts`) is a
  * no-op. On iOS/Android under Hermes these globals are ABSENT, and several
  * dependencies assume them:
- *   - walletpair-sdk + @noble/*  → crypto.getRandomValues  (X25519 keygen, nonces)
- *   - walletpair-sdk             → btoa / atob             (base64url of the join payload)
+ *   - WalletPair protocol + @noble/* → crypto.getRandomValues (X25519 keygen, nonces)
+ *   - WalletPair protocol            → btoa / atob            (canonical base64url frames)
  *   - services/image-decode      → Buffer                  (gallery-QR decode fallback)
  *
  * Without these, WalletPair (Vela Connect) pairing throws on the first scan and
@@ -42,6 +42,6 @@ if (typeof g.Buffer === 'undefined') g.Buffer = Buffer;
 {
   const cg = (globalThis as { crypto?: { getRandomValues?: unknown } }).crypto;
   if (!cg || typeof cg.getRandomValues !== 'function') {
-    console.error('[polyfills] globalThis.crypto.getRandomValues MISSING after react-native-get-random-values — WalletPair/@noble crypto will fail. Check the native RNG module.');
+    console.error('[polyfills] globalThis.crypto.getRandomValues MISSING after react-native-get-random-values — WalletPair crypto will fail. Check the native RNG module.');
   }
 }

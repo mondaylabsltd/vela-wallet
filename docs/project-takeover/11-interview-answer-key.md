@@ -1030,7 +1030,7 @@
 **标准答案要点**:
 1. 入口是 package.json 的 "main": "expo-router/entry" —— expo-router 按 src/app/ 目录文件系统生成路由,根组件是 src/app/_layout.tsx(RootLayout)。
 2. _layout.tsx 第 1 行是 import '@/polyfills',注释写明 MUST be first:必须在任何依赖模块被求值之前,把 crypto/btoa/atob/Buffer 装到 Hermes 全局上。
-3. Hermes(iOS/Android)缺三组浏览器全局:crypto.getRandomValues(walletpair-sdk + @noble/* 用于 X25519 keygen 和 nonce)、btoa/atob(walletpair join payload 的 base64url)、Buffer(services/image-decode 的相册 QR 解码 fallback)。
+3. Hermes(iOS/Android)缺三组浏览器全局:crypto.getRandomValues(WalletPair v1 + @noble/* 用于 X25519 keygen 和 nonce)、btoa/atob(WalletPair 帧的 base64url)、Buffer(services/image-decode 的相册 QR 解码 fallback)。
 4. polyfills.ts 用 react-native-get-random-values 补 crypto,base-64 补 btoa/atob,buffer 包补 Buffer,且都是 typeof 检查后才赋值。
 5. web 由 Metro 平台扩展解析自动选 polyfills.web.ts,它是刻意的 no-op(export {}):浏览器本来就有这些全局,同时避免把 native-only 的 react-native-get-random-values 打进 web bundle。
 6. 不补的后果:WalletPair(Vela Connect)第一次扫码配对直接抛错、相册导入 QR 静默失败——且两者在 web 构建里完全复现不出来(web-only 测试曾掩盖过这类 native bug)。
@@ -1038,7 +1038,7 @@
 **代码证据**:
 - `package.json:3` — "main": "expo-router/entry"
 - `src/app/_layout.tsx:1` — import '@/polyfills'; // MUST be first: installs crypto/btoa/atob/Buffer on Hermes before any dep loads
-- `src/polyfills.ts:8-13` — 逐条列出 walletpair-sdk+@noble→getRandomValues、btoa/atob、Buffer 的依赖方,及"WalletPair 首扫抛错 / 相册 QR 静默失败,web 均不复现"
+- `src/polyfills.ts:8-13` — 逐条列出 WalletPair v1+@noble→getRandomValues、btoa/atob、Buffer 的依赖方,及"WalletPair 首扫抛错 / 相册 QR 静默失败,web 均不复现"
 - `src/polyfills.ts:20` — import 'react-native-get-random-values' 装 crypto.getRandomValues
 - `src/polyfills.ts:33-35` — btoa/atob/Buffer 的条件赋值
 - `src/polyfills.web.ts:1-7` — web 变体是 no-op,注释解释避免把 native-only 包拉进 web bundle
@@ -1543,7 +1543,6 @@
 ---
 
 **统计**:全库共 40 题 = 6 域 × 6 题(D3/D4/D5-D10/D6-D7/D8-D9/D11-D12)+ 4 道综合题。难度分布(域内):难度1×6、难度2×6、难度3×8、难度4×10、难度5×6。
-
 
 
 
