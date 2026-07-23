@@ -13,7 +13,7 @@
 When the dedicated gas account (G06) is underfunded, the bundler returns an error that Vela recognizes
 via `parseBundlerUnderfunded` — matched by **stable signals** (e.g. `/dedicated bundler (gas account|
 EOA)/` + `Deposit to:` + `required:`), **not exact wording** — and surfaces a **gas-account top-up
-modal** (`BundlerFundingModal`). This parser must stay in sync with the `vela-bundler` repo's error
+modal** (`BundlerFundingModal`). This parser must stay in sync with the `vela-relay` repo's error
 messages.
 
 ## 2. Background & context
@@ -55,7 +55,7 @@ robust substrings (not literal strings) prevents breakage when wording changes s
 
 ## 9. Dependencies, risks & open questions
 
-- **Risk:** **cross-repo coupling** — `parseBundlerUnderfunded` (wallet) must stay in sync with `vela-bundler` `handlers.ts` wording.
+- **Risk:** **cross-repo coupling** — `parseBundlerUnderfunded` (wallet) must stay in sync with `vela-relay` `handlers.ts` wording.
 - **Open question:** a shared contract/enum for this signal to remove string coupling entirely.
 
 ## 10. Source anchors

@@ -1160,7 +1160,7 @@ async function sendUserOpTempo(
  * The single fee leg batched into an in-band UserOp: a plain native-value transfer to the
  * bundler's recipient, or a whitelisted-stablecoin `transfer`. Pure + exported for tests.
  * The shape must stay a plain CALL to the exact recipient — that is what the bundler's
- * reimbursement parser counts (vela-bundler docs/inband-gas-settlement.md anti-drain guards).
+ * reimbursement parser counts (vela-relay docs/inband-gas-settlement.md anti-drain guards).
  * `value` is hex (MultiSendCall's format — abiEncodeUint256Hex parses it as hex).
  */
 export function buildInBandFeeLeg(
@@ -1214,7 +1214,7 @@ export async function estimateInBandBasisGas(
 }
 
 /**
- * Send a UserOperation on a generic in-band chain (vela-bundler
+ * Send a UserOperation on a generic in-band chain (vela-relay
  * docs/inband-gas-settlement.md — the Tempo model generalized to all EVM chains):
  *   - the UserOp is signed with maxFeePerGas = maxPriorityFeePerGas = 0 (EntryPoint's
  *     native prefund/refund becomes a no-op), and
@@ -1913,7 +1913,7 @@ export interface ChainGasPrice {
 
 /**
  * Derive the network gas price from the raw chain signals, using the SAME formula the
- * bundler prices from (vela-bundler shared/simulation/index.ts getGasPrices +
+ * bundler prices from (vela-relay shared/simulation/index.ts getGasPrices +
  * shared/gas/fee-model.ts): networkPrice = max(eth_gasPrice, baseFee + tip).
  *
  * The priority tip is LOAD-BEARING on chains where the base fee is a rounding error but

@@ -26,7 +26,7 @@ import {
 function bundlerCostUnits(simGas: bigint, price: bigint, decimals = 6): bigint {
   const atto = (simGas + TEMPO_COST_BUFFER_GAS) * price;
   const num = atto * 10n ** BigInt(decimals);
-  return (num + 10n ** 18n - 1n) / 10n ** 18n; // ceilDiv — matches vela-bundler tempoCostInFeeToken
+  return (num + 10n ** 18n - 1n) / 10n ** 18n; // ceilDiv — matches vela-relay tempoCostInFeeToken
 }
 
 describe('tempo gas model', () => {

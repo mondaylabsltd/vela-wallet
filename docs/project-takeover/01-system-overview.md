@@ -53,7 +53,7 @@ docs/                设计/需求/测试/上架文档(较全,见各文件)
 
 | 服务 | 用途 | 位置 |
 |---|---|---|
-| vela-bundler(**独立仓库**) | 自营 4337 bundler,gas 报价权威 | `src/services/bundler-service.ts`;错误文案字符串耦合见 `parseBundlerUnderfunded` |
+| vela-relay(**独立仓库**) | 自营 4337 bundler,gas 报价权威 | `src/services/bundler-service.ts`;错误文案字符串耦合见 `parseBundlerUnderfunded` |
 | p256-index.getvela.app(**独立仓库** biubiu-projects) | 公钥索引(跨设备恢复),CF Worker + D1 + DO 队列 | `src/services/public-key-index.ts` |
 | getvela.app/api/* | Alchemy/Pimlico 代理、bug-report GitHub 代理 | `getvela.app/src/routes/api/` |
 | 公共 RPC 池 | 每链多端点评分/封禁/故障转移 | `src/services/rpc-pool.ts` |

@@ -125,7 +125,7 @@ Configure custom endpoints in **Settings > Advanced > Service Endpoints**.
 | -------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | **Chain Data Index**     | Network info, token data, chain logos             | [atshelchin/ethereum-data](https://github.com/atshelchin/ethereum-data)                                                         |
 | **Passkey Index**        | Public key storage for cross-device recovery      | [atshelchin/webauthnp256-publickey-index.biubiu.tools](https://github.com/atshelchin/webauthnp256-publickey-index.biubiu.tools) |
-| **Bundler Service**      | ERC-4337 transaction bundler                      | [atshelchin/vela-bundler](https://github.com/atshelchin/vela-bundler)                                                           |
+| **Bundler Service**      | ERC-4337 transaction bundler                      | [mondaylabsltd/vela-relay](https://github.com/mondaylabsltd/vela-relay)                                                           |
 | **Exchange-Rate Source** | USD-based fiat rates that drive the currency list | [mondaylabsltd/vela-currency](https://github.com/mondaylabsltd/vela-currency) (self-hosted [Frankfurter](https://frankfurter.dev), FOSS)              |
 
 The first three are Vela services that each expose a `/api/health` endpoint. The wallet validates three checks before accepting a custom endpoint for them:

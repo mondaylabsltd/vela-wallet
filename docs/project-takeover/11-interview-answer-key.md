@@ -447,7 +447,7 @@
 
 ### D4-tx-chain-Q6 · 难度 5/5
 
-**考察目标**:修改影响分析:换 Tempo 默认 fee token 牵动的全部位置(含跨仓库 vela-bundler)、会破的隐藏假设(小数、×10^12 缩放、per-subcall gas 标定、bundler float),以及验证方案。同时深考 Tempo 稳定币 gas 报销机制本身。
+**考察目标**:修改影响分析:换 Tempo 默认 fee token 牵动的全部位置(含跨仓库 vela-relay)、会破的隐藏假设(小数、×10^12 缩放、per-subcall gas 标定、bundler float),以及验证方案。同时深考 Tempo 稳定币 gas 报销机制本身。
 
 **题干**:修改影响题:假设 Tempo 官方新发了一种 TIP-20 稳定币(注意:它是 4 位小数),要求 Vela 把默认 gas fee token 从 pathUSD 换成它。你需要动哪些位置(包括本仓库之外)?哪些看不见的假设会被打破?你打算怎么验证这次修改?
 
@@ -456,7 +456,7 @@
 2. 小数假设会破:TEMPO_FEE_TOKEN_DECIMALS=6 是"每个 TIP-20 USD 都 6 位小数"的全局假设;4 位小数意味着 tempoReimbursement/attoToTokenUnits/estimateTempoFee 的换算,以及 bundler-service.ts 里 gas 账户余额的 ×10^12(6→18 位)缩放全部要改,否则报销金额和余额显示错 100 倍。
 3. gas 账户显示:bundler-service.ts 的 fetchBundlerAccountInfo 在 Tempo 分支用 TEMPO_DEFAULT_FEE_TOKEN 做 balanceOf 且把 nativeSym 硬编码为 'pathUSD',token 地址和符号都要换。
 4. token picker 归类:isTempoFeeToken 决定哪个 token 被归入 'Gas' 类,跟着常量走但要确认 UI 文案。
-5. 跨仓库:feeToken 作为 Vela 扩展字段随 eth_sendUserOperation 上送(submitUserOp 第三参 → userOpToDict extra),vela-bundler 端用它给外层 0x76 付 gas 并校验批内报销转账覆盖成本——bundler 必须认可新 token 且持有其浮动资金,sponsorship 也是给 gas 账户打 fee-token float;bundler 不认就会以 reimbursed=0 语义拒单,钱包侧改动全白费。
+5. 跨仓库:feeToken 作为 Vela 扩展字段随 eth_sendUserOperation 上送(submitUserOp 第三参 → userOpToDict extra),vela-relay 端用它给外层 0x76 付 gas 并校验批内报销转账覆盖成本——bundler 必须认可新 token 且持有其浮动资金,sponsorship 也是给 gas 账户打 fee-token float;bundler 不认就会以 reimbursed=0 语义拒单,钱包侧改动全白费。
 6. gas 标定假设可能破:TEMPO_CALL_GAS_PER_SUBCALL=380k 与 TEMPO_PER_SUBCALL_GAS_EST=95k 是按 0x20c0 TIP-20 transfer(实测 ~308k)标定的;新 token 的 transfer 计量不同就要重新实测,否则要么批量 OOG 回滚、要么报销定价失真。
 7. 机制不变量要守住:Tempo UserOp 恒以 maxFeePerGas=0 签名(避免 AA21),用户成本全在批尾的 feeToken.transfer(bundlerEOA, reimbursement),定价用 tempoExpectedGas(现实 gas)而非 padded limits——这些不随 token 更换而变。
 8. 验证:在 Moderato 测试网(42431,在 TEMPO_CHAIN_IDS 内)/并行空间测试环境走完整发送:核对确认屏报价 == 链上实扣报销(estimateTempoFee 与 sendUserOpTempo 共用 tempoExpectedGas 公式,天然可对账);验证资助弹窗余额与符号;验证未部署账户首发(6M verificationGas、部署实测 ~4.1M)不回归;验证 bundler 侧确实以新 token 收到报销。
@@ -473,7 +473,7 @@
 
 **常见错误**:
 - 只改 tempo.ts 一个常量就收工——漏掉小数换算、bundler-service ×10^12 缩放、nativeSym 硬编码、380k/95k gas 标定四处隐藏假设。
-- 忘了这是跨仓库变更:vela-bundler 不认新 feeToken、不持有其 float,钱包侧改动全部白费。
+- 忘了这是跨仓库变更:vela-relay 不认新 feeToken、不持有其 float,钱包侧改动全部白费。
 - 忘了 sponsorship 和 gas 账户余额显示也以 fee token 计价,只测发送路径不测资助路径。
 - 以为 Tempo 的 UserOp maxFeePerGas 要按新 token 重新定价——它恒为 0,全部定价都在批尾报销转账里。
 
@@ -1149,9 +1149,9 @@
 1. 单测有明确的覆盖边界:src/__tests__/services/safe-transaction.test.ts 文件头写明只测纯函数(calldata 构造、hash、格式化、quote-abuse 判定的 golden vector),'RPC-dependent functions are not tested here'——gas 逻辑恰恰大量走 RPC/bundler,单测绿不代表行为对。
 2. 第一层:本地门禁四件套 npx tsc --noEmit / npm run lint / npx jest / npm run build:web(与 ci.yml 同款)。
 3. 第二层:parallel space 实测——dev 下进 /parallel 用 fixture 钱包走真实 Send/dApp 流程;注意 parallel-send.spec.ts 是 hermetic 的,只覆盖到 token picker 入口、刻意不落链,所以它测不到 gas 路径。
-4. 第三层:RUN_ONCHAIN=1 npx playwright test parallel-onchain —— 唯一证明全栈协同的测试:fixture passkey 签真实 ERC-4337 UserOp → 真 vela-bundler 提交 → RIP-7212 P256 预编译 + EntryPoint + Safe4337Module 在 Gnosis(chain 100)真结算,dApp 拿到真 tx hash。
-5. 双账户充值模型:① fixture Safe「Parallel One」(0xD400866e00B055B20752a826CD5C89b811de130b)要有少量 xDAI 覆盖转账金额;② vela-bundler 的 per-Safe gas 存款地址(bundlerGasAccount 查询)要另充——bundler 从存款地址付 gas,不是从 Safe 余额;两者任一不足测试都会自跳过。
-6. gas 改动的额外雷区:gas 报价与 vela-bundler 跨仓耦合(bundler 是价格权威,wallet 侧不能否决其报价),改这一带要连同 bundler 的行为一起验证,不能只看 wallet 单侧。
+4. 第三层:RUN_ONCHAIN=1 npx playwright test parallel-onchain —— 唯一证明全栈协同的测试:fixture passkey 签真实 ERC-4337 UserOp → 真 vela-relay 提交 → RIP-7212 P256 预编译 + EntryPoint + Safe4337Module 在 Gnosis(chain 100)真结算,dApp 拿到真 tx hash。
+5. 双账户充值模型:① fixture Safe「Parallel One」(0xD400866e00B055B20752a826CD5C89b811de130b)要有少量 xDAI 覆盖转账金额;② vela-relay 的 per-Safe gas 存款地址(bundlerGasAccount 查询)要另充——bundler 从存款地址付 gas,不是从 Safe 余额;两者任一不足测试都会自跳过。
+6. gas 改动的额外雷区:gas 报价与 vela-relay 跨仓耦合(bundler 是价格权威,wallet 侧不能否决其报价),改这一带要连同 bundler 的行为一起验证,不能只看 wallet 单侧。
 7. 降级路径验证:用故障注入 vela.slowRpc / vela.failRpc 检查 gas 估算失败/超时时的 UI 表现。
 
 **代码证据**:
@@ -1309,7 +1309,7 @@
 1. getvela.app Worker 有三枚 secret:ALCHEMY_API_KEY、PIMLICO_API_KEY、GITHUB_BUG_TOKEN;生产通过 wrangler secret put 写入,本地放 getvela.app/.dev.vars(已 gitignore、从未入库)。
 2. ALCHEMY/PIMLICO key 被 bundler 代理直接拼进上游 URL(api.pimlico.io/v2/{chainId}/rpc?apikey=… 和 {slug}.g.alchemy.com/v2/{key}),这正是钱包 App 不直连提供商、必须走 /api/bundler 代理的原因——key 泄漏=配额被烧/被封,钱包估算与发送直接受损。
 3. GITHUB_BUG_TOKEN 是 fine-grained PAT、仅 issues 权限,永不到达客户端;未配置时 bug-report 路由返回 503 {error:'not_configured'},客户端自动降级为预填 GitHub URL——这是唯一可"无密钥运行"的路由,且是刻意设计。
-4. vela-bundler(独立仓库)持有 gas account EOA 私钥——这是唯一直接控制真金白银的密钥,泄漏=资金被直接盗走,严重度与前三枚不同量级。
+4. vela-relay(独立仓库)持有 gas account EOA 私钥——这是唯一直接控制真金白银的密钥,泄漏=资金被直接盗走,严重度与前三枚不同量级。
 5. 未来的 Android upload keystore:绝不入库(gitignore 已覆盖 *.jks 和 keystore.properties),存本地+密码管理器;丢失可走 Play 重置流程(因为开了 Play App Signing);仓库只有 keystore.properties.example。
 6. p256-index 服务端签名 key 在独立仓库/CF,本仓库不含。
 7. 轮换流程(以 API key 为例):提供商控制台生成新 key → wrangler secret put → 验证 → 废旧。
@@ -1343,7 +1343,7 @@
 
 ### D11-D12-ops-external-Q4 · 难度 4/5
 
-**考察目标**:代码定位题:高频故障"gas 账户余额不足→充值 modal"的检测逻辑在哪、靠什么机制识别、为什么与 vela-bundler 仓库存在脆弱的文案耦合、防线是什么(针对基线错误:不知道 underfunded 弹窗这一高频故障模式)。
+**考察目标**:代码定位题:高频故障"gas 账户余额不足→充值 modal"的检测逻辑在哪、靠什么机制识别、为什么与 vela-relay 仓库存在脆弱的文案耦合、防线是什么(针对基线错误:不知道 underfunded 弹窗这一高频故障模式)。
 
 **题干**:用户发交易时 bundler 报"gas 账户余额不足",钱包应该弹出充值 modal 而不是甩原始报错。(a) 这个错误检测逻辑在哪个文件哪个函数?(b) 它靠什么机制判断"这是 underfunded 错误"并提取充值信息?(c) 哪两条 UI 路径消费它?(d) 为什么另一个仓库里改一句错误文案能静默弄坏这里?现有防线有哪几道?
 
@@ -1352,8 +1352,8 @@
 2. 机制:对错误消息做字符串/正则匹配——命中 /dedicated bundler (gas account|EOA)/i,或同时命中 'Deposit to: 0x' 与 'required:';兼容 bundler 历史上的两代文案(legacy 'dedicated bundler EOA' 和现行 'Insufficient native balance…Deposit to: 0x…')。
 3. 再从消息里正则提取 Spendable(spendableWei)、required(requiredWei)、Deposit to 后的 40 位 hex 地址;asset 字段按消息含 pathUSD 判定为 'pathUSD'(Tempo)否则 'native'——这样即使后续账户查询失败也能直接开充值 modal。
 4. 两条消费路径:SendScreen.tsx:984(Send 流程)和 models/dapp-connection.tsx:593(dApp 签名流程),两处都在收到发送错误后调它决定是否弹 funding modal。
-5. 耦合原因:错误来自独立仓库 vela-bundler 的 handlers.ts 文案,钱包侧靠字符串匹配识别;对方改措辞不会产生任何编译/类型错误,只会让 parse 返回 null,用户看到原始报错——静默降级。
-6. 防线一:匹配设计上抓"稳定信号"(dedicated bundler / Deposit to+required)而非整句精确匹配,小改动能扛住;防线二:bundler-service.test.ts 里 parseBundlerUnderfunded 的回归测试固定了两代文案样本;防线三:发布 checklist 明文规定"若改过 bundler 错误文案或 parseBundlerUnderfunded,与 vela-bundler 仓库联合验证"。
+5. 耦合原因:错误来自独立仓库 vela-relay 的 handlers.ts 文案,钱包侧靠字符串匹配识别;对方改措辞不会产生任何编译/类型错误,只会让 parse 返回 null,用户看到原始报错——静默降级。
+6. 防线一:匹配设计上抓"稳定信号"(dedicated bundler / Deposit to+required)而非整句精确匹配,小改动能扛住;防线二:bundler-service.test.ts 里 parseBundlerUnderfunded 的回归测试固定了两代文案样本;防线三:发布 checklist 明文规定"若改过 bundler 错误文案或 parseBundlerUnderfunded,与 vela-relay 仓库联合验证"。
 7. 另有主动路径:checkBundlerFunding(bundler-service.ts:118)在发送前查 spendableBalance ≥ threshold,不足则用 recommendedFundingWei(第 106 行,含 FUNDING_BUFFER_BPS 缓冲)先弹 modal——parseBundlerUnderfunded 是这条主动检查漏掉时的兜底。
 
 **代码证据**:
@@ -1364,7 +1364,7 @@
 - `src/models/dapp-connection.tsx:593` — dApp 路径消费:parseBundlerUnderfunded(msg)
 - `src/__tests__/services/bundler-service.test.ts:54-91` — 两代文案 + 负例的回归测试
 - `src/services/bundler-service.ts:106-110,118-140` — recommendedFundingWei 与 checkBundlerFunding 主动检查
-- `docs/project-takeover/05-deployment-runbook.md:30` — 发布 checklist:改文案必须与 vela-bundler 联合验证
+- `docs/project-takeover/05-deployment-runbook.md:30` — 发布 checklist:改文案必须与 vela-relay 联合验证
 - `docs/project-takeover/06-operations-runbook.md:26-27` — 排障手册"充值 modal 不弹/弹错"条目直指两仓文案同步
 
 **常见错误**:
@@ -1374,7 +1374,7 @@
 - 以为两仓库部署耦合(实际部署独立,耦合的是语义/文案)。
 
 **追问**:
-1. vela-bundler 明天把文案改成 'gas balance too low, top up 0x…',parse 会命中吗?逐个正则走一遍。(答:不命中——无 'dedicated bundler'、无 'Deposit to: 0x'、无 'required:',返回 null,用户看原始报错。)
+1. vela-relay 明天把文案改成 'gas balance too low, top up 0x…',parse 会命中吗?逐个正则走一遍。(答:不命中——无 'dedicated bundler'、无 'Deposit to: 0x'、无 'required:',返回 null,用户看原始报错。)
 2. 为什么 asset 要区分 pathUSD 和 native?哪条链的 gas 不是原生币?(答:Tempo/4217,TIP-20 稳定币计价。)
 3. 如果你要把这个字符串耦合升级成结构化错误码,两个仓库各要改什么,过渡期怎么兼容旧版本 App?
 
@@ -1384,16 +1384,16 @@
 
 ### D11-D12-ops-external-Q5 · 难度 4/5
 
-**考察目标**:故障推演题:半夜收到"发不出交易",能给出项目特异的诊断序列(按故障影响矩阵分层定位:underfunded → Gnosis gas price → getvela.app 代理 → vela-bundler → RPC),并知道每层的具体工具和命令(针对基线错误:排障序列无项目特异性)。
+**考察目标**:故障推演题:半夜收到"发不出交易",能给出项目特异的诊断序列(按故障影响矩阵分层定位:underfunded → Gnosis gas price → getvela.app 代理 → vela-relay → RPC),并知道每层的具体工具和命令(针对基线错误:排障序列无项目特异性)。
 
 **题干**:凌晨两点,一键 bug report 进来一条 issue:"发不出交易,一直失败"。请给出你的诊断序列——每一步查什么、用什么工具/命令、什么现象指向什么结论。禁止"重启试试/看看日志"这类通用答案。追加:如果 getvela.app Worker 此刻整个挂了,钱包哪些功能死、哪些活?
 
 **标准答案要点**:
 1. 第 0 步读 issue 本身:一键 bug report 自带脱敏 environment(App 版本+commit、平台、RPC unreachable 链列表)和 diagnostics(metrics 的 recentFailures,含 service/outcome/status)——先看最近失败的是哪个 service、什么状态码,直接缩小范围。
-2. 第一嫌疑(高频):bundler gas account underfunded——正常应弹充值 modal;若用户看到的是原始报错文案,查 parseBundlerUnderfunded 与 vela-bundler 当前文案是否还匹配(两仓文案同步问题,06 手册专门条目)。
+2. 第一嫌疑(高频):bundler gas account underfunded——正常应弹充值 modal;若用户看到的是原始报错文案,查 parseBundlerUnderfunded 与 vela-relay 当前文案是否还匹配(两仓文案同步问题,06 手册专门条目)。
 3. 第二嫌疑(历史惨案区):Gnosis 'gas price too low'/费率显示 '—'——原则是 bundler 报价是权威、钱包 RPC 永不否决;查 getBundlerGasQuote(safe-transaction.ts:1470)与 bundler 侧 pimlico_getUserOperationGasPrice;回归测试在 bundler-service.test.ts。
 4. 第三层:getvela.app /api/bundler 代理——wrangler tail 看 Worker 实时日志;若是刚发过版,wrangler rollback;修复后 smoke=在钱包里做一次小额估算(不需提交)确认代理通。
-5. 第四层:vela-bundler 服务本身(独立仓库/宿主)——App 侧已有 3 重试+existingHash 恢复、大 calldata 直接拒绝;gas 报价与错误文案都以它为权威。
+5. 第四层:vela-relay 服务本身(独立仓库/宿主)——App 侧已有 3 重试+existingHash 恢复、大 calldata 直接拒绝;gas 报价与错误文案都以它为权威。
 6. 第五层:链 RPC——单链 RPC 挂只影响余额刷新(缓存兜底+多端点转移+封禁,rpc-pool);429 只静默用缓存;发送路径走 bundler 不走这条,所以"余额正常但发不出"反而排除 RPC。
 7. 复现工具:开发环境浏览器控制台 vela.failRpc(1)/vela.rateLimitRpc('all')/vela.slowRpc(3000)/vela.flakyRpc(0.5)/vela.nullPrice('all'),E2E 种子 __VELA_FAULT_INIT__。
 8. 追加题答案——getvela.app Worker 全挂:死=bundler 代理(内置 bundler 用户估算/发送失败但有明确报错、估算失败拒绝提交)、汇率、NFT、transactions、bug-report 后端(自动降级 GitHub URL);活=资金(非托管)、余额(RPC pool 直连+缓存)、passkey 登录、Web 钱包本体(CF Pages 是独立部署单元);临时缓解=App 设置里 vela.serviceEndpoints 可覆盖服务端点。
@@ -1401,7 +1401,7 @@
 
 **代码证据**:
 - `docs/project-takeover/06-operations-runbook.md:23-27` — 排障条目:gas price too low(bundler 是权威)与充值 modal 不弹(两仓文案同步)
-- `docs/project-takeover/06-operations-runbook.md:15-16` — 故障影响矩阵:vela-bundler 行(3 重试+existingHash)与 getvela.app/api 行(wrangler tail / wrangler rollback / vela.serviceEndpoints 覆盖)
+- `docs/project-takeover/06-operations-runbook.md:15-16` — 故障影响矩阵:vela-relay 行(3 重试+existingHash)与 getvela.app/api 行(wrangler tail / wrangler rollback / vela.serviceEndpoints 覆盖)
 - `docs/project-takeover/06-operations-runbook.md:44-46` — 模拟故障命令全家桶 vela.* 与 __VELA_FAULT_INIT__
 - `docs/project-takeover/06-operations-runbook.md:5-7` — 可观测性现状:无遥测无告警,诊断靠 bug report + 控制台日志
 - `src/services/bug-report.ts:53-75` — environment 行(版本/平台/RPC unreachable)与 diagnostics(recentFailures 的 service/outcome/status)构成 issue 内容
@@ -1413,7 +1413,7 @@
 **常见错误**:
 - 【受训者原错】通用排障套话:"先看日志、重启服务、检查网络"——没有一步是本项目特异的。
 - 【受训者原错】不知道 underfunded 充值 modal 是第一嫌疑的高频故障。
-- 把 getvela.app 挂和 vela-bundler 挂混为一谈(一个是代理 Worker,一个是独立仓库的 bundler 服务,诊断命令完全不同)。
+- 把 getvela.app 挂和 vela-relay 挂混为一谈(一个是代理 Worker,一个是独立仓库的 bundler 服务,诊断命令完全不同)。
 - 以为官网 Worker 挂了 Web 钱包也一起挂(CF Pages 与 CF Worker 是独立部署单元)。
 - 以为某条链 RPC 挂会导致发不出交易(发送走 bundler;RPC 挂主要影响余额展示)。
 
@@ -1512,10 +1512,10 @@
 **考察目标**:复盘方法论 + 跨仓库耦合的系统性理解:能否把"一句文案改动"追到完整故障链,区分触发因素与根因,并识别"防线存在但为什么没起作用"。
 
 **标准答案要点**:
-1. **(a) 故障链**:vela-bundler handlers.ts 文案改动 → 钱包 parseBundlerUnderfunded(bundler-service.ts:367)的两组稳定信号正则(/dedicated bundler (gas account|EOA)/i;'Deposit to: 0x'+'required:')全部落空 → 返回 null → 两个消费点 SendScreen.tsx:984 与 dapp-connection.tsx:593 都不弹 funding modal → 原始英文报错透出。前置的主动防线 checkBundlerFunding(bundler-service.ts:118)只在发送前查询余额,查询失败或余额在阈值边缘时会漏,parse 正是它的兜底——兜底断了故障才可见。
+1. **(a) 故障链**:vela-relay handlers.ts 文案改动 → 钱包 parseBundlerUnderfunded(bundler-service.ts:367)的两组稳定信号正则(/dedicated bundler (gas account|EOA)/i;'Deposit to: 0x'+'required:')全部落空 → 返回 null → 两个消费点 SendScreen.tsx:984 与 dapp-connection.tsx:593 都不弹 funding modal → 原始英文报错透出。前置的主动防线 checkBundlerFunding(bundler-service.ts:118)只在发送前查询余额,查询失败或余额在阈值边缘时会漏,parse 正是它的兜底——兜底断了故障才可见。
 2. **(b) 防线为何全部漏过**:① 回归测试(bundler-service.test.ts:54-91)固定的是**钱包仓内**的两代文案样本——bundler 仓的 PR 不会触发钱包的测试,单侧测试护不住双边契约;② 发布 checklist(05-deployment-runbook.md:30)明文要求"改 bundler 错误文案须与钱包联合验证"——流程存在但没被执行,这是流程执行失败而非流程缺失;③ 无遥测无告警(06-operations-runbook.md:5-7),发现渠道只有用户 bug report,40 分钟延迟是观测缺失的直接代价。
-3. **(c) 三层行动项**:立即=钱包侧 hotfix 扩正则兼容新文案 + 把新文案样本追加进回归测试;短期=vela-bundler 仓 PR 模板/review checklist 增加"动过错误文案?→ 与钱包联验"强制项,双仓文案变更互相 tag review;长期=结构化错误码(机器可读字段,如 code:'BUNDLER_UNDERFUNDED'+结构化 deposit/required 字段),过渡期 bundler 双发(新字段+旧文案并存)兼容存量旧版 App,同时给 /api/bundler 5xx 率或 parse-miss 配告警。
-4. **(d) 最深层问题**:跨仓库隐式契约以自然语言文案为载体(memory 中的已知架构债:parseBundlerUnderfunded 必须与 vela-bundler handlers.ts 措辞同步)+ 零观测——这是架构与流程问题,不是某一行代码的 bug;单纯"把正则改对"没有消除事故类别。
+3. **(c) 三层行动项**:立即=钱包侧 hotfix 扩正则兼容新文案 + 把新文案样本追加进回归测试;短期=vela-relay 仓 PR 模板/review checklist 增加"动过错误文案?→ 与钱包联验"强制项,双仓文案变更互相 tag review;长期=结构化错误码(机器可读字段,如 code:'BUNDLER_UNDERFUNDED'+结构化 deposit/required 字段),过渡期 bundler 双发(新字段+旧文案并存)兼容存量旧版 App,同时给 /api/bundler 5xx 率或 parse-miss 配告警。
+4. **(d) 最深层问题**:跨仓库隐式契约以自然语言文案为载体(memory 中的已知架构债:parseBundlerUnderfunded 必须与 vela-relay handlers.ts 措辞同步)+ 零观测——这是架构与流程问题,不是某一行代码的 bug;单纯"把正则改对"没有消除事故类别。
 
 **评分维度(总分 5)**:
 - 故障链完整性(0–1.5):从文案改动追到两个消费点与用户可见现象,并说清 checkBundlerFunding 与 parse 的主动/兜底关系。
@@ -1543,6 +1543,5 @@
 ---
 
 **统计**:全库共 40 题 = 6 域 × 6 题(D3/D4/D5-D10/D6-D7/D8-D9/D11-D12)+ 4 道综合题。难度分布(域内):难度1×6、难度2×6、难度3×8、难度4×10、难度5×6。
-
 
 

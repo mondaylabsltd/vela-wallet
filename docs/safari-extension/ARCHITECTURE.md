@@ -165,7 +165,7 @@ Signing reuses the native pipeline through `ExtensionBridgeTransport` (§5). The
      → emits DAppTransport 'request' (rid, method, params, origin)
      → EXISTING DAppConnectionProvider renders <SigningRequestModal>:
            clear-signing · simulateAssetChanges · gas/funding · approval-guard(no-unlimited)  [ALL REUSED]
-     → user approves → Passkey.sign(safeOpHash) → UserOp → vela-bundler → userOpHash
+     → user approves → Passkey.sign(safeOpHash) → UserOp → vela-relay → userOpHash
      → onSubmitted: buildSigningRecord → LocalTransaction(status:'pending', dappOrigin)  [persist-at-submit]
      → transport.sendResponse(rid, userOpHash):
            writes mailbox  vela.ext.sign.<requestId> = { status:'submitted', result:userOpHash }

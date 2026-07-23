@@ -21,7 +21,7 @@
 |---|---|---|
 | 曝光 | getvela.app 访问量、来源(UTM 只打在落地页链接上) | Cloudflare Web Analytics(无 cookie,与品牌一致) |
 | 试用 | Web 版打开数(静态托管请求数近似) | CF Pages 分析 |
-| 激活 | 无法直接测(App 内不追踪)——用代理指标:bundler 新钱包首笔 UserOp 数/周 | vela-bundler 服务端日志(链上公开行为,非用户追踪) |
+| 激活 | 无法直接测(App 内不追踪)——用代理指标:bundler 新钱包首笔 UserOp 数/周 | vela-relay 服务端日志(链上公开行为,非用户追踪) |
 | 购买 | 商店销量、商店页转化率、来源(Apple: App Analytics;Google: Console) | 两店后台 |
 | 布道 | GitHub stars、被引用/转发 | GitHub/社媒 |
 

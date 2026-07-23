@@ -129,7 +129,7 @@ export async function gnosisBalanceWei(address: string): Promise<bigint> {
 }
 
 /**
- * The vela-bundler gas account for a Safe on a chain. The bundler pays gas from a
+ * The vela-relay gas account for a Safe on a chain. The bundler pays gas from a
  * per-Safe deposit address (NOT the Safe's own balance), so a real UserOp needs THIS
  * funded (or a sponsorship). Returns the deposit address + spendable balance (wei).
  */

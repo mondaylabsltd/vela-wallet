@@ -35,8 +35,8 @@
       "chainDataHint": "Ağ bilgisi, token verisi ve zincir logoları sağlar",
       "passkeyLabel": "PASSKEY DİZİNİ",
       "passkeyHint": "Cihazlar arası giriş için geçiş anahtarı açık anahtarlarını saklar",
-      "bundlerLabel": "BUNDLER SERVİSİ",
-      "bundlerHint": "Vela Bundler uyumlu bir uç nokta gereklidir",
+      "bundlerLabel": "VELA RELAY",
+      "bundlerHint": "Vela Relay uyumlu bir uç nokta gereklidir",
       "fiatLabel": "FİAT KURLARI",
       "fiatHint": "Para birimi listesini belirleyen USD tabanlı döviz kurları — daha geniş kapsam için değiştirilebilir.",
       "resetToDefaults": "Varsayılanlara Sıfırla"

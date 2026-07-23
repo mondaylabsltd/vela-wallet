@@ -35,8 +35,8 @@
       "chainDataHint": "네트워크 정보, 토큰 데이터, 체인 로고를 제공합니다",
       "passkeyLabel": "패스키 인덱스",
       "passkeyHint": "기기 간 로그인을 위해 패스키 공개 키를 저장합니다",
-      "bundlerLabel": "BUNDLER 서비스",
-      "bundlerHint": "Vela Bundler 호환 엔드포인트가 필요합니다",
+      "bundlerLabel": "VELA RELAY",
+      "bundlerHint": "Vela Relay 호환 엔드포인트가 필요합니다",
       "fiatLabel": "법정화폐 환율",
       "fiatHint": "USD 기준 환율로 통화 목록을 구성합니다 — 더 넓은 범위의 소스로 교체 가능.",
       "resetToDefaults": "기본값으로 재설정"

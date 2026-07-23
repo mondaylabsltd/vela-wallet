@@ -1,5 +1,5 @@
 /**
- * sendUserOpInBand — "sign what was displayed" (vela-bundler in-band gas).
+ * sendUserOpInBand — "sign what was displayed" (vela-relay in-band gas).
  *
  * The confirm slide's fee is signed VERBATIM: when a quotedFee {amount, recipient} is threaded
  * through, the send path must NOT re-quote at submit (no fresh vela_getInBandGasQuote) — the

@@ -35,8 +35,8 @@
       "chainDataHint": "Liefert Netzwerkinfos, Token-Daten und Chain-Logos",
       "passkeyLabel": "PASSKEY-INDEX",
       "passkeyHint": "Speichert öffentliche Passkey-Schlüssel für die geräteübergreifende Anmeldung",
-      "bundlerLabel": "BUNDLER-DIENST",
-      "bundlerHint": "Ein Vela-Bundler-kompatibler Endpunkt ist erforderlich",
+      "bundlerLabel": "VELA RELAY",
+      "bundlerHint": "Ein Vela-Relay-kompatibler Endpunkt ist erforderlich",
       "fiatLabel": "FIAT-KURSE",
       "fiatHint": "USD-basierte Wechselkurse für die Währungsliste — austauschbar für breitere Abdeckung.",
       "resetToDefaults": "Auf Standard zurücksetzen"

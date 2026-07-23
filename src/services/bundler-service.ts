@@ -29,7 +29,7 @@ export interface BundlerAccountInfo {
   depositAddress: string;
   /** Where the in-band gas reimbursement should be sent. Normally equals
    *  depositAddress; the bundler's TREASURY when its vault mode is enabled
-   *  (vela-bundler docs/pool-queue-architecture.md Stage 2). Absent on old
+   *  (vela-relay docs/pool-queue-architecture.md Stage 2). Absent on old
    *  bundlers — callers fall back to depositAddress. Funding/deposit flows
    *  must keep using depositAddress; only the reimbursement leg follows this. */
   settlementRecipient?: string;
@@ -134,7 +134,7 @@ export async function checkBundlerFunding(
 ): Promise<FundingNeeded | null> {
   await ensureEndpoints();
   const builtin = await isUsingBuiltinBundler(chainId);
-  console.log(`[BundlerFunding] chain=${chainId} isVelaBundler=${builtin}`);
+  console.log(`[BundlerFunding] chain=${chainId} isVelaRelay=${builtin}`);
   if (!builtin) return null;
 
   const info = await fetchBundlerAccountInfo(chainId, safeAddress);
@@ -564,7 +564,7 @@ export function underfundedRequiredWei(underfunded: BundlerUnderfunded): bigint 
  * funding modal even when a follow-up account lookup fails.
  */
 // ---------------------------------------------------------------------------
-// In-band gas settlement (generic chains) — vela-bundler docs/inband-gas-settlement.md
+// In-band gas settlement (generic chains) — vela-relay docs/inband-gas-settlement.md
 // ---------------------------------------------------------------------------
 
 /** One fee-asset entry returned by `vela_getInBandGasQuote`. The method now

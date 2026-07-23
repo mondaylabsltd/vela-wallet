@@ -1,5 +1,5 @@
 /**
- * Generic in-band gas settlement — wallet side (vela-bundler
+ * Generic in-band gas settlement — wallet side (vela-relay
  * docs/inband-gas-settlement.md).
  *
  * Every Vela UserOp signs maxFeePerGas = 0 and batches

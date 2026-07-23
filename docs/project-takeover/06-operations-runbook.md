@@ -12,7 +12,7 @@
 |---|---|---|---|
 | 某链 RPC | 该链余额停更 | 缓存余额+多端点转移+封禁(`rpc-pool.ts`);429 只静默用缓存 | 通常自愈;必要时在设置里换 RPC 或推荐用户自配 |
 | 所有内置 RPC(某链) | "网络异常"横幅 | `rpcFailedChains` 驱动 UI;缓存兜底 | 检查公共端点池;更新内置列表发版 |
-| vela-bundler | 发送失败(明确报错)、估算失败拒绝提交 | 3 重试+existingHash 恢复;大 calldata 直接拒绝 | 查 bundler 仓库/宿主;**gas 报价与错误文案都以它为权威** |
+| vela-relay | 发送失败(明确报错)、估算失败拒绝提交 | 3 重试+existingHash 恢复;大 calldata 直接拒绝 | 查 bundler 仓库/宿主;**gas 报价与错误文案都以它为权威** |
 | getvela.app/api | bundler 代理断 → 同上;汇率/NFT 缺失 | 服务端点可在 App 设置覆盖(`vela.serviceEndpoints`) | `wrangler tail` 看 Worker 日志;`wrangler rollback` |
 | p256-index | 新钱包创建时"同步失败"(可重试);**新设备恢复找不到钱包** | 创建时 3 重试+pending 队列自动补传 | 独立仓库排障;确认 D1/DO 状态。**资金不受影响**,可安抚用户 |
 | WalletPair relay | dApp 连接断 | 60s reconnecting 宽限+会话持久化自动重连 | 检查 relay 服务 |
@@ -24,7 +24,7 @@
 历史惨案区。原则:bundler 报价是权威,钱包 RPC 永不否决。查 `getBundlerGasQuote`(`safe-transaction.ts:1464`)与 bundler 侧 `pimlico_getUserOperationGasPrice`。回归测试在 `bundler-service.test.ts`。
 
 **充值 modal 不弹 / 弹错**
-`parseBundlerUnderfunded`(`bundler-service.ts:367`)字符串匹配 vela-bundler 错误文案。两仓文案是否同步?
+`parseBundlerUnderfunded`(`bundler-service.ts:367`)字符串匹配 vela-relay 错误文案。两仓文案是否同步?
 
 **用户报"余额清零"**
 某链 RPC 失败绝不应清零(merge-by-chain 回归测试保护)。若真发生,查 `wallet-api.ts` 缓存合并逻辑。

@@ -35,8 +35,8 @@
       "chainDataHint": "Предоставляет информацию о сетях, данные токенов и логотипы сетей",
       "passkeyLabel": "ИНДЕКС PASSKEY",
       "passkeyHint": "Хранит открытые ключи passkey для входа с разных устройств",
-      "bundlerLabel": "СЕРВИС BUNDLER",
-      "bundlerHint": "Требуется эндпоинт, совместимый с Vela Bundler",
+      "bundlerLabel": "VELA RELAY",
+      "bundlerHint": "Требуется эндпоинт, совместимый с Vela Relay",
       "fiatLabel": "КУРСЫ ВАЛЮТ",
       "fiatHint": "Курсы валют на основе USD, формирующие список валют — можно заменить для более широкого охвата.",
       "resetToDefaults": "Сбросить к стандартным"

@@ -2,7 +2,7 @@
  * dApp connection — REAL on-chain settlement on Gnosis (opt-in). [@onchain]
  *
  * The one test that proves the whole stack works together on a live chain: the fixture
- * passkey signs a real ERC-4337 UserOp, the vela bundler submits it, the RIP-7212 P256
+ * passkey signs a real ERC-4337 UserOp, the vela relay submits it, the RIP-7212 P256
  * precompile + EntryPoint + Safe4337Module settle it on Gnosis (chain 100), and the dApp
  * gets a real transaction hash back.
  *
@@ -39,7 +39,7 @@ test.describe('@onchain parallel-space · real Gnosis settlement', () => {
       `Fund Parallel One (${FIXTURE.one}) with a little xDAI on Gnosis — balance ${balance} wei`,
     );
 
-    // The vela-bundler pays gas from a per-Safe deposit address, not the Safe balance.
+    // The vela-relay pays gas from a per-Safe deposit address, not the Safe balance.
     const gas = await bundlerGasAccount(100, FIXTURE.one);
     test.skip(
       gas.spendableWei < MIN_GAS_WEI,

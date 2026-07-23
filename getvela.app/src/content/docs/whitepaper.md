@@ -65,7 +65,7 @@ Vela App (iOS / Android / Web, one codebase)
   • Clear-signing UI (ERC-7730)
         │  signed UserOperation
         ▼
-Vela Bundler (ERC-4337, self-hostable)
+Vela Relay (ERC-4337, self-hostable)
   • Submits handleOps to the EntryPoint
   • Cannot alter or forge your transaction
         ▼

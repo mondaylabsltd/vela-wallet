@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-When calling the Vela bundler, Vela **picks the fastest RPC for the chain and forwards it** via an
+When calling the Vela Relay, Vela **picks the fastest RPC for the chain and forwards it** via an
 `X-Rpc-Url` header, so the bundler reaches the chain through a known-good endpoint. `poolBundlerCall`
 races all endpoints with a 3s `eth_chainId` ping, caches the winner per chain (~1h), and passes it
 along — **critical for Tempo's in-band reimbursement** to reach the right bundler EOA (G10).

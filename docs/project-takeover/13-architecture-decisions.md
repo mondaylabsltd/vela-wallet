@@ -125,7 +125,7 @@ Gnosis 链上反复出现 "gas price too low" 提交失败与费率显示 "—" 
 
 **代价**
 - 信任集中于自营 bundler:它报错价(bug 或被攻破)时,钱包只有 3× 滥价上限这一层薄防御,且该防御在部分链上 fail-open。
-- 跨仓库语义耦合:报价协议、错误文案(`parseBundlerUnderfunded`,`bundler-service.ts:367`)与 vela-bundler 仓库强耦合,改一边必须同步另一边(03/06/07 号文档反复强调)。
+- 跨仓库语义耦合:报价协议、错误文案(`parseBundlerUnderfunded`,`bundler-service.ts:367`)与 vela-relay 仓库强耦合,改一边必须同步另一边(03/06/07 号文档反复强调)。
 - Tempo 链例外处理(见 ADR-007)让"权威"规则带上脚注,增加理解成本。
 
 **替代方案(当时被拒)**

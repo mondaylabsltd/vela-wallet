@@ -35,8 +35,8 @@
       "chainDataHint": "Menyediakan info jaringan, data token, dan logo chain",
       "passkeyLabel": "INDEKS PASSKEY",
       "passkeyHint": "Menyimpan kunci publik passkey untuk masuk lintas perangkat",
-      "bundlerLabel": "LAYANAN BUNDLER",
-      "bundlerHint": "Endpoint yang kompatibel dengan Vela Bundler diperlukan",
+      "bundlerLabel": "VELA RELAY",
+      "bundlerHint": "Endpoint yang kompatibel dengan Vela Relay diperlukan",
       "fiatLabel": "KURS FIAT",
       "fiatHint": "Kurs berbasis USD yang menentukan daftar mata uang — ganti untuk cakupan lebih luas.",
       "resetToDefaults": "Setel Ulang ke Bawaan"

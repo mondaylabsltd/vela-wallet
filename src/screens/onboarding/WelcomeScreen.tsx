@@ -33,7 +33,7 @@ type ServiceHealth = {
 const SERVICE_IDENTITY: Record<string, string> = {
   data: 'ethereum-data',
   passkey: 'webauthn-p256-publickey-index',
-  bundler: 'vela-bundler',
+  bundler: 'vela-relay',
 };
 
 async function checkServiceEndpointHealth(
