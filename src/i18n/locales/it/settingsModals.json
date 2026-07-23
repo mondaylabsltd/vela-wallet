@@ -35,8 +35,8 @@
       "chainDataHint": "Fornisce informazioni sulle reti, dati dei token e logo delle reti",
       "passkeyLabel": "INDICE PASSKEY",
       "passkeyHint": "Memorizza le chiavi pubbliche delle passkey per l'accesso da più dispositivi",
-      "bundlerLabel": "SERVIZIO BUNDLER",
-      "bundlerHint": "È richiesto un endpoint compatibile con Vela Bundler",
+      "bundlerLabel": "VELA RELAY",
+      "bundlerHint": "È richiesto un endpoint compatibile con Vela Relay",
       "fiatLabel": "TASSI FIAT",
       "fiatHint": "Tassi di cambio in USD che definiscono l’elenco delle valute — sostituibile per una copertura più ampia.",
       "resetToDefaults": "Ripristina i valori predefiniti"

@@ -34,7 +34,7 @@
 | 4 | getvela.app API 代理(bundler/wallet/nft/transactions)带服务端 Alchemy/Pimlico key,无速率限制,CORS 只防浏览器 | `getvela.app/src/hooks.server.ts`(自述"curl 可达");各 +server.ts 无 rate limit(bug-report 除外) | ⬜ 未修。控制措施:Cloudflare 侧配 WAF/rate-limit 规则(运维操作,见 06);key 消耗有提供商侧上限告警可兜底 |
 | 5 | `/api/proxy` SSRF 黑名单有缺口(十进制 IP、IPv6-mapped、169.254、DNS rebinding) | `getvela.app/src/routes/api/proxy/+server.ts:5-30` | ⬜ 未修。Workers 运行时无内网/元数据服务可打,实际影响=开放代理滥用;与 P2-4 一并用 CF 规则控 |
 | 6 | 公钥索引服务是跨设备恢复单点(独立仓库,本审计范围外) | `src/services/public-key-index.ts`;memory: CF Worker+D1+DO | ⬜ 文档化(见 06/08):需确认 D1 备份策略 |
-| 7 | bundler 错误文案跨仓库字符串耦合 | `bundler-service.ts:367-385` ↔ vela-bundler handlers.ts | ⬜ 已有单测钉住钱包侧;改文案须两仓同步(03/07 已写明) |
+| 7 | bundler 错误文案跨仓库字符串耦合 | `bundler-service.ts:367-385` ↔ vela-relay handlers.ts | ⬜ 已有单测钉住钱包侧;改文案须两仓同步(03/07 已写明) |
 
 ### P3(技术债/优化)
 

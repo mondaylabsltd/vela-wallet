@@ -63,7 +63,7 @@ export const SAFE_PROXY_RUNTIME_CODE: string = (() => {
  * pays the beneficiary (mirrors the Safe self-deploy gate).
  *
  * CRITICAL: these three constants MUST be byte-identical to the bundler's
- * (vela-bundler/shared/contracts/splitter.ts). If any of them drift, the wallet deploys a
+ * (vela-relay/shared/contracts/splitter.ts). If any of them drift, the wallet deploys a
  * splitter at a different address than the bundler pays, and the split silently breaks. The
  * creation code is the pinned metadata-light / PUSH0-free build; regenerate ONLY via
  * `forge inspect VelaGasSettlementSplitter bytecode` and update both repos + the golden test

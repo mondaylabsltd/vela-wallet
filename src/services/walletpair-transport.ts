@@ -1,8 +1,8 @@
 /**
  * WalletPair transport adapter.
  *
- * Wraps a WalletSession from walletpair-sdk and implements the DAppTransport
- * interface so it plugs into the existing DAppConnectionProvider seamlessly.
+ * Implements the documented WalletPair wallet session directly and adapts it to
+ * DAppTransport so it plugs into DAppConnectionProvider seamlessly.
  *
  * Transport: WebSocket relay (web and mobile). Pairing happens over a relay
  * URL carried in the pairing URI — no Bluetooth.
@@ -11,34 +11,13 @@
 import { AppState, Platform, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  WalletSession,
-  WebSocketTransport,
-  evmChainId,
   parsePairingUri,
-  type Capabilities,
   type SessionPersistence,
-  type Transport as WPTransport,
-  type WalletPhase,
-} from 'walletpair-sdk';
-import * as WalletPairSDK from 'walletpair-sdk';
+  WalletPairSession,
+  type WalletPairPhase,
+  type EthereumRequest,
+} from './walletpair-protocol';
 import type { DAppTransport, DAppTransportEvents, DAppInfo, WalletInfo } from './dapp-transport';
-import { DEFAULT_NETWORKS, getAllNetworksSync } from '@/models/network';
-import { SAFE_PROXY_RUNTIME_CODE } from './safe-address';
-
-// Pipe the SDK's developer-only disconnect diagnostics (close code, relay
-// terminate reason, phase, willReconnect) to the dev console so disconnect
-// causes are queryable. NOT shown to end users (Metro/Flipper/Xcode logs only).
-// Forward-compatible: feature-detected, so it's a no-op until walletpair-sdk is
-// bumped to a version that exposes setDisconnectLogSink, then auto-activates.
-(WalletPairSDK as { setDisconnectLogSink?: (fn: (e: unknown) => void) => void }).setDisconnectLogSink?.(
-  (entry) => console.log('[WalletPair][disconnect]', entry),
-);
-// DEV-only: verbose SDK tracing (WS handshake, frames, phase) to Metro so we can see
-// exactly what the wallet-side connection does — BUG-5 (docs/KNOWN-BUGS.md): the app's
-// wallet joining drops the dApp peer even though a pure Node↔Node pairing works.
-if (__DEV__) {
-  (WalletPairSDK as { setWalletpairDebugLogging?: (on: boolean) => void }).setWalletpairDebugLogging?.(true);
-}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -46,166 +25,61 @@ if (__DEV__) {
 
 const STORAGE_KEY = 'vela.walletpairSession';
 
-/**
- * SDK-operation deadlines (not fetch timeouts — those live in net.ts). The relay
- * can silently drop a join or stay unreachable, so we bound those states rather
- * than letting the connect promise hang or the UI spin "reconnecting" forever.
- */
-const CONFIRM_JOIN_TIMEOUT_MS = 30_000;
 /** Max time to stay in the transient "reconnecting" state before surfacing a
- *  recoverable error. The session is kept (SDK may still recover / user can
+ *  recoverable error. The session is kept (a later retry may still recover / user can
  *  manually reconnect) — we just stop pretending it's about to come back. */
 const RECONNECT_MAX_MS = 60_000;
 
-/**
- * Read-only JSON-RPC methods the wallet will forward to its own RPC when a dApp
- * routes them over the channel (spec §9.6 Tier 2). They are declared explicitly
- * in capabilities.methods so the session-layer allowlist (protocol §7.1) admits
- * them — explicit negotiation rather than implicit pass-through.
- */
-const READ_ONLY_RPC_METHODS = [
-  'eth_call', 'eth_estimateGas', 'eth_getBalance', 'eth_getCode',
-  'eth_getStorageAt', 'eth_getTransactionCount', 'eth_getTransactionByHash',
-  'eth_getTransactionReceipt', 'eth_getLogs', 'eth_blockNumber',
-  'eth_getBlockByNumber', 'eth_getBlockByHash', 'eth_feeHistory',
-  'eth_gasPrice', 'eth_maxPriorityFeePerGas', 'eth_newFilter',
-  'eth_newBlockFilter', 'eth_getFilterChanges', 'eth_uninstallFilter',
-  'eth_sendRawTransaction', 'eth_syncing',
-];
+const SUPPORTED_METHODS = new Set([
+  'eth_requestAccounts', 'eth_accounts', 'eth_chainId', 'net_version',
+  'wallet_switchEthereumChain', 'wallet_addEthereumChain',
+  'wallet_getPermissions', 'wallet_requestPermissions',
+  'eth_sendTransaction', 'personal_sign',
+  'eth_signTypedData', 'eth_signTypedData_v1', 'eth_signTypedData_v3', 'eth_signTypedData_v4',
+  'wallet_sendCalls', 'wallet_getCallsStatus', 'wallet_getCapabilities',
+  'web3_clientVersion', 'eth_syncing', 'eth_blockNumber', 'eth_call',
+  'eth_estimateGas', 'eth_createAccessList', 'eth_gasPrice',
+  'eth_maxPriorityFeePerGas', 'eth_feeHistory', 'eth_getBalance',
+  'eth_getCode', 'eth_getStorageAt', 'eth_getProof', 'eth_getTransactionCount',
+  'eth_getBlockByHash', 'eth_getBlockByNumber', 'eth_getBlockTransactionCountByHash',
+  'eth_getBlockTransactionCountByNumber', 'eth_getTransactionByHash',
+  'eth_getTransactionByBlockHashAndIndex', 'eth_getTransactionByBlockNumberAndIndex',
+  'eth_getTransactionReceipt', 'eth_getLogs',
+]);
 
-/**
- * Race a promise against a deadline. On timeout, rejects with `message` — used to
- * bound SDK operations (confirmJoin) that would otherwise hang on a silent relay.
- * The underlying SDK operation is not cancelled (no AbortSignal in the SDK API);
- * we just stop awaiting it so the UI isn't frozen.
- */
-function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), ms);
-    p.then(
-      (v) => { clearTimeout(timer); resolve(v); },
-      (e) => { clearTimeout(timer); reject(e); },
-    );
-  });
+function caip2ToChainId(caip2: string): number {
+  const parsed = Number.parseInt(caip2.slice('eip155:'.length), 10);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) throw new TypeError('invalid EIP-155 chain ID');
+  return parsed;
 }
 
-/** Wallet capabilities advertised to dApps. */
-function buildCapabilities(): Capabilities {
-  const allNetworks = getAllNetworksSync();
-  const chains = allNetworks.map(n => evmChainId(n.chainId));
-
-  // Share RPC URLs so the dApp-side can proxy read-only requests locally
-  const rpcUrls: Record<string, string> = {};
-  for (const n of allNetworks) {
-    rpcUrls[evmChainId(n.chainId)] = n.rpcURL;
-  }
-
-  // Declare EIP-5792 capabilities per chain (smart contract wallet)
-  const walletCapabilities: Record<string, Record<string, unknown>> = {};
-  for (const n of allNetworks) {
-    const hexChainId = '0x' + n.chainId.toString(16);
-    walletCapabilities[hexChainId] = {
-      atomic: { status: 'supported' },
-    };
-  }
-
-  return {
-    methods: [
-      'wallet_getAccounts',
-      'wallet_sendTransaction',
-      'wallet_signTransaction',
-      'wallet_signMessage',
-      'wallet_signTypedData',
-      'wallet_switchChain',
-      'wallet_sendCalls',
-      'wallet_getCallsStatus',
-      ...READ_ONLY_RPC_METHODS,
-    ],
-    events: ['accountsChanged', 'chainChanged', 'disconnect'],
-    chains,
-    version: { evm: 1 },
-    rpcUrls,
-    walletCapabilities,
-    // Safe v1.4.1 SafeProxy *runtime* bytecode — what eth_getCode returns once
-    // deployed, and identical for every proxy from this factory (the singleton
-    // lives in storage slot 0, not in the code). Sent so the extension/SDK can
-    // answer eth_getCode with non-empty code for a counterfactual account, so
-    // dApps detect a smart contract wallet (EIP-1271) instead of an EOA.
-    contractBytecode: SAFE_PROXY_RUNTIME_CODE,
-  };
+function declaredChainId(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return value;
+  if (typeof value !== 'string') return null;
+  if (/^0x[0-9a-fA-F]+$/.test(value)) return Number.parseInt(value, 16);
+  if (/^[0-9]+$/.test(value)) return Number.parseInt(value, 10);
+  return null;
 }
 
-/** Map WalletPair method names → Ethereum JSON-RPC names used by use-dapp-signing. */
-const METHOD_MAP: Record<string, string> = {
-  wallet_signMessage: 'personal_sign',
-  wallet_signTypedData: 'eth_signTypedData_v4',
-  wallet_sendTransaction: 'eth_sendTransaction',
-  wallet_signTransaction: 'eth_sendTransaction',
-  wallet_getAccounts: 'eth_requestAccounts',
-  wallet_switchChain: 'wallet_switchEthereumChain',
-  wallet_sendCalls: 'wallet_sendCalls',
-};
-
-/**
- * Convert WalletPair request params (single object) back to Ethereum JSON-RPC
- * array format that use-dapp-signing.ts expects.
- *
- * WalletPair EVM sub-protocol sends:
- *   wallet_signMessage    → { message: "text", address: "0x..." }
- *   wallet_signTypedData  → { address: "0x...", typedData: {...} }
- *   wallet_sendTransaction → { address: "0x...", tx: { to, value, data, ... } }
- *   wallet_switchChain    → { chain: "eip155:137" }
- *   wallet_getAccounts    → {} or undefined
- *
- * Ethereum JSON-RPC expects:
- *   personal_sign          → [hexMessage, address]
- *   eth_signTypedData_v4   → [address, typedDataJSON]
- *   eth_sendTransaction    → [{ to, value, data, ... }]
- *   wallet_switchEthereumChain → [{ chainId: "0x89" }]
- *   eth_requestAccounts    → []
- */
-function walletPairParamsToJsonRpc(mappedMethod: string, params: unknown): any[] {
-  if (params == null) return [];
-  if (Array.isArray(params)) return params;
-  const p = params as Record<string, any>;
-
-  switch (mappedMethod) {
-    case 'personal_sign': {
-      // WalletPair sends UTF-8 text; personal_sign expects hex-encoded bytes
-      let hexMsg = p.message ?? '';
-      if (typeof hexMsg === 'string' && !hexMsg.startsWith('0x')) {
-        const bytes = new TextEncoder().encode(hexMsg);
-        hexMsg = '0x' + Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-      }
-      return [hexMsg, p.address ?? ''];
+/** The encrypted CAIP-2 suffix is the authoritative chain context. */
+function assertRequestChainContext(method: string, params: any[], caip2: string): void {
+  const expected = caip2ToChainId(caip2);
+  let candidate: unknown;
+  if (method === 'eth_sendTransaction' || method === 'wallet_sendCalls') candidate = params[0]?.chainId;
+  if (method.includes('signTypedData')) {
+    const typed = params[1] ?? params[0];
+    try {
+      candidate = typeof typed === 'string' ? JSON.parse(typed)?.domain?.chainId : typed?.domain?.chainId;
+    } catch {
+      // The signing validator will return a method-specific invalid-params error.
+      return;
     }
-    case 'eth_signTypedData_v4': {
-      // use-dapp-signing reads params[1] ?? params[0]
-      const typedData = typeof p.typedData === 'string' ? p.typedData : JSON.stringify(p.typedData);
-      return [p.address ?? '', typedData];
-    }
-    case 'eth_sendTransaction': {
-      // use-dapp-signing reads params[0] as { to, value, data }
-      return [p.tx ?? p];
-    }
-    case 'wallet_switchEthereumChain': {
-      // WalletPair sends { chain: "eip155:137" }, JSON-RPC expects [{ chainId: "0x89" }]
-      const caip2 = p.chain as string | undefined;
-      if (caip2?.startsWith('eip155:')) {
-        const num = parseInt(caip2.split(':')[1], 10);
-        return [{ chainId: '0x' + num.toString(16) }];
-      }
-      return [p];
-    }
-    case 'eth_requestAccounts':
-      return [];
-    case 'wallet_sendCalls':
-      // Pass through as-is — the params object is the EIP-5792 sendCalls payload
-      return [p];
-    default:
-      return [p];
   }
+  if (candidate === undefined || candidate === null) return;
+  const actual = declaredChainId(candidate);
+  if (actual === null || actual !== expected) throw new TypeError('request chain ID does not match its WalletPair chain context');
 }
+
 
 // ---------------------------------------------------------------------------
 // AsyncStorage-backed persistence
@@ -261,7 +135,7 @@ export interface WalletPairPrepareResult {
 export class WalletPairTransport implements DAppTransport {
   readonly name = 'WalletPair';
 
-  private session: WalletSession;
+  private session: WalletPairSession;
   private _connected = false;
   private _dappInfo: DAppInfo;
   private listeners = new Map<string, Set<Function>>();
@@ -275,8 +149,11 @@ export class WalletPairTransport implements DAppTransport {
   private backgroundedAt: number | null = null;
   /** Bounds the transient "reconnecting" state so it can't spin forever. */
   private reconnectDeadline: ReturnType<typeof setTimeout> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempt = 0;
+  private connectEventSent = false;
 
-  private constructor(session: WalletSession, dappInfo: DAppInfo) {
+  private constructor(session: WalletPairSession, dappInfo: DAppInfo) {
     this.session = session;
     this._dappInfo = dappInfo;
     this.wireSessionEvents();
@@ -297,21 +174,11 @@ export class WalletPairTransport implements DAppTransport {
    * Returns the fingerprint for user verification and a transport ready to connect().
    */
   static prepare(uri: string): WalletPairPrepareResult {
-    const parsed = parsePairingUri(uri);
-
-    const relayUrl = parsed.relay;
-    if (!relayUrl) {
-      throw new Error('This pairing code has no relay URL. Vela Connect pairs over a relay — please scan a current Vela Connect QR code.');
-    }
-    const sdkTransport: WPTransport = new WebSocketTransport(relayUrl);
-
+    const parsed = parsePairingUri(uri.trim());
     const persistence = createPersistence();
-    const session = new WalletSession({
-      transport: sdkTransport,
-      capabilities: buildCapabilities(),
+    const session = new WalletPairSession({
       meta: {
         name: 'Vela Wallet',
-        description: 'Smart wallet powered by passkeys',
         url: 'https://getvela.app',
         icon: 'https://getvela.app/icon.png',
       },
@@ -338,35 +205,20 @@ export class WalletPairTransport implements DAppTransport {
     const snapshot = await loadWalletPairSnapshot();
     if (!snapshot) return null;
 
-    // Parse snapshot to extract relay URL and dApp name for display
-    let relayUrl = '';
-    let dappName = 'dApp';
+    let dappInfo: DAppInfo;
     try {
-      // Snapshot may be HMAC-signed: <64hex>.<json>
-      const json = snapshot.length > 65 && snapshot[64] === '.'
-        ? snapshot.slice(65)
-        : snapshot;
-      const data = JSON.parse(json);
-      relayUrl = data.relayUrl ?? '';
-      dappName = data.dappName ?? 'dApp';
+      const data = JSON.parse(snapshot) as { dapp?: DAppInfo };
+      if (!data.dapp?.name || !data.dapp.url) throw new TypeError('missing dApp metadata');
+      dappInfo = { name: data.dapp.name, url: data.dapp.url, icon: data.dapp.icon };
     } catch {
       await clearWalletPairSession();
       return null;
     }
 
-    if (!relayUrl) {
-      await clearWalletPairSession();
-      return null;
-    }
-
-    const wsTransport = new WebSocketTransport(relayUrl);
     const persistence = createPersistence();
-    const session = new WalletSession({
-      transport: wsTransport,
-      capabilities: buildCapabilities(),
+    const session = new WalletPairSession({
       meta: {
         name: 'Vela Wallet',
-        description: 'Smart wallet powered by passkeys',
         url: 'https://getvela.app',
         icon: 'https://getvela.app/icon.png',
       },
@@ -379,10 +231,7 @@ export class WalletPairTransport implements DAppTransport {
       return null;
     }
 
-    const dappInfo: DAppInfo = { name: dappName, url: '' };
     const transport = new WalletPairTransport(session, dappInfo);
-    // Session is already in 'connected' phase after restore — set flag
-    transport._connected = true;
     return transport;
   }
 
@@ -395,13 +244,7 @@ export class WalletPairTransport implements DAppTransport {
   async connect(): Promise<void> {
     console.log('[WalletPair] confirmJoin starting...');
     try {
-      // Bound confirmJoin: if the relay silently drops the join (CF hibernation,
-      // dropped packet) the SDK promise can hang forever, freezing the connect UI.
-      await withTimeout(
-        this.session.confirmJoin(),
-        CONFIRM_JOIN_TIMEOUT_MS,
-        'WalletPair connection timed out — check the dApp and try a fresh pairing QR.',
-      );
+      await this.session.confirmJoin();
       console.log('[WalletPair] confirmJoin resolved, phase:', this.session.phase);
     } catch (err) {
       console.log('[WalletPair] confirmJoin failed:', err);
@@ -411,19 +254,22 @@ export class WalletPairTransport implements DAppTransport {
 
   /** Force an immediate reconnect (also used for the manual "Reconnect now"). */
   async reconnect(): Promise<void> {
-    if (this.session.phase === 'idle' || this.session.phase === 'closed') return;
+    if (this.session.phase !== 'disconnected') return;
+    this.clearScheduledReconnect();
     this.emit('reconnecting');
     await this.session.reconnect();
   }
 
   disconnect(): void {
+    const wasConnected = this._connected;
     this._connected = false;
     this.stopHeartbeat();
     this.clearReconnectDeadline();
+    this.clearScheduledReconnect();
     this.teardownAppStateRecovery();
     this.teardownWebRecovery();
     this.session.destroy();
-    this.emit('disconnected');
+    if (!wasConnected) this.emit('disconnected');
     this.listeners.clear();
   }
 
@@ -433,36 +279,39 @@ export class WalletPairTransport implements DAppTransport {
     // dApp will time out on its side; we log so the failure is diagnosable.
     try {
       if (error) {
-        // Drop the tracked method on the reject path too — wrapResult (which clears
-        // it on success) is never reached for errors, so otherwise the entry leaks.
-        this.requestMethodMap.delete(id);
-        this.session.reject(id, String(error.code), error.message);
+        this.session.reject(id, error.code, error.message);
       } else {
-        // Wrap result in WalletPair EVM sub-protocol format.
-        // The dApp's EIP-1193 provider unwraps these via mapResponse().
-        this.session.approve(id, this.wrapResult(id, result));
+        // The Ethereum protocol resolves the EIP-1193 result itself, not a
+        // WalletPair-specific wrapper object.
+        this.session.approve(id, result ?? null);
       }
     } catch (e) {
-      this.requestMethodMap.delete(id);
-      console.warn(`[WalletPair] failed to deliver response ${id}:`, e instanceof Error ? e.message : e);
+      const message = e instanceof Error ? e.message : String(e);
+      console.warn(`[WalletPair] failed to deliver response ${id}:`, message);
+      // A bad application result can be converted into a valid ProviderRpcError
+      // while the request ID is still outstanding (WalletPairSession validates
+      // before deleting it). This is much better than leaving the dApp waiting.
+      if (!error) {
+        try {
+          this.session.reject(id, -32603, 'Wallet could not encode the response');
+          return;
+        } catch { /* the channel/request is already gone */ }
+      }
+      this.emit('error', `Unable to return WalletPair response: ${message}`);
     }
   }
-
-  /** Track which WalletPair method each request came from so we can wrap the response correctly. */
-  private requestMethodMap = new Map<string, string>();
 
   pushWalletInfo(info: WalletInfo): void {
     if (!this._connected) return;
     try {
-      this.session.pushEvent('accountsChanged', {
-        accounts: info.accounts.map(a => ({
-          address: a.address,
-          chains: DEFAULT_NETWORKS.map(n => evmChainId(n.chainId)),
-        })),
-      });
-      this.session.pushEvent('chainChanged', {
-        chain: evmChainId(info.chainId),
-      });
+      const caip2 = `eip155:${info.chainId}`;
+      const chainId = '0x' + info.chainId.toString(16);
+      if (!this.connectEventSent) {
+        this.session.pushEvent('connect', { chainId }, caip2);
+        this.connectEventSent = true;
+      }
+      this.session.pushEvent('accountsChanged', info.accounts.map(a => a.address), caip2);
+      this.session.pushEvent('chainChanged', chainId, caip2);
     } catch (e) {
       console.warn('[WalletPair] failed to push wallet info:', e instanceof Error ? e.message : e);
     }
@@ -486,36 +335,6 @@ export class WalletPairTransport implements DAppTransport {
   private emit(event: string, ...args: any[]) {
     const set = this.listeners.get(event);
     if (set) set.forEach(fn => fn(...args));
-  }
-
-  /**
-   * Wrap Ethereum-format result into WalletPair EVM sub-protocol format.
-   * The dApp's EIP-1193 provider (mapResponse) unwraps these.
-   */
-  private wrapResult(requestId: string, result: any): any {
-    const wpMethod = this.requestMethodMap.get(requestId);
-    this.requestMethodMap.delete(requestId);
-
-    switch (wpMethod) {
-      case 'wallet_signMessage':
-      case 'wallet_signTypedData':
-        // dApp expects { signature: "0x..." }
-        return { signature: result };
-      case 'wallet_sendTransaction':
-        // dApp expects { txHash: "0x..." }
-        return { txHash: result };
-      case 'wallet_sendCalls':
-        // dApp expects { id: "0x..." } — the bundle ID (tx hash)
-        return { id: result };
-      case 'wallet_getAccounts':
-        // dApp expects { accounts: [{ address, chains }] }
-        if (Array.isArray(result)) {
-          return { accounts: result.map((a: string) => ({ address: a, chains: buildCapabilities().chains })) };
-        }
-        return result;
-      default:
-        return result;
-    }
   }
 
   // -----------------------------------------------------------------------
@@ -543,7 +362,7 @@ export class WalletPairTransport implements DAppTransport {
     this.reconnectDeadline = setTimeout(() => {
       this.reconnectDeadline = null;
       if (this._connected) return; // recovered in the meantime
-      // The relay is taking too long (or is down). Keep the session — the SDK may
+      // The relay is taking too long (or is down). Keep the session — the protocol may
       // still recover and the user can hit "Reconnect now" — but surface a clear,
       // recoverable error so the UI exits the indefinite "reconnecting" state.
       console.log('[WalletPair] reconnect deadline hit — still not connected');
@@ -560,7 +379,7 @@ export class WalletPairTransport implements DAppTransport {
   // -----------------------------------------------------------------------
   //
   // When the OS backgrounds the app, React Native suspends JS timers — the
-  // heartbeat stops and the SDK's reconnect-backoff timers freeze — and the
+  // heartbeat and our reconnect backoff freeze — and the
   // relay/NAT idle-closes the WebSocket (~30s). On return to foreground the
   // socket is usually dead while `_connected` may still read true (the close
   // event never fired while JS was suspended). So on foreground we force a
@@ -583,7 +402,7 @@ export class WalletPairTransport implements DAppTransport {
 
     // Nothing to recover before pairing has started ('idle') or once the session
     // is finished ('closed'); the normal connect() flow owns the initial join.
-    if (this.session.phase === 'idle' || this.session.phase === 'closed') return;
+    if (this.session.phase !== 'disconnected' && this.session.phase !== 'connected') return;
 
     // If we're not connected, or we were backgrounded long enough that the relay
     // has almost certainly idle-closed the socket, force an immediate reconnect
@@ -592,7 +411,9 @@ export class WalletPairTransport implements DAppTransport {
     const STALE_AFTER_MS = 20_000;
     if (!this._connected || backgroundedMs >= STALE_AFTER_MS) {
       console.log('[WalletPair] foreground: forcing reconnect (bg', backgroundedMs, 'ms)');
-      this.session.reconnect().catch((e) => console.log('[WalletPair] foreground reconnect failed:', e));
+      if (this.session.phase === 'disconnected') {
+        this.reconnect().catch((e) => console.log('[WalletPair] foreground reconnect failed:', e));
+      }
     } else {
       this.session.ping();
     }
@@ -608,7 +429,7 @@ export class WalletPairTransport implements DAppTransport {
   // -----------------------------------------------------------------------
   //
   // On mobile web the relay socket dies whenever the tab is backgrounded or the
-  // network flaps (Wi-Fi↔5G, VPN reconnect), and the SDK's reconnect backoff can
+  // network flaps (Wi-Fi↔5G, VPN reconnect), and a reconnect backoff can
   // stretch out — leaving the panel stuck on "重新连接中…" until the user taps
   // "立即重连". React Native's AppState only models tab visibility, never the
   // `online` event, so we listen for both browser signals directly and force an
@@ -638,7 +459,7 @@ export class WalletPairTransport implements DAppTransport {
    * reconnect, and a no-op before pairing ('idle') or after teardown ('closed').
    */
   private recoverNow(reason: string) {
-    if (this.session.phase === 'idle' || this.session.phase === 'closed') return;
+    if (this.session.phase !== 'disconnected' && this.session.phase !== 'connected') return;
     const now = Date.now();
     if (now - this.lastRecoverAt < 3000) return;
     this.lastRecoverAt = now;
@@ -646,7 +467,7 @@ export class WalletPairTransport implements DAppTransport {
       console.log('[WalletPair] web recovery: forcing reconnect (', reason, ')');
       this.emit('reconnecting');
       this.startReconnectDeadline();
-      this.session.reconnect().catch((e) => console.log('[WalletPair] web recovery reconnect failed:', e));
+      this.reconnect().catch((e) => console.log('[WalletPair] web recovery reconnect failed:', e));
     } else {
       this.session.ping();
     }
@@ -657,14 +478,34 @@ export class WalletPairTransport implements DAppTransport {
   }
 
   // -----------------------------------------------------------------------
+  // Reconnect backoff
+  // -----------------------------------------------------------------------
+
+  private scheduleReconnect() {
+    if (this.reconnectTimer || this.session.phase !== 'disconnected') return;
+    const delay = Math.min(1_000 * 2 ** this.reconnectAttempt, 30_000);
+    this.reconnectAttempt += 1;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.reconnect().catch(() => this.scheduleReconnect());
+    }, delay);
+  }
+
+  private clearScheduledReconnect() {
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+  }
+
+  // -----------------------------------------------------------------------
   // Session event wiring
   // -----------------------------------------------------------------------
 
   private wireSessionEvents() {
-    this.session.on('phase', (phase: WalletPhase) => {
+    this.session.on('phase', (phase: WalletPairPhase) => {
       console.log('[WalletPair] phase:', phase);
       if (phase === 'connected') {
         this._connected = true;
+        this.reconnectAttempt = 0;
+        this.clearScheduledReconnect();
         this.clearReconnectDeadline();
         this.startHeartbeat();
         this.emit('connected', this._dappInfo.name || 'WalletPair');
@@ -672,6 +513,7 @@ export class WalletPairTransport implements DAppTransport {
         const wasConnected = this._connected;
         this._connected = false;
         this.stopHeartbeat();
+        this.clearScheduledReconnect();
         this.clearReconnectDeadline();
         this.teardownAppStateRecovery();
         this.teardownWebRecovery();
@@ -682,31 +524,36 @@ export class WalletPairTransport implements DAppTransport {
           this.emit('error', 'Connection closed by dApp or relay. Try a fresh pairing URI.');
         }
       } else if (phase === 'disconnected') {
-        // Transport-level disconnect — SDK will auto-reconnect with backoff.
-        // Don't mark as disconnected yet; emit 'reconnecting' so the UI can
-        // show a subtle indicator instead of resetting to fully disconnected.
+        // Transport-level disconnect. Keep the session and retry with a bounded
+        // backoff; the encrypted counter state survives the new WebSocket.
         this._connected = false;
+        this.connectEventSent = false;
         this.stopHeartbeat();
         this.emit('reconnecting');
         this.startReconnectDeadline();
-        console.log('[WalletPair] transport disconnected, SDK will retry...');
+        this.scheduleReconnect();
+        console.log('[WalletPair] transport disconnected; reconnecting...');
       }
     });
 
-    this.session.on('request', (req: { id: string; method: string; params: unknown }) => {
+    this.session.on('request', (req: EthereumRequest) => {
       console.log('[WalletPair] request:', req.method, req.id);
-      // Isolate bad data: a malformed params payload must reject THIS request, not
-      // throw out of the SDK callback and tear down the whole channel.
       try {
-        const wpMethod = req.method;
-        const mappedMethod = METHOD_MAP[wpMethod] ?? wpMethod;
-        const params = walletPairParamsToJsonRpc(mappedMethod, req.params);
-        this.requestMethodMap.set(req.id, wpMethod);
+        if (!SUPPORTED_METHODS.has(req.method)) {
+          console.warn(`[WalletPair] rejecting unsupported method ${req.method}; no signing sheet will open`);
+          this.session.reject(req.id, 4200, `Unsupported WalletPair method: ${req.method}`);
+          return;
+        }
+        if (!Array.isArray(req.params)) throw new TypeError('Ethereum RPC params must be an array for this method');
+        assertRequestChainContext(req.method, req.params, req.caip2);
         const origin = this._dappInfo.url || this._dappInfo.name || 'walletpair';
-        this.emit('request', req.id, mappedMethod, params, origin);
+        if (req.method === 'eth_sendTransaction' || req.method === 'personal_sign' || req.method.includes('signTypedData') || req.method === 'wallet_sendCalls') {
+          console.log('[WalletPair] routing signing request to approval sheet:', req.method, req.id);
+        }
+        this.emit('request', req.id, req.method, req.params, origin, caip2ToChainId(req.caip2));
       } catch (e) {
         console.warn(`[WalletPair] dropping malformed request ${req.id} (${req.method}):`, e instanceof Error ? e.message : e);
-        try { this.session.reject(req.id, '-32602', 'Invalid params'); } catch { /* channel gone */ }
+        try { this.session.reject(req.id, -32602, 'Invalid params'); } catch { /* channel gone */ }
       }
     });
 

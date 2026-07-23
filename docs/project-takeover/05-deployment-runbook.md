@@ -12,7 +12,7 @@
 | iOS App     | .ipa                     | App Store Connect                    | `eas build -p ios --profile production`(EAS 托管证书;Xcode Archive 为后备) |
 | Android App | .aab                     | Google Play                          | `eas build -p android --profile production`(EAS 托管 keystore;本地 gradlew 为后备,见下) |
 
-另有两个**独立仓库**的服务(不在本仓库,部署互不耦合但语义耦合):vela-bundler(gas 报价与错误文案)、p256-index(公钥索引)。
+另有两个**独立仓库**的服务(不在本仓库,部署互不耦合但语义耦合):vela-relay(gas 报价与错误文案)、p256-index(公钥索引)。
 
 ## 发布前检查(每次)
 
@@ -29,7 +29,7 @@ cd getvela.app && bun run check   # 0 errors
 发布 checklist 附加项:
 
 - [ ]  (手动部署单元:官网/移动端)`git status` 干净、在 main 上——commit hash 由 `app.config.js` 构建时注入,脏工作区构建会给"未提交的代码"打上"最近 commit"的标签。Web 钱包对此已免疫:CF Pages 只从已合并的 main commit 构建
-- [ ]  若改过 bundler 错误文案或 `parseBundlerUnderfunded`:与 vela-bundler 仓库联合验证
+- [ ]  若改过 bundler 错误文案或 `parseBundlerUnderfunded`:与 vela-relay 仓库联合验证
 - [ ]  若改过 approval-guard / 签名编码:在 parallel space 手动过一遍 clear-signing 场景页
 - [ ]  若动过依赖:重跑全量 E2E
 

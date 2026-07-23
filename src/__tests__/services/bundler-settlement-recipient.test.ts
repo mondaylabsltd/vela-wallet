@@ -1,5 +1,5 @@
 /**
- * fetchBundlerAccountInfo — settlementRecipient mapping (vela-bundler vault mode,
+ * fetchBundlerAccountInfo — settlementRecipient mapping (vela-relay vault mode,
  * docs/pool-queue-architecture.md Stage 2).
  *
  * The bundler tells the wallet where the in-band gas reimbursement should go:

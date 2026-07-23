@@ -27,8 +27,8 @@
 			<div class="col">
 				<h3>Infrastructure</h3>
 				<a href="https://walletpair.org/" target="_blank" rel="noopener">WalletPair</a>
-				<a href="https://github.com/mondaylabsltd/vela-bundler" target="_blank" rel="noopener"
-					>Vela Bundler</a
+				<a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener"
+					>Vela Relay</a
 				>
 				<a href="https://ethereum-data.awesometools.dev/" target="_blank" rel="noopener"
 					>Chain Data Index</a

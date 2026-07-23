@@ -35,8 +35,8 @@
       "chainDataHint": "Cung cấp thông tin mạng, dữ liệu token và logo chain",
       "passkeyLabel": "CHỈ MỤC PASSKEY",
       "passkeyHint": "Lưu khóa công khai của passkey để đăng nhập trên nhiều thiết bị",
-      "bundlerLabel": "DỊCH VỤ BUNDLER",
-      "bundlerHint": "Cần điểm cuối tương thích với Vela Bundler",
+      "bundlerLabel": "VELA RELAY",
+      "bundlerHint": "Cần điểm cuối tương thích với Vela Relay",
       "fiatLabel": "TỶ GIÁ FIAT",
       "fiatHint": "Tỷ giá theo USD tạo nên danh sách tiền tệ — có thể thay bằng nguồn phủ rộng hơn.",
       "resetToDefaults": "Khôi phục mặc định"

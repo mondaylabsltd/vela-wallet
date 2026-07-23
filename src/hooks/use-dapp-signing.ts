@@ -483,6 +483,7 @@ export const INSTANT_READONLY_METHODS = new Set([
   'wallet_getPermissions',
   'wallet_requestPermissions',
   'wallet_addEthereumChain',
+  'wallet_getCapabilities',
 ]);
 
 /**
@@ -535,7 +536,10 @@ export async function handleReadOnlyRPC(
   switch (method) {
     case 'eth_accounts':
     case 'eth_requestAccounts':
-      return { handled: true, result: [address] };
+      // Never let an unhydrated/no-longer-selected account produce
+      // `[undefined]`: that is outside the encrypted protocol's JSON data model
+      // and would otherwise make the dApp wait until its own timeout.
+      return { handled: true, result: address ? [address] : [] };
     case 'eth_chainId':
       return { handled: true, result: '0x' + chainId.toString(16) };
     case 'net_version':
@@ -548,6 +552,10 @@ export async function handleReadOnlyRPC(
       return { handled: true, result: [{ parentCapability: 'eth_accounts' }] };
     case 'wallet_addEthereumChain':
       return { handled: true, result: null };
+    case 'wallet_getCapabilities':
+      return { handled: true, result: {
+        ['0x' + chainId.toString(16)]: { atomic: { status: 'supported' } },
+      } };
     // EIP-5792: poll the status of a prior wallet_sendCalls batch by its ID
     // (the userOpHash returned from handleSendCalls).
     case 'wallet_getCallsStatus': {

@@ -35,8 +35,8 @@
       "chainDataHint": "Provides network info, token data, and chain logos",
       "passkeyLabel": "PASSKEY INDEX",
       "passkeyHint": "Stores passkey public keys for cross-device sign-in",
-      "bundlerLabel": "BUNDLER SERVICE",
-      "bundlerHint": "Vela Bundler compatible endpoint required",
+      "bundlerLabel": "VELA RELAY",
+      "bundlerHint": "Vela Relay compatible endpoint required",
       "fiatLabel": "FIAT RATES",
       "fiatHint": "USD-based exchange rates that drive the currency list — swap for wider coverage.",
       "resetToDefaults": "Reset to Defaults"

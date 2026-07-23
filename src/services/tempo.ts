@@ -163,7 +163,7 @@ export function tempoReimbursement(
 /**
  * Gas buffer the BUNDLER adds to the real simulated gas when computing the cost the EOA
  * reimbursement transfer must clear (bundler rejects if `reimbursed_to_EOA < (gasUsed + this) × price`).
- * MUST match TEMPO_COST_BUFFER_GAS in vela-bundler/shared/tempo.ts.
+ * MUST match TEMPO_COST_BUFFER_GAS in vela-relay/shared/tempo.ts.
  */
 export const TEMPO_COST_BUFFER_GAS = 80_000n;
 

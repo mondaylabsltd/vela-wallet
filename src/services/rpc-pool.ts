@@ -374,7 +374,7 @@ async function collectBundlerUrls(chainId: number): Promise<{ url: string; sourc
     if (net?.bundlerURL) add(net.bundlerURL, 'user');
   }
 
-  // 3. Built-in vela bundler (always available as fallback)
+  // 3. Built-in vela relay (always available as fallback)
   add(`${getBuiltinBundler()}/${chainId}`, 'builtin');
 
   return entries;
@@ -838,7 +838,7 @@ export async function poolRpcCall(
 
 /**
  * Make a bundler RPC call with automatic failover.
- * Sends X-Rpc-Url header so the vela bundler knows how to reach the chain.
+ * Sends X-Rpc-Url header so the vela relay knows how to reach the chain.
  */
 export async function poolBundlerCall(
   method: string,
@@ -929,14 +929,14 @@ function shorten(url: string): string {
 }
 
 /**
- * Check whether the built-in vela bundler will be used for a given chain.
+ * Check whether the built-in vela relay will be used for a given chain.
  * Returns true if no user-configured bundler is available.
  * Ensures the pool is initialized before checking.
  */
 export async function isUsingBuiltinBundler(chainId: number): Promise<boolean> {
   await ensurePool(chainId);
   const pool = bundlerPools.get(chainId) ?? [];
-  // Check if any healthy non-vela bundler exists.
+  // Check if any healthy non-vela relay exists.
   // User-configured endpoints pointing at the built-in bundler still count as built-in.
   const builtinHost = getBuiltinBundler();
   const externalEndpoints = pool.filter(

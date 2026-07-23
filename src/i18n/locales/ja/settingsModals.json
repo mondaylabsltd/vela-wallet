@@ -35,8 +35,8 @@
       "chainDataHint": "ネットワーク情報、トークンデータ、チェーンのロゴを提供します",
       "passkeyLabel": "パスキーインデックス",
       "passkeyHint": "端末をまたいだサインインのためにパスキーの公開鍵を保存します",
-      "bundlerLabel": "BUNDLER サービス",
-      "bundlerHint": "Vela Bundler 互換のエンドポイントが必要です",
+      "bundlerLabel": "VELA RELAY",
+      "bundlerHint": "Vela Relay 互換のエンドポイントが必要です",
       "fiatLabel": "法定通貨レート",
       "fiatHint": "USD ベースの為替レート。通貨リストを構成します — より広いカバレッジのソースに差し替え可能。",
       "resetToDefaults": "デフォルトに戻す"

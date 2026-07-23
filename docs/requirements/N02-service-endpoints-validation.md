@@ -13,7 +13,7 @@
 Vela is **self-hostable end-to-end**: users configure custom endpoints in **Settings → Advanced →
 Service Endpoints**. Each candidate is **validated before acceptance** — HTTPS only, reachable within
 10s, and `/api/health` returns the correct `service` id + `status: "ok"`. Services: **Chain Data Index**
-(`atshelchin/ethereum-data`), **Passkey Index** (B08), **Bundler** (`atshelchin/vela-bundler`, F07), plus
+(`atshelchin/ethereum-data`), **Passkey Index** (B08), **Bundler** (`mondaylabsltd/vela-relay`, F07), plus
 **FX = Frankfurter** (E05).
 
 ## 2. Background & context

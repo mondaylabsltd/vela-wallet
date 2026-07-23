@@ -1,6 +1,6 @@
 /**
  * fetchTreasuryStatus — the per-chain treasury bootstrap signal
- * (GET /v1/treasury/:chainId, vela-bundler Stage 2).
+ * (GET /v1/treasury/:chainId, vela-relay Stage 2).
  *
  * bootstrapNeeded means the relayer can't operate on this chain until someone funds the
  * treasury directly (a NON-REFUNDABLE operator-float contribution). The wallet surfaces the

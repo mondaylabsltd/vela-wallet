@@ -193,7 +193,7 @@
 **`P0`** ｜ **分类** dApp 连接（WalletPair/批量/历史回放） ｜ **平台** All
 
 - **测什么**：指纹确认触发 confirmJoin，建立加密 WebSocket 通道。失败会导致 dApp 无法与钱包通信，必验证重连逻辑、超时处理、已连接状态标识。
-- **怎么测**：1) 从指纹卡片点击"确认"按钮；2) 等待 confirmJoin 完成（SDK 应完成 join handshake）；3) 观察 UI 从指纹卡片切换到"已连接"状态卡片；4) 卡片应显示绿色圆点、"已连接"标题、dApp 名称、E2E 锁徽章。
+- **怎么测**：1) 从指纹卡片点击"确认"按钮；2) 等待 confirmJoin 完成（协议会完成 join handshake）；3) 观察 UI 从指纹卡片切换到"已连接"状态卡片；4) 卡片应显示绿色圆点、"已连接"标题、dApp 名称、E2E 锁徽章。
 - **预期结果**：已连接卡片显示：绿色活跃圆点(10×10)、"已连接"标题、dApp icon/名称、钱包地址短码(4+4)、当前链、绿色 E2E 锁徽章。WalletPair 会话持久化到 AsyncStorage(key: vela.walletpairSession)。
 - **边界/异常**：confirmJoin 超过 30 秒(CONFIRM_JOIN_TIMEOUT_MS)应弹出超时错误；relay 无响应应检测。
 - **源码参考**：`src/services/walletpair-transport.ts:389-404, src/models/dapp-connection.tsx:416-452`
@@ -981,7 +981,7 @@
 
 **`P2`** ｜ **分类** dApp 连接（WalletPair/批量/历史回放） ｜ **平台** iOS, Android
 
-- **测什么**：移动端 React Native 在后台暂停 JS 计时器，WebSocket 在 ~30 秒被 relay 关闭。回到前台时(AppState='active')应自动强制重连(reconnect())而不等待 SDK 的指数退避，确保用户无感知。
+- **测什么**：移动端 React Native 在后台暂停 JS 计时器，WebSocket 在 ~30 秒被 relay 关闭。回到前台时(AppState='active')应自动强制重连(reconnect())而不等待协议重连的指数退避，确保用户无感知。
 - **怎么测**：1) 钱包已连接 dApp；2) 按 Home 键将钱包放入后台(5-30 秒)；3) 点击钱包图标回到前台；4) 观察连接状态卡片(应短暂闪过黄色"重新连接中"或直接恢复绿色)；5) 立即尝试签名请求，应成功。
 - **预期结果**：回到前台后 <1 秒内恢复连接(无需用户点击"立即重连")。如果后台时间 >=20s(STALE_AFTER_MS)，应直接 reconnect()；<20s 应 ping()。连接状态卡片短暂显示黄色点和"重新连接中"后恢复绿色。
 - **边界/异常**：后台 1 秒内回前台应不中断现有连接；后台期间网络断开应在回前台时重连；多次快速 blur/focus 应去重(不连续 reconnect)。

@@ -19,7 +19,7 @@ export interface DAppTransportEvents {
   /** Transport lost — auto-reconnect in progress. */
   reconnecting: () => void;
   /** Incoming JSON-RPC request from a dApp. */
-  request: (id: string, method: string, params: any[], origin: string) => void;
+  request: (id: string, method: string, params: any[], origin: string, chainId?: number) => void;
   /** Transport-level error. */
   error: (message: string) => void;
 }

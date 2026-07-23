@@ -203,17 +203,11 @@ change is picked up by re-bundling.
 
 ## BUG-5 (✅ RESOLVED 2026-07-06 — was a harness mis-declaration, NOT an app bug) — WalletPair peer rejected the app's join
 
-**Resolution:** the "peer drops when the app's wallet joins" was chased through a relay
-hypothesis, then an RN-WebSocket hypothesis, and finally NAILED with a WS proxy that logged the
-peer's own frame: on receiving the app's join the peer sent `close {reason:"unsupported_capability"}`.
-The dApp peer (`e2e/safari/wp_peer.mjs`) declared EVM JSON-RPC method names
-(`personal_sign`, `eth_sendTransaction`), but WalletPair wallets declare `wallet_*` names
-(`buildCapabilities` → `wallet_signMessage`, `wallet_sendTransaction`, …). `DAppSession` rejects a
-join when any dApp-declared method/chain isn't in the wallet's set ("Wallet missing required
-methods"). So the peer was rejecting a perfectly good join. Fixed the peer to declare WalletPair
-names (`wallet_signMessage`/`wallet_signTypedData`/`wallet_sendTransaction`) — **the app's
-WalletPair works.** (BUG-4 crypto + BUG-6 stale-session were the real app bugs on this path; both
-fixed.) The device concurrent proof now gets `wp_connected` ✓, `wp_survived` ✓ (WP still connected
+**Resolution:** this was a pre-v1 protocol harness problem. The current dApp peer
+(`e2e/safari/wp_peer.mjs`) implements the published relay/encryption/Ethereum protocol directly;
+there is no capability negotiation or legacy `wallet_*` method map. **The app's WalletPair works.**
+(BUG-4 crypto + BUG-6 stale-session were the real app bugs on this path; both fixed.) The device
+concurrent proof now gets `wp_connected` ✓, `wp_survived` ✓ (WP still connected
 after the extension sign — two-slot survival), `no_leak` ✓ (the WP peer received only its own
 `accountsChanged`/`chainChanged`, never the extension signature — F2), with `ext_real_sig` the only
 flaky step (independently 4/4 in `check_real_sign.py`; chained after the WP setup it flakes on
@@ -225,7 +219,7 @@ device). All four criteria have passed across runs → the two-slot design is pr
 
 **Discovered:** 2026-07-06, right after fixing BUG-4, running `e2e/safari/check_concurrent.py`.
 With BUG-4 fixed the wallet now joins the relay (app phase `waiting_accept`), but the session
-never reaches `connected`: the dApp peer's own SDK disconnect log is
+never reaches `connected`: the dApp peer's own protocol disconnect log is
 `{"side":"dapp","kind":"transport_close","code":1000,"reason":"closed","phase":"waiting","willReconnect":true}`
 — the **CF-Worker relay CLOSES the peer's idle pre-pair WebSocket** (normal 1000), the peer
 auto-reconnects, but the wallet's join arrives during that gap and is LOST → the wallet's
@@ -233,10 +227,10 @@ auto-reconnects, but the wallet's join arrives during that gap and is LOST → t
 drop the join message (e.g. CF Worker hibernation), leaving both sides stuck in waiting_accept"
 case that `src/services/walletpair-transport.ts`'s `confirmFingerprint` already anticipates.
 
-**★ It is APP-SIDE, not the relay (isolated 2026-07-06):** a pure **Node↔Node** pairing —
-`DAppSession` ↔ `WalletSession` from the SAME `walletpair-sdk`, both over the SAME real relay
+**★ It is APP-SIDE, not the relay (isolated 2026-07-06):** a pure **Node↔Node** pairing over the
+same real relay
 `wss://relay.walletpair.org/v1` — **pairs in ~2s, fingerprints match, both reach `connected`**.
-And a lone peer sits in `waiting` for 38s+ with NO disconnect. So the relay + SDK are fine; the
+And a lone peer sits in `waiting` for 38s+ with NO disconnect. So the relay + protocol are fine; the
 peer only drops **when the APP's wallet joins**. The one variable is the wallet-side WebSocket:
 Node's `ws` vs React-Native's `WebSocket` (Hermes). Something about the app's RN WalletPair
 connection makes the relay close the peer as the app joins (candidate causes: RN `WebSocket`

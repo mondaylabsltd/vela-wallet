@@ -56,7 +56,7 @@ honest (G05): the wallet can't inflate it.
 
 ## 9. Dependencies, risks & open questions
 
-- **Risk:** cross-repo drift with `vela-bundler`'s networkPrice formula — keep in sync (G07).
+- **Risk:** cross-repo drift with `vela-relay`'s networkPrice formula — keep in sync (G07).
 - **Open question:** per-chain tip defaults where `eth_maxPriorityFeePerGas` is unsupported.
 
 ## 10. Source anchors

@@ -15,7 +15,7 @@ import { VelaCard } from '@/components/ui/VelaCard';
 import { useColorSchemePreference, type ColorSchemePreference } from '@/constants/color-scheme';
 import { fadeIn, fadeInDown } from '@/constants/entering';
 import { TEXT_SCALE_LEVELS, useTextScale } from '@/constants/text-scale';
-import { scaleFont, color, createStyles, font, inter, radius, shadow, space, text, useStyles } from '@/constants/theme';
+import { color, createStyles, font, inter, radius, scaleFont, shadow, space, text, useStyles } from '@/constants/theme';
 import { useAvatarStyle } from '@/hooks/use-avatar-style';
 import { useCopyFeedback } from '@/hooks/use-copy-feedback';
 import { LANGUAGE_NATIVE_NAMES, SUPPORTED_LANGUAGES, type AppLanguage, type LanguagePreference } from '@/i18n';
@@ -340,7 +340,7 @@ type ServiceHealth = {
 const SERVICE_IDENTITY: Record<string, string> = {
   data: 'ethereum-data',
   passkey: 'webauthn-p256-publickey-index',
-  bundler: 'vela-bundler',
+  bundler: 'vela-relay',
 };
 
 async function checkServiceEndpointHealth(

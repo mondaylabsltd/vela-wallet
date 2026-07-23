@@ -28,7 +28,7 @@
   6. 提交:3 次重试(仅 transient);`[existingHash:0x…]` → 改为轮询已有 op(防重复提交)
   7. 成功后**乐观递增 nonce 缓存**(并发发送不撞 nonce);回执轮询 1s→3s 自适应退避,120s 上限
 - gas 档位:slow 1.1× / standard 1.2× / rapid 1.5× / fast 2.0×(`GAS_TIER_MULTIPLIERS`)
-- bundler 余额不足 → `parseBundlerUnderfunded()`(`bundler-service.ts:367`)字符串匹配错误文案弹充值 modal —— **与 vela-bundler 仓库 handlers.ts 文案强耦合,改任何一边必须同步**
+- bundler 余额不足 → `parseBundlerUnderfunded()`(`bundler-service.ts:367`)字符串匹配错误文案弹充值 modal —— **与 vela-relay 仓库 handlers.ts 文案强耦合,改任何一边必须同步**
 
 ## 3. Tempo 链(4217)特殊规则
 
@@ -37,7 +37,7 @@
 ## 4. dApp 连接与签名
 
 入口 `/(tabs)/connect` 扫码/粘贴 → `src/models/dapp-connection.tsx`(Context)
-两条传输:RemoteInjectTransport(SSE+POST,浏览器插件桥)与 WalletPairTransport(WS relay,`walletpair-sdk`)。会话持久化 `vela.walletpairSession`/`vela.remoteInjectSession`,App 恢复时自动重连(60s reconnecting 宽限)。
+两条传输:RemoteInjectTransport(SSE+POST,浏览器插件桥)与 WalletPairTransport(WS relay,本地 WalletPair v1 协议实现)。会话持久化 `vela.walletpairSession`/`vela.remoteInjectSession`,App 恢复时自动重连(60s reconnecting 宽限)。
 
 签名请求 → `src/hooks/use-dapp-signing.ts` 方法路由(personal_sign / eth_signTypedData_v4 / eth_sendTransaction / wallet_sendCalls EIP-5792)→ 单一 `<SigningSheet>`(`src/components/SigningRequestModal.tsx`,生产与测试 harness 同一渲染路径):
 
@@ -69,7 +69,7 @@
 |---|---|
 | `safe-transaction.ts` 签名/编码(SafeOp hash、签名格式、MultiSend 编码) | 错一个字节 = 链上验签失败或资金操作错误;全部手写无 viem 兜底 |
 | gas 定价链(bundler 报价权威原则) | 历史上反复出 "gas price too low"/"—" 费率回归,已有专门检验;改动须过 `bundler-service.test.ts` |
-| `parseBundlerUnderfunded` 文案匹配 | 跨仓库耦合 vela-bundler |
+| `parseBundlerUnderfunded` 文案匹配 | 跨仓库耦合 vela-relay |
 | approval-guard 检测/重写 | 安全承诺"never unlimited";所有 approval 形态(ERC-20/2612/DAI permit/Permit2/setApprovalForAll)都要覆盖 |
 | Tempo 报销批量 | 估算器低报,垫值和 2× 边际是实测值 |
 | i18n 键深 ≤3 段 | 超深会静默 fallback 成键名(14 语言) |

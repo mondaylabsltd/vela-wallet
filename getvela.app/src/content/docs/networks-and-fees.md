@@ -91,7 +91,7 @@ dedicated relayer account for your wallet on each network. **Third-party bundler
 network routed to them you never see the activation screen.
 </Callout>
 
-### Activating the gas account (Vela bundler)
+### Activating the gas account (Vela Relay)
 
 On Vela's bundler, your first transaction on each network **activates a dedicated
 gas account**. The app offers **Free Activation** — *sponsored by Vela for new

@@ -11,7 +11,7 @@
  * It reuses the app's whole signing pipeline (clear-signing, asset-sim, gas card,
  * approval-guard, passkey, bundler) unchanged — what is new is only the same-device
  * mailbox (App Group files) that replaces WalletPair's WS relay. It is NOT routed
- * through walletpair-sdk (built for cross-device long-lived sessions).
+ * through WalletPair's cross-device, long-lived session protocol.
  *
  * Fund-safety contract (docs/safari-extension/ARCHITECTURE.md §12.1.3 / §4):
  *   - ONLY 'submitted' | 'rejected' ever reach disk.

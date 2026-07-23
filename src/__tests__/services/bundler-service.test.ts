@@ -52,7 +52,7 @@ describe('bundler-service', () => {
   });
 
   describe('parseBundlerUnderfunded', () => {
-    // The exact message the current bundler returns (see vela-bundler
+    // The exact message the current bundler returns (see vela-relay
     // shared/rpc/handlers.ts). This is the wording that reaches the dApp signing
     // modal — if the server rewords it, this test must be updated in lockstep so
     // the funding modal keeps opening instead of dumping a raw error.

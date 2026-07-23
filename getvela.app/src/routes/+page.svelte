@@ -1120,7 +1120,7 @@
 					<p>
 						Transactions go through an ERC-4337 bundler. You pay network gas plus a small service
 						fee. You can skip the fee entirely by running a compatible
-						<a href="https://github.com/mondaylabsltd/vela-bundler" target="_blank" rel="noopener"
+						<a href="https://github.com/mondaylabsltd/vela-relay" target="_blank" rel="noopener"
 							>self-hosted bundler</a
 						>.
 					</p>

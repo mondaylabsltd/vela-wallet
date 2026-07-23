@@ -31,13 +31,13 @@ artifacts and must never be described as Bluetooth pairing.
 - **FR-1** — Pair by scanning a WalletPair relay URI QR (H04); establish an **E2E-encrypted** WebSocket channel.
 - **FR-2** — **No Bluetooth** anywhere; the transport is the relay only.
 - **FR-3** — Require out-of-band fingerprint verification before joining (K02).
-- **FR-4** — Advertise capabilities to the dApp on session creation (K04).
+- **FR-4** — Use the documented encrypted EIP-1193 envelopes; EIP-5792 capabilities are returned through `wallet_getCapabilities` (K04).
 - **FR-5** — Exactly one session at a time (single-session model, K03).
 
 ## 5. Non-functional requirements
 
 - **NFR-1** — E2E encryption; the relay cannot read message contents.
-- **NFR-2** — Uses the `walletpair-sdk`; transport concerns isolated in `walletpair-transport.ts`.
+- **NFR-2** — Implements the published WalletPair v1 relay, encryption, and Ethereum protocols locally; transport concerns remain isolated in `walletpair-transport.ts`.
 
 ## 6. UX / flow notes
 
@@ -47,7 +47,7 @@ Connect tab → scan pairing QR → fingerprint confirm (K02) → connected card
 
 - [ ] **AC-1** — Scanning a valid pairing QR establishes an E2E-encrypted session after fingerprint confirm.
 - [ ] **AC-2** — No Bluetooth API is used or requested.
-- [ ] **AC-3** — Capabilities are advertised to the dApp on connect (K04).
+- [ ] **AC-3** — `wallet_getCapabilities` returns the wallet's EIP-5792 support (K04).
 
 ## 8. Out of scope / non-goals
 
@@ -60,5 +60,5 @@ Connect tab → scan pairing QR → fingerprint confirm (K02) → connected card
 
 ## 10. Source anchors
 
-- `src/services/walletpair-transport.ts:5-9,288-320`, `walletpair-sdk`.
+- `src/services/walletpair-protocol.ts`, `src/services/walletpair-transport.ts`.
 - `docs/CONTENT-SOURCE-100-CLUES.md` — clue 32 (+ guardrails: no BLE).

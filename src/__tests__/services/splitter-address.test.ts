@@ -2,8 +2,8 @@
  * VelaGasSettlementSplitter CREATE2 derivation — cross-repo determinism.
  *
  * The golden vectors below MUST equal the bundler's
- * (vela-bundler/tests/splitter_test.ts) and the Foundry test's
- * (vela-bundler/evm_contracts/test/VelaGasSettlementSplitterCreate2.t.sol). If the wallet and
+ * (vela-relay/tests/splitter_test.ts) and the Foundry test's
+ * (vela-relay/evm_contracts/test/VelaGasSettlementSplitterCreate2.t.sol). If the wallet and
  * bundler disagree, the wallet deploys a splitter at an address the bundler never pays.
  */
 import {

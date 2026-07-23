@@ -35,11 +35,11 @@
 
 | 本仓库 | 对端 | 耦合物 |
 |---|---|---|
-| `parseBundlerUnderfunded`(bundler-service.ts:367) | vela-bundler handlers.ts | **错误文案字符串** |
-| gas 报价消费逻辑 | vela-bundler 报价接口 | `pimlico_getUserOperationGasPrice` 语义/markup |
+| `parseBundlerUnderfunded`(bundler-service.ts:367) | vela-relay handlers.ts | **错误文案字符串** |
+| gas 报价消费逻辑 | vela-relay 报价接口 | `pimlico_getUserOperationGasPrice` 语义/markup |
 | `public-key-index.ts` | p256-index(biubiu-projects 仓库) | API 契约 + Idempotency-Key 格式 |
 | `.well-known` 两个路由(getvela.app) | iOS entitlements / Android 签名指纹 | rpId=getvela.app、Team ID、SHA-256 指纹 |
-| walletpair-sdk 版本 | WalletPair relay | 协议版本 |
+| WalletPair v1 协议实现 | WalletPair relay | `protocols/{relay,encryption,ethereum}.md` 兼容性 |
 
 ## 测试策略
 
