@@ -81,7 +81,6 @@ export default function SendScreen() {
         loading={loading}
         onSelect={handleSelectToken}
         onAddChanged={refreshTokens}
-        defaultCategory="stable"
         initialChainId={multiSelect.chainId}
         multiSelect={tokenMultiSelect}
       />

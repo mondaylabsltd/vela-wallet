@@ -48,6 +48,7 @@ interface Props {
   onAddChanged?: () => void;
   /** Hide the count + USD total row (e.g. when most balances are zero). */
   hideTotals?: boolean;
+  /** Initial quick filter. Defaults to All so every held asset is visible. */
   defaultCategory?: TokenCategory;
   /**
    * Multi-select / sweep mode (② 多币一人). When set, rows show checkboxes and
@@ -71,7 +72,7 @@ interface Props {
   initialChainId?: number | null;
 }
 
-export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTotals, defaultCategory = 'stable', multiSelect, initialChainId = null }: Props) {
+export function TokenSelector({ tokens, loading, onSelect, onAddChanged, hideTotals, defaultCategory = 'all', multiSelect, initialChainId = null }: Props) {
   const { t } = useTranslation();
   const formatUsd = useDisplayCurrency().fmt;
   const networks = useAllNetworks();
