@@ -1,0 +1,51 @@
+package app.getvela.wallet.feature.wallet.core
+
+import app.getvela.wallet.feature.settings.core.NetView
+import kotlinx.coroutines.flow.StateFlow
+
+/**
+ * Where a chain's candidate endpoints come from.
+ *
+ * **From the `network_admin` machine, not from storage.** Spec 040 already
+ * built the reader for custom networks, per-network overrides, provider keys
+ * and service endpoints; a second reader of those same keys would be a second
+ * opinion about which endpoints exist, and the two would disagree the moment
+ * somebody edited one (research D4).
+ *
+ * The core scores what it is given by `RpcSource` tier, so the *order* here is
+ * not a preference — it is a statement about provenance, and the machine
+ * decides what that is worth.
+ *
+ * **What this does not yet collect** (spec 041 phase 2, when the chain index
+ * becomes reachable): the index's own RPC list and the provider-key URLs. The
+ * pool routes correctly with one candidate per chain; it simply has less to
+ * choose from, and every extra tier is a wider net rather than a different
+ * behaviour.
+ */
+class NetworkEndpointSource(
+    private val networks: StateFlow<NetView>,
+) : RpcEndpointSource {
+
+    override suspend fun forChain(chainId: Int): RpcSeeds {
+        val row = networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }
+            ?: return RpcSeeds()
+
+        return RpcSeeds(
+            rpc = listOfNotNull(
+                row.rpc_url.takeIf { it.isNotBlank() }?.let { url ->
+                    // A custom network's URL is one the person typed, which is
+                    // the highest tier the core knows. A built-in's is the
+                    // default we ship.
+                    RpcEndpointSeed(
+                        url = url,
+                        source = if (row.is_custom) RpcSource.User else RpcSource.Default,
+                    )
+                },
+            ),
+            bundler = listOfNotNull(
+                row.bundler_url.takeIf { it.isNotBlank() }
+                    ?.let { RpcEndpointSeed(url = it, source = RpcSource.Builtin) },
+            ),
+        )
+    }
+}

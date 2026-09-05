@@ -13,11 +13,13 @@ import app.getvela.wallet.feature.contacts.core.ContactsView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -31,12 +33,30 @@ import org.junit.Test
  * sibling shipped.
  */
 class ContactsMachineTest {
+    /**
+     * Cancelled after every test.
+     *
+     * Each host keeps a driver alive for the life of its scope. A suite that
+     * leaves a dozen of them running competes with itself for
+     * `Dispatchers.Default`, and the symptom lands somewhere else entirely — a
+     * different test timing out on a budget it had never come close to. A
+     * leaked scope is not untidiness; it is a flake with somebody else's name
+     * on it.
+     */
+    private val scopes = mutableListOf<CoroutineScope>()
+
+    @After
+    fun stopEveryMachine() {
+        scopes.forEach { it.cancel() }
+        scopes.clear()
+    }
+
 
     private fun host(store: KeyValueStore): CoreHost<ContactsView> {
         val executor = ContactsExecutor(store)
         return CoreHost(
             bridge = uniffi.vela_core_uniffi.ContactsCore().asBridge(),
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it },
             initial = ContactsView(),
             serializer = ContactsView.serializer(),
             perform = JsonShell.perform(

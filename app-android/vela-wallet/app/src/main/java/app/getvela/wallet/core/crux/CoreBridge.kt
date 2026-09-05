@@ -1,11 +1,18 @@
 package app.getvela.wallet.core.crux
 
+import uniffi.vela_core_uniffi.ActivityFeedCore
+import uniffi.vela_core_uniffi.BalanceDashboardCore
 import uniffi.vela_core_uniffi.ContactsCore
 import uniffi.vela_core_uniffi.CreateWalletCore
 import uniffi.vela_core_uniffi.DisplayCurrencyCore
 import uniffi.vela_core_uniffi.LoginCore
+import uniffi.vela_core_uniffi.ManageTokensCore
 import uniffi.vela_core_uniffi.NetworkAdminCore
+import uniffi.vela_core_uniffi.PaymentRequestCore
+import uniffi.vela_core_uniffi.ReceiveWatchCore
+import uniffi.vela_core_uniffi.RpcPoolCore
 import uniffi.vela_core_uniffi.SessionCore
+import uniffi.vela_core_uniffi.TokenTrustCore
 
 /**
  * The three bridge methods, without caring which machine is behind them.
@@ -62,4 +69,26 @@ fun NetworkAdminCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
 fun DisplayCurrencyCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+/** The read path (spec 041). `RpcPoolCore` is what every other one reads through. */
+fun RpcPoolCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun BalanceDashboardCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun ActivityFeedCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun ManageTokensCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun TokenTrustCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun ReceiveWatchCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun PaymentRequestCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)

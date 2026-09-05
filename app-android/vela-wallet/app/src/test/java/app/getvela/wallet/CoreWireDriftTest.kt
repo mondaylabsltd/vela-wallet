@@ -18,6 +18,17 @@ import app.getvela.wallet.feature.contacts.core.ContactTombstone
 import app.getvela.wallet.feature.contacts.core.ContactTxKind
 import app.getvela.wallet.feature.contacts.core.ContactsView
 import app.getvela.wallet.feature.settings.core.CurrencyEvent
+import app.getvela.wallet.feature.wallet.core.RpcBanEntry
+import app.getvela.wallet.feature.wallet.core.RpcCallVerdict
+import app.getvela.wallet.feature.wallet.core.RpcEndpointSeed
+import app.getvela.wallet.feature.wallet.core.RpcErrorInfo
+import app.getvela.wallet.feature.wallet.core.RpcEvent
+import app.getvela.wallet.feature.wallet.core.RpcKind
+import app.getvela.wallet.feature.wallet.core.RpcOperation
+import app.getvela.wallet.feature.wallet.core.RpcPoolView
+import app.getvela.wallet.feature.wallet.core.RpcShellResult
+import app.getvela.wallet.feature.wallet.core.RpcSource
+import app.getvela.wallet.feature.wallet.core.RpcTransportOutcome
 import app.getvela.wallet.feature.settings.core.CurrencyOperation
 import app.getvela.wallet.feature.settings.core.CurrencyShellResult
 import app.getvela.wallet.feature.settings.core.CurrencyView
@@ -184,6 +195,46 @@ class CoreWireDriftTest {
         val lastUsed = elementDescriptor<Contact>("last_used_ms")
         assertEquals("the u32 is an Int in Kotlin", "kotlin.Int", txCount.serialName)
         assertEquals("the f64 is a Double", "kotlin.Double", lastUsed.serialName)
+    }
+
+    // -- rpc_pool (spec 041) --------------------------------------------------
+
+    @Test
+    fun poolViewsMatchTheGeneratedMirrors() {
+        assertFieldsExist<RpcPoolView>("RpcPoolView")
+        assertFieldsExist<RpcEndpointSeed>("RpcEndpointSeed")
+        assertFieldsExist<RpcBanEntry>("RpcBanEntry")
+        assertFieldsExist<RpcErrorInfo>("RpcErrorInfo")
+    }
+
+    @Test
+    fun poolOperationsAreExhaustive() {
+        // Seven operations, and the pool is the base every other read-path
+        // machine goes through — an operation nobody answers here is every
+        // screen in the app hanging, not one.
+        assertVariantsExhaustive<RpcOperation>("RpcOperation")
+    }
+
+    @Test
+    fun poolResultsAreExhaustive() {
+        assertVariantsExhaustive<RpcShellResult>("RpcShellResult")
+    }
+
+    @Test
+    fun poolVerdictsAndOutcomesAreExhaustive() {
+        assertVariantsExhaustive<RpcCallVerdict>("RpcCallVerdict")
+        assertVariantsExhaustive<RpcTransportOutcome>("RpcTransportOutcome")
+    }
+
+    @Test
+    fun poolEventsExist() {
+        assertVariantsExist<RpcEvent>("RpcEvent")
+    }
+
+    @Test
+    fun poolEnumsMatchTheGeneratedMirrors() {
+        assertStringUnion<RpcSource>("RpcSource")
+        assertStringUnion<RpcKind>("RpcKind")
     }
 
     // -- network_admin -------------------------------------------------------

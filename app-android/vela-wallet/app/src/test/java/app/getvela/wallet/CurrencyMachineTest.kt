@@ -13,9 +13,11 @@ import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -34,12 +36,30 @@ import org.junit.Test
  * What it does prove is that when the storage answers, the machine behaves.
  */
 class CurrencyMachineTest {
+    /**
+     * Cancelled after every test.
+     *
+     * Each host keeps a driver alive for the life of its scope. A suite that
+     * leaves a dozen of them running competes with itself for
+     * `Dispatchers.Default`, and the symptom lands somewhere else entirely — a
+     * different test timing out on a budget it had never come close to. A
+     * leaked scope is not untidiness; it is a flake with somebody else's name
+     * on it.
+     */
+    private val scopes = mutableListOf<CoroutineScope>()
+
+    @After
+    fun stopEveryMachine() {
+        scopes.forEach { it.cancel() }
+        scopes.clear()
+    }
+
 
     private fun host(store: KeyValueStore, locale: Locale?): CoreHost<CurrencyView> {
         val executor = CurrencyExecutor(store) { locale }
         return CoreHost(
             bridge = uniffi.vela_core_uniffi.DisplayCurrencyCore().asBridge(),
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it },
             initial = CurrencyView(code = "USD", rate = null, committed = false),
             serializer = CurrencyView.serializer(),
             perform = JsonShell.perform(

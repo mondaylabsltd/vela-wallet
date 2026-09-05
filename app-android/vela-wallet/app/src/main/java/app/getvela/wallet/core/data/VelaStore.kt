@@ -80,6 +80,14 @@ interface KeyValueStore {
 
         /** Shared with onboarding's endpoint sheet — the reason this class exists. */
         const val SERVICE_ENDPOINTS = "vela.serviceEndpoints"
+
+        /**
+         * Endpoints the pool has ruled against, as `{url, bannedAt, permanent}`
+         * (spec 041). Shared with the other clients: a device that learned an
+         * endpoint is dead should agree with its siblings rather than each
+         * rediscovering it the hard way.
+         */
+        const val RPC_BANNED = "vela.rpc.banned"
     }
 }
 

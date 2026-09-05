@@ -255,3 +255,52 @@ bridge_object!(
     DisplayCurrencyCore,
     vela_core::app::display_currency::DisplayCurrency
 );
+
+// The read path (spec 041). `RpcPool` is the base every other one reads
+// through — endpoint scoring, bans, cooldowns and the fastest-endpoint race
+// are its decisions, and the shell contributes only fetch, clock and jitter.
+
+bridge_object!(
+    /// RPC/bundler endpoint pool decisions: scoring, cooldowns, bans.
+    RpcPoolCore,
+    vela_core::app::rpc_pool::RpcPool
+);
+
+bridge_object!(
+    /// Balance aggregation & display policy (per active account).
+    BalanceDashboardCore,
+    vela_core::app::balance_dashboard::BalanceDashboard
+);
+
+bridge_object!(
+    /// The activity feed: dedupe, batch folding, tombstones, celebrations.
+    ActivityFeedCore,
+    vela_core::app::activity_feed::ActivityFeed
+);
+
+bridge_object!(
+    /// Manual custom-token management.
+    ManageTokensCore,
+    vela_core::app::manage_tokens::ManageTokens
+);
+
+bridge_object!(
+    /// The token trust model: transfer allowlists, auto-add admission,
+    /// asymmetric simulation trust.
+    TokenTrustCore,
+    vela_core::app::token_trust::TokenTrust
+);
+
+bridge_object!(
+    /// Deposit detection on the Receive screen: phased polling, baseline
+    /// diff, false-positive guards.
+    ReceiveWatchCore,
+    vela_core::app::receive_watch::ReceiveWatch
+);
+
+bridge_object!(
+    /// Payment requests: the acknowledge gate, the EIP-681/pay-link builder,
+    /// and the strict `/pay` validator.
+    PaymentRequestCore,
+    vela_core::app::payment_request::PaymentRequest
+);
