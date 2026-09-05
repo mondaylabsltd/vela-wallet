@@ -537,6 +537,87 @@ own doc calls a defaulted 1 "a real 7x mispayment".
 
 Tests: 192 → **202**.
 
+---
+
+## Phase 6 — closeout
+
+### Blocked on drawings that do not exist
+
+The core is complete for every one of these. What is missing is a picture, and
+inventing one would be designing rather than wiring (founder decision,
+2026-09-05).
+
+| Surface | Core is ready | What a drawing would have to contain |
+|---|---|---|
+| **Add / edit a contact** | `Event::Save { input, now_ms }`, with `ContactSaveInput` | A form: name, address, note, group membership; a validation state for a malformed address; and what 保存 does when the address already exists (the core's rule is existing-wins). `design/contacts/C5` is a menu of three choices, not a form. |
+| **Favourite a contact** | `Event::ToggleFavorite` | Any affordance at all. No mock anywhere carries one — not the row, not the detail header, not the swipe. |
+| **Contacts search** | nothing needed; `ContactsLive.home(query:)` narrows and is tested | The search box is a `Text`, not a `TextField`. Not blocking — the A–Z rail is the drawn way to find somebody — which is why it was **not** built under the founder's "input boxes yes, forms no" call. |
+| **编辑分组 / 导入 / 导出** | `GroupSave`, `ImportParsed` | Destinations. The menu items are drawn; what they open is not. |
+| **The P256 precompile check** | `compat.p256_available` | A fifth row in the compatibility list, and a corpus key for it. Without one, a chain rejected *only* for a missing precompile shows four green ticks under a 不兼容 badge. |
+| **Endpoints / RPC providers panels** | 6 operations, all live in the executor | Nothing — these are drawn (ST11, ST12) and merely unwired. Bounded work, not a gap; the editable field they need now exists. |
+
+### Debts → 051
+
+| # | Debt |
+|---|---|
+| 1 | Four fail-closed arms carry `// live in 051`: `contacts::resolve_identity`, `contacts::classify_recipient`, `display_currency::resolve_rate`, `network_admin::fetch_fiat_rates`. Two more wait on 052: `contacts::load_send_history`, `network_admin::clear_bundler_cache`. `invalidate_pools` is an acknowledged no-op until a pool exists. |
+| 2 | **Web files CJK contacts under `#`.** Same defect this cut fixed on iOS; `contacts/live.ts`'s `sectionLetter` needs the same transliteration. |
+| 3 | **Web's add-network search is broken against the live index.** `decodeSearchIndex` passes `Number(chainId)` into a `u32` and sends the whole index, so one out-of-range id refuses the entire result — exactly what happened here. |
+| 4 | `CoreHTTP` and `RegistryClient` each configure their own `URLSession`. Collapsing them is natural in 051, when the RPC pool needs a client anyway. |
+| 5 | `CoreDriver` still lives under `Features/Onboarding/Core/` while four machines depend on it. A pure move, deliberately not made in the commit that first reused it. |
+| 6 | Three address-shortening copies with two different thresholds (`> 14` twice, `> 10` once); web uses a fourth form (8+6). New code uses `AddressText`. |
+| 7 | Adding a network takes **42–90 seconds** end to end. The drawn 检查中 state was never designed against a full minute. |
+
+### Device verification — what is ready and what is not
+
+The device build **succeeds and signs**:
+
+```
+CodeSign .../Build/Products/Debug-iphoneos/VelaWallet.app
+** BUILD SUCCEEDED **        # -destination 'generic/platform=iOS'
+```
+
+Installing on `shelchin's iPhone` did **not** get that far:
+
+```
+error: The developer disk image could not be mounted on this device.
+```
+
+That is a device-side precondition, not a code problem — the phone needs to be
+unlocked, with Developer Mode on and this Mac trusted. Nothing else stands
+between here and the run.
+
+#### The checklist, in the order it has to happen
+
+1. Unlock the phone, keep it unlocked, and confirm **设置 → 隐私与安全性 → 开发者模式** is on.
+2. `rust/scripts/build-ios-xcframework.sh` if this is a fresh checkout.
+3. `xcodebuild -project VelaWallet.xcodeproj -scheme VelaWallet -destination 'id=00008130-001C68C804E1401C' build`
+4. Install and launch with `xcrun devicectl` (quickstart §3).
+5. **通讯录**: tap the tab. Your own book, or the drawn empty state. Delete
+   somebody through the row swipe and its confirm. **Force-quit. Relaunch.**
+   Still gone. *(The relaunch is the test — see the finding above: the row
+   leaves the screen a turn before anything reaches storage.)*
+6. **设置 → 网络**: the list should be twelve chains, not eight. Open 添加,
+   type a chain id, and watch 添加 stay disabled until the core's verdict
+   arrives — **allow it a full minute**. Point the custom RPC at a different
+   chain's endpoint and confirm the refusal appears and nothing is written.
+   Add a real chain, force-quit, relaunch: still listed.
+7. **设置 → 显示货币**: pick one, relaunch. It sticks, and any fiat figure shows
+   the USD amount rather than the same digits wearing a ¥.
+
+### SC verdicts
+
+| | Verdict |
+|---|---|
+| **SC-001** — 通讯录 opens; CRUD survives a relaunch | **Met in code, device run pending.** `ContactsStoreTests` proves the loop over real storage including the relaunch; the tab opens and renders live (screenshot). Cross-client read of a web-written `vela.contacts` is untested — it needs two devices. |
+| **SC-002** — a typed network survives a relaunch; the mismatch refusal writes nothing | **Met in code, device run pending.** The live suite reaches a real verdict against real endpoints; the refusal path has unit coverage. |
+| **SC-003** — currency survives a relaunch and degrades rather than fabricating | **Met.** Storage round-trip and the degrade rule both tested. |
+| **SC-004** — the third machine costs zero shared logic | **Met, with one file named.** Four of five untouched; `RootView.swift` +17, all of it the composition of two views. Reported rather than engineered around. |
+| **SC-005** — fixtures stay canon | **Met.** 38 fixture tests pass unchanged; ST10b screenshot is identical but for the clock; every `*Fixtures.swift` diff is a delegation, not a value. |
+| **SC-006** — test count strictly increases, build green | **Met.** 130 → **203**, plus 3 live behind a flag. Green at every phase boundary. |
+| **SC-007** — no machine changes, no corpus delta, no other client touched | **Met.** `rust/crates/vela-core/src/app/` and `src/i18n_catalogs/` untouched; `vela-core-uniffi` gained three `bridge_object!` lines; `app-web`, `app-desktop`, `app-android`, `app-browser-extension` untouched. |
+| **SC-008** — verified on the device | **Not met.** The build signs for the device; the install is blocked on Developer Mode. The checklist above is what remains. |
+
 ### Recorded, not fixed
 
 - **Three address-shortening copies disagree.** `RootView.shortenAddress` and
