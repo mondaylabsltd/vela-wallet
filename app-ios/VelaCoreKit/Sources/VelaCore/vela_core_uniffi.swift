@@ -1274,6 +1274,162 @@ public func FfiConverterTypeCcidPort_lower(_ value: CcidPort) -> UInt64 {
 
 
 /**
+ * The address book: saved ⊕ history-derived, tombstoned, grouped.
+ */
+public protocol ContactsCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * The address book: saved ⊕ history-derived, tombstoned, grouped.
+ */
+open class ContactsCore: ContactsCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_contactscore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_contactscore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_contactscore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_contactscore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_contactscore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_contactscore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeContactsCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ContactsCore
+
+    public static func lift(_ handle: UInt64) throws -> ContactsCore {
+        return ContactsCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ContactsCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ContactsCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ContactsCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContactsCore_lift(_ handle: UInt64) throws -> ContactsCore {
+    return try FfiConverterTypeContactsCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeContactsCore_lower(_ value: ContactsCore) -> UInt64 {
+    return FfiConverterTypeContactsCore.lower(value)
+}
+
+
+
+
+
+
+/**
  * Creating a wallet: register → prove signing → derive → sync → save.
  */
 public protocol CreateWalletCoreProtocol: AnyObject, Sendable {
@@ -5891,6 +6047,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_usbhidport_path() != 10313) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_contactscore_dispatch() != 41809) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_contactscore_resolve_effect() != 28417) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_contactscore_view() != 58589) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_createwalletcore_dispatch() != 61861) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -5922,6 +6087,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_i18n_new_with_legacy_plurals() != 58560) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_contactscore_new() != 11136) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_createwalletcore_new() != 56933) {

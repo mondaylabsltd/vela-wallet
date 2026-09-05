@@ -21,6 +21,13 @@ struct ContactsScreen: View {
     let model: ContactsHomeModel
     var onOpenContact: (ContactModel) -> Void = { _ in }
     var onOpenGroup: (GroupRowModel) -> Void = { _ in }
+    /// Leaving 通讯录. Without it this screen is a place a person can reach and
+    /// not get out of — which is what the tab bar looked like before spec 050.
+    var onSelectTab: (WalletTab) -> Void = { _ in }
+    /// The row swipe's 删除, **after** the drawn second confirmation. Carries
+    /// the full address rather than the row model, because the address is the
+    /// core's key and the row's `id` is a `UUID()` minted for SwiftUI.
+    var onDelete: (String) -> Void = { _ in }
 
     @State private var sheetShown = false
     @State private var confirming: ContactModel?
@@ -36,13 +43,14 @@ struct ContactsScreen: View {
 
             listArea
 
-            WalletTabBar(tabs: model.tabs, selected: .contacts)
+            WalletTabBar(tabs: model.tabs, selected: .contacts, onSelect: onSelectTab)
         }
         .background(theme.bgBase.ignoresSafeArea())
         .environment(\.walletTextScale, model.textScale)
         .sheet(isPresented: $sheetShown) {
             if let sheet = presentedSheet {
-                ActionMenuSheet(model: sheet, onItem: { _ in }, onCancel: { sheetShown = false })
+                ActionMenuSheet(model: sheet, onItem: { item in confirm(item) },
+                                onCancel: { sheetShown = false })
                     .environment(\.walletTextScale, model.textScale)
             }
         }
@@ -55,6 +63,18 @@ struct ContactsScreen: View {
     private var presentedSheet: ActionMenuModel? {
         if let confirming { return model.deleteConfirms[confirming.id] }
         return model.sheet
+    }
+
+    /// A tap inside the presented sheet.
+    ///
+    /// Only the delete confirm has anywhere to go: the add/import/export menu
+    /// (C5) is a picture of three choices whose destinations nothing has drawn,
+    /// so its items dismiss rather than pretending to act. Routing them
+    /// somewhere invented would be worse than the honest nothing.
+    private func confirm(_ item: MenuItemModel) {
+        defer { sheetShown = false; confirming = nil }
+        guard let target = confirming, item.destructive else { return }
+        onDelete(target.addressFull)
     }
 
     // MARK: - Header (large title + add button)

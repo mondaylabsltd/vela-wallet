@@ -80,8 +80,10 @@ enum ContactsFixtures {
 
     /// The rail always renders the full alphabet plus `#` (research D4);
     /// letters without a section jump to the nearest existing one.
-    static let indexLetters: [String] =
-        (UnicodeScalar("A").value...UnicodeScalar("Z").value).map { String(UnicodeScalar($0)!) } + ["#"]
+    ///
+    /// Lives in `ContactsLabels` since spec 050, because the live builder
+    /// renders the same rail; the value is unchanged.
+    static let indexLetters: [String] = ContactsLabels.indexLetters
 
     /// C1f search-active query (pre-filtered by the fixture layer).
     static let searchQuery = "Ali"
@@ -165,25 +167,20 @@ enum ContactsFixtures {
             .map { GroupRowModel(name: $0.0, countLabel: count(loc, "contacts.groupMembers", $0.1)) }
     }
 
+    // Shared with `ContactsLive` since spec 050 — one implementation of what
+    // the tab bar says and how a count is composed, so a live screen and its
+    // gallery board cannot drift. Same keys, same output.
+
     private static func count(_ loc: Loc, _ key: String, _ value: Int) -> String {
-        loc.t(key, vars: ["count": String(value)])
+        ContactsLabels.count(loc, key, value)
     }
 
     private static func tabs(loc: Loc) -> TabsModel {
-        TabsModel(
-            wallet: loc.t("componentsUi.mainNav.wallet"),
-            contacts: loc.t("componentsUi.mainNav.contacts"),
-            explore: loc.t("componentsUi.mainNav.explore"),
-            settings: loc.t("componentsUi.mainNav.settings")
-        )
+        ContactsLabels.tabs(loc: loc)
     }
 
     private static func search(loc: Loc, query: String? = nil) -> ContactsSearchModel {
-        ContactsSearchModel(
-            placeholder: loc.t("contacts.searchPlaceholder"),
-            query: query,
-            clearLabel: loc.t("contacts.cancel")
-        )
+        ContactsLabels.search(loc: loc, query: query)
     }
 
     // MARK: - Menus (data-model.md §Menus)

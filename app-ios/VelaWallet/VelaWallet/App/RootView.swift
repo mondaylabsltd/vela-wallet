@@ -23,6 +23,13 @@ struct RootView: View {
     @State private var model: WelcomeModel
     @State private var session: SessionController
     @State private var onboarding: OnboardingModel
+    /// The address book's machine (spec 050), app-resident like the session's.
+    ///
+    /// Constructed here rather than inside the contacts section because a Crux
+    /// core's model IS the app's state for that surface: rebuilding it whenever
+    /// somebody switches tabs would re-read storage on every visit and throw
+    /// away the identity and classification caches the core keeps.
+    @State private var contacts: ContactsStore
 
     // Spec 012. `true` only for the first construction in this process — a
     // cold start (FR-008); SwiftUI never rebuilds `RootView`'s State on a
@@ -30,6 +37,10 @@ struct RootView: View {
     /// The wallet-flow stack (spec 021). Lives here, beside the session, so
     /// it survives the wallet body's own re-renders.
     @State private var flows = FlowNav()
+    /// Which section of the signed-in shell is showing (spec 050).
+    @State private var section: WalletSection = .wallet
+    /// Where the contacts section is, inside itself.
+    @State private var contactsRoute: ContactsRoute?
     @State private var launching = !LaunchAnimation.isDisabled
     /// Welcome content fades IN as the launch lockup fades OUT (FR-012).
     @State private var pageOpacity: Double = LaunchAnimation.isDisabled ? 1 : 0
@@ -43,6 +54,7 @@ struct RootView: View {
         let onboarding = OnboardingModel(session: session, store: store)
         _session = State(initialValue: session)
         _onboarding = State(initialValue: onboarding)
+        _contacts = State(initialValue: ContactsStore(store: VelaStore()))
         _model = State(initialValue: WelcomeModel(content: WelcomeContentBuilder.build(loc: loc)) { intent in
             switch intent {
             case .createWallet:
@@ -252,28 +264,112 @@ struct RootView: View {
                 )
                 .transition(.move(edge: .trailing))
             } else {
-                WalletScreen(
-                    model: WalletFixtures
-                        .buildMobileState(.h1, loc: loc)
-                        .withAddress(session.view.address)
-                        .withName(session.view.activeName),
-                    loc: loc,
-                    onSelectTab: { tab in
-                        // 设置 has a screen now (spec 023), and the 退出登录 row
-                        // inside it is where signing out lives. Until then the
-                        // TAB itself signed you out — which meant tapping 设置
-                        // to change your language logged you out instead. 通讯录
-                        // and 探索 stay on this screen rather than navigating to
-                        // fixtures a signed-in person would read as their real
-                        // data.
-                        if tab == .settings { router.path.append(.settings) }
-                    },
-                    onFlow: { flows.enter($0) }
-                )
+                switch section {
+                case .wallet:
+                    WalletScreen(
+                        model: WalletFixtures
+                            .buildMobileState(.h1, loc: loc)
+                            .withAddress(session.view.address)
+                            .withName(session.view.activeName),
+                        loc: loc,
+                        onSelectTab: selectTab,
+                        onFlow: { flows.enter($0) }
+                    )
+                case .contacts:
+                    contactsSection
+                }
             }
         } else {
             WelcomeScreen(loc: loc, model: model, signingIn: onboarding.loginView.busy)
         }
+    }
+
+    /// The tab bar's four destinations.
+    ///
+    /// 设置 has a screen (spec 023), and the 退出登录 row inside it is where
+    /// signing out lives. Until spec 023 the TAB itself signed you out — which
+    /// meant tapping 设置 to change your language logged you out instead. That
+    /// regression must not come back through this switch.
+    ///
+    /// 通讯录 became a real destination in spec 050; before it, the tab was
+    /// drawn, tappable, and did nothing at all. 探索 still does nothing, and
+    /// stays that way until its machines are wired.
+    private func selectTab(_ tab: WalletTab) {
+        switch tab {
+        case .settings: router.path.append(.settings)
+        case .wallet: section = .wallet
+        case .contacts: section = .contacts
+        case .explore: break
+        }
+    }
+
+    /// The address book, live (spec 050).
+    ///
+    /// Detail and group are pushes *within* the section rather than app routes,
+    /// for the reason the flows are: an address book is not somewhere a person
+    /// should be able to deep-link into before they have a wallet. They are
+    /// keyed by the core's own identifiers, so a book that reloads under the
+    /// screen cannot leave it pointing at a row that no longer exists — it
+    /// falls back to the list, which is what a deleted contact should do.
+    @ViewBuilder private var contactsSection: some View {
+        Group {
+            if let view = contacts.view, view.loaded {
+                switch contactsRoute {
+                case .detail(let address):
+                    if let contact = contacts.contact(at: address) {
+                        ContactDetailScreen(
+                            model: ContactsLive.detail(contact, view: view, loc: loc),
+                            onBack: { contactsRoute = nil }
+                        )
+                    } else {
+                        contactsHome(view)
+                    }
+                case .group(let id):
+                    if let group = contacts.group(id: id) {
+                        GroupDetailScreen(
+                            model: ContactsLive.group(group, view: view, loc: loc),
+                            onBack: { contactsRoute = nil },
+                            onOpenMember: { member in
+                                contactsRoute = .detail(address: member.addressFull)
+                            }
+                        )
+                    } else {
+                        contactsHome(view)
+                    }
+                case nil:
+                    contactsHome(view)
+                }
+            } else {
+                // The core has not ruled yet. Real chrome, empty list — never
+                // fixture contacts, and never the "you have none" state.
+                ContactsScreen(
+                    model: ContactsLive.waiting(loc: loc),
+                    onSelectTab: selectTab
+                )
+            }
+        }
+        // Idempotent: the first appearance boots the machine, later ones speak
+        // up only if the signed-in account actually changed.
+        .task(id: session.view.address) {
+            contacts.open(myAddress: session.view.address)
+        }
+    }
+
+    private func contactsHome(_ view: ContactsViewWire) -> some View {
+        ContactsScreen(
+            model: ContactsLive.home(view, loc: loc, query: contacts.query),
+            onOpenContact: { contactsRoute = .detail(address: $0.addressFull) },
+            onOpenGroup: { row in
+                // The row model carries a display name, not the core's id — so
+                // the id is looked up here rather than smuggled through the
+                // drawing.
+                if let group = view.groups.first(where: { $0.name == row.name }) {
+                    contactsRoute = .group(id: group.id)
+                }
+            },
+            onSelectTab: selectTab,
+            onDelete: { contacts.delete(address: $0) }
+        )
     }
 
     /// Settings, wearing the signed-in identity.
@@ -371,6 +467,24 @@ struct RootView: View {
         }
         if let url { UIApplication.shared.open(url) }
     }
+}
+
+/// Which section of the signed-in shell is showing (spec 050).
+///
+/// A section, not a route: `design/contacts/C1` draws the tab bar with 通讯录
+/// **selected**, so it is a peer of 钱包 rather than something pushed over it.
+/// 设置 is the opposite case — its drawing has a back affordance — and stays an
+/// `AppRoute`. 探索 joins this enum when its machines are wired.
+enum WalletSection { case wallet, contacts }
+
+/// Where the contacts section is, inside itself (spec 050).
+///
+/// Keyed by the core's own identifiers rather than by a row's SwiftUI `id`,
+/// which is a `UUID()` minted per render: a book that reloads under the screen
+/// would otherwise leave it pointing at a row that no longer exists.
+enum ContactsRoute: Equatable {
+    case detail(address: String)
+    case group(id: String)
 }
 
 /// `VELA_PAGE` launch override (spec 015 research D4, extended by spec 018

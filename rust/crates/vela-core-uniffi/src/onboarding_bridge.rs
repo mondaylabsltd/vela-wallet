@@ -223,3 +223,15 @@ bridge_object!(
     SessionCore,
     vela_core::app::session::Session
 );
+
+// The wallet-state machines, added per cut rather than all at once (spec 050
+// research D10). `vela-core-wasm` exports twenty-two of them because the web
+// client drives twenty-two; every one exported here lands a class in the
+// committed `vela_core_uniffi.swift` and in the signed binary, so an export
+// arrives with the code that calls it.
+
+bridge_object!(
+    /// The address book: saved ⊕ history-derived, tombstoned, grouped.
+    ContactsCore,
+    vela_core::app::contacts::Contacts
+);
