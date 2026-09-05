@@ -36,41 +36,41 @@ tells the truth, and an untested claim of truth is just a different fixture.
 
 ## Phase 1 — The road, part one: bridge + plumbing (US3)
 
-- [ ] **T005** `US3` Add the three `bridge_object!` registrations to
+- [X] **T005** `US3` Add the three `bridge_object!` registrations to
       `rust/crates/vela-core-uniffi/src/onboarding_bridge.rs`, doc comments
       matched to the wasm siblings in `vela-core-wasm/src/wallet_state.rs`.
-- [ ] **T006** `US3` Regenerate `rust/bindings/kotlin/` and confirm the three
+- [X] **T006** `US3` Regenerate `rust/bindings/kotlin/` and confirm the three
       new classes are present (`ContactsCore`, `NetworkAdminCore`,
       `DisplayCurrencyCore`).
-- [ ] **T007** `US3` Create `…/wallet/core/crux/` and **move** `CoreDriver.kt`
+- [X] **T007** `US3` Create `…/wallet/core/crux/` and **move** `CoreDriver.kt`
       and the `CoreBridge` interface out of `feature/onboarding/core/`; update
       onboarding's imports. No copies, no behaviour change.
-- [ ] **T008** `US3` Add `…/core/crux/Wire.kt`: the single `Json` instance and
+- [X] **T008** `US3` Add `…/core/crux/Wire.kt`: the single `Json` instance and
       its rules (`ignoreUnknownKeys`, `explicitNulls = false`, no
       `coerceInputValues` — research D2), with the reasoning in the header.
-- [ ] **T009** `US3` Add `…/core/crux/CoreHost.kt`: one machine's driver plus a
+- [X] **T009** `US3` Add `…/core/crux/CoreHost.kt`: one machine's driver plus a
       `StateFlow` of its decoded view; typed on the view class, blind to the
       product.
-- [ ] **T010** `US3` Add the Kotlin serialization plugin + `kotlinx-serialization-json`
+- [X] **T010** `US3` Add the Kotlin serialization plugin + `kotlinx-serialization-json`
       to `gradle/libs.versions.toml` and `app/build.gradle.kts`.
-- [ ] **T011** `US3` **Gate**: `:app:testDebugUnitTest` and `:app:assembleDebug`
+- [X] **T011** `US3` **Gate**: `:app:testDebugUnitTest` and `:app:assembleDebug`
       green with the 118 existing tests unchanged.
 
 ---
 
 ## Phase 2 — The road, part two: store + drift gate (US3)
 
-- [ ] **T012** `US3` Extract `…/core/data/VelaStore.kt` — `read`/`write`/`remove`
+- [X] **T012** `US3` Extract `…/core/data/VelaStore.kt` — `read`/`write`/`remove`
       over the existing `vela_onboarding` DataStore file; `AccountStore` keeps
       its whole-record invariant and rides on top (research D9).
-- [ ] **T013** `US3` `VelaStoreTest`: absent reads as null, a write round-trips,
+- [X] **T013** `US3` `VelaStoreTest`: absent reads as null, a write round-trips,
       a removed key is absent, and `AccountStore`'s existing behaviour is
       unchanged (its own tests stay green).
-- [ ] **T014** `US3` `CoreWireDriftTest`: for every declared Kotlin wire class,
+- [X] **T014** `US3` `CoreWireDriftTest`: for every declared Kotlin wire class,
       compare `@SerialName`s and nullability against the ts-rs mirror in
       `app-web/vela-wallet/src/lib/core/generated/`, via the `vela.repo.root`
       system property `DesignTokenDriftTest` already uses.
-- [ ] **T015** `US3` **Demonstrate SC-008**: rename a field in a Rust wire type,
+- [X] **T015** `US3` **Demonstrate SC-008**: rename a field in a Rust wire type,
       watch `CoreWireDriftTest` go red, revert, record the output in
       `results.md`.
 
@@ -78,112 +78,119 @@ tells the truth, and an untested claim of truth is just a different fixture.
 
 ## Phase 3 — Currency, end to end (US1)
 
-- [ ] **T016** `US1` `…/feature/settings/core/CurrencyWire.kt` — `CurrencyView`,
+- [X] **T016** `US1` `…/feature/settings/core/CurrencyWire.kt` — `CurrencyView`,
       `CurrencyOperation`, `CurrencyShellResult`, `CurrencyEvent`.
       **`rate` stays `Double?`** (data-model §1).
-- [ ] **T017** `US1` `CurrencyExecutor.kt` — four operations, exactly as
+- [X] **T017** `US1` `CurrencyExecutor.kt` — four operations, exactly as
       `contracts/shell-operations.md` specifies; `read_device_currency`
       answered for real from the primary locale (research D8);
       `resolve_rate` fail-closed with `// live in 041`.
-- [ ] **T018** `US1` `CurrencyExecutorTest` — one case per operation, including
+- [X] **T018** `US1` `CurrencyExecutorTest` — one case per operation, including
       a regionless locale (`en`) answering `null` and a stored code that
       round-trips.
-- [ ] **T019** `US1` Wire the currency host into `AppContainer` (lazy — research
+- [X] **T019** `US1` Wire the currency host into `AppContainer` (lazy — research
       D5) and the currency overlay in `SettingsScreen` to it: the list, the
       chosen row, and the write on selection.
-- [ ] **T020** `US1` **Device check (SC-001)**: choose a currency, force-stop,
-      relaunch, still chosen. Record in `results.md`.
+- [~] **T020** `US1` **Device check (SC-001)** — **BLOCKED**: needs a wallet on
+      the device (a passkey ceremony is a human action) and MIUI refuses the
+      instrumented-test APK. `CurrencyPersistenceTest` is written and waiting;
+      the in-process half is green. See `results.md`.
 
 ---
 
 ## Phase 4 — Fields that accept typing (US1)
 
-- [ ] **T021** `US1` `VelaUrlField` gains an optional `onValueChange`; when
+- [X] **T021** `US1` `VelaUrlField` gains an optional `onValueChange`; when
       absent, the rendering is byte-identical to today (research D7).
-- [ ] **T022** `US1` Compose test: with `onValueChange` the field accepts text
+- [X] **T022** `US1` Compose test: with `onValueChange` the field accepts text
       and reports it; without it, the same tree renders as before.
-- [ ] **T023** `US1` **Gate**: every settings gallery state still renders
+- [X] **T023** `US1` **Gate**: every settings gallery state still renders
       (`settings-gallery`, all 28 states, light and dark).
 
 ---
 
 ## Phase 5 — Networks, read path (US1)
 
-- [ ] **T024** `US1` `NetWire.kt` — `NetView` and everything it reaches
+- [X] **T024** `US1` `NetWire.kt` — `NetView` and everything it reaches
       (data-model §1), plus `NetOperation`/`NetShellResult`/`NetEvent`.
-- [ ] **T025** `US1` `NetworkAdminExecutor.kt` — six storage operations live
+- [X] **T025** `US1` `NetworkAdminExecutor.kt` — six storage operations live
       against `VelaStore`, one real debounce, ten network operations
       fail-closed with `// live in 041`, each answering the shape the contract
       names.
-- [ ] **T026** `US1` `NetworkAdminExecutorTest` — one case per operation;
+- [X] **T026** `US1` `NetworkAdminExecutorTest` — one case per operation;
       unreadable storage reads as "nothing configured"; a write failure still
       answers `written`.
-- [ ] **T027** `US1` `SettingsLive.kt` — `NetView` + `CurrencyView` + session →
+- [X] **T027** `US1` `SettingsLive.kt` — `NetView` + `CurrencyView` + session →
       `SettingsScreenModel`, sibling of `SettingsFixtures`.
-- [ ] **T028** `US1` `SettingsLiveTest` — the networks list, the detail page,
+- [X] **T028** `US1` `SettingsLiveTest` — the networks list, the detail page,
       the endpoints and providers pages render from a core view; health tiles
       render their **unknown** state (FR-013), never a staged value.
-- [ ] **T029** `US1` `VelaNavHost`: the `settings` route reads the live builder;
+- [X] **T029** `US1` `VelaNavHost`: the `settings` route reads the live builder;
       `settings-gallery` keeps its fixtures.
 
 ---
 
 ## Phase 6 — Networks, write path (US1)
 
-- [ ] **T030** `US1` Add-network wizard: the form's fields are typable, its
-      events reach the core, and the core's wizard phase drives the screen.
-- [ ] **T031** `US1` Network detail: edit the RPC and explorer URLs; removal
+- [~] **T030** `US1` Add-network wizard — **MOVED TO 041**: both routes into it
+      need `fetch_chain_info` / `fetch_search_index`, which are fail-closed
+      here, so the core never resolves a candidate and `can_add` stays false.
+      That is the core refusing to save a chain it has not confirmed, not a
+      wiring gap.
+- [X] **T031** `US1` Network detail: edit the RPC and explorer URLs; removal
       with its confirm.
-- [ ] **T032** `US1` Provider keys and service endpoints: edit and save through
+- [X] **T032** `US1` Provider keys and service endpoints: edit and save through
       the core, `vela.serviceEndpoints` written as the complete merged record.
-- [ ] **T033** `US1` Refusal path: a network the core rejects shows the core's
+- [X] **T033** `US1` Refusal path: a network the core rejects shows the core's
       refusal and writes nothing (FR-012) — unit-tested on the view, and seen
       once on a device.
-- [ ] **T034** `US1` **Device check (SC-002)**: add → force-stop → edit →
-      force-stop → remove → force-stop. Record.
+- [~] **T034** `US1` **Device check (SC-002)** — **BLOCKED** with T020, and
+      partly moot: the "add" half moves to 041 with T030.
 
 ---
 
 ## Phase 7 — Contacts, read path (US2)
 
-- [ ] **T035** `US2` `ContactsWire.kt` — `ContactsView`, `Contact`,
+- [X] **T035** `US2` `ContactsWire.kt` — `ContactsView`, `Contact`,
       `ContactGroupView`, `ContactRecipientView`, the enums, and the
       operation/result/event hierarchies.
-- [ ] **T036** `US2` `ContactsExecutor.kt` — three storage operations live (the
+- [X] **T036** `US2` `ContactsExecutor.kt` — three storage operations live (the
       camelCase stored shapes and the `address → ms` **map** verbatim);
       `load_send_history` truthfully empty; identity and classification
       fail-closed. All marked per the contract.
-- [ ] **T037** `US2` `ContactsExecutorTest` — round-trip each stored shape;
+- [X] **T037** `US2` `ContactsExecutorTest` — round-trip each stored shape;
       a corrupt record reads as empty, never as a partial book.
-- [ ] **T038** `US2` `ContactsLive.kt` — `ContactsView` → `ContactsHomeModel`,
+- [X] **T038** `US2` `ContactsLive.kt` — `ContactsView` → `ContactsHomeModel`,
       `ContactDetailModel`, `GroupDetailModel`, with letter sectioning and
       search narrowing documented as the presentation judgements they are.
-- [ ] **T039** `US2` `ContactsLiveTest` — **parity cases ported from**
+- [X] **T039** `US2` `ContactsLiveTest` — **parity cases ported from**
       `app-web/vela-wallet/src/lib/contacts/live.test.ts`: `#` sorts last,
       core order survives inside a letter, an unnamed address introduces itself
       by its short form.
-- [ ] **T040** `US2` `VelaNavHost`: the `contacts` route reads the live builder;
+- [X] **T040** `US2` `VelaNavHost`: the `contacts` route reads the live builder;
       `contacts-gallery` keeps its fixtures.
-- [ ] **T041** `US2` **Connect the Contacts tab.** It refuses to navigate today
+- [X] **T041** `US2` **Connect the Contacts tab.** It refuses to navigate today
       because the screen showed fixtures (research D11); that reason expires
       with T038. Settings' `通讯录` row keeps working and now reaches the same
       live screen.
-- [ ] **T041b** `US2` **Device check (SC-003)**: an empty store shows the empty
-      state — no fixture person anywhere on a signed-in route.
+- [X] **T041b** `US2` **Device check (SC-003)** ✅ **done on device**: the live
+      contacts route on an empty store shows the empty state and its two calls
+      to action — no fixture people, no fixture groups. (First attempt showed
+      the fixture book: a silently incomplete `adb install`, not the code.)
 
 ---
 
 ## Phase 8 — Contacts, actions (US2)
 
-- [ ] **T042** `US2` Detail and group-detail actions take their target from the
+- [X] **T042** `US2` Detail and group-detail actions take their target from the
       **rendered model** (data-model §3). A test proves the detail page's
       delete acts on the contact it is displaying.
-- [ ] **T043** `US2` Delete + dismiss + group membership reach the core and
+- [X] **T043** `US2` Delete + dismiss + group membership reach the core and
       write through the executor.
-- [ ] **T044** `US2` **Device check (SC-004)**: with three contacts saved,
-      delete the middle one; it is the one that goes, and it stays gone after a
-      relaunch.
-- [ ] **T045** `US2` Record in `results.md` which contact actions have **no
+- [~] **T044** `US2` **Device check (SC-004)** — **BLOCKED** with T020. The
+      machine test already deletes the middle of three and asserts both the
+      view and the stored bytes.
+- [X] **T045** `US2` Record in `results.md` which contact actions have **no
       artwork** on Android (add/edit form, favourites) — as a debt for the
       designer, not as scope silently absorbed (FR-016).
 
@@ -191,19 +198,24 @@ tells the truth, and an untested claim of truth is just a different fixture.
 
 ## Phase 9 — Honesty pass and closeout
 
-- [ ] **T046** `INFRA` `grep -n 'Fixtures\.' navigation/VelaNavHost.kt`: every
+- [X] **T046** `INFRA` `grep -n 'Fixtures\.' navigation/VelaNavHost.kt`: every
       remaining hit is a developer route or belongs to 041/042, and is listed.
-- [ ] **T047** `INFRA` `grep -rn 'live in 041'`: the count is recorded as the
+- [X] **T047** `INFRA` `grep -rn 'live in 041'`: the count is recorded as the
       budget spec 041 inherits.
-- [ ] **T048** `INFRA` **FR-018 proof**: the aeroplane-mode device pass behaves
+- [X] **T048** `INFRA` **FR-018 proof**: the aeroplane-mode device pass behaves
       identically to the connected one.
-- [ ] **T049** `INFRA` `results.md`: ten success criteria verdicted with
+- [X] **T049** `INFRA` `results.md`: ten success criteria verdicted with
       evidence, the size measurements, the debts, and a handover section naming
       the first thing spec 041 must do.
-- [ ] **T050** `INFRA` Final gate: `:app:testDebugUnitTest`, `:app:assembleDebug`,
+- [X] **T050** `INFRA` Final gate: `:app:testDebugUnitTest`, `:app:assembleDebug`,
       and every gallery state rendering.
 
 ---
+
+## Legend
+
+`[X]` done · `[~]` not done, with the reason recorded here and in `results.md`.
+Nothing is marked done that is not.
 
 ## Dependencies
 
