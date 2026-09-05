@@ -156,6 +156,39 @@ detail and group pushes, and a `contacts` store constructed beside the session.
 helpers now delegate to `ContactsLabels`, and the 22 existing
 `ContactsFixturesTests` still pass, which is the proof rather than the claim.
 
+### Phase 1a — the loop, end to end, with nothing faked below it
+
+`ContactsStoreTests` drives the real core through the real bridge, the real
+`CoreDriver`, the real executor and a real `UserDefaults`. It is the same path
+the screen takes, minus the finger, and it is what stands in for SC-001 until
+the device run.
+
+Five tests: the book loads from storage through the core; a delete writes a
+tombstone that survives a **relaunch** (a second store over the same defaults);
+switching accounts resets the book; re-entering the tab does not re-boot the
+machine; and no account loads an empty book rather than somebody else's.
+
+Tests: 163 → **168**, all passing.
+
+### The finding this file exists for: the view lands before the write does
+
+The relaunch test failed on its first run, and the reason is worth more than the
+test:
+
+> **The core commits its view the instant it handles the event, and *queues* the
+> writes.**
+
+So the row disappears from the screen a turn *before* anything reaches storage.
+The test had settled on `contacts.count == 1` and then read the shelf — and
+found nothing, because nothing was there yet.
+
+The consequence reaches past the test suite. **"I watched the contact vanish" is
+not evidence that it will still be gone tomorrow.** A device check that deletes
+a row and sees it disappear has verified the view and nothing else; only the
+relaunch verifies the write. Every persistence claim in this feature — contacts,
+networks, the display currency — has to be made *after* a relaunch, which is why
+each acceptance scenario says so.
+
 ### Two bugs the new tests found, both mine
 
 1. **`assertionFailure` was the wrong kind of loud.** The unknown-operation
