@@ -76,6 +76,23 @@ object SettingsLive {
     ): SettingsScreenModel {
         if (!view.loaded) return model
         return model.copy(
+            // The row that opens the list said "12 个网络" from the fixture
+            // while the list beside it was live — so adding a custom network
+            // left the count untouched. Found on a device (spec 040 phase 11).
+            sections = model.sections.map { section ->
+                section.copy(
+                    rows = section.rows.map { row ->
+                        if (row.id == "networks") {
+                            row.copy(
+                                value = row.value.orEmpty()
+                                    .replaceFirst(Regex("\\d+"), view.networks.size.toString()),
+                            )
+                        } else {
+                            row
+                        }
+                    },
+                )
+            },
             networks = view.networks.map { row ->
                 NetworkRowModel(
                     id = row.id,

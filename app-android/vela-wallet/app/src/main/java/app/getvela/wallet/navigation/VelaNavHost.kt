@@ -463,6 +463,7 @@ fun VelaNavHost(
                         providerId(fieldId)?.let { settings.commitProviderKey(it) }
                     },
                     onRemoveNetwork = { id -> settings.deleteNetwork(id) },
+                    onResetEndpoints = { settings.resetEndpoints() },
                 ),
             )
         }

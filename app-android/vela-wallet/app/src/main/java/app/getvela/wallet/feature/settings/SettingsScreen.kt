@@ -115,6 +115,8 @@ data class SettingsActions(
     val onFieldCommitted: (fieldId: String) -> Unit = {},
     /** The bin on a custom network row. */
     val onRemoveNetwork: (id: String) -> Unit = {},
+    /** 恢复默认 on the service-endpoints page. */
+    val onResetEndpoints: () -> Unit = {},
 )
 
 @Composable
@@ -172,6 +174,7 @@ fun SettingsRoute(
         onFieldEdited = actions.onFieldEdited,
         onFieldCommitted = actions.onFieldCommitted,
         onRemoveNetwork = actions.onRemoveNetwork,
+        onResetEndpoints = actions.onResetEndpoints,
     )
 }
 
@@ -194,6 +197,7 @@ fun SettingsScreen(
     onFieldEdited: (String, String) -> Unit = { _, _ -> },
     onFieldCommitted: (String) -> Unit = {},
     onRemoveNetwork: (String) -> Unit = {},
+    onResetEndpoints: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
 
@@ -257,6 +261,7 @@ fun SettingsScreen(
                             onFieldEdited = onFieldEdited,
                             onFieldCommitted = onFieldCommitted,
                             onRemoveNetwork = onRemoveNetwork,
+                            onResetEndpoints = onResetEndpoints,
                         )
                     }
                 }
@@ -446,6 +451,7 @@ private fun SettingsPageBody(
     onFieldEdited: (String, String) -> Unit = { _, _ -> },
     onFieldCommitted: (String) -> Unit = {},
     onRemoveNetwork: (String) -> Unit = {},
+    onResetEndpoints: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     when (page) {
@@ -659,8 +665,14 @@ private fun SettingsPageBody(
                 )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl3))
             }
+            // Drawn as a label in spec 023 and never given a click — found on
+            // a device by tapping it and watching the store not change. The
+            // core has had `reset_endpoints_to_defaults` all along.
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = VelaSpacing.xl),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onResetEndpoints)
+                    .padding(top = VelaSpacing.xl),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {

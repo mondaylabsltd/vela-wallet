@@ -199,6 +199,42 @@ fields — so `ContactsLive.home` shipped a working filter that nothing on the
 phone could feed. Same fix as phase 4: an optional `onQueryChange`, unchanged
 without it, gallery states untouched. Verified on the device.
 
+### The device pass (third sitting) — a signed-in wallet, SC-002 closed
+
+The founder signed in with an existing passkey, so the settings surface is
+reachable at last. Everything on it that spec 040 claims was exercised by hand:
+
+| Check | Result |
+| --- | --- |
+| Currency row reads the machine | ✅ showed `JPY · ¥` — the value the instrumented test had written, read back by the screen |
+| Currency sheet ticks the core's choice | ✅ JPY ticked, not the fixture's hardcoded row 0 |
+| Pick GBP → row updates → disk → force-stop → relaunch | ✅ `GBP · £` throughout |
+| Networks list is the core's | ✅ 12 real chains with real ids; **no latency pills on any row** (FR-013) |
+| A custom network written in another client's byte shape | ✅ appeared as `Seven Testnet 链 7777` with the 自定义 tag and a bin |
+| Remove it in the UI | ✅ gone from the list and from disk |
+| Type into a service endpoint, blur to commit | ✅ the complete four-key camelCase record written under `vela.serviceEndpoints` |
+
+**SC-002 is now met for everything this slice claims** (edit and remove);
+adding still belongs to 041 for the reason recorded above.
+
+### Three more things the device found
+
+1. **恢复默认 was not a button.** The service-endpoints page drew the label and
+   the refresh glyph, and nothing was clickable — the core has had
+   `reset_endpoints_to_defaults` all along. Found by tapping it and watching the
+   store not change. Wired; verified by restoring a deliberately corrupted
+   endpoint on the device.
+2. **The networks row counted fixtures.** `网络 … 12 个网络` came from the ST1
+   fixture while the list beside it was live, so adding a custom network left
+   the number alone. Now derived from the view — verified reading `13 个网络`
+   with one custom network seeded, and back to 12 after removing it.
+3. **A correction to this document.** The contacts section above said the stored
+   JSON is "byte-identical to what the other clients produce". It is not, quite:
+   `org.json` escapes forward slashes, so a URL is written `https:\/\/…` where
+   `JSON.stringify` writes `https://…`. Both parse to the same string and the
+   compatibility holds, but the claim was stronger than the evidence. Read it as
+   *shape- and value-compatible*.
+
 ### What still needs a wallet, and is therefore blocked
 
 SC-001, SC-002 and SC-004 all require a signed-in wallet on the device, which
@@ -277,7 +313,7 @@ that gets edited to match what shipped is not a criterion.
 | # | Claim | Verdict |
 | --- | --- | --- |
 | SC-001 | A currency choice survives a force-stop | ✅ **verified on device**, across a real process death, plus the bytes read off disk |
-| SC-002 | A custom network can be added, edited, removed | **Partly met, and the gap is stated.** Edit and remove are wired; **adding is impossible in 040** because both routes to it need the network layer 041 brings |
+| SC-002 | A custom network can be added, edited, removed | ✅ **for what this slice claims**, verified on device: a custom network written in another client's shape is listed, tagged and removable, and endpoints are editable and saved. **Adding is impossible in 040** — both routes to it need the network layer 041 brings, recorded rather than reworded |
 | SC-003 | Contacts render the device's own book; empty means empty | ✅ **verified on device** |
 | SC-004 | Deleting the middle of three deletes that one | ✅ **verified on device**, across two process deaths, and again through the UI with the confirm sheet naming the right contact |
 | SC-005 | Zero network requests from these surfaces | ✅ by construction — 18 `// live in 041` arms, and no HTTP client is reachable from any of the three executors |
@@ -316,6 +352,7 @@ those two screens, and why:
 | 5 | Contact **add/edit form** and **favourite** control | **no artwork** — the core supports both; nothing is drawn on Android. Not blocked on wiring |
 | 6 | Import / export of contacts | needs a file picker; the core supports it |
 | 7 | Per-network RPC override page | drawn, but has no selection state — the detail page shows a fixed fixture network |
+| 7b | Removing a network takes effect with no confirmation, unlike deleting a contact | a design question for the founder, not a wiring gap |
 | 8 | Currency captions are unlocalised (English here, Chinese on web) | a content decision: needs i18n keys for currency names |
 | 9 | Live builders import fixture files for copy | see FR-017 above |
 | 10 | Wallet home, flows, explore, signing still fixture-fed | **041 / 042**, as scoped |
