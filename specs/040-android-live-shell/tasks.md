@@ -91,10 +91,10 @@ tells the truth, and an untested claim of truth is just a different fixture.
 - [X] **T019** `US1` Wire the currency host into `AppContainer` (lazy — research
       D5) and the currency overlay in `SettingsScreen` to it: the list, the
       chosen row, and the write on selection.
-- [~] **T020** `US1` **Device check (SC-001)** — **BLOCKED**: needs a wallet on
-      the device (a passkey ceremony is a human action) and MIUI refuses the
-      instrumented-test APK. `CurrencyPersistenceTest` is written and waiting;
-      the in-process half is green. See `results.md`.
+- [X] **T020** `US1` **Device check (SC-001)** ✅ **done**: across a real
+      process death (two `am instrument` runs with `force-stop` between), plus
+      the bytes read off disk, plus the whole UI path — pick GBP, kill, relaunch,
+      still GBP.
 
 ---
 
@@ -144,8 +144,11 @@ tells the truth, and an untested claim of truth is just a different fixture.
 - [X] **T033** `US1` Refusal path: a network the core rejects shows the core's
       refusal and writes nothing (FR-012) — unit-tested on the view, and seen
       once on a device.
-- [~] **T034** `US1` **Device check (SC-002)** — **BLOCKED** with T020, and
-      partly moot: the "add" half moves to 041 with T030.
+- [X] **T034** `US1` **Device check (SC-002)** ✅ **done for what this slice
+      claims**: a custom network written in another client's byte shape is
+      listed, tagged 自定义, removable in the UI and gone from disk; an endpoint
+      is typed into, committed on blur and written whole. The "add" half is
+      T030's, in 041.
 
 ---
 
@@ -187,9 +190,9 @@ tells the truth, and an untested claim of truth is just a different fixture.
       delete acts on the contact it is displaying.
 - [X] **T043** `US2` Delete + dismiss + group membership reach the core and
       write through the executor.
-- [~] **T044** `US2` **Device check (SC-004)** — **BLOCKED** with T020. The
-      machine test already deletes the middle of three and asserts both the
-      view and the stored bytes.
+- [X] **T044** `US2` **Device check (SC-004)** ✅ **done**: three saved, the
+      middle one deleted, across two process deaths — and again through the UI,
+      where the confirm sheet named the contact on screen.
 - [X] **T045** `US2` Record in `results.md` which contact actions have **no
       artwork** on Android (add/edit form, favourites) — as a debt for the
       designer, not as scope silently absorbed (FR-016).
@@ -211,6 +214,18 @@ tells the truth, and an untested claim of truth is just a different fixture.
       and every gallery state rendering.
 
 ---
+
+## Added on the device (phase 10–11)
+
+- [X] **T051** `US1` Wire 恢复默认 on the service-endpoints page — it was a
+      label with no click, while the core has always had
+      `reset_endpoints_to_defaults`.
+- [X] **T052** `US1` The 网络 row's count comes from the view, not the ST1
+      fixture, so adding a network moves it.
+- [X] **T053** `US2` The contacts search field accepts typing — `ContactsLive`
+      shipped a filter nothing could feed.
+- [X] **T054** `US2` A live contact shows no invented transactions and no
+      borrowed empty copy.
 
 ## Legend
 
