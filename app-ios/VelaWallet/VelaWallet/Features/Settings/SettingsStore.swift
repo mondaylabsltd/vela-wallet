@@ -23,6 +23,7 @@ import VelaCore
 /// uniffi generates one class per exported machine with no shared supertype.
 /// Declared beside its user so adding a machine touches no shared file.
 extension NetworkAdminCore: CoreBridge {}
+extension DisplayCurrencyCore: CoreBridge {}
 
 @MainActor
 @Observable
@@ -33,15 +34,25 @@ final class SettingsStore {
     /// renders from.
     private(set) var networkAdmin: NetViewWire?
 
+    /// Which currency amounts are shown in (spec 050, phase 4).
+    ///
+    /// The second machine on this screen, and it lives here rather than in its
+    /// own store for the reason the screen is one value: 设置 is one surface,
+    /// and a caller should not have to know how many cores are behind it.
+    private(set) var currency: CurrencyViewWire?
+
     /// `true` once the core has read all four stores. Mutations sent before it
     /// are dropped by the core.
     var isLoaded: Bool { networkAdmin?.loaded == true }
 
     private let executor: NetworkAdminExecutor
+    private let currencyExecutor: DisplayCurrencyExecutor
     private var core: CoreStore<NetViewWire>!
+    private var currencyCore: CoreStore<CurrencyViewWire>!
 
     init(store: VelaStore, accounts: AccountStore) {
         self.executor = NetworkAdminExecutor(store: store, accounts: accounts)
+        self.currencyExecutor = DisplayCurrencyExecutor(store: store)
         self.core = CoreStore(
             bridge: NetworkAdminCore(),
             perform: { [executor] operation in await executor.perform(operation) },
@@ -51,12 +62,24 @@ final class SettingsStore {
             // how a screen stops responding with nothing in any log to say why.
             onFault: { print("[vela-wallet] network_admin fault: \($0)") }
         )
+        self.currencyCore = CoreStore(
+            bridge: DisplayCurrencyCore(),
+            perform: { [currencyExecutor] operation in await currencyExecutor.perform(operation) },
+            onView: { [weak self] view in self?.currency = view },
+            onFault: { print("[vela-wallet] display_currency fault: \($0)") }
+        )
     }
 
-    /// Called from the settings route's `.task`. Idempotent: the machine reads
-    /// its stores once and keeps them.
+    /// Called from the settings route's `.task`. Idempotent: the machines read
+    /// their stores once and keep them.
     func open() {
         core.boot(CoreJSON.string(["type": "started"]))
+        currencyCore.boot(CoreJSON.string(["type": "refresh"]))
+    }
+
+    /// A row of the currency picker.
+    func chooseCurrency(_ code: String) {
+        currencyCore.dispatch(CoreJSON.string(["type": "user_chose", "code": code]))
     }
 
     // MARK: - What the drawn controls raise

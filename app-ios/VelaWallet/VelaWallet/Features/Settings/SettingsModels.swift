@@ -78,7 +78,7 @@ struct SettingsRowModel: Identifiable {
 
 struct SettingsSectionModel: Identifiable {
     let id = UUID()
-    let rows: [SettingsRowModel]
+    var rows: [SettingsRowModel]
     var label: String?
     /// ST1b: 高级 is a disclosure, and it remembers being open.
     var collapsible: Bool = false
@@ -411,7 +411,7 @@ struct SettingsScreenModel {
     let rescue: Bool
     let tabs: TabsModel
     var account: SettingsAccountRowModel
-    let sections: [SettingsSectionModel]
+    var sections: [SettingsSectionModel]
     let theme: SegmentedModel
     let avatar: SegmentedModel
     let textScale: TextScaleModel
@@ -431,7 +431,7 @@ struct SettingsScreenModel {
     var accountsSheet: AccountsSheetModel
     let signOutSheet: ConfirmSheetModel
     let languageSheet: SelectSheetModel
-    let currencySheet: SelectSheetModel
+    var currencySheet: SelectSheetModel
     let numberSheet: SelectSheetModel
     let dateSheet: SelectSheetModel
     let timeSheet: SelectSheetModel

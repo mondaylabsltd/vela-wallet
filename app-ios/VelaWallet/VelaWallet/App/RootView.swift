@@ -422,11 +422,18 @@ struct RootView: View {
                 address: session.view.address,
                 display: Self.shortenAddress(session.view.address)
             )
-        // Before the core has ruled there is nothing truthful to swap in, so
-        // the drawing stands as drawn — never half-live, and never a fixture
-        // list wearing a live pill.
-        guard let view = settings.networkAdmin, view.loaded else { return base }
-        return SettingsLive.withNetworks(view, on: base, loc: loc)
+        // Before a core has ruled there is nothing truthful to swap in, so the
+        // drawing stands as drawn — never half-live, and never a fixture list
+        // wearing a live pill. The two machines are independent: one can be
+        // ready while the other is not.
+        var model = base
+        if let view = settings.networkAdmin, view.loaded {
+            model = SettingsLive.withNetworks(view, on: model, loc: loc)
+        }
+        if let view = settings.currency {
+            model = SettingsLive.withCurrency(view, on: model, loc: loc)
+        }
+        return model
     }
 
     /// `0x14fB1f…D1eA5c` — the phone's short form, matching the wallet header's

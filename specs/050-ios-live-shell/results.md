@@ -465,6 +465,78 @@ Tests: 183 → **192** hermetic, plus 3 live behind the flag. Literal violations
 written as `Font.system` rather than hidden behind implicit-member syntax so the
 audit still counts it). Build green.
 
+---
+
+## Phase 4 — `display_currency`, and the measurement this cut exists to produce
+
+The third machine. Its value is the diffstat, not the feature.
+
+### SC-004, measured
+
+```
+ .../Sources/VelaCore/vela_core_uniffi.swift        | 168 +++++      generated
+ app-ios/VelaWallet/VelaWallet/App/RootView.swift   |  17 ++-        ← see below
+ .../Features/Settings/CurrencyCatalog.swift        |  52 +++        new
+ .../Settings/DisplayCurrencyExecutor.swift         |  84 +++        new
+ .../Features/Settings/SettingsFixtures.swift       |  13 +-         list moved out
+ .../Features/Settings/SettingsLive.swift           |  66 +++        new builder
+ .../Features/Settings/SettingsModels.swift         |   6 +-         3 `let` → `var`
+ .../Features/Settings/SettingsStore.swift          |  27 ++         2nd machine
+ .../Features/Settings/SettingsWire.swift           |  15 ++         new mirror
+ .../VelaWalletTests/DisplayCurrencyTests.swift     | 125 +++        new tests
+ .../vela-core-uniffi/src/onboarding_bridge.rs      |   6 +          1 export
+```
+
+**Four of the five named shared files are untouched:** `CoreDriver.swift`,
+`CoreStore.swift`, `VelaStore.swift` and `CoreHTTP.swift` are byte-identical.
+The road is paved: a third machine cost one export, one executor, one wire
+mirror, one builder and a dozen lines in the store that already existed.
+
+**`RootView.swift` changed, and pretending otherwise would be the dishonest
+version of this criterion.** Seventeen lines, and they are all one thing: the
+settings model assembly went from a single early-return over one machine to a
+`var model` threaded through two. Not shared logic — the *composition* of two
+independent views, one of which can be ready while the other is not.
+
+The change was avoidable only by contorting the architecture to win a number:
+`display_currency` could have been given its own store, and RootView would have
+grown a constructor line instead. It was put inside `SettingsStore` because 设置
+is one surface and a caller should not have to know how many cores are behind
+it — which is the better structure and costs the cleaner number, so the number
+is reported rather than the structure bent.
+
+### Why this machine went third and not first
+
+The plan said so and the reason held: the paved-road measurement only means
+something once two machines with *different* needs have been over the road.
+`contacts` needed storage and no network; `network_admin` needed HTTP, a
+debounce and probes. If `display_currency` had gone first it would have measured
+a road nobody had driven on.
+
+### What shipped
+
+- `bridge_object!(DisplayCurrencyCore, …)` — the third and last export.
+- `DisplayCurrencyExecutor` — three operations live, `resolve_rate` fail-closed.
+  **`read_device_currency` is a platform call** (`Locale.current.currency`),
+  where desktop carried it as an open debt needing a region→ISO-4217 table.
+- `CurrencyCatalog` — the eight currencies, shared by both builders for the
+  reason `ContactsLabels` is: two copies of the list is how a gallery board and
+  a live screen start offering different currencies.
+- `SettingsLive.withCurrency` — the 货币 row's value and the picker's selection.
+
+### `rate: null` is not `1`, made concrete
+
+The 货币 row reads `USD · $1,234.56`. With no rate it **degrades**: it says USD
+and shows the USD figure. It does not relabel the same digits with a ¥, which
+would tell somebody 1,234.56 dollars is 1,234.56 yuan.
+
+A code the catalog has never heard of — a device region can produce one —
+degrades the same way rather than inventing a symbol. Both have tests, and the
+`rate: nil` one is the reason this machine models an optional at all: the core's
+own doc calls a defaulted 1 "a real 7x mispayment".
+
+Tests: 192 → **202**.
+
 ### Recorded, not fixed
 
 - **Three address-shortening copies disagree.** `RootView.shortenAddress` and

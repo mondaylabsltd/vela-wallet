@@ -256,6 +256,21 @@ struct NetProviderViewWire: Decodable, Equatable {
     let test: NetProviderTestViewWire?
 }
 
+// MARK: - display_currency
+
+/// Which currency amounts are shown in, and whether one can be priced.
+struct CurrencyViewWire: Decodable, Equatable {
+    let code: String
+    /// USD → `code`, or `nil` when nothing could price it right now.
+    ///
+    /// **`nil` is not `1`.** Formatting may degrade — show the USD figure
+    /// rather than label an unconverted number with a ¥ — but converting may
+    /// not: a fiat amount multiplied by a defaulted 1 is a real mispayment.
+    let rate: Double?
+    /// `false` ⇒ the USD placeholder is showing and the person has not chosen.
+    let committed: Bool
+}
+
 // MARK: - The whole view
 
 struct NetViewWire: Decodable, Equatable {

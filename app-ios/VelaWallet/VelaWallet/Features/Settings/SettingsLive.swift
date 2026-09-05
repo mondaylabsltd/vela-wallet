@@ -40,6 +40,72 @@ enum SettingsLive {
         return copy
     }
 
+    // MARK: - display_currency
+
+    /// Swap in the currency the person actually chose.
+    ///
+    /// Two surfaces: the 货币 row's value on the home page, and which row of the
+    /// picker reads as selected.
+    static func withCurrency(
+        _ view: CurrencyViewWire,
+        on model: SettingsScreenModel,
+        loc: Loc
+    ) -> SettingsScreenModel {
+        var copy = model
+        copy.sections = model.sections.map { section in
+            var updated = section
+            updated.rows = section.rows.map { row in
+                guard row.id == "currency" else { return row }
+                var changed = row
+                changed.value = currencyRowValue(view)
+                return changed
+            }
+            return updated
+        }
+        copy.currencySheet = SelectSheetModel(
+            title: model.currencySheet.title,
+            rows: CurrencyCatalog.entries.map { entry in
+                SelectRowModel(
+                    id: entry.code, label: entry.code, glyph: entry.glyph,
+                    caption: entry.name, selected: entry.code == view.code
+                )
+            },
+            subtitle: model.currencySheet.subtitle,
+            searchPlaceholder: model.currencySheet.searchPlaceholder,
+            footerNote: model.currencySheet.footerNote,
+            footerLink: model.currencySheet.footerLink
+        )
+        return copy
+    }
+
+    /// `USD · $1,234.56` — the code, then a sample amount in it.
+    ///
+    /// **A missing rate degrades; it never converts.** With `rate == nil` the
+    /// sample stays the USD figure under a USD symbol rather than the same
+    /// digits relabelled with a ¥, because relabelling is the lie: it tells
+    /// somebody 1,234.56 dollars is 1,234.56 yuan. The core models that
+    /// difference (`rate: null` is not `1`) and this is where the shell honours
+    /// it.
+    static func currencyRowValue(_ view: CurrencyViewWire) -> String {
+        let sample = 1_234.56
+        guard let rate = view.rate, rate > 0, view.committed,
+              let entry = CurrencyCatalog.entry(view.code)
+        else {
+            // Degraded: say USD, show USD.
+            let usd = CurrencyCatalog.entry("USD")
+            return "USD · \(usd?.glyph ?? "$")\(format(sample))"
+        }
+        return "\(view.code) · \(entry.glyph)\(format(sample * rate))"
+    }
+
+    private static func format(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.minimumFractionDigits = 2
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: NSNumber(value: amount)) ?? String(format: "%.2f", amount)
+    }
+
     // MARK: - The add-network wizard
 
     /// The wizard, driven by the core's phase.

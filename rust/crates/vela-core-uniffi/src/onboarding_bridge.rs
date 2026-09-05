@@ -241,3 +241,9 @@ bridge_object!(
     NetworkAdminCore,
     vela_core::app::network_admin::NetworkAdmin
 );
+
+bridge_object!(
+    /// Which currency amounts are shown in, and whether one can be priced.
+    DisplayCurrencyCore,
+    vela_core::app::display_currency::DisplayCurrency
+);

@@ -115,16 +115,9 @@ enum SettingsFixtures {
 
     /// Currency names come from the FX provider, not the corpus: the list is
     /// provider-driven, so their names are data here rather than 120 strings.
-    private static let currencies: [(code: String, glyph: String, name: String)] = [
-        ("USD", "$", "US Dollar"),
-        ("EUR", "€", "Euro"),
-        ("GBP", "£", "British Pound"),
-        ("CNY", "¥", "Chinese Yuan"),
-        ("JPY", "¥", "Japanese Yen"),
-        ("KRW", "₩", "South Korean Won"),
-        ("HKD", "$", "Hong Kong Dollar"),
-        ("VND", "₫", "Vietnamese Dong"),
-    ]
+    /// Lives in `CurrencyCatalog` since spec 050, because the live picker
+    /// offers the same eight; the values are unchanged.
+    private static let currencies = CurrencyCatalog.entries
 
     private static let numberSamples =
         ["1,234,567.89", "1,234,567.89", "1.234.567,89", "1 234 567,89", "12,34,567.89"]
