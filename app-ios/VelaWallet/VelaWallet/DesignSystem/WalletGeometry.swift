@@ -86,6 +86,11 @@ enum ChainPalette {
     // supported networks, not just the six the home holds balances on.
     static let optimism = TokenColor(argb: 0xFFFF0420).color // #FF0420
     static let avalanche = TokenColor(argb: 0xFFE84142).color // #E84142
+    /// A chain with no brand colour in the drawings — Tempo and X Layer wear it
+    /// in `SettingsFixtures`, and since spec 050 so does every chain the core
+    /// knows about that nobody drew. Neutral on purpose: a chain must never be
+    /// handed somebody else's brand.
+    static let unbranded = TokenColor(argb: 0xFF8C8C8C).color // #8C8C8C
     /// All-networks pill dots, in mock order (Ethereum, Polygon, BNB).
     static let pillDots: [Color] = [ethereum, polygon, bnb]
 }

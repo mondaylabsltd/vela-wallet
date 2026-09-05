@@ -416,9 +416,9 @@ struct SettingsScreenModel {
     let eraseSubtitle: String
     let networksTitle: String
     let networksSubtitle: String
-    let networks: [SettingsNetworkRowModel]
+    var networks: [SettingsNetworkRowModel]
     let addNetworkLabel: String
-    let networkDetail: NetworkDetailModel
+    var networkDetail: NetworkDetailModel
     let addNetwork: AddNetworkModel
     let rpcProviders: RpcProvidersModel
     let endpoints: EndpointsModel

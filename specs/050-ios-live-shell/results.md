@@ -273,6 +273,86 @@ Tests: 168 → **170**.
 today. It is `contacts/live.ts`'s `sectionLetter`, and it needs the same fix in
 a web cut — flagged here rather than reached across into another client's code.
 
+---
+
+## Phase 2 — `network_admin` reads, and the first real HTTP
+
+The largest machine in the cut: 2,900 lines of core, 16 operations, four storage
+keys. Its **read** half lands here; the wizard's write path is phase 3.
+
+### What shipped
+
+`bridge_object!(NetworkAdminCore, …)` — the second and last export of this
+phase. Then:
+
+| File | What it is |
+|---|---|
+| `Core/CoreHTTP.swift` | `URLSession`, GET JSON + JSON-RPC + a probe that reports status and latency. Every method returns an optional, because every caller's next move is the same: answer the core's "I could not find out". |
+| `Features/Settings/SettingsWire.swift` | `Decodable` mirrors of `NetView`, including two hand-written tagged unions |
+| `Features/Settings/NetworkAdminExecutor.swift` | all 16 operations — 13 live, 3 fail-closed and marked |
+| `Features/Settings/SettingsLive.swift` | the networks list and detail, swapped onto the fixture model |
+| `Features/Settings/SettingsStore.swift` | the resident machine |
+
+`AccountStore` grew `loadServiceEndpoints` / `saveServiceEndpoints`, and its
+existing `loadRegistryURL` / `saveRegistryURL` now delegate to them — so the key
+with two writers has **one** writer's worth of code.
+
+### Two things iOS can do that web cannot
+
+1. **`probe_reachable` asks the real question.** An explorer is a website, not a
+   JSON API, and a browser's CORS rules hide its response — so web sends
+   `no-cors` and can only report "the request did not throw". iOS has no CORS,
+   so this reads the actual status. A strictly better answer than the client
+   this was ported from can give.
+2. **`wss://` RPC endpoints are probed.** Web opens a `WebSocket`; iOS uses
+   `URLSessionWebSocketTask` with the same budget. Answering `null` for these
+   would make every WebSocket RPC read as incompatible — a chain a person could
+   genuinely add, refused for the shell's convenience.
+
+### `SettingsScreenModel` is one value, so the live builder is partial
+
+`ContactsScene` is a screen; `SettingsScreenModel` is **every** settings page and
+sheet in one struct. So `SettingsLive` follows the pattern spec 019 established
+on this same type with `withIdentity`: build the fixture model, then swap the
+fields the core now owns.
+
+That is the honest shape. A field this file does not touch is visibly still a
+fixture, and the list of what it touches is the list of what is live — today,
+`networks` and `networkDetail`.
+
+### Two decisions worth their space
+
+**The health pill is `nil` until something is measured.** An unmeasured endpoint
+is not a healthy one, and painting a green dot before the probe answers is the
+screen making a claim the core has not.
+
+**Colour is a display fact, and the core is right not to have it.** `vela-core`
+knows a chain's id, name, RPC and explorer and deliberately not what colour it
+is. The eight brand colours the design system ships are used by chain id; the
+core's other four builtins and every custom chain get the neutral the drawing
+gives Tempo and X Layer — so a chain nobody drew is never handed somebody
+else's brand.
+
+### The literal audit earned its keep immediately
+
+The neutral started life as `Color(red: 0.549, …)` copied from the fixture, and
+the audit went 35 → 36. It is now `ChainPalette.unbranded`, a token beside the
+other eight, and the count is back to 35. Exactly the gate working as the
+baseline promised.
+
+### Verified on screen
+
+`VELA_PAGE=settings-live VELA_STATE=st9` opens straight on the networks page
+(`VELA_STATE` is new here, and exists because that page is otherwise two taps
+inside a route and unreachable from a screenshot pass).
+
+The list that came up is the **core's twelve builtin chains** — Ethereum, BNB,
+Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo and the
+rest — not the fixture's eight. Optimism, Avalanche and Unichain had never
+appeared on this screen before, because no drawing lists them.
+
+Tests: 170 → **183**. Literal violations: 35 → 35. Build green.
+
 ### Recorded, not fixed
 
 - **Three address-shortening copies disagree.** `RootView.shortenAddress` and

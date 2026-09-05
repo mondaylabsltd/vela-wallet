@@ -235,3 +235,9 @@ bridge_object!(
     ContactsCore,
     vela_core::app::contacts::Contacts
 );
+
+bridge_object!(
+    /// Networks, the add-network wizard, service endpoints and RPC providers.
+    NetworkAdminCore,
+    vela_core::app::network_admin::NetworkAdmin
+);

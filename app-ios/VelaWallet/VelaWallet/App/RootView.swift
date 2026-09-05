@@ -23,6 +23,10 @@ struct RootView: View {
     @State private var model: WelcomeModel
     @State private var session: SessionController
     @State private var onboarding: OnboardingModel
+    /// The networks machine (spec 050), app-resident: it probes endpoints and
+    /// holds a search debounce, and one that died with the settings route would
+    /// re-probe every chain on each visit.
+    @State private var settings: SettingsStore
     /// The address book's machine (spec 050), app-resident like the session's.
     ///
     /// Constructed here rather than inside the contacts section because a Crux
@@ -54,7 +58,12 @@ struct RootView: View {
         let onboarding = OnboardingModel(session: session, store: store)
         _session = State(initialValue: session)
         _onboarding = State(initialValue: onboarding)
-        _contacts = State(initialValue: ContactsStore(store: VelaStore()))
+        let shelf = VelaStore()
+        _contacts = State(initialValue: ContactsStore(store: shelf))
+        // `vela.serviceEndpoints` has two writers; the executor reaches it
+        // through this same `AccountStore` so onboarding's endpoint override
+        // survives a settings write (data-model §5).
+        _settings = State(initialValue: SettingsStore(store: shelf, accounts: store))
         _model = State(initialValue: WelcomeModel(content: WelcomeContentBuilder.build(loc: loc)) { intent in
             switch intent {
             case .createWallet:
@@ -153,6 +162,10 @@ struct RootView: View {
             ContactsStateHost(state: .c1, loc: loc)
         case .contactsLive:
             contactsSection
+        case .settingsLive:
+            // `VELA_STATE=st9` opens straight on the networks page, which
+            // is otherwise two taps inside a route.
+            settingsScreen(SettingsStateId(rawValue: PageOverride.state ?? "st1") ?? .st1)
         case .contactsGallery:
             ContactsGalleryScreen(loc: loc)
         case .flowsGallery:
@@ -175,7 +188,7 @@ struct RootView: View {
                             )
                             .navigationBarBackButtonHidden()
                         case .settings:
-                            settingsScreen
+                            settingsScreen()
                                 .navigationBarBackButtonHidden()
                         }
                     }
@@ -374,20 +387,16 @@ struct RootView: View {
         )
     }
 
-    /// Settings, wearing the signed-in identity.
+    /// Settings, wearing the signed-in identity and the real networks.
     ///
-    /// Fixture-driven still (spec 023 scope) apart from the two things that
-    /// identify the account — its name and address, both the real ones. A
-    /// fixture name over a real address would tell somebody they are signed in
-    /// as a stranger (spec 019's finding).
-    @ViewBuilder private var settingsScreen: some View {
+    /// Two layers are live and the rest is still the spec-023 fixture, visibly
+    /// so. The identity, because a fixture name over a real address tells
+    /// somebody they are signed in as a stranger (spec 019's finding). The
+    /// **networks**, because a settings screen listing somebody else's chains
+    /// is the same lie one level down (spec 050).
+    @ViewBuilder private func settingsScreen(_ state: SettingsStateId = .st1) -> some View {
         SettingsScreen(
-            model: SettingsFixtures.build(.st1, loc: loc)
-                .withIdentity(
-                    name: session.view.activeName,
-                    address: session.view.address,
-                    display: Self.shortenAddress(session.view.address)
-                ),
+            model: settingsModel(state),
             loc: loc,
             onSelectTab: { tab in
                 if tab == .wallet { router.path.removeLast() }
@@ -396,6 +405,21 @@ struct RootView: View {
             // look for it.
             onSignOut: { session.signOut() }
         )
+        .task { settings.open() }
+    }
+
+    private func settingsModel(_ state: SettingsStateId) -> SettingsScreenModel {
+        let base = SettingsFixtures.build(state, loc: loc)
+            .withIdentity(
+                name: session.view.activeName,
+                address: session.view.address,
+                display: Self.shortenAddress(session.view.address)
+            )
+        // Before the core has ruled there is nothing truthful to swap in, so
+        // the drawing stands as drawn — never half-live, and never a fixture
+        // list wearing a live pill.
+        guard let view = settings.networkAdmin, view.loaded else { return base }
+        return SettingsLive.withNetworks(view, on: base, loc: loc)
     }
 
     /// `0x14fB1f…D1eA5c` — the phone's short form, matching the wallet header's
@@ -498,7 +522,7 @@ enum ContactsRoute: Equatable {
 enum PageOverride {
     enum Page {
         case wallet, gallery, contacts, contactsLive, contactsGallery, flowsGallery
-        case settings, settingsGallery
+        case settings, settingsLive, settingsGallery
     }
 
     static let page: Page? = {
@@ -513,12 +537,20 @@ enum PageOverride {
         // first completing a passkey ceremony.
         case "contacts-live": .contactsLive
         case "contacts-gallery": .contactsGallery
+        // The settings surface with its LIVE network list — the same purpose
+        // `contacts-live` serves, for the other machine in this cut.
+        case "settings-live": .settingsLive
         case "flows-gallery": .flowsGallery
         case "settings": .settings
         case "settings-gallery": .settingsGallery
         default: nil
         }
     }()
+
+    /// WHICH state the overridden page opens on — `VELA_STATE=st9` puts
+    /// `settings-live` straight on the networks page, which is otherwise two
+    /// taps inside a route and unreachable from a screenshot pass.
+    static let state: String? = ProcessInfo.processInfo.environment["VELA_STATE"]
 }
 
 /// Resolves every welcome-screen string from the corpus — existing keys only,

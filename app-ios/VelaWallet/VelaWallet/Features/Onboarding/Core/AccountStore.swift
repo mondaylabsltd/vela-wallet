@@ -31,10 +31,10 @@ actor AccountStore {
     }
 
     private enum Key {
-        static let accounts = "vela.accounts"
-        static let activeIndex = "vela.activeAccountIndex"
-        static let pendingUploads = "vela.pendingUploads"
-        static let serviceEndpoints = "vela.serviceEndpoints"
+        static let accounts = VelaStore.Key.accounts
+        static let activeIndex = VelaStore.Key.activeIndex
+        static let pendingUploads = VelaStore.Key.pendingUploads
+        static let serviceEndpoints = VelaStore.Key.serviceEndpoints
     }
 
     /// Read the account list. Order is the core's, never re-sorted here.
@@ -102,32 +102,50 @@ actor AccountStore {
         defaults.removeObject(forKey: Key.activeIndex)
     }
 
-    /// The passkey-index endpoint override, when the person set one.
-    func loadRegistryURL() -> String? {
+    // MARK: - `vela.serviceEndpoints`, which has two writers
+
+    /// The whole endpoints blob, as stored — camelCase, partial, absent fields
+    /// absent.
+    ///
+    /// This key is the one place onboarding and `network_admin` (spec 050) both
+    /// write, so **both go through here**. Two independent writers on one key is
+    /// how a person's custom passkey-index endpoint disappears the first time
+    /// they open 设置 → 端点 — silently, because both writes succeed.
+    func loadServiceEndpoints() -> [String: Any] {
         guard let raw = defaults.string(forKey: Key.serviceEndpoints),
               let data = raw.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return nil }
-        let url = object["passkeyIndexURL"] as? String
-        return (url?.isEmpty ?? true) ? nil : url
+        else { return [:] }
+        return object
     }
 
-    func saveRegistryURL(_ url: String?) {
-        var endpoints: [String: Any] = [:]
-        if let raw = defaults.string(forKey: Key.serviceEndpoints),
-           let data = raw.data(using: .utf8),
-           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            endpoints = object
-        }
-        if let url, !url.isEmpty {
-            endpoints["passkeyIndexURL"] = url
-        } else {
-            endpoints.removeValue(forKey: "passkeyIndexURL")
+    /// Merge fields in; a `nil` value removes its field.
+    ///
+    /// Merging rather than replacing is the whole point: a caller that only
+    /// knows about one endpoint must not erase the other three.
+    func saveServiceEndpoints(_ fields: [String: String?]) {
+        var endpoints = loadServiceEndpoints()
+        for (name, value) in fields {
+            if let value, !value.isEmpty {
+                endpoints[name] = value
+            } else {
+                endpoints.removeValue(forKey: name)
+            }
         }
         if let data = try? JSONSerialization.data(withJSONObject: endpoints),
            let text = String(data: data, encoding: .utf8) {
             defaults.set(text, forKey: Key.serviceEndpoints)
         }
+    }
+
+    /// The passkey-index endpoint override, when the person set one.
+    func loadRegistryURL() -> String? {
+        let url = loadServiceEndpoints()["passkeyIndexURL"] as? String
+        return (url?.isEmpty ?? true) ? nil : url
+    }
+
+    func saveRegistryURL(_ url: String?) {
+        saveServiceEndpoints(["passkeyIndexURL": url])
     }
 
     // MARK: - Raw access

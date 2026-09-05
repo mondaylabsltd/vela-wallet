@@ -63,6 +63,42 @@ struct CoreWireDriftTests {
         #expect(!after.loaded)
     }
 
+    /// `NetView` decodes — including the two tagged unions Swift cannot
+    /// synthesise, `NetProbeHealth` and `NetServiceHealth`.
+    ///
+    /// The `started` event is what the settings route sends first, so this is
+    /// the same path the screen takes.
+    @Test func networkAdminViewDecodes() throws {
+        let core = NetworkAdminCore()
+
+        let initial = try CoreJSON.decode(NetViewWire.self, from: try CoreJSON.object(core.view()))
+        #expect(!initial.loaded)
+        #expect(initial.wizard.phase == .idle)
+        #expect(!initial.wizard.canAdd, "the add gate must be shut before anything is known")
+
+        let after = try CoreJSON.decode(
+            NetViewWire.self,
+            from: try view(from: core.dispatch(eventJson: CoreJSON.string(["type": "started"])))
+        )
+        #expect(!after.loaded, "the core has asked for the stores and is waiting")
+    }
+
+    /// The operations `network_admin` asks for on its first event are ones this
+    /// build can perform.
+    @Test func networkAdminAsksOnlyForOperationsThisBuildHandles() throws {
+        let core = NetworkAdminCore()
+        let result = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string(["type": "started"])))
+        let effects = result["effects"] as? [[String: Any]] ?? []
+        #expect(!effects.isEmpty, "`started` must ask the shell for the stores")
+        for effect in effects {
+            let tag = (effect["operation"] as? [String: Any])?["type"] as? String ?? ""
+            #expect(
+                NetworkAdminExecutor.operations.contains(tag),
+                "the core asks for `\(tag)`, which this build's executor does not handle"
+            )
+        }
+    }
+
     /// The bridge's three methods behave the way `CoreDriver` assumes.
     ///
     /// Property 2 of the driver's contract: resolving an effect id the bridge
