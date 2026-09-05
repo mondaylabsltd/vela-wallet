@@ -4,6 +4,36 @@ import app.getvela.wallet.feature.settings.core.CurrencyEvent
 import app.getvela.wallet.feature.settings.core.CurrencyOperation
 import app.getvela.wallet.feature.settings.core.CurrencyShellResult
 import app.getvela.wallet.feature.settings.core.CurrencyView
+import app.getvela.wallet.feature.settings.core.NetChainIndexEntry
+import app.getvela.wallet.feature.settings.core.NetChainInfo
+import app.getvela.wallet.feature.settings.core.NetChainMismatch
+import app.getvela.wallet.feature.settings.core.NetCompatibility
+import app.getvela.wallet.feature.settings.core.NetContractStatus
+import app.getvela.wallet.feature.settings.core.NetCustomNetwork
+import app.getvela.wallet.feature.settings.core.NetEndpointField
+import app.getvela.wallet.feature.settings.core.NetEndpointView
+import app.getvela.wallet.feature.settings.core.NetEvent
+import app.getvela.wallet.feature.settings.core.NetHealthBody
+import app.getvela.wallet.feature.settings.core.NetNetworkConfig
+import app.getvela.wallet.feature.settings.core.NetNetworkRow
+import app.getvela.wallet.feature.settings.core.NetOperation
+import app.getvela.wallet.feature.settings.core.NetOverrideField
+import app.getvela.wallet.feature.settings.core.NetProbeHealth
+import app.getvela.wallet.feature.settings.core.NetProviderId
+import app.getvela.wallet.feature.settings.core.NetProviderKeys
+import app.getvela.wallet.feature.settings.core.NetProviderNetRow
+import app.getvela.wallet.feature.settings.core.NetProviderTestView
+import app.getvela.wallet.feature.settings.core.NetProviderView
+import app.getvela.wallet.feature.settings.core.NetRawChainData
+import app.getvela.wallet.feature.settings.core.NetRpcFailureKind
+import app.getvela.wallet.feature.settings.core.NetServiceEndpoints
+import app.getvela.wallet.feature.settings.core.NetServiceHealth
+import app.getvela.wallet.feature.settings.core.NetShellResult
+import app.getvela.wallet.feature.settings.core.NetStoredEndpoints
+import app.getvela.wallet.feature.settings.core.NetView
+import app.getvela.wallet.feature.settings.core.NetWizardErrorKind
+import app.getvela.wallet.feature.settings.core.NetWizardPhase
+import app.getvela.wallet.feature.settings.core.NetWizardView
 import java.io.File
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
@@ -79,6 +109,73 @@ class CoreWireDriftTest {
         assertVariantsExist<CurrencyEvent>("CurrencyEvent")
     }
 
+    // -- network_admin -------------------------------------------------------
+
+    @Test
+    fun networkViewsMatchTheGeneratedMirrors() {
+        // Every struct the settings surface reads out of `NetView`. Forty-odd
+        // fields transcribed by hand from Rust; this is what makes that safe.
+        assertFieldsExist<NetView>("NetView")
+        assertFieldsExist<NetNetworkRow>("NetNetworkRow")
+        assertFieldsExist<NetChainMismatch>("NetChainMismatch")
+        assertFieldsExist<NetEndpointView>("NetEndpointView")
+        assertFieldsExist<NetProviderView>("NetProviderView")
+        assertFieldsExist<NetProviderTestView>("NetProviderTestView")
+        assertFieldsExist<NetProviderNetRow>("NetProviderNetRow")
+        assertFieldsExist<NetWizardView>("NetWizardView")
+        assertFieldsExist<NetChainIndexEntry>("NetChainIndexEntry")
+        assertFieldsExist<NetChainInfo>("NetChainInfo")
+        assertFieldsExist<NetCompatibility>("NetCompatibility")
+        assertFieldsExist<NetContractStatus>("NetContractStatus")
+        assertFieldsExist<NetRawChainData>("NetRawChainData")
+    }
+
+    @Test
+    fun networkStoredShapesMatchTheGeneratedMirrors() {
+        // These cross the bridge in BOTH directions — an operation carries them
+        // out and a result carries them back — so a missing field is a value
+        // silently dropped on the way to storage.
+        assertFieldsExist<NetCustomNetwork>("NetCustomNetwork")
+        assertFieldsExist<NetNetworkConfig>("NetNetworkConfig")
+        assertFieldsExist<NetServiceEndpoints>("NetServiceEndpoints")
+        assertFieldsExist<NetStoredEndpoints>("NetStoredEndpoints")
+        assertFieldsExist<NetProviderKeys>("NetProviderKeys")
+    }
+
+    @Test
+    fun networkOperationsAreExhaustive() {
+        assertVariantsExhaustive<NetOperation>("NetOperation")
+    }
+
+    @Test
+    fun networkResultsAreExhaustive() {
+        assertVariantsExhaustive<NetShellResult>("NetShellResult")
+    }
+
+    @Test
+    fun networkHealthShapesAreExhaustive() {
+        assertVariantsExhaustive<NetProbeHealth>("NetProbeHealth")
+        assertVariantsExhaustive<NetServiceHealth>("NetServiceHealth")
+        assertVariantsExhaustive<NetHealthBody>("NetHealthBody")
+        assertVariantsExhaustive<NetWizardErrorKind>("NetWizardErrorKind")
+    }
+
+    @Test
+    fun networkEventsExist() {
+        assertVariantsExist<NetEvent>("NetEvent")
+    }
+
+    @Test
+    fun networkEnumsMatchTheGeneratedMirrors() {
+        // ts-rs writes a plain string union for a fieldless Rust enum, so these
+        // are compared as values rather than as union members with payloads.
+        assertStringUnion<NetEndpointField>("NetEndpointField")
+        assertStringUnion<NetProviderId>("NetProviderId")
+        assertStringUnion<NetOverrideField>("NetOverrideField")
+        assertStringUnion<NetWizardPhase>("NetWizardPhase")
+        assertStringUnion<NetRpcFailureKind>("NetRpcFailureKind")
+    }
+
     // -- assertions ----------------------------------------------------------
 
     /** Every field this Kotlin class names must exist in the mirror. */
@@ -119,6 +216,23 @@ class CoreWireDriftTest {
             )
         }
         assertVariantFields(serializer<T>(), tsName)
+    }
+
+    /**
+     * A fieldless Rust enum is a plain TypeScript string union, and Kotlin
+     * declares it as an `enum class` whose `@SerialName`s must match it exactly.
+     * A missing value here is a state the shell cannot decode at all.
+     */
+    private inline fun <reified T : Enum<T>> assertStringUnion(tsName: String) {
+        val descriptor = serializer<T>().descriptor
+        val kotlin = (0 until descriptor.elementsCount).map { descriptor.getElementName(it) }
+        val mirror = mirror(tsName)
+            .substringAfter("export type $tsName =")
+            .substringBefore(";")
+            .split("|")
+            .map { it.trim().trim('"') }
+            .filter { it.isNotEmpty() }
+        assertEquals("$tsName values must match the generated mirror", mirror.sorted(), kotlin.sorted())
     }
 
     /** Each variant's payload fields must exist in that variant of the mirror. */

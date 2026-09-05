@@ -1,7 +1,12 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.core.i18n.I18nKeys
+import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.core.CurrencyCatalog
 import app.getvela.wallet.feature.settings.core.CurrencyView
+import app.getvela.wallet.feature.settings.core.NetEndpointField
+import app.getvela.wallet.feature.settings.core.NetProviderId
+import app.getvela.wallet.feature.settings.core.NetView
 
 /**
  * The live settings builders: what the core has ruled → the display models the
@@ -50,6 +55,101 @@ object SettingsLive {
                 },
             ),
         )
+    }
+
+    /**
+     * The networks a person has, the endpoints they point at, and the provider
+     * keys they hold — all from the core's store rather than from the eleven
+     * chains the ST9 mock happens to draw.
+     *
+     * **What is deliberately absent: health.** `rpc_health` and
+     * `explorer_health` are `null` for the whole of spec 040, because nothing
+     * can probe an endpoint until 041 gives the shell a network layer. The
+     * fixture rows carry a green `42ms` pill; these carry no pill at all,
+     * because an unmeasured endpoint drawn as fast is the one lie this feature
+     * is most able to tell by accident. (FR-013.)
+     */
+    fun withNetworks(
+        model: SettingsScreenModel,
+        view: NetView,
+        strings: VelaStrings,
+    ): SettingsScreenModel {
+        if (!view.loaded) return model
+        return model.copy(
+            networks = view.networks.map { row ->
+                NetworkRowModel(
+                    id = row.id,
+                    mark = ChainMarkModel(
+                        letter = row.display_name.take(1).uppercase(),
+                        colorArgb = markColour(row.chain_id),
+                    ),
+                    name = row.display_name,
+                    meta = strings.t(
+                        I18nKeys.SettingsUi.CHAIN_ID,
+                        mapOf("chainId" to row.chain_id.toString()),
+                    ),
+                    // No badge: see the note above. A pill here would be a
+                    // measurement nobody took.
+                    badge = null,
+                    tag = if (row.is_custom) {
+                        strings.t(I18nKeys.SettingsUi.NETWORK_CUSTOM)
+                    } else {
+                        null
+                    },
+                    removable = row.is_custom,
+                )
+            },
+            endpoints = model.endpoints.copy(
+                fields = view.endpoints.map { endpoint ->
+                    UrlFieldModel(
+                        id = endpoint.field.name,
+                        label = endpointLabel(endpoint.field, model),
+                        value = endpoint.value,
+                        // The default is the placeholder: an unset endpoint
+                        // shows what it WOULD use, greyed, not an empty box.
+                        placeholder = endpoint.default_value,
+                    )
+                },
+            ),
+            rpcProviders = model.rpcProviders.copy(
+                providers = view.providers.mapIndexed { index, provider ->
+                    val card = model.rpcProviders.providers.getOrNull(index)
+                        ?: model.rpcProviders.providers.firstOrNull()
+                    card?.copy(
+                        id = provider.provider.name,
+                        name = providerName(provider.provider),
+                        field = card.field.copy(value = provider.key),
+                    )
+                }.filterNotNull(),
+            ),
+        )
+    }
+
+    /**
+     * A stable colour per chain, so a network keeps its mark between launches.
+     *
+     * The fixtures hand-picked a colour per chain because they knew all eleven.
+     * A live list does not, and a random colour that changes on every read
+     * would make the list flicker.
+     */
+    private fun markColour(chainId: Long): Long = MARKS[(chainId % MARKS.size).toInt()]
+
+    private val MARKS = listOf(
+        0xFF6C7BFF, 0xFF2E9E7E, 0xFFE0A03A, 0xFF8C8C8C,
+        0xFFCF5C7A, 0xFF4A9BD1, 0xFF9B6CD1, 0xFF3FA37A,
+    )
+
+    /** The label the drawn endpoints page already uses, in field order. */
+    private fun endpointLabel(field: NetEndpointField, model: SettingsScreenModel): String {
+        val drawn = model.endpoints.fields
+        val index = NetEndpointField.entries.indexOf(field)
+        return drawn.getOrNull(index)?.label ?: field.name
+    }
+
+    private fun providerName(provider: NetProviderId): String = when (provider) {
+        NetProviderId.Alchemy -> "Alchemy"
+        NetProviderId.Drpc -> "dRPC"
+        NetProviderId.Ankr -> "Ankr"
     }
 
     /**

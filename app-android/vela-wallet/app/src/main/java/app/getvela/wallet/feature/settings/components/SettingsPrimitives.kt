@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -23,10 +25,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import app.getvela.wallet.core.designsystem.components.VelaIcons
@@ -227,6 +234,14 @@ fun SettingsSectionLabel(
  * A labelled mono field. Every endpoint on ST9b / ST11 / ST12 / SR2 / SR5 is
  * one of these: a label row that may carry a latency pill, the value in a
  * sunken box, an optional in-field action, and an optional hint under it.
+ *
+ * **Pass [onValueChange] and it accepts typing; omit it and it renders exactly
+ * as it always has.** Spec 023 drew ten of these and gave none of them an
+ * input, which was right while every value came from a fixture and wrong the
+ * moment a person is expected to enter an RPC URL. The default keeps every
+ * existing call site and every gallery state pixel-identical, so making a
+ * field editable is a decision taken one call site at a time rather than a
+ * change to what settings look like.
  */
 @Composable
 fun VelaUrlField(
@@ -238,6 +253,8 @@ fun VelaUrlField(
     badge: StatusPillModel? = null,
     tone: SettingsTone? = null,
     action: String? = null,
+    onValueChange: ((String) -> Unit)? = null,
+    keyboard: KeyboardType = KeyboardType.Uri,
 ) {
     val colors = VelaTheme.colors
     val border = when (tone) {
@@ -275,15 +292,53 @@ fun VelaUrlField(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
-            Text(
-                text = value.ifEmpty { placeholder.orEmpty() },
-                color = if (value.isEmpty()) colors.fgSubtle else colors.fgBase,
-                fontFamily = VelaMonoFontFamily,
-                fontSize = VelaTextSize.base,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+            if (onValueChange == null) {
+                Text(
+                    text = value.ifEmpty { placeholder.orEmpty() },
+                    color = if (value.isEmpty()) colors.fgSubtle else colors.fgBase,
+                    fontFamily = VelaMonoFontFamily,
+                    fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        color = colors.fgBase,
+                        fontFamily = VelaMonoFontFamily,
+                        fontSize = VelaTextSize.base,
+                    ),
+                    cursorBrush = SolidColor(colors.accentBase),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = keyboard,
+                        // No autocorrect and no capitalisation: this field
+                        // holds URLs and chain ids, and a keyboard that
+                        // helpfully capitalises "https" produces a URL that
+                        // silently fails to connect.
+                        autoCorrectEnabled = false,
+                        capitalization = KeyboardCapitalization.None,
+                        imeAction = ImeAction.Done,
+                    ),
+                    modifier = Modifier.weight(1f),
+                    decorationBox = { field ->
+                        if (value.isEmpty() && placeholder != null) {
+                            Text(
+                                text = placeholder,
+                                color = colors.fgSubtle,
+                                fontFamily = VelaMonoFontFamily,
+                                fontSize = VelaTextSize.base,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        field()
+                    },
+                )
+            }
             if (action != null) {
                 Text(
                     text = action,

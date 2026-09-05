@@ -14,7 +14,7 @@ import kotlinx.serialization.json.Json
  * machines: `app-web`'s generated mirrors number 311 types, and 311 parsers
  * are 311 places for a typo to become a silently-empty screen.
  *
- * The three settings below are the contract, and each is a deliberate answer
+ * The four settings below are the contract, and each is a deliberate answer
  * to a way a shell can lie about what the core said:
  *
  * 1. **`ignoreUnknownKeys = true`** — the core may carry fields this client
@@ -22,7 +22,16 @@ import kotlinx.serialization.json.Json
  *    addition breaks Android before Android has any use for it.
  * 2. **`explicitNulls = false`** — an absent optional and an explicit `null`
  *    mean the same thing to serde, and should here too.
- * 3. **NO `coerceInputValues`** — this is the important one. With it, a value
+ * 3. **`encodeDefaults = true`** — and this one is not a preference, it is a
+ *    bug fix with a test behind it. kotlinx omits a property equal to its
+ *    default, so an answer of `StoreLoaded()` went out as
+ *    `{"type":"store_loaded"}` and serde rejected it: *"invalid result from
+ *    shell: missing field `custom_networks`"*. serde defaults a missing
+ *    `Option` to `None` but requires every `Vec` and every scalar, so an empty
+ *    list must be *sent* as `[]` rather than left out. The symptom was a
+ *    machine that never left `loaded = false` — a settings page stuck on its
+ *    placeholder with one line in the log.
+ * 4. **NO `coerceInputValues`** — this is the important one. With it, a value
  *    Kotlin does not understand (an enum variant added in Rust) would quietly
  *    become the declared default and the person would be shown the *wrong*
  *    state with no error anywhere. Without it, the decode throws and the fault
@@ -37,6 +46,7 @@ object Wire {
     val json: Json = Json {
         ignoreUnknownKeys = true
         explicitNulls = false
+        encodeDefaults = true
         // classDiscriminator is "type" by default — the same tag serde uses.
     }
 }

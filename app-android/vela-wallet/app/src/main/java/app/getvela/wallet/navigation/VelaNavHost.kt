@@ -324,16 +324,24 @@ fun VelaNavHost(
                         display = shortenAddress(session.address),
                     )
             }
-            // The display currency is the person's own, from spec 040's first
-            // live machine. Everything else on this screen is still the ST1
-            // fixture — the networks, endpoints and providers arrive in phase
-            // 5, and the RPC health tiles need the network layer spec 041
-            // brings.
+            // The display currency, the networks, the service endpoints and the
+            // provider keys are the person's own. What is still the ST1 fixture
+            // is everything that needs a network to be true: RPC health and
+            // latency pills, the storage figures, the relayer panel. Those wait
+            // for spec 041 and render their unknown state until then.
             val settings = application.container.settings
             val currency by settings.currency.collectAsStateWithLifecycle()
-            LaunchedEffect(Unit) { settings.refreshCurrency() }
+            val networks by settings.networks.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) {
+                settings.refreshCurrency()
+                settings.startNetworks()
+            }
             SettingsRoute(
-                model = SettingsLive.withCurrency(model, currency),
+                model = SettingsLive.withNetworks(
+                    SettingsLive.withCurrency(model, currency),
+                    networks,
+                    strings,
+                ),
                 actions = SettingsActions(
                     onSelectTab = { tab ->
                         if (tab == VelaTab.Wallet) navController.popBackStack()

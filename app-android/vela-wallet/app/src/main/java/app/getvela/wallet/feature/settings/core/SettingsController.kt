@@ -6,10 +6,14 @@ import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.core.diagnostics.VelaLog
+import java.time.Instant
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
 import uniffi.vela_core_uniffi.DisplayCurrencyCore
+import uniffi.vela_core_uniffi.NetworkAdminCore
 
 /**
  * The settings surface's machines, app-resident.
@@ -51,8 +55,34 @@ class SettingsController(context: Context, scope: CoroutineScope) {
         onFault = { error -> VelaLog.failure("settings.currency.fault", "core fault", error) },
     )
 
+    private val networkExecutor = NetworkAdminExecutor(store)
+
+    private val networkHost = CoreHost(
+        bridge = NetworkAdminCore().asBridge(),
+        scope = scope,
+        // `loaded = false` until storage answers. The screen keeps showing what
+        // it had rather than blanking the network list for a frame.
+        initial = NetView(),
+        serializer = NetView.serializer(),
+        perform = JsonShell.perform(
+            NetOperation.serializer(),
+            NetShellResult.serializer(),
+            networkExecutor::perform,
+        ),
+        escapedFailure = JsonShell.escapedFailure(
+            NetOperation.serializer(),
+            NetShellResult.serializer(),
+            fallback = NetShellResult.StoreLoaded(),
+            answer = networkExecutor::neutralAnswer,
+        ),
+        onFault = { error -> VelaLog.failure("settings.network.fault", "core fault", error) },
+    )
+
     /** The display currency the core has settled on. */
     val currency: StateFlow<CurrencyView> = currencyHost.view
+
+    /** The networks, endpoints and provider keys this device holds. */
+    val networks: StateFlow<NetView> = networkHost.view
 
     /**
      * Re-read the preference. Cheap by design — a second `refresh` while one is
@@ -64,6 +94,66 @@ class SettingsController(context: Context, scope: CoroutineScope) {
     /** An explicit pick in the currency sheet. User choice wins over any seed. */
     fun chooseCurrency(code: String) =
         currencyHost.dispatch(CurrencyEvent.UserChose(code), CurrencyEvent.serializer())
+
+    // -- networks ------------------------------------------------------------
+    //
+    // One method per thing a person can do on the drawn pages. Each is one
+    // event; none of them decides anything.
+
+    /** Read the stored networks, endpoints and keys. Safe to call on entry. */
+    fun startNetworks() = net(NetEvent.Started)
+
+    fun searchNetworks(query: String) = net(NetEvent.SearchInput(query))
+
+    fun selectChain(chainId: Long, keepCustomRpc: Boolean = false) =
+        net(NetEvent.ChainSelected(chainId, keepCustomRpc))
+
+    fun editCustomRpc(value: String) = net(NetEvent.CustomRpcEdited(value))
+
+    /** The clock is the shell's: the core takes none, so the stamp comes from here. */
+    fun confirmAddNetwork() = net(NetEvent.AddConfirmed(nowIso()))
+
+    fun addNetworkByChainId(chainId: Long) =
+        net(NetEvent.AddByChainIdRequested(chainId, nowIso()))
+
+    fun resetWizard() = net(NetEvent.WizardReset)
+
+    fun deleteNetwork(id: String) = net(NetEvent.DeleteConfirmed(id))
+
+    fun expandOverride(chainId: Long) = net(NetEvent.OverrideExpanded(chainId))
+
+    fun editOverride(chainId: Long, field: NetOverrideField, value: String) =
+        net(NetEvent.OverrideFieldEdited(chainId, field, value))
+
+    /**
+     * The commit point for an override.
+     *
+     * The core validates and saves on blur, not on every keystroke — which is
+     * why an editable field must report BOTH: the edits keep the box in sync,
+     * and this is what asks the core to accept them.
+     */
+    fun commitOverride(chainId: Long) = net(NetEvent.OverrideBlurred(chainId))
+
+    fun openEndpoints() = net(NetEvent.EndpointsOpened)
+
+    fun editEndpoint(field: NetEndpointField, value: String) =
+        net(NetEvent.EndpointEdited(field, value))
+
+    fun commitEndpoint(field: NetEndpointField) = net(NetEvent.EndpointBlurred(field))
+
+    fun resetEndpoints() = net(NetEvent.ResetEndpointsToDefaults)
+
+    fun openProviders() = net(NetEvent.ProvidersOpened)
+
+    fun editProviderKey(provider: NetProviderId, value: String) =
+        net(NetEvent.ProviderKeyEdited(provider, value))
+
+    fun commitProviderKey(provider: NetProviderId) = net(NetEvent.ProviderKeyBlurred(provider))
+
+    private fun net(event: NetEvent) = networkHost.dispatch(event, NetEvent.serializer())
+
+    private fun nowIso(): String =
+        DateTimeFormatter.ISO_INSTANT.format(Instant.now().truncatedTo(ChronoUnit.SECONDS))
 
     private companion object {
         /**
