@@ -119,6 +119,31 @@ struct ContactsLiveTests {
         }
     }
 
+    /// What iOS's transliteration covers **beyond** Chinese.
+    ///
+    /// Recorded as a regression guard ahead of the core taking sectioning over
+    /// (028's `ContactsView.sections`, landed 2026-09-05 on an unmerged
+    /// branch). Its table is U+4E00–U+9FFF plus Latin-1/Extended-A, while
+    /// `.toLatin` is ICU and romanises every script it knows — so these names
+    /// file under a letter today and would fall to `#` under a CJK-only table.
+    ///
+    /// ja and ko are shipped locales, so this is a real population, not a
+    /// curiosity. If the switch lands with the narrower table, THIS is the test
+    /// that should fail.
+    @Test func transliterationAlsoFilesKanaHangulAndCyrillic() {
+        let cases: [(String, String)] = [
+            ("さくら", "S"),   // kana   — sakura
+            ("김민준", "G"),    // hangul — gim
+            ("Ελένη", "E"),    // greek  — eléni
+            ("Дмитрий", "D"),  // cyrillic
+        ]
+        for (name, letter) in cases {
+            let section = ContactsLive.home(view([contact("0x1", name: name)]), loc: loc)
+                .sections.first?.letter
+            #expect(section == letter, "\(name) filed under \(section ?? "?"), expected \(letter)")
+        }
+    }
+
     /// Digits, emoji and an unnamed address still land under `#`, which sorts
     /// last — where the drawn rail puts it.
     @Test func thingsWithNoLatinInitialCollectUnderHashWhichSortsLast() {
