@@ -18,6 +18,7 @@ lottie = "6.7.1"
 credentials = "1.5.0"
 playServicesFido = "21.1.0"
 okhttp = "4.12.0"
+kotlinxSerialization = "1.9.0"
 
 [libraries]
 # The caBLE WebSocket tunnel (CTAP 2.2 channel of the hybrid transport).
@@ -57,6 +58,12 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 # `Task.await()`, so the FIDO2 pending intent is fetched without a callback.
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "kotlinxCoroutines" }
 org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
+# The wire types of twenty-four Crux machines, decoded by declaration rather
+# than by hand (spec 040 research D2). serde's `tag = "type"` + snake_case is
+# exactly this library's default discriminator, so a Kotlin wire class is a
+# transcription of the Rust enum instead of a parser. `org.json` stays for
+# AccountStore, which deliberately does NOT want typed records.
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 # Airbnb's Lottie for Compose (spec 012). Maven Central, pure Kotlin/Java, no
 # native library — so it adds nothing to the ABI payload the uniffi .so already
 # constrains. dotLottie was measured and rejected: not on Maven Central at all
@@ -66,3 +73,4 @@ lottie-compose = { group = "com.airbnb.android", name = "lottie-compose", versio
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

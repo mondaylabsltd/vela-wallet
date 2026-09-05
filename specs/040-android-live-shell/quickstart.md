@@ -27,8 +27,21 @@ a new Kotlin class, and Gradle will not conjure it.
 
 ## 1. Build and test
 
+**Point `JAVA_HOME` at a real JDK first.** On this machine the ambient
+`JAVA_HOME` is the VS Code Java extension's bundled **JRE** 21, which has no
+`jlink`, and AGP needs `jlink` to build its JDK image. The failure names a path
+rather than a cause:
+
+```text
+jlink executable …/redhat.java-…/jre/21.0.12.1-macosx-aarch64/bin/jlink does not exist
+```
+
+A daemon already started on the wrong JVM keeps using it, so `./gradlew --stop`
+first if you have hit this once already.
+
 ```bash
 cd app-android/vela-wallet
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 # Unit tests (the gate that runs on every phase)
 ./gradlew :app:testDebugUnitTest -PvelaSkipRustBuild

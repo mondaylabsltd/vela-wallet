@@ -1,12 +1,8 @@
 package app.getvela.wallet.feature.onboarding.core
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.first
+import app.getvela.wallet.core.data.KeyValueStore
+import app.getvela.wallet.core.data.VelaStore
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -27,7 +23,16 @@ import org.json.JSONObject
  * vocabulary is `JSONObject` rather than a Kotlin data class — a data class is
  * exactly the shape that invites a field-by-field copy.
  */
-class AccountStore(private val context: Context) {
+class AccountStore(context: Context) {
+
+    /**
+     * The account records live in the wallet's one key-value space, beside the
+     * contacts and networks the other machines keep. Sharing the file is not a
+     * convenience: `vela.serviceEndpoints` is read from here AND by the
+     * settings machine, and two DataStore instances over one file is a runtime
+     * error, not a merge.
+     */
+    private val store = VelaStore(context)
 
     /** Read the account list. Order is the core's, never re-sorted here. */
     suspend fun loadAccounts(): JSONArray = readList(KEY_ACCOUNTS)
@@ -105,10 +110,7 @@ class AccountStore(private val context: Context) {
      * that credential becomes unfindable at sign-in.
      */
     suspend fun clearSignedInWallet() {
-        context.onboardingStore.edit { preferences ->
-            preferences.remove(KEY_ACCOUNTS)
-            preferences.remove(KEY_ACTIVE_INDEX)
-        }
+        store.remove(KEY_ACCOUNTS, KEY_ACTIVE_INDEX)
     }
 
     /** The passkey-index endpoint override, when the person set one. */
@@ -128,11 +130,10 @@ class AccountStore(private val context: Context) {
 
     // -- raw access ----------------------------------------------------------
 
-    private suspend fun readRaw(key: Preferences.Key<String>): String? =
-        context.onboardingStore.data.first()[key]
+    private suspend fun readRaw(key: String): String? = store.read(key)
 
-    private suspend fun writeRaw(key: Preferences.Key<String>, value: String) {
-        context.onboardingStore.edit { it[key] = value }
+    private suspend fun writeRaw(key: String, value: String) {
+        store.write(key, value)
     }
 
     /**
@@ -143,26 +144,15 @@ class AccountStore(private val context: Context) {
      * either way: its address derives from the passkey, so signing in rebuilds
      * the record.
      */
-    private suspend fun readList(key: Preferences.Key<String>): JSONArray {
+    private suspend fun readList(key: String): JSONArray {
         val raw = readRaw(key) ?: return JSONArray()
         return runCatching { JSONArray(raw) }.getOrElse { JSONArray() }
     }
 
     private companion object {
-        val KEY_ACCOUNTS = stringPreferencesKey("vela.accounts")
-        val KEY_ACTIVE_INDEX = stringPreferencesKey("vela.activeAccountIndex")
-        val KEY_PENDING_UPLOADS = stringPreferencesKey("vela.pendingUploads")
-        val KEY_SERVICE_ENDPOINTS = stringPreferencesKey("vela.serviceEndpoints")
+        const val KEY_ACCOUNTS = "vela.accounts"
+        const val KEY_ACTIVE_INDEX = "vela.activeAccountIndex"
+        const val KEY_PENDING_UPLOADS = "vela.pendingUploads"
+        val KEY_SERVICE_ENDPOINTS = KeyValueStore.Keys.SERVICE_ENDPOINTS
     }
 }
-
-/**
- * One DataStore for the whole onboarding surface.
- *
- * Separate from the theme preference's store on purpose: sign-out clears wallet
- * identity and must not be able to reach a display preference, and a file that
- * holds both is a file where one careless `clear()` reaches both.
- */
-private val Context.onboardingStore: DataStore<Preferences> by preferencesDataStore(
-    name = "vela_onboarding",
-)

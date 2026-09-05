@@ -223,3 +223,35 @@ bridge_object!(
     SessionCore,
     vela_core::app::session::Session
 );
+
+// The wallet-state machines, in the order the shells wire them. Each line is
+// a machine the native clients can drive; the same set has been exported to
+// the web since spec 016 (`vela-core-wasm/src/wallet_state.rs`), and the names
+// are deliberately identical so a reader can follow one machine across four
+// clients without a translation table.
+//
+// The cost is measured, not assumed (spec 040 research D6): a machine is
+// ~357 KB stripped on arm64-v8a and the uniffi object around it is 5,920
+// bytes, so the price of this list is the rules themselves. Add machines as
+// their shell arrives — an exported machine nothing drives is dead weight in
+// three ABIs.
+
+bridge_object!(
+    /// The address book: manual + history-derived merge, tombstones, groups.
+    ContactsCore,
+    vela_core::app::contacts::Contacts
+);
+
+bridge_object!(
+    /// Network & endpoint configuration: add-network wizard, overrides,
+    /// service endpoints, provider keys.
+    NetworkAdminCore,
+    vela_core::app::network_admin::NetworkAdmin
+);
+
+bridge_object!(
+    /// The display currency: atomic code+rate pair, first-launch region seed,
+    /// user-choice-wins.
+    DisplayCurrencyCore,
+    vela_core::app::display_currency::DisplayCurrency
+);

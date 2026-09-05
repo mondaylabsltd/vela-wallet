@@ -1,4 +1,4 @@
-package app.getvela.wallet.feature.onboarding.core
+package app.getvela.wallet.core.crux
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -7,17 +7,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
-import uniffi.vela_core_uniffi.CreateWalletCore
-import uniffi.vela_core_uniffi.LoginCore
-import uniffi.vela_core_uniffi.SessionCore
 
 /**
  * Platform-shell plumbing for a Crux core, blind to product semantics.
  *
  * It knows how to dispatch an event, perform the effects that come back, and
  * hand the answers to the core. It knows nothing about wallets — which is why
- * the create machine, the login machine and the session machine all share it
- * instead of each screen re-deriving the same failure and cancellation rules.
+ * every machine the app drives shares it instead of each screen re-deriving the
+ * same failure and cancellation rules.
  *
  * ```text
  *   ViewModel                CoreDriver               executor
@@ -50,6 +47,17 @@ class CoreDriver(
     private val perform: suspend (operation: JSONObject) -> String,
     /** Called on every committed view, in the order the core produced them. */
     private val onView: (JSONObject) -> Unit,
+    /**
+     * The answer to give when [perform] itself threw — the machine's own
+     * "something went wrong" variant for that operation.
+     *
+     * A parameter rather than a call, because the variant is the MACHINE's:
+     * contacts answers `written`, onboarding answers `passkey_failed`, and a
+     * driver that knew which was which would be a driver that knows about
+     * wallets. What it does know is that an unanswered effect is a spinner
+     * that never stops, so this must always produce something.
+     */
+    private val escapedFailure: (operation: JSONObject, error: Throwable) -> String,
     /** A shell fault: a malformed event, an escaped exception. Never a user error. */
     private val onFault: (Throwable) -> Unit = {},
 ) {
@@ -102,7 +110,9 @@ class CoreDriver(
             }
         }
 
-        for (effect in result.optJSONArray("effects").objects()) {
+        val effects = result.optJSONArray("effects")
+        for (i in 0 until (effects?.length() ?: 0)) {
+            val effect = effects?.optJSONObject(i) ?: continue
             val id = effect.optLong("id").toULong()
             val operation = effect.optJSONObject("operation") ?: continue
             run(id, operation)
@@ -131,7 +141,7 @@ class CoreDriver(
                 // failure, so reaching here means a shell bug — but the core
                 // must still be unblocked, or the flow stops with a spinner.
                 onFault(error)
-                OnboardingExecutor.escapedFailure(operation, error)
+                escapedFailure(operation, error)
             }
             running.remove(id)
             resolve(id, resultJson)
@@ -147,38 +157,4 @@ class CoreDriver(
                 .onFailure(onFault)
         }
     }
-}
-
-/**
- * The three bridge methods, without caring which machine is behind them.
- *
- * uniffi generates one class per exported object with no shared supertype, so
- * this interface is what lets [CoreDriver] be written once. The adapters below
- * are the entire binding surface the app has to the onboarding cores.
- */
-interface CoreBridge {
-    fun dispatch(eventJson: String): String
-    fun resolveEffect(effectId: ULong, resultJson: String): String
-    fun view(): String
-}
-
-fun CreateWalletCore.asBridge(): CoreBridge = object : CoreBridge {
-    override fun dispatch(eventJson: String) = this@asBridge.dispatch(eventJson)
-    override fun resolveEffect(effectId: ULong, resultJson: String) =
-        this@asBridge.resolveEffect(effectId, resultJson)
-    override fun view() = this@asBridge.view()
-}
-
-fun LoginCore.asBridge(): CoreBridge = object : CoreBridge {
-    override fun dispatch(eventJson: String) = this@asBridge.dispatch(eventJson)
-    override fun resolveEffect(effectId: ULong, resultJson: String) =
-        this@asBridge.resolveEffect(effectId, resultJson)
-    override fun view() = this@asBridge.view()
-}
-
-fun SessionCore.asBridge(): CoreBridge = object : CoreBridge {
-    override fun dispatch(eventJson: String) = this@asBridge.dispatch(eventJson)
-    override fun resolveEffect(effectId: ULong, resultJson: String) =
-        this@asBridge.resolveEffect(effectId, resultJson)
-    override fun view() = this@asBridge.view()
 }
