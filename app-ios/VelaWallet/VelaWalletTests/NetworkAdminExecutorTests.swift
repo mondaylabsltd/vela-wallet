@@ -200,6 +200,28 @@ struct NetworkAdminExecutorTests {
 
     // MARK: - Codecs
 
+    /// **The live defect, pinned.**
+    ///
+    /// The production chain index contains ids above `u32::MAX` (7078815900 was
+    /// the first one found). The core's `chain_id` is a `u32`, and serde refuses
+    /// the WHOLE `search_index` result over one bad row — so the wizard sat on
+    /// 搜索中 forever with no error anywhere, because the answer never reached
+    /// the machine. Dropping the row is what keeps one unrepresentable id from
+    /// costing every other chain.
+    @Test func aChainIdTooLargeForTheCoreIsDroppedRatherThanPoisoningTheIndex() {
+        let good = NetworkAdminExecutor.searchEntryToWire([
+            "chainId": 100, "name": "Gnosis", "shortName": "gno",
+            "nativeCurrencySymbol": "XDAI",
+        ])
+        #expect(good?["chain_id"] as? Int == 100)
+
+        for bad in [7_078_815_900, -1] {
+            let row = NetworkAdminExecutor.searchEntryToWire(["chainId": bad, "name": "Nope"])
+            #expect(row == nil, "chain id \(bad) survived the u32 guard")
+        }
+        #expect(NetworkAdminExecutor.searchEntryToWire(["name": "no id at all"]) == nil)
+    }
+
     /// `eth_chainId` returns hex. Zero, junk and a non-string are all "no
     /// answer", never a chain id.
     @Test func chainIdParsingRefusesEverythingThatIsNotOne() {

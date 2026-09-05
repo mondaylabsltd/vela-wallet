@@ -25,6 +25,12 @@ struct SettingsScreen: View {
     var onSelectTab: (WalletTab) -> Void = { _ in }
     var onSignOut: () -> Void = {}
     var onOpenContacts: () -> Void = {}
+    /// What the add-network wizard raises (spec 050).
+    ///
+    /// Defaulted to no-ops so every gallery board and fixture call site is
+    /// unchanged — the wizard stays a picture there, which is what keeps the
+    /// screenshot sweep meaningful.
+    var networkActions = SettingsNetworkActions()
 
     @State private var page: SettingsPage
     @State private var overlay: SettingsOverlay
@@ -35,13 +41,15 @@ struct SettingsScreen: View {
         loc: Loc,
         onSelectTab: @escaping (WalletTab) -> Void = { _ in },
         onSignOut: @escaping () -> Void = {},
-        onOpenContacts: @escaping () -> Void = {}
+        onOpenContacts: @escaping () -> Void = {},
+        networkActions: SettingsNetworkActions = SettingsNetworkActions()
     ) {
         self.model = model
         self.loc = loc
         self.onSelectTab = onSelectTab
         self.onSignOut = onSignOut
         self.onOpenContacts = onOpenContacts
+        self.networkActions = networkActions
         // Seeds, not bindings: a gallery state pins where this opens, and a
         // person tapping owns it from then on.
         _page = State(initialValue: model.page)
@@ -137,7 +145,7 @@ struct SettingsScreen: View {
         case .home: homeBody
         case .networks: networksBody
         case .networkDetail: NetworkDetailBody(detail: model.networkDetail)
-        case .addNetwork: AddNetworkBody(panel: model.addNetwork)
+        case .addNetwork: AddNetworkBody(panel: model.addNetwork, actions: networkActions)
         case .rpcProviders: RpcProvidersBody(panel: model.rpcProviders)
         case .endpoints: EndpointsBody(panel: model.endpoints)
         case .storage: StorageBody(panel: model.storage,
@@ -294,6 +302,16 @@ private struct NetworkDetailBody: View {
 private struct AddNetworkBody: View {
     @Environment(\.theme) private var theme
     let panel: AddNetworkModel
+    var actions = SettingsNetworkActions()
+
+    /// The two editable fields' local text.
+    ///
+    /// Local, and seeded from the model, because the core is the authority on
+    /// what has been COMMITTED while a half-typed URL is nobody's business but
+    /// this view's. Committing on submit or on leaving the field is what hands
+    /// it over.
+    @State private var query = ""
+    @State private var customRpc = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s16) {
@@ -314,13 +332,19 @@ private struct AddNetworkBody: View {
                 if let title = panel.checksTitle {
                     SettingsCheckList(title: title, items: panel.checks)
                 }
-                if let custom = panel.customRpc { SettingsUrlField(field: custom) }
+                if let custom = panel.customRpc {
+                    SettingsUrlField(
+                        field: custom,
+                        text: actions.isLive ? $customRpc : nil,
+                        onCommit: { actions.onEditCustomRpc(customRpc) }
+                    )
+                }
                 if let callout = panel.callout { SettingsCallout(callout: callout) }
                 // An outline CTA plus a re-check link when it cannot be added:
                 // an action you cannot take should not be dressed as the action
                 // you came for.
                 if let primary = panel.primary {
-                    VelaButton(title: primary, kind: .primary) {}
+                    VelaButton(title: primary, kind: .primary) { actions.onConfirmAdd() }
                 }
                 if let secondary = panel.secondary {
                     VelaButton(title: secondary, kind: .secondary) {}
@@ -332,14 +356,45 @@ private struct AddNetworkBody: View {
                         .foregroundStyle(theme.infoBase)
                         .frame(maxWidth: .infinity)
                         .padding(.top, Tokens.Space.s8)
+                        .onTapGesture { actions.onEditCustomRpc(customRpc) }
                 }
             } else {
-                SettingsUrlField(field: UrlFieldModel(id: "search", label: "", value: "",
-                                                      placeholder: panel.searchPlaceholder))
-                ForEach(panel.results) { SettingsNetworkRow(row: $0) }
+                SettingsUrlField(
+                    field: UrlFieldModel(id: "search", label: "", value: "",
+                                         placeholder: panel.searchPlaceholder),
+                    text: actions.isLive ? $query : nil,
+                    onCommit: { actions.onSearch(query) }
+                )
+                // The core debounces the search itself, so every keystroke can
+                // go straight to it — a shell-side timer here would be a second
+                // one, racing the first.
+                .onChange(of: query) { _, value in actions.onSearch(value) }
+                ForEach(panel.results) { row in
+                    SettingsNetworkRow(row: row)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if let chainId = row.chainId { actions.onSelectChain(chainId) }
+                        }
+                }
             }
         }
+        .onAppear { customRpc = panel.customRpc?.value ?? "" }
     }
+}
+
+/// What the add-network wizard can raise (spec 050).
+///
+/// A struct of closures rather than five parameters, because the wizard's
+/// controls arrive together and are wired together; `isLive` is what tells the
+/// drawn fields whether there is anything on the other end. A gallery board
+/// leaves it default, and every field stays the picture it was drawn as.
+struct SettingsNetworkActions {
+    var onSearch: (String) -> Void = { _ in }
+    var onSelectChain: (Int) -> Void = { _ in }
+    var onEditCustomRpc: (String) -> Void = { _ in }
+    var onConfirmAdd: () -> Void = {}
+    /// `false` for fixtures — the fields render as `Text`, exactly as drawn.
+    var isLive = false
 }
 
 private struct RpcProvidersBody: View {

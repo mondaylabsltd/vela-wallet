@@ -353,6 +353,118 @@ appeared on this screen before, because no drawing lists them.
 
 Tests: 170 → **183**. Literal violations: 35 → 35. Build green.
 
+---
+
+## Phase 3 — the one new control, and a defect only the real world had
+
+### The control
+
+Not a new component. `SettingsUrlField` — the box every endpoint on ST9b / ST11 /
+ST12 / SR2 / SR5 already is — gained an **optional binding**:
+
+```swift
+var text: Binding<String>?     // nil renders exactly as drawn
+```
+
+`nil` is the drawn state and produces the same `Text` in the same box for every
+gallery board and every fixture call site, so the screenshot sweep stays
+meaningful. A binding turns it into a `TextField` with the same mono face, the
+same colours and the same placeholder.
+
+That is the atom the drawing was missing, added without moving anything drawn —
+which is a smaller and safer answer than the `Components/Settings/SettingsField.swift`
+the plan named, and is what shipped instead.
+
+The wizard's controls reach the core through `SettingsNetworkActions`, a struct
+of closures whose `isLive` flag is what tells the fields whether there is
+anything on the other end. A gallery board leaves it default and every field
+stays the picture it was drawn as.
+
+### The check list is a mapping, not an invention
+
+The drawing summarises the core's **eleven** `REQUIRED_CONTRACTS` into **four**
+rows, and the mapping turned out to be already decided rather than something to
+invent: EntryPoint v0.7, Safe L2 合约 and WebAuthn 签名模块 are named
+individually, and 其余 **8** 项合约 counts the rest. 3 + 8 = 11.
+
+A missing contract fails exactly the row that names it, which is what the
+fixture's own comment demands — *"incompatible is only legible as an answer if it
+shows WHICH requirement failed"*.
+
+### A design gap, recorded rather than papered over
+
+**The P256 precompile has no row and no corpus key.** It participates in the
+core's `compatible` verdict, and the drawing has nowhere to show it. A chain
+rejected *only* for a missing precompile therefore renders four green ticks under
+a 不兼容 badge — exactly the illegibility the list was drawn to prevent.
+
+Folding it into 其余 8 项合约 would be worse: it would name eight contracts as
+the failure when the failure is the precompile. Closing it needs a drawn row and
+a corpus key, and this feature may add neither (FR-010).
+
+### Three refusals whose wording lives in the wrong namespace
+
+`network_admin` models `already_added`, `not_found` and `not_compatible`, and
+`settingsModals.addNetwork.*` has no sentence for any of them. `addToken.*` does
+— *"This network is already added"*, *"Chain info not found"*, *"Not compatible
+with Vela Wallet"* — because the Expo client's add-token flow embedded an
+add-network step.
+
+The wording is exactly this screen's; only the namespace is historical. Using it
+beats inventing a key, which this feature may not do. `no_rpc_endpoint` has no
+sentence at all and borrows `unableToVerify`, which is the true thing rather than
+the exact thing — recorded as a wording gap.
+
+### The defect only a live run could find
+
+A compile-flagged live suite (`-DVELA_LIVE_TESTS`) drives the wizard against real
+endpoints. It failed, and the reason was invisible until `CoreStore`'s fault hook
+was given somewhere to print:
+
+```
+network_admin fault: invalid result from shell:
+invalid value: integer `7078815900`, expected u32
+```
+
+**The production chain index contains chain ids larger than `u32::MAX`.** The
+core's `chain_id` is a `u32`, so serde refuses the **entire** `search_index`
+result over one bad row — and the observable symptom is a wizard stuck on 搜索中
+forever, with nothing in any log.
+
+Fixed by dropping rows whose id the core cannot represent. That is hygiene, not
+policy: a chain id the core cannot hold is a chain it can never be asked about,
+so offering it would be offering a dead end.
+
+**This is a cross-client defect.** Web's `decodeSearchIndex` passes
+`Number(r.chainId)` straight through to the same `u32` field and sends the whole
+index, so its add-network search fails the same way against the live index. It is
+recorded here rather than reached across into another client's code.
+
+Two smaller findings came with it:
+
+- **`CoreStore`'s fault hook defaulted to silence.** `SettingsStore` now passes a
+  logger. A malformed event or an unreadable view was, until this, a screen that
+  simply stopped responding with nothing to say why — which is the same defect
+  class FR-002 exists to prevent, one layer up.
+- **The live suite must be `.serialized`.** Its tests are `@MainActor` and each
+  polls the main actor while waiting for the effect loop; run in parallel they
+  starve each other, and the wizard — which needs a debounce, an index fetch, a
+  chain resolve and an RPC race to finish — is the one that loses.
+
+### A UX number worth knowing
+
+Adding **Gnosis (100)** from a cold start took **between 42 and 90 seconds** end
+to end: search index, chain resolve, the RPC race, eleven `eth_getCode` reads and
+the P256 probe. The drawn 检查中 state has to carry a full minute, and it was
+never designed against that number.
+
+### Gates
+
+Tests: 183 → **192** hermetic, plus 3 live behind the flag. Literal violations:
+35 → 36 → **35** (the editable and read-only halves now share one mono face,
+written as `Font.system` rather than hidden behind implicit-member syntax so the
+audit still counts it). Build green.
+
 ### Recorded, not fixed
 
 - **Three address-shortening copies disagree.** `RootView.shortenAddress` and

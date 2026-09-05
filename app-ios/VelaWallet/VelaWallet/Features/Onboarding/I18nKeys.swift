@@ -314,6 +314,19 @@ enum I18nKeys {
         static let addChainTool = "settingsModals.addNetwork.openChainSetupTool"
         static let addRecheckWithRpc = "settingsModals.addNetwork.recheckWithRpc"
         static let addTestnet = "settingsModals.addNetwork.testnet"
+        static let addUnableToVerify = "settingsModals.addNetwork.unableToVerify"
+
+            // The wizard's three refusals (spec 050).
+            //
+            // Filed under `addToken.*` for a historical reason — the Expo
+            // client's add-token flow embedded an add-network step — and the
+            // WORDING is exactly this screen's: "This network is already
+            // added", "Chain info not found", "Not compatible with Vela
+            // Wallet". Using the corpus entry whose text says the right thing
+            // beats inventing a key, which this feature may not do.
+        static let addAlreadyAdded = "addToken.errorAlreadyAdded"
+        static let addChainNotFound = "addToken.errorChainNotFound"
+        static let addNotCompatible = "addToken.errorNotCompatible"
 
             // RPC providers.
         static let providersDescription = "settingsModals.rpcProviders.description"

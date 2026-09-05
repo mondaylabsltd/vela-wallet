@@ -403,7 +403,14 @@ struct RootView: View {
             },
             // The way out of a signed-in wallet, on the row a person would
             // look for it.
-            onSignOut: { session.signOut() }
+            onSignOut: { session.signOut() },
+            networkActions: SettingsNetworkActions(
+                onSearch: { settings.search($0) },
+                onSelectChain: { settings.selectChain($0) },
+                onEditCustomRpc: { settings.editCustomRpc($0) },
+                onConfirmAdd: { settings.confirmAdd() },
+                isLive: true
+            )
         )
         .task { settings.open() }
     }

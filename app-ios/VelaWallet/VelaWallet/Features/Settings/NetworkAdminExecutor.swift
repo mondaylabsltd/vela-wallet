@@ -374,7 +374,9 @@ private extension NetworkAdminExecutor {
 
 // MARK: - Stored ⇄ wire
 
-private extension NetworkAdminExecutor {
+// Internal rather than private: these codecs ARE the cross-client contract,
+// and a contract nothing can test is a contract nobody keeps.
+extension NetworkAdminExecutor {
 
     static func customNetworkToWire(_ stored: [String: Any]) -> [String: Any] {
         [
@@ -462,9 +464,21 @@ private extension NetworkAdminExecutor {
 
     /// One row of `/index/fuse-chains.json`. A row without a usable chain id is
     /// dropped rather than coerced to zero — chain 0 is not a chain.
+    ///
+    /// **The `u32` guard is not paranoia — it is a live defect this cut found.**
+    /// The production index contains chain ids above `u32::MAX` (7078815900 was
+    /// the first one), the core's `chain_id` is a `u32`, and serde refuses the
+    /// WHOLE `search_index` result over one bad row. The observable symptom is
+    /// a wizard stuck on 搜索中 forever with no error anywhere, because the
+    /// result never reaches the machine.
+    ///
+    /// Dropping the row is hygiene, not policy: a chain id the core cannot
+    /// represent is a chain it can never be asked about, so offering it would
+    /// be offering a dead end.
     static func searchEntryToWire(_ raw: Any) -> [String: Any]? {
         guard let row = raw as? [String: Any],
-              let chainId = (row["chainId"] as? NSNumber)?.intValue
+              let number = row["chainId"] as? NSNumber,
+              let chainId = uint32(number)
         else { return nil }
         return [
             "chain_id": chainId,
@@ -486,7 +500,9 @@ private extension NetworkAdminExecutor {
         guard let data = body as? [String: Any] else { return nil }
         let native = data["nativeCurrency"] as? [String: Any]
         return [
-            "chain_id": (data["chainId"] as? NSNumber)?.intValue ?? NSNull(),
+            // Same `u32` guard as the index: an id the core cannot hold arrives
+            // as "no id", which its parser already knows how to refuse.
+            "chain_id": (data["chainId"] as? NSNumber).flatMap(uint32) ?? NSNull(),
             "name": optionalString(data["name"]),
             "short_name": optionalString(data["shortName"]),
             "native_currency_name": optionalString(native?["name"]),
@@ -515,5 +531,18 @@ private extension NetworkAdminExecutor {
     static func integer(_ value: Any?) -> Int {
         guard let number = value as? NSNumber, number.doubleValue.isFinite else { return 0 }
         return number.intValue
+    }
+
+    /// A chain id the core's `u32` can actually hold, or nothing.
+    ///
+    /// `nil` for a negative, a fractional, or an out-of-range value. Every wire
+    /// field this feeds is either optional or a row that can be dropped, which
+    /// is deliberate: one unrepresentable id must never cost the whole answer.
+    static func uint32(_ number: NSNumber) -> Int? {
+        let value = number.doubleValue
+        guard value.isFinite, value >= 0, value <= Double(UInt32.max),
+              value == value.rounded(.towardZero)
+        else { return nil }
+        return Int(value)
     }
 }

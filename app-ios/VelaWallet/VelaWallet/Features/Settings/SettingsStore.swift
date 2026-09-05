@@ -45,7 +45,11 @@ final class SettingsStore {
         self.core = CoreStore(
             bridge: NetworkAdminCore(),
             perform: { [executor] operation in await executor.perform(operation) },
-            onView: { [weak self] view in self?.networkAdmin = view }
+            onView: { [weak self] view in self?.networkAdmin = view },
+            // A shell fault here is a malformed event or a view this build
+            // cannot read — never a person's mistake. Swallowing it silently is
+            // how a screen stops responding with nothing in any log to say why.
+            onFault: { print("[vela-wallet] network_admin fault: \($0)") }
         )
     }
 

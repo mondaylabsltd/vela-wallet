@@ -36,7 +36,147 @@ enum SettingsLive {
         if let first = view.networks.first {
             copy.networkDetail = detail(first, loc: loc, fallback: model.networkDetail)
         }
+        copy.addNetwork = wizard(view.wizard, loc: loc, fallback: model.addNetwork)
         return copy
+    }
+
+    // MARK: - The add-network wizard
+
+    /// The wizard, driven by the core's phase.
+    ///
+    /// `fallback` supplies the labels and placeholders the drawing owns. Every
+    /// verdict — the badge, the checks, whether 添加 is offered at all — is the
+    /// core's; **`can_add` is never re-derived here**, because a second opinion
+    /// is how a screen offers to add a chain the core will refuse.
+    static func wizard(
+        _ wizard: NetWizardViewWire,
+        loc: Loc,
+        fallback: AddNetworkModel
+    ) -> AddNetworkModel {
+        let k = I18nKeys.SettingsUi.self
+        var model = AddNetworkModel(
+            title: fallback.title,
+            subtitle: fallback.subtitle,
+            searchPlaceholder: fallback.searchPlaceholder
+        )
+
+        // No candidate yet — the search list.
+        guard let info = wizard.chainInfo else {
+            model.results = wizard.suggestions.map { entry in
+                SettingsNetworkRowModel(
+                    id: String(entry.chainId),
+                    chainId: entry.chainId,
+                    mark: mark(chainId: entry.chainId, name: entry.name),
+                    name: entry.name,
+                    meta: chainMeta(loc, entry.chainId)
+                )
+            }
+            model.callout = errorCallout(wizard.error, loc: loc)
+            return model
+        }
+
+        model.subtitle = "\(info.name) · \(chainMeta(loc, info.chainId))"
+        model.candidate = SettingsNetworkRowModel(
+            id: String(info.chainId),
+            chainId: info.chainId,
+            mark: mark(chainId: info.chainId, name: info.name),
+            name: info.name,
+            meta: candidateMeta(wizard, loc: loc),
+            badge: verdictBadge(wizard, loc: loc)
+        )
+
+        if let compat = wizard.compat {
+            model.checksTitle = loc.t(k.addCompatibilityCheck)
+            model.checks = checks(compat, loc: loc)
+        }
+
+        model.customRpc = UrlFieldModel(
+            id: "custom-rpc",
+            label: loc.t(k.addCustomRpcTitle),
+            value: wizard.customRpc,
+            placeholder: loc.t(k.addCustomRpcPlaceholder)
+        )
+        model.callout = errorCallout(wizard.error, loc: loc)
+            ?? (wizard.compat?.compatible == false
+                ? CalloutModel(tone: .warning, text: loc.t(k.addIncompatibleHint))
+                : nil)
+
+        // The gate. An accent CTA appears only when the CORE says the chain can
+        // be added; otherwise the drawing's outline-plus-recheck pair, because
+        // an action you cannot take should not be dressed as the action you
+        // came for.
+        if wizard.canAdd {
+            model.primary = loc.t(k.addButton)
+        } else if wizard.compat?.compatible == false {
+            model.secondary = loc.t(k.addChainTool)
+            model.recheck = loc.t(k.addRecheckWithRpc)
+        }
+        return model
+    }
+
+    /// The four drawn rows over the core's eleven contracts.
+    ///
+    /// Not an invented summary: the drawing names three of `REQUIRED_CONTRACTS`
+    /// individually — EntryPoint v0.7, Safe L2, WebAuthn Signer — and counts
+    /// the remaining eight. 3 + 8 = 11, which is why the fixture's row reads
+    /// 其余 8 项合约.
+    ///
+    /// **Known gap, recorded rather than papered over**: the P256 precompile
+    /// participates in the core's verdict and has no drawn row and no corpus
+    /// key. A chain rejected *only* for a missing precompile therefore shows
+    /// four ticks under a 不兼容 badge — the exact illegibility this list was
+    /// drawn to avoid. Folding it into 其余 8 项合约 would be worse: it would
+    /// name eight contracts as the failure when the failure is the precompile.
+    static func checks(_ compat: NetCompatibilityWire, loc: Loc) -> [CheckItemModel] {
+        let k = I18nKeys.SettingsUi.self
+        func deployed(_ name: String) -> Bool {
+            compat.contracts.first { $0.name == name }?.deployed ?? false
+        }
+        let named = ["EntryPoint v0.7", "Safe L2", "WebAuthn Signer"]
+        let rest = compat.contracts.filter { !named.contains($0.name) }
+        return [
+            CheckItemModel(label: "EntryPoint v0.7", ok: deployed("EntryPoint v0.7")),
+            CheckItemModel(label: loc.t(k.addCheckSafe), ok: deployed("Safe L2")),
+            CheckItemModel(label: loc.t(k.addCheckSigner), ok: deployed("WebAuthn Signer")),
+            CheckItemModel(
+                label: loc.t(k.addCheckRemaining, vars: ["count": String(rest.count)]),
+                ok: !rest.isEmpty && rest.allSatisfy(\.deployed)
+            ),
+        ]
+    }
+
+    /// The line under the candidate's name: the winning RPC's latency once the
+    /// race is decided, the "checking" line before that.
+    private static func candidateMeta(_ wizard: NetWizardViewWire, loc: Loc) -> String {
+        let k = I18nKeys.SettingsUi.self
+        if let latency = wizard.compat?.bestRpcLatencyMs {
+            return loc.t(k.addBestRpc, vars: ["latencyMs": String(Int(latency.rounded()))])
+        }
+        return loc.t(k.addCompatibilityCheck)
+    }
+
+    private static func verdictBadge(_ wizard: NetWizardViewWire, loc: Loc) -> StatusPillModel? {
+        let k = I18nKeys.SettingsUi.self
+        guard let compat = wizard.compat else { return nil }
+        return compat.compatible
+            ? StatusPillModel(tone: .ok, label: loc.t(k.addCompatible))
+            : StatusPillModel(tone: .error, label: loc.t(k.addIncompatible))
+    }
+
+    /// The core's refusal, in the words the corpus already has.
+    private static func errorCallout(_ error: NetWizardErrorWire?, loc: Loc) -> CalloutModel? {
+        let k = I18nKeys.SettingsUi.self
+        guard let error else { return nil }
+        let text = switch error {
+        case .alreadyAdded: loc.t(k.addAlreadyAdded)
+        case .notFound: loc.t(k.addChainNotFound)
+        // The corpus has no "no RPC endpoint" sentence. `unableToVerify` is the
+        // true thing rather than the exact thing: with no endpoint there is
+        // nothing to verify against. Recorded as a wording gap.
+        case .noRpcEndpoint: loc.t(k.addUnableToVerify)
+        case .notCompatible: loc.t(k.addNotCompatible)
+        }
+        return CalloutModel(tone: .warning, text: text)
     }
 
     /// One row of 设置 → 网络.

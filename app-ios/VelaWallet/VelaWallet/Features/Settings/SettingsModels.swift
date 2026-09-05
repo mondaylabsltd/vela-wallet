@@ -179,6 +179,10 @@ struct ChainMarkModel {
 
 struct SettingsNetworkRowModel: Identifiable {
     let id: String
+    /// The core's key for this chain (spec 050). `nil` on a fixture row, whose
+    /// taps go nowhere by design — the id above is a slug, and a slug is not
+    /// something `network_admin` can be asked about.
+    var chainId: Int?
     let mark: ChainMarkModel
     let name: String
     /// "链 1" — the chain-id line under the name.
@@ -222,7 +226,7 @@ struct CheckItemModel: Identifiable {
 
 struct AddNetworkModel {
     let title: String
-    let subtitle: String
+    var subtitle: String
     let searchPlaceholder: String
     var results: [SettingsNetworkRowModel] = []
     var candidate: SettingsNetworkRowModel?
@@ -419,7 +423,7 @@ struct SettingsScreenModel {
     var networks: [SettingsNetworkRowModel]
     let addNetworkLabel: String
     var networkDetail: NetworkDetailModel
-    let addNetwork: AddNetworkModel
+    var addNetwork: AddNetworkModel
     let rpcProviders: RpcProvidersModel
     let endpoints: EndpointsModel
     let storage: StorageModel
