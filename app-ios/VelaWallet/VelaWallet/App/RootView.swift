@@ -346,6 +346,11 @@ struct RootView: View {
                             onBack: { contactsRoute = nil },
                             onOpenMember: { member in
                                 contactsRoute = .detail(address: member.addressFull)
+                            },
+                            onDeleteGroup: {
+                                contacts.deleteGroup(id: group.id)
+                                // Back to the list: the page this was is gone.
+                                contactsRoute = nil
                             }
                         )
                     } else {

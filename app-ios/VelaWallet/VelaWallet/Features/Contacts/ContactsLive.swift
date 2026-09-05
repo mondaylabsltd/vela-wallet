@@ -190,7 +190,9 @@ enum ContactsLive {
             ctaEnabled: !group.members.isEmpty,
             backLabel: loc.t("componentsUi.mainNav.contacts"),
             moreLabel: loc.t("contacts.manage"),
-            sheet: nil,
+            // The ⋯ menu is drawn (C6) and its destructive item is the one with
+            // a machine behind it; the screen raises the sheet on demand.
+            sheet: ContactsFixtures.groupMenu(loc: loc),
             textScale: 1
         )
     }

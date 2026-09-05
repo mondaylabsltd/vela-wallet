@@ -148,6 +148,38 @@ struct ContactsStoreTests {
         #expect(store.view?.contacts.count == 1)
     }
 
+    /// Deleting a group removes the grouping, not the people.
+    ///
+    /// The distinction is why the drawing gives contact deletion a confirm
+    /// sheet and group deletion only a menu item: one loses an address, the
+    /// other loses a label.
+    @Test func deletingAGroupKeepsItsMembersInTheBook() async {
+        let (_, defaults) = suite()
+        seedBook(defaults)
+        defaults.set(
+            #"[{"id":"grp_1","name":"家人","members":["\#(alice)","\#(bob)"]}]"#,
+            forKey: VelaStore.Key.contactGroups
+        )
+
+        let store = ContactsStore(store: VelaStore(defaults: defaults))
+        store.open(myAddress: alice)
+        await settle(until: { store.isLoaded && store.view?.groups.count == 1 })
+        #expect(store.group(id: "grp_1")?.members.count == 2)
+
+        store.deleteGroup(id: "grp_1")
+        await settle(until: { store.view?.groups.isEmpty == true })
+        #expect(store.view?.groups.isEmpty == true)
+        #expect(store.view?.contacts.count == 2, "the members went with the group")
+
+        // And it stays gone.
+        await settle(until: { defaults.string(forKey: VelaStore.Key.contactGroups) == "[]" })
+        let reopened = ContactsStore(store: VelaStore(defaults: defaults))
+        reopened.open(myAddress: alice)
+        await settle(until: { reopened.isLoaded })
+        #expect(reopened.view?.groups.isEmpty == true)
+        #expect(reopened.view?.contacts.count == 2)
+    }
+
     /// Signed out: no address, no book, and no crash.
     @Test func noAccountLoadsAnEmptyBookRatherThanSomebodyElses() async {
         let (_, defaults) = suite()

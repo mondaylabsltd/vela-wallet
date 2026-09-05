@@ -16,6 +16,13 @@ struct GroupDetailScreen: View {
     let model: GroupDetailModel
     var onBack: () -> Void = {}
     var onOpenMember: (ContactModel) -> Void = { _ in }
+    /// 删除分组, from the ⋯ menu (spec 050).
+    ///
+    /// No second confirmation, because the drawing has none and none is owed:
+    /// deleting a group removes the grouping, not the people. The members are
+    /// still in the address book afterwards, which is what makes this different
+    /// from deleting a contact — that one IS drawn with a confirm, and has one.
+    var onDeleteGroup: () -> Void = {}
 
     @State private var sheetShown = false
 
@@ -40,11 +47,26 @@ struct GroupDetailScreen: View {
         .environment(\.walletTextScale, model.textScale)
         .sheet(isPresented: $sheetShown) {
             if let sheet = model.sheet {
-                ActionMenuSheet(model: sheet, onItem: { _ in }, onCancel: { sheetShown = false })
+                ActionMenuSheet(
+                    model: sheet,
+                    // Only the destructive item has anywhere to go: 编辑分组,
+                    // 导入 and 导出 are choices whose destinations nothing has
+                    // drawn, so they dismiss rather than pretending to act.
+                    onItem: { item in
+                        sheetShown = false
+                        if item.destructive { onDeleteGroup() }
+                    },
+                    onCancel: { sheetShown = false }
+                )
                     .environment(\.walletTextScale, model.textScale)
             }
         }
-        .onAppear { sheetShown = model.sheet != nil }
+        // C6 is the state that opens WITH the menu up; every other state has
+        // the same menu available behind ⋯ and starts with it closed. Keying on
+        // the state rather than on `sheet != nil` is what lets a live group
+        // carry the menu without it popping open on arrival — and it is
+        // frame-identical for the fixtures, where only C6 has a sheet.
+        .onAppear { sheetShown = model.state == .c6 }
     }
 
     private var navBar: some View {
