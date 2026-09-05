@@ -96,6 +96,29 @@ the design tokens.
 
 ---
 
+## A success criterion this slice cannot meet, stated plainly
+
+**SC-002 says a custom network can be "added, edited and removed". Adding is
+not possible in spec 040, and no amount of shell work would make it so.**
+
+Both routes into the add-network wizard go through the network:
+`add_by_chain_id_requested` needs `fetch_chain_info`, and the search box needs
+`fetch_search_index`. Both are fail-closed here, so the core never resolves a
+candidate and `can_add` stays `false` — which is the core being right, not a
+gap in the wiring. It refuses to save a chain whose id, symbol and contract
+support it has not confirmed.
+
+What US1 *does* deliver on the device: the display currency, the network list,
+per-network endpoints, the four service endpoints, the provider keys, and
+removing a custom network — each read from and written to the store the other
+clients share.
+
+**Adding a network moves to spec 041**, with the chain index it depends on.
+Recorded here rather than quietly reworded in the spec, because a criterion
+that gets edited to match what shipped is not a criterion.
+
+---
+
 ## Corrections to the record (found while planning, before any code)
 
 1. **The premise of the request was wrong, and it matters.** Contacts,

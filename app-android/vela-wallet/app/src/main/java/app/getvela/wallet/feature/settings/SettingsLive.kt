@@ -118,7 +118,13 @@ object SettingsLive {
                     card?.copy(
                         id = provider.provider.name,
                         name = providerName(provider.provider),
-                        field = card.field.copy(value = provider.key),
+                        // The field's id is what the host maps back to a
+                        // machine event, so it must be the core's own name for
+                        // this provider rather than the fixture's label.
+                        field = card.field.copy(
+                            id = provider.provider.name,
+                            value = provider.key,
+                        ),
                     )
                 }.filterNotNull(),
             ),

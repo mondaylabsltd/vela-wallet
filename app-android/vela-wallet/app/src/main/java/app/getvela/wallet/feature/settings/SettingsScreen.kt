@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -100,6 +101,20 @@ data class SettingsActions(
      * the sheet closes here, and what the pick means is the core's.
      */
     val onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
+    /**
+     * A field changed, keystroke by keystroke, identified by the id its model
+     * carries.
+     *
+     * Per keystroke rather than on blur because the CORE holds the draft: it
+     * echoes the value back in its view, so the box a person types into is
+     * showing the core's state rather than a second copy that can disagree
+     * with it. The web shell does the same.
+     */
+    val onFieldEdited: (fieldId: String, value: String) -> Unit = { _, _ -> },
+    /** The field lost focus — the core's commit point, where it validates and saves. */
+    val onFieldCommitted: (fieldId: String) -> Unit = {},
+    /** The bin on a custom network row. */
+    val onRemoveNetwork: (id: String) -> Unit = {},
 )
 
 @Composable
@@ -154,6 +169,9 @@ fun SettingsRoute(
         },
         onSelectTab = actions.onSelectTab,
         onSignOut = actions.onSignOut,
+        onFieldEdited = actions.onFieldEdited,
+        onFieldCommitted = actions.onFieldCommitted,
+        onRemoveNetwork = actions.onRemoveNetwork,
     )
 }
 
@@ -173,6 +191,9 @@ fun SettingsScreen(
     onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
     onSelectTab: (VelaTab) -> Unit = {},
     onSignOut: () -> Unit = {},
+    onFieldEdited: (String, String) -> Unit = { _, _ -> },
+    onFieldCommitted: (String) -> Unit = {},
+    onRemoveNetwork: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
 
@@ -229,7 +250,14 @@ fun SettingsScreen(
                     else -> {
                         val (title, subtitle) = pageHeader(model, page)
                         SettingsNavHeader(title, subtitle, model.closeLabel, onBack)
-                        SettingsPageBody(model, page, onOpenOverlay)
+                        SettingsPageBody(
+                            model = model,
+                            page = page,
+                            onOpenOverlay = onOpenOverlay,
+                            onFieldEdited = onFieldEdited,
+                            onFieldCommitted = onFieldCommitted,
+                            onRemoveNetwork = onRemoveNetwork,
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(VelaSpacing.xl4))
@@ -377,18 +405,57 @@ private fun SettingsHomeBody(
     }
 }
 
+/**
+ * A [VelaUrlField] wired to the core.
+ *
+ * Focus is what commits. The core validates and saves on blur — not on every
+ * keystroke — so a field that reported only its edits would let a person type a
+ * perfectly good RPC URL that never reached storage, with the box still showing
+ * it. Both halves or neither.
+ */
+@Composable
+private fun EditableUrlField(
+    field: UrlFieldModel,
+    onEdited: (String, String) -> Unit,
+    onCommitted: (String) -> Unit,
+    action: String? = null,
+) {
+    var focused by remember(field.id) { mutableStateOf(false) }
+    VelaUrlField(
+        label = field.label,
+        value = field.value,
+        placeholder = field.placeholder,
+        hint = field.hint,
+        badge = field.badge,
+        tone = field.tone,
+        action = action,
+        onValueChange = { value -> onEdited(field.id, value) },
+        modifier = Modifier.onFocusChanged { state ->
+            if (focused && !state.isFocused) onCommitted(field.id)
+            focused = state.isFocused
+        },
+    )
+}
+
 @Composable
 @Suppress("LongMethod")
 private fun SettingsPageBody(
     model: SettingsScreenModel,
     page: SettingsPage,
     onOpenOverlay: (SettingsOverlay) -> Unit,
+    onFieldEdited: (String, String) -> Unit = { _, _ -> },
+    onFieldCommitted: (String) -> Unit = {},
+    onRemoveNetwork: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     when (page) {
         SettingsPage.Networks -> {
             model.networks.forEach { row ->
-                VelaNetworkRow(row, deleteLabel = model.addNetworkLabel)
+                VelaNetworkRow(
+                    row = row,
+                    deleteLabel = model.addNetworkLabel,
+                    onDelete = onRemoveNetwork,
+                )
             }
             Row(
                 modifier = Modifier
@@ -548,11 +615,11 @@ private fun SettingsPageBody(
                     )
                     VelaStatusPill(provider.badge)
                 }
-                VelaUrlField(
-                    label = "",
-                    value = provider.field.value,
-                    placeholder = provider.field.placeholder,
+                EditableUrlField(
+                    field = provider.field,
                     action = provider.action,
+                    onEdited = onFieldEdited,
+                    onCommitted = onFieldCommitted,
                 )
                 if (provider.support != null) {
                     Text(
@@ -585,11 +652,10 @@ private fun SettingsPageBody(
                 modifier = Modifier.padding(bottom = VelaSpacing.xl3),
             )
             model.endpoints.fields.forEach { field ->
-                VelaUrlField(
-                    label = field.label,
-                    value = field.value,
-                    hint = field.hint,
-                    badge = field.badge,
+                EditableUrlField(
+                    field = field,
+                    onEdited = onFieldEdited,
+                    onCommitted = onFieldCommitted,
                 )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl3))
             }

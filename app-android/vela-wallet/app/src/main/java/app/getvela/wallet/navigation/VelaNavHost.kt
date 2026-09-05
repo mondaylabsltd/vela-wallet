@@ -52,6 +52,8 @@ import app.getvela.wallet.feature.settings.SettingsActions
 import app.getvela.wallet.feature.settings.SettingsFixtures
 import app.getvela.wallet.feature.settings.SettingsLive
 import app.getvela.wallet.feature.settings.SettingsOverlay
+import app.getvela.wallet.feature.settings.core.NetEndpointField
+import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.SettingsRoute
 import app.getvela.wallet.feature.settings.SettingsScreenState
 import app.getvela.wallet.feature.settings.gallery.SettingsGalleryScreen
@@ -356,6 +358,19 @@ fun VelaNavHost(
                         // deliberately inert rather than pretending to save.
                         if (sheet == SettingsOverlay.Currency) settings.chooseCurrency(id)
                     },
+                    // The field ids are the core's own enum names, put there by
+                    // SettingsLive. The screen reports "this box changed"; which
+                    // machine event that is stays here, so a new editable field
+                    // is a line in one place rather than a callback per box.
+                    onFieldEdited = { fieldId, value ->
+                        endpointField(fieldId)?.let { settings.editEndpoint(it, value) }
+                        providerId(fieldId)?.let { settings.editProviderKey(it, value) }
+                    },
+                    onFieldCommitted = { fieldId ->
+                        endpointField(fieldId)?.let { settings.commitEndpoint(it) }
+                        providerId(fieldId)?.let { settings.commitProviderKey(it) }
+                    },
+                    onRemoveNetwork = { id -> settings.deleteNetwork(id) },
                 ),
             )
         }
@@ -488,6 +503,19 @@ private fun android.content.Context.openUrl(url: String) {
         )
     }
 }
+
+/**
+ * Which core field a settings box belongs to, by the id its model carries.
+ *
+ * `null` for a box no machine owns yet — the search fields, the add-network
+ * form. Those still render and still accept typing; nothing listens, and that
+ * is honest until spec 041 brings the chain index they need.
+ */
+private fun endpointField(fieldId: String): NetEndpointField? =
+    NetEndpointField.entries.firstOrNull { it.name == fieldId }
+
+private fun providerId(fieldId: String): NetProviderId? =
+    NetProviderId.entries.firstOrNull { it.name == fieldId }
 
 /** Reached only by the `vela.startDestination` extra; the guard leaves them alone. */
 internal val DEVELOPER_ROUTES = setOf(
