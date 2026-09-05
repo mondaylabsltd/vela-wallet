@@ -91,6 +91,15 @@ data class SettingsActions(
     val onSelectTab: (VelaTab) -> Unit = {},
     val onSignOut: () -> Unit = {},
     val onOpenContacts: () -> Unit = {},
+    /**
+     * A row picked in one of the select sheets — currency today, the language
+     * and format sheets when their machines arrive.
+     *
+     * The overlay says WHICH sheet, so one callback serves five of them and a
+     * new sheet does not widen this class. Returning is the host's business:
+     * the sheet closes here, and what the pick means is the core's.
+     */
+    val onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
 )
 
 @Composable
@@ -135,6 +144,14 @@ fun SettingsRoute(
         onToggleAdvanced = { advancedOpen = !advancedOpen },
         onOpenOverlay = { overlay = it },
         onDismissOverlay = { overlay = SettingsOverlay.None },
+        onSheetSelect = { sheet, id ->
+            actions.onSheetSelect(sheet, id)
+            // The sheet closes on the pick, before the core has answered. The
+            // alternative — waiting for the view to come back — leaves a
+            // person tapping a row that visibly does nothing while a storage
+            // write completes.
+            overlay = SettingsOverlay.None
+        },
         onSelectTab = actions.onSelectTab,
         onSignOut = actions.onSignOut,
     )
@@ -153,6 +170,7 @@ fun SettingsScreen(
     onToggleAdvanced: () -> Unit = {},
     onOpenOverlay: (SettingsOverlay) -> Unit = {},
     onDismissOverlay: () -> Unit = {},
+    onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
     onSelectTab: (VelaTab) -> Unit = {},
     onSignOut: () -> Unit = {},
 ) {
@@ -229,6 +247,7 @@ fun SettingsScreen(
                 overlay = overlay,
                 onDismiss = onDismissOverlay,
                 onSignOut = onSignOut,
+                onSheetSelect = onSheetSelect,
             )
         }
     }
@@ -800,6 +819,7 @@ private fun SettingsSheet(
     overlay: SettingsOverlay,
     onDismiss: () -> Unit,
     onSignOut: () -> Unit,
+    onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -836,11 +856,21 @@ private fun SettingsSheet(
                     onConfirm = onSignOut,
                     onCancel = onDismiss,
                 )
-                SettingsOverlay.Language -> SelectSheetBody(model.languageSheet)
-                SettingsOverlay.Currency -> SelectSheetBody(model.currencySheet)
-                SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet)
-                SettingsOverlay.DateFormat -> SelectSheetBody(model.dateSheet)
-                SettingsOverlay.TimeFormat -> SelectSheetBody(model.timeSheet)
+                SettingsOverlay.Language -> SelectSheetBody(model.languageSheet) {
+                    onSheetSelect(SettingsOverlay.Language, it)
+                }
+                SettingsOverlay.Currency -> SelectSheetBody(model.currencySheet) {
+                    onSheetSelect(SettingsOverlay.Currency, it)
+                }
+                SettingsOverlay.NumberFormat -> SelectSheetBody(model.numberSheet) {
+                    onSheetSelect(SettingsOverlay.NumberFormat, it)
+                }
+                SettingsOverlay.DateFormat -> SelectSheetBody(model.dateSheet) {
+                    onSheetSelect(SettingsOverlay.DateFormat, it)
+                }
+                SettingsOverlay.TimeFormat -> SelectSheetBody(model.timeSheet) {
+                    onSheetSelect(SettingsOverlay.TimeFormat, it)
+                }
                 SettingsOverlay.ClearCaches -> ConfirmSheetBody(
                     model.clearCachesSheet,
                     onConfirm = onDismiss,
@@ -908,14 +938,14 @@ private fun SheetTitle(title: String, subtitle: String? = null) {
 }
 
 @Composable
-private fun SelectSheetBody(sheet: SelectSheetModel) {
+private fun SelectSheetBody(sheet: SelectSheetModel, onSelect: (String) -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(sheet.title, sheet.subtitle)
     if (sheet.searchPlaceholder != null) {
         VelaUrlField(label = "", value = "", placeholder = sheet.searchPlaceholder)
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
     }
-    sheet.rows.forEach { VelaSelectRow(it) }
+    sheet.rows.forEach { VelaSelectRow(it, onClick = onSelect) }
     if (sheet.footerNote != null) {
         Text(
             text = sheet.footerNote,

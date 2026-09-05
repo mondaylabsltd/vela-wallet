@@ -7,6 +7,7 @@ import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.LocaleResolver
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.SessionController
+import app.getvela.wallet.feature.settings.core.SettingsController
 import java.util.Locale
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
@@ -45,6 +46,23 @@ class AppContainer(private val app: Application) {
         store = accountStore,
         scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
     )
+
+    /**
+     * The settings machines, built on first use and never torn down.
+     *
+     * Lazy for a reason the session machine does not share: the route guard is
+     * needed before the first frame, while a person who never opens Settings
+     * should not pay for its storage read. Never torn down for the reason the
+     * session machine *does* share: a machine rebuilt whenever a screen is
+     * rebuilt spends the frame after every rotation reporting its placeholder
+     * over a settled choice.
+     */
+    val settings: SettingsController by lazy {
+        SettingsController(
+            context = app,
+            scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+        )
+    }
 
     private val i18nExecutor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "vela-i18n")

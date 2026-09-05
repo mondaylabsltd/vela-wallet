@@ -50,6 +50,8 @@ import app.getvela.wallet.feature.flows.WalletFlowEntry
 import app.getvela.wallet.feature.flows.rememberFlowNavState
 import app.getvela.wallet.feature.settings.SettingsActions
 import app.getvela.wallet.feature.settings.SettingsFixtures
+import app.getvela.wallet.feature.settings.SettingsLive
+import app.getvela.wallet.feature.settings.SettingsOverlay
 import app.getvela.wallet.feature.settings.SettingsRoute
 import app.getvela.wallet.feature.settings.SettingsScreenState
 import app.getvela.wallet.feature.settings.gallery.SettingsGalleryScreen
@@ -322,8 +324,16 @@ fun VelaNavHost(
                         display = shortenAddress(session.address),
                     )
             }
+            // The display currency is the person's own, from spec 040's first
+            // live machine. Everything else on this screen is still the ST1
+            // fixture — the networks, endpoints and providers arrive in phase
+            // 5, and the RPC health tiles need the network layer spec 041
+            // brings.
+            val settings = application.container.settings
+            val currency by settings.currency.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { settings.refreshCurrency() }
             SettingsRoute(
-                model = model,
+                model = SettingsLive.withCurrency(model, currency),
                 actions = SettingsActions(
                     onSelectTab = { tab ->
                         if (tab == VelaTab.Wallet) navController.popBackStack()
@@ -332,6 +342,12 @@ fun VelaNavHost(
                     // would look for it.
                     onSignOut = { application.container.session.signOut() },
                     onOpenContacts = { navController.push(VelaDestinations.CONTACTS) },
+                    onSheetSelect = { sheet, id ->
+                        // Only the currency sheet has a machine behind it yet.
+                        // The others still render their fixture rows and are
+                        // deliberately inert rather than pretending to save.
+                        if (sheet == SettingsOverlay.Currency) settings.chooseCurrency(id)
+                    },
                 ),
             )
         }

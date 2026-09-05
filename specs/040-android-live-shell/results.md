@@ -65,6 +65,37 @@ already carries, with `bridge_class!` read as `bridge_object!`.
 
 ---
 
+## Phase 1–2 — The road (T005–T015) ✅
+
+Six machines on the bridge, the plumbing out of the onboarding feature, one
+key-value space, and a drift gate that has been shown to fail.
+
+**SC-008 demonstrated.** `CurrencyView.rate` was renamed to `fx_rate` in the
+generated mirror — exactly what a Rust rename produces after regeneration — and
+the suite went red, naming the field and both candidate causes:
+
+```text
+CoreWireDriftTest > currencyRateStaysNullable FAILED
+CoreWireDriftTest > currencyViewMatchesTheGeneratedMirror FAILED
+  CurrencyView.rate is declared in Kotlin but absent from the generated mirror
+  (fields there: [code, committed, fx_rate]) — a Rust rename, or a typo here
+```
+
+Reverted; the mirrors are untouched in the diff. Two tests caught it
+independently, which is the design: one checks that every field Kotlin names
+exists, the other that `rate` specifically stays nullable, because `null` is not
+`1` and the core's comment says what confusing them costs.
+
+The Gradle input declaration matters as much as the test. `app/build.gradle.kts`
+now lists the mirror directory as a test input; without it the mirrors would
+regenerate and the one test that would have caught the change would be skipped
+as `UP-TO-DATE`. The file's own comment had already warned about this hazard for
+the design tokens.
+
+**Gate**: 118 existing tests unchanged and green, +5 drift tests.
+
+---
+
 ## Corrections to the record (found while planning, before any code)
 
 1. **The premise of the request was wrong, and it matters.** Contacts,

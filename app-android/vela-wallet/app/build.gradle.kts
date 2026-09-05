@@ -82,6 +82,16 @@ android {
             test.inputs.dir(velaRepoRoot.resolve("public/i18n"))
                 .withPathSensitivity(PathSensitivity.RELATIVE)
                 .withPropertyName("velaI18nCatalogs")
+            // The ts-rs mirrors CoreWireDriftTest checks the Kotlin wire types
+            // against (spec 040 FR-008). Same stale-green hazard as the tokens
+            // above, and worse: without this, a Rust rename lands, the mirrors
+            // regenerate, and the one test that would have caught it is skipped
+            // as UP-TO-DATE.
+            test.inputs.dir(
+                velaRepoRoot.resolve("app-web/vela-wallet/src/lib/core/generated"),
+            )
+                .withPathSensitivity(PathSensitivity.RELATIVE)
+                .withPropertyName("velaCoreWireMirrors")
             test.inputs.file(
                 velaRepoRoot.resolve("rust/target/release/${System.mapLibraryName("vela_core_uniffi")}"),
             )
