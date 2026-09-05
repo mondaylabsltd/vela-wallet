@@ -154,9 +154,26 @@ object ContactsLive {
             // way. The FULL address, never the shortened one: this is the value
             // the copy button puts on the clipboard.
             address = fallback.address.copy(lines = splitAddress(contact.address)),
-            // The recent-activity block needs the transaction store spec 041
-            // brings; until then it keeps the fixture's own empty shape rather
-            // than inventing a history. // live in 041
+            // **Cleared, not inherited.** // live in 041
+            //
+            // The recent-activity block needs the local transaction store spec
+            // 041 brings. An earlier version of this line left the fallback's
+            // rows alone, on the assumption that the fallback carried none —
+            // and the C2 fixture carries two, so a freshly saved contact was
+            // shown "+50 USDC received yesterday" for a transaction that never
+            // happened. Found on a device, in the one place a wrong answer
+            // looks completely ordinary.
+            //
+            // The empty BLOCK is cleared too, and that is not tidiness.
+            // `contactDetailNoActivity` fills it with `contacts.empty` —
+            // "还没有联系人 / 添加常用地址…" — which reads as nonsense under
+            // 最近往来 on a page that is showing a contact. The fixture could
+            // reuse it because it was never on a live screen; here it is on
+            // every one. There is no i18n key for "no transactions with this
+            // person yet", and inventing product copy is not this feature's
+            // call, so the section keeps its heading and stands empty until
+            // spec 041 gives it both a history and a sentence.
+            activity = fallback.activity.copy(rows = emptyList(), empty = null),
         )
     }
 

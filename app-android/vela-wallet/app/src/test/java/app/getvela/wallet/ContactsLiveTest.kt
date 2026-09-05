@@ -176,6 +176,31 @@ class ContactsLiveTest {
     }
 
     @Test
+    fun theDetailPageInventsNoTransactions() {
+        // The bug this pins was found on a device, not here: the builder kept
+        // the fallback's activity rows, and the C2 fixture has two — so a
+        // contact saved a minute ago was shown "+50 USDC received yesterday".
+        // Handed the POPULATED fixture on purpose, because that is what the
+        // call site did wrong.
+        val populated = ContactsFixtures.buildMobileState(ContactsScreenState.C2, strings).detail!!
+        assertTrue("the fixture really does carry rows", populated.activity.rows.isNotEmpty())
+
+        val view = book(contact(ALICE, "Alice"))
+        val detail = ContactsLive.detail(populated, view.contacts[0], view)
+        assertTrue(
+            "a live contact has no history until spec 041 gives it one",
+            detail.activity.rows.isEmpty(),
+        )
+        // And no borrowed empty copy either: the no-activity fixture fills that
+        // block with the CONTACTS-list empty text, which under 最近往来 tells a
+        // person they have no contacts on a page showing one of them.
+        assertNull(
+            "the activity block must not borrow the contact-list empty copy",
+            detail.activity.empty,
+        )
+    }
+
+    @Test
     fun theListModelCarriesNoDetail() {
         // A list state with a detail attached renders the detail. The two are
         // one model, so the builder must clear what it is not showing.

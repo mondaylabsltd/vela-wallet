@@ -149,6 +149,56 @@ fixture book. The cause was not the code — `adb install` had printed
 line. The install had not completed. A screenshot of a stale APK is the most
 convincing wrong answer available on a device; check for `Success`.
 
+### The device pass (second sitting) — SC-001 and SC-004 closed
+
+The founder enabled MIUI's "install via USB", which unblocked the instrumented
+tests. Both persistence claims are now verified **across real process deaths**,
+with `am force-stop` between separate `am instrument` invocations:
+
+| Check | Method | Result |
+| --- | --- | --- |
+| SC-001 | choose JPY → force-stop → fresh process reads it back | ✅ |
+| SC-001 | `vela.displayCurrency` = `JPY` on disk, in the SAME file as onboarding's own keys | ✅ |
+| SC-004 | save 3 → force-stop → delete the middle → force-stop → only Alice + Carol | ✅ |
+| SC-003 | list, letter sections, count, identicons from the device's own store | ✅ |
+| — | delete through the UI: sheet names **Alice**, list drops to "1 位" | ✅ |
+| — | search: typed `car`, filtered to Carol, count and rail updated | ✅ |
+
+Stored bytes, read straight off the device — camelCase, plain integers:
+
+```json
+[{"address":"0xcccc…cccc","name":"Carol","kind":"unknown","favorite":false,
+  "txCount":0,"lastUsed":1788576804456,"firstSeen":1788576804456,"source":"manual"}]
+```
+
+### Three more bugs, all found by running it
+
+1. **The persistence test had the very race it was written after.** It asserted
+   on the store immediately after the view settled; the view had committed in
+   62 ms and the key was still `null`. Third appearance of the same shape — and
+   the first one that could only be seen on hardware.
+2. **A contact showed transactions that never happened.** `ContactsLive.detail`
+   left the fallback's activity rows alone "because the fallback carries none"
+   — and the C2 fixture carries two, so a contact saved a minute earlier
+   displayed *"+50 USDC received yesterday · Ethereum"*. I asserted the contents
+   of a file I had not opened, which is the exact mistake this program's memory
+   warns about. Cleared, with a test that hands the builder the populated
+   fixture on purpose.
+3. **And the empty state it fell back to was the wrong sentence.**
+   `contactDetailNoActivity` fills that block with `contacts.empty` —
+   *"还没有联系人 / 添加常用地址…"* — which reads as nonsense under 最近往来 on a
+   page showing a contact. Harmless in a fixture that was never live; on every
+   live contact once the section is legitimately empty. There is no i18n key for
+   "no transactions with this person yet" and inventing product copy is not this
+   feature's call, so the section keeps its heading and stands empty until 041.
+
+### One more box nobody could type into
+
+The contacts **search field** was display-only, exactly like the ten settings
+fields — so `ContactsLive.home` shipped a working filter that nothing on the
+phone could feed. Same fix as phase 4: an optional `onQueryChange`, unchanged
+without it, gallery states untouched. Verified on the device.
+
 ### What still needs a wallet, and is therefore blocked
 
 SC-001, SC-002 and SC-004 all require a signed-in wallet on the device, which
@@ -226,15 +276,15 @@ that gets edited to match what shipped is not a criterion.
 
 | # | Claim | Verdict |
 | --- | --- | --- |
-| SC-001 | A currency choice survives a force-stop | **Machine-verified, device-blocked.** A fresh machine over the same store reads the choice back (`CurrencyMachineTest`); the process-death half needs a wallet on the device — see above |
+| SC-001 | A currency choice survives a force-stop | ✅ **verified on device**, across a real process death, plus the bytes read off disk |
 | SC-002 | A custom network can be added, edited, removed | **Partly met, and the gap is stated.** Edit and remove are wired; **adding is impossible in 040** because both routes to it need the network layer 041 brings |
 | SC-003 | Contacts render the device's own book; empty means empty | ✅ **verified on device** |
-| SC-004 | Deleting the middle of three deletes that one | **Machine-verified** (`ContactsMachineTest`); the device pass is blocked with SC-001 |
+| SC-004 | Deleting the middle of three deletes that one | ✅ **verified on device**, across two process deaths, and again through the UI with the confirm sheet naming the right contact |
 | SC-005 | Zero network requests from these surfaces | ✅ by construction — 18 `// live in 041` arms, and no HTTP client is reachable from any of the three executors |
 | SC-006 | Bridge size measured and recorded | ✅ four builds, per-machine costs, a budget for 041/042 |
 | SC-007 | The third machine costs no shared plumbing | ✅ `display_currency` landed as four files plus one bridge line; `contacts` the same |
 | SC-008 | A Rust rename turns a test red | ✅ demonstrated and reverted, output quoted above |
-| SC-009 | Existing suite stays green; the suite grows | ✅ 118 → **209**, 0 failures; `assembleDebug` green |
+| SC-009 | Existing suite stays green; the suite grows | ✅ 118 → **210** unit tests + 5 instrumented, 0 failures; `assembleDebug` green |
 | SC-010 | Every gallery state still renders | ✅ untouched by construction — the fixture builders and gallery routes were not modified, and `VelaUrlField` renders byte-identically without an `onValueChange` |
 
 ## FR-017, honestly
@@ -261,7 +311,7 @@ those two screens, and why:
 | --- | --- | --- |
 | 1 | Add-network wizard (needs the chain index) | **041** |
 | 2 | RPC/endpoint health, latency, fiat rates — 18 `// live in 041` arms | **041** |
-| 3 | A contact's recent activity (needs the local tx store) | **041** |
+| 3 | A contact's recent activity (needs the local tx store) **and an i18n key for "no transactions with this person yet"** — the section currently stands empty under its heading | **041** |
 | 4 | Identity resolution and recipient classification | **041** |
 | 5 | Contact **add/edit form** and **favourite** control | **no artwork** — the core supports both; nothing is drawn on Android. Not blocked on wiring |
 | 6 | Import / export of contacts | needs a file picker; the core supports it |

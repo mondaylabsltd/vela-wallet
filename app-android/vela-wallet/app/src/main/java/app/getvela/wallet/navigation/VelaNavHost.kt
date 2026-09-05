@@ -320,8 +320,11 @@ fun VelaNavHost(
                     strings,
                 )
             }
+            // The NO-ACTIVITY detail variant, not C2. C2 is Alice-the-fixture
+            // and she has two transactions; a contact saved a minute ago has
+            // none, and until spec 041 there is no local store to ask.
             val detailLabels = remember(strings) {
-                ContactsFixtures.buildMobileState(ContactsScreenState.C2, strings)
+                ContactsFixtures.contactDetailNoActivity(strings)
             }
             // C3 is the empty book: the only fixture state that carries the
             // "no contacts yet" copy and its two calls to action.
@@ -340,9 +343,9 @@ fun VelaNavHost(
                 book.contacts.firstOrNull { it.address == address }
             }
             val listModel = ContactsLive.home(labels, book, query, emptyState)
-            val model = if (selected != null && detailLabels.detail != null) {
+            val model = if (selected != null) {
                 listModel.copy(
-                    detail = ContactsLive.detail(detailLabels.detail, selected, book),
+                    detail = ContactsLive.detail(detailLabels, selected, book),
                     deleteConfirm = if (confirmingDelete) {
                         // Named after the contact on screen: a confirmation that
                         // says "delete Alice?" while removing Bob is worse than
@@ -385,6 +388,7 @@ fun VelaNavHost(
                         }
                     },
                     onContact = { contact -> openContact = contact.addressFull },
+                    onQueryChange = { typed -> query = typed },
                     onDismissMenu = {
                         menuOpen = false
                         confirmingDelete = false

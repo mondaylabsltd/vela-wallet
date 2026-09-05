@@ -8,6 +8,7 @@ import app.getvela.wallet.feature.settings.core.SettingsController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -54,16 +55,32 @@ class CurrencyPersistenceTest {
         settings.refreshCurrency()
         settings.chooseCurrency(CHOICE)
 
-        // The machine has committed when its view says so — the write is one
-        // of the effects it runs on the way there.
         withTimeout(TIMEOUT_MS) {
             settings.currency.first { it.code == CHOICE && it.committed }
+        }
+
+        // Wait for the STORE, not for the view.
+        //
+        // The committed view arrives strictly BEFORE the bytes: the core
+        // updates its model and emits `write_stored_code` as an effect, so the
+        // screen is already showing JPY while DataStore is still writing. The
+        // first run of this test on a device failed exactly here — the view had
+        // settled in 62 ms and the key was still null — which is the same race
+        // the network and contacts machine tests hit, appearing a third time in
+        // the one place it could only be seen on hardware.
+        val written = withTimeout(TIMEOUT_MS) {
+            var value = store.read(KeyValueStore.Keys.DISPLAY_CURRENCY)
+            while (value != CHOICE) {
+                delay(20)
+                value = store.read(KeyValueStore.Keys.DISPLAY_CURRENCY)
+            }
+            value
         }
 
         assertEquals(
             "the choice must reach the shared key the other clients read",
             CHOICE,
-            store.read(KeyValueStore.Keys.DISPLAY_CURRENCY),
+            written,
         )
     }
 

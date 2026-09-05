@@ -48,6 +48,13 @@ data class ContactsActions(
     val onGroup: (GroupRowModel) -> Unit = {},
     val onDismissMenu: () -> Unit = {},
     val onTab: (VelaTab) -> Unit = {},
+    /**
+     * The search box, keystroke by keystroke.
+     *
+     * `null` leaves the box display-only, which is what the gallery wants: a
+     * fixture state pins its own query and must not be editable out of it.
+     */
+    val onQueryChange: ((String) -> Unit)? = null,
 )
 
 /**
@@ -137,6 +144,7 @@ fun ContactsScreen(
                             model = model.search,
                             onClick = { actions.onAction("contacts.search") },
                             onClear = { actions.onAction("contacts.searchClear") },
+                            onQueryChange = actions.onQueryChange,
                         )
                         Spacer(modifier = Modifier.height(VelaSpacing.xl3))
                     }
