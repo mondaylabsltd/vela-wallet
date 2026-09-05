@@ -33,6 +33,15 @@ enum SettingsLive {
     ) -> SettingsScreenModel {
         var copy = model
         copy.networks = view.networks.map { row($0, loc: loc) }
+        // One detail per chain, keyed by row id. A single `networkDetail` was
+        // enough while the list was a fixture and became a lie the moment it
+        // went live: every row opened the first chain's page, so tapping Gnosis
+        // showed Ethereum's RPC under Gnosis's name.
+        copy.networkDetails = Dictionary(
+            uniqueKeysWithValues: view.networks.map {
+                ($0.id, detail($0, loc: loc, fallback: model.networkDetail))
+            }
+        )
         if let first = view.networks.first {
             copy.networkDetail = detail(first, loc: loc, fallback: model.networkDetail)
         }
@@ -249,6 +258,7 @@ enum SettingsLive {
     static func row(_ network: NetNetworkRowWire, loc: Loc) -> SettingsNetworkRowModel {
         SettingsNetworkRowModel(
             id: network.id,
+            chainId: network.chainId,
             mark: mark(chainId: network.chainId, name: network.displayName),
             name: network.displayName,
             meta: chainMeta(loc, network.chainId),
@@ -273,15 +283,25 @@ enum SettingsLive {
             mark: mark(chainId: network.chainId, name: network.displayName),
             name: network.displayName,
             note: fallback.note,
-            badge: badge(network.rpcHealth) ?? fallback.badge,
+            // **Never the fixture's pill.** `?? fallback.badge` used to be here,
+            // and on a real phone it painted 在线 · 45ms over an endpoint
+            // nothing had probed — the fixture's own constant, presented as a
+            // measurement. Unmeasured is neutral and says nothing.
+            badge: badge(network.rpcHealth) ?? Self.unmeasured,
             rpc: field(fallback.rpc, value: network.rpcUrl, health: network.rpcHealth),
             explorer: field(fallback.explorer, value: network.explorerUrl,
                             health: network.explorerHealth),
+            // (Both fields drop the fixture's pill for the same reason.)
             callout: mismatchCallout(network, loc: loc) ?? fallback.callout
         )
     }
 
     // MARK: - Pieces
+
+    /// What an endpoint nobody has probed wears: nothing that reads as an
+    /// answer. Neutral is documented as "unset/idle, not failed", and the
+    /// ellipsis is a glyph rather than copy, so it needs no corpus key.
+    static let unmeasured = StatusPillModel(tone: .neutral, label: "\u{22EF}")
 
     /// The health pill. `nil` while nothing has been measured — an unmeasured
     /// endpoint is not a healthy one, and drawing a green pill before the probe
@@ -332,7 +352,7 @@ enum SettingsLive {
             value: value,
             placeholder: fallback.placeholder,
             hint: fallback.hint,
-            badge: badge(health) ?? fallback.badge,
+            badge: badge(health),
             tone: fallback.tone,
             action: fallback.action
         )

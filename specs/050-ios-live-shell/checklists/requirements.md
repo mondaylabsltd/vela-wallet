@@ -68,14 +68,18 @@ results.md with its reason, never quietly left blank.
       the test count strictly increasing.
 - [x] SC-004's diffstat pasted into results.md, with any forced declarations named
       rather than scored as zero.
-- [ ] Every P1 acceptance scenario confirmed **on the device**, with evidence.
+- [x] Every P1 acceptance scenario confirmed **on the device**, with evidence —
+      six XCUITests green on `shelchin's iPhone`, screenshots in the `.xcresult`.
+      They found two bugs no simulator run had.
 - [x] The blocked-surface table states what a drawing would need to contain.
 - [x] The debts → 051 table is complete.
 
 
 ## Open at closeout
 
-Only the device items. `SC-008` is not met: the build signs for the device, the
-install stops at Developer Mode. The one unticked box is the P1 scenarios on
-hardware; the cross-client read of a web-written `vela.contacts` rides with it and
-needs two devices. The checklist is in results.md, phase 6.
+**Nothing on this list.** SC-008 was met in phase 7.
+
+Two things ride to 051 and are named there rather than here, because neither is a
+requirement this feature set itself: a cross-client read of a web-written
+`vela.contacts` (needs two devices), and adding a brand-new chain end to end
+(depends on which chain is compatible on the day).

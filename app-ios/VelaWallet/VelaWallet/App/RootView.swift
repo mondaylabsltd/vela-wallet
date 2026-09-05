@@ -410,6 +410,7 @@ struct RootView: View {
             // look for it.
             onSignOut: { session.signOut() },
             networkActions: SettingsNetworkActions(
+                onOpenNetwork: { settings.expandNetwork(chainId: $0) },
                 onSearch: { settings.search($0) },
                 onSelectChain: { settings.selectChain($0) },
                 onEditCustomRpc: { settings.editCustomRpc($0) },

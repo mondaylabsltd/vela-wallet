@@ -423,6 +423,12 @@ struct SettingsScreenModel {
     var networks: [SettingsNetworkRowModel]
     let addNetworkLabel: String
     var networkDetail: NetworkDetailModel
+    /// One detail per network, keyed by row id (spec 050).
+    ///
+    /// Empty for the fixtures, which draw a single detail page and reach it
+    /// by state pin rather than by tapping a row. A live list fills it, so
+    /// tapping Gnosis opens Gnosis.
+    var networkDetails: [String: NetworkDetailModel] = [:]
     var addNetwork: AddNetworkModel
     let rpcProviders: RpcProvidersModel
     let endpoints: EndpointsModel

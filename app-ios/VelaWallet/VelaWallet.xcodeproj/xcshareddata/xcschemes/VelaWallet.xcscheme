@@ -49,14 +49,23 @@
             </BuildableReference>
          </TestableReference>
          <!--
-           The UI tests are skipped in the shared scheme. ScreenshotSweepTests
-           launches the app once per gallery fixture and pulls images out of the
-           .xcresult; that is a review instrument for a person, not a gate, and
-           on a CI runner it is minutes of simulator time for no signal. Run
-           them explicitly with -only-testing when you want pictures.
+           The UI test TARGET is included; one class inside it is skipped.
+           (Spec 050 amended this. The whole target used to be skipped, which
+           also made `-only-testing` on it fail outright — a testable a scheme
+           skips cannot be re-enabled from the command line, so the on-device
+           acceptance tests were unrunnable.)
+
+           ScreenshotSweepTests stays skipped by name: it launches the app once
+           per gallery fixture and pulls images out of the .xcresult, which is a
+           review instrument for a person rather than a gate, and minutes of
+           simulator time for no signal on CI. Run it with -only-testing when
+           you want pictures.
+
+           LiveWiringAcceptanceTests runs: it is spec 050's acceptance on real
+           hardware, and it is fast.
          -->
          <TestableReference
-            skipped = "YES">
+            skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "23ED5E503019A42500EA9C55"
@@ -64,6 +73,11 @@
                BlueprintName = "VelaWalletUITests"
                ReferencedContainer = "container:VelaWallet.xcodeproj">
             </BuildableReference>
+            <SkippedTests>
+               <Test
+                  Identifier = "ScreenshotSweepTests">
+               </Test>
+            </SkippedTests>
          </TestableReference>
       </Testables>
    </TestAction>

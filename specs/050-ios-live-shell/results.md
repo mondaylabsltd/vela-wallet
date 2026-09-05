@@ -83,10 +83,11 @@ two branches merge cleanly rather than conflicting over a comment. Its
 provenance line therefore says "spec 029", which is true and which this
 paragraph explains.
 
-The scheme also **skips the UI test target**, and that is deliberate:
-`ScreenshotSweepTests` launches the app once per gallery fixture and pulls
-images out of the `.xcresult`. It is a review instrument for a person, not a
-gate. Run it explicitly with `-only-testing` when pictures are wanted.
+The scheme also **skipped the UI test target**, which was deliberate at the
+time: `ScreenshotSweepTests` launches the app once per gallery fixture and pulls
+images out of the `.xcresult`, which is a review instrument for a person rather
+than a gate. *(Phase 7 narrowed it — the whole target being skipped also made
+`-only-testing` on it impossible, so the sweep is now skipped by name instead.)*
 
 ### A gate the plan claimed, and the honest version of it
 
@@ -587,7 +588,7 @@ That is a device-side precondition, not a code problem — the phone needs to be
 unlocked, with Developer Mode on and this Mac trusted. Nothing else stands
 between here and the run.
 
-#### The checklist, in the order it has to happen
+#### The checklist — steps 1–4 and 6's probes are now automated (phase 7); 5 and 7 still want a human
 
 1. Unlock the phone, keep it unlocked, and confirm **设置 → 隐私与安全性 → 开发者模式** is on.
 2. `rust/scripts/build-ios-xcframework.sh` if this is a fresh checkout.
@@ -609,14 +610,75 @@ between here and the run.
 
 | | Verdict |
 |---|---|
-| **SC-001** — 通讯录 opens; CRUD survives a relaunch | **Met in code, device run pending.** `ContactsStoreTests` proves the loop over real storage including the relaunch; the tab opens and renders live (screenshot). Cross-client read of a web-written `vela.contacts` is untested — it needs two devices. |
-| **SC-002** — a typed network survives a relaunch; the mismatch refusal writes nothing | **Met in code, device run pending.** The live suite reaches a real verdict against real endpoints; the refusal path has unit coverage. |
+| **SC-001** — 通讯录 opens; CRUD survives a relaunch | **Met.** `ContactsStoreTests` proves the loop over real storage including the relaunch, and the tab renders live **on the phone**. The one part still untested is a cross-client read of a web-written `vela.contacts` — that needs two devices, and is carried to 051. |
+| **SC-002** — a typed network survives a relaunch; the mismatch refusal writes nothing | **Met.** Typing a chain id on the phone reaches the core's verdict against real endpoints, and the detail page's probes measure live (551 ms / 2.0 s on Gnosis). The refusal path has unit coverage; a full add-and-relaunch of a *new* chain is the founder's to do, since it depends on which chain is compatible today. |
 | **SC-003** — currency survives a relaunch and degrades rather than fabricating | **Met.** Storage round-trip and the degrade rule both tested. |
 | **SC-004** — the third machine costs zero shared logic | **Met, with one file named.** Four of five untouched; `RootView.swift` +17, all of it the composition of two views. Reported rather than engineered around. |
 | **SC-005** — fixtures stay canon | **Met.** 38 fixture tests pass unchanged; ST10b screenshot is identical but for the clock; every `*Fixtures.swift` diff is a delegation, not a value. |
 | **SC-006** — test count strictly increases, build green | **Met.** 130 → **203**, plus 3 live behind a flag. Green at every phase boundary. |
 | **SC-007** — no machine changes, no corpus delta, no other client touched | **Met.** `rust/crates/vela-core/src/app/` and `src/i18n_catalogs/` untouched; `vela-core-uniffi` gained three `bridge_object!` lines; `app-web`, `app-desktop`, `app-android`, `app-browser-extension` untouched. |
-| **SC-008** — verified on the device | **Not met.** The build signs for the device; the install is blocked on Developer Mode. The checklist above is what remains. |
+| **SC-008** — verified on the device | **Met.** Six XCUITests pass on `shelchin's iPhone`, with screenshots exported from the `.xcresult`. They found two bugs that no simulator run and no unit test had: the network detail opening the wrong chain, and the health pill showing the fixture's 45 ms. |
+
+---
+
+## Phase 7 — on the phone, and the two bugs it found
+
+The founder unlocked the device. `devicectl` installed, and
+`LiveWiringAcceptanceTests` — six XCUITests that tap, type and photograph on the
+hardware itself — **passed**. SC-008 is met.
+
+```
+Test Case testContactsIsLiveAndNotTheFixtureRoster            passed (5.4s)
+Test Case testContactsFixtureForComparison                    passed (18.5s)
+Test Case testNetworksListIsTheCoresTwelveNotTheDrawingsEight passed (5.5s)
+Test Case testTappingANetworkOpensThatNetwork                 passed (6.3s)
+Test Case testTheAddGateFollowsTheCoresVerdict                passed (6.3s)
+Test Case testCurrencyDegradesRatherThanFabricating           passed (9.5s)
+** TEST SUCCEEDED **      platform=iOS, id=00008130-001C68C804E1401C
+```
+
+Screenshots come back inside the `.xcresult` — the recipe `ScreenshotSweepTests`
+already documented, and the only way to photograph an iPhone from a script.
+
+### Two device-side preconditions, both real
+
+1. **The whole UI test target was `skipped = "YES"` in the shared scheme**, and a
+   testable a scheme skips **cannot be re-enabled from the command line** —
+   `-only-testing` on it fails outright. The target is now included with
+   `ScreenshotSweepTests` skipped *by name*, which keeps the slow sweep off CI
+   and makes the acceptance tests runnable.
+2. **`Authentication canceled. Canceled by another authentication.`** — a
+   `devicectl device process launch --console` left running from an earlier
+   check was holding the device's usage assertion. Killing it fixed it. One
+   automation session at a time.
+
+### The two bugs, both invisible until the list was live
+
+**Tapping any network opened Ethereum.** The row's tap handler was
+`{ _ in page = .networkDetail }` — the id discarded — and the detail page read a
+single `model.networkDetail`. Harmless for four years of fixtures, where the
+list and the detail were the same one chain. The moment the list became the
+core's twelve it was a lie: tapping Gnosis showed another chain's RPC under
+Gnosis's name. Now the id is carried and the detail is keyed by it, with a
+device test that fails if Ethereum appears after tapping Gnosis.
+
+**The health pill was the fixture's.** `badge(...) ?? fallback.badge` fell back
+to the drawing, so an endpoint nothing had contacted wore **在线 · 45ms** —
+`SettingsFixtures`' own constant, presented as a measurement. This is the exact
+rule phase 2 wrote down ("painting a green dot before the probe answers is the
+screen making a claim the core has not") defeated by a `??` three lines below
+it. The fix is two-part, and the second half is the better one:
+
+- unmeasured is neutral and says nothing, never the fixture's pill;
+- **opening a network's detail now tells the core** (`override_expanded`), which
+  seeds `checking` and starts its probe wave.
+
+So the pills are real. On the phone, over its own network: **RPC 551ms** (green)
+and **explorer 2.0s** (amber, because the core's own threshold is one second).
+
+Worth recording separately: `rpc.gnosischain.com` answers iOS's `URLSession` in
+551 ms, where desktop's `ureq` gets a 403 from the same host (030's carried debt
+#4). Whatever that endpoint objects to, it is not this client.
 
 ### Two things the plan named that shipped differently
 

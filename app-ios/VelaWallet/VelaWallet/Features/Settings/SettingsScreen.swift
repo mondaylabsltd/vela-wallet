@@ -35,6 +35,8 @@ struct SettingsScreen: View {
     @State private var page: SettingsPage
     @State private var overlay: SettingsOverlay
     @State private var advancedOpen: Bool
+    /// Which network row was tapped, so the detail page is that chain's.
+    @State private var selectedNetwork: String?
 
     init(
         model: SettingsScreenModel,
@@ -130,7 +132,7 @@ struct SettingsScreen: View {
     private var pageTitle: (title: String, subtitle: String?) {
         switch page {
         case .networks: (model.networksTitle, model.networksSubtitle)
-        case .networkDetail: (model.networkDetail.title, model.networkDetail.subtitle)
+        case .networkDetail: (networkDetail.title, networkDetail.subtitle)
         case .addNetwork: (model.addNetwork.title, model.addNetwork.subtitle)
         case .rpcProviders: (model.rpcProviders.title, model.rpcProviders.subtitle)
         case .endpoints: (model.endpoints.title, nil)
@@ -144,7 +146,7 @@ struct SettingsScreen: View {
         switch page {
         case .home: homeBody
         case .networks: networksBody
-        case .networkDetail: NetworkDetailBody(detail: model.networkDetail)
+        case .networkDetail: NetworkDetailBody(detail: networkDetail)
         case .addNetwork: AddNetworkBody(panel: model.addNetwork, actions: networkActions)
         case .rpcProviders: RpcProvidersBody(panel: model.rpcProviders)
         case .endpoints: EndpointsBody(panel: model.endpoints)
@@ -197,8 +199,17 @@ struct SettingsScreen: View {
 
     @ViewBuilder private var networksBody: some View {
         ForEach(model.networks) { row in
-            SettingsNetworkRow(row: row, deleteLabel: model.addNetworkLabel) { _ in
+            // The tapped row's id is carried, not discarded (spec 050).
+            //
+            // It used to be `{ _ in page = .networkDetail }`, which was harmless
+            // while the list and the detail were both one fixture and became a
+            // lie the moment the list went live: every row opened Ethereum's
+            // page, so tapping Gnosis showed another chain's RPC under Gnosis's
+            // name. `selectedNetwork` is what the detail is then built from.
+            SettingsNetworkRow(row: row, deleteLabel: model.addNetworkLabel) { id in
+                selectedNetwork = id
                 page = .networkDetail
+                if let chainId = row.chainId { networkActions.onOpenNetwork(chainId) }
             }
         }
         // A link, not a CTA: adding a network is navigation, and accent is
@@ -214,6 +225,19 @@ struct SettingsScreen: View {
         .padding(.top, Tokens.Space.s24)
         .contentShape(Rectangle())
         .onTapGesture { page = .addNetwork }
+    }
+
+    /// The detail for the row that was tapped.
+    ///
+    /// Falls back to the model's own when nothing was tapped — which is the
+    /// gallery's case, where `VELA_SETTINGS_STATE=st9b` lands on this page
+    /// directly and the fixture is the whole answer.
+    private var networkDetail: NetworkDetailModel {
+        guard let selectedNetwork,
+              let row = model.networks.first(where: { $0.id == selectedNetwork }),
+              let detail = model.networkDetails[row.id]
+        else { return model.networkDetail }
+        return detail
     }
 
     /// Rows a tap navigates from; everything else opens an overlay.
@@ -389,6 +413,8 @@ private struct AddNetworkBody: View {
 /// drawn fields whether there is anything on the other end. A gallery board
 /// leaves it default, and every field stays the picture it was drawn as.
 struct SettingsNetworkActions {
+    /// A network's detail page opened — the core probes it from here.
+    var onOpenNetwork: (Int) -> Void = { _ in }
     var onSearch: (String) -> Void = { _ in }
     var onSelectChain: (Int) -> Void = { _ in }
     var onEditCustomRpc: (String) -> Void = { _ in }

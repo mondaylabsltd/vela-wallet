@@ -116,6 +116,16 @@ final class SettingsStore {
         core.dispatch(CoreJSON.string(["type": "wizard_reset"]))
     }
 
+    /// Opening a network's detail page.
+    ///
+    /// This is what makes the health pills real: the core seeds them
+    /// `checking` and starts a probe wave. Without it the page would sit on
+    /// whatever it was born with, which is how it came to show the fixture's
+    /// 45ms over an endpoint nothing had contacted.
+    func expandNetwork(chainId: Int) {
+        core.dispatch(CoreJSON.string(["type": "override_expanded", "chain_id": chainId]))
+    }
+
     func deleteNetwork(id: String) {
         core.dispatch(CoreJSON.string(["type": "delete_confirmed", "id": id]))
     }
