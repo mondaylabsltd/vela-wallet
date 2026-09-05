@@ -93,3 +93,49 @@ it, whether 429 means "broken" or "busy" — `rpc_pool.rs`, unchanged.
   only from the core's own network list, so no untrusted URL reaches it — but
   that changes in phase 2 when the chain index and provider tiers arrive, and
   admission lands with them rather than after.
+
+
+---
+
+## Inbox — a core change coming from another session (2026-09-05)
+
+The web session working on spec 028 flagged commit `6cec4ddf` on
+`028-web-port-completion` (not on `origin/main` yet; it arrives when 028
+merges). It changes `vela-core`'s `contacts.rs` by **events and view fields
+only**, and adds `app/contacts_io.rs` — the desktop's own `contact_io.rs`
+lifted into the core, with the rule that a malformed file is **refused before
+any write** rather than parsed into an empty success.
+
+**Checked, not assumed: Android is unaffected.**
+
+| Changed | Android's exposure |
+| --- | --- |
+| `ContactsView` gains `import_failure`, `export` | none — `ignoreUnknownKeys`, and the drift gate's view rule is Kotlin ⊆ mirror |
+| `ContactEvent` gains 7 variants | none — the event rule is subset too |
+| `ContactOperation`, `ContactShellResult` | **unchanged** — verified in the diff; the three operation lines it touches are new *uses* of the existing `WriteGroups` |
+
+The desktop breaks on the same commit because a Rust struct literal must be
+exhaustive. Kotlin has no such failure mode, which is a real difference between
+the shells and worth remembering when a native heads-up arrives: **the question
+for Android is never "did a view gain a field", it is "did an operation or a
+result change shape".**
+
+### What it changes for the Android plan
+
+1. **Debt #6 from spec 040 (contacts import/export) gets smaller and better
+   shaped.** It read "needs a file picker; the core supports it". The core now
+   owns the parsing *and* the refusal rules, so the Android work becomes: a
+   file picker, a dispatch of `import_file { content, filename, into_group,
+   now_ms }`, and rendering `import_failure`
+   (`malformed_json | no_address_column | empty | unknown_group`). **No CSV
+   parser in Kotlin** — which is the outcome FR-113 wants anyway.
+2. **Android is not part of the divergence 028 recorded**, because Android has
+   no import at all. The trap runs the other way: whoever builds it here must
+   go through the core's `import_file` rather than writing a parser, or Android
+   would *join* a divergence it is currently outside of.
+3. **New group events** — `add_group_members`, `remove_group_member`,
+   `set_contact_groups` — are what spec 040's debt #5 (group editing) needs,
+   and they are the core's now rather than something to invent.
+4. **`send.rs`**: `picked_address` closes the picker and `open()` seeds
+   `recipient` from `prefilled_recipient`. View-level, so spec 042 inherits it
+   for free.
