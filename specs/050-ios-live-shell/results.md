@@ -618,6 +618,22 @@ between here and the run.
 | **SC-007** — no machine changes, no corpus delta, no other client touched | **Met.** `rust/crates/vela-core/src/app/` and `src/i18n_catalogs/` untouched; `vela-core-uniffi` gained three `bridge_object!` lines; `app-web`, `app-desktop`, `app-android`, `app-browser-extension` untouched. |
 | **SC-008** — verified on the device | **Not met.** The build signs for the device; the install is blocked on Developer Mode. The checklist above is what remains. |
 
+### Two things the plan named that shipped differently
+
+**`Core/CoreExecutor.swift` was not built.** Three executors turned out to share no
+behaviour worth a protocol: each one's `switch` is over its own operation names, its
+own coercion helpers and its own fail-closed variants. A protocol over that is a name
+for a coincidence. The rule it was meant to carry — *an unrecognised tag must still
+answer* — lives in each `default:` branch, with a test per machine.
+
+The shared road is therefore four files, not five: `CoreStore`, `VelaStore`,
+`CoreHTTP`, `AddressText`.
+
+**The new control shipped as a mode, not a type.** `SettingsUrlField` gained an
+optional `text: Binding<String>?`; `nil` renders exactly as drawn. Smaller than the
+`SettingsField.swift` the plan named, and it leaves every fixture call site
+pixel-identical — verified by screenshot.
+
 ### Recorded, not fixed
 
 - **Three address-shortening copies disagree.** `RootView.shortenAddress` and

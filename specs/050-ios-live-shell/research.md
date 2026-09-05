@@ -230,7 +230,7 @@ a quickstart line, not a defect.
 
 ## D11 — The text field
 
-**Decision**: one new control, `SettingsField`, built from the existing
+**Decision**: one new control, built from the existing
 `Components/Settings/SettingsPrimitives.swift` vocabulary and `DesignSystem/Tokens.swift`
 — no literal colours, spacing, radii or type. It is used by the add-network wizard
 (chain id, RPC URL, and the endpoint/provider panels that are the same row shape).

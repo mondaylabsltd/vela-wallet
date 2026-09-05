@@ -123,7 +123,8 @@ app-ios/VelaWallet/VelaWallet/
 │   └── Onboarding/Core/
 │       └── AccountStore.swift         #   rebased onto VelaStore; API unchanged
 ├── Components/Settings/
-│   └── SettingsField.swift            #   NEW — the one new control
+│   └── SettingsPrimitives.swift       #   the one new control — shipped as an
+│                                      #   editable mode on SettingsUrlField
 └── App/RootView.swift                 #   .contacts section; stores constructed here
 
 app-ios/VelaWallet/VelaWalletTests/     # executor, builder, storage, decode-drift tests
@@ -148,7 +149,7 @@ Each phase is one commit, and each ends on a green gate: `xcodebuild build`,
 | 0 | Baselines recorded: test count, binary size, sweep output, the 27-operation inventory | Nothing is claimed that was not measured |
 | 1 | The road + the first machine: 3 exports, `Core/`, `VelaStore`, `CoreHTTP`, and **contacts** wired; 通讯录 opens | The pipeline works end to end, on the smallest machine, with no network |
 | 2 | `network_admin` reads: store, search index, chain info | The largest machine's read half, and the first real HTTP |
-| 3 | `SettingsField` + the add-network wizard's write path: probes, verdicts, refusal, persist | The one drawing gap closed, and the core's verdict on screen |
+| 3 | The editable field + the add-network wizard's write path: probes, verdicts, refusal, persist | The one drawing gap closed, and the core's verdict on screen |
 | 4 | **`display_currency`** — the paved-road measurement | SC-004: the third machine costs zero shared lines |
 | 5 | Contacts writes: edit, delete, tombstone, groups, and the `AccountSwitched` boundary | SC-001 on the device |
 | 6 | Device verification, blocked-surface table, debts → 051, results.md | SC-008 |

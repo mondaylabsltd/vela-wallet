@@ -45,9 +45,13 @@ every network bug. Landing this alone already turns a dead tab into a real scree
 - **T012** `Core/VelaStore.swift` — `vela.*` keys, values as JSON **text**, corrupt →
   empty, never throws. `AccountStore` rebased onto it with its public API and its
   existing tests unchanged (research D4).
-- **T013** [P] `Core/CoreExecutor.swift` — the executor protocol, the tagged-operation
-  helpers, and the **unrecognised-tag** branch that answers loudly rather than
-  hanging (FR-002).
+- **T013** [P] ~~`Core/CoreExecutor.swift` — the executor protocol and the shared
+  tagged-operation helpers.~~ **Not built.** Three executors turned out to share no
+  behaviour worth a protocol: each one's `switch` is over its own operation names,
+  its own coercion helpers and its own fail-closed variants. A protocol over that is
+  a name for a coincidence. The rule it was meant to carry — *an unrecognised tag
+  must still answer* (FR-002) — lives in each executor's `default:` branch instead,
+  with a test per machine that proves it.
 - **T014** [P] `Core/CoreStore.swift` — the resident holder: owns a `CoreBridge` and a
   `CoreDriver`, decodes the view into a `Decodable` mirror, publishes it
   `@Observable`. Constructed eagerly, booted lazily from the screen's `.task`
@@ -112,8 +116,10 @@ every network bug. Landing this alone already turns a dead tab into a real scree
 
 ## Phase 3 — The one new control, and the wizard that can finally be used
 
-- **T040** `Components/Settings/SettingsField.swift` — built from
-  `SettingsPrimitives` and `Tokens`; no literals. The founder's decision of
+- **T040** The one new control — built from `SettingsPrimitives` and `Tokens`; no
+  literals. *(Shipped as an optional `text: Binding<String>?` on the existing
+  `SettingsUrlField` rather than a new file: `nil` renders exactly as drawn, so
+  every fixture call site is unchanged.)* The founder's decision of
   2026-09-05 scopes it to this one control.
 - **T041** Wire the add-network wizard's fields to core events: chain id, RPC URL,
   and the blur/commit that triggers the probes.
