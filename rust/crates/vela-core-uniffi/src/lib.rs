@@ -872,3 +872,77 @@ pub fn registry_build_member_proof(
     serde_json::to_string(&proof)
         .map_err(|error| CoreError::Internal(format!("could not serialize member proof: {error}")))
 }
+
+// ---------------------------------------------------------------------------
+// Native-coin pricing (spec 041)
+// ---------------------------------------------------------------------------
+//
+// These two are RULES, and they were reachable from the web (`vela-core-wasm`)
+// but not from Swift or Kotlin — so each native client was one convenient
+// afternoon away from writing its own price ladder, and two wallets would have
+// disagreed about what a coin is worth. The desktop handover asked for exactly
+// this promotion rather than a third copy.
+//
+// The shell still owns the multicall and the decoding; what crosses here is the
+// judgement: which quote is deepest, and which source to believe.
+
+/// One stable quote token's successful multicall outputs.
+#[derive(uniffi::Record)]
+pub struct NativeQuoteGroup {
+    /// Quote outputs in THIS stable's base units, as decimal strings. Failed
+    /// calls are simply absent — the shell drops them, it does not zero them.
+    pub amounts_out: Vec<String>,
+    /// This stable's `decimals()` read; `None` = the read failed (the core
+    /// defaults it, and that default is its business).
+    pub quote_decimals: Option<u32>,
+}
+
+/// The chosen price and where it came from.
+#[derive(uniffi::Record)]
+pub struct NativePriceChoice {
+    /// `None` = nothing could price this coin. **Not zero, and not one.**
+    pub price: Option<f64>,
+    /// `dex` | `chainlink_sanity` | `chainlink_local` | `chainlink_eth` | `none`.
+    pub source: String,
+}
+
+/// The deepest pool across every stable quote.
+#[uniffi::export]
+pub fn best_native_dex_price(groups: Vec<NativeQuoteGroup>) -> Option<f64> {
+    let groups: Vec<vela_core::app::balance_dashboard::NativeQuoteGroup> = groups
+        .into_iter()
+        .map(|group| vela_core::app::balance_dashboard::NativeQuoteGroup {
+            amounts_out: group.amounts_out,
+            quote_decimals: group.quote_decimals,
+        })
+        .collect();
+    vela_core::app::balance_dashboard::best_native_dex_price(&groups)
+}
+
+/// The source ladder and its sanity band: a DEX price that disagrees with
+/// Chainlink by too much loses to Chainlink.
+#[uniffi::export]
+pub fn choose_native_price(
+    dex: Option<f64>,
+    chainlink_local: Option<f64>,
+    chainlink_eth: Option<f64>,
+) -> NativePriceChoice {
+    use vela_core::app::balance_dashboard::NativePriceSource as Source;
+    match vela_core::app::balance_dashboard::choose_native_price(dex, chainlink_local, chainlink_eth)
+    {
+        Some(chosen) => NativePriceChoice {
+            price: Some(chosen.price),
+            source: match chosen.source {
+                Source::Dex => "dex",
+                Source::ChainlinkSanity => "chainlink_sanity",
+                Source::ChainlinkLocal => "chainlink_local",
+                Source::ChainlinkEth => "chainlink_eth",
+            }
+            .to_owned(),
+        },
+        None => NativePriceChoice {
+            price: None,
+            source: "none".to_owned(),
+        },
+    }
+}

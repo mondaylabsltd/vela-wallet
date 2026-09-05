@@ -18,6 +18,14 @@ import app.getvela.wallet.feature.contacts.core.ContactTombstone
 import app.getvela.wallet.feature.contacts.core.ContactTxKind
 import app.getvela.wallet.feature.contacts.core.ContactsView
 import app.getvela.wallet.feature.settings.core.CurrencyEvent
+import app.getvela.wallet.feature.wallet.core.BalanceCacheEntry
+import app.getvela.wallet.feature.wallet.core.BalanceEvent
+import app.getvela.wallet.feature.wallet.core.BalanceNotice
+import app.getvela.wallet.feature.wallet.core.BalanceOperation
+import app.getvela.wallet.feature.wallet.core.BalanceShellResult
+import app.getvela.wallet.feature.wallet.core.BalanceSwitcherView
+import app.getvela.wallet.feature.wallet.core.BalanceToken
+import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.RpcBanEntry
 import app.getvela.wallet.feature.wallet.core.RpcCallVerdict
 import app.getvela.wallet.feature.wallet.core.RpcEndpointSeed
@@ -195,6 +203,56 @@ class CoreWireDriftTest {
         val lastUsed = elementDescriptor<Contact>("last_used_ms")
         assertEquals("the u32 is an Int in Kotlin", "kotlin.Int", txCount.serialName)
         assertEquals("the f64 is a Double", "kotlin.Double", lastUsed.serialName)
+    }
+
+    // -- balance_dashboard (spec 041) ------------------------------------------
+
+    @Test
+    fun balanceViewsMatchTheGeneratedMirrors() {
+        assertFieldsExist<BalanceView>("BalanceView")
+        assertFieldsExist<BalanceToken>("BalanceToken")
+        assertFieldsExist<BalanceCacheEntry>("BalanceCacheEntry")
+        assertFieldsExist<BalanceSwitcherView>("BalanceSwitcherView")
+    }
+
+    @Test
+    fun balanceOperationsAndResultsAreExhaustive() {
+        assertVariantsExhaustive<BalanceOperation>("BalanceOperation")
+        assertVariantsExhaustive<BalanceShellResult>("BalanceShellResult")
+    }
+
+    @Test
+    fun balanceEventsExist() {
+        assertVariantsExist<BalanceEvent>("BalanceEvent")
+    }
+
+    @Test
+    fun balanceNoticesMatchTheGeneratedMirror() {
+        assertStringUnion<BalanceNotice>("BalanceNotice")
+    }
+
+    @Test
+    fun aBalanceIsAStringAndATotalIsNullable() {
+        // Two type choices the whole read path rests on, pinned because both
+        // would compile if they were wrong.
+        //
+        // `balance` is a STRING because the core parses it as a human decimal
+        // and multiplies it by a price; a numeric field here would invite
+        // handing over raw units, which is a total 10^18 times too large and
+        // invisible until a price exists.
+        //
+        // `display_total_usd` is NULLABLE because "we do not know" is not zero,
+        // and a money screen that renders unknown as 0 has told somebody their
+        // wallet is empty.
+        assertEquals("kotlin.String", elementDescriptor<BalanceToken>("balance").serialName)
+        assertTrue(
+            "display_total_usd must stay nullable",
+            elementDescriptor<BalanceView>("display_total_usd").isNullable,
+        )
+        assertTrue(
+            "price_usd must stay nullable",
+            elementDescriptor<BalanceToken>("price_usd").isNullable,
+        )
     }
 
     // -- rpc_pool (spec 041) --------------------------------------------------

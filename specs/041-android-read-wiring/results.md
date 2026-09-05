@@ -139,3 +139,53 @@ result change shape".**
 4. **`send.rs`**: `picked_address` closes the picker and `open()` seeds
    `recipient` from `prefilled_recipient`. View-level, so spec 042 inherits it
    for free.
+
+
+---
+
+## Phase 4a — The price rules stop being web-only (T120 partial)
+
+`bestNativeDexPrice` and `chooseNativePrice` were reachable from the web
+through wasm and **from nowhere else** — so Android and iOS were each one
+convenient afternoon away from writing their own price ladder, and two Vela
+wallets would have disagreed about what the same holding is worth. The desktop
+handover asked for a promotion rather than a third copy; this is it.
+
+Two `#[uniffi::export]` wrappers in `vela-core-uniffi`, and **nothing else in
+`rust/` touched** — so `pkg-web`, the ts-rs mirrors and their `--check` gates
+are all unaffected, verified by `git status` before rebuilding. The shell keeps
+the multicall and the decoding; what crosses the bridge is the judgement.
+
+`NativePriceTest` proves it end to end from Kotlin, on the real core:
+
+| Case | Verdict |
+| --- | --- |
+| two quotes in one stable | the deeper pool wins |
+| no quotes at all | **`null`, not `0`** — a coin nobody could price is unknown, and a screen rendering unknown as zero has told a person their holding is worthless |
+| DEX agrees with Chainlink | `dex` |
+| DEX disagrees far enough | `chainlink_sanity` — the band is why a thin or manipulated pool cannot show somebody a fortune |
+| no DEX quote | `chainlink_local`, then `chainlink_eth` |
+| nothing at all | `price = null`, `source = none` |
+
+`BalanceWire.kt` is transcribed and in the drift gate, with two type choices
+pinned by a test because both would compile if they were wrong:
+
+- **`balance` is a `String`.** The core parses it as a human decimal and
+  multiplies by the price (`balance_dashboard.rs:159`). A numeric field invites
+  raw units, which is a total 10^18 times too large **and invisible until a
+  price exists** — which is precisely what this feature makes happen. Inherited
+  from the desktop's spec 031 findings and now verified in the core's source
+  rather than taken on trust.
+- **`display_total_usd` and `price_usd` are nullable.** "We do not know" is not
+  zero.
+
+**Gate**: 235 unit tests (218 + 6 price + 11 drift/balance), 0 failures.
+
+### What Phase 4 still needs
+
+The balance **pipeline**: per-chain token discovery, a Multicall3 batch per
+chain, DEX price quotes in the same batch, the Chainlink fallback, and the
+streaming partial results the core expects. That is the ~800-line
+`services/wallet-api.ts` port, and it is the single largest piece of this
+spec — followed by `manage_tokens`, `token_trust`, the controller, `WalletLive`
+and the device check.
