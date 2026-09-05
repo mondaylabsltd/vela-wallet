@@ -222,6 +222,57 @@ address; the wire is a list. Writing a list there is silently accepted by
 `UserDefaults` and read back as empty by every client — which resurrects every
 deleted contact on the next launch. It has a test of its own.
 
+### Phase 1b — what a screenshot found that 168 tests did not
+
+`VELA_PAGE=contacts-live` was added — the desktop's `VELA_SECTION` by another
+name. `contacts` mounts the fixture host; `contacts-live` mounts the **real
+machine** over whatever `vela.contacts` actually holds, which is the only way to
+look at the wired screen without first completing a passkey ceremony.
+
+Seed the simulator's shelf and launch it:
+
+```bash
+xcrun simctl spawn <udid> defaults write app.getvela.VelaWallet \
+  vela.contacts -string '[{"address":"0x…","name":"妈妈", …}]'
+SIMCTL_CHILD_VELA_PAGE=contacts-live SIMCTL_CHILD_VELA_LANG=zh \
+  xcrun simctl launch <udid> app.getvela.VelaWallet
+```
+
+(`defaults write` needs `-string`, or it parses the JSON as a plist and refuses.
+Env vars reach the app only through the `SIMCTL_CHILD_` prefix.)
+
+The screen came up correct — real contacts, real groups, core-resolved member
+counts, core-drawn identicons — **and 妈妈 was filed under `#`.**
+
+#### CJK names were being dumped in one bucket
+
+`ContactsFixtures` is the drawing's canon and it is unambiguous: 阿豪 is in
+section **A**, 妈妈 in section **M**, and `sectionLetters` is
+`["A","B","C","D","H","M"]`. The roster files CJK names by their **pinyin
+initial**.
+
+The live builder — ported faithfully from web's `live.ts`, which does
+`first >= 'A' && first <= 'Z' ? first : '#'` — sent every one of them to `#`.
+
+Faithful, and wrong. For a wallet whose first market writes Chinese names, that
+is an A–Z directory with the directory taken out: every contact in one bucket at
+the bottom of the rail, and the rail itself pointing at nothing. No test caught
+it because every test I had written used Latin names — the fixtures encode the
+right answer, and nothing compared the two builders against it.
+
+Fixed by transliterating the initial (`.toLatin` then `.stripDiacritics`) before
+the A–Z test. Digits, emoji and unnamed addresses still file under `#`.
+
+The regression test is the one that should have existed from the start: **every
+name in the drawn roster must file where the drawing files it.** It passes for
+all eight, including "DAO 金库" → D and "hold on" → H.
+
+Tests: 168 → **170**.
+
+**Cross-client debt**: web has the same defect and files CJK contacts under `#`
+today. It is `contacts/live.ts`'s `sectionLetter`, and it needs the same fix in
+a web cut — flagged here rather than reached across into another client's code.
+
 ### Recorded, not fixed
 
 - **Three address-shortening copies disagree.** `RootView.shortenAddress` and

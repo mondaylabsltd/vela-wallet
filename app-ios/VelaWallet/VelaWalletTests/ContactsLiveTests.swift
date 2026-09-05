@@ -88,14 +88,45 @@ struct ContactsLiveTests {
         #expect(model.sections[0].contacts.map(\.name) == ["Amber", "Alice"])
     }
 
-    /// Digits, CJK, emoji and an unnamed address all land under `#`, which
-    /// sorts last — where the drawn rail puts it.
-    @Test func nonLatinInitialsCollectUnderHashWhichSortsLast() {
+    /// CJK names file under their pinyin initial, exactly as the drawing does.
+    ///
+    /// `ContactsFixtures` is the canon and it is unambiguous: 阿豪 sits in
+    /// section A and 妈妈 in section M. The straight `("A"..."Z")` rule sends
+    /// every Chinese name to one bucket at the bottom of the rail — an A–Z
+    /// directory with the directory taken out.
+    @Test func cjkNamesFileUnderTheirPinyinInitialLikeTheDrawing() {
         let model = ContactsLive.home(
             view([
                 contact("0x1", name: "妈妈"),
+                contact("0x2", name: "阿豪"),
+                contact("0x3", name: "Bob"),
+            ]),
+            loc: loc
+        )
+        #expect(model.sections.map(\.letter) == ["A", "B", "M"])
+        #expect(model.sections.first?.contacts.map(\.name) == ["阿豪"])
+        #expect(model.sections.last?.contacts.map(\.name) == ["妈妈"])
+    }
+
+    /// The fixture roster's own sectioning is the acceptance test for the rule:
+    /// if the live builder disagrees with the drawing about where a canon name
+    /// files, one of them is wrong.
+    @Test func theLiveRuleAgreesWithTheDrawnRosterSections() {
+        for canon in ContactsFixtures.roster {
+            let letter = ContactsLive.home(view([contact("0x1", name: canon.name)]), loc: loc)
+                .sections.first?.letter
+            #expect(letter == canon.section, "\(canon.name) files under \(letter ?? "?"), drawn as \(canon.section)")
+        }
+    }
+
+    /// Digits, emoji and an unnamed address still land under `#`, which sorts
+    /// last — where the drawn rail puts it.
+    @Test func thingsWithNoLatinInitialCollectUnderHashWhichSortsLast() {
+        let model = ContactsLive.home(
+            view([
+                contact("0x1", name: "7-Eleven"),
                 contact("0x2", name: "Bob"),
-                contact("0x3", name: "7-Eleven"),
+                contact("0x3", name: "🎩"),
             ]),
             loc: loc
         )

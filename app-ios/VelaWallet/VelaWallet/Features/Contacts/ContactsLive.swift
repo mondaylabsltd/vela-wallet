@@ -251,12 +251,40 @@ enum ContactsLive {
         .map { ContactSectionModel(letter: $0, contacts: byLetter[$0] ?? []) }
     }
 
-    /// A–Z, with everything else — digits, CJK, emoji, an unnamed address —
-    /// under `#`. Matching the rail the drawing always renders.
+    /// Which letter a name files under.
+    ///
+    /// **CJK names are transliterated, not dumped under `#`** — 妈妈 files under
+    /// M, 阿豪 under A. That is what the drawing says, and `ContactsFixtures`
+    /// pins it: its roster puts 阿豪 in section A and 妈妈 in section M, and
+    /// `sectionLetters` is `["A","B","C","D","H","M"]`.
+    ///
+    /// It is also the only reading that works. The straight
+    /// `("A"..."Z").contains` rule — which is what web's `live.ts` does, and
+    /// what this function did until a simulator screenshot showed 妈妈 sitting
+    /// under `#` — sends **every** Chinese name to one bucket at the bottom of
+    /// the rail. For a wallet whose first market writes Chinese names, that is
+    /// an A–Z directory with the directory taken out.
+    ///
+    /// Everything that still has no Latin initial — digits, emoji, an unnamed
+    /// address — keeps `#`, which is the bucket the rail always draws last.
+    ///
+    /// (Recorded as a cross-client divergence: web files these under `#` today.)
     private static func sectionLetter(_ name: String) -> String {
         guard let first = name.trimmingCharacters(in: .whitespaces).first else { return "#" }
-        let upper = String(first).uppercased()
-        return ("A"..."Z").contains(upper) ? upper : "#"
+        for candidate in [String(first), transliterated(String(first))] {
+            guard let initial = candidate?.first else { continue }
+            let upper = String(initial).uppercased()
+            if ("A"..."Z").contains(upper) { return upper }
+        }
+        return "#"
+    }
+
+    /// 妈 → "mā" → "ma". Latin input passes through unchanged, so the common
+    /// case costs one identity transform.
+    private static func transliterated(_ character: String) -> String? {
+        character
+            .applyingTransform(.toLatin, reverse: false)?
+            .applyingTransform(.stripDiacritics, reverse: false)
     }
 
     /// Case-insensitive contains over the name, the resolved name and the

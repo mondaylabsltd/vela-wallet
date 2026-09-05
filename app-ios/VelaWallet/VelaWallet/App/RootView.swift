@@ -151,6 +151,8 @@ struct RootView: View {
             GalleryScreen(loc: loc)
         case .contacts:
             ContactsStateHost(state: .c1, loc: loc)
+        case .contactsLive:
+            contactsSection
         case .contactsGallery:
             ContactsGalleryScreen(loc: loc)
         case .flowsGallery:
@@ -495,7 +497,8 @@ enum ContactsRoute: Equatable {
 /// navigation (FR-004).
 enum PageOverride {
     enum Page {
-        case wallet, gallery, contacts, contactsGallery, flowsGallery, settings, settingsGallery
+        case wallet, gallery, contacts, contactsLive, contactsGallery, flowsGallery
+        case settings, settingsGallery
     }
 
     static let page: Page? = {
@@ -503,6 +506,12 @@ enum PageOverride {
         case "wallet": .wallet
         case "gallery": .gallery
         case "contacts": .contacts
+        // The LIVE address book, without a wallet (spec 050) — the desktop's
+        // `VELA_SECTION` by another name. `contacts` mounts the fixture host;
+        // this mounts the real machine over whatever `vela.contacts` actually
+        // holds, which is the only way to look at the wired screen without
+        // first completing a passkey ceremony.
+        case "contacts-live": .contactsLive
         case "contacts-gallery": .contactsGallery
         case "flows-gallery": .flowsGallery
         case "settings": .settings
