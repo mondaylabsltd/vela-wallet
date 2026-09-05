@@ -568,6 +568,7 @@ inventing one would be designing rather than wiring (founder decision,
 | 5 | `CoreDriver` still lives under `Features/Onboarding/Core/` while four machines depend on it. A pure move, deliberately not made in the commit that first reused it. |
 | 6 | Three address-shortening copies with two different thresholds (`> 14` twice, `> 10` once); web uses a fourth form (8+6). New code uses `AddressText`. |
 | 7 | Adding a network takes **42–90 seconds** end to end. The drawn 检查中 state was never designed against a full minute. |
+| 8 | **Inbound, from web's 028** (peer message, 2026-09-05): commit `6cec4ddf` on `028-web-port-completion` — not on `origin/main` yet — adds `import_failure` and `export` to `ContactsView`, plus events `import_file`, `export_requested`, `export_taken`, `import_acknowledged`, `add_group_members`, `remove_group_member`, `set_contact_groups`, and a new `app/contacts_io.rs`. **Bites on rebase, quietly.** iOS does not compile-break (Swift builds no Rust literal, and `JSONDecoder` drops keys `ContactsWire` has no property for) and iOS parses no files at all, so 028's D50 refusal deviation is desktop-only. What it does mean: the two new view fields land and are **silently ignored**, so an import refusal would have nowhere to show. Add them to `ContactsWire` when import is drawn. `CoreWireDriftTests` covers the dangerous half — a new *operation* would fail loudly rather than hang — and the peer confirms `import_file` carries its `content`, so there is none. |
 
 ### Device verification — what is ready and what is not
 
