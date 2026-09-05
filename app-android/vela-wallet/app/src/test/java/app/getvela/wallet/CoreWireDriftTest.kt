@@ -1,5 +1,22 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.feature.contacts.core.Contact
+import app.getvela.wallet.feature.contacts.core.ContactEvent
+import app.getvela.wallet.feature.contacts.core.ContactGroupInput
+import app.getvela.wallet.feature.contacts.core.ContactGroupView
+import app.getvela.wallet.feature.contacts.core.ContactIdentity
+import app.getvela.wallet.feature.contacts.core.ContactImportEntry
+import app.getvela.wallet.feature.contacts.core.ContactImportGroup
+import app.getvela.wallet.feature.contacts.core.ContactImportReport
+import app.getvela.wallet.feature.contacts.core.ContactKind
+import app.getvela.wallet.feature.contacts.core.ContactOperation
+import app.getvela.wallet.feature.contacts.core.ContactRecipientView
+import app.getvela.wallet.feature.contacts.core.ContactSaveInput
+import app.getvela.wallet.feature.contacts.core.ContactShellResult
+import app.getvela.wallet.feature.contacts.core.ContactSource
+import app.getvela.wallet.feature.contacts.core.ContactTombstone
+import app.getvela.wallet.feature.contacts.core.ContactTxKind
+import app.getvela.wallet.feature.contacts.core.ContactsView
 import app.getvela.wallet.feature.settings.core.CurrencyEvent
 import app.getvela.wallet.feature.settings.core.CurrencyOperation
 import app.getvela.wallet.feature.settings.core.CurrencyShellResult
@@ -107,6 +124,66 @@ class CoreWireDriftTest {
     @Test
     fun currencyEventsExist() {
         assertVariantsExist<CurrencyEvent>("CurrencyEvent")
+    }
+
+    // -- contacts ------------------------------------------------------------
+
+    @Test
+    fun contactViewsMatchTheGeneratedMirrors() {
+        assertFieldsExist<ContactsView>("ContactsView")
+        assertFieldsExist<Contact>("Contact")
+        assertFieldsExist<ContactGroupView>("ContactGroupView")
+        assertFieldsExist<ContactRecipientView>("ContactRecipientView")
+        assertFieldsExist<ContactIdentity>("ContactIdentity")
+        assertFieldsExist<ContactImportReport>("ContactImportReport")
+        assertFieldsExist<ContactTombstone>("ContactTombstone")
+        assertFieldsExist<ContactSaveInput>("ContactSaveInput")
+        assertFieldsExist<ContactGroupInput>("ContactGroupInput")
+        assertFieldsExist<ContactImportEntry>("ContactImportEntry")
+        assertFieldsExist<ContactImportGroup>("ContactImportGroup")
+    }
+
+    @Test
+    fun contactOperationsAreExhaustive() {
+        assertVariantsExhaustive<ContactOperation>("ContactOperation")
+    }
+
+    @Test
+    fun contactResultsAreExhaustive() {
+        assertVariantsExhaustive<ContactShellResult>("ContactShellResult")
+    }
+
+    @Test
+    fun contactEventsExist() {
+        assertVariantsExist<ContactEvent>("ContactEvent")
+    }
+
+    @Test
+    fun contactEnumsMatchTheGeneratedMirrors() {
+        assertStringUnion<ContactKind>("ContactKind")
+        assertStringUnion<ContactSource>("ContactSource")
+        assertStringUnion<ContactTxKind>("ContactTxKind")
+    }
+
+    @Test
+    fun theMirrorCannotTellU32FromF64AndThisSaysSo() {
+        // A gate has to know what it does not check. ts-rs writes every Rust
+        // number as TypeScript `number`, so `tx_count: u32` and
+        // `last_used_ms: f64` are indistinguishable here — and serde is not
+        // indistinguishable about them: sending `0.0` for a u32 is rejected
+        // outright ("invalid type: floating point `0.0`, expected u32"), which
+        // is how the mistake was found in spec 040 phase 7, on the real
+        // machine rather than in this file.
+        //
+        // What this test pins is the SHAPE of that blind spot, so the next
+        // person to add a numeric field looks at the Rust rather than at the
+        // mirror.
+        assertEquals("number", tsFieldType("Contact", "tx_count"))
+        assertEquals("number", tsFieldType("Contact", "last_used_ms"))
+        val txCount = elementDescriptor<Contact>("tx_count")
+        val lastUsed = elementDescriptor<Contact>("last_used_ms")
+        assertEquals("the u32 is an Int in Kotlin", "kotlin.Int", txCount.serialName)
+        assertEquals("the f64 is a Double", "kotlin.Double", lastUsed.serialName)
     }
 
     // -- network_admin -------------------------------------------------------
@@ -331,6 +408,9 @@ class CoreWireDriftTest {
 
     private fun tsFieldIsNullable(tsName: String, field: String): Boolean =
         tsMembers(tsName).single()[field]?.contains("null") == true
+
+    private fun tsFieldType(tsName: String, field: String): String? =
+        tsMembers(tsName).single()[field]
 
     /** Split on [separator], ignoring separators inside braces or angle brackets. */
     private fun splitTopLevel(text: String, separator: Char): List<String> {

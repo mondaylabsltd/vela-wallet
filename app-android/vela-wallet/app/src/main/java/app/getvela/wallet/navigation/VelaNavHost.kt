@@ -19,6 +19,7 @@ import app.getvela.wallet.core.data.ThemePreference
 import app.getvela.wallet.core.i18n.LocalVelaStrings
 import app.getvela.wallet.feature.contacts.ContactsActions
 import app.getvela.wallet.feature.contacts.ContactsFixtures
+import app.getvela.wallet.feature.contacts.ContactsLive
 import app.getvela.wallet.feature.contacts.ContactsRoute
 import app.getvela.wallet.feature.contacts.ContactsScreenState
 import app.getvela.wallet.feature.contacts.gallery.ContactsGalleryScreen
@@ -273,12 +274,18 @@ fun VelaNavHost(
                         // 设置 has a screen now (spec 023), and the 退出登录 row
                         // inside it is where signing out lives. Until then the
                         // TAB itself signed you out — which meant tapping 设置
-                        // to change your language logged you out instead. 通讯录
-                        // and 探索 stay on this screen rather than navigating to
-                        // fixtures a signed-in person would read as their real
-                        // data.
-                        if (tab == VelaTab.Settings) {
-                            navController.push(VelaDestinations.SETTINGS)
+                        // to change your language logged you out instead.
+                        //
+                        // 通讯录 refused to navigate for a good reason: it
+                        // would have shown a signed-in person six strangers.
+                        // That reason expired with spec 040 — the screen reads
+                        // this device's own book now — so the tab works.
+                        // 探索 stays where it was: its screen is still a
+                        // fixture, and it has no destination on this base.
+                        when (tab) {
+                            VelaTab.Settings -> navController.push(VelaDestinations.SETTINGS)
+                            VelaTab.Contacts -> navController.push(VelaDestinations.CONTACTS)
+                            else -> Unit
                         }
                     },
                     onFlow = { flows.enter(it) },
@@ -292,18 +299,99 @@ fun VelaNavHost(
 
         composable(VelaDestinations.CONTACTS) {
             val strings = LocalVelaStrings.current
+            val contacts = application.container.contacts
+            val book by contacts.view.collectAsStateWithLifecycle()
             var menuOpen by rememberSaveable { mutableStateOf(false) }
-            val model = remember(strings, menuOpen) {
+            var query by rememberSaveable { mutableStateOf("") }
+            var openContact by rememberSaveable { mutableStateOf<String?>(null) }
+
+            // Read the book for THIS account: the core keys history-derived
+            // entries by whose wallet they belong to.
+            LaunchedEffect(session.address) {
+                contacts.open(session.address.takeIf { it.isNotEmpty() })
+            }
+
+            // The labels — titles, empty-state copy, the tab bar — come from
+            // the fixture builder, which has already resolved them through the
+            // i18n engine. The PEOPLE come from the core.
+            val labels = remember(strings, menuOpen) {
                 ContactsFixtures.buildMobileState(
                     if (menuOpen) ContactsScreenState.C5 else ContactsScreenState.C1,
                     strings,
                 )
             }
+            val detailLabels = remember(strings) {
+                ContactsFixtures.buildMobileState(ContactsScreenState.C2, strings)
+            }
+            // C3 is the empty book: the only fixture state that carries the
+            // "no contacts yet" copy and its two calls to action.
+            val emptyState = remember(strings) {
+                ContactsFixtures.buildMobileState(ContactsScreenState.C3, strings).empty
+            }
+
+            var confirmingDelete by rememberSaveable { mutableStateOf(false) }
+
+            // ONE lookup, and everything below reads it. The detail page, the
+            // confirm sheet's wording and the delete itself all take the same
+            // `selected` — the desktop sibling shipped a page that displayed
+            // contact A while its delete acted on contact B, because the target
+            // was looked up twice.
+            val selected = openContact?.let { address ->
+                book.contacts.firstOrNull { it.address == address }
+            }
+            val listModel = ContactsLive.home(labels, book, query, emptyState)
+            val model = if (selected != null && detailLabels.detail != null) {
+                listModel.copy(
+                    detail = ContactsLive.detail(detailLabels.detail, selected, book),
+                    deleteConfirm = if (confirmingDelete) {
+                        // Named after the contact on screen: a confirmation that
+                        // says "delete Alice?" while removing Bob is worse than
+                        // no confirmation at all.
+                        ContactsFixtures.deleteConfirm(
+                            strings,
+                            ContactsLive.displayName(selected),
+                        )
+                    } else {
+                        null
+                    },
+                )
+            } else {
+                listModel
+            }
+
+            BackHandler(enabled = openContact != null) {
+                confirmingDelete = false
+                openContact = null
+            }
+
             ContactsRoute(
                 model = model,
                 actions = ContactsActions(
-                    onAction = { id -> if (id == "contacts.addContact") menuOpen = true },
-                    onDismissMenu = { menuOpen = false },
+                    onAction = { id ->
+                        when (id) {
+                            "contacts.addContact" -> menuOpen = true
+                            "contacts.deleteContact" -> confirmingDelete = true
+                            "contacts.delete" -> selected?.let { contact ->
+                                contacts.delete(contact.address)
+                                confirmingDelete = false
+                                openContact = null
+                            }
+                            "contacts.back" -> {
+                                confirmingDelete = false
+                                openContact = null
+                            }
+                            "contacts.searchClear" -> query = ""
+                            else -> Unit
+                        }
+                    },
+                    onContact = { contact -> openContact = contact.addressFull },
+                    onDismissMenu = {
+                        menuOpen = false
+                        confirmingDelete = false
+                    },
+                    onTab = { tab ->
+                        if (tab == VelaTab.Wallet) navController.popBackStack()
+                    },
                 ),
             )
         }

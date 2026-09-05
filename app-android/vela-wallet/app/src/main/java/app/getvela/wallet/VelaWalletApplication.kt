@@ -5,6 +5,7 @@ import app.getvela.wallet.core.data.ThemePreferenceRepository
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.LocaleResolver
+import app.getvela.wallet.feature.contacts.core.ContactsController
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.settings.core.SettingsController
@@ -59,6 +60,14 @@ class AppContainer(private val app: Application) {
      */
     val settings: SettingsController by lazy {
         SettingsController(
+            context = app,
+            scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+        )
+    }
+
+    /** The address book, on the same terms as [settings]. */
+    val contacts: ContactsController by lazy {
+        ContactsController(
             context = app,
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
         )
