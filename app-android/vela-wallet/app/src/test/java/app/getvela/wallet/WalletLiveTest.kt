@@ -11,6 +11,10 @@ import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.WalletScreenState
 import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.FeedDirection
+import app.getvela.wallet.feature.wallet.core.FeedItem
+import app.getvela.wallet.feature.wallet.core.FeedRow
+import app.getvela.wallet.feature.wallet.core.FeedView
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -39,7 +43,8 @@ class WalletLiveTest {
     /** The chain names a device would have, from its network list. */
     private val chains = mapOf(137 to "Polygon", 42161 to "Arbitrum")
 
-    private fun home(view: BalanceView) = WalletLive.home(base(), view, strings, chains)
+    private fun home(view: BalanceView, feed: FeedView = FeedView()) =
+        WalletLive.home(base(), view, feed, strings, chains)
 
     private fun token(
         symbol: String,
@@ -198,5 +203,136 @@ class WalletLiveTest {
 
         assertEquals(BalanceStateKind.Hidden, model.balance.state)
         assertEquals(1, model.assetRows.size)
+    }
+
+    // -- the feed ------------------------------------------------------------
+
+    private fun item(
+        id: String,
+        received: Boolean,
+        value: String?,
+        symbol: String = "USDC",
+        dayStart: Long,
+        alias: String? = null,
+        counterparty: String? = "0x9F3c000000000000000000000000000000021aE0",
+    ) = FeedItem(
+        id = id,
+        direction = if (received) FeedDirection.In else FeedDirection.Out,
+        counterparty = counterparty,
+        alias = alias,
+        value = value,
+        symbol = symbol,
+        decimals = 6,
+        chain_id = 137,
+        timestamp = dayStart / 1000.0 + 3600,
+        day_start_ms = dayStart.toDouble(),
+    )
+
+    private fun midnight(daysAgo: Int, now: Long): Long {
+        val calendar = java.util.Calendar.getInstance().apply {
+            timeInMillis = now
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        calendar.add(java.util.Calendar.DAY_OF_YEAR, -daysAgo)
+        return calendar.timeInMillis
+    }
+
+    /**
+     * The core interleaves headers and items; this walks that order and never
+     * re-sorts it. A shell that grouped by its own key would put a payment
+     * under a day the core did not choose.
+     */
+    @Test
+    fun `the feed keeps the core's grouping and order`() {
+        val now = System.currentTimeMillis()
+        val today = midnight(0, now)
+        val yesterday = midnight(1, now)
+        val feed = FeedView(
+            rows = listOf(
+                FeedRow.Header("day-$today", today.toDouble(), today / 1000.0),
+                FeedRow.Item(item("a", received = false, value = "2", symbol = "POL", dayStart = today)),
+                FeedRow.Item(item("b", received = true, value = "120", symbol = "USDT", dayStart = today)),
+                FeedRow.Header("day-$yesterday", yesterday.toDouble(), yesterday / 1000.0),
+                FeedRow.Item(item("c", received = true, value = "50", dayStart = yesterday)),
+            ),
+        )
+
+        val groups = WalletLive.activity(feed, strings, now)
+
+        assertEquals(2, groups.size)
+        assertEquals(2, groups[0].rows.size)
+        assertEquals(1, groups[1].rows.size)
+        assertEquals(listOf("−2", "+120"), groups[0].rows.map { it.amount })
+        assertEquals("POL", groups[0].rows[0].unit)
+    }
+
+    /** Today and yesterday are named; anything older shows its date. */
+    @Test
+    fun `day labels are relative only for the two days that deserve it`() {
+        val now = System.currentTimeMillis()
+        val old = midnight(9, now)
+        val feed = FeedView(
+            rows = listOf(
+                FeedRow.Header("day-0", midnight(0, now).toDouble(), now / 1000.0),
+                FeedRow.Item(item("a", received = true, value = "1", dayStart = midnight(0, now))),
+                FeedRow.Header("day-1", midnight(1, now).toDouble(), now / 1000.0),
+                FeedRow.Item(item("b", received = true, value = "1", dayStart = midnight(1, now))),
+                FeedRow.Header("day-9", old.toDouble(), old / 1000.0),
+                FeedRow.Item(item("c", received = true, value = "1", dayStart = old)),
+            ),
+        )
+
+        val labels = WalletLive.activity(feed, strings, now).map { it.label }
+
+        assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.Wallet.DAY_TODAY), labels[0])
+        assertEquals(strings.t(app.getvela.wallet.core.i18n.I18nKeys.Wallet.DAY_YESTERDAY), labels[1])
+        assertTrue("an older day shows a date, not a relative word", labels[2].isNotBlank())
+        assertTrue(labels[2] != labels[0] && labels[2] != labels[1])
+    }
+
+    /** A resolved name wins over an address; an address is shortened, never raw. */
+    @Test
+    fun `a counterparty reads as a name when there is one`() {
+        val now = System.currentTimeMillis()
+        val today = midnight(0, now)
+        val feed = FeedView(
+            rows = listOf(
+                FeedRow.Header("day-$today", today.toDouble(), today / 1000.0),
+                FeedRow.Item(item("a", received = true, value = "50", dayStart = today, alias = "Alice")),
+                FeedRow.Item(item("b", received = true, value = "50", dayStart = today)),
+            ),
+        )
+
+        val rows = WalletLive.activity(feed, strings, now).single().rows
+
+        assertTrue("a resolved name is used as-is", rows[0].subtitle.contains("Alice"))
+        assertTrue("an address is shortened", rows[1].subtitle.contains("…"))
+        assertTrue(
+            "42 characters of hex in a list row tells nobody anything",
+            rows[1].subtitle.length < 30,
+        )
+    }
+
+    /** A header with nothing under it is not a day — it is a gap in the list. */
+    @Test
+    fun `an empty day is not rendered`() {
+        val now = System.currentTimeMillis()
+        val feed = FeedView(
+            rows = listOf(FeedRow.Header("day-x", midnight(0, now).toDouble(), now / 1000.0)),
+        )
+
+        assertEquals(emptyList<Any>(), WalletLive.activity(feed, strings, now))
+    }
+
+    /** An empty feed says "empty", and does not keep the fixture's history. */
+    @Test
+    fun `an empty feed empties the section`() {
+        val model = home(BalanceView(), FeedView())
+
+        assertEquals(SectionMode.Empty, model.activitySection.mode)
+        assertEquals(emptyList<Any>(), model.activityGroups)
     }
 }

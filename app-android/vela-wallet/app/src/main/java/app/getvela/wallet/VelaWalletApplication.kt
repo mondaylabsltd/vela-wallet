@@ -9,6 +9,8 @@ import app.getvela.wallet.feature.contacts.core.ContactsController
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.settings.core.SettingsController
+import app.getvela.wallet.core.platform.Haptics
+import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import app.getvela.wallet.feature.wallet.core.WalletController
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -82,6 +84,14 @@ class AppContainer(private val app: Application) {
             context = app,
             networks = settings.networks,
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
+            // A payment from one of this person's OWN wallets should say so by
+            // name, and that costs no network call at all.
+            ownAccounts = {
+                session.view.value.accounts.map {
+                    FeedExecutor.FeedOwnAccount(address = it.address, name = it.name)
+                }
+            },
+            haptic = { Haptics.moneyIn(app) },
         )
     }
 

@@ -18,8 +18,18 @@ import org.json.JSONObject
  * cannot be asked to return 429.
  */
 class FakeRpcTransport(
-    private val answer: (url: String, method: String) -> RpcPostResult,
+    private val answer: (url: String, method: String, params: List<Any?>) -> RpcPostResult,
 ) : RpcTransport {
+
+    /**
+     * The common case: an answer that depends only on where and what was asked.
+     *
+     * The params-aware form exists for the one place it matters — `eth_getLogs`
+     * carries an `address` filter, and a fake that ignores it is not modelling
+     * an endpoint, it is modelling a hostile one.
+     */
+    constructor(answer: (url: String, method: String) -> RpcPostResult) :
+        this({ url, method, _ -> answer(url, method) })
 
     /** Every URL asked, in order — the evidence for "it routed around". */
     val asked = CopyOnWriteArrayList<String>()
@@ -32,7 +42,7 @@ class FakeRpcTransport(
         timeoutMs: Int,
     ): RpcPostResult {
         asked += url
-        return answer(url, method)
+        return answer(url, method, params)
     }
 
     companion object {

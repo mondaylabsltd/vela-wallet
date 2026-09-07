@@ -26,6 +26,35 @@ import app.getvela.wallet.feature.wallet.core.BalanceShellResult
 import app.getvela.wallet.feature.wallet.core.BalanceSwitcherView
 import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.FeedBatch
+import app.getvela.wallet.feature.wallet.core.FeedBatchKind
+import app.getvela.wallet.feature.wallet.core.FeedBatchTransfer
+import app.getvela.wallet.feature.wallet.core.FeedDirection
+import app.getvela.wallet.feature.wallet.core.FeedEvent
+import app.getvela.wallet.feature.wallet.core.FeedItem
+import app.getvela.wallet.feature.wallet.core.FeedOperation
+import app.getvela.wallet.feature.wallet.core.FeedRow
+import app.getvela.wallet.feature.wallet.core.FeedShellResult
+import app.getvela.wallet.feature.wallet.core.FeedToast
+import app.getvela.wallet.feature.wallet.core.FeedTxKind
+import app.getvela.wallet.feature.wallet.core.FeedTxRecord
+import app.getvela.wallet.feature.wallet.core.FeedTxStatus
+import app.getvela.wallet.feature.wallet.core.FeedView
+import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
+import app.getvela.wallet.feature.wallet.core.TrustCustomToken
+import app.getvela.wallet.feature.wallet.core.TrustDeltaKind
+import app.getvela.wallet.feature.wallet.core.TrustEvent
+import app.getvela.wallet.feature.wallet.core.TrustIncomingView
+import app.getvela.wallet.feature.wallet.core.TrustLogsOutcome
+import app.getvela.wallet.feature.wallet.core.TrustMetaEntry
+import app.getvela.wallet.feature.wallet.core.TrustOperation
+import app.getvela.wallet.feature.wallet.core.TrustRawLog
+import app.getvela.wallet.feature.wallet.core.TrustReceiptLog
+import app.getvela.wallet.feature.wallet.core.TrustShellResult
+import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
+import app.getvela.wallet.feature.wallet.core.TrustSimView
+import app.getvela.wallet.feature.wallet.core.TrustTokenMeta
+import app.getvela.wallet.feature.wallet.core.TrustView
 import app.getvela.wallet.feature.wallet.core.RpcBanEntry
 import app.getvela.wallet.feature.wallet.core.RpcCallVerdict
 import app.getvela.wallet.feature.wallet.core.RpcEndpointSeed
@@ -252,6 +281,133 @@ class CoreWireDriftTest {
         assertTrue(
             "price_usd must stay nullable",
             elementDescriptor<BalanceToken>("price_usd").isNullable,
+        )
+    }
+
+    // -- activity_feed (spec 041) ---------------------------------------------
+
+    @Test
+    fun feedViewsMatchTheGeneratedMirrors() {
+        assertFieldsExist<FeedView>("FeedView")
+        assertFieldsExist<FeedItem>("FeedItem")
+        assertFieldsExist<FeedTxRecord>("FeedTxRecord")
+        assertFieldsExist<FeedBatch>("FeedBatch")
+        assertFieldsExist<FeedBatchTransfer>("FeedBatchTransfer")
+        assertFieldsExist<FeedToast>("FeedToast")
+    }
+
+    @Test
+    fun feedOperationsAndResultsAreExhaustive() {
+        // Six operations. `read_tx_store` and `scan_incoming_transfers` are
+        // issued together on a tick, which is why `read_id` exists — an
+        // unanswered operation here does not hang one screen, it strands a
+        // celebration.
+        assertVariantsExhaustive<FeedOperation>("FeedOperation")
+        assertVariantsExhaustive<FeedShellResult>("FeedShellResult")
+    }
+
+    @Test
+    fun feedEventsExist() {
+        assertVariantsExist<FeedEvent>("FeedEvent")
+    }
+
+    @Test
+    fun feedRowsAndEnumsMatchTheGeneratedMirrors() {
+        assertVariantsExhaustive<FeedRow>("FeedRow")
+        assertStringUnion<FeedTxKind>("FeedTxKind")
+        assertStringUnion<FeedTxStatus>("FeedTxStatus")
+        assertStringUnion<FeedDirection>("FeedDirection")
+        assertStringUnion<FeedBatchKind>("FeedBatchKind")
+    }
+
+    @Test
+    fun aFeedRecordKeepsSecondsAndMillisecondsApart() {
+        // `timestamp` is epoch SECONDS and `day_start_ms` is epoch
+        // MILLISECONDS, in the same struct, one field apart. Both are `f64` in
+        // the Rust and both are `number` in the mirror, so nothing outside this
+        // test can tell them apart — and swapping them puts every payment in
+        // 1970 or in the year 57000.
+        //
+        // `day_start_ms` is also the one value in this wire the SHELL must
+        // compute, because it is local midnight on this device in this
+        // timezone. The core cannot know it.
+        assertEquals("kotlin.Double", elementDescriptor<FeedTxRecord>("timestamp").serialName)
+        assertEquals("kotlin.Double", elementDescriptor<FeedTxRecord>("day_start_ms").serialName)
+        assertEquals("number", tsFieldType("FeedTxRecord", "timestamp"))
+        assertEquals("number", tsFieldType("FeedTxRecord", "day_start_ms"))
+    }
+
+    @Test
+    fun aFeedItemsAmountStaysAStringAndItsCountsStayIntegers() {
+        // Same rule as the balance wire: an amount is a decimal STRING, never
+        // a number. And `decimals` is a `u32` in the Rust — a Double here is
+        // rejected outright by serde, which is 040's bug in a new place.
+        assertEquals("kotlin.String", elementDescriptor<FeedItem>("id").serialName)
+        assertEquals("kotlin.Int", elementDescriptor<FeedTxRecord>("decimals").serialName)
+        assertEquals("kotlin.Int", elementDescriptor<FeedTxRecord>("chain_id").serialName)
+        assertTrue(
+            "a batch row has no single amount, so `value` must stay nullable",
+            elementDescriptor<FeedItem>("value").isNullable,
+        )
+    }
+
+    // -- token_trust (spec 041) -----------------------------------------------
+
+    @Test
+    fun trustViewsMatchTheGeneratedMirrors() {
+        assertFieldsExist<TrustView>("TrustView")
+        assertFieldsExist<TrustIncomingView>("TrustIncomingView")
+        assertFieldsExist<TrustSimView>("TrustSimView")
+        assertFieldsExist<TrustRawLog>("TrustRawLog")
+        assertFieldsExist<TrustCustomToken>("TrustCustomToken")
+        assertFieldsExist<TrustMetaEntry>("TrustMetaEntry")
+        assertFieldsExist<TrustTokenMeta>("TrustTokenMeta")
+        assertFieldsExist<TrustAssetDelta>("TrustAssetDelta")
+        assertFieldsExist<TrustReceiptLog>("TrustReceiptLog")
+    }
+
+    @Test
+    fun trustOperationsAndResultsAreExhaustive() {
+        assertVariantsExhaustive<TrustOperation>("TrustOperation")
+        assertVariantsExhaustive<TrustShellResult>("TrustShellResult")
+    }
+
+    @Test
+    fun trustEventsExist() {
+        assertVariantsExist<TrustEvent>("TrustEvent")
+    }
+
+    @Test
+    fun trustOutcomesAndJudgmentsAreExhaustive() {
+        // `range_capped` is not a failure and must not be encodable as one:
+        // the core uses the cap to narrow its next span, and a shell that
+        // reported it as `failed` would make a busy endpoint look broken and
+        // stop the scan instead of retrying smaller.
+        assertVariantsExhaustive<TrustLogsOutcome>("TrustLogsOutcome")
+        assertVariantsExhaustive<TrustSimJudgment>("TrustSimJudgment")
+        assertStringUnion<TrustDeltaKind>("TrustDeltaKind")
+    }
+
+    @Test
+    fun anIncomingTransferKeepsItsRawAmountAndItsUnresolvedMetadata() {
+        // `value` is the RAW on-chain amount as a string — undivided. The feed
+        // divides by `decimals` when it has them; a shell that pre-divided
+        // would hand the core a number it would divide again.
+        //
+        // `symbol` and `decimals` stay NULLABLE because "this token's metadata
+        // could not be read" is a real state, and it is exactly the state a
+        // scam token is in. Defaulting them here would put a confident name on
+        // the one thing that has not earned one.
+        assertEquals("kotlin.String", elementDescriptor<TrustIncomingView>("value").serialName)
+        assertTrue(elementDescriptor<TrustIncomingView>("symbol").isNullable)
+        assertTrue(elementDescriptor<TrustIncomingView>("decimals").isNullable)
+        assertTrue(elementDescriptor<TrustMetaEntry>("meta").isNullable)
+        // `tokens: null` means the READ failed, which fails admission closed —
+        // a non-null empty list would mean "this person has no custom tokens",
+        // which is a different fact entirely.
+        assertTrue(
+            "CustomTokens.tokens must stay nullable",
+            elementDescriptor<TrustShellResult.CustomTokens>("tokens").isNullable,
         )
     }
 

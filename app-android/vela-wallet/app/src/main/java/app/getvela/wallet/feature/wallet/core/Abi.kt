@@ -38,6 +38,7 @@ object Abi {
     private const val SEL_DECIMALS = "313ce567" // decimals()
     private const val SEL_QUOTE_V3 = "c6a5026a" // quoteExactInputSingle((address,address,uint256,uint24,uint160))
     private const val SEL_GET_AMOUNTS_OUT = "5509a1ac" // getAmountsOut(uint256,(address,address,bool,address)[])
+    private const val SEL_SYMBOL = "95d89b41" // symbol()
     private const val SEL_LATEST_ROUND = "feaf968c" // latestRoundData()
 
     /** One entry in a Multicall3 batch. `allowFailure` is always true here. */
@@ -82,6 +83,8 @@ object Abi {
     fun encodeBalanceOf(address: String): String = "0x" + SEL_BALANCE_OF + addressWord(address)
 
     fun encodeDecimals(): String = "0x$SEL_DECIMALS"
+
+    fun encodeSymbol(): String = "0x$SEL_SYMBOL"
 
     fun encodeGetEthBalance(address: String): String =
         "0x" + SEL_GET_ETH_BALANCE + addressWord(address)
@@ -183,6 +186,48 @@ object Abi {
 
     /** `decimals()`. */
     fun decodeUint8(hex: String): Int = decodeUint256(hex).toInt()
+
+    /**
+     * An ABI `string` return — `symbol()` and `name()`.
+     *
+     * Two layouts in the wild: the modern `[offset][length][data]`, and a
+     * single fixed 32-byte word from legacy tokens that declared `bytes32`
+     * (MKR is the famous one). A length that cannot be a length means this is
+     * the legacy shape, not a corrupt string.
+     *
+     * Decoded as UTF-8 so multibyte symbols survive — "USD₮0" is a real
+     * token, and rendering it as mojibake makes a legitimate holding look like
+     * a scam.
+     *
+     * Returns `null` rather than `""` when nothing readable is there: an
+     * unresolvable symbol is a fact the core acts on, and an empty string
+     * would read as a token that answered with a blank name.
+     */
+    fun decodeString(hex: String): String? {
+        val d = strip(hex)
+        if (d.length < 64) return null
+        if (d.length < 128) return utf8(d.substring(0, 64))
+
+        val length = wordAt(d, 64)
+        if (length <= 0 || length > 4096 || 128 + length * 2 > d.length) {
+            return utf8(d.substring(0, 64))
+        }
+        return utf8(d.substring(128, 128 + length * 2))
+    }
+
+    /** Hex bytes as UTF-8, stopping at the first NUL (bytes32 padding). */
+    private fun utf8(dataHex: String): String? {
+        val bytes = ArrayList<Byte>(dataHex.length / 2)
+        var index = 0
+        while (index + 1 < dataHex.length) {
+            val byte = dataHex.substring(index, index + 2).toIntOrNull(16) ?: break
+            if (byte == 0) break
+            bytes.add(byte.toByte())
+            index += 2
+        }
+        if (bytes.isEmpty()) return null
+        return String(bytes.toByteArray(), Charsets.UTF_8).trim().ifBlank { null }
+    }
 
     /**
      * `getAmountsOut → uint256[]`. For one hop the array is

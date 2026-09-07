@@ -26,6 +26,17 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!--
+      VIBRATE (spec 041, the money-in buzz).
+
+      Normal-protection: granted at install, no runtime dialog. It is used for
+      exactly one thing — the two-beat confirmation when a genuinely new
+      incoming payment lands, which the core decides and the shell performs.
+      The device still has the last word: a phone with haptics turned off
+      simply does nothing, and so does one without a vibrator.
+    -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
       Bluetooth (spec 019, caBLE "sign in with your phone" as INITIATOR).
 
       This app SHOWS the QR; the other phone scans it and starts advertising a

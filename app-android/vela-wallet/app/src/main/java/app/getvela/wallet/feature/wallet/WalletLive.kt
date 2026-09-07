@@ -5,8 +5,15 @@ import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.FeedDirection
+import app.getvela.wallet.feature.wallet.core.FeedItem
+import app.getvela.wallet.feature.wallet.core.FeedRow
+import app.getvela.wallet.feature.wallet.core.FeedView
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.text.DateFormat
+import java.util.Calendar
+import java.util.Date
 
 /**
  * The live wallet-home builders: `BalanceView` → the display models the drawn
@@ -45,12 +52,19 @@ object WalletLive {
     fun home(
         fallback: WalletHomeModel,
         view: BalanceView,
+        feed: FeedView,
         strings: VelaStrings,
         chainNames: Map<Int, String>,
+        now: Long = System.currentTimeMillis(),
     ): WalletHomeModel {
         val rows = view.tokens.map { token -> assetRow(token, chainNames) }
+        val groups = activity(feed, strings, now)
         return fallback.copy(
             balance = balance(fallback.balance, view, strings),
+            activitySection = fallback.activitySection.copy(
+                mode = if (groups.isEmpty()) SectionMode.Empty else SectionMode.Rows,
+            ),
+            activityGroups = groups,
             assetsSection = fallback.assetsSection.copy(
                 mode = when {
                     rows.isNotEmpty() -> SectionMode.Rows
@@ -59,10 +73,124 @@ object WalletLive {
                 },
             ),
             assetRows = rows,
-            // live in 041 phase 5 — the feed needs `activity_feed`, so the
-            // section keeps its fixture shape until then rather than claiming
-            // this wallet has no history.
         )
+    }
+
+    /**
+     * The feed, from the core's already-grouped rows.
+     *
+     * **The order and the grouping are not this function's.** `activity_feed`
+     * emits headers and items already interleaved, precisely so a shell cannot
+     * sort a header away from its day. This walks that list in order and never
+     * re-sorts it.
+     */
+    fun activity(
+        feed: FeedView,
+        strings: VelaStrings,
+        now: Long = System.currentTimeMillis(),
+    ): List<ActivityGroupModel> {
+        val groups = mutableListOf<ActivityGroupModel>()
+        for (row in feed.rows) {
+            when (row) {
+                is FeedRow.Header -> groups += ActivityGroupModel(dayLabel(row, strings, now), emptyList())
+                is FeedRow.Item -> {
+                    val model = activityRow(row.item, strings)
+                    val last = groups.lastOrNull()
+                    if (last == null) {
+                        // An item before any header cannot happen — but if the
+                        // core ever emits one, it gets shown rather than
+                        // dropped. A payment silently missing from a history is
+                        // the worse failure.
+                        groups += ActivityGroupModel("", listOf(model))
+                    } else {
+                        groups[groups.lastIndex] = last.copy(rows = last.rows + model)
+                    }
+                }
+            }
+        }
+        return groups.filter { it.rows.isNotEmpty() }
+    }
+
+    /**
+     * "Today", "Yesterday", or the date.
+     *
+     * The comparison is between LOCAL midnights: the core stamped
+     * `day_start_ms` with this device's own midnight, so comparing it against
+     * today's gives whole days apart without any timezone arithmetic here.
+     */
+    private fun dayLabel(header: FeedRow.Header, strings: VelaStrings, now: Long): String {
+        val today = Calendar.getInstance().apply {
+            timeInMillis = now
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val days = ((today - header.day_start_ms.toLong()) / DAY_MS)
+        return when (days) {
+            0L -> strings.t(I18nKeys.Wallet.DAY_TODAY)
+            1L -> strings.t(I18nKeys.Wallet.DAY_YESTERDAY)
+            else -> DateFormat.getDateInstance(DateFormat.MEDIUM)
+                .format(Date(header.day_start_ms.toLong()))
+        }
+    }
+
+    private fun activityRow(item: FeedItem, strings: VelaStrings): ActivityRowModel {
+        val received = item.direction == FeedDirection.In
+        val batch = item.batch
+        return ActivityRowModel(
+            kind = when {
+                // A dApp transaction is a send whose counterparty is a
+                // contract; the core does not label it, because what to call it
+                // is display vocabulary.
+                item.batch != null -> if (received) ActivityKind.Received else ActivityKind.Sent
+                received -> ActivityKind.Received
+                else -> ActivityKind.Sent
+            },
+            title = strings.t(
+                if (received) I18nKeys.Wallet.LABEL_RECEIVED else I18nKeys.Wallet.LABEL_SENT,
+            ),
+            subtitle = counterparty(item, strings),
+            amount = signedAmount(item, received),
+            unit = item.symbol.ifBlank { batch?.symbol.orEmpty() },
+            positive = received,
+            masked = false,
+            badgeColor = badgeColour(item.chain_id),
+        )
+    }
+
+    /**
+     * The counterparty line: a resolved name, or a shortened address.
+     *
+     * `alias` is the core's overlay — a resolved identity, falling back to the
+     * name captured when the payment was sent. An address with neither is
+     * shortened rather than shown in full; the whole 42 characters in a list
+     * row is unreadable and tells nobody anything more.
+     */
+    private fun counterparty(item: FeedItem, strings: VelaStrings): String {
+        val received = item.direction == FeedDirection.In
+        val name = item.alias ?: item.counterparty?.let(::shortenAddress) ?: return ""
+        return strings.t(
+            if (received) I18nKeys.Wallet.FROM_NAME else I18nKeys.Wallet.TO_NAME,
+            mapOf("name" to name),
+        )
+    }
+
+    private fun shortenAddress(address: String): String =
+        if (address.length <= 12) address else address.take(6) + "…" + address.takeLast(4)
+
+    /**
+     * The amount, signed.
+     *
+     * Truncated, never rounded — the same rule as an asset row. A batch of
+     * mixed tokens has no single amount, so the core sends none and the row
+     * says how many assets moved instead.
+     */
+    private fun signedAmount(item: FeedItem, received: Boolean): String {
+        val raw = item.value ?: return item.batch?.count?.toString() ?: ""
+        val parsed = raw.toBigDecimalOrNull() ?: return raw
+        val trimmed = parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString()
+        return if (received) "+$trimmed" else "−$trimmed"
     }
 
     /**
@@ -163,6 +291,8 @@ object WalletLive {
 
     /** A stable colour per chain, so a token keeps its badge between launches. */
     private fun badgeColour(chainId: Int): Color = BADGES[chainId.mod(BADGES.size)]
+
+    private const val DAY_MS = 24L * 60 * 60 * 1000
 
     private val BADGES = listOf(
         Color(0xFF6C7BFF), Color(0xFF2E9E7E), Color(0xFFE0A03A), Color(0xFF8C8C8C),

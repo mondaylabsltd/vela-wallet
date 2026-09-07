@@ -260,6 +260,7 @@ fun VelaNavHost(
             // feed and the flows are still fixtures until phases 5 and 6.
             val wallet = application.container.wallet
             val balances by wallet.balances.collectAsStateWithLifecycle()
+            val feed by wallet.feed.collectAsStateWithLifecycle()
             val networks by application.container.settings.networks.collectAsStateWithLifecycle()
             val chainNames = remember(networks.networks) {
                 networks.networks.associate { it.chain_id.toInt() to it.display_name }
@@ -292,7 +293,7 @@ fun VelaNavHost(
                 )
             } else {
                 WalletScreen(
-                    model = WalletLive.home(model, balances, strings, chainNames),
+                    model = WalletLive.home(model, balances, feed, strings, chainNames),
                     onSelectTab = { tab ->
                         // 设置 has a screen now (spec 023), and the 退出登录 row
                         // inside it is where signing out lives. Until then the

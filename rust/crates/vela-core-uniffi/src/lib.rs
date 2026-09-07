@@ -965,3 +965,19 @@ pub fn choose_native_price(
 pub fn is_chain_without_native_coin(chain_id: u32) -> bool {
     vela_core::app::fee_policy::is_tempo_chain(chain_id)
 }
+
+/// Where to watch for money arriving when a wallet holds nothing yet.
+///
+/// `token_trust` already falls back to this list when it is handed an empty
+/// set of held chains, so the core is the owner. The shell needs the same
+/// chain ids slightly earlier than the core does — it must fetch each chain's
+/// registry document to build the allowlist BEFORE the poll starts, and a poll
+/// that begins with no allowlist scans nothing.
+///
+/// The web keeps its own copy of these six for that reason. Copying them again
+/// here would make a brand-new wallet's very first receipt — the one that
+/// matters most — depend on two lists agreeing.
+#[uniffi::export]
+pub fn default_monitor_chains() -> Vec<u32> {
+    vela_core::app::token_trust::DEFAULT_MONITOR_CHAINS.to_vec()
+}

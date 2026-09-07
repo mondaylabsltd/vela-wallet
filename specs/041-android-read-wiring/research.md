@@ -142,3 +142,42 @@ Three things sit temptingly close and are out (spec Assumptions):
   with its own permission story, not a wire.
 - **The explore tab and dApp surfaces.** 042, and on this base they have no
   navigation destination at all.
+
+
+---
+
+## D9 — Where the ABI codec goes (decided during phase 4c)
+
+Pricing a coin needs Multicall3 batching, ERC-20 reads, Uniswap-V3 and Solidly
+quotes and Chainlink decoding — 342 lines of hand-written hex framing in the
+web's `services/abi.ts`. Android needs the same. Three options: port it to
+Kotlin, promote it into `vela-core` and export it over uniffi, or put it in the
+uniffi crate alone.
+
+**Decision**: port the framing to Kotlin; leave the rules in Rust.
+
+The codebase already drew this line, and it holds up. `best_group_price`,
+`best_native_dex_price` and `choose_native_price` live in
+`vela_core::app::balance_dashboard` *because they are judgement about money* —
+which pool wins, which stable wins, whether a quote is trustworthy. They are
+already exported to both wasm and uniffi, so Android calls the same rules the
+web does. What stayed in each shell is transport framing: 32-byte words and
+offsets, which cannot be wrong in an interesting way without a test noticing.
+
+Promoting the framing was the tempting alternative and was rejected on blast
+radius, not on principle: it changes the crate every shell links, mid-programme,
+while a colleague works 02x/03x on the same tree — and it buys nothing the
+vectors do not already buy. It stays available as a later consolidation.
+
+**The cost, stated plainly**: a second hand-written copy with no generated
+artifact to drift-test against, unlike the wire types. Mitigations: every
+encoding and decoding is pinned by hand in `AbiTest` (18 cases, including
+malformed remote input), and the whole path runs against real chains on a
+device.
+
+**The exception that proves the split.** `firstGroupedQuotePrice` — first usable
+quote across groups, each scaled by its own stable's decimals — is judgement,
+not framing. Its docstring is entirely about a 10^12 mispricing, and it has **no
+Rust owner**: it exists only in the web's TypeScript. It is deliberately not
+ported. Android does not price custom ERC-20s until that rule is in the core,
+which is the first task of phase 4d.

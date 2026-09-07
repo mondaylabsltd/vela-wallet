@@ -94,6 +94,19 @@ interface KeyValueStore {
 
         /** Whether money figures are hidden on this device. */
         const val BALANCE_HIDDEN = "vela.balanceHidden"
+
+        /**
+         * The activity records this device holds, newest first, capped at 200.
+         *
+         * `transactionHistory`, singular — the same key the other clients
+         * write. This one is a person's own history: a wrong key here does not
+         * fail, it silently shows an empty Activity tab to somebody who has
+         * been using the wallet for months.
+         */
+        const val TRANSACTIONS = "vela.transactionHistory"
+
+        /** ERC-20s this person added or accepted, all chains (spec 041). */
+        const val CUSTOM_TOKENS = "vela.customTokens"
     }
 }
 
