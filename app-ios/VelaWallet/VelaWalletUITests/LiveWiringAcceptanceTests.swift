@@ -55,6 +55,18 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         return app
     }
 
+    /// Tap, but only once the element is really there.
+    ///
+    /// A bare `.tap()` on a `firstMatch` query fails immediately when the
+    /// accessibility tree has not caught up — which it sometimes has not, on a
+    /// screen whose first render follows a hundred stored transactions. This
+    /// suite went flaky exactly there, and a flaky acceptance test is worse
+    /// than a missing one: the next person reads it as a defect.
+    private func tap(_ element: XCUIElement, _ what: String, timeout: TimeInterval = 15) {
+        XCTAssertTrue(element.waitForExistence(timeout: timeout), "\(what) never appeared")
+        element.tap()
+    }
+
     private func attach(_ screenshot: XCUIScreenshot, named name: String) {
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
@@ -259,7 +271,8 @@ final class LiveWiringAcceptanceTests: XCTestCase {
                       "no receipts reached the home feed")
 
         // The activity section's 全部 — the first of the two.
-        app.buttons.matching(identifier: "全部").element(boundBy: 0).tap()
+        tap(app.buttons.matching(identifier: "全部").element(boundBy: 0),
+            "the activity section's 全部")
         XCTAssertTrue(app.staticTexts["历史记录"].waitForExistence(timeout: 10),
                       "the history screen never opened")
         XCTAssertEqual(
@@ -269,7 +282,7 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         attach(app.screenshot(), named: "device-history-live")
 
         // The first row opens ITS transaction.
-        app.staticTexts["已收到"].firstMatch.tap()
+        tap(app.staticTexts["已收到"].firstMatch, "a history row")
         XCTAssertTrue(app.staticTexts["成功"].waitForExistence(timeout: 10),
                       "the transaction sheet never opened")
         XCTAssertTrue(app.staticTexts["哈希"].exists, "the sheet has no hash row")
@@ -296,7 +309,7 @@ final class LiveWiringAcceptanceTests: XCTestCase {
 
         XCTAssertTrue(app.buttons["收款"].waitForExistence(timeout: 30),
                       "the home never appeared")
-        app.buttons["收款"].tap()
+        tap(app.buttons["收款"], "收款")
 
         // The seeded account's own address, shortened the way every iOS
         // surface shortens one.
@@ -311,7 +324,7 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         // The row's QR button opens the code — tapping the network's NAME does
         // nothing, which is the drawing's choice: a row is a place to copy
         // from, and the code is one of its two actions.
-        app.buttons["扫描二维码"].firstMatch.tap()
+        tap(app.buttons["扫描二维码"].firstMatch, "a network row's QR button")
         XCTAssertTrue(app.staticTexts["0x88cCA0EeDbF2C442611"].waitForExistence(timeout: 10),
                       "the QR sheet is not showing the signed-in address")
         Thread.sleep(forTimeInterval: 1)
@@ -346,7 +359,7 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         // belongs to 活动.
         let seeAll = app.buttons.matching(identifier: "全部")
         XCTAssertTrue(seeAll.count >= 2, "the two section headers are not both drawn")
-        seeAll.element(boundBy: 1).tap()
+        tap(seeAll.element(boundBy: 1), "the assets section's 全部")
 
         // The screen's own 添加, in its header. The 通过地址添加代币 link at the
         // bottom of the list does the same thing, and this test used it first —
@@ -355,7 +368,7 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         let addAction = app.buttons["添加"]
         XCTAssertTrue(addAction.waitForExistence(timeout: 10),
                       "the assets screen never opened")
-        addAction.tap()
+        tap(addAction, "添加")
 
         let field = app.textFields["合约地址"]
         XCTAssertTrue(field.waitForExistence(timeout: 10), "the add-token sheet has no field")
@@ -371,7 +384,7 @@ final class LiveWiringAcceptanceTests: XCTestCase {
 
         let add = app.buttons["添加到钱包"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
-        add.tap()
+        tap(add, "添加到钱包")
 
         // The chip is the core's, recomputed from the tokens it read BACK out
         // of storage — so it appearing is the save having actually landed.

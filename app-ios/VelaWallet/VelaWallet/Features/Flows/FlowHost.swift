@@ -59,6 +59,9 @@ struct FlowHost: View {
     /// fixture, which is the gallery and the screenshot sweep.
     var chainSheet: ChainSheetModel?
     var onPickChain: ((Int?) -> Void)?
+    /// 在区块浏览器中查看, on whichever sheet is open. Absent where there is
+    /// nothing real to look up — the gallery, and a chain with no explorer.
+    var onExplorer: (() -> Void)?
 
     /// Whether the network picker is up. Local, because which sheet is showing
     /// is render-domain state no machine needs to know.
@@ -100,7 +103,8 @@ struct FlowHost: View {
                         onNavigate: onNavigate,
                         addTokenInput: addTokenInput,
                         onAddToken: onAddToken,
-                        addTokenError: addTokenError
+                        addTokenError: addTokenError,
+                        onExplorer: onExplorer
                     )
                         .environment(\.walletTextScale, model.textScale)
                         .presentationDragIndicator(.hidden)
@@ -230,6 +234,7 @@ private struct FlowSheetHost: View {
     var addTokenInput: Binding<String>?
     var onAddToken: (() -> Void)?
     var addTokenError: String?
+    var onExplorer: (() -> Void)?
 
     var body: some View {
         ScrollView {
@@ -270,13 +275,16 @@ private struct FlowSheetHost: View {
 
     @ViewBuilder private var body_: some View {
         switch sheet {
-        case .receiveQr(let m): ReceiveQrBody(model: m)
-        case .txDetail(let m): TxDetailBody(model: m)
+        case .receiveQr(let m):
+            ReceiveQrBody(model: m, onExplorer: { onExplorer?() })
+        case .txDetail(let m):
+            TxDetailBody(model: m, onExplorer: { onExplorer?() })
         case .tokenDetail(let m):
             TokenDetailBody(
                 model: m,
                 onReceive: { onNavigate(.receive) },
-                onSend: { onNavigate(.sendForm) }
+                onSend: { onNavigate(.sendForm) },
+                onExplorer: { onExplorer?() }
             )
         case .addToken(let m):
             AddTokenBody(

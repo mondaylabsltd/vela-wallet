@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// Navigation state. Since spec 019 the create journey is a pushed route
 /// rather than a presented sheet — `presentedFlow` is gone with the 014 sheet.
@@ -19,6 +20,9 @@ struct RootView: View {
     @Environment(\.colorScheme) private var systemScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let loc: Loc
+    /// The `vela.*` shelf, for the reads that are not a machine's — the
+    /// explorer bases of custom networks.
+    private let shelf: VelaStore
     @State private var router: Router
     @State private var model: WelcomeModel
     @State private var session: SessionController
@@ -83,6 +87,7 @@ struct RootView: View {
         _session = State(initialValue: session)
         _onboarding = State(initialValue: onboarding)
         let shelf = VelaStore()
+        self.shelf = shelf
         // Before the session machine boots: it reads `vela.accounts` on its
         // first event, and a record written after that is not seen until a
         // relaunch. DEBUG-only, env-gated, and key-less (spec 051 D3).
@@ -351,6 +356,9 @@ struct RootView: View {
                     onPickChain: { chainId in
                         chainFilter = chainId
                         activity.chainFilter(chainId)
+                    },
+                    onExplorer: explorerLink(for: state).map { url in
+                        { UIApplication.shared.open(url) }
                     }
                 )
                 .transition(.move(edge: .trailing))
@@ -577,6 +585,36 @@ struct RootView: View {
             model.sheet = .addToken(FlowsLive.addToken(view, on: sheet, loc: loc))
         }
         return model
+    }
+
+    /// What 在区块浏览器中查看 opens, for whichever sheet is up.
+    ///
+    /// `nil` on a chain with no explorer — the button is then absent rather
+    /// than sending somebody to another chain's explorer, where they would find
+    /// nothing and reasonably conclude their money had vanished.
+    private func explorerLink(for state: FlowStateId) -> URL? {
+        switch state {
+        case .a2, .a3:
+            guard let feed = activity.feed, let item = selectedItem(in: feed) else { return nil }
+            let hash = item.txHash ?? feed.transactions.first { $0.id == item.id }?.txHash ?? ""
+            return ExplorerLinks.tx(chainId: item.chainId, hash: hash, store: shelf)
+        case .t2:
+            guard let balance = wallet.balance,
+                  balance.tokens.indices.contains(assetRow) else { return nil }
+            let token = balance.tokens[assetRow]
+            // A native coin has no token page; the account's own page is the
+            // honest thing to show for it.
+            return ExplorerLinks.token(chainId: token.chainId, contract: token.tokenAddress,
+                                       store: shelf)
+                ?? ExplorerLinks.address(chainId: token.chainId, session.view.address,
+                                         store: shelf)
+        case .r2, .r3:
+            let chainId = ChainCatalog.chains.indices.contains(receiveNetwork)
+                ? ChainCatalog.chains[receiveNetwork].chainId : 0
+            return ExplorerLinks.address(chainId: chainId, session.view.address, store: shelf)
+        default:
+            return nil
+        }
     }
 
     /// The feed item behind the tapped history row.

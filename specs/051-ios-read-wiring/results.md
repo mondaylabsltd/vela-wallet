@@ -746,10 +746,35 @@ the twelve built-ins, because a filter offering an empty chain is a dead end
 somebody has to back out of. **The filtering itself is the core's**: the shell
 sends `chain_filter_changed` and renders whatever comes back.
 
+### Three buttons that said "在区块浏览器中查看" and did nothing
+
+`onExplorer` was declared on the receive, transaction and token sheets and
+passed by nobody. All three open the chain's own explorer now — a transaction at
+`/tx/`, a token at `/token/`, an address at `/address/`, and a custom network's
+own `explorerURL` counts.
+
+**Web's Etherscan fallback is not ported.** Its own comment says why —
+*"security surfaces show NO link rather than a misleading one"* — and sending
+somebody to Ethereum's explorer to look up a Gnosis transaction is that
+misleading link: they find nothing and reasonably conclude their money has
+vanished. A chain with no explorer gets no button.
+
+### A flaky acceptance test, hardened rather than re-run until green
+
+The receive test failed once in a full-suite run and passed alone: a bare
+`.tap()` on a `firstMatch` query fails immediately when the accessibility tree
+has not caught up, which it sometimes has not on a screen whose first render
+follows a hundred stored transactions left by the previous test. Every tap this
+cut added now waits for its element first, and the suite was run twice more end
+to end to say so.
+
+A flaky acceptance test is worse than a missing one: the next person reads it as
+a defect in the app.
+
 ### Gates
 
-Hermetic tests 309 → **322**; live 25; UI 11 → **12**. Literal violations 35.
-Zero Rust changes.
+Hermetic tests 309 → **327**; live 25; UI 11 → **12** (green twice in a row).
+Literal violations 35. Zero Rust changes.
 
 ---
 

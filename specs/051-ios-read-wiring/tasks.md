@@ -224,6 +224,10 @@ The core owns these and no gesture reaches them:
   the rows are the chains with transfers, and the core does the filtering;
 - the **receipt toast and row glow** (`FeedView.toast` / `newItemId`) — decoded,
   never drawn;
+- **保存图片** on the receive sheet (`ReceiveQrBody.onSave`) — the artwork exists
+  (`ShareCardArtwork`, R4) and still carries the FIXTURE identity; wiring it
+  needs `NSPhotoLibraryAddUsageDescription` and a saved/permission alert nobody
+  has drawn;
 - **swipe-to-delete** an activity row (`ActivityStore.deleteRequested`);
 - the **manage/delete list** of custom tokens (`MtokView.custom_tokens`,
   `ManageTokensStore.delete`) — the corpus has 已添加的代币 and the sheet has no

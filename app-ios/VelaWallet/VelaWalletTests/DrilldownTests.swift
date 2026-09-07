@@ -284,3 +284,61 @@ struct DrilldownTests {
         #expect(live.facts.first?.value.contains("7") == true)
     }
 }
+
+// MARK: - The explorer links
+
+@MainActor
+struct ExplorerLinkTests {
+
+    private func freshStore() -> VelaStore {
+        VelaStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+    }
+
+    @Test func aTransactionLinksToItsOwnChainsExplorer() {
+        let store = freshStore()
+        #expect(ExplorerLinks.tx(chainId: 100, hash: "0xabc", store: store)?.absoluteString
+                == "https://gnosisscan.io/tx/0xabc")
+        #expect(ExplorerLinks.address(chainId: 1, "0xdead", store: store)?.absoluteString
+                == "https://etherscan.io/address/0xdead")
+        #expect(ExplorerLinks.token(chainId: 1, contract: "0xdAC17", store: store)?.absoluteString
+                == "https://etherscan.io/token/0xdAC17")
+    }
+
+    /// **Web falls back to Etherscan for a chain it has no explorer for; this
+    /// does not.** Sending somebody to Ethereum's explorer to look up a Gnosis
+    /// transaction is the misleading link web's own comment warns about — they
+    /// would find nothing and reasonably conclude their money had vanished.
+    @Test func aChainWithoutAnExplorerHasNoLinkRatherThanTheWrongOne() {
+        let store = freshStore()
+        #expect(ExplorerLinks.base(chainId: 4_294_967_294, store: store) == nil)
+        #expect(ExplorerLinks.tx(chainId: 4_294_967_294, hash: "0xabc", store: store) == nil)
+        #expect(ExplorerLinks.address(chainId: 4_294_967_294, "0xdead", store: store) == nil)
+    }
+
+    /// A native coin has no token page — the caller falls back to the account's
+    /// own page rather than linking to the chain's homepage.
+    @Test func aNativeCoinHasNoTokenPage() {
+        let store = freshStore()
+        #expect(ExplorerLinks.token(chainId: 100, contract: nil, store: store) == nil)
+        #expect(ExplorerLinks.token(chainId: 100, contract: "", store: store) == nil)
+    }
+
+    /// A network the person added carries its own explorer. Reading only the
+    /// built-ins would leave every added chain's transactions unlinkable.
+    @Test func aCustomNetworkBringsItsOwnExplorer() {
+        let store = freshStore()
+        store.writeList(VelaStore.Key.customNetworks, [[
+            "chainId": 7_777_777, "displayName": "Zora",
+            "explorerURL": "https://explorer.zora.energy/",
+        ]])
+        // The trailing slash is stripped, as web strips it.
+        #expect(ExplorerLinks.tx(chainId: 7_777_777, hash: "0xabc", store: store)?.absoluteString
+                == "https://explorer.zora.energy/tx/0xabc")
+    }
+
+    @Test func nothingToLookUpIsNoLink() {
+        let store = freshStore()
+        #expect(ExplorerLinks.tx(chainId: 1, hash: "", store: store) == nil)
+        #expect(ExplorerLinks.address(chainId: 1, "", store: store) == nil)
+    }
+}
