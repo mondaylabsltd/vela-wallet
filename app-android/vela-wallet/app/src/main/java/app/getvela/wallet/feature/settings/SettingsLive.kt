@@ -4,6 +4,7 @@ import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.core.CurrencyCatalog
 import app.getvela.wallet.feature.settings.core.CurrencyView
+import app.getvela.wallet.feature.settings.core.NetProbeHealth
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.core.NetView
@@ -62,13 +63,49 @@ object SettingsLive {
      * keys they hold — all from the core's store rather than from the eleven
      * chains the ST9 mock happens to draw.
      *
-     * **What is deliberately absent: health.** `rpc_health` and
-     * `explorer_health` are `null` for the whole of spec 040, because nothing
-     * can probe an endpoint until 041 gives the shell a network layer. The
-     * fixture rows carry a green `42ms` pill; these carry no pill at all,
-     * because an unmeasured endpoint drawn as fast is the one lie this feature
-     * is most able to tell by accident. (FR-013.)
+     * **Health is measured or it is absent.** `rpc_health` was `null` for the
+     * whole of spec 040 and the rows carried no pill, because an unmeasured
+     * endpoint drawn as fast is the one lie this screen is most able to tell by
+     * accident. Spec 041 gives the shell a way to probe; a row still carries no
+     * pill until its own probe has answered. (FR-013.)
      */
+    /**
+     * An endpoint's health, as a pill — or nothing.
+     *
+     * `null` means nobody has asked yet, and it stays blank. "Checking" is also
+     * blank rather than a spinner in a list of twelve rows: a screenful of
+     * spinners reads as a broken screen, and the answer arrives in about a
+     * second.
+     *
+     * The wording and the one-second threshold are the drawn design's, taken
+     * from `SettingsFixtures.latency` rather than reinvented — the same pill a
+     * person has been looking at, now with a number somebody measured.
+     */
+    private fun healthPill(health: NetProbeHealth?, strings: VelaStrings): StatusPillModel? =
+        when (health) {
+            null, NetProbeHealth.Checking -> null
+            is NetProbeHealth.Ok -> {
+                val slow = health.latency_ms >= SLOW_MS
+                val value = if (slow) {
+                    "%.1fs".format(health.latency_ms / 1000.0)
+                } else {
+                    "${health.latency_ms}ms"
+                }
+                val word = strings.t(
+                    if (slow) I18nKeys.SettingsUi.NETWORK_SLOW else I18nKeys.SettingsUi.NETWORK_ONLINE,
+                )
+                StatusPillModel(
+                    tone = if (slow) SettingsTone.Warn else SettingsTone.Ok,
+                    label = "$word · $value",
+                )
+            }
+            NetProbeHealth.Error ->
+                StatusPillModel(SettingsTone.Error, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))
+        }
+
+    /** A second is where the drawn design calls an endpoint slow. */
+    private const val SLOW_MS = 1_000L
+
     fun withNetworks(
         model: SettingsScreenModel,
         view: NetView,
@@ -105,9 +142,7 @@ object SettingsLive {
                         I18nKeys.SettingsUi.CHAIN_ID,
                         mapOf("chainId" to row.chain_id.toString()),
                     ),
-                    // No badge: see the note above. A pill here would be a
-                    // measurement nobody took.
-                    badge = null,
+                    badge = healthPill(row.rpc_health, strings),
                     tag = if (row.is_custom) {
                         strings.t(I18nKeys.SettingsUi.NETWORK_CUSTOM)
                     } else {

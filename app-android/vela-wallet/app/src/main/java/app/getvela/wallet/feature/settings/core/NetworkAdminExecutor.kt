@@ -8,10 +8,9 @@ import org.json.JSONObject
 /**
  * The only place the `network_admin` core touches the outside world.
  *
- * Sixteen operations: **six storage, one timer, nine network**. Spec 040 has
- * no network layer, so the nine answer with the same "unknown" shapes the web
- * contract defined, each marked `// live in 041` — grep for that marker to
- * find spec 041's inbox, and watch the count go to zero as it lands.
+ * Sixteen operations: **six storage, one timer, nine network**. The nine were
+ * fail-closed for the whole of spec 040, which had no network layer; they are
+ * live now, and the one that is still a no-op says why in place.
  *
  * Port source:
  * `app-web/vela-wallet/src/lib/settings/core/network-admin-executor.ts`.
@@ -27,7 +26,19 @@ import org.json.JSONObject
  * rejecting a malformed `store_loaded` would strand the core *unloaded*
  * forever, and every later write would be silently discarded.
  */
-class NetworkAdminExecutor(private val store: KeyValueStore) {
+class NetworkAdminExecutor(
+    private val store: KeyValueStore,
+    /**
+     * The network checks. `null` means this executor has no way to reach a
+     * network — the settings machines boot before the pool exists — and every
+     * probe then answers the same "nothing observed" shape it answered for the
+     * whole of spec 040. Fail-closed, and the core reads it as unknown rather
+     * than as broken.
+     */
+    private val probes: NetworkProbes? = null,
+    /** Forget an endpoint's history in the pool; `null` = every chain. */
+    private val invalidatePools: (Long?) -> Unit = {},
+) {
 
     @Suppress("LongMethod")
     suspend fun perform(operation: NetOperation): NetShellResult = when (operation) {
@@ -103,57 +114,101 @@ class NetworkAdminExecutor(private val store: KeyValueStore) {
             NetShellResult.DebounceElapsed
         }
 
-        // -- network: fail-closed until spec 041 -------------------------------
+        // -- network -----------------------------------------------------------
         //
-        // Every arm answers the shape the core's failure twin defines. None of
-        // them guesses: an empty index is not "no such chain", an unreachable
-        // probe is not "incompatible", and a null code is not "not a contract".
-        // The core decides what each absence means.
+        // Every arm reports what it observed and nothing more. None of them
+        // guesses: an empty index is not "no such chain", an unreachable probe
+        // is not "incompatible", and a null code is not "not a contract". The
+        // core decides what each absence means — and with no probes wired at
+        // all, every one of these answers the same shape it did in 040.
 
-        // live in 041
-        is NetOperation.FetchSearchIndex -> NetShellResult.SearchIndex(chains = emptyList())
+        is NetOperation.FetchSearchIndex ->
+            NetShellResult.SearchIndex(chains = probes?.searchIndex().orEmpty())
 
-        // live in 041
-        is NetOperation.FetchChainInfo ->
-            NetShellResult.ChainInfo(chain_id = operation.chain_id, data = null)
+        is NetOperation.FetchChainInfo -> NetShellResult.ChainInfo(
+            chain_id = operation.chain_id,
+            data = probes?.chainInfo(operation.chain_id),
+        )
 
-        // live in 041
-        is NetOperation.ProbeRpc -> NetShellResult.Probed(
+        is NetOperation.ProbeRpc -> {
+            val probe = probes?.probeRpc(operation.url)
+            NetShellResult.Probed(
+                url = operation.url,
+                // What the endpoint SAYS it is. Whether that matches the chain
+                // it was configured for is the core's verdict, not a check made
+                // here.
+                reported_chain_id = probe?.reportedChainId,
+                latency_ms = probe?.latencyMs?.toLong() ?: 0,
+            )
+        }
+
+        is NetOperation.ProbeReachable -> {
+            val reach = probes?.probeReachable(operation.url)
+            NetShellResult.Reachable(
+                url = operation.url,
+                ok = reach?.ok ?: false,
+                latency_ms = reach?.latencyMs?.toLong() ?: 0,
+            )
+        }
+
+        is NetOperation.RpcGetCode -> NetShellResult.Code(
             url = operation.url,
-            reported_chain_id = null,
-            latency_ms = 0,
+            address = operation.address,
+            code = probes?.getCode(operation.url, operation.address),
         )
 
-        // live in 041
-        is NetOperation.ProbeReachable ->
-            NetShellResult.Reachable(url = operation.url, ok = false, latency_ms = 0)
-
-        // live in 041
-        is NetOperation.RpcGetCode ->
-            NetShellResult.Code(url = operation.url, address = operation.address, code = null)
-
-        // live in 041
         is NetOperation.RpcCallP256 ->
-            NetShellResult.P256Call(url = operation.url, result = null)
+            NetShellResult.P256Call(url = operation.url, result = probes?.callP256(operation.url))
 
-        // live in 041
-        is NetOperation.FetchServiceHealth -> NetShellResult.ServiceHealth(
-            field = operation.field,
-            body = NetHealthBody.Failed,
-            latency_ms = 0,
-        )
+        is NetOperation.FetchServiceHealth -> {
+            val health = probes?.serviceHealth(operation.base_url)
+            NetShellResult.ServiceHealth(
+                field = operation.field,
+                body = healthBody(health),
+                latency_ms = health?.latencyMs?.toLong() ?: 0,
+            )
+        }
 
-        // live in 041
-        is NetOperation.FetchFiatRates ->
-            NetShellResult.FiatRates(body = NetHealthBody.Failed, latency_ms = 0)
+        is NetOperation.FetchFiatRates -> {
+            val health = probes?.fiatRates(operation.url)
+            NetShellResult.FiatRates(
+                body = when {
+                    health == null -> NetHealthBody.Failed
+                    health.httpStatus != null -> NetHealthBody.HttpError(health.httpStatus.toLong())
+                    // Zero rates IS a body — an endpoint that answered with an
+                    // empty table. Whether that counts as healthy is the core's.
+                    else -> NetHealthBody.Rates((health.rateCount ?: 0).toLong())
+                },
+                latency_ms = health?.latencyMs?.toLong() ?: 0,
+            )
+        }
 
-        // -- acknowledged no-ops ----------------------------------------------
-        //
-        // Not fail-closed: there is genuinely nothing to invalidate. Android
-        // gets an RPC pool and a bundler cache in spec 041, and these arms
-        // become real then. // live in 041
-        is NetOperation.InvalidatePools -> NetShellResult.Invalidated
+        // Forget what the pool learned about these endpoints, so a person who
+        // has just fixed a URL is not still routed around it.
+        is NetOperation.InvalidatePools -> {
+            invalidatePools(operation.chain_id)
+            NetShellResult.Invalidated
+        }
+
+        // Still an acknowledged no-op: there is no bundler client to cache
+        // anything yet. Answered, never skipped. // live in 042
         is NetOperation.ClearBundlerCache -> NetShellResult.BundlerCacheCleared
+    }
+
+    /**
+     * A health response in the core's vocabulary.
+     *
+     * Four shapes, and the distinction between them is the whole point: nothing
+     * answered, an HTTP status came back, or the service identified itself.
+     * Collapsing "404" into "failed" would tell somebody their endpoint is
+     * unreachable when it is answering perfectly and just does not have that
+     * path.
+     */
+    private fun healthBody(health: NetworkProbes.Health?): NetHealthBody = when {
+        health == null -> NetHealthBody.Failed
+        health.httpStatus != null -> NetHealthBody.HttpError(health.httpStatus.toLong())
+        health.service == null && health.status == null -> NetHealthBody.Failed
+        else -> NetHealthBody.Identity(service = health.service, status = health.status)
     }
 
     /**

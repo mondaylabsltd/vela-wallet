@@ -46,18 +46,38 @@ class SettingsController(
 
     private val store = VelaStore(context)
 
+    /**
+     * What this device points one service at: the person's override, or the
+     * default the core supplies.
+     *
+     * A named function rather than a lambda at each site, because these are
+     * read by objects built BEFORE the machine that answers them — the
+     * probes and the rate resolver both need an endpoint the network machine
+     * has not loaded yet. Resolving at call time is what makes that legal, and
+     * an explicit return type is what lets the compiler see it.
+     */
+    private fun endpointUrl(field: NetEndpointField): String =
+        networkHost.view.value.endpoints
+            .firstOrNull { row -> row.field == field }
+            ?.let { row -> row.value.ifBlank { row.default_value } }
+            .orEmpty()
+
     private val rates = pool?.let {
         CurrencyRates(
             pool = it,
             store = store,
-            endpoint = {
-                networkHost.view.value.endpoints
-                    .firstOrNull { row -> row.field == NetEndpointField.FiatRates }
-                    ?.let { row -> row.value.ifBlank { row.default_value } }
-                    .orEmpty()
-            },
+            endpoint = { endpointUrl(NetEndpointField.FiatRates) },
         )
     }
+
+    /**
+     * The network checks, pointed at the ethereum-data service this device is
+     * configured for — which is this machine's own view, so a person who
+     * redirects that endpoint searches THEIR index rather than the default one.
+     */
+    private val probes = NetworkProbes(
+        chainIndexUrl = { endpointUrl(NetEndpointField.EthereumData) },
+    )
 
     private val currencyExecutor = CurrencyExecutor(
         store = store,
@@ -86,7 +106,18 @@ class SettingsController(
         onFault = { error -> VelaLog.failure("settings.currency.fault", "core fault", error) },
     )
 
-    private val networkExecutor = NetworkAdminExecutor(store)
+    private val networkExecutor = NetworkAdminExecutor(
+        store = store,
+        probes = probes,
+        // A person who has just corrected a URL should be routed to it, not
+        // around it: the pool remembers which endpoints failed, and this is
+        // where that memory is asked to forget.
+        invalidatePools = { chainId ->
+            // `null` means every chain — the settings screen's "clear caches".
+            // A chain id means only that one's endpoints were reconfigured.
+            if (chainId == null) pool?.invalidateAll() else pool?.refreshChain(chainId.toInt())
+        },
+    )
 
     private val networkHost = CoreHost(
         bridge = NetworkAdminCore().asBridge(),

@@ -115,6 +115,14 @@ data class SettingsActions(
     val onFieldCommitted: (fieldId: String) -> Unit = {},
     /** The bin on a custom network row. */
     val onRemoveNetwork: (id: String) -> Unit = {},
+    /**
+     * A network row was opened.
+     *
+     * This is what asks the core to check that endpoint — the row was drawn as
+     * tappable from the start and nothing was listening, so the probe arms
+     * landed with no caller. (Spec 041 phase 2.)
+     */
+    val onOpenNetwork: (id: String) -> Unit = {},
     /** 恢复默认 on the service-endpoints page. */
     val onResetEndpoints: () -> Unit = {},
 )
@@ -174,6 +182,7 @@ fun SettingsRoute(
         onFieldEdited = actions.onFieldEdited,
         onFieldCommitted = actions.onFieldCommitted,
         onRemoveNetwork = actions.onRemoveNetwork,
+        onOpenNetwork = actions.onOpenNetwork,
         onResetEndpoints = actions.onResetEndpoints,
     )
 }
@@ -197,6 +206,7 @@ fun SettingsScreen(
     onFieldEdited: (String, String) -> Unit = { _, _ -> },
     onFieldCommitted: (String) -> Unit = {},
     onRemoveNetwork: (String) -> Unit = {},
+    onOpenNetwork: (String) -> Unit = {},
     onResetEndpoints: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
@@ -261,6 +271,7 @@ fun SettingsScreen(
                             onFieldEdited = onFieldEdited,
                             onFieldCommitted = onFieldCommitted,
                             onRemoveNetwork = onRemoveNetwork,
+                            onOpenNetwork = onOpenNetwork,
                             onResetEndpoints = onResetEndpoints,
                         )
                     }
@@ -451,6 +462,7 @@ private fun SettingsPageBody(
     onFieldEdited: (String, String) -> Unit = { _, _ -> },
     onFieldCommitted: (String) -> Unit = {},
     onRemoveNetwork: (String) -> Unit = {},
+    onOpenNetwork: (String) -> Unit = {},
     onResetEndpoints: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
@@ -460,6 +472,7 @@ private fun SettingsPageBody(
                 VelaNetworkRow(
                     row = row,
                     deleteLabel = model.addNetworkLabel,
+                    onClick = onOpenNetwork,
                     onDelete = onRemoveNetwork,
                 )
             }

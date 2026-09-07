@@ -496,6 +496,14 @@ fun VelaNavHost(
                         providerId(fieldId)?.let { settings.commitProviderKey(it) }
                     },
                     onRemoveNetwork = { id -> settings.deleteNetwork(id) },
+                    // The row carries a display id; the machine speaks chain
+                    // ids. The network list already holds both, so the lookup
+                    // is a read rather than a second identity to keep in sync.
+                    onOpenNetwork = { id ->
+                        settings.networks.value.networks
+                            .firstOrNull { it.id == id }
+                            ?.let { settings.expandOverride(it.chain_id) }
+                    },
                     onResetEndpoints = { settings.resetEndpoints() },
                 ),
             )

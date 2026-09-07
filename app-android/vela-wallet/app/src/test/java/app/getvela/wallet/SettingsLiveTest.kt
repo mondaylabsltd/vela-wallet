@@ -5,6 +5,7 @@ import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.SettingsFixtures
 import app.getvela.wallet.feature.settings.SettingsLive
 import app.getvela.wallet.feature.settings.SettingsScreenState
+import app.getvela.wallet.feature.settings.SettingsTone
 import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetEndpointView
@@ -89,21 +90,51 @@ class SettingsLiveTest {
 
     @Test
     fun noRowClaimsALatencyNobodyMeasured() {
-        // FR-013. The ST9 fixture rows carry a green `42ms`; a live row carries
-        // nothing until spec 041 can probe. Passing a health through would be
-        // the easy version of this bug, so the assertion covers both.
+        // FR-013, and the rule that outlived the phase that wrote it.
+        //
+        // In spec 040 nothing could probe, so NO row could carry a pill. Spec
+        // 041 gives the shell a way to measure — and the invariant is unchanged
+        // in the only way that matters: a row shows a latency when somebody
+        // measured it, and shows nothing when nobody has. "Checking" is nothing
+        // too; a list of twelve spinners reads as a broken screen.
         val view = NetView(
             loaded = true,
             networks = listOf(
                 row(1, "Ethereum", false),
-                row(10, "Optimism", false, NetProbeHealth.Ok(42)),
+                row(10, "Optimism", false, NetProbeHealth.Checking),
             ),
         )
         val model = SettingsLive.withNetworks(base(), view, strings)
         assertTrue(
-            "no live network row may show a status pill in spec 040",
+            "an unprobed row must not claim a latency",
             model.networks.all { it.badge == null },
         )
+    }
+
+    @Test
+    fun aMeasuredEndpointShowsWhatWasMeasured() {
+        val view = NetView(
+            loaded = true,
+            networks = listOf(
+                row(1, "Ethereum", false, NetProbeHealth.Ok(42)),
+                row(10, "Optimism", false, NetProbeHealth.Ok(2_400)),
+                row(56, "BNB", false, NetProbeHealth.Error),
+            ),
+        )
+
+        val rows = SettingsLive.withNetworks(base(), view, strings).networks
+
+        // The number is the one that came back, in the drawn design's units.
+        assertTrue("fast reads in milliseconds", rows[0].badge!!.label.endsWith("42ms"))
+        assertEquals(SettingsTone.Ok, rows[0].badge!!.tone)
+        // Past a second it reads in seconds and stops being green — the same
+        // threshold the fixture has always drawn.
+        assertTrue("slow reads in seconds", rows[1].badge!!.label.endsWith("2.4s"))
+        assertEquals(SettingsTone.Warn, rows[1].badge!!.tone)
+        // A failed probe is a verdict, and it carries no number at all: there
+        // is no latency for a request that never answered.
+        assertEquals(SettingsTone.Error, rows[2].badge!!.tone)
+        assertTrue("a failure has no latency to report", !rows[2].badge!!.label.contains("ms"))
     }
 
     @Test
