@@ -510,6 +510,43 @@ cross-compile.
 
 ---
 
+## Phase 5b — The screens behind "全部" ✅
+
+Four read screens were reachable the whole time and none of them was wired.
+Tapping 全部 on Activity, or any activity row, or any asset row, opened a
+**fixture**: a person could tap past their own payments into somebody else's,
+and tapping their own POL showed a stranger's transaction.
+
+**A row that can be tapped has to say what it is.** Neither `ActivityRowModel`
+nor `AssetRowModel` carried an id, so every row opened the same screen — the
+navigation had no way to name a target. Both carry one now, and `FlowNavState`
+carries the selection beside the stack, cleared on `back()` and `close()` so the
+screen underneath can never read an id it was not opened for.
+
+This is the shape the desktop shipped once — a page that displayed contact A
+while its delete acted on contact B — and the fix is the same: look the target
+up ONCE, from an id the navigation carries.
+
+**A detail with no target renders nothing.** Not the fixture. A screen about the
+wrong payment and a screen about the right payment look equally authoritative,
+and only one of them is wrong.
+
+That makes **six** drawn-and-unwired surfaces in this feature, and the count is
+the finding:
+
+| Surface | What was missing |
+| --- | --- |
+| network rows | tappable, nothing listening — the probes had no caller |
+| add-network search | a read-only box with no `onValueChange` |
+| the receive QR | a decorative pattern encoding nothing |
+| `focused()` / `backgrounded()` | on the controller, called from nowhere |
+| the contact activity block | inherited the fixture's transactions |
+| **A1 / A2 / T1 / T2** | reachable from three taps, entirely fixture |
+
+**Gate**: 366 unit tests, 0 failures.
+
+---
+
 ## Success criteria
 
 | # | Criterion | Verdict |
@@ -537,7 +574,7 @@ staging rather than wiring:
 Every path they exercise is proven by test and every executor logs what it did,
 so each is an afternoon rather than an investigation.
 
-**Final gate**: 356 unit tests, 0 failures, and `grep -rn 'live in 041'` is zero.
+**Final gate**: 366 unit tests, 0 failures, and `grep -rn 'live in 041'` is zero.
 
 ### What this feature kept finding
 
@@ -552,6 +589,11 @@ Five separate surfaces were **drawn and not wired**, each looking finished:
 | the contact activity block | inherited the fixture's transactions |
 
 None of them fails loudly. Every one of them looks like a working screen, which
-is why the device pass keeps earning its place: four of the five were found by
-looking at a phone, not by reading code.
+is why the device pass keeps earning its place: four of the six were found by
+looking at a phone, and the last two by asking a question a phone had already
+taught me to ask — *what happens when I tap this?*
+
+The generalisation worth carrying into 042: **a drawn screen is not a wired
+screen, and the difference is invisible.** Grepping for a marker finds the work
+somebody remembered to mark. Tapping every tappable thing finds the rest.
 

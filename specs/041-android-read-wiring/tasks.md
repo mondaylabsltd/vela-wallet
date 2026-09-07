@@ -91,8 +91,11 @@ an untested one is a worse lie than the fixture it replaced.
 ## Phase 5 — Activity (US3)
 
 - [x] **T127** `FeedWire.kt`, `ActivityFeedExecutor`, feed in the controller.
-- [x] **T128** `WalletLive` grows the feed; the activity screens (`A1`–`A3`)
-      and the contact-detail block 040 left empty.
+- [x] **T128** `WalletLive` grows the feed; the activity screens (`A1`/`A2`),
+      the assets screens (`T1`/`T2`) and the contact-detail block 040 left
+      empty. **Marked done once before the screens were reached** — the home
+      feed and the contact block were wired and the four flow screens were not,
+      which is how they stayed fixture-driven for two more phases.
 - [~] **T129** Device check (SC-103) — the pipeline is proven in
       `IncomingScanTest`; the device run needs a deposit made while the app
       watches, because `token_trust` looks back 100 blocks and no further.
