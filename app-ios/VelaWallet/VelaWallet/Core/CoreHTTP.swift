@@ -39,6 +39,9 @@ enum CoreHTTP {
         static let networkCheck: TimeInterval = 10
         /// Fiat FX rates.
         static let fiatRates: TimeInterval = 8
+        /// Read-only JSON-RPC (eth_call / getBalance / getLogs) — fail over
+        /// fast, because the pool has other endpoints to try.
+        static let rpcRead: TimeInterval = 8
     }
 
     /// One session for the app, so connection reuse and the system proxy
@@ -101,6 +104,59 @@ enum CoreHTTP {
             return Probe(body: nil, status: nil, latencyMs: 0)
         }
         return await perform(request)
+    }
+
+    /// A JSON-RPC reply, **classified rather than interpreted**.
+    ///
+    /// `rpc_pool` bans on the difference between these, so the distinctions are
+    /// the core's vocabulary and not this file's convenience: a 429 is not a
+    /// 500, a timeout is not a refused connection, and a JSON-RPC error is a
+    /// server that answered.
+    enum RpcReply {
+        /// A 2xx with a JSON object body — which may still carry an `error`.
+        case response([String: Any])
+        case httpError(status: Int)
+        /// 2xx, but the body was not JSON. Some proxies answer HTML.
+        case nonJSON
+        case timeout
+        /// Never reached a server: DNS, refused, offline, TLS.
+        case network
+    }
+
+    /// One JSON-RPC call, with the envelope preserved.
+    ///
+    /// Distinct from `rpc(_:method:params:)`, which returns just the result and
+    /// flattens every failure to `nil`. The pool needs the failure *kind*,
+    /// because that is what it bans on.
+    static func rpcEnvelope(
+        _ url: String,
+        method: String,
+        params: [Any],
+        timeout: TimeInterval = Timeout.rpcRead
+    ) async -> RpcReply {
+        guard var request = request(url, timeout: timeout) else { return .network }
+        let payload: [String: Any] = [
+            "jsonrpc": "2.0", "id": 1, "method": method, "params": params,
+        ]
+        guard let body = try? JSONSerialization.data(withJSONObject: payload) else {
+            return .network
+        }
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+
+        do {
+            let (data, response) = try await session.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200..<300).contains(status) else { return .httpError(status: status) }
+            guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return .nonJSON }
+            return .response(object)
+        } catch let error as URLError where error.code == .timedOut {
+            return .timeout
+        } catch {
+            return .network
+        }
     }
 
     // MARK: - The one request, the one send

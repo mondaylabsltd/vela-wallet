@@ -656,6 +656,318 @@ fileprivate struct FfiConverterData: FfiConverterRustBuffer {
 
 
 /**
+ * Transfers and dApp activity, grouped by day.
+ */
+public protocol ActivityFeedCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * Transfers and dApp activity, grouped by day.
+ */
+open class ActivityFeedCore: ActivityFeedCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_activityfeedcore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_activityfeedcore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_activityfeedcore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_activityfeedcore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_activityfeedcore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_activityfeedcore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeActivityFeedCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ActivityFeedCore
+
+    public static func lift(_ handle: UInt64) throws -> ActivityFeedCore {
+        return ActivityFeedCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ActivityFeedCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ActivityFeedCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ActivityFeedCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActivityFeedCore_lift(_ handle: UInt64) throws -> ActivityFeedCore {
+    return try FfiConverterTypeActivityFeedCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeActivityFeedCore_lower(_ value: ActivityFeedCore) -> UInt64 {
+    return FfiConverterTypeActivityFeedCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * The home screen's money: balances across chains, cached and priced.
+ */
+public protocol BalanceDashboardCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * The home screen's money: balances across chains, cached and priced.
+ */
+open class BalanceDashboardCore: BalanceDashboardCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_balancedashboardcore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_balancedashboardcore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_balancedashboardcore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_balancedashboardcore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_balancedashboardcore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_balancedashboardcore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeBalanceDashboardCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = BalanceDashboardCore
+
+    public static func lift(_ handle: UInt64) throws -> BalanceDashboardCore {
+        return BalanceDashboardCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: BalanceDashboardCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> BalanceDashboardCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: BalanceDashboardCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBalanceDashboardCore_lift(_ handle: UInt64) throws -> BalanceDashboardCore {
+    return try FfiConverterTypeBalanceDashboardCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeBalanceDashboardCore_lower(_ value: BalanceDashboardCore) -> UInt64 {
+    return FfiConverterTypeBalanceDashboardCore.lower(value)
+}
+
+
+
+
+
+
+/**
  * One message-oriented caBLE frame transport, as Kotlin/Swift sees it. The
  * shell owns the WebSocket (or BLE L2CAP) socket; the Noise handshake and the
  * CTAP framing above it are the core's.
@@ -2598,6 +2910,162 @@ public func FfiConverterTypeLoginCore_lower(_ value: LoginCore) -> UInt64 {
 
 
 /**
+ * The token list: custom tokens, metadata from the chain, caches.
+ */
+public protocol ManageTokensCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * The token list: custom tokens, metadata from the chain, caches.
+ */
+open class ManageTokensCore: ManageTokensCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_managetokenscore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_managetokenscore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_managetokenscore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_managetokenscore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_managetokenscore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_managetokenscore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeManageTokensCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ManageTokensCore
+
+    public static func lift(_ handle: UInt64) throws -> ManageTokensCore {
+        return ManageTokensCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ManageTokensCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ManageTokensCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ManageTokensCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeManageTokensCore_lift(_ handle: UInt64) throws -> ManageTokensCore {
+    return try FfiConverterTypeManageTokensCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeManageTokensCore_lower(_ value: ManageTokensCore) -> UInt64 {
+    return FfiConverterTypeManageTokensCore.lower(value)
+}
+
+
+
+
+
+
+/**
  * Networks, the add-network wizard, service endpoints and RPC providers.
  */
 public protocol NetworkAdminCoreProtocol: AnyObject, Sendable {
@@ -2754,6 +3222,476 @@ public func FfiConverterTypeNetworkAdminCore_lower(_ value: NetworkAdminCore) ->
 
 
 /**
+ * A receive request, and whether it has been acknowledged.
+ */
+public protocol PaymentRequestCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * A receive request, and whether it has been acknowledged.
+ */
+open class PaymentRequestCore: PaymentRequestCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_paymentrequestcore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_paymentrequestcore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_paymentrequestcore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_paymentrequestcore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_paymentrequestcore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_paymentrequestcore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePaymentRequestCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = PaymentRequestCore
+
+    public static func lift(_ handle: UInt64) throws -> PaymentRequestCore {
+        return PaymentRequestCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: PaymentRequestCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PaymentRequestCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: PaymentRequestCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePaymentRequestCore_lift(_ handle: UInt64) throws -> PaymentRequestCore {
+    return try FfiConverterTypePaymentRequestCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePaymentRequestCore_lower(_ value: PaymentRequestCore) -> UInt64 {
+    return FfiConverterTypePaymentRequestCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Watching a receive address for the deposit that just landed.
+ */
+public protocol ReceiveWatchCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * Watching a receive address for the deposit that just landed.
+ */
+open class ReceiveWatchCore: ReceiveWatchCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_receivewatchcore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_receivewatchcore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_receivewatchcore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_receivewatchcore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_receivewatchcore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_receivewatchcore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeReceiveWatchCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = ReceiveWatchCore
+
+    public static func lift(_ handle: UInt64) throws -> ReceiveWatchCore {
+        return ReceiveWatchCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: ReceiveWatchCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> ReceiveWatchCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: ReceiveWatchCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReceiveWatchCore_lift(_ handle: UInt64) throws -> ReceiveWatchCore {
+    return try FfiConverterTypeReceiveWatchCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeReceiveWatchCore_lower(_ value: ReceiveWatchCore) -> UInt64 {
+    return FfiConverterTypeReceiveWatchCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Which endpoint a chain read goes to: scoring, bans, races, self-rescue.
+ * **The routing authority** — no other machine talks to a chain.
+ */
+public protocol RpcPoolCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * Which endpoint a chain read goes to: scoring, bans, races, self-rescue.
+ * **The routing authority** — no other machine talks to a chain.
+ */
+open class RpcPoolCore: RpcPoolCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_rpcpoolcore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_rpcpoolcore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_rpcpoolcore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_rpcpoolcore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_rpcpoolcore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_rpcpoolcore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRpcPoolCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = RpcPoolCore
+
+    public static func lift(_ handle: UInt64) throws -> RpcPoolCore {
+        return RpcPoolCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: RpcPoolCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RpcPoolCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: RpcPoolCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRpcPoolCore_lift(_ handle: UInt64) throws -> RpcPoolCore {
+    return try FfiConverterTypeRpcPoolCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRpcPoolCore_lower(_ value: RpcPoolCore) -> UInt64 {
+    return FfiConverterTypeRpcPoolCore.lower(value)
+}
+
+
+
+
+
+
+/**
  * Which account is current, and which route the shell is allowed to show.
  */
 public protocol SessionCoreProtocol: AnyObject, Sendable {
@@ -2902,6 +3840,162 @@ public func FfiConverterTypeSessionCore_lift(_ handle: UInt64) throws -> Session
 #endif
 public func FfiConverterTypeSessionCore_lower(_ value: SessionCore) -> UInt64 {
     return FfiConverterTypeSessionCore.lower(value)
+}
+
+
+
+
+
+
+/**
+ * Whether a token that arrived by transfer may be shown as an asset.
+ */
+public protocol TokenTrustCoreProtocol: AnyObject, Sendable {
+    
+    func dispatch(eventJson: String) throws  -> String
+    
+    func resolveEffect(effectId: UInt64, resultJson: String) throws  -> String
+    
+    func view() throws  -> String
+    
+}
+/**
+ * Whether a token that arrived by transfer may be shown as an asset.
+ */
+open class TokenTrustCore: TokenTrustCoreProtocol, @unchecked Sendable {
+    fileprivate let handle: UInt64
+
+    /// Used to instantiate a [FFIObject] without an actual handle, for fakes in tests, mostly.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public struct NoHandle {
+        public init() {}
+    }
+
+    // TODO: We'd like this to be `private` but for Swifty reasons,
+    // we can't implement `FfiConverter` without making this `required` and we can't
+    // make it `required` without making it `public`.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    required public init(unsafeFromHandle handle: UInt64) {
+        self.handle = handle
+    }
+
+    // This constructor can be used to instantiate a fake object.
+    // - Parameter noHandle: Placeholder value so we can have a constructor separate from the default empty one that may be implemented for classes extending [FFIObject].
+    //
+    // - Warning:
+    //     Any object instantiated with this constructor cannot be passed to an actual Rust-backed object. Since there isn't a backing handle the FFI lower functions will crash.
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public init(noHandle: NoHandle) {
+        self.handle = 0
+    }
+
+#if swift(>=5.8)
+    @_documentation(visibility: private)
+#endif
+    public func uniffiCloneHandle() -> UInt64 {
+        return try! rustCall { uniffi_vela_core_uniffi_fn_clone_tokentrustcore(self.handle, $0) }
+    }
+public convenience init() {
+    let handle =
+        try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_constructor_tokentrustcore_new(uniffiCallStatus
+    )
+}
+    self.init(unsafeFromHandle: handle)
+}
+
+    deinit {
+        if handle == 0 {
+            // Mock objects have handle=0 don't try to free them
+            return
+        }
+
+        try! rustCall { uniffi_vela_core_uniffi_fn_free_tokentrustcore(handle, $0) }
+    }
+
+    
+
+    
+open func dispatch(eventJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_tokentrustcore_dispatch(
+            self.uniffiCloneHandle(),
+        FfiConverterString.lower(eventJson),uniffiCallStatus
+    )
+})
+}
+    
+open func resolveEffect(effectId: UInt64, resultJson: String)throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_tokentrustcore_resolve_effect(
+            self.uniffiCloneHandle(),
+        FfiConverterUInt64.lower(effectId),
+        FfiConverterString.lower(resultJson),uniffiCallStatus
+    )
+})
+}
+    
+open func view()throws  -> String  {
+    return try  FfiConverterString.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_method_tokentrustcore_view(
+            self.uniffiCloneHandle(),uniffiCallStatus
+    )
+})
+}
+    
+
+    
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeTokenTrustCore: FfiConverter {
+    typealias FfiType = UInt64
+    typealias SwiftType = TokenTrustCore
+
+    public static func lift(_ handle: UInt64) throws -> TokenTrustCore {
+        return TokenTrustCore(unsafeFromHandle: handle)
+    }
+
+    public static func lower(_ value: TokenTrustCore) -> UInt64 {
+        return value.uniffiCloneHandle()
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> TokenTrustCore {
+        let handle: UInt64 = try readInt(&buf)
+        return try lift(handle)
+    }
+
+    public static func write(_ value: TokenTrustCore, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenTrustCore_lift(_ handle: UInt64) throws -> TokenTrustCore {
+    return try FfiConverterTypeTokenTrustCore.lift(handle)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeTokenTrustCore_lower(_ value: TokenTrustCore) -> UInt64 {
+    return FfiConverterTypeTokenTrustCore.lower(value)
 }
 
 
@@ -6359,6 +7453,24 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_usbhidport_path() != 10313) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_activityfeedcore_dispatch() != 50992) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_activityfeedcore_resolve_effect() != 61528) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_activityfeedcore_view() != 27349) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_balancedashboardcore_dispatch() != 15268) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_balancedashboardcore_resolve_effect() != 47473) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_balancedashboardcore_view() != 9104) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_contactscore_dispatch() != 41809) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6395,6 +7507,15 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_logincore_view() != 29556) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_managetokenscore_dispatch() != 3555) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_managetokenscore_resolve_effect() != 10920) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_managetokenscore_view() != 24891) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_method_networkadmincore_dispatch() != 52660) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -6402,6 +7523,33 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_networkadmincore_view() != 55500) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_paymentrequestcore_dispatch() != 63261) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_paymentrequestcore_resolve_effect() != 30758) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_paymentrequestcore_view() != 37072) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_receivewatchcore_dispatch() != 62533) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_receivewatchcore_resolve_effect() != 24502) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_receivewatchcore_view() != 22156) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_rpcpoolcore_dispatch() != 24005) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_rpcpoolcore_resolve_effect() != 27891) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_rpcpoolcore_view() != 42986) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_sessioncore_dispatch() != 2616) {
@@ -6413,10 +7561,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_method_sessioncore_view() != 24600) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_method_tokentrustcore_dispatch() != 435) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_tokentrustcore_resolve_effect() != 211) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_method_tokentrustcore_view() != 33625) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_constructor_i18n_new() != 47923) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_i18n_new_with_legacy_plurals() != 58560) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_activityfeedcore_new() != 25853) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_balancedashboardcore_new() != 33348) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_constructor_contactscore_new() != 11136) {
@@ -6431,10 +7594,25 @@ private let initializationResult: InitializationResult = {
     if (uniffi_vela_core_uniffi_checksum_constructor_logincore_new() != 62417) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_constructor_managetokenscore_new() != 30780) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_constructor_networkadmincore_new() != 6920) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_vela_core_uniffi_checksum_constructor_paymentrequestcore_new() != 26521) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_receivewatchcore_new() != 7750) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_rpcpoolcore_new() != 10658) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_vela_core_uniffi_checksum_constructor_sessioncore_new() != 17728) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_constructor_tokentrustcore_new() != 45154) {
         return InitializationResult.apiChecksumMismatch
     }
 

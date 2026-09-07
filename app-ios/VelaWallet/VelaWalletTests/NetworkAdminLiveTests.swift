@@ -47,10 +47,36 @@ struct NetworkAdminLiveTests {
         }
     }
 
+    /// Typing a **built-in** chain's id gets the core's refusal, not a verdict.
+    ///
+    /// This test used to type 100 and demand a compatibility verdict, which was
+    /// the assertion being wrong rather than the app: Gnosis is a built-in, so
+    /// `already_added` is the correct and only answer. Asking the core to probe
+    /// a chain it has just refused is asking it to contradict itself.
+    @Test func typingABuiltinChainIdIsRefusedAsAlreadyAdded() async {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let store = SettingsStore(store: VelaStore(defaults: defaults),
+                                  accounts: AccountStore(defaults: defaults))
+        store.open()
+        await settle(until: { store.isLoaded })
+
+        store.search("100")
+        await settle(until: { !(store.networkAdmin?.wizard.suggestions.isEmpty ?? true) },
+                     seconds: 15)
+        store.selectChain(100)
+        await settle(until: { store.networkAdmin?.wizard.error != nil }, seconds: 20)
+
+        #expect(store.networkAdmin?.wizard.error == .alreadyAdded(chainId: 100))
+        #expect(store.networkAdmin?.wizard.canAdd == false,
+                "the gate must stay shut on a chain that is already there")
+    }
+
     /// Type a chain id, and the core reaches a verdict it did not invent.
     ///
-    /// Gnosis (100) because it is the chain the golden Safe lives on, so a
-    /// verdict of "not compatible" here would be news rather than noise.
+    /// Zora (7777777) because it is **not** a built-in, so the wizard actually
+    /// runs: index → resolve → RPC race → eleven `eth_getCode` reads → P256.
+    /// Whether it comes back compatible is a fact about somebody else's
+    /// deployment, so only the *arrival* of a verdict is asserted.
     @Test func typingAChainIdReachesARealVerdict() async {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = SettingsStore(store: VelaStore(defaults: defaults),
@@ -59,7 +85,7 @@ struct NetworkAdminLiveTests {
         await settle(until: { store.isLoaded })
         #expect(store.isLoaded, "the store never loaded")
 
-        store.search("100")
+        store.search("7777777")
         await settle(until: { !(store.networkAdmin?.wizard.suggestions.isEmpty ?? true) },
                      seconds: 15)
         let suggestions = store.networkAdmin?.wizard.suggestions ?? []
@@ -67,7 +93,7 @@ struct NetworkAdminLiveTests {
         let query = store.networkAdmin?.wizard.query ?? "?"
         #expect(!suggestions.isEmpty, "no suggestions; phase = \(phase), query = \(query)")
 
-        store.selectChain(100)
+        store.selectChain(7_777_777)
         await settle(until: { store.networkAdmin?.wizard.compat != nil }, seconds: 90)
 
         let compat = store.networkAdmin?.wizard.compat
@@ -89,6 +115,67 @@ struct NetworkAdminLiveTests {
         let chains = reply?["chains"] as? [[String: Any]] ?? []
         #expect(chains.count > 100, "the index returned \(chains.count) chains")
         #expect(chains.first?["chain_id"] as? Int == 1)
+    }
+
+    /// **The pool routes a real call, and the answer is the golden Safe's own
+    /// balance.**
+    ///
+    /// `0x88cCA0…6894` is the multi-key Safe every client's read path is
+    /// checked against; its Gnosis balance is independently verifiable with one
+    /// `eth_getBalance` from a terminal, which is what makes it a fixture worth
+    /// having.
+    ///
+    /// Note what the caller does NOT do: name a URL. Which endpoint, after
+    /// which failure, under which ban is one decision and `rpc_pool` owns it —
+    /// the whole point of spec 051.
+    @Test func theGoldenSafesGnosisBalanceComesBackThroughThePool() async {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let pool = RpcPool(store: VelaStore(defaults: defaults),
+                           accounts: AccountStore(defaults: defaults))
+        pool.boot()
+
+        let outcome = await pool.call(
+            chainId: 100,
+            method: "eth_getBalance",
+            params: ["0x88cCA0EeDbF2C4426110bbFc998F048689266894", "latest"]
+        )
+
+        guard case .ok(let result) = outcome else {
+            Issue.record("the pool failed the whole sweep: \(outcome)")
+            return
+        }
+        let hex = result as? String ?? ""
+        #expect(hex.hasPrefix("0x"), "not a quantity: \(hex)")
+        // A balance, not a claim about its size: the figure moves when the
+        // founder sends from it, and a test that pinned it would fail for the
+        // wrong reason.
+        let wei = UInt64(hex.dropFirst(2), radix: 16)
+        #expect(wei != nil, "unparseable quantity: \(hex)")
+        print("[live] golden Safe on Gnosis: \(hex)")
+    }
+
+    /// A chain with no endpoints anywhere fails — and says whether it was
+    /// rate-limited, because invariant ④ forbids offering "swap in your own
+    /// RPC" to somebody who is merely being throttled.
+    ///
+    /// The id matters. This test first used 999999999 on the assumption that
+    /// nobody serves it; the chain index **does**, and it answered `eth_chainId`
+    /// with `0x3b9ac9ff`. That was the test being wrong about the world. A
+    /// `u32`-max id is one the registry genuinely has no row for.
+    @Test func aChainWithNoEndpointsFailsRatherThanHanging() async {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let pool = RpcPool(store: VelaStore(defaults: defaults),
+                           accounts: AccountStore(defaults: defaults))
+        pool.boot()
+
+        let nowhere = 4_294_967_294
+        let outcome = await pool.call(chainId: nowhere, method: "eth_chainId")
+        guard case .failed(let rateLimited) = outcome else {
+            Issue.record("expected a failure for a chain nobody serves, got \(outcome)")
+            return
+        }
+        #expect(!rateLimited, "nothing answered, so nothing rate-limited us")
+        #expect(pool.failedChains.contains(nowhere))
     }
 
     /// The `/api/health` probe reaches a real service and comes back with an

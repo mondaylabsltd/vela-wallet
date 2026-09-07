@@ -99,6 +99,36 @@ struct CoreWireDriftTests {
         }
     }
 
+    /// `RpcPoolView` decodes, and the pool asks for nothing this build cannot
+    /// perform.
+    ///
+    /// The pool is the one machine whose unhandled operation would not merely
+    /// blank a screen — every read in the app queues behind it, so a tag it
+    /// cannot answer stalls the whole wallet.
+    @Test func rpcPoolViewDecodesAndAsksOnlyForHandledOperations() throws {
+        let core = RpcPoolCore()
+
+        let initial = try CoreJSON.decode(RpcPoolViewWire.self, from: try CoreJSON.object(core.view()))
+        #expect(initial.failedChains.isEmpty)
+        #expect(initial.banned.isEmpty)
+
+        // A call on a cold pool must ask for its config first.
+        let result = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
+            "type": "call_requested",
+            "call_id": "t1", "chain_id": 100, "kind": "rpc",
+            "method": "eth_getBalance", "now_ms": 1_700_000_000_000,
+        ])))
+        let effects = result["effects"] as? [[String: Any]] ?? []
+        #expect(!effects.isEmpty, "a cold pool must ask for its endpoints")
+        for effect in effects {
+            let tag = (effect["operation"] as? [String: Any])?["type"] as? String ?? ""
+            #expect(
+                RpcPool.operations.contains(tag),
+                "the pool asks for `\(tag)`, which this build cannot perform"
+            )
+        }
+    }
+
     /// The bridge's three methods behave the way `CoreDriver` assumes.
     ///
     /// Property 2 of the driver's contract: resolving an effect id the bridge

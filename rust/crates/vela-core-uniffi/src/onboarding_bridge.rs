@@ -247,3 +247,51 @@ bridge_object!(
     DisplayCurrencyCore,
     vela_core::app::display_currency::DisplayCurrency
 );
+
+// The read path (spec 051). Seven at once, against 050's one-per-cut rule,
+// because this cut wires all seven — the rule is "an export arrives with the
+// code that calls it", and the alternative here is seven `.xcframework`
+// rebuilds at five to eight minutes each for the same end state.
+
+bridge_object!(
+    /// Which endpoint a chain read goes to: scoring, bans, races, self-rescue.
+    /// **The routing authority** — no other machine talks to a chain.
+    RpcPoolCore,
+    vela_core::app::rpc_pool::RpcPool
+);
+
+bridge_object!(
+    /// The home screen's money: balances across chains, cached and priced.
+    BalanceDashboardCore,
+    vela_core::app::balance_dashboard::BalanceDashboard
+);
+
+bridge_object!(
+    /// Transfers and dApp activity, grouped by day.
+    ActivityFeedCore,
+    vela_core::app::activity_feed::ActivityFeed
+);
+
+bridge_object!(
+    /// The token list: custom tokens, metadata from the chain, caches.
+    ManageTokensCore,
+    vela_core::app::manage_tokens::ManageTokens
+);
+
+bridge_object!(
+    /// Whether a token that arrived by transfer may be shown as an asset.
+    TokenTrustCore,
+    vela_core::app::token_trust::TokenTrust
+);
+
+bridge_object!(
+    /// Watching a receive address for the deposit that just landed.
+    ReceiveWatchCore,
+    vela_core::app::receive_watch::ReceiveWatch
+);
+
+bridge_object!(
+    /// A receive request, and whether it has been acknowledged.
+    PaymentRequestCore,
+    vela_core::app::payment_request::PaymentRequest
+);

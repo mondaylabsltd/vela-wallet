@@ -295,6 +295,8 @@ final class NetworkAdminExecutor {
 /// (`network_admin.rs:157-160`) so a drift is visible.
 enum NetDefaults {
     static let ethereumDataURL = "https://ethereum-data.awesometools.dev"
+    /// Vela's own relay. The bundler tier has one entry because Vela runs it.
+    static let bundlerServiceURL = "https://vela-relay.getvela.app"
 }
 
 // MARK: - Probes

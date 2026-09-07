@@ -452,12 +452,26 @@ Two smaller findings came with it:
   starve each other, and the wizard — which needs a debounce, an index fetch, a
   chain resolve and an RPC race to finish — is the one that loses.
 
-### A UX number worth knowing
+### A UX number worth knowing — ⚠️ **corrected in 051, and it was wrong**
 
-Adding **Gnosis (100)** from a cold start took **between 42 and 90 seconds** end
-to end: search index, chain resolve, the RPC race, eleven `eth_getCode` reads and
-the P256 probe. The drawn 检查中 state has to carry a full minute, and it was
-never designed against that number.
+*As first written*: adding Gnosis (100) took between 42 and 90 seconds end to
+end, and the drawn 检查中 state had to carry a full minute.
+
+**That number was an artifact of the test, not a measurement of the wizard.**
+The test typed `100` — a **built-in** chain — and then waited up to 90 seconds
+for a compatibility verdict the core is right never to produce: Gnosis is
+already added, and `already_added` is the correct and only answer. What was
+being timed was my own settle loop giving up.
+
+Re-measured in 051 against **Zora (7777777)**, which is not a built-in and
+therefore actually runs the pipeline — index, chain resolve, the RPC race,
+eleven `eth_getCode` reads and the P256 probe: **3.6 seconds**. The refusal path
+for a built-in answers in **2.3 seconds**.
+
+So the 检查中 state carries a few seconds, not a minute, and nothing needs
+redesigning around it. Recorded here rather than quietly deleted, because the
+wrong number was reported to the founder and a handoff that silently improves is
+one nobody can trust.
 
 ### Gates
 
@@ -567,7 +581,7 @@ inventing one would be designing rather than wiring (founder decision,
 | 4 | `CoreHTTP` and `RegistryClient` each configure their own `URLSession`. Collapsing them is natural in 051, when the RPC pool needs a client anyway. |
 | 5 | `CoreDriver` still lives under `Features/Onboarding/Core/` while four machines depend on it. A pure move, deliberately not made in the commit that first reused it. |
 | 6 | Three address-shortening copies with two different thresholds (`> 14` twice, `> 10` once); web uses a fourth form (8+6). New code uses `AddressText`. |
-| 7 | Adding a network takes **42–90 seconds** end to end. The drawn 检查中 state was never designed against a full minute. |
+| 7 | ~~Adding a network takes 42–90 seconds.~~ **Withdrawn in 051 — the number was my test timing out, not the wizard.** Re-measured: 3.6 s for a real add (Zora), 2.3 s for a built-in's refusal. No debt. |
 | 8 | **Inbound, from web's 028** (peer message, 2026-09-05): commit `6cec4ddf` on `028-web-port-completion` — not on `origin/main` yet — adds `import_failure` and `export` to `ContactsView`, plus events `import_file`, `export_requested`, `export_taken`, `import_acknowledged`, `add_group_members`, `remove_group_member`, `set_contact_groups`, and a new `app/contacts_io.rs`. **Bites on rebase, quietly.** iOS does not compile-break (Swift builds no Rust literal, and `JSONDecoder` drops keys `ContactsWire` has no property for) and iOS parses no files at all, so 028's D50 refusal deviation is desktop-only. What it does mean: the two new view fields land and are **silently ignored**, so an import refusal would have nowhere to show. Add them to `ContactsWire` when import is drawn. `CoreWireDriftTests` covers the dangerous half — a new *operation* would fail loudly rather than hang — and the peer confirms `import_file` carries its `content`, so there is none. |
 
 ### Device verification — what is ready and what is not
