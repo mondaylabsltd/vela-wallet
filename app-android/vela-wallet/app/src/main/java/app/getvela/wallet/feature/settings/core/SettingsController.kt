@@ -175,6 +175,24 @@ class SettingsController(
     /** The clock is the shell's: the core takes none, so the stamp comes from here. */
     fun confirmAddNetwork() = net(NetEvent.AddConfirmed(nowIso()))
 
+    /**
+     * A chain picked from the search results.
+     *
+     * Ends at the core's `checked` phase with a verdict, so the person sees
+     * which contracts were found and presses the button themselves.
+     */
+    fun selectChain(chainId: Long) =
+        net(NetEvent.ChainSelected(chain_id = chainId, keep_custom_rpc = false))
+
+    /**
+     * Add a chain by id with **no confirm step** — the scan path.
+     *
+     * The core calls this `auto`: on a compatible verdict it saves the network
+     * and clears the wizard in one move. That is right for a QR code or a deep
+     * link, where there is no list to have picked from; it is wrong for
+     * somebody browsing search results, who would watch the screen empty itself
+     * and never see the checks. Wiring a row tap here was exactly that bug.
+     */
     fun addNetworkByChainId(chainId: Long) =
         net(NetEvent.AddByChainIdRequested(chainId, nowIso()))
 

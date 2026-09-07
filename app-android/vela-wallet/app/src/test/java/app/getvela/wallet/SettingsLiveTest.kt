@@ -7,6 +7,12 @@ import app.getvela.wallet.feature.settings.SettingsLive
 import app.getvela.wallet.feature.settings.SettingsScreenState
 import app.getvela.wallet.feature.settings.SettingsTone
 import app.getvela.wallet.feature.settings.core.CurrencyView
+import app.getvela.wallet.feature.settings.core.NetChainIndexEntry
+import app.getvela.wallet.feature.settings.core.NetChainInfo
+import app.getvela.wallet.feature.settings.core.NetCompatibility
+import app.getvela.wallet.feature.settings.core.NetContractStatus
+import app.getvela.wallet.feature.settings.core.NetWizardPhase
+import app.getvela.wallet.feature.settings.core.NetWizardView
 import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetEndpointView
 import app.getvela.wallet.feature.settings.core.NetNetworkRow
@@ -215,5 +221,158 @@ class SettingsLiveTest {
         val model = SettingsLive.withCurrency(base(), CurrencyView("JPY", null, true))
         val row = model.sections.flatMap { it.rows }.single { it.id == "currency" }
         assertEquals("JPY · ¥", row.value)
+    }
+
+    // -- the add-network wizard (spec 041 phase 8) ---------------------------
+
+    private fun indexEntry(chainId: Long, name: String, symbol: String) = NetChainIndexEntry(
+        chain_id = chainId,
+        name = name,
+        short_name = name.lowercase(),
+        native_currency_symbol = symbol,
+        has_logo = false,
+    )
+
+    private fun chainInfo(chainId: Long, name: String, testnet: Boolean = false) = NetChainInfo(
+        chain_id = chainId,
+        name = name,
+        short_name = name.lowercase(),
+        native_name = name,
+        native_symbol = "CELO",
+        native_decimals = 18,
+        rpc_url = "https://rpc.example",
+        rpc_urls = listOf("https://rpc.example"),
+        explorer_url = "https://explorer.example",
+        logo_url = "",
+        is_testnet = testnet,
+    )
+
+    private fun wizardView(wizard: NetWizardView) = NetView(loaded = true, wizard = wizard)
+
+    /**
+     * **A search nobody performed has no results.**
+     *
+     * The fixture drew three under an empty box — which reads as "these are
+     * your options" — and two of them were chains that do not exist.
+     */
+    @Test
+    fun anEmptySearchOffersNothing() {
+        val view = wizardView(
+            NetWizardView(query = "", suggestions = listOf(indexEntry(42220, "Celo", "CELO"))),
+        )
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+
+        assertEquals(emptyList<Any>(), add.results)
+    }
+
+    @Test
+    fun aSearchShowsWhatTheIndexAnswered() {
+        val view = wizardView(
+            NetWizardView(
+                query = "celo",
+                suggestions = listOf(
+                    indexEntry(42220, "Celo Mainnet", "CELO"),
+                    indexEntry(44787, "Celo Alfajores Testnet", "CELO"),
+                ),
+            ),
+        )
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+
+        assertEquals(listOf("Celo Mainnet", "Celo Alfajores Testnet"), add.results.map { it.name })
+        // The chain id IS the identity: two chains can share a name, and the
+        // tap has to reach the right one.
+        assertEquals(listOf("42220", "44787"), add.results.map { it.id })
+        assertTrue(add.results[0].meta.contains("42220"))
+        assertTrue(add.results[0].meta.contains("CELO"))
+    }
+
+    /**
+     * **No verdict until one was reached.**
+     *
+     * The same rule as the latency pill: a chain drawn as compatible before
+     * anything was checked is a claim nobody made. And the add button — which
+     * writes a network somebody's money will be read from — must not be
+     * reachable while the checks are still running.
+     */
+    @Test
+    fun aCandidateBeingCheckedCarriesNoVerdictAndNoButton() {
+        val view = wizardView(
+            NetWizardView(
+                phase = NetWizardPhase.Checking,
+                chain_info = chainInfo(42220, "Celo Mainnet"),
+                compat = null,
+                can_add = false,
+            ),
+        )
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+
+        assertEquals("Celo Mainnet", add.candidate!!.name)
+        assertNull("no pill before a verdict", add.candidate!!.badge)
+        assertEquals(emptyList<Any>(), add.checks)
+        assertNull("the add button must not be reachable mid-check", add.primary)
+    }
+
+    @Test
+    fun acheckedCandidateShowsEveryContractAndOffersTheButton() {
+        val view = wizardView(
+            NetWizardView(
+                phase = NetWizardPhase.Checked,
+                chain_info = chainInfo(42220, "Celo Mainnet"),
+                compat = NetCompatibility(
+                    chain_id = 42220,
+                    compatible = true,
+                    contracts = listOf(
+                        NetContractStatus("EntryPoint", "0xaa", deployed = true),
+                        NetContractStatus("Safe", "0xbb", deployed = true),
+                    ),
+                ),
+                can_add = true,
+            ),
+        )
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+
+        assertEquals(SettingsTone.Ok, add.candidate!!.badge!!.tone)
+        assertEquals(listOf("EntryPoint", "Safe"), add.checks.map { it.label })
+        assertTrue(add.checks.all { it.ok })
+        assertTrue(add.primary!!.isNotBlank())
+    }
+
+    /** An incompatible chain is named as such, and cannot be added. */
+    @Test
+    fun anIncompatibleChainIsNotOfferedForAdding() {
+        val view = wizardView(
+            NetWizardView(
+                phase = NetWizardPhase.Checked,
+                chain_info = chainInfo(1234, "Nowhere"),
+                compat = NetCompatibility(
+                    chain_id = 1234,
+                    compatible = false,
+                    contracts = listOf(NetContractStatus("EntryPoint", "0xaa", deployed = false)),
+                ),
+                can_add = false,
+            ),
+        )
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+
+        assertEquals(SettingsTone.Error, add.candidate!!.badge!!.tone)
+        assertEquals(false, add.checks.single().ok)
+        assertNull("a chain whose contracts are missing cannot be added", add.primary)
+    }
+
+    /** A testnet says so, because sending real money to one loses it. */
+    @Test
+    fun aTestnetCandidateIsTagged() {
+        val view = wizardView(
+            NetWizardView(chain_info = chainInfo(44787, "Celo Alfajores Testnet", testnet = true)),
+        )
+
+        val add = SettingsLive.withWizard(base(), view, strings).addNetwork
+
+        assertTrue(add.candidate!!.tag!!.isNotBlank())
     }
 }

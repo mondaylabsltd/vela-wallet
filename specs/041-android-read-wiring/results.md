@@ -439,11 +439,33 @@ search does nothing", with a core fault in the log and an empty screen.
 > (`Number.isFinite` only) and iOS met the same class in spec 050. Whether
 > `chain_id` should widen in the core is recorded here, not answered.
 
-**SC-106 is NOT claimed.** The checks complete — the log proves it — but the
-wizard resets to an empty query before the verdict and the add button render, so
-adding a network is not verified end to end on the device. The button is wired
-and offered only when the core says `can_add`; what is missing is why the wizard
-state is discarded. Open, and named.
+### The "reset" was the wrong event, and probably a success
+
+Chased down after the fact: the row tap was wired to
+`AddByChainIdRequested`, which the core calls the **auto** path — the scan
+route for a QR code or deep link. On a compatible verdict it does
+
+```rust
+model.wizard = Wizard::default();   // ← the "reset" seen on the device
+return save_custom_network(model, record);
+```
+
+— it saves the network and clears the wizard in one move, with **no confirm
+step**. So the screen emptying itself was almost certainly the add succeeding,
+and the network list would have shown Celo Alfajores. The device came off USB
+before that could be confirmed, so it stays unclaimed rather than asserted.
+
+It was still the wrong event for a person browsing search results: it skips the
+verdict, the contract checks and the button the design draws, all of which had
+just been wired. The row tap is `ChainSelected` now, which ends at the core's
+`checked` phase with a verdict and lets the person press the button themselves.
+`addNetworkByChainId` stays for the scan path it was built for, and its doc now
+says so.
+
+**SC-106 is NOT claimed** — not because the wizard is broken, but because the
+last device run could not be completed. Six wizard cases pin the behaviour in
+the meantime, including the two that matter most: no verdict pill before a
+verdict exists, and no add button while the checks are still running.
 
 ---
 
@@ -456,18 +478,25 @@ state is discarded. Open, and named.
 | SC-103 | the feed lists real on-chain transfers | ⚠️ pipeline proven in tests; needs a live deposit (100-block window) |
 | SC-104 | a deposit noticed without a refresh | ⚠️ watcher wired and stopping correctly; same live deposit needed |
 | SC-105 | `grep -rn 'live in 041'` → zero | ⚠️ **one** left, deliberate: custom-token pricing waits for its rule to get a Rust owner |
-| SC-106 | a custom network added, surviving a restart | ⚠️ search + checks live; the add step resets before it renders |
+| SC-106 | a custom network added, surviving a restart | ⚠️ search + checks + verdict live and tested; the final device confirmation was cut short by a USB drop |
 | SC-107 | zero chain requests outside the pool | ✅ `NoStrayHttpClientTest`; the settings probes are single-URL by design and use the one client |
 | SC-108 | bridge delta measured before the work | ✅ +1,133,184 stripped bytes for seven machines (phase 0) |
 | SC-109 | the suite stays green and grows | ✅ 210 → **347**, 0 failures |
 
 ### The honest shape of this
 
-Six of nine criteria are met or all-but-met. The three that are not share one
-cause: **they need money to move while the app is watching**, and this session
-had no funded sender. That is a staging problem, not a wiring one — every path
-they exercise is proven by test and every executor logs what it did, so the
-device run is an afternoon rather than an investigation.
+Six of nine criteria are met or all-but-met, and the three that are not are
+staging rather than wiring:
+
+- **SC-103 / SC-104** need money to move while the app is watching, and this
+  session had no funded sender. The 100-block monitor window cannot reach
+  backwards.
+- **SC-106** needs one more device run; the wizard's own behaviour is tested.
+
+Every path they exercise is proven by test and every executor logs what it did,
+so each is an afternoon rather than an investigation.
+
+**Final gate**: 353 unit tests, 0 failures.
 
 ### What this feature kept finding
 

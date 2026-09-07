@@ -533,7 +533,7 @@ fun VelaNavHost(
                     onSearchNetwork = { query -> settings.searchNetworks(query) },
                     onConfirmAddNetwork = { settings.confirmAddNetwork() },
                     onPickNetwork = { chainId ->
-                        chainId.toLongOrNull()?.let { settings.addNetworkByChainId(it) }
+                        chainId.toLongOrNull()?.let { settings.selectChain(it) }
                     },
                     onOpenNetwork = { id ->
                         settings.networks.value.networks
