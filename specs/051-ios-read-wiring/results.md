@@ -566,9 +566,76 @@ Hermetic tests 288 → **298**; live 20; device UI 10 → **11**. Literal violat
 
 ---
 
+## Phase 6 — every `// live in 051` marker is down
+
+Five markers were inventoried in phase 0. All five are live; `contacts::
+load_send_history` is the only arm still waiting, and it waits for **052**
+(SC-004).
+
+### One resolver, two callers
+
+`RecipientIdentity` is the waterfall: the passkey index by wallet ref, then five
+ENS-compatible registries read on-chain — `.bnb` (BSC), `.arb` (Arbitrum), `.g`
+(Gravity), Basenames (Base, ENSIP-19 reverse registrar) and ENS (Ethereum).
+
+`contacts::resolve_identity` and the activity feed's alias arm share **one
+instance**, built in `RootView`. Two would mean two caches, two ban interactions
+with the pool, and — the part somebody would actually see — one counterparty
+wearing two different names on two screens.
+
+Priority beats speed: every registry is asked in parallel and the first match
+**by list order** wins, not the first to answer. A race would give the same
+address a different name on different days.
+
+Only positive answers are cached (`recipient_id:<address>`, 24h, web's key).
+An absence today is not a fact about the address.
+
+### `namehash` had grown a second implementation, quietly
+
+Phase 2c put one inside `FiatRates` for the Chainlink feed names. Phase 6 needed
+one for `<addr>.addr.reverse`. They are now both `Ens.namehash` — because two
+namehashes that disagree do not fail loudly, they resolve to **nothing**, and a
+name that never appears looks exactly like an address nobody has named.
+
+The ERC-20 string decoder was hardened in the same pass: it now READS the
+declared offset instead of assuming `0x20`. That was safe while it only decoded
+`symbol()` from token contracts; phase 6 decodes `name()` from resolvers nobody
+in this repo wrote.
+
+### A live test that was wrong about the world, for a reason worth keeping
+
+`classify_recipient` was asserted against vitalik.eth as "an EOA, so `0x`". It
+answers **`0xef0100…`** — an EIP-7702 delegation designator. The address has
+delegated to a smart account, and a growing share of ordinary wallets have.
+
+A client reading "has code ⇒ contract" would badge those as contracts.
+`contacts.rs` already carves it out (`is_eip7702_delegation`, invariant ⑦: a
+delegated EOA is a wallet, never badged "Contract") — which is exactly why the
+shell hands over the **raw bytes** instead of a boolean. The test now pins the
+burn address for the `0x` case and prints what vitalik's answers, so the next
+person sees the shape rather than rediscovering it.
+
+Live: `0xd8dA…6045` → **vitalik.eth (ENS)**, resolved through this client's own
+namehash, resolver slice and string decode.
+
+### The pool's own invalidation, finally connected
+
+`network_admin`'s `invalidate_pools` was the fifth marker — "there is no pool to
+invalidate yet". There is now: changing an endpoint or a provider key dispatches
+`invalidate_all` / `refresh_chain`, so the cached winner is dropped. That matters
+beyond tidiness: the winner rides as `X-Rpc-Url` on the bundler's REST calls for
+up to an hour, so a stale one keeps sending traffic to the endpoint somebody
+just replaced.
+
+### Gates
+
+Hermetic tests 298 → **306**; live 20 → **23**; device UI 11. Literal violations
+35. Zero Rust changes.
+
+---
+
 ## Next
 
-Phase 6 — flip 050's remaining `// live in 051` arms (`contacts::resolve_name`,
-`contacts::check_is_contract`), which the activity feed's alias resolver is also
-waiting on. Then phase 7, device acceptance and closeout. The remaining order is
-in **[tasks.md](./tasks.md)**.
+Phase 7 — device acceptance and closeout. Everything owed is in
+**[tasks.md](./tasks.md)**: the phone's own run of the eleven acceptance tests,
+and the "wired but unreachable" list.

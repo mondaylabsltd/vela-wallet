@@ -157,15 +157,22 @@ final class TokenMetadata {
     static func decodeString(_ returnData: Data) -> String {
         guard returnData.count >= 32 else { return "" }
         if returnData.count < 64 { return utf8(returnData.prefix(32)) }
-        let lengthWord = returnData.subdata(in: 32..<64)
-        guard let text = TokenReads.scaled(bytes: lengthWord, decimals: 0),
-              let length = Int(text), length > 0, length <= 4_096,
-              64 + length <= returnData.count
+        // The offset is READ, not assumed to be 0x20. It always is for a lone
+        // string, but spec 051 phase 6 decodes `name()` returns from resolvers
+        // nobody here wrote, and assuming there reads a length out of the
+        // middle of somebody's name.
+        guard let offsetText = TokenReads.scaled(bytes: returnData.prefix(32), decimals: 0),
+              let offset = Int(offsetText), offset >= 32, offset + 32 <= returnData.count,
+              let lengthText = TokenReads.scaled(
+                  bytes: returnData.subdata(in: offset..<(offset + 32)), decimals: 0
+              ),
+              let length = Int(lengthText), length > 0, length <= 4_096,
+              offset + 32 + length <= returnData.count
         else {
             // Not offset-encoded — read the head as `bytes32`.
             return utf8(returnData.prefix(32))
         }
-        return utf8(returnData.subdata(in: 64..<(64 + length)))
+        return utf8(returnData.subdata(in: (offset + 32)..<(offset + 32 + length)))
     }
 
     /// UTF-8 up to the first NUL — the `bytes32` padding terminator.

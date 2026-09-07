@@ -79,11 +79,17 @@ struct RootView: View {
         // first event, and a record written after that is not seen until a
         // relaunch. DEBUG-only, env-gated, and key-less (spec 051 D3).
         DevAccountSeed.applyIfRequested(store: shelf)
-        _contacts = State(initialValue: ContactsStore(store: shelf))
         // One pool, built before anything that reads a chain — the settings
         // machines included, since spec 051 put the fiat feeds behind it.
         let pool = RpcPool(store: shelf, accounts: store)
         _pool = State(initialValue: pool)
+        // ONE name resolver for the whole app: the address book and the
+        // activity feed ask the same question about the same addresses, and two
+        // resolvers would mean two caches and two names for one person.
+        let identity = RecipientIdentity(store: shelf, pool: pool, accounts: store)
+        _contacts = State(initialValue: ContactsStore(
+            store: shelf, identity: identity, pool: pool
+        ))
         // `vela.serviceEndpoints` has two writers; the executor reaches it
         // through this same `AccountStore` so onboarding's endpoint override
         // survives a settings write (data-model §5).
@@ -96,7 +102,7 @@ struct RootView: View {
         let trust = TokenTrustStore(store: shelf, pool: pool, accounts: store, held: held)
         _trust = State(initialValue: trust)
         _activity = State(initialValue: ActivityStore(
-            store: shelf, accounts: store, held: held, trust: trust
+            store: shelf, accounts: store, held: held, trust: trust, identity: identity
         ))
         // A saved token has to reach the balances, so the core's
         // "invalidate the token cache" becomes a re-read here — there is no

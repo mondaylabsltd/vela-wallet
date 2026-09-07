@@ -46,9 +46,15 @@ final class ActivityStore {
     private var scopedTo: String?
     private var ticker: Task<Void, Never>?
 
-    init(store: VelaStore, accounts: AccountStore, held: HeldTokens, trust: TokenTrustStore) {
+    init(
+        store: VelaStore,
+        accounts: AccountStore,
+        held: HeldTokens,
+        trust: TokenTrustStore,
+        identity: RecipientIdentity? = nil
+    ) {
         self.executor = ActivityExecutor(
-            store: store, accounts: accounts, held: held, trust: trust
+            store: store, accounts: accounts, held: held, trust: trust, identity: identity
         )
         self.core = CoreStore(
             bridge: ActivityFeedCore(),

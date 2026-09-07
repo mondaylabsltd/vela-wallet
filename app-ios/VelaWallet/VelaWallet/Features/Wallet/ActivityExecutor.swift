@@ -60,17 +60,28 @@ final class ActivityExecutor {
     private let accounts: AccountStore
     private let held: HeldTokens
     private let trust: TokenTrustStore
+    /// The same waterfall `contacts::resolve_identity` uses. One resolver, so a
+    /// counterparty cannot be named one thing in the feed and another in the
+    /// address book — and so the 24-hour cache is shared rather than doubled.
+    private let identity: RecipientIdentity?
     /// One scan per account at a time. The shell issues this from three places
     /// that can overlap — the account hand-off, the focus tick and the 10s
     /// poll — and a follower answering the leader's count would make the core
     /// believe two batches landed and celebrate a backlog it already spent.
     private var scanning: Set<String> = []
 
-    init(store: VelaStore, accounts: AccountStore, held: HeldTokens, trust: TokenTrustStore) {
+    init(
+        store: VelaStore,
+        accounts: AccountStore,
+        held: HeldTokens,
+        trust: TokenTrustStore,
+        identity: RecipientIdentity? = nil
+    ) {
         self.store = store
         self.accounts = accounts
         self.held = held
         self.trust = trust
+        self.identity = identity
     }
 
     func perform(_ operation: [String: Any]) async -> String {
@@ -230,14 +241,12 @@ final class ActivityExecutor {
 
     // MARK: - Naming
 
-    /// The person's OWN accounts, and nothing else yet.
+    /// The person's OWN accounts first, then the shared waterfall.
     ///
-    /// A local name, no network at all — which is the first rung web takes too.
-    /// The rest of the waterfall (the passkey index and the name services) is
-    /// `contacts::resolve_name`'s, still marked `// live in 051` in
-    /// `ContactsExecutor`; when it lands, both callers share it rather than
-    /// each growing a resolver. Until then the answer is `nil`, which the core
-    /// records as "asked, nothing found" and never asks again this session.
+    /// Own accounts first is not an optimisation: a name you gave your own
+    /// wallet beats anything a registry says about it, and answering it costs
+    /// no network at all. Only then the passkey index and the name services —
+    /// the same resolver the address book uses, so one address has one name.
     private func ownAccountName(_ addr: String) async -> String? {
         let wanted = addr.lowercased()
         for account in await accounts.loadAccounts() {
@@ -247,7 +256,7 @@ final class ActivityExecutor {
             else { continue }
             return name
         }
-        return nil
+        return await identity?.resolve(addr)?.name
     }
 
     // MARK: - Formatting the stored string

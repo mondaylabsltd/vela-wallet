@@ -60,8 +60,8 @@ final class ContactsStore {
     /// does not re-announce the same account and reset the machine for nothing.
     private var scopedTo: String??
 
-    init(store: VelaStore) {
-        self.executor = ContactsExecutor(store: store)
+    init(store: VelaStore, identity: RecipientIdentity? = nil, pool: RpcPool? = nil) {
+        self.executor = ContactsExecutor(store: store, identity: identity, pool: pool)
         self.core = CoreStore(
             bridge: ContactsCore(),
             perform: { [executor] operation in await executor.perform(operation) },

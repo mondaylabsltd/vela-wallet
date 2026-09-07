@@ -173,6 +173,20 @@ final class RpcPool {
         }
     }
 
+    /// Somebody changed an endpoint or a provider key.
+    ///
+    /// `nil` invalidates every chain; a chain id reloads that one and drops its
+    /// cached winner — which matters more than it sounds: the winner is handed
+    /// to the bundler as `X-Rpc-Url` for up to an hour, so a stale one keeps
+    /// sending traffic to the endpoint the person just replaced.
+    func invalidate(chainId: Int?) {
+        guard booted else { return }
+        core.dispatch(CoreJSON.string(
+            chainId.map { ["type": "refresh_chain", "chain_id": $0] }
+                ?? ["type": "invalidate_all"]
+        ))
+    }
+
     /// The best endpoint for a chain, as the core scores it — for the callers
     /// that need a URL rather than an answer (a WebSocket, a link).
     func bestRpcUrl(chainId: Int) async -> String? {

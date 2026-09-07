@@ -57,9 +57,18 @@ final class ContactsExecutor {
     ]
 
     private let store: VelaStore
+    /// The name waterfall. `nil` keeps the fail-closed answers — which is the
+    /// state every hermetic test drives, and a real one on a device with no
+    /// network.
+    private let identity: RecipientIdentity?
+    /// The routing pool, for `eth_getCode`. Same rule: absent means unknown,
+    /// never a verdict.
+    private let pool: RpcPool?
 
-    init(store: VelaStore) {
+    init(store: VelaStore, identity: RecipientIdentity? = nil, pool: RpcPool? = nil) {
         self.store = store
+        self.identity = identity
+        self.pool = pool
     }
 
     func perform(_ operation: [String: Any]) async -> String {
@@ -105,24 +114,40 @@ final class ContactsExecutor {
         case "load_send_history":
             return CoreJSON.string(["type": "history_failed"])
 
-        // live in 051 — needs the RPC pool and the name-service waterfall.
+        // The name waterfall: the passkey index, then the on-chain name
+        // services. `null` is "nobody could name them" and is never cached —
+        // an absence today is not a fact about the address (invariant ⑦).
         case "resolve_identity":
+            let address = operation["address"] as? String ?? ""
+            let found = await identity?.resolve(address)
             return CoreJSON.string([
                 "type": "identity_resolved",
-                "address": operation["address"] as? String ?? "",
-                "identity": NSNull(),
+                "address": address,
+                "identity": found.map { ["name": $0.name, "source": $0.source] as Any }
+                    ?? NSNull(),
             ])
 
-        // live in 051 — needs `eth_getCode` through the pool.
+        // `eth_getCode`, routed. The RAW code goes back: the core owns both
+        // projections (what kind of contact this is, and the risk badge).
         //
-        // `code: null` is UNKNOWN. An empty string would mean "definitely an
-        // EOA", which the core would show as a settled classification.
+        // `code: null` stays UNKNOWN. An empty string means "definitely an
+        // EOA", which the core shows as a settled classification — so a failed
+        // read must never become one.
         case "classify_recipient":
+            let chainId = (operation["chain_id"] as? NSNumber)?.intValue ?? 0
+            let address = operation["address"] as? String ?? ""
+            var code: Any = NSNull()
+            if let pool {
+                let outcome = await pool.call(
+                    chainId: chainId, method: "eth_getCode", params: [address, "latest"]
+                )
+                if case .ok(let value) = outcome, let hex = value as? String { code = hex }
+            }
             return CoreJSON.string([
                 "type": "recipient_classified",
-                "chain_id": (operation["chain_id"] as? NSNumber)?.intValue ?? 0,
-                "address": operation["address"] as? String ?? "",
-                "code": NSNull(),
+                "chain_id": chainId,
+                "address": address,
+                "code": code,
             ])
 
         default:

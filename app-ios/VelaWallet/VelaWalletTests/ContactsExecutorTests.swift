@@ -60,6 +60,11 @@ struct ContactsExecutorTests {
 
     /// `null`, not `""`. An empty string means "definitely an EOA", which the
     /// core would show as a settled classification (invariant ⑦).
+    ///
+    /// Since spec 051 phase 6 this arm reads `eth_getCode` through the pool.
+    /// With no pool wired — this executor's default, and a real state on a
+    /// device that has not booted one — it stays unknown rather than becoming
+    /// a verdict.
     @Test func classificationIsUnknownRatherThanAnEoa() async {
         let (store, _) = freshStore()
         let reply = await answer(ContactsExecutor(store: store), [
@@ -67,6 +72,22 @@ struct ContactsExecutorTests {
         ])
         #expect(type(of: reply) == "recipient_classified")
         #expect(reply["code"] is NSNull)
+    }
+
+    /// A name nobody could find is `null`, and the core never asks again this
+    /// session. `null` is also never cached — an absence today is not a fact
+    /// about the address (invariant ⑦).
+    @Test func anUnresolvableIdentityIsNullRatherThanAnAddress() async {
+        let (store, _) = freshStore()
+        let reply = await answer(ContactsExecutor(store: store), [
+            "type": "resolve_identity",
+            "address": "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+        ])
+        #expect(type(of: reply) == "identity_resolved")
+        #expect(reply["identity"] is NSNull)
+        // The address is echoed so the core can correlate — a lookup that
+        // answered about a different address would name the wrong person.
+        #expect(reply["address"] as? String == "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")
     }
 
     /// An operation from a newer core must not hang the machine.

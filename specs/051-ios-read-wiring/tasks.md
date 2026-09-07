@@ -165,24 +165,44 @@ and a chain with nothing to ask (Tempo, or a chain with no tokens and no feed)
 reports success without vouching for anything — turning a blackout into "your
 wallet is empty", which the core would adopt as a baseline.
 
+### Phase 6 — every `// live in 051` marker is down ✅
+
+All five from phase 0's inventory. `contacts::load_send_history` is the only arm
+still waiting, and it waits for **052** — which is SC-004 met.
+
+- `Core/RecipientIdentity.swift` — the waterfall (passkey index → `.bnb` / `.arb`
+  / `.g` / Basenames / ENS), **one instance** shared by the address book and the
+  activity feed, positive-only 24h cache under web's `recipient_id:` key.
+- `Core/Ens.swift` — namehash, which had quietly grown a second implementation
+  in `FiatRates`. Two that disagree resolve to *nothing*, silently.
+- `classify_recipient` reads `eth_getCode` through the pool; the RAW bytes go to
+  the core, which owns both projections.
+- `invalidate_pools` now really invalidates.
+
+Live: `0xd8dA…6045` → **vitalik.eth**. And a finding: that address answers
+`0xef0100…`, an **EIP-7702 delegation designator** — a client reading "has code
+⇒ contract" would badge delegated wallets as contracts.
+
 ---
 
-## Next — Phase 6: 050's remaining `// live in 051` arms
+## Next — Phase 7: device acceptance + closeout
 
-- `contacts::resolve_name` — the name-service waterfall. **The activity feed
-  wants it too**: `ActivityExecutor.ownAccountName` answers own-accounts-only
-  and returns `nil` for everybody else, so a counterparty shows as an address
-  until this lands. One resolver, two callers.
-- `contacts::check_is_contract` — `eth_getCode` through the pool.
-- `contacts::load_send_history` stays waiting for 052.
+The eleven acceptance tests have never run on the phone in this cut: it dropped
+off USB during phase 2c and has been unavailable since. A simulator run is
+preparation, never proof (SC-008).
 
----
+```bash
+xcodebuild -project VelaWallet.xcodeproj -scheme VelaWallet \
+  -destination 'platform=iOS,id=00008130-001C68C804E1401C' \
+  -only-testing:VelaWalletUITests/LiveWiringAcceptanceTests \
+  -resultBundlePath /tmp/accept.xcresult test
+xcrun xcresulttool export attachments --path /tmp/accept.xcresult \
+  --output-path /tmp/accept-images
+```
 
-## Then
-
-| Phase | What |
-|---|---|
-| 7 | Device acceptance + closeout |
+Then closeout: results.md's SC table, the baselines re-measured (dylib size,
+bindings bytes), and the two founder decisions this cut surfaced (VND, the
+BNB feed).
 
 ### Wired but unreachable — the list to close before 7
 

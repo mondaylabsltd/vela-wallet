@@ -79,10 +79,15 @@ final class NetworkAdminExecutor {
     /// the value; this is the last one it reported, so a person who points the
     /// wallet at their own mirror is not ignored.
     private var ethereumDataURL = NetDefaults.ethereumDataURL
+    /// The routing pool, so a changed endpoint takes effect now rather than
+    /// whenever a cached winner happens to expire. `nil` keeps the
+    /// acknowledged no-op the hermetic tests drive.
+    private let pool: RpcPool?
 
-    init(store: VelaStore, accounts: AccountStore) {
+    init(store: VelaStore, accounts: AccountStore, pool: RpcPool? = nil) {
         self.store = store
         self.accounts = accounts
+        self.pool = pool
     }
 
     func perform(_ operation: [String: Any]) async -> String {
@@ -245,13 +250,15 @@ final class NetworkAdminExecutor {
                 "latency_ms": probe.latencyMs,
             ])
 
+        // The routing pool re-reads its config and drops cached winners.
+        // Still acknowledged rather than skipped: the core waits for this ack
+        // before leaving the write.
+        case "invalidate_pools":
+            pool?.invalidate(chainId: (operation["chain_id"] as? NSNumber)?.intValue)
+            return CoreJSON.string(["type": "invalidated"])
+
         // MARK: Fail-closed until their infrastructure exists
 
-
-        // live in 051 — there is no pool to invalidate yet. Acknowledged, never
-        // skipped: the core waits for this ack before leaving the write.
-        case "invalidate_pools":
-            return CoreJSON.string(["type": "invalidated"])
 
         // live in 052 — there is no bundler client, so no cache.
         case "clear_bundler_cache":

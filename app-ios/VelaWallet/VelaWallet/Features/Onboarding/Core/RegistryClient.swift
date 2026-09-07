@@ -343,6 +343,30 @@ actor RegistryClient {
         }
     }
 
+    /// `/api/query?walletRef=` — the index's display name for a WALLET
+    /// address, which is how a Vela user shows up as a name rather than as
+    /// hexadecimal on somebody else's screen.
+    ///
+    /// Best-effort by construction: identity is enrichment, so a slow or
+    /// unreachable index degrades to "unknown recipient" and never blocks a
+    /// screen. The zero address is skipped — it is a mint/burn counterparty,
+    /// and asking is a 404 nobody needs.
+    func queryByWalletRef(_ address: String) async -> String? {
+        let stripped = address.lowercased().hasPrefix("0x")
+            ? String(address.lowercased().dropFirst(2)) : address.lowercased()
+        guard stripped.count == 40, stripped.contains(where: { $0 != "0" }) else { return nil }
+        let walletRef = "0x" + String(repeating: "0", count: 24) + stripped
+        let record = try? await request(
+            "/api/query?walletRef=\(Self.escape(walletRef))",
+            body: nil,
+            timeout: Self.readTimeout,
+            label: "Identity"
+        )
+        let name = (record?["name"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (name?.isEmpty ?? true) ? nil : name
+    }
+
     /// The v1 index's display name for a credential — the only place a v1-era
     /// wallet's name survives. Best-effort and read-only: a lost name degrades
     /// the label, never the flow.
