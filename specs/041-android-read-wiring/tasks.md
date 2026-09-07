@@ -49,83 +49,91 @@ an untested one is a worse lie than the fixture it replaced.
 
 ## Phase 2 — The ten network arms (US4)
 
-- [ ] **T112** `fetch_chain_info` + `fetch_search_index` against the chain
+- [x] **T112** `fetch_chain_info` + `fetch_search_index` against the chain
       index (this is also what unblocks T131).
-- [ ] **T113** `probe_rpc`, `probe_reachable`, `rpc_get_code`,
+- [x] **T113** `probe_rpc`, `probe_reachable`, `rpc_get_code`,
       `rpc_call_p256` through the pool.
-- [ ] **T114** `fetch_service_health`, `fetch_fiat_rates`.
-- [ ] **T115** `invalidate_pools`, `clear_bundler_cache` act on the real pool.
-- [ ] **T116** Settings health tiles and endpoint rows render live verdicts;
+- [x] **T114** `fetch_service_health`, `fetch_fiat_rates`.
+- [x] **T115** `invalidate_pools`, `clear_bundler_cache` act on the real pool.
+- [x] **T116** Settings health tiles and endpoint rows render live verdicts;
       no fixture latency survives on a signed-in route.
-- [ ] **T117** Tests for each arm, including the failure variants they must
+- [x] **T117** Tests for each arm, including the failure variants they must
       keep for genuine failures.
 
 ---
 
 ## Phase 3 — The rate (US4)
 
-- [ ] **T118** `CurrencyExecutor.resolve_rate` fetches a real rate; `null`
+- [x] **T118** `CurrencyExecutor.resolve_rate` fetches a real rate; `null`
       still degrades rather than defaulting to 1.
-- [ ] **T119** Test: a rate arrives → the view converts; the source is down →
+- [x] **T119** Test: a rate arrives → the view converts; the source is down →
       `rate` stays null and the USD figure shows.
 
 ---
 
 ## Phase 4 — Balances (US2)
 
-- [ ] **T120** `BalanceWire.kt`, `MtokWire.kt`, `TrustWire.kt`.
-- [ ] **T121** `BalanceExecutor`, `ManageTokensExecutor`, `TokenTrustExecutor`.
-- [ ] **T122** `WalletController` — the three machines, app-resident.
-- [ ] **T123** `WalletLive.kt` — hero, network filter, asset rows, section
+- [x] **T120** `BalanceWire.kt`, `MtokWire.kt`, `TrustWire.kt`.
+- [x] **T121** `BalanceExecutor`, `ManageTokensExecutor`, `TokenTrustExecutor`.
+- [x] **T122** `WalletController` — the three machines, app-resident.
+- [x] **T123** `WalletLive.kt` — hero, network filter, asset rows, section
       states (loading / empty / rows).
-- [ ] **T124** **The two inherited traps** (research D6), each with a test:
+- [x] **T124** **The two inherited traps** (research D6), each with a test:
       balances cross the wire as human decimals; Tempo is excluded by the
       core's own `TEMPO_CHAIN_IDS`, never by a magnitude threshold.
-- [ ] **T125** `VelaNavHost` — the wallet route reads the live builder; the
+- [x] **T125** `VelaNavHost` — the wallet route reads the live builder; the
       gallery keeps its fixtures.
-- [ ] **T126** Device check (SC-101/102): real balances; one chain's endpoints
+- [x] **T126** Device check (SC-101/102): real balances; one chain's endpoints
       down → cache renders and the ban persists.
 
 ---
 
 ## Phase 5 — Activity (US3)
 
-- [ ] **T127** `FeedWire.kt`, `ActivityFeedExecutor`, feed in the controller.
-- [ ] **T128** `WalletLive` grows the feed; the activity screens (`A1`–`A3`)
+- [x] **T127** `FeedWire.kt`, `ActivityFeedExecutor`, feed in the controller.
+- [x] **T128** `WalletLive` grows the feed; the activity screens (`A1`–`A3`)
       and the contact-detail block 040 left empty.
-- [ ] **T129** Device check (SC-103).
+- [~] **T129** Device check (SC-103) — the pipeline is proven in
+      `IncomingScanTest`; the device run needs a deposit made while the app
+      watches, because `token_trust` looks back 100 blocks and no further.
 
 ---
 
 ## Phase 6 — Receive (US3)
 
-- [ ] **T130** `receive_watch` + `payment_request`: wire, executors,
+- [x] **T130** `receive_watch` + `payment_request`: wire, executors,
       controller, the receive flow (`R1`–`R4`).
-- [ ] **T131** Device check (SC-104): a deposit noticed without a refresh.
+- [~] **T131** Device check (SC-104) — same deposit, same run as T129.
 
 ---
 
 ## Phase 7 — Contacts backfills (US4)
 
-- [ ] **T132** `resolve_identity`, `classify_recipient`, `load_send_history`.
-- [ ] **T133** Tests: a resolvable name resolves; an unreachable lookup stays
+- [x] **T132** `resolve_identity`, `classify_recipient`, `load_send_history`.
+- [x] **T133** Tests: a resolvable name resolves; an unreachable lookup stays
       `null` and claims nothing.
 
 ---
 
 ## Phase 8 — Add a network (US4)
 
-- [ ] **T134** FR-111: the add-network wizard works against the chain index.
-- [ ] **T135** Device check (SC-106): added, survives a restart — 040's
-      deferred criterion.
+- [x] **T134** FR-111: the add-network wizard works against the chain index.
+- [~] **T135** Device check (SC-106) — search, checks and verdict are live and
+      tested; the last device run ended when the phone came off USB. The add
+      itself very likely succeeded (see results.md: the core's auto path clears
+      the wizard on save), but "very likely" is not a verdict.
 
 ---
 
 ## Phase 9 — Closeout
 
-- [ ] **T136** `grep -rn 'live in 041'` → zero.
-- [ ] **T137** Full gate: unit + instrumented + `assembleDebug` + galleries.
-- [ ] **T138** `results.md`: ten criteria verdicted, measurements, debts for
+- [~] **T136** `grep -rn 'live in 041'` → **one**, and it is deliberate:
+      custom-token pricing waits for `first_grouped_quote_price` to get a Rust
+      owner. Porting it to Kotlin would have made a second un-gated copy of a
+      rule whose whole docstring is about a 10^12 mispricing.
+- [~] **T137** Full gate: **353 unit tests green**, `assembleDebug` passes with
+      the Rust cross-compile. The instrumented suite needs the device back.
+- [x] **T138** `results.md`: ten criteria verdicted, measurements, debts for
       042, and a handover.
 
 ## Dependencies
