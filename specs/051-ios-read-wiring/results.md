@@ -634,8 +634,63 @@ Hermetic tests 298 → **306**; live 20 → **23**; device UI 11. Literal violat
 
 ---
 
-## Next
+## Phase 7 — closeout
 
-Phase 7 — device acceptance and closeout. Everything owed is in
-**[tasks.md](./tasks.md)**: the phone's own run of the eleven acceptance tests,
-and the "wired but unreachable" list.
+### The success criteria
+
+| | | |
+|---|---|---|
+| **SC-001** | the home shows the golden Safe's real Gnosis balance | **met, not on the phone** — `0.74797 xDAI` at `$0.99975`, matched against a direct `eth_getBalance` in `PriceLiveTests`; seen on the simulator, and the device run is owed |
+| **SC-002** | one `rpc_pool` session serves every machine; a ban set by one caller is observed by another | **met** — `RpcPoolLiveTests.oneBanMapServesEveryCaller`: two machines' executors, one dead chain, one entry in one list |
+| **SC-003** | an unreachable chain renders as unreachable, not as zero | **met** — `ReadPathContractTests`: every chain with a coin to read reports `failed`, the token list stays empty, and the switcher answers `null` |
+| **SC-004** | the `// live in 051` arms are live; `load_send_history` is the only one left | **met** — all five down (the inventory said four arms; the fifth was `invalidate_pools`) |
+| **SC-005** | galleries unchanged; every `*Fixtures.swift` diff additive | **met** — `git diff 07b4ccad -- '*Fixtures.swift'` is **empty**; the fixtures were not touched at all |
+| **SC-006** | the Swift test count strictly increases; build and the device suite green at every boundary | **met, one caveat** — 203 → **309** hermetic, 6 → **25** live, 8 → **11** UI. The UI suite is green on the simulator at every boundary; on the phone, see SC-008 |
+| **SC-007** | zero machine changes under `rust/`; zero corpus delta; zero lines under the other four clients | **met** — `git diff 07b4ccad -- rust/crates/vela-core/` is **empty**, and no client but `app-ios` has a changed line |
+| **SC-008** | every P1 scenario confirmed on `shelchin's iPhone` | **NOT MET** — the phone dropped off USB during phase 2c and has read `unavailable` since. Everything below is owed |
+
+### The one thing still owed
+
+The eleven acceptance tests have never run on the phone in this cut. They pass on
+the simulator, and a simulator run is preparation, never proof — the spec says so
+and phase 2b proved why (the dev-seed defect surfaced only under a real run).
+The command is the third in tasks.md's list.
+
+### Baselines, re-measured
+
+| | phase 0 | now | |
+|---|---|---|---|
+| `@Test` functions | 203 | **309** hermetic + 25 live | |
+| Device Debug dylib | 57,346,720 | **61,651,216** | +4,304,496 (+7.5%) |
+| Committed `vela_core_uniffi.swift` | 215,916 | **263,535** | +47,619 — Multicall3's three exports (+44,783) and the price ladder (+2,836) |
+| Literal-audit violations | 35 | **35** | the gate is "no new ones" |
+| `// live in 051` markers | 5 | **0** | |
+
+The dylib is a Debug, unstripped device build — not a shipping number, but the
+same measurement phase 0 took.
+
+### Two decisions this cut surfaced, both the founder's
+
+1. **VND cannot be priced.** The deployed `vela-currency` endpoint quotes 30 ECB
+   currencies, not the "~160 incl. VND" its own source comment claims. VND is the
+   only code in the picker's eight that neither rung can price, so it degrades to
+   USD — honestly, but forever. Drop it from `CurrencyCatalog`, or fix the
+   deployment.
+2. **The mainnet BNB/USD feed is dead** (`0x14e613AC…75d25` answers `0x`). BSC's
+   local feed covers BNB today, so nothing on screen is wrong — but web carries
+   the same dead address, and a coin appearing off its home chain would be
+   unpriced for this reason.
+
+### What 052 inherits
+
+- `VELA_ACCOUNT` seeds a **key-less** account. It can fund every read in this cut
+  and can never produce a signature (FR-010). If 052 leans on it, the failure is
+  a refusal, not a wrong signature.
+- `contacts::load_send_history` is the last fail-closed arm, and it answers
+  `history_failed` rather than an empty list — deliberately: an empty list would
+  tell the core nobody has ever been paid, and every address would wear the
+  address-poisoning warning forever.
+- The **DEX quote rung** of the price ladder and the **request builder** half of
+  `payment_request` are the two deferred bodies of work, both recorded above.
+- The "wired but unreachable" list in tasks.md is the shortest path to making
+  what is already built visible.
