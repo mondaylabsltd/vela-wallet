@@ -35,6 +35,7 @@ struct RootView: View {
     /// trusted-token set it builds is shared by everything that reads a chain.
     @State private var trust: TokenTrustStore
     @State private var activity: ActivityStore
+    @State private var tokens: ManageTokensStore
     /// The networks machine (spec 050), app-resident: it probes endpoints and
     /// holds a search debounce, and one that died with the settings route would
     /// re-probe every chain on each visit.
@@ -89,11 +90,19 @@ struct RootView: View {
         // what they were worth. Web gets the same three facts from its
         // `fetchTokens` cache; there is no such cache here, so it is explicit.
         let held = HeldTokens()
-        _wallet = State(initialValue: WalletStore(store: shelf, pool: pool, held: held))
         let trust = TokenTrustStore(store: shelf, pool: pool, accounts: store, held: held)
         _trust = State(initialValue: trust)
         _activity = State(initialValue: ActivityStore(
             store: shelf, accounts: store, held: held, trust: trust
+        ))
+        // A saved token has to reach the balances, so the core's
+        // "invalidate the token cache" becomes a re-read here — there is no
+        // cache on this client, only a fetch.
+        let wallet = WalletStore(store: shelf, pool: pool, held: held)
+        _wallet = State(initialValue: wallet)
+        _tokens = State(initialValue: ManageTokensStore(
+            store: shelf, pool: pool,
+            onInvalidate: { [weak wallet] in wallet?.refresh(pull: false) }
         ))
         _model = State(initialValue: WelcomeModel(content: WelcomeContentBuilder.build(loc: loc)) { intent in
             switch intent {
@@ -304,11 +313,15 @@ struct RootView: View {
             // navigation bar would frame wrongly.
             if let state = flows.top {
                 FlowHost(
-                    model: WalletFlowFixtures.build(state, loc: loc),
+                    model: flowModel(state),
                     onBack: { flows.back() },
-                    onNavigate: { flows.push($0) }
+                    onNavigate: { flows.push($0) },
+                    addTokenInput: addTokenInput(for: state),
+                    onAddToken: addTokenAction(for: state),
+                    addTokenError: addTokenError(for: state)
                 )
                 .transition(.move(edge: .trailing))
+                .task(id: state) { if state == .t3 { tokens.open() } }
             } else {
                 switch section {
                 case .wallet:
@@ -316,8 +329,25 @@ struct RootView: View {
                         model: walletModel,
                         loc: loc,
                         onSelectTab: selectTab,
-                        onFlow: { flows.enter($0) }
+                        onFlow: { flows.enter($0) },
+                        onToggleBalance: { wallet.togglePrivacy() },
+                        onRefresh: RefreshAction {
+                            // `pull: true` is carried so the core can tell a
+                            // person's own gesture from the 30-second tick and
+                            // answer it differently.
+                            wallet.refresh(pull: true)
+                            activity.focusTick()
+                            await wallet.settled()
+                        }
                     )
+                    // The two machines have to agree about hiding: the balance
+                    // core owns the state, and the feed core suppresses its
+                    // receipt toast on it. Forwarding the COMMITTED value
+                    // rather than a guess made at tap time is what keeps them
+                    // from disagreeing by one tap.
+                    .onChange(of: wallet.balance?.hidden ?? false) { _, hidden in
+                        activity.privacyChanged(hidden: hidden)
+                    }
                     .task {
                         pool.boot()
                         activity.open(address: session.view.address,
@@ -445,6 +475,56 @@ struct RootView: View {
         guard let view = wallet.balance else { return base }
         return WalletLive.apply(view, currency: settings.currency, feed: activity.feed,
                                 feedRead: activity.hasRead, on: base, loc: loc)
+    }
+
+    /// A flow screen, with the parts that have machines behind them swapped
+    /// in and the rest still drawn.
+    ///
+    /// Two so far: the assets list is the same holdings the home shows, and the
+    /// add-token sheet is `manage_tokens`. Every other flow is a picture, and
+    /// visibly so.
+    private func flowModel(_ state: FlowStateId) -> FlowScreenModel {
+        var model = WalletFlowFixtures.build(state, loc: loc)
+        if case .assets(let assets) = model.base, let balance = wallet.balance {
+            model.base = .assets(FlowsLive.assets(
+                balance, currency: settings.currency, on: assets, loc: loc
+            ))
+        }
+        // The ERC-20 tab only: the native tab adds a NETWORK, which is
+        // `network_admin`'s wizard and not this machine's.
+        if case .addToken(let sheet) = model.sheet, sheet.tab == .erc20,
+           let view = tokens.view {
+            model.sheet = .addToken(FlowsLive.addToken(view, on: sheet, loc: loc))
+        }
+        return model
+    }
+
+    /// The address field, owned by the core — and only on the sheet that has
+    /// a machine behind it.
+    ///
+    /// The text lives in the machine's model rather than in a `@State` beside
+    /// it, so validity, the found cards and the field can never disagree about
+    /// what was typed.
+    private func addTokenInput(for state: FlowStateId) -> Binding<String>? {
+        guard state == .t3 else { return nil }
+        return Binding(
+            get: { tokens.view?.inputAddress ?? "" },
+            set: { tokens.input($0) }
+        )
+    }
+
+    /// 添加到钱包 — the first card the core found, which is the one drawn.
+    private func addTokenAction(for state: FlowStateId) -> (() -> Void)? {
+        guard state == .t3 else { return nil }
+        return {
+            guard let chainId = tokens.view?.found.first?.chainId else { return }
+            tokens.save(chainId: chainId)
+        }
+    }
+
+    private func addTokenError(for state: FlowStateId) -> String? {
+        guard state == .t3, let view = tokens.view else { return nil }
+        return FlowsLive.saveErrorText(view, loc: loc)
     }
 
     /// Settings, wearing the signed-in identity and the real networks.

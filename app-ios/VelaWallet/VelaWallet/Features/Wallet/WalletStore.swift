@@ -65,6 +65,27 @@ final class WalletStore {
         ]))
     }
 
+    /// Hold a pull gesture open until the refresh it started is done.
+    ///
+    /// `refresh(pull:)` dispatches and returns, so awaiting nothing would snap
+    /// the spinner away before a single chain had answered — which reads as
+    /// "already up to date" over stale figures. Two waits, because the core
+    /// does not flip `refreshing` until its first effect resolves: first for
+    /// the refresh to START, then for it to finish.
+    ///
+    /// The cap is a give-up, not a decision: twelve chains can genuinely be
+    /// slow, but a spinner that never stops is worse than a figure that is a
+    /// few seconds old.
+    func settled(timeout: TimeInterval = 20) async {
+        let started = Date()
+        while Date().timeIntervalSince(started) < 2, balance?.refreshing != true {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        while Date().timeIntervalSince(started) < timeout, balance?.refreshing == true {
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+    }
+
     /// Tap the figure to hide it. A display state the core owns, so it survives
     /// a relaunch rather than being re-hidden by hand each time.
     func togglePrivacy() {

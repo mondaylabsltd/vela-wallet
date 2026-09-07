@@ -154,4 +154,26 @@ struct RpcEndpointsTests {
         defaults.set("{{{", forKey: RpcEndpoints.banStorageKey)
         #expect(RpcEndpoints.loadBans(store: store).isEmpty)
     }
+
+    /// A call before `boot()` is REFUSED, not queued.
+    ///
+    /// `CoreStore` drops events sent before a machine's first one — on purpose,
+    /// since every machine reads its stores on boot — so a routed call made
+    /// first would wait on a continuation nothing will ever resume. That is not
+    /// a slow call, it is a hang for the life of the process: a spinner with no
+    /// explanation on screen, and a test suite that never finishes. This suite
+    /// found it that way.
+    @Test func aCallBeforeBootIsRefusedRatherThanHanging() async {
+        let (store, accounts, _) = fresh()
+        let pool = RpcPool(store: store, accounts: accounts)
+        #expect(!pool.booted)
+
+        let outcome = await pool.call(chainId: 100, method: "eth_blockNumber")
+        guard case .failed(let rateLimited) = outcome else {
+            Issue.record("an unbooted pool answered \(outcome)")
+            return
+        }
+        #expect(!rateLimited, "nothing was asked, so nothing throttled us")
+        #expect(await pool.bestRpcUrl(chainId: 100) == nil)
+    }
 }

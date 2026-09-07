@@ -394,6 +394,12 @@ struct AddTokenBody: View {
     var onTab: (String) -> Void = { _ in }
     var onNetwork: () -> Void = {}
     var onSubmit: () -> Void = {}
+    /// Present only when a machine owns the field. The gallery passes nothing
+    /// and keeps its picture.
+    var input: Binding<String>?
+    /// Shown under the CTA when a save failed — the mock has no alert, and a
+    /// tap that changes nothing has told the person nothing.
+    var errorText: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tokens.Space.s12) {
@@ -427,11 +433,20 @@ struct AddTokenBody: View {
                 .accessibilityLabel(network.pickLabel)
             }
 
-            FlowMonoField(
-                value: model.fieldValue,
-                label: model.fieldLabel,
-                error: model.fieldError
-            )
+            if let input {
+                FlowMonoInput(
+                    value: input,
+                    label: model.fieldLabel,
+                    placeholder: model.fieldPlaceholder,
+                    error: model.fieldError
+                )
+            } else {
+                FlowMonoField(
+                    value: model.fieldValue,
+                    label: model.fieldLabel,
+                    error: model.fieldError
+                )
+            }
 
             result
 
@@ -442,6 +457,12 @@ struct AddTokenBody: View {
                 action: onSubmit
             )
             .padding(.top, Tokens.Space.s4)
+
+            if let errorText {
+                Text(verbatim: errorText)
+                    .typeRole(Typography.rowSub.scaled(textScale))
+                    .foregroundStyle(theme.errorBase)
+            }
         }
     }
 

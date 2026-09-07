@@ -123,7 +123,7 @@ final class TokenTrustExecutor {
         case "read_custom_tokens":
             return CoreJSON.string([
                 "type": "custom_tokens",
-                "tokens": store.readList(VelaStore.Key.customTokens).compactMap(Self.tokenToWire),
+                "tokens": CustomTokens.load(store: store).compactMap(CustomTokens.toWire),
             ])
 
         case "write_custom_token":
@@ -209,45 +209,11 @@ final class TokenTrustExecutor {
         ]
     }
 
-    /// A stored custom token as the core reads it. `networkName` stays behind:
-    /// chain naming is display vocabulary the shell owns.
-    static func tokenToWire(_ stored: [String: Any]) -> [String: Any]? {
-        guard let contract = stored["contractAddress"] as? String, !contract.isEmpty,
-              let chainId = (stored["chainId"] as? NSNumber)?.intValue
-        else { return nil }
-        return [
-            "id": stored["id"] as? String ?? "\(chainId)_\(contract)",
-            "chain_id": chainId,
-            "contract_address": contract,
-            "symbol": stored["symbol"] as? String ?? "",
-            "name": stored["name"] as? String ?? "",
-            "decimals": (stored["decimals"] as? NSNumber)?.intValue ?? 18,
-        ]
-    }
-
     /// The core's token in the shape every client persists — **replacing by
-    /// id, never duplicating** (invariant ⑧). `networkName` is re-derived here,
-    /// which is where the web original derives it too.
+    /// id, never duplicating** (invariant ⑧), through the one writer both
+    /// token machines share.
     private func write(token: [String: Any]) -> Bool {
-        guard let contract = token["contract_address"] as? String, !contract.isEmpty,
-              let chainId = (token["chain_id"] as? NSNumber)?.intValue,
-              let symbol = token["symbol"] as? String, !symbol.isEmpty
-        else { return false }
-        let id = token["id"] as? String ?? "\(chainId)_\(contract)"
-        var stored = store.readList(VelaStore.Key.customTokens).filter {
-            ($0["id"] as? String) != id
-        }
-        stored.append([
-            "id": id,
-            "chainId": chainId,
-            "contractAddress": contract,
-            "symbol": symbol,
-            "name": token["name"] as? String ?? symbol,
-            "decimals": (token["decimals"] as? NSNumber)?.intValue ?? 18,
-            "networkName": ChainCatalog.meta(chainId)?.displayName ?? "",
-        ])
-        store.writeList(VelaStore.Key.customTokens, stored)
-        return true
+        CustomTokens.save(CustomTokens.fromWire(token), store: store)
     }
 
     /// `parseInt(hex, 16)`. Unusable input reads as `nil`, never as a zero the

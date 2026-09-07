@@ -267,13 +267,16 @@ struct AddTokenModel {
     /// ERC-20 only: the network the contract is looked up on.
     var network: AddTokenNetworkModel?
     let fieldLabel: String
-    let fieldValue: String
+    // `var` since spec 051 phase 4: `manage_tokens` owns what is typed, what
+    // the chains answered and whether the CTA may fire, and `FlowsLive` swaps
+    // them the way `WalletLive` swaps the balance.
+    var fieldValue: String
     let fieldPlaceholder: String
     /// Draws the field in its error state and prints this under it.
     var fieldError: String?
-    let result: AddTokenResult
+    var result: AddTokenResult
     let cta: String
-    let ctaDisabled: Bool
+    var ctaDisabled: Bool
 }
 
 // MARK: - Send
@@ -593,7 +596,9 @@ enum WalletFlowSheet: Identifiable {
 /// it, and the history behind it is still the history.
 struct FlowScreenModel {
     let state: FlowStateId
-    let base: FlowBase
+    // `var` since spec 051 phase 4: `FlowsLive` swaps the assets list for the
+    // person's own holdings.
+    var base: FlowBase
     var sheet: WalletFlowSheet?
     /// 1 or 1.35 — threaded through `walletTextScale`, as spec 015's H7x is.
     var textScale: CGFloat = 1

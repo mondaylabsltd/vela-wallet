@@ -148,8 +148,10 @@ struct ActivityTests {
         #expect(wire["log_index"] as? String == "0x2")
     }
 
+    /// The shared reader both token machines go through — `token_trust` when
+    /// it admits one from a receipt, `manage_tokens` when somebody types one in.
     @Test func aStoredCustomTokenCrossesWithoutItsDisplayVocabulary() {
-        let wire = TokenTrustExecutor.tokenToWire([
+        let wire = CustomTokens.toWire([
             "id": "100_0xabc", "chainId": 100, "contractAddress": "0xabc",
             "symbol": "USDC", "name": "USD Coin", "decimals": 6,
             "networkName": "Gnosis",
@@ -159,7 +161,7 @@ struct ActivityTests {
         // `networkName` is the shell's word for a chain and does not travel.
         #expect(wire?["networkName"] == nil)
         // A row without a contract is not a token anybody can watch.
-        #expect(TokenTrustExecutor.tokenToWire(["chainId": 100]) == nil)
+        #expect(CustomTokens.toWire(["chainId": 100]) == nil)
     }
 
     @Test func hexQuantitiesReadAsNumbersOrAsNothing() {

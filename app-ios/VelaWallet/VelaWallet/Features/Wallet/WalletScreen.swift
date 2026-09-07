@@ -10,6 +10,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct WalletScreen: View {
     @Environment(\.theme) private var theme
@@ -37,6 +38,20 @@ struct WalletScreen: View {
     /// entries into Receive / Send / Scan / Activity / Assets. Absent in the
     /// gallery, where this screen is a picture.
     var onFlow: ((WalletFlowEntry) -> Void)?
+    /// Tap the figure to hide it (spec 051). The drawing has carried
+    /// `a11yHide` / `a11yShow` labels since spec 015 and the core has owned the
+    /// state since phase 2b — this is the gesture that was missing between
+    /// them. Absent in the gallery, where a tap would mutate a picture.
+    var onToggleBalance: (() -> Void)?
+    /// Pull to refresh. Also absent in the gallery: a fixture cannot refresh,
+    /// and a spinner over one would be a promise nothing keeps.
+    ///
+    /// Boxed in a class on purpose. An `(() async -> Void)?` stored directly in
+    /// a `View` crashes SwiftUI's layout machinery on this toolchain — the
+    /// AttributeGraph walks the view's fields to build a comparison layout and
+    /// segfaults reading the metadata of an optional async function type. A
+    /// class reference is one pointer, so there are no fields to walk.
+    var onRefresh: RefreshAction?
     @State private var sheetShown = false
     @State private var viewingIdenticon = false
 
@@ -46,7 +61,7 @@ struct WalletScreen: View {
                 VStack(alignment: .leading, spacing: Tokens.Space.s0) {
                     headerRow
                         .padding(.top, Tokens.Space.s8)
-                    BalanceDisplay(model: model.balance)
+                    balanceDisplay
                         .padding(.top, Tokens.Space.s24)
                     ActionButtonRow(
                         model: model.actions,
@@ -63,6 +78,7 @@ struct WalletScreen: View {
                 .padding(.horizontal, Tokens.Layout.screenPaddingX)
                 .padding(.bottom, Tokens.Space.s24)
             }
+            .refreshableIf(onRefresh)
             WalletTabBar(tabs: model.tabs, onSelect: onSelectTab)
         }
         .background(theme.bgBase.ignoresSafeArea())
@@ -86,6 +102,26 @@ struct WalletScreen: View {
             .presentationDetents([.medium, .large])
         }
         .onAppear { sheetShown = model.sheet != nil }
+    }
+
+    /// The hero, tappable when somebody owns the state behind it.
+    ///
+    /// The haptic is not decoration: the figure becomes dots, and a change that
+    /// REMOVES the thing you were looking at needs a confirmation you can feel.
+    @ViewBuilder private var balanceDisplay: some View {
+        if let onToggleBalance {
+            BalanceDisplay(model: model.balance)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    onToggleBalance()
+                }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(Text(verbatim: model.balance.state == .hidden
+                                        ? model.balance.a11yShow : model.balance.a11yHide))
+        } else {
+            BalanceDisplay(model: model.balance)
+        }
     }
 
     // MARK: - Header row
@@ -207,4 +243,32 @@ struct WalletScreen: View {
     )
         .themed(.light)
         .environment(\.identiconProvider, .previewSafe)
+}
+
+/// `.refreshable`, only when somebody can actually refresh.
+///
+/// Applying it unconditionally would put a working pull gesture on the gallery
+/// boards and the screenshot sweep, where the model is a fixture and the
+/// spinner would spin over nothing (FR-004).
+private extension View {
+    @ViewBuilder func refreshableIf(_ action: RefreshAction?) -> some View {
+        if let action {
+            self.refreshable { await action.run() }
+        } else {
+            self
+        }
+    }
+}
+
+/// A pull-to-refresh handler, boxed.
+///
+/// See `WalletScreen.onRefresh` for why this is a class and not the closure
+/// itself.
+@MainActor
+final class RefreshAction {
+    let run: () async -> Void
+
+    init(_ run: @escaping () async -> Void) {
+        self.run = run
+    }
 }

@@ -42,6 +42,11 @@ struct FlowHost: View {
     let model: FlowScreenModel
     var onBack: () -> Void = {}
     var onNavigate: (FlowStep) -> Void = { _ in }
+    /// The live add-token sheet's field and CTA. Absent everywhere the sheet is
+    /// a fixture, which is the gallery and the screenshot sweep.
+    var addTokenInput: Binding<String>?
+    var onAddToken: (() -> Void)?
+    var addTokenError: String?
 
     /// The sheet's own dismissal. A new state means a new sheet, so the flag
     /// is keyed on the model's state — closing one must not suppress the next.
@@ -61,7 +66,13 @@ struct FlowHost: View {
                 )
             ) {
                 if let sheet = model.sheet {
-                    FlowSheetHost(sheet: sheet, onNavigate: onNavigate)
+                    FlowSheetHost(
+                        sheet: sheet,
+                        onNavigate: onNavigate,
+                        addTokenInput: addTokenInput,
+                        onAddToken: onAddToken,
+                        addTokenError: addTokenError
+                    )
                         .environment(\.walletTextScale, model.textScale)
                         .presentationDragIndicator(.hidden)
                         .presentationCornerRadius(Tokens.Radius.r20)
@@ -172,6 +183,9 @@ private struct FlowSheetHost: View {
 
     let sheet: WalletFlowSheet
     var onNavigate: (FlowStep) -> Void = { _ in }
+    var addTokenInput: Binding<String>?
+    var onAddToken: (() -> Void)?
+    var addTokenError: String?
 
     var body: some View {
         ScrollView {
@@ -220,7 +234,13 @@ private struct FlowSheetHost: View {
                 onReceive: { onNavigate(.receive) },
                 onSend: { onNavigate(.sendForm) }
             )
-        case .addToken(let m): AddTokenBody(model: m)
+        case .addToken(let m):
+            AddTokenBody(
+                model: m,
+                onSubmit: { onAddToken?() },
+                input: addTokenInput,
+                errorText: addTokenError
+            )
         case .contactPick(let m): ContactPickBody(model: m, onScan: { onNavigate(.scan) })
         case .feeToken(let m): FeeTokenBody(model: m)
         case .batchImport(let m): BatchImportBody(model: m)

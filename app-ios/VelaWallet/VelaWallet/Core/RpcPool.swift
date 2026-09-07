@@ -112,8 +112,18 @@ final class RpcPool {
         )
     }
 
+    /// Whether the routing core has been given its ban map.
+    ///
+    /// A call before that would be dropped by `CoreStore` (events before boot
+    /// are, on purpose) and its continuation would never resume — an `await`
+    /// that hangs for the life of the process. A test suite found exactly that
+    /// by forgetting one `boot()`; a screen would find it as a spinner nobody
+    /// can explain.
+    private(set) var booted = false
+
     /// Read the persisted ban map and hand it to the core. Called once.
     func boot() {
+        booted = true
         core.boot(CoreJSON.string([
             "type": "bans_loaded",
             "entries": RpcEndpoints.loadBans(store: store),
@@ -133,6 +143,12 @@ final class RpcPool {
         params: [Any] = [],
         kind: String = "rpc"
     ) async -> RpcOutcome {
+        // Fail closed rather than hang. The caller can retry after boot; a
+        // continuation that never resumes cannot.
+        guard booted else {
+            print("[vela-wallet] rpc_pool: \(method) on \(chainId) before boot — refused")
+            return .failed(rateLimited: false)
+        }
         let callId = mintCallId()
         return await withCheckedContinuation { continuation in
             var entry = Pending(method: method, params: params)
@@ -160,6 +176,7 @@ final class RpcPool {
     /// The best endpoint for a chain, as the core scores it — for the callers
     /// that need a URL rather than an answer (a WebSocket, a link).
     func bestRpcUrl(chainId: Int) async -> String? {
+        guard booted else { return nil }
         let callId = mintCallId()
         return await withCheckedContinuation { continuation in
             var entry = Pending(method: "", params: [])

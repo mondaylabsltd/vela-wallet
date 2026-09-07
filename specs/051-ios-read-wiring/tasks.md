@@ -122,15 +122,40 @@ history**: the scan is 100 blocks, native transfers emit no log, and the local
 store is the source of truth. A fresh install shows an empty feed for a funded
 account, on every client.
 
+### Phase 4 — `manage_tokens`, and two gestures ✅
+
+- **tap-to-hide** and **pull-to-refresh** are reachable at last (the core has
+  owned both since 2b; only the gesture was missing). The pull holds its spinner
+  until the core settles.
+- `manage_tokens` drives the drawn T3 sheet, and T1's assets list shows the
+  person's own holdings. Verified on the simulator end to end: type USDT's
+  contract → found on Ethereum → 添加到钱包 → 已添加, which is the core reading
+  its own write back out of storage.
+- `Core/CustomTokens.swift` is now the **only** writer of `vela.customTokens`;
+  both token machines go through it, and the id has one lowercased spelling.
+- Four deviations recorded in results.md: the search runs automatically (one CTA
+  in the drawing), one card is shown (one result slot), there is no manage/delete
+  list (drawn nowhere), and the address field had to become typable
+  (`FlowMonoInput`, beside the picture the gallery keeps rendering).
+
+**The crash to remember**: `var onRefresh: (() async -> Void)?` stored in a
+SwiftUI `View` segfaults AttributeGraph at launch on this toolchain. Box an
+async closure in a class. Ordinary `(() -> Void)?` is fine.
+
 ---
 
-## Next — Phase 4: `manage_tokens`
+## Next — Phase 5: `receive_watch` + `payment_request`
 
-The token list surface. `token_trust`, phase 4's other half, landed with phase 3.
+**Read the drawings first.** The drawn receive screens (R1 list, R2/R3 QR, R4
+share card) have **no deposit-detected surface**: `ReceiveWatchView` publishes
+`detected` + a `deposits` list and there is nowhere to put it. What IS available
+without inventing UI is the haptic (`SignalDeposit`) and the home's own
+`zeroLive` "监听收款中" treatment. Decide that boundary before wiring, the way
+phase 4 decided it for the manage list.
 
-- Read `rust/crates/vela-core/src/app/manage_tokens.rs` first.
-- The metadata resolver it needs already exists (`Core/TokenMetadata.swift`), and
-  so does the `vela.customTokens` writer (`TokenTrustExecutor.write`).
+- `receive_watch.rs` is 377 lines and needs no input: Start, FetchTokens (reuse
+  `TokenReads`), Wait, SignalDeposit.
+- `payment_request.rs` (687) is the ack — check what of it is drawn at all.
 
 ---
 
@@ -138,7 +163,6 @@ The token list surface. `token_trust`, phase 4's other half, landed with phase 3
 
 | Phase | What |
 |---|---|
-| 5 | `receive_watch` + `payment_request` — the deposit watcher and the ack |
 | 6 | Flip 050's remaining `// live in 051` arms: `contacts::resolve_name` (the name-service waterfall — the activity feed's alias resolver wants it too) and `contacts::check_is_contract` (`eth_getCode` through the pool). `contacts::load_send_history` waits for 052 |
 | 7 | Device acceptance + closeout |
 
@@ -146,12 +170,15 @@ The token list surface. `token_trust`, phase 4's other half, landed with phase 3
 
 The core owns these and no gesture reaches them:
 
-- **tap-to-hide** (`WalletStore.togglePrivacy`) and **pull-to-refresh**
-  (`WalletStore.refresh(pull:)`) — no call site at all;
 - the **chain-filter pill** (`ActivityStore.chainFilter`) — still a fixture;
 - the **receipt toast and row glow** (`FeedView.toast` / `newItemId`) — decoded,
   never drawn;
-- **swipe-to-delete** an activity row (`ActivityStore.deleteRequested`).
+- **swipe-to-delete** an activity row (`ActivityStore.deleteRequested`);
+- the **manage/delete list** of custom tokens (`MtokView.custom_tokens`,
+  `ManageTokensStore.delete`) — the corpus has 已添加的代币 and the sheet has no
+  component for it.
+
+Closed in phase 4: tap-to-hide and pull-to-refresh.
 
 ### Deferred out of phase 2, on purpose
 

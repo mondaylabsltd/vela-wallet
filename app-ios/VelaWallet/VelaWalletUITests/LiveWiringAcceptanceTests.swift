@@ -208,7 +208,14 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         // `总余额 · USD` was the test being wrong about the world: this
         // simulator had CNY stored and drew `总余额 · CNY`, correctly. What is
         // asserted is that a hero appeared at all.
-        let hero = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "总余额 · "))
+        //
+        // `descendants` rather than `staticTexts` because the hero became a
+        // BUTTON when tap-to-hide landed — it carries `.isButton` and a hint
+        // saying what the tap does, so its label no longer answers a
+        // static-text query. The element kind is the app's business; that a
+        // hero exists is this test's.
+        let hero = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", "总余额 · "))
         XCTAssertTrue(hero.firstMatch.waitForExistence(timeout: 30),
                       "the home hero never appeared")
         // Twelve chains, a mainnet feed batch and a per-chain feed each: the
@@ -226,6 +233,68 @@ final class LiveWiringAcceptanceTests: XCTestCase {
             NSPredicate(format: "label CONTAINS %@", "0.8533")
         )
         XCTAssertEqual(fixtureHolding.count, 0, "a fixture holding is still on screen")
+    }
+
+    // MARK: - US3: a token somebody adds by hand
+
+    /// Type a contract, and the wallet finds it on a chain and keeps it.
+    ///
+    /// The account seeded here is a public exchange hot wallet, for one
+    /// property: it holds a large USDT balance on Ethereum, so the token this
+    /// test adds has a balance to show afterwards. Nothing is signed and only
+    /// public data is read.
+    ///
+    /// What it proves that a unit test cannot: the address reaches the core on
+    /// every keystroke, the sweep runs across the registry, the found card is
+    /// the chain's own answer, and the save round-trips through storage — the
+    /// 已添加 chip is recomputed by the core from what it read back.
+    func testAddingATokenByContractFindsItAndKeepsIt() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_ACCOUNT"] = "0x28C6c06298d514Db089934071355E5743bf21d60"
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "dark"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh)"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["资产"].waitForExistence(timeout: 30),
+                      "the home never appeared")
+        // The assets section's 全部 — the second on the screen; the first
+        // belongs to 活动.
+        let seeAll = app.buttons.matching(identifier: "全部")
+        XCTAssertTrue(seeAll.count >= 2, "the two section headers are not both drawn")
+        seeAll.element(boundBy: 1).tap()
+
+        // The screen's own 添加, in its header. The 通过地址添加代币 link at the
+        // bottom of the list does the same thing, and this test used it first —
+        // on an account with a long list it is simply not on screen, which is
+        // the test being wrong about the account rather than the app.
+        let addAction = app.buttons["添加"]
+        XCTAssertTrue(addAction.waitForExistence(timeout: 10),
+                      "the assets screen never opened")
+        addAction.tap()
+
+        let field = app.textFields["合约地址"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "the add-token sheet has no field")
+        field.tap()
+        // Tether on Ethereum.
+        field.typeText("0xdAC17F958D2ee523a2206206994597C13D831ec7")
+
+        // The sweep asks every network in the registry, so this waits on real
+        // round trips rather than on a local decision.
+        XCTAssertTrue(app.staticTexts["Tether USD"].waitForExistence(timeout: 60),
+                      "no chain answered for a contract every chain knows")
+        attach(app.screenshot(), named: "device-add-token-found")
+
+        let add = app.buttons["添加到钱包"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+
+        // The chip is the core's, recomputed from the tokens it read BACK out
+        // of storage — so it appearing is the save having actually landed.
+        XCTAssertTrue(app.staticTexts["已添加"].waitForExistence(timeout: 20),
+                      "the token was not kept")
+        attach(app.screenshot(), named: "device-add-token-added")
     }
 
     // MARK: - The currency rule, on the phone

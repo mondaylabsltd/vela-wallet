@@ -406,7 +406,99 @@ phase — the seven bridge exports were all landed in phase 1.
 
 ---
 
+## Phase 4 — `manage_tokens`, and the gestures that were missing
+
+### Two machines' worth of work was already reachable-by-nobody
+
+Before the machine: **tap-to-hide** and **pull-to-refresh** now exist. The core
+has owned both since phase 2b — `privacy_toggled` writes through to storage,
+`refresh_requested { pull }` is answered differently from a background tick —
+and the drawing has carried `a11yHide` / `a11yShow` labels since spec 015. What
+was missing was the gesture between them, which is the kind of gap that reads as
+"the feature isn't built" when in fact only the last inch is.
+
+The pull holds its spinner until the core says the refresh is done
+(`WalletStore.settled`), because a spinner that snaps away before a chain has
+answered reads as "already up to date" over stale figures.
+
+### A crash worth writing down
+
+Storing `var onRefresh: (() async -> Void)?` in a SwiftUI `View` **segfaults on
+launch** on this toolchain: AttributeGraph walks a view's fields to build its
+comparison layout and dies reading the metadata of an optional async function
+type (`type metadata accessor for (nonisolated(nonsending) ())?` is the top
+frame). Boxing the closure in a small class fixes it — a class is one pointer,
+so there are no fields to walk. Ordinary optional closures (`(() -> Void)?`) are
+fine; it is the async one.
+
+It reached the simulator, not a test: the app died before XCTest could attach,
+which is also why the unit suite reported "the test runner crashed before
+establishing connection" rather than anything about closures.
+
+### The machine, and where the drawing and the core disagree
+
+`manage_tokens` drives the drawn T3 sheet; the T1 assets list behind it now
+shows the person's own holdings. Four deviations, all recorded rather than
+smoothed over:
+
+1. **The search runs by itself.** Web's panel has a 搜索代币 button; the drawn
+   sheet has ONE CTA (添加到钱包), so the sweep runs when the address becomes
+   valid, once per address. The core still owns validity, the probe fan-out and
+   admission — what moved is when the shell asks.
+2. **One card, not a list.** The core finds a card per chain; the drawing has one
+   result slot, so the first (registry order) is shown and the network row names
+   the chain it was found on. The others are still in the core's view, waiting
+   for a drawing that lists them.
+3. **No manage/delete list.** `MtokView.custom_tokens` and
+   `DeleteRequested` are wired in the store and drawn nowhere — the corpus has
+   已添加的代币 and the sheet has no component for it.
+4. **The address field had to become typable.** Spec 021's flows layer was drawn
+   as pictures: `FlowMonoField` is a `Text`. `FlowMonoInput` is its editable
+   twin — same mono role, same filled ground, same error stroke, plus a cursor —
+   and the fixtures keep rendering the picture, so the gallery and the
+   screenshot sweep are untouched.
+
+### One key, one writer
+
+`vela.customTokens` now has exactly one writer (`Core/CustomTokens.swift`), which
+both token machines reach through: `token_trust` when it admits a token from an
+authenticated receipt, `manage_tokens` when somebody types one in. That is the
+lesson `vela.serviceEndpoints` taught in 050 — two independent writers on one
+key, both succeeding, one erasing the other — applied before it could happen.
+
+The id has one spelling too: `{chainId}_{contract}`, lowercased.
+`manage_tokens.rs` calls it "THE dedupe key" and notes that the TypeScript
+hand-rolled it in two places.
+
+### What "invalidate the token cache" means here
+
+Nothing to invalidate: the balance executor reads through every time. So the
+core's invalidation becomes a **re-read** — a token somebody just added shows up
+in their balances immediately rather than whenever they next pull. That is the
+honest translation of the rule, not a skipped acknowledgement.
+
+### A hang the suite found, and the guard that replaced it
+
+`RpcPool.call` before `boot()` used to **wait forever**: `CoreStore` drops events
+sent before a machine's first one (on purpose — every machine reads its stores on
+boot), so the call's continuation had nothing left to resume it. The unit suite
+stopped finishing, which is how it surfaced; on a screen it would be a spinner
+nobody can explain.
+
+It now refuses instead, and that refusal is what makes the manage-tokens tests
+hermetic: an unbooted pool answers "this chain said nothing" without a packet
+leaving the machine.
+
+### Gates
+
+Hermetic tests 273 → **288**; live (flagged) 16 → **20**; device UI 9 → **10**.
+Literal violations 35. Zero Rust changes.
+
+---
+
 ## Next
 
-Phase 4, the rest of `manage_tokens` (the token list surface; `token_trust`
-landed with phase 3). The remaining order is in **[tasks.md](./tasks.md)**.
+Phase 5, `receive_watch` + `payment_request` — with the same caveat phase 4 hit:
+the drawn receive screens have **no deposit-detected surface**, so read the
+drawings before planning the wiring. The remaining order is in
+**[tasks.md](./tasks.md)**.
