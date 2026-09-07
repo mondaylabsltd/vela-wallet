@@ -64,6 +64,10 @@ import app.getvela.wallet.feature.flows.FlowLive
 import app.getvela.wallet.feature.flows.FlowScreenModel
 import app.getvela.wallet.feature.flows.FlowSheet
 import app.getvela.wallet.feature.settings.core.NetView
+import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.feature.settings.core.CurrencyView
+import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.FeedView
 import app.getvela.wallet.feature.wallet.core.PaymentRequestView
 import app.getvela.wallet.feature.wallet.WalletFixtures
 import app.getvela.wallet.feature.wallet.WalletLive
@@ -309,9 +313,31 @@ fun VelaNavHost(
                         wallet.openReceive(session.address, PAY_LINK_BASE)
                     }
                 }
-                val flowModel = remember(flowState, strings, session.address, networks, request) {
+                val flowModel = remember(
+                    flowState,
+                    strings,
+                    session.address,
+                    networks,
+                    request,
+                    balances,
+                    feed,
+                    currency,
+                    flows.selected,
+                ) {
                     FlowFixtures.build(flowState, strings).let { drawn ->
-                        liveFlow(drawn, session.address, session.activeName, networks, request)
+                        liveFlow(
+                            drawn = drawn,
+                            address = session.address,
+                            name = session.activeName,
+                            networks = networks,
+                            request = request,
+                            balances = balances,
+                            feed = feed,
+                            currency = currency,
+                            chainNames = chainNames,
+                            selected = flows.selected,
+                            strings = strings,
+                        )
                     }
                 }
                 FlowHost(
@@ -340,7 +366,10 @@ fun VelaNavHost(
                             else -> Unit
                         }
                     },
-                    onFlow = { flows.enter(it) },
+                    // The id says WHICH row was tapped. Without it every row
+                    // opened the same detail, so this person's own POL showed
+                    // somebody else's transaction.
+                    onFlow = { entry, id -> flows.enter(entry, id) },
                 )
             }
         }
@@ -720,12 +749,19 @@ private const val PAY_LINK_BASE = "https://getvela.app/pay"
  * stale value is unrecoverable, so an empty session renders no address rather
  * than the drawn one.
  */
+@Suppress("LongParameterList")
 private fun liveFlow(
     drawn: FlowScreenModel,
     address: String,
     name: String,
     networks: NetView,
     request: PaymentRequestView,
+    balances: BalanceView,
+    feed: FeedView,
+    currency: CurrencyView,
+    chainNames: Map<Int, String>,
+    selected: String?,
+    strings: VelaStrings,
 ): FlowScreenModel = drawn.copy(
     base = when (val base = drawn.base) {
         is FlowBase.Receive -> FlowBase.Receive(
@@ -733,11 +769,29 @@ private fun liveFlow(
             // network is the same colour wherever it appears.
             FlowLive.receiveNetworks(base.model, networks, address, WalletLive::badge),
         )
+        is FlowBase.History ->
+            FlowBase.History(FlowLive.history(base.model, feed, strings))
+        is FlowBase.Assets ->
+            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency))
         else -> drawn.base
     },
     sheet = when (val sheet = drawn.sheet) {
         is FlowSheet.ReceiveQr ->
             FlowSheet.ReceiveQr(FlowLive.receiveQr(sheet.model, address, name, request))
+        // **A detail with no target shows nothing, not a fixture.** A screen
+        // about the wrong payment and one about the right payment look equally
+        // authoritative, and only one of them is wrong.
+        is FlowSheet.TxDetail ->
+            FlowLive.txDetail(sheet.model, feed, selected, strings)?.let(FlowSheet::TxDetail)
+        is FlowSheet.TokenDetail -> FlowLive.tokenDetail(
+            fallback = sheet.model,
+            view = balances,
+            feed = feed,
+            id = selected,
+            chainNames = chainNames,
+            currency = currency,
+            strings = strings,
+        )?.let(FlowSheet::TokenDetail)
         else -> drawn.sheet
     },
 )

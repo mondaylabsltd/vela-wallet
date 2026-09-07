@@ -60,7 +60,7 @@ object WalletLive {
         now: Long = System.currentTimeMillis(),
     ): WalletHomeModel {
         val money = Money.of(currency)
-        val rows = view.tokens.map { token -> assetRow(token, chainNames, money) }
+        val rows = assetRows(view, chainNames, currency)
         val groups = activity(feed, strings, now)
         return fallback.copy(
             balance = balance(fallback.balance, view, strings, money),
@@ -142,6 +142,7 @@ object WalletLive {
         val received = item.direction == FeedDirection.In
         val batch = item.batch
         return ActivityRowModel(
+            id = item.id,
             kind = when {
                 // A dApp transaction is a send whose counterparty is a
                 // contract; the core does not label it, because what to call it
@@ -194,6 +195,22 @@ object WalletLive {
         val parsed = raw.toBigDecimalOrNull() ?: return raw
         val trimmed = parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString()
         return if (received) "+$trimmed" else "−$trimmed"
+    }
+
+    /**
+     * Every holding as a row.
+     *
+     * Shared with the assets screen and the token detail, so a holding reads
+     * the same wherever it appears — and so the chain label, the truncation and
+     * the currency are decided once.
+     */
+    fun assetRows(
+        view: BalanceView,
+        chainNames: Map<Int, String>,
+        currency: CurrencyView,
+    ): List<AssetRowModel> {
+        val money = Money.of(currency)
+        return view.tokens.map { token -> assetRow(token, chainNames, money) }
     }
 
     /**
@@ -264,11 +281,21 @@ object WalletLive {
         )
     }
 
+    /**
+     * A holding's identity: the chain it is on and the contract, or `native`.
+     *
+     * The same shape `receive_watch` uses for its baseline keys, so the two
+     * cannot disagree about which holding is which.
+     */
+    fun holdingId(chainId: Int, contract: String?): String =
+        "$chainId:${contract?.lowercase() ?: "native"}"
+
     private fun assetRow(
         token: BalanceToken,
         chainNames: Map<Int, String>,
         money: Money,
     ): AssetRowModel = AssetRowModel(
+        id = holdingId(token.chain_id, token.token_address),
         ticker = token.symbol,
         // The chain, falling back to the token's own name only when this
         // device has no row for the chain — never a blank line.

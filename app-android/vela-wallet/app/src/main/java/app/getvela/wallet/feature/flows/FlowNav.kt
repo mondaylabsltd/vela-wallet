@@ -64,11 +64,29 @@ class FlowNavState internal constructor() {
     var stack by mutableStateOf<List<FlowState>>(emptyList())
         private set
 
+    /**
+     * Which row opened the detail on top of the stack.
+     *
+     * A transaction id, or a token's `chainId:contract`. Carried here because a
+     * detail screen is ABOUT something, and the stack alone cannot say what:
+     * every row was opening the same screen, so tapping this person's own POL
+     * showed somebody else's transaction. The desktop shipped the same shape
+     * once — a page that displayed contact A while its delete acted on contact
+     * B — and the fix there was the same: look the target up ONCE, from an id
+     * the navigation carries.
+     *
+     * Cleared whenever the stack changes without one, so a stale id can never
+     * be read by the next screen.
+     */
+    var selected by mutableStateOf<String?>(null)
+        private set
+
     val top: FlowState? get() = stack.lastOrNull()
     val isOpen: Boolean get() = stack.isNotEmpty()
 
-    fun enter(entry: WalletFlowEntry) {
+    fun enter(entry: WalletFlowEntry, id: String? = null) {
         stack = ENTRIES.getValue(entry)
+        selected = id
     }
 
     /**
@@ -76,22 +94,29 @@ class FlowNavState internal constructor() {
      * navigation intents generously (`Done`, `Chains`, …) and a flow that has
      * nowhere to put one should do nothing, not crash a wallet.
      */
-    fun push(step: FlowStep) {
+    fun push(step: FlowStep, id: String? = null) {
         if (step == FlowStep.Done) {
             close()
             return
         }
         val next = STEPS[step] ?: return
-        if (top != next) stack = stack + next
+        if (top != next) {
+            stack = stack + next
+            selected = id
+        }
     }
 
     /** One level up. At the root this leaves the flow and shows the wallet. */
     fun back() {
         stack = stack.dropLast(1)
+        // The id belonged to the screen just left. Keeping it would let the
+        // screen underneath read a target it was never opened for.
+        selected = null
     }
 
     fun close() {
         stack = emptyList()
+        selected = null
     }
 }
 

@@ -72,7 +72,7 @@ fun WalletScreen(
      * into Receive / Send / Scan / Activity / Assets. Absent in the gallery,
      * where this screen is a picture.
      */
-    onFlow: (WalletFlowEntry) -> Unit = {},
+    onFlow: (WalletFlowEntry, String?) -> Unit = { _, _ -> },
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
@@ -107,7 +107,7 @@ private fun WalletHomeContent(
      * is a later feature; an unreachable wallet is not something to wait for it.
      */
     onSelectTab: (VelaTab) -> Unit = {},
-    onFlow: (WalletFlowEntry) -> Unit = {},
+    onFlow: (WalletFlowEntry, String?) -> Unit = { _, _ -> },
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -150,22 +150,22 @@ private fun WalletHomeContent(
                 Spacer(modifier = Modifier.height(VelaSpacing.xl3))
                 ActionButtonRow(
                     actions = model.actions,
-                    onReceive = { onFlow(WalletFlowEntry.Receive) },
-                    onSend = { onFlow(WalletFlowEntry.Send) },
-                    onScan = { onFlow(WalletFlowEntry.Scan) },
+                    onReceive = { onFlow(WalletFlowEntry.Receive, null) },
+                    onSend = { onFlow(WalletFlowEntry.Send, null) },
+                    onScan = { onFlow(WalletFlowEntry.Scan, null) },
                 )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl4))
 
                 SectionHeader(
                     title = model.activitySection.title,
                     action = model.activitySection.action,
-                    onAction = { onFlow(WalletFlowEntry.Activity) },
+                    onAction = { onFlow(WalletFlowEntry.Activity, null) },
                 )
                 when (model.activitySection.mode) {
                     SectionMode.Rows -> model.activityGroups.forEach { group ->
                         DayLabel(label = group.label)
                         group.rows.forEach { row ->
-                            Box(modifier = Modifier.clickable { onFlow(WalletFlowEntry.TxDetail) }) {
+                            Box(modifier = Modifier.clickable { onFlow(WalletFlowEntry.TxDetail, row.id) }) {
                                 ActivityRow(model = row)
                             }
                         }
@@ -183,7 +183,7 @@ private fun WalletHomeContent(
                 SectionHeader(
                     title = model.assetsSection.title,
                     action = model.assetsSection.action,
-                    onAction = { onFlow(WalletFlowEntry.Assets) },
+                    onAction = { onFlow(WalletFlowEntry.Assets, null) },
                 )
                 when (model.assetsSection.mode) {
                     SectionMode.Rows -> {
@@ -191,7 +191,7 @@ private fun WalletHomeContent(
                         model.assetRows.forEach { row ->
                             AssetRow(
                                 model = row,
-                                onClick = { onFlow(WalletFlowEntry.TokenDetail) },
+                                onClick = { onFlow(WalletFlowEntry.TokenDetail, row.id) },
                             )
                         }
                     }

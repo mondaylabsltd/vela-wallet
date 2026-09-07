@@ -54,6 +54,14 @@ enum class ActivityKind { Sent, Received, Dapp }
 
 @Immutable
 data class ActivityRowModel(
+    /**
+     * Which transaction this row is.
+     *
+     * Every row opened the same detail screen before this existed, so tapping
+     * one payment showed another. A row that can be tapped has to be able to
+     * say what it is.
+     */
+    val id: String = "",
     val kind: ActivityKind,
     val title: String,
     val subtitle: String,
@@ -83,6 +91,8 @@ sealed interface AssetFiatModel {
 
 @Immutable
 data class AssetRowModel(
+    /** `chainId:contract`, or `chainId:native` — which holding this row is. */
+    val id: String = "",
     val ticker: String,
     val chain: String,
     val badgeColor: Color,

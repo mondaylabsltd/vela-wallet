@@ -1,6 +1,14 @@
 package app.getvela.wallet.feature.flows
 
+import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.settings.core.NetView
+import app.getvela.wallet.feature.wallet.AssetFiatModel
+import app.getvela.wallet.feature.wallet.WalletLive
+import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.FeedDirection
+import app.getvela.wallet.feature.wallet.core.FeedRow
+import app.getvela.wallet.feature.wallet.core.FeedView
 import app.getvela.wallet.feature.wallet.core.PaymentRequestView
 
 /**
@@ -90,6 +98,142 @@ object FlowLive {
     /** `0x1234…abcd` — a row has no space for forty-two characters. */
     internal fun shortAddress(address: String): String =
         if (address.length <= 12) address else address.take(6) + "…" + address.takeLast(4)
+
+
+    // -- the read screens behind "全部" ---------------------------------------
+
+    /**
+     * A1 — the whole history, not the first few.
+     *
+     * The home screen's Activity section shows a handful and offers "全部".
+     * That link opened a fixture: a person tapped past their own payments into
+     * somebody else's. Same rows, same grouping, same core ordering as the home
+     * feed — this only removes the cut-off.
+     */
+    fun history(
+        fallback: HistoryModel,
+        feed: FeedView,
+        strings: VelaStrings,
+        now: Long = System.currentTimeMillis(),
+    ): HistoryModel {
+        val groups = WalletLive.activity(feed, strings, now)
+        return fallback.copy(
+            mode = if (groups.isEmpty()) HistoryMode.Empty else HistoryMode.Rows,
+            groups = groups,
+        )
+    }
+
+    /**
+     * A2 — one transaction, the one that was tapped.
+     *
+     * [id] comes from the row. With no id, or an id the feed no longer holds,
+     * the fixture is NOT shown: a detail screen about the wrong payment is
+     * worse than one that admits it has nothing, because both look equally
+     * authoritative and only one of them is wrong.
+     */
+    fun txDetail(
+        fallback: TxDetailModel,
+        feed: FeedView,
+        id: String?,
+        strings: VelaStrings,
+    ): TxDetailModel? {
+        val item = feed.rows
+            .filterIsInstance<FeedRow.Item>()
+            .map { it.item }
+            .firstOrNull { it.id == id }
+            ?: return null
+
+        val received = item.direction == FeedDirection.In
+        val amount = item.value?.toBigDecimalOrNull()
+            ?.stripTrailingZeros()
+            ?.toPlainString()
+            .orEmpty()
+        return fallback.copy(
+            amount = "${if (received) "+" else "\u2212"}$amount ${item.symbol}".trim(),
+            positive = received,
+            // The fiat line is the core's own `usd_value`, which is 0 when
+            // nothing could price it — and a confident "$0.00" on a detail
+            // screen is the same lie the hero told once.
+            fiat = if (item.usd_value > 0) {
+                "$" + java.math.BigDecimal(item.usd_value)
+                    .setScale(2, java.math.RoundingMode.DOWN)
+                    .toPlainString()
+            } else {
+                ""
+            },
+        )
+    }
+
+    /**
+     * T1 — every holding.
+     *
+     * The same rows the home screen shows, minus its cut-off. `chainNames`
+     * comes from the network machine for the same reason it does there: a
+     * row's second line is the chain, and `BalanceToken.name` is the token's.
+     */
+    fun assets(
+        fallback: AssetsModel,
+        view: BalanceView,
+        chainNames: Map<Int, String>,
+        currency: CurrencyView,
+    ): AssetsModel {
+        val rows = WalletLive.assetRows(view, chainNames, currency)
+        return fallback.copy(
+            rows = rows,
+            // The guided-empty body replaces the list; it must not sit under
+            // one. A wallet that holds something is not an empty wallet.
+            empty = if (rows.isEmpty()) fallback.empty else null,
+        )
+    }
+
+    /**
+     * T2 — one holding, the one that was tapped.
+     *
+     * Same rule as the transaction detail: no id, or an id nothing matches,
+     * shows nothing rather than a fixture token. The transactions listed under
+     * it are the ones on THIS token's chain and symbol.
+     */
+    fun tokenDetail(
+        fallback: TokenDetailModel,
+        view: BalanceView,
+        feed: FeedView,
+        id: String?,
+        chainNames: Map<Int, String>,
+        currency: CurrencyView,
+        strings: VelaStrings,
+        now: Long = System.currentTimeMillis(),
+    ): TokenDetailModel? {
+        val token = view.tokens
+            .firstOrNull { WalletLive.holdingId(it.chain_id, it.token_address) == id }
+            ?: return null
+
+        val row = WalletLive.assetRows(
+            BalanceView(tokens = listOf(token)),
+            chainNames,
+            currency,
+        ).single()
+
+        val theirs = FeedView(
+            rows = feed.rows.filter { entry ->
+                entry !is FeedRow.Item ||
+                    (entry.item.chain_id == token.chain_id && entry.item.symbol == token.symbol)
+            },
+        )
+        return fallback.copy(
+            mark = TokenMarkModel(token.symbol, row.badgeColor),
+            symbol = token.symbol,
+            chain = row.chain,
+            balance = row.balance,
+            fiat = when (val fiat = row.fiat) {
+                is AssetFiatModel.Value -> fiat.text
+                // "—", not "$0.00": an unpriced holding has no fiat figure, and
+                // a zero here would say it is worthless.
+                is AssetFiatModel.NoPrice -> fiat.text
+                else -> ""
+            },
+            rows = WalletLive.activity(theirs, strings, now).flatMap { it.rows },
+        )
+    }
 
     /** The address as the card draws it: two lines, split halfway. */
     internal fun addressLines(address: String): Pair<String, String> {

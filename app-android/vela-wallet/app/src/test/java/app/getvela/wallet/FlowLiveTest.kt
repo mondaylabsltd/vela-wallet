@@ -11,10 +11,19 @@ import app.getvela.wallet.feature.settings.core.NetNetworkRow
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.wallet.WalletFixtures
 import app.getvela.wallet.feature.wallet.WalletLive
+import app.getvela.wallet.feature.flows.HistoryMode
+import app.getvela.wallet.feature.settings.core.CurrencyView
+import app.getvela.wallet.feature.wallet.core.BalanceToken
+import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.FeedDirection
+import app.getvela.wallet.feature.wallet.core.FeedItem
+import app.getvela.wallet.feature.wallet.core.FeedRow
+import app.getvela.wallet.feature.wallet.core.FeedView
 import app.getvela.wallet.feature.wallet.core.PaymentRequestView
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -160,5 +169,207 @@ class FlowLiveTest {
         // Before storage answers there is nothing truer to show; blanking for a
         // frame is a flicker a person reads as a bug.
         assertEquals(drawn.rows, live.rows)
+    }
+
+    // -- the read screens behind "全部" (spec 041 phase 5b) -------------------
+
+    private fun feedItem(
+        id: String,
+        received: Boolean,
+        value: String,
+        symbol: String = "POL",
+        chainId: Int = 137,
+        usd: Double = 0.0,
+    ) = FeedItem(
+        id = id,
+        direction = if (received) FeedDirection.In else FeedDirection.Out,
+        counterparty = "0x9F3c000000000000000000000000000000021aE0",
+        value = value,
+        symbol = symbol,
+        decimals = 18,
+        usd_value = usd,
+        chain_id = chainId,
+        timestamp = System.currentTimeMillis() / 1000.0,
+        day_start_ms = midnightToday(),
+    )
+
+    private fun midnightToday(): Double = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis.toDouble()
+
+    private fun feedOf(vararg items: FeedItem) = FeedView(
+        rows = listOf(
+            FeedRow.Header("day", midnightToday(), System.currentTimeMillis() / 1000.0),
+        ) + items.map { FeedRow.Item(it) },
+    )
+
+    private fun historyFixture() =
+        (FlowFixtures.build(FlowState.A1, strings).base as FlowBase.History).model
+
+    private fun txFixture() =
+        (FlowFixtures.build(FlowState.A2, strings).sheet as FlowSheet.TxDetail).model
+
+    private fun assetsFixture() =
+        (FlowFixtures.build(FlowState.T1, strings).base as FlowBase.Assets).model
+
+    private fun tokenFixture() =
+        (FlowFixtures.build(FlowState.T2, strings).sheet as FlowSheet.TokenDetail).model
+
+    private fun token(symbol: String, balance: String, chainId: Int, price: Double? = null) =
+        BalanceToken(
+            chain_id = chainId,
+            symbol = symbol,
+            name = symbol,
+            balance = balance,
+            decimals = 18,
+            price_usd = price,
+        )
+
+    private val chainNames = mapOf(137 to "Polygon", 42161 to "Arbitrum")
+
+    /** "全部" opened a fixture: a person tapped past their own payments. */
+    @Test
+    fun `the history screen lists this device's own transactions`() {
+        val drawn = historyFixture()
+        assertTrue("the fixture has history of its own", drawn.groups.isNotEmpty())
+
+        val live = FlowLive.history(drawn, feedOf(feedItem("a", false, "2")), strings)
+
+        assertEquals(1, live.groups.sumOf { it.rows.size })
+        assertEquals("−2", live.groups.single().rows.single().amount)
+    }
+
+    @Test
+    fun `an empty history says so rather than borrowing one`() {
+        val live = FlowLive.history(historyFixture(), FeedView(), strings)
+
+        assertEquals(emptyList<Any>(), live.groups)
+        assertEquals(HistoryMode.Empty, live.mode)
+    }
+
+    /**
+     * **A detail with no target shows nothing.**
+     *
+     * Every row opened the same screen before the id existed, so tapping one
+     * payment showed another. A screen about the wrong payment and one about
+     * the right payment look equally authoritative; only one is wrong.
+     */
+    @Test
+    fun `a transaction detail with no matching id renders nothing`() {
+        val feed = feedOf(feedItem("a", false, "2"))
+
+        assertNull(FlowLive.txDetail(txFixture(), feed, id = null, strings = strings))
+        assertNull(FlowLive.txDetail(txFixture(), feed, id = "not-in-the-feed", strings = strings))
+    }
+
+    @Test
+    fun `a transaction detail shows the transaction that was tapped`() {
+        val feed = feedOf(
+            feedItem("a", received = false, value = "2", usd = 0.5),
+            feedItem("b", received = true, value = "120", symbol = "USDT", usd = 120.0),
+        )
+
+        val detail = FlowLive.txDetail(txFixture(), feed, id = "b", strings = strings)!!
+
+        assertTrue(detail.amount.startsWith("+120"))
+        assertTrue(detail.amount.contains("USDT"))
+        assertEquals(true, detail.positive)
+        assertEquals("$120.00", detail.fiat)
+    }
+
+    /** An unpriced payment shows no fiat line, not a confident zero. */
+    @Test
+    fun `a transaction nothing could price shows no fiat figure`() {
+        val feed = feedOf(feedItem("a", received = true, value = "5", usd = 0.0))
+
+        val detail = FlowLive.txDetail(txFixture(), feed, id = "a", strings = strings)!!
+
+        assertEquals("", detail.fiat)
+    }
+
+    // -- assets ---------------------------------------------------------------
+
+    @Test
+    fun `the assets screen lists this device's own holdings`() {
+        val view = BalanceView(
+            display_total_usd = 5.0,
+            tokens = listOf(
+                token("POL", "0.152784", 137, price = 0.097),
+                token("ETH", "0.002", 42161, price = 2500.0),
+            ),
+        )
+
+        val live = FlowLive.assets(assetsFixture(), view, chainNames, CurrencyView(code = "USD"))
+
+        assertEquals(listOf("POL", "ETH"), live.rows.map { it.ticker })
+        assertEquals(listOf("Polygon", "Arbitrum"), live.rows.map { it.chain })
+        // A wallet that holds something is not an empty wallet.
+        assertNull(live.empty)
+    }
+
+    @Test
+    fun `an empty assets screen keeps its guided empty state`() {
+        val live = FlowLive.assets(
+            assetsFixture(),
+            BalanceView(),
+            chainNames,
+            CurrencyView(code = "USD"),
+        )
+
+        assertEquals(emptyList<Any>(), live.rows)
+    }
+
+    @Test
+    fun `a token detail with no matching id renders nothing`() {
+        val view = BalanceView(tokens = listOf(token("POL", "1", 137, price = 1.0)))
+
+        assertNull(detailFor(view, FeedView(), id = null))
+        assertNull(detailFor(view, FeedView(), id = "999:native"))
+    }
+
+    private fun detailFor(view: BalanceView, feed: FeedView, id: String?) = FlowLive.tokenDetail(
+        fallback = tokenFixture(),
+        view = view,
+        feed = feed,
+        id = id,
+        chainNames = chainNames,
+        currency = CurrencyView(code = "USD"),
+        strings = strings,
+    )
+
+    @Test
+    fun `a token detail shows the holding that was tapped, and only its own history`() {
+        val view = BalanceView(
+            tokens = listOf(
+                token("POL", "0.152784", 137, price = 0.097),
+                token("ETH", "0.002", 42161, price = 2500.0),
+            ),
+        )
+        val feed = feedOf(
+            feedItem("a", received = false, value = "2", symbol = "POL", chainId = 137),
+            feedItem("b", received = true, value = "1", symbol = "ETH", chainId = 42161),
+        )
+
+        val detail = detailFor(view, feed, id = "137:native")!!
+
+        assertEquals("POL", detail.symbol)
+        assertEquals("Polygon", detail.chain)
+        assertTrue(detail.balance.startsWith("0.152784"))
+        // Somebody else's ETH transfer must not appear under POL.
+        assertEquals(1, detail.rows.size)
+        assertEquals("POL", detail.rows.single().unit)
+    }
+
+    /** An unpriced holding shows "—", never a zero that calls it worthless. */
+    @Test
+    fun `an unpriced token detail shows no figure rather than zero`() {
+        val view = BalanceView(tokens = listOf(token("MON", "1", 143)))
+
+        val detail = detailFor(view, FeedView(), id = "143:native")!!
+
+        assertEquals("—", detail.fiat)
     }
 }
