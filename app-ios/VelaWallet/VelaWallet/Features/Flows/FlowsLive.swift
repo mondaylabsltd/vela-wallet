@@ -50,6 +50,56 @@ enum FlowsLive {
         )
     }
 
+    // MARK: - The network filter
+
+    /// The chain picker over the history, and the pill that opens it.
+    ///
+    /// The rows are the chains this account actually has transfers on, with
+    /// their counts — not the twelve built-ins, because a filter offering a
+    /// chain with nothing on it is a dead end somebody has to back out of.
+    /// **The filtering itself is the core's**: the shell sends
+    /// `chain_filter_changed` and re-renders whatever comes back.
+    static func chainSheet(
+        _ feed: FeedViewWire,
+        selected: Int?,
+        loc: Loc
+    ) -> ChainSheetModel {
+        var counts: [Int: Int] = [:]
+        for item in items(feed) { counts[item.chainId, default: 0] += 1 }
+
+        var rows = [ChainRowModel(
+            name: loc.t("componentsUi.networkFilter.allNetworks"),
+            dot: .all,
+            count: counts.values.reduce(0, +),
+            selected: selected == nil,
+            chainId: nil
+        )]
+        // Registry order, so the list does not reshuffle as counts change.
+        for chain in ChainCatalog.chains {
+            guard let count = counts[chain.chainId] else { continue }
+            rows.append(ChainRowModel(
+                name: chain.displayName,
+                dot: .color(SettingsLive.mark(chainId: chain.chainId,
+                                              name: chain.displayName).color),
+                count: count,
+                selected: selected == chain.chainId,
+                chainId: chain.chainId
+            ))
+        }
+        return ChainSheetModel(
+            title: loc.t("componentsUi.networkFilter.selectChain"), rows: rows
+        )
+    }
+
+    /// The header pill: which filter is on.
+    static func pill(selected: Int?, loc: Loc, fallback: FlowPillModel?) -> FlowPillModel? {
+        guard let selected, let chain = ChainCatalog.meta(selected) else { return fallback }
+        return FlowPillModel(
+            dots: [SettingsLive.mark(chainId: chain.chainId, name: chain.displayName).color],
+            label: chain.displayName
+        )
+    }
+
     // MARK: - A1 / A2, the history and one transaction
 
     /// The whole feed, in the drawn history screen.
@@ -60,13 +110,20 @@ enum FlowsLive {
     /// looking at.
     static func history(
         _ feed: FeedViewWire,
+        selected: Int? = nil,
         on model: HistoryModel,
         loc: Loc,
         hidden: Bool
     ) -> HistoryModel {
+        let header = FlowHeaderModel(
+            title: model.header.title,
+            backLabel: model.header.backLabel,
+            action: model.header.action,
+            pill: pill(selected: selected, loc: loc, fallback: model.header.pill)
+        )
         let groups = WalletLive.activityGroups(feed, loc: loc, hidden: hidden)
         return HistoryModel(
-            header: model.header,
+            header: header,
             mode: groups.isEmpty ? .empty : .rows,
             emptyText: model.emptyText,
             groups: groups

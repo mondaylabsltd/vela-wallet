@@ -734,9 +734,21 @@ is exactly the question it exists to answer.
 Seen on device-class hardware: `已收到 USDT · 成功 · +2,910.640521 USDT ·
 ≈ $2,910.64 · 发送方 0x38ce…6d6f · Ethereum · 今天 12:44 · 哈希 0x60a6…e3e7`.
 
+### The network filter, while the history was open anyway
+
+The pill in the history header raised an intent nothing answered, and
+`ChainSelectSheet` was a list with a checkmark that nobody could pick from. Both
+were drawn; connecting them is wiring, and the same shape as phase 4's editable
+field: **a picker nobody can pick from is a picture of a picker**.
+
+The rows are the chains this account has transfers ON, with their counts — not
+the twelve built-ins, because a filter offering an empty chain is a dead end
+somebody has to back out of. **The filtering itself is the core's**: the shell
+sends `chain_filter_changed` and renders whatever comes back.
+
 ### Gates
 
-Hermetic tests 309 → **319**; live 25; UI 11 → **12**. Literal violations 35.
+Hermetic tests 309 → **322**; live 25; UI 11 → **12**. Literal violations 35.
 Zero Rust changes.
 
 ---

@@ -55,6 +55,14 @@ struct FlowHost: View {
     var onSelectActivity: ((Int, Int) -> Void)?
     /// Which assets row opened the token sheet.
     var onSelectAsset: ((Int) -> Void)?
+    /// The network filter behind the header pill. Absent where the screen is a
+    /// fixture, which is the gallery and the screenshot sweep.
+    var chainSheet: ChainSheetModel?
+    var onPickChain: ((Int?) -> Void)?
+
+    /// Whether the network picker is up. Local, because which sheet is showing
+    /// is render-domain state no machine needs to know.
+    @State private var pickingChain = false
 
     /// The sheet's own dismissal. A new state means a new sheet, so the flag
     /// is keyed on the model's state — closing one must not suppress the next.
@@ -67,6 +75,19 @@ struct FlowHost: View {
     var body: some View {
         base
             .environment(\.walletTextScale, model.textScale)
+            .sheet(isPresented: $pickingChain) {
+                if let chainSheet {
+                    ChainSelectSheet(model: chainSheet, onSelect: { chainId in
+                        onPickChain?(chainId)
+                        pickingChain = false
+                    })
+                    .environment(\.walletTextScale, model.textScale)
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.hidden)
+                    .presentationCornerRadius(Tokens.Radius.r20)
+                    .presentationBackground(theme.bgBase)
+                }
+            }
             .sheet(
                 isPresented: Binding(
                     get: { sheetShown },
@@ -89,6 +110,12 @@ struct FlowHost: View {
             }
     }
 
+    /// The pill's tap. With nothing wired it still reports the intent, so a
+    /// screen that has no picker yet behaves exactly as it did.
+    private func openChainPicker() {
+        if chainSheet != nil { pickingChain = true } else { onNavigate(.chains) }
+    }
+
     @ViewBuilder private var base: some View {
         switch model.base {
         case .scan(let m):
@@ -109,7 +136,7 @@ struct FlowHost: View {
                 })
             }
         case .history(let m):
-            FlowScaffold(header: m.header, onBack: onBack, onPill: { onNavigate(.chains) }) {
+            FlowScaffold(header: m.header, onBack: onBack, onPill: { openChainPicker() }) {
                 HistoryBody(model: m, onSelect: { group, row in
                     onSelectActivity?(group, row)
                     onNavigate(.txDetail)
@@ -120,7 +147,7 @@ struct FlowHost: View {
                 header: m.header,
                 onBack: onBack,
                 onAction: { onNavigate(.addToken) },
-                onPill: { onNavigate(.chains) }
+                onPill: { openChainPicker() }
             ) {
                 AssetsBody(
                     model: m,

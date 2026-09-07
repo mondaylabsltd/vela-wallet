@@ -141,6 +141,9 @@ struct ChainRowModel: Identifiable {
     let dot: ChainDot
     let count: Int
     let selected: Bool
+    /// Which chain this row picks; `nil` is the 所有网络 row. Absent in the
+    /// fixtures, which are a picture of the list rather than a picker.
+    var chainId: Int?
 }
 
 struct ChainSheetModel {

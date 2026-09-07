@@ -170,6 +170,59 @@ struct DrilldownTests {
         #expect(bare.facts.first?.mono == true, "an address must be drawn in mono")
     }
 
+    // MARK: - The network filter
+
+    /// The picker offers the chains this account has transfers ON, with their
+    /// counts — not the twelve built-ins. A filter offering an empty chain is a
+    /// dead end somebody has to back out of.
+    @Test func theChainPickerOffersOnlyChainsWithTransfers() {
+        let view = feed([
+            item(id: "a", chainId: 1),
+            item(id: "b", chainId: 1),
+            item(id: "c", chainId: 100),
+        ])
+        let sheet = FlowsLive.chainSheet(view, selected: nil, loc: loc)
+
+        #expect(sheet.rows.count == 3, "expected 所有网络 + two chains")
+        #expect(sheet.rows[0].name == loc.t("componentsUi.networkFilter.allNetworks"))
+        #expect(sheet.rows[0].chainId == nil)
+        #expect(sheet.rows[0].count == 3)
+        #expect(sheet.rows[0].selected, "no filter means 所有网络 is the chosen row")
+        // Registry order, so the list does not reshuffle as counts change.
+        #expect(sheet.rows[1].name == "Ethereum")
+        #expect(sheet.rows[1].count == 2)
+        #expect(sheet.rows[2].name == "Gnosis")
+        #expect(sheet.rows[2].count == 1)
+    }
+
+    @Test func thePickedChainIsTheMarkedRowAndTheHeaderPill() {
+        let view = feed([item(id: "a", chainId: 1), item(id: "b", chainId: 100)])
+        let sheet = FlowsLive.chainSheet(view, selected: 100, loc: loc)
+        #expect(sheet.rows.first(where: { $0.chainId == 100 })?.selected == true)
+        #expect(sheet.rows[0].selected == false, "所有网络 stayed marked under a filter")
+
+        let live = FlowsLive.history(view, selected: 100, on: baseHistory,
+                                     loc: loc, hidden: false)
+        #expect(live.header.pill?.label == "Gnosis")
+        // And with no filter the drawn 全部网络 pill stands.
+        let unfiltered = FlowsLive.history(view, on: baseHistory, loc: loc, hidden: false)
+        #expect(unfiltered.header.pill?.label == baseHistory.header.pill?.label)
+    }
+
+    /// The shell does not filter. It sends the choice to the core and renders
+    /// whatever comes back — the rows above are built from the feed the core
+    /// published, filtered or not.
+    @Test func theShellDoesNotDoTheFilteringItself() {
+        // A feed the core has already filtered to one chain: the screen shows
+        // exactly those rows, and the picker still offers what is in it.
+        let filtered = feed([item(id: "a", chainId: 100)])
+        let live = FlowsLive.history(filtered, selected: 100, on: baseHistory,
+                                     loc: loc, hidden: false)
+        #expect(live.groups.flatMap(\.rows).count == 1)
+        let sheet = FlowsLive.chainSheet(filtered, selected: 100, loc: loc)
+        #expect(sheet.rows.count == 2, "the picker invented a chain the feed does not have")
+    }
+
     // MARK: - T2
 
     private func token(

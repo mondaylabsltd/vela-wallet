@@ -44,6 +44,9 @@ struct RootView: View {
     /// tap travelling with the navigation they would show the first.
     @State private var activityRow: (group: Int, row: Int) = (0, 0)
     @State private var assetRow = 0
+    /// The network filter on the history screen. `nil` is every chain — the
+    /// core owns the filtering; this is only which row was picked.
+    @State private var chainFilter: Int?
     /// The networks machine (spec 050), app-resident: it probes endpoints and
     /// holds a search debounce, and one that died with the settings route would
     /// re-probe every chain on each visit.
@@ -341,7 +344,14 @@ struct RootView: View {
                     addTokenError: addTokenError(for: state),
                     onReceiveNetwork: { receiveNetwork = $0 },
                     onSelectActivity: { activityRow = ($0, $1) },
-                    onSelectAsset: { assetRow = $0 }
+                    onSelectAsset: { assetRow = $0 },
+                    chainSheet: activity.feed.map {
+                        FlowsLive.chainSheet($0, selected: chainFilter, loc: loc)
+                    },
+                    onPickChain: { chainId in
+                        chainFilter = chainId
+                        activity.chainFilter(chainId)
+                    }
                 )
                 .transition(.move(edge: .trailing))
                 .task(id: state) {
@@ -539,7 +549,8 @@ struct RootView: View {
         // second one built from another source.
         if case .history(let history) = model.base, let feed = activity.feed {
             model.base = .history(FlowsLive.history(
-                feed, on: history, loc: loc, hidden: wallet.balance?.hidden ?? false
+                feed, selected: chainFilter, on: history, loc: loc,
+                hidden: wallet.balance?.hidden ?? false
             ))
         }
         if case .txDetail(let detail)? = model.sheet, let feed = activity.feed,

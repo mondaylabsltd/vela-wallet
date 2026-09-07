@@ -220,9 +220,8 @@ a symbol and decimals, not the contract, on every client.
 
 The core owns these and no gesture reaches them:
 
-- the **chain-filter pill** (`ActivityStore.chainFilter`) — the history and
-  assets headers raise `onPill`, `FlowNav` has no `.chains` step, and
-  `ChainSelectSheet` is drawn with fixture rows. The nearest piece of work;
+- ~~the chain-filter pill~~ — done in phase 8: the pill opens the drawn picker,
+  the rows are the chains with transfers, and the core does the filtering;
 - the **receipt toast and row glow** (`FeedView.toast` / `newItemId`) — decoded,
   never drawn;
 - **swipe-to-delete** an activity row (`ActivityStore.deleteRequested`);
