@@ -13,7 +13,8 @@ import kotlinx.serialization.Serializable
  *
  * Sixteen operations, six of which are storage and ten of which are network.
  * Spec 040 answers the six and fail-closes the ten; every one of those arms
- * carries `// live in 041` so the next spec can find its own work by grep.
+ * carries a `// live in NNN` marker so the next spec can find its own work by
+ * grep — the convention 040 started and 041 emptied.
  */
 
 // ---------------------------------------------------------------------------
@@ -126,9 +127,9 @@ data class NetView(
 /**
  * One row of the network editor.
  *
- * `rpc_health` and `explorer_health` are `null` for the whole of spec 040 —
- * nothing can probe an endpoint until 041 — and the settings screen renders
- * that as *unknown* rather than as a green tick. // live in 041
+ * `rpc_health` and `explorer_health` are `null` until this device has probed
+ * that endpoint, and the settings screen renders that as *unknown* rather than
+ * as a green tick. A probe runs when a network row is opened.
  */
 @Serializable
 data class NetNetworkRow(

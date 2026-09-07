@@ -1,8 +1,12 @@
 package app.getvela.wallet.feature.contacts
 
+import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.contacts.core.Contact
 import app.getvela.wallet.feature.contacts.core.ContactGroupView
 import app.getvela.wallet.feature.contacts.core.ContactsView
+import app.getvela.wallet.feature.wallet.WalletLive
+import app.getvela.wallet.feature.wallet.core.FeedRow
+import app.getvela.wallet.feature.wallet.core.FeedView
 
 /**
  * The live contacts builders: `ContactsView` → the display models the drawn
@@ -140,8 +144,31 @@ object ContactsLive {
      * while its delete acted on contact B, and it survived three review passes
      * because both halves looked right in isolation.
      */
-    fun detail(fallback: ContactDetailModel, contact: Contact, view: ContactsView): ContactDetailModel {
+    fun detail(
+        fallback: ContactDetailModel,
+        contact: Contact,
+        view: ContactsView,
+        feed: FeedView = FeedView(),
+        strings: VelaStrings? = null,
+    ): ContactDetailModel {
         val model = toContactModel(contact)
+        // Only the rows whose counterparty IS this person. Matched on the
+        // address rather than the name: a name is a label somebody typed and
+        // two contacts can share one, while the address is the identity the
+        // payment actually went to.
+        val withThisPerson = if (strings == null) {
+            emptyList()
+        } else {
+            WalletLive.activity(
+                FeedView(
+                    rows = feed.rows.filter { row ->
+                        row !is FeedRow.Item ||
+                            row.item.counterparty.equals(contact.address, ignoreCase = true)
+                    },
+                ),
+                strings,
+            ).flatMap { it.rows }
+        }
         return fallback.copy(
             contact = model,
             chips = fallback.chips.copy(
@@ -154,26 +181,23 @@ object ContactsLive {
             // way. The FULL address, never the shortened one: this is the value
             // the copy button puts on the clipboard.
             address = fallback.address.copy(lines = splitAddress(contact.address)),
-            // **Cleared, not inherited.** // live in 041
+            // **This person's transactions, or nothing.**
             //
-            // The recent-activity block needs the local transaction store spec
-            // 041 brings. An earlier version of this line left the fallback's
-            // rows alone, on the assumption that the fallback carried none —
-            // and the C2 fixture carries two, so a freshly saved contact was
-            // shown "+50 USDC received yesterday" for a transaction that never
-            // happened. Found on a device, in the one place a wrong answer
-            // looks completely ordinary.
+            // An earlier version left the fallback's rows alone, on the
+            // assumption that the fallback carried none — and the C2 fixture
+            // carries two, so a freshly saved contact was shown "+50 USDC
+            // received yesterday" for a payment that never happened. Found on a
+            // device, in the one place a wrong answer looks completely
+            // ordinary.
             //
-            // The empty BLOCK is cleared too, and that is not tidiness.
+            // The empty BLOCK stays cleared, and that is not tidiness.
             // `contactDetailNoActivity` fills it with `contacts.empty` —
             // "还没有联系人 / 添加常用地址…" — which reads as nonsense under
-            // 最近往来 on a page that is showing a contact. The fixture could
-            // reuse it because it was never on a live screen; here it is on
-            // every one. There is no i18n key for "no transactions with this
-            // person yet", and inventing product copy is not this feature's
-            // call, so the section keeps its heading and stands empty until
-            // spec 041 gives it both a history and a sentence.
-            activity = fallback.activity.copy(rows = emptyList(), empty = null),
+            // 最近往来 on a page that is showing a contact. There is still no
+            // i18n key for "no transactions with this person yet", and
+            // inventing product copy is not this feature's call, so a contact
+            // with no history keeps its heading and stands empty.
+            activity = fallback.activity.copy(rows = withThisPerson, empty = null),
         )
     }
 

@@ -18,9 +18,20 @@ import uniffi.vela_core_uniffi.ContactsCore
  * asks it who an address belongs to), and re-reading storage on every screen
  * entry would flash an empty list at somebody who has fifty contacts.
  */
-class ContactsController(context: Context, scope: CoroutineScope) {
+class ContactsController(
+    context: Context,
+    scope: CoroutineScope,
+    /** A name for an address, from the passkey index. `null` = nobody knows one. */
+    registryName: suspend (String) -> String? = { null },
+    /** `eth_getCode` on one chain, for the contract badge. `null` = unchecked. */
+    code: suspend (Int, String) -> String? = { _, _ -> null },
+) {
 
-    private val executor = ContactsExecutor(VelaStore(context))
+    private val executor = ContactsExecutor(
+        store = VelaStore(context),
+        registryName = registryName,
+        code = code,
+    )
 
     private val host = CoreHost(
         bridge = ContactsCore().asBridge(),

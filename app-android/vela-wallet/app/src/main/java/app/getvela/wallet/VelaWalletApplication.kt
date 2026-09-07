@@ -7,6 +7,7 @@ import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.LocaleResolver
 import app.getvela.wallet.feature.contacts.core.ContactsController
 import app.getvela.wallet.feature.onboarding.core.AccountStore
+import app.getvela.wallet.feature.onboarding.core.RegistryClient
 import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.settings.core.SettingsController
 import app.getvela.wallet.core.data.VelaStore
@@ -14,6 +15,7 @@ import app.getvela.wallet.core.platform.Haptics
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import app.getvela.wallet.feature.wallet.core.NetworkEndpointSource
 import app.getvela.wallet.feature.wallet.core.RpcPool
+import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.wallet.core.WalletController
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -128,6 +130,14 @@ class AppContainer(private val app: Application) {
         ContactsController(
             context = app,
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+            // Paying another Vela user should show their name, not forty hex
+            // characters. The index this asks is the same one onboarding
+            // publishes to, through the same client.
+            registryName = { address -> RegistryClient().nameForAddress(address) },
+            code = { chainId, address ->
+                (pool.call(chainId, "eth_getCode", listOf(address, "latest")) as? RpcResult.Body)
+                    ?.json?.optString("result")?.takeIf { it.startsWith("0x") }
+            },
         )
     }
 

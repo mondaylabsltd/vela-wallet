@@ -8,6 +8,10 @@ import app.getvela.wallet.feature.contacts.ContactsScreenState
 import app.getvela.wallet.feature.contacts.core.Contact
 import app.getvela.wallet.feature.contacts.core.ContactGroupView
 import app.getvela.wallet.feature.contacts.core.ContactsView
+import app.getvela.wallet.feature.wallet.core.FeedView
+import app.getvela.wallet.feature.wallet.core.FeedRow
+import app.getvela.wallet.feature.wallet.core.FeedItem
+import app.getvela.wallet.feature.wallet.core.FeedDirection
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -213,5 +217,100 @@ class ContactsLiveTest {
         const val ALICE = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         const val BOB = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         const val CAROL = "0xcccccccccccccccccccccccccccccccccccccccc"
+    }
+
+    // -- the detail page's activity block (spec 041 phase 7) -----------------
+
+    private fun feedItem(counterparty: String, value: String) = FeedRow.Item(
+        FeedItem(
+            id = "tx-$counterparty-$value",
+            direction = FeedDirection.Out,
+            counterparty = counterparty,
+            value = value,
+            symbol = "USDC",
+            decimals = 6,
+            chain_id = 137,
+            timestamp = System.currentTimeMillis() / 1000.0,
+            day_start_ms = midnightToday(),
+        ),
+    )
+
+    private fun midnightToday(): Double = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis.toDouble()
+
+    private fun feedWith(vararg rows: FeedRow) = FeedView(
+        rows = listOf(
+            FeedRow.Header("day-today", midnightToday(), System.currentTimeMillis() / 1000.0),
+        ) + rows.toList(),
+    )
+
+    /**
+     * The device bug, still pinned.
+     *
+     * The C2 fixture carries two transactions. A freshly saved contact that
+     * inherited them was shown "+50 USDC received yesterday" for a payment that
+     * never happened — the kind of wrong answer that looks completely ordinary.
+     */
+    @Test
+    fun `a contact with no history shows no transactions`() {
+        val contact = contact("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Alice")
+
+        val detail = ContactsLive.detail(
+            fallback = ContactsFixtures.buildMobileState(ContactsScreenState.C2, strings).detail!!,
+            contact = contact,
+            view = ContactsView(contacts = listOf(contact)),
+            feed = FeedView(),
+            strings = strings,
+        )
+
+        assertEquals(emptyList<Any>(), detail.activity.rows)
+        // And no empty-state block either: `contacts.empty` reads as
+        // "还没有联系人 / 添加常用地址" under 最近往来, which is nonsense on a
+        // page that is showing a contact.
+        assertNull(detail.activity.empty)
+    }
+
+    /** Payments to THIS person, and only to this person. */
+    @Test
+    fun `the activity block shows this contact's own transactions`() {
+        val alice = contact("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Alice")
+        val feed = feedWith(
+            feedItem("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "50"),
+            feedItem("0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB", "70"),
+            feedItem("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "20"),
+        )
+
+        val detail = ContactsLive.detail(
+            fallback = ContactsFixtures.buildMobileState(ContactsScreenState.C2, strings).detail!!,
+            contact = alice,
+            view = ContactsView(contacts = listOf(alice)),
+            feed = feed,
+            strings = strings,
+        )
+
+        assertEquals(2, detail.activity.rows.size)
+        assertEquals(listOf("−50", "−20"), detail.activity.rows.map { it.amount })
+    }
+
+    /** An address is an identity; a name is a label two contacts can share. */
+    @Test
+    fun `matching is by address, not by name`() {
+        val alice = contact("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "Alice")
+        // Same capitalisation difference a real address book produces.
+        val feed = feedWith(feedItem("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "50"))
+
+        val detail = ContactsLive.detail(
+            fallback = ContactsFixtures.buildMobileState(ContactsScreenState.C2, strings).detail!!,
+            contact = alice,
+            view = ContactsView(contacts = listOf(alice)),
+            feed = feed,
+            strings = strings,
+        )
+
+        assertEquals(1, detail.activity.rows.size)
     }
 }

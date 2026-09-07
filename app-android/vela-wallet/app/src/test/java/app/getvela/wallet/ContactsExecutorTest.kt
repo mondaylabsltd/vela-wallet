@@ -8,6 +8,7 @@ import app.getvela.wallet.feature.contacts.core.ContactOperation
 import app.getvela.wallet.feature.contacts.core.ContactShellResult
 import app.getvela.wallet.feature.contacts.core.ContactSource
 import app.getvela.wallet.feature.contacts.core.ContactTombstone
+import app.getvela.wallet.feature.contacts.core.ContactTxKind
 import app.getvela.wallet.feature.contacts.core.ContactsExecutor
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
@@ -29,7 +30,10 @@ import org.junit.Test
  */
 class ContactsExecutorTest {
 
-    private fun executor(store: KeyValueStore = FakeStore()) = ContactsExecutor(store)
+    /** One store per test, so the history cases can write into the same one. */
+    private val store = FakeStore()
+
+    private fun executor(store: KeyValueStore = this.store) = ContactsExecutor(store)
 
     private fun contact(
         address: String,
@@ -230,5 +234,110 @@ class ContactsExecutorTest {
             ContactShellResult.HistoryFailed,
             executor().neutralAnswer(ContactOperation.LoadSendHistory),
         )
+    }
+
+    // -- the history-derived half of the book (spec 041 phase 7) -------------
+
+    private suspend fun writeActivity(vararg rows: JSONObject) {
+        val array = JSONArray()
+        rows.forEach(array::put)
+        store.write(KeyValueStore.Keys.TRANSACTIONS, array.toString())
+    }
+
+    private fun sent(to: String, seconds: Double, name: String? = null) = JSONObject()
+        .put("id", "tx-$to-$seconds")
+        .put("type", "send")
+        .put("to", to)
+        .put("timestamp", seconds)
+        .apply { if (name != null) put("toName", name) }
+
+    /**
+     * **Seconds in, milliseconds out.**
+     *
+     * The activity store keeps epoch SECONDS and the core wants MILLISECONDS.
+     * They are a thousand apart and both are plain numbers, so nothing catches
+     * a missed conversion except this: every "last paid" would read as 1970,
+     * and a person's most recent recipient would sort to the bottom of their
+     * own address book.
+     */
+    @Test
+    fun `send history crosses in milliseconds, not seconds`() = runBlocking {
+        writeActivity(sent("0xAAAA", 1_756_900_000.0, name = "Alice"))
+
+        val result = executor().perform(ContactOperation.LoadSendHistory)
+
+        val tx = (result as ContactShellResult.HistoryLoaded).txs.single()
+        assertEquals(1_756_900_000_000.0, tx.timestamp_ms!!, 1.0)
+        assertEquals("0xAAAA", tx.to)
+        assertEquals("Alice", tx.to_name)
+        assertEquals(ContactTxKind.Send, tx.kind)
+    }
+
+    @Test
+    fun `the address book reads the same store the feed reads`() = runBlocking {
+        // Not a copy, not a second key: a payment that shows in Activity is a
+        // payment the address book knows about, or the two disagree about
+        // whether it happened.
+        writeActivity(sent("0xAAAA", 1.0), sent("0xBBBB", 2.0))
+
+        val result = executor().perform(ContactOperation.LoadSendHistory)
+
+        assertEquals(2, (result as ContactShellResult.HistoryLoaded).txs.size)
+    }
+
+    @Test
+    fun `an untyped legacy row is left for the core to interpret`() = runBlocking {
+        writeActivity(JSONObject().put("id", "x").put("to", "0xAAAA").put("timestamp", 1.0))
+
+        val result = executor().perform(ContactOperation.LoadSendHistory)
+
+        assertNull((result as ContactShellResult.HistoryLoaded).txs.single().kind)
+    }
+
+    @Test
+    fun `an empty store is an empty history, not a failure`() = runBlocking {
+        val result = executor().perform(ContactOperation.LoadSendHistory)
+
+        assertEquals(emptyList<Any>(), (result as ContactShellResult.HistoryLoaded).txs)
+    }
+
+    // -- identity and classification -----------------------------------------
+
+    @Test
+    fun `a name from the index becomes an identity`() = runBlocking {
+        val subject = ContactsExecutor(store, registryName = { "Bob" })
+
+        val result = subject.perform(ContactOperation.ResolveIdentity("0xAAAA"))
+
+        val identity = (result as ContactShellResult.IdentityResolved).identity!!
+        assertEquals("Bob", identity.name)
+        assertEquals("passkey", identity.source)
+    }
+
+    @Test
+    fun `no name anywhere resolves to nothing, never to an invented one`() = runBlocking {
+        val result = executor().perform(ContactOperation.ResolveIdentity("0xAAAA"))
+
+        assertNull((result as ContactShellResult.IdentityResolved).identity)
+    }
+
+    @Test
+    fun `a code read that failed stays unknown, not "not a contract"`() = runBlocking {
+        // `"0x"` means "definitely not a contract" and a trust badge is drawn
+        // from it. A read that never answered has not earned that claim.
+        val result = executor().perform(ContactOperation.ClassifyRecipient(1, "0xAAAA"))
+
+        assertNull((result as ContactShellResult.RecipientClassified).code)
+    }
+
+    @Test
+    fun `a code read passes the chain's answer through untouched`() = runBlocking {
+        val subject = ContactsExecutor(store, code = { _, _ -> "0x60806040" })
+
+        val result = subject.perform(ContactOperation.ClassifyRecipient(137, "0xAAAA"))
+
+        val classified = result as ContactShellResult.RecipientClassified
+        assertEquals("0x60806040", classified.code)
+        assertEquals(137, classified.chain_id)
     }
 }

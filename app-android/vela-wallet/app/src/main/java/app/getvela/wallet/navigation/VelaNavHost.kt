@@ -378,7 +378,15 @@ fun VelaNavHost(
             val listModel = ContactsLive.home(labels, book, query, emptyState)
             val model = if (selected != null) {
                 listModel.copy(
-                    detail = ContactsLive.detail(detailLabels, selected, book),
+                    detail = ContactsLive.detail(
+                        fallback = detailLabels,
+                        contact = selected,
+                        view = book,
+                        // The activity this device holds, filtered to this
+                        // person by the page itself.
+                        feed = application.container.wallet.feed.value,
+                        strings = strings,
+                    ),
                     deleteConfirm = if (confirmingDelete) {
                         // Named after the contact on screen: a confirmation that
                         // says "delete Alice?" while removing Bob is worse than
