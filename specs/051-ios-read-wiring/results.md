@@ -161,7 +161,3 @@ Phase 2b, the rest of `balance_dashboard` — the executor, the live builder, th
 store, and `RootView`'s `.wallet` case. The order and the remaining traps are in
 **[tasks.md](./tasks.md)**; `Core/TokenReads.swift` and
 `Features/Wallet/BalanceWire.swift` are already in place.
-
-Phase 2, `balance_dashboard` — the `$1,383.28` screen. The plan, the two traps
-that cost desktop a defect each, and the ABI gap that has to be settled first
-are all in **[tasks.md](./tasks.md)**.

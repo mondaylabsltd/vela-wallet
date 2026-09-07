@@ -94,7 +94,16 @@ the shape 050 never had, and it is why this phase ports a service layer.
    `RootView.init` beside `contacts` and `settings`.
 6. Wire `signedInOrWelcome`'s `.wallet` case to it.
 
-### The gap that needs deciding first (research D1)
+### ✅ Already done (phase 2a, `f2b518e1`) — start at step 3
+
+- The ABI gap below is **settled and shipped**: `multicall3_encode_aggregate3`,
+  `multicall3_decode_aggregate3`, `erc20_encode_balance_of` in
+  `rust/crates/vela-core-uniffi/src/multicall.rs`. Bindings 215,916 → 260,699.
+- `Core/TokenReads.swift` — the multi-chain read, every call through
+  `RpcPool.call`, raw units → human decimal in string arithmetic.
+- `Features/Wallet/BalanceWire.swift` — the `Decodable` mirrors.
+
+### The gap that needed deciding first (research D1) — SETTLED
 
 `aggregate3((address,bool,bytes)[])` is a dynamic array of tuples and the bridge
 exports **no encoder for it**. `abi_encode_address/uint256/bytes32`,
