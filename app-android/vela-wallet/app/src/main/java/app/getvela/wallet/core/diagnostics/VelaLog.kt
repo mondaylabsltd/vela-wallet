@@ -123,8 +123,27 @@ object VelaLog {
                 }
             }
         }
-        Log.i(TAG, line)
+        logcat(line)
         appendToFile(line)
+    }
+
+    /**
+     * **A log line must never become a failure.**
+     *
+     * `android.util.Log` is a stub on the JVM and throws "not mocked" — so the
+     * first executor to log inside an operation threw instead of answering, and
+     * the machine waiting on that answer hung until the test's own timeout. A
+     * shell operation that never answers is the one contract violation this
+     * codebase cannot recover from, and it arrived through a diagnostic.
+     *
+     * The file write below has always been guarded; Logcat was not.
+     */
+    private fun logcat(line: String) {
+        try {
+            Log.i(TAG, line)
+        } catch (_: Throwable) {
+            // No Android runtime (unit tests). The file, if any, still has it.
+        }
     }
 
     @Synchronized
@@ -136,7 +155,11 @@ object VelaLog {
         } catch (error: Exception) {
             // A diagnostic that crashes the thing it is diagnosing is worse than
             // no diagnostic. Logcat still has the line.
-            Log.w(TAG, "could not write the log file", error)
+            // Same rule as above: reporting the failure must not become one.
+            try {
+                Log.w(TAG, "could not write the log file", error)
+            } catch (_: Throwable) {
+            }
         }
     }
 

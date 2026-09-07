@@ -5,7 +5,9 @@ import app.getvela.wallet.core.net.VelaHttp
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -234,13 +236,24 @@ data class RpcPostResult(val outcome: RpcTransportOutcome, val body: JSONObject?
  */
 class OkHttpTransport : RpcTransport {
 
+    /**
+     * **The blocking call confines itself.**
+     *
+     * `execute()` blocks, so this suspend function is only safe on a dispatcher
+     * that tolerates blocking — and nothing in its signature says so. Leaving
+     * that to the caller made an unrelated file's dispatcher choice
+     * (`AppContainer.wallet`) load-bearing: harmonising that scope with its
+     * `Main.immediate` siblings would have crashed the read path with
+     * `NetworkOnMainThreadException`. The confinement belongs here, where the
+     * blocking is.
+     */
     override suspend fun post(
         url: String,
         method: String,
         params: List<Any?>,
         xRpcUrl: String?,
         timeoutMs: Int,
-    ): RpcPostResult {
+    ): RpcPostResult = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("jsonrpc", "2.0")
             .put("id", 1)
@@ -260,14 +273,14 @@ class OkHttpTransport : RpcTransport {
             .build()
             .newCall(request)
 
-        return try {
+        try {
             call.execute().use { response ->
                 if (!response.isSuccessful) {
-                    return RpcPostResult(RpcTransportOutcome.HttpError(response.code))
+                    return@withContext RpcPostResult(RpcTransportOutcome.HttpError(response.code))
                 }
                 val text = response.body?.string().orEmpty()
                 val json = runCatching { JSONObject(text) }.getOrNull()
-                    ?: return RpcPostResult(RpcTransportOutcome.NonJson)
+                    ?: return@withContext RpcPostResult(RpcTransportOutcome.NonJson)
                 val error = json.optJSONObject("error")?.let {
                     RpcErrorInfo(
                         code = if (it.isNull("code")) null else it.optInt("code"),

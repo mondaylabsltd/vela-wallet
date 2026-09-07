@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.wallet.core
 
 import app.getvela.wallet.core.data.KeyValueStore
+import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.settings.core.NetView
 import java.math.BigDecimal
 import java.math.BigInteger
@@ -114,6 +115,17 @@ class BalanceExecutor(
         operation: BalanceOperation.FetchTokens,
     ): BalanceShellResult {
         val holdings = nativeHoldings(operation.address, streaming = true)
+        // Every other machine in this app logs what it did; this one did not,
+        // and the first device run could not tell a genuinely empty wallet from
+        // twelve failed reads — both render as a total of zero from outside.
+        VelaLog.event(
+            "balance.fetch",
+            "settled",
+            "chains" to networks.value.networks.size,
+            "held" to holdings.tokens.size,
+            "failed" to holdings.failed.size,
+            "rateLimited" to pool.view.value.rate_limited_chains.size,
+        )
         return BalanceShellResult.FetchSettled(
             address = operation.address,
             pull = operation.pull,

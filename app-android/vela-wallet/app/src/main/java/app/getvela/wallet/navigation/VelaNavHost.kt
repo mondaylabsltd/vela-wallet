@@ -59,10 +59,12 @@ import app.getvela.wallet.feature.settings.SettingsRoute
 import app.getvela.wallet.feature.settings.SettingsScreenState
 import app.getvela.wallet.feature.settings.gallery.SettingsGalleryScreen
 import app.getvela.wallet.feature.wallet.WalletFixtures
+import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.WalletScreen
 import app.getvela.wallet.feature.wallet.WalletScreenState
 import app.getvela.wallet.feature.wallet.components.VelaTab
 import app.getvela.wallet.feature.wallet.gallery.GalleryScreen
+import kotlinx.coroutines.flow.first
 
 object VelaDestinations {
     const val WELCOME = "welcome"
@@ -254,6 +256,23 @@ fun VelaNavHost(
             // it leaves the wallet — on a phone that is the most common way out
             // of a flow, and losing the whole wallet from four screens deep is
             // not what the gesture means.
+            // The holdings are this person's own from spec 041; the activity
+            // feed and the flows are still fixtures until phases 5 and 6.
+            val wallet = application.container.wallet
+            val balances by wallet.balances.collectAsStateWithLifecycle()
+            LaunchedEffect(session.address) {
+                if (session.address.isEmpty()) return@LaunchedEffect
+                // ORDER MATTERS. The pool asks the network machine which
+                // endpoints a chain has, so a fetch dispatched before that
+                // machine has read storage finds no chains at all and settles
+                // with nothing — silently, and with no second chance, because
+                // nothing re-triggers when the list later arrives.
+                val settings = application.container.settings
+                settings.startNetworks()
+                settings.networks.first { it.loaded }
+                wallet.open(session.address)
+            }
+
             val flows = rememberFlowNavState()
             BackHandler(enabled = flows.isOpen) { flows.back() }
 
@@ -269,7 +288,7 @@ fun VelaNavHost(
                 )
             } else {
                 WalletScreen(
-                    model = model,
+                    model = WalletLive.home(model, balances, strings),
                     onSelectTab = { tab ->
                         // 设置 has a screen now (spec 023), and the 退出登录 row
                         // inside it is where signing out lives. Until then the

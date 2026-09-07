@@ -9,6 +9,7 @@ import app.getvela.wallet.feature.contacts.core.ContactsController
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.settings.core.SettingsController
+import app.getvela.wallet.feature.wallet.core.WalletController
 import java.util.Locale
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
@@ -62,6 +63,25 @@ class AppContainer(private val app: Application) {
         SettingsController(
             context = app,
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+        )
+    }
+
+    /**
+     * The wallet home's machines — the RPC pool and the balance dashboard — on
+     * the same terms as [settings].
+     *
+     * The pool lives here rather than on a screen because its ban map and
+     * endpoint statistics are facts about the network that every read-path
+     * machine shares. Two pools would mean two opinions about a dead endpoint.
+     *
+     * It reads its endpoints from the settings machine's own view, so there is
+     * exactly one reader of what networks this person has.
+     */
+    val wallet: WalletController by lazy {
+        WalletController(
+            context = app,
+            networks = settings.networks,
+            scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
         )
     }
 
