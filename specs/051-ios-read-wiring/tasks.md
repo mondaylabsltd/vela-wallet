@@ -185,17 +185,13 @@ Live: `0xd8dA…6045` → **vitalik.eth**. And a finding: that address answers
 
 ---
 
-## Next — Phase 7: the device run, and it is the ONLY thing left
+### Phase 7 — closeout ✅ all eight criteria met
 
-Closeout is written (results.md has the SC table, the re-measured baselines and
-the two founder decisions). Seven of the eight success criteria are met.
+The phone came back at the end and the **9 acceptance tests passed on it** in
+78 seconds (SC-008). results.md has the SC table, the re-measured baselines and
+the two founder decisions.
 
-**SC-008 is not**, and cannot be from this machine: the phone dropped off USB
-during phase 2c and has read `unavailable` since. The eleven acceptance tests
-pass on the simulator, and a simulator run is preparation, never proof — phase 2b
-is the proof of that, where the dev-seed defect surfaced only under a real run.
-
-Plug the phone in and run:
+To re-run them on the device:
 
 ```bash
 xcodebuild -project VelaWallet.xcodeproj -scheme VelaWallet \

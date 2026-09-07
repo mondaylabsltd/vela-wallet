@@ -645,16 +645,33 @@ Hermetic tests 298 → **306**; live 20 → **23**; device UI 11. Literal violat
 | **SC-003** | an unreachable chain renders as unreachable, not as zero | **met** — `ReadPathContractTests`: every chain with a coin to read reports `failed`, the token list stays empty, and the switcher answers `null` |
 | **SC-004** | the `// live in 051` arms are live; `load_send_history` is the only one left | **met** — all five down (the inventory said four arms; the fifth was `invalidate_pools`) |
 | **SC-005** | galleries unchanged; every `*Fixtures.swift` diff additive | **met** — `git diff 07b4ccad -- '*Fixtures.swift'` is **empty**; the fixtures were not touched at all |
-| **SC-006** | the Swift test count strictly increases; build and the device suite green at every boundary | **met, one caveat** — 203 → **309** hermetic, 6 → **25** live, 8 → **11** UI. The UI suite is green on the simulator at every boundary; on the phone, see SC-008 |
+| **SC-006** | the Swift test count strictly increases; build and the device suite green at every boundary | **met** — 203 → **309** hermetic, 6 → **25** live, 8 → **11** UI (9 of them acceptance, all green on the phone) |
 | **SC-007** | zero machine changes under `rust/`; zero corpus delta; zero lines under the other four clients | **met** — `git diff 07b4ccad -- rust/crates/vela-core/` is **empty**, and no client but `app-ios` has a changed line |
-| **SC-008** | every P1 scenario confirmed on `shelchin's iPhone` | **NOT MET** — the phone dropped off USB during phase 2c and has read `unavailable` since. Everything below is owed |
+| **SC-008** | every P1 scenario confirmed on `shelchin's iPhone` | **met** — the phone came back and all **9** acceptance tests passed on it in 78s |
 
-### The one thing still owed
+### On the phone
 
-The eleven acceptance tests have never run on the phone in this cut. They pass on
-the simulator, and a simulator run is preparation, never proof — the spec says so
-and phase 2b proved why (the dev-seed defect surfaced only under a real run).
-The command is the third in tasks.md's list.
+The device dropped off USB during phase 2c and read `unavailable` for the rest of
+the cut; it reappeared at closeout and the suite ran there:
+
+```
+testHomeShowsRealMoneyRatherThanTheFixtureTotal      passed (11.9s)
+testReceiveShowsTheSignedInAddressAndARealCode       passed  (8.3s)
+testAddingATokenByContractFindsItAndKeepsIt          passed (23.7s)
+testNetworksListIsTheCoresTwelveNotTheDrawingsEight  passed  (5.5s)
+testTappingANetworkOpensThatNetwork                  passed  (6.3s)
+testTheAddGateFollowsTheCoresVerdict                 passed  (6.0s)
+testCurrencyDegradesRatherThanFabricating            passed  (5.6s)
+testContactsIsLiveAndNotTheFixtureRoster             passed  (5.4s)
+testContactsFixtureForComparison                     passed  (5.4s)
+                              9 tests, 0 failures, 78.1s
+```
+
+The home on the founder's own iPhone reads **总余额 · CNY ¥5.02** over
+`xDAI · Gnosis · 0.74797`, under their real address and identicon —
+`0.74797 × $0.99975 × 6.71`, every factor of which came from a chain or a feed.
+Screenshots are in the result bundle
+(`device-home-live-balance`, `device-receive-qr`, `device-add-token-added`, …).
 
 ### Baselines, re-measured
 
