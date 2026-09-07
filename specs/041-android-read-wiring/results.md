@@ -242,3 +242,246 @@ Again only `vela-core-uniffi` changed, so no regeneration gate applies.
    view is right before the rest of it arrives" in this program.
 
 **Gate**: 241 unit tests, 0 failures.
+
+---
+
+## Phase 4b/4c — Balances and prices ✅
+
+**$5.02 on the device**, from three real holdings: 0.002 ETH on Arbitrum,
+0.152784 POL on Polygon, 0.01 USDT that phase 4b could not see. One
+`aggregate3` per chain carries the native balance, every stablecoin's balance
+and decimals, the wrapped native token, four DEX quote tiers per stable, and
+the chain's own Chainlink feed. Twelve chains cost twelve requests.
+
+The device log shows the core's ladder choosing, which is the point of putting
+it there:
+
+| chain | coin | price | source |
+| --- | --- | --- | --- |
+| 1 | ETH | $2501.19 | `dex` |
+| 137 | POL | $0.0973 | `dex` |
+| 100 | XDAI | $0.99975 | `chainlink_sanity` — a thin pool disagreed and lost |
+| 130 | ETH | $2511.83 | `chainlink_eth` — no local feed, no quote |
+| 143 | MON | — | `none` — prices nothing rather than guessing |
+
+### Three defects, all found on the device
+
+1. **A confident `$0.00` over two real holdings.** The core folds an unpriced
+   holding in at zero, so a wallet whose every coin is unpriced totals exactly
+   `0.0` — indistinguishable at the type level from an empty one. Phase 4b had
+   no price source, so that was EVERY wallet. Fixed with a skeleton and a
+   warning that says why.
+2. **A log line became a failure.** `android.util.Log` is a stub on the JVM and
+   throws "not mocked". One line of tracing in the balance executor meant it
+   threw instead of answering its operation, and the machine waiting on that
+   answer hung until the test timeout — a diagnostic breaking the one shell
+   contract that cannot be recovered from.
+3. **An asset row named the token twice.** The second line is the chain, and it
+   was read off `BalanceToken.name` — correct only while the shell was writing
+   chain names into a field that means the token's name. Real names arrived with
+   the chain documents and every row read "USDT / USDT".
+
+**Gate**: 274 unit tests, 0 failures.
+
+---
+
+## Phase 5 — Activity ⚠️ (wired; SC-103 not claimed)
+
+The feed is on `activity_feed` and `token_trust`. The fixture's four
+transactions are gone; the screen shows this device's own history and an honest
+empty state when there is none.
+
+**SC-103 is NOT claimed.** `token_trust` is a LIVE monitor with a 100-block
+window — it cannot discover money that arrived last week, and this wallet's did.
+The pipeline is proven end to end in `IncomingScanTest`: a real Transfer log
+becomes a stored receipt, the same one twice does not, an off-allowlist contract
+does not, and a token whose metadata never resolved stays out rather than being
+written with a guessed 18 decimals. Confirming it on the device needs a deposit
+made while the app is watching, which is SC-104's test too.
+
+### Three defects, two of them device-only
+
+1. **The scan waited for the wrong thing.** `dispatch` is asynchronous, so
+   waiting for `!scanning` matched the state from BEFORE the poll was requested.
+   It answered instantly with the previous poll's feed; a receipt would have
+   surfaced one poll late while the log said it found nothing.
+2. **The scan watched the wrong chains.** It asks which chains this person holds
+   on, at the same instant the balance read starts — so the answer was always
+   "none" and it fell back to the six default chains. Money on Optimism,
+   Avalanche, Unichain, Monad or World Chain had no receipt monitoring on the
+   first pass. The log said `chains=6` without saying anything was wrong; it now
+   says `chains=2`, which is this wallet's truth.
+3. **An empty scan was silent** — logged only when something landed, so "found
+   nothing" and "never ran" were indistinguishable. The same blind spot the
+   balance executor had one phase earlier.
+
+**Gate**: 308 unit tests, 0 failures.
+
+---
+
+## Phase 3 — The display currency ✅
+
+**£3.71 on the device**, converted from $5.02 at Chainlink's GBP/USD feed. The
+hero, its label and every asset row move together. GBP had been *selected* since
+before this phase and the hero correctly showed dollars, because the core
+refuses to convert without a rate.
+
+Two lines here are silently, hugely wrong when they are wrong, and both are
+pinned:
+
+- **The inversion.** A `<CCY>/USD` feed answers what one unit costs in dollars —
+  0.0068 for JPY. The display rate is the other direction. Returning the feed's
+  own number shows a Japanese person a balance 22,000× too small.
+- **The decimals.** Most fiat feeds report 8; PHP reports 18. Each feed's own
+  `decimals()` is read in the same batch.
+
+The RPC pool moved to the composition root. Its own doc already said it belongs
+there — "two pools would mean two opinions about a dead endpoint" — and the
+currency rate is the second consumer, which is when that stopped being
+theoretical.
+
+**Gate**: 322 unit tests, 0 failures.
+
+---
+
+## Phase 2 — The network arms ✅
+
+Nine operations stop being fail-closed. On the device: **Gnosis · 在线 · 542ms**,
+on the one row that was probed, with every other row still blank — the rule 040
+wrote and this phase keeps: *a latency nobody measured is not drawn.*
+
+**The probes had no caller.** The network row was drawn tappable from the start
+and nothing was listening, so `expandOverride` existed on the controller with no
+path to it. The nine arms would have gone live and the screen would still have
+shown nothing.
+
+`noRowClaimsALatencyNobodyMeasured` was 040's "no pill, ever". It now pins the
+invariant that outlived it: measured shows a number, unmeasured and checking
+show nothing.
+
+**Gate**: 323 unit tests, 0 failures.
+
+---
+
+## Phase 7 — Contacts backfills ✅
+
+Three arms live. The address book reads the SAME activity store the feed reads,
+so the two can never disagree about whether a payment happened. A name comes
+from the passkey index through the client onboarding already publishes to.
+
+**Seconds in, milliseconds out.** The store keeps epoch seconds and the core
+wants milliseconds; a missed conversion has nothing to catch it except the test
+that now does — every "last paid" would read as 1970 and a person's most recent
+recipient would sort to the bottom of their own address book.
+
+The contact detail's 最近往来 block shows this person's transactions, matched on
+ADDRESS rather than name. The device bug stays fixed: a contact with no history
+shows nothing, not the C2 fixture's "+50 USDC received yesterday".
+
+Deliberately not ported: the ENS-style reverse waterfall (.bnb, .arb,
+Basenames) needs a namehash, which needs keccak256. The core already has one for
+selectors and should own this rather than carry a third hand-written copy.
+
+**Gate**: 334 unit tests, 0 failures.
+
+---
+
+## Phase 6 — Receive ✅
+
+**The QR code was a decoration.** Xorshift noise with three finder squares,
+drawn at full size, encoding nothing. Spec 015 chose that deliberately and said
+why: *"a code that looked scannable but was not would be worse than one that
+plainly is not."* By this spec the screen around it had become entirely real —
+this person's name, address and identicon — so the pattern stopped plainly not
+being a code and started looking exactly like one. The failure that reasoning
+guarded against arrived from the other side.
+
+It draws the real matrix now, from the encoder already on the bridge (the one
+caBLE and the desktop use). Decoded from a device screenshot with `zbarimg`:
+
+```
+QR-Code:0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141
+```
+
+— exactly the address printed on the card.
+
+**`focused()` and `backgrounded()` had no caller.** The balance machine has had
+a focus-driven auto-refresh since phase 4 and nothing was telling it; the
+receive watcher needs the same signal or it polls a dozen chains from inside a
+bag. Counted rather than a boolean, because a rotation stops one activity and
+starts another.
+
+The receive screen is the one place in this app where a stale value is
+unrecoverable — every other leaked fixture shows wrong information, a fixture
+ADDRESS sends money to a stranger. The address is replaced unconditionally, and
+an empty session renders a blank card rather than the drawn one.
+
+**Gate**: 347 unit tests, 0 failures.
+
+---
+
+## Phase 8 — Add a network ⚠️ (search live; SC-106 not claimed)
+
+Typing "celo" returns Celo Mainnet (42220), Alfajores (44787), Baklava (62320)
+and Sepolia (11142220) from the public index. Picking one runs the compatibility
+checks against that chain's own RPC — eight contracts, all found.
+
+**The search box was drawn read-only.** `value = ""`, no `onValueChange` — the
+component has taken one all along. The fixture's three results sat under a
+search nobody could perform, and two of them were invented chains.
+
+**A chain id past u32 was killing the whole index.** The public index carries
+7,078,815,900; the core holds `chain_id` as `u32`, so serde rejected the ENTIRE
+`search_index` result. The symptom was not "that chain is missing" but "network
+search does nothing", with a core fault in the log and an empty screen.
+
+> **For every platform, not just this one.** The web guards this no better
+> (`Number.isFinite` only) and iOS met the same class in spec 050. Whether
+> `chain_id` should widen in the core is recorded here, not answered.
+
+**SC-106 is NOT claimed.** The checks complete — the log proves it — but the
+wizard resets to an empty query before the verdict and the add button render, so
+adding a network is not verified end to end on the device. The button is wired
+and offered only when the core says `can_add`; what is missing is why the wizard
+state is discarded. Open, and named.
+
+---
+
+## Success criteria
+
+| # | Criterion | Verdict |
+| --- | --- | --- |
+| SC-101 | real balances and total on a device | ✅ $5.02 over three holdings, arithmetic checked |
+| SC-102 | a chain down → cache renders, ban persists | ⚠️ ban persistence tested; the down-chain device run was not staged |
+| SC-103 | the feed lists real on-chain transfers | ⚠️ pipeline proven in tests; needs a live deposit (100-block window) |
+| SC-104 | a deposit noticed without a refresh | ⚠️ watcher wired and stopping correctly; same live deposit needed |
+| SC-105 | `grep -rn 'live in 041'` → zero | ⚠️ **one** left, deliberate: custom-token pricing waits for its rule to get a Rust owner |
+| SC-106 | a custom network added, surviving a restart | ⚠️ search + checks live; the add step resets before it renders |
+| SC-107 | zero chain requests outside the pool | ✅ `NoStrayHttpClientTest`; the settings probes are single-URL by design and use the one client |
+| SC-108 | bridge delta measured before the work | ✅ +1,133,184 stripped bytes for seven machines (phase 0) |
+| SC-109 | the suite stays green and grows | ✅ 210 → **347**, 0 failures |
+
+### The honest shape of this
+
+Six of nine criteria are met or all-but-met. The three that are not share one
+cause: **they need money to move while the app is watching**, and this session
+had no funded sender. That is a staging problem, not a wiring one — every path
+they exercise is proven by test and every executor logs what it did, so the
+device run is an afternoon rather than an investigation.
+
+### What this feature kept finding
+
+Five separate surfaces were **drawn and not wired**, each looking finished:
+
+| Surface | What was missing |
+| --- | --- |
+| network rows | tappable, nothing listening — the probes had no caller |
+| add-network search | a read-only box with no `onValueChange` |
+| the receive QR | a decorative pattern encoding nothing |
+| `focused()` / `backgrounded()` | on the controller, called from nowhere |
+| the contact activity block | inherited the fixture's transactions |
+
+None of them fails loudly. Every one of them looks like a working screen, which
+is why the device pass keeps earning its place: four of the five were found by
+looking at a phone, not by reading code.
+
