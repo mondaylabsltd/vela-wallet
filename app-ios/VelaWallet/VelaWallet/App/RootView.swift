@@ -36,6 +36,9 @@ struct RootView: View {
     @State private var trust: TokenTrustStore
     @State private var activity: ActivityStore
     @State private var tokens: ManageTokensStore
+    @State private var deposits: ReceiveWatchStore
+    /// Which network row opened the receive code.
+    @State private var receiveNetwork = 0
     /// The networks machine (spec 050), app-resident: it probes endpoints and
     /// holds a search debounce, and one that died with the settings route would
     /// re-probe every chain on each visit.
@@ -103,6 +106,12 @@ struct RootView: View {
         _tokens = State(initialValue: ManageTokensStore(
             store: shelf, pool: pool,
             onInvalidate: { [weak wallet] in wallet?.refresh(pull: false) }
+        ))
+        // The receive screen's watcher. A detected deposit buzzes and re-reads
+        // the balances, so the figure behind the code is the new one.
+        _deposits = State(initialValue: ReceiveWatchStore(
+            store: shelf, pool: pool, held: held,
+            onDeposit: { [weak wallet] in wallet?.refresh(pull: false) }
         ))
         _model = State(initialValue: WelcomeModel(content: WelcomeContentBuilder.build(loc: loc)) { intent in
             switch intent {
@@ -318,10 +327,18 @@ struct RootView: View {
                     onNavigate: { flows.push($0) },
                     addTokenInput: addTokenInput(for: state),
                     onAddToken: addTokenAction(for: state),
-                    addTokenError: addTokenError(for: state)
+                    addTokenError: addTokenError(for: state),
+                    onReceiveNetwork: { receiveNetwork = $0 }
                 )
                 .transition(.move(edge: .trailing))
-                .task(id: state) { if state == .t3 { tokens.open() } }
+                .task(id: state) {
+                    if state == .t3 { tokens.open() }
+                    // The watcher runs while a code is on screen — five
+                    // minutes, at the core's own cadence, and it stops itself.
+                    if state == .r2 || state == .r3 {
+                        deposits.open(address: session.view.address)
+                    }
+                }
             } else {
                 switch section {
                 case .wallet:
@@ -485,6 +502,21 @@ struct RootView: View {
     /// visibly so.
     private func flowModel(_ state: FlowStateId) -> FlowScreenModel {
         var model = WalletFlowFixtures.build(state, loc: loc)
+        let address = session.view.address
+        // The receive screens first, because they are the ones where a fixture
+        // is not embarrassing but dangerous: money sent to the drawn address is
+        // money gone.
+        if case .receive(let list) = model.base {
+            model.base = .receive(FlowsLive.receiveList(address, on: list, loc: loc))
+        }
+        if case .receiveQr(let qr)? = model.sheet {
+            model.sheet = .receiveQr(FlowsLive.receiveQr(
+                address, name: session.view.activeName,
+                chain: ChainCatalog.chains.indices.contains(receiveNetwork)
+                    ? ChainCatalog.chains[receiveNetwork] : nil,
+                on: qr, loc: loc
+            ))
+        }
         if case .assets(let assets) = model.base, let balance = wallet.balance {
             model.base = .assets(FlowsLive.assets(
                 balance, currency: settings.currency, on: assets, loc: loc

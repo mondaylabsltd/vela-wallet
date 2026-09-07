@@ -142,20 +142,39 @@ account, on every client.
 SwiftUI `View` segfaults AttributeGraph at launch on this toolchain. Box an
 async closure in a class. Ordinary `(() -> Void)?` is fine.
 
+### Phase 5 — the receive screen ✅
+
+**The most dangerous fixture in the client is gone.** 收款 listed
+`0x14fB1f…D1eA5c` — an address belonging to nobody — on every network row, above
+a QR drawn from a demo pattern. It now shows the signed-in address and a code
+that actually encodes it (`cable_qr_matrix`, the same encoder the passkey
+ceremony uses).
+
+- `QrCode.modules` answers `nil` rather than falling back to the pattern: a code
+  that looks scannable and is not is the failure being fixed.
+- The sheet names the network that was **tapped** (nothing carried which row
+  opened it, so it kept the fixture's first one).
+- `receive_watch` runs while a code is on screen: buzz + balance re-read on a
+  detected deposit. Its `deposits` list is drawn nowhere — recorded, not
+  invented.
+- `payment_request` is **deferred**: its gate, request builder and `/pay`
+  validator need three surfaces this client does not draw. Results.md says why.
+
+**The bug the failure test found**: "every chain failed" was `allSatisfy(failed)`,
+and a chain with nothing to ask (Tempo, or a chain with no tokens and no feed)
+reports success without vouching for anything — turning a blackout into "your
+wallet is empty", which the core would adopt as a baseline.
+
 ---
 
-## Next — Phase 5: `receive_watch` + `payment_request`
+## Next — Phase 6: 050's remaining `// live in 051` arms
 
-**Read the drawings first.** The drawn receive screens (R1 list, R2/R3 QR, R4
-share card) have **no deposit-detected surface**: `ReceiveWatchView` publishes
-`detected` + a `deposits` list and there is nowhere to put it. What IS available
-without inventing UI is the haptic (`SignalDeposit`) and the home's own
-`zeroLive` "监听收款中" treatment. Decide that boundary before wiring, the way
-phase 4 decided it for the manage list.
-
-- `receive_watch.rs` is 377 lines and needs no input: Start, FetchTokens (reuse
-  `TokenReads`), Wait, SignalDeposit.
-- `payment_request.rs` (687) is the ack — check what of it is drawn at all.
+- `contacts::resolve_name` — the name-service waterfall. **The activity feed
+  wants it too**: `ActivityExecutor.ownAccountName` answers own-accounts-only
+  and returns `nil` for everybody else, so a counterparty shows as an address
+  until this lands. One resolver, two callers.
+- `contacts::check_is_contract` — `eth_getCode` through the pool.
+- `contacts::load_send_history` stays waiting for 052.
 
 ---
 
@@ -163,7 +182,6 @@ phase 4 decided it for the manage list.
 
 | Phase | What |
 |---|---|
-| 6 | Flip 050's remaining `// live in 051` arms: `contacts::resolve_name` (the name-service waterfall — the activity feed's alias resolver wants it too) and `contacts::check_is_contract` (`eth_getCode` through the pool). `contacts::load_send_history` waits for 052 |
 | 7 | Device acceptance + closeout |
 
 ### Wired but unreachable — the list to close before 7
@@ -176,7 +194,11 @@ The core owns these and no gesture reaches them:
 - **swipe-to-delete** an activity row (`ActivityStore.deleteRequested`);
 - the **manage/delete list** of custom tokens (`MtokView.custom_tokens`,
   `ManageTokensStore.delete`) — the corpus has 已添加的代币 and the sheet has no
-  component for it.
+  component for it;
+- the **deposit list** on the receive screen (`ReceiveWatchView.deposits`) — the
+  watcher runs and buzzes, and 监听收款中 has no slot in `ReceiveQrModel`;
+- everything `payment_request` decides — the acknowledge gate, the amount/mode
+  request builder, the pay-link.
 
 Closed in phase 4: tap-to-hide and pull-to-refresh.
 

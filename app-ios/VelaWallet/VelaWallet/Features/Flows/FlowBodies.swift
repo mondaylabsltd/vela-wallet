@@ -128,7 +128,7 @@ struct ReceiveQrBody: View {
                 onCopy: { copied = "address" }
             )
 
-            QrCardView(label: model.title) {
+            QrCardView(label: model.title, modules: model.modules) {
                 Circle()
                     .fill(model.centre.badgeColor)
                     .frame(width: WalletFlowGeometry.qrCentre, height: WalletFlowGeometry.qrCentre)

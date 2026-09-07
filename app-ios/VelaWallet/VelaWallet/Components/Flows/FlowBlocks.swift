@@ -67,20 +67,31 @@ struct QrCardView<Centre: View>: View {
     @Environment(\.theme) private var theme
 
     let label: String
+    /// A REAL code's modules, row-major. `nil` keeps the drawn demo pattern,
+    /// which is what the gallery and the screenshot sweep render.
+    ///
+    /// There is deliberately no fallback the other way: a screen with a real
+    /// address that cannot encode it must not quietly show the demo pattern —
+    /// see `QrCode`.
+    var modules: [[Bool]]?
     @ViewBuilder let centre: () -> Centre
 
     var body: some View {
         ZStack {
             Canvas { context, size in
-                let modules = CGFloat(QrPattern.modules)
-                let module = min(size.width, size.height) / modules
-                for r in 0..<QrPattern.modules {
-                    for c in 0..<QrPattern.modules where QrPattern.cells[r][c] {
+                let cells = modules ?? QrPattern.cells
+                let count = cells.count
+                let module = min(size.width, size.height) / CGFloat(count)
+                for r in 0..<count {
+                    for c in 0..<cells[r].count where cells[r][c] {
                         let rect = CGRect(
                             x: CGFloat(c) * module,
                             y: CGFloat(r) * module,
-                            width: module,
-                            height: module
+                            // Rounded up so neighbouring modules meet: a
+                            // hairline of white between them is what a camera
+                            // reads as a broken code.
+                            width: module.rounded(.up),
+                            height: module.rounded(.up)
                         )
                         context.fill(Path(rect), with: .color(WalletGeometry.qrInk))
                     }

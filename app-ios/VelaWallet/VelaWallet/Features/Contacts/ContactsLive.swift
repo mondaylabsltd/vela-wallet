@@ -155,7 +155,7 @@ enum ContactsLive {
                 qr: loc.t("contacts.actionQr")
             ),
             addressLabel: loc.t("contacts.addressLabel"),
-            addressLines: addressLines(contact.address),
+            addressLines: AddressText.lines(contact.address),
             copyLabel: loc.t("componentsUi.identiconViewer.copyAddress"),
             copiedLabel: loc.t("componentsUi.identiconViewer.copied"),
             activityTitle: loc.t("contacts.recentActivity"),
@@ -301,10 +301,4 @@ enum ContactsLive {
         }
     }
 
-    /// The mock's two mono lines: the address split in half, never mid-byte.
-    private static func addressLines(_ address: String) -> [String] {
-        guard address.count > 1 else { return [address] }
-        let split = address.index(address.startIndex, offsetBy: (address.count + 1) / 2)
-        return [String(address[..<split]), String(address[split...])]
-    }
 }

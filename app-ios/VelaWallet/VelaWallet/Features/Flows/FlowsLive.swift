@@ -50,6 +50,80 @@ enum FlowsLive {
         )
     }
 
+    // MARK: - R1 / R2, the receive screens
+
+    /// The network list, with the person's OWN address on every row.
+    ///
+    /// This is the screen where a fixture is not merely embarrassing: money
+    /// sent to the drawn address is money gone. Until this landed, 收款 showed
+    /// `WalletFixtures.identity` — somebody else's address entirely — beside a
+    /// code drawn from a demo pattern.
+    static func receiveList(
+        _ address: String,
+        on model: ReceiveListModel,
+        loc: Loc
+    ) -> ReceiveListModel {
+        guard !address.isEmpty else { return model }
+        let networks = ChainCatalog.chains
+        var live = model
+        live.subtitle = loc.t("receive.networksLine", vars: ["count": String(networks.count)])
+        live.rows = networks.map { chain in
+            NetworkRowModel(
+                name: chain.displayName,
+                code: chain.nativeSymbol,
+                badgeColor: SettingsLive.mark(chainId: chain.chainId, name: chain.displayName).color,
+                // One address, every network — which is what the subtitle above
+                // promises and what a 4337 Safe at a deterministic address
+                // actually delivers.
+                addressDisplay: AddressText.short(address),
+                copyLabel: model.rows.first?.copyLabel ?? "",
+                qrLabel: model.rows.first?.qrLabel ?? ""
+            )
+        }
+        return live
+    }
+
+    /// The code, and the account card above it.
+    ///
+    /// The QR encodes the **bare address**. That is the whole answer in address
+    /// mode; the amount-carrying EIP-681 request is `payment_request`'s, and
+    /// its mode toggle, amount field and acknowledge gate are drawn nowhere on
+    /// this client yet — recorded in results.md rather than invented here.
+    static func receiveQr(
+        _ address: String,
+        name: String,
+        chain: ChainMeta?,
+        on model: ReceiveQrModel,
+        loc: Loc
+    ) -> ReceiveQrModel {
+        guard !address.isEmpty else { return model }
+        var live = model
+        // The chain the person actually tapped. Without it the sheet keeps the
+        // fixture's first network and tells somebody who picked Gnosis to
+        // receive Ethereum assets — the address is the same on both, but the
+        // sentence would be a lie and the mark would back it up.
+        if let chain {
+            live.title = loc.t("receive.qrTitleNetwork", vars: ["network": chain.displayName])
+            live.centre = TokenMarkModel(
+                ticker: chain.nativeSymbol,
+                badgeColor: SettingsLive.mark(chainId: chain.chainId,
+                                              name: chain.displayName).color
+            )
+        }
+        live.account = AddressCardModel(
+            name: name.isEmpty ? model.account.name : name,
+            identiconSeed: address,
+            lines: AddressText.lines(address),
+            copyLabel: model.account.copyLabel
+        )
+        // `nil` when the address cannot be encoded — the card then draws the
+        // demo pattern, which is why `QrCode` never falls back to it silently:
+        // the caller decides, and here an unencodable address is a bug worth
+        // seeing rather than a picture worth showing.
+        live.modules = QrCode.modules(address)
+        return live
+    }
+
     // MARK: - T3, the add-token sheet
 
     /// The sheet, driven by `manage_tokens`.

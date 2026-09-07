@@ -37,4 +37,16 @@ enum AddressText {
         guard address.count > 14 else { return address }
         return "\(address.prefix(6))\u{2026}\(address.suffix(4))"
     }
+
+    /// The mock's two mono lines: the address split in half, never mid-byte.
+    ///
+    /// Lives here rather than beside its first caller because spec 051 needed a
+    /// second one — the receive screen wraps the same address the contact sheet
+    /// does, and two halves computed two ways is how the same address comes to
+    /// look like two different ones.
+    static func lines(_ address: String) -> [String] {
+        guard address.count > 1 else { return [address] }
+        let split = address.index(address.startIndex, offsetBy: (address.count + 1) / 2)
+        return [String(address[..<split]), String(address[split...])]
+    }
 }

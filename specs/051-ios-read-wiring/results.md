@@ -496,9 +496,79 @@ Literal violations 35. Zero Rust changes.
 
 ---
 
+## Phase 5 — the receive screen, and the most dangerous fixture in the client
+
+### What was on that screen
+
+`收款` listed **`0x14fB1f…D1eA5c`** — `WalletFixtures.identity`, an address
+belonging to nobody — on every network row, above a QR drawn from
+`QrPattern`: a deterministic demo pattern, captioned 不可扫描 in the gallery and
+captioned nothing at all here.
+
+A fixture balance is embarrassing. A fixture **receive address** is money gone,
+and nobody reads a caption while holding a phone up to a camera. This is the
+screen that should have been wired first.
+
+### It shows the person's own address now, and a code that encodes it
+
+The encoder is the bridge's `cable_qr_matrix` — the same one that draws the
+`FIDO:/` code during a hybrid passkey ceremony, so this client has one QR
+encoder rather than two that could disagree about version, masking or error
+correction.
+
+`QrCode.modules` answers **`nil`** when it cannot encode, and the demo pattern
+is deliberately NOT a fallback: a code that looks scannable and is not is
+exactly the failure being fixed. The card decides, and it keeps the pattern only
+where the model has no real address — the gallery and the screenshot sweep.
+
+Proven by test rather than by eye: the grid is square, and the finder patterns
+are checked in **all three corners**, because a transposed row-major slice still
+draws a top-left one and would encode somebody's address sideways.
+
+### The sheet names the network that was tapped
+
+The drawn sheet says "使用这个地址接收 **X** 上的资产" and draws that chain's
+mark. Nothing carried WHICH row opened it, so the sheet kept the fixture's first
+network: tap Gnosis, get told to receive Ethereum assets. The address is the
+same on both — that is the point of the screen — so what would have been wrong
+is the sentence and the mark, which is enough.
+
+### `receive_watch` runs; its surface does not exist
+
+Start when a code opens, fetch, wait, buzz — the cadence (3s for a minute, then
+60s, stop at five) is the core's. A detected deposit **buzzes and re-reads the
+balances**. What it cannot do is show the deposit: `ReceiveWatchView.deposits`
+has nowhere drawn to go, and the corpus's 监听收款中 has no slot in
+`ReceiveQrModel`. Recorded, not invented.
+
+**A bug the failure test found.** The sweep reported "everything failed" as
+`allSatisfy(failed)` — and a chain with **nothing to ask** (Tempo has no native
+coin; a chain with no custom tokens and no price feed sends no request at all)
+reports success without having vouched for anything. One of those in the list
+turned a total blackout into "your wallet is empty", which the core would adopt
+as a baseline — and the next successful fetch would then look like a deposit of
+everything somebody owns. It now says failed when nothing came back and
+something broke.
+
+### `payment_request` is deferred, and this is why
+
+Its three sub-machines need three surfaces this client does not draw: the
+acknowledge **gate** (an overlay over the QR — the iOS redesign replaced it with
+the always-on 仅限支持的网络 reminder), the **request builder** (mode toggle,
+amount field, pay-link), and the `/pay` **validator** (a landing page, web's).
+The one thing it would decide for a drawn surface — `qr_value` in address mode —
+is the bare address, which is what the sheet encodes.
+
+### Gates
+
+Hermetic tests 288 → **298**; live 20; device UI 10 → **11**. Literal violations
+35. Zero Rust changes.
+
+---
+
 ## Next
 
-Phase 5, `receive_watch` + `payment_request` — with the same caveat phase 4 hit:
-the drawn receive screens have **no deposit-detected surface**, so read the
-drawings before planning the wiring. The remaining order is in
-**[tasks.md](./tasks.md)**.
+Phase 6 — flip 050's remaining `// live in 051` arms (`contacts::resolve_name`,
+`contacts::check_is_contract`), which the activity feed's alias resolver is also
+waiting on. Then phase 7, device acceptance and closeout. The remaining order is
+in **[tasks.md](./tasks.md)**.

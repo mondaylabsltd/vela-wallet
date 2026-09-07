@@ -103,11 +103,11 @@ struct NetworkRowModel: Identifiable {
 struct ReceiveListModel {
     let header: FlowHeaderModel
     /// "One address across all 8 networks".
-    let subtitle: String
+    var subtitle: String
     let searchPlaceholder: String
     /// Shown in place of the rows when the search matches nothing.
     let emptyText: String
-    let rows: [NetworkRowModel]
+    var rows: [NetworkRowModel]
 }
 
 /// The account card that sits above every QR: whose address this is.
@@ -126,16 +126,19 @@ struct ContractLineModel {
 }
 
 struct ReceiveQrModel {
-    let title: String
+    var title: String
     let closeLabel: String
     /// R3 only: the token's contract, above the account card.
     var contract: ContractLineModel?
-    let account: AddressCardModel
+    var account: AddressCardModel
     /// The mark drawn in the middle of the code — the token, or the network.
-    let centre: TokenMarkModel
+    var centre: TokenMarkModel
     let warning: String
     let saveImage: String
     let viewOnExplorer: String
+    /// The real code's modules, when there is a real address to encode.
+    /// `nil` keeps the drawn demo pattern — see `QrCode`.
+    var modules: [[Bool]]?
 }
 
 /// R4 — the image "Save image" produces, not a screen someone navigates to.

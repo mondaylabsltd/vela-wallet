@@ -47,6 +47,10 @@ struct FlowHost: View {
     var addTokenInput: Binding<String>?
     var onAddToken: (() -> Void)?
     var addTokenError: String?
+    /// Which network row opened the code. The drawn sheet names a chain and
+    /// draws its mark, and it can only name the RIGHT one if the row that was
+    /// tapped travels with the navigation.
+    var onReceiveNetwork: ((Int) -> Void)?
 
     /// The sheet's own dismissal. A new state means a new sheet, so the flag
     /// is keyed on the model's state — closing one must not suppress the next.
@@ -95,7 +99,10 @@ struct FlowHost: View {
             .background(theme.bgSunken.ignoresSafeArea())
         case .receive(let m):
             FlowScaffold(header: m.header, onBack: onBack) {
-                ReceiveListBody(model: m, onQr: { _ in onNavigate(.receiveQr) })
+                ReceiveListBody(model: m, onQr: { index in
+                    onReceiveNetwork?(index)
+                    onNavigate(.receiveQr)
+                })
             }
         case .history(let m):
             FlowScaffold(header: m.header, onBack: onBack, onPill: { onNavigate(.chains) }) {

@@ -235,6 +235,48 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         XCTAssertEqual(fixtureHolding.count, 0, "a fixture holding is still on screen")
     }
 
+    // MARK: - US2: the receive screen is the person's own address
+
+    /// 收款 shows YOUR address, on every network, with a code that encodes it.
+    ///
+    /// The most dangerous fixture in the client was here: a drawn address
+    /// (`0x14fB1f…D1eA5c`, belonging to nobody) beside a demo QR pattern. Money
+    /// sent to it does not come back, and nobody reads a caption while holding
+    /// a phone up to a camera. Both assertions are absences for that reason —
+    /// the fixture address must be gone from both screens.
+    func testReceiveShowsTheSignedInAddressAndARealCode() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_ACCOUNT"] = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "dark"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh)"]
+        app.launch()
+
+        XCTAssertTrue(app.buttons["收款"].waitForExistence(timeout: 30),
+                      "the home never appeared")
+        app.buttons["收款"].tap()
+
+        // The seeded account's own address, shortened the way every iOS
+        // surface shortens one.
+        XCTAssertTrue(app.staticTexts["0x88cC…6894"].firstMatch.waitForExistence(timeout: 10),
+                      "the network list is not showing the signed-in address")
+        XCTAssertEqual(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "14fB1f")).count, 0,
+            "the fixture address is still on the receive screen"
+        )
+        attach(app.screenshot(), named: "device-receive-list")
+
+        // The row's QR button opens the code — tapping the network's NAME does
+        // nothing, which is the drawing's choice: a row is a place to copy
+        // from, and the code is one of its two actions.
+        app.buttons["扫描二维码"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["0x88cCA0EeDbF2C442611"].waitForExistence(timeout: 10),
+                      "the QR sheet is not showing the signed-in address")
+        Thread.sleep(forTimeInterval: 1)
+        attach(app.screenshot(), named: "device-receive-qr")
+    }
+
     // MARK: - US3: a token somebody adds by hand
 
     /// Type a contract, and the wallet finds it on a chain and keeps it.
