@@ -10,6 +10,10 @@ import app.getvela.wallet.feature.wallet.core.BalanceExecutor
 import app.getvela.wallet.feature.wallet.core.BalanceOperation
 import app.getvela.wallet.feature.wallet.core.BalanceShellResult
 import app.getvela.wallet.feature.wallet.core.BalanceView
+import app.getvela.wallet.feature.wallet.core.ChainDex
+import app.getvela.wallet.feature.wallet.core.ChainInfo
+import app.getvela.wallet.feature.wallet.core.ChainNative
+import app.getvela.wallet.feature.wallet.core.ChainStable
 import app.getvela.wallet.feature.wallet.core.RpcEndpointSeed
 import app.getvela.wallet.feature.wallet.core.RpcEndpointSource
 import app.getvela.wallet.feature.wallet.core.RpcPool
@@ -71,6 +75,8 @@ class BalanceMachineTest {
 
     private fun harness(
         rows: List<NetNetworkRow>,
+        chains: Map<Int, ChainInfo> = emptyMap(),
+        mainnet: Map<String, Double> = emptyMap(),
         answer: (url: String, method: String) -> app.getvela.wallet.feature.wallet.core.RpcPostResult,
     ): Harness {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -83,7 +89,13 @@ class BalanceMachineTest {
             scope = scope,
             transport = transport,
         )
-        val executor = BalanceExecutor(pool, networks, FakeStore())
+        val executor = BalanceExecutor(
+            pool = pool,
+            networks = networks,
+            store = FakeStore(),
+            chainInfo = { chainId -> chains[chainId] },
+            mainnetPrices = { mainnet },
+        )
         val host = CoreHost(
             bridge = BalanceDashboardCore().asBridge(),
             scope = scope,
@@ -230,6 +242,188 @@ class BalanceMachineTest {
             "the core must hold at least one unpriced holding",
             view.unpriced_tokens.isNotEmpty() || view.notice != null || view.display_total_usd == null,
         )
+    }
+
+    // -- the batch, and what it is worth -------------------------------------
+
+    /**
+     * A quoter that answers one price per (tokenIn → tokenOut) pair.
+     *
+     * The batch is opaque hex by the time it reaches the transport, so the test
+     * builds the ANSWER by position: whatever the executor put in slot `n`, the
+     * fake replies to slot `n`. That is exactly the coupling under test — a
+     * result is matched to its call by index and nothing else.
+     */
+    private fun batched(vararg words: String?): app.getvela.wallet.feature.wallet.core.RpcPostResult =
+        FakeRpcTransport.body(aggregate3Return(words.toList()))
+
+    private fun word(value: java.math.BigInteger): String =
+        value.toString(16).padStart(64, '0')
+
+    private fun aggregate3Return(entries: List<String?>): String {
+        val elements = entries.map { data ->
+            val payload = data ?: ""
+            word(if (data == null) java.math.BigInteger.ZERO else java.math.BigInteger.ONE) +
+                word(java.math.BigInteger.valueOf(0x40)) +
+                word(java.math.BigInteger.valueOf((payload.length / 2).toLong())) +
+                payload
+        }
+        val offsets = StringBuilder()
+        var offset = entries.size * 32L
+        elements.forEach { element ->
+            offsets.append(word(java.math.BigInteger.valueOf(offset)))
+            offset += element.length / 2
+        }
+        return "0x" + word(java.math.BigInteger.valueOf(32)) +
+            word(java.math.BigInteger.valueOf(entries.size.toLong())) +
+            offsets + elements.joinToString("")
+    }
+
+    private fun polygonLike(stables: List<ChainStable>) = ChainInfo(
+        chainId = 137,
+        native = ChainNative("Polygon", "POL", 18),
+        stables = stables,
+        wrappedNative = "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+        dex = ChainDex("uniswap-v3", "0x61fFE014bA17989E743c5F6cB21bF9697530B21e", null),
+    )
+
+    private val usdc = ChainStable("USDC", "native", "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")
+    private val dai = ChainStable("DAI", "bridge", "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063")
+
+    /**
+     * The whole batch, decoded and priced.
+     *
+     * Slots, in the order the executor builds them: native balance, USDC
+     * balance, USDC decimals, wrapped balance, wrapped decimals, then four
+     * V3 quotes (one per fee tier) of one POL against USDC.
+     */
+    @Test
+    fun oneCallPerChainPricesTheCoinAndItsStables() {
+        val h = harness(
+            rows = listOf(row(137, "POL", "Polygon")),
+            chains = mapOf(137 to polygonLike(listOf(usdc))),
+        ) { _, _ ->
+            batched(
+                word(java.math.BigInteger("2000000000000000000")), // 2 POL
+                word(java.math.BigInteger("5000000")), //              5 USDC
+                word(java.math.BigInteger.valueOf(6)), //              USDC decimals
+                null, //                                              no wrapped balance
+                word(java.math.BigInteger.valueOf(18)),
+                word(java.math.BigInteger.valueOf(250_000)), //        $0.25 per POL
+                null,
+                null,
+                null,
+            )
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+
+        val view = h.host.settle { it.tokens.size >= 2 }
+
+        val pol = view.tokens.first { it.symbol == "POL" }
+        assertEquals("2", pol.balance)
+        assertEquals(0.25, pol.price_usd!!, 1e-9)
+
+        val stable = view.tokens.first { it.symbol == "USDC" }
+        assertEquals("5", stable.balance)
+        // A curated stablecoin is a MEMBERSHIP verdict, not a missing factor
+        // defaulting to 1.
+        assertEquals(1.0, stable.price_usd!!, 1e-9)
+        assertEquals(6, stable.decimals)
+
+        // 2 × $0.25 + 5 × $1 = $5.50, and the core is the one that adds up.
+        assertEquals(5.5, view.display_total_usd!!, 1e-9)
+    }
+
+    /**
+     * **The 10^12 trap.**
+     *
+     * A chain carrying both a 6-decimal USDC and an 18-decimal DAI, where only
+     * the DAI pool answers. Scaling that quote by the neighbouring USDC's
+     * decimals prices the coin a trillion times too high. Each quote group must
+     * carry its OWN `decimals()` read — which is the reason the calls are
+     * grouped per stable rather than kept in one flat list.
+     */
+    @Test
+    fun aQuoteIsScaledByItsOwnStablesDecimals() {
+        val h = harness(
+            rows = listOf(row(137, "POL", "Polygon")),
+            chains = mapOf(137 to polygonLike(listOf(usdc, dai))),
+        ) { _, _ ->
+            batched(
+                word(java.math.BigInteger("1000000000000000000")), // 1 POL
+                null, word(java.math.BigInteger.valueOf(6)), //        USDC: none held, 6 decimals
+                null, word(java.math.BigInteger.valueOf(18)), //       DAI:  none held, 18 decimals
+                null, word(java.math.BigInteger.valueOf(18)), //       wrapped
+                // USDC quotes: the pool is dead, every tier fails.
+                null, null, null, null,
+                // DAI quotes: 0.25 DAI per POL, in DAI's 18 base units.
+                word(java.math.BigInteger("250000000000000000")), null, null, null,
+            )
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+
+        val view = h.host.settle { it.tokens.isNotEmpty() }
+
+        val pol = view.tokens.first { it.symbol == "POL" }
+        // Scaled by USDC's 6 this would be 250,000,000,000 dollars a coin.
+        assertEquals(0.25, pol.price_usd!!, 1e-9)
+    }
+
+    /**
+     * A DEX quote that disagrees with Chainlink by too much loses to it.
+     *
+     * The band is the core's (`choose_native_price`), and this test exists to
+     * prove the shell actually hands it both numbers — a shell that forgot the
+     * Chainlink argument would still look right whenever the pools are healthy.
+     */
+    @Test
+    fun aThinPoolLosesToChainlink() {
+        val h = harness(
+            rows = listOf(row(137, "POL", "Polygon")),
+            chains = mapOf(137 to polygonLike(listOf(usdc))),
+            mainnet = mapOf("MATIC" to 0.25), // POL's feed key on mainnet
+        ) { _, _ ->
+            batched(
+                word(java.math.BigInteger("1000000000000000000")),
+                null, word(java.math.BigInteger.valueOf(6)),
+                null, word(java.math.BigInteger.valueOf(18)),
+                // A near-empty pool quoting POL at $5.
+                word(java.math.BigInteger.valueOf(5_000_000)), null, null, null,
+            )
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+
+        val view = h.host.settle { it.tokens.isNotEmpty() }
+
+        assertEquals(0.25, view.tokens.single().price_usd!!, 1e-9)
+    }
+
+    /**
+     * A chain without Multicall3 still shows what it holds.
+     *
+     * The batch is a convenience; a balance is not. A chain somebody added
+     * themselves may have no Multicall3 deployment, and losing a real holding
+     * to a missing helper contract would be a worse failure than one extra
+     * request.
+     */
+    @Test
+    fun aChainWithoutTheBatchFallsBackToAPlainBalance() {
+        val h = harness(
+            rows = listOf(row(137, "POL", "Polygon")),
+            chains = mapOf(137 to polygonLike(listOf(usdc))),
+        ) { _, method ->
+            // `eth_call` answers with something that is not a batch at all.
+            if (method == "eth_call") FakeRpcTransport.body("0x")
+            else FakeRpcTransport.body("0x1bc16d674ec80000") // 2 POL
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+
+        val view = h.host.settle { it.tokens.isNotEmpty() }
+
+        val pol = view.tokens.single()
+        assertEquals("2", pol.balance)
+        // No batch means no quotes and no feed: shown, and honestly unpriced.
+        assertNull(pol.price_usd)
     }
 
     private companion object {

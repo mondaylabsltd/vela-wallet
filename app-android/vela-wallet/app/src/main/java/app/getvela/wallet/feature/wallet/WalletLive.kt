@@ -34,13 +34,21 @@ object WalletLive {
      * [fallback] supplies everything that is content rather than data — section
      * titles, action labels, empty-state copy, the tab bar — already resolved
      * through the i18n engine by the fixture builder.
+     *
+     * [chainNames] is what each chain is called, from the `network_admin`
+     * machine. A holding's row says which chain it is on, and that is NOT the
+     * token's own name — `BalanceToken.name` is "Ether", "USDT", "Wrapped
+     * Polygon Ecosystem Token". An earlier version read the chain off that
+     * field and was right only because the shell had been writing chain names
+     * into it; the moment real token names arrived, every row read "USDT USDT".
      */
     fun home(
         fallback: WalletHomeModel,
         view: BalanceView,
         strings: VelaStrings,
+        chainNames: Map<Int, String>,
     ): WalletHomeModel {
-        val rows = view.tokens.map(::assetRow)
+        val rows = view.tokens.map { token -> assetRow(token, chainNames) }
         return fallback.copy(
             balance = balance(fallback.balance, view, strings),
             assetsSection = fallback.assetsSection.copy(
@@ -122,9 +130,11 @@ object WalletLive {
         )
     }
 
-    private fun assetRow(token: BalanceToken): AssetRowModel = AssetRowModel(
+    private fun assetRow(token: BalanceToken, chainNames: Map<Int, String>): AssetRowModel = AssetRowModel(
         ticker = token.symbol,
-        chain = token.name,
+        // The chain, falling back to the token's own name only when this
+        // device has no row for the chain — never a blank line.
+        chain = chainNames[token.chain_id] ?: token.name,
         badgeColor = badgeColour(token.chain_id),
         balance = "${trimAmount(token.balance)} ${token.symbol}",
         fiat = token.price_usd?.let { price ->

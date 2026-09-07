@@ -36,14 +36,63 @@ class WalletLiveTest {
 
     private fun base() = WalletFixtures.buildMobileState(WalletScreenState.H1, strings)
 
-    private fun token(symbol: String, balance: String, price: Double? = null) = BalanceToken(
-        chain_id = 137,
+    /** The chain names a device would have, from its network list. */
+    private val chains = mapOf(137 to "Polygon", 42161 to "Arbitrum")
+
+    private fun home(view: BalanceView) = WalletLive.home(base(), view, strings, chains)
+
+    private fun token(
+        symbol: String,
+        balance: String,
+        price: Double? = null,
+        chainId: Int = 137,
+        name: String = symbol,
+    ) = BalanceToken(
+        chain_id = chainId,
         symbol = symbol,
-        name = "Polygon",
+        // The TOKEN's name — "Ether", "USDT" — not the chain's. They were the
+        // same string for as long as the shell was writing chain names into
+        // this field, which is what hid the bug below.
+        name = name,
         balance = balance,
         decimals = 18,
         price_usd = price,
     )
+
+    /**
+     * A row says which chain a holding is on.
+     *
+     * Reading that off `BalanceToken.name` looked correct for a whole phase,
+     * because the shell was putting chain names in it. The moment real token
+     * names arrived from the chain documents, every row read "USDT / USDT" and
+     * "ETH / Ether" — the one thing the second line is for, gone.
+     */
+    @Test
+    fun `an asset row names the chain, not the token again`() {
+        val view = BalanceView(
+            display_total_usd = 5.0,
+            tokens = listOf(
+                token("ETH", "0.002", price = 2500.0, chainId = 42161, name = "Ether"),
+                token("USDT", "0.01", price = 1.0, chainId = 137, name = "USDT"),
+            ),
+        )
+
+        val rows = home(view).assetRows
+
+        assertEquals("Arbitrum", rows[0].chain)
+        assertEquals("Polygon", rows[1].chain)
+    }
+
+    /** A chain this device has no row for still says something, never a blank. */
+    @Test
+    fun `an unknown chain falls back to the token's own name`() {
+        val view = BalanceView(
+            display_total_usd = 1.0,
+            tokens = listOf(token("MON", "1", price = 1.0, chainId = 143, name = "Monad")),
+        )
+
+        assertEquals("Monad", home(view).assetRows.single().chain)
+    }
 
     /**
      * The device bug, pinned.
@@ -60,7 +109,7 @@ class WalletLiveTest {
             tokens = listOf(token("POL", "0.152784"), token("ETH", "0.002")),
         )
 
-        val model = WalletLive.home(base(), view, strings)
+        val model = home(view)
 
         assertEquals(BalanceStateKind.Loading, model.balance.state)
         assertNull(model.balance.integer)
@@ -78,7 +127,7 @@ class WalletLiveTest {
     fun `the empty hero explains itself`() {
         val view = BalanceView(display_total_usd = 0.0, tokens = listOf(token("POL", "0.152784")))
 
-        val status = WalletLive.home(base(), view, strings).balance.status
+        val status = home(view).balance.status
 
         assertNotNull("an empty hero with no reason given is the bug", status)
         assertEquals(BalanceStatusKind.Warning, status!!.kind)
@@ -88,7 +137,7 @@ class WalletLiveTest {
     /** A zero that IS zero keeps its figure — the states must stay distinct. */
     @Test
     fun `a genuinely empty wallet shows zero`() {
-        val model = WalletLive.home(base(), BalanceView(display_total_usd = 0.0), strings)
+        val model = home(BalanceView(display_total_usd = 0.0))
 
         assertEquals(BalanceStateKind.ZeroLive, model.balance.state)
         assertEquals("$0", model.balance.integer)
@@ -102,7 +151,7 @@ class WalletLiveTest {
             tokens = listOf(token("POL", "10", price = 0.45), token("ETH", "0.002")),
         )
 
-        val model = WalletLive.home(base(), view, strings)
+        val model = home(view)
 
         assertEquals(BalanceStateKind.Normal, model.balance.state)
         assertEquals("$4", model.balance.integer)
@@ -118,8 +167,8 @@ class WalletLiveTest {
      */
     @Test
     fun `an empty list while loading is not an empty wallet`() {
-        val loading = WalletLive.home(base(), BalanceView(holdings_loading = true), strings)
-        val settled = WalletLive.home(base(), BalanceView(), strings)
+        val loading = home(BalanceView(holdings_loading = true))
+        val settled = home(BalanceView())
 
         assertEquals(SectionMode.Loading, loading.assetsSection.mode)
         assertEquals(SectionMode.Empty, settled.assetsSection.mode)
@@ -133,7 +182,7 @@ class WalletLiveTest {
             tokens = listOf(token("POL", "0.1234569999", price = 1.0)),
         )
 
-        assertEquals("0.123456 POL", WalletLive.home(base(), view, strings).assetRows[0].balance)
+        assertEquals("0.123456 POL", home(view).assetRows[0].balance)
     }
 
     /** Hidden hides the figure and nothing else. */
@@ -145,7 +194,7 @@ class WalletLiveTest {
             tokens = listOf(token("POL", "10", price = 1.2)),
         )
 
-        val model = WalletLive.home(base(), view, strings)
+        val model = home(view)
 
         assertEquals(BalanceStateKind.Hidden, model.balance.state)
         assertEquals(1, model.assetRows.size)

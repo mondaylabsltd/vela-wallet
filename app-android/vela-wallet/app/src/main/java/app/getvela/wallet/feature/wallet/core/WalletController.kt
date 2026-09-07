@@ -6,6 +6,7 @@ import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.settings.core.NetView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.StateFlow
@@ -37,10 +38,26 @@ class WalletController(
         scope = scope,
     )
 
+    /**
+     * What each chain holds and how to price it — read from the ethereum-data
+     * service the `network_admin` machine points at, so a person who redirects
+     * that endpoint is honoured here too rather than by a second reader.
+     */
+    private val chains = ChainData(
+        endpoint = {
+            networks.value.endpoints
+                .firstOrNull { it.field == NetEndpointField.EthereumData }
+                ?.let { it.value.ifBlank { it.default_value } }
+                .orEmpty()
+        },
+    )
+
     private val executor = BalanceExecutor(
         pool = pool,
         networks = networks,
         store = store,
+        chainInfo = chains::forChain,
+        mainnetPrices = ChainlinkPrices(pool)::prices,
     )
 
     private val balanceHost = CoreHost(
