@@ -29,6 +29,14 @@ class CurrencyExecutor(
      * the JVM's default locale is not a thing a test should mutate.
      */
     private val primaryLocale: () -> Locale?,
+    /**
+     * USD → a currency code, or `null`.
+     *
+     * A seam, so the four storage-and-locale arms stay testable without a
+     * network. The default answers `null`, which is what the core reads as
+     * "nothing can price this right now" — never as 1.
+     */
+    private val rates: suspend (String) -> Double? = { null },
 ) {
 
     suspend fun perform(operation: CurrencyOperation): CurrencyShellResult = when (operation) {
@@ -49,12 +57,17 @@ class CurrencyExecutor(
         is CurrencyOperation.ReadDeviceCurrency ->
             CurrencyShellResult.DeviceCurrency(readDeviceCurrency())
 
-        // live in 041 — pricing needs the network layer that spec brings.
-        // `null`, NOT `1`: the core splits on the difference, and a fiat amount
-        // multiplied by a defaulted 1 is a real mispayment rather than a
-        // cosmetic one.
-        is CurrencyOperation.ResolveRate ->
-            CurrencyShellResult.RateResolved(operation.code, rate = null)
+        // The rate waterfall: a Chainlink fiat feed, then the configured FX
+        // endpoint, then nothing.
+        //
+        // `null`, NOT `1`. The core splits on that difference and refuses to
+        // convert without a rate, keeping the USD figure on screen. A defaulted
+        // 1 would tell somebody in Tokyo that their ¥150,000 is $150,000 — a
+        // real mispayment rather than a cosmetic one.
+        is CurrencyOperation.ResolveRate -> CurrencyShellResult.RateResolved(
+            operation.code,
+            rate = rates(operation.code)?.takeIf { it.isFinite() && it > 0.0 },
+        )
     }
 
     /**

@@ -30,6 +30,15 @@ import uniffi.vela_core_uniffi.TokenTrustCore
 class WalletController(
     context: Context,
     private val networks: StateFlow<NetView>,
+    /**
+     * The one way this app reads a chain.
+     *
+     * Passed in rather than built here. It was built here while the balance
+     * dashboard was its only consumer; the currency rate is the second, and two
+     * pools would mean two opinions about which endpoints are dead — the exact
+     * thing this object exists to prevent.
+     */
+    val pool: RpcPool,
     private val scope: CoroutineScope,
     /** This person's other accounts — a counterparty name with no network call. */
     private val ownAccounts: () -> List<FeedExecutor.FeedOwnAccount> = { emptyList() },
@@ -38,13 +47,6 @@ class WalletController(
 ) {
 
     private val store = VelaStore(context)
-
-    /** The one way this app reads a chain. */
-    val pool = RpcPool(
-        store = store,
-        endpoints = NetworkEndpointSource(networks),
-        scope = scope,
-    )
 
     /**
      * What each chain holds and how to price it — read from the ethereum-data

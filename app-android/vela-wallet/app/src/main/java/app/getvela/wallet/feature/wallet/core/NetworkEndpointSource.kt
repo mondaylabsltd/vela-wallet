@@ -23,11 +23,20 @@ import kotlinx.coroutines.flow.StateFlow
  * behaviour.
  */
 class NetworkEndpointSource(
-    private val networks: StateFlow<NetView>,
+    /**
+     * The network machine's view, read at CALL time.
+     *
+     * A provider rather than the flow itself, because the pool and the machine
+     * that feeds it are built in the same breath: the pool needs this list, and
+     * the settings machine that produces the list needs the pool for its
+     * currency rate. Resolving late breaks that knot without either side
+     * knowing about the other.
+     */
+    private val networks: () -> NetView,
 ) : RpcEndpointSource {
 
     override suspend fun forChain(chainId: Int): RpcSeeds {
-        val row = networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }
+        val row = networks().networks.firstOrNull { it.chain_id.toInt() == chainId }
             ?: return RpcSeeds()
 
         return RpcSeeds(

@@ -3,6 +3,7 @@ package app.getvela.wallet.feature.wallet
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.wallet.core.BalanceToken
 import app.getvela.wallet.feature.wallet.core.BalanceView
 import app.getvela.wallet.feature.wallet.core.FeedDirection
@@ -53,14 +54,16 @@ object WalletLive {
         fallback: WalletHomeModel,
         view: BalanceView,
         feed: FeedView,
+        currency: CurrencyView,
         strings: VelaStrings,
         chainNames: Map<Int, String>,
         now: Long = System.currentTimeMillis(),
     ): WalletHomeModel {
-        val rows = view.tokens.map { token -> assetRow(token, chainNames) }
+        val money = Money.of(currency)
+        val rows = view.tokens.map { token -> assetRow(token, chainNames, money) }
         val groups = activity(feed, strings, now)
         return fallback.copy(
-            balance = balance(fallback.balance, view, strings),
+            balance = balance(fallback.balance, view, strings, money),
             activitySection = fallback.activitySection.copy(
                 mode = if (groups.isEmpty()) SectionMode.Empty else SectionMode.Rows,
             ),
@@ -203,6 +206,7 @@ object WalletLive {
         fallback: BalanceModel,
         view: BalanceView,
         strings: VelaStrings,
+        money: Money,
     ): BalanceModel {
         if (view.hidden) return fallback.copy(state = BalanceStateKind.Hidden)
 
@@ -247,18 +251,24 @@ object WalletLive {
             )
         }
 
-        val rounded = BigDecimal(total).setScale(2, RoundingMode.DOWN)
+        val rounded = BigDecimal(money.convert(total)).setScale(2, RoundingMode.DOWN)
         val whole = rounded.toBigInteger()
         val cents = rounded.subtract(BigDecimal(whole)).movePointRight(2).abs().toBigInteger()
         return fallback.copy(
             state = if (rounded.signum() == 0) BalanceStateKind.ZeroLive else BalanceStateKind.Normal,
-            integer = "$" + groupThousands(whole.toString()),
+            integer = money.symbol + groupThousands(whole.toString()),
             decimals = cents.toString().padStart(2, '0'),
+            // The label beside the figure names the currency it is in.
+            currency = money.code,
             status = fallback.status?.takeIf { view.refreshing || view.balance_partial },
         )
     }
 
-    private fun assetRow(token: BalanceToken, chainNames: Map<Int, String>): AssetRowModel = AssetRowModel(
+    private fun assetRow(
+        token: BalanceToken,
+        chainNames: Map<Int, String>,
+        money: Money,
+    ): AssetRowModel = AssetRowModel(
         ticker = token.symbol,
         // The chain, falling back to the token's own name only when this
         // device has no row for the chain — never a blank line.
@@ -266,8 +276,10 @@ object WalletLive {
         badgeColor = badgeColour(token.chain_id),
         balance = "${trimAmount(token.balance)} ${token.symbol}",
         fiat = token.price_usd?.let { price ->
-            val value = amountAsDouble(token.balance) * price
-            AssetFiatModel.Value("$" + BigDecimal(value).setScale(2, RoundingMode.DOWN).toPlainString())
+            val value = money.convert(amountAsDouble(token.balance) * price)
+            AssetFiatModel.Value(
+                money.symbol + BigDecimal(value).setScale(2, RoundingMode.DOWN).toPlainString(),
+            )
         } ?: AssetFiatModel.NoPrice("—"),
         masked = false,
     )
@@ -291,6 +303,43 @@ object WalletLive {
 
     /** A stable colour per chain, so a token keeps its badge between launches. */
     private fun badgeColour(chainId: Int): Color = BADGES[chainId.mod(BADGES.size)]
+
+    /**
+     * The display currency, as the money on this screen is written.
+     *
+     * **A null rate is not 1.** The core resolves the rate and leaves it null
+     * when nothing could price the currency; converting anyway would tell
+     * somebody in Tokyo that their ¥150,000 is $150,000. So an unpriced
+     * currency keeps the figure in dollars and says USD — which is what the
+     * hero showed for the whole of phases 4 and 5, correctly, before there was
+     * a rate to use.
+     */
+    internal class Money private constructor(
+        val code: String,
+        val symbol: String,
+        private val rate: Double?,
+    ) {
+        fun convert(usd: Double): Double = rate?.let { usd * it } ?: usd
+
+        companion object {
+            fun of(view: CurrencyView): Money {
+                val rate = view.rate?.takeIf { it.isFinite() && it > 0.0 }
+                // No rate, or no settled choice, means dollars — and saying so.
+                if (rate == null || !view.committed) return Money("USD", "$", null)
+                return Money(view.code, symbolFor(view.code), rate)
+            }
+
+            /**
+             * The currency's own sign, from the JVM's ISO-4217 table rather
+             * than a table of this app's own. An unknown code falls back to the
+             * code itself, which reads as "CHF 12.00" — plain, and never the
+             * wrong sign in front of a number.
+             */
+            private fun symbolFor(code: String): String = runCatching {
+                java.util.Currency.getInstance(code).getSymbol(java.util.Locale.US)
+            }.getOrNull()?.takeIf { it != code } ?: "$code "
+        }
+    }
 
     private const val DAY_MS = 24L * 60 * 60 * 1000
 

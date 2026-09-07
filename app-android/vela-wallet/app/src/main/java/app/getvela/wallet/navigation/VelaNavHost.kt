@@ -261,6 +261,9 @@ fun VelaNavHost(
             val wallet = application.container.wallet
             val balances by wallet.balances.collectAsStateWithLifecycle()
             val feed by wallet.feed.collectAsStateWithLifecycle()
+            // The display currency the person chose, and the rate that makes it
+            // showable. Without a rate the core leaves the figure in dollars.
+            val currency by application.container.settings.currency.collectAsStateWithLifecycle()
             val networks by application.container.settings.networks.collectAsStateWithLifecycle()
             val chainNames = remember(networks.networks) {
                 networks.networks.associate { it.chain_id.toInt() to it.display_name }
@@ -275,6 +278,12 @@ fun VelaNavHost(
                 val settings = application.container.settings
                 settings.startNetworks()
                 settings.networks.first { it.loaded }
+                // The hero is a money figure, and which currency it is in is
+                // this machine's answer. Refreshed here rather than only on the
+                // settings screen, because somebody who never opens settings
+                // still has a display currency — and until this runs the core
+                // has no rate and the wallet shows dollars.
+                settings.refreshCurrency()
                 wallet.open(session.address)
             }
 
@@ -293,7 +302,7 @@ fun VelaNavHost(
                 )
             } else {
                 WalletScreen(
-                    model = WalletLive.home(model, balances, feed, strings, chainNames),
+                    model = WalletLive.home(model, balances, feed, currency, strings, chainNames),
                     onSelectTab = { tab ->
                         // 设置 has a screen now (spec 023), and the 退出登录 row
                         // inside it is where signing out lives. Until then the

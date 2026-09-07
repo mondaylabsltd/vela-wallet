@@ -6,6 +6,7 @@ import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.feature.wallet.core.RpcPool
 import java.time.Instant
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -28,11 +29,41 @@ import uniffi.vela_core_uniffi.NetworkAdminCore
  * that separation is what lets spec 041 add six more machines here without any
  * screen learning about it.
  */
-class SettingsController(context: Context, scope: CoroutineScope) {
+class SettingsController(
+    context: Context,
+    scope: CoroutineScope,
+    /**
+     * The chain reader, for the display currency's rate.
+     *
+     * Nullable because the settings machines must boot without one: the pool
+     * needs the network list this very controller produces, so demanding it at
+     * construction would be a cycle. A settings surface with no pool simply
+     * cannot price a currency, and the core reads that as "not right now" —
+     * which is the same thing it read for the whole of spec 040.
+     */
+    pool: RpcPool? = null,
+) {
 
     private val store = VelaStore(context)
 
-    private val currencyExecutor = CurrencyExecutor(store) { primaryLocale(context) }
+    private val rates = pool?.let {
+        CurrencyRates(
+            pool = it,
+            store = store,
+            endpoint = {
+                networkHost.view.value.endpoints
+                    .firstOrNull { row -> row.field == NetEndpointField.FiatRates }
+                    ?.let { row -> row.value.ifBlank { row.default_value } }
+                    .orEmpty()
+            },
+        )
+    }
+
+    private val currencyExecutor = CurrencyExecutor(
+        store = store,
+        primaryLocale = { primaryLocale(context) },
+        rates = { code -> rates?.resolve(code) },
+    )
 
     private val currencyHost = CoreHost(
         bridge = DisplayCurrencyCore().asBridge(),

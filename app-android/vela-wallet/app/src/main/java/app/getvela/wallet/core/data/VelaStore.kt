@@ -107,6 +107,12 @@ interface KeyValueStore {
 
         /** ERC-20s this person added or accepted, all chains (spec 041). */
         const val CUSTOM_TOKENS = "vela.customTokens"
+
+        /** USD → fiat from Chainlink's mainnet feeds; stale beats absent. */
+        const val FIAT_RATES = "vela.fiatRates.v1"
+
+        /** The FX endpoint's table, keyed by the URL it came from. */
+        const val FX_RATES = "vela.fxRates.v1"
     }
 }
 

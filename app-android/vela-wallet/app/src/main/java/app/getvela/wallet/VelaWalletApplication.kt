@@ -9,8 +9,11 @@ import app.getvela.wallet.feature.contacts.core.ContactsController
 import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.settings.core.SettingsController
+import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.core.platform.Haptics
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
+import app.getvela.wallet.feature.wallet.core.NetworkEndpointSource
+import app.getvela.wallet.feature.wallet.core.RpcPool
 import app.getvela.wallet.feature.wallet.core.WalletController
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -65,6 +68,30 @@ class AppContainer(private val app: Application) {
         SettingsController(
             context = app,
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+            pool = pool,
+        )
+    }
+
+    /**
+     * The one way this app reads a chain.
+     *
+     * App-resident, and app-resident is not a style choice: the ban map and the
+     * endpoint statistics are facts about the network that every read-path
+     * machine shares. Two pools would mean two opinions about a dead endpoint,
+     * and the second one would keep asking.
+     *
+     * Its endpoint list comes from the settings machine — which in turn needs
+     * this pool to price a currency. The source reads that list lazily, which
+     * is what lets both be built without either waiting for the other.
+     *
+     * `Dispatchers.IO`: the transport blocks, and confines itself, but the
+     * driver's own JSON work has no business on the main thread either.
+     */
+    val pool: RpcPool by lazy {
+        RpcPool(
+            store = VelaStore(app),
+            endpoints = NetworkEndpointSource { settings.networks.value },
+            scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
         )
     }
 
@@ -83,6 +110,7 @@ class AppContainer(private val app: Application) {
         WalletController(
             context = app,
             networks = settings.networks,
+            pool = pool,
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
             // A payment from one of this person's OWN wallets should say so by
             // name, and that costs no network call at all.

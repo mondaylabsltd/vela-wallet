@@ -24,7 +24,7 @@ class CurrencyExecutorTest {
     private fun executor(
         store: KeyValueStore = FakeStore(),
         locale: Locale? = Locale.US,
-    ) = CurrencyExecutor(store) { locale }
+    ) = CurrencyExecutor(store, primaryLocale = { locale })
 
     // -- read_stored_code ----------------------------------------------------
 

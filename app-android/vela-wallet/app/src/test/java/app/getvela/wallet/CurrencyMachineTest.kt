@@ -56,7 +56,7 @@ class CurrencyMachineTest {
 
 
     private fun host(store: KeyValueStore, locale: Locale?): CoreHost<CurrencyView> {
-        val executor = CurrencyExecutor(store) { locale }
+        val executor = CurrencyExecutor(store, primaryLocale = { locale })
         return CoreHost(
             bridge = uniffi.vela_core_uniffi.DisplayCurrencyCore().asBridge(),
             scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it },

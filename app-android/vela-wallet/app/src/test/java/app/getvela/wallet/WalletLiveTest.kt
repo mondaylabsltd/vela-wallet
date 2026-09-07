@@ -2,6 +2,7 @@ package app.getvela.wallet
 
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.wallet.AssetFiatModel
 import app.getvela.wallet.feature.wallet.BalanceStateKind
 import app.getvela.wallet.feature.wallet.BalanceStatusKind
@@ -43,8 +44,11 @@ class WalletLiveTest {
     /** The chain names a device would have, from its network list. */
     private val chains = mapOf(137 to "Polygon", 42161 to "Arbitrum")
 
-    private fun home(view: BalanceView, feed: FeedView = FeedView()) =
-        WalletLive.home(base(), view, feed, strings, chains)
+    private fun home(
+        view: BalanceView,
+        feed: FeedView = FeedView(),
+        currency: CurrencyView = CurrencyView(code = "USD"),
+    ) = WalletLive.home(base(), view, feed, currency, strings, chains)
 
     private fun token(
         symbol: String,
@@ -334,5 +338,84 @@ class WalletLiveTest {
 
         assertEquals(SectionMode.Empty, model.activitySection.mode)
         assertEquals(emptyList<Any>(), model.activityGroups)
+    }
+
+    // -- the display currency -------------------------------------------------
+
+    private fun gbp(rate: Double? = 0.78) =
+        CurrencyView(code = "GBP", rate = rate, committed = true)
+
+    /** A settled choice with a rate converts the hero and every row with it. */
+    @Test
+    fun `a chosen currency converts the figures`() {
+        val view = BalanceView(
+            display_total_usd = 100.0,
+            tokens = listOf(token("POL", "100", price = 1.0)),
+        )
+
+        val model = home(view, currency = gbp())
+
+        assertEquals("£78", model.balance.integer)
+        assertEquals("00", model.balance.decimals)
+        assertEquals("GBP", model.balance.currency)
+        assertEquals(AssetFiatModel.Value("£78.00"), model.assetRows.single().fiat)
+    }
+
+    /**
+     * **The case that must not convert.**
+     *
+     * A chosen currency with no rate keeps the figure in dollars and says so.
+     * Multiplying by a defaulted 1 would put a pound sign in front of a dollar
+     * amount — the same number, relabelled, and wrong by whatever the rate is.
+     */
+    @Test
+    fun `a currency nobody could price keeps showing dollars`() {
+        val view = BalanceView(
+            display_total_usd = 100.0,
+            tokens = listOf(token("POL", "100", price = 1.0)),
+        )
+
+        val model = home(view, currency = gbp(rate = null))
+
+        assertEquals("$100", model.balance.integer)
+        assertEquals("USD", model.balance.currency)
+        assertEquals(AssetFiatModel.Value("$100.00"), model.assetRows.single().fiat)
+    }
+
+    /** An uncommitted placeholder is not a choice, and does not convert either. */
+    @Test
+    fun `the USD placeholder does not convert`() {
+        val view = BalanceView(display_total_usd = 100.0)
+
+        val model = home(view, currency = CurrencyView(code = "GBP", rate = 0.78, committed = false))
+
+        assertEquals("$100", model.balance.integer)
+        assertEquals("USD", model.balance.currency)
+    }
+
+    /** A currency with no sign in the JVM's table reads as a code, never a wrong sign. */
+    @Test
+    fun `an unsigned currency shows its code`() {
+        val view = BalanceView(display_total_usd = 100.0)
+
+        val model = home(
+            view,
+            currency = CurrencyView(code = "CHF", rate = 0.80, committed = true),
+        )
+
+        assertEquals("CHF 80", model.balance.integer)
+    }
+
+    /** A nonsense rate is no rate: zero or infinity must never reach a figure. */
+    @Test
+    fun `a rate that is not a positive number is refused`() {
+        val view = BalanceView(display_total_usd = 100.0)
+
+        assertEquals("$100", home(view, currency = gbp(rate = 0.0)).balance.integer)
+        assertEquals("$100", home(view, currency = gbp(rate = Double.NaN)).balance.integer)
+        assertEquals(
+            "$100",
+            home(view, currency = gbp(rate = Double.POSITIVE_INFINITY)).balance.integer,
+        )
     }
 }

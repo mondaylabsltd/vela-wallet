@@ -261,19 +261,32 @@ object Abi {
      * Returns `null` rather than a number for anything unusable, which is the
      * `isFinite && > 0` gate `choose_native_price` documents as the shell's.
      */
-    fun decodeChainlinkUsd(hex: String): Double? {
+    fun decodeChainlinkUsd(hex: String): Double? = decodeChainlinkAnswer(hex, USD_FEED_DECIMALS)
+
+    /**
+     * The same answer, scaled by a decimals the caller read from the feed.
+     *
+     * The USD price feeds all use 8, but the FIAT feeds do not — PHP reports 18
+     * — so anything reading a currency feed must pass what that feed said about
+     * itself. Assuming 8 there is a rate off by a factor of 10^10.
+     */
+    fun decodeChainlinkAnswer(hex: String, decimals: Int): Double? {
         val d = strip(hex)
         if (d.length < 128) return null
+        if (decimals < 0 || decimals > 38) return null
         val raw = runCatching { BigInteger(d.substring(64, 128), 16) }.getOrNull() ?: return null
         val signed = if (raw.bitLength() >= 256) raw.subtract(TWO_POW_256) else raw
         if (signed.signum() <= 0) return null
-        val price = signed.toDouble() / 1e8
+        val price = signed.toDouble() / StrictMath.pow(10.0, decimals.toDouble())
         return if (price.isFinite() && price > 0.0) price else null
     }
 
     // -- helpers -------------------------------------------------------------
 
     private val TWO_POW_256: BigInteger = BigInteger.ONE.shiftLeft(256)
+
+    /** Every Chainlink USD PRICE feed reports 8. The fiat feeds do not. */
+    private const val USD_FEED_DECIMALS = 8
 
     private fun strip(hex: String): String = if (hex.startsWith("0x")) hex.substring(2) else hex
 
