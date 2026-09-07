@@ -106,6 +106,101 @@ object SettingsLive {
     /** A second is where the drawn design calls an endpoint slow. */
     private const val SLOW_MS = 1_000L
 
+    /**
+     * The add-network wizard: what the chain index answered for what was typed.
+     *
+     * **An empty query shows nothing.** The fixture drew three results under an
+     * empty search box, which reads as "these are your options" — and two of
+     * them were invented chains. A search nobody has performed has no results.
+     */
+    fun withWizard(
+        model: SettingsScreenModel,
+        view: NetView,
+        strings: VelaStrings,
+    ): SettingsScreenModel {
+        val wizard = view.wizard
+        val info = wizard.chain_info
+        val compat = wizard.compat
+        return model.copy(
+            addNetwork = model.addNetwork.copy(
+                query = wizard.query,
+                results = if (wizard.query.isBlank()) {
+                    emptyList()
+                } else {
+                    wizard.suggestions.map { entry ->
+                        NetworkRowModel(
+                            // The chain id IS the identity: two chains can
+                            // share a name, and the tap must reach the right
+                            // one.
+                            id = entry.chain_id.toString(),
+                            mark = ChainMarkModel(
+                                letter = entry.name.take(1).uppercase(),
+                                colorArgb = markColour(entry.chain_id),
+                            ),
+                            name = entry.name,
+                            meta = strings.t(
+                                I18nKeys.SettingsUi.CHAIN_ID,
+                                mapOf("chainId" to entry.chain_id.toString()),
+                            ) + " · " + entry.native_currency_symbol,
+                        )
+                    }
+                },
+                candidate = info?.let {
+                    NetworkRowModel(
+                        id = it.chain_id.toString(),
+                        mark = ChainMarkModel(
+                            letter = it.name.take(1).uppercase(),
+                            colorArgb = markColour(it.chain_id),
+                        ),
+                        name = it.name,
+                        meta = strings.t(
+                            I18nKeys.SettingsUi.CHAIN_ID,
+                            mapOf("chainId" to it.chain_id.toString()),
+                        ) + " · " + it.native_symbol,
+                        // **No verdict until one was reached.** While the
+                        // checks are running there is no pill: a chain drawn as
+                        // compatible before anything was checked is the same
+                        // lie as a latency nobody measured.
+                        badge = compat?.let { result ->
+                            StatusPillModel(
+                                tone = if (result.compatible) SettingsTone.Ok else SettingsTone.Error,
+                                label = strings.t(
+                                    if (result.compatible) {
+                                        I18nKeys.SettingsUi.ADD_COMPATIBLE
+                                    } else {
+                                        I18nKeys.SettingsUi.ADD_INCOMPATIBLE
+                                    },
+                                ),
+                            )
+                        },
+                        tag = if (it.is_testnet) {
+                            strings.t(I18nKeys.SettingsUi.ADD_TESTNET)
+                        } else {
+                            null
+                        },
+                    )
+                },
+                // Each contract the core looked for, and whether it is there.
+                // The names are the core's; this only says found or not.
+                checks = compat?.contracts?.map { contract ->
+                    CheckItemModel(label = contract.name, ok = contract.deployed)
+                }.orEmpty(),
+                checksTitle = compat?.let {
+                    strings.t(I18nKeys.SettingsUi.ADD_COMPATIBILITY_CHECK)
+                },
+                // Only offered when the core says this chain can be added.
+                // The button is what writes a network somebody's money will be
+                // read from, and it must not be reachable on a chain whose
+                // contracts are not deployed.
+                primary = if (wizard.can_add) {
+                    strings.t(I18nKeys.SettingsUi.ADD_BUTTON)
+                } else {
+                    null
+                },
+            ),
+        )
+    }
+
     fun withNetworks(
         model: SettingsScreenModel,
         view: NetView,

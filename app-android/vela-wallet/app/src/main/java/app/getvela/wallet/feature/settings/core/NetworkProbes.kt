@@ -164,7 +164,21 @@ class NetworkProbes(
         for (index in 0 until rows.length()) {
             val row = rows.optJSONObject(index) ?: continue
             val chainId = row.optLong("chainId", -1)
-            if (chainId < 0) continue
+            // **One unrepresentable chain must not cost the whole index.**
+            //
+            // The core holds a chain id as `u32`, and the public index carries
+            // ids past it — 7,078,815,900 is in there today. Handing one over
+            // makes serde reject the ENTIRE `search_index` result, so the
+            // fault this produced was not "that chain is missing" but "network
+            // search does nothing at all", with a core fault in the log and
+            // nothing on screen.
+            //
+            // Dropping it is honest: a chain this core cannot represent is a
+            // chain this wallet cannot add, so it is not offered. Whether the
+            // core's own type should widen is a question for every platform —
+            // the web guards this no better, and iOS met the same defect in
+            // spec 050 — and it is recorded rather than answered here.
+            if (chainId < 0 || chainId > U32_MAX) continue
             out.add(
                 NetChainIndexEntry(
                     chain_id = chainId,
@@ -187,7 +201,9 @@ class NetworkProbes(
         val native = raw.optJSONObject("nativeCurrency")
 
         return NetRawChainData(
-            chain_id = if (raw.has("chainId")) raw.optLong("chainId") else null,
+            // Same ceiling as the index: a chain id the core cannot hold is
+            // reported as absent rather than as a number it will reject.
+            chain_id = raw.optLong("chainId", -1).takeIf { it in 0..U32_MAX },
             name = raw.optString("name").ifBlank { null },
             short_name = raw.optString("shortName").ifBlank { null },
             native_currency_name = native?.optString("name")?.ifBlank { null },
@@ -258,6 +274,9 @@ class NetworkProbes(
     private companion object {
         /** The same budget the web gives a network check. */
         const val PROBE_TIMEOUT_MS = 8_000L
+
+        /** What the core can hold in a `chain_id`. */
+        const val U32_MAX = 4_294_967_295L
 
         val JSON = "application/json; charset=utf-8".toMediaType()
 

@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalConfiguration
@@ -123,6 +124,12 @@ data class SettingsActions(
      * landed with no caller. (Spec 041 phase 2.)
      */
     val onOpenNetwork: (id: String) -> Unit = {},
+    /** Typing in the add-network search. */
+    val onSearchNetwork: (String) -> Unit = {},
+    /** Choosing one of its results, by chain id. */
+    val onPickNetwork: (String) -> Unit = {},
+    /** Committing the chosen network, once the core's checks have passed. */
+    val onConfirmAddNetwork: () -> Unit = {},
     /** 恢复默认 on the service-endpoints page. */
     val onResetEndpoints: () -> Unit = {},
 )
@@ -183,6 +190,9 @@ fun SettingsRoute(
         onFieldCommitted = actions.onFieldCommitted,
         onRemoveNetwork = actions.onRemoveNetwork,
         onOpenNetwork = actions.onOpenNetwork,
+        onSearchNetwork = actions.onSearchNetwork,
+        onPickNetwork = actions.onPickNetwork,
+        onConfirmAddNetwork = actions.onConfirmAddNetwork,
         onResetEndpoints = actions.onResetEndpoints,
     )
 }
@@ -207,6 +217,9 @@ fun SettingsScreen(
     onFieldCommitted: (String) -> Unit = {},
     onRemoveNetwork: (String) -> Unit = {},
     onOpenNetwork: (String) -> Unit = {},
+    onSearchNetwork: (String) -> Unit = {},
+    onPickNetwork: (String) -> Unit = {},
+    onConfirmAddNetwork: () -> Unit = {},
     onResetEndpoints: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
@@ -272,6 +285,9 @@ fun SettingsScreen(
                             onFieldCommitted = onFieldCommitted,
                             onRemoveNetwork = onRemoveNetwork,
                             onOpenNetwork = onOpenNetwork,
+                            onSearchNetwork = onSearchNetwork,
+                            onPickNetwork = onPickNetwork,
+                            onConfirmAddNetwork = onConfirmAddNetwork,
                             onResetEndpoints = onResetEndpoints,
                         )
                     }
@@ -463,6 +479,9 @@ private fun SettingsPageBody(
     onFieldCommitted: (String) -> Unit = {},
     onRemoveNetwork: (String) -> Unit = {},
     onOpenNetwork: (String) -> Unit = {},
+    onSearchNetwork: (String) -> Unit = {},
+    onPickNetwork: (String) -> Unit = {},
+    onConfirmAddNetwork: () -> Unit = {},
     onResetEndpoints: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
@@ -545,9 +564,21 @@ private fun SettingsPageBody(
         SettingsPage.AddNetwork -> {
             val add = model.addNetwork
             if (add.candidate == null) {
-                VelaUrlField(label = "", value = "", placeholder = add.searchPlaceholder)
+                // The box was drawn read-only with an empty value, so the
+                // fixture's three results sat under a search nobody could
+                // perform. `onValueChange` has been on this component all
+                // along; nothing was passing one.
+                VelaUrlField(
+                    label = "",
+                    value = add.query,
+                    placeholder = add.searchPlaceholder,
+                    onValueChange = onSearchNetwork,
+                    keyboard = KeyboardType.Text,
+                )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl))
-                add.results.forEach { VelaNetworkRow(it) }
+                add.results.forEach { row ->
+                    VelaNetworkRow(row = row, onClick = onPickNetwork)
+                }
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = VelaSpacing.xl),
@@ -592,7 +623,14 @@ private fun SettingsPageBody(
                 // an action you cannot take should not be dressed as the action
                 // you came for.
                 if (add.primary != null) {
-                    VelaPrimaryButton(add.primary, onClick = {}, modifier = Modifier.fillMaxWidth())
+                    // The button that writes a network somebody's money will be
+                    // read from. It was drawn with an empty handler; the core
+                    // only offers it when its own checks passed.
+                    VelaPrimaryButton(
+                        add.primary,
+                        onClick = onConfirmAddNetwork,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
                 if (add.secondary != null) {
                     VelaSecondaryButton(add.secondary, onClick = {}, modifier = Modifier.fillMaxWidth())

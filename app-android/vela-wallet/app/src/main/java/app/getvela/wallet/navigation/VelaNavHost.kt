@@ -491,8 +491,12 @@ fun VelaNavHost(
                 settings.startNetworks()
             }
             SettingsRoute(
-                model = SettingsLive.withNetworks(
-                    SettingsLive.withCurrency(model, currency),
+                model = SettingsLive.withWizard(
+                    SettingsLive.withNetworks(
+                        SettingsLive.withCurrency(model, currency),
+                        networks,
+                        strings,
+                    ),
                     networks,
                     strings,
                 ),
@@ -526,6 +530,11 @@ fun VelaNavHost(
                     // The row carries a display id; the machine speaks chain
                     // ids. The network list already holds both, so the lookup
                     // is a read rather than a second identity to keep in sync.
+                    onSearchNetwork = { query -> settings.searchNetworks(query) },
+                    onConfirmAddNetwork = { settings.confirmAddNetwork() },
+                    onPickNetwork = { chainId ->
+                        chainId.toLongOrNull()?.let { settings.addNetworkByChainId(it) }
+                    },
                     onOpenNetwork = { id ->
                         settings.networks.value.networks
                             .firstOrNull { it.id == id }

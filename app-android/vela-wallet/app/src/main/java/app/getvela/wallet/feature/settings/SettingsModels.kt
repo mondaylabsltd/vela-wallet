@@ -222,6 +222,8 @@ data class AddNetworkModel(
     val title: String,
     val subtitle: String,
     val searchPlaceholder: String,
+    /** What is typed in the search box — the core's, so a keystroke round-trips. */
+    val query: String = "",
     val results: List<NetworkRowModel> = emptyList(),
     val candidate: NetworkRowModel? = null,
     val checksTitle: String? = null,

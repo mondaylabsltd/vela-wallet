@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.settings.core
 
 import app.getvela.wallet.core.data.KeyValueStore
+import app.getvela.wallet.core.diagnostics.VelaLog
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
@@ -151,14 +152,28 @@ class NetworkAdminExecutor(
             )
         }
 
-        is NetOperation.RpcGetCode -> NetShellResult.Code(
-            url = operation.url,
-            address = operation.address,
-            code = probes?.getCode(operation.url, operation.address),
-        )
+        is NetOperation.RpcGetCode -> {
+            val code = probes?.getCode(operation.url, operation.address)
+            // The compatibility check is several of these in a row, and when it
+            // stalls the screen shows a candidate with no verdict and no
+            // button. From outside, "still checking" and "asked nobody" look
+            // identical — the same blind spot the balance and scan executors
+            // each had once.
+            VelaLog.event(
+                "net.getCode",
+                "read",
+                "url" to operation.url,
+                "at" to operation.address,
+                "code" to (code?.length ?: -1),
+            )
+            NetShellResult.Code(operation.url, operation.address, code)
+        }
 
-        is NetOperation.RpcCallP256 ->
-            NetShellResult.P256Call(url = operation.url, result = probes?.callP256(operation.url))
+        is NetOperation.RpcCallP256 -> {
+            val result = probes?.callP256(operation.url)
+            VelaLog.event("net.p256", "called", "url" to operation.url, "got" to (result ?: "-"))
+            NetShellResult.P256Call(url = operation.url, result = result)
+        }
 
         is NetOperation.FetchServiceHealth -> {
             val health = probes?.serviceHealth(operation.base_url)
