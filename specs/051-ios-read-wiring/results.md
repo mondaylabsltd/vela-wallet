@@ -698,6 +698,49 @@ same measurement phase 0 took.
    the same dead address, and a coin appearing off its home chain would be
    unpriced for this reason.
 
+---
+
+## Phase 8 — where the live home leads
+
+Closeout found the obvious remaining lie by using the app: the home shows real
+money, and **tapping through it opened fixture screens**. 活动 → 全部 listed
+somebody else's transactions (`至 hold on`), an asset row opened a fixture USDT,
+and a transaction row opened a transfer that never happened.
+
+Three drilldowns are live now, all from machines already running:
+
+- **A1 history** — the same `activity_feed` rows the home shows, not a second
+  list built from another source. Building it twice is how 全部 comes to
+  disagree with the screen it was opened from.
+- **A2 one transaction** — built from the **stored record**, because `FeedItem`
+  is a lossy projection and the sheet wants the hash and the counterparty. The
+  fiat line is the **stored** figure: re-pricing a year-old transfer at today's
+  rate would quietly restate history.
+- **T2 one token** — that token's facts and, under them, only that token's
+  transfers. Matched on symbol AND chain, because the same ticker on two
+  networks is two different assets.
+
+The tapped row travels with the navigation (it did not before — the sheets would
+have opened the first row whatever was tapped, the same defect the receive sheet
+had with its network).
+
+### A row the drawing has and this build cannot fill
+
+The transaction sheet draws a 代币合约 row. A stored `LocalTransaction` carries a
+symbol and decimals and **not** the contract — on every client. The row is
+omitted rather than filled with a plausible address, because "which contract?"
+is exactly the question it exists to answer.
+
+Seen on device-class hardware: `已收到 USDT · 成功 · +2,910.640521 USDT ·
+≈ $2,910.64 · 发送方 0x38ce…6d6f · Ethereum · 今天 12:44 · 哈希 0x60a6…e3e7`.
+
+### Gates
+
+Hermetic tests 309 → **319**; live 25; UI 11 → **12**. Literal violations 35.
+Zero Rust changes.
+
+---
+
 ### What 052 inherits
 
 - `VELA_ACCOUNT` seeds a **key-less** account. It can fund every read in this cut

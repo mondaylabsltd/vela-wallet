@@ -235,6 +235,47 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         XCTAssertEqual(fixtureHolding.count, 0, "a fixture holding is still on screen")
     }
 
+    // MARK: - US1b: where the live home leads
+
+    /// 活动 → 全部 opens the person's OWN history, and a row in it opens the
+    /// transaction that was tapped.
+    ///
+    /// A live home that hands off to a fixture screen is the same lie one level
+    /// down: tap a real transfer, read somebody else's. The discriminator is
+    /// `至 hold on` — a recipient that exists only in `WalletFlowFixtures`.
+    func testHistoryAndItsTransactionAreTheAccountsOwn() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_ACCOUNT"] = "0x28C6c06298d514Db089934071355E5743bf21d60"
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "dark"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh)"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["活动"].waitForExistence(timeout: 30),
+                      "the home never appeared")
+        // The receipt scan has to land before there is a history to open.
+        XCTAssertTrue(app.staticTexts["已收到"].firstMatch.waitForExistence(timeout: 60),
+                      "no receipts reached the home feed")
+
+        // The activity section's 全部 — the first of the two.
+        app.buttons.matching(identifier: "全部").element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["历史记录"].waitForExistence(timeout: 10),
+                      "the history screen never opened")
+        XCTAssertEqual(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "hold on")).count, 0,
+            "the fixture history is still on screen"
+        )
+        attach(app.screenshot(), named: "device-history-live")
+
+        // The first row opens ITS transaction.
+        app.staticTexts["已收到"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["成功"].waitForExistence(timeout: 10),
+                      "the transaction sheet never opened")
+        XCTAssertTrue(app.staticTexts["哈希"].exists, "the sheet has no hash row")
+        attach(app.screenshot(), named: "device-tx-detail-live")
+    }
+
     // MARK: - US2: the receive screen is the person's own address
 
     /// 收款 shows YOUR address, on every network, with a code that encodes it.

@@ -206,11 +206,23 @@ Then closeout: results.md's SC table, the baselines re-measured (dylib size,
 bindings bytes), and the two founder decisions this cut surfaced (VND, the
 BNB feed).
 
-### Wired but unreachable — the list to close before 7
+### Phase 8 — the drilldowns ✅
+
+The home was live and everything it led to was a fixture. A1 (history), A2 (one
+transaction) and T2 (one token) are live now, from machines already running, and
+the tapped row travels with the navigation — without it the sheets opened the
+first row whatever was tapped.
+
+The 代币合约 row on the transaction sheet is **omitted**: a stored record carries
+a symbol and decimals, not the contract, on every client.
+
+### Wired but unreachable — what is left
 
 The core owns these and no gesture reaches them:
 
-- the **chain-filter pill** (`ActivityStore.chainFilter`) — still a fixture;
+- the **chain-filter pill** (`ActivityStore.chainFilter`) — the history and
+  assets headers raise `onPill`, `FlowNav` has no `.chains` step, and
+  `ChainSelectSheet` is drawn with fixture rows. The nearest piece of work;
 - the **receipt toast and row glow** (`FeedView.toast` / `newItemId`) — decoded,
   never drawn;
 - **swipe-to-delete** an activity row (`ActivityStore.deleteRequested`);

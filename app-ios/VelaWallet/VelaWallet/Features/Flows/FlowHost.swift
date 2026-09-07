@@ -51,6 +51,10 @@ struct FlowHost: View {
     /// draws its mark, and it can only name the RIGHT one if the row that was
     /// tapped travels with the navigation.
     var onReceiveNetwork: ((Int) -> Void)?
+    /// Which history row opened the transaction sheet, as (group, row).
+    var onSelectActivity: ((Int, Int) -> Void)?
+    /// Which assets row opened the token sheet.
+    var onSelectAsset: ((Int) -> Void)?
 
     /// The sheet's own dismissal. A new state means a new sheet, so the flag
     /// is keyed on the model's state — closing one must not suppress the next.
@@ -106,7 +110,10 @@ struct FlowHost: View {
             }
         case .history(let m):
             FlowScaffold(header: m.header, onBack: onBack, onPill: { onNavigate(.chains) }) {
-                HistoryBody(model: m, onSelect: { _, _ in onNavigate(.txDetail) })
+                HistoryBody(model: m, onSelect: { group, row in
+                    onSelectActivity?(group, row)
+                    onNavigate(.txDetail)
+                })
             }
         case .assets(let m):
             FlowScaffold(
@@ -117,7 +124,10 @@ struct FlowHost: View {
             ) {
                 AssetsBody(
                     model: m,
-                    onSelect: { _ in onNavigate(.tokenDetail) },
+                    onSelect: { index in
+                        onSelectAsset?(index)
+                        onNavigate(.tokenDetail)
+                    },
                     onAdd: { onNavigate(.addToken) },
                     onReceive: { onNavigate(.receive) }
                 )

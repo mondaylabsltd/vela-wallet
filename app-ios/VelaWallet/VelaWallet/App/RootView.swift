@@ -39,6 +39,11 @@ struct RootView: View {
     @State private var deposits: ReceiveWatchStore
     /// Which network row opened the receive code.
     @State private var receiveNetwork = 0
+    /// Which history row opened the transaction sheet, and which assets row
+    /// opened the token sheet. The drawn sheets show ONE of each; without the
+    /// tap travelling with the navigation they would show the first.
+    @State private var activityRow: (group: Int, row: Int) = (0, 0)
+    @State private var assetRow = 0
     /// The networks machine (spec 050), app-resident: it probes endpoints and
     /// holds a search debounce, and one that died with the settings route would
     /// re-probe every chain on each visit.
@@ -334,7 +339,9 @@ struct RootView: View {
                     addTokenInput: addTokenInput(for: state),
                     onAddToken: addTokenAction(for: state),
                     addTokenError: addTokenError(for: state),
-                    onReceiveNetwork: { receiveNetwork = $0 }
+                    onReceiveNetwork: { receiveNetwork = $0 },
+                    onSelectActivity: { activityRow = ($0, $1) },
+                    onSelectAsset: { assetRow = $0 }
                 )
                 .transition(.move(edge: .trailing))
                 .task(id: state) {
@@ -528,6 +535,30 @@ struct RootView: View {
                 balance, currency: settings.currency, on: assets, loc: loc
             ))
         }
+        // The history screen the home's 全部 opens — the same feed, not a
+        // second one built from another source.
+        if case .history(let history) = model.base, let feed = activity.feed {
+            model.base = .history(FlowsLive.history(
+                feed, on: history, loc: loc, hidden: wallet.balance?.hidden ?? false
+            ))
+        }
+        if case .txDetail(let detail)? = model.sheet, let feed = activity.feed,
+           let item = selectedItem(in: feed) {
+            model.sheet = .txDetail(FlowsLive.txDetail(
+                item,
+                record: feed.transactions.first { $0.id == item.id },
+                on: detail, loc: loc
+            ))
+        }
+        if case .tokenDetail(let detail)? = model.sheet,
+           let balance = wallet.balance, balance.tokens.indices.contains(assetRow) {
+            model.sheet = .tokenDetail(FlowsLive.tokenDetail(
+                balance.tokens[assetRow],
+                feed: activity.feed,
+                display: WalletLive.Display.from(settings.currency),
+                on: detail, loc: loc
+            ))
+        }
         // The ERC-20 tab only: the native tab adds a NETWORK, which is
         // `network_admin`'s wizard and not this machine's.
         if case .addToken(let sheet) = model.sheet, sheet.tab == .erc20,
@@ -535,6 +566,21 @@ struct RootView: View {
             model.sheet = .addToken(FlowsLive.addToken(view, on: sheet, loc: loc))
         }
         return model
+    }
+
+    /// The feed item behind the tapped history row.
+    ///
+    /// Resolved against the SAME grouping the screen rendered, so the sheet
+    /// cannot open a different transaction than the one that was tapped.
+    private func selectedItem(in feed: FeedViewWire) -> FeedItemWire? {
+        let groups = WalletLive.activityGroups(
+            feed, loc: loc, hidden: wallet.balance?.hidden ?? false
+        )
+        guard groups.indices.contains(activityRow.group) else { return nil }
+        let before = groups[..<activityRow.group].reduce(0) { $0 + $1.rows.count }
+        let flat = before + activityRow.row
+        let items = FlowsLive.items(feed)
+        return items.indices.contains(flat) ? items[flat] : nil
     }
 
     /// The address field, owned by the core — and only on the sheet that has
