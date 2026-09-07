@@ -88,6 +88,12 @@ interface KeyValueStore {
          * rediscovering it the hard way.
          */
         const val RPC_BANNED = "vela.rpc.banned"
+
+        /** `address → {usd, at}`, 24h TTL — the Expo bytes (spec 041). */
+        const val BALANCE_CACHE = "vela.balanceCache"
+
+        /** Whether money figures are hidden on this device. */
+        const val BALANCE_HIDDEN = "vela.balanceHidden"
     }
 }
 

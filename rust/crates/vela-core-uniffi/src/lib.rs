@@ -946,3 +946,22 @@ pub fn choose_native_price(
         },
     }
 }
+
+/// Does this chain have no native coin?
+///
+/// Tempo's gas is a TIP-20 stablecoin, so it has nothing to read a native
+/// balance from — and its RPC answers the SAME constant for every address,
+/// while its native symbol is `USD`. A shell that queries it anyway and lets a
+/// stablecoin peg price that constant at a dollar puts something like
+/// 4 × 10^57 dollars into a person's total. The desktop found exactly that
+/// (spec 031) and fixed it by reading this predicate rather than inventing a
+/// "that number looks too big" threshold.
+///
+/// It was reachable only by a shell that links Rust directly. Android and iOS
+/// could not ask, which left them one plausible-looking constant away from the
+/// same bug — so it crosses the bridge now, for the same reason the price
+/// ladder does.
+#[uniffi::export]
+pub fn is_chain_without_native_coin(chain_id: u32) -> bool {
+    vela_core::app::fee_policy::is_tempo_chain(chain_id)
+}

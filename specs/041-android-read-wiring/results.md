@@ -189,3 +189,56 @@ streaming partial results the core expects. That is the ~800-line
 `services/wallet-api.ts` port, and it is the single largest piece of this
 spec — followed by `manage_tokens`, `token_trust`, the controller, `WalletLive`
 and the device check.
+
+
+---
+
+## Phase 4b — Native holdings, read from chains (T121–T122 partial)
+
+`BalanceExecutor` reads one `eth_getBalance` per chain, concurrently, through
+the pool; `WalletController` holds the pool and the dashboard machine together.
+Every judgement about money stays in `balance_dashboard.rs` — this half reads
+chains and reports what it read.
+
+**Deliberately native coins only.** ERC-20 holdings and prices need a Multicall3
+batch with DEX quotes in the same call, and that is 4c. Until then every holding
+crosses with `price_usd = null`, so the core reports the total as *unknown*
+rather than as a number. A wrong total would be worse than the fixture it
+replaces; an honest "not yet" is not.
+
+### A second core rule promoted rather than copied
+
+`is_tempo_chain` was reachable only by a shell that links Rust directly — so
+Android and iOS could not ask, which left them one plausible-looking constant
+away from the bug the desktop found: Tempo has no native coin, its RPC answers
+the **same constant for every address**, and its native symbol is `USD`, so a
+stablecoin peg prices that constant at a dollar and puts ~4×10^57 dollars into
+somebody's total. It now crosses as `is_chain_without_native_coin`, and the test
+proves the chain is **never queried at all**.
+
+Again only `vela-core-uniffi` changed, so no regeneration gate applies.
+
+### What the tests establish
+
+| Case | What it pins |
+| --- | --- |
+| 1.5 ETH | crosses as `"1.5"` — a **human decimal**, not raw units |
+| a chain with no native coin | never asked, by the core's predicate |
+| a chain holding nothing | **not** a failed chain |
+| a chain that did not answer | named in `failed_chain_ids`, not rendered as zero |
+| a zero balance | not a holding |
+| an unpriced holding | never becomes a price, and the total stays unknown |
+
+### Two bugs the tests caught, both mine
+
+1. **An empty chain was reported as a broken one.** The first version treated
+   "produced no token" as "did not answer", so a chain where a person simply has
+   no funds would have raised a network-down banner. `answered` is now tracked
+   from the RPC result rather than inferred from the output.
+2. **A settle predicate that fired before the fetch started.**
+   `!holdings_loading` is true on the initial view, so the assertion ran against
+   an empty screen. Only `fetch_settled` carries the failed list, so waiting for
+   that is waiting for the fetch to actually finish. Third variation on "the
+   view is right before the rest of it arrives" in this program.
+
+**Gate**: 241 unit tests, 0 failures.
