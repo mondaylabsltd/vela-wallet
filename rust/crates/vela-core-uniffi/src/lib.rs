@@ -14,6 +14,9 @@ mod ctap_bridge;
 /// Multicall3 encoding for the native read path (spec 051).
 mod multicall;
 mod onboarding_bridge;
+/// The native-coin price ladder, asked of the core rather than re-decided
+/// (spec 051 phase 2c).
+mod prices;
 
 pub use onboarding_bridge::{CreateWalletCore, LoginCore, SessionCore};
 

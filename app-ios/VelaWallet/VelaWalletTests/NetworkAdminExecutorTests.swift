@@ -76,13 +76,40 @@ struct NetworkAdminExecutorTests {
         #expect(reply["reported_chain_id"] is NSNull)
     }
 
-    /// `fetch_fiat_rates` is fail-closed until 051 owns the price path, and it
-    /// says so with the core's modelled failure rather than an empty rate set.
-    @Test func fiatRatesFailClosedRatherThanReportingNoRates() async {
+    /// An unreachable rates endpoint is the core's modelled failure, never an
+    /// empty rate set — the two look identical on screen and mean opposite
+    /// things about whether the endpoint works.
+    @Test func anUnreachableRatesEndpointFailsRatherThanReportingNoRates() async {
         let (_, _, _, executor) = fresh()
         let reply = await answer(executor, ["type": "fetch_fiat_rates", "url": "https://x.test"])
         #expect(type(of: reply) == "fiat_rates")
         #expect((reply["body"] as? [String: Any])?["type"] as? String == "failed")
+    }
+
+    /// The COUNT is the shell's — it is a question about the two shapes a
+    /// swappable provider may send. Whether zero rates means "unusable" is the
+    /// core's, and nothing here answers it.
+    @Test func bothRatesShapesAreCounted() {
+        let array = NetworkAdminExecutor.fiatRatesBody(CoreHTTP.Probe(
+            body: [["quote": "EUR", "rate": 0.92], ["quote": "GBP", "rate": 0.79]],
+            status: 200, latencyMs: 12
+        ))
+        #expect(array["type"] as? String == "rates")
+        #expect(array["rate_count"] as? Int == 2)
+
+        let object = NetworkAdminExecutor.fiatRatesBody(CoreHTTP.Probe(
+            body: ["rates": ["EUR": 0.92, "GBP": 0.79, "JPY": 150]], status: 200, latencyMs: 12
+        ))
+        #expect(object["rate_count"] as? Int == 3)
+
+        // A 200 carrying something else is zero rates, and the core decides
+        // what that means. A 500 is an http_error, which it reads differently.
+        #expect(NetworkAdminExecutor.fiatRatesBody(
+            CoreHTTP.Probe(body: "<html>", status: 200, latencyMs: 1)
+        )["rate_count"] as? Int == 0)
+        #expect(NetworkAdminExecutor.fiatRatesBody(
+            CoreHTTP.Probe(body: nil, status: 500, latencyMs: 1)
+        )["type"] as? String == "http_error")
     }
 
     // MARK: - Storage

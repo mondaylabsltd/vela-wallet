@@ -17,6 +17,14 @@
 //  Rendering it as `$0.00` would tell somebody their wallet is empty when the
 //  truth is that nobody could price it.
 //
+//  ## The figure is converted, or it is labelled USD — never relabelled
+//
+//  `display_total_usd` is USD by construction; `display_currency` owns the
+//  rate. When it has one the hero converts and wears the person's code; when it
+//  does not, the hero shows the **USD figure under USD**. Relabelling the same
+//  digits with a ¥ is the lie the whole `rate: null` rule exists to prevent —
+//  it tells somebody 1,234.56 dollars is 1,234.56 yuan.
+//
 //  ## A partial total is a floor, and has to say so
 //
 //  When some chains answered and some did not, the core sets `balance_partial`.
@@ -29,24 +37,57 @@ import SwiftUI
 
 enum WalletLive {
 
+    /// Which currency the money on this screen is stated in, and what to
+    /// multiply a USD figure by to get there.
+    ///
+    /// Built from the `display_currency` view, and it applies the same rule
+    /// `SettingsLive.currencyRowValue` does — one rule, two surfaces.
+    struct Display {
+        let code: String
+        let rate: Double
+
+        static let usd = Display(code: "USD", rate: 1)
+
+        /// The badge the hero's figure wears. Decoration, not identity — the
+        /// code itself is already stated in the line above the figure, so a
+        /// currency the catalog has never heard of shows the number bare rather
+        /// than borrowing somebody else's `$`.
+        var glyph: String { CurrencyCatalog.entry(code)?.glyph ?? "" }
+
+        /// A currency without a rate, or one the person has not committed to,
+        /// degrades to USD. `rate: nil` is **not** 1: the difference is
+        /// whether the digits get relabelled.
+        static func from(_ view: CurrencyViewWire?) -> Display {
+            guard let view, view.committed, let rate = view.rate, rate > 0, rate.isFinite
+            else { return .usd }
+            return Display(code: view.code, rate: rate)
+        }
+    }
+
     /// Swap the balance hero and the asset rows onto the drawn home.
     static func apply(
         _ view: BalanceViewWire,
+        currency: CurrencyViewWire? = nil,
         on model: WalletHomeModel,
         loc: Loc
     ) -> WalletHomeModel {
         var copy = model
-        copy.balance = balance(view, fallback: model.balance)
-        copy.assetRows = assetRows(view)
+        let display = Display.from(currency)
+        copy.balance = balance(view, display: display, fallback: model.balance)
+        copy.assetRows = assetRows(view, display: display)
         return copy
     }
 
     // MARK: - The hero
 
-    static func balance(_ view: BalanceViewWire, fallback: BalanceModel) -> BalanceModel {
+    static func balance(
+        _ view: BalanceViewWire,
+        display: Display = .usd,
+        fallback: BalanceModel
+    ) -> BalanceModel {
         var model = BalanceModel(
             label: fallback.label,
-            currency: fallback.currency,
+            currency: display.code,
             state: state(view),
             integer: nil,
             decimals: nil,
@@ -63,8 +104,8 @@ enum WalletLive {
               let total = view.displayTotalUsd ?? view.cachedTotalUsd
         else { return model }
 
-        let (integer, decimals) = split(total)
-        model.integer = integer
+        let (integer, decimals) = split(total * display.rate)
+        model.integer = display.glyph + integer
         model.decimals = decimals
         return model
     }
@@ -123,20 +164,24 @@ enum WalletLive {
     ///
     /// Invisible until the balance was real — with a fixture there was nothing
     /// to duplicate.
-    static func assetRows(_ view: BalanceViewWire) -> [AssetRowModel] {
+    static func assetRows(_ view: BalanceViewWire, display: Display = .usd) -> [AssetRowModel] {
         view.tokens.map { token in
             AssetRowModel(
                 ticker: token.symbol,
                 chain: ChainCatalog.meta(token.chainId)?.displayName ?? "",
                 badgeColor: chainColor(token.chainId),
                 balance: token.balance,
-                fiat: fiat(token, hidden: view.hidden),
+                fiat: fiat(token, hidden: view.hidden, display: display),
                 masked: view.hidden
             )
         }
     }
 
-    private static func fiat(_ token: BalanceTokenWire, hidden: Bool) -> AssetFiatModel {
+    private static func fiat(
+        _ token: BalanceTokenWire,
+        hidden: Bool,
+        display: Display
+    ) -> AssetFiatModel {
         if hidden { return .masked }
         guard let price = token.priceUsd, let amount = Double(token.balance) else {
             // Held, unpriceable. The drawn `noPrice` treatment says exactly
@@ -145,8 +190,9 @@ enum WalletLive {
         }
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
-        formatter.currencyCode = "USD"
-        return .value(formatter.string(from: NSNumber(value: amount * price)) ?? "")
+        formatter.currencyCode = display.code
+        let value = amount * price * display.rate
+        return .value(formatter.string(from: NSNumber(value: value)) ?? "")
     }
 
     /// The same brand colours the settings list uses, and the same neutral for a

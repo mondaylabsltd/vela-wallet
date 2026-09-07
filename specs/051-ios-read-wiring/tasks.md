@@ -22,9 +22,11 @@ cd app-ios/VelaWallet                                       # xcodebuild needs t
 xcodebuild -project VelaWallet.xcodeproj -scheme VelaWallet \
   -destination 'id=84146B7B-C679-46AC-8426-41AA42E6F403' test
 
-# 2. The live suite (real endpoints). Behind a compile flag so a flaky network
-#    never fails an unrelated change.
+# 2. The live suites (real endpoints). Behind a compile flag so a flaky network
+#    never fails an unrelated change. Two of them now: the add-network wizard,
+#    and the price path (feeds, the fiat waterfall, the golden Safe priced).
 xcodebuild ... -only-testing:VelaWalletTests/NetworkAdminLiveTests \
+  -only-testing:VelaWalletTests/PriceLiveTests \
   OTHER_SWIFT_FLAGS='$(inherited) -DVELA_LIVE_TESTS'
 
 # 3. On the founder's iPhone. Screenshots come back inside the .xcresult.
@@ -37,7 +39,9 @@ xcrun xcresulttool export attachments --path /tmp/accept.xcresult \
 # 4. Gates. The literal audit is NOT green on main — 35 pre-existing violations.
 #    The gate is "no new ones".
 node app-ios/scripts/audit-literals.mjs                     # expect 35
-git diff --stat origin/main -- rust/crates/vela-core/src/app/   # expect empty
+# Against the MERGE BASE, not origin/main: main has moved under this branch and
+# now carries somebody else's send.rs work, which a plain diff would blame here.
+git diff --stat $(git merge-base origin/main HEAD) -- rust/crates/vela-core/src/app/   # expect empty
 ```
 
 ---
@@ -59,76 +63,54 @@ five `// live in 051` markers inventoried.
 
 ---
 
-## Next — Phase 2: `balance_dashboard`
+### Phase 2 — `balance_dashboard` ✅ committed `f2b518e1` · `f0c58f76` · phase 2c
 
-**The screen this whole cut exists to fix.** `WalletScreen` renders
-`WalletFixtures.buildMobileState(.h1)` — `$1,383.28` of somebody else's money
-under the person's real name and identicon (`App/RootView.swift`,
-`signedInOrWelcome`).
+The screen this cut exists to fix. `$1,383.28` of somebody else's money is gone:
+the home reads the seeded address's own holdings, priced, in the currency the
+person chose.
 
-### The seven operations
+- **2a** — the ABI gap closed in Rust (`multicall3_encode_aggregate3`,
+  `multicall3_decode_aggregate3`, `erc20_encode_balance_of`), `TokenReads`, and
+  `BalanceWire`. Bindings 215,916 → 260,699.
+- **2b** — `BalanceExecutor`'s seven operations, `WalletLive`, `WalletStore`,
+  `RootView`'s `.wallet` case, and `VELA_ACCOUNT`'s key-less seed. Two defects
+  the live screen found: every unpriceable holding rendered twice, and the dev
+  seed persisted past its own pin.
+- **2c** — the price path. `choose_native_price` exported through the bridge
+  (bindings → 263,535) rather than a fourth re-decision of the ladder; the
+  Chainlink rungs (mainnet batch + per-chain feed) filling `price_usd`; the fiat
+  waterfall behind `resolve_rate`; `fetch_fiat_rates` live; and the hero
+  converting into the chosen currency or saying USD.
 
-`FetchTokens` · `FetchAccountAssets` · `ReadBalanceCache` ·
-`ReadBalanceCacheMany` · `WriteBalanceCache` · `StartRetryTimer` ·
-`WritePrivacy`
+Two facts about the world, recorded in results.md and **needing a founder
+decision** rather than a code change:
 
-`FetchTokens { address, force, pull }` **names no chain and no URL** — the core
-delegates the whole multi-chain fetch and rules only on what comes back. That is
-the shape 050 never had, and it is why this phase ports a service layer.
+- the mainnet **BNB/USD feed is dead** (`0x14e613AC…75d25` answers `0x`) —
+  web carries the same dead entry; BSC's local feed covers BNB today;
+- the fiat endpoint quotes **30 currencies, not "~160 incl. VND"**, so **VND is
+  the one code in the picker's eight that nothing can price**. It degrades
+  honestly to USD. Drop it from `CurrencyCatalog`, or fix the `vela-currency`
+  deployment.
 
-### What to build, in order
+**Still owed for 2c**: the device acceptance run. `testHomeShowsRealMoneyRather
+ThanTheFixtureTotal` passes on the simulator and the phone dropped off USB
+mid-run — a simulator run is preparation, never proof (SC-008).
 
-1. **`Features/Wallet/BalanceWire.swift`** — `Decodable` mirrors of
-   `BalanceDashboardView`. Read the Rust first:
-   `rust/crates/vela-core/src/app/balance_dashboard.rs` (1,096 lines).
-2. **`Core/TokenReads.swift`** — the multi-chain fetch, ported from
-   `app-web/vela-wallet/src/lib/services/wallet-api.ts` (788) and
-   `token-reads.ts` (86). Native balance is `eth_getBalance`; ERC-20 balances
-   are **Multicall3 `aggregate3`** — see the gap below.
-3. **`Features/Wallet/BalanceExecutor.swift`** — the seven operations, every
-   chain read going **through `RpcPool.call`** and never through `CoreHTTP`
-   directly (FR-002: one pool, one ban map).
-4. **`Features/Wallet/WalletLive.swift`** — sibling of `WalletFixtures`,
-   producing the same display models.
-5. **`Features/Wallet/WalletStore.swift`** — resident, constructed in
-   `RootView.init` beside `contacts` and `settings`.
-6. Wire `signedInOrWelcome`'s `.wallet` case to it.
+---
 
-### ✅ Already done (phase 2a, `f2b518e1`) — start at step 3
+## Next — Phase 3: `activity_feed`
 
-- The ABI gap below is **settled and shipped**: `multicall3_encode_aggregate3`,
-  `multicall3_decode_aggregate3`, `erc20_encode_balance_of` in
-  `rust/crates/vela-core-uniffi/src/multicall.rs`. Bindings 215,916 → 260,699.
-- `Core/TokenReads.swift` — the multi-chain read, every call through
-  `RpcPool.call`, raw units → human decimal in string arithmetic.
-- `Features/Wallet/BalanceWire.swift` — the `Decodable` mirrors.
+Real transfers, grouped by day. The home's 活动 section is still
+`WalletFixtures`' two rows (已发送 −2 POL, 已收到 +120 USDT) under a real
+address, which is the same class of lie the balance was.
 
-### The gap that needed deciding first (research D1) — SETTLED
-
-`aggregate3((address,bool,bytes)[])` is a dynamic array of tuples and the bridge
-exports **no encoder for it**. `abi_encode_address/uint256/bytes32`,
-`function_selector` and `decode_calldata` exist and are not enough.
-
-D1's decision: a Rust encoder in **`vela-core-uniffi`** (add `alloy-dyn-abi` as
-a direct dep of that crate), exported through the bridge. **Not** in
-`vela-core`, because that would force a `rust/pkg-web` rebuild and commit while
-another session holds the web client — a scheduling reason, recorded as a
-consolidation debt rather than dressed up as a design.
-
-Measure the bridge growth when it lands: the `.xcframework` and the committed
-`vela_core_uniffi.swift` both grow, and 019 recorded that linking crux cost
-+785,864 stripped bytes on Android. Baselines are in Phase 0 above.
-
-### Two traps this phase will hit
-
-- **`BalanceToken.balance` is a HUMAN DECIMAL, not raw units.** Desktop's 031
-  wrote it the other way and the defect was invisible while prices were `None` —
-  with a price, the total would have been out by 10^18.
-- **Tempo (4217) has no native coin** and its RPC returns the same ~4.24e75
-  constant for every address; its symbol is `USD`, so a stablecoin peg would
-  price the garbage at $1 and put ~4e57 dollars into the total. The guard is
-  the core's own `fee_policy::TEMPO_CHAIN_IDS`, never an invented "too big"
-  threshold. `ChainCatalog` already marks it `gasModel: .tempo`.
+- `ScanIncomingTransfers` uses `eth_getLogs` **through the pool**, and the
+  range-cap verdict is why `RpcOutcome.rangeCap` exists — the caller narrows the
+  span and asks again; the core has already recorded the cap.
+- Port from `app-web/vela-wallet/src/lib/services/activity.ts` (203) and
+  `incoming-transfers.ts`.
+- Read `rust/crates/vela-core/src/app/activity_feed.rs` first: the grouping,
+  the day boundaries and what counts as pending are all its.
 
 ---
 
@@ -136,15 +118,22 @@ Measure the bridge growth when it lands: the `.xcframework` and the committed
 
 | Phase | What |
 |---|---|
-| 3 | `activity_feed` — real transfers grouped by day; `ScanIncomingTransfers` uses `eth_getLogs` through the pool, and the range-cap verdict is why `RpcOutcome.rangeCap` exists |
 | 4 | `manage_tokens` + `token_trust` — the token list and the security verdict. **`token_trust` is the one machine here whose job is security**: a token that arrived by transfer is untrusted until the core says otherwise, and a shell that pre-filters has made the decision the core was written to make |
 | 5 | `receive_watch` + `payment_request` — the deposit watcher and the ack |
-| 6 | Flip 050's four `// live in 051` arms; `contacts::load_send_history` is the only one left, and it waits for 052 |
+| 6 | Flip 050's remaining `// live in 051` arms: `contacts::resolve_name` (the name-service waterfall) and `contacts::check_is_contract` (`eth_getCode` through the pool). `contacts::load_send_history` waits for 052 |
 | 7 | Device acceptance + closeout |
+
+### Deferred out of phase 2, on purpose
+
+The **DEX quote rung** of the native price ladder — it needs per-chain master
+data (`fetchChainTokens`: router, wrapped native, the chain's stables) and its
+own dynamic-ABI encoders. `dex` is passed as `nil` today, which the core reads
+as "no quote", and `best_native_dex_price` is left unexported until something
+calls it. ERC-20 prices wait on the same work.
 
 ---
 
-## The seeded read account (research D3), still to build
+## The seeded read account (research D3) ✅ built in phase 2b
 
 `VELA_ACCOUNT=<address>` seeds `vela.accounts` with a **key-less** record so the
 read path has an address. Legitimate here and not in 052: reading needs an

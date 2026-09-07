@@ -48,10 +48,15 @@ final class BalanceExecutor {
 
     private let store: VelaStore
     private let pool: RpcPool
+    /// The Chainlink map, cached across refreshes. One instance, because twelve
+    /// chains asking Ethereum mainnet for the same five feeds is eleven
+    /// round trips nobody needs.
+    private let prices: Prices
 
     init(store: VelaStore, pool: RpcPool) {
         self.store = store
         self.pool = pool
+        self.prices = Prices(pool: pool)
     }
 
     func perform(_ operation: [String: Any]) async -> String {
@@ -67,12 +72,14 @@ final class BalanceExecutor {
         case "fetch_account_assets":
             let address = operation["address"] as? String ?? ""
             let chains = chainIds()
+            let chainlinkPrices = await prices.mainnetPrices()
             var tokens: [[String: Any]] = []
             var anyFailed = false
             for chainId in chains {
                 let result = await TokenReads.read(
                     address: address, chainId: chainId,
-                    tokens: customTokens(chainId: chainId), pool: pool
+                    tokens: customTokens(chainId: chainId), pool: pool,
+                    chainlinkPrices: chainlinkPrices
                 )
                 tokens.append(contentsOf: result.tokens)
                 anyFailed = anyFailed || result.failed
@@ -146,12 +153,19 @@ final class BalanceExecutor {
             return CoreJSON.string(["type": "fetch_errored", "address": address, "pull": pull])
         }
 
+        // Priced before the fan-out, and once: the mainnet feed batch is one
+        // read the twelve chains then share. It is deliberately NOT inside the
+        // group — twelve tasks racing to fill one three-minute cache would send
+        // twelve identical calls to Ethereum on every cold refresh.
+        let chainlinkPrices = await prices.mainnetPrices()
+
         let results = await withTaskGroup(of: TokenReads.ChainResult.self) { group in
             for chainId in chainIds() {
                 let tokens = customTokens(chainId: chainId)
                 group.addTask { [pool] in
                     await TokenReads.read(address: address, chainId: chainId,
-                                          tokens: tokens, pool: pool)
+                                          tokens: tokens, pool: pool,
+                                          chainlinkPrices: chainlinkPrices)
                 }
             }
             var collected: [TokenReads.ChainResult] = []

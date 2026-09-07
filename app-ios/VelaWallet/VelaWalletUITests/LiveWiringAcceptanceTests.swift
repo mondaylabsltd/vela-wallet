@@ -182,6 +182,52 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         XCTAssertTrue(settled, "the wizard never left its initial state")
     }
 
+    // MARK: - US1: the home screen is the person's own money
+
+    /// The hero is a chain read, not the drawing.
+    ///
+    /// `VELA_ACCOUNT` seeds a **key-less** record (FR-010) so the read path has
+    /// an address without a passkey ceremony, and the address is the golden
+    /// Safe — whose Gnosis balance is checkable with one `eth_getBalance`, and
+    /// is checked that way in `PriceLiveTests`.
+    ///
+    /// The assertions are absences, deliberately: the live figure moves when
+    /// the founder spends, while `$1,383.28` and `0.8533 BNB` exist only in
+    /// `WalletFixtures` and would still be on screen if the wiring came
+    /// undone. The screenshot is what the number itself is for.
+    func testHomeShowsRealMoneyRatherThanTheFixtureTotal() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_ACCOUNT"] = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "dark"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh)"]
+        app.launch()
+
+        // The hero's label carries the person's CHOSEN currency, so pinning
+        // `总余额 · USD` was the test being wrong about the world: this
+        // simulator had CNY stored and drew `总余额 · CNY`, correctly. What is
+        // asserted is that a hero appeared at all.
+        let hero = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "总余额 · "))
+        XCTAssertTrue(hero.firstMatch.waitForExistence(timeout: 30),
+                      "the home hero never appeared")
+        // Twelve chains, a mainnet feed batch and a per-chain feed each: the
+        // figure lands within a few seconds, and the screenshot is worth
+        // nothing taken before it does.
+        Thread.sleep(forTimeInterval: 8)
+        attach(app.screenshot(), named: "device-home-live-balance")
+
+        let fixtureTotal = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "1,383")
+        )
+        XCTAssertEqual(fixtureTotal.count, 0, "the fixture total is still on screen")
+
+        let fixtureHolding = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "0.8533")
+        )
+        XCTAssertEqual(fixtureHolding.count, 0, "a fixture holding is still on screen")
+    }
+
     // MARK: - The currency rule, on the phone
 
     /// The picker marks the core's code, and the row degrades rather than

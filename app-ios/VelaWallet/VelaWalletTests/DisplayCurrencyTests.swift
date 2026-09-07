@@ -17,10 +17,20 @@ import Testing
 struct DisplayCurrencyTests {
     private let loc = Loc(overrideTag: "zh", preferredLanguages: [])
 
-    private func fresh() -> (VelaStore, UserDefaults, DisplayCurrencyExecutor) {
+    /// No rate sources, so nothing reaches the network: these tests are about
+    /// the machine's answers, and a suite that priced CNY by asking Ethereum
+    /// would be measuring somebody's wifi.
+    private func fresh(sources: [any FiatRateSource] = []) -> (VelaStore, UserDefaults, DisplayCurrencyExecutor) {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let store = VelaStore(defaults: defaults)
-        return (store, defaults, DisplayCurrencyExecutor(store: store))
+        return (store, defaults, DisplayCurrencyExecutor(store: store, sources: sources))
+    }
+
+    /// A rung that answers a fixed map — the waterfall's shape without its
+    /// network.
+    private struct StubSource: FiatRateSource {
+        let rates: [String: Double]
+        func rate(_ code: String) async -> Double? { rates[code] }
     }
 
     private func answer(_ executor: DisplayCurrencyExecutor, _ op: [String: Any]) async -> [String: Any] {
@@ -64,12 +74,49 @@ struct DisplayCurrencyTests {
         #expect(reply["code"] is String || reply["code"] is NSNull)
     }
 
-    /// Fail-closed until 051 owns the price path — and `null`, never 1.
+    /// A code no source can price is `null`, never 1.
     @Test func anUnresolvableRateIsUnknownRatherThanOne() async {
         let (_, _, executor) = fresh()
         let reply = await answer(executor, ["type": "resolve_rate", "code": "CNY"])
         #expect(reply["type"] as? String == "rate_resolved")
         #expect(reply["rate"] is NSNull, "a fabricated rate reached the core")
+    }
+
+    /// USD is the identity, and it is answered without asking anybody — a
+    /// wallet that cannot reach the network still knows one dollar is one
+    /// dollar.
+    @Test func usdResolvesToOneWithNoSourceAtAll() async {
+        let (_, _, executor) = fresh()
+        let reply = await answer(executor, ["type": "resolve_rate", "code": "USD"])
+        #expect((reply["rate"] as? NSNumber)?.doubleValue == 1)
+    }
+
+    /// The waterfall takes the FIRST rung that can price the code. Chainlink's
+    /// feeds are asked before the configurable endpoint, and a source that
+    /// answers `nil` hands on rather than ending the search.
+    @Test func theFirstSourceThatCanPriceItWins() async {
+        let (_, _, executor) = fresh(sources: [
+            StubSource(rates: ["JPY": 150]),
+            StubSource(rates: ["JPY": 999, "VND": 25_000]),
+        ])
+        let first = await answer(executor, ["type": "resolve_rate", "code": "JPY"])
+        #expect((first["rate"] as? NSNumber)?.doubleValue == 150)
+
+        let second = await answer(executor, ["type": "resolve_rate", "code": "VND"])
+        #expect((second["rate"] as? NSNumber)?.doubleValue == 25_000)
+    }
+
+    /// A source answering zero, a negative or an infinity has not priced
+    /// anything. Passing one through would put a `0` where the core expects
+    /// "no rate" — and `0` multiplies every figure on the screen to nothing.
+    @Test func aNonsensicalRateIsRefusedRatherThanForwarded() async {
+        let (_, _, executor) = fresh(sources: [
+            StubSource(rates: ["EUR": 0, "GBP": -1, "CHF": .infinity]),
+        ])
+        for code in ["EUR", "GBP", "CHF"] {
+            let reply = await answer(executor, ["type": "resolve_rate", "code": code])
+            #expect(reply["rate"] is NSNull, "\(code) forwarded a nonsense rate")
+        }
     }
 
     // MARK: - The rule

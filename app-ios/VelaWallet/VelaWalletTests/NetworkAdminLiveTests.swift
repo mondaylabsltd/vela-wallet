@@ -55,8 +55,10 @@ struct NetworkAdminLiveTests {
     /// a chain it has just refused is asking it to contradict itself.
     @Test func typingABuiltinChainIdIsRefusedAsAlreadyAdded() async {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
-        let store = SettingsStore(store: VelaStore(defaults: defaults),
-                                  accounts: AccountStore(defaults: defaults))
+        let shelf = VelaStore(defaults: defaults)
+        let accounts = AccountStore(defaults: defaults)
+        let store = SettingsStore(store: shelf, accounts: accounts,
+                                  pool: RpcPool(store: shelf, accounts: accounts))
         store.open()
         await settle(until: { store.isLoaded })
 
@@ -79,8 +81,10 @@ struct NetworkAdminLiveTests {
     /// deployment, so only the *arrival* of a verdict is asserted.
     @Test func typingAChainIdReachesARealVerdict() async {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
-        let store = SettingsStore(store: VelaStore(defaults: defaults),
-                                  accounts: AccountStore(defaults: defaults))
+        let shelf = VelaStore(defaults: defaults)
+        let accounts = AccountStore(defaults: defaults)
+        let store = SettingsStore(store: shelf, accounts: accounts,
+                                  pool: RpcPool(store: shelf, accounts: accounts))
         store.open()
         await settle(until: { store.isLoaded })
         #expect(store.isLoaded, "the store never loaded")

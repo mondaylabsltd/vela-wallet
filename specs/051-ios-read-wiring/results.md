@@ -196,8 +196,118 @@ Tests 224 (hermetic) + 8 UI, all green. Literal violations 35.
 
 ---
 
+## Phase 2c — the price path
+
+### The handoff's own claim, corrected
+
+The previous "Next" said flipping `resolve_rate` and `fetch_fiat_rates` would
+stop the total reading `0.00`. **It would not have.** Those two are the *fiat*
+rate — USD → the person's currency — and the total was zero because every
+`BalanceToken` carried `price_usd: nil`. Two different price paths were sharing
+one name. This phase does both, because they share the machinery (Chainlink
+feeds read through Multicall3), but the one that fixes the hero is the token
+price.
+
+### `choose_native_price`, exported rather than re-decided
+
+The ladder — DEX preferred, but a DEX price outside ratio (0.5, 2.0) against the
+best Chainlink read means low liquidity, so Chainlink wins — has been in
+`balance_dashboard.rs` since spec 017 while **every platform re-decided around
+it** in `wallet-api.ts`. Web opened the door in 025; this is the same door on the
+uniffi side (`vela-core-uniffi/src/prices.rs`).
+
+It is not a style point. The band exists because one near-empty X Layer pool
+quoted WOKB at ~$5 against a real ~$81, and a shell that re-implements it is a
+second opinion nobody diffed.
+
+Bindings **260,699 → 263,535 bytes (+2,836)**. `best_native_dex_price` is
+deliberately **not** exported: iOS has no DEX quotes to fold, and 050's D10 says
+an export arrives with the code that calls it.
+
+### What is NOT priced, and says so
+
+The DEX rung needs per-chain master data this client does not have
+(`fetchChainTokens` → router, wrapped native, the chain's stables). Until it
+lands, `dex` is passed as **`nil` rather than approximated**, and custom ERC-20s
+stay unpriced. A stablecoin priced at "$1 because the symbol looks like one" is
+exactly the invention the core's unpriced notice exists to avoid.
+
+### The fiat waterfall
+
+`FiatRates` (Chainlink's 16 fiat feeds, ENS-addressed on mainnet, per-feed
+`decimals()` because PHP's is 18 where most are 8) then `FiatFx` (the
+configurable endpoint, both provider response shapes). Both persist under web's
+own keys and TTLs — `vela.fiatRates.v1`, `vela.fiatFeedAddrs.v1`,
+`vela.fxRates.v1` (FR-005).
+
+The order is the whole rule, so it lives in **one place**: the array of
+`FiatRateSource`s the executor is built with. The hermetic tests construct it
+with no sources at all, which is why they never touch the network — and is a
+state a real device reaches too, on a plane.
+
+### The hero converts, or it says USD
+
+`display_currency` owns the rate and the shell owns formatting, so the home hero
+multiplies and wears the chosen code and glyph — and when the rate is `nil`, it
+shows the **USD figure under USD**. Relabelling the same digits with a ¥ is the
+lie FR-009 exists to prevent. `SettingsLive.currencyRowValue` already applied
+that rule to a settings row; it now applies to the biggest number in the app,
+from one `WalletLive.Display`.
+
+The currency machine is booted from the **home** screen's `.task` as well, since
+which currency somebody reads their money in is app-wide — waiting for a visit to
+设置 would show a dollar figure to a person who chose CNY and never went looking.
+
+### Seen, live
+
+```
+[live] mainnet feeds: ["AVAX": 7.93, "DAI": 0.9996, "MATIC": 0.0973, "ETH": 2518.39]
+[live] golden Safe xDAI: 0.75897 at $0.99975138
+[live] USD→EUR (Chainlink): 0.861      [live] USD→HKD (endpoint): 7.8403
+[live] USD→CNY (waterfall): 6.7107
+```
+
+On the phone, and on a simulator whose stored currency is CNY: **总余额 · CNY,
+¥5.02**, with the xDAI row reading `0.74797 / ¥5.02`. The warning triangle is
+gone, because there is now a price behind the figure.
+
+### Two things the world disagreed with
+
+1. **The mainnet BNB/USD feed is dead.** `0x14e613AC…75d25`, carried verbatim
+   from web's `price-service.ts`, answers `0x` — no contract. Nothing on screen
+   is wrong today, because BSC's *local* feed prices BNB through the ladder's
+   `chainlink_local` rung. But web has the same dead entry, and a coin that ever
+   appears off its home chain would be unpriced for this reason.
+2. **The fiat endpoint quotes 30 currencies, not "~160 incl. VND".** The
+   deployed `vela-currency` instance returns the ECB set. Of the picker's eight,
+   seven price (five via Chainlink, HKD via the endpoint) and **VND prices
+   nowhere** — it degrades honestly to USD, which is the rule working, but a
+   person who chooses VND gets a dollar figure forever. Founder's call: drop VND
+   from the catalog, or fix the deployment. It is not a code defect and was not
+   "fixed" by making the code agree with the comment.
+
+### Two tests that were wrong about the world, again
+
+The VND live test above (asserted a rate the endpoint has never quoted), and a
+device acceptance test that pinned `总余额 · USD` — the simulator had CNY stored
+and drew `总余额 · CNY`, **correctly**. Both assertions were rewritten to say
+what is actually durable; neither the endpoint nor the app was changed to make a
+wrong test pass.
+
+### Gates
+
+Hermetic tests 224 → **253**; live (flagged) 6 → **13**; device UI 8 → **9**.
+Literal violations 35 → 35. Zero lines under `rust/crates/vela-core/src/app/`.
+
+**A gate command in tasks.md needs correcting**: `git diff origin/main --
+rust/crates/vela-core/src/app/` is no longer empty, because `main` has moved
+under this branch — it now reports somebody else's `send.rs` work. The gate this
+cut owes is against the **merge base**:
+`git diff --stat $(git merge-base origin/main HEAD) -- rust/crates/vela-core/src/app/`.
+
+---
+
 ## Next
 
-Phase 2c, the price path — flip `resolve_rate` and `fetch_fiat_rates` live so the
-total stops reading `0.00` over real holdings. Then phase 3, `activity_feed`.
-The remaining order is in **[tasks.md](./tasks.md)**.
+Phase 3, `activity_feed` — real transfers grouped by day. The remaining order is
+in **[tasks.md](./tasks.md)**.

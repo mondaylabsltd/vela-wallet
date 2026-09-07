@@ -72,12 +72,14 @@ struct RootView: View {
         // relaunch. DEBUG-only, env-gated, and key-less (spec 051 D3).
         DevAccountSeed.applyIfRequested(store: shelf)
         _contacts = State(initialValue: ContactsStore(store: shelf))
+        // One pool, built before anything that reads a chain — the settings
+        // machines included, since spec 051 put the fiat feeds behind it.
+        let pool = RpcPool(store: shelf, accounts: store)
+        _pool = State(initialValue: pool)
         // `vela.serviceEndpoints` has two writers; the executor reaches it
         // through this same `AccountStore` so onboarding's endpoint override
         // survives a settings write (data-model §5).
-        _settings = State(initialValue: SettingsStore(store: shelf, accounts: store))
-        let pool = RpcPool(store: shelf, accounts: store)
-        _pool = State(initialValue: pool)
+        _settings = State(initialValue: SettingsStore(store: shelf, accounts: store, pool: pool))
         _wallet = State(initialValue: WalletStore(store: shelf, pool: pool))
         _model = State(initialValue: WelcomeModel(content: WelcomeContentBuilder.build(loc: loc)) { intent in
             switch intent {
@@ -304,6 +306,10 @@ struct RootView: View {
                     )
                     .task {
                         pool.boot()
+                        // The display currency is app-wide: the hero is the
+                        // figure it matters most on, and it must not wait for a
+                        // visit to 设置 to learn the person chose CNY.
+                        settings.openCurrency()
                         wallet.open(address: session.view.address)
                     }
                 case .contacts:
@@ -421,7 +427,7 @@ struct RootView: View {
             .withAddress(session.view.address)
             .withName(session.view.activeName)
         guard let view = wallet.balance else { return base }
-        return WalletLive.apply(view, on: base, loc: loc)
+        return WalletLive.apply(view, currency: settings.currency, on: base, loc: loc)
     }
 
     /// Settings, wearing the signed-in identity and the real networks.

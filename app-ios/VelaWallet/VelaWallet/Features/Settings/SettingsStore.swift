@@ -50,9 +50,12 @@ final class SettingsStore {
     private var core: CoreStore<NetViewWire>!
     private var currencyCore: CoreStore<CurrencyViewWire>!
 
-    init(store: VelaStore, accounts: AccountStore) {
+    /// `pool` is the app's one `rpc_pool` session (FR-002). The currency
+    /// machine needs it because its first rate rung is Chainlink's fiat feeds
+    /// on Ethereum mainnet — a chain read, and therefore a routed one.
+    init(store: VelaStore, accounts: AccountStore, pool: RpcPool) {
         self.executor = NetworkAdminExecutor(store: store, accounts: accounts)
-        self.currencyExecutor = DisplayCurrencyExecutor(store: store)
+        self.currencyExecutor = DisplayCurrencyExecutor(store: store, accounts: accounts, pool: pool)
         self.core = CoreStore(
             bridge: NetworkAdminCore(),
             perform: { [executor] operation in await executor.perform(operation) },
@@ -74,6 +77,17 @@ final class SettingsStore {
     /// their stores once and keep them.
     func open() {
         core.boot(CoreJSON.string(["type": "started"]))
+        openCurrency()
+    }
+
+    /// Boot the currency machine alone.
+    ///
+    /// Which currency somebody reads their money in is **app-wide**, not a
+    /// property of the settings screen: the home screen's hero is the figure
+    /// that matters most, and waiting for a visit to 设置 to learn the person
+    /// chose CNY would show them a dollar figure for as long as they never went
+    /// looking. Idempotent, like `open()`.
+    func openCurrency() {
         currencyCore.boot(CoreJSON.string(["type": "refresh"]))
     }
 

@@ -76,6 +76,15 @@ struct VelaStore {
         static let balanceCache = "vela.balanceCache"
         /// The ERC-20s the wallet reads balances for.
         static let customTokens = "vela.customTokens"
+        /// USD → fiat, as Chainlink's mainnet feeds last stated it (5-minute
+        /// TTL in memory; persisted so a cold or offline start still converts).
+        static let fiatRates = "vela.fiatRates.v1"
+        /// Those feeds' ENS-resolved addresses. The proxies are immutable, so
+        /// this is a 30-day cache rather than a lookup on every launch.
+        static let fiatFeedAddrs = "vela.fiatFeedAddrs.v1"
+        /// The configurable endpoint's USD-based rate map, keyed by the URL it
+        /// came from so changing the endpoint refetches.
+        static let fxRates = "vela.fxRates.v1"
     }
 
     private let defaults: UserDefaults

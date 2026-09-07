@@ -5061,6 +5061,73 @@ public func FfiConverterTypeMulticall3Result_lower(_ value: Multicall3Result) ->
 }
 
 
+/**
+ * The chosen price and the rung it came from. `source` is `"none"` when
+ * nothing could price the coin — which is **not** a price of zero, and the
+ * caller must not turn it into one.
+ */
+public struct NativePriceChoice: Equatable, Hashable {
+    public var price: Double?
+    /**
+     * The `NativePriceSource` variant name, spelled exactly as the wasm
+     * bridge spells it so a price log reads the same on every client.
+     */
+    public var source: String
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(price: Double?, 
+        /**
+         * The `NativePriceSource` variant name, spelled exactly as the wasm
+         * bridge spells it so a price log reads the same on every client.
+         */source: String) {
+        self.price = price
+        self.source = source
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension NativePriceChoice: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeNativePriceChoice: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> NativePriceChoice {
+        return
+            try NativePriceChoice(
+                price: FfiConverterOptionDouble.read(from: &buf), 
+                source: FfiConverterString.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: NativePriceChoice, into buf: inout [UInt8]) {
+        FfiConverterOptionDouble.write(value.price, into: &buf)
+        FfiConverterString.write(value.source, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNativePriceChoice_lift(_ buf: RustBuffer) throws -> NativePriceChoice {
+    return try FfiConverterTypeNativePriceChoice.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeNativePriceChoice_lower(_ value: NativePriceChoice) -> RustBuffer {
+    return FfiConverterTypeNativePriceChoice.lower(value)
+}
+
+
 public struct P256PublicKey: Equatable, Hashable {
     public var x: Data
     public var y: Data
@@ -7391,6 +7458,21 @@ public func multicall3EncodeAggregate3(calls: [Multicall3Call])throws  -> Data  
     )
 })
 }
+/**
+ * The source ladder and its sanity band — DEX preferred, but a DEX price
+ * deviating beyond ratio (0.5, 2.0) against the best Chainlink read means low
+ * liquidity, so Chainlink wins.
+ */
+public func chooseNativePrice(dex: Double?, chainlinkLocal: Double?, chainlinkEth: Double?) -> NativePriceChoice  {
+    return try!  FfiConverterTypeNativePriceChoice_lift(try! rustCall() {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_choose_native_price(
+        FfiConverterOptionDouble.lower(dex),
+        FfiConverterOptionDouble.lower(chainlinkLocal),
+        FfiConverterOptionDouble.lower(chainlinkEth),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -7609,6 +7691,9 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_multicall3_encode_aggregate3() != 41166) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_choose_native_price() != 58106) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_change_language() != 36683) {

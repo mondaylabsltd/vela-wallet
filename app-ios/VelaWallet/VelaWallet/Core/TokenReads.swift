@@ -36,9 +36,6 @@
 import Foundation
 import VelaCore
 
-/// Multicall3, at the same address on every chain that has it.
-private let multicall3 = "0xcA11bde05977b3631167028862bE2a173976CA11"
-
 enum TokenReads {
 
     /// One chain's answer. `failed` and `rateLimited` are carried separately
@@ -52,40 +49,37 @@ enum TokenReads {
     }
 
     /// Read the native coin and every known ERC-20 for one address, on one
-    /// chain.
+    /// chain — and price the native coin while the batch is open.
     ///
-    /// The native balance and the token batch are one `eth_getBalance` and one
-    /// `aggregate3`. A chain that fails either is reported failed rather than
-    /// contributing a partial figure the core would have to treat as complete.
+    /// Two round trips: `eth_getBalance`, and one `aggregate3` carrying every
+    /// token's `balanceOf` plus this chain's Chainlink native feed. A chain
+    /// that fails a BALANCE read is reported failed rather than contributing a
+    /// partial figure the core would have to treat as complete.
+    ///
+    /// `chainlinkPrices` is the Ethereum-mainnet map, fetched once per refresh
+    /// and passed in — twelve chains must not each re-read mainnet.
     static func read(
         address: String,
         chainId: Int,
         tokens: [CustomTokenRef],
-        pool: RpcPool
+        pool: RpcPool,
+        chainlinkPrices: [String: Double] = [:]
     ) async -> ChainResult {
         var out: [[String: Any]] = []
         var failed = false
         var rateLimited = false
 
-        // 1. The native coin — unless the chain has none.
         let meta = ChainCatalog.meta(chainId)
-        if meta?.gasModel != .tempo {
+        let hasNativeCoin = meta?.gasModel != .tempo
+
+        // 1. The native coin's balance — unless the chain has none.
+        var nativeBalance: String?
+        if hasNativeCoin {
             switch await pool.call(
                 chainId: chainId, method: "eth_getBalance", params: [address, "latest"]
             ) {
             case .ok(let value):
-                if let hex = value as? String, let scaled = scaled(hex: hex, decimals: 18) {
-                    out.append([
-                        "chain_id": chainId,
-                        "symbol": meta?.nativeSymbol ?? "",
-                        "name": meta?.displayName ?? "",
-                        "balance": scaled,
-                        "decimals": 18,
-                        "token_address": NSNull(),
-                        "price_usd": NSNull(),
-                        "spam": false,
-                    ])
-                }
+                if let hex = value as? String { nativeBalance = scaled(hex: hex, decimals: 18) }
             case .failed(let throttled):
                 failed = true
                 rateLimited = throttled
@@ -96,80 +90,112 @@ enum TokenReads {
             }
         }
 
-        // 2. The ERC-20s, in one batch.
-        if !tokens.isEmpty {
-            let batch = await readTokenBalances(
-                address: address, chainId: chainId, tokens: tokens, pool: pool
-            )
-            out.append(contentsOf: batch.tokens)
-            failed = failed || batch.failed
+        // 2. The ERC-20 balances and this chain's own price feed, in one batch.
+        let feed = hasNativeCoin ? Prices.nativeFeeds[chainId] : nil
+        let batch = await batch(address: address, chainId: chainId, tokens: tokens,
+                                priceFeed: feed, pool: pool)
+
+        // A batch that carried no balances cannot report a balance failure.
+        // Marking the chain failed because a PRICE feed did not answer would
+        // draw "this network is unreachable" over a network that answered
+        // every question about somebody's money.
+        if batch.failed && !tokens.isEmpty {
+            failed = true
             rateLimited = rateLimited || batch.rateLimited
         }
+
+        if let nativeBalance {
+            out.append([
+                "chain_id": chainId,
+                "symbol": meta?.nativeSymbol ?? "",
+                "name": meta?.displayName ?? "",
+                "balance": nativeBalance,
+                "decimals": 18,
+                "token_address": NSNull(),
+                "price_usd": Prices.choose(
+                    local: batch.localPrice,
+                    mainnet: Prices.mainnetPrice(symbol: meta?.nativeSymbol ?? "",
+                                                 in: chainlinkPrices)
+                ).map { $0 as Any } ?? NSNull(),
+                "spam": false,
+            ])
+        }
+        out.append(contentsOf: batch.tokens)
 
         return ChainResult(chainId: chainId, tokens: out, failed: failed, rateLimited: rateLimited)
     }
 
-    /// `aggregate3` of one `balanceOf` per token.
+    /// What one chain's batch came back with.
+    private struct Batch {
+        var tokens: [[String: Any]] = []
+        /// This chain's own Chainlink native/USD read — the ladder's local
+        /// rung. `nil` when the chain has no feed, or the feed did not answer.
+        var localPrice: Double?
+        var failed = false
+        var rateLimited = false
+    }
+
+    /// `aggregate3` of one `balanceOf` per token, plus `latestRoundData()` on
+    /// the chain's native feed when it has one.
     ///
     /// `allowFailure` is `true` on every call: a token that reverts — a proxy
     /// mid-upgrade, a contract that is not really an ERC-20 — must not cost the
     /// others their answer. A reverted entry keeps its slot, which is what lets
     /// results be matched to tokens by index.
-    private static func readTokenBalances(
+    private static func batch(
         address: String,
         chainId: Int,
         tokens: [CustomTokenRef],
+        priceFeed: String?,
         pool: RpcPool
-    ) async -> ChainResult {
-        guard let owner = try? erc20EncodeBalanceOf(ownerHex: address) else {
-            return ChainResult(chainId: chainId, tokens: [], failed: true, rateLimited: false)
-        }
-        let calls = tokens.map {
-            Multicall3Call(target: $0.address, allowFailure: true, callData: owner)
-        }
-        guard let calldata = try? multicall3EncodeAggregate3(calls: calls) else {
-            return ChainResult(chainId: chainId, tokens: [], failed: true, rateLimited: false)
-        }
-
-        let outcome = await pool.call(
-            chainId: chainId,
-            method: "eth_call",
-            params: [["to": multicall3, "data": "0x" + calldata.hexString], "latest"]
-        )
-        guard case .ok(let value) = outcome else {
-            if case .failed(let throttled) = outcome {
-                return ChainResult(chainId: chainId, tokens: [], failed: true,
-                                   rateLimited: throttled)
+    ) async -> Batch {
+        var calls: [Multicall3Call] = []
+        if !tokens.isEmpty {
+            guard let owner = try? erc20EncodeBalanceOf(ownerHex: address) else {
+                return Batch(failed: true)
             }
-            return ChainResult(chainId: chainId, tokens: [], failed: true, rateLimited: false)
+            calls = tokens.map { Multicall.call($0.address, owner) }
         }
-        guard let hex = value as? String,
-              let data = Data(hexString: hex),
-              let results = try? multicall3DecodeAggregate3(data: data)
-        else {
-            // The chain answered with something this build cannot read. Failed,
-            // not empty: "no tokens" is a claim, and this is not evidence for it.
-            return ChainResult(chainId: chainId, tokens: [], failed: true, rateLimited: false)
+        if let priceFeed, let latestRound = Multicall.selector("latestRoundData()") {
+            calls.append(Multicall.call(priceFeed, latestRound))
+        }
+        guard !calls.isEmpty else { return Batch() }
+
+        let outcome = await Multicall.aggregate3(chainId: chainId, calls: calls, pool: pool)
+        guard case .ok(let results) = outcome else {
+            // The chain answered with nothing this build can read. Failed, not
+            // empty: "no tokens" is a claim, and this is not evidence for it.
+            var refused = Batch(failed: true)
+            if case .failed(let throttled) = outcome { refused.rateLimited = throttled }
+            return refused
         }
 
-        var out: [[String: Any]] = []
+        var out = Batch()
         for (index, result) in results.enumerated() where index < tokens.count {
             guard result.success,
                   let balance = scaled(bytes: result.returnData,
                                        decimals: tokens[index].decimals)
             else { continue }
-            out.append([
+            out.tokens.append([
                 "chain_id": chainId,
                 "symbol": tokens[index].symbol,
                 "name": tokens[index].name,
                 "balance": balance,
                 "decimals": tokens[index].decimals,
                 "token_address": tokens[index].address,
+                // An ERC-20's price needs the DEX quote path, which this cut
+                // does not have. `nil` is the drawn "couldn't be priced" row,
+                // and a guessed $1 for anything that looks like a stablecoin is
+                // exactly the invention the core's unpriced notice exists to
+                // avoid.
                 "price_usd": NSNull(),
                 "spam": false,
             ])
         }
-        return ChainResult(chainId: chainId, tokens: out, failed: false, rateLimited: false)
+        if priceFeed != nil, let last = results.last, results.count == calls.count, last.success {
+            out.localPrice = Prices.chainlinkAnswer(last.returnData, decimals: 8)
+        }
+        return out
     }
 
     // MARK: - Raw units → human decimal

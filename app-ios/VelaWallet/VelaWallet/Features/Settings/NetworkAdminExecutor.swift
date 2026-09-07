@@ -236,15 +236,17 @@ final class NetworkAdminExecutor {
                 "latency_ms": probe.latencyMs,
             ])
 
-        // MARK: Fail-closed until their infrastructure exists
-
-        // live in 051 — the price path owns the rates endpoint.
         case "fetch_fiat_rates":
+            let url = operation["url"] as? String ?? ""
+            let probe = await CoreHTTP.probeJSON(url, timeout: CoreHTTP.Timeout.fiatRates)
             return CoreJSON.string([
                 "type": "fiat_rates",
-                "body": ["type": "failed"],
-                "latency_ms": 0,
+                "body": Self.fiatRatesBody(probe),
+                "latency_ms": probe.latencyMs,
             ])
+
+        // MARK: Fail-closed until their infrastructure exists
+
 
         // live in 051 — there is no pool to invalidate yet. Acknowledged, never
         // skipped: the core waits for this ack before leaving the write.
@@ -379,6 +381,28 @@ private extension NetworkAdminExecutor {
 // Internal rather than private: these codecs ARE the cross-client contract,
 // and a contract nothing can test is a contract nobody keeps.
 extension NetworkAdminExecutor {
+
+    /// The fiat endpoint's reply, shaped for the core.
+    ///
+    /// The COUNT is the shell's, because "how many rates are in this body" is a
+    /// question about the two response shapes a swappable provider may send.
+    /// Whether a count of zero means the endpoint is unusable is the core's,
+    /// and it is not answered here.
+    static func fiatRatesBody(_ probe: CoreHTTP.Probe) -> [String: Any] {
+        guard let status = probe.status else { return ["type": "failed"] }
+        guard (200..<300).contains(status) else {
+            return ["type": "http_error", "status": status]
+        }
+        let count: Int
+        if let rows = probe.body as? [Any] {
+            count = rows.count
+        } else if let rates = (probe.body as? [String: Any])?["rates"] as? [String: Any] {
+            count = rates.count
+        } else {
+            count = 0
+        }
+        return ["type": "rates", "rate_count": count]
+    }
 
     static func customNetworkToWire(_ stored: [String: Any]) -> [String: Any] {
         [
