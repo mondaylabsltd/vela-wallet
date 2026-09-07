@@ -230,6 +230,53 @@ pub fn best_native_dex_price(groups: &[NativeQuoteGroup]) -> Option<f64> {
     best
 }
 
+/// The first usable price across quote groups, each scaled by ITS OWN quote
+/// token's decimals — the custom-ERC-20 rule (`firstGroupedQuotePrice`,
+/// `wallet-api.ts:682-693`).
+///
+/// **Why FIRST here and MAX in [`best_native_dex_price`].** They answer
+/// different questions. The native path quotes one coin against every stable at
+/// once and picks the deepest pool, because a near-empty pool on one stable
+/// would otherwise price the coin. This path walks the stables in a preference
+/// order the shell chose — native USDC, then any USDC, then USDT — and takes
+/// the first that answers, because for an arbitrary token the *preferred* venue
+/// is the trustworthy one and a deeper pool elsewhere may be a different asset
+/// with a similar ticker.
+///
+/// **The 10^12 trap this exists to prevent.** The rule it replaced took the
+/// first surviving quote out of a flat list that MIXED quote tokens and divided
+/// it by one token's `decimals()`. On any chain whose stablecoin list holds
+/// both a 6-decimal (USDC/USDT) and an 18-decimal (DAI/WXDAI) entry, a token
+/// with no USDC pool but a live DAI pool was priced a trillion times too high —
+/// and that number is what a portfolio total, a sort order and an ingest
+/// valuation all consume.
+///
+/// `quote_decimals: None` means THAT group's `decimals()` read failed, and it
+/// falls back to [`DEFAULT_QUOTE_DECIMALS`] — its own default, never a
+/// neighbour's real value. A zero amount does not price: a zero-output quote is
+/// a dead pool, not a free token.
+///
+/// Ported to Rust in spec 041 because it had no owner: it existed only in the
+/// web's TypeScript, and Android needed it to price a custom token. A second
+/// hand-written copy of a rule whose entire history is a mispricing was not
+/// worth having.
+pub fn first_grouped_quote_price(groups: &[NativeQuoteGroup]) -> Option<f64> {
+    for group in groups {
+        let decimals = group.quote_decimals.unwrap_or(DEFAULT_QUOTE_DECIMALS);
+        let scale = 10f64.powi(i32::try_from(decimals).unwrap_or(i32::MAX));
+        for amount in &group.amounts_out {
+            let Ok(value) = amount.trim().parse::<f64>() else {
+                continue;
+            };
+            if value <= 0.0 || !value.is_finite() {
+                continue;
+            }
+            return Some(value / scale);
+        }
+    }
+    None
+}
+
 /// Where the chosen native price came from — mirrors `nativePriceSource`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NativePriceSource {

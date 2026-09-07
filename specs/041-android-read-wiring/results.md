@@ -469,6 +469,47 @@ verdict exists, and no add button while the checks are still running.
 
 ---
 
+## Phase 4d — Custom tokens, and the rule that had no owner ✅
+
+The last `live in 041` marker is gone, and it went the way it was deferred for:
+`firstGroupedQuotePrice` existed **only in the web's TypeScript**, so it was
+ported into `vela_core::app::balance_dashboard::first_grouped_quote_price` and
+exported over uniffi — not copied into Kotlin. A second hand-written copy of a
+rule whose entire history is a mispricing was not worth having, and iOS gets it
+for free.
+
+**Why FIRST here and MAX next door.** `best_native_dex_price` takes the deepest
+pool across every stable, because a near-empty pool would otherwise price a
+chain's own coin. `first_grouped_quote_price` walks the stables in the shell's
+preference order — native USDC, then any USDC, then USDT — and takes the first
+that answers, because for an arbitrary token the preferred venue is the
+trustworthy one and a deeper pool elsewhere may be a different asset wearing a
+similar ticker. They look interchangeable and are not; the docs on both now say
+so.
+
+The shell's part is the ORDER, and that is the rule's input: which stable comes
+first decides which venue prices somebody's token. It comes from the chain
+registry's `pickQuoteToken`, not from the executor.
+
+Custom ERC-20s now ride in the same `aggregate3` — balance, then path A (the
+token against each stable) and path B (the token against the wrapped native
+coin, times the coin's price). **Path B cannot run when the coin has no price**:
+multiplying by an unknown is a fabrication, not a fallback.
+
+The tokens come from `vela.customTokens`, the SAME key `token_trust` writes
+through — so a token admitted by a confirmed receipt appears in the balances
+rather than waiting to be added again by hand.
+
+Four cases in the core (34 → 38 there) and three on Android pin it, including
+the 10^12 trap on this new path: two stables with different decimals, only the
+18-decimal one quoting, and a price that must come out 0.5 rather than
+500,000,000,000.
+
+**Gate**: 356 unit tests, 0 failures; `assembleDebug` passes with the Rust
+cross-compile.
+
+---
+
 ## Success criteria
 
 | # | Criterion | Verdict |
@@ -477,7 +518,7 @@ verdict exists, and no add button while the checks are still running.
 | SC-102 | a chain down → cache renders, ban persists | ⚠️ ban persistence tested; the down-chain device run was not staged |
 | SC-103 | the feed lists real on-chain transfers | ⚠️ pipeline proven in tests; needs a live deposit (100-block window) |
 | SC-104 | a deposit noticed without a refresh | ⚠️ watcher wired and stopping correctly; same live deposit needed |
-| SC-105 | `grep -rn 'live in 041'` → zero | ⚠️ **one** left, deliberate: custom-token pricing waits for its rule to get a Rust owner |
+| SC-105 | `grep -rn 'live in 041'` → zero | ✅ **zero** — phase 4d gave the last rule a Rust owner |
 | SC-106 | a custom network added, surviving a restart | ⚠️ search + checks + verdict live and tested; the final device confirmation was cut short by a USB drop |
 | SC-107 | zero chain requests outside the pool | ✅ `NoStrayHttpClientTest`; the settings probes are single-URL by design and use the one client |
 | SC-108 | bridge delta measured before the work | ✅ +1,133,184 stripped bytes for seven machines (phase 0) |
@@ -496,7 +537,7 @@ staging rather than wiring:
 Every path they exercise is proven by test and every executor logs what it did,
 so each is an afternoon rather than an investigation.
 
-**Final gate**: 353 unit tests, 0 failures.
+**Final gate**: 356 unit tests, 0 failures, and `grep -rn 'live in 041'` is zero.
 
 ### What this feature kept finding
 

@@ -77,6 +77,8 @@ class BalanceMachineTest {
         rows: List<NetNetworkRow>,
         chains: Map<Int, ChainInfo> = emptyMap(),
         mainnet: Map<String, Double> = emptyMap(),
+        /** The device's own storage — the custom-token cases write into it. */
+        store: FakeStore = FakeStore(),
         answer: (url: String, method: String) -> app.getvela.wallet.feature.wallet.core.RpcPostResult,
     ): Harness {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -92,7 +94,7 @@ class BalanceMachineTest {
         val executor = BalanceExecutor(
             pool = pool,
             networks = networks,
-            store = FakeStore(),
+            store = store,
             chainInfo = { chainId -> chains[chainId] },
             mainnetPrices = { mainnet },
         )
@@ -424,6 +426,139 @@ class BalanceMachineTest {
         assertEquals("2", pol.balance)
         // No batch means no quotes and no feed: shown, and honestly unpriced.
         assertNull(pol.price_usd)
+    }
+
+    // -- custom tokens (spec 041 phase 4d) -----------------------------------
+
+    private val newc = "0xdeadbeef0000000000000000000000000000cafe"
+
+    /** One custom token in the store, as this device records them. */
+    private fun withCustomToken(store: FakeStore) = store.also {
+        runBlocking {
+            it.write(
+                app.getvela.wallet.core.data.KeyValueStore.Keys.CUSTOM_TOKENS,
+                org.json.JSONArray().put(
+                    org.json.JSONObject()
+                        .put("id", "137_$newc")
+                        .put("chainId", 137)
+                        .put("contractAddress", newc)
+                        .put("symbol", "NEWC")
+                        .put("name", "New Coin")
+                        .put("decimals", 18),
+                ).toString(),
+            )
+        }
+    }
+
+    /**
+     * A custom token is read and priced through the CORE's rule.
+     *
+     * Slots: native, USDC balance, USDC decimals, wrapped balance, wrapped
+     * decimals, NEWC balance, then the native quote tiers, then NEWC's own.
+     */
+    @Test
+    fun aCustomTokenIsReadAndPricedByTheCoresRule() {
+        val store = withCustomToken(FakeStore())
+        val h = harness(
+            rows = listOf(row(137, "POL", "Polygon")),
+            chains = mapOf(137 to polygonLike(listOf(usdc))),
+            store = store,
+        ) { _, _ ->
+            batched(
+                word(java.math.BigInteger("1000000000000000000")), // 1 POL
+                null, word(java.math.BigInteger.valueOf(6)), //        USDC: none held
+                null, word(java.math.BigInteger.valueOf(18)), //       wrapped
+                word(java.math.BigInteger("3000000000000000000")), // 3 NEWC
+                // POL priced at $0.25 against USDC.
+                word(java.math.BigInteger.valueOf(250_000)), null, null, null,
+                // NEWC → USDC: $2.00, in USDC's six decimals.
+                word(java.math.BigInteger.valueOf(2_000_000)), null, null, null,
+                // NEWC → wrapped POL: not needed, path A answered.
+                null, null, null, null,
+            )
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+
+        val view = h.host.settle { it.tokens.any { token -> token.symbol == "NEWC" } }
+
+        val token = view.tokens.first { it.symbol == "NEWC" }
+        assertEquals("3", token.balance)
+        assertEquals(newc, token.token_address)
+        assertEquals(2.0, token.price_usd!!, 1e-9)
+        // 1 POL at $0.25 + 3 NEWC at $2.00 = $6.25, and the core adds up.
+        assertEquals(6.25, view.display_total_usd!!, 1e-9)
+    }
+
+    /**
+     * **The 10^12 trap, on the custom path.**
+     *
+     * Two stables with different decimals, and only the 18-decimal one quotes.
+     * Scaling that by the 6-decimal neighbour's value prices the token a
+     * trillion times too high — into a portfolio total and a sort order.
+     */
+    @Test
+    fun aCustomTokensQuoteIsScaledByItsOwnStablesDecimals() {
+        val store = withCustomToken(FakeStore())
+        val h = harness(
+            rows = listOf(row(137, "POL", "Polygon")),
+            chains = mapOf(137 to polygonLike(listOf(usdc, dai))),
+            store = store,
+        ) { _, _ ->
+            batched(
+                word(java.math.BigInteger("1000000000000000000")), // 1 POL
+                null, word(java.math.BigInteger.valueOf(6)), //        USDC
+                null, word(java.math.BigInteger.valueOf(18)), //       DAI
+                null, word(java.math.BigInteger.valueOf(18)), //       wrapped
+                word(java.math.BigInteger("1000000000000000000")), // 1 NEWC
+                // Native quotes: USDC answers $0.25.
+                word(java.math.BigInteger.valueOf(250_000)), null, null, null,
+                null, null, null, null,
+                // NEWC → USDC: dead. NEWC → DAI: 0.5 DAI, at 18 decimals.
+                null, null, null, null,
+                word(java.math.BigInteger("500000000000000000")), null, null, null,
+                // NEWC → wrapped: unused.
+                null, null, null, null,
+            )
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+
+        val view = h.host.settle { it.tokens.any { token -> token.symbol == "NEWC" } }
+
+        // Scaled by USDC's 6 this would be 500,000,000,000 dollars a token.
+        assertEquals(0.5, view.tokens.first { it.symbol == "NEWC" }.price_usd!!, 1e-9)
+    }
+
+    /**
+     * A token nothing could price is held, shown, and not counted.
+     *
+     * Path B multiplies by the native coin's price, so it cannot run when the
+     * coin has none: multiplying by an unknown is a fabrication, not a
+     * fallback.
+     */
+    @Test
+    fun aCustomTokenNothingCanPriceStaysUnpriced() {
+        val store = withCustomToken(FakeStore())
+        val h = harness(
+            rows = listOf(row(137, "POL", "Polygon")),
+            chains = mapOf(137 to polygonLike(listOf(usdc))),
+            store = store,
+        ) { _, _ ->
+            batched(
+                word(java.math.BigInteger("1000000000000000000")),
+                null, word(java.math.BigInteger.valueOf(6)),
+                null, word(java.math.BigInteger.valueOf(18)),
+                word(java.math.BigInteger("1000000000000000000")), // 1 NEWC held
+                // No quotes answer at all — not for POL, not for NEWC.
+                null, null, null, null,
+                null, null, null, null,
+                null, null, null, null,
+            )
+        }
+        h.host.dispatch(BalanceEvent.AccountChanged(ADDRESS), BalanceEvent.serializer())
+
+        val view = h.host.settle { it.tokens.any { token -> token.symbol == "NEWC" } }
+
+        assertNull(view.tokens.first { it.symbol == "NEWC" }.price_usd)
     }
 
     private companion object {

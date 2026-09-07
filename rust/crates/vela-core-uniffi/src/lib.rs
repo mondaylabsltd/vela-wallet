@@ -919,6 +919,30 @@ pub fn best_native_dex_price(groups: Vec<NativeQuoteGroup>) -> Option<f64> {
     vela_core::app::balance_dashboard::best_native_dex_price(&groups)
 }
 
+/// The first usable price across quote groups — the CUSTOM-token rule.
+///
+/// Deliberately not [`best_native_dex_price`]: that one takes the deepest pool
+/// across every stable, because a near-empty pool would otherwise price a
+/// chain's own coin. This one walks the stables in the shell's preference order
+/// and takes the first that answers, because for an arbitrary token the
+/// preferred venue is the trustworthy one and a deeper pool elsewhere may be a
+/// different asset wearing a similar ticker.
+///
+/// Each group is scaled by its OWN `decimals()`. Mixing them is a 10^12
+/// mispricing on any chain carrying both a 6-decimal and an 18-decimal stable,
+/// which is most of them.
+#[uniffi::export]
+pub fn first_grouped_quote_price(groups: Vec<NativeQuoteGroup>) -> Option<f64> {
+    let groups: Vec<vela_core::app::balance_dashboard::NativeQuoteGroup> = groups
+        .into_iter()
+        .map(|group| vela_core::app::balance_dashboard::NativeQuoteGroup {
+            amounts_out: group.amounts_out,
+            quote_decimals: group.quote_decimals,
+        })
+        .collect();
+    vela_core::app::balance_dashboard::first_grouped_quote_price(&groups)
+}
+
 /// The source ladder and its sanity band: a DEX price that disagrees with
 /// Chainlink by too much loses to Chainlink.
 #[uniffi::export]

@@ -11,9 +11,11 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import org.json.JSONArray
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.NativeQuoteGroup
 import uniffi.vela_core_uniffi.bestNativeDexPrice
+import uniffi.vela_core_uniffi.firstGroupedQuotePrice
 import uniffi.vela_core_uniffi.chooseNativePrice
 import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
 
@@ -36,9 +38,12 @@ import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
  * enough to beat Chainlink are `vela_core::app::balance_dashboard`, called over
  * the bridge. This class decodes words and asks.
  *
- * Custom ERC-20s are not priced yet: their rule (`firstGroupedQuotePrice`)
- * exists only in the web's TypeScript and has no owner in the core. It gets one
- * before Android reads it. // live in 041 phase 4d
+ * **Custom ERC-20s are read and priced too.** Their rule had no owner — it
+ * existed only in the web's TypeScript — so it was ported into
+ * `balance_dashboard::first_grouped_quote_price` rather than copied into
+ * Kotlin. Two paths, both the core's: the token quoted directly against each
+ * stablecoin in preference order, and failing that against the wrapped native
+ * coin multiplied by the coin's own price.
  */
 class BalanceExecutor(
     private val pool: RpcPool,
@@ -176,7 +181,7 @@ class BalanceExecutor(
     )
 
     /** What a slot in the batch is, which decides how it gets priced. */
-    private enum class Kind { Native, Stable, Wrapped }
+    private enum class Kind { Native, Stable, Wrapped, Custom }
 
     private class Slot(
         val kind: Kind,
@@ -288,6 +293,20 @@ class BalanceExecutor(
             )
         }
 
+        // The person's own tokens on this chain. Their decimals are already
+        // known — they were recorded when the token was added — so no
+        // `decimals()` read is spent on them.
+        val customs = customTokens(chainId)
+        customs.forEach { token ->
+            slots.add(
+                Slot(
+                    Kind.Custom, token.symbol, token.name, token.contract, token.decimals,
+                    balanceIndex = calls.size, decimalsIndex = null,
+                ),
+            )
+            calls.add(Abi.Call(token.contract, Abi.encodeBalanceOf(address)))
+        }
+
         // One quote group per stable, never one flat list. The amount a quote
         // returns is denominated in THAT stable's base units, so a group scaled
         // by a neighbour's `decimals()` mis-prices by 10^12 the moment a chain
@@ -302,6 +321,43 @@ class BalanceExecutor(
                 val indices = quoteCalls(calls, dex, wrapped, stable.contract, amountIn)
                 // +1: the native coin is slot 0, so stable `index` is slot 1+index.
                 if (indices.isNotEmpty()) quoteGroups.add(indices to slots[1 + index].decimalsIndex)
+            }
+        }
+
+        // **The order IS the rule's input.** `first_grouped_quote_price` takes
+        // the first group that answers, so which stable comes first decides
+        // which venue prices somebody's token. The preference — native USDC,
+        // then any USDC, then USDT, then whatever is left — is the chain
+        // registry's, not this file's.
+        val preferred = ChainData.pickQuoteToken(stables)
+        val orderedStables = stables.withIndex()
+            .sortedBy { (_, stable) -> if (stable == preferred) 0 else 1 }
+            .map { (index, stable) -> index to stable }
+
+        // Custom-token prices, two paths and both the core's:
+        //
+        //   A  token → each stablecoin, in the shell's preference order, each
+        //      group scaled by ITS OWN decimals (`first_grouped_quote_price`).
+        //   B  token → the wrapped native coin, times the coin's own price.
+        //      One quote token here, so one scale, and the wrapped coin mirrors
+        //      the native decimals by construction.
+        val customDirect = HashMap<String, MutableList<Pair<List<Int>, Int?>>>()
+        val customViaNative = HashMap<String, List<Int>>()
+        if (dex != null) {
+            customs.forEach { token ->
+                val amountIn = BigInteger.TEN.pow(token.decimals)
+                val direct = ArrayList<Pair<List<Int>, Int?>>()
+                orderedStables.forEach { (stableIndex, stable) ->
+                    val indices = quoteCalls(calls, dex, token.contract, stable.contract, amountIn)
+                    if (indices.isNotEmpty()) {
+                        direct.add(indices to slots[1 + stableIndex].decimalsIndex)
+                    }
+                }
+                if (direct.isNotEmpty()) customDirect[token.contract] = direct
+                if (wrapped != null) {
+                    val viaNative = quoteCalls(calls, dex, token.contract, wrapped, amountIn)
+                    if (viaNative.isNotEmpty()) customViaNative[token.contract] = viaNative
+                }
             }
         }
 
@@ -368,6 +424,15 @@ class BalanceExecutor(
                 token_address = slot.contract,
                 price_usd = when (slot.kind) {
                     Kind.Native, Kind.Wrapped -> nativePrice.price
+                    Kind.Custom -> customPrice(
+                        contract = slot.contract.orEmpty(),
+                        results = results,
+                        direct = customDirect,
+                        viaNative = customViaNative,
+                        protocol = dex?.protocol,
+                        nativeUsd = nativePrice.price,
+                        nativeDecimals = nativeDecimals,
+                    )
                     // **$1.00 here is a membership verdict, not a default.**
                     // The token came from this chain's curated stablecoin list,
                     // and ≈$1 is what that list means; the same approximation is
@@ -384,6 +449,76 @@ class BalanceExecutor(
         }
 
         return ChainAnswer(chainId, answered = true, tokens = tokens)
+    }
+
+    /**
+     * What one custom token is worth, by the core's rules.
+     *
+     * Path A is `first_grouped_quote_price` — the first stable that answers,
+     * each group scaled by its own decimals. Path B is the wrapped native
+     * coin's quote times the coin's own price, and it only runs when A found
+     * nothing AND the coin itself has a price: multiplying by an unknown is not
+     * a fallback, it is a fabrication.
+     */
+    private fun customPrice(
+        contract: String,
+        results: List<Abi.CallResult>,
+        direct: Map<String, List<Pair<List<Int>, Int?>>>,
+        viaNative: Map<String, List<Int>>,
+        protocol: String?,
+        nativeUsd: Double?,
+        nativeDecimals: Int,
+    ): Double? {
+        val groups = direct[contract].orEmpty().map { (indices, decimalsIndex) ->
+            NativeQuoteGroup(
+                amountsOut = quoteAmounts(results, indices, protocol),
+                quoteDecimals = decimalsIndex
+                    ?.let { results.getOrNull(it) }
+                    ?.takeIf { it.success }
+                    ?.let { Abi.decodeUint8(it.data).toUInt() },
+            )
+        }
+        firstGroupedQuotePrice(groups)?.let { return it }
+
+        if (nativeUsd == null) return null
+        val amounts = quoteAmounts(results, viaNative[contract].orEmpty(), protocol)
+        // One quote token, so one scale — and the wrapped coin mirrors the
+        // native decimals by construction. The same rule does the scaling.
+        val inNative = firstGroupedQuotePrice(
+            listOf(NativeQuoteGroup(amounts, nativeDecimals.toUInt())),
+        ) ?: return null
+        return inNative * nativeUsd
+    }
+
+    /** One custom token as this device recorded it. */
+    private class CustomToken(
+        val contract: String,
+        val symbol: String,
+        val name: String,
+        val decimals: Int,
+    )
+
+    /**
+     * The ERC-20s this person added or accepted, for one chain.
+     *
+     * The SAME key `token_trust` writes through, so a token admitted by a
+     * confirmed receipt appears in the balances rather than waiting for
+     * somebody to add it again by hand.
+     */
+    private suspend fun customTokens(chainId: Int): List<CustomToken> {
+        val raw = store.read(KeyValueStore.Keys.CUSTOM_TOKENS) ?: return emptyList()
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+        return (0 until array.length()).mapNotNull { index ->
+            val row = array.optJSONObject(index) ?: return@mapNotNull null
+            if (row.optInt("chainId") != chainId) return@mapNotNull null
+            val contract = row.optString("contractAddress").ifBlank { return@mapNotNull null }
+            CustomToken(
+                contract = contract,
+                symbol = row.optString("symbol").ifBlank { return@mapNotNull null },
+                name = row.optString("name").ifBlank { row.optString("symbol") },
+                decimals = row.optInt("decimals", DEFAULT_DECIMALS),
+            )
+        }
     }
 
     /** The DEX calls for one pair, appended in place; the indices are the answer. */

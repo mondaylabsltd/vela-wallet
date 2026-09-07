@@ -127,10 +127,8 @@ an untested one is a worse lie than the fixture it replaced.
 
 ## Phase 9 — Closeout
 
-- [~] **T136** `grep -rn 'live in 041'` → **one**, and it is deliberate:
-      custom-token pricing waits for `first_grouped_quote_price` to get a Rust
-      owner. Porting it to Kotlin would have made a second un-gated copy of a
-      rule whose whole docstring is about a 10^12 mispricing.
+- [x] **T136** `grep -rn 'live in 041'` → **zero**. `first_grouped_quote_price`
+      got its Rust owner (phase 4d) rather than a second Kotlin copy.
 - [~] **T137** Full gate: **353 unit tests green**, `assembleDebug` passes with
       the Rust cross-compile. The instrumented suite needs the device back.
 - [x] **T138** `results.md`: ten criteria verdicted, measurements, debts for
