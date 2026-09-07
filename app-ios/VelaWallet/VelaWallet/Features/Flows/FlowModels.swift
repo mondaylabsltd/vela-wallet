@@ -144,12 +144,15 @@ struct ReceiveQrModel {
 /// R4 — the image "Save image" produces, not a screen someone navigates to.
 struct ShareCardModel {
     let headline: String
-    let name: String
-    let lines: [String]
-    let networkNote: String
-    let networkMark: TokenMarkModel
-    let identiconSeed: String
+    var name: String
+    var lines: [String]
+    var networkNote: String
+    var networkMark: TokenMarkModel
+    var identiconSeed: String
     let wordmark: String
+    /// The real code's modules. `nil` keeps the drawn demo pattern, which is
+    /// what the gallery renders — see `QrCode`.
+    var modules: [[Bool]]?
 }
 
 // MARK: - Scan
@@ -590,6 +593,16 @@ enum WalletFlowSheet: Identifiable {
         case .batchImport(let m): m.title
         }
     }
+}
+
+/// What a sheet has to say after an action — 已保存, 需要权限, or a failure.
+///
+/// It is drawn as the platform's alert on purpose: the mocks have no alert
+/// component, and inventing one for two sentences the corpus already carries
+/// would be a new surface where a standard one does.
+struct FlowAlertModel {
+    let title: String
+    let message: String
 }
 
 /// One state: the screen, and the sheet over it.

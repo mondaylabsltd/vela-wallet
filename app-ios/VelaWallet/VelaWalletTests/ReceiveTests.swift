@@ -197,3 +197,68 @@ struct ReceiveTests {
         #expect(reply["tokens"] == nil, "a failed sweep still reported holdings")
     }
 }
+
+// MARK: - The share card
+
+@MainActor
+struct ShareCardTests {
+    private let loc = Loc(overrideTag: "zh", preferredLanguages: [])
+    private let golden = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+
+    private var drawn: ShareCardModel {
+        guard case .share(let card) = WalletFlowFixtures.build(.r4, loc: loc).base
+        else { fatalError("the R4 fixture lost its card") }
+        return card
+    }
+
+    /// **The card leaves the app.** One built from the fixture identity is
+    /// somebody else's address in a stranger's chat — the receive screen's
+    /// danger with a longer half-life, because the image outlives the session
+    /// that made it.
+    @Test func theCardCarriesTheSignedInIdentityAndARealCode() {
+        let live = FlowsLive.shareCard(golden, name: "我", chain: ChainCatalog.meta(100),
+                                       on: drawn, loc: loc)
+        #expect(live.name == "我")
+        #expect(live.identiconSeed == golden)
+        #expect(live.lines.joined() == golden)
+        #expect(live.modules == QrCode.modules(golden))
+        // The fixture's identity is gone from every field.
+        #expect(!live.lines.joined().contains("14fB1f"))
+        #expect(live.identiconSeed != WalletFixtures.identity.addressFull)
+    }
+
+    /// The card names the network the person was looking at — the note is what
+    /// tells a payer which chain to send on, and the drawn card's first network
+    /// would be a guess.
+    @Test func theCardNamesTheNetworkItWasMadeFrom() {
+        let live = FlowsLive.shareCard(golden, name: "我", chain: ChainCatalog.meta(100),
+                                       on: drawn, loc: loc)
+        #expect(live.networkNote == loc.t("receive.shareCardNetworkNote",
+                                          vars: ["network": "Gnosis"]))
+        #expect(live.networkMark.ticker == "xDAI")
+    }
+
+    /// No address, no swap: the drawn card stands rather than becoming a card
+    /// with nobody on it.
+    @Test func noAddressLeavesTheDrawnCardAlone() {
+        let live = FlowsLive.shareCard("", name: "", chain: nil, on: drawn, loc: loc)
+        #expect(live.identiconSeed == drawn.identiconSeed)
+        #expect(live.modules == nil)
+    }
+
+    /// The permission the save path asks for is declared, and it is the
+    /// add-only one.
+    @Test func theAlbumPermissionIsDeclaredAndNarrow() throws {
+        let plist = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()   // VelaWalletTests
+                .deletingLastPathComponent()   // VelaWallet (project dir)
+                .appendingPathComponent("VelaWallet/Info.plist"),
+            encoding: .utf8
+        )
+        #expect(plist.contains("NSPhotoLibraryAddUsageDescription"),
+                "the save path would crash on first use without this")
+        #expect(!plist.contains("NSPhotoLibraryUsageDescription</key>"),
+                "read access was requested for a write-only feature")
+    }
+}

@@ -331,6 +331,43 @@ final class LiveWiringAcceptanceTests: XCTestCase {
         attach(app.screenshot(), named: "device-receive-qr")
     }
 
+    /// 保存图片 renders the card and puts it in the album.
+    ///
+    /// The button has been drawn since spec 021 and did nothing. What it
+    /// produces leaves the app — a card built from the fixture identity would
+    /// be somebody else's address in a stranger's chat — so this drives the
+    /// whole path including the system's permission prompt.
+    func testSavingTheReceiveCardReachesTheAlbum() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["VELA_ACCOUNT"] = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        app.launchEnvironment["VELA_LANG"] = "zh"
+        app.launchEnvironment["VELA_THEME"] = "dark"
+        app.launchEnvironment["VELA_SKIP_LAUNCH_ANIMATION"] = "1"
+        app.launchArguments += ["-AppleLanguages", "(zh)"]
+        app.launch()
+
+        tap(app.buttons["收款"], "收款", timeout: 30)
+        tap(app.buttons["扫描二维码"].firstMatch, "a network row's QR button")
+        tap(app.buttons["保存图片"], "保存图片")
+
+        // The system asks once per install. Answering it here is part of the
+        // path — a test that only passed on an already-authorised simulator
+        // would prove nothing about a person's first save.
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        for label in ["允许", "Allow", "好", "OK"] {
+            let button = springboard.buttons[label]
+            if button.waitForExistence(timeout: 3) {
+                button.tap()
+                break
+            }
+        }
+
+        // 已保存 · 收款二维码已保存到相册。
+        XCTAssertTrue(app.staticTexts["已保存"].waitForExistence(timeout: 20),
+                      "the save said nothing at all")
+        attach(app.screenshot(), named: "device-share-card-saved")
+    }
+
     // MARK: - US3: a token somebody adds by hand
 
     /// Type a contract, and the wallet finds it on a chain and keeps it.

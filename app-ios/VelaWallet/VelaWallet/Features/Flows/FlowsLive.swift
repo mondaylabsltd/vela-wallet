@@ -380,6 +380,38 @@ enum FlowsLive {
         return live
     }
 
+    /// The card 保存图片 produces: the person's own address, their identicon in
+    /// the middle of a code that encodes it, and the network it is for.
+    ///
+    /// This one leaves the app. A card built from the fixture identity is
+    /// somebody else's address in a stranger's chat, which is the receive
+    /// screen's danger with a longer half-life — the image outlives the
+    /// session that made it.
+    static func shareCard(
+        _ address: String,
+        name: String,
+        chain: ChainMeta?,
+        on model: ShareCardModel,
+        loc: Loc
+    ) -> ShareCardModel {
+        guard !address.isEmpty else { return model }
+        var live = model
+        live.name = name.isEmpty ? model.name : name
+        live.lines = AddressText.lines(address)
+        live.identiconSeed = address
+        live.modules = QrCode.modules(address)
+        if let chain {
+            live.networkNote = loc.t("receive.shareCardNetworkNote",
+                                     vars: ["network": chain.displayName])
+            live.networkMark = TokenMarkModel(
+                ticker: chain.nativeSymbol,
+                badgeColor: SettingsLive.mark(chainId: chain.chainId,
+                                              name: chain.displayName).color
+            )
+        }
+        return live
+    }
+
     // MARK: - T3, the add-token sheet
 
     /// The sheet, driven by `manage_tokens`.

@@ -759,6 +759,30 @@ somebody to Ethereum's explorer to look up a Gnosis transaction is that
 misleading link: they find nothing and reasonably conclude their money has
 vanished. A chain with no explorer gets no button.
 
+### 保存图片, which had been drawn and inert since spec 021
+
+The receive sheet's save button did nothing, and what it was supposed to produce
+— `ShareCardArtwork` (R4) — still carried **`WalletFixtures.identity`**. That is
+the receive screen's danger with a longer half-life: the image leaves the app and
+outlives the session that made it, so a card built from the fixture would be
+somebody else's address sitting in a stranger's chat.
+
+The card now carries the signed-in identity, a real code, and the network the
+person was actually looking at. Saving renders it at device scale (a downsampled
+QR is one a camera has to work at) and writes it with Photos' **`.addOnly`**
+authorisation — the narrowest one there is. A wallet asking to READ somebody's
+photos in order to save a QR code would be asking for far more than it needs,
+and `Info.plist` now declares exactly that one string.
+
+The alert is presented **inside the sheet**, so saving a card does not close the
+code somebody was showing. It is the platform's alert on purpose: the mocks have
+no alert component, and the corpus already carries both sentences
+(`已保存 · 收款二维码已保存到相册。` / `需要权限 · 请允许访问相册以保存图片。`).
+
+Driven end to end in the acceptance suite, permission prompt included — a test
+that only passed on an already-authorised simulator would prove nothing about a
+person's first save.
+
 ### A flaky acceptance test, hardened rather than re-run until green
 
 The receive test failed once in a full-suite run and passed alone: a bare
@@ -773,8 +797,8 @@ a defect in the app.
 
 ### Gates
 
-Hermetic tests 309 → **327**; live 25; UI 11 → **12** (green twice in a row).
-Literal violations 35. Zero Rust changes.
+Hermetic tests 309 → **331**; live 25; UI 11 → **13** (green twice in a row).
+Literal violations 35. Zero Rust changes. One new `Info.plist` key, add-only.
 
 ---
 

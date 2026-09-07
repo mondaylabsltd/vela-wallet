@@ -62,6 +62,13 @@ struct FlowHost: View {
     /// 在区块浏览器中查看, on whichever sheet is open. Absent where there is
     /// nothing real to look up — the gallery, and a chain with no explorer.
     var onExplorer: (() -> Void)?
+    /// 保存图片 on the receive sheet. Absent in the gallery, where there is no
+    /// address to put on a card.
+    var onSaveCard: (() -> Void)?
+    /// What that action had to say. Presented **inside the sheet**, so saving
+    /// a card does not close the code somebody was showing.
+    var alert: FlowAlertModel?
+    var onDismissAlert: (() -> Void)?
 
     /// Whether the network picker is up. Local, because which sheet is showing
     /// is render-domain state no machine needs to know.
@@ -104,7 +111,10 @@ struct FlowHost: View {
                         addTokenInput: addTokenInput,
                         onAddToken: onAddToken,
                         addTokenError: addTokenError,
-                        onExplorer: onExplorer
+                        onExplorer: onExplorer,
+                        onSaveCard: onSaveCard,
+                        alert: alert,
+                        onDismissAlert: onDismissAlert
                     )
                         .environment(\.walletTextScale, model.textScale)
                         .presentationDragIndicator(.hidden)
@@ -235,6 +245,9 @@ private struct FlowSheetHost: View {
     var onAddToken: (() -> Void)?
     var addTokenError: String?
     var onExplorer: (() -> Void)?
+    var onSaveCard: (() -> Void)?
+    var alert: FlowAlertModel?
+    var onDismissAlert: (() -> Void)?
 
     var body: some View {
         ScrollView {
@@ -246,6 +259,17 @@ private struct FlowSheetHost: View {
             .padding(.bottom, Tokens.Space.s32)
         }
         .background(theme.bgBase)
+        .alert(
+            alert?.title ?? "",
+            isPresented: Binding(
+                get: { alert != nil },
+                set: { if !$0 { onDismissAlert?() } }
+            )
+        ) {
+            Button("OK") { onDismissAlert?() }
+        } message: {
+            Text(verbatim: alert?.message ?? "")
+        }
     }
 
     /// The sheet's own title row.
@@ -276,7 +300,11 @@ private struct FlowSheetHost: View {
     @ViewBuilder private var body_: some View {
         switch sheet {
         case .receiveQr(let m):
-            ReceiveQrBody(model: m, onExplorer: { onExplorer?() })
+            ReceiveQrBody(
+                model: m,
+                onSave: { onSaveCard?() },
+                onExplorer: { onExplorer?() }
+            )
         case .txDetail(let m):
             TxDetailBody(model: m, onExplorer: { onExplorer?() })
         case .tokenDetail(let m):

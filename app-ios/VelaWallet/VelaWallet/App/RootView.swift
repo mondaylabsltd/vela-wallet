@@ -51,6 +51,9 @@ struct RootView: View {
     /// The network filter on the history screen. `nil` is every chain — the
     /// core owns the filtering; this is only which row was picked.
     @State private var chainFilter: Int?
+    /// What 保存图片 did, once it has done it. The corpus has the words; the
+    /// alert is the platform's.
+    @State private var saveOutcome: ShareCardExport.Outcome?
     /// The networks machine (spec 050), app-resident: it probes endpoints and
     /// holds a search debounce, and one that died with the settings route would
     /// re-probe every chain on each visit.
@@ -359,7 +362,10 @@ struct RootView: View {
                     },
                     onExplorer: explorerLink(for: state).map { url in
                         { UIApplication.shared.open(url) }
-                    }
+                    },
+                    onSaveCard: session.view.address.isEmpty ? nil : { saveShareCard() },
+                    alert: saveAlert,
+                    onDismissAlert: { saveOutcome = nil }
                 )
                 .transition(.move(edge: .trailing))
                 .task(id: state) {
@@ -585,6 +591,61 @@ struct RootView: View {
             model.sheet = .addToken(FlowsLive.addToken(view, on: sheet, loc: loc))
         }
         return model
+    }
+
+    /// Render the receive card and put it in the album.
+    ///
+    /// The card is built here rather than inside the sheet because it needs the
+    /// signed-in identity and the chain the person picked — the same two facts
+    /// the code on screen is built from, so the image and the screen can never
+    /// disagree.
+    private func saveShareCard() {
+        let card = FlowsLive.shareCard(
+            session.view.address,
+            name: session.view.activeName,
+            chain: ChainCatalog.chains.indices.contains(receiveNetwork)
+                ? ChainCatalog.chains[receiveNetwork] : nil,
+            on: drawnShareCard,
+            loc: loc
+        )
+        Task {
+            saveOutcome = await ShareCardExport.save(
+                card, scheme: scheme, scale: UIScreen.main.scale
+            )
+        }
+    }
+
+    /// The drawn card (R4), as the base every live one is built on — its
+    /// headline, wordmark and layout are the drawing's.
+    private var drawnShareCard: ShareCardModel {
+        guard case .share(let card) = WalletFlowFixtures.build(.r4, loc: loc).base else {
+            // The fixture cannot lose its own card, but a crash here would be a
+            // crash on somebody's receive screen.
+            return ShareCardModel(
+                headline: loc.t("receive.shareCardHeadline"),
+                name: "", lines: [], networkNote: "",
+                networkMark: TokenMarkModel(ticker: "", badgeColor: .clear),
+                identiconSeed: "", wordmark: "Vela Wallet"
+            )
+        }
+        return card
+    }
+
+    /// What the save had to say, if it has said anything yet.
+    private var saveAlert: FlowAlertModel? {
+        switch saveOutcome {
+        case .saved:
+            FlowAlertModel(title: loc.t("receive.request.savedTitle"),
+                           message: loc.t("receive.request.savedBody"))
+        case .denied:
+            FlowAlertModel(title: loc.t("receive.request.permTitle"),
+                           message: loc.t("receive.request.permBody"))
+        case .failed:
+            FlowAlertModel(title: loc.t("addToken.errorTitle"),
+                           message: loc.t("receive.request.shareError"))
+        case nil:
+            nil
+        }
     }
 
     /// What 在区块浏览器中查看 opens, for whichever sheet is up.

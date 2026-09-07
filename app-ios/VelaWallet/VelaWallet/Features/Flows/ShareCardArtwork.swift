@@ -30,7 +30,7 @@ struct ShareCardArtwork: View {
                 .padding(.vertical, Tokens.Space.s24)
 
             VStack(spacing: Tokens.Space.s8) {
-                QrCardView(label: model.headline) {
+                QrCardView(label: model.headline, modules: model.modules) {
                     IdenticonAvatar(seed: model.identiconSeed, size: WalletFlowGeometry.qrCentre)
                 }
                 Text(verbatim: model.name)
