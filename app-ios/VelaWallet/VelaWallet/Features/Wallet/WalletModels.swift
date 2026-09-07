@@ -165,12 +165,12 @@ struct WalletHomeModel {
     let state: MobileStateId
     var header: WalletHeaderModel
     let pill: NetworkPillModel
-    let balance: BalanceModel
+    var balance: BalanceModel
     let actions: ActionsModel
     let activitySection: SectionModel
     let activityGroups: [ActivityGroupModel]
     let assetsSection: SectionModel
-    let assetRows: [AssetRowModel]
+    var assetRows: [AssetRowModel]
     let tabs: TabsModel
     var sheet: ChainSheetModel?
     /// 1 or 1.35 — multiplies wallet type roles via walletTextScale (FR-011).

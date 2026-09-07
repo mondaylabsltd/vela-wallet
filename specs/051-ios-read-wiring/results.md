@@ -155,9 +155,49 @@ Tests 215 → **224**. Literal violations 35.
 
 ---
 
+## Phase 2b — the home screen shows the person's own money
+
+`BalanceExecutor` (7 operations, every chain read through `RpcPool`),
+`WalletLive` (a partial sibling of `WalletFixtures`, like `SettingsLive`),
+`WalletStore` (resident) and `RootView`'s `.wallet` case.
+
+`VELA_ACCOUNT=0x…` seeds a **key-less** account so the read path has an address
+without a passkey ceremony (research D3).
+
+### Seen on screen
+
+`$1,383.28` is gone. The home now reads **xDAI · Gnosis · 0.75897** — the golden
+Safe's real balance, fetched through the pool and converted to a human decimal.
+
+### Two defects the live screen found, both invisible before it
+
+1. **Every unpriceable holding was rendered twice.** `assetRows` concatenated
+   `tokens + unpricedTokens`, and `unpricedTokens` is **not the complement** —
+   the core's own doc calls it *"the detail sheet's 'couldn't be priced' list"*,
+   a subset built for a different surface. One address, one chain, two identical
+   xDAI rows. With a fixture there was nothing to duplicate.
+
+2. **The dev seed persisted, which is exactly the FR-010 hazard.** It only ever
+   *wrote* the account, so the next launch without the pin was still signed in as
+   a key-less record. The XCUITest suite found it within one run — two onboarding
+   tests failed because the app booted into a wallet nobody had asked for. The
+   seed now **removes its own record when the pin is absent**, which makes "never
+   inherited as a way to skip a ceremony" structural instead of a promise.
+
+### A known intermediate state, not a defect
+
+The total reads **`0.00` with the warning triangle** while a real 0.75897 xDAI
+sits below it. There is no price source yet: `display_currency::resolve_rate` and
+`network_admin::fetch_fiat_rates` are both still on this cut's own
+`// live in 051` list. The core is answering "the priced sum is zero", the drawn
+warning is saying so, and it resolves when the price path lands later in 051.
+
+Tests 224 (hermetic) + 8 UI, all green. Literal violations 35.
+
+---
+
 ## Next
 
-Phase 2b, the rest of `balance_dashboard` — the executor, the live builder, the
-store, and `RootView`'s `.wallet` case. The order and the remaining traps are in
-**[tasks.md](./tasks.md)**; `Core/TokenReads.swift` and
-`Features/Wallet/BalanceWire.swift` are already in place.
+Phase 2c, the price path — flip `resolve_rate` and `fetch_fiat_rates` live so the
+total stops reading `0.00` over real holdings. Then phase 3, `activity_feed`.
+The remaining order is in **[tasks.md](./tasks.md)**.

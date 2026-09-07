@@ -23,6 +23,14 @@ struct RootView: View {
     @State private var model: WelcomeModel
     @State private var session: SessionController
     @State private var onboarding: OnboardingModel
+    /// The routing authority (spec 051). One session, app-wide: a ban is a fact
+    /// about the network, and two callers with their own endpoint lists is how
+    /// the Expo client got a ban map that disagreed with itself.
+    @State private var pool: RpcPool
+    /// The home screen's money (spec 051), app-resident: it holds the fetched
+    /// holdings, the cached total and a retry timer, and one that died with the
+    /// screen would re-read twelve chains on every visit.
+    @State private var wallet: WalletStore
     /// The networks machine (spec 050), app-resident: it probes endpoints and
     /// holds a search debounce, and one that died with the settings route would
     /// re-probe every chain on each visit.
@@ -59,11 +67,18 @@ struct RootView: View {
         _session = State(initialValue: session)
         _onboarding = State(initialValue: onboarding)
         let shelf = VelaStore()
+        // Before the session machine boots: it reads `vela.accounts` on its
+        // first event, and a record written after that is not seen until a
+        // relaunch. DEBUG-only, env-gated, and key-less (spec 051 D3).
+        DevAccountSeed.applyIfRequested(store: shelf)
         _contacts = State(initialValue: ContactsStore(store: shelf))
         // `vela.serviceEndpoints` has two writers; the executor reaches it
         // through this same `AccountStore` so onboarding's endpoint override
         // survives a settings write (data-model §5).
         _settings = State(initialValue: SettingsStore(store: shelf, accounts: store))
+        let pool = RpcPool(store: shelf, accounts: store)
+        _pool = State(initialValue: pool)
+        _wallet = State(initialValue: WalletStore(store: shelf, pool: pool))
         _model = State(initialValue: WelcomeModel(content: WelcomeContentBuilder.build(loc: loc)) { intent in
             switch intent {
             case .createWallet:
@@ -282,14 +297,15 @@ struct RootView: View {
                 switch section {
                 case .wallet:
                     WalletScreen(
-                        model: WalletFixtures
-                            .buildMobileState(.h1, loc: loc)
-                            .withAddress(session.view.address)
-                            .withName(session.view.activeName),
+                        model: walletModel,
                         loc: loc,
                         onSelectTab: selectTab,
                         onFlow: { flows.enter($0) }
                     )
+                    .task {
+                        pool.boot()
+                        wallet.open(address: session.view.address)
+                    }
                 case .contacts:
                     contactsSection
                 }
@@ -390,6 +406,22 @@ struct RootView: View {
             onSelectTab: selectTab,
             onDelete: { contacts.delete(address: $0) }
         )
+    }
+
+    /// The home screen: the person's own address, name — and, since spec 051,
+    /// their own money.
+    ///
+    /// Before the core has ruled there is nothing truthful to swap in, so the
+    /// drawing stands as drawn. That is the same rule the settings screen
+    /// follows, and it matters more here: a fixture total under a real address
+    /// is the app telling somebody their money is somewhere it is not.
+    private var walletModel: WalletHomeModel {
+        let base = WalletFixtures
+            .buildMobileState(.h1, loc: loc)
+            .withAddress(session.view.address)
+            .withName(session.view.activeName)
+        guard let view = wallet.balance else { return base }
+        return WalletLive.apply(view, on: base, loc: loc)
     }
 
     /// Settings, wearing the signed-in identity and the real networks.

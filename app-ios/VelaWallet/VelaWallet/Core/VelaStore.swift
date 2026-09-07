@@ -69,6 +69,13 @@ struct VelaStore {
 
         // Owned by `display_currency` (spec 050).
         static let displayCurrency = "vela.displayCurrency"
+
+        // Owned by the read path (spec 051).
+        /// `address → { usd, at }`, 24-hour TTL. The last total the wallet
+        /// knew, so a cold start shows a figure instead of a spinner.
+        static let balanceCache = "vela.balanceCache"
+        /// The ERC-20s the wallet reads balances for.
+        static let customTokens = "vela.customTokens"
     }
 
     private let defaults: UserDefaults
