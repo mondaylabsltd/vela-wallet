@@ -113,7 +113,54 @@ green. Literal violations 35 → 35. Zero lines under
 
 ---
 
+## Phase 2a — the ABI gap closed, and the unit trap tested
+
+### D1 settled, and measured
+
+`multicall3_encode_aggregate3`, `multicall3_decode_aggregate3` and
+`erc20_encode_balance_of` now live in **`vela-core-uniffi/src/multicall.rs`**,
+built on `alloy-dyn-abi` (added as a direct dep of that crate).
+
+`aggregate3((address,bool,bytes)[])` is a dynamic array of tuples with a dynamic
+member — head/tail offsets nested two deep. The bridge's `abi_encode_address` /
+`_uint256` / `_bytes32` cannot express it, and a hand-rolled encoder is correct
+right up until the first tuple with two dynamic members. **I proved that on
+myself**: a first version of the Swift test hand-wrote the return-side ABI and
+was rejected by the decoder with `type check failed for "offset (usize)"`. The
+test now asserts what Swift actually owns — that garbage is *refused* rather
+than decoded into a plausible empty list — and the slot-preservation property
+stays where alloy can build the fixture, in Rust.
+
+Bridge growth for the three exports: committed bindings **215,916 → 260,699
+bytes (+44,783)**. The wasm bundle pays nothing, because `vela-core-wasm` does
+not link this crate — which was the point of putting it here rather than in
+`vela-core`.
+
+### The unit trap, tested with a number two clients agree on
+
+`balance_dashboard.rs:298` requires a **human decimal string, never a JSON
+number**. Desktop's 031 wrote raw units and the defect was invisible for as long
+as prices were `None`.
+
+`TokenReads.scaled` converts in **decimal string arithmetic, not `Double`** — a
+`Double` carries 15–16 significant digits and a balance routinely needs more, so
+going through one rounds somebody's money quietly. The tests pin
+`0xa8867319d2da000 → "0.75897"` (the figure the live pool returned and desktop's
+031 measured independently) and a 21-digit balance that a `Double` would mangle.
+
+Tempo's exclusion is by the chain's **declared gas model**, never a "that number
+looks too big" threshold — a threshold would also reject a genuine whale.
+
+Tests 215 → **224**. Literal violations 35.
+
+---
+
 ## Next
+
+Phase 2b, the rest of `balance_dashboard` — the executor, the live builder, the
+store, and `RootView`'s `.wallet` case. The order and the remaining traps are in
+**[tasks.md](./tasks.md)**; `Core/TokenReads.swift` and
+`Features/Wallet/BalanceWire.swift` are already in place.
 
 Phase 2, `balance_dashboard` — the `$1,383.28` screen. The plan, the two traps
 that cost desktop a defect each, and the ABI gap that has to be settled first

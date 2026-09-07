@@ -4923,6 +4923,144 @@ public func FfiConverterTypeLanguageState_lower(_ value: LanguageState) -> RustB
 }
 
 
+/**
+ * One call inside an `aggregate3` batch.
+ */
+public struct Multicall3Call: Equatable, Hashable {
+    /**
+     * `0x`-prefixed contract address.
+     */
+    public var target: String
+    /**
+     * Let the batch continue when this one reverts.
+     *
+     * The balance reader sets it: a token that reverts on `balanceOf` — a
+     * proxy mid-upgrade, a contract that is not really an ERC-20 — must not
+     * cost the other eleven their answer.
+     */
+    public var allowFailure: Bool
+    public var callData: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(
+        /**
+         * `0x`-prefixed contract address.
+         */target: String, 
+        /**
+         * Let the batch continue when this one reverts.
+         *
+         * The balance reader sets it: a token that reverts on `balanceOf` — a
+         * proxy mid-upgrade, a contract that is not really an ERC-20 — must not
+         * cost the other eleven their answer.
+         */allowFailure: Bool, callData: Data) {
+        self.target = target
+        self.allowFailure = allowFailure
+        self.callData = callData
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Multicall3Call: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMulticall3Call: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Multicall3Call {
+        return
+            try Multicall3Call(
+                target: FfiConverterString.read(from: &buf), 
+                allowFailure: FfiConverterBool.read(from: &buf), 
+                callData: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Multicall3Call, into buf: inout [UInt8]) {
+        FfiConverterString.write(value.target, into: &buf)
+        FfiConverterBool.write(value.allowFailure, into: &buf)
+        FfiConverterData.write(value.callData, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMulticall3Call_lift(_ buf: RustBuffer) throws -> Multicall3Call {
+    return try FfiConverterTypeMulticall3Call.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMulticall3Call_lower(_ value: Multicall3Call) -> RustBuffer {
+    return FfiConverterTypeMulticall3Call.lower(value)
+}
+
+
+/**
+ * One result out of an `aggregate3` batch, in the order the calls went in.
+ */
+public struct Multicall3Result: Equatable, Hashable {
+    public var success: Bool
+    public var returnData: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(success: Bool, returnData: Data) {
+        self.success = success
+        self.returnData = returnData
+    }
+
+    
+
+    
+}
+
+#if compiler(>=6)
+extension Multicall3Result: Sendable {}
+#endif
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeMulticall3Result: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> Multicall3Result {
+        return
+            try Multicall3Result(
+                success: FfiConverterBool.read(from: &buf), 
+                returnData: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: Multicall3Result, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.success, into: &buf)
+        FfiConverterData.write(value.returnData, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMulticall3Result_lift(_ buf: RustBuffer) throws -> Multicall3Result {
+    return try FfiConverterTypeMulticall3Result.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeMulticall3Result_lower(_ value: Multicall3Result) -> RustBuffer {
+    return FfiConverterTypeMulticall3Result.lower(value)
+}
+
+
 public struct P256PublicKey: Equatable, Hashable {
     public var x: Data
     public var y: Data
@@ -6412,6 +6550,56 @@ fileprivate struct FfiConverterSequenceTypeCtapCredentialChoice: FfiConverterRus
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterSequenceTypeMulticall3Call: FfiConverterRustBuffer {
+    typealias SwiftType = [Multicall3Call]
+
+    public static func write(_ value: [Multicall3Call], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeMulticall3Call.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Multicall3Call] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Multicall3Call]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeMulticall3Call.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+fileprivate struct FfiConverterSequenceTypeMulticall3Result: FfiConverterRustBuffer {
+    typealias SwiftType = [Multicall3Result]
+
+    public static func write(_ value: [Multicall3Result], into buf: inout [UInt8]) {
+        let len = Int32(value.count)
+        writeInt(&buf, len)
+        for item in value {
+            FfiConverterTypeMulticall3Result.write(item, into: &buf)
+        }
+    }
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> [Multicall3Result] {
+        let len: Int32 = try readInt(&buf)
+        var seq = [Multicall3Result]()
+        seq.reserveCapacity(Int(len))
+        for _ in 0 ..< len {
+            seq.append(try FfiConverterTypeMulticall3Result.read(from: &buf))
+        }
+        return seq
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterSequenceTypeP256PublicKey: FfiConverterRustBuffer {
     typealias SwiftType = [P256PublicKey]
 
@@ -7164,6 +7352,45 @@ public func ctapRegisterCcid(port: CcidPort, host: CtapCeremonyHost, name: Strin
     )
 })
 }
+/**
+ * `balanceOf(address)` calldata — what an `aggregate3` batch is almost always
+ * made of.
+ */
+public func erc20EncodeBalanceOf(ownerHex: String)throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_erc20_encode_balance_of(
+        FfiConverterString.lower(ownerHex),uniffiCallStatus
+    )
+})
+}
+/**
+ * Decode what `aggregate3` returned: `(bool success, bytes returnData)[]`.
+ *
+ * A failed entry **keeps its slot**. The caller matches results to calls by
+ * index, and compacting the failures away here would silently misalign every
+ * token after the first revert — which is the kind of defect that shows up as
+ * one person's balance appearing under another token's name.
+ */
+public func multicall3DecodeAggregate3(data: Data)throws  -> [Multicall3Result]  {
+    return try  FfiConverterSequenceTypeMulticall3Result.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_multicall3_decode_aggregate3(
+        FfiConverterData.lower(data),uniffiCallStatus
+    )
+})
+}
+/**
+ * Build `aggregate3` calldata.
+ */
+public func multicall3EncodeAggregate3(calls: [Multicall3Call])throws  -> Data  {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeCoreError_lift) {
+        uniffiCallStatus in
+    uniffi_vela_core_uniffi_fn_func_multicall3_encode_aggregate3(
+        FfiConverterSequenceTypeMulticall3Call.lower(calls),uniffiCallStatus
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -7373,6 +7600,15 @@ private let initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_func_ctap_register_ccid() != 13458) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_erc20_encode_balance_of() != 6291) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_multicall3_decode_aggregate3() != 39521) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_vela_core_uniffi_checksum_func_multicall3_encode_aggregate3() != 41166) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_vela_core_uniffi_checksum_method_i18n_change_language() != 36683) {
