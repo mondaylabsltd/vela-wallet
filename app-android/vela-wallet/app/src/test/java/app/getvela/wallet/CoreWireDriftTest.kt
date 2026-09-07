@@ -39,7 +39,21 @@ import app.getvela.wallet.feature.wallet.core.FeedToast
 import app.getvela.wallet.feature.wallet.core.FeedTxKind
 import app.getvela.wallet.feature.wallet.core.FeedTxRecord
 import app.getvela.wallet.feature.wallet.core.FeedTxStatus
+import app.getvela.wallet.feature.wallet.core.DepositEntry
+import app.getvela.wallet.feature.wallet.core.DepositItem
 import app.getvela.wallet.feature.wallet.core.FeedView
+import app.getvela.wallet.feature.wallet.core.PayRequest
+import app.getvela.wallet.feature.wallet.core.PaymentRequestEvent
+import app.getvela.wallet.feature.wallet.core.PaymentRequestOperation
+import app.getvela.wallet.feature.wallet.core.PaymentRequestShellResult
+import app.getvela.wallet.feature.wallet.core.PaymentRequestView
+import app.getvela.wallet.feature.wallet.core.ReceiveAsset
+import app.getvela.wallet.feature.wallet.core.ReceiveMode
+import app.getvela.wallet.feature.wallet.core.ReceiveWatchEvent
+import app.getvela.wallet.feature.wallet.core.ReceiveWatchOperation
+import app.getvela.wallet.feature.wallet.core.ReceiveWatchShellResult
+import app.getvela.wallet.feature.wallet.core.ReceiveWatchView
+import app.getvela.wallet.feature.wallet.core.TokenSnapshot
 import app.getvela.wallet.feature.wallet.core.TrustAssetDelta
 import app.getvela.wallet.feature.wallet.core.TrustCustomToken
 import app.getvela.wallet.feature.wallet.core.TrustDeltaKind
@@ -409,6 +423,57 @@ class CoreWireDriftTest {
             "CustomTokens.tokens must stay nullable",
             elementDescriptor<TrustShellResult.CustomTokens>("tokens").isNullable,
         )
+    }
+
+    // -- receive_watch + payment_request (spec 041) ---------------------------
+
+    @Test
+    fun receiveViewsMatchTheGeneratedMirrors() {
+        assertFieldsExist<ReceiveWatchView>("ReceiveWatchView")
+        assertFieldsExist<TokenSnapshot>("TokenSnapshot")
+        assertFieldsExist<DepositEntry>("DepositEntry")
+        assertFieldsExist<DepositItem>("DepositItem")
+        assertFieldsExist<PaymentRequestView>("PaymentRequestView")
+        assertFieldsExist<ReceiveAsset>("Asset")
+        assertFieldsExist<PayRequest>("PayRequest")
+    }
+
+    @Test
+    fun receiveOperationsAndResultsAreExhaustive() {
+        assertVariantsExhaustive<ReceiveWatchOperation>("ReceiveWatchOperation")
+        assertVariantsExhaustive<ReceiveWatchShellResult>("ReceiveWatchShellResult")
+        assertVariantsExhaustive<PaymentRequestOperation>("PaymentRequestOperation")
+        assertVariantsExhaustive<PaymentRequestShellResult>("PaymentRequestShellResult")
+    }
+
+    @Test
+    fun receiveEventsExist() {
+        assertVariantsExist<ReceiveWatchEvent>("ReceiveWatchEvent")
+        assertVariantsExist<PaymentRequestEvent>("PaymentRequestEvent")
+        assertStringUnion<ReceiveMode>("ReceiveMode")
+    }
+
+    @Test
+    fun aPayRequestCarriesBaseUnitsAsAString() {
+        // Base units routinely exceed what a double holds exactly — 1 ETH is
+        // 10^18 — and this is the number a payment is made FROM. A `number`
+        // here would round somebody's request.
+        val base = elementDescriptor<PayRequest>("amount_base")
+        assertEquals("kotlin.String?", base.serialName)
+        assertTrue("an open request has no amount at all", base.isNullable)
+        assertEquals("string | null", tsFieldType("PayRequest", "amount_base"))
+        // A watched BALANCE is a double on purpose, and that is not a
+        // contradiction: it is compared against a threshold, never spent.
+        assertEquals("kotlin.Double", elementDescriptor<TokenSnapshot>("balance").serialName)
+    }
+
+    @Test
+    fun theReceiveGateStartsCoveredAndUnacknowledged() {
+        // `gate_loading` defaulting to false would flash a QR code at somebody
+        // before the warning they have not yet seen — the one thing this gate
+        // exists to prevent.
+        assertTrue(PaymentRequestView().gate_loading)
+        assertEquals(false, PaymentRequestView().acknowledged)
     }
 
     // -- rpc_pool (spec 041) --------------------------------------------------

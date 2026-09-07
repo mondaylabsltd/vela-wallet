@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.vela_core_uniffi.ActivityFeedCore
+import uniffi.vela_core_uniffi.PaymentRequestCore
+import uniffi.vela_core_uniffi.ReceiveWatchCore
 import uniffi.vela_core_uniffi.BalanceDashboardCore
 import uniffi.vela_core_uniffi.TokenTrustCore
 
@@ -44,6 +46,14 @@ class WalletController(
     private val ownAccounts: () -> List<FeedExecutor.FeedOwnAccount> = { emptyList() },
     /** The money-in buzz. */
     private val haptic: () -> Unit = {},
+    /**
+     * Is the app in front of somebody?
+     *
+     * The receive watcher polls, and it must stop when the phone goes into a
+     * pocket — the core stops the session the moment the shell says the app is
+     * not active, so this answer is what ends the polling.
+     */
+    private val foreground: () -> Boolean = { true },
 ) {
 
     private val store = VelaStore(context)
@@ -175,6 +185,121 @@ class WalletController(
         ),
         onFault = { error -> VelaLog.failure("wallet.feed.fault", "core fault", error) },
     )
+
+    // -- the receive screen ---------------------------------------------------
+
+    private val receiveExecutor = ReceiveExecutor(
+        store = store,
+        // The watcher compares BALANCES, so it reads the balance machine's own
+        // view rather than starting a second read of the same chains. `null`
+        // means "no read has settled yet" — a fetch failure, not an empty
+        // wallet, which the core would otherwise see as everything withdrawn.
+        snapshot = {
+            balanceHost.view.value
+                .takeIf { it.last_refreshed_at_ms != null }
+                ?.tokens
+                ?.map { token ->
+                    TokenSnapshot(
+                        id = "${token.chain_id}:${token.token_address ?: "native"}",
+                        symbol = token.symbol,
+                        chain_id = token.chain_id,
+                        balance = token.balance.toDoubleOrNull() ?: 0.0,
+                        price_usd = token.price_usd,
+                    )
+                }
+        },
+        foreground = foreground,
+        haptic = haptic,
+    )
+
+    private val watchHost = CoreHost(
+        bridge = ReceiveWatchCore().asBridge(),
+        scope = scope,
+        initial = ReceiveWatchView(),
+        serializer = ReceiveWatchView.serializer(),
+        perform = JsonShell.perform(
+            ReceiveWatchOperation.serializer(),
+            ReceiveWatchShellResult.serializer(),
+            receiveExecutor::performWatch,
+        ),
+        escapedFailure = JsonShell.escapedFailure(
+            ReceiveWatchOperation.serializer(),
+            ReceiveWatchShellResult.serializer(),
+            fallback = ReceiveWatchShellResult.Signalled,
+            answer = receiveExecutor::neutralWatchAnswer,
+        ),
+        onFault = { error -> VelaLog.failure("wallet.watch.fault", "core fault", error) },
+    )
+
+    private val requestHost = CoreHost(
+        bridge = PaymentRequestCore().asBridge(),
+        scope = scope,
+        initial = PaymentRequestView(),
+        serializer = PaymentRequestView.serializer(),
+        perform = JsonShell.perform(
+            PaymentRequestOperation.serializer(),
+            PaymentRequestShellResult.serializer(),
+            receiveExecutor::performRequest,
+        ),
+        escapedFailure = JsonShell.escapedFailure(
+            PaymentRequestOperation.serializer(),
+            PaymentRequestShellResult.serializer(),
+            fallback = PaymentRequestShellResult.AckWritten,
+            answer = receiveExecutor::neutralRequestAnswer,
+        ),
+        onFault = { error -> VelaLog.failure("wallet.request.fault", "core fault", error) },
+    )
+
+    /** Money noticed while somebody is looking at their own QR code. */
+    val watch: StateFlow<ReceiveWatchView> = watchHost.view
+
+    /** What that QR code says. */
+    val request: StateFlow<PaymentRequestView> = requestHost.view
+
+    /**
+     * Open the receive screen for an address.
+     *
+     * The watch is single-shot by design — the core runs one session, stops
+     * after five minutes, and stops early if the app goes into a pocket. This
+     * is called on every entry, and a second `start` while one is running is
+     * the core's to ignore.
+     */
+    fun openReceive(address: String, payBaseUrl: String) {
+        requestHost.dispatch(
+            PaymentRequestEvent.Start(
+                account = address,
+                recipient = address,
+                base_url = payBaseUrl,
+            ),
+            PaymentRequestEvent.serializer(),
+        )
+        watchHost.dispatch(ReceiveWatchEvent.Start, ReceiveWatchEvent.serializer())
+    }
+
+    fun receiveMode(mode: ReceiveMode) =
+        requestHost.dispatch(PaymentRequestEvent.ModeChanged(mode), PaymentRequestEvent.serializer())
+
+    fun receiveAmount(text: String) =
+        requestHost.dispatch(
+            PaymentRequestEvent.AmountChanged(text),
+            PaymentRequestEvent.serializer(),
+        )
+
+    fun receiveAsset(token: BalanceToken, networkName: String) =
+        requestHost.dispatch(
+            PaymentRequestEvent.AssetPicked(
+                chain_id = token.chain_id,
+                token_address = token.token_address,
+                symbol = token.symbol,
+                decimals = token.decimals,
+                network_name = networkName,
+            ),
+            PaymentRequestEvent.serializer(),
+        )
+
+    /** The warning gate's confirm. */
+    fun acknowledgeReceive() =
+        requestHost.dispatch(PaymentRequestEvent.Acknowledge, PaymentRequestEvent.serializer())
 
     init {
         // The knot: the executor emits `chain_assets_arrived` as each chain

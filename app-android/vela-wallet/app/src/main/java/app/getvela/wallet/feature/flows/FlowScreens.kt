@@ -211,7 +211,14 @@ fun ReceiveQrBody(
         )
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            QrCard(label = model.title) {
+            QrCard(
+                label = model.title,
+                // The address the card is showing, rejoined — a scanner reads
+                // this, so it must be the same string the two lines above spell
+                // out and never a shortened one.
+                payload = (model.account.lines.first + model.account.lines.second)
+                    .takeIf { it.isNotEmpty() },
+            ) {
                 Box(
                     modifier = Modifier
                         .size(VelaIconSize.xl3)

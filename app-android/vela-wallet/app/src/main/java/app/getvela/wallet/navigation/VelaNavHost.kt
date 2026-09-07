@@ -58,6 +58,13 @@ import app.getvela.wallet.feature.settings.core.NetProviderId
 import app.getvela.wallet.feature.settings.SettingsRoute
 import app.getvela.wallet.feature.settings.SettingsScreenState
 import app.getvela.wallet.feature.settings.gallery.SettingsGalleryScreen
+import app.getvela.wallet.feature.flows.FlowBase
+import app.getvela.wallet.feature.flows.FlowState
+import app.getvela.wallet.feature.flows.FlowLive
+import app.getvela.wallet.feature.flows.FlowScreenModel
+import app.getvela.wallet.feature.flows.FlowSheet
+import app.getvela.wallet.feature.settings.core.NetView
+import app.getvela.wallet.feature.wallet.core.PaymentRequestView
 import app.getvela.wallet.feature.wallet.WalletFixtures
 import app.getvela.wallet.feature.wallet.WalletLive
 import app.getvela.wallet.feature.wallet.WalletScreen
@@ -292,8 +299,20 @@ fun VelaNavHost(
 
             val flowState = flows.top
             if (flowState != null) {
-                val flowModel = remember(flowState, strings) {
-                    FlowFixtures.build(flowState, strings)
+                val request by wallet.request.collectAsStateWithLifecycle()
+                // The receive screen shows an ADDRESS. Every other fixture that
+                // leaks shows somebody the wrong information; a fixture address
+                // here sends their money to a stranger, permanently — so the
+                // watch and the request machine start the moment this opens.
+                LaunchedEffect(flowState, session.address) {
+                    if (session.address.isNotEmpty() && flowState in RECEIVE_STATES) {
+                        wallet.openReceive(session.address, PAY_LINK_BASE)
+                    }
+                }
+                val flowModel = remember(flowState, strings, session.address, networks, request) {
+                    FlowFixtures.build(flowState, strings).let { drawn ->
+                        liveFlow(drawn, session.address, session.activeName, networks, request)
+                    }
                 }
                 FlowHost(
                     model = flowModel,
@@ -671,3 +690,45 @@ internal val DEVELOPER_ROUTES = setOf(
 
 private const val PRIVACY_URL = "https://getvela.app/privacy"
 private const val TERMS_URL = "https://getvela.app/terms"
+
+/** The flow states that show somebody their own address. */
+private val RECEIVE_STATES = setOf(FlowState.R1, FlowState.R2)
+
+/**
+ * Where a pay link points.
+ *
+ * A phone has no origin to read, so the shell supplies the public one — the
+ * core never touches a location.
+ */
+private const val PAY_LINK_BASE = "https://getvela.app/pay"
+
+/**
+ * The drawn flow screens, showing this device's facts.
+ *
+ * Only the receive screens are live in spec 041; sending is 042, and the rest
+ * keep their fixtures rather than pretending. **The address is replaced
+ * unconditionally** — a receive screen is the one place in this app where a
+ * stale value is unrecoverable, so an empty session renders no address rather
+ * than the drawn one.
+ */
+private fun liveFlow(
+    drawn: FlowScreenModel,
+    address: String,
+    name: String,
+    networks: NetView,
+    request: PaymentRequestView,
+): FlowScreenModel = drawn.copy(
+    base = when (val base = drawn.base) {
+        is FlowBase.Receive -> FlowBase.Receive(
+            // The same per-chain colour the wallet's own asset rows use, so a
+            // network is the same colour wherever it appears.
+            FlowLive.receiveNetworks(base.model, networks, address, WalletLive::badge),
+        )
+        else -> drawn.base
+    },
+    sheet = when (val sheet = drawn.sheet) {
+        is FlowSheet.ReceiveQr ->
+            FlowSheet.ReceiveQr(FlowLive.receiveQr(sheet.model, address, name, request))
+        else -> drawn.sheet
+    },
+)

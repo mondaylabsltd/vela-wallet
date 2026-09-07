@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -62,6 +63,7 @@ import app.getvela.wallet.feature.flows.SummaryLineModel
 import app.getvela.wallet.feature.flows.TokenMarkModel
 import app.getvela.wallet.feature.wallet.components.TokenIcon
 import kotlin.math.min
+import uniffi.vela_core_uniffi.qrMatrix
 
 /** The blocks of the wallet flows (spec 021 components 8, 16–22, 24–26). */
 
@@ -134,17 +136,39 @@ fun AddressCard(
  *   mark: a card whose address was doctored would carry artwork that no longer
  *   matches the characters printed under it.
  *
- * The modules are the deterministic demo pattern spec 015 established, never
- * real encoded data — a code that looked scannable but was not would be worse
- * than one that plainly is not.
+ * **The modules are real when a payload is given.** They were the deterministic
+ * demo pattern spec 015 established, on the reasoning that a code which looked
+ * scannable but was not would be worse than one that plainly is not — and by
+ * spec 041 the screen around it had become entirely real: this person's name,
+ * this person's address, their own identicon, at full size. The pattern stopped
+ * plainly not being a code and started looking exactly like one, which is the
+ * failure that reasoning was guarding against, arrived from the other side.
+ *
+ * The gallery still passes no payload, so its canon is unchanged.
  */
 @Composable
 fun QrCard(
     label: String,
     modifier: Modifier = Modifier,
+    /**
+     * What the code encodes.
+     *
+     * `null` draws the placeholder pattern — the gallery's canon, so its
+     * screenshots stay identical between runs. **A real screen must always pass
+     * this.** A receive code that encodes nothing looks completely finished and
+     * does nothing when somebody scans it, which is the one failure on this
+     * screen that is not discovered until money fails to arrive.
+     */
+    payload: String? = null,
     centre: (@Composable () -> Unit)? = null,
 ) {
     val ink = VelaTheme.colors.fixed.shadowInk
+    // The SAME encoder every Vela platform uses, over the bridge. Four
+    // hand-rolled encoders would be four subtly different codes, and the one
+    // that failed would fail only on somebody else's camera.
+    val matrix = remember(payload) {
+        payload?.let { text -> runCatching { qrMatrix(text) }.getOrNull() }
+    }
     Box(
         modifier = modifier
             .size(VelaSizing.qrCard)
@@ -157,11 +181,12 @@ fun QrCard(
         contentAlignment = Alignment.Center,
     ) {
         Canvas(modifier = Modifier.fillMaxWidth().height(VelaSizing.qrCard - VelaSpacing.xl3 * 2)) {
-            val cells = QR_MODULES
+            val cells = matrix?.width?.toInt() ?: QR_MODULES
             val module = min(size.width, size.height) / cells
             for (r in 0 until cells) {
                 for (c in 0 until cells) {
-                    if (qrCell(r, c)) {
+                    val dark = matrix?.modules?.getOrNull(r * cells + c) ?: qrCell(r, c)
+                    if (dark) {
                         drawRect(
                             color = ink,
                             topLeft = androidx.compose.ui.geometry.Offset(c * module, r * module),

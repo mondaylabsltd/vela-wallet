@@ -122,6 +122,7 @@ class AppContainer(private val app: Application) {
                 }
             },
             haptic = { Haptics.moneyIn(app) },
+            foreground = { foregroundActivities > 0 },
         )
     }
 
@@ -145,7 +146,47 @@ class AppContainer(private val app: Application) {
         Thread(runnable, "vela-i18n")
     }
 
+    /**
+     * How many of this app's screens are in front of somebody.
+     *
+     * Counted rather than a boolean, because a rotation stops one activity and
+     * starts another and the count never reaches zero — a boolean set on stop
+     * would report "backgrounded" for the instant in between, and the receive
+     * watcher would end its session every time somebody turned their phone.
+     */
+    @Volatile
+    private var foregroundActivities = 0
+
+    /**
+     * The one place this app learns it has been put away.
+     *
+     * `registerActivityLifecycleCallbacks` rather than a lifecycle observer in
+     * a composable: the question is about the PROCESS, and a composable that
+     * leaves the composition answers nothing at all.
+     */
+    private val activityCounter = object : Application.ActivityLifecycleCallbacks {
+        override fun onActivityStarted(activity: android.app.Activity) {
+            foregroundActivities += 1
+            wallet.focused()
+        }
+
+        override fun onActivityStopped(activity: android.app.Activity) {
+            foregroundActivities = (foregroundActivities - 1).coerceAtLeast(0)
+            if (foregroundActivities == 0) wallet.backgrounded()
+        }
+
+        override fun onActivityCreated(activity: android.app.Activity, state: android.os.Bundle?) = Unit
+        override fun onActivityResumed(activity: android.app.Activity) = Unit
+        override fun onActivityPaused(activity: android.app.Activity) = Unit
+        override fun onActivitySaveInstanceState(activity: android.app.Activity, out: android.os.Bundle) = Unit
+        override fun onActivityDestroyed(activity: android.app.Activity) = Unit
+    }
+
     fun start() {
+        // The balance machine has had a focus-driven auto-refresh since spec
+        // 041 phase 4 and nothing was telling it; the receive watcher needs the
+        // same signal to stop polling from a pocket.
+        app.registerActivityLifecycleCallbacks(activityCounter)
         i18nExecutor.execute {
             i18nRuntime.initialize(LocaleResolver.resolve(currentLocales()))
         }

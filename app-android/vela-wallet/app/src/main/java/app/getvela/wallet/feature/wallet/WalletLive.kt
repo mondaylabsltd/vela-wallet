@@ -301,7 +301,13 @@ object WalletLive {
     private fun groupThousands(digits: String): String =
         digits.reversed().chunked(3).joinToString(",").reversed()
 
-    /** A stable colour per chain, so a token keeps its badge between launches. */
+    /**
+     * A stable colour per chain, so a token keeps its badge between launches —
+     * and so a network is the same colour wherever it appears, including on the
+     * receive screen.
+     */
+    fun badge(chainId: Long): Color = badgeColour(chainId.toInt())
+
     private fun badgeColour(chainId: Int): Color = BADGES[chainId.mod(BADGES.size)]
 
     /**
