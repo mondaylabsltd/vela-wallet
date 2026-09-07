@@ -307,7 +307,106 @@ cut owes is against the **merge base**:
 
 ---
 
+## Phase 3 — `activity_feed` + `token_trust`, because the feed is the scan
+
+### Two machines, one screen, and why they could not be split
+
+tasks.md planned `activity_feed` for phase 3 and `token_trust` for phase 4. They
+shipped together, and the reason is structural rather than convenient:
+`ScanIncomingTransfers` — the operation that makes the feed anything at all — is
+**routed through `token_trust` on every client**. Its judged incoming list is
+what a receipt record is built from.
+
+Without it, `activity_feed` on this client would read a local store that nothing
+has ever written (sends are 052) and render an empty screen. That is not a phase;
+it is a phase's worth of code with nothing to show.
+
+### What was ported
+
+| | |
+|---|---|
+| `Core/TxRecords.swift` | `vela.transactionHistory` — load, merge (de-dupe by id, newest-first, 200 cap), delete, and the stored→wire projection |
+| `Core/TokenMetadata.swift` | `symbol()` + `decimals()` over Multicall3, memoised and persisted under web's `vela.tokenMeta.*` keys |
+| `Core/ChainTokens.swift` | the registry's stablecoins + wrapped native, which ARE the scan's allowlist |
+| `Core/HeldTokens.swift` | what the last balance read found — web gets it from `fetchTokens`' cache; there is no such cache here, so it is explicit |
+| `Core/Multicall.swift` | one batch shape, shared by balances, prices and metadata |
+
+### The range cap, where it always belonged
+
+Web classifies an `eth_getLogs` failure by **matching the provider's wording** in
+its executor. Here it does not have to: `rpc_pool` already parses the cap, and
+the shell reads `RpcOutcome.rangeCap`. Phase 1's results.md predicted that case
+would earn its keep in phase 3; this is where.
+
+### A bug the live suite caught in one run
+
+`pool.call(kind: "logs")` — `kind` is the endpoint **class** (`rpc` or
+`bundler`, the two tiers the pool scores separately), not a label for the
+method. The core rejected the event outright (`unknown variant \`logs\``) and the
+scan hung to its 60-second deadline. A hermetic test would not have found it: the
+core only sees the event when something actually calls a chain.
+
+### Seen, live
+
+```
+[live] receipts found: 108                        (last 100 Ethereum blocks)
+[live] newest: 1069120000 USDT from 0xde195056…   (raw, 6 decimals)
+[live] stored: 1069.12 USDT usd=$1,069.12         (human decimal + ingest valuation)
+[live] rescan of the same window: 0 new           (no double celebration)
+[live] golden Safe receipts on Gnosis: 0
+```
+
+On the simulator, seeded with that same public address, the home draws a 今天
+group of real receipts — `+1,069.12 USDT`, `+406.926592 USDT`, `+10,000 USDT`,
+each 来自 its shortened sender — under a hero of ¥1,086,541,760.24. The fixture's
+两 rows (已发送 −2 POL, 已收到 +120 USDT) are gone.
+
+`1069120000 → "1069.12"` is the metadata gate doing its job: with the
+18-decimals fallback web's original had, that receipt would have been stored as
+`0.00000000106912` — the "+0 tokens" defect `token_trust`'s invariant ③ exists to
+prevent.
+
+### The feature's honest shape: a watcher, not a history
+
+**This deserves a founder decision, and it is not a defect.**
+`token_trust::LIVE_SCAN_BLOCKS` is **100 blocks**, and a native coin transfer
+emits no `Transfer` log at all on a chain without EIP-7708. So:
+
+- the golden Safe's own feed is **empty**, correctly — its xDAI arrived as a
+  native transfer, and outside a hundred-block window besides;
+- a fresh install shows an empty feed for an account with years of on-chain
+  activity, because the local store is the source of truth and this device has
+  never recorded anything;
+- what the feed *does* catch is an ERC-20 receipt landing **while the app is
+  running**, plus (from 052) whatever this device sends.
+
+Every client behaves this way — it is the same core — so it is a product fact,
+not an iOS gap. Giving somebody a real history would need an indexer, which is a
+different feature with a running cost.
+
+### Waiting is not empty
+
+An unread machine and an account with no history both publish zero rows, and
+they must not draw the same. The section stays on the drawn **skeleton** until
+the store read lands, and only then says 暂无交易记录 (FR-008). "Nothing has
+happened here" is a claim, and it must not be made before anybody looked.
+
+### Still unreachable, and named
+
+The core owns tap-to-hide and pull-to-refresh; **no gesture reaches either** —
+`WalletStore.togglePrivacy` and `refresh(pull:)` have no call site, and neither
+does the chain-filter pill or the receipt toast. Phase 2b left them and this
+phase did not fix them; they are listed in tasks.md rather than quietly carried.
+
+### Gates
+
+Hermetic tests 253 → **273**; live (flagged) 13 → **16**. Literal violations 35.
+Zero lines under `rust/crates/vela-core/src/app/`; no Rust change at all in this
+phase — the seven bridge exports were all landed in phase 1.
+
+---
+
 ## Next
 
-Phase 3, `activity_feed` — real transfers grouped by day. The remaining order is
-in **[tasks.md](./tasks.md)**.
+Phase 4, the rest of `manage_tokens` (the token list surface; `token_trust`
+landed with phase 3). The remaining order is in **[tasks.md](./tasks.md)**.

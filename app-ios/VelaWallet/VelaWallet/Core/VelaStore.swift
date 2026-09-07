@@ -76,6 +76,9 @@ struct VelaStore {
         static let balanceCache = "vela.balanceCache"
         /// The ERC-20s the wallet reads balances for.
         static let customTokens = "vela.customTokens"
+        /// The local transaction store — the activity feed's single source of
+        /// truth, capped at the newest 200 records on every client.
+        static let transactionHistory = "vela.transactionHistory"
         /// USD → fiat, as Chainlink's mainnet feeds last stated it (5-minute
         /// TTL in memory; persisted so a cold or offline start still converts).
         static let fiatRates = "vela.fiatRates.v1"

@@ -31,6 +31,10 @@ struct RootView: View {
     /// holdings, the cached total and a retry timer, and one that died with the
     /// screen would re-read twelve chains on every visit.
     @State private var wallet: WalletStore
+    /// The anti-scam core behind the receipt scan — resident, because the
+    /// trusted-token set it builds is shared by everything that reads a chain.
+    @State private var trust: TokenTrustStore
+    @State private var activity: ActivityStore
     /// The networks machine (spec 050), app-resident: it probes endpoints and
     /// holds a search debounce, and one that died with the settings route would
     /// re-probe every chain on each visit.
@@ -80,7 +84,17 @@ struct RootView: View {
         // through this same `AccountStore` so onboarding's endpoint override
         // survives a settings write (data-model §5).
         _settings = State(initialValue: SettingsStore(store: shelf, accounts: store, pool: pool))
-        _wallet = State(initialValue: WalletStore(store: shelf, pool: pool))
+        // The balance read publishes what it found here, and the receipt scan
+        // reads it: which chains this account uses, which tokens it holds, and
+        // what they were worth. Web gets the same three facts from its
+        // `fetchTokens` cache; there is no such cache here, so it is explicit.
+        let held = HeldTokens()
+        _wallet = State(initialValue: WalletStore(store: shelf, pool: pool, held: held))
+        let trust = TokenTrustStore(store: shelf, pool: pool, accounts: store, held: held)
+        _trust = State(initialValue: trust)
+        _activity = State(initialValue: ActivityStore(
+            store: shelf, accounts: store, held: held, trust: trust
+        ))
         _model = State(initialValue: WelcomeModel(content: WelcomeContentBuilder.build(loc: loc)) { intent in
             switch intent {
             case .createWallet:
@@ -306,6 +320,8 @@ struct RootView: View {
                     )
                     .task {
                         pool.boot()
+                        activity.open(address: session.view.address,
+                                      hidden: wallet.balance?.hidden ?? false)
                         // The display currency is app-wide: the hero is the
                         // figure it matters most on, and it must not wait for a
                         // visit to 设置 to learn the person chose CNY.
@@ -427,7 +443,8 @@ struct RootView: View {
             .withAddress(session.view.address)
             .withName(session.view.activeName)
         guard let view = wallet.balance else { return base }
-        return WalletLive.apply(view, currency: settings.currency, on: base, loc: loc)
+        return WalletLive.apply(view, currency: settings.currency, feed: activity.feed,
+                                feedRead: activity.hasRead, on: base, loc: loc)
     }
 
     /// Settings, wearing the signed-in identity and the real networks.

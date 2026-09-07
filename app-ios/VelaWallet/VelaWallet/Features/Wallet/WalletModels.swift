@@ -167,8 +167,10 @@ struct WalletHomeModel {
     let pill: NetworkPillModel
     var balance: BalanceModel
     let actions: ActionsModel
-    let activitySection: SectionModel
-    let activityGroups: [ActivityGroupModel]
+    // `var` since spec 051 phase 3: the activity section is a machine's now,
+    // and `WalletLive` swaps it the way it already swaps the balance.
+    var activitySection: SectionModel
+    var activityGroups: [ActivityGroupModel]
     let assetsSection: SectionModel
     var assetRows: [AssetRowModel]
     let tabs: TabsModel

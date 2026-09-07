@@ -23,10 +23,12 @@ xcodebuild -project VelaWallet.xcodeproj -scheme VelaWallet \
   -destination 'id=84146B7B-C679-46AC-8426-41AA42E6F403' test
 
 # 2. The live suites (real endpoints). Behind a compile flag so a flaky network
-#    never fails an unrelated change. Two of them now: the add-network wizard,
-#    and the price path (feeds, the fiat waterfall, the golden Safe priced).
+#    never fails an unrelated change. Three now: the add-network wizard, the
+#    price path (feeds, the fiat waterfall, the golden Safe priced), and the
+#    receipt scan (real ERC-20 receipts on Ethereum, decoded and persisted).
 xcodebuild ... -only-testing:VelaWalletTests/NetworkAdminLiveTests \
   -only-testing:VelaWalletTests/PriceLiveTests \
+  -only-testing:VelaWalletTests/ActivityLiveTests \
   OTHER_SWIFT_FLAGS='$(inherited) -DVELA_LIVE_TESTS'
 
 # 3. On the founder's iPhone. Screenshots come back inside the .xcresult.
@@ -98,19 +100,37 @@ mid-run — a simulator run is preparation, never proof (SC-008).
 
 ---
 
-## Next — Phase 3: `activity_feed`
+### Phase 3 — `activity_feed` + `token_trust` ✅
 
-Real transfers, grouped by day. The home's 活动 section is still
-`WalletFixtures`' two rows (已发送 −2 POL, 已收到 +120 USDT) under a real
-address, which is the same class of lie the balance was.
+Shipped together, and they had to be: `ScanIncomingTransfers` is routed through
+`token_trust` on every client, so an `activity_feed` without it would render a
+local store nothing has ever written.
 
-- `ScanIncomingTransfers` uses `eth_getLogs` **through the pool**, and the
-  range-cap verdict is why `RpcOutcome.rangeCap` exists — the caller narrows the
-  span and asks again; the core has already recorded the cap.
-- Port from `app-web/vela-wallet/src/lib/services/activity.ts` (203) and
-  `incoming-transfers.ts`.
-- Read `rust/crates/vela-core/src/app/activity_feed.rs` first: the grouping,
-  the day boundaries and what counts as pending are all its.
+- `Core/TxRecords.swift` (`vela.transactionHistory`), `Core/TokenMetadata.swift`
+  (symbol + decimals over Multicall3), `Core/ChainTokens.swift` (the registry's
+  stables = the scan allowlist), `Core/HeldTokens.swift` (web's `fetchTokens`
+  cache, made explicit), and the two machines' executors, stores and wires.
+- Proven live: **108 real USDT receipts** in the last 100 Ethereum blocks,
+  `1069120000` raw → `"1069.12"` stored, a rescan of the same window answering
+  **0 new**.
+- The one bug: `pool.call(kind: "logs")` — `kind` is the endpoint *class*
+  (`rpc` / `bundler`), and the core rejected the event outright. Only a live
+  test could find it.
+
+**Read the feed's honest shape in results.md before promising anybody a
+history**: the scan is 100 blocks, native transfers emit no log, and the local
+store is the source of truth. A fresh install shows an empty feed for a funded
+account, on every client.
+
+---
+
+## Next — Phase 4: `manage_tokens`
+
+The token list surface. `token_trust`, phase 4's other half, landed with phase 3.
+
+- Read `rust/crates/vela-core/src/app/manage_tokens.rs` first.
+- The metadata resolver it needs already exists (`Core/TokenMetadata.swift`), and
+  so does the `vela.customTokens` writer (`TokenTrustExecutor.write`).
 
 ---
 
@@ -118,10 +138,20 @@ address, which is the same class of lie the balance was.
 
 | Phase | What |
 |---|---|
-| 4 | `manage_tokens` + `token_trust` — the token list and the security verdict. **`token_trust` is the one machine here whose job is security**: a token that arrived by transfer is untrusted until the core says otherwise, and a shell that pre-filters has made the decision the core was written to make |
 | 5 | `receive_watch` + `payment_request` — the deposit watcher and the ack |
-| 6 | Flip 050's remaining `// live in 051` arms: `contacts::resolve_name` (the name-service waterfall) and `contacts::check_is_contract` (`eth_getCode` through the pool). `contacts::load_send_history` waits for 052 |
+| 6 | Flip 050's remaining `// live in 051` arms: `contacts::resolve_name` (the name-service waterfall — the activity feed's alias resolver wants it too) and `contacts::check_is_contract` (`eth_getCode` through the pool). `contacts::load_send_history` waits for 052 |
 | 7 | Device acceptance + closeout |
+
+### Wired but unreachable — the list to close before 7
+
+The core owns these and no gesture reaches them:
+
+- **tap-to-hide** (`WalletStore.togglePrivacy`) and **pull-to-refresh**
+  (`WalletStore.refresh(pull:)`) — no call site at all;
+- the **chain-filter pill** (`ActivityStore.chainFilter`) — still a fixture;
+- the **receipt toast and row glow** (`FeedView.toast` / `newItemId`) — decoded,
+  never drawn;
+- **swipe-to-delete** an activity row (`ActivityStore.deleteRequested`).
 
 ### Deferred out of phase 2, on purpose
 

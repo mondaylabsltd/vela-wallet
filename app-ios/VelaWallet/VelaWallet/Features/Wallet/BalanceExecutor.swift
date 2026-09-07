@@ -52,11 +52,16 @@ final class BalanceExecutor {
     /// chains asking Ethereum mainnet for the same five feeds is eleven
     /// round trips nobody needs.
     private let prices: Prices
+    /// What this read found, published for the receipt scan: which chains to
+    /// watch, which tokens are held, and what they were worth. Web gets the
+    /// same three facts out of `fetchTokens`' cache.
+    private let held: HeldTokens
 
-    init(store: VelaStore, pool: RpcPool) {
+    init(store: VelaStore, pool: RpcPool, held: HeldTokens) {
         self.store = store
         self.pool = pool
         self.prices = Prices(pool: pool)
+        self.held = held
     }
 
     func perform(_ operation: [String: Any]) async -> String {
@@ -172,6 +177,11 @@ final class BalanceExecutor {
             for await result in group { collected.append(result) }
             return collected
         }
+
+        // Published before the core is answered: the same tick's scan asks for
+        // the held set, and a set one refresh out of date is a token watched
+        // that is no longer there — or worse, one that is not yet.
+        held.record(address: address, tokens: results.flatMap(\.tokens))
 
         return CoreJSON.string([
             "type": "fetch_settled",

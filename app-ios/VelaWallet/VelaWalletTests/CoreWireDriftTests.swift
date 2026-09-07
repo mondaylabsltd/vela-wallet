@@ -129,6 +129,69 @@ struct CoreWireDriftTests {
         }
     }
 
+    /// `FeedView` decodes, including the tagged `FeedRow` union Swift cannot
+    /// synthesise — and the feed machine asks for nothing this build cannot do.
+    ///
+    /// `account_switched` is what the home sends first, and it is what makes
+    /// the machine read the store and scan, so this is the app's own path.
+    @Test func activityFeedViewDecodesAndAsksOnlyForHandledOperations() throws {
+        let core = ActivityFeedCore()
+
+        let initial = try CoreJSON.decode(FeedViewWire.self, from: try CoreJSON.object(core.view()))
+        #expect(initial.rows.isEmpty)
+        #expect(initial.toast == nil)
+
+        let result = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
+            "type": "account_switched",
+            "address": "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+        ])))
+        _ = try CoreJSON.decode(FeedViewWire.self, from: result["view"] as? [String: Any] ?? [:])
+        let effects = result["effects"] as? [[String: Any]] ?? []
+        #expect(!effects.isEmpty, "a switched account must read the store")
+        for effect in effects {
+            let tag = (effect["operation"] as? [String: Any])?["type"] as? String ?? ""
+            #expect(
+                ActivityExecutor.operations.contains(tag),
+                "the feed asks for `\(tag)`, which this build's executor does not handle"
+            )
+        }
+    }
+
+    /// `TrustView` decodes, and the scan asks only for operations this build
+    /// performs.
+    ///
+    /// The anti-scam core is the one machine where an unanswered operation is
+    /// not merely a stall: its metadata gate would never be met, and a scan
+    /// that never finishes is a wallet that never notices it was paid.
+    @Test func tokenTrustViewDecodesAndAsksOnlyForHandledOperations() throws {
+        let core = TokenTrustCore()
+
+        let initial = try CoreJSON.decode(TrustViewWire.self, from: try CoreJSON.object(core.view()))
+        #expect(!initial.scanning)
+        #expect(initial.incoming.isEmpty)
+
+        let address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894"
+        _ = try core.dispatch(eventJson: CoreJSON.string([
+            "type": "held_chains_snapshot", "address": address, "chain_ids": [100],
+        ]))
+        let result = try CoreJSON.object(core.dispatch(eventJson: CoreJSON.string([
+            "type": "poll_requested", "address": address,
+        ])))
+        let view = try CoreJSON.decode(
+            TrustViewWire.self, from: result["view"] as? [String: Any] ?? [:]
+        )
+        #expect(view.scanning, "a requested poll must announce itself as scanning")
+        let effects = result["effects"] as? [[String: Any]] ?? []
+        #expect(!effects.isEmpty, "a poll must ask the chain something")
+        for effect in effects {
+            let tag = (effect["operation"] as? [String: Any])?["type"] as? String ?? ""
+            #expect(
+                TokenTrustExecutor.operations.contains(tag),
+                "token_trust asks for `\(tag)`, which this build's executor does not handle"
+            )
+        }
+    }
+
     /// The bridge's three methods behave the way `CoreDriver` assumes.
     ///
     /// Property 2 of the driver's contract: resolving an effect id the bridge

@@ -32,8 +32,8 @@ final class WalletStore {
     /// tab does not re-announce the same account and throw away its holdings.
     private var scopedTo: String?
 
-    init(store: VelaStore, pool: RpcPool) {
-        self.executor = BalanceExecutor(store: store, pool: pool)
+    init(store: VelaStore, pool: RpcPool, held: HeldTokens) {
+        self.executor = BalanceExecutor(store: store, pool: pool, held: held)
         self.core = CoreStore(
             bridge: BalanceDashboardCore(),
             perform: { [executor] operation in await executor.perform(operation) },

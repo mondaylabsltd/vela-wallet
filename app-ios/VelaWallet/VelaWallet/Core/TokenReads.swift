@@ -222,8 +222,21 @@ enum TokenReads {
         return scaled(hex: bytes.hexString, decimals: decimals)
     }
 
+    /// The same conversion from a **decimal** raw amount — the shape
+    /// `token_trust` publishes a discovered transfer's value in.
+    ///
+    /// Still string arithmetic, and for the same reason: a receipt of
+    /// 1,234,567.891234567890123456 tokens has more significant digits than a
+    /// `Double` can hold, and rounding somebody's incoming payment on the way
+    /// into the store would make the wallet disagree with the chain forever.
+    static func scaled(decimal digits: String, decimals: Int) -> String? {
+        let trimmed = digits.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed.allSatisfy(\.isNumber) else { return nil }
+        return placeDecimalPoint(trimmed, decimals: decimals)
+    }
+
     /// Insert the point and trim, without ever becoming a number.
-    private static func placeDecimalPoint(_ digits: String, decimals: Int) -> String {
+    static func placeDecimalPoint(_ digits: String, decimals: Int) -> String {
         guard decimals > 0 else { return digits }
         let padded = String(repeating: "0", count: max(0, decimals + 1 - digits.count)) + digits
         let split = padded.index(padded.endIndex, offsetBy: -decimals)
