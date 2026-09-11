@@ -713,14 +713,17 @@ export function parsePublicKey(hex: string): P256PublicKey;
  * that was asked about and carries a usable name; `iconUrl` is present only
  * when the path is the service's own shape.
  */
-export function passkeyDirectoryEntry(aaguid: string, json: string, dark: boolean): any;
+export function passkeyDirectoryEntry(aaguid: string, json: string, dark: boolean, origin?: string | null): any;
 
 /**
  * **Where to ask about a model the compiled catalog cannot name**, or
  * `undefined` when there is nothing to ask: a malformed or all-zero AAGUID, or
  * one the catalog already answers offline.
+ *
+ * `origin` is the directory node the person's service-endpoint settings
+ * name (spec 038 #E4); absent, the crate's default.
  */
-export function passkeyDirectoryUrl(aaguid: string): string | undefined;
+export function passkeyDirectoryUrl(aaguid: string, origin?: string | null): string | undefined;
 
 /**
  * **The security-key fallback mark**, as an `image/svg+xml` data URI, for a
@@ -923,8 +926,8 @@ export interface InitOutput {
     readonly networkadmincore_resolve_effect: (a: number, b: bigint, c: number, d: number) => [number, number, number, number];
     readonly networkadmincore_view: (a: number) => [number, number, number, number];
     readonly parsePublicKey: (a: number, b: number) => [number, number, number];
-    readonly passkeyDirectoryEntry: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
-    readonly passkeyDirectoryUrl: (a: number, b: number) => [number, number];
+    readonly passkeyDirectoryEntry: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
+    readonly passkeyDirectoryUrl: (a: number, b: number, c: number, d: number) => [number, number];
     readonly passkeyFallbackIconDataUri: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => [number, number];
     readonly passkeyProviderIconDataUri: (a: number, b: number, c: number) => [number, number];
     readonly passkeyProviderName: (a: number, b: number) => [number, number];

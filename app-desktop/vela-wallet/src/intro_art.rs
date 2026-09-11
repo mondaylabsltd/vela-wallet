@@ -29,8 +29,13 @@ pub enum IntroArt {
 }
 
 impl IntroArt {
+    /// The three, in slide order — the drift test walks them against the
+    /// generated contract.
+    #[cfg(test)]
     pub const ALL: [IntroArt; 3] = [Self::NoSeedPhrase, Self::KeysAreYours, Self::OneAddress];
 
+    /// The contract's id for this piece.
+    #[cfg(test)]
     pub fn id(self) -> &'static str {
         match self {
             Self::NoSeedPhrase => "no-seed-phrase",

@@ -251,6 +251,15 @@ two extra keys already existed in the corpus; they join the served list).
 Tests: `live-batch.test.ts` +2 (the words from the view; the desktop body
 overlaid). Flows + i18n suites 173 passed.
 
+Seen while reproducing, not changed: in fiat mode the core converts each
+line at the token's full precision — 0.001 USD at 0.9996 became
+`0.001000400160064026 XDAI`, sixty times over, on the preview and on the
+confirm. `fiat_to_token_amount` (ported verbatim from the phone) rounds at
+`decimals`; a payroll line probably wants the token's *display* precision
+(the same six places the balance rows use) or the fiat's own cents carried
+into the token. That is a money-rounding rule and the founder's call —
+raised in the report rather than decided here.
+
 ### Slice 10 — #D2, the receipt and the detail
 
 The confirm listed a split's recipients since slice 5; the receipt still
@@ -270,4 +279,27 @@ parts — `FeedItem.batch.transfers` was never read by either shell.
   draws the one list on the confirm (now with avatars), the receipt and the
   detail; `flows/live.rs::receipt_parts` / `detail_parts` word them, the
   same rules as the web. Test +1 (a split receipt lists and counts).
+
+### Slice 11 — #E4, the client half
+
+The lookup for an AAGUID the vendored catalog cannot name now goes wherever
+the person's service-endpoints object says (`aaguidDirectoryURL`), on both
+shells, with the core's catalog still answering first and offline. Until
+our node exists the default is the directory the core named; moving every
+client to ours is a one-line default change, no build in between.
+
+- Core: `directory_lookup_url_at(origin, aaguid)` / `directory_entry_at`
+  (the mark's URL is built on the origin that was asked); the old
+  functions delegate with the constant. The wasm exports take an optional
+  origin (artifact rebuilt; source fingerprint refreshed). +1 test.
+- Web: `DEFAULT_SERVICE_ENDPOINTS.aaguidDirectoryURL` + `getAaguidDirectoryURL()`,
+  the `ServiceEndpoints` field, and `passkey-directory.svelte.ts` passes the
+  origin to both wasm calls.
+- Desktop: `passkey_directory::directory_origin()` reads the same object
+  the fiat-rates URL does (+1 test), and the lookup's `fetch` now walks the
+  proxy chain (`proxy::agent`) — it was the one request on this shell that
+  ignored the person's proxy (a Part B miss, found here).
+- Not in this repo: the node itself (biubiu-projects) and a Settings →
+  Service Endpoints row for the field (needs two corpus keys; the field is
+  reachable through the stored object today).
 

@@ -86,6 +86,8 @@ pub struct IntroState {
 }
 
 impl IntroState {
+    /// Which slide is up — the tests' window into the state.
+    #[cfg(test)]
     pub fn index(&self) -> usize {
         self.index
     }

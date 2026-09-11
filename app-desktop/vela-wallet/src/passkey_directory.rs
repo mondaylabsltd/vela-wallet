@@ -85,13 +85,35 @@ fn key(aaguid: &str, dark: bool) -> String {
     format!("{}|{dark}", aaguid.to_ascii_lowercase())
 }
 
+/// Which directory to ask (spec 038 #E4): the `aaguidDirectoryURL` of the
+/// same service-endpoints object the index and the rates come from, or the
+/// core's default until the settings name one. Read through, like the fiat
+/// rates URL: a person who points it at our own node should not have to
+/// relaunch for the next lookup to go there.
+#[must_use]
+pub fn directory_origin() -> String {
+    crate::executor::storage::read_value(crate::executor::storage::KEY_SERVICE_ENDPOINTS)
+        .ok()
+        .flatten()
+        .and_then(|value| {
+            value
+                .get("aaguidDirectoryURL")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|url| !url.is_empty())
+                .map(str::to_owned)
+        })
+        .unwrap_or_else(|| vela_core::passkey::AAGUID_DIRECTORY_ORIGIN.to_owned())
+}
+
 /// Ask the directory about `aaguid`. Blocking; callers run it off the UI thread.
 #[must_use]
 pub fn fetch_holder(aaguid: &str, dark: bool) -> Option<Holder> {
-    let url = vela_core::passkey::directory_lookup_url(aaguid)?;
+    let origin = directory_origin();
+    let url = vela_core::passkey::directory_lookup_url_at(&origin, aaguid)?;
     let json = fetch(&url)?;
     let body = String::from_utf8(json).ok()?;
-    vela_core::passkey::directory_entry(aaguid, &body, dark).map(|entry| Holder {
+    vela_core::passkey::directory_entry_at(&origin, aaguid, &body, dark).map(|entry| Holder {
         name: entry.name,
         icon_url: entry.icon_url,
     })
@@ -112,13 +134,47 @@ pub fn fetch_mark(url: &str, size: u32) -> Option<Arc<RenderImage>> {
     render_image_from_png(&png)
 }
 
+/// On the same route as every other request this shell makes (spec 038 Part
+/// B): the system proxy first, then the environment's, then direct. A bare
+/// agent here was the one lookup that ignored the person's proxy.
 fn fetch(url: &str) -> Option<Vec<u8>> {
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(TIMEOUT))
-        .build()
-        .into();
-    let mut response = agent.get(url).call().ok()?;
+    let mut response = crate::executor::proxy::agent(TIMEOUT)
+        .get(url)
+        .call()
+        .ok()?;
     let mut body = Vec::new();
     std::io::Read::read_to_end(&mut response.body_mut().as_reader(), &mut body).ok()?;
     Some(body)
+}
+
+#[cfg(test)]
+mod origin_tests {
+    use super::*;
+    use crate::executor::storage;
+
+    #[test]
+    fn the_directory_is_the_endpoints_object_s_node_or_the_default() {
+        storage::tests::with_temp_state("aaguid-directory", || {
+            assert_eq!(
+                directory_origin(),
+                vela_core::passkey::AAGUID_DIRECTORY_ORIGIN
+            );
+            storage::write_value(
+                storage::KEY_SERVICE_ENDPOINTS,
+                serde_json::json!({ "aaguidDirectoryURL": "https://aaguid.getvela.app" }),
+            )
+            .expect("an endpoints write");
+            assert_eq!(directory_origin(), "https://aaguid.getvela.app");
+            // Blank is "not set", not "ask nowhere".
+            storage::write_value(
+                storage::KEY_SERVICE_ENDPOINTS,
+                serde_json::json!({ "aaguidDirectoryURL": "  " }),
+            )
+            .expect("an endpoints write");
+            assert_eq!(
+                directory_origin(),
+                vela_core::passkey::AAGUID_DIRECTORY_ORIGIN
+            );
+        });
+    }
 }
