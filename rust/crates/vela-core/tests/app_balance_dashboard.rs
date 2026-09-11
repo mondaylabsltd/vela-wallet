@@ -389,7 +389,11 @@ fn slow_chains_keep_their_last_value_mid_refresh() {
         vec![],
         vec![],
     ));
-    assert_eq!(sut.view().display_total_usd, Some(35.0), "moved once, at settle");
+    assert_eq!(
+        sut.view().display_total_usd,
+        Some(35.0),
+        "moved once, at settle"
+    );
 }
 
 /// Spec 038 #188, the first load: seven chains answering one by one must not
@@ -412,7 +416,11 @@ fn the_figure_moves_once_per_refresh_and_unpriced_waits_for_settle() {
         tokens: vec![token(56, "BNB", "40", None)],
     });
     let view = sut.view();
-    assert_eq!(view.display_total_usd, Some(62.0), "the cached figure holds");
+    assert_eq!(
+        view.display_total_usd,
+        Some(62.0),
+        "the cached figure holds"
+    );
     assert_eq!(view.notice, None, "no unpriced notice mid-stream");
     // Settle: everything priced now.
     sut.resolve(settled(
@@ -445,14 +453,22 @@ fn an_errored_first_load_is_unreachable_not_zero() {
     });
     let view = sut.view();
     assert!(view.unreachable);
-    assert!(!view.balance_unknown, "the skeleton closed; the reason is different");
+    assert!(
+        !view.balance_unknown,
+        "the skeleton closed; the reason is different"
+    );
     assert_eq!(view.tokens.len(), 0);
     // A later successful fetch clears it.
     sut.dispatch(Event::RefreshRequested {
         force: true,
         pull: false,
     });
-    sut.resolve(settled(ADDR_A, vec![token(1, "ETH", "1", Some(1.0))], vec![], vec![]));
+    sut.resolve(settled(
+        ADDR_A,
+        vec![token(1, "ETH", "1", Some(1.0))],
+        vec![],
+        vec![],
+    ));
     assert!(!sut.view().unreachable);
 }
 

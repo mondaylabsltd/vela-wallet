@@ -1023,7 +1023,13 @@ mod execution_failure {
     #[test]
     fn the_topic_is_the_keccak_of_the_safe_event() {
         let digest = crate::primitives::keccak256(b"ExecutionFailure(bytes32,uint256)");
-        let hex = format!("0x{}", digest.iter().map(|b| format!("{b:02x}")).collect::<String>());
+        let hex = format!(
+            "0x{}",
+            digest
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        );
         assert_eq!(hex, SAFE_EXECUTION_FAILURE_TOPIC);
     }
 
@@ -1031,12 +1037,16 @@ mod execution_failure {
     fn a_failure_log_fails_the_receipt_and_a_transfer_does_not() {
         let transfer = TrustReceiptLog {
             address: "0xtoken".to_owned(),
-            topics: vec!["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef".to_owned()],
+            topics: vec![
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef".to_owned(),
+            ],
             data: "0x".to_owned(),
         };
         let failure = TrustReceiptLog {
             address: "0xsafe".to_owned(),
-            topics: vec![SAFE_EXECUTION_FAILURE_TOPIC.to_uppercase().replace("0X", "0x")],
+            topics: vec![SAFE_EXECUTION_FAILURE_TOPIC
+                .to_uppercase()
+                .replace("0X", "0x")],
             data: "0x".to_owned(),
         };
         assert!(!safe_execution_failed(&[transfer.clone()]));

@@ -784,7 +784,9 @@ impl App for BalanceDashboard {
             },
             balance_unknown: unknown,
             balance_partial: partial,
-            unreachable: model.errored_without_data && model.tokens.is_empty() && model.cached_total.is_none(),
+            unreachable: model.errored_without_data
+                && model.tokens.is_empty()
+                && model.cached_total.is_none(),
             notice,
             hidden: model.hidden,
             refreshing: model.pending_pulls > 0,

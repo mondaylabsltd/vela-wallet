@@ -54,9 +54,8 @@ fn three_local_failures_say_this_machine_could_not_get_out() {
     let mut sut = Sut::new();
     sut.dispatch(Event::Start);
     for _ in 0..3 {
-        if let [ShellOperation::Wait { .. }] = sut
-            .resolve(ShellResult::IndexTransportFailed)
-            .as_slice()
+        if let [ShellOperation::Wait { .. }] =
+            sut.resolve(ShellResult::IndexTransportFailed).as_slice()
         {
             sut.resolve(ShellResult::Waited);
         }
