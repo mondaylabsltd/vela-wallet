@@ -35,6 +35,7 @@
 	import IntroCarousel from '$lib/ui/intro/IntroCarousel.svelte';
 	import AddMethodPicker from '$lib/ui/onboarding/v2/AddMethodPicker.svelte';
 	import Sheet from '$lib/ui/onboarding/Sheet.svelte';
+	import SocialMeta from '$lib/ui/SocialMeta.svelte';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import { markIntroSeen, shouldShowIntro } from '$lib/intro/gate';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
@@ -171,6 +172,13 @@
 	{/each}
 	<link rel="alternate" hreflang="x-default" href="{SITE_ORIGIN}/{FALLBACK_LOCALE}" />
 </svelte:head>
+
+<SocialMeta
+	{locale}
+	title={m.metaTitle}
+	description={m.metaDescription}
+	url="{SITE_ORIGIN}/{locale}"
+/>
 
 {#if intro}
 	<IntroCarousel

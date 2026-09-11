@@ -167,3 +167,31 @@ module doc's own admitted trap. The verdict split is still to build.
   row "Estimated fee" (`send.feeTokenEstimate`) instead of "Network fee".
 - T028: `proxy::with_candidates_for(url, …)` — loopback stays direct, every
   other RPC-pool call walks system → env → direct; `agent_for` retired.
+
+### Slice 7 — the share card (#meta), the weight walk
+
+- #meta: `SocialMeta.svelte` on the landing page — `og:site_name/type/title/
+  description/url/image(+size)/locale(+14 alternates)`, `twitter:card =
+  summary_large_image`, `twitter:title/description/image`. The image is
+  `static/og-image.svg` (the canonical mark at 4× on the brand ground,
+  text-free so one card serves 15 locales) rendered once to `og-image.png`
+  by `scripts/gen-og-image.mjs` (Playwright Chromium) and committed.
+  **Deviation**: no new corpus key — `og:description` is `metaDescription`
+  clipped at a word boundary to 110 characters, which is what a preview does
+  to a 154-character sentence anyway, minus the mid-word cut.
+- T044 walked: the desktop's `FontWeight::BOLD` on body-sized text is limited
+  to two ✓ glyphs (success disc, ack box) and the Done screen's wallet name,
+  which the web also sets bold. No further drift beyond the button and the
+  wordmark fixed in slice 2.
+
+### Reproductions on the running web app (dev server, parallel space)
+
+- **#191 — reproduced as WORKING at this branch.** Seeded a confirmed send
+  (`saveTransaction`, to `0x600746…f95f4d`) → Contacts lists it under "#" as a
+  history-derived row → its detail has **Edit** → the sheet has a NAME field →
+  "Bob from history" → Save → the row re-sorts under "B" with the name, and
+  the detail shows it. On the desktop layout the Edit button sits at the
+  bottom of the third column; the founder's report was on a build before the
+  028 contacts completion or missed that affordance — the phone sheet is
+  checked below.
+- #meta e2e: `welcome-ssr` 43 passed on the isolated build — the card tags on `/en` and `/zh`, `og:description` ≤ 111 chars, 14 alternates, `og-image.png` served as PNG; the first-paint intro case passes too.

@@ -281,3 +281,37 @@ test('the prerendered document still carries the landing page', async ({ request
 	expect(html.indexOf(`'${INTRO_SEEN_KEY}'`)).toBeGreaterThan(-1);
 	expect(html.indexOf(`'${INTRO_SEEN_KEY}'`)).toBeLessThan(html.indexOf('<body'));
 });
+
+/**
+ * Spec 038 #meta / SC-440: a shared link is a real card. Every locale's
+ * prerendered document carries the og/twitter set, the description fits a
+ * preview, and the image is served.
+ */
+for (const locale of ['en', 'zh'] as const) {
+	test(`/${locale} carries the share card`, async ({ request }) => {
+		const html = await (await request.get(`/${locale}`)).text();
+		for (const tag of [
+			'property="og:site_name" content="Vela Wallet"',
+			'property="og:type" content="website"',
+			'property="og:title"',
+			'property="og:description"',
+			`property="og:url" content="https://app.getvela.app/${locale}"`,
+			'property="og:image" content="https://app.getvela.app/og-image.png"',
+			'property="og:image:width" content="1200"',
+			'name="twitter:card" content="summary_large_image"',
+			'name="twitter:image"'
+		]) {
+			expect(html, tag).toContain(tag);
+		}
+		const description = html.match(/property="og:description" content="([^"]*)"/)?.[1] ?? '';
+		expect(description.length).toBeGreaterThan(0);
+		expect(description.length).toBeLessThanOrEqual(111); // 110 + the ellipsis
+		expect((html.match(/og:locale:alternate/g) ?? []).length).toBe(14);
+	});
+}
+
+test('the share image is served as a PNG', async ({ request }) => {
+	const response = await request.get('/og-image.png');
+	expect(response.status()).toBe(200);
+	expect(response.headers()['content-type']).toContain('image/png');
+});
