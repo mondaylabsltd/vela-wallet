@@ -22,7 +22,7 @@ import type {
   OnboardingLoginControllerOptions,
 } from './onboarding-controller-types';
 
-const INITIAL_VIEW: LoginView = { busy: false, endpoint_unreachable: false };
+const INITIAL_VIEW: LoginView = { busy: false, endpoint_unreachable: false, transport_failed: false };
 
 function toStored(account: Account): StoredAccount {
   return {

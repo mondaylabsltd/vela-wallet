@@ -1049,7 +1049,7 @@ mod execution_failure {
                 .replace("0X", "0x")],
             data: "0x".to_owned(),
         };
-        assert!(!safe_execution_failed(&[transfer.clone()]));
+        assert!(!safe_execution_failed(std::slice::from_ref(&transfer)));
         assert!(safe_execution_failed(&[transfer, failure]));
         assert!(!safe_execution_failed(&[]));
     }
