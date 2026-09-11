@@ -186,6 +186,18 @@ export const WALLET_FLOW_KEYS = [
 	'send.batchApply_one',
 	'send.batchApplyEmpty',
 
+	// send · the core's alerts, worded (spec 038 #D4)
+	'send.alertEstimateFailedTitle',
+	'send.alertEstimateFailedBody',
+	'send.alertAccountUnavailableBody',
+	'send.alertInvalidAddressTitle',
+	'send.alertInvalidAddressBody',
+	'send.alertInvalidAmountTitle',
+	'send.alertInvalidAmountBody',
+	'send.alertInsufficientBalanceTitle',
+	'send.alertInsufficientBalanceBody',
+	'send.alertLoadTokensError',
+
 	// send · confirm
 	'send.confirmTitle',
 	'send.fromLabel',

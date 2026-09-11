@@ -76,9 +76,9 @@
 	}
 
 	interface BatchActions {
-	/** Spec 038 #E6: the rate typed in place, and back to the fetched one. */
-	rate: (text: string) => void;
-	resetRate: () => void;
+		/** Spec 038 #E6: the rate typed in place, and back to the fetched one. */
+		rate: (text: string) => void;
+		resetRate: () => void;
 		unit(id: string): void;
 		paste(text: string): void;
 		pickFile(): void;
@@ -114,6 +114,7 @@
 	title={model.title}
 	closeLabel={model.closeLabel}
 	backLabel={model.backLabel}
+	scrollKey={body.kind}
 	{onback}
 	{onclose}
 >

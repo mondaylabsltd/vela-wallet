@@ -37,6 +37,10 @@
 		<Breakdown rows={model.breakdown} />
 	{/if}
 
+	{#if model.alert !== undefined}
+		<p class="alert" role="alert">{model.alert}</p>
+	{/if}
+
 	<div class="cta">
 		<Button variant="primary" shape="rounded" onclick={onconfirm}>{model.cta}</Button>
 	</div>
@@ -91,5 +95,10 @@
 	.cta {
 		margin-top: auto;
 		padding-block: var(--space-3xl) var(--space-xl);
+	}
+	.alert {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-danger-base);
 	}
 </style>

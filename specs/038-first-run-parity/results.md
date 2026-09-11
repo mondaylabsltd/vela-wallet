@@ -303,3 +303,55 @@ client to ours is a one-line default change, no build in between.
   Service Endpoints row for the field (needs two corpus keys; the field is
   reachable through the stored object today).
 
+### Slice 12 — #D4, the send journey's visual pass (web)
+
+Live on the dev server in the parallel space, at 1440 px: `screenshots/`
+`web-send-form-1.png`, `web-confirm-1.png`, `web-receipt-confirmed.png`
+(one real 0.001 XDAI send on Gnosis — the waiting state read "Submitted to
+the network · Waiting for blockchain confirmation… · Gnosis typically
+confirms in ~15s · 1s elapsed — almost there" and landed before the
+screenshot could; `web-receipt-waiting.png` therefore shows the confirmed
+frame too), `web-import-60.png`, `web-send-form-60.png`,
+`web-confirm-60.png` + `-top.png`, `web-confirm-12.png`, `web-confirm-3.png`.
+Against the design language: open heroes, hairlines, subordinated fiat,
+one accent per screen — held at every count. What fell out:
+
+1. **The receipt's hash ran off both edges** — 66 characters on one line,
+   label hidden, and the copy button beside it copied nothing (the
+   handler only flashed the tick). Now the two ends with the whole hash as
+   the title, and the button writes the clipboard.
+2. **A refused estimate was invisible on the web.** The first sixty-row
+   attempt (addresses `0x…0001`–`0x…003c`) was refused by the relay's
+   simulation — "Safe execution failed: the target call in executeUserOp
+   reverted" (which of the low addresses reverts was not pinned; a later
+   two-row batch including `0x…0009` estimated fine, the retry from
+   `0x…1001` upward went through); the core raised
+   `ShowAlert { estimate_failed }` and the page had `console.warn` where
+   the sentence belonged — total blank, fee "—", Continue doing nothing. The
+   alert is now a line on the form and the confirm, worded from the same
+   ten corpus keys the desktop uses (`alertWords`, served list +10), kept
+   until the person edits a field or moves a stage. Verified live with a
+   malformed address (`web-form-alert.png`: "Invalid Address · Please enter
+   a valid Ethereum address (0x...)"); the line came down on the next
+   keystroke into the field.
+3. **The split's "Total" row had no figure** on both shells — it read
+   `token_amount`, the single field, empty in a split. Both now read the
+   core's sum (`confirm_amount`).
+4. **The column kept the previous screen's scroll offset**: a confirm opened
+   after a long split form started on its last rows, hero and count above
+   the fold. `ThirdPanel` scrolls to its top when the body kind changes.
+5. Casing: the fee row prints the relay's `xDAI` beside the token's `XDAI`
+   on one screen — the relay and the chain data disagree on the native
+   symbol's case. Not changed (the relay's word is the fee's); noted.
+
+Not seen, and worth a founder ruling: the fixture counterparties seeded for
+#E3 (`0x600746…`, `0x1111…`) draw a `400` from the p256 index on every
+history load (`api/query?walletRef=`) — the index says "unknown ref" with a
+client-error status, and the console shows it as an error each time.
+
+**Desktop**: the same three panels (`breakdown_list`, the receipt, the
+detail) are built and tested, but this session cannot capture the gpui
+window (`screencapture` needs screen-recording consent this shell does
+not have; the earlier attempt captured the editor). The founder's own run
+is the desktop half of SC-429.
+

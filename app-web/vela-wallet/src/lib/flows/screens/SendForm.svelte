@@ -163,6 +163,10 @@
 
 	<FeeRow fee={model.fee} onopen={onfee} />
 
+	{#if model.alert !== undefined}
+		<p class="alert" role="alert">{model.alert}</p>
+	{/if}
+
 	<div class="cta">
 		<Button variant="primary" shape="rounded" onclick={oncontinue} disabled={ctaDisabled}>
 			{model.cta}
@@ -241,5 +245,12 @@
 
 	.cta {
 		padding-block: var(--space-md) var(--space-xl);
+	}
+	/* The core's refusal, where the eye is when the button did nothing. */
+	.alert {
+		margin: 0;
+		padding-top: var(--space-md);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-danger-base);
 	}
 </style>

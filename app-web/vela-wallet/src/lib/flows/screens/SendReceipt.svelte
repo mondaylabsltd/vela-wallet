@@ -12,6 +12,8 @@
 	 * sit here watching a spinner.
 	 */
 	import Button from '$lib/ui/Button.svelte';
+	import { copyText } from '$lib/services/clipboard';
+	import { shortenAddress } from '$lib/wallet/identity';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import Breakdown from '../ui/Breakdown.svelte';
@@ -29,7 +31,11 @@
 	let copied = $state(false);
 	let timer: ReturnType<typeof setTimeout> | undefined;
 
+	// The whole hash goes to the clipboard; the row shows its two ends (spec
+	// 038 #D4 — 66 characters on one line ran off both edges of the column,
+	// and the button beside them copied nothing).
 	function copy() {
+		if (model.hash) void copyText(model.hash.value);
 		copied = true;
 		clearTimeout(timer);
 		timer = setTimeout(() => (copied = false), 150);
@@ -68,7 +74,7 @@
 		{#if model.hash !== undefined}
 			<p class="hash">
 				<span class="hash-label">{model.hash.label}</span>
-				<span class="hash-value">{model.hash.value}</span>
+				<span class="hash-value" title={model.hash.value}>{shortenAddress(model.hash.value)}</span>
 				<button type="button" aria-label={model.hash.copyLabel} class:copied onclick={copy}>
 					<Icon icon={copied ? UTILITY_ICONS.check : UTILITY_ICONS.copy} size="sm" />
 				</button>

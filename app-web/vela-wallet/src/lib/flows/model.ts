@@ -438,6 +438,12 @@ export interface SendFormModel {
 	/** split and sweep: the total line above the fee. */
 	summary?: { label: string; value: string };
 	fee: FeeRowModel;
+	/**
+	 * The core's last refusal, in the corpus's words (spec 038 #D4): an
+	 * estimate that failed, an address that is not one. Live only; the
+	 * phone raised these as native alerts, this shell had logged them.
+	 */
+	alert?: string;
 	cta: string;
 }
 
@@ -512,6 +518,8 @@ export interface SendConfirmModel {
 	facts: FactRowModel[];
 	/** SD3b's recipient list / SD3c's asset list, as a second card. */
 	breakdown?: BreakdownRowModel[];
+	/** The core's last refusal, worded — see `SendFormModel.alert`. */
+	alert?: string;
 	cta: string;
 }
 

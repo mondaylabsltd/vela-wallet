@@ -1640,7 +1640,9 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                     )
                 )
                 .into(),
-                format!("{} {symbol}", send.token_amount)
+                // The core's SUM of the rows (`confirm_amount`); `token_amount`
+                // is the single field, empty in a split (spec 038 #D4).
+                format!("{} {symbol}", send.confirm_amount)
                     .trim()
                     .to_owned()
                     .into(),

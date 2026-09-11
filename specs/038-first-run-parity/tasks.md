@@ -189,7 +189,7 @@ same three ways in as the desktop (SC-428, 438).
 - [x] T074i [US11] Core `send.rs`: `SendConfirmView.recipients` (count + rows: address, name, amount) for split and sweep; ts-rs regenerate — SC-442
 - [x] T074j [US11] (confirm, receipt and TxDetail all list the parts through one `Breakdown.svelte`; the desktop receipt and detail through `breakdown_list` with avatars) Web confirm `SendConfirm.svelte` + `live-send.ts` SD3: recipients block (count title, first 3 rows with identicon, "all N" → third column on wide / sheet on phone); the same block on `SendReceipt.svelte` and `TxDetail.svelte` — SC-442
 - [x] T074k [P] [US11] (receipt + detail landed in slice 10; the confirm rows now carry avatars) Desktop `money.rs` confirm/receipt/detail: the same recipients block (third column for the full list, per the desktop rule: no bottom sheets) — SC-442
-- [ ] T074l [US11] Visual pass on both shells at 1 / 3 / 12 / 60 recipients (screenshots into results.md) — #D4
+- [x] T074l [US11] (web done live on the dev server — `screenshots/web-*.png`, one real 0.001 XDAI send for the waiting/receipt states; five fixes fell out; the desktop window still cannot be captured from this session, see results) Visual pass on both shells at 1 / 3 / 12 / 60 recipients (screenshots into results.md) — #D4
 
 ## Phase 11c: US12 — The founder's evening pass (Part E) (P2)
 

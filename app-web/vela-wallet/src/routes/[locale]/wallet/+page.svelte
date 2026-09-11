@@ -94,6 +94,7 @@
 	import SigningHost from '$lib/signing/SigningHost.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import type { SendOpenParams } from '$lib/core/generated/SendOpenParams';
+	import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
 	import type { SendView } from '$lib/core/generated/SendView';
 
 	import { WEB_DESTINATIONS, webNavItems } from '$lib/wallet/destinations';
@@ -527,7 +528,9 @@
 				credentialLoaded: () => {},
 				signingStarted: () => {},
 				receiptUpdate: () => {},
-				alert: (kind) => console.warn('[send] alert:', kind),
+				// Kept on screen until the person edits or moves on (spec 038 #D4);
+				// it used to be a console line nobody reading the form could see.
+				alert: (kind) => (sendAlert = kind),
 				close: () => closeSend(),
 				feeQuote: async (request) => {
 					const outcome = await feeQuote.requestQuote(request);
@@ -761,6 +764,21 @@
 	});
 
 	/** The live inputs the send overlays read, or `undefined` while none is open. */
+	/** The core's last refusal, shown on the form/confirm until an edit or a move. */
+	let sendAlert = $state<SendAlertKind | null>(null);
+	// What the person can change: a stage, a field, a row. Any of it changing
+	// is the person acting on the refusal, and the line comes down. The
+	// refusal's own render changes none of these, so it stays up.
+	const sendAlertScope = $derived(
+		sendView
+			? `${sendView.stage}|${sendView.recipient}|${sendView.amount}|${sendView.recipients.map((r) => `${r.address}:${r.amount}`).join(',')}`
+			: ''
+	);
+	$effect(() => {
+		void sendAlertScope;
+		sendAlert = null;
+	});
+
 	const sendInputs = $derived(
 		sendView && identity
 			? {
@@ -772,7 +790,8 @@
 					identicon: avatarSvgForClient,
 					sweepPicking,
 					chainFilter: chainFilter.chainId,
-					classFilter: sendClassFilter
+					classFilter: sendClassFilter,
+					alert: sendAlert
 				}
 			: undefined
 	);

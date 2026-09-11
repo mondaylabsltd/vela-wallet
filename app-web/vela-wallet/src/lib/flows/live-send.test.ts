@@ -264,6 +264,45 @@ describe('the confirm screen', () => {
 	});
 });
 
+describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
+	const alice = '0x' + 'ab'.repeat(20);
+	it('a failed estimate is a sentence on the form, and on the confirm', () => {
+		const form = liveSendForm(formModel(), {
+			...inputs({ selected_token: ETH, recipient: alice, amount: '1' }),
+			alert: { type: 'estimate_failed', kind: 'generic' as never }
+		});
+		expect(form.alert).toContain(m['send.alertEstimateFailedTitle']);
+		expect(form.alert).toContain(m['send.alertEstimateFailedBody']);
+		const confirm = liveSendConfirm(confirmModel(), {
+			...inputs({ selected_token: ETH, recipient: alice, confirm_amount: '1' }),
+			alert: { type: 'invalid_amount' }
+		});
+		expect(confirm.alert).toContain(m['send.alertInvalidAmountTitle']);
+	});
+
+	it('no refusal, no line', () => {
+		const form = liveSendForm(formModel(), inputs({ selected_token: ETH }));
+		expect(form.alert).toBeUndefined();
+	});
+
+	it('a split’s total is the core’s sum, not the single field', () => {
+		const form = liveSendForm(
+			formModel(),
+			inputs({
+				selected_token: ETH,
+				split_mode: true,
+				confirm_amount: '0.06',
+				token_amount: '',
+				recipients: [
+					{ id: 'a', address: alice, amount: '0.03', name: null },
+					{ id: 'b', address: '0x' + 'cd'.repeat(20), amount: '0.03', name: null }
+				]
+			})
+		);
+		expect(form.summary?.value).toBe('0.06 ETH');
+	});
+});
+
 describe('the receipt', () => {
 	const receipt = (status: 'submitted' | 'confirmed' | 'failed') => ({
 		status,

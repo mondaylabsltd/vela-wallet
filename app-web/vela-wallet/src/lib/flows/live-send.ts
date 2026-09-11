@@ -15,6 +15,7 @@ import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendToken } from '$lib/core/generated/SendToken';
+import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
 import type { SendView } from '$lib/core/generated/SendView';
 import { isStable } from '$lib/services/activity';
 import { chainName, nativeSymbol } from '$lib/services/networks';
@@ -64,6 +65,12 @@ export interface SendLiveInputs {
 	 */
 	chainFilter?: number | null;
 	classFilter?: SendClassFilter;
+	/**
+	 * The core's last `ShowAlert`, kept by the page until the person edits
+	 * or moves on (spec 038 #D4). The phone raised these natively; the web
+	 * had a `console.warn` where the sentence should have been.
+	 */
+	alert?: SendAlertKind | null;
 }
 
 /** SD1's chips: all, the stables, the chains' own coins, the rest. */
@@ -404,17 +411,48 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 				]
 			: undefined,
 		// Split shows the total above the fee; single's amount is the hero.
+		// The total is the core's SUM of the rows (`confirm_amount`) —
+		// `token_amount` is the single field, empty in a split, which is why
+		// the row read "Total · XDAI" with no figure (spec 038 #D4).
 		summary: split
 			? {
 					label: m['send.splitTotalLabel'],
-					value: `${send.token_amount} ${token?.symbol ?? ''}`.trim()
+					value: `${send.confirm_amount} ${token?.symbol ?? ''}`.trim()
 				}
 			: undefined,
 		amount: split ? undefined : amountBlock,
 		recipient: split ? undefined : recipientBlock,
 		fee: feeRow(inputs, model.fee),
+		alert: alertWords(inputs.alert, m),
 		cta: m['send.continueBtn']
 	};
+}
+
+/**
+ * The core's alert kind, in the corpus's words — semantic keys only, the same
+ * mapping the desktop draws (`send_alert_words`). Title and body joined by a
+ * middle dot where both exist; a kind with one sentence gets that sentence.
+ */
+export function alertWords(
+	kind: SendAlertKind | null | undefined,
+	m: WalletFlowMessages
+): string | undefined {
+	if (!kind) return undefined;
+	switch (kind.type) {
+		case 'invalid_address':
+			return `${m['send.alertInvalidAddressTitle']} · ${m['send.alertInvalidAddressBody']}`;
+		case 'invalid_amount':
+			return `${m['send.alertInvalidAmountTitle']} · ${m['send.alertInvalidAmountBody']}`;
+		case 'insufficient_balance':
+		case 'split_over_balance':
+			return `${m['send.alertInsufficientBalanceTitle']} · ${m['send.alertInsufficientBalanceBody']}`;
+		case 'load_tokens_failed':
+			return m['send.alertLoadTokensError'];
+		case 'estimate_failed':
+			return `${m['send.alertEstimateFailedTitle']} · ${m['send.alertEstimateFailedBody']}`;
+		case 'account_unavailable':
+			return m['send.alertAccountUnavailableBody'];
+	}
 }
 
 /** The address, split across the drawn two lines. Empty reads as the placeholder. */
@@ -498,6 +536,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			}),
 			facts,
 			breakdown,
+			alert: alertWords(inputs.alert, m),
 			cta: m['send.confirmSendBtn']
 		};
 	}
@@ -520,6 +559,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
 			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
 			breakdown,
+			alert: alertWords(inputs.alert, m),
 			cta: m['send.confirmSendBtn']
 		};
 	}
@@ -530,6 +570,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		subline: usd === null ? '' : `≈ ${moneyText(usd, currency)}`,
 		facts,
 		breakdown: undefined,
+		alert: alertWords(inputs.alert, m),
 		cta: m['send.confirmSendBtn']
 	};
 }
