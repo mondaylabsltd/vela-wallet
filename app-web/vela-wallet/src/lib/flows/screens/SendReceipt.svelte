@@ -14,6 +14,7 @@
 	import Button from '$lib/ui/Button.svelte';
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
+	import Breakdown from '../ui/Breakdown.svelte';
 	import StatusHero from '../ui/StatusHero.svelte';
 	import type { SendReceiptModel } from '../model';
 
@@ -59,6 +60,10 @@
 <div class="receipt">
 	<StatusHero stage={model.stage} title={model.title} captions={[...model.captions, ...etaLines]} />
 
+	{#if model.breakdown !== undefined}
+		<div class="parts"><Breakdown rows={model.breakdown} title={model.breakdownTitle} /></div>
+	{/if}
+
 	<div class="foot">
 		{#if model.hash !== undefined}
 			<p class="hash">
@@ -90,6 +95,10 @@
 		flex-direction: column;
 		flex: 1;
 		min-height: 100%;
+	}
+
+	.parts {
+		padding-top: var(--space-lg);
 	}
 
 	/* The buttons live at the bottom of the screen while the status sits near

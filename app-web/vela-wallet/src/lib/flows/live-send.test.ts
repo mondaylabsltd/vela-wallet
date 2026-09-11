@@ -318,6 +318,54 @@ describe('the receipt', () => {
 		expect(model.ctaAccent).toBe(true);
 	});
 
+	it('a split lists every recipient the core froze and counts them in the caption (#D2)', () => {
+		const alice = '0x' + 'cd'.repeat(20);
+		const bob = '0x' + 'ef'.repeat(20);
+		const model = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				tx_status: 'confirmed',
+				user_op_hash: '0xop',
+				tx_hash: '0xtx',
+				selected_token: ETH,
+				split_mode: true,
+				receipt: {
+					...receipt('confirmed'),
+					kind: 'split',
+					transfers: [
+						{
+							to: alice,
+							to_name: 'Alice',
+							amount: '0.2',
+							symbol: 'ETH',
+							logo_urls: [],
+							usd_value: 600
+						},
+						{ to: bob, to_name: null, amount: '0.3', symbol: 'ETH', logo_urls: [], usd_value: 900 }
+					]
+				}
+			})
+		);
+		expect(model.breakdownTitle).toContain('2');
+		expect(model.breakdown?.map((row) => row.label)).toEqual([
+			'Alice',
+			expect.stringMatching(/^0xef/)
+		]);
+		expect(model.breakdown?.map((row) => row.value)).toEqual(['0.2 ETH', '0.3 ETH']);
+		expect(model.breakdown?.[0].identiconSvg).toBeTruthy();
+		// Not "To " with nobody after it.
+		expect(model.captions[0]).toContain(model.breakdownTitle ?? '');
+	});
+
+	it('a single send carries no parts', () => {
+		const model = liveSendReceipt(
+			receiptModel(),
+			inputs({ tx_status: 'confirmed', tx_hash: '0xtx', receipt: receipt('confirmed') })
+		);
+		expect(model.breakdown).toBeUndefined();
+		expect(model.breakdownTitle).toBeUndefined();
+	});
+
 	it('a refused submit is the failed stage, worded by the core’s key', () => {
 		const failed = liveSendReceipt(
 			receiptModel(),

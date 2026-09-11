@@ -104,6 +104,63 @@ describe('naming a feed item', () => {
 });
 
 describe('liveTxDetail', () => {
+	it('a folded split row lists its recipients under the facts (spec 038 #D2)', () => {
+		const alice = '0x' + 'cd'.repeat(20);
+		const bob = '0x' + 'ef'.repeat(20);
+		const detail = liveTxDetail(
+			item('s', {
+				direction: 'out',
+				counterparty: null,
+				value: '0.5',
+				batch: {
+					kind: 'split',
+					count: 2,
+					total_usd: 1500,
+					transfers: [
+						{
+							to: alice,
+							to_name: 'Alice',
+							value: '0.2',
+							symbol: 'ETH',
+							decimals: 18,
+							usd_value: 600,
+							logo_urls: null
+						},
+						{
+							to: bob,
+							to_name: null,
+							value: '0.3',
+							symbol: 'ETH',
+							decimals: 18,
+							usd_value: 900,
+							logo_urls: null
+						}
+					],
+					ids: ['s1', 's2'],
+					from: '0x' + 'a1'.repeat(20),
+					chain_id: 1,
+					timestamp: 1_700_000_000,
+					status: 'confirmed',
+					tx_hash: '0x' + 'c3'.repeat(32),
+					user_op_hash: '0xop',
+					symbol: 'ETH',
+					logo_urls: null,
+					to: null,
+					to_name: null
+				}
+			}),
+			ctx
+		);
+		expect(detail.breakdownTitle).toContain('2');
+		expect(detail.breakdown?.map((row) => row.label)).toEqual([
+			'Alice',
+			expect.stringMatching(/^0xef/)
+		]);
+		expect(detail.breakdown?.[0].identiconSvg).toBeTruthy();
+		// No single "To" fact: the row has no one counterparty.
+		expect(detail.facts.some((fact) => fact.lead?.kind === 'identicon')).toBe(false);
+	});
+
 	const ctx = { m: fm, wm: m, currency: USD, hidden: false, identicon: IDENTICON };
 
 	it('words the tapped transaction, not the fixture one', () => {

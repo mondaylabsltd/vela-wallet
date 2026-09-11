@@ -187,8 +187,8 @@ same three ways in as the desktop (SC-428, 438).
 - [x] T074g [P] [US11] Core `network_admin.rs`: `typical_inclusion_s: u16` per builtin chain (block time × usual depth; Gnosis 5s×3, Ethereum 12s×2, L2s 2s×5, Tempo …); `SendReceiptView.typical_inclusion_s` + `elapsed_s` from the shell clock; `SendReceiptView.longer_than_usual` past 2× — SC-443
 - [x] T074h [US11] Web `app-web/vela-wallet/src/lib/flows/screens/SendReceipt.svelte` + `live-send.ts`: elapsed/typical line and the "longer than usual" state; desktop `app-desktop/vela-wallet/src/wallet/money.rs` receipt stage the same — SC-443
 - [x] T074i [US11] Core `send.rs`: `SendConfirmView.recipients` (count + rows: address, name, amount) for split and sweep; ts-rs regenerate — SC-442
-- [~] T074j [US11] (confirm breakdown with identicons done; receipt + TxDetail lists pending) Web confirm `SendConfirm.svelte` + `live-send.ts` SD3: recipients block (count title, first 3 rows with identicon, "all N" → third column on wide / sheet on phone); the same block on `SendReceipt.svelte` and `TxDetail.svelte` — SC-442
-- [x] T074k [P] [US11] Desktop `money.rs` confirm/receipt/detail: the same recipients block (third column for the full list, per the desktop rule: no bottom sheets) — SC-442
+- [x] T074j [US11] (confirm, receipt and TxDetail all list the parts through one `Breakdown.svelte`; the desktop receipt and detail through `breakdown_list` with avatars) Web confirm `SendConfirm.svelte` + `live-send.ts` SD3: recipients block (count title, first 3 rows with identicon, "all N" → third column on wide / sheet on phone); the same block on `SendReceipt.svelte` and `TxDetail.svelte` — SC-442
+- [x] T074k [P] [US11] (receipt + detail landed in slice 10; the confirm rows now carry avatars) Desktop `money.rs` confirm/receipt/detail: the same recipients block (third column for the full list, per the desktop rule: no bottom sheets) — SC-442
 - [ ] T074l [US11] Visual pass on both shells at 1 / 3 / 12 / 60 recipients (screenshots into results.md) — #D4
 
 ## Phase 11c: US12 — The founder's evening pass (Part E) (P2)

@@ -34,7 +34,8 @@ import type {
 	SendFormModel,
 	SendPickModel,
 	SendReceiptModel,
-	TokenMarkModel
+	TokenMarkModel,
+	BreakdownRowModel
 } from './model';
 import type { AssetRowModel } from '$lib/wallet/model';
 
@@ -545,9 +546,10 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
  * while it was still in the air.
  */
 export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs): SendReceiptModel {
-	const { send, m } = inputs;
+	const { send, m, identicon } = inputs;
 	const token = send.selected_token;
 	const chainId = token?.chain_id ?? 1;
+	const parts = receiptParts(send, m, token?.symbol ?? '', identicon);
 	const header = {
 		...model.header,
 		title: token ? fill(m['send.sendTitle'], { symbol: token.symbol }) : model.header.title
@@ -573,12 +575,17 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 		return {
 			...model,
 			header,
+			...parts,
 			stage: 'confirmed',
 			title: fill(m['send.txConfirmedTitle'], {
 				amount: send.receipt?.amount ?? send.confirm_amount,
 				symbol: token?.symbol ?? ''
 			}),
-			captions: [`${fill(m['history.toName'], { name: to })} · ${chainName(chainId)}`],
+			// A split names its count here and its people below; "To " with
+			// nobody after it was what the single-recipient line read as.
+			captions: [
+				`${parts.breakdownTitle ?? fill(m['history.toName'], { name: to })} · ${chainName(chainId)}`
+			],
 			hash: send.tx_hash
 				? {
 						label: m['componentsTx.receipt.txHash'],
@@ -609,6 +616,7 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 		return {
 			...model,
 			header,
+			...parts,
 			stage: 'submitted',
 			title: m['send.txSubmittedTitle'],
 			captions: [m['send.txWaitingConfirm']],
@@ -629,12 +637,49 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 	return {
 		...model,
 		header,
+		...parts,
 		stage: 'submitting',
 		title: m['send.txSubmitting'],
 		captions: [m['send.txPreparingBiometric'], m['send.txBackgroundHint']],
 		hash: undefined,
 		cta: m['send.txCloseBackground'],
 		ctaAccent: false
+	};
+}
+
+/**
+ * Spec 038 #D2: a split's parts on the receipt as on the confirm — from the
+ * receipt's own transfers once the core froze them, from the drafts before
+ * that. Nothing for a single send or a sweep (the sweep's parts are assets,
+ * and its one recipient is already the caption).
+ */
+function receiptParts(
+	send: SendView,
+	m: WalletFlowMessages,
+	symbol: string,
+	identicon: (seed: string) => string
+): { breakdownTitle?: string; breakdown?: BreakdownRowModel[] } {
+	const frozen = send.receipt?.kind === 'split' ? send.receipt.transfers : [];
+	const rows: BreakdownRowModel[] =
+		frozen.length > 0
+			? frozen.map((transfer) => ({
+					identiconSvg: identicon(transfer.to),
+					address: transfer.to,
+					label: transfer.to_name ?? shortenAddress(transfer.to),
+					value: `${transfer.amount} ${transfer.symbol}`.trim()
+				}))
+			: send.split_mode
+				? send.recipients.map((draft) => ({
+						identiconSvg: draft.address ? identicon(draft.address) : undefined,
+						address: draft.address || undefined,
+						label: draft.name ?? shortenAddress(draft.address),
+						value: `${draft.amount} ${symbol}`.trim()
+					}))
+				: [];
+	if (rows.length === 0) return { breakdownTitle: undefined, breakdown: undefined };
+	return {
+		breakdownTitle: fill(m['send.recipientCount_other'], { count: rows.length }),
+		breakdown: rows
 	};
 }
 

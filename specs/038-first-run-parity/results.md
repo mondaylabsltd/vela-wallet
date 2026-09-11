@@ -251,3 +251,23 @@ two extra keys already existed in the corpus; they join the served list).
 Tests: `live-batch.test.ts` +2 (the words from the view; the desktop body
 overlaid). Flows + i18n suites 173 passed.
 
+### Slice 10 — #D2, the receipt and the detail
+
+The confirm listed a split's recipients since slice 5; the receipt still
+said "To " with nobody after it (the single-recipient line over an empty
+`recipient`), and a folded batch row's detail showed no counterparty and no
+parts — `FeedItem.batch.transfers` was never read by either shell.
+
+- **Web**: one `flows/ui/Breakdown.svelte` (the confirm's list, extracted,
+  with an optional title) is drawn on `SendConfirm`, `SendReceipt` and
+  `TxDetail`. `liveSendReceipt` builds the parts from the receipt's frozen
+  `transfers` (a split) or the drafts before the core freezes them, titles
+  them "N recipients" and puts that title in the confirmed caption;
+  `liveTxDetail` builds them from `item.batch` — a split's recipients with
+  avatars, a sweep's assets with their marks. Tests +3.
+- **Desktop**: `BreakdownRow.seed` (the avatar), `SendReceipt` and
+  `TxDetail` gain `breakdown_title` + `breakdown`; `panels.rs::breakdown_list`
+  draws the one list on the confirm (now with avatars), the receipt and the
+  detail; `flows/live.rs::receipt_parts` / `detail_parts` word them, the
+  same rules as the web. Test +1 (a split receipt lists and counts).
+
