@@ -1,3 +1,5 @@
+> **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期；该应用及其 `src/**` 已退役并删除，文中的实现引用请对照 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 与 `rust/crates/vela-core`。需求本身仍有效，正文按原样保留。
+
 # M04 · Bespoke UI Primitives & Semantic Haptics
 
 | | |

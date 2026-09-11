@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. The iOS Safari extension has no packaging in the tree today (`targets/safari` and `packages/safari-extension` were Expo-only); re-homing it under `app-ios/` is its own spec — see spec 039 "Two packages".
+
 # Vela Safari Web Extension — Architecture
 
 **Goal:** After a user installs Vela Wallet on iOS, every EIP-1193 / EIP-6963 dApp opened in **iOS Safari** receives an injected `window.ethereum` provider, exactly like a desktop MetaMask extension. Connecting and reading happen silently in Safari; **only signing hops once to the native Vela app** (where the passkey lives), then returns.

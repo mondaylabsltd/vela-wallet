@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. The iOS Safari extension has no packaging in the tree today (`targets/safari` and `packages/safari-extension` were Expo-only); re-homing it under `app-ios/` is its own spec — see spec 039 "Two packages".
+
 # R1 Spike — Increment 4: return path + fake sign  ·  **R1 S1 GO/NO-GO GATE**
 
 **Goal:** prove the full sign round-trip and its 4 fund-safety invariants on a physical device. page taps R1 sign → app launches (Inc 3) → app **fake-signs** (no passkey/bundler) → writes `sign-result-<rid>.json` + persists → user returns to Safari → content.js **focus-polls** the result via the (evictable) background → the page **displays** it. **This increment decides whether the sign path ships in front of WalletPair, or the return path gets redesigned.**

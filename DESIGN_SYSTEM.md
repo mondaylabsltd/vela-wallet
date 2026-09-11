@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This design system was written for the React Native / Expo app (`createStyles`, `withSpring`, `Pressable`, `lucide-react-native`), retired and deleted in spec 039. The living design language is [docs/DESIGN-LANGUAGE.md](docs/DESIGN-LANGUAGE.md) and [design-system.md](design-system.md); the tokens are generated from [docs/design-tokens.json](docs/design-tokens.json) into each shell (`tokens.css`/`tokens.ts`, `Tokens.swift`, the desktop theme). Kept as the record of the visual rules the shells inherited.
+
 # Vela Wallet Design System
 
 Design principles and implementation rules for maintaining visual consistency across all screens and future features.

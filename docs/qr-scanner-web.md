@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. Living implementation: `app-web/vela-wallet/src/lib/services/qr-decode.ts` and `src/lib/flows/core/scanner.svelte.ts` (the scanner is the core's state, spec 028).
+
 # Web QR Scanner — 技术总结
 
 ## 问题背景

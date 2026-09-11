@@ -1,3 +1,5 @@
+> **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期。该应用（`src/`、`e2e/`、`modules/`、`plugins/`、`targets/`）及其工具链已在 spec 039（`specs/039-retire-expo-tree/`）退役并删除；文中出现的 `src/**` 路径与 `npm run build:web`、`npx expo …`、`eas build`、`jest`、`playwright` 等根目录命令已不存在。现行实现与命令见 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 各自的 README，以及根目录 `package.json` 里的工具脚本。正文按原样保留，作为历史记录。
+
 # 09 — 人类学习知识地图 (Human Learning Map)
 
 > 基线 commit: `73d7aac`（2026-07-02）。本图为人类接管训练服务，与审计文档 01–08 互补：01–08 回答"系统是什么"，本文回答"按什么顺序、学到什么深度"。文档与源码冲突时以源码为准。

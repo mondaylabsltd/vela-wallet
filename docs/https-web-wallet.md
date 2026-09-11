@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. The dApp half — `packages/vela-sdk` — is kept and still builds; the wallet half (`/web-request`, the popup transport, the consent page) lived only in the Expo app and is OWED to `app-web/vela-wallet` (spec 039 Part B, "Owed before the hostname moves"). Until it lands, `wallet.getvela.app/web-request` is served by the frozen Expo build.
+
 # HTTPS Web Wallet integration
 
 Vela can act as an external wallet for an HTTPS dApp without a native app or
@@ -54,6 +56,6 @@ cross-device approval.
 
 - dApp SDK: `packages/vela-sdk/src/index.ts`
 - shared protocol: `packages/vela-sdk/src/protocol.ts`
-- wallet request route: `src/app/web-request.tsx`
-- one-shot transport: `src/services/web-popup-transport.ts`
-- existing signing pipeline: `src/models/dapp-connection.tsx`
+- wallet request route: `src/app/web-request.tsx` — deleted with the Expo app; owed to `app-web/vela-wallet` (spec 039)
+- one-shot transport: `src/services/web-popup-transport.ts` — deleted; owed (spec 039)
+- signing pipeline in the web shell: `app-web/vela-wallet/src/lib/signing/` (SigningSheet + clear-executor)

@@ -1,3 +1,5 @@
+> **勘误（2026-09-11，spec 039）**：本文是 Expo / React Native 应用时期的测试计划；该应用及其根目录测试命令（`npm test`、`npm run test:e2e`、`npx playwright test` 等）已退役并删除。现行测试门禁见 `.github/workflows/ci.yml` 与 `docs/project-takeover/02-local-development.md`（各壳自己的命令）。正文按原样保留，作为历史记录。
+
 # Vela Wallet — Automated Test Plan
 
 Based on [CLAUDE-AUTO-TEST.md](../../walletpair/agent-rules/CLAUDE-AUTO-TEST.md) and [AI-CODING-RULES.md](../../walletpair/agent-rules/AI-CODING-RULES.md).

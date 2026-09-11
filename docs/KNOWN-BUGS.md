@@ -158,6 +158,12 @@ throw; the pre-check is `try`-wrapped; all returns release). **File:** `dapp-con
 
 ## BUG-4 (✅ FIXED 2026-07-06 — WalletPair) — pairing threw "crypto.getRandomValues must be defined"
 
+> 2026-09-11: the runtime this bug lived in — the React Native / Expo app, its
+> module-evaluation order under Metro and the `index.js` polyfill entry — was retired in spec
+> 039, together with WalletPair itself (ruled out for the web in spec 027).
+> Kept as the record of the class of bug (a module capturing `globalThis.crypto`
+> once at evaluation); nothing below can recur in the current shells.
+
 **Discovered:** 2026-07-06, building the concurrent-session DEVICE harness
 (`e2e/safari/check_concurrent.py` — the first time a REAL WalletPair session was
 established on the device; WalletPair has ≈0 real dApp adoption, which is *why* the
