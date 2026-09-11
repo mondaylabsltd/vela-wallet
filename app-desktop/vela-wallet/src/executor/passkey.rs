@@ -101,7 +101,7 @@ impl PasskeyFailure {
         }
     }
 
-    fn classified(kind: FailureKind, message: impl Into<String>) -> Self {
+    pub(crate) fn classified(kind: FailureKind, message: impl Into<String>) -> Self {
         Self {
             kind,
             // `not_supported` on desktop is the one classified failure that

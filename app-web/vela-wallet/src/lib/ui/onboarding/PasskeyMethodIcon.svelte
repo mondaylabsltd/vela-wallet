@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * One passkey method icon, inline (spec 038 / #190).
+	 * One passkey method icon, inline (spec 038, issue 190).
 	 *
 	 * `ink` is `currentColor` so the row's own colour tints it; `muted` and
 	 * `paper` are the two tokens the USB key needs to keep its slots readable
