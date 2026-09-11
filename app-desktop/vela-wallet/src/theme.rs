@@ -938,8 +938,16 @@ mod fonts_bundled {
     #[test]
     fn the_four_faces_are_truetype_files() {
         for (index, bytes) in UI_FONT_FILES.iter().enumerate() {
-            assert_eq!(&bytes[..4], &[0x00, 0x01, 0x00, 0x00], "font {index}: not sfnt/TrueType");
-            assert!(bytes.len() > 50_000, "font {index}: {} bytes is not a whole face", bytes.len());
+            assert_eq!(
+                &bytes[..4],
+                &[0x00, 0x01, 0x00, 0x00],
+                "font {index}: not sfnt/TrueType"
+            );
+            assert!(
+                bytes.len() > 50_000,
+                "font {index}: {} bytes is not a whole face",
+                bytes.len()
+            );
         }
     }
 }
@@ -958,8 +966,14 @@ mod launch_gate {
             "the web's app.html no longer names the replay window"
         );
         assert_eq!(LAUNCH_REPLAY_AFTER_MS, 604_800_000.);
-        assert!(html.contains(LAUNCH_PLAYED_KEY), "storage key differs from the web");
-        assert!(html.contains(INTRO_SEEN_KEY), "intro key differs from the web");
+        assert!(
+            html.contains(LAUNCH_PLAYED_KEY),
+            "storage key differs from the web"
+        );
+        assert!(
+            html.contains(INTRO_SEEN_KEY),
+            "intro key differs from the web"
+        );
     }
 
     #[test]

@@ -49,12 +49,13 @@ const WIZARD_SEARCH_FOCUS: usize = ENDPOINT_FOCUS_COUNT + 3;
 const WIZARD_RPC_FOCUS: usize = WIZARD_SEARCH_FOCUS + 1;
 /// Two handles per network card, past everything above.
 const OVERRIDE_FOCUS_BASE: usize = WIZARD_RPC_FOCUS + 1;
+use crate::executor::format_prefs;
 use crate::executor::passkey::WindowHandle;
 use crate::hardware;
 use crate::settings::components::{
-    CalloutTone, callout, chain_mark, check_list, danger_card, dropdown_menu, dropdown_trigger,
-    editable_url_field, form_row, key_value_row, network_row, rpc_banner, segmented,
-    settings_nav_row, status_pill, storage_bar, storage_group, text_scale, url_field,
+    CalloutTone, callout, chain_mark, check_list, danger_card, dropdown_menu, dropdown_menu_picks,
+    dropdown_trigger, editable_url_field, form_row, key_value_row, network_row, rpc_banner,
+    segmented, settings_nav_row, status_pill, storage_bar, storage_group, text_scale, url_field,
 };
 use crate::settings::fixtures::{self as settings_fixtures, SettingsPage, Tone, latency, pill};
 use crate::settings::live as settings_live;
@@ -5516,7 +5517,7 @@ impl WalletPage {
                     "USD",
                     "$",
                     &self.locale,
-                    vela_core::l10n::currency::FiatOptions::default(),
+                    crate::executor::format_prefs::fiat_options(),
                 ),
             )
         ));
@@ -5540,7 +5541,7 @@ impl WalletPage {
                         "USD",
                         "$",
                         &self.locale,
-                        vela_core::l10n::currency::FiatOptions::default(),
+                        crate::executor::format_prefs::fiat_options(),
                     ))
                 });
             // The core's own index, not the loop's: it survives a display
@@ -5923,27 +5924,38 @@ impl WalletPage {
     /// absolutely-positioned child of that row's control cell so it lies over
     /// the rows beneath instead of pushing them down — the desktop SPEC's
     /// "浮层需逃出容器裁剪" rule.
+    ///
+    /// A session (spec 038 #E3) reads the presets in force and lets the
+    /// number, date and time rows choose; the design surfaces keep the mock's
+    /// literals and its one drawn menu, gated on `identity` like every other
+    /// live surface here.
     fn settings_localization(&mut self, theme: &Theme, cx: &mut Context<Self>) -> Div {
         let s = &self.settings;
         let auto_note =
             gpui::SharedString::from(format!("{} · {}", s.note_automatic, s.note_system));
+        let live = if self.identity.is_some() {
+            let formats = format_prefs::current();
+            let (number, date, time) = settings_live::format_row_values(formats, &self.locale);
+            let menus = settings_live::format_menus(
+                format_prefs::choice(),
+                &format_prefs::machine(),
+                &self.locale,
+                &auto_note,
+                &s.note_indian,
+            );
+            Some((number, date, time, menus))
+        } else {
+            None
+        };
+        let (number_value, date_value, time_value) = match live.as_ref() {
+            Some((number, date, time, _)) => (number.clone(), date.clone(), time.clone()),
+            None => ("1,234,567.89".into(), "2026/06/13".into(), "13:45".into()),
+        };
         let rows: [(&'static str, gpui::SharedString, gpui::SharedString); 4] = [
             ("currency", s.currency.clone(), self.currency_value(cx)),
-            (
-                "number",
-                s.number_format.clone(),
-                gpui::SharedString::from("1,234,567.89"),
-            ),
-            (
-                "date",
-                s.date_format.clone(),
-                gpui::SharedString::from("2026/06/13"),
-            ),
-            (
-                "time",
-                s.time_format.clone(),
-                gpui::SharedString::from("13:45"),
-            ),
+            ("number", s.number_format.clone(), number_value),
+            ("date", s.date_format.clone(), date_value),
+            ("time", s.time_format.clone(), time_value),
         ];
         let number_menu: [(gpui::SharedString, Option<gpui::SharedString>, bool); 5] = [
             ("1,234,567.89".into(), Some(auto_note), true),
@@ -5954,12 +5966,33 @@ impl WalletPage {
         ];
 
         let open = self.settings_open_dropdown;
+        let page = cx.entity();
         let mut col = div().flex().flex_col();
         for (id, label, value) in rows {
             let is_open = open == Some(id);
             let trigger = dropdown_trigger(theme, &mut self.icons, value);
-            let menu = (is_open && id == "number")
-                .then(|| dropdown_menu(theme, &mut self.icons, &number_menu));
+            let menu = if !is_open {
+                None
+            } else if let Some((_, _, _, menus)) = live.as_ref() {
+                let rows = match id {
+                    "number" => Some(&menus.number),
+                    "date" => Some(&menus.date),
+                    "time" => Some(&menus.time),
+                    _ => None,
+                };
+                rows.map(|rows| {
+                    let page = page.clone();
+                    dropdown_menu_picks(theme, &mut self.icons, rows, move |index, _, cx| {
+                        page.update(cx, |this, cx| {
+                            this.pick_format(id, index);
+                            this.settings_open_dropdown = None;
+                            cx.notify();
+                        });
+                    })
+                })
+            } else {
+                (id == "number").then(|| dropdown_menu(theme, &mut self.icons, &number_menu))
+            };
             let control = div()
                 .id(SharedString::from(format!("settings-dropdown-{id}")))
                 .relative()
@@ -5982,6 +6015,17 @@ impl WalletPage {
             col = col.child(form_row(theme, label, control));
         }
         col
+    }
+
+    /// A format row's pick, kept for the next launch. Row 0 of every menu is
+    /// "Automatic"; the rest name the presets in the menu's own order.
+    fn pick_format(&mut self, id: &'static str, index: usize) {
+        match id {
+            "number" => format_prefs::set_number(settings_live::picked_number(index)),
+            "date" => format_prefs::set_date(settings_live::picked_date(index)),
+            "time" => format_prefs::set_time(settings_live::picked_time(index)),
+            _ => {}
+        }
     }
 
     /// DST4 — the network list, expanding one row in place.
@@ -10323,28 +10367,27 @@ impl Render for WalletPage {
                 &self.loc,
                 prompt,
                 move |id, _window, cx| {
-                    entity
-                        .update(cx, |page, cx| {
-                            use crate::outcome::ActionId;
-                            match id {
-                                ActionId::ToggleDetails => {
-                                    if let Some(prompt) = page.crash.as_mut() {
-                                        prompt.details_expanded = !prompt.details_expanded;
-                                    }
-                                }
-                                ActionId::ReportError => {
-                                    if let Some(details) =
-                                        page.crash.as_ref().and_then(|p| p.details.clone())
-                                    {
-                                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(details));
-                                    }
-                                }
-                                ActionId::Accept | ActionId::Decline | ActionId::EditIndexEndpoint => {
-                                    page.crash = None;
+                    entity.update(cx, |page, cx| {
+                        use crate::outcome::ActionId;
+                        match id {
+                            ActionId::ToggleDetails => {
+                                if let Some(prompt) = page.crash.as_mut() {
+                                    prompt.details_expanded = !prompt.details_expanded;
                                 }
                             }
-                            cx.notify();
-                        });
+                            ActionId::ReportError => {
+                                if let Some(details) =
+                                    page.crash.as_ref().and_then(|p| p.details.clone())
+                                {
+                                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(details));
+                                }
+                            }
+                            ActionId::Accept | ActionId::Decline | ActionId::EditIndexEndpoint => {
+                                page.crash = None;
+                            }
+                        }
+                        cx.notify();
+                    });
                 },
             ));
         }

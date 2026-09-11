@@ -112,7 +112,7 @@ pub fn vela_button_state(
         .px(px(theme::BTN_PAD_X))
         .py(px(theme::BTN_PAD_Y))
         .text_size(theme::text_cta())
-                // SEMIBOLD, as the web's `Button.svelte` (`--weight-semibold`): one
+        // SEMIBOLD, as the web's `Button.svelte` (`--weight-semibold`): one
         // notch lighter than the BOLD this carried — spec 038 finding 8.
         .font_weight(FontWeight::SEMIBOLD);
 
@@ -167,7 +167,7 @@ pub fn welcome_cta_state(
         .px(px(theme::CTA_PAD_X))
         .py(px(theme::BTN_PAD_Y))
         .text_size(theme::text_cta())
-                // SEMIBOLD, as the web's `Button.svelte` (`--weight-semibold`): one
+        // SEMIBOLD, as the web's `Button.svelte` (`--weight-semibold`): one
         // notch lighter than the BOLD this carried — spec 038 finding 8.
         .font_weight(FontWeight::SEMIBOLD);
 

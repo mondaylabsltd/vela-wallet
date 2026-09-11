@@ -708,7 +708,8 @@ impl SendHost {
     }
 
     fn ensure_watcher(&mut self, cx: &mut Context<Self>) {
-        if self.watching || (self.send.is_idle() && self.fee.is_idle() && !self.receipt_counting()) {
+        if self.watching || (self.send.is_idle() && self.fee.is_idle() && !self.receipt_counting())
+        {
             return;
         }
         self.watching = true;

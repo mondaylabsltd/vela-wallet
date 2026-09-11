@@ -80,7 +80,10 @@ mod tests {
         assert_eq!(result, None);
         let report = take().expect("the hook left a report");
         assert!(report.contains("the key was unplugged"), "{report}");
-        assert!(report.contains("panic_report.rs"), "location recorded: {report}");
+        assert!(
+            report.contains("panic_report.rs"),
+            "location recorded: {report}"
+        );
         assert_eq!(take(), None, "taken once");
         assert_eq!(guarded(|| 7), Some(7), "and ordinary work is untouched");
     }

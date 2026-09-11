@@ -325,7 +325,12 @@ pub fn with_candidates<T>(
                     error,
                 });
             }
-            Err(error) => return Err(Transport { error, local: false }),
+            Err(error) => {
+                return Err(Transport {
+                    error,
+                    local: false,
+                });
+            }
         }
     }
 }
@@ -697,7 +702,9 @@ mod candidates {
     /// request.
     fn install(list: Vec<Candidate>) -> std::sync::MutexGuard<'static, ()> {
         static SERIAL: Mutex<()> = Mutex::new(());
-        let guard = SERIAL.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let guard = SERIAL
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Ok(mut state) = state().lock() {
             *state = Some(Candidates {
                 list,
@@ -751,7 +758,11 @@ mod candidates {
   SOCKSProxy : 127.0.0.1
 }";
         let proxy = proxy_from_scutil(socks_only).expect("the SOCKS entry");
-        assert_eq!(proxy.protocol(), ProxyProtocol::Socks5h, "resolved at the far end");
+        assert_eq!(
+            proxy.protocol(),
+            ProxyProtocol::Socks5h,
+            "resolved at the far end"
+        );
         assert_eq!(proxy.port(), 1080);
         assert!(proxy_from_scutil("<dictionary> {\n  HTTPEnable : 0\n}").is_none());
     }
@@ -811,7 +822,11 @@ mod candidates {
                 .map(|_| ())
         })
         .expect_err("nothing can answer");
-        assert!(failure.local, "unresolvable host = this machine could not get out: {:?}", failure.error);
+        assert!(
+            failure.local,
+            "unresolvable host = this machine could not get out: {:?}",
+            failure.error
+        );
         // The dead-end list was dropped, so the next request re-derives.
         assert!(state().lock().map(|g| g.is_none()).unwrap_or(false));
     }

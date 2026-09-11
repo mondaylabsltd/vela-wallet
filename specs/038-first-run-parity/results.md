@@ -195,3 +195,39 @@ module doc's own admitted trap. The verdict split is still to build.
   028 contacts completion or missed that affordance — the phone sheet is
   checked below.
 - #meta e2e: `welcome-ssr` 43 passed on the isolated build — the card tags on `/en` and `/zh`, `og:description` ≤ 111 chars, 14 alternates, `og-image.png` served as PNG; the first-paint intro case passes too.
+
+### Slice 8 — #E3 on both shells
+
+Reproduced live (dev server, parallel space, a `Sent` record seeded at
+2026-06-13 12:00; Settings → Localization → Date format → "13.06.2026").
+
+- **Web**: the detail column read `13.06.2026 12:00 PM`, so `formatDate` and
+  the preference were never the fault. The desktop-width feed printed no day
+  heading at all — `WalletDesktop.svelte` iterated `activityGroups` without
+  the `<p class="day">` `WalletHome.svelte` prints — so a chosen format had
+  nowhere to show outside the detail. Fixed: the heading, with the phone's
+  rule. After the fix the same page reads `Today` / `13.06.2026` over the
+  two records.
+- **Desktop**: the number, date and time rows in Settings → Localization
+  were the mock's literals with one drawn (inert) menu; `day_label`
+  hardcoded `DatePreset::Iso`, every clock `TimePreset::H24`, every figure
+  `NumberPreset::CommaDot` (eleven sites across `flows/live.rs`,
+  `wallet/live.rs`, `signing/live.rs`, `page.rs`, `settings/live.rs`).
+  Fixed: `executor/format_prefs.rs` — one stored object (`vela.formats`,
+  the web's words `dmy_dot` / `h12` / `comma_dot`…, unknown words read as
+  Automatic), "Automatic · System" resolved from the same locale ladder the
+  strings use (`loc::requested_tag`) through a table that answers what
+  `Intl` answers the web for the shipped locales (pinned for 18 tags);
+  `settings/live.rs::format_menus` builds the three menus (auto row first,
+  the web's order, tick on the row in force) and `dropdown_menu_picks` is
+  the first menu on this shell whose rows answer a click; `pick_format`
+  persists and closes. The gallery and `VELA_PAGE=settings` keep the mock.
+  Under test the machine tag is pinned to `en`, so a figure a test pins does
+  not depend on the machine running it.
+- Not done here: the currency row on the desktop still has no picker (a
+  032-era debt, not E3); the desktop's fiat figures still print `USD`/`$`
+  regardless of the display currency in several live constructors — noted
+  for the desktop parity backlog.
+- Desktop 393 passed / 0 failed (+9 tests); web wallet suite 92 passed;
+  svelte-check 0 errors; `cargo fmt` clean.
+

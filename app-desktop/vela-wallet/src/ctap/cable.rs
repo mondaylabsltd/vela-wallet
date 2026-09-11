@@ -196,7 +196,10 @@ impl WebSocketCablePort {
 impl CablePort for WebSocketCablePort {
     fn write_frame(&mut self, frame: &[u8]) -> Result<(), PortError> {
         if self.closed_by_peer {
-            log(&format!("→ tunnel frame ({} bytes) refused: peer closed", frame.len()));
+            log(&format!(
+                "→ tunnel frame ({} bytes) refused: peer closed",
+                frame.len()
+            ));
             return Err(PortError::Io(TUNNEL_CLOSED.to_owned()));
         }
         log(&format!("→ tunnel frame ({} bytes)", frame.len()));
@@ -588,7 +591,10 @@ fn resolve_proxy() -> Option<ProxyEndpoint> {
     let proxy = crate::executor::proxy::system_proxy()?;
     let socks = matches!(
         proxy.protocol(),
-        ureq::ProxyProtocol::Socks5 | ureq::ProxyProtocol::Socks5h | ureq::ProxyProtocol::Socks4 | ureq::ProxyProtocol::Socks4A
+        ureq::ProxyProtocol::Socks5
+            | ureq::ProxyProtocol::Socks5h
+            | ureq::ProxyProtocol::Socks4
+            | ureq::ProxyProtocol::Socks4A
     );
     Some(ProxyEndpoint {
         socks,
@@ -596,8 +602,6 @@ fn resolve_proxy() -> Option<ProxyEndpoint> {
         port: proxy.port(),
     })
 }
-
-
 
 /// Scan the Bluetooth radio for a proximity advert that decrypts under this
 /// session's EID key, and return its 16-byte plaintext. Blocks (on a private

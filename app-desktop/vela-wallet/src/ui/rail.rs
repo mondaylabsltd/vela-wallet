@@ -113,7 +113,6 @@ pub fn onboarding_rail(theme: &Theme, slot: RailSlot) -> Stateful<Div> {
             ),
     };
 
-
     div()
         .id("onboarding-rail")
         .w(px(RAIL_W))

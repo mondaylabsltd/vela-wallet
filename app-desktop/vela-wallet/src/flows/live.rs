@@ -23,9 +23,9 @@ use vela_core::app::manage_tokens::MtokView;
 use vela_core::app::network_admin::BUILTIN_CHAINS;
 use vela_core::app::payment_request::PaymentRequestView;
 use vela_core::app::receive_watch::ReceiveWatchView;
-use vela_core::l10n::currency::{FiatOptions, format_fiat};
-use vela_core::l10n::datetime::{Civil, TimePreset, format_time};
-use vela_core::l10n::number::{NumberPreset, format_token_amount};
+use vela_core::l10n::currency::format_fiat;
+use vela_core::l10n::datetime::{Civil, format_time};
+use vela_core::l10n::number::format_token_amount;
 
 use crate::flows::FlowStrings;
 use crate::wallet::fill;
@@ -38,7 +38,13 @@ use vela_core::app::send::{
     SendView,
 };
 
-use crate::flows::fixtures::{AddressCard, AssetsEmpty, AssetsPanel, BatchImport, BatchRow, BreakdownRow, ContactPick, CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeTokenPick, FeeTokenRow, FilterChip, HistoryGroup, NetworkRow, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, TokenMark, address_lines};
+use crate::flows::fixtures::{
+    AddressCard, AssetsEmpty, AssetsPanel, BatchImport, BatchRow, BreakdownRow, ContactPick,
+    CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeTokenPick, FeeTokenRow,
+    FilterChip, HistoryGroup, NetworkRow, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard,
+    SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, TokenMark,
+    address_lines,
+};
 use crate::wallet::fixtures::{AssetRowModel, Fiat, MASK};
 
 /// A chain's colour, from the one table every surface reads.
@@ -86,7 +92,11 @@ fn asset_row(
         balance: if hidden {
             SharedString::from(MASK)
         } else {
-            SharedString::from(format_token_amount(amount, NumberPreset::CommaDot, false))
+            SharedString::from(format_token_amount(
+                amount,
+                crate::executor::format_prefs::current().number,
+                false,
+            ))
         },
         fiat: if hidden {
             Fiat::Masked
@@ -101,7 +111,7 @@ fn asset_row(
                 "USD",
                 "$",
                 locale,
-                FiatOptions::default(),
+                crate::executor::format_prefs::fiat_options(),
             )))
         },
     }
@@ -291,7 +301,7 @@ fn day_label(day_start_ms: f64, s: &FlowStrings) -> SharedString {
     let civil = Civil::from_unix_millis(day_start_ms as i64, 0);
     SharedString::from(vela_core::l10n::datetime::format_date(
         &civil,
-        vela_core::l10n::datetime::DatePreset::Iso,
+        crate::executor::format_prefs::current().date,
     ))
 }
 
@@ -405,7 +415,7 @@ pub fn tx_detail(
                 "USD",
                 "$",
                 locale,
-                FiatOptions::default(),
+                crate::executor::format_prefs::fiat_options(),
             ))
         },
         positive: incoming,
@@ -418,7 +428,11 @@ pub fn tx_detail(
 fn stamp(timestamp_sec: f64, s: &FlowStrings, locale: &str) -> String {
     let epoch_ms = timestamp_sec * 1000.0;
     let civil = crate::executor::local_civil(epoch_ms);
-    let clock = format_time(&civil, TimePreset::H24, locale);
+    let clock = format_time(
+        &civil,
+        crate::executor::format_prefs::current().time,
+        locale,
+    );
     let day = day_label(crate::executor::day_start_ms(epoch_ms), s);
     format!("{day} {clock}")
 }
@@ -615,7 +629,7 @@ fn deposits(view: &ReceiveWatchView, locale: &str) -> Vec<FlowDeposit> {
         .map(|entry| FlowDeposit {
             time: SharedString::from(format_time(
                 &crate::executor::local_civil(entry.at_epoch_ms),
-                TimePreset::H24,
+                crate::executor::format_prefs::current().time,
                 locale,
             )),
             rows: entry
@@ -625,7 +639,11 @@ fn deposits(view: &ReceiveWatchView, locale: &str) -> Vec<FlowDeposit> {
                     (
                         SharedString::from(format!(
                             "+{} {}",
-                            format_token_amount(item.amount, NumberPreset::CommaDot, false),
+                            format_token_amount(
+                                item.amount,
+                                crate::executor::format_prefs::current().number,
+                                false
+                            ),
                             item.symbol
                         )),
                         SharedString::from(match item.usd {
@@ -635,7 +653,13 @@ fn deposits(view: &ReceiveWatchView, locale: &str) -> Vec<FlowDeposit> {
                             Some(usd) => format!(
                                 "{}  {}",
                                 chain_name(item.chain_id),
-                                format_fiat(usd, "USD", "$", locale, FiatOptions::default())
+                                format_fiat(
+                                    usd,
+                                    "USD",
+                                    "$",
+                                    locale,
+                                    crate::executor::format_prefs::fiat_options()
+                                )
                             ),
                             None => chain_name(item.chain_id),
                         }),
@@ -714,14 +738,24 @@ fn native_symbol(chain_id: u32) -> String {
 }
 
 fn trimmed(amount: f64) -> String {
-    format_token_amount(amount, NumberPreset::CommaDot, false)
+    format_token_amount(
+        amount,
+        crate::executor::format_prefs::current().number,
+        false,
+    )
 }
 
 fn fiat_line(usd: Option<f64>, locale: &str) -> Option<SharedString> {
     usd.map(|usd| {
         SharedString::from(format!(
             "≈ {}",
-            format_fiat(usd, "USD", "$", locale, FiatOptions::default())
+            format_fiat(
+                usd,
+                "USD",
+                "$",
+                locale,
+                crate::executor::format_prefs::fiat_options()
+            )
         ))
     })
 }
@@ -819,7 +853,7 @@ fn send_token_row(
                 "USD",
                 "$",
                 locale,
-                FiatOptions::default(),
+                crate::executor::format_prefs::fiat_options(),
             ))),
         },
     }
@@ -1720,7 +1754,10 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
                         .clone()
                         .unwrap_or_else(|| shorten(&draft.address))
                         .into(),
-                    value: format!("{} {symbol}", draft.amount).trim().to_owned().into(),
+                    value: format!("{} {symbol}", draft.amount)
+                        .trim()
+                        .to_owned()
+                        .into(),
                 })
                 .collect()
         } else {
@@ -2149,8 +2186,8 @@ mod tests {
             transfers: Vec::new(),
             amount: "0.001".to_owned(),
             usd_value: 0.0,
-                submitted_at_ms: None,
-                typical_inclusion_s: None,
+            submitted_at_ms: None,
+            typical_inclusion_s: None,
         });
         send_receipt(&SendInputs {
             send: &send,

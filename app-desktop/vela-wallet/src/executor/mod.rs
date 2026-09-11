@@ -45,6 +45,7 @@ pub mod dapp_rpc;
 pub mod display_currency;
 pub mod explore_sites;
 pub mod fee;
+pub mod format_prefs;
 pub mod identity;
 pub mod manage_tokens;
 pub mod network_admin;

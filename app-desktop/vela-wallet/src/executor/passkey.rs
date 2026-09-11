@@ -1143,7 +1143,9 @@ mod tests {
                 _request: &[u8],
                 _touch: Option<TouchKind>,
             ) -> Result<Vec<u8>, CableError> {
-                Err(CableError::Other(crate::ctap::cable::TUNNEL_CLOSED.to_owned()))
+                Err(CableError::Other(
+                    crate::ctap::cable::TUNNEL_CLOSED.to_owned(),
+                ))
             }
             fn cancel(&mut self) {
                 unreachable!("no goodbye into a closed tunnel");
@@ -1181,9 +1183,18 @@ mod tests {
             Ok(_) => unreachable!("a closed tunnel cannot sign"),
         };
         assert_eq!(failure.kind, FailureKind::Cancelled);
-        assert!(failure.message.as_deref().is_some_and(|m| m.contains("phone")));
+        assert!(
+            failure
+                .message
+                .as_deref()
+                .is_some_and(|m| m.contains("phone"))
+        );
         let log = touches.lock().map(|log| log.clone()).unwrap_or_default();
-        assert_eq!(log.last(), Some(&false), "the card must come down on the failure path");
+        assert_eq!(
+            log.last(),
+            Some(&false),
+            "the card must come down on the failure path"
+        );
     }
 
     /// A low-S DER signature over a fixed digest, produced here rather than

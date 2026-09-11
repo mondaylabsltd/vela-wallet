@@ -195,7 +195,7 @@ same three ways in as the desktop (SC-428, 438).
 
 - [x] T074m [US12] (Celo probed live: all 11 contracts + RIP-7212 present; the scan path now answers `CheckFailed` → 'unable to verify' on both shells) #E1: split `NotCompatible` from "could not check" in core `network_admin.rs` (`NetWizardErrorKind::CheckFailed` with retry) and render both on web + desktop; run the eleven probes + P-256 against Celo from the desktop and record which fails — SC-444
 - [x] T074n [US12] #E2: `TokenDetail.svelte` `onselect(id)` → page opens `tx-detail` by feed id (`findFeedItem`); `FlowsPanel`/`FlowsMobile` wiring — SC-445
-- [ ] T074o [US12] #E3: reproduce which surface ignores the date format (web feed / desktop); fix that surface
+- [x] T074o [US12] #E3: reproduced on both shells — web desktop layout dropped the day heading (`WalletDesktop.svelte` prints it now); desktop rows were mocks (`executor/format_prefs.rs` + `settings/live.rs` menus + `dropdown_menu_picks`; every figure/date/clock reads the presets in force) — SC-450
 - [ ] T074p [US12] #E4: client — the AAGUID lookup base URL comes from the same settings object as the index (default = our node once it exists); server task filed in `biubiu-projects`
 - [x] T074q [US12] #E5: `liveLanguageRows` ticks the route locale; `settings/+page.svelte` navigates to the chosen locale after `setLanguage` — SC-446
 - [x] T074r [US12] (rate editor done; the "toggle does not switch" half still needs a reproduction) #E6: web `BatchImport.svelte` editable rate (`EditRate` / `ResetRateToAuto`), verify the sheet opens with its token so `SetUnit` applies — SC-447

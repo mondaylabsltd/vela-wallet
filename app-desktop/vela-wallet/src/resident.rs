@@ -213,7 +213,9 @@ where
                             .background_executor()
                             .spawn(async move {
                                 if crate::panic_report::test_panic_requested() {
-                                    panic!("VELA_TEST_PANIC: a deliberate panic in background work");
+                                    panic!(
+                                        "VELA_TEST_PANIC: a deliberate panic in background work"
+                                    );
                                 }
                                 crate::panic_report::guarded(work)
                             })

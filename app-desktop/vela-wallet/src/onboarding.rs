@@ -285,7 +285,12 @@ impl OnboardingPage {
     }
 
     /// One intro event. The state decides; the page marks it seen and routes.
-    fn on_intro_event(&mut self, event: intro::IntroEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    fn on_intro_event(
+        &mut self,
+        event: intro::IntroEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(state) = self.intro.as_mut() else {
             return;
         };
@@ -1044,7 +1049,11 @@ impl Render for OnboardingPage {
         {
             self.prompt = Some((
                 Machine::Login,
-                Prompt::new(vela_core::app::PromptKind::CreateFailed { detail }, false, 0),
+                Prompt::new(
+                    vela_core::app::PromptKind::CreateFailed { detail },
+                    false,
+                    0,
+                ),
             ));
         }
         let tiling = frame_tiling(window);
@@ -1274,7 +1283,12 @@ impl Render for OnboardingPage {
 /// Pure, so the one rule that trapped the front door (spec 038 finding 6) is
 /// a unit test rather than a render pass: a dismissed card stays dismissed
 /// until a re-probe clears the flag, and the create journey never gets one.
-fn endpoint_should_auto_open(unreachable: bool, open: bool, dismissed: bool, creating: bool) -> bool {
+fn endpoint_should_auto_open(
+    unreachable: bool,
+    open: bool,
+    dismissed: bool,
+    creating: bool,
+) -> bool {
     unreachable && !open && !dismissed && !creating
 }
 

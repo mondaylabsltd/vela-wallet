@@ -8,8 +8,8 @@ use gpui::SharedString;
 
 use vela_core::app::activity_feed::{FeedDirection, FeedItem, FeedRow, FeedTxKind, FeedView};
 use vela_core::app::balance_dashboard::{BalanceNotice, BalanceView};
-use vela_core::l10n::currency::{FiatOptions, format_fiat};
-use vela_core::l10n::number::{NumberPreset, format_token_amount};
+use vela_core::l10n::currency::format_fiat;
+use vela_core::l10n::number::format_token_amount;
 
 use crate::wallet::WalletStrings;
 use crate::wallet::fixtures::{
@@ -97,7 +97,13 @@ pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str) -> BalanceMo
 /// belongs here rather than in a formatter. Splitting on the LAST `.` is what
 /// keeps a locale whose group separator is `.` from being cut in half.
 fn split_fiat(usd: f64, locale: &str) -> (SharedString, Option<SharedString>) {
-    let formatted = format_fiat(usd, "USD", "$", locale, FiatOptions::default());
+    let formatted = format_fiat(
+        usd,
+        "USD",
+        "$",
+        locale,
+        crate::executor::format_prefs::fiat_options(),
+    );
     match formatted.rsplit_once('.') {
         Some((whole, minor)) if minor.chars().all(|c| c.is_ascii_digit()) => (
             SharedString::from(whole.to_owned()),
@@ -935,7 +941,11 @@ pub fn asset_rows(
                 balance: if view.hidden {
                     SharedString::from(crate::wallet::fixtures::MASK)
                 } else {
-                    SharedString::from(format_token_amount(amount, NumberPreset::CommaDot, false))
+                    SharedString::from(format_token_amount(
+                        amount,
+                        crate::executor::format_prefs::current().number,
+                        false,
+                    ))
                 },
                 fiat: if view.hidden {
                     Fiat::Masked
@@ -947,7 +957,7 @@ pub fn asset_rows(
                         "USD",
                         "$",
                         locale,
-                        FiatOptions::default(),
+                        crate::executor::format_prefs::fiat_options(),
                     )))
                 },
             }
@@ -1037,7 +1047,11 @@ pub fn visible_token_indices(view: &BalanceView, filter: Option<u32>) -> Vec<usi
 pub fn receipt_toast(view: &FeedView, s: &WalletStrings) -> Option<SharedString> {
     let toast = view.toast.as_ref()?;
     let amount = toast.value.parse::<f64>().ok()?;
-    let amount = format_token_amount(amount, NumberPreset::CommaDot, false);
+    let amount = format_token_amount(
+        amount,
+        crate::executor::format_prefs::current().number,
+        false,
+    );
     Some(SharedString::from(crate::wallet::fill(
         &crate::wallet::fill(&s.toast_received, "amount", &amount),
         "token",
@@ -1079,7 +1093,15 @@ pub fn asset_detail(
     let token = view.tokens.get(index)?;
     let amount = token.balance.parse::<f64>().unwrap_or(0.0);
     let chain = crate::executor::custom_tokens::network_name(token.chain_id);
-    let figure = |value: f64| format_fiat(value, "USD", "$", locale, FiatOptions::default());
+    let figure = |value: f64| {
+        format_fiat(
+            value,
+            "USD",
+            "$",
+            locale,
+            crate::executor::format_prefs::fiat_options(),
+        )
+    };
 
     let mut facts = vec![(s.label_name.clone(), SharedString::from(token.name.clone()))];
     if let Some(price) = token.price_usd {
@@ -1114,7 +1136,11 @@ pub fn asset_detail(
         } else {
             SharedString::from(format!(
                 "{} {}",
-                format_token_amount(amount, NumberPreset::CommaDot, false),
+                format_token_amount(
+                    amount,
+                    crate::executor::format_prefs::current().number,
+                    false
+                ),
                 token.symbol
             ))
         },
@@ -1271,7 +1297,11 @@ pub(crate) fn amount_text(item: &FeedItem, incoming: bool) -> SharedString {
     let Ok(amount) = value.parse::<f64>() else {
         return SharedString::from("");
     };
-    let formatted = format_token_amount(amount, NumberPreset::CommaDot, false);
+    let formatted = format_token_amount(
+        amount,
+        crate::executor::format_prefs::current().number,
+        false,
+    );
     SharedString::from(format!(
         "{}{formatted}",
         if incoming { "+" } else { "\u{2212}" }

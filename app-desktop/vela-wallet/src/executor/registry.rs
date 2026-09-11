@@ -504,7 +504,15 @@ fn eth_call(url: &str, to: &str, data_hex: &str) -> Result<Vec<u8>> {
             "method": "eth_call",
             "params": [{ "to": to, "data": data_hex }, "latest"],
         }))
-        .map_err(|error| classify("Legacy name", Transport { error, local: false }))?
+        .map_err(|error| {
+            classify(
+                "Legacy name",
+                Transport {
+                    error,
+                    local: false,
+                },
+            )
+        })?
         .body_mut()
         .read_json()
         .map_err(|error| RegistryError::answered(format!("Legacy name: bad JSON: {error}")))?;
@@ -783,10 +791,34 @@ mod tests {
     /// send someone hunting for a working URL over a refusal.
     #[test]
     fn only_a_status_code_counts_as_an_answer() {
-        assert!(!classify("Query", Transport { error: ureq::Error::StatusCode(404), local: false }).network);
-        assert!(classify("Query", Transport { error: ureq::Error::HostNotFound, local: false }).network);
+        assert!(
+            !classify(
+                "Query",
+                Transport {
+                    error: ureq::Error::StatusCode(404),
+                    local: false
+                }
+            )
+            .network
+        );
+        assert!(
+            classify(
+                "Query",
+                Transport {
+                    error: ureq::Error::HostNotFound,
+                    local: false
+                }
+            )
+            .network
+        );
         // Spec 038: the one new bit — "this machine could not get out".
-        let local = classify("Query", Transport { error: ureq::Error::HostNotFound, local: true });
+        let local = classify(
+            "Query",
+            Transport {
+                error: ureq::Error::HostNotFound,
+                local: true,
+            },
+        );
         assert!(local.network && local.local);
     }
 
@@ -811,7 +843,11 @@ mod tests {
     #[ignore = "needs the network"]
     fn the_deployed_registry_answers_its_health_probe() {
         set_registry_url(DEFAULT_REGISTRY_URL);
-        assert_eq!(probe_health(), Probe::Reachable, "{DEFAULT_REGISTRY_URL} did not answer");
+        assert_eq!(
+            probe_health(),
+            Probe::Reachable,
+            "{DEFAULT_REGISTRY_URL} did not answer"
+        );
     }
 
     /// A key nobody registered comes back as not-registered, not as an error.

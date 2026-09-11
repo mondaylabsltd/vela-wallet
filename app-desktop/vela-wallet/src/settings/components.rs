@@ -7,6 +7,8 @@
 //! labelled URL field, a checklist, a storage line and a key/value row. Every
 //! panel in `wallet::page` is a composition of these.
 
+use std::rc::Rc;
+
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Stateful,
@@ -226,14 +228,40 @@ pub fn dropdown_trigger(theme: &Theme, icons: &mut IconCache, value: gpui::Share
         ))
 }
 
+/// One row of a dropdown's menu: the example, an optional note, whether it is
+/// the one in force.
+pub type MenuRow = (gpui::SharedString, Option<gpui::SharedString>, bool);
+
 /// The menu an open dropdown drops (DST3). Rendered as an absolutely-positioned
 /// child of the trigger's cell, because the desktop SPEC requires it to escape
 /// the panel's clipping rather than push the rows below it down.
-pub fn dropdown_menu(
+///
+/// A picture of the control: the gallery's and the mock's. A menu whose rows
+/// answer to a click is [`dropdown_menu_picks`].
+pub fn dropdown_menu(theme: &Theme, icons: &mut IconCache, rows: &[MenuRow]) -> Div {
+    menu_of(theme, icons, rows, None)
+}
+
+/// The same menu, live (spec 038 #E3): `on_pick` is handed the index of the
+/// row the person chose.
+pub fn dropdown_menu_picks(
     theme: &Theme,
     icons: &mut IconCache,
-    rows: &[(gpui::SharedString, Option<gpui::SharedString>, bool)],
+    rows: &[MenuRow],
+    on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> Div {
+    menu_of(theme, icons, rows, Some(Rc::new(on_pick)))
+}
+
+type PickAction = Rc<dyn Fn(usize, &mut gpui::Window, &mut gpui::App)>;
+
+fn menu_of(
+    theme: &Theme,
+    icons: &mut IconCache,
+    rows: &[MenuRow],
+    on_pick: Option<PickAction>,
+) -> Div {
+    let hover = theme.bg_sunken;
     let mut col = div()
         .absolute()
         .top_0()
@@ -278,7 +306,18 @@ pub fn dropdown_menu(
         if *selected {
             row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 16.));
         }
-        col = col.child(row);
+        match on_pick.as_ref() {
+            Some(pick) => {
+                let pick = pick.clone();
+                col = col.child(
+                    row.id(ElementId::from(("dropdown-option", i)))
+                        .cursor_pointer()
+                        .hover(move |el| el.bg(hover))
+                        .on_click(move |_, window, cx| pick(i, window, cx)),
+                );
+            }
+            None => col = col.child(row),
+        }
         if i != last {
             col = col.child(div().h(px(1.)).bg(theme.divider));
         }

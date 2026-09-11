@@ -355,7 +355,10 @@ pub fn load_registry_endpoint() -> Option<String> {
 /// animation's "played" — use the SAME key names as the web (`vela.intro.seen`,
 /// `vela.launch.played`) so the four shells share one vocabulary.
 pub fn read_epoch_ms(key: &str) -> Option<f64> {
-    read_value(key).ok().flatten().and_then(|value| value.as_f64())
+    read_value(key)
+        .ok()
+        .flatten()
+        .and_then(|value| value.as_f64())
 }
 
 /// Write such a flag. Best-effort in the same way the web's is: an unwritable

@@ -17,11 +17,7 @@ impl Loc {
     /// `LC_MESSAGES` → `LANG` → `en` (spec 007 FR-007), resolved through the
     /// same ladder i18next uses (`resolve_language`).
     pub fn from_env() -> Self {
-        let requested = ["VELA_LANG", "LC_ALL", "LC_MESSAGES", "LANG"]
-            .iter()
-            .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()))
-            .map(|raw| normalize_posix_tag(&raw))
-            .unwrap_or_else(|| "en".to_owned());
+        let requested = requested_tag();
 
         let mut engine = match I18n::embedded() {
             Ok(engine) => engine,
@@ -107,6 +103,18 @@ impl Loc {
 /// `zh_CN.UTF-8` → `zh-CN`; strips the encoding suffix and maps `_` → `-`.
 /// `resolve_language` takes it from there (including `C`/`POSIX` → `en` via
 /// its unsupported-tag fallback).
+/// The tag the launch locale is resolved from: `VELA_LANG` → `LC_ALL` →
+/// `LC_MESSAGES` → `LANG` → `en`, as a BCP-47-shaped tag (`zh_CN.UTF-8` →
+/// `zh-CN`). Shared with the format presets (spec 038 #E3), so "Automatic"
+/// there means the same machine the strings mean.
+pub(crate) fn requested_tag() -> String {
+    ["VELA_LANG", "LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()))
+        .map(|raw| normalize_posix_tag(&raw))
+        .unwrap_or_else(|| "en".to_owned())
+}
+
 fn normalize_posix_tag(raw: &str) -> String {
     let no_encoding = raw.split('.').next().unwrap_or(raw);
     no_encoding.replace('_', "-")

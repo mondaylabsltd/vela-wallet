@@ -198,7 +198,7 @@ fn signed_amount(delta: &str, decimals: u32) -> SharedString {
         if negative { "\u{2212}" } else { "+" },
         vela_core::l10n::number::format_token_amount(
             amount,
-            vela_core::l10n::number::NumberPreset::CommaDot,
+            crate::executor::format_prefs::current().number,
             false,
         )
     ))

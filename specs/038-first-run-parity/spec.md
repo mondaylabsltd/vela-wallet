@@ -578,11 +578,20 @@ the first needs a reproduction before it is fixed.
   `TokenDetail.svelte` renders the same `ActivityRow` with no handler. The
   detail already resolves a feed item by id (`findFeedItem`), so the token
   screen's rows only need to name theirs.
-- **#E3 — the date format "13.06.2026" did not take.** `formatDate` reads
-  `preferences.dateFormat` and both `dayLabel`s (wallet, contacts) call it, so
-  the web's feed should follow — reproduce which surface the founder saw (the
-  desktop has no date-format preference wired; the day words "today /
-  yesterday" are not dates). Pin before fixing.
+- **#E3 — the date format "13.06.2026" did not take.** Reproduced on both
+  shells (2026-09-11, a record seeded at 2026-06-13 12:00). **Web**: the
+  detail column read `13.06.2026 12:00 PM` — the preference works — but the
+  desktop-width feed printed no day heading at all (the desktop layout
+  iterated the groups without the day line the phone layout prints), so
+  outside the detail there was nowhere for a date to show. Fixed: the
+  desktop layout prints the day heading. **Desktop**: the number, date and
+  time rows in Settings → Localization were the mock's literals with one
+  drawn menu — a pick changed nothing — and every date was ISO, every clock
+  24-hour, every figure comma-dot. Fixed: a stored choice (the web's own
+  words) with "Automatic · System" resolved from the machine's locale the way
+  the web resolves it from the browser's; the three menus pick and persist;
+  every day heading, detail stamp, deposit clock, token amount and fiat
+  figure reads the presets in force (SC-450).
 - **#E4 — AAGUID lookups go to a third party.** The catalog is vendored in
   `vela-core` (never queried for known models), but an unknown AAGUID is
   looked up at runtime from `aaguid-explorer.awesometools.dev` by every shell.
@@ -660,6 +669,9 @@ the first needs a reproduction before it is fixed.
   ellipsis, and the amount field is sized to what it holds.
 - **SC-449**: (#E8) the balance dialog lists every unpriced token by name and
   network.
+- **SC-450**: choosing "13.06.2026" in Settings → Localization changes the day
+  heading of an older record on the wallet feed to that form on both shells,
+  and the choice is still in force after a relaunch.
 - **SC-439**: (#191) a history-suggested contact can be given a name from its
   detail, and the name survives a reload.
 

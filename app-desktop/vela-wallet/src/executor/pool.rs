@@ -692,7 +692,9 @@ fn post(
         Ok(response) => response,
         Err(failure) => {
             return match failure.error {
-                ureq::Error::StatusCode(status) => (RpcTransportOutcome::HttpError { status }, None),
+                ureq::Error::StatusCode(status) => {
+                    (RpcTransportOutcome::HttpError { status }, None)
+                }
                 ureq::Error::Timeout(_) => (RpcTransportOutcome::Timeout, None),
                 _ => (RpcTransportOutcome::Network, None),
             };

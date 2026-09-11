@@ -95,6 +95,7 @@
 				onaction={() => onflow?.('activity')}
 			/>
 			{#each model.activityGroups as group (group.label)}
+				<p class="day">{group.label}</p>
 				<ul>
 					{#each group.rows as row, i (i)}
 						<li>
@@ -192,5 +193,14 @@
 		list-style: none;
 		margin: 0;
 		padding: 0;
+	}
+	/* The day a group files under — the phone prints it; the desktop layout
+	   had dropped it (spec 038 #E3), which left a chosen date format with
+	   nowhere to show outside the detail column. */
+	.day {
+		margin: 0;
+		padding-block: var(--space-sm);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-fg-subtle);
 	}
 </style>

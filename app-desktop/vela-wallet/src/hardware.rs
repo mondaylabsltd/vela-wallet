@@ -16,7 +16,10 @@
 
 use std::cell::RefCell;
 
-use gpui::{App, Div, div, FontWeight, ImageSource, img, InteractiveElement as _, ParentElement, px, rgb, SharedString, StatefulInteractiveElement as _, Styled, Window};
+use gpui::{
+    App, Div, FontWeight, ImageSource, InteractiveElement as _, ParentElement, SharedString,
+    StatefulInteractiveElement as _, Styled, Window, div, img, px, rgb,
+};
 use qrcode::{Color as QrColor, QrCode};
 
 use vela_core::app::KeyMethod;
@@ -24,8 +27,8 @@ use vela_core::app::KeyMethod;
 use crate::ctap::usb::{TouchKind, TouchRequest};
 use crate::executor::passkey::{CredentialChoice, PinRequest};
 use crate::loc::Loc;
-use crate::passkey_icons::{Palette, PasskeyIcon, PasskeyIconCache};
 use crate::outcome::{SHEET_PAD, SHEET_RADIUS, SHEET_W};
+use crate::passkey_icons::{Palette, PasskeyIcon, PasskeyIconCache};
 use crate::theme::{self, FLOW_GAP_LG, FLOW_GAP_MD, FLOW_GAP_SM, TOUCH_DISC, Theme};
 use crate::ui::{ButtonVariant, NameFieldStrings, text_field, vela_button, vela_button_opts};
 
@@ -148,9 +151,10 @@ pub fn signin_method_card(
     let this_device = crate::executor::passkey::platform_supported();
     let entry = |method: KeyMethod, title_key: &str, body_key: &str, available: bool| {
         let on_pick = on_pick.clone();
-        let mark = icons
-            .borrow_mut()
-            .image(PasskeyIcon::for_method(method), palette, METHOD_ICON_PX);
+        let mark =
+            icons
+                .borrow_mut()
+                .image(PasskeyIcon::for_method(method), palette, METHOD_ICON_PX);
         let row = div()
             .id(("signin-method", method as u64))
             .w_full()

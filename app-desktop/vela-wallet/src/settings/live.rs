@@ -17,7 +17,12 @@ use vela_core::app::network_admin::{
     NetCompatibility, NetNetworkRow, NetProbeHealth, NetProviderId, NetServiceHealth, NetView,
     NetWizardErrorKind, NetWizardPhase, NetWizardView,
 };
-use vela_core::l10n::currency::{FiatOptions, format_fiat};
+use vela_core::l10n::currency::format_fiat;
+use vela_core::l10n::datetime::{Civil, DatePreset, TimePreset, format_date, format_time};
+use vela_core::l10n::number::{NumberPreset, format_token_amount};
+
+use crate::executor::format_prefs::{self, Choice, Formats};
+use crate::settings::components::MenuRow;
 
 /// The sample figure the 本地化 mock prints beside the currency code.
 const SAMPLE: f64 = 1234.56;
@@ -61,7 +66,7 @@ pub fn currency_row_value(view: &CurrencyView, locale: &str) -> SharedString {
                 &view.code,
                 symbol_for(&view.code),
                 locale,
-                FiatOptions::default(),
+                crate::executor::format_prefs::fiat_options(),
             );
             SharedString::from(format!("{} · {sample}", view.code))
         }
@@ -944,5 +949,208 @@ mod endpoint_tests {
             .unwrap_or_else(|| unreachable!("invalid has a badge"));
         assert!(matches!(wrong.tone, Tone::Warn));
         assert!(endpoint_tone(&NetServiceHealth::InvalidResponse { latency_ms: 40.0 }).is_none());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Localization — the number, date and clock rows (spec 038 #E3)
+// ---------------------------------------------------------------------------
+
+/// The sample every format row and menu prints — the web's `FORMAT_SAMPLE`,
+/// 2026-06-13 13:45, so a row here and a row there show the same figure.
+pub const FORMAT_SAMPLE: Civil = Civil {
+    year: 2026,
+    month: 6,
+    day: 13,
+    hour: 13,
+    minute: 45,
+    second: 0,
+    weekday: 6,
+};
+
+/// The web's `1,234,567.89`.
+const NUMBER_SAMPLE: f64 = 1_234_567.89;
+
+fn number_example(preset: NumberPreset) -> SharedString {
+    SharedString::from(format_token_amount(NUMBER_SAMPLE, preset, false))
+}
+
+fn date_example(preset: DatePreset) -> SharedString {
+    SharedString::from(format_date(&FORMAT_SAMPLE, preset))
+}
+
+fn time_example(preset: TimePreset, locale: &str) -> SharedString {
+    SharedString::from(format_time(&FORMAT_SAMPLE, preset, locale))
+}
+
+/// What the three rows show: the sample in the preset in force.
+#[must_use]
+pub fn format_row_values(
+    formats: Formats,
+    locale: &str,
+) -> (SharedString, SharedString, SharedString) {
+    (
+        number_example(formats.number),
+        date_example(formats.date),
+        time_example(formats.time, locale),
+    )
+}
+
+/// The three menus, each opening with "Automatic · System" — the machine's
+/// own convention, printed as its example — and then the presets in the
+/// order the web lists them. The row in force carries the tick.
+pub struct FormatMenus {
+    pub number: Vec<MenuRow>,
+    pub date: Vec<MenuRow>,
+    pub time: Vec<MenuRow>,
+}
+
+#[must_use]
+pub fn format_menus(
+    choice: Choice,
+    machine: &Formats,
+    locale: &str,
+    auto_note: &SharedString,
+    indian_note: &SharedString,
+) -> FormatMenus {
+    let mut number = vec![(
+        number_example(machine.number),
+        Some(auto_note.clone()),
+        choice.number.is_none(),
+    )];
+    number.extend(format_prefs::NUMBER_OPTIONS.iter().map(|preset| {
+        (
+            number_example(*preset),
+            (*preset == NumberPreset::Indian).then(|| indian_note.clone()),
+            choice.number == Some(*preset),
+        )
+    }));
+    let mut date = vec![(
+        date_example(machine.date),
+        Some(auto_note.clone()),
+        choice.date.is_none(),
+    )];
+    date.extend(
+        format_prefs::DATE_OPTIONS
+            .iter()
+            .map(|preset| (date_example(*preset), None, choice.date == Some(*preset))),
+    );
+    let mut time = vec![(
+        time_example(machine.time, locale),
+        Some(auto_note.clone()),
+        choice.time.is_none(),
+    )];
+    time.extend(format_prefs::TIME_OPTIONS.iter().map(|preset| {
+        (
+            time_example(*preset, locale),
+            None,
+            choice.time == Some(*preset),
+        )
+    }));
+    FormatMenus { number, date, time }
+}
+
+/// A menu index back to a choice: row 0 is "Automatic", the rest the presets
+/// in the order [`format_menus`] laid them.
+#[must_use]
+pub fn picked_number(index: usize) -> Option<NumberPreset> {
+    index
+        .checked_sub(1)
+        .and_then(|i| format_prefs::NUMBER_OPTIONS.get(i).copied())
+}
+
+#[must_use]
+pub fn picked_date(index: usize) -> Option<DatePreset> {
+    index
+        .checked_sub(1)
+        .and_then(|i| format_prefs::DATE_OPTIONS.get(i).copied())
+}
+
+#[must_use]
+pub fn picked_time(index: usize) -> Option<TimePreset> {
+    index
+        .checked_sub(1)
+        .and_then(|i| format_prefs::TIME_OPTIONS.get(i).copied())
+}
+
+#[cfg(test)]
+mod format_tests {
+    use super::*;
+
+    fn menus(choice: Choice) -> FormatMenus {
+        format_menus(
+            choice,
+            &format_prefs::auto("en-US"),
+            "en",
+            &SharedString::from("Automatic · System"),
+            &SharedString::from("Indian grouping"),
+        )
+    }
+
+    #[test]
+    fn the_rows_print_the_web_s_sample_in_the_preset_in_force() {
+        let (number, date, time) = format_row_values(
+            Formats {
+                number: NumberPreset::DotComma,
+                date: DatePreset::DmyDot,
+                time: TimePreset::H12,
+            },
+            "en",
+        );
+        assert_eq!(number.as_ref(), "1.234.567,89");
+        assert_eq!(date.as_ref(), "13.06.2026");
+        assert_eq!(time.as_ref(), "1:45 PM");
+    }
+
+    #[test]
+    fn a_fresh_wallet_ticks_automatic_and_shows_the_machine_s_example() {
+        let m = menus(Choice::default());
+        assert_eq!(m.number[0].0.as_ref(), "1,234,567.89");
+        assert_eq!(m.number[0].1.as_deref(), Some("Automatic · System"));
+        assert!(m.number[0].2);
+        assert!(m.number[1..].iter().all(|row| !row.2));
+        assert_eq!(m.date[0].0.as_ref(), "06/13/2026");
+        assert!(m.date[0].2);
+        assert_eq!(m.time[0].0.as_ref(), "1:45 PM");
+        assert!(m.time[0].2);
+        // The five date presets, the two clocks, the four groupings.
+        assert_eq!(m.date.len(), 6);
+        assert_eq!(m.time.len(), 3);
+        assert_eq!(m.number.len(), 5);
+        assert_eq!(m.number[4].1.as_deref(), Some("Indian grouping"));
+    }
+
+    #[test]
+    fn a_choice_moves_the_tick_off_automatic() {
+        let m = menus(Choice {
+            number: None,
+            date: Some(DatePreset::DmyDot),
+            time: Some(TimePreset::H24),
+        });
+        assert!(!m.date[0].2);
+        let ticked: Vec<&str> = m
+            .date
+            .iter()
+            .filter(|row| row.2)
+            .map(|row| row.0.as_ref())
+            .collect();
+        assert_eq!(ticked, ["13.06.2026"]);
+        let ticked: Vec<&str> = m
+            .time
+            .iter()
+            .filter(|row| row.2)
+            .map(|row| row.0.as_ref())
+            .collect();
+        assert_eq!(ticked, ["13:45"]);
+        assert!(m.number[0].2);
+    }
+
+    #[test]
+    fn a_menu_index_names_the_preset_the_row_printed() {
+        assert_eq!(picked_date(0), None);
+        assert_eq!(picked_date(4), Some(DatePreset::DmyDot));
+        assert_eq!(picked_date(9), None);
+        assert_eq!(picked_time(2), Some(TimePreset::H12));
+        assert_eq!(picked_number(3), Some(NumberPreset::SpaceComma));
     }
 }

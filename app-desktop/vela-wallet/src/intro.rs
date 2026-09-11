@@ -22,15 +22,29 @@ use gpui::{
 
 use crate::intro_art::{IntroArt, IntroArtCache, Palette, VIEW_H, VIEW_W};
 use crate::loc::Loc;
-use crate::theme::{self, FLOW_COLUMN_W, FLOW_GAP_LG, FLOW_GAP_MD, GAP_HERO_CTA, GAP_WELCOME_CTA, Theme};
+use crate::theme::{
+    self, FLOW_COLUMN_W, FLOW_GAP_LG, FLOW_GAP_MD, GAP_HERO_CTA, GAP_WELCOME_CTA, Theme,
+};
 use crate::ui::{ButtonVariant, welcome_cta};
 
 /// The three slides, in the order the argument is made — one art and two
 /// corpus keys each, the same sequence every shell reads (`slides.ts`).
 const SLIDES: [(IntroArt, &str, &str); 3] = [
-    (IntroArt::NoSeedPhrase, "onboarding.intro.noSeedTitle", "onboarding.intro.noSeedBody"),
-    (IntroArt::KeysAreYours, "onboarding.intro.custodyTitle", "onboarding.intro.custodyBody"),
-    (IntroArt::OneAddress, "onboarding.intro.chainsTitle", "onboarding.intro.chainsBody"),
+    (
+        IntroArt::NoSeedPhrase,
+        "onboarding.intro.noSeedTitle",
+        "onboarding.intro.noSeedBody",
+    ),
+    (
+        IntroArt::KeysAreYours,
+        "onboarding.intro.custodyTitle",
+        "onboarding.intro.custodyBody",
+    ),
+    (
+        IntroArt::OneAddress,
+        "onboarding.intro.chainsTitle",
+        "onboarding.intro.chainsBody",
+    ),
 ];
 
 /// The illustration's drawn width; height follows the contract's viewBox.
@@ -103,7 +117,8 @@ impl IntroState {
                     // and a track that slides freely into empty space says
                     // there is.
                     let overshoot = (self.index == 0 && raw > 0.) || (self.last() && raw < 0.);
-                    self.drag_px = if overshoot { raw / 3. } else { raw }.clamp(-FLOW_COLUMN_W, FLOW_COLUMN_W);
+                    self.drag_px =
+                        if overshoot { raw / 3. } else { raw }.clamp(-FLOW_COLUMN_W, FLOW_COLUMN_W);
                 }
             }
             IntroEvent::DragEnd => {
@@ -209,14 +224,24 @@ pub fn render_intro(state: &mut IntroState, theme: &Theme, loc: &Loc, sink: Intr
             .overflow_hidden()
             .cursor_grab()
             .on_mouse_down(MouseButton::Left, move |event, window, cx| {
-                down(IntroEvent::DragStart(f32::from(event.position.x)), window, cx);
+                down(
+                    IntroEvent::DragStart(f32::from(event.position.x)),
+                    window,
+                    cx,
+                );
             })
             .on_mouse_move(move |event: &MouseMoveEvent, window, cx| {
                 if event.pressed_button == Some(MouseButton::Left) {
-                    moved(IntroEvent::DragMove(f32::from(event.position.x)), window, cx);
+                    moved(
+                        IntroEvent::DragMove(f32::from(event.position.x)),
+                        window,
+                        cx,
+                    );
                 }
             })
-            .on_mouse_up(MouseButton::Left, move |_, window, cx| up(IntroEvent::DragEnd, window, cx))
+            .on_mouse_up(MouseButton::Left, move |_, window, cx| {
+                up(IntroEvent::DragEnd, window, cx)
+            })
             .on_mouse_up_out(MouseButton::Left, move |_, window, cx| {
                 up_out(IntroEvent::DragEnd, window, cx)
             })
@@ -227,16 +252,16 @@ pub fn render_intro(state: &mut IntroState, theme: &Theme, loc: &Loc, sink: Intr
     //    way on — or, on the last slide, the two ways in --------------------
     let mut dots = div().flex().flex_row().gap(px(8.)).justify_center();
     for i in 0..total {
-        dots = dots.child(
-            div()
-                .w(px(6.))
-                .h(px(6.))
-                .rounded_full()
-                .bg(if i == index { theme.fg_base } else { theme.fg_subtle }),
-        );
+        dots = dots.child(div().w(px(6.)).h(px(6.)).rounded_full().bg(if i == index {
+            theme.fg_base
+        } else {
+            theme.fg_subtle
+        }));
     }
-    let page_of: SharedString =
-        loc.t_vars("onboarding.intro.pageOf", &[("current", (index + 1) as f64), ("total", total as f64)]);
+    let page_of: SharedString = loc.t_vars(
+        "onboarding.intro.pageOf",
+        &[("current", (index + 1) as f64), ("total", total as f64)],
+    );
     let _ = page_of; // the dots carry it visually; the label is the screen reader's, which gpui has no channel for yet
 
     let actions = if last {

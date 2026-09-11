@@ -21,16 +21,20 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use gpui::{AnyElement, App, Div, div, FocusHandle, FontWeight, ImageSource, img, InteractiveElement as _, IntoElement as _, ParentElement, px, SharedString, Stateful, StatefulInteractiveElement as _, Styled, Window};
+use gpui::{
+    AnyElement, App, Div, FocusHandle, FontWeight, ImageSource, InteractiveElement as _,
+    IntoElement as _, ParentElement, SharedString, Stateful, StatefulInteractiveElement as _,
+    Styled, Window, div, img, px,
+};
 
 use vela_core::app::create_wallet::{CreateKeyRow, CreateStage, CreateView, SubmitLabel};
 use vela_core::app::{KeyMethod, StatusKey};
 
+use crate::hardware::METHOD_ICON_PX;
 use crate::identicon::IdenticonCache;
 use crate::loc::Loc;
-use crate::passkey_icons::{Palette, PasskeyIcon, PasskeyIconCache};
-use crate::hardware::METHOD_ICON_PX;
 use crate::passkey_directory::PasskeyDirectory;
+use crate::passkey_icons::{Palette, PasskeyIcon, PasskeyIconCache};
 use crate::theme::{
     self, FLOW_GAP_LG, FLOW_GAP_MD, FLOW_GAP_SM, HAIRLINE, OPACITY_DISABLED, RADIUS_FIELD, Theme,
 };
@@ -921,10 +925,11 @@ fn method_picker(host: &FlowHost<'_>) -> Div {
         } else {
             FlowEvent::MethodUnavailable(method)
         };
-        let mark = host
-            .passkey_icons
-            .borrow_mut()
-            .image(PasskeyIcon::for_method(method), palette, METHOD_ICON_PX);
+        let mark = host.passkey_icons.borrow_mut().image(
+            PasskeyIcon::for_method(method),
+            palette,
+            METHOD_ICON_PX,
+        );
         let row = div()
             .id(("flow-method", method as u64))
             .w_full()
