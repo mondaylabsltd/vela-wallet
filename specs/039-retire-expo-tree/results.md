@@ -249,3 +249,16 @@ Draft PR **#193** — https://github.com/mondaylabsltd/vela-wallet/pull/193
 (the workflow triggers on `pull_request`, not on a branch push). CI run
 34599194167 on `49bad427`; job results appended below when the run
 finishes.
+
+## CI, first run — one red, and why
+
+Run 34599463891 on `472ac163`: the `rust` job's "Web build is current" step
+failed — the committed fingerprint (`672f6881b303`) was taken at the
+generator commit, and the docs pass afterwards edited a doc comment in
+`rust/crates/vela-core-wasm/src/lib.rs` and the `description` line of its
+`Cargo.toml`. `sourceFingerprint()` hashes every `.rs` and `Cargo.toml`
+under the crate roots, comments included, so a comment-only edit is a new
+fingerprint. Rebuilt (`npm run build:wasm`, asset `69fea6785243`, same
+3,734,673 bytes), `--check` exit 0, app-web `sync-wasm --check` exit 0,
+committed. Lesson for the memory notes: any edit under `rust/`, prose or
+not, means a rebuild before the push.
