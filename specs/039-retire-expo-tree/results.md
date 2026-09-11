@@ -262,3 +262,38 @@ fingerprint. Rebuilt (`npm run build:wasm`, asset `69fea6785243`, same
 3,734,673 bytes), `--check` exit 0, app-web `sync-wasm --check` exit 0,
 committed. Lesson for the memory notes: any edit under `rust/`, prose or
 not, means a rebuild before the push.
+
+## Second ruling — the tooling package moves into `scripts/` (2026-09-11)
+
+Founder, on seeing the root `package.json`: *"最好就是能用一个专门的 scripts
+目录来管理，而不是放到根目录，我希望根目录干净一点"*. Applied:
+
+- `package.json` + `package-lock.json` → `scripts/`; the root now carries no
+  npm file and no `node_modules`. Every npm script does `cd ..` first, so
+  `npm --prefix scripts run <name>` from the root and `npm run <name>` from
+  inside `scripts/` behave the same.
+- `typescript` is no longer needed anywhere at the top: `packages/vela-sdk`
+  gets its own lockfile and CI runs `npm ci --prefix packages/vela-sdk`
+  before its build. Four dependencies remain in `scripts/`: `i18next`,
+  `identicons-esm`, `@noble/curves`, `@noble/hashes`.
+- `verify-i18n-parity.mjs` and `dump-vectors/i18n.dump.mjs` resolve
+  `i18next` from their own location (`createRequire(import.meta.url)`)
+  instead of the root `package.json`.
+- CI: `cache-dependency-path: scripts/package-lock.json`, `npm ci --prefix
+  scripts`, `npm --prefix scripts run dump:vectors`.
+- The residue check's rule 1 now also fails on a root `package.json` or
+  `package-lock.json` reappearing (20 self-test expectations).
+- README, 01, 02, 05 and the spec's clean-tree test 1 say so.
+
+Gates after the move (all exit 0): residue self-test + check, `gen:i18n` +
+diff, `dump:vectors` + diff, `gen:identicon-features` + diff, `lint:i18n`,
+Lottie self-test + lint, reachability, `verify:identicon`, `verify:i18n`,
+`verify:wasm`, `gen-core-types --check`, `vela-sdk` `npm ci` + build, and
+`check:expo-residue` run from inside `scripts/`.
+
+## CI, first run — the other seven
+
+Run 34599463891 on `472ac163`: `app`, `web`, `site`, `rust-macos`,
+`desktop`, **`android`**, **`ios`** all green; only `rust` red (the
+fingerprint, above). The founder's constraint — the four shells unaffected —
+holds on a runner that builds the bindings and the xcframework from scratch.

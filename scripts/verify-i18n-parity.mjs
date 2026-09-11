@@ -29,7 +29,9 @@ import { createRequire } from 'node:module';
 import { loadShippedCore } from '../rust/scripts/load-wasm-node.mjs';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const require = createRequire(join(REPO_ROOT, 'package.json'));
+// Resolved from this file's own location: the oracle is installed by the
+// tooling package in scripts/ (spec 039), not at the repository root.
+const require = createRequire(import.meta.url);
 
 // Full ICU is load-bearing: it is what makes the oracle MODE A. A small-icu Node
 // would silently compare the port against the DEGRADED behaviour it exists to fix.

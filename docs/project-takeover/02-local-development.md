@@ -1,6 +1,6 @@
 # 02 — 本地开发 (Local Development)
 
-> 2026-09-11 按 spec 039 重写:Expo / React Native 应用已退役,本文只描述现存的四个壳、共享核心与根目录工具包。
+> 2026-09-11 按 spec 039 重写:Expo / React Native 应用已退役,本文只描述现存的四个壳、共享核心与 `scripts/` 里的工具包(根目录不放任何 npm 文件)。
 
 ## 前置
 
@@ -12,8 +12,8 @@
 ## 从零启动
 
 ```bash
-# 根目录:只装工具包(5 个依赖),不构建任何 App
-npm ci
+# 工具包在 scripts/(4 个依赖),根目录不放 npm 文件;不构建任何 App
+npm ci --prefix scripts
 
 # Web 壳(生产 Web 钱包)
 cd app-web/vela-wallet && pnpm install && pnpm dev        # http://localhost:5173
@@ -39,18 +39,18 @@ cd ../app-android/vela-wallet && ./gradlew :app:installDebug
 
 ## 常用命令与门禁
 
-根目录工具包(`package.json`):
+工具包(`scripts/package.json`;下表命令在根目录写作 `npm --prefix scripts run <name>`,或 `cd scripts` 后 `npm run <name>`;每条脚本都先切回仓库根再执行):
 
 | 命令 | 用途 |
 |---|---|
-| `npm run gen:i18n` | 语料 → Rust 目录 + `public/i18n`(改语料必须一起提交产物;加键要改脚本里的路径计数) |
-| `npm run lint:i18n` / `npm run verify:i18n` | 语料缺陷登记 / Rust i18n 与 `i18next` 的 parity |
-| `npm run gen:identicon-features` / `npm run verify:identicon` | 头像图形表再生成 / 与 `identicons-esm` 的 parity |
-| `npm run dump:vectors` | 从 npm 预言机重导 identicon/i18n 语料向量(CI 要求零 diff) |
-| `npm run gen:core-types` | Rust 枚举 → `app-web/vela-wallet/src/lib/*/generated`(CI 要求零 diff) |
-| `npm run build:wasm` / `npm run verify:wasm` | 重建 `rust/pkg-web` + `public/vela_core_bg.<hash>.wasm` / 用发布产物回放语料 |
-| `npm run lint:lottie` / `npm run check:native-reachability` | 启动动画资产合法性 / 每个原生壳的页面都能从导航根到达 |
-| `npm run check:expo-residue` | Expo 残留检查(删掉的路径、依赖、CI 步骤、文档里的死命令) |
+| `gen:i18n` | 语料 → Rust 目录 + `public/i18n`(改语料必须一起提交产物;加键要改脚本里的路径计数) |
+| `lint:i18n` / `verify:i18n` | 语料缺陷登记 / Rust i18n 与 `i18next` 的 parity |
+| `gen:identicon-features` / `verify:identicon` | 头像图形表再生成 / 与 `identicons-esm` 的 parity |
+| `dump:vectors` | 从 npm 预言机重导 identicon/i18n 语料向量(CI 要求零 diff) |
+| `gen:core-types` | Rust 枚举 → `app-web/vela-wallet/src/lib/*/generated`(CI 要求零 diff) |
+| `build:wasm` / `verify:wasm` | 重建 `rust/pkg-web` + `public/vela_core_bg.<hash>.wasm`(**改过 `rust/` 下任何 `.rs`/`Cargo.toml`,连注释都算,推送前必须重建**)/ 用发布产物回放语料 |
+| `lint:lottie` / `check:native-reachability` | 启动动画资产合法性 / 每个原生壳的页面都能从导航根到达 |
+| `check:expo-residue` | Expo 残留检查(删掉的路径、根目录 npm 文件、依赖、CI 步骤、文档里的死命令) |
 
 各壳的门禁(提交前跑自己改过的壳):
 

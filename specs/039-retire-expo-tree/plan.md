@@ -136,10 +136,9 @@ specs/039-retire-expo-tree/
 │   ├── i18n/<locale>.json                            # gen-i18n Stage 4 → ios, android, app-web, gates
 │   └── vela_core_bg.<hash>.wasm                      # build-web.mjs → sync-wasm, load-wasm-node, scripts/onchain
 ├── rust/                                             # vela-core + wasm + uniffi + scripts
-├── scripts/                                          # generators, gates, oracles (+ check-expo-residue.mjs)
+├── scripts/                                          # THE tooling package: package.json + lockfile live here (+ check-expo-residue.mjs)
 ├── specs/
-├── package.json  package-lock.json                   # the tooling package
-├── README.md  ROADMAP.md  WHITEPAPER.md  DESIGN_SYSTEM.md  design-system.md  LICENSE
+├── README.md  ROADMAP.md  WHITEPAPER.md  DESIGN_SYSTEM.md  design-system.md  LICENSE   # no package.json at the root (founder ruling)
 └── .github/  .specify/  .gitignore  .mcp.json
 ```
 

@@ -10,7 +10,9 @@ files are not its business — test 2 covers those and is a one-line
 
 1. **Deleted paths reappear.** Any tracked path under `src/`, `e2e/`,
    `modules/`, `plugins/`, `targets/`, `packages/safari-extension/`, or any
-   of the root files: `app.json app.config.js eas.json metro.config.js
+   of the root files: `package.json package-lock.json` (the tooling package
+   is `scripts/package.json`; the root carries no npm state — founder
+   ruling, 2026-09-11), `app.json app.config.js eas.json metro.config.js
    index.js index.web.js expo-env.d.ts fingerprint.config.js
    .fingerprintignore jest.config.js jest.setup.js playwright.config.ts
    tsconfig.json eslint.config.js keystore.properties.example

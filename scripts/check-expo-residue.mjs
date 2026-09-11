@@ -41,7 +41,11 @@ const FIXTURES = 'scripts/__fixtures__/expo-residue';
 // ---------------------------------------------------------------- rules --
 
 const DELETED_DIRS = ['src/', 'e2e/', 'modules/', 'plugins/', 'targets/', '.eas/', 'packages/safari-extension/'];
+// `package.json` / `package-lock.json` at the ROOT are in this set on purpose:
+// the tooling package lives in scripts/ (founder ruling, spec 039) and the
+// root is to carry no npm state.
 const DELETED_FILES = new Set([
+  'package.json', 'package-lock.json',
   'app.json', 'app.config.js', 'eas.json', 'metro.config.js', 'index.js', 'index.web.js',
   'expo-env.d.ts', 'fingerprint.config.js', '.fingerprintignore', 'jest.config.js', 'jest.setup.js',
   'playwright.config.ts', 'tsconfig.json', 'eslint.config.js', 'keystore.properties.example',
@@ -192,6 +196,8 @@ function selfTest() {
   expect('rule 1 catches src/x.ts', rule1(['src/x.ts']).length === 1);
   expect('rule 1 catches app.json', rule1(['app.json']).length === 1);
   expect('rule 1 ignores app-web/src/x.ts', rule1(['app-web/vela-wallet/src/x.ts']).length === 0);
+  expect('rule 1 catches a root package.json', rule1(['package.json']).length === 1);
+  expect('rule 1 allows scripts/package.json', rule1(['scripts/package.json']).length === 0);
   // rule 2: an expo dependency in a package.json
   expect('rule 2 catches dependencies.expo', rule2(['x/package.json'], reads({ 'x/package.json': fixture('rule2-package.json') })).length === 1);
   expect('rule 2 ignores i18next', rule2(['ok-package.json'], reads({ 'ok-package.json': '{"dependencies":{"i18next":"1"}}' })).length === 0);
@@ -217,7 +223,7 @@ function selfTest() {
     for (const f of failures) console.error(`   ${f}`);
     process.exit(1);
   }
-  console.log('expo-residue self-test: ok (18 expectations)');
+  console.log('expo-residue self-test: ok (20 expectations)');
 }
 
 if (process.argv.includes('--self-test')) selfTest();

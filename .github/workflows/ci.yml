@@ -7,13 +7,15 @@
 # app that used to live under `src/` is gone; nothing in this file runs
 # Expo, Metro, Jest or a root TypeScript check any more.
 #
-# The `app` job is the ROOT TOOLING gate: the generators and the corpus
-# oracles that every shell depends on (identicon and i18n vectors replayed
-# against the pinned npm packages, the regenerated artefacts diffed against
-# what is committed, the Lottie and reachability lints, the parity gates, the
-# Safe recovery extension, the HTTPS wallet SDK, and the Expo-residue check).
-# It keeps the name `app` because branch protection requires a check called
-# that; what it runs is what is listed here.
+# The `app` job is the TOOLING gate: the generators and the corpus oracles
+# that every shell depends on (identicon and i18n vectors replayed against
+# the pinned npm packages, the regenerated artefacts diffed against what is
+# committed, the Lottie and reachability lints, the parity gates, the Safe
+# recovery extension, the HTTPS wallet SDK, and the Expo-residue check). The
+# npm package that installs the oracles lives in `scripts/` — the repository
+# root carries no npm state (founder ruling, spec 039). The job keeps the
+# name `app` because branch protection requires a check called that; what it
+# runs is what is listed here.
 #
 # Deployment coupling: the web wallet deploys from Cloudflare's own build of
 # app-web/vela-wallet (Workers app `vela-wallet-web`), which runs independently
@@ -43,7 +45,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+          cache-dependency-path: scripts/package-lock.json
+      # The tooling package (i18next, identicons-esm, @noble/*) — scripts/,
+      # not the root.
+      - run: npm ci --prefix scripts
       - name: Install Safe extension dependencies
         run: npm ci --prefix packages/safe-recovery-extension
       - name: Check Safe extension
@@ -51,10 +56,12 @@ jobs:
           npm run check --prefix packages/safe-recovery-extension
           npm test --prefix packages/safe-recovery-extension
           npm run build --prefix packages/safe-recovery-extension
-      # The SDK's `tsc` resolves from the ROOT node_modules (there is no install
-      # step for the package), which is why `typescript` stays a root devDependency.
+      # The SDK installs its own `typescript` (its lockfile is committed); nothing
+      # at the repository root provides `tsc` any more.
       - name: Build HTTPS wallet SDK
-        run: npm run build --prefix packages/vela-sdk
+        run: |
+          npm ci --prefix packages/vela-sdk
+          npm run build --prefix packages/vela-sdk
       # Half of this gate retired with the TypeScript oracle it compared against.
       #
       # primitives/abi/eip712/safe/webauthn.json were extracted from the
@@ -71,7 +78,7 @@ jobs:
       # with it. The dump is byte-stable — no timestamp, no git sha.
       - name: Regenerable corpus still matches its npm oracles
         run: |
-          npm run dump:vectors
+          npm --prefix scripts run dump:vectors
           git diff --exit-code -- rust/crates/vela-core/tests/vectors/identicon.json \
                                   rust/crates/vela-core/tests/vectors/identicon-bulk.json \
                                   rust/crates/vela-core/tests/vectors/i18n-behaviour.json \
@@ -104,7 +111,7 @@ jobs:
                                   rust/crates/vela-core/src/i18n_catalogs \
                                   rust/crates/vela-core/src/l10n/datetime_data.rs \
                                   public/i18n \
-            || { echo "::error::The generated i18n artefacts no longer match rust/crates/vela-core/i18n/locales. Run 'npm run gen:i18n' and commit the result TOGETHER WITH the corpus change — a corpus edit and its regenerated artefacts belong in one commit."; exit 1; }
+            || { echo "::error::The generated i18n artefacts no longer match rust/crates/vela-core/i18n/locales. Run 'npm --prefix scripts run gen:i18n' and commit the result TOGETHER WITH the corpus change — a corpus edit and its regenerated artefacts belong in one commit."; exit 1; }
       # Reports the six known corpus defects (FR-018) and fails only on NEW ones.
       # It fixes nothing on purpose: silently "improving" a translated string during
       # an engine port makes every parity claim unverifiable.

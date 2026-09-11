@@ -82,7 +82,7 @@ The four shells are only worth having if they cannot drift apart. Each shared as
 | Behavior | the conformance corpus in `rust/crates/vela-core/tests/vectors/` — the crypto/ABI/Safe/WebAuthn vectors are frozen goldens; the identicon and i18n vectors regenerate from the pinned `identicons-esm` and `i18next` packages | replayed through Rust, the Kotlin bindings, the Swift bindings and the shipped web artifact |
 | App icons | [design/icon/](design/icon/) | every platform's icon set (see [App icons](#app-icons)) |
 
-Two parity suites compare the Rust ports against the npm packages the corpus was extracted from: the full 17,115 locale/key cross-product plus 50,000 fuzzed option bundles for i18n, and every address literal in the repo plus 200,000 random seeds for identicons. Keeping those two packages installed is the reason the repository root still has a `package.json`.
+Two parity suites compare the Rust ports against the npm packages the corpus was extracted from: the full 17,115 locale/key cross-product plus 50,000 fuzzed option bundles for i18n, and every address literal in the repo plus 200,000 random seeds for identicons. Keeping those two packages installed is what the npm package in `scripts/` is for.
 
 ### Where it stands
 
@@ -97,21 +97,21 @@ Feature specs, plans and delivery reports live in [specs/](specs/), numbered in 
 
 Each shell builds and runs on its own — the commands are in [The shells](#the-shells) and in each shell's README. The shared core is [rust/README.md](rust/README.md).
 
-### The root tooling package
+### The tooling package (`scripts/`)
 
-The repository root's `package.json` builds no app. It holds the generators and gates every shell depends on:
+The repository root carries no npm state. The generators and gates every shell depends on are an npm package in [scripts/](scripts/package.json); run them from the root with `--prefix`, or `cd scripts` first:
 
 ```bash
-npm ci                      # five packages: the two npm oracles, @noble/* for scripts/onchain, typescript for packages/vela-sdk
-npm run gen:i18n            # corpus → Rust catalogs + public/i18n (commit together with the corpus edit)
-npm run gen:core-types      # Rust enums → app-web's generated/ wire types
-npm run build:wasm          # vela-core → rust/pkg-web + public/vela_core_bg.<hash>.wasm
-npm run verify:i18n         # parity: Rust i18n vs the pinned i18next
-npm run verify:identicon    # parity: Rust identicons vs the pinned identicons-esm
-npm run check:expo-residue  # the Expo tree stays retired (fails CI on a dead command in any doc)
+npm ci --prefix scripts                       # four packages: the two npm oracles + @noble/* for scripts/onchain
+npm --prefix scripts run gen:i18n             # corpus → Rust catalogs + public/i18n (commit together with the corpus edit)
+npm --prefix scripts run gen:core-types       # Rust enums → app-web's generated/ wire types
+npm --prefix scripts run build:wasm           # vela-core → rust/pkg-web + public/vela_core_bg.<hash>.wasm
+npm --prefix scripts run verify:i18n          # parity: Rust i18n vs the pinned i18next
+npm --prefix scripts run verify:identicon     # parity: Rust identicons vs the pinned identicons-esm
+npm --prefix scripts run check:expo-residue   # the Expo tree stays retired (fails CI on a dead command in any doc)
 ```
 
-`i18next` and `identicons-esm` are the oracles the conformance corpus is replayed against; `@noble/curves` and `@noble/hashes` are resolved from the root by `scripts/onchain/`; `typescript` is resolved from the root by `packages/vela-sdk`'s build. Do not "clean up" those five.
+`i18next` and `identicons-esm` are the oracles the conformance corpus is replayed against; `@noble/curves` and `@noble/hashes` are resolved from `scripts/node_modules` by `scripts/onchain/`. Do not "clean up" those four. `packages/vela-sdk` and `packages/safe-recovery-extension` install their own dependencies.
 
 ## Platform Support
 

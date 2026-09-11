@@ -24,8 +24,8 @@ Vela Wallet 是一个 **passkey(P-256/WebAuthn)签名的 ERC-4337 智能合约�
 | 站点/API 后端 | SvelteKit on Cloudflare Workers(仓库内子项目) | bun 管理 | `app-web/getvela.app/wrangler.jsonc` |
 | 密码学 | 平台 passkey(Secure Enclave / Credential Manager / navigator.credentials / 桌面 hidapi 安全钥匙 + caBLE),私钥永不进壳 | — | `rust/crates/vela-core/src/webauthn/`, 各壳的 passkey 执行器 |
 | 链上账户 | Safe v1.4.1 + Safe4337Module + WebAuthn Signer + EntryPoint v0.7 | 合约地址硬编码(全链统一 CREATE2) | `rust/crates/vela-core/src/safe/` |
-| 根目录工具包 | npm:语料/头像生成器、npm 预言机(`i18next`、`identicons-esm`)、闸门脚本 | Node 22 | `package.json`(不构建任何 App) |
-| 测试 | `cargo test`(核心 + 桌面)、vitest + Playwright(web)、Swift Testing / XCTest(iOS)、gradle 单测(Android)、根目录闸门脚本 | — | `.github/workflows/ci.yml` |
+| 工具包(`scripts/`) | npm:语料/头像生成器、npm 预言机(`i18next`、`identicons-esm`)、闸门脚本;根目录不放任何 npm 状态 | Node 22 | `scripts/package.json`(不构建任何 App;`npm --prefix scripts run <name>`) |
+| 测试 | `cargo test`(核心 + 桌面)、vitest + Playwright(web)、Swift Testing / XCTest(iOS)、gradle 单测(Android)、`scripts/` 闸门脚本 | — | `.github/workflows/ci.yml` |
 
 **注意:没有 viem/ethers 依赖** —— ABI 编码、EIP-712、RPC、Multicall 在 Rust 核心里(alloy-core 等固定版本 crate)。改动这些底层时务必跑核心的 conformance 语料(`cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures`)。
 
@@ -48,8 +48,9 @@ public/i18n/         gen-i18n 生成的 15 份语言目录,iOS/Android/Web 与�
 public/vela_core_bg.<hash>.wasm  build:wasm 产物,app-web 的 sync-wasm 从此复制
 assets/fonts/        Plus Jakarta Sans TTF(桌面 include_bytes!)
 design/              图标 SVG 源、Lottie 启动动画、插画
-scripts/             根目录生成器与闸门(gen-i18n、gen-identicon-features、verify-*-parity、
-                     lint-lottie-assets、check-native-reachability、check-expo-residue、gen-app-icons.sh)
+scripts/             工具包(package.json 在此,根目录无 npm 文件):gen-i18n、gen-identicon-features、
+                     verify-*-parity、lint-lottie-assets、check-native-reachability、check-expo-residue、
+                     gen-app-icons.sh;onchain/ 为链上 e2e 脚本(bun)
 docs/                设计/需求/测试/上架/接管文档
 specs/               按落地顺序编号的功能规格(spec/plan/tasks/results)
 ```
@@ -93,6 +94,6 @@ WalletPair 中继与 remote-inject 桥已随 Expo 应用退役(创始人在 spec
 
 ## CI/CD
 
-`.github/workflows/ci.yml`,PR 与 main 推送触发。八个 job:`app`(根目录工具闸门:语料/头像预言机再生成与 diff、Lottie 与可达性 lint、两道 parity、Safe 扩展、SDK 构建、Expo 残留检查)、`web`(app-web `pnpm build`)、`site`(getvela.app `bun run check`)、`rust`(fmt/clippy/测试/wasm 金丝雀/web 产物一致/onboarding 类型一致/Swift 生成/Kotlin 语料)、`rust-macos`(Swift 语料)、`desktop`(fmt/clippy/test)、`android`(生成 Kotlin 绑定 + assembleDebug + 单测)、`ios`(xcframework + xcodebuild test)。
+`.github/workflows/ci.yml`,PR 与 main 推送触发。八个 job:`app`(`scripts/` 工具闸门:语料/头像预言机再生成与 diff、Lottie 与可达性 lint、两道 parity、Safe 扩展、SDK 构建、Expo 残留检查)、`web`(app-web `pnpm build`)、`site`(getvela.app `bun run check`)、`rust`(fmt/clippy/测试/wasm 金丝雀/web 产物一致/onboarding 类型一致/Swift 生成/Kotlin 语料)、`rust-macos`(Swift 语料)、`desktop`(fmt/clippy/test)、`android`(生成 Kotlin 绑定 + assembleDebug + 单测)、`ios`(xcframework + xcodebuild test)。
 
 部署:Web 钱包由 Cloudflare 从 `app-web/vela-wallet` 自建 Worker `vela-wallet-web`(与 CI 无耦合,**CI 绿 ≠ 已发布**);官网手动 `bun run deploy`;iOS/Android 见 `05-deployment-runbook.md`。

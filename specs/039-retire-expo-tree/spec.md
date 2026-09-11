@@ -237,9 +237,11 @@ three.
 
 1. **Nothing at the root exists only for Expo.** The root listing after the
    cut holds the shells (`app-*`), `rust/`, `packages/`, `scripts/`, `docs/`,
-   `design/`, `specs/`, `assets/`, `public/`, `agent-rules/`, the tooling
-   `package.json` + lockfile, the licence, the four top-level markdown files,
-   and dotfiles that a surviving tool reads. No `app.json`, no `metro.*`, no
+   `design/`, `specs/`, `assets/`, `public/`, `agent-rules/`, the licence,
+   the four top-level markdown files, and dotfiles that a surviving tool
+   reads. **No `package.json`, lockfile or `node_modules` at the root**: the
+   tooling package lives in `scripts/` (founder, 2026-09-11, second ruling:
+   *"用一个专门的 scripts 目录来管理，而不是放到根目录"*). No `app.json`, no `metro.*`, no
    `index*.js`, no root `jest.*`, no root `playwright.config.ts`, no stray
    `.verify-*.mjs`, no `targets/`, no `modules/`, no `plugins/`, no `e2e/`.
 2. **The working tree has no Expo residue.** `git status --ignored --short`

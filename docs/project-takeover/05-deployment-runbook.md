@@ -17,7 +17,7 @@
 ## 发布前检查(每次)
 
 ```bash
-npm ci && npm run check:expo-residue                              # 根目录工具包装得上、Expo 没回来
+npm ci --prefix scripts && npm --prefix scripts run check:expo-residue   # 工具包装得上、Expo 没回来、根目录无 npm 文件
 cd app-web/vela-wallet && pnpm check && pnpm lint && pnpm test:unit -- --run && pnpm build   # Web 壳
 cd app-desktop/vela-wallet && cargo fmt --all --check && cargo clippy --all-targets && cargo test
 cd rust && cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures
@@ -30,8 +30,8 @@ iOS/Android 的编译与单测由 CI 的 `ios`/`android` job 跑;本地跑法见
 
 - [ ] 若改过 bundler 错误文案或相关解析:与 vela-relay 仓库联合验证
 - [ ] 若改过授权额度守卫 / 签名编码:在平行空间(`/[locale]/parallel`)手动过一遍清晰签名场景
-- [ ] 若改过语料:`npm run gen:i18n` 的产物已与语料一起提交(CI 会 diff)
-- [ ] 若改过核心 Rust:`npm run build:wasm` 已重建并提交 `rust/pkg-web` + `public/vela_core_bg.<hash>.wasm`(`--check` 对每个 Rust 文件取指纹)
+- [ ] 若改过语料:`npm --prefix scripts run gen:i18n` 的产物已与语料一起提交(CI 会 diff)
+- [ ] 若改过 `rust/` 下任何 `.rs` 或 `Cargo.toml`(注释也算):`npm --prefix scripts run build:wasm` 已重建并提交 `rust/pkg-web` + `public/vela_core_bg.<hash>.wasm`(`--check` 对每个 Rust 文件取指纹,039 的第一轮 CI 就是栽在一条注释上)
 
 ## Web 钱包发布(Worker,自动)
 
