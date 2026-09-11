@@ -157,32 +157,35 @@ export const PASSKEY_ICONS: Record<PasskeyIconId, PasskeyIcon> = {
 };
 
 /**
- * Which mark "This device" shows — decided at runtime, never assumed
- * (founder ruling, #190): the platform authenticator on a Mac in Safari is
- * Apple's, in Chrome on a Mac it is Chrome's, on Windows it is Windows Hello,
- * on Android / ChromeOS it is Google Password Manager. Anything else gets the
- * generic FIDO2 mark rather than a wrong brand.
+ * What a method row shows (spec 038 #190, the founder's revision of
+ * 2026-09-11 evening): "this device" is THE DEVICE — a laptop or a phone by
+ * form factor, never a vendor's mark, because the platform authenticator on
+ * a given machine is not reliably Apple's, Google's or Microsoft's; "phone or
+ * tablet" is the camera that scans the code; the security key keeps the USB
+ * mark from the founder's set.
  */
-export function platformIcon(ua: string = navigator.userAgent): PasskeyIconId {
-	const isMac = /Macintosh|Mac OS X/i.test(ua);
-	const isChrome = /Chrome\//i.test(ua) && !/Edg\//i.test(ua);
-	if (/Android|CrOS/i.test(ua)) return 'google';
-	if (/Windows/i.test(ua)) return 'windows';
-	if (isMac) return isChrome ? 'chrome-mac' : 'apple';
-	return 'fido2';
+export type MethodGlyph =
+	| { kind: 'lucide'; name: 'laptop' | 'smartphone' | 'scan-line' }
+	| { kind: 'mark'; id: PasskeyIconId };
+
+/** A coarse pointer (a finger) or a mobile UA means the device is a phone. */
+export function isHandheld(
+	ua: string = navigator.userAgent,
+	coarse: boolean = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+): boolean {
+	return coarse || /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
 }
 
-/** The icon for a method row. */
-export function methodIcon(
+export function methodGlyph(
 	method: 'platform' | 'hybrid' | 'security_key',
-	ua?: string
-): PasskeyIconId {
+	handheld: boolean = isHandheld()
+): MethodGlyph {
 	switch (method) {
 		case 'platform':
-			return platformIcon(ua);
+			return { kind: 'lucide', name: handheld ? 'smartphone' : 'laptop' };
 		case 'hybrid':
-			return 'google';
+			return { kind: 'lucide', name: 'scan-line' };
 		case 'security_key':
-			return 'usb';
+			return { kind: 'mark', id: 'usb' };
 	}
 }

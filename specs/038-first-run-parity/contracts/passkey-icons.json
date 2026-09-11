@@ -8,22 +8,14 @@
     },
     "consumers": "web inline <svg> (PasskeyMethodIcon.svelte) · desktop resvg via icons.rs colour substitution",
     "platform_rule": {
+      "revised": "2026-09-11 evening (founder): 'this device' is THE DEVICE, never a vendor mark",
       "this_device": {
-        "desktop": {
-          "macos": "apple",
-          "windows": "windows",
-          "linux": "fido2"
-        },
-        "web": {
-          "macos+safari": "apple",
-          "macos+chrome": "chrome-mac",
-          "windows": "windows",
-          "android|chromeos": "google",
-          "other": "fido2"
-        }
+        "desktop": "lucide laptop",
+        "web": "lucide laptop (fine pointer) / lucide smartphone (coarse pointer or mobile UA)"
       },
-      "hybrid": "google",
-      "security_key": "usb"
+      "hybrid": "lucide scan-line (the camera that scans the code)",
+      "security_key": "usb (this contract's mark)",
+      "vendor_marks": "apple / windows / google / chrome-mac / fido2 stay here for the key-row provider line, which knows the vault by AAGUID"
     }
   },
   "icons": [

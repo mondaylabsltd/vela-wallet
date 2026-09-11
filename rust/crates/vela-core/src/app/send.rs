@@ -1245,6 +1245,8 @@ pub struct Model {
     receipt_signed: Option<SendLine>,
     receipt_failed: bool,
     fee_held: bool,
+    /// The submit result's clock (#D3); `None` until the relay accepted.
+    submitted_at_ms: Option<f64>,
     fee_rejected: bool,
     recipient_identity: Option<SendRecipientIdentity>,
     recipient_risk: Option<SendRecipientRisk>,
@@ -1339,6 +1341,13 @@ pub struct SendReceiptView {
     /// The single-send scalar amount (token units, resolved).
     pub amount: String,
     pub usd_value: f64,
+    /// When the relay accepted the op (the submit result's clock), so the
+    /// shell can show how long the wait has been (spec 038 #D3). The core is
+    /// clockless: elapsed is the shell's subtraction, with its own clock.
+    pub submitted_at_ms: Option<f64>,
+    /// The chain's usual time to land, from the builtin table; `None` for a
+    /// custom network, where the shell says nothing rather than guess.
+    pub typical_inclusion_s: Option<u16>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -3423,6 +3432,7 @@ fn slide_confirm(model: &mut Model) -> Cmd {
     model.user_op_hash = None;
     model.tx_error = None;
     model.receipt_failed = false;
+    model.submitted_at_ms = None;
     model.receipt_signed = None;
     model.fee_held = false;
     model.fee_rejected = false;
@@ -4147,6 +4157,7 @@ fn accept_submitted(model: &mut Model, id: u64, user_op_hash: String, now_ms: f6
     // receipt reads THIS and never converts again.
     model.receipt_signed = lines.first().cloned();
     model.user_op_hash = Some(user_op_hash.clone());
+    model.submitted_at_ms = Some(now_ms);
     model.tx = SendTxStatus::Confirmed;
     model.lock.end(gen);
 
@@ -4385,6 +4396,13 @@ fn receipt_view(model: &Model, stage: SendStage) -> Option<SendReceiptView> {
         transfers,
         amount,
         usd_value: if usd_value.is_nan() { 0.0 } else { usd_value },
+        submitted_at_ms: model.submitted_at_ms,
+        typical_inclusion_s: model.selected_token.as_ref().and_then(|token| {
+            super::network_admin::BUILTIN_CHAINS
+                .iter()
+                .find(|chain| chain.chain_id == token.chain_id)
+                .map(|chain| chain.typical_inclusion_s)
+        }),
     })
 }
 

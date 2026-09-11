@@ -495,6 +495,28 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		};
 	}
 
+	// SD3b — the split's confirm (spec 038 #D2): how many, and every one of
+	// them by name and avatar, so what is about to be signed can be read in
+	// full — not "3 recipients" and a total.
+	if (send.split_mode && send.recipients.length > 0) {
+		const symbol = token?.symbol ?? '';
+		const breakdown = send.recipients.map((draft) => ({
+			identiconSvg: draft.address ? identicon(draft.address) : undefined,
+			address: draft.address || undefined,
+			label: draft.name ?? shortenAddress(draft.address),
+			value: `${draft.amount} ${symbol}`.trim()
+		}));
+		const countLine = fill(m['send.recipientCount_other'], { count: send.recipients.length });
+		return {
+			...model,
+			amount: `${send.confirm_amount} ${symbol}`.trim(),
+			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
+			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
+			breakdown,
+			cta: m['send.confirmSendBtn']
+		};
+	}
+
 	return {
 		...model,
 		amount: `${send.confirm_amount} ${token?.symbol ?? ''}`.trim(),
@@ -564,12 +586,27 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 	}
 
 	if (status === 'submitted') {
+		const receipt = send.receipt;
+		const eta =
+			receipt?.submitted_at_ms != null && receipt.typical_inclusion_s != null
+				? {
+						submittedAtMs: receipt.submitted_at_ms,
+						typicalS: receipt.typical_inclusion_s,
+						typicalLine: fill(m['send.txTypicalTime'], {
+							chainName: chainName(chainId),
+							estSecs: receipt.typical_inclusion_s
+						}),
+						elapsedTemplate: m['send.txElapsed'],
+						slowLine: m['send.txSlowConfirm']
+					}
+				: undefined;
 		return {
 			...model,
 			header,
 			stage: 'submitted',
 			title: m['send.txSubmittedTitle'],
 			captions: [m['send.txWaitingConfirm']],
+			eta,
 			hash: send.user_op_hash
 				? {
 						label: m['componentsTx.receipt.txHash'],

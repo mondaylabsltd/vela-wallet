@@ -14,7 +14,7 @@
 	 */
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import { methodCopy } from '$lib/onboarding/core/copy';
-	import { methodIcon } from '$lib/onboarding/passkey-icons';
+	import { methodGlyph } from '$lib/onboarding/passkey-icons';
 	import PasskeyMethodIcon from '$lib/ui/onboarding/PasskeyMethodIcon.svelte';
 
 	interface Props {
@@ -34,7 +34,7 @@
 			{@const copy = methodCopy(method)}
 			<li>
 				<button class="method" type="button" onclick={() => onPick(method)}>
-					<PasskeyMethodIcon id={methodIcon(method)} />
+					<PasskeyMethodIcon glyph={methodGlyph(method)} />
 					<span class="text">
 						<span class="name">{strings(copy.title)}</span>
 						<span class="caption">{strings(copy.body)}</span>

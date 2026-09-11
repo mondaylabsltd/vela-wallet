@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { PASSKEY_ICONS, methodIcon, platformIcon } from './passkey-icons';
+import { PASSKEY_ICONS, isHandheld, methodGlyph } from './passkey-icons';
 
 const contract = JSON.parse(
 	readFileSync(
@@ -43,22 +43,17 @@ describe('passkey icons', () => {
 		}
 	});
 
-	it('resolves "this device" to the platform the app is running on', () => {
-		const safariMac =
+	it('shows the DEVICE for "this device", the scanner for a phone, the key for a key', () => {
+		const iphone =
+			'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1';
+		const mac =
 			'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
-		const chromeMac =
-			'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
-		const chromeWin =
-			'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36';
-		const android =
-			'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/152.0.0.0 Mobile Safari/537.36';
-		const linuxFirefox = 'Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0';
-		expect(platformIcon(safariMac)).toBe('apple');
-		expect(platformIcon(chromeMac)).toBe('chrome-mac');
-		expect(platformIcon(chromeWin)).toBe('windows');
-		expect(platformIcon(android)).toBe('google');
-		expect(platformIcon(linuxFirefox)).toBe('fido2');
-		expect(methodIcon('hybrid')).toBe('google');
-		expect(methodIcon('security_key')).toBe('usb');
+		expect(isHandheld(iphone, false)).toBe(true);
+		expect(isHandheld(mac, false)).toBe(false);
+		expect(isHandheld(mac, true)).toBe(true);
+		expect(methodGlyph('platform', false)).toEqual({ kind: 'lucide', name: 'laptop' });
+		expect(methodGlyph('platform', true)).toEqual({ kind: 'lucide', name: 'smartphone' });
+		expect(methodGlyph('hybrid')).toEqual({ kind: 'lucide', name: 'scan-line' });
+		expect(methodGlyph('security_key')).toEqual({ kind: 'mark', id: 'usb' });
 	});
 });

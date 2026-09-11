@@ -30,25 +30,22 @@ pub enum PasskeyIcon {
     ChromeMac,
     Fido2,
     Usb,
+    /// lucide `laptop` — the device itself (stroke, 24-unit).
+    Laptop,
+    /// lucide `scan-line` — the camera that scans the code (stroke, 24-unit).
+    Scan,
 }
 
 impl PasskeyIcon {
-    /// The mark for "this device" on the platform this binary runs on.
-    pub fn platform() -> Self {
-        if cfg!(target_os = "macos") {
-            Self::Apple
-        } else if cfg!(windows) {
-            Self::Windows
-        } else {
-            Self::Fido2
-        }
-    }
-
-    /// The mark for a method row.
+    /// The glyph for a method row (the founder's revision of #190): "this
+    /// device" is THE DEVICE — a laptop, since this binary only runs on one —
+    /// never a vendor's mark; "phone or tablet" is the scanner; the security
+    /// key keeps the USB mark from the founder's set. The vendor marks stay
+    /// in the contract for the key-row provider line, which knows the vault.
     pub fn for_method(method: KeyMethod) -> Self {
         match method {
-            KeyMethod::Platform => Self::platform(),
-            KeyMethod::Hybrid => Self::Google,
+            KeyMethod::Platform => Self::Laptop,
+            KeyMethod::Hybrid => Self::Scan,
             KeyMethod::SecurityKey => Self::Usb,
         }
     }
@@ -71,6 +68,8 @@ struct IconDef {
 
 fn def(icon: PasskeyIcon) -> IconDef {
     match icon {
+        // Never reached: `svg_document` draws these before asking.
+        PasskeyIcon::Laptop | PasskeyIcon::Scan => IconDef { id: "lucide", view: 24., elements: &[] },
         PasskeyIcon::Apple => IconDef {
             id: "apple",
             view: 16.,
@@ -143,6 +142,22 @@ fn hex(color: Hsla) -> (String, u32) {
 }
 
 fn svg_document(icon: PasskeyIcon, palette: &Palette) -> String {
+    // The two lucide glyphs: verbatim stroke defs, tinted with the ink.
+    let lucide = match icon {
+        PasskeyIcon::Laptop => Some(
+            r##"<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>"##,
+        ),
+        PasskeyIcon::Scan => Some(
+            r##"<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>"##,
+        ),
+        _ => None,
+    };
+    if let Some(inner) = lucide {
+        let (ink, _) = hex(palette.ink);
+        return format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{ink}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{inner}</svg>"##
+        );
+    }
     let d = def(icon);
     let (ink, _) = hex(palette.ink);
     let (muted, _) = hex(palette.muted);
@@ -240,7 +255,7 @@ mod tests {
             muted: gpui::rgb(0x888888).into(),
             paper: gpui::rgb(0xffffff).into(),
         };
-        for icon in [PasskeyIcon::Apple, PasskeyIcon::Usb, PasskeyIcon::ChromeMac] {
+        for icon in [PasskeyIcon::Apple, PasskeyIcon::Usb, PasskeyIcon::ChromeMac, PasskeyIcon::Laptop, PasskeyIcon::Scan] {
             let image = crate::icons::rasterize(&svg_document(icon, &palette), 32);
             assert!(image.is_some(), "{icon:?} did not rasterise");
         }

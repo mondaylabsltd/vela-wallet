@@ -271,7 +271,9 @@ describe('the receipt', () => {
 		kind: null,
 		transfers: [],
 		amount: '0.5',
-		usd_value: 1500
+		usd_value: 1500,
+		submitted_at_ms: null,
+		typical_inclusion_s: null
 	});
 
 	it('signing shows the submitting state — nothing is accepted yet', () => {

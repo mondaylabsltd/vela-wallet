@@ -202,6 +202,8 @@ export const WALLET_FLOW_KEYS = [
 	'send.txConfirmedTitle',
 	'send.txWaitingConfirm',
 	'send.txTypicalTime',
+	'send.txElapsed',
+	'send.txSlowConfirm',
 	'componentsTx.receipt.txHash',
 	'componentsTx.receipt.done'
 ] as const;

@@ -135,6 +135,18 @@ pub enum TrackShellResult {
         tx_hash: String,
         now_ms: f64,
     },
+    /// A definitive successful receipt WITH its authentic logs (spec 038 Part
+    /// D, #D1). Additive: shells that can read the logs send this instead of
+    /// [`Self::Receipt`], and the core decides whether the Safe inside the
+    /// UserOp actually executed — `ExecutionFailure` in the logs means the
+    /// EntryPoint counted the op a success while the payment did not happen,
+    /// and the record must say `failed`, not `confirmed`.
+    ReceiptWithLogs {
+        user_op_hash: String,
+        tx_hash: String,
+        now_ms: f64,
+        logs: Vec<super::token_trust::TrustReceiptLog>,
+    },
     /// A definitive failed receipt (`success === false`) — the op was dropped
     /// or reverted on-chain. The one receipt shape that may mark failure.
     ReceiptFailed {
@@ -607,6 +619,29 @@ fn accept(model: &mut Model, result: TrackShellResult) -> Command<TrackEffect, E
         TrackShellResult::Clock { now_ms } => run_scheduler(model, now_ms),
 
         // -- definitive receipts ---------------------------------------------
+        TrackShellResult::ReceiptWithLogs {
+            user_op_hash,
+            tx_hash,
+            now_ms,
+            logs,
+        } => {
+            // One rule, then the ordinary path: a Safe `ExecutionFailure`
+            // inside a "successful" UserOp is a failed payment (#D1).
+            let result = if safe_execution_failed(&logs) {
+                TrackShellResult::ReceiptFailed {
+                    user_op_hash,
+                    tx_hash,
+                    now_ms,
+                }
+            } else {
+                TrackShellResult::Receipt {
+                    user_op_hash,
+                    tx_hash,
+                    now_ms,
+                }
+            };
+            accept(model, result)
+        }
         TrackShellResult::Receipt {
             user_op_hash,
             tx_hash,
@@ -896,10 +931,31 @@ fn normalize(user_op_hash: &str) -> String {
 }
 
 /// The clock a result carries, if any — acks carry none.
+/// `keccak256("ExecutionFailure(bytes32,uint256)")` — the event Safe's
+/// `execTransaction` emits when the inner call fails WITHOUT reverting the
+/// outer one. Pinned against the core's own keccak by a test below.
+pub const SAFE_EXECUTION_FAILURE_TOPIC: &str =
+    "0x23428b18acfb3ea64b08dc0c1d296ea9c09702c09083ca5272e64d115b687d23";
+
+/// Did a Safe inside this receipt report an execution failure? (#D1)
+///
+/// A UserOp's receipt carries only the logs of that op's execution, and the
+/// only Safe executing in one of OUR ops is ours — so any log with this
+/// topic is the payment not happening, whatever the EntryPoint's `success`
+/// says. Case-insensitive on the topic so a checksummed relay cannot hide it.
+pub fn safe_execution_failed(logs: &[super::token_trust::TrustReceiptLog]) -> bool {
+    logs.iter().any(|log| {
+        log.topics
+            .first()
+            .is_some_and(|topic| topic.eq_ignore_ascii_case(SAFE_EXECUTION_FAILURE_TOPIC))
+    })
+}
+
 fn clock_of(result: &TrackShellResult) -> Option<f64> {
     match result {
         TrackShellResult::Clock { now_ms }
         | TrackShellResult::Receipt { now_ms, .. }
+        | TrackShellResult::ReceiptWithLogs { now_ms, .. }
         | TrackShellResult::ReceiptFailed { now_ms, .. }
         | TrackShellResult::ReceiptPending { now_ms, .. }
         | TrackShellResult::ReceiptUnreachable { now_ms, .. }
@@ -954,5 +1010,37 @@ impl super::SplitEffect for TrackEffect {
             TrackEffect::Render(_) => None,
             TrackEffect::Shell(request) => Some(request),
         }
+    }
+}
+
+#[cfg(test)]
+mod execution_failure {
+    use super::*;
+    use crate::app::token_trust::TrustReceiptLog;
+
+    /// The topic constant is the core's own keccak of the Safe event
+    /// signature — a typo here would make every failed payment "confirmed".
+    #[test]
+    fn the_topic_is_the_keccak_of_the_safe_event() {
+        let digest = crate::primitives::keccak256(b"ExecutionFailure(bytes32,uint256)");
+        let hex = format!("0x{}", digest.iter().map(|b| format!("{b:02x}")).collect::<String>());
+        assert_eq!(hex, SAFE_EXECUTION_FAILURE_TOPIC);
+    }
+
+    #[test]
+    fn a_failure_log_fails_the_receipt_and_a_transfer_does_not() {
+        let transfer = TrustReceiptLog {
+            address: "0xtoken".to_owned(),
+            topics: vec!["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef".to_owned()],
+            data: "0x".to_owned(),
+        };
+        let failure = TrustReceiptLog {
+            address: "0xsafe".to_owned(),
+            topics: vec![SAFE_EXECUTION_FAILURE_TOPIC.to_uppercase().replace("0X", "0x")],
+            data: "0x".to_owned(),
+        };
+        assert!(!safe_execution_failed(&[transfer.clone()]));
+        assert!(safe_execution_failed(&[transfer, failure]));
+        assert!(!safe_execution_failed(&[]));
     }
 }

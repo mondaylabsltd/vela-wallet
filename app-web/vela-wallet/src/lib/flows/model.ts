@@ -531,6 +531,21 @@ export interface SendReceiptModel {
 	/** submitted / confirmed: the hash and its copy affordance. */
 	hash?: { label: string; value: string; copyLabel: string };
 	viewOnExplorer?: string;
+	/**
+	 * Spec 038 #D3 — live, while submitted: when the relay accepted the op and
+	 * how long this chain usually takes, so the screen can count rather than
+	 * spin. The screen owns the clock; the sentence is the corpus's.
+	 */
+	eta?: {
+		submittedAtMs: number;
+		typicalS: number;
+		/** "Gnosis typically confirms in ~15s" — already filled. */
+		typicalLine: string;
+		/** "{{elapsed}}s elapsed — almost there" — the screen fills the number. */
+		elapsedTemplate: string;
+		/** Past twice the typical time. */
+		slowLine: string;
+	};
 	/** The single bottom button: "Close · keep running" or "Done". */
 	cta: string;
 	ctaAccent: boolean;

@@ -116,3 +116,41 @@ capture needs the no-TCC harness — the visual pass (SC-429) is still owed.
 - #E1, #E3, #E4 recorded and pinned in the spec; not fixed in this slice
   (#E1 needs the eleven probes run against Celo from the desktop; #E3 needs
   the surface reproduced; #E4 is a server task).
+
+### Slice 5 — Part D, icons v2, E9
+
+**D1** — core `TrackShellResult::ReceiptWithLogs` (additive; both shells now
+send the receipt's authentic logs) and `safe_execution_failed`: a log with
+topic `keccak("ExecutionFailure(bytes32,uint256)")` = `0x23428b18…7d23`
+(pinned against the core's keccak) turns a `success: true` receipt into
+`ReceiptFailed`. A live reproduction of the founder's failed-but-confirmed
+send is still owed — the guard covers the one mechanism the code allows.
+
+**D3** — `NetBuiltinChain.typical_inclusion_s` for the 12 builtin chains
+(block time × usual depth: Ethereum 24 s, Gnosis 15 s, BSC 9 s, Polygon 6 s,
+Tempo 5 s, the OP-stack/Arbitrum/Avalanche/World 4 s, Unichain/Monad 3 s);
+`SendReceiptView.submitted_at_ms` + `typical_inclusion_s`. The corpus already
+had the three sentences (`send.txTypicalTime`, `txElapsed`, `txSlowConfirm`)
+from the Expo app — served now. Web `SendReceipt.svelte` counts once a
+second; the desktop's send watcher keeps ticking while a receipt is submitted
+and re-renders per second.
+
+**D2** — the split's confirm lists every recipient (name-or-address, amount;
+identicon on the web) under a "N recipients · network" subline. The receipt
+and the activity detail do not yet list them (T074j partial). Desktop rows
+have no identicon (BreakdownRow carries label/value only).
+
+**Icons v2** (founder's revision) — "this device" is the device (lucide
+laptop / smartphone by pointer coarseness on the web; laptop on the desktop),
+"phone or tablet" is the scanner (lucide scan-line), the USB key keeps the
+founder's mark; the vendor marks stay in the contract for the provider line.
+Web sign-in opens in `Sheet`, which is now a centred dialog at ≥1280.
+
+**E9** — the network filter lists networks the person added at count 0
+until their balance lands (`liveChainRows(…, customChainIds)`).
+
+**E1, measured** — Celo (42220) via forno: all 11 `REQUIRED_CONTRACTS` have
+code (69–24 421 bytes) and the RIP-7212 precompile at 0x100 answers `…01` to
+the core's own payload. Celo is compatible; the desktop's "not compatible"
+was a failed probe (its old proxy path) flattened to that verdict — the
+module doc's own admitted trap. The verdict split is still to build.

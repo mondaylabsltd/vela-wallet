@@ -53,6 +53,8 @@ export interface WalletLiveInputs {
 	feed?: FeedView | null;
 	/** The sidebar's network filter: one chain, or `null` for every network. */
 	chainFilter?: number | null;
+	/** Chains the person added (spec 038 #E9): always listed, even at zero. */
+	customChainIds?: readonly number[];
 	/**
 	 * The held token whose detail the third column shows (spec 015's D3
 	 * panel, live). Absent, the column is closed — or the flow host's.
@@ -78,11 +80,19 @@ export function balanceTokenId(token: BalanceToken): string {
 export function liveChainRows(
 	view: BalanceView,
 	allNetworksLabel: string,
-	filter: number | null
+	filter: number | null,
+	/**
+	 * Networks the person added themselves (spec 038 #E9). A chain earns a
+	 * row by holding something; one that was added on purpose is listed
+	 * whether or not its balance has been read yet — otherwise adding Celo
+	 * looks like nothing happened until the next fetch lands.
+	 */
+	customChainIds: readonly number[] = []
 ): ChainRowModel[] {
 	const counts = new Map<number, number>();
 	for (const token of view.tokens)
 		counts.set(token.chain_id, (counts.get(token.chain_id) ?? 0) + 1);
+	for (const id of customChainIds) if (!counts.has(id)) counts.set(id, 0);
 	return [
 		{
 			name: allNetworksLabel,
@@ -519,7 +529,8 @@ export function withLiveWalletDesktop(
 			networks: liveChainRows(
 				inputs.balance,
 				inputs.m.networkFilter.allNetworks,
-				inputs.chainFilter ?? null
+				inputs.chainFilter ?? null,
+				inputs.customChainIds ?? []
 			)
 		},
 		balance: live.balance,

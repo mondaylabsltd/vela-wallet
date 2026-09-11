@@ -38,12 +38,7 @@ use vela_core::app::send::{
     SendView,
 };
 
-use crate::flows::fixtures::{
-    AddressCard, AssetsEmpty, AssetsPanel, BatchImport, BatchRow, ContactPick, CtaState,
-    DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeTokenPick, FeeTokenRow, FilterChip,
-    HistoryGroup, NetworkRow, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm,
-    SendForm, SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, TokenMark, address_lines,
-};
+use crate::flows::fixtures::{AddressCard, AssetsEmpty, AssetsPanel, BatchImport, BatchRow, BreakdownRow, ContactPick, CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeTokenPick, FeeTokenRow, FilterChip, HistoryGroup, NetworkRow, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, TokenMark, address_lines};
 use crate::wallet::fixtures::{AssetRowModel, Fiat, MASK};
 
 /// A chain's colour, from the one table every surface reads.
@@ -1708,7 +1703,23 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             .into(),
         subline: fiat_line(usd, i.locale).unwrap_or_default(),
         facts,
-        breakdown: Vec::new(),
+        // Spec 038 #D2: a split's confirm lists every recipient by name and
+        // amount — what is about to be signed, in full.
+        breakdown: if send.split_mode {
+            send.recipients
+                .iter()
+                .map(|draft| BreakdownRow {
+                    label: draft
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| shorten(&draft.address))
+                        .into(),
+                    value: format!("{} {symbol}", draft.amount).trim().to_owned().into(),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        },
         notice,
         cta: s.confirm_send.clone(),
         // Signing and submitting are waits; `can_confirm` is the core's gate
@@ -1806,7 +1817,32 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             // A held payment is NOT waiting for a confirmation: it is queued
             // until fees settle, and it says so in place of the ordinary wait
             // rather than beside it.
-            captions: vec![held.unwrap_or_else(|| s.tx_waiting_confirm.clone())],
+            captions: {
+                // Spec 038 #D3: count, don't spin. The core hands over when the
+                // relay accepted the op and this chain's usual time; the shell
+                // owns the clock and the sentences are the corpus's.
+                let mut lines = vec![held.unwrap_or_else(|| s.tx_waiting_confirm.clone())];
+                if let Some(receipt) = send.receipt.as_ref()
+                    && let (Some(at), Some(typical)) =
+                        (receipt.submitted_at_ms, receipt.typical_inclusion_s)
+                {
+                    let elapsed = ((crate::executor::now_ms() - at) / 1000.0).max(0.0) as u64;
+                    lines.push(
+                        fill(
+                            &fill(&s.tx_typical_time, "chainName", &chain_name(chain_id)),
+                            "estSecs",
+                            &typical.to_string(),
+                        )
+                        .into(),
+                    );
+                    lines.push(if elapsed >= u64::from(typical) * 2 {
+                        s.tx_slow_confirm.clone()
+                    } else {
+                        fill(&s.tx_elapsed, "elapsed", &elapsed.to_string()).into()
+                    });
+                }
+                lines
+            },
             hash: send
                 .tx_hash
                 .clone()
@@ -2107,6 +2143,8 @@ mod tests {
             transfers: Vec::new(),
             amount: "0.001".to_owned(),
             usd_value: 0.0,
+                submitted_at_ms: None,
+                typical_inclusion_s: None,
         });
         send_receipt(&SendInputs {
             send: &send,

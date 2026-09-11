@@ -34,6 +34,7 @@
 	import OnboardingRail from '$lib/ui/onboarding/v2/OnboardingRail.svelte';
 	import IntroCarousel from '$lib/ui/intro/IntroCarousel.svelte';
 	import AddMethodPicker from '$lib/ui/onboarding/v2/AddMethodPicker.svelte';
+	import Sheet from '$lib/ui/onboarding/Sheet.svelte';
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import { markIntroSeen, shouldShowIntro } from '$lib/intro/gate';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
@@ -223,14 +224,6 @@
 				</Button>
 			</div>
 
-			<!-- The three ways in, expanded in place exactly as the create
-			     journey expands them: a wallet on a phone or a security key is
-			     reachable by name, not only through whatever the browser's sheet
-			     defaults to (spec 038 SC-428). -->
-			<div class="methods" class:open={methodsOpen}>
-				<AddMethodPicker open={methodsOpen} {strings} onPick={(method) => void signIn(method)} />
-			</div>
-
 			{#if transportFailed}
 				<p class="endpointWarning" role="status">
 					{strings('onboarding.common.networkBody')}
@@ -242,6 +235,19 @@
 			{/if}
 		</div>
 	</main>
+{/if}
+
+{#if methodsOpen}
+	<!-- The three ways in, in a sheet (a dialog on desktop): a wallet on a
+	     phone or a security key is reachable by name, not only through
+	     whatever the browser's own sheet defaults to (spec 038 SC-428;
+	     founder: 弹框 on phone web and desktop web alike). -->
+	<Sheet label={strings('onboarding.login.header')} onClose={() => (methodsOpen = false)}>
+		<div class="methodsSheet">
+			<h2 class="methodsTitle">{strings('onboarding.login.header')}</h2>
+			<AddMethodPicker open={true} {strings} onPick={(method) => void signIn(method)} />
+		</div>
+	</Sheet>
 {/if}
 
 {#if pending}
@@ -353,12 +359,15 @@
 		gap: var(--space-lg);
 	}
 
-	.methods {
-		max-width: var(--layout-flowColumn);
+	.methodsSheet {
+		padding: var(--space-xl) var(--layout-screenPaddingX) var(--space-3xl);
 	}
 
-	.methods.open {
-		margin-block-start: var(--space-lg);
+	.methodsTitle {
+		margin: 0 0 var(--space-lg);
+		color: var(--color-fg-base);
+		font-size: var(--text-xl);
+		font-weight: var(--weight-bold);
 	}
 
 	.endpointWarning {

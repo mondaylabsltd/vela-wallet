@@ -334,7 +334,12 @@ the machine.
     attempted.
 
 19. **The passkey method rows have no icons, and the web sign-in has no
-    rows.** (#190, ruled) The rows get real icons — the founder's set:
+    rows.** (#190, ruled — and revised the same evening: "this device" shows
+    THE DEVICE, a laptop or a phone by form factor, never Apple's, Google's or
+    Microsoft's mark, because the platform authenticator on a given machine is
+    not reliably any of them; "phone or tablet" shows the camera that scans;
+    the USB key keeps its mark; and the web's "I already have a wallet" opens
+    a sheet — a dialog on desktop — on every width.) The rows get real icons — the founder's set:
     Apple passkey, Windows passkey, Google Password Manager, Chrome-on-Mac,
     FIDO2 security key, USB security key — and **"This device" shows the icon
     of the platform the app is actually running on**, decided at runtime: the

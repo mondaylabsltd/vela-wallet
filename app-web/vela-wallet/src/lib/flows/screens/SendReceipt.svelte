@@ -33,10 +33,31 @@
 		clearTimeout(timer);
 		timer = setTimeout(() => (copied = false), 150);
 	}
+
+	// Spec 038 #D3: while the relay has the op, the screen counts. One second
+	// is the right grain — a person reads "12s", not a spinner. The sentences
+	// arrive in the model; only the number is this screen's.
+	let now = $state(Date.now());
+	$effect(() => {
+		if (!model.eta) return;
+		const timer = setInterval(() => (now = Date.now()), 1000);
+		return () => clearInterval(timer);
+	});
+	const elapsedS = $derived(
+		model.eta ? Math.max(0, Math.floor((now - model.eta.submittedAtMs) / 1000)) : 0
+	);
+	const etaLines = $derived.by(() => {
+		if (!model.eta) return [] as string[];
+		const { typicalS, typicalLine, elapsedTemplate, slowLine } = model.eta;
+		return [
+			typicalLine,
+			elapsedS >= typicalS * 2 ? slowLine : elapsedTemplate.replace('{{elapsed}}', String(elapsedS))
+		];
+	});
 </script>
 
 <div class="receipt">
-	<StatusHero stage={model.stage} title={model.title} captions={model.captions} />
+	<StatusHero stage={model.stage} title={model.title} captions={[...model.captions, ...etaLines]} />
 
 	<div class="foot">
 		{#if model.hash !== undefined}

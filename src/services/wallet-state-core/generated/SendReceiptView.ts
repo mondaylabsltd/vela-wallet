@@ -8,4 +8,15 @@ export type SendReceiptView = { status: SendReceiptStatus, hold_reason: SendHold
 /**
  * The single-send scalar amount (token units, resolved).
  */
-amount: string, usd_value: number, };
+amount: string, usd_value: number, 
+/**
+ * When the relay accepted the op (the submit result's clock), so the
+ * shell can show how long the wait has been (spec 038 #D3). The core is
+ * clockless: elapsed is the shell's subtraction, with its own clock.
+ */
+submitted_at_ms: number | null, 
+/**
+ * The chain's usual time to land, from the builtin table; `None` for a
+ * custom network, where the shell says nothing rather than guess.
+ */
+typical_inclusion_s: number | null, };

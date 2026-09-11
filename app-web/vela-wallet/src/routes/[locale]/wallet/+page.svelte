@@ -77,7 +77,7 @@
 		type ManageTokensSession
 	} from '$lib/wallet/core/manage-tokens-session';
 	import type { MtokView } from '$lib/core/generated/MtokView';
-	import { getAllNetworksSync, networkId } from '$lib/services/networks';
+	import { getAllNetworksSync, getCustomChainIdsSync, networkId } from '$lib/services/networks';
 	import {
 		makeRecipientId,
 		sendTokenId,
@@ -161,6 +161,18 @@
 	 */
 	let selectedAssetId = $state<string | null>(null);
 	let selectedTxId = $state<string | null>(null);
+
+	/**
+	 * Spec 038 #E9: the networks the person added, listed in the filter from
+	 * the moment they exist rather than from the first balance that lands on
+	 * them. `networksVersion` ticks when the set changes.
+	 */
+	let networksVersion = $state(0);
+	$effect(() => subscribeNetworks(() => (networksVersion += 1)));
+	const customChainIds = $derived.by(() => {
+		void networksVersion;
+		return getCustomChainIdsSync();
+	});
 	/**
 	 * The network whose code the receive screen shows (spec 028 Phase 9, T482):
 	 * the row that was tapped, or the sidebar's filter (T495). The list and the
@@ -1087,6 +1099,7 @@
 		identity === null
 			? data.desktop
 			: withLiveWalletDesktop(webNav(desktopWithIdentity(data.desktop, identity)), {
+					customChainIds,
 					...liveInputs,
 					// Two things cannot occupy one column (founder, 2026-09-05: the
 					// token's detail and the picker were drawn side by side). While a
@@ -1263,7 +1276,12 @@
 	 */
 	let chainSheetOpen = $state(false);
 	const chainRows = $derived(
-		liveChainRows(balance.view, data.walletMessages.networkFilter.allNetworks, chainFilter.chainId)
+		liveChainRows(
+			balance.view,
+			data.walletMessages.networkFilter.allNetworks,
+			chainFilter.chainId,
+			customChainIds
+		)
 	);
 
 	/**
@@ -1307,7 +1325,9 @@
 	const rpcRestored = $derived(
 		rpcSaved && rpcDraft === null && rescueRow?.rpc_health?.type === 'ok'
 	);
-	const balanceDetailModel = $derived(liveBalanceDetail(balance.view, currency.view, rm, data.walletMessages.balance.unpriced));
+	const balanceDetailModel = $derived(
+		liveBalanceDetail(balance.view, currency.view, rm, data.walletMessages.balance.unpriced)
+	);
 	const relayerModel = $derived(
 		sendView?.treasury_bootstrap ? liveRelayer(sendView.treasury_bootstrap, rm) : undefined
 	);

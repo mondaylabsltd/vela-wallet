@@ -182,18 +182,18 @@ same three ways in as the desktop (SC-428, 438).
 
 **Goal**: SC-441, 442, 443 (#D1–#D3), #D4 visual pass.
 
-- [ ] T074e [US11] Reproduce #D1 on the parallel space (a send whose inner call reverts: ERC-20 transfer over balance); record the UserOp receipt (`success`, logs) and both shells' stored status in `specs/038-first-run-parity/results.md`
-- [ ] T074f [US11] Core `rust/crates/vela-core/src/app/tx_tracker.rs`: a `Receipt` whose logs carry Safe `ExecutionFailure` (topic `keccak("ExecutionFailure(bytes32,uint256)")`) emitted by the sender is treated as `ReceiptFailed`; both shells pass the authentic logs they already collect (`remember_receipt` / `tracker-executor.ts`) into the result; core test with a fixture log — SC-441
-- [ ] T074g [P] [US11] Core `network_admin.rs`: `typical_inclusion_s: u16` per builtin chain (block time × usual depth; Gnosis 5s×3, Ethereum 12s×2, L2s 2s×5, Tempo …); `SendReceiptView.typical_inclusion_s` + `elapsed_s` from the shell clock; `SendReceiptView.longer_than_usual` past 2× — SC-443
-- [ ] T074h [US11] Web `app-web/vela-wallet/src/lib/flows/screens/SendReceipt.svelte` + `live-send.ts`: elapsed/typical line and the "longer than usual" state; desktop `app-desktop/vela-wallet/src/wallet/money.rs` receipt stage the same — SC-443
-- [ ] T074i [US11] Core `send.rs`: `SendConfirmView.recipients` (count + rows: address, name, amount) for split and sweep; ts-rs regenerate — SC-442
-- [ ] T074j [US11] Web confirm `SendConfirm.svelte` + `live-send.ts` SD3: recipients block (count title, first 3 rows with identicon, "all N" → third column on wide / sheet on phone); the same block on `SendReceipt.svelte` and `TxDetail.svelte` — SC-442
-- [ ] T074k [P] [US11] Desktop `money.rs` confirm/receipt/detail: the same recipients block (third column for the full list, per the desktop rule: no bottom sheets) — SC-442
+- [~] T074e [US11] (guard built and tested on a fixture log; live reproduction still needs the founder's failing send) Reproduce #D1 on the parallel space (a send whose inner call reverts: ERC-20 transfer over balance); record the UserOp receipt (`success`, logs) and both shells' stored status in `specs/038-first-run-parity/results.md`
+- [x] T074f [US11] Core `rust/crates/vela-core/src/app/tx_tracker.rs`: a `Receipt` whose logs carry Safe `ExecutionFailure` (topic `keccak("ExecutionFailure(bytes32,uint256)")`) emitted by the sender is treated as `ReceiptFailed`; both shells pass the authentic logs they already collect (`remember_receipt` / `tracker-executor.ts`) into the result; core test with a fixture log — SC-441
+- [x] T074g [P] [US11] Core `network_admin.rs`: `typical_inclusion_s: u16` per builtin chain (block time × usual depth; Gnosis 5s×3, Ethereum 12s×2, L2s 2s×5, Tempo …); `SendReceiptView.typical_inclusion_s` + `elapsed_s` from the shell clock; `SendReceiptView.longer_than_usual` past 2× — SC-443
+- [x] T074h [US11] Web `app-web/vela-wallet/src/lib/flows/screens/SendReceipt.svelte` + `live-send.ts`: elapsed/typical line and the "longer than usual" state; desktop `app-desktop/vela-wallet/src/wallet/money.rs` receipt stage the same — SC-443
+- [x] T074i [US11] Core `send.rs`: `SendConfirmView.recipients` (count + rows: address, name, amount) for split and sweep; ts-rs regenerate — SC-442
+- [~] T074j [US11] (confirm breakdown with identicons done; receipt + TxDetail lists pending) Web confirm `SendConfirm.svelte` + `live-send.ts` SD3: recipients block (count title, first 3 rows with identicon, "all N" → third column on wide / sheet on phone); the same block on `SendReceipt.svelte` and `TxDetail.svelte` — SC-442
+- [x] T074k [P] [US11] Desktop `money.rs` confirm/receipt/detail: the same recipients block (third column for the full list, per the desktop rule: no bottom sheets) — SC-442
 - [ ] T074l [US11] Visual pass on both shells at 1 / 3 / 12 / 60 recipients (screenshots into results.md) — #D4
 
 ## Phase 11c: US12 — The founder's evening pass (Part E) (P2)
 
-- [ ] T074m [US12] #E1: split `NotCompatible` from "could not check" in core `network_admin.rs` (`NetWizardErrorKind::CheckFailed` with retry) and render both on web + desktop; run the eleven probes + P-256 against Celo from the desktop and record which fails — SC-444
+- [~] T074m [US12] (Celo probed live: all 11 contracts + RIP-7212 present ⇒ the desktop's verdict was a failed probe flattened to 'incompatible'; the verdict split is still to build) #E1: split `NotCompatible` from "could not check" in core `network_admin.rs` (`NetWizardErrorKind::CheckFailed` with retry) and render both on web + desktop; run the eleven probes + P-256 against Celo from the desktop and record which fails — SC-444
 - [x] T074n [US12] #E2: `TokenDetail.svelte` `onselect(id)` → page opens `tx-detail` by feed id (`findFeedItem`); `FlowsPanel`/`FlowsMobile` wiring — SC-445
 - [ ] T074o [US12] #E3: reproduce which surface ignores the date format (web feed / desktop); fix that surface
 - [ ] T074p [US12] #E4: client — the AAGUID lookup base URL comes from the same settings object as the index (default = our node once it exists); server task filed in `biubiu-projects`
@@ -201,6 +201,9 @@ same three ways in as the desktop (SC-428, 438).
 - [x] T074r [US12] (rate editor done; the "toggle does not switch" half still needs a reproduction) #E6: web `BatchImport.svelte` editable rate (`EditRate` / `ResetRateToAuto`), verify the sheet opens with its token so `SetUnit` applies — SC-447
 - [x] T074s [US12] #E7: `RecipientCard.svelte` two-line editable layout, content-sized amount, hairline fields — SC-448
 - [x] T074t [US12] #E8: `BalanceDetailModel.unpriced` from `view.unpriced_tokens`; section in `BalanceDetailBody.svelte`; desktop's balance detail the same — SC-449
+
+- [x] T074u [US12] #E9: `liveChainRows` lists every network the person added (count 0 until its balance lands); `getCustomChainIdsSync` + `subscribeNetworks` on the wallet page
+- [x] T074v [US5] #190 revised: "this device" = the device (laptop / phone by form factor), "phone or tablet" = the scanner, USB keeps its mark; web sign-in picker in a sheet (a dialog at desktop widths)
 
 ## Phase 12: US10 — The two dev commands, and a sheet that tells the truth (P3)
 

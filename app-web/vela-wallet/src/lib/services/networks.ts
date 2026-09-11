@@ -99,6 +99,12 @@ export function getAllNetworksSync(): Network[] {
 	return _allNetworksSnapshot;
 }
 
+/** The networks the person added (spec 038 #E9) — the snapshot minus the builtins. */
+export function getCustomChainIdsSync(): number[] {
+	const builtin = new Set(DEFAULT_NETWORKS.map((n) => n.chainId));
+	return _allNetworksSnapshot.map((n) => n.chainId).filter((id) => !builtin.has(id));
+}
+
 export async function getAllNetworks(): Promise<Network[]> {
 	await refreshCustomNetworks();
 	return getAllNetworksSync();

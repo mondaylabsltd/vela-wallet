@@ -100,6 +100,8 @@ pub struct SendHost {
     pub pin: Option<PinDialog>,
     pub pick: Option<Vec<CredentialChoice>>,
     watching: bool,
+    /// The last whole second the receipt re-rendered for (#D3).
+    last_counted_second: Option<u64>,
     signing_reported: bool,
     tracked_hash: Option<String>,
     last_track_status: Option<TrackStatus>,
@@ -163,6 +165,7 @@ impl SendHost {
             pin: None,
             pick: None,
             watching: false,
+            last_counted_second: None,
             signing_reported: false,
             tracked_hash: None,
             last_track_status: None,
@@ -696,8 +699,16 @@ impl SendHost {
 
     /// Poll the ceremony channel and the signing flag while anything is in
     /// flight. Detached; ends by returning.
+    /// A submitted receipt with a clock to count against (#D3).
+    fn receipt_counting(&self) -> bool {
+        self.send.view().receipt.as_ref().is_some_and(|receipt| {
+            receipt.status == vela_core::app::send::SendReceiptStatus::Submitted
+                && receipt.submitted_at_ms.is_some()
+        })
+    }
+
     fn ensure_watcher(&mut self, cx: &mut Context<Self>) {
-        if self.watching || (self.send.is_idle() && self.fee.is_idle()) {
+        if self.watching || (self.send.is_idle() && self.fee.is_idle() && !self.receipt_counting()) {
             return;
         }
         self.watching = true;
@@ -740,7 +751,17 @@ impl SendHost {
         if self.pick.is_some() != asking.is_some() {
             self.pick = asking;
         }
-        let busy = !self.send.is_idle() || !self.fee.is_idle();
+        // Spec 038 #D3: while the relay has the op the receipt counts seconds,
+        // so the watcher keeps ticking and re-renders once per second.
+        let counting = self.receipt_counting();
+        if counting {
+            let second = (crate::executor::now_ms() / 1000.0) as u64;
+            if self.last_counted_second != Some(second) {
+                self.last_counted_second = Some(second);
+                cx.notify();
+            }
+        }
+        let busy = !self.send.is_idle() || !self.fee.is_idle() || counting;
         cx.notify();
         if !busy {
             self.watching = false;

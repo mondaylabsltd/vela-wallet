@@ -60,6 +60,8 @@ const FLOW_CHROME_KEYS = [
 	// Spec 038: the front door's sentence for a probe that never left the
 	// machine — an existing key, newly served here.
 	'onboarding.common.networkBody',
+	// Spec 038: the sign-in sheet's title on Welcome.
+	'onboarding.login.header',
 	'onboarding.common.copyAddress',
 	'onboarding.common.copied',
 	'onboarding.create.technicalDetails',
