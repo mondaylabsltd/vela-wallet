@@ -33,13 +33,13 @@ const RUST_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const CRATE_DIR = join(RUST_DIR, 'crates', 'vela-core-wasm');
 const STAGING_DIR = join(RUST_DIR, 'target', 'pkg-web-staging');
 const OUT_DIR = join(RUST_DIR, 'pkg-web');
-const PUBLIC_DIR = join(dirname(RUST_DIR), 'public');
+const PUBLIC_DIR = join(dirname(RUST_DIR), 'assets', 'wasm');
 
 /**
  * Hard ceiling on the wasm-opt'd module.
  *
  * Since spec 017 wave B the module is NOT bundled: it ships as a fingerprinted
- * asset in `public/` and loads asynchronously (the 011 research.md D7 route,
+ * asset in `assets/wasm/` and loads asynchronously (the 011 research.md D7 route,
  * triggered when the full machine roadmap blew past the 2 MB embedded-base64
  * ceiling at 2,930,927 bytes). The budget is therefore network transfer, not
  * bundle size: at 4 MB raw the brotli'd wire cost is roughly 1.3 MB, fetched
@@ -289,7 +289,7 @@ function emit() {
     if (!drift.length) {
       if (!existsSync(committedAsset)) {
         throw new Error(
-          `build-web --check: public/${wasmAssetName} is missing — the committed asset was ` +
+          `build-web --check: assets/wasm/${wasmAssetName} is missing — the committed asset was ` +
             'built from different Rust source. Run `npm run build:wasm` and commit the result.',
         );
       }
@@ -364,7 +364,7 @@ function emit() {
   }
   writeFileSync(join(PUBLIC_DIR, wasmAssetName), wasm);
   console.log(
-    `build-web: wrote rust/pkg-web + public/${wasmAssetName} (wasm ${wasm.byteLength} bytes)`,
+    `build-web: wrote rust/pkg-web + assets/wasm/${wasmAssetName} (wasm ${wasm.byteLength} bytes)`,
   );
 }
 

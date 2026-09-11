@@ -42,7 +42,7 @@ interface WelcomeCorpus {
 
 function corpus(locale: string): WelcomeCorpus {
 	const raw = JSON.parse(
-		readFileSync(join(APP_ROOT, '..', '..', 'public', 'i18n', `${locale}.json`), 'utf8')
+		readFileSync(join(APP_ROOT, '..', '..', 'assets', 'i18n', `${locale}.json`), 'utf8')
 	);
 	const onboarding = raw.onboarding;
 	return {

@@ -351,7 +351,7 @@ let i18nLocales = ["en", "zh", "zh-TW", "zh-HK", "ja", "ko", "vi", "id", "tr",
 // order, and `vectorsPath` is declared further down. A stored `let` here read it
 // before its initialiser had run — which is undefined behaviour, and crashed the
 // harness with SIGSEGV rather than anything diagnosable.
-var i18nAssetDir: String { "\(vectorsPath)/../../../../../public/i18n" }
+var i18nAssetDir: String { "\(vectorsPath)/../../../../../assets/i18n" }
 var i18nAssets: [String: Data] = [:]
 
 func i18nAsset(_ lng: String) -> Data? {

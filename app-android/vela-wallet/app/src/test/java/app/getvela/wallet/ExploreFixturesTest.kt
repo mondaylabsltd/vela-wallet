@@ -30,7 +30,7 @@ class ExploreFixturesTest {
     )
 
     private fun zhStrings(): I18nRuntime = I18nRuntime { tag ->
-        File(repoRoot, "public/i18n/$tag.json").readBytes()
+        File(repoRoot, "assets/i18n/$tag.json").readBytes()
     }.apply { initialize("zh") }
 
     /** Every string a state carries, flattened — the echo check's input. */

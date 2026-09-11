@@ -542,7 +542,7 @@ fun main(args: Array<String>) {
     val failures = mutableListOf<String>()
     var total = 0
 
-    i18nAssetDirPath = File(vectorsDir, "../../../../../public/i18n").canonicalPath
+    i18nAssetDirPath = File(vectorsDir, "../../../../../assets/i18n").canonicalPath
     val files = vectorsDir.listFiles { f -> f.name.endsWith(".json") }?.sortedBy { it.name }
         ?: emptyList()
     if (files.isEmpty()) {

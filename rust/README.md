@@ -47,19 +47,19 @@ workspace `Cargo.toml`; the reasoning behind each is in
 |---|---|
 | Test the crate | `cd rust && cargo test --workspace --features vela-core/i18n-all` |
 | Lint | `cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings` |
-| Regenerate conformance vectors | `npm run dump:vectors` (repo root) |
-| Regenerate the identicon artwork table | `npm run gen:identicon-features` |
-| Regenerate the i18n tables + TS resources | `npm run gen:i18n` |
-| Report the i18n corpus defect register | `npm run lint:i18n` |
+| Regenerate conformance vectors | `npm --prefix scripts run dump:vectors` (from the repo root; the tooling package is `scripts/`) |
+| Regenerate the identicon artwork table | `npm --prefix scripts run gen:identicon-features` |
+| Regenerate the i18n tables + `assets/i18n` | `npm --prefix scripts run gen:i18n` |
+| Report the i18n corpus defect register | `npm --prefix scripts run lint:i18n` |
 | i18n residency (SC-005) | `cargo test -p vela-core --features i18n-all --test i18n_residency -- --nocapture` |
 | i18n budget (SC-007) | `cargo test -p vela-core --features i18n-all --release --test i18n_bench -- --nocapture` |
-| Identicon parity vs the shipped JS library | `npm run verify:identicon` |
-| i18n parity vs the shipped JS library | `npm run verify:i18n` |
-| Build the web artifact | `npm run build:wasm` |
-| Verify the shipped web artifact | `npm run verify:wasm` |
+| Identicon parity vs the pinned `identicons-esm` | `npm --prefix scripts run verify:identicon` |
+| i18n parity vs the pinned `i18next` | `npm --prefix scripts run verify:i18n` |
+| Build the web artifact | `npm --prefix scripts run build:wasm` |
+| Verify the shipped web artifact | `npm --prefix scripts run verify:wasm` |
 | Kotlin bindings conformance | `rust/scripts/smoke-kotlin.sh` |
 | Swift bindings conformance (macOS) | `rust/scripts/smoke-swift.sh` |
-| Performance vs the legacy TS | `npm run bench:legacy && npm run bench:core` |
+| Benchmark the web artifact | `npm --prefix scripts run bench:core` |
 
 CI runs all of these (`rust` job on ubuntu, `rust-macos` for Swift).
 
@@ -114,11 +114,12 @@ because the old output was garbage. **An un-enumerated behavior change is a bug.
 - **The build remaps `$CARGO_HOME`.** Registry panic-location strings otherwise
   embed the builder's home directory, which both leaks into production and makes
   the artifact impossible to reproduce on another machine.
-- **React Native still runs TypeScript.** Hermes has no WebAssembly, so on
-  iOS/Android the app uses the quarantined legacy modules until the native
-  rewrite adopts the Kotlin/Swift bindings. `src/services/vela-core/` is the
-  facade that hides this; an eslint rule (covering dynamic `import()` too) keeps
-  app code from reaching the legacy modules directly.
+- **Every shell links this crate.** iOS and Android through the UniFFI
+  bindings (with the `crux` feature on since spec 019), the web shell through
+  the wasm artifact, the desktop as a crate dependency. The TypeScript
+  implementations the corpus was extracted from were deleted in PR #168, and
+  the React Native / Expo app that hosted them in spec 039 — there is no
+  second implementation anywhere.
 
 ## Bumping uniffi
 
@@ -130,8 +131,8 @@ pin, regenerate, and run both smoke harnesses before committing.
 ## i18n / L10n
 
 `vela_core::i18n` reproduces `i18next@26.3.1` byte-for-byte; `vela_core::l10n`
-reproduces `src/services/locale-format.ts` and corrects the currency layer it never
-handled. Spec: `specs/004-rust-i18n/`.
+reproduced the Expo app's `locale-format.ts` (deleted with that app) and corrects
+the currency layer it never handled. Spec: `specs/004-rust-i18n/`.
 
 **The corpus under `rust/crates/vela-core/i18n/locales/` is the only hand-edited
 file set.** Everything downstream is generated and CI fails on drift:
@@ -141,7 +142,7 @@ file set.** Everything downstream is generated and CI fails on drift:
 | `src/i18n/paths.rs` | the shared 1,205-path table |
 | `src/i18n_catalogs/*.rs` | one compiled-in value blob per locale |
 | `src/l10n/datetime_data.rs` | day periods + weekday names, from ICU |
-| `public/i18n/<lng>.json` | the runtime on-demand asset the web route fetches |
+| `assets/i18n/<lng>.json` | the runtime on-demand asset the web route fetches |
 | `../../src/i18n/resources.ts` | what the React Native app imports |
 | `tests/vectors/i18n-*.json` | 18,975 conformance cases, from the real JS package |
 

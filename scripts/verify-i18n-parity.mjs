@@ -86,7 +86,7 @@ const wasm = await loadShippedCore();
 
 // Per-locale assets, exactly what the browser fetches from `/i18n/<lng>.json`.
 const assets = Object.fromEntries(
-  LOCALES.map((l) => [l, new Uint8Array(readFileSync(join(REPO_ROOT, 'public/i18n', `${l}.json`)))]),
+  LOCALES.map((l) => [l, new Uint8Array(readFileSync(join(REPO_ROOT, 'assets/i18n', `${l}.json`)))]),
 );
 
 const engines = Object.fromEntries(

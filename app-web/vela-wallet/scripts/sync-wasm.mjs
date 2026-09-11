@@ -3,7 +3,7 @@
  * Put the committed vela-core wasm where the BROWSER can fetch it.
  *
  * `rust/scripts/build-web.mjs` writes one fingerprinted artifact to the repo's
- * `public/` directory and names it in `rust/pkg-web/vela_core_wasm_url.js`.
+ * `assets/wasm/` directory and names it in `rust/pkg-web/vela_core_wasm_url.js`.
  * That is where this app's build-time consumers, the corpus replay and
  * scripts/onchain read it from disk (the path is a leftover of the retired
  * Expo client, kept because every reader names it). SvelteKit serves
@@ -41,9 +41,9 @@ const match = /export const WASM_URL = '([^']+)'/.exec(readFileSync(urlModule, '
 if (!match) fail('could not read WASM_URL from vela_core_wasm_url.js');
 
 const asset = match[1].replace(/^\//, '');
-const source = join(REPO, 'public', asset);
+const source = join(REPO, 'assets', 'wasm', asset);
 if (!existsSync(source))
-	fail(`public/${asset} missing — run \`npm run build:wasm\` at the repo root`);
+	fail(`assets/wasm/${asset} missing — run \`npm run build:wasm\` at the repo root`);
 
 const target = join(STATIC, asset);
 const bytes = readFileSync(source);

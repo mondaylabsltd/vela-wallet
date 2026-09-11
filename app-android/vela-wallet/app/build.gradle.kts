@@ -58,7 +58,7 @@ android {
             // Generated uniffi Kotlin bindings are consumed in place (spec 008 FR-009 / research D1):
             // single committed copy, regenerated only via rust/scripts/smoke-kotlin.sh.
             kotlin.srcDir(velaRepoRoot.resolve("rust/bindings/kotlin"))
-            // Locale catalogs are synced from the generated public/i18n at build time (research D3).
+            // Locale catalogs are synced from the generated assets/i18n at build time (research D3).
             // Static File (not Provider): AGP 9 disallows Providers here; the task
             // dependency is carried by the merge*Assets wiring below.
             assets.srcDir(projectDir.resolve("build/generated/velaI18n"))
@@ -78,7 +78,7 @@ android {
             test.inputs.file(velaRepoRoot.resolve("docs/design-tokens.json"))
                 .withPathSensitivity(PathSensitivity.NONE)
                 .withPropertyName("velaDesignTokens")
-            test.inputs.dir(velaRepoRoot.resolve("public/i18n"))
+            test.inputs.dir(velaRepoRoot.resolve("assets/i18n"))
                 .withPathSensitivity(PathSensitivity.RELATIVE)
                 .withPropertyName("velaI18nCatalogs")
             test.inputs.file(
@@ -124,8 +124,8 @@ val cargoNdkBuild = tasks.register<Exec>("cargoNdkBuild") {
 }
 
 val syncVelaI18nAssets = tasks.register<Sync>("syncVelaI18nAssets") {
-    description = "Copies generated locale catalogs (public/i18n) into build assets (research D3)."
-    from(velaRepoRoot.resolve("public/i18n")) {
+    description = "Copies generated locale catalogs (assets/i18n) into build assets (research D3)."
+    from(velaRepoRoot.resolve("assets/i18n")) {
         include("*.json")
     }
     into(layout.buildDirectory.dir("generated/velaI18n/i18n"))

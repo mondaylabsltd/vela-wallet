@@ -269,7 +269,7 @@
 				"$(SRCROOT)/../scripts/catalogs-input.xcfilelist",
 			);
 			inputPaths = (
-				"$(SRCROOT)/../../public/i18n",
+				"$(SRCROOT)/../../assets/i18n",
 			);
 			name = "Bundle locale catalogs";
 			outputFileListPaths = (

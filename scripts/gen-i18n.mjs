@@ -6,7 +6,7 @@
  * Source   <-  rust/crates/vela-core/i18n/locales/   240 files, THE source of truth
  * Stage 1  ->  rust/.../src/i18n/paths.rs             the SHARED path table, paid once
  * Stage 2  ->  rust/.../src/i18n_catalogs/<lng>.rs    one value blob per locale
- * Stage 4  ->  public/i18n/<lng>.json                  the on-demand catalog every shell reads
+ * Stage 4  ->  assets/i18n/<lng>.json                  the on-demand catalog every shell reads
  * Stage 5  ->  rust/.../src/l10n/datetime_data.rs      day periods + weekday names
  *
  * (Stage 3 was `src/i18n/resources.ts`, the React Native app's import; it went
@@ -39,12 +39,14 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const LOCALES_DIR = join(REPO_ROOT, 'rust/crates/vela-core/i18n/locales');
 const PATHS_FILE = join(REPO_ROOT, 'rust/crates/vela-core/src/i18n/paths.rs');
 const CATALOG_DIR = join(REPO_ROOT, 'rust/crates/vela-core/src/i18n_catalogs');
-// `public/i18n/` is read AT THIS PATH by every shell and two gates: app-ios
+// `assets/i18n/` is read AT THIS PATH by every shell and two gates: app-ios
 // (Xcode file lists + bundle-catalogs.sh), app-android (build.gradle.kts and the
-// fixture tests), app-web/vela-wallet (engine.server.ts, at build time),
-// scripts/verify-i18n-parity.mjs and rust/scripts/verify-web.mjs. Moving it is
-// a five-toolchain edit; the name is historical (spec 004) and harmless.
-const ASSET_DIR = join(REPO_ROOT, 'public/i18n');
+// fixture tests), app-web/vela-wallet (engine.server.ts, at build time), the
+// Kotlin/Swift harnesses, scripts/verify-i18n-parity.mjs and
+// rust/scripts/verify-web.mjs. Moving it is a five-toolchain edit — spec 039
+// did exactly one, from the Expo-era `public/i18n`, and the list above is
+// where to look if it ever has to happen again.
+const ASSET_DIR = join(REPO_ROOT, 'assets/i18n');
 const DATETIME_FILE = join(REPO_ROOT, 'rust/crates/vela-core/src/l10n/datetime_data.rs');
 
 // Locale order and namespace spread order are the ones the original

@@ -34,7 +34,7 @@ const lib = globalThis.VelaCS;
 
 // vela-core, compiled — the reference the page's digest must agree with.
 const core = await import(join(root, '..', '..', 'rust/pkg-web/vela_core.js'));
-core.initSync({ module: readFileSync(join(root, '..', '..', 'public/vela_core_bg.1b6c8ce4be03.wasm')) });
+core.initSync({ module: readFileSync(join(root, '..', '..', 'assets/wasm/vela_core_bg.1b6c8ce4be03.wasm')) });
 
 function expectedSafeOpHash(op, chainId) {
   const bytes = core.attestSafeOpHash(JSON.stringify({

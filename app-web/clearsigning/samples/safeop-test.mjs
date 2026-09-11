@@ -34,7 +34,7 @@ const hex = (bytes) => '0x' + Buffer.from(bytes).toString('hex');
 // --- vela-core, as compiled for the web -------------------------------------
 
 const core = await import(join(repo, 'rust/pkg-web/vela_core.js'));
-core.initSync({ module: readFileSync(join(repo, 'public/vela_core_bg.1b6c8ce4be03.wasm')) });
+core.initSync({ module: readFileSync(join(repo, 'assets/wasm/vela_core_bg.1b6c8ce4be03.wasm')) });
 
 // --- fixtures ---------------------------------------------------------------
 

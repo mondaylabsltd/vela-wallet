@@ -26,7 +26,7 @@ export const CHAIN_ID = 100n;
 export const wasm = await (async () => {
   const mod = await import(join(REPO, 'rust', 'pkg-web', 'vela_core.js'));
   const { WASM_URL } = await import(join(REPO, 'rust', 'pkg-web', 'vela_core_wasm_url.js'));
-  mod.initSync({ module: readFileSync(join(REPO, 'public', WASM_URL.replace(/^\//, ''))) });
+  mod.initSync({ module: readFileSync(join(REPO, 'assets', 'wasm', WASM_URL.replace(/^\//, ''))) });
   return mod;
 })();
 

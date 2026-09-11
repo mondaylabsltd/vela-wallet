@@ -2,7 +2,7 @@
  * vela-core i18n engine — BUILD-TIME ONLY seam (spec 006, contracts/i18n-ssr.md).
  *
  * Runs the real Rust resolver (the artefact spec 005 proved against i18next
- * with zero divergences) over the real generated catalogs (`public/i18n/`).
+ * with zero divergences) over the real generated catalogs (`assets/i18n/`).
  * Every `[locale]` page is prerendered, so this module executes in Node during
  * `vite build` (and in the dev server / vitest) — never on the deployed
  * Cloudflare Worker, which cannot compile wasm from bytes. The e2e suite
@@ -26,7 +26,7 @@ import type { SigningMessages } from '$lib/signing/messages';
 import type { SettingsMessages } from '$lib/settings/messages';
 
 /** Generated runtime catalogs (gen-i18n.mjs stage 4), one per locale. */
-const CATALOGS = import.meta.glob('../../../../../public/i18n/*.json', {
+const CATALOGS = import.meta.glob('../../../../../assets/i18n/*.json', {
 	query: '?raw',
 	import: 'default',
 	eager: true
@@ -34,7 +34,7 @@ const CATALOGS = import.meta.glob('../../../../../public/i18n/*.json', {
 
 function catalogBytes(locale: string): Uint8Array {
 	const entry = Object.entries(CATALOGS).find(([path]) => path.endsWith(`/${locale}.json`));
-	if (!entry) throw new Error(`no generated catalog for locale "${locale}" in public/i18n/`);
+	if (!entry) throw new Error(`no generated catalog for locale "${locale}" in assets/i18n/`);
 	return new TextEncoder().encode(entry[1]);
 }
 
