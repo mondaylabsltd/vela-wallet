@@ -183,6 +183,8 @@ export const WALLET_FLOW_KEYS = [
 	'send.batchRejected_one',
 	'send.batchRejected_other',
 	'send.batchApply_other',
+	'send.batchApply_one',
+	'send.batchApplyEmpty',
 
 	// send · confirm
 	'send.confirmTitle',

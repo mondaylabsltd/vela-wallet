@@ -231,3 +231,23 @@ Reproduced live (dev server, parallel space, a `Sent` record seeded at
 - Desktop 393 passed / 0 failed (+9 tests); web wallet suite 92 passed;
   svelte-check 0 errors; `cargo fmt` clean.
 
+### Slice 9 — #E6, the half that needed a reproduction
+
+Wallet → Send → XDAI → Add recipient → Import list, at desktop width. The
+third column opened on the FIXTURE: "In CNY / In USDT", "1 USDT = 7.25 CNY",
+three sample rows, "Import 2 recipients". Pressing "In USDT" changed
+nothing. The session was real — `openBatch()` had started it and the nav
+had routed to `dsd2c` on `batchView` — but `withLiveDesktopBody` had no
+`batch-import` arm: the importer is a sheet on the phone (`sd2c`, overlaid
+by the sheet arm) and a column body on the desktop, and only the sheet
+shape had ever been wired. Every tab press and keystroke reached the core;
+the drawn column never reflected it.
+
+Fixed in `flows/live.ts` (the arm) and `flows/live-batch.ts`: the tabs,
+the rate label and the hint are worded from `fiat_code` and the token
+symbol (the fixture's CNY/USDT was a picture), and the CTA offers what
+parsed — `batchApplyEmpty` / `batchApply_one` / `batchApply_other` (the
+two extra keys already existed in the corpus; they join the served list).
+Tests: `live-batch.test.ts` +2 (the words from the view; the desktop body
+overlaid). Flows + i18n suites 173 passed.
+

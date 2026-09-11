@@ -715,6 +715,17 @@ function withLiveDesktopBody(model: DesktopFlowModel, inputs: FlowsLiveInputs): 
 						body: { kind: 'add-token', model: liveAddToken(model.body.model, inputs.addToken) }
 					}
 				: model;
+		// The importer is a SHEET on the phone and a column BODY here; the sheet
+		// arm below the phone's switch never reached this shape, so the desktop
+		// drew the fixture over a live session — tabs that would not switch, a
+		// rate nobody could edit (spec 038 #E6).
+		case 'batch-import':
+			return inputs.batch
+				? {
+						...model,
+						body: { kind: 'batch-import', model: liveBatchImport(model.body.model, inputs.batch) }
+					}
+				: model;
 		case 'contact-pick':
 			return inputs.contactPick
 				? {

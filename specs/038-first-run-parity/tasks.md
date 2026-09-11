@@ -198,7 +198,7 @@ same three ways in as the desktop (SC-428, 438).
 - [x] T074o [US12] #E3: reproduced on both shells — web desktop layout dropped the day heading (`WalletDesktop.svelte` prints it now); desktop rows were mocks (`executor/format_prefs.rs` + `settings/live.rs` menus + `dropdown_menu_picks`; every figure/date/clock reads the presets in force) — SC-450
 - [ ] T074p [US12] #E4: client — the AAGUID lookup base URL comes from the same settings object as the index (default = our node once it exists); server task filed in `biubiu-projects`
 - [x] T074q [US12] #E5: `liveLanguageRows` ticks the route locale; `settings/+page.svelte` navigates to the chosen locale after `setLanguage` — SC-446
-- [x] T074r [US12] (rate editor done; the "toggle does not switch" half still needs a reproduction) #E6: web `BatchImport.svelte` editable rate (`EditRate` / `ResetRateToAuto`), verify the sheet opens with its token so `SetUnit` applies — SC-447
+- [x] T074r [US12] (reproduced: the desktop column body never received the live overlay — `withLiveDesktopBody` gained `batch-import`; tabs/rate label/hint/CTA now worded from the view) #E6: web `BatchImport.svelte` editable rate (`EditRate` / `ResetRateToAuto`), verify the sheet opens with its token so `SetUnit` applies — SC-447
 - [x] T074s [US12] #E7: `RecipientCard.svelte` two-line editable layout, content-sized amount, hairline fields — SC-448
 - [x] T074t [US12] #E8: `BalanceDetailModel.unpriced` from `view.unpriced_tokens`; section in `BalanceDetailBody.svelte`; desktop's balance detail the same — SC-449
 

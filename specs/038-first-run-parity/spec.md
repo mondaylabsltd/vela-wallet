@@ -606,11 +606,17 @@ the first needs a reproduction before it is fixed.
   a language must navigate to that locale's route (the setter today only
   stores).
 - **#E6 — batch import: the unit toggle does not switch and the rate cannot
-  be edited.** The core has `SetUnit`, `EditRate` and `ResetRateToAuto`, and
-  `rate_edited`; the web renders `rate_input` as a read-only span and wires no
-  rate handler at all. `SetUnit` is ignored while `model.token` is `None` —
-  reproduce whether the sheet was opened without its token. Fix: an editable
-  rate field (with "back to auto"), and the toggle live.
+  be edited.** Reproduced on the web at desktop width (2026-09-11): the
+  "Import list" door opened the importer as the third column with the
+  FIXTURE drawn over a live session — "In CNY / In USDT", "1 USDT = 7.25
+  CNY", three sample rows, "Import 2 recipients" — while every tab press and
+  keystroke went to the real machine, which nobody could see. The importer
+  is a sheet on the phone and a column body on the desktop; the live overlay
+  handled only the sheet. Fixed: the desktop body is overlaid too, and the
+  overlay now words the tabs, the rate label and the hint from the currency
+  in force and the token being split, and the button offers what parsed
+  (none / one / many). The rate is editable in place with "back to auto"
+  (SC-447).
 - **#E7 — the split recipient row.** The amount `<input>` is a fixed
   `calc(--space-2xl × 6)` box and the address input shares one line with the
   pick button, so at four recipients the address is cut to `0x3187ł` and the
