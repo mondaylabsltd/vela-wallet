@@ -1,76 +1,75 @@
 # 02 — 本地开发 (Local Development)
 
+> 2026-09-11 按 spec 039 重写:Expo / React Native 应用已退役,本文只描述现存的四个壳、共享核心与根目录工具包。
+
 ## 前置
 
-- Node(无 engines 约束;审计时使用系统 Node,npm lockfileVersion 3 ⇒ 需 npm ≥ 9)
-- 原生开发:Xcode(iOS)/ Android Studio;`getvela.app` 子项目需要 **bun**
-- 无需任何私有凭据即可开发 App 本体(RPC 走公共池;bundler 走内置 `getvela.app/api/bundler` 代理)
+- **Node 22 + npm ≥ 9**(根目录工具包);**pnpm 10**(`app-web/vela-wallet`,版本在其 `packageManager` 字段);**bun**(`app-web/getvela.app`)
+- **Rust 1.97.1**(`rustup`),加 `wasm32-unknown-unknown` target 与 `wasm-pack 0.15`(仅在改动核心后需要重建 wasm)
+- iOS:Xcode(需能编译 xcframework);Android:JDK 17 + Android Studio/SDK;桌面:gpui 的系统依赖(见 `app-desktop/vela-wallet/README.md`)
+- 无需任何私有凭据即可开发钱包本体(RPC 走公共池;bundler 走内置 `getvela.app/api/bundler` 代理)
 
 ## 从零启动
 
 ```bash
-npm install                 # 根项目
-npm run web                 # Web 开发(expo start --web,默认 :8081)
-npm run ios / npm run android   # 原生 Debug(模拟器;等价 npx expo run:ios / run:android)
+# 根目录:只装工具包(5 个依赖),不构建任何 App
+npm ci
+
+# Web 壳(生产 Web 钱包)
+cd app-web/vela-wallet && pnpm install && pnpm dev        # http://localhost:5173
+
+# 桌面壳
+cd app-desktop/vela-wallet && cargo run
+
+# iOS 壳:先出 xcframework(gitignored),再开工程
+./rust/scripts/build-ios-xcframework.sh
+open app-ios/VelaWallet/VelaWallet.xcodeproj               # ⌘R
+
+# Android 壳:先生成 Kotlin 绑定(gitignored),再装机
+cd rust && cargo build --release -p vela-core-uniffi && \
+  cargo run --release -p vela-core-uniffi --bin uniffi-bindgen -- generate \
+    --library target/release/libvela_core_uniffi.dylib --language kotlin \
+    --out-dir bindings/kotlin --no-format
+cd ../app-android/vela-wallet && ./gradlew :app:installDebug
 ```
 
-构建元信息(git commit + 版本)由 `app.config.js` 在构建时注入 `extra.gitCommit`,运行时经 `expo-constants` 读取(`src/constants/build-info.ts`)——没有生成文件,构建不会弄脏工作区。(2026-07-02 前为 `prestart` 钩子生成文件,已废除。)
+新 clone 建不出 iOS/Android 的原因与解法都在 `.github/workflows/ci.yml` 的 `ios`/`android` job 注释里(绑定产物不入库)。
 
-## 原生构建与真机运行
+## 常用命令与门禁
 
-`/android` 与 `/ios` 是 `expo prebuild` 生成物(gitignored)。新 clone 或改过 app.json/plugins 后先重新生成:
+根目录工具包(`package.json`):
 
-```bash
-npx expo prebuild --clean          # 重新生成 android/ + ios/(应用全部 config plugin,
-                                   # 包括 with-release-signing、with-native-modules)
-```
+| 命令 | 用途 |
+|---|---|
+| `npm run gen:i18n` | 语料 → Rust 目录 + `public/i18n`(改语料必须一起提交产物;加键要改脚本里的路径计数) |
+| `npm run lint:i18n` / `npm run verify:i18n` | 语料缺陷登记 / Rust i18n 与 `i18next` 的 parity |
+| `npm run gen:identicon-features` / `npm run verify:identicon` | 头像图形表再生成 / 与 `identicons-esm` 的 parity |
+| `npm run dump:vectors` | 从 npm 预言机重导 identicon/i18n 语料向量(CI 要求零 diff) |
+| `npm run gen:core-types` | Rust 枚举 → `app-web/vela-wallet/src/lib/*/generated`(CI 要求零 diff) |
+| `npm run build:wasm` / `npm run verify:wasm` | 重建 `rust/pkg-web` + `public/vela_core_bg.<hash>.wasm` / 用发布产物回放语料 |
+| `npm run lint:lottie` / `npm run check:native-reachability` | 启动动画资产合法性 / 每个原生壳的页面都能从导航根到达 |
+| `npm run check:expo-residue` | Expo 残留检查(删掉的路径、依赖、CI 步骤、文档里的死命令) |
 
-常用运行矩阵:
+各壳的门禁(提交前跑自己改过的壳):
 
-```bash
-# ---- Debug(日常开发)----
-npx expo run:ios                   # iOS 模拟器
-npx expo run:ios --device          # iOS 真机(passkey 必须真机——模拟器无 Secure Enclave 凭据体验)
-npx expo run:android               # Android 模拟器/已连接设备
-npx expo run:android --device      # 多设备时交互选择目标真机
-
-# ---- Release(发布前真机验证)----
-npx expo run:ios --configuration Release            # iOS Release 构建(Hermes 产物、无 dev menu;
-                                                    # __DEV__=false,可验证 parallel 徽章/dev_unlocked 门控)
-npx expo run:ios --device --configuration Release   # Release + 真机(上架前 D 节验证用这个)
-npx expo run:android --variant release              # Android Release 变体;无 android/keystore.properties
-                                                    # 时回退 debug keystore 并打 WARNING(仅限本地验证,
-                                                    # 该产物禁止发布,passkey DAL 校验也会因指纹不符失败)
-```
-
-注意事项:
-- **passkey 测试必须真机**:iOS 需登录 iCloud(passkey 存 iCloud Keychain);Android 需 Google 账号 + 屏幕锁。rpId=`getvela.app`,AASA/assetlinks 从线上域拉取,所以真机测试无需本地服务
-- **Release 构建是验证 `__DEV__` 门控的唯一方式**(fault console 不注册、/parallel 仅 `dev_unlocked` 可达、徽章仍应在 parallel 激活时出现——2026-07-02 修复项)
-- Android Release + 真实签名:`cp keystore.properties.example android/keystore.properties` 填真值(见 05)
-- iOS 真机需要开发者证书;Xcode 里选 Team F9W689P9NE,provisioning 需含 Associated Domains entitlement
-
-## 常用命令与实测结果(2026-07-02)
-
-| 命令 | 用途 | 审计实测 |
-|---|---|---|
-| `npx tsc --noEmit` | 类型检查 | ✅ 通过(修复前因根 tsconfig 误包含 getvela.app 子项目报 52 错,已排除) |
-| `npm run lint` | ESLint | ✅ 0 error(修复前 QRScanner.tsx 有 3 个 rules-of-hooks error);~165 warning 为风格类 |
-| `npm test` | Jest 单测 | ✅ 79 套件 / 1022 用例(1 个真实 RPC 集成套件默认跳过,见下) |
-| `RUN_NETWORK_TESTS=1 npx jest price-query` | 真实 RPC 价格查询集成测试 | 按需运行;依赖第三方公共 RPC,可能因限流失败(非代码缺陷) |
-| `npm run test:e2e` | Playwright E2E(自动拉起 dev server) | 见 04 文档实测记录 |
-| `npm run build:web` | 生产 Web 构建 → `dist/` | ✅ 通过,~11MB,含 CF Pages 资产修正 |
+| 壳 | 命令 |
+|---|---|
+| app-web | `pnpm check && pnpm lint && pnpm test:unit -- --run && pnpm build`;e2e:`pnpm test:e2e`(起真实 worker,截图落在 `e2e/__screenshots__/`) |
+| app-desktop | `cargo fmt --all --check && cargo clippy --all-targets && cargo test` |
+| rust(核心) | `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures`(少了 feature 会红,见 ci.yml 注释) |
+| app-ios | `xcodebuild test -project VelaWallet.xcodeproj -scheme VelaWallet -destination 'id=<模拟器 udid>' CODE_SIGNING_ALLOWED=NO`(Swift Testing 的结果在第二行,"Executed 0 tests" 不是失败) |
+| app-android | `./gradlew :app:assembleDebug :app:testDebugUnitTest -PvelaSkipRustBuild` |
 
 ## 测试环境:Parallel Space
 
-- 入口:dev 下访问 `/parallel`;生产构建需先在 About 页 logo 6 连击设置 `dev_unlocked`
-- 原理:**唯一差异是签名密钥** —— 用 `src/services/dev/passkey-fixture.ts` 的 3 把公开测试 P-256 私钥替代真实 passkey,其余(Safe 地址推导、链上验签、全部界面)与生产一致;进入时备份真实钱包缓存、退出恢复(`src/services/dev/parallel-space.ts`)
-- **fixture 私钥是公开的,对应地址永远不能放真实资金**
-- 激活时全局紫色 PARALLEL SPACE 徽章(`src/components/dev/ParallelSpaceBadge.tsx`;接管修复后在生产构建同样渲染)
-- E2E 全部跑在该环境;剧本见 `docs/PARALLEL-SPACE-E2E-PLAYBOOK.md`
+- Web:`/[locale]/parallel`。**唯一差异是签名密钥** —— 用固定的公开测试 P-256 密钥集替代真实 passkey,其余(地址推导、链上验签、全部界面)与生产一致(`app-web/vela-wallet/src/lib/dev/parallel-space.ts`);激活时全局紫色 PARALLEL SPACE 徽章(`ParallelSpaceBadge.svelte`)。平行空间里 gas 赞助按设计关闭。
+- 桌面:`vela-core` 的 `dev-fixtures` feature 提供同一密钥集的软件签名器(`cargo test`/本地开发用;发布包不编译)。
+- **fixture 私钥是公开的,对应地址永远不能放真实资金。** 金标测试 Safe 见 `docs/PARALLEL-SPACE.md`。
+- 真网只读巡检与真发钱的步骤:`docs/PARALLEL-SPACE.md`。
 
-## 故障注入(dev only)
+## 故障注入(Web)
 
-浏览器控制台 `vela.help()`:`vela.failRpc/rateLimitRpc/slowRpc/flakyRpc/nullPrice/clear/status`(`src/services/dev/fault-injection.ts`)。E2E 自动化种子:`globalThis.__VELA_FAULT_INIT__`。
+浏览器控制台 `vela.help()`:`vela.failRpc/rateLimitRpc/slowRpc/flakyRpc/nullPrice/clear/status`(`app-web/vela-wallet/src/lib/services/fault-injection.ts`);控制台由 `localStorage['vela.dev.console']` 门控(`src/lib/services/dev-console.ts`)。
 
 ## getvela.app 子项目(官网 + API)
 
@@ -82,11 +81,11 @@ bun run dev                      # SvelteKit dev
 bunx wrangler deploy             # 部署(需 Cloudflare 账号;生产密钥用 wrangler secret put)
 ```
 
-注意:该子项目被根 tsconfig **排除**,类型检查用它自己的 `bun run check`(需先 `svelte-kit sync` 生成 `$types`)。
+类型检查用它自己的 `bun run check`(需先 `svelte-kit sync` 生成 `$types`)。
 
 ## 数据存储(本地)
 
-全部 AsyncStorage(Web=localStorage,原生=平台实现),键前缀 `vela.*`:
-`vela.accounts`(仅公开数据:credentialId/地址/公钥)、`vela.transactionHistory`、`vela.customTokens`、`vela.networkConfig`、`vela.serviceEndpoints`、`vela.walletpairSession`、`vela.language` 等。**无私钥、无助记词** —— 密钥在平台 passkey 里。
-
-清空重置:Web 清 localStorage;原生卸载重装(passkey 仍留在系统凭据管理器,可重新登录找回)。
+- Web:钱包记录在 IndexedDB(库 `vela`、store `kv`,`app-web/vela-wallet/src/lib/services/storage.ts`),键前缀 `vela.*`:`vela.accounts`(仅公开数据:credentialId/地址/公钥)、`vela.transactionHistory`、`vela.customTokens`、`vela.networkConfig`、`vela.contacts*` 等;onboarding 的四个键与 `vela.serviceEndpoints` 留在 localStorage。清空重置:设置 → 存储,或浏览器清站点数据。
+- 桌面:单个 JSON 文件,tmp+rename 写入(`app-desktop/vela-wallet/src/executor/storage.rs`)。
+- iOS/Android:见各自 README。
+- **无私钥、无助记词** —— 密钥在平台 passkey 或安全钥匙里;清掉本地数据后凭任意一把创始钥匙重新登录即可找回钱包。
