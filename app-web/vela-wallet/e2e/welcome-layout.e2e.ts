@@ -114,6 +114,30 @@ test('sign-in stays on Welcome — it has no steps to show', async ({ page }) =>
 	await expect(page).toHaveURL('/en');
 });
 
+/**
+ * Spec 038 SC-428 (T054): "I already have a wallet" opens the three ways in
+ * by name — a sheet on the phone, a dialog at desktop width — each row with
+ * its glyph, so a security key or a phone is reachable without the browser's
+ * own sheet deciding.
+ */
+for (const [width, height] of [
+	[390, 844],
+	[1440, 900]
+] as const) {
+	test(`sign-in offers the three ways in, with icons, at ${width}px`, async ({ page }) => {
+		await page.setViewportSize({ width, height });
+		await page.goto('/en');
+		await page.getByRole('button', { name: 'I already have a wallet' }).click();
+		await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
+		const rows = page.locator('.methods .method');
+		await expect(rows).toHaveCount(3);
+		for (let i = 0; i < 3; i += 1) {
+			await expect(rows.nth(i).locator('svg')).toBeVisible();
+		}
+		await expect(page).toHaveURL('/en');
+	});
+}
+
 test('mobile brand mark and wordmark share one row', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/en');

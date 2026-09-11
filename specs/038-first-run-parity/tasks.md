@@ -26,7 +26,7 @@ apps per quickstart.md (SC-429).
 ## Phase 1: Setup
 
 - [x] T001 Copy `PlusJakartaSans_{400Regular,500Medium,600SemiBold,700Bold}.ttf` from `app-ios/VelaWallet/VelaWallet/DesignSystem/Fonts/` to `assets/fonts/` and note the OFL licence in `assets/fonts/README.md`
-- [ ] T002 [P] Add a `VELA_STATE_DIR`-scoped dev seam list to `app-desktop/vela-wallet/README.md` (the two dev commands: parallel space, signed bundle) — the text SC-425 points at
+- [x] T002 (README "Sign in during development" names `VELA_STATE_DIR`, the parallel-space run and the signed bundle) [P] Add a `VELA_STATE_DIR`-scoped dev seam list to `app-desktop/vela-wallet/README.md` (the two dev commands: parallel space, signed bundle) — the text SC-425 points at
 - [x] T003 [P] Verify `cargo test -p vela-core --features i18n-all,crux`, `cargo test` in `app-desktop/vela-wallet`, and `pnpm test` in `app-web/vela-wallet` are green on the branch before any change (baseline counts recorded in `specs/038-first-run-parity/results.md`)
 
 ## Phase 2: Foundational (blocking)
@@ -34,7 +34,7 @@ apps per quickstart.md (SC-429).
 - [x] T004 Generalise `rasterize(svg, size)` to `rasterize_sized(svg, w, h)` in `app-desktop/vela-wallet/src/icons.rs` (non-square canvas; the intro art is 160×128) keeping the existing square call sites
 - [x] T005 [P] Add `theme::font_ui() -> &'static str` returning `"Plus Jakarta Sans"` in `app-desktop/vela-wallet/src/theme.rs`
 - [x] T006 [P] Add `read_epoch_ms(key)` / `write_epoch_ms(key, now)` helpers over `read_value`/`write_value` in `app-desktop/vela-wallet/src/executor/storage.rs` (used by the intro and launch gates)
-- [ ] T007 [P] Add `ceremony::FailureKind`→detail plumbing: `PasskeyFailure` in `app-desktop/vela-wallet/src/executor/passkey.rs` carries the peer-close reason string (used by US2)
+- [x] T007 (`TUNNEL_CLOSED` travels in the failure message; `ceremony_failure` reads it back — the peer-close reason reaches the sheet) [P] Add `ceremony::FailureKind`→detail plumbing: `PasskeyFailure` in `app-desktop/vela-wallet/src/executor/passkey.rs` carries the peer-close reason string (used by US2)
 
 ---
 
@@ -112,7 +112,7 @@ days (SC-416, 417, 422).
 - [x] T042 [US4] Apply `.font_family(theme::font_ui())` on the root `div` of `OnboardingPage::render` (`onboarding.rs`) and `WalletPage::render` (`wallet/page.rs`) and the gallery root (`gallery.rs`)
 - [x] T043 [P] [US4] Test `fonts_bundled` in `app-desktop/vela-wallet/src/theme.rs` `mod tests`: the four `include_bytes!` parse as TTF (`ttf-parser` is already a transitive dep via cosmic-text; else assert magic bytes + size) — SC-424
 - [x] T044 [US4] (walked: beyond the two pinned sites, BOLD on body-sized text occurs only for two ✓ glyphs and the Done screen's wallet name, which the web sets bold too — no further drift) Weight audit: `button.rs:115,168` BOLD → SEMIBOLD; `logo.rs:71` EXTRA_BOLD → BOLD; then walk the remaining `FontWeight::` sites in `app-desktop/vela-wallet/src/**` against the web token at the same control (headline bold, body regular, caption medium/semibold per the web component) and record each change in `specs/038-first-run-parity/results.md` — SC-423
-- [ ] T045 [US4] Record the CJK/mono deviation (OS fallback faces) in `specs/038-first-run-parity/results.md` with the TTF-sourcing follow-up
+- [x] T045 [US4] (results.md "Deviations") Record the CJK/mono deviation (OS fallback faces) in `specs/038-first-run-parity/results.md` with the TTF-sourcing follow-up
 
 ## Phase 8: US5 — Passkey method icons, platform-resolved; web sign-in picker (P2)
 
@@ -129,7 +129,7 @@ same three ways in as the desktop (SC-428, 438).
 - [x] T051 [US5] Desktop: draw the icon in each row of `hardware::signin_method_card` and the create picker (`app-desktop/vela-wallet/src/hardware.rs` / `onboarding_flow.rs`) at `--icon-lg`
 - [x] T052 [P] [US5] Test in `app-desktop/vela-wallet/src/icons.rs` `mod tests`: each passkey icon template rasterises (non-empty pixmap) and the path data equals the contract JSON — SC-428
 - [x] T053 [US5] Web sign-in picker: in `app-web/vela-wallet/src/routes/[locale]/+page.svelte` the "I already have a wallet" button opens `AddMethodPicker` in place (`open` state, same expand pattern as create); `onPick={(method) => signIn(method)}`; `signIn` dispatches `{ type: 'sign_in', method }`; the intro's sign-in button does the same — finding 20
-- [ ] T054 [P] [US5] e2e in `app-web/vela-wallet/e2e/welcome-layout.e2e.ts`: pressing "I already have a wallet" shows three rows with icons at 390 and 1440
+- [x] T054 [P] [US5] (2 cases, green) e2e in `app-web/vela-wallet/e2e/welcome-layout.e2e.ts`: pressing "I already have a wallet" shows three rows with icons at 390 and 1440
 
 ## Phase 9: US7 — Panics become a sheet; money fallbacks become view state (P2)
 
@@ -202,23 +202,23 @@ same three ways in as the desktop (SC-428, 438).
 - [x] T074s [US12] #E7: `RecipientCard.svelte` two-line editable layout, content-sized amount, hairline fields — SC-448
 - [x] T074t [US12] #E8: `BalanceDetailModel.unpriced` from `view.unpriced_tokens`; section in `BalanceDetailBody.svelte`; desktop's balance detail the same — SC-449
 
-- [x] T074u [US12] #E9: `liveChainRows` lists every network the person added (count 0 until its balance lands); `getCustomChainIdsSync` + `subscribeNetworks` on the wallet page
+- [x] T074u [US12] (second cut: `ensureCustomNetworks()` — the snapshot is read once per document, awaited by the balance boot and kicked off by the root layout; verified on a cold load of /en/wallet after adding Celo: "Celo Mainnet 0" beside the three funded chains — SC-451) #E9: `liveChainRows` lists every network the person added (count 0 until its balance lands); `getCustomChainIdsSync` + `subscribeNetworks` on the wallet page
 - [x] T074v [US5] #190 revised: "this device" = the device (laptop / phone by form factor), "phone or tablet" = the scanner, USB keeps its mark; web sign-in picker in a sheet (a dialog at desktop widths)
 
 ## Phase 12: US10 — The two dev commands, and a sheet that tells the truth (P3)
 
 **Goal**: SC-425, 426.
 
-- [ ] T075 [P] [US10] `app-desktop/vela-wallet/README.md`: a "Sign in during development" section with the two commands (`VELA_PARALLEL_SPACE=1 cargo run --features dev-fixtures`; `./scripts/build-macos-app.sh --no-dmg` with `VELA_SIGN_IDENTITY`/`VELA_PROVISION_PROFILE`, then run the bundle) and why `cargo run` cannot use "This device" on macOS
-- [ ] T076 [US10] In `app-desktop/vela-wallet/src/executor/platform_macos.rs` classify the AS error "does not have an application identifier" as `FailureKind::NotSupported` with detail "this binary is not a signed bundle"; the failure sheet's body for that kind on macOS says so (existing `IncompatibleLogin` copy + detail) — SC-426
-- [ ] T077 [P] [US10] `cargo` alias `dev` = `run --features dev-fixtures` in `app-desktop/vela-wallet/.cargo/config.toml` (env still set by the person; documented)
+- [x] T075 (landed in 885e7485) [P] [US10] `app-desktop/vela-wallet/README.md`: a "Sign in during development" section with the two commands (`VELA_PARALLEL_SPACE=1 cargo run --features dev-fixtures`; `./scripts/build-macos-app.sh --no-dmg` with `VELA_SIGN_IDENTITY`/`VELA_PROVISION_PROFILE`, then run the bundle) and why `cargo run` cannot use "This device" on macOS
+- [x] T076 (landed in 885e7485: `platform_macos.rs` classifies "does not have an application identifier" as `NotSupported`) [US10] In `app-desktop/vela-wallet/src/executor/platform_macos.rs` classify the AS error "does not have an application identifier" as `FailureKind::NotSupported` with detail "this binary is not a signed bundle"; the failure sheet's body for that kind on macOS says so (existing `IncompatibleLogin` copy + detail) — SC-426
+- [x] T077 (landed in 885e7485: `.cargo/config.toml` `dev` alias) [P] [US10] `cargo` alias `dev` = `run --features dev-fixtures` in `app-desktop/vela-wallet/.cargo/config.toml` (env still set by the person; documented)
 
 ## Phase 13: Polish & cross-cutting
 
-- [ ] T078 Sweep both shells' first-run and front-door surfaces at 390×844, 1280×800, 1440×900, 3840×2160 (web) and default / maximised window (desktop); log findings in `specs/038-first-run-parity/results.md`
-- [ ] T079 [P] Screenshot pass per quickstart.md — every SC row, both shells — into `specs/038-first-run-parity/results.md` (SC-429)
-- [ ] T080 [P] Run the four gates: `cargo test -p vela-core --features i18n-all,crux`, desktop `cargo test`, web `pnpm test`, web `pnpm e2e`; counts strictly increase vs T003
-- [ ] T081 Write `specs/038-first-run-parity/results.md` handover (what landed, deviations: CJK/mono fonts, any SC deferred, the clear-signing spec pointer)
+- [x] T078 (web: 390/1280/1440 by e2e, 3840 by screenshot — the frame is left-anchored at 4 K, recorded as a design question; desktop window = founder's run) Sweep both shells' first-run and front-door surfaces at 390×844, 1280×800, 1440×900, 3840×2160 (web) and default / maximised window (desktop); log findings in `specs/038-first-run-parity/results.md`
+- [~] T079 [P] (web: the send journey, the front door at 4 K, the alert; desktop: cannot be captured from this shell — founder's run) Screenshot pass per quickstart.md — every SC row, both shells — into `specs/038-first-run-parity/results.md` (SC-429)
+- [x] T080 [P] (core green, desktop 395, web 937 + the two `main` failures, e2e 220 passed) Run the four gates: `cargo test -p vela-core --features i18n-all,crux`, desktop `cargo test`, web `pnpm test`, web `pnpm e2e`; counts strictly increase vs T003
+- [x] T081 (results.md "Deviations" + "Handover") Write `specs/038-first-run-parity/results.md` handover (what landed, deviations: CJK/mono fonts, any SC deferred, the clear-signing spec pointer)
 
 ---
 

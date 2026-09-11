@@ -78,6 +78,22 @@ export async function refreshCustomNetworks(): Promise<void> {
 	for (const l of _networkListeners) l();
 }
 
+let _firstLoad: Promise<void> | null = null;
+
+/**
+ * The first read of the stored custom networks, once per document — awaited
+ * by whatever reads the snapshot first (the balance boot), kicked off by the
+ * root layout for everything else (spec 038 #E9, the founder's second
+ * report). Nothing called `refreshCustomNetworks` at boot: the snapshot was
+ * the builtin table until a Settings write, so a fresh load of the wallet
+ * neither listed nor fetched a network the person had added. The refresh
+ * after a write stays as it is; this only guarantees the first one.
+ */
+export function ensureCustomNetworks(): Promise<void> {
+	_firstLoad ??= refreshCustomNetworks();
+	return _firstLoad;
+}
+
 export function customToNetwork(cn: CustomNetworkRecord): Network {
 	return {
 		id: cn.id,

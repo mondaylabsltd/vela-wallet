@@ -629,6 +629,16 @@ the first needs a reproduction before it is fixed.
   the core already hands over `unpriced_tokens`. Fix: a third section listing
   each unpriced token (symbol, network, balance) — the sentence on the hero
   is a link, and the dialog must answer it.
+- **#E9 — the network list did not show the added Celo.** Two causes, two
+  cuts. First (slice 5): the sidebar listed only chains that already held
+  something, so a network added a moment ago had no row until its balance
+  landed — every added network is listed now, count 0 until then. Second
+  (the founder's second report, on a fresh load of `/zh/wallet`): nothing
+  read the stored custom networks at boot — the synchronous snapshot every
+  reader walks (the balance fetch, the sidebar, send, signing, the RPC pool)
+  was the builtin table until a Settings write refreshed it, so a fresh load
+  neither fetched nor listed Celo, assets or not. The snapshot is read once
+  per document before the first balance fetch (SC-451).
 
 ### Success Criteria (Parts B and C)
 
@@ -678,6 +688,9 @@ the first needs a reproduction before it is fixed.
 - **SC-450**: choosing "13.06.2026" in Settings → Localization changes the day
   heading of an older record on the wallet feed to that form on both shells,
   and the choice is still in force after a relaunch.
+- **SC-451**: (#E9) a network added in Settings is listed in the wallet's
+  network filter, and its balances fetched, on the very next fresh load of
+  the wallet page — no Settings visit required.
 - **SC-439**: (#191) a history-suggested contact can be given a name from its
   detail, and the name survives a reload.
 

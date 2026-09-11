@@ -17,6 +17,7 @@
 	import { resolve } from '$app/paths';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { updated } from '$app/state';
+	import { ensureCustomNetworks } from '$lib/services/networks';
 	import { invalidateAllPools } from '$lib/services/rpc-pool';
 	import { normalizePackagedUrl } from '$lib/extension/page-url';
 	import ParallelSpaceBadge from '$lib/dev/ParallelSpaceBadge.svelte';
@@ -76,6 +77,10 @@
 	});
 
 	onMount(() => {
+		// The custom-network snapshot, warmed once per document (spec 038 #E9)
+		// so send, signing and the RPC pool see an added network on a fresh
+		// load, not only after the wallet page or a Settings write.
+		void ensureCustomNetworks();
 		offline = typeof navigator !== 'undefined' && navigator.onLine === false;
 		const wentOffline = () => (offline = true);
 		const cameBack = () => {
@@ -133,7 +138,6 @@
 		launching = true;
 	});
 </script>
-
 
 <!--
 	One continuous surface. The page content and the launch screen sit on this

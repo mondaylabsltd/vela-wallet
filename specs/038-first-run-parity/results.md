@@ -355,3 +355,76 @@ window (`screencapture` needs screen-recording consent this shell does
 not have; the earlier attempt captured the editor). The founder's own run
 is the desktop half of SC-429.
 
+### Slice 13 — #E9, the second cause (the founder's second report)
+
+"网络列表还是少了我添加的 celo" on a fresh load of `/zh/wallet`. Slice 5
+had made the sidebar list added networks — but only from a snapshot
+somebody had refreshed, and nobody refreshed it at boot: `refreshCustomNetworks`
+was called by the network-admin executor after a WRITE and nowhere else, so
+`getAllNetworksSync()` was the builtin table on every fresh load until the
+person changed something in Settings. That snapshot is what the balance
+fetch walks (`fetchTokens` → `getAllNetworksSync()`), what the sidebar
+reads, and what send, signing, dapp-submit and the RPC pool consult — so an
+added Celo was neither listed nor fetched, assets or not, until a Settings
+write in the same document.
+
+Fixed: `ensureCustomNetworks()` (one read per document, idempotent promise);
+the balance boot awaits it beside `loadCore()`, the root layout kicks it off
+for every other route. Reproduced and verified live: added Celo Mainnet
+through Settings → Networks (the eleven probes passed, "Compatible"),
+navigated fresh to `/en/wallet`: the sidebar read "All Networks 3 · BNB
+Chain 1 · Gnosis 1 · Tempo 1 · Celo Mainnet 0" with the three funded chains'
+assets — before the fix a fresh load had no Celo row. Test:
+`networks.svelte.test.ts` (browser project; the storage is IndexedDB, which
+the node project lacks) — the snapshot carries the stored network after the
+first read, and a later write still refreshes.
+
+Also in this slice: the 4 K sweep (T078) — `web-intro-3840.png` and
+`web-wallet-3840.png`. Both compositions are left-anchored: the intro sits
+beside the rail exactly as Welcome and the create journey do, and the
+signed-in frame is sidebar + a main capped at `--layout-maxContentWidth`
+(800 px) + the third column, so three quarters of a 4 K screen is empty
+ground. That is the mocks' rule (drawn at 1440) applied honestly rather
+than a defect; whether the frame should centre past ~2000 px is a design
+question for the founder, not changed here. No overflow, nothing clipped,
+at any of the four widths. The sign-in picker e2e (T054) passes at 390 and
+1440.
+
+## Deviations
+
+- **CJK and monospace faces on the desktop (US4, T045).** Plus Jakarta Sans
+  is bundled for Latin; CJK glyphs and the monospace addresses fall back to
+  the OS faces (PingFang / Hiragino / Noto on macOS, whatever the system
+  serves on Linux). The web ships the same Latin face and lets the browser
+  fall back the same way, so the two shells still agree; a bundled CJK
+  face is ~10 MB per weight and was not worth the download for a first
+  cut. Follow-up: source a subsetted Noto Sans CJK and a mono face with the
+  same licence check the Plus Jakarta files had (`assets/fonts/README.md`).
+- **The desktop half of the visual pass (SC-429, T079).** This session's
+  shell has no screen-recording consent, so the gpui window cannot be
+  captured; the panels are built and tested and the founder's own run is
+  the evidence.
+- **#D1 live (T074e).** The `ExecutionFailure` guard is tested against a
+  fixture log with the real topic; a live failed-but-confirmed send needs
+  the founder's failing case.
+- **E4's server** lives in biubiu-projects; the client default moves with
+  one line once the node exists.
+
+## Handover
+
+What landed is the eighteen commits `f812347a`…`ba3c82ee` on
+`038-first-run-parity`, unpushed until the founder says. The gates as of
+the last commit: core `cargo test --features i18n-all,crux` green; desktop
+`cargo test` 395 passed; web `vitest` 937 passed with the two failures
+`main` already carries (explore fixtures 8≠7, signing catalogue 35≠33);
+web `pnpm check` (tokens, wasm sync, generated types, svelte-check) 0
+errors; welcome e2e 43 + intro layout 4 passed. The wasm artifact was
+rebuilt for #E4 (`build-web.mjs --check` hashes every Rust file, so any
+further core edit needs another rebuild before a PR).
+
+Rulings the founder still owes: the fiat→token batch conversion carries
+the token's 18 decimals; the relay's `xDAI` beside the chain data's `XDAI`;
+the p256 index answering 400 for an unknown `walletRef` on every history
+load. The clear-signing key method is its own spec (rpId `getvela.app`),
+not this one.
+
