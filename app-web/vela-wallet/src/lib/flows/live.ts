@@ -10,6 +10,7 @@
  * second builder for four strings.
  */
 
+import { feedPositionOf } from '$lib/wallet/live-detail';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
@@ -288,10 +289,13 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 		hidden || token.price_usd === null
 			? m.balance.noPrice
 			: moneyText(held * token.price_usd, currency);
-	const rows = (inputs.feed?.rows ?? [])
+	const items = (inputs.feed?.rows ?? [])
 		.flatMap((row) => (row.type === 'item' ? [row.item] : []))
-		.filter((item) => item.chain_id === token.chain_id && item.symbol === token.symbol)
-		.map((item) => liveActivityRow(item, m, hidden));
+		.filter((item) => item.chain_id === token.chain_id && item.symbol === token.symbol);
+	const rows = items.map((item) => liveActivityRow(item, m, hidden));
+	// Each row can open its own detail — through the history's own index,
+	// so it is the same screen, reached the same way (spec 038 #E2).
+	const rowTargets = items.map((item) => feedPositionOf(inputs.feed, item.id));
 	const facts: FactRowModel[] = [
 		{
 			label: fm['tokenDetail.labelPrice'],
@@ -326,6 +330,7 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 		fiat,
 		facts,
 		rows,
+		rowTargets,
 		explorerUrl: tokenExplorerURL(token, view.address)
 	};
 }

@@ -64,6 +64,29 @@ export function feedItemAt(
 	return undefined;
 }
 
+/**
+ * The history screen's (group × 100 + row) index for a feed item id — the
+ * inverse of `feedItemAt`, so a screen that lists a SUBSET of the feed (a
+ * token's own rows, spec 038 #E2) can open the same transaction detail the
+ * history opens, through the same navigation.
+ */
+export function feedPositionOf(feed: FeedView | null | undefined, id: string): number | undefined {
+	if (!feed) return undefined;
+	let g = -1;
+	let r = 0;
+	for (const entry of feed.rows) {
+		if (entry.type === 'header') {
+			g += 1;
+			r = 0;
+			continue;
+		}
+		if (g === -1) g = 0;
+		if (entry.item.id === id) return g * 100 + r;
+		r += 1;
+	}
+	return undefined;
+}
+
 export interface TxDetailContext {
 	/** The flow corpus (flat), which names the facts. */
 	m: WalletFlowMessages;

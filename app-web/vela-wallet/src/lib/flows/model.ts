@@ -285,6 +285,8 @@ export interface TokenDetailModel {
 	facts: FactRowModel[];
 	transactionsTitle: string;
 	rows: ActivityRowModel[];
+	/** Live only (spec 038 #E2): per row, the history index that opens its detail. */
+	rowTargets?: (number | undefined)[];
 	viewOnExplorer: string;
 	/** Where "view on explorer" leads — live only; absent, the control is drawn inert. */
 	explorerUrl?: string;
@@ -483,6 +485,12 @@ export interface BatchImportModel {
 	rateSection: string;
 	rateLabel: string;
 	rateValue: string;
+	/** Live only (spec 038 #E6): the rate as typed, editable in place. */
+	rateInput?: string;
+	/** The person overrode the fetched rate; the reset control shows. */
+	rateEdited?: boolean;
+	/** "Auto" — the reset control's word. */
+	rateReset?: string;
 	rateHint: string;
 	parsedLabel: string;
 	rows: { ok: boolean; address: string; conversion: string }[];

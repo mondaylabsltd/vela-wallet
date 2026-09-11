@@ -44,6 +44,14 @@
 > 接收人数很多时希望能看到有多少个接收地址、能细看每一个及其头像；等待上链过程
 > 中最好有一个预估倒计时；以及视觉上要优化 UI/UX。
 
+> 还发现几个问题：1 添加 celo 网络时显示不兼容，实际上 celo 可以兼容，expo/web
+> 都可以添加；2 某个代币的交易记录列表能看到，但没法看某条记录的详情，只能从活动
+> 里看；3 设置的日期格式 13.06.2026 没生效；4 服务节点要新增对 AAGUID 的支持
+> (aaguid-explorer.awesometools.dev)；5 语言设置显示"简体中文"，但网址是 /en、
+> 页面是英文——应该显示当前是英文；6 导入收款人按 CNY 计价 / 按 USDT 数量的 tab 无法
+> 切换，汇率无法修改；7 发送 ETH 时输入金额的输入框很丑，地址展示不全；8 "部分代币
+> 无法获取价格"的弹层只展示每个网络的余额，要展示哪些代币没有价格。
+
 > cargo run app-desktop 版本时，在这个开发环境下，无法选择使用 this device 登录，
 > 这体验很差，很影响开发和测试，能不能自动完成相关配置，因为我记得之前不知道用了
 > 什么 env 前缀运行 cargo run 就可以的。
@@ -547,6 +555,61 @@ the first needs a reproduction before it is fixed.
   subordinated fiat, accent only on the value-moving action) with the split
   case at 1, 3, 12 and 60 recipients.
 
+## Part E — eight more from the founder's pass (2026-09-11, evening)
+
+- **#E1 — Celo reads as incompatible.** The compatibility check probes eleven
+  `REQUIRED_CONTRACTS` by `eth_getCode` on the best RPC and calls the P-256
+  verifier; Celo (42220) has at least the CREATE2 deployer and the Safe
+  singleton factory at their canonical addresses (probed live from
+  `forno.celo.org`: 70 bytes of code each), and the web and Expo clients add
+  it. The module doc admits the trap: *"rpcFailed and truly-incompatible both
+  flatten to `not-compatible`"* — so a probe that could not reach the RPC
+  (the desktop's proxy path, Part B) reads as an incompatible chain. Fix:
+  keep the two verdicts apart on every shell (a failed probe says "could not
+  check", with retry), and run the eleven probes + P-256 against Celo on the
+  desktop to see which one actually fails.
+- **#E2 — a token's transaction rows do not open the detail.** `History`
+  passes `onclick` to `ActivityRow` and the page routes `go('tx-detail', …)`;
+  `TokenDetail.svelte` renders the same `ActivityRow` with no handler. The
+  detail already resolves a feed item by id (`findFeedItem`), so the token
+  screen's rows only need to name theirs.
+- **#E3 — the date format "13.06.2026" did not take.** `formatDate` reads
+  `preferences.dateFormat` and both `dayLabel`s (wallet, contacts) call it, so
+  the web's feed should follow — reproduce which surface the founder saw (the
+  desktop has no date-format preference wired; the day words "today /
+  yesterday" are not dates). Pin before fixing.
+- **#E4 — AAGUID lookups go to a third party.** The catalog is vendored in
+  `vela-core` (never queried for known models), but an unknown AAGUID is
+  looked up at runtime from `aaguid-explorer.awesometools.dev` by every shell.
+  The founder wants our own service node to serve it: a proxy/cached copy on
+  our worker (cross-repo, `biubiu-projects`), so a person's authenticator
+  model is not sent to a stranger's server and the lookup works behind the
+  GFW. This cut records the client change (endpoint from the same settings
+  object as the index); the server is a separate task.
+- **#E5 — the language row ticks the stored choice, not the active one.**
+  `liveLanguageRows` ticks `preferences.language`; the route was `/en` and
+  the page English. The row must tick the locale the page is IN, and choosing
+  a language must navigate to that locale's route (the setter today only
+  stores).
+- **#E6 — batch import: the unit toggle does not switch and the rate cannot
+  be edited.** The core has `SetUnit`, `EditRate` and `ResetRateToAuto`, and
+  `rate_edited`; the web renders `rate_input` as a read-only span and wires no
+  rate handler at all. `SetUnit` is ignored while `model.token` is `None` —
+  reproduce whether the sheet was opened without its token. Fix: an editable
+  rate field (with "back to auto"), and the toggle live.
+- **#E7 — the split recipient row.** The amount `<input>` is a fixed
+  `calc(--space-2xl × 6)` box and the address input shares one line with the
+  pick button, so at four recipients the address is cut to `0x3187ł` and the
+  amount reads as a stray box. Fix: two lines per card (ordinal, then the
+  full-width mono address with ellipsis), the amount sized to its content and
+  right-aligned with the symbol, a hairline under each editable field so the
+  affordance is visible without a browser border.
+- **#E8 — "some tokens couldn't be priced" opens a dialog that does not name
+  them.** `liveBalanceDetail` lists pending networks and settled networks;
+  the core already hands over `unpriced_tokens`. Fix: a third section listing
+  each unpriced token (symbol, network, balance) — the sentence on the hero
+  is a link, and the dialog must answer it.
+
 ### Success Criteria (Parts B and C)
 
 - **SC-430**: on a Mac whose only proxy is the one in System Settings, the
@@ -581,6 +644,17 @@ the first needs a reproduction before it is fixed.
 - **SC-443**: (#D3) the waiting stage shows a typical-time estimate per chain
   and moves to "longer than usual" past 2× without ever calling the payment
   failed.
+- **SC-444**: (#E1) Celo can be added from the desktop; a probe that fails
+  says "could not check" with retry, never "incompatible".
+- **SC-445**: (#E2) a row on a token's detail opens that transaction's detail.
+- **SC-446**: (#E5) the language row ticks the page's locale; choosing another
+  navigates to it.
+- **SC-447**: (#E6) the unit toggle switches; the rate is editable and can be
+  returned to auto; the recipients recompute.
+- **SC-448**: (#E7) at four recipients every address reads in full or with an
+  ellipsis, and the amount field is sized to what it holds.
+- **SC-449**: (#E8) the balance dialog lists every unpriced token by name and
+  network.
 - **SC-439**: (#191) a history-suggested contact can be given a name from its
   detail, and the name survives a reload.
 

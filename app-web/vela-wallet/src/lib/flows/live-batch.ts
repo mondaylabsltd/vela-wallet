@@ -51,9 +51,16 @@ export function liveBatchImport(
 			batch.rate_status === 'ok'
 				? `${batch.rate_input} ${batch.fiat_code}`
 				: batch.rate_status === 'loading'
-					? '…'
-					: // Unknown, and said so. The core has already refused to apply.
-						m['send.batchRateHint'],
+					? m['send.batchRateLoading']
+					: // Unknown, and said so. The core has already refused to apply —
+						// and the field below is where a rate can be typed (spec 038 #E6).
+						m['send.batchRateFailed'],
+		// The rate is the screen's real subject and it is editable in place
+		// (`EditRate` / `ResetRateToAuto` have been the core's since 026; the
+		// web drew the rate as a read-only span — spec 038 #E6).
+		rateInput: batch.rate_input,
+		rateEdited: batch.rate_edited,
+		rateReset: m['send.batchRateReset'],
 		parsedLabel: fill(m['send.batchParsedCount'], { n: batch.recipient_count }),
 		rows: batch.preview.map((row) => previewRow(row, symbol)),
 		rejectedText:

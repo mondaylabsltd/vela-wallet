@@ -76,6 +76,9 @@
 	}
 
 	interface BatchActions {
+	/** Spec 038 #E6: the rate typed in place, and back to the fetched one. */
+	rate: (text: string) => void;
+	resetRate: () => void;
 		unit(id: string): void;
 		paste(text: string): void;
 		pickFile(): void;
@@ -190,6 +193,8 @@
 			model={body.model}
 			onunit={batch ? (id) => batch.unit(id) : undefined}
 			onpaste={batch ? (text) => batch.paste(text) : undefined}
+			onrate={batch ? (text) => batch.rate(text) : undefined}
+			onresetrate={batch ? () => batch.resetRate() : undefined}
 			onfile={batch ? () => batch.pickFile() : undefined}
 			ontemplate={batch ? () => batch.saveTemplate() : undefined}
 			onapply={batch ? () => batch.apply() : undefined}

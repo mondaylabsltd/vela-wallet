@@ -191,6 +191,17 @@ same three ways in as the desktop (SC-428, 438).
 - [ ] T074k [P] [US11] Desktop `money.rs` confirm/receipt/detail: the same recipients block (third column for the full list, per the desktop rule: no bottom sheets) — SC-442
 - [ ] T074l [US11] Visual pass on both shells at 1 / 3 / 12 / 60 recipients (screenshots into results.md) — #D4
 
+## Phase 11c: US12 — The founder's evening pass (Part E) (P2)
+
+- [ ] T074m [US12] #E1: split `NotCompatible` from "could not check" in core `network_admin.rs` (`NetWizardErrorKind::CheckFailed` with retry) and render both on web + desktop; run the eleven probes + P-256 against Celo from the desktop and record which fails — SC-444
+- [x] T074n [US12] #E2: `TokenDetail.svelte` `onselect(id)` → page opens `tx-detail` by feed id (`findFeedItem`); `FlowsPanel`/`FlowsMobile` wiring — SC-445
+- [ ] T074o [US12] #E3: reproduce which surface ignores the date format (web feed / desktop); fix that surface
+- [ ] T074p [US12] #E4: client — the AAGUID lookup base URL comes from the same settings object as the index (default = our node once it exists); server task filed in `biubiu-projects`
+- [x] T074q [US12] #E5: `liveLanguageRows` ticks the route locale; `settings/+page.svelte` navigates to the chosen locale after `setLanguage` — SC-446
+- [x] T074r [US12] (rate editor done; the "toggle does not switch" half still needs a reproduction) #E6: web `BatchImport.svelte` editable rate (`EditRate` / `ResetRateToAuto`), verify the sheet opens with its token so `SetUnit` applies — SC-447
+- [x] T074s [US12] #E7: `RecipientCard.svelte` two-line editable layout, content-sized amount, hairline fields — SC-448
+- [x] T074t [US12] #E8: `BalanceDetailModel.unpriced` from `view.unpriced_tokens`; section in `BalanceDetailBody.svelte`; desktop's balance detail the same — SC-449
+
 ## Phase 12: US10 — The two dev commands, and a sheet that tells the truth (P3)
 
 **Goal**: SC-425, 426.

@@ -267,6 +267,8 @@
 					unit: (id: string) =>
 						batchSession?.dispatch({ type: 'set_unit', unit: id === 'fiat' ? 'fiat' : 'token' }),
 					paste: (text: string) => batchSession?.dispatch({ type: 'set_raw_text', text }),
+					rate: (text: string) => batchSession?.dispatch({ type: 'edit_rate', text }),
+					resetRate: () => batchSession?.dispatch({ type: 'reset_rate_to_auto' }),
 					pickFile: () => batchSession?.dispatch({ type: 'pick_file_requested' }),
 					saveTemplate: () => batchSession?.dispatch({ type: 'save_template_requested' }),
 					apply: () => {
@@ -1305,7 +1307,7 @@
 	const rpcRestored = $derived(
 		rpcSaved && rpcDraft === null && rescueRow?.rpc_health?.type === 'ok'
 	);
-	const balanceDetailModel = $derived(liveBalanceDetail(balance.view, currency.view, rm));
+	const balanceDetailModel = $derived(liveBalanceDetail(balance.view, currency.view, rm, data.walletMessages.balance.unpriced));
 	const relayerModel = $derived(
 		sendView?.treasury_bootstrap ? liveRelayer(sendView.treasury_bootstrap, rm) : undefined
 	);

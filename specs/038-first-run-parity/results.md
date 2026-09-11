@@ -95,3 +95,24 @@ callers' candidate retry (T028 partial), the remaining `FontWeight::` walk
 Screenshots: the desktop app was launched with `VELA_INTRO=1` on a fresh
 state (launch animation → intro confirmed from the log), but a window-only
 capture needs the no-TCC harness — the visual pass (SC-429) is still owed.
+
+### Slice 4 — the founder's evening pass, Part E (web)
+
+- #E2 a token's rows open the transaction detail: `feedPositionOf` (the
+  inverse of `feedItemAt`) gives each token-detail row the history's own
+  index; `TokenDetail` (phone sheet) and `AssetDetailPanel` (desktop third
+  column) take `onselect`.
+- #E5 the language row ticks the page's locale, not the stored choice.
+- #E6 the batch rate is editable in place (`edit_rate` / `reset_rate_to_auto`
+  were the core's already); loading/failed states use their own corpus
+  sentences (`batchRateLoading` / `batchRateFailed`, now served). The unit
+  toggle's wiring is correct on paper (`set_unit` with the same ids the
+  toggle compares) — the founder's "无法切换" still needs a reproduction.
+- #E7 the split recipient card: grid, two lines when editable, the amount
+  field content-sized (`field-sizing: content`, 6–12ch), a hairline under
+  each editable field.
+- #E8 the balance dialog gains a third section listing every unpriced token
+  (symbol · network · balance), titled with the hero's own sentence.
+- #E1, #E3, #E4 recorded and pinned in the spec; not fixed in this slice
+  (#E1 needs the eleven probes run against Celo from the desktop; #E3 needs
+  the surface reproduced; #E4 is a server task).

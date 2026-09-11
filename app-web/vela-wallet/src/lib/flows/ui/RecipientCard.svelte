@@ -73,34 +73,51 @@
 	{:else}
 		<span class="amount">{recipient.amount}</span>
 	{/if}
-	<button type="button" class="remove" aria-label={recipient.removeLabel} onclick={onremove}>
+	<button
+		type="button"
+		class="remove"
+		style="grid-area: remove"
+		aria-label={recipient.removeLabel}
+		onclick={onremove}
+	>
 		<Icon icon={UTILITY_ICONS.x} size="md" />
 	</button>
 </div>
 
 <style>
+	/*
+	 * Spec 038 #E7. Two lines per card when editable — ordinal, then the
+	 * address across the card's full width — with the amount sized to what it
+	 * holds and right-aligned beside its symbol. Before this the amount was a
+	 * fixed six-space box and the address shared its line with the pick
+	 * button, so at four recipients the address was cut to "0x3187ł" and the
+	 * amount read as a stray box.
+	 */
 	.card {
-		display: flex;
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto auto;
+		grid-template-areas: 'avatar text amount remove';
+		gap: var(--space-md) var(--space-lg);
 		align-items: center;
-		gap: var(--space-lg);
 		padding: var(--space-lg);
 		border-radius: var(--radius-lg);
 		background: var(--color-bg-raised);
 	}
-
+	.card :global(.identicon),
+	.card > :first-child {
+		grid-area: avatar;
+	}
 	.text {
+		grid-area: text;
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-xs);
-		flex: 1;
 		min-width: 0;
 	}
-
 	.ordinal {
 		font-size: calc(var(--text-xs) * var(--text-scale, 1));
 		color: var(--color-fg-subtle);
 	}
-
 	.name {
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
@@ -109,69 +126,66 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-
 	.amount {
+		grid-area: amount;
 		font-family: var(--font-numeric);
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		font-variant-numeric: tabular-nums;
 		color: var(--color-fg-base);
-		flex-shrink: 0;
+		text-align: end;
 	}
-
 	/* The fields sit on the card's own surface: the card is the field, and a
-	   sunken box inside a raised one would be a well inside a well. */
+	   sunken box inside a raised one would be a well inside a well. A
+	   hairline underneath says "type here" without a browser border. */
 	.entry-row,
 	.amount-entry {
 		display: flex;
 		align-items: center;
 		gap: var(--space-xs);
 		min-width: 0;
-		border-radius: var(--radius-sm);
+		border-block-end: var(--border-hairline) solid var(--color-border-base);
 	}
-
+	.entry-row:focus-within,
+	.amount-entry:focus-within {
+		border-block-end-color: var(--color-fg-base);
+	}
 	.entry {
 		min-width: 0;
 		border: none;
 		background: none;
-		padding: 0;
+		padding: var(--space-xs) 0;
 		color: var(--color-fg-base);
 	}
-
 	.entry:focus {
 		outline: none;
 	}
-
 	.address {
 		flex: 1;
 		font-family: var(--font-mono);
 		font-size: calc(var(--text-base) * var(--text-scale, 1));
+		text-overflow: ellipsis;
 	}
-
 	.amount-entry {
-		flex-shrink: 0;
+		grid-area: amount;
 		justify-content: flex-end;
 	}
-
-	.amount {
-		text-align: end;
-	}
-
 	.entry.amount {
-		width: calc(var(--space-2xl) * 6);
+		/* Sized to its content, never narrower than a short amount and never
+		   wider than a third of the card. */
+		field-sizing: content;
+		min-width: 6ch;
+		max-width: 12ch;
 		text-align: end;
-		text-overflow: ellipsis;
 		font-family: var(--font-numeric);
 		font-size: calc(var(--text-lg) * var(--text-scale, 1));
 		font-weight: var(--weight-semibold);
 		font-variant-numeric: tabular-nums;
 	}
-
 	.symbol {
 		font-size: calc(var(--text-sm) * var(--text-scale, 1));
 		color: var(--color-fg-muted);
 	}
-
 	.pick,
 	.remove {
 		display: flex;

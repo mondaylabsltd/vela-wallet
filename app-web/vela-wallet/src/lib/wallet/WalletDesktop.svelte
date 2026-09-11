@@ -146,6 +146,7 @@
 				panel={model.panels.assetDetail}
 				onsend={() => onflow?.('send', { assetId: model.panels.assetDetail.id })}
 				onreceive={() => onflow?.('receive-token', { assetId: model.panels.assetDetail.id })}
+				onselect={(row) => onactivity?.(row)}
 			/>
 		</ThirdPanel>
 	{:else if onflow !== undefined}
