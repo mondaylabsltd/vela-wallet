@@ -8,23 +8,26 @@
 //!   * one slot that says where you are — the step's ordinal, name and what it
 //!     decides while the journey runs, the product's own line before it starts
 //!     and after it ends;
-//!   * the settings affordance, which had no permanent home before this and
-//!     was reachable only from a warning that appears when the index is down.
+//!
+//! It used to carry a third thing, a settings affordance for the passkey-index
+//! endpoint. Spec 038 removed it (founder ruling): the endpoint sheet opens
+//! itself when the probe says the index is unreachable, and the warning line
+//! on Welcome is a button to the same sheet — a permanent door to a room the
+//! app already takes you to was the desktop's alone, and the web's front door
+//! never had one.
 //!
 //! The ordinal is set as TYPE, not drawn as a stepper. A vertical stepper here
 //! reads as a control bolted to the side of the page; a mono numeral at
 //! display size reads as part of the page, carries the same fact, and gives
 //! the rail something to be composed around.
 
-use crate::icons::{Icon, IconCache};
 use crate::theme::{
     self, GAP_LOGO_WORDMARK, LOGO_SIZE, RAIL_PAD_X, RAIL_PAD_Y, RAIL_RULE_H, RAIL_RULE_W,
     RAIL_TEXT_W, RAIL_W, Theme,
 };
 use crate::ui::{vela_mark, vela_wordmark};
 use gpui::{
-    App, ClickEvent, Div, FontWeight, ImageSource, InteractiveElement, ParentElement, SharedString,
-    Stateful, StatefulInteractiveElement, Styled, Window, div, img, px,
+    Div, FontWeight, InteractiveElement, ParentElement, SharedString, Stateful, Styled, div, px,
 };
 
 /// What the rail's middle slot says. Same position and size either way — the
@@ -44,13 +47,7 @@ pub enum RailSlot {
     },
 }
 
-pub fn onboarding_rail(
-    theme: &Theme,
-    icons: &mut IconCache,
-    slot: RailSlot,
-    settings_label: SharedString,
-    on_settings: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> Stateful<Div> {
+pub fn onboarding_rail(theme: &Theme, slot: RailSlot) -> Stateful<Div> {
     let middle = match slot {
         RailSlot::Tagline(text) => div()
             .child(
@@ -116,28 +113,6 @@ pub fn onboarding_rail(
             ),
     };
 
-    let settings = div()
-        .id("rail-settings")
-        .flex()
-        .items_center()
-        .gap(px(theme::FLOW_GAP_SM))
-        .cursor_pointer()
-        .text_size(theme::text_row_meta())
-        .text_color(theme.fg_subtle)
-        .hover(|s| s.text_color(theme.fg_base))
-        .on_click(on_settings)
-        .child(
-            img(ImageSource::Render(icons.image(
-                Icon::NavSettings,
-                false,
-                theme.fg_subtle,
-                15,
-            )))
-            .w(px(15.))
-            .h(px(15.))
-            .flex_none(),
-        )
-        .child(div().child(settings_label));
 
     div()
         .id("onboarding-rail")
@@ -163,5 +138,7 @@ pub fn onboarding_rail(
                 .child(vela_wordmark(theme)),
         )
         .child(middle)
-        .child(settings)
+        // The bottom slot is empty by design; `justify_between` keeps the
+        // middle slot where it was when three things lived here.
+        .child(div())
 }

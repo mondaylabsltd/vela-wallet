@@ -33,6 +33,8 @@
 	import Button from '$lib/ui/Button.svelte';
 	import OnboardingRail from '$lib/ui/onboarding/v2/OnboardingRail.svelte';
 	import IntroCarousel from '$lib/ui/intro/IntroCarousel.svelte';
+	import AddMethodPicker from '$lib/ui/onboarding/v2/AddMethodPicker.svelte';
+	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import { markIntroSeen, shouldShowIntro } from '$lib/intro/gate';
 	import PromptSheet from '$lib/ui/onboarding/v2/PromptSheet.svelte';
 	import { fillTemplate } from '$lib/i18n/fill';
@@ -74,6 +76,14 @@
 	let starting = $state(false);
 
 	/**
+	 * The sign-in method picker is open (spec 038 finding 20). The web used to
+	 * dispatch `platform` and let the browser's own sheet cover the rest; a
+	 * wallet living on a phone or a key deserves a row that says so — the same
+	 * three rows creating a wallet shows, and the desktop's sign-in shows.
+	 */
+	let methodsOpen = $state(false);
+
+	/**
 	 * The first-run intro is up. Starts false so the prerendered document is the
 	 * landing page; `onMount` raises it when this browser has not seen it.
 	 */
@@ -91,6 +101,12 @@
 	 * that, not this screen — so this only surfaces the warning.
 	 */
 	const endpointUnreachable = $derived(loginView?.endpoint_unreachable ?? false);
+	/**
+	 * The probe could not get out of THIS machine (spec 038). A browser cannot
+	 * usually tell this apart from the service being down — only the desktop
+	 * produces it today — but the sentence is different, so it is read here too.
+	 */
+	const transportFailed = $derived(loginView?.transport_failed ?? false);
 
 	function prompt(kind: PromptKind): Promise<boolean> {
 		return new Promise((settle) => {
@@ -111,8 +127,9 @@
 	 * prerendered and must stay wasm-free until someone commits. The health
 	 * probe the core starts is part of that commitment.
 	 */
-	async function signIn() {
+	async function signIn(method: KeyMethod) {
 		if (signingIn) return;
+		methodsOpen = false;
 		starting = true;
 		try {
 			if (!login) {
@@ -123,7 +140,7 @@
 				});
 				login.start({ type: 'start' });
 			}
-			login.dispatch({ type: 'sign_in', method: 'platform' });
+			login.dispatch({ type: 'sign_in', method });
 		} finally {
 			// Handed over to `loginView.busy` — or released, if the core never
 			// came up, so the button can be pressed again.
@@ -133,6 +150,10 @@
 
 	onMount(() => {
 		if (shouldShowIntro()) intro = true;
+		// The inline script in app.html hid Welcome before paint on the same
+		// rule; whichever way the gate went, the decision is now this
+		// component's, and the attribute must not outlive it.
+		delete document.documentElement.dataset.intro;
 		return () => {
 			login?.dispose();
 			login = null;
@@ -153,6 +174,7 @@
 {#if intro}
 	<IntroCarousel
 		strings={data.intro}
+		tagline={strings('onboarding.welcome.desktopTagline')}
 		{signingIn}
 		{createHref}
 		onSkip={leaveIntro}
@@ -160,13 +182,14 @@
 		onSignIn={() => {
 			// Seen: whichever way this ends, they have read it. Marking it on the
 			// press rather than on success means a cancelled passkey prompt drops
-			// them on Welcome, not back into the introduction they just read.
+			// them on Welcome, not back into the introduction they just read —
+			// where the method picker is waiting, open.
 			leaveIntro();
-			void signIn();
+			methodsOpen = true;
 		}}
 	/>
 {:else}
-	<main class="welcome">
+	<main class="welcome" data-intro-page>
 		<OnboardingRail
 			rail={{ kind: 'tagline', text: strings('onboarding.welcome.desktopTagline') }}
 		/>
@@ -190,12 +213,29 @@
 				<Button variant="primary" shape="rounded" disabled={signingIn} href={createHref}>
 					{m.createWallet}
 				</Button>
-				<Button variant="secondary" shape="rounded" loading={signingIn} onclick={signIn}>
+				<Button
+					variant="secondary"
+					shape="rounded"
+					loading={signingIn}
+					onclick={() => (methodsOpen = !methodsOpen)}
+				>
 					{m.alreadyHaveWallet}
 				</Button>
 			</div>
 
-			{#if endpointUnreachable}
+			<!-- The three ways in, expanded in place exactly as the create
+			     journey expands them: a wallet on a phone or a security key is
+			     reachable by name, not only through whatever the browser's sheet
+			     defaults to (spec 038 SC-428). -->
+			<div class="methods" class:open={methodsOpen}>
+				<AddMethodPicker open={methodsOpen} {strings} onPick={(method) => void signIn(method)} />
+			</div>
+
+			{#if transportFailed}
+				<p class="endpointWarning" role="status">
+					{strings('onboarding.common.networkBody')}
+				</p>
+			{:else if endpointUnreachable}
 				<p class="endpointWarning" role="status">
 					{strings('onboarding.settings.warningText')}
 				</p>
@@ -311,6 +351,14 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-lg);
+	}
+
+	.methods {
+		max-width: var(--layout-flowColumn);
+	}
+
+	.methods.open {
+		margin-block-start: var(--space-lg);
 	}
 
 	.endpointWarning {

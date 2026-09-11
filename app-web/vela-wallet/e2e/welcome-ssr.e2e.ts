@@ -251,3 +251,33 @@ test('the Welcome page loads no wasm until someone commits to a flow', async ({ 
 
 	expect(wasmRequests, 'Welcome must not fetch the onboarding core').toEqual([]);
 });
+
+/**
+ * Spec 038 SC-413/414: on a FIRST run the landing page must never be the
+ * first frame — the intro is decided before paint by app.html — and yet the
+ * prerendered document must still BE the landing page for crawlers.
+ */
+test('a first run never paints Welcome before the intro', async ({ page }) => {
+	// A fresh context has no `vela.intro.seen`; the launch animation is
+	// skipped so it cannot mask the frame under test.
+	await page.goto('/en?skipLaunch', { waitUntil: 'commit' });
+	// Before hydration: the attribute is on <html> and Welcome is hidden.
+	await expect(page.locator('html')).toHaveAttribute('data-intro', 'pending');
+	const welcomeOpacity = await page
+		.locator('main[data-intro-page]')
+		.evaluate((el) => getComputedStyle(el).opacity)
+		.catch(() => '0');
+	expect(welcomeOpacity).toBe('0');
+	// After hydration: the intro is up and the attribute is gone.
+	await expect(page.locator('.intro')).toBeVisible();
+	await expect(page.locator('html')).not.toHaveAttribute('data-intro', 'pending');
+});
+
+test('the prerendered document still carries the landing page', async ({ request }) => {
+	const html = await (await request.get('/en')).text();
+	expect(html).toContain('data-intro-page');
+	expect(html).toContain(escapeHtml(corpus('en').heroTitle));
+	// And the pre-paint decision is in the head, before any module.
+	expect(html.indexOf(`'${INTRO_SEEN_KEY}'`)).toBeGreaterThan(-1);
+	expect(html.indexOf(`'${INTRO_SEEN_KEY}'`)).toBeLessThan(html.indexOf('<body'));
+});

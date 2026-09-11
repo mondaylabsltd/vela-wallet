@@ -51,13 +51,17 @@ const MAX_UNIT_MEMBERS: usize = 7;
 pub struct RegistryError {
     pub message: String,
     pub network: bool,
+    /// `network`, and every route out of this machine refused (spec 038): the
+    /// sentence is "check your network", not "the service is down".
+    pub local: bool,
 }
 
 impl RegistryError {
-    fn network(message: impl Into<String>) -> Self {
+    fn network(message: impl Into<String>, local: bool) -> Self {
         Self {
             message: message.into(),
             network: true,
+            local,
         }
     }
 
@@ -65,6 +69,7 @@ impl RegistryError {
         Self {
             message: message.into(),
             network: false,
+            local: false,
         }
     }
 }
@@ -102,23 +107,24 @@ pub fn registry_url() -> String {
         .unwrap_or_else(|_| DEFAULT_REGISTRY_URL.to_owned())
 }
 
-/// This module builds no agent of its own: `proxy::agent` is the app's only
-/// HTTP client factory, so every request here inherits the proxy decision
-/// rather than re-deciding it. See that module's note.
-use super::proxy::agent;
+/// This module builds no agent of its own: `proxy` is the app's only HTTP
+/// client factory, and every request here walks its candidate chain
+/// (`proxy::with_candidates`) so a refused route is retried on the next one
+/// rather than reported as the index being down. See that module's note.
+use super::proxy::{self, Transport};
 
-/// Turn a ureq error into the one bit of classification the core needs.
+/// Turn a transport failure into the two bits of classification the core
+/// needs.
 ///
 /// `StatusCode` is the ONLY variant that means the server answered. Everything
 /// else — DNS, TLS, a refused connection, a timeout — is a request that never
-/// arrived, and the core offers the person a different endpoint for exactly
-/// that case.
-fn classify(label: &str, error: ureq::Error) -> RegistryError {
-    match error {
+/// arrived; `local` says whether it never even left the machine.
+fn classify(label: &str, failure: Transport) -> RegistryError {
+    match failure.error {
         ureq::Error::StatusCode(status) => {
             RegistryError::answered(format!("{label} failed: {status}"))
         }
-        other => RegistryError::network(format!("{label} failed: {other}")),
+        other => RegistryError::network(format!("{label} failed: {other}"), failure.local),
     }
 }
 
@@ -127,10 +133,9 @@ fn get_json<T: serde::de::DeserializeOwned>(
     label: &str,
     timeout: Duration,
 ) -> Result<T> {
-    agent(timeout)
-        .get(format!("{}{path}", registry_url()))
-        .call()
-        .map_err(|error| classify(label, error))?
+    let url = format!("{}{path}", registry_url());
+    proxy::with_candidates(timeout, |agent| agent.get(&url).call())
+        .map_err(|failure| classify(label, failure))?
         .body_mut()
         .read_json::<T>()
         .map_err(|error| {
@@ -144,10 +149,9 @@ fn post_json<T: serde::de::DeserializeOwned>(
     label: &str,
     timeout: Duration,
 ) -> Result<T> {
-    agent(timeout)
-        .post(format!("{}{path}", registry_url()))
-        .send_json(body)
-        .map_err(|error| classify(label, error))?
+    let url = format!("{}{path}", registry_url());
+    proxy::with_candidates(timeout, |agent| agent.post(&url).send_json(&body))
+        .map_err(|failure| classify(label, failure))?
         .body_mut()
         .read_json::<T>()
         .map_err(|error| {
@@ -369,17 +373,35 @@ struct Health {
     status: String,
 }
 
-/// One health probe. Never fails outward: the core asked a yes/no question.
-pub fn probe_health() -> bool {
-    // The cache buster mirrors the web client's `?_t=`: an intermediary that
-    // cached a 200 would make an unreachable endpoint look healthy, which is
-    // the one answer this probe must never give wrongly.
-    let nonce = vela_core::primitives::to_hex(&passkey::random(8), false);
+/// What one health probe found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Probe {
+    /// The index answered with its own identity and `status: ok`.
+    Reachable,
+    /// A route existed and the index did not answer as itself — down, or the
+    /// wrong service behind the URL.
+    Down,
+    /// Nothing left this machine: every route refused (spec 038).
+    Local,
+}
+
+/// One health probe. Never fails outward: the core asked a yes/no question,
+/// and spec 038 added the one refinement a screen can act on differently.
+pub fn probe_health() -> Probe {
+    // The nonce defeats an intermediary cache: a cached 200 would make an
+    // unreachable endpoint look healthy, which is the one answer this probe
+    // must never give wrongly.
+    let nonce = Instant::now().elapsed().as_nanos();
     match get_json::<Health>(&format!("/api/health?_t={nonce}"), "Health", READ_TIMEOUT) {
         Ok(health) => {
-            SERVICE_IDENTITIES.contains(&health.service.as_str()) && health.status == "ok"
+            if SERVICE_IDENTITIES.contains(&health.service.as_str()) && health.status == "ok" {
+                Probe::Reachable
+            } else {
+                Probe::Down
+            }
         }
-        Err(_) => false,
+        Err(error) if error.local => Probe::Local,
+        Err(_) => Probe::Down,
     }
 }
 
@@ -474,7 +496,7 @@ fn eth_call(url: &str, to: &str, data_hex: &str) -> Result<Vec<u8>> {
         #[serde(default)]
         result: Option<String>,
     }
-    let reply: RpcReply = agent(READ_TIMEOUT)
+    let reply: RpcReply = proxy::agent(READ_TIMEOUT)
         .post(url)
         .send_json(serde_json::json!({
             "jsonrpc": "2.0",
@@ -482,7 +504,7 @@ fn eth_call(url: &str, to: &str, data_hex: &str) -> Result<Vec<u8>> {
             "method": "eth_call",
             "params": [{ "to": to, "data": data_hex }, "latest"],
         }))
-        .map_err(|error| classify("Legacy name", error))?
+        .map_err(|error| classify("Legacy name", Transport { error, local: false }))?
         .body_mut()
         .read_json()
         .map_err(|error| RegistryError::answered(format!("Legacy name: bad JSON: {error}")))?;
@@ -705,13 +727,18 @@ fn await_task(id: &str) -> Result<()> {
         }
         std::thread::sleep(POLL_INTERVAL);
     }
-    Err(RegistryError::network(format!(
-        "Register timed out after {}s{}",
-        POLL_TIMEOUT.as_secs(),
-        last_error
-            .map(|error| format!(": {error}"))
-            .unwrap_or_default()
-    )))
+    // The server was reached — it answered "not yet" for the whole budget —
+    // so this is never a local transport failure.
+    Err(RegistryError::network(
+        format!(
+            "Register timed out after {}s{}",
+            POLL_TIMEOUT.as_secs(),
+            last_error
+                .map(|error| format!(": {error}"))
+                .unwrap_or_default()
+        ),
+        false,
+    ))
 }
 
 fn strip_hex(value: &str) -> &str {
@@ -756,8 +783,11 @@ mod tests {
     /// send someone hunting for a working URL over a refusal.
     #[test]
     fn only_a_status_code_counts_as_an_answer() {
-        assert!(!classify("Query", ureq::Error::StatusCode(404)).network);
-        assert!(classify("Query", ureq::Error::HostNotFound).network);
+        assert!(!classify("Query", Transport { error: ureq::Error::StatusCode(404), local: false }).network);
+        assert!(classify("Query", Transport { error: ureq::Error::HostNotFound, local: false }).network);
+        // Spec 038: the one new bit — "this machine could not get out".
+        let local = classify("Query", Transport { error: ureq::Error::HostNotFound, local: true });
+        assert!(local.network && local.local);
     }
 
     /// A credential id is hex today, but the query string is built from it —
@@ -781,7 +811,7 @@ mod tests {
     #[ignore = "needs the network"]
     fn the_deployed_registry_answers_its_health_probe() {
         set_registry_url(DEFAULT_REGISTRY_URL);
-        assert!(probe_health(), "{DEFAULT_REGISTRY_URL} did not answer");
+        assert_eq!(probe_health(), Probe::Reachable, "{DEFAULT_REGISTRY_URL} did not answer");
     }
 
     /// A key nobody registered comes back as not-registered, not as an error.

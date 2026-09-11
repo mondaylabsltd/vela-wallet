@@ -87,6 +87,38 @@
 					document.documentElement.dataset.launch = 'playing';
 				}
 			}
+
+			/*
+			 * Spec 038: decide BEFORE first paint whether the first-run intro is up,
+			 * for the same reason as the launch block above — decided in `onMount`
+			 * the prerendered landing page paints first and is then replaced, so a
+			 * first run saw Welcome → intro on every load (spec 038 finding 2).
+			 * `app.css` hides `[data-intro-page]` (the Welcome main) under this
+			 * attribute; the page removes it once the intro has mounted or the gate
+			 * has said no, so it never outlives the decision.
+			 *
+			 * The rule is duplicated from `$lib/intro/gate.ts` — it cannot be
+			 * imported here. `gate.test.ts` reads this file and asserts the storage
+			 * key and both query params agree with the module's constants.
+			 *
+			 *   STORAGE_KEY = 'vela.intro.seen'   FORCE_PARAM = 'intro'   SKIP_PARAM = 'skipIntro'
+			 */
+			try {
+				var introParams = new URLSearchParams(location.search);
+				var introDue = introParams.has('intro')
+					? true
+					: introParams.has('skipIntro')
+						? false
+						: localStorage.getItem('vela.intro.seen') === null;
+				if (introDue) {
+					document.documentElement.dataset.intro = 'pending';
+				}
+			} catch (e) {
+				/* Blocked storage: the module shows it too, so hide Welcome. */
+				if (location.search.indexOf('skipIntro') === -1) {
+					document.documentElement.dataset.intro = 'pending';
+				}
+			}
 		</script>
 		%sveltekit.head%
 	</head>

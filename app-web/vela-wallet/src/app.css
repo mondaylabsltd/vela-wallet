@@ -90,3 +90,12 @@ a {
 html[data-launch='playing'] [data-launch-page] {
 	opacity: 0;
 }
+
+/*
+ * Spec 038: the first-run intro, decided by the same kind of inline script.
+ * Only the Welcome main carries the attribute; the intro is visible the frame
+ * it mounts, and the page removes `data-intro` as soon as the gate has spoken.
+ */
+html[data-intro='pending'] [data-intro-page] {
+	opacity: 0;
+}

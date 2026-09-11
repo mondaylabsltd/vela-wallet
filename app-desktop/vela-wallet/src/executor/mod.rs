@@ -280,8 +280,12 @@ pub fn perform(operation: &ShellOperation, ceremony: &Ceremony) -> Performed {
             Err(error) => index_failed(error),
         },
 
-        ShellOperation::ProbeIndexHealth => ShellResult::IndexHealth {
-            ok: registry::probe_health(),
+        ShellOperation::ProbeIndexHealth => match registry::probe_health() {
+            registry::Probe::Reachable => ShellResult::IndexHealth { ok: true },
+            registry::Probe::Down => ShellResult::IndexHealth { ok: false },
+            // Every route out of this machine refused: the person's network,
+            // not our service, and the screen says so (spec 038).
+            registry::Probe::Local => ShellResult::IndexTransportFailed,
         },
 
         ShellOperation::Wait { ms } => {
@@ -370,8 +374,8 @@ fn index_failed(error: registry::RegistryError) -> ShellResult {
     // publish that fails after three signatures vanishes without a trace (the
     // recovery flow deliberately enters the wallet anyway).
     eprintln!(
-        "[vela-registry] index operation failed (network={}): {}",
-        error.network, error.message
+        "[vela-registry] index operation failed (network={}, local={}): {}",
+        error.network, error.local, error.message
     );
     ShellResult::IndexFailed {
         message: error.message,

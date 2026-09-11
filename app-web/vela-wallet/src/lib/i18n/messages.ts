@@ -57,6 +57,9 @@ export const WELCOME_KEYS = [
 /** Scaffold chrome + pattern furniture the panels resolve outside the outcome catalog. */
 const FLOW_CHROME_KEYS = [
 	'onboarding.common.close',
+	// Spec 038: the front door's sentence for a probe that never left the
+	// machine — an existing key, newly served here.
+	'onboarding.common.networkBody',
 	'onboarding.common.copyAddress',
 	'onboarding.common.copied',
 	'onboarding.create.technicalDetails',

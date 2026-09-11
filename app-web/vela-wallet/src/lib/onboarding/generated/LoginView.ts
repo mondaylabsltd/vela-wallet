@@ -9,4 +9,11 @@ busy: boolean,
  * The index server did not answer its health probe. The screen surfaces
  * the endpoint settings so the user can point the app somewhere reachable.
  */
-endpoint_unreachable: boolean, };
+endpoint_unreachable: boolean, 
+/**
+ * The probe could not get out of THIS MACHINE (spec 038): every route the
+ * shell tried refused locally. Implies `endpoint_unreachable`. The screen
+ * says "check your network" and does NOT offer the endpoint field — a
+ * different URL cannot fix a machine that cannot reach any of them.
+ */
+transport_failed: boolean, };
