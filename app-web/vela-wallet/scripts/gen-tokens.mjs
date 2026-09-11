@@ -10,7 +10,7 @@
  * and the vitest drift gate re-runs the pure generators for the same guarantee.
  *
  * Web additions (tokens the export lacks) live in WEB_ADDITIONS below with the
- * design-system.md rule that licenses each; nothing else may invent a value.
+ * docs/design-system.md rule that licenses each; nothing else may invent a value.
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -22,11 +22,11 @@ const SOURCE = join(APP_ROOT, '..', '..', 'docs', 'design-tokens.json');
 const OUT_CSS = join(APP_ROOT, 'src', 'lib', 'tokens', 'tokens.css');
 const OUT_TS = join(APP_ROOT, 'src', 'lib', 'tokens', 'tokens.ts');
 
-/** design-system.md §Layout names these; the DTCG export does not carry them. */
+/** docs/design-system.md §Layout names these; the DTCG export does not carry them. */
 const WEB_ADDITIONS = [
-	['size-control-sm', '36px', 'sizing.control.sm per design-system.md'],
-	['size-control-md', '44px', 'sizing.control.md per design-system.md'],
-	['size-control-lg', '52px', 'sizing.control.lg per design-system.md'],
+	['size-control-sm', '36px', 'sizing.control.sm per docs/design-system.md'],
+	['size-control-md', '44px', 'sizing.control.md per docs/design-system.md'],
+	['size-control-lg', '52px', 'sizing.control.lg per docs/design-system.md'],
 	['breakpoint-desktop', '1280px', 'feature 006 responsive contract'],
 	[
 		'breakpoint-contactsOverlay',
@@ -236,7 +236,7 @@ const WEB_ADDITIONS = [
 	['opacity-hover', '0.92', 'pointer hover feedback; no export token exists for hover']
 ];
 
-/** Composite stacks: export families + design-system.md CJK/system fallbacks. */
+/** Composite stacks: export families + docs/design-system.md CJK/system fallbacks. */
 const FONT_UI = "'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif";
 const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace";
 
@@ -322,7 +322,7 @@ export function generateCss(tokens = loadTokens()) {
    is dark, and browsers without prefers-color-scheme support get dark. */
 :root {
 ${declsFor(core)}
-\t--font-ui: ${FONT_UI}; /* web addition: design-system.md CJK fallback */
+\t--font-ui: ${FONT_UI}; /* web addition: docs/design-system.md CJK fallback */
 \t--font-mono: ${FONT_MONO}; /* web addition: mono fallbacks */
 ${additions}
 ${declsFor(dark)}
