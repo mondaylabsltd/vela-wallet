@@ -1,0 +1,5 @@
+jobs:
+  app:
+    steps:
+      # a comment naming Expo is fine
+      - run: npx expo lint
