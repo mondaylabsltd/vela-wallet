@@ -207,3 +207,45 @@ analytics: default, unconfirmed; dev harnesses: Assumptions).
   `packages/safari-extension` deleted (re-home under `app-ios` is its own
   spec); `packages/vela-sdk` kept with its CI step; the third-party
   analytics script not carried over.
+
+## The gates still bite (SC-393) — run 2026-09-11, both reverted
+
+- **i18n**: one corpus leaf (`send.send.selectTokenTitle` in
+  `rust/crates/vela-core/i18n/locales/en/send.json`, `"…"` → `"…!"`),
+  `node scripts/gen-i18n.mjs` (exit 0), then the gate's diff:
+  `public/i18n/en.json | 2 +-`, `rust/…/i18n_catalogs/en.rs | 44 ++++----` →
+  **exit 1**. Reverted; `git status` clean. (A first attempt that wrote a
+  malformed top-level key made `gen-i18n` itself exit 1 — the generator's
+  structural assertions are a second layer of the same gate.)
+- **identicon**: one colour literal in the pinned oracle
+  (`node_modules/identicons-esm/dist/core-*.mjs`, `#010101` → `#010100`),
+  then `npm run dump:vectors` and the gate's diff:
+  `tests/vectors/identicon.json | 8 ++++----` → **exit 1**; and
+  `verify-identicon-parity.mjs` → **exit 1** (`legacy: … fill="#010100"` vs
+  `core: … fill="#010101"`). Oracle restored from backup, vectors regenerated
+  and diffed clean, parity green again; `git status` clean.
+
+## Fresh clone (SC-395) — 2026-09-11
+
+`git clone --branch 039-retire-expo-tree` into a scratch directory, then
+`docs/project-takeover/02-local-development.md` top to bottom: `npm ci`
+(7 packages, 0.4 s); every root gate exit 0 (gen-i18n + diff, dump:vectors +
+diff, identicon table + diff, corpus lint, Lottie, reachability, both parity
+gates, verify-web, the residue check, the SDK build); `gen-core-types
+--check` — 11 + 326 types current in one mirror each; app-web `pnpm install
+--frozen-lockfile` + `pnpm build` (6.6 s) green; desktop `cargo check` green.
+No command in the document was "not found".
+
+One sentence in the document misled and was fixed on the spot: on a fresh
+clone `pnpm check` fails BEFORE the first `pnpm dev`/`pnpm build`, because
+the `static/` wasm copy is gitignored and `sync-wasm --check` only verifies
+it; after the build it passes (1386 files, 0 errors). `02` now says to run
+`pnpm sync:wasm` (or dev/build) first. Not a regression — the same is true
+on `main` — but the doc walk is what surfaced it.
+
+## PR and CI
+
+Draft PR **#193** — https://github.com/mondaylabsltd/vela-wallet/pull/193
+(the workflow triggers on `pull_request`, not on a branch push). CI run
+34599194167 on `49bad427`; job results appended below when the run
+finishes.

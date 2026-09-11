@@ -17,6 +17,8 @@ npm ci
 
 # Web 壳(生产 Web 钱包)
 cd app-web/vela-wallet && pnpm install && pnpm dev        # http://localhost:5173
+# 新 clone 上先跑一次 pnpm dev / pnpm build / pnpm sync:wasm 再跑 pnpm check:
+# static/ 里的 wasm 副本不入库,由 sync-wasm 生成,`check` 只校验不生成
 
 # 桌面壳
 cd app-desktop/vela-wallet && cargo run

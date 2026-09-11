@@ -43,15 +43,19 @@
       move checklist
 - [x] The things a unit test cannot see are called out: the shared-floor
       consumers must be RUN (SC-392); the fresh-clone walk (SC-395)
-- [ ] `/speckit-plan` not yet run
+- [x] `/speckit-plan` run 2026-09-11 (plan.md, research.md D1–D14,
+      data-model.md, contracts/expo-residue-check.md, quickstart.md)
+- [x] `/speckit-tasks` run 2026-09-11 (52 tasks, four story groups)
+- [x] `/speckit-implement` run 2026-09-11 — T001–T049 done; T050 opened as
+      draft PR #193 pending the `android` and `ios` CI jobs; T051–T052 done
 
 ## Notes
 
 - WalletPair and the remote-inject bridge are not open rulings: the founder
   ruled them out for the web in spec 027 ("不用支持 walletpair 以及 remote
   inject 因为它们不成熟"); the register cites that ruling.
-- The register was produced by a file-by-file sweep of both trees on
-  2026-09-11; rows marked *verify* need one more look during planning before
-  they are called *present*.
+- One correction to the spec's first draft was made during implementation
+  and recorded in place: `assets/images/icon.png` and `favicon.png` were the
+  icon script's Expo OUTPUTS, not its inputs, and were deleted with the tree.
 - The one cost of "delete first" that the spec insists on writing down: the
   Pages deployment freezes at the last Expo commit until the hostname moves.
