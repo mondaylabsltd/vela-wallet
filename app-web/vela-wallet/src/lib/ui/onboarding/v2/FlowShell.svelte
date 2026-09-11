@@ -56,6 +56,11 @@
 		display: flex;
 		flex: 1;
 		min-height: 0;
+		/* Rail and screen together, capped and centred past the widest the
+		   mocks were drawn for (spec 038 T078). */
+		width: 100%;
+		max-width: var(--layout-frameMax);
+		margin-inline: auto;
 	}
 
 	.shell {

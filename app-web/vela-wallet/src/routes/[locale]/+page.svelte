@@ -284,6 +284,11 @@
 		.welcome {
 			justify-content: flex-start;
 			padding: 0;
+			/* Rail and column together, capped and centred past the widest the
+			   mocks were drawn for (spec 038 T078). */
+			width: 100%;
+			max-width: var(--layout-frameMax);
+			margin-inline: auto;
 		}
 	}
 

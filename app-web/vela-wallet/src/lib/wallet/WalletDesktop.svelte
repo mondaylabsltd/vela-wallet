@@ -167,6 +167,11 @@
 	.desktop {
 		display: flex;
 		height: 100%;
+		/* Capped and centred past the widest the mocks were drawn for (spec
+		   038 T078): on a 4 K display the frame no longer hugs the left edge. */
+		width: 100%;
+		max-width: var(--layout-frameMax);
+		margin-inline: auto;
 		background: var(--color-bg-base);
 		overflow: hidden;
 	}

@@ -419,6 +419,24 @@ Nineteen rows pasted from the wallet, hero ¥10,289.33, the account list
   by the missing chain's share, with the partial notice showing. Not
   changed; it is the rule the founder asked for in #188.
 
+### Slice 15 — the three rulings, applied ("按最佳实践和用户体验来")
+
+1. **Conversion precision.** `batch_import::conversion_decimals`: six
+   places — what every balance row prints — or finer when one more place is
+   worth more than a cent of the fiat (a coin at 60,000 keeps seven), never
+   more than the token carries. 0.001 USD at 0.9996 reads `0.001 XDAI`;
+   5,000 CNY at 7.25 reads `689.655172 USDT`; 100 CNY of a coin at 435,000
+   keeps eight places so nothing is lost. Core tests; the batch integration
+   suite unchanged (71 green). Every shell gets it through the core.
+2. **The 4 K frame.** A new layout token `--layout-frameMax` (1920, the
+   widest the mocks' composition is meant for) caps and centres the
+   signed-in frame (wallet, settings, contacts, explore roots), the intro,
+   Welcome and the flow shell; below it nothing changes. `web-wallet-3840-centred.png`.
+   The overflow e2e now runs at 3840 too.
+3. **The index's 400.** Server-side: the p256 index should answer an unknown
+   `walletRef` with 404 or an empty body. Filed as T074z for biubiu-projects;
+   the client already treats it as "no name".
+
 ## Deviations
 
 - **CJK and monospace faces on the desktop (US4, T045).** Plus Jakarta Sans

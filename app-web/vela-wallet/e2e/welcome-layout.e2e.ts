@@ -24,7 +24,7 @@ test.beforeEach(async ({ page }) => {
 	);
 });
 
-const WIDTHS = [320, 375, 768, 1279, 1280, 1440, 1920];
+const WIDTHS = [320, 375, 768, 1279, 1280, 1440, 1920, 3840];
 
 for (const width of WIDTHS) {
 	test(`no horizontal overflow at ${width}px`, async ({ page }) => {

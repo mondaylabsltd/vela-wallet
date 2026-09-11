@@ -185,6 +185,11 @@
 	.intro {
 		display: flex;
 		min-height: 100dvh;
+		/* Rail and column together are capped and centred past the widest
+		   the mocks were drawn for (spec 038 T078). */
+		width: 100%;
+		max-width: var(--layout-frameMax);
+		margin-inline: auto;
 		background: var(--color-bg-base);
 	}
 
