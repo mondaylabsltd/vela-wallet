@@ -2,6 +2,7 @@
 	import type { AssetDetailPanelModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
 	import ActivityRow from './ActivityRow.svelte';
+	import type { ActivityRowModel } from '../model';
 	import Icon from './Icon.svelte';
 	import TokenIcon from './TokenIcon.svelte';
 	import { copyText } from '$lib/services/clipboard';

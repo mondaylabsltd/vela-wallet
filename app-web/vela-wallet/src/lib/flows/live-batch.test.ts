@@ -115,7 +115,9 @@ describe('an unpriceable currency', () => {
 			m,
 			symbol: 'USDT'
 		});
-		expect(built.rateValue).toBe(m['send.batchRateHint']);
+		// Spec 038 #E6: the failed state has its own sentence; the hint is the
+		// paragraph under the (now editable) rate.
+		expect(built.rateValue).toBe(m['send.batchRateFailed']);
 		expect(built.rateValue).not.toContain('1');
 		// The unconvertible row shows what was WRITTEN, never a token figure.
 		expect(built.rows[0].conversion).toBe('5000');
@@ -128,7 +130,7 @@ describe('an unpriceable currency', () => {
 			m,
 			symbol: 'USDT'
 		});
-		expect(built.rateValue).toBe('…');
+		expect(built.rateValue).toBe(m['send.batchRateLoading']);
 		expect(built.ctaDisabled).toBe(true);
 	});
 });
