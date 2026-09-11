@@ -1,0 +1,137 @@
+# Release build of the Android shell (app-android/vela-wallet): an UNSIGNED
+# release APK and AAB, attached to a GitHub release on an `android-v*` tag.
+#
+# Same shape as the desktop release triad and web-extension-package.yml: a tag
+# cuts a release, a manual run only builds, a pull request that touches the
+# shell's packaging runs the cheap metadata check.
+#
+# Unsigned on purpose (founder, 2026-09-11: 不用考虑签名). The upload keystore
+# is the founder's to hold; signing the AAB is a local step
+# (`jarsigner` / Play App Signing — see docs/project-takeover/05). The zip
+# attached here is what gets signed.
+#
+# Unlike the `android` job in ci.yml this job does NOT pass
+# -PvelaSkipRustBuild: a release package needs libvela_core_uniffi.so for all
+# three ABIs, so the Rust core is cross-compiled here (cargo-ndk, ~6 minutes
+# cold, cached by rust-cache after that).
+name: Android package
+
+on:
+  # Cutting an Android release: `git tag android-v1.0 && git push --tags`.
+  # The tag's version must equal `versionName` in app/build.gradle.kts.
+  push:
+    tags: ['android-v*']
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app-android/vela-wallet/app/build.gradle.kts'
+      - 'rust/scripts/build-android.sh'
+      - '.github/workflows/android-package.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    name: Validate the packaging metadata
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: versionName / versionCode / applicationId are set
+        run: |
+          f=app-android/vela-wallet/app/build.gradle.kts
+          for k in versionName versionCode applicationId; do
+            grep -qE "^\s*$k = " "$f" || { echo "::error::$f no longer sets $k"; exit 1; }
+          done
+          grep -qE 'abiFilters \+= listOf\("arm64-v8a", "armeabi-v7a", "x86_64"\)' "$f" \
+            || { echo "::error::the packaged ABI list changed — update rust/scripts/build-android.sh and this workflow together"; exit 1; }
+      - name: A release tag must name versionName
+        if: startsWith(github.ref, 'refs/tags/android-v')
+        run: |
+          version=$(sed -nE 's/^\s*versionName = "([^"]+)".*/\1/p' app-android/vela-wallet/app/build.gradle.kts)
+          tag="${GITHUB_REF_NAME#android-v}"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME names $tag but build.gradle.kts says versionName $version — bump it and re-tag"
+            exit 1
+          fi
+
+  package:
+    name: Build the unsigned APK and AAB
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - uses: gradle/actions/setup-gradle@v4
+      # rust/scripts/build-android.sh drives cargo-ndk and finds the NDK under
+      # $ANDROID_SDK_ROOT/ndk/ (the runner image ships one; the script picks
+      # the newest).
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      # A fresh checkout cannot build this app: rust/bindings/kotlin/ is
+      # gitignored and consumed in place as a kotlin.srcDir.
+      - name: Generate the Kotlin bindings
+        working-directory: rust
+        run: |
+          cargo build --release -p vela-core-uniffi
+          cargo run --release -p vela-core-uniffi --bin uniffi-bindgen -- generate \
+            --library target/release/libvela_core_uniffi.so \
+            --language kotlin --out-dir bindings/kotlin --no-format
+      - name: Build (release, unsigned; cross-compiles the core for 3 ABIs)
+        working-directory: app-android/vela-wallet
+        run: ./gradlew :app:assembleRelease :app:bundleRelease --console=plain
+      - name: Collect
+        id: collect
+        working-directory: app-android/vela-wallet
+        run: |
+          version=$(sed -nE 's/^\s*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts)
+          mkdir -p out
+          cp app/build/outputs/apk/release/app-release-unsigned.apk "out/vela-wallet-android-${version}-unsigned.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "out/vela-wallet-android-${version}-unsigned.aab"
+          ls -l out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: app-android/vela-wallet/out/*
+          if-no-files-found: error
+
+  release:
+    name: Attach the packages to the release
+    if: startsWith(github.ref, 'refs/tags/android-v')
+    needs: [metadata, package]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish checksums alongside the packages
+        working-directory: artifacts
+        run: |
+          sha256sum ./* > "$RUNNER_TEMP/SHA256SUMS-android"
+          mv "$RUNNER_TEMP/SHA256SUMS-android" SHA256SUMS-android
+          cat SHA256SUMS-android
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Vela Wallet Android $GITHUB_REF_NAME (unsigned)" \
+            --generate-notes \
+            --verify-tag \
+            artifacts/* \
+          || gh release upload "$GITHUB_REF_NAME" artifacts/* \
+            --repo "$GITHUB_REPOSITORY" --clobber
