@@ -76,10 +76,9 @@ The following are critical details that Claude Code cannot infer on its own and 
 - Does not support MV3 service workers (use background page), use browser.* not chrome.*
 - First-time enable and authorization cannot be automated, requires XCUITest or manual user action
 
-**React Native / Mobile USB Device:**
-- Android: Enable USB debugging + confirm with adb devices; "unauthorized" → check phone popup + use data cable not charging cable
-- iOS: Developer mode + Xcode trust + code signing
-- Detox real device config: type: "android.attached" / type: "ios.device"
+**Mobile devices (app-android / app-ios):**
+- Android: Enable USB debugging + confirm with adb devices; "unauthorized" → check phone popup + use data cable not charging cable; install with `./gradlew :app:installDebug`
+- iOS: Developer mode + Xcode trust + code signing; the xcframework must be built first (`rust/scripts/build-ios-xcframework.sh`)
 - Screenshots: `adb exec-out screencap -p > /tmp/s.png` / `xcrun simctl io booted screenshot`
 
 **Swift / Xcode:**

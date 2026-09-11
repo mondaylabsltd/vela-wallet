@@ -101,10 +101,16 @@ because the old output was garbage. **An un-enumerated behavior change is a bug.
 ## Platform notes
 
 - **Web** loads the module synchronously from a base64 payload (`initSync`).
-  Metro cannot bundle wasm as ESM, Cloudflare Pages drops `node_modules` asset
-  paths, and Metro cannot parse `import.meta` — the build script strips it and
-  fails loudly if the wasm-bindgen glue ever changes shape. `pkg-web/` is
-  committed on purpose; CI fails if it drifts from a fresh build.
+  The shape was chosen for the Expo web build's bundler (Metro could neither
+  bundle wasm as ESM nor parse `import.meta`, and Cloudflare Pages dropped
+  `node_modules` asset paths — spec 001 research D7); that app is gone (spec
+  039), but the SvelteKit shell's build-time engine and `sync-wasm.mjs`, the
+  corpus replay (`verify-web.mjs`) and `scripts/onchain/` all read the
+  artifact in this form, so it stays. The build script still strips
+  `import.meta` and fails loudly if the wasm-bindgen glue ever changes shape.
+  `pkg-web/` is committed on purpose; CI fails if it drifts from a fresh
+  build — and `--check` fingerprints every Rust file, so a core edit means a
+  rebuild.
 - **The build remaps `$CARGO_HOME`.** Registry panic-location strings otherwise
   embed the builder's home directory, which both leaks into production and makes
   the artifact impossible to reproduce on another machine.

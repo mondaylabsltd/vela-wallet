@@ -10,7 +10,7 @@ description: Create a self-custodial Vela wallet in about a minute with a passke
 # Create your wallet
 
 Creating a wallet takes about a minute and a single biometric prompt. Open the
-web wallet at [wallet.getvela.app](https://wallet.getvela.app/onboarding?mode=create)
+web wallet at [wallet.getvela.app](https://wallet.getvela.app/)
 and choose **Create a wallet**.
 
 ## Steps

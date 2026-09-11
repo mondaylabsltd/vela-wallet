@@ -3,7 +3,7 @@ name = "vela-core-wasm"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "wasm-bindgen shell over vela-core for the web app (metro/Expo web, base64 initSync loading)."
+description = "wasm-bindgen shell over vela-core for the web shell (app-web/vela-wallet; base64 initSync loading)."
 
 [lib]
 crate-type = ["cdylib"]

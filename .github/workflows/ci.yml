@@ -152,10 +152,10 @@ jobs:
         run: node scripts/verify-i18n-parity.mjs
       # Spec 039 retired the React Native / Expo tree. This keeps it retired:
       # a deleted path reappearing, an Expo/RN dependency in any package.json,
-      # an Expo term in a workflow step or npm script, or a dead command
-      # (`npx expo …`, `eas build`, `npm run build:web`) quoted in a living
-      # document all fail; prose mentions are only counted. The self-test runs
-      # first for the same reason the Lottie linter's does.
+      # an Expo term in a workflow step or npm script, or one of the old
+      # root-only Expo/EAS/`build:web` commands quoted in a living document
+      # all fail; prose mentions are only counted. The self-test runs first
+      # for the same reason the Lottie linter's does.
       - name: No Expo residue
         run: |
           node scripts/check-expo-residue.mjs --self-test

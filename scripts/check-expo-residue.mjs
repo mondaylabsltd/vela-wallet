@@ -51,9 +51,14 @@ const DELETED_FILES = new Set([
 
 const DEP_RE = /^(expo|@expo\/|expo-|react-native|@react-native|@react-navigation|eslint-config-expo|@bacons\/apple-targets|lucide-react-native)/;
 const TERM_RE = /\bexpo\b|react-native|react native|\bmetro\b|\beas\b|\bhermes\b/i;
-const DEAD_CMD_RE = /(npx\s+expo\b|\bexpo\s+(start|export|run|prebuild|lint|install)\b|\beas\s+(build|submit|credentials|update)\b|npm\s+run\s+(web|build:web|test:e2e|test:e2e:headed|test:live|typecheck)\b|\bmetro\b.*\b(start|bundle)\b)/i;
+// Only commands that existed at the ROOT for the Expo tree. `npm run test:e2e`
+// and friends are deliberately absent: the shells have scripts of the same
+// name that are alive.
+const DEAD_CMD_RE = /(npx\s+expo\b|\bexpo\s+(start|export|run|prebuild|lint|install)\b|\beas\s+(build|submit|credentials|update)\b|npm\s+run\s+(web|build:web|test:live)\b|\bnpx\s+metro\b|\bmetro\s+(start|bundle)\b)/i;
 const BANNER_RE = /^>\s*\*\*(History\s*\(\d{4}-\d{2}-\d{2}\)|勘误\s*[（(]\d{4}-\d{2}-\d{2})/;
 const BANNER_WINDOW = 20;
+// The checker's own name is the one Expo term allowed in executable config.
+const SELF_REF_RE = /expo[- ]residue/i;
 
 // Paths rule 4 and the report leave alone: the specs are design records and
 // quote the old commands on purpose; this script and its fixtures contain
@@ -84,13 +89,14 @@ function rule3(paths, read) {
   for (const p of paths) {
     if (/^\.github\/workflows\/[^/]+\.ya?ml$/.test(p)) {
       read(p).split('\n').forEach((line, i) => {
-        if (/^\s*#/.test(line)) return;
+        if (/^\s*#/.test(line) || SELF_REF_RE.test(line)) return;
         if (TERM_RE.test(line)) out.push(`${p}:${i + 1}: ${line.trim()}`);
       });
     } else if (/(^|\/)package\.json$/.test(p) && !EXEMPT_RE.test(p)) {
       let pkg;
       try { pkg = JSON.parse(read(p)); } catch { continue; }
       for (const [name, cmd] of Object.entries(pkg.scripts ?? {})) {
+        if (SELF_REF_RE.test(`${name} ${cmd}`)) continue;
         if (TERM_RE.test(String(cmd))) out.push(`${p}: scripts.${name} = ${cmd}`);
       }
     }
@@ -138,8 +144,13 @@ function trackedPaths() {
     .filter(Boolean);
 }
 
-/** Text of a tracked file, or null when it looks binary (a NUL in the first 8 KiB). */
+/**
+ * Text of a tracked file, or null when it looks binary (a NUL in the first
+ * 8 KiB) or is tracked but absent from the working tree (deleted, not yet
+ * committed) — the index is `git ls-files`' view, the disk is ours.
+ */
 function readTracked(p) {
+  if (!existsSync(join(REPO_ROOT, p))) return null;
   const buf = readFileSync(join(REPO_ROOT, p));
   if (buf.subarray(0, 8192).includes(0)) return null;
   return buf.toString('utf8');
@@ -188,6 +199,9 @@ function selfTest() {
   expect('rule 3 catches a workflow step', rule3(['.github/workflows/rule3-ci.yml'], reads({ '.github/workflows/rule3-ci.yml': fixture('rule3-ci.yml') })).length === 1);
   expect('rule 3 ignores a workflow comment', rule3(['.github/workflows/c.yml'], reads({ '.github/workflows/c.yml': '# the Expo app is gone\njobs: {}\n' })).length === 0);
   expect('rule 3 catches a package.json script', rule3(['x/package.json'], reads({ 'x/package.json': '{"scripts":{"web":"expo start --web"}}' })).length === 1);
+  expect('rule 3 allows the checker\'s own step', rule3(['.github/workflows/s.yml'], reads({ '.github/workflows/s.yml': '      - name: No Expo residue\n        run: node scripts/check-expo-residue.mjs\n' })).length === 0);
+  expect('rule 4 leaves a shell\'s test:e2e alone', rule4(['x/package.json'], reads({ 'x/package.json': '{"scripts":{"test":"npm run test:unit && npm run test:e2e"}}' })).length === 0);
+  expect('rule 4 leaves "Metro\'s double-bundle" prose alone', rule4(['a.ts'], reads({ 'a.ts': '// Metro\'s double-bundle hazard has no counterpart here\n' })).length === 0);
   // rule 4: a dead command in a living doc trips; the same command under a banner does not
   expect('rule 4 catches npm run build:web in a living doc', rule4(['rule4-doc.md'], reads({})).length === 1);
   expect('rule 4 exempts a banner\'d doc', rule4(['banner-doc.md'], reads({})).length === 0);
@@ -203,7 +217,7 @@ function selfTest() {
     for (const f of failures) console.error(`   ${f}`);
     process.exit(1);
   }
-  console.log('expo-residue self-test: ok (15 expectations)');
+  console.log('expo-residue self-test: ok (18 expectations)');
 }
 
 if (process.argv.includes('--self-test')) selfTest();
