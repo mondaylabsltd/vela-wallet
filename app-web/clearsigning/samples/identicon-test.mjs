@@ -17,7 +17,7 @@ for (const file of ['lib/identicon-features.js', 'lib/identicon.js']) {
 const ours = globalThis.VelaCS.identicon;
 
 const core = await import(join(repo, 'rust/pkg-web/vela_core.js'));
-core.initSync({ module: readFileSync(join(repo, 'public/vela_core_bg.1b6c8ce4be03.wasm')) });
+core.initSync({ module: readFileSync(join(repo, 'assets/wasm/vela_core_bg.1b6c8ce4be03.wasm')) });
 
 const seeds = [
   '0x88cca0f8b4e1f0dc0e7c4f9a2b3d5e6f7a8b6894',

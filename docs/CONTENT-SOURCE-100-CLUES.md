@@ -1,3 +1,5 @@
+> **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期。该应用（`src/`、`e2e/`、`modules/`、`plugins/`、`targets/`）及其工具链已在 spec 039（`specs/039-retire-expo-tree/`）退役并删除；文中出现的 `src/**` 路径与 `npm run build:web`、`npx expo …`、`eas build`、`jest`、`playwright` 等根目录命令已不存在。现行实现与命令见 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 各自的 README，以及根目录 `package.json` 里的工具脚本。正文按原样保留，作为历史记录。
+
 nnmpmpnpsp
 
 # Vela Wallet — 100 Clues (Content & SEO Source Document)
@@ -237,7 +239,7 @@ These come straight from the codebase and override intuition. Violating them pro
 
 **91. getvela.app tech stack + SEO scaffolding.** Marketing/docs site = **SvelteKit + Svelte 5 + TypeScript (bun)**, deployed on **Cloudflare**, with schema.org Organization + WebSite JSON-LD binding the "Vela Wallet" entity to the domain (for branded sitelinks). Accent `#e8572a` on near-black `#0f0e0c`. The wallet app is React Native + Expo Router, web built to `dist/` → Cloudflare Pages. Source: `app-web/getvela.app/README.md`, `+page.svelte`.
 
-**92. Engineering culture (substantiates "built carefully, in the open").** Codified rules in `agent-rules/`: AI-coding accountability ("AI can produce code, but not accountability") with a Low/Medium/High risk workflow where any crypto/key/auth change is auto-High; a red-team security-audit prompt ("prove this code is unsafe until you can't"); a pre-launch hardening rulebook; and a build→test→fix loop with 30-cycle stability verification. Source: `agent-rules/AI-CODING-RULES.md`, `SECURITY-AUDIT.md`, `LAUNCH_AUDIT.md`, `CLAUDE-AUTO-TEST.md`.
+**92. Engineering culture (substantiates "built carefully, in the open").** Codified rules in `docs/agent-rules/`: AI-coding accountability ("AI can produce code, but not accountability") with a Low/Medium/High risk workflow where any crypto/key/auth change is auto-High; a red-team security-audit prompt ("prove this code is unsafe until you can't"); a pre-launch hardening rulebook; and a build→test→fix loop with 30-cycle stability verification. Source: `docs/agent-rules/AI-CODING-RULES.md`, `SECURITY-AUDIT.md`, `LAUNCH_AUDIT.md`, `CLAUDE-AUTO-TEST.md`.
 
 **93. Solo founder, fully in the open.** One person — **"Shelchin," Founder & Engineer** (GitHub `atshelchin`, X `@atshelchin`) — builds the wallet, the contracts, and the site. Legal entity **MONDAY LABS LTD (UK)**; brand socials X `@realvelawallet`, Telegram `t.me/velawallet`; repo `github.com/mondaylabsltd/vela-wallet`. Source: `about/+page.svelte`, `seo.ts`. Useful for schema.org Organization markup and indie-founder angle.
 

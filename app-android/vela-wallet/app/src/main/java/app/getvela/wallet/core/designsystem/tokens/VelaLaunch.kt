@@ -67,7 +67,7 @@ object VelaLaunch {
     const val phoneBoxWidthRatio: Float = 350f / 390f
     const val largeBoxWidthRatio: Float = 680f / 1920f
 
-    /** Bundled asset names, synced from `design/onboarding/launch/` at build time. */
+    /** Bundled asset names, synced from `docs/design/onboarding/launch/` at build time. */
     fun assetName(largeScreen: Boolean, darkTheme: Boolean): String {
         val form = if (largeScreen) "desktop" else "phone"
         val appearance = if (darkTheme) "dark" else "light"

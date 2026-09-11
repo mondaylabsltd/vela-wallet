@@ -1,4 +1,4 @@
-//! The onboarding rail (design/onboarding-desktop-b.html) — the left column
+//! The onboarding rail (docs/design/onboarding-desktop-b.html) — the left column
 //! of every onboarding screen.
 //!
 //! It exists to use the desktop's width for ORIENTATION rather than for

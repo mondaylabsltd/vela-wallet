@@ -2,7 +2,7 @@
 /**
  * The three intro illustrations, as geometry (spec 020-intro-carousel).
  *
- * Source   <-  design/onboarding-new-2/*.png   the founder's boards, MEASURED
+ * Source   <-  docs/design/onboarding-new-2/*.png   the founder's boards, MEASURED
  * Output   ->  specs/020-intro-carousel/contracts/intro-illustrations.json
  *
  * Why a generator and not three hand-written SVG files: the four apps cannot
@@ -327,7 +327,7 @@ function oneAddress() {
 
 const doc = {
   _meta: {
-    source: 'design/onboarding-new-2/*.png (392x852 light boards), measured with a pixel probe',
+    source: 'docs/design/onboarding-new-2/*.png (392x852 light boards), measured with a pixel probe',
     generator: 'scripts/gen-intro-art.mjs — edit the generator, never this file',
     viewBox: `0 0 ${VIEW_W} ${VIEW_H}`,
     roles: {

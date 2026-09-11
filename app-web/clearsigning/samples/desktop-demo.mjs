@@ -49,7 +49,7 @@ for (const file of ['lib/keccak.js', 'lib/abi.js', 'lib/encode.js']) {
 const lib = globalThis.VelaCS;
 
 const core = await import(join(repo, 'rust/pkg-web/vela_core.js'));
-core.initSync({ module: readFileSync(join(repo, 'public/vela_core_bg.1b6c8ce4be03.wasm')) });
+core.initSync({ module: readFileSync(join(repo, 'assets/wasm/vela_core_bg.1b6c8ce4be03.wasm')) });
 
 // --- 1. assemble the request ------------------------------------------------
 

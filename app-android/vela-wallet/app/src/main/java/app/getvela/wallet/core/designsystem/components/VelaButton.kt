@@ -46,7 +46,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
  *
  * [loading] is the third state, and it is NOT disabled: the action is running
  * and this button is what the person is waiting on. It keeps full emphasis and
- * turns a spinner where its label was (DESIGN_SYSTEM.md — "Loading state:
+ * turns a spinner where its label was (docs/design-system.md — "Loading state:
  * ActivityIndicator replacing text"), because a dimmed button reads as
  * "unavailable", which is the one thing "working" must never look like.
  */

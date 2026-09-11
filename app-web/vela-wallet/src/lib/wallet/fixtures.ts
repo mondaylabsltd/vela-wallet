@@ -1,6 +1,6 @@
 /**
  * Canonical wallet-home fixtures (spec 015, data-model.md — the single canon
- * all four platforms port). Content is verbatim from `design/wallet/` mocks;
+ * all four platforms port). Content is verbatim from `docs/design/wallet/` mocks;
  * builders merge it with resolved messages into display-ready view models.
  * Pure data + assembly: no fetching, no formatting rules, no business state.
  */

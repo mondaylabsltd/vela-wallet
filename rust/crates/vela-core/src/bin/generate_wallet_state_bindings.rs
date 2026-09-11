@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let out_dir = match env::args().nth(1) {
         Some(path) => PathBuf::from(path),
         None => PathBuf::from(env::var("CARGO_MANIFEST_DIR")?)
-            .join("../../../src/services/wallet-state-core/generated"),
+            .join("../../../app-web/vela-wallet/src/lib/core/generated"),
     };
     fs::create_dir_all(&out_dir)?;
 

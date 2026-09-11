@@ -14,7 +14,7 @@ use gpui::{
 /// `Busy` is NOT `Disabled`: the action is running and this button is what the
 /// person is waiting on. It keeps full emphasis and turns a spinner where its
 /// label was, because a dimmed control reads as "unavailable" — the one thing
-/// "working" must never look like (DESIGN_SYSTEM.md, "Loading state").
+/// "working" must never look like (docs/design-system.md, "Loading state").
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ButtonState {
     Enabled,
@@ -62,7 +62,7 @@ pub fn vela_button(
 /// swap — with the pointer affordance and the click handler withheld.
 ///
 /// The shape is v2's: a 12px rectangle. **There is no capsule anywhere in
-/// design/onboarding-new** — every button in it, on every screen and in the
+/// docs/design/onboarding-new** — every button in it, on every screen and in the
 /// sheet, is `border-radius: 12px` — so the pill went with v1 rather than
 /// surviving as a second shape nothing calls for.
 pub fn vela_button_opts(

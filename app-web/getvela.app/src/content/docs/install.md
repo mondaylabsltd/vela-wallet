@@ -9,7 +9,7 @@ Vela runs **in your browser** — there's nothing to download and no app store t
 go through. Open the web wallet and you can create or restore a wallet in under a
 minute.
 
-<a href="https://wallet.getvela.app/onboarding" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Open the web wallet →</a>
+<a href="https://wallet.getvela.app/" target="_blank" rel="noopener" style="display:inline-block;margin:4px 0 8px;padding:11px 22px;border-radius:10px;background:#e8572a;color:#fff;font-weight:600;text-decoration:none;">Open the web wallet →</a>
 
 The same wallet, built from one codebase, also runs on iOS and Android. **Native
 mobile apps are coming soon** — when they ship, your passkey and wallet carry

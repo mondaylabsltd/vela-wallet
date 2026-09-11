@@ -96,11 +96,11 @@
 	--shadow-sm: 0 1px 3px 0 rgba(26,26,24,0.04);
 	--shadow-md: 0 2px 8px 0 rgba(26,26,24,0.06);
 	--shadow-lg: 0 4px 16px 0 rgba(26,26,24,0.08);
-	--font-ui: 'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif; /* web addition: design-system.md CJK fallback */
+	--font-ui: 'Plus Jakarta Sans', 'Noto Sans SC', system-ui, sans-serif; /* web addition: docs/design-system.md CJK fallback */
 	--font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace; /* web addition: mono fallbacks */
-	--size-control-sm: 36px; /* web addition: sizing.control.sm per design-system.md */
-	--size-control-md: 44px; /* web addition: sizing.control.md per design-system.md */
-	--size-control-lg: 52px; /* web addition: sizing.control.lg per design-system.md */
+	--size-control-sm: 36px; /* web addition: sizing.control.sm per docs/design-system.md */
+	--size-control-md: 44px; /* web addition: sizing.control.md per docs/design-system.md */
+	--size-control-lg: 52px; /* web addition: sizing.control.lg per docs/design-system.md */
 	--breakpoint-desktop: 1280px; /* web addition: feature 006 responsive contract */
 	--breakpoint-contactsOverlay: 1120px; /* web addition: spec 018 desktop SPEC sheet: below this width the third column overlays instead of squeezing the list */
 	--motion-panel-in: 240ms; /* web addition: spec 018 FR-011: third-column open */

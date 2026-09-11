@@ -13,7 +13,7 @@
  * The palette is deliberately warm on both sides — paper ivory in light,
  * soft charcoal in dark — never pure white or pure black, so long reading
  * sessions stay comfortable. It mirrors the Vela app's own design system
- * (DESIGN_SYSTEM.md: warm neutrals + one bold accent).
+ * (docs/design-system.md: warm neutrals + one bold accent).
  *
  * `:root` is never scoped by Svelte, so importing this once in the root
  * layout makes the variables available everywhere.

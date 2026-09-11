@@ -18,7 +18,7 @@ const APP_ROOT = join(import.meta.dirname, '..');
  *  corpus, never hardcoded copy. */
 export function en(path: string): string {
 	const raw = JSON.parse(
-		readFileSync(join(APP_ROOT, '..', '..', 'public', 'i18n', 'en.json'), 'utf8')
+		readFileSync(join(APP_ROOT, '..', '..', 'assets', 'i18n', 'en.json'), 'utf8')
 	) as Record<string, unknown>;
 	const value = path.split('.').reduce<unknown>((node, key) => {
 		if (node === null || typeof node !== 'object') return undefined;

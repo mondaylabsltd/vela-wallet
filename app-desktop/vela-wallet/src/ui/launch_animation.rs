@@ -43,10 +43,10 @@ compile_error!(
 /// Only the `desktop-core` pair is embedded — the desktop window's minimum is
 /// 1280 × 800, so the phone form factor is unreachable here.
 const DARK: &[u8] = include_bytes!(
-    "../../../../design/onboarding/launch/vela-wallet-launch-desktop-core-dark.json"
+    "../../../../docs/design/onboarding/launch/vela-wallet-launch-desktop-core-dark.json"
 );
 const LIGHT: &[u8] = include_bytes!(
-    "../../../../design/onboarding/launch/vela-wallet-launch-desktop-core-light.json"
+    "../../../../docs/design/onboarding/launch/vela-wallet-launch-desktop-core-light.json"
 );
 
 /// Holds the one frame that is currently on screen.

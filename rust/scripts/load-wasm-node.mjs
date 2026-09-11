@@ -18,7 +18,7 @@ const REPO_ROOT = dirname(RUST_DIR);
 /** The committed wasm bytes, as named by `rust/pkg-web/vela_core_wasm_url.js`. */
 export async function readShippedWasm() {
   const { WASM_URL } = await import(join(RUST_DIR, 'pkg-web', 'vela_core_wasm_url.js'));
-  return readFileSync(join(REPO_ROOT, 'public', WASM_URL.replace(/^\//, '')));
+  return readFileSync(join(REPO_ROOT, 'assets', 'wasm', WASM_URL.replace(/^\//, '')));
 }
 
 /** Import the glue and initialize it with the shipped bytes. */

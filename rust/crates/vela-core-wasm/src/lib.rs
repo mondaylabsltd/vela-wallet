@@ -1,10 +1,11 @@
-//! wasm-bindgen shell over vela-core → the Expo web app.
+//! wasm-bindgen shell over vela-core → the web shell (app-web/vela-wallet).
 //!
 //! Thin by design: DTO mirrors + `#[wasm_bindgen]` wrappers, zero logic.
-//! Loading is synchronous `initSync` over a base64-embedded module (metro
-//! cannot bundle wasm as ESM and Cloudflare Pages drops `node_modules` asset
-//! paths — see specs/001-rust-core-bindings/research.md D7), so the TS facade
-//! can call into the core without an async gate.
+//! Loading is synchronous `initSync` over a base64-embedded module (a shape
+//! chosen for the retired Expo web build's bundler — see
+//! specs/001-rust-core-bindings/research.md D7 — and kept because every
+//! remaining reader depends on it), so the TS facade can call into the core
+//! without an async gate.
 //!
 //! Error contract: every fallible export rejects with `{ code, message }`
 //! where `code` is the stable `CoreError` variant name the conformance corpus

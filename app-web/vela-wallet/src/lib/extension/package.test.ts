@@ -66,7 +66,7 @@ describe('the manifest', () => {
 	});
 
 	it('wears the wallet mark, at every size Chrome asks for', () => {
-		// The mark is design/icon/app-icon.svg, rendered; without `icons` Chrome
+		// The mark is docs/design/icon/app-icon.svg, rendered; without `icons` Chrome
 		// shows a grey puzzle piece for the whole product.
 		for (const size of ['16', '32', '48', '128']) {
 			expect(manifest.icons?.[size], `icons.${size}`).toBeDefined();

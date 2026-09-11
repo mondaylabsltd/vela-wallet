@@ -2,7 +2,7 @@
 #
 # Xcode build phase: Bundle locale catalogs  (spec 010-ios-catalog-bundling)
 #
-# Copies the merged runtime catalogs (public/i18n/<lng>.json) into
+# Copies the merged runtime catalogs (assets/i18n/<lng>.json) into
 # VelaWallet.app at build time, so the repository keeps exactly one copy of
 # them — the arrangement Android has had since spec 008.
 #
@@ -53,7 +53,7 @@ IFS=$'\n' read -r -d '' -a targets < <(strip "$output_list" && printf '\0')
 # knowledge. Used only for the extra-locale check below.
 corpus_dir="$(dirname "${sources[0]}")"
 [ -d "$corpus_dir" ] ||
-	fail "locale corpus directory not found: $corpus_dir (expected the repo's public/i18n) — regenerate it with \`node scripts/gen-i18n.mjs\`"
+	fail "locale corpus directory not found: $corpus_dir (expected the repo's assets/i18n) — regenerate it with \`node scripts/gen-i18n.mjs\`"
 
 # A locale added to the corpus but not to the declaration would otherwise ship
 # silently as a 15-of-16 app. Fail instead (spec US3).

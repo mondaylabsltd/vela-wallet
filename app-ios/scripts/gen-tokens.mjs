@@ -10,7 +10,7 @@
  * (app-web/vela-wallet/scripts/gen-tokens.mjs, same source file).
  *
  * iOS additions (tokens the export lacks) live in IOS_ADDITIONS below with the
- * design-system.md rule that licenses each; nothing else may invent a value.
+ * docs/design-system.md rule that licenses each; nothing else may invent a value.
  */
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -23,17 +23,17 @@ const OUT_SWIFT = join(APP_ROOT, 'VelaWallet', 'VelaWallet', 'DesignSystem', 'To
 
 /**
  * The ONLY place introducing values the DTCG export lacks; each entry cites
- * the design-system.md rule (or web precedent) that licenses it.
+ * the docs/design-system.md rule (or web precedent) that licenses it.
  */
 const IOS_ADDITIONS = {
-	// design-system.md §Layout & sizing: "Controls: use sizing.control.sm (36px),
+	// docs/design-system.md §Layout & sizing: "Controls: use sizing.control.sm (36px),
 	// sizing.control.md (44px), or sizing.control.lg (52px)."
 	control: { sm: 36, md: 44, lg: 52 },
 	// CTA label on accent.base, white in BOTH modes (fg.inverse flips);
 	// web precedent: WEB_ADDITIONS `color-onAccent` in app-web gen-tokens.mjs.
 	onAccent: '#FFFFFF',
 	// Fallbacks ONLY if the export drops core.size.hitTarget / core.size.hitSlop
-	// (design-system.md: prefer 44px or larger for touch targets). The current
+	// (docs/design-system.md: prefer 44px or larger for touch targets). The current
 	// export carries both, so these are unused.
 	hitTarget: 44,
 	hitSlop: 8
@@ -209,7 +209,7 @@ export function generateSwift(tokens = loadTokens()) {
 	return `// GENERATED — do not edit. Regenerate: node app-ios/scripts/gen-tokens.mjs
 // Source: docs/design-tokens.json (Penpot DTCG export — the design value authority).
 // IOS_ADDITIONS entries are the only values the export lacks; each cites its
-// design-system.md license inside app-ios/scripts/gen-tokens.mjs.
+// docs/design-system.md license inside app-ios/scripts/gen-tokens.mjs.
 
 import SwiftUI
 
@@ -323,7 +323,7 @@ ${motion}
 ${shadows}
     }
 
-    /// IOS_ADDITIONS: design-system.md sizing.control.sm/md/lg.
+    /// IOS_ADDITIONS: docs/design-system.md sizing.control.sm/md/lg.
     enum Control {
 ${controls}
     }

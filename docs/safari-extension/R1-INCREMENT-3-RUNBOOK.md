@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. The iOS Safari extension has no packaging in the tree today (`targets/safari` and `packages/safari-extension` were Expo-only); re-homing it under `app-ios/` is its own spec — see spec 039 "Two packages".
+
 # R1 Spike — Increment 3: gesture launch + deep link + request hand-off (FACT-1 / R3)
 
 **Goal:** prove (a) a content-script button tap **synchronously launches** `velawallet://sign?rid=<uuid>` (FACT-1 — the crux of the sign hop), (b) Expo Router routes it to a new `src/app/sign.tsx`, and (c) the app **reads the signing request** the extension handed off via the App Group (by rid). NO signing, NO return-to-page (that's Inc 4).

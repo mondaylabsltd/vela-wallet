@@ -4,7 +4,7 @@
 //
 //  The onboarding welcome screen — composition only (FR-009).
 //
-//  The v2 design (design/onboarding-new, founder direction 2026-08-25), which
+//  The v2 design (docs/design/onboarding-new, founder direction 2026-08-25), which
 //  the web and the desktop already draw: brand row, a two-line headline with
 //  one supporting sentence, and the two ways in at the bottom. The six-card
 //  carousel is gone — the design is one column that says what the wallet IS

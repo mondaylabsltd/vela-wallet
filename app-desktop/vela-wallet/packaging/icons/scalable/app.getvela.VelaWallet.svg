@@ -7,7 +7,7 @@
     app-desktop/vela-wallet/scripts/generate-desktop-icons.sh.
 
     Geometry and colours are verbatim from the design source,
-    design/onboarding/Vela App Screen Icon _ Universal - iPhone.svg. Only the
+    docs/design/onboarding/Vela App Screen Icon _ Universal - iPhone.svg. Only the
     Penpot export scaffolding was removed: wrapper groups, generated ids, a
     display:none backing rect, and CSS `style="fill: ..."` declarations that
     ImageMagick's SVG renderer ignores (it would draw the whole icon black).

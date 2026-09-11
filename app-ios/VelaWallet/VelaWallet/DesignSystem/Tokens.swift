@@ -1,7 +1,7 @@
 // GENERATED — do not edit. Regenerate: node app-ios/scripts/gen-tokens.mjs
 // Source: docs/design-tokens.json (Penpot DTCG export — the design value authority).
 // IOS_ADDITIONS entries are the only values the export lacks; each cites its
-// design-system.md license inside app-ios/scripts/gen-tokens.mjs.
+// docs/design-system.md license inside app-ios/scripts/gen-tokens.mjs.
 
 import SwiftUI
 
@@ -199,7 +199,7 @@ enum Tokens {
         static let lg = TokenShadow(color: TokenColor(argb: 0x141A1A18), radius: 16, x: 0, y: 4)
     }
 
-    /// IOS_ADDITIONS: design-system.md sizing.control.sm/md/lg.
+    /// IOS_ADDITIONS: docs/design-system.md sizing.control.sm/md/lg.
     enum Control {
         static let sm: CGFloat = 36
         static let md: CGFloat = 44

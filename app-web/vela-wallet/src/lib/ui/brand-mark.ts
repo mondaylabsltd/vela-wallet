@@ -1,5 +1,5 @@
 /**
- * The brand mark as data (design-system.md §Brand) — the same three paths
+ * The brand mark as data (docs/design-system.md §Brand) — the same three paths
  * `BrandMark.svelte` draws, for surfaces that cannot mount a component: the
  * receive share image is composed as an SVG string and rasterised, so it
  * needs the geometry and the dark-UI asset's own colours as values. Asset
@@ -17,7 +17,7 @@ export const BRAND_MARK = {
 } as const;
 
 /**
- * The application icon as data — `design/icon/app-icon.svg`, THE canonical
+ * The application icon as data — `docs/design/icon/app-icon.svg`, THE canonical
  * mark every platform's icon is rendered from, verbatim. The receive share
  * card wears this rather than the in-app sailboat (founder, 2026-09-05): the
  * saved picture ends up beside the app on someone's phone, and the two must

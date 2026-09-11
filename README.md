@@ -4,72 +4,30 @@ A self-custodial smart wallet for EVM networks.
 
 Vela Wallet uses ERC-4337 account abstraction with WebAuthn (passkey) authentication — no seed phrases, no private keys to manage.
 
-The React Native + Expo codebase runs on **iOS** and **Android**. The **web** build now comes from the SvelteKit shell in [app-web/vela-wallet](app-web/vela-wallet/README.md), and **desktop** is a separate native client.
-
-> ### 🚧 Migrating off Expo
->
-> Vela is moving away from React Native and Expo. The Expo app in [src/](src/) is what ships today, and it is not going anywhere yet: nothing has been deleted, every command in this README still works, and it remains the app that holds real funds.
->
-> Next to it, the wallet is being rebuilt as **one shared Rust core plus one native shell per platform** — SwiftUI on iOS, Jetpack Compose on Android, SvelteKit on the web, gpui on desktop. The two architectures live side by side in this repo while the move happens, screen by screen.
->
-> What the new one is, why it exists, and how far it has got: [The new architecture](#the-new-architecture).
+It is built as **one shared Rust core and one native shell per platform** — SwiftUI on **iOS**, Jetpack Compose on **Android**, SvelteKit on the **web**, gpui on **desktop**. The React Native / Expo app this repository started as was retired and deleted in spec [039](specs/039-retire-expo-tree/spec.md) on 2026-09-11; nothing in the tree depends on it any more.
 
 ## Features
 
-- **Passkey authentication** — Sign transactions with Face ID, Touch ID, or fingerprint. No seed phrases or private key management.
+- **Passkey authentication** — Sign transactions with Face ID, Touch ID, a fingerprint, a security key or a phone across the room (caBLE). No seed phrases or private key management.
 - **Smart contract wallet** — Built on [Safe](https://github.com/safe-fndn/safe-smart-account/tree/release/v1.4.1) with ERC-4337 account abstraction. Your wallet is a Safe smart account.
 - **12 EVM networks** — Ethereum, BNB Chain, Polygon, Arbitrum, Optimism, Base, Avalanche, Gnosis, Unichain, Tempo, Monad, World Chain. Custom networks supported.
-- **Multi-chain portfolio** — Balances and USD prices across all chains in one view. Native tokens, stablecoins, wrapped assets, and custom ERC-20s.
+- **Multi-chain portfolio** — Balances and fiat values across all chains in one view. Native tokens, stablecoins, wrapped assets, and custom ERC-20s.
 - **On-chain pricing** — DEX quotes (Uniswap V3, PancakeSwap, Aerodrome) with Chainlink oracle fallback. No third-party price API dependency.
-- **Deposit detection** — Real-time balance monitoring with haptic notification when incoming transfers land.
-- **DApp Connect** — Pair with compatible dApps over WalletPair's encrypted WebSocket relay to sign transactions from Vela.
-- **HTTPS Web Wallet** — dApps can integrate `@vela-wallet/sdk` and open `wallet.getvela.app` for account consent and passkey signing, without a native app or extension.
-- **Cross-device recovery** — Passkeys sync through the platform provider (iCloud Keychain on iOS, Google Password Manager on Android). Wallet metadata backs up via iCloud Key-Value Store (iOS) and Android Auto Backup.
+- **Deposit detection** — Balance monitoring that notices incoming transfers as they land.
+- **dApp connection** — The browser-extension build of the web shell injects an EIP-1193 / EIP-6963 provider into any page (spec [027](specs/027-web-extension-provider/spec.md)). The desktop and native shells sign what the core's clear-signing decoder can explain.
+- **Cross-device recovery** — Passkeys sync through the platform provider (iCloud Keychain, Google Password Manager); the wallet address is a function of every founding key, so any one key rebuilds it on a new device.
 - **Fully self-hostable** — All four backend services (chain data, passkey index, bundler, currency rates) are published on GitHub and can be self-deployed.
 
-## Architecture (the Expo app, shipping today)
+## Architecture
 
-```
-┌─────────────────────────────────────────────┐
-│  React Native + Expo Router                 │
-│  (iOS / Android / Web)                      │
-├─────────────────────────────────────────────┤
-│  Native Modules                             │
-│  ┌──────────┐ ┌──────────┐ ┌─────────────┐ │
-│  │ Passkey  │ │ CloudSync│ │ BLE Connect │ │
-│  │ WebAuthn │ │ iCloud / │ │ DApp Pairing│ │
-│  │ P-256    │ │ AutoBackup│ │             │ │
-│  └──────────┘ └──────────┘ └─────────────┘ │
-├─────────────────────────────────────────────┤
-│  Services                                   │
-│  ┌──────────────────┐ ┌──────────────────┐  │
-│  │ RPC Pool         │ │ Safe Transaction │  │
-│  │ Multi-source     │ │ ERC-4337 UserOp  │  │
-│  │ Auto-failover    │ │ WebAuthn signing │  │
-│  │ Latency scoring  │ │ Bundler submit   │  │
-│  └──────────────────┘ └──────────────────┘  │
-│  ┌──────────────────┐ ┌──────────────────┐  │
-│  │ Wallet API       │ │ Price Service    │  │
-│  │ Multicall3 batch │ │ DEX quotes       │  │
-│  │ Progressive load │ │ Chainlink oracle │  │
-│  └──────────────────┘ └──────────────────┘  │
-├─────────────────────────────────────────────┤
-│  EVM Networks (12 chains)                   │
-│  ETH · BNB · POL · ARB · OP · BASE          │
-│  AVAX · GNO · UNI · TEMPO · MON · WLD       │
-└─────────────────────────────────────────────┘
-```
+### Why we left Expo
 
-## The new architecture
-
-### Why we are leaving Expo
-
-Two structural problems that no amount of care inside the React Native codebase fixes:
+Two structural problems that no amount of care inside a React Native codebase could fix:
 
 - **The code that must not be wrong existed several times over.** Keccak-256 was hand-rolled twice — TypeScript and a parallel Swift copy — alongside SHA-256, a dynamic ABI decoder and P-256 curve math on BigInt. Counterfactual Safe address derivation was maintained in three places, including byte-matched constants in the bundler repo. A divergence in any copy silently loses funds or makes the signing sheet lie about what is being approved. ([rust/README.md](rust/README.md))
-- **The rules that guard your money lived inside React components.** Rules bought with incidents — a passkey must *prove* it can sign before anything persists, a cancelled verification must resume from the signature instead of minting a second passkey — sat in `useState` cells and mutable refs, untestable without a browser. One send controller alone holds ~40 state cells whose ordering is maintained by comments and discipline. ([specs/011](specs/011-crux-onboarding-state/spec.md), [specs/016](specs/016-crux-wallet-state/spec.md))
+- **The rules that guard your money lived inside React components.** Rules bought with incidents — a passkey must *prove* it can sign before anything persists, a cancelled verification must resume from the signature instead of minting a second passkey — sat in `useState` cells and mutable refs, untestable without a browser. One send controller alone held ~40 state cells whose ordering was maintained by comments and discipline. ([specs/011](specs/011-crux-onboarding-state/spec.md), [specs/016](specs/016-crux-wallet-state/spec.md))
 
-So the computation and the rules move down into one Rust crate, and each platform gets a shell that renders it with that platform's own UI toolkit — not a cross-platform runtime pretending to be four.
+So the computation and the rules moved down into one Rust crate, and each platform got a shell that renders it with that platform's own UI toolkit — not a cross-platform runtime pretending to be four.
 
 ```
 ┌────────────────┬────────────────┬────────────────┬────────────────┐
@@ -85,7 +43,7 @@ So the computation and the rules move down into one Rust crate, and each platfor
           │  ┌────────────────────────────────────────┐  │
           │  │ Crux state machines — business rules   │  │
           │  │ send · sign_request · fee_policy ·     │  │
-          │  │ rpc_pool · dapp_session · contacts · … │  │
+          │  │ rpc_pool · contacts · balance · …      │  │
           │  ├────────────────────────────────────────┤  │
           │  │ primitives · abi · eip712 · safe ·     │  │
           │  │ webauthn · identicon · i18n (15 locs)  │  │
@@ -106,9 +64,9 @@ One implementation reaches four surfaces: UniFFI generates the Swift and Kotlin 
 
 | Platform | Directory | Stack | Run it |
 | --- | --- | --- | --- |
-| iOS | [app-ios/VelaWallet](app-ios/VelaWallet) | SwiftUI + VelaCoreKit (SPM package wrapping the xcframework) | open `VelaWallet.xcodeproj`, ⌘R |
-| Android | [app-android/vela-wallet](app-android/vela-wallet) | Kotlin + Jetpack Compose | `./gradlew :app:installDebug` |
-| Web | [app-web/vela-wallet](app-web/vela-wallet/README.md) | SvelteKit 2 / Svelte 5 on Cloudflare Workers | `pnpm install && pnpm dev` |
+| iOS | [app-ios/VelaWallet](app-ios/VelaWallet) | SwiftUI + VelaCoreKit (SPM package wrapping the xcframework) | `./rust/scripts/build-ios-xcframework.sh`, then open `VelaWallet.xcodeproj`, ⌘R |
+| Android | [app-android/vela-wallet](app-android/vela-wallet) | Kotlin + Jetpack Compose + the UniFFI Kotlin bindings | generate the bindings (see [.github/workflows/ci.yml](.github/workflows/ci.yml) `android`), then `./gradlew :app:installDebug` |
+| Web | [app-web/vela-wallet](app-web/vela-wallet/README.md) | SvelteKit 2 / Svelte 5 on Cloudflare Workers; also builds the Chrome extension (`pnpm build:extension`; a release zip is cut by `git tag extension-v<version>` → [web-extension-package.yml](.github/workflows/web-extension-package.yml)) | `pnpm install && pnpm dev` |
 | Desktop | [app-desktop/vela-wallet](app-desktop/vela-wallet/README.md) | Rust + [gpui](https://github.com/zed-industries/zed) | `cargo run` |
 
 ### One source of truth for everything shared
@@ -117,69 +75,61 @@ The four shells are only worth having if they cannot drift apart. Each shared as
 
 | Shared asset | Source of truth | Generated into |
 | --- | --- | --- |
-| Translations (15 locales) | `rust/crates/vela-core/i18n/locales/` | compiled-in Rust catalogs, `public/i18n/`, `src/i18n/resources.ts` (`npm run gen:i18n`) |
+| Translations (15 locales) | `rust/crates/vela-core/i18n/locales/` | compiled-in Rust catalogs and `assets/i18n/<locale>.json`, which iOS, Android and the web shell all read (`npm --prefix scripts run gen:i18n`) |
+| Wire types (Crux events, operations, views) | the Rust enums in `rust/crates/vela-core/src/app/` | `app-web/vela-wallet/src/lib/{onboarding,session,core}/generated` (`npm --prefix scripts run gen:core-types`) |
+| The web wasm artifact | `rust/crates/vela-core-wasm` | `rust/pkg-web/` (the JS glue) + `assets/wasm/vela_core_bg.<fingerprint>.wasm` (`npm --prefix scripts run build:wasm`) |
 | Design tokens | [docs/design-tokens.json](docs/design-tokens.json) (Penpot DTCG export) | `tokens.css` / `tokens.ts` for web, `Tokens.swift` for iOS — literals are test-banned in product UI |
-| Behavior | conformance corpus extracted from the TypeScript implementations | replayed through Rust, the Kotlin bindings, the Swift bindings and the shipped web artifact |
-| App icons | [design/icon/](design/icon/) | every platform's icon set (see [App icons](#app-icons)) |
+| Behavior | the conformance corpus in `rust/crates/vela-core/tests/vectors/` — the crypto/ABI/Safe/WebAuthn vectors are frozen goldens; the identicon and i18n vectors regenerate from the pinned `identicons-esm` and `i18next` packages | replayed through Rust, the Kotlin bindings, the Swift bindings and the shipped web artifact |
+| App icons | [docs/design/icon/](docs/design/icon/) | every platform's icon set (see [App icons](#app-icons)) |
 
-Two parity suites compare the Rust ports against the JavaScript the app still ships: the full 17,115 locale/key cross-product plus 50,000 fuzzed option bundles for i18n, and every address literal in the repo plus 200,000 random seeds for identicons.
+Two parity suites compare the Rust ports against the npm packages the corpus was extracted from: the full 17,115 locale/key cross-product plus 50,000 fuzzed option bundles for i18n, and every address literal in the repo plus 200,000 random seeds for identicons. Keeping those two packages installed is what the npm package in `scripts/` is for.
 
 ### Where it stands
 
-- **Shipping**: the Expo app. All wallet functionality — RPC pool, ERC-4337 signing and submission, dApp connect, portfolio, pricing — runs there.
-- **Already served by the core**: in the Expo **web** build, onboarding (create + sign in) and a growing set of wallet-state machines drive the real screens through wasm — the `.web.ts` controllers in `src/`. On iOS and Android the TypeScript path still runs, because Hermes has no WebAssembly: the same rules, two engines, held together by the conformance corpus. Those machines are what the SvelteKit shell picks up as it takes over the web target.
-- **Built in the new shells**: onboarding, wallet home and contacts, on all four platforms, against fixture data (specs [014](specs/014-onboarding-flow-ui/), [015](specs/015-wallet-home-ui/), [018](specs/018-contacts-ui/)). They already take their translations and identicons from the core — `Loc.swift`, `I18nRuntime.kt`, the build-time wasm engine on web — but not yet its state machines: the `crux` feature is compiled out of the UniFFI builds, so iOS and Android link the computation layer only. Nothing in these shells touches a network, a passkey or the bundler yet.
-- **Not started**: the send, signing and dApp surfaces in the new shells, and the cutover of any platform's store build.
+- **Web**: the SvelteKit shell is the production web wallet build, deployed as the Cloudflare Worker `vela-wallet-web` (see [Build for Web](#build-for-web-cloudflare-workers) for which build the hostname currently serves).
+- **Desktop**: wired to the core end to end — onboarding, wallet, send, contacts, message signing, scanning, simulation (specs 030–038).
+- **iOS and Android**: the shells are built and take their translations, identicons and wire types from the core; wiring them to the core's machines is in progress on their own specs (04x for Android, 05x for iOS).
+- **Retired**: the React Native / Expo app (spec 039). It could not run on a phone after PR #168 made the core facade wasm-only, and no store build of it ever shipped.
 
 Feature specs, plans and delivery reports live in [specs/](specs/), numbered in the order they landed.
 
-## Get Started (the Expo app)
+## Get Started
 
-1. Install dependencies
+Each shell builds and runs on its own — the commands are in [The shells](#the-shells) and in each shell's README. The shared core is [rust/README.md](rust/README.md).
 
-   ```bash
-   npm install
-   ```
-2. Start the app
+### The tooling package (`scripts/`)
 
-   ```bash
-   # iOS / Android
-   npx expo start
+The repository root carries no npm state. The generators and gates every shell depends on are an npm package in [scripts/](scripts/package.json); run them from the root with `--prefix`, or `cd scripts` first:
 
-   # Web
-   npx expo start --web
-   ```
+```bash
+npm ci --prefix scripts                       # four packages: the two npm oracles + @noble/* for scripts/onchain
+npm --prefix scripts run gen:i18n             # corpus → Rust catalogs + assets/i18n (commit together with the corpus edit)
+npm --prefix scripts run gen:core-types       # Rust enums → app-web's generated/ wire types
+npm --prefix scripts run build:wasm           # vela-core → rust/pkg-web + assets/wasm/vela_core_bg.<hash>.wasm
+npm --prefix scripts run verify:i18n          # parity: Rust i18n vs the pinned i18next
+npm --prefix scripts run verify:identicon     # parity: Rust identicons vs the pinned identicons-esm
+npm --prefix scripts run check:expo-residue   # the Expo tree stays retired (fails CI on a dead command in any doc)
+```
 
-The new native shells build and run independently of this — see [The shells](#the-shells) for the per-platform commands, and [rust/README.md](rust/README.md) for the shared core they all link against.
+`i18next` and `identicons-esm` are the oracles the conformance corpus is replayed against; `@noble/curves` and `@noble/hashes` are resolved from `scripts/node_modules` by `scripts/onchain/`. Do not "clean up" those four.
 
 ## Platform Support
 
-
-| Feature            | iOS                      | Android                     | Web                         |
-| -------------------- | -------------------------- | ----------------------------- | ----------------------------- |
-| Passkey (WebAuthn) | Native (ASAuthorization) | Native (Credential Manager) | `navigator.credentials` API |
-| Cloud Sync         | iCloud Key-Value Store   | SharedPreferences + Auto Backup | IndexedDB (local only)      |
-| QR Scanner         | expo-camera              | expo-camera                 | `getUserMedia` + jsQR       |
-| Haptic Feedback    | expo-haptics             | expo-haptics                | No-op                       |
-| Clipboard          | expo-clipboard           | expo-clipboard              | `navigator.clipboard`       |
-| In-App Browser     | expo-web-browser         | expo-web-browser            | `window.open`               |
-| BLE (DApp Connect) | VelaBLE native module    | VelaBLE native module       | Not supported (v1)          |
-| Animated Balance   | Reanimated worklet       | Reanimated worklet          | Plain text (no animation)   |
+Capabilities differ per shell and are documented where they were built: each shell's README, and the spec that wired the capability (for example passkey methods per platform in [specs/019](specs/019-onboarding-live-wiring/spec.md)). The shells share the core's rules; what differs is the platform API each one drives.
 
 ### Web Notes
 
-- **Passkey rpId**: Uses the registrable domain (e.g. `getvela.app`) so passkeys work across subdomains and are consistent with native.
-- **Cloud Sync**: Web uses IndexedDB for local persistence. No cross-device sync — accounts are stored in the browser only.
-- **DApp Connect**: BLE connection is not available on web. This is planned for a future release.
-- **Native APIs**: All platform-specific APIs (Alert, Clipboard, Haptics, AppState, Linking) are abstracted via `src/services/platform.ts`.
+- **Passkey rpId**: Uses the registrable domain (`getvela.app`) so passkeys work across subdomains and are consistent with the native shells. Local dev and preview hosts get their own rpId (`localhost` / the preview hostname) and therefore their own passkeys; the parallel space (`/[locale]/parallel`) is how a preview is exercised with a fixed key set instead.
+- **Local storage**: IndexedDB for wallet records, `localStorage` for the onboarding keys and the endpoint override. No cross-device sync — accounts are stored in the browser only; the passkey and the public-key index rebuild them elsewhere.
+- **dApps**: the same code builds a Chrome extension that injects the provider into pages (`app-web/vela-wallet/extension/`); the plain web app has no in-page dApp transport.
 
 ### Desktop
 
 The desktop client is a **separate native application** — Rust on
-[gpui](https://github.com/zed-industries/zed), not React Native — in
+[gpui](https://github.com/zed-industries/zed), not a web view — in
 [app-desktop/vela-wallet](app-desktop/vela-wallet). It shares the `vela-core`
-crate and the design sources with the app above, but none of its TypeScript, so
-the table does not describe it.
+crate, the design sources and the fonts under `assets/fonts/` with the other
+shells.
 
 Installable packages are built from that directory, for x64 and ARM64:
 
@@ -196,13 +146,13 @@ Setup, system dependencies and release steps are in
 
 ### App icons
 
-Every icon in the repository — iOS, Android, both native projects, the desktop
+Every icon in the repository — both native projects, the desktop
 packages and this site's favicons — is rendered from one vector source,
-[design/icon/](design/icon/). Nothing is hand-exported, so the platforms cannot
+[docs/design/icon/](docs/design/icon/). Nothing is hand-exported, so the platforms cannot
 drift apart:
 
 ```bash
-./scripts/gen-app-icons.sh                                   # Expo, app-ios, app-android, getvela.app
+./scripts/gen-app-icons.sh                                   # app-ios, app-android, getvela.app
 app-desktop/vela-wallet/scripts/generate-desktop-icons.sh    # Linux hicolor, Windows .ico, macOS .iconset
 ```
 
@@ -224,7 +174,7 @@ pnpm preview    # wrangler dev of the built worker on :4173
 
 `pnpm build` runs the vela-core wasm i18n engine in Node to prerender each `/{locale}` page, so no translation runtime and no wasm reach the deployed Worker. Cloudflare builds the same command from the repo; CI runs it too, so a broken build fails the PR rather than the deploy.
 
-The Expo web bundle (`npm run build:web` → `dist/`, deployed to Cloudflare Pages) is no longer the production web build and is no longer built in CI. The command still exists while the Expo app does.
+**`wallet.getvela.app` is served by this Worker** since 2026-09-11 (the founder moved the hostname off the retired Expo build's Cloudflare Pages deployment the same day the tree was deleted; verified: `/` answers a 307 to the visitor's locale, `/en/wallet` is the SvelteKit page). The old Expo paths — `/onboarding`, `/pay`, `/web-request` — no longer exist; the wallet's URL space is `/{locale}/…`. The deployment runbook ([docs/project-takeover/05](docs/project-takeover/05-deployment-runbook.md)) has the smoke test and the rollback (the Pages project's last deployment can be re-attached).
 
 ## Self-Deploy Service Endpoints
 
@@ -257,9 +207,9 @@ Vela Wallet uses ERC-4337 account abstraction, so transactions are relayed by a 
 Each transaction incurs a gas fee deducted from **your Safe wallet** — in the network's native token by default, or in a supported stablecoin where the bundler offers ERC-20 settlement (Tempo has no native coin, so gas there is always settled in USD stablecoins). The fee consists of:
 
 - **On-chain gas cost** — The actual cost to execute the transaction on the blockchain.
-- **Relayer service fee** — The total charge is a fixed multiple of the raw on-chain cost: currently **3× on standard networks** (`INBAND_MARKUP`, `src/services/safe-transaction.ts`) and **2× on Tempo** (`TEMPO_FEE_MARGIN`, `src/services/tempo.ts`), with minimums of 0.00001 native units or $0.01 in stablecoins. The margin pays the relayer that fronts the gas and runs the infrastructure.
+- **Relayer service fee** — The total charge is a fixed multiple of the raw on-chain cost: currently **3× on standard networks** (`INBAND_MARKUP` in the web shell's `safe-transaction.ts`, mirrored by the desktop executor) and **2× on Tempo**, with minimums of 0.00001 native units or $0.01 in stablecoins. The bundler is the price authority for the gas price itself. The margin pays the relayer that fronts the gas and runs the infrastructure.
 
-The confirmation screen shows a single quoted total in the fee asset and in USD. The quoted amount and its recipient are part of the signed payload, so the relayer is paid exactly what was shown.
+The confirmation screen shows a single quoted total in the fee asset and in fiat. The quoted amount and its recipient are part of the signed payload, so the relayer is paid exactly what was shown.
 
 ### Gas Relayer Account
 
@@ -273,73 +223,6 @@ Before your first transaction on a network, you need to fund a **dedicated gas r
 ### Max Send
 
 When sending the maximum amount of a native token (ETH, BNB, etc.), the wallet automatically reserves enough for the transaction's gas fee (EntryPoint prefund). This prevents "insufficient balance" failures.
-
-## WebAuthn Proxy Extension (Domain Recovery / Dev Passkeys)
-
-If the production domain (`getvela.app`) becomes unavailable, passkeys bound to it will stop working on the new hosting domain because WebAuthn ties credentials to the rpId (relying party ID). The included Chrome extension solves this by proxying WebAuthn calls through the extension's own origin, which has `host_permissions` for `getvela.app`.
-
-This also enables local development and preview deployments to authenticate with production passkeys.
-
-### How rpId is resolved
-
-
-| Environment                                           | Without extension | With extension |
-| ------------------------------------------------------- | ------------------- | ---------------- |
-| `getvela.app` / `*.getvela.app`                       | `getvela.app`     | `getvela.app`  |
-| `localhost` / `127.0.0.1`                             | `localhost`       | `getvela.app`  |
-| Preview domains (`*.pages.dev`, `*.vercel.app`, etc.) | current hostname  | `getvela.app`  |
-
-Without the extension, each environment uses its own rpId and maintains independent passkeys. With the extension installed, all environments share the `getvela.app` rpId and the same set of passkeys.
-
-### Supported preview domains
-
-`pages.dev`, `workers.dev`, `github.io`, `vercel.app`, `netlify.app`, `deno.dev`, `fly.dev`, `railway.app`, `render.com`, `surge.sh`, `ngrok-free.app`, `trycloudflare.com`
-
-### Setup
-
-1. Open `chrome://extensions/` and enable **Developer mode**.
-2. Click **Load unpacked** and select the `app-browser-extension/chrome-ext-webauthn-proxy/` directory.
-3. Grant the requested permissions when prompted.
-4. Navigate to your dev/preview URL — the extension activates automatically.
-
-When a page calls `navigator.credentials.create()` or `.get()` with a non-matching rpId, the extension intercepts the call, opens a small popup window, and performs the WebAuthn ceremony with `rpId: "getvela.app"`. The system authenticator prompt (Touch ID / Windows Hello) appears as usual, and the result is passed back to the page.
-
-### How it works
-
-```
-Page JS (any domain)
-  │  navigator.credentials.create/get intercepted
-  ▼
-inject.js (MAIN world, document_start)
-  │  serialize options, window.postMessage
-  ▼
-bridge.js (ISOLATED world, has chrome.runtime API)
-  │  chrome.runtime.sendMessage
-  ▼
-background.js (service worker)
-  │  chrome.windows.create → opens popup
-  ▼
-webauthn.html/js (extension origin, has host_permissions)
-  │  navigator.credentials.create/get({ rpId: "getvela.app" })
-  │  → System authenticator prompt (Touch ID / Windows Hello)
-  ▼
-Result flows back: webauthn.js → background → bridge → inject → page
-```
-
-### Important notes
-
-- The `clientDataJSON.origin` in the WebAuthn response will be `chrome-extension://<id>`, not the page origin. Your relying party server must accept this origin when validating credentials created through the extension.
-- The extension sets `window.__VELA_WEBAUTHN_PROXY_RPID__` in the page context. The app's `getRelyingPartyId()` reads this global to ensure public key uploads and server queries use the same rpId as the WebAuthn call.
-- This extension is for development and disaster recovery only. Do not publish it to the Chrome Web Store.
-
-### Safe owner recovery extension
-
-The repository also includes [`packages/safe-recovery-extension`](packages/safe-recovery-extension/README.md),
-which lets `app.safe.global` control a Safe whose owner list contains Vela's
-shared WebAuthn signer contract. The contract owner only authorizes the SafeTx;
-it cannot originate an outer transaction. The extension therefore uses a local,
-gas-only EOA relayer to submit the signed `execTransaction`, after simulating it
-and checking that the Safe calldata contains the WebAuthn contract signature.
 
 ## Recipient Identity Resolution
 
@@ -357,18 +240,18 @@ When sending tokens, the wallet resolves recipient addresses to human-readable n
 
 - **Standard ENS**: `namehash(addr.addr.reverse)` → `registry.resolver(node)` → `resolver.name(node)`
 - **ENSIP-19** (Basenames): `reverseRegistrar.node(addr)` → chain-specific reverse node → same flow
-- Only positive results are cached (AsyncStorage, 24h TTL)
+- Only positive results are cached (locally, 24h TTL)
 - No third-party API dependencies — all queries use direct on-chain RPC calls
 
-To add a new name service, add an entry to `NAME_SERVICES` in `src/services/recipient-identity.ts`.
+The registry is `NAME_SERVICES` in the web shell's `recipient-identity.ts` (`app-web/vela-wallet/src/lib/services/`) and, for the desktop, in `app-desktop/vela-wallet/src/executor/identity.rs` — add a service to both.
 
 ## Security Model
 
-- **No private key access** — Signing uses WebAuthn P-256 keys managed by your OS (iCloud Keychain / Google Password Manager). Vela Wallet never has access to the private key.
+- **No private key access** — Signing uses WebAuthn P-256 keys managed by your OS (iCloud Keychain / Google Password Manager) or by a security key. Vela Wallet never has access to the private key.
 - **Safe smart account** — Your wallet is a Safe proxy contract, audited and battle-tested with billions in TVL.
 - **On-device only** — Transaction construction, signing, and signature verification all happen locally. The bundler only receives the signed UserOperation.
-- **Passkey-scoped** — Each wallet is bound to a passkey credential. Transactions require biometric verification (Face ID / fingerprint) every time.
+- **Passkey-scoped** — Each wallet is bound to its founding passkeys. Transactions require the authenticator's own verification (Face ID / fingerprint / PIN) every time.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

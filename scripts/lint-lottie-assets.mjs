@@ -29,7 +29,7 @@ import { basename, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const DESIGN_DIR = join(REPO_ROOT, 'design');
+const DESIGN_DIR = join(REPO_ROOT, 'docs', 'design');
 const FIXTURE_DIR = join(REPO_ROOT, 'scripts/__fixtures__/lottie');
 const CROSSFILE_DIR = join(REPO_ROOT, 'scripts/__fixtures__/lottie-crossfile');
 /** Repo-relative, for the stray-copy guard's exemption. */
@@ -493,7 +493,7 @@ function collect(dir) {
 }
 
 /**
- * SC-004: `design/onboarding/launch` is the ONLY place an animation may live.
+ * SC-004: `docs/design/onboarding/launch` is the ONLY place an animation may live.
  *
  * Each app receives them at build time — an Xcode file-list phase, a Gradle
  * Sync, a Vite alias, `include_bytes!`. A committed copy under an app would
@@ -513,7 +513,7 @@ function strayCopies(files) {
   return tracked
     .split('\n')
     .filter(
-      (p) => p && names.has(basename(p)) && !p.startsWith('design/') && !p.startsWith(FIXTURE_ROOT),
+      (p) => p && names.has(basename(p)) && !p.startsWith('docs/design/') && !p.startsWith(FIXTURE_ROOT),
     )
     .sort();
 }
@@ -687,11 +687,11 @@ function main() {
           const problems = checkCrossFile(files);
           for (const stray of strayCopies(files)) {
             problems.push(
-              `${stray} is a committed copy of an animation — design/onboarding/launch is the only ` +
+              `${stray} is a committed copy of an animation — docs/design/onboarding/launch is the only ` +
                 'source (FR-001/SC-004). Every app receives these at build time; a copy goes stale silently.',
             );
           }
-          return report(files, problems, 'design/');
+          return report(files, problems, 'docs/design/');
         })();
   process.exit(ok ? 0 : 1);
 }

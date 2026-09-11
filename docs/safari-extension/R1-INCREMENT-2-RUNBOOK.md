@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. The iOS Safari extension has no packaging in the tree today (`targets/safari` and `packages/safari-extension` were Expo-only); re-homing it under `app-ios/` is its own spec — see spec 039 "Two packages".
+
 # R1 Spike — Increment 2: App Group echo (FACT-2 / R2 / R4)
 
 **Goal:** prove the extension process and the app process share the App Group container **bidirectionally** via immutable JSON files + a Darwin notification, and settle **R2** (can a content script reach native directly?). No signing, no real UI.

@@ -2,7 +2,7 @@
 //  Typography.swift
 //  VelaWallet
 //
-//  Type roles per design-system.md (complete recipes, never ad-hoc font
+//  Type roles per docs/design-system.md (complete recipes, never ad-hoc font
 //  calls). Plus Jakarta Sans is bundled (DesignSystem/Fonts); CJK falls
 //  through to the system face — DV-003, matching the shipped RN app.
 //
@@ -109,7 +109,7 @@ enum Typography {
     /// Small monospaced diagnostics — tech-details code/endpoint lines.
     static let monoSmall = TypeRole(fontName: FontName.mono, size: Tokens.TextSize.t13, relativeTo: .footnote, leading: Tokens.Leading.normal)
 
-    // MARK: Wallet roles (spec 015 — design/wallet mocks)
+    // MARK: Wallet roles (spec 015 — docs/design/wallet mocks)
 
     /// Hero balance integer part — text.t40, bold, amount leading.
     static let amountHero = TypeRole(fontName: FontName.bold, size: Tokens.TextSize.t40, relativeTo: .largeTitle, leading: Tokens.Leading.amountHero)
@@ -132,7 +132,7 @@ enum Typography {
     /// Tab-bar item label — text.t10, medium, single-line.
     static let tab = TypeRole(fontName: FontName.medium, size: Tokens.TextSize.t10, relativeTo: .caption2, leading: Tokens.Leading.none)
 
-    // MARK: Contacts roles (spec 018 — design/contacts mocks)
+    // MARK: Contacts roles (spec 018 — docs/design/contacts mocks)
 
     /// Screen title (通讯录 / 家人) — text.t26, bold (mocks C1/C4).
     static let pageTitle = TypeRole(fontName: FontName.bold, size: Tokens.TextSize.t26, relativeTo: .title, leading: Tokens.Leading.tight)

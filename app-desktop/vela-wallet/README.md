@@ -537,9 +537,9 @@ rather than a detail:
 
 ### Icons
 
-Every icon in the repository — this app's, the Expo app's, both native
-projects', and the marketing site's — is rendered from one vector source,
-[design/icon/](../../design/icon/):
+Every icon in the repository — this app's, both native projects', and the
+marketing site's — is rendered from one vector source,
+[docs/design/icon/](../../docs/design/icon/):
 
 | Source | Used for |
 |---|---|
@@ -552,7 +552,7 @@ package needs no image tooling:
 
 ```bash
 ./scripts/generate-desktop-icons.sh          # Linux hicolor + .ico + .iconset
-../../scripts/gen-app-icons.sh               # Expo, app-ios, app-android, getvela.app
+../../scripts/gen-app-icons.sh               # app-ios, app-android, getvela.app
 ```
 
 Four platform rules are encoded in those scripts, and every one of them fails

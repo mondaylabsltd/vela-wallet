@@ -6,13 +6,13 @@ import staticAdapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 
 /**
- * `design/onboarding/launch` is the repo-wide source of truth for animations
+ * `docs/design/onboarding/launch` is the repo-wide source of truth for animations
  * (spec 012 FR-001) and lives OUTSIDE this app. Aliasing it, plus opening it to
  * the dev server's fs allow-list, is what lets Vite emit the four `core` files
  * as hashed assets served from our own origin — no copy under app-web/, and no
  * third-party CDN at runtime.
  */
-const LAUNCH_ANIMATIONS = fileURLToPath(new URL('../../design/onboarding/launch', import.meta.url));
+const LAUNCH_ANIMATIONS = fileURLToPath(new URL('../../docs/design/onboarding/launch', import.meta.url));
 
 /**
  * Spec 027: the same application, built a second way.

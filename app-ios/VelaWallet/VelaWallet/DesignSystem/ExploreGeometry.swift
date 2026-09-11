@@ -4,7 +4,7 @@
 //
 //  Explore + signing geometry the token set does not name (spec 022),
 //  MEASURED off design/explore/*.png at the 392×844 design frame.
-//  Licensed by design-system.md ("if a needed token doesn't exist…
+//  Licensed by docs/design-system.md ("if a needed token doesn't exist…
 //  propose a semantic name") — kept here, never inline in views.
 //
 

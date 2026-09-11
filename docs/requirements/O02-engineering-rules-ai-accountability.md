@@ -1,4 +1,4 @@
-# O02 · Engineering Rules & AI-Coding Accountability (`agent-rules/`)
+# O02 · Engineering Rules & AI-Coding Accountability (`docs/agent-rules/`)
 
 | | |
 |---|---|
@@ -10,7 +10,7 @@
 
 ## 1. Summary
 
-Vela codifies its engineering process in `agent-rules/`: **AI-coding accountability** ("AI can produce
+Vela codifies its engineering process in `docs/agent-rules/`: **AI-coding accountability** ("AI can produce
 code, but not accountability") with a **Low/Medium/High risk workflow** where any crypto/key/auth change
 is **auto-High**; a red-team security-audit prompt ("prove this code is unsafe until you can't"); a
 pre-launch hardening rulebook; and a build→test→fix loop with **30-cycle stability verification**. This
@@ -33,7 +33,7 @@ Auto-High for any key/auth/crypto change forces the highest scrutiny exactly whe
 - **FR-2** — Apply the red-team audit prompt ("prove this code is unsafe until you can't") to High-risk changes.
 - **FR-3** — Follow the pre-launch hardening rulebook before releases (O03).
 - **FR-4** — Run the build→test→fix loop with **30-cycle stability verification** for stability-critical work.
-- **FR-5** — Rules live in-repo (`agent-rules/`) and are open for inspection.
+- **FR-5** — Rules live in-repo (`docs/agent-rules/`) and are open for inspection.
 
 ## 5. Non-functional requirements
 
@@ -61,5 +61,5 @@ No user-facing UI; this is process. It underpins the "audited Safe + careful int
 
 ## 10. Source anchors
 
-- `agent-rules/AI-CODING-RULES.md`, `SECURITY-AUDIT.md`, `LAUNCH_AUDIT.md`, `CLAUDE-AUTO-TEST.md`.
+- `docs/agent-rules/AI-CODING-RULES.md`, `SECURITY-AUDIT.md`, `LAUNCH_AUDIT.md`, `CLAUDE-AUTO-TEST.md`.
 - `docs/CONTENT-SOURCE-100-CLUES.md` — clue 92.

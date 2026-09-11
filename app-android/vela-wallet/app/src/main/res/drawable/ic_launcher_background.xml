@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Adaptive-icon background layer: the tile colour, flat and full-bleed so the
-    launcher can mask it to any shape. Generated from design/icon/app-icon.svg
+    launcher can mask it to any shape. Generated from docs/design/icon/app-icon.svg
     by scripts/gen-app-icons.sh - keep the colour in step with the <rect> fill
     there and with android.adaptiveIcon.backgroundColor in app.json.
 -->

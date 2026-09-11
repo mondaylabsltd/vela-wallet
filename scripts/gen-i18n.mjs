@@ -6,9 +6,11 @@
  * Source   <-  rust/crates/vela-core/i18n/locales/   240 files, THE source of truth
  * Stage 1  ->  rust/.../src/i18n/paths.rs             the SHARED path table, paid once
  * Stage 2  ->  rust/.../src/i18n_catalogs/<lng>.rs    one value blob per locale
- * Stage 3  ->  src/i18n/resources.ts                  what the React Native app imports
- * Stage 4  ->  public/i18n/<lng>.json                  the runtime on-demand asset
+ * Stage 4  ->  assets/i18n/<lng>.json                  the on-demand catalog every shell reads
  * Stage 5  ->  rust/.../src/l10n/datetime_data.rs      day periods + weekday names
+ *
+ * (Stage 3 was `src/i18n/resources.ts`, the React Native app's import; it went
+ * with that app in spec 039. The numbering is kept so older notes still line up.)
  *
  * Why the split: the 1,141 dotted paths repeated per locale cost 460,471 bytes;
  * interned once they cost 31,198 — a 14.8x collapse, and the only reason `ja`+`en`
@@ -37,16 +39,19 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const LOCALES_DIR = join(REPO_ROOT, 'rust/crates/vela-core/i18n/locales');
 const PATHS_FILE = join(REPO_ROOT, 'rust/crates/vela-core/src/i18n/paths.rs');
 const CATALOG_DIR = join(REPO_ROOT, 'rust/crates/vela-core/src/i18n_catalogs');
-const RESOURCES_FILE = join(REPO_ROOT, 'src/i18n/resources.ts');
-// Expo copies `public/*` to the export root, so these are fetchable at
-// `/i18n/<lng>.json`. NOT `assets/` — that is Metro's bundler-resolved tree under
-// content-hashed filenames, which nothing can fetch at a stable URL.
-// `public/zbar.wasm` is the working precedent (research.md D9).
-const ASSET_DIR = join(REPO_ROOT, 'public/i18n');
+// `assets/i18n/` is read AT THIS PATH by every shell and two gates: app-ios
+// (Xcode file lists + bundle-catalogs.sh), app-android (build.gradle.kts and the
+// fixture tests), app-web/vela-wallet (engine.server.ts, at build time), the
+// Kotlin/Swift harnesses, scripts/verify-i18n-parity.mjs and
+// rust/scripts/verify-web.mjs. Moving it is a five-toolchain edit — spec 039
+// did exactly one, from the Expo-era `public/i18n`, and the list above is
+// where to look if it ever has to happen again.
+const ASSET_DIR = join(REPO_ROOT, 'assets/i18n');
 const DATETIME_FILE = join(REPO_ROOT, 'rust/crates/vela-core/src/l10n/datetime_data.rs');
 
-// Locale order and namespace spread order mirror src/i18n/resources.ts exactly, so
-// a later namespace overwriting an earlier key behaves identically here.
+// Locale order and namespace spread order are the ones the original
+// hand-maintained resource file had, so a later namespace overwriting an
+// earlier key behaves identically here (and in every artefact below).
 const LOCALES = ['en', 'zh', 'zh-TW', 'zh-HK', 'ja', 'ko', 'vi', 'id', 'tr', 'es-MX', 'pt-BR', 'fr', 'de', 'ru', 'it'];
 const NAMESPACE_FILES = [
   'home', 'send', 'receive', 'assets', 'addToken', 'tokenDetail', 'history',
@@ -379,8 +384,8 @@ for (const lng of LOCALES) {
   // per locale costs the 2,648 extra bytes only where they are needed — and the
   // only build that compiles a catalog in at all is the desktop app, which
   // takes `i18n-all` precisely because it has no size budget. The web build
-  // compiles ZERO locales (runtime JSON, FR-015) and React Native reads
-  // `src/i18n/resources.ts`, so neither ships these arrays.
+  // compiles ZERO locales (runtime JSON, FR-015), so it ships none of these
+  // arrays.
   //
   // Still fail loudly past u32: a wrapped offset would slice a value in half.
   const offsetWidth = blobBytes >= 65_536 ? 4 : 2;
@@ -445,78 +450,6 @@ ${LOCALES.map((l) => `        #[cfg(feature = "${featureOf(l)}")]\n        "${l}
         _ => None,
     }
 }
-`);
-
-// ---------------------------------------------------------------------------
-// Stage 3 — the TypeScript resources the React Native app imports (FR-011)
-// ---------------------------------------------------------------------------
-//
-// Emitted as 240 imports plus per-locale spreads, exactly the shape the
-// hand-maintained file had. Inlining the strings instead would be a much larger
-// file and would change how Metro bundles them; the ONLY thing this generator
-// changes is who maintains the list.
-//
-// `en` MUST stay a NAMED export: src/i18n/i18next.d.ts does
-// `import type { en } from './resources'` to derive the typed key union, so
-// dropping it breaks `npm run typecheck` for all 1,029 call sites at once.
-
-/** `es-MX` -> `esMX`, the identifier prefix used for that locale's imports. */
-const identOf = (lng) => {
-  const [lang, region] = lng.split('-');
-  return region ? lang + region.toUpperCase() : lang;
-};
-const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-
-/** POSIX-style relative import specifier from src/i18n/ to the corpus. */
-function importPath(...segments) {
-  const spec = relative(dirname(RESOURCES_FILE), join(LOCALES_DIR, ...segments)).split('\\').join('/');
-  return spec.startsWith('.') ? spec : `./${spec}`;
-}
-
-const importLines = [];
-const localeBlocks = [];
-for (const lng of LOCALES) {
-  const id = identOf(lng);
-  importLines.push(`import ${id}Core from '${importPath(`${lng}.json`)}';`);
-  for (const ns of NAMESPACE_FILES) {
-    importLines.push(`import ${id}${cap(ns)} from '${importPath(lng, `${ns}.json`)}';`);
-  }
-  // `en` is exported by name; the rest stay module-local, as before.
-  const decl = lng === 'en' ? 'export const en' : `const ${id}`;
-  localeBlocks.push(
-    `${decl} = {\n` +
-      `  ...${id}Core,\n` +
-      NAMESPACE_FILES.map((ns) => `  ...${id}${cap(ns)},`).join('\n') +
-      `\n};`,
-  );
-}
-
-writeFileSync(RESOURCES_FILE, `/**
- * ${GENERATED_BY}
- *
- * Per-language resource aggregator. Each language merges its core file
- * (common/language/settings) + every per-namespace file into one flat
- * \`translation\` object, in the order below — a later namespace overwriting an
- * earlier key behaves exactly as it always has.
- *
- * The corpus itself lives in the Rust crate (\`${relative(REPO_ROOT, LOCALES_DIR).split('\\').join('/')}\`),
- * which is the single source of truth for every platform: edit a string there and
- * regenerate, and the TypeScript resources, the compiled-in Rust catalogs and the
- * conformance corpus all move together.
- *
- * \`en\` is exported BY NAME because src/i18n/i18next.d.ts derives the typed key
- * union from it (\`import type { en } from './resources'\`).
- *
- * To add a language: add it to LOCALES in scripts/gen-i18n.mjs and re-run
- * \`npm run gen:i18n\`.
- */
-${importLines.join('\n')}
-
-${localeBlocks.join('\n\n')}
-
-export const resources = {
-${LOCALES.map((l) => `  ${JSON.stringify(l)}: { translation: ${identOf(l)} },`).join('\n')}
-};
 `);
 
 // ---------------------------------------------------------------------------
@@ -653,7 +586,6 @@ const shared = keyBlobBytes + branchBitmap.length + PATHS.length * 8; // +ptr ar
 console.log(`\nSC-005 check — ja + en resident, shared table included:`);
 console.log(`  shared ${shared} + ja ${ja.tableBytes} + en ${en.tableBytes} = ${shared + ja.tableBytes + en.tableBytes} bytes (budget 135,345 for the per-locale halves)`);
 console.log(`  per-locale halves only: ${ja.tableBytes + en.tableBytes} bytes`);
-console.log(`resources.ts: ${importLines.length} imports across ${LOCALES.length} locales -> ${relative(REPO_ROOT, RESOURCES_FILE)}`);
 const assetTotal = assetStats.reduce((n, a) => n + a.bytes, 0);
 const assetEn = assetStats.find((a) => a.lng === 'en').bytes;
 const assetJa = assetStats.find((a) => a.lng === 'ja').bytes;

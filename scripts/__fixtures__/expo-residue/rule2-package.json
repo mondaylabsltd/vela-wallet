@@ -1,0 +1,1 @@
+{ "name": "fixture", "dependencies": { "expo": "~55.0.0", "i18next": "^26" } }
