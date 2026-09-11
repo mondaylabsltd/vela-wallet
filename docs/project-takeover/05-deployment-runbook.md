@@ -1,12 +1,12 @@
 # 05 — 部署手册 (Deployment Runbook)
 
-> 现状(**2026-09-11,spec 039 后**):**Web 钱包的生产构建 = Cloudflare Worker `vela-wallet-web`**,由 Cloudflare 从 `app-web/vela-wallet` 自建(merge 进 main 即构建)。**但 `wallet.getvela.app` 这个域名今天仍指向旧的 Cloudflare Pages 项目**——它冻结在 Pages 最后一次成功构建的 Expo 包(main @ 936f1b3f),因为 Pages 的构建命令(根目录的 `build:web` 脚本)已随 Expo 应用删除。域名迁到 Worker 是创始人在面板里做的一次操作,清单见下文「域名迁移」。官网/API 与移动端仍手动发布。`.github/workflows/ci.yml` 是合并门禁。
+> 现状(**2026-09-11,spec 039 后**):**Web 钱包 = Cloudflare Worker `vela-wallet-web`**,由 Cloudflare 从 `app-web/vela-wallet` 自建(merge 进 main 即构建),**`wallet.getvela.app` 已于 2026-09-11 由创始人迁到该 Worker**(实测:`/` 按 Accept-Language 307 到 `/en`、`/zh`;`/en/wallet` 是 SvelteKit 页面;旧的 `/onboarding`、`/pay`、`/web-request` 均 404)。旧的 Pages 项目只剩回滚用途。官网/API 与移动端仍手动发布。`.github/workflows/ci.yml` 是合并门禁。
 
 ## 部署单元一览
 
 | 单元 | 产物 | 目标 | 命令 |
 | --- | --- | --- | --- |
-| Web 钱包 | `.svelte-kit/cloudflare`(Worker + 预渲染的 15 个 locale 页) | Cloudflare Worker `vela-wallet-web`(自建;`wrangler.jsonc` 里 `workers_dev: true`,自定义域名在面板配置) | merge 进 main → Cloudflare 自动执行 `pnpm build`;本地 `pnpm build && pnpm preview` 仅作验证 |
+| Web 钱包 | `.svelte-kit/cloudflare`(Worker + 预渲染的 15 个 locale 页) | Cloudflare Worker `vela-wallet-web` = `wallet.getvela.app`(自建;自定义域名在面板配置,`wrangler.jsonc` 不记录) | merge 进 main → Cloudflare 自动执行 `pnpm build`;本地 `pnpm build && pnpm preview` 仅作验证 |
 | 官网+API | `.svelte-kit/cloudflare` | Cloudflare Workers(getvela.app) | `cd app-web/getvela.app && bun run deploy` |
 | iOS App | .ipa | App Store Connect | Xcode Archive(`app-ios/VelaWallet/VelaWallet.xcodeproj`);EAS 已随 Expo 退役 |
 | Android App | .aab | Google Play | `app-android/vela-wallet` 的 gradle release 构建;**签名密钥方案待创始人定**(EAS 托管 keystore 已随 Expo 退役,见 `docs/store-submission/`) |
@@ -45,15 +45,14 @@ iOS/Android 的编译与单测由 CI 的 `ios`/`android` job 跑;本地跑法见
    - 确认**没有** PARALLEL SPACE 紫色徽章(若出现=你在 fixture 空间,立即排查)
 4. 回滚:Cloudflare Workers 的版本回滚(面板或 `wrangler rollback`)
 
-### 域名迁移(创始人一次性操作,时间自定)
+### 域名迁移(已完成,2026-09-11)
 
-`wallet.getvela.app` 从冻结的 Pages 部署迁到 Worker:
+`wallet.getvela.app` 已从冻结的 Pages 部署迁到 Worker(创始人在面板操作)。迁移后的实测记在 `specs/039-retire-expo-tree/results.md`。仍要做/要知道的:
 
-1. 仓库里我们自己指向旧路径的链接已改为 `https://wallet.getvela.app/`(官网六处);`/pay` 支付链接页是**欠账**(spec 039 Part B),迁移前补齐或接受 404(HTTPS SDK 与其 `/web-request` 已于 2026-09-11 整个删除,不再欠)
-2. 面板:给 Worker `vela-wallet-web` 加自定义域名 `wallet.getvela.app`;把 Pages 项目从该域名解绑,并**暂停 Pages 的自动部署**(否则每次 merge 都报一次失败构建)
-3. 迁移前后各做一次上面的 Smoke Test,结果记入 `specs/039-retire-expo-tree/results.md`
+1. **官网要重新部署**(`cd app-web/getvela.app && bun run deploy`):官网六处指向 `wallet.getvela.app/onboarding[?mode=create]` 的链接在 039 分支上已改为 `https://wallet.getvela.app/`,线上官网在部署前仍是旧链接 → 404
+2. `/pay` 支付链接页是**欠账**(spec 039 Part B):官网的 `/pay` 转发暂时落到钱包首页(保留 query),等钱包补上 `/pay` 路由后改回
+3. 面板:若 Pages 项目仍连着 main 的自动部署,**暂停它**(否则每次 merge 都报一次失败构建);Pages 的最后一次部署留作回滚
 4. 回滚:把域名重新绑回 Pages 项目的最后一次部署(静态、无状态、秒级)
-5. 当天改本文与 README 的「域名现状」一句
 
 **老用户注意**:Expo 版把账户/联系人/自定义代币/历史存在 localStorage,Worker 版存 IndexedDB,两者格式逐字节兼容但**不迁移**(创始人裁定 2026-09-11:客户端缓存可丢失)。钱包本身在 passkey 后面,重新登录即回。
 

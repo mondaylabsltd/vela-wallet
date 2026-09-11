@@ -122,14 +122,12 @@ specs/039-retire-expo-tree/
 
 ```text
 .
-├── agent-rules/
 ├── app-android/  app-desktop/  app-ios/  app-web/     # the four shells (+ getvela.app, clearsigning under app-web)
 ├── assets/
 │   ├── fonts/PlusJakartaSans_*.ttf                   # app-desktop include_bytes! (assets/images/ is gone: every raster there was an Expo output)
 │   ├── i18n/<locale>.json                            # gen-i18n Stage 4 → ios, android, app-web, gates (was public/i18n)
 │   └── wasm/vela_core_bg.<hash>.wasm                 # build-web.mjs → sync-wasm, load-wasm-node, scripts/onchain (was public/)
-├── design/                                           # icon SVG source, Lottie + illustrations (gen-app-icons, lint-lottie-assets)
-├── docs/
+├── docs/                                             # incl. docs/agent-rules/ and docs/design/ (moved here by the founder, 2026-09-11)
 ├── rust/                                             # vela-core + wasm + uniffi + scripts   (packages/ is gone: vela-sdk and safe-recovery-extension deleted, founder 2026-09-11)
 ├── scripts/                                          # THE tooling package: package.json + lockfile live here (+ check-expo-residue.mjs)
 ├── specs/

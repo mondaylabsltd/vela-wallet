@@ -82,12 +82,12 @@ enum Brand {
 }
 
 /// Welcome-screen geometry the token set does not name, measured from
-/// `design/onboarding/W1 Welcome _ default.png` at the 390×844 design frame
+/// `docs/design/onboarding/W1 Welcome _ default.png` at the 390×844 design frame
 /// (@2x pixels ÷ 2). Licensed by docs/design-system.md ("if a needed token doesn't
 /// exist… propose a semantic name") — kept here, never inline in views.
 enum WelcomeGeometry {
     /// The v2 mark: a 60pt glyph beside a small tracked wordmark, not v1's
-    /// 37pt mark under a 42pt display title (design/onboarding-new; the web
+    /// 37pt mark under a 42pt display title (docs/design/onboarding-new; the web
     /// and the desktop draw the same pair at the same size).
     static let markSize: CGFloat = 60
     /// Gap between mark and wordmark.
@@ -125,7 +125,7 @@ enum WelcomeGeometry {
 }
 
 /// Onboarding-flow (create/login sheet) geometry the token set does not
-/// name, measured from `design/onboarding/create|login/*.png` at the
+/// name, measured from `docs/design/onboarding/create|login/*.png` at the
 /// 390×844 design frame (spec 014). Same docs/design-system.md license as
 /// `WelcomeGeometry` — values live here, never inline in views.
 enum FlowGeometry {

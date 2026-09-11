@@ -62,7 +62,7 @@ pub fn vela_button(
 /// swap — with the pointer affordance and the click handler withheld.
 ///
 /// The shape is v2's: a 12px rectangle. **There is no capsule anywhere in
-/// design/onboarding-new** — every button in it, on every screen and in the
+/// docs/design/onboarding-new** — every button in it, on every screen and in the
 /// sheet, is `border-radius: 12px` — so the pill went with v1 rather than
 /// surviving as a second shape nothing calls for.
 pub fn vela_button_opts(

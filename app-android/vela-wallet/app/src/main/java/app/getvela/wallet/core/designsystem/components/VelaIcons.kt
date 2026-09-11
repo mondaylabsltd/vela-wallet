@@ -427,7 +427,7 @@ object VelaIcons {
         strokeIcon("VelaPlus", "M5 12h14", "M12 5v14")
     }
 
-    // --- spec 021 additions (design/wallet-2) ----------------------------
+    // --- spec 021 additions (docs/design/wallet-2) ----------------------------
     /**
      * The single-person glyph. `UsersRound` is the group; SD2's recipient
      * field opens a picker for exactly one person, and two heads there read

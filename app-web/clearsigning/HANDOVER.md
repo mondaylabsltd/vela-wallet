@@ -73,7 +73,7 @@ node samples/desktop-demo.mjs      # 不带 --auto：真按一次 Touch ID
 | `lib/logos.js` | 远端 logo | 纯装饰，只进 `<img>`，失败静默退回 |
 
 规范：[PROTOCOL.md](PROTOCOL.md)（通道线格式、摘要、**第 9 节的来源对照表**）。
-设计稿：`design/clearsigning/`（33 张，Penpot 导出；CS19 未导出）。
+设计稿：`docs/design/clearsigning/`（33 张，Penpot 导出；CS19 未导出）。
 
 ## 已经完成
 

@@ -76,7 +76,7 @@ export type DesktopFlowStateId =
 	| 'dsd3'
 	| 'dsd4'
 	/**
-	 * The three sub-pickers the desktop send form can open. `design/wallet-2/`
+	 * The three sub-pickers the desktop send form can open. `docs/design/wallet-2/`
 	 * draws no panel for them, but DSD2L draws the affordances that ask for
 	 * them — a person icon on the recipient field, a chevron on the fee row,
 	 * and (on DSD2bL) an import pill. A chevron that leads nowhere is a defect,

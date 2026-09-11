@@ -224,7 +224,7 @@ pub const WINDOW_H: f32 = 800.;
 pub const LOGO_SIZE: f32 = 60.;
 
 // ---------------------------------------------------------------------------
-// Onboarding, v2 desktop (design/onboarding-desktop-b.html).
+// Onboarding, v2 desktop (docs/design/onboarding-desktop-b.html).
 //
 // Two columns. A rail carries the brand and, during the create journey, which
 // step you are on; the screen itself is a measure-width column beside it,
@@ -550,7 +550,7 @@ pub const BTN_PAD_X: f32 = 24.;
 pub const BTN_PAD_Y: f32 = 10.;
 
 // ---------------------------------------------------------------------------
-// Onboarding create/login flow patterns (spec 014, design/onboarding mocks).
+// Onboarding create/login flow patterns (spec 014, docs/design/onboarding mocks).
 // Geometry measured on the dark mocks at their ~1:1 panel width.
 // ---------------------------------------------------------------------------
 
@@ -582,7 +582,7 @@ pub const FLOW_GAP_XL: f32 = 28.;
 /// leading element sits beside text.
 pub const FLOW_GAP_MD_SNUG: f32 = 12.;
 
-// -- v2 flow shell (design/onboarding-new) ----------------------------------
+// -- v2 flow shell (docs/design/onboarding-new) ----------------------------------
 
 /// The measure of the screen column beside the rail — the SAME on every
 /// onboarding screen now, welcome included. A maximum, not a width.

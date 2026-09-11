@@ -17,7 +17,7 @@ export const BRAND_MARK = {
 } as const;
 
 /**
- * The application icon as data — `design/icon/app-icon.svg`, THE canonical
+ * The application icon as data — `docs/design/icon/app-icon.svg`, THE canonical
  * mark every platform's icon is rendered from, verbatim. The receive share
  * card wears this rather than the in-app sailboat (founder, 2026-09-05): the
  * saved picture ends up beside the app on someone's phone, and the two must

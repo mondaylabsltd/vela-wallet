@@ -34,7 +34,7 @@
 
 `pnpm check` → `pnpm lint` → `pnpm test:unit` → `pnpm build` → `pnpm test:e2e`
 (e2e builds and serves the real worker; screenshots land in
-`e2e/__screenshots__/` for comparison against `../../design/onboarding/`).
+`e2e/__screenshots__/` for comparison against `../../docs/design/onboarding/`).
 
 ## Svelte MCP
 

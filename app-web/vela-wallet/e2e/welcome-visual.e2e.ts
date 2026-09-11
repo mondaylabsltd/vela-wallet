@@ -2,7 +2,7 @@
  * Mode gate + screenshot harvest (spec SC-002/SC-006, FR-005): the page must
  * fully swap between the dark and light token sets with the system color
  * scheme, and screenshots land in e2e/__screenshots__/ for human comparison
- * against design/onboarding/{W1,W1L,D1,D1L}.png (zh, like the mocks).
+ * against docs/design/onboarding/{W1,W1L,D1,D1L}.png (zh, like the mocks).
  */
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';

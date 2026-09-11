@@ -3,7 +3,7 @@
 //  VelaWallet
 //
 //  Wallet-home geometry the token set does not name (spec 015), measured
-//  from design/wallet/H1 at the 390×844 design frame (@2x pixels ÷ 2).
+//  from docs/design/wallet/H1 at the 390×844 design frame (@2x pixels ÷ 2).
 //  Licensed by docs/design-system.md ("if a needed token doesn't exist…
 //  propose a semantic name") — kept here, never inline in views.
 //

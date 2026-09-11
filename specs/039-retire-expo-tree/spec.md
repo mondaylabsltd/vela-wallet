@@ -236,8 +236,8 @@ three.
 "目录干净" is read as three tests, each of them runnable:
 
 1. **Nothing at the root exists only for Expo.** The root listing after the
-   cut holds the shells (`app-*`), `rust/`, `packages/`, `scripts/`, `docs/`,
-   `design/`, `specs/`, `assets/`, `agent-rules/`, the licence, `README.md`
+   cut holds the shells (`app-*`), `rust/`, `scripts/`, `docs/` (which now
+   also holds `agent-rules/` and `design/`), `specs/`, `assets/`, the licence, `README.md`
    alone among markdown files (the founder's fourth ruling: every other
    document lives under `docs/`), and dotfiles that a surviving tool reads.
    `public/` is gone too (third ruling): its generated i18n catalogs and the

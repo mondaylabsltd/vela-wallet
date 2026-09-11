@@ -77,7 +77,7 @@ node samples/safeop-test.mjs    # 9 项：SafeOp / SafeMessage 对拍 vela-core 
 
 ## 渲染样例画廊
 
-`gallery.html` 把设计稿 `design/clearsigning/` 的 33 个场景全部渲染一遍。
+`gallery.html` 把设计稿 `docs/design/clearsigning/` 的 33 个场景全部渲染一遍。
 每一张都走真实管线 —— **意图 → resolve → render** ——，没有一张是写死的 HTML：
 
 ```sh
@@ -211,7 +211,7 @@ browser read the extension manifest as a PWA manifest.
 | `background.js` | Service worker; toolbar click opens the page in a tab |
 | `icons/` | Extension icons + web favicon |
 
-`icons/icon.svg` is a copy of the canonical mark at `design/icon/app-icon.svg`.
+`icons/icon.svg` is a copy of the canonical mark at `docs/design/icon/app-icon.svg`.
 Regenerate the PNGs after changing it:
 
 ```sh

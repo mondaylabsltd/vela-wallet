@@ -53,7 +53,7 @@ They are recorded with their evidence in [`research.md`](../../../specs/027-web-
 
 ```
 manifest.json      the five constraints above, plus a pinned id (`key`)
-icons/             the toolbar and store icons, rendered from design/icon/app-icon.svg
+icons/             the toolbar and store icons, rendered from docs/design/icon/app-icon.svg
 inpage.js          MAIN world: the provider, its announcement, the legacy shim
 content.js         isolated world: the page bridge
 background.js      the service worker: routing, the per-site chain, reads

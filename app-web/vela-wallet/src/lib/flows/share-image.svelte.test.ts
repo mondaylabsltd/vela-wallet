@@ -51,7 +51,7 @@ describe('the share image', () => {
 		// The clip group wraps the nested artwork; a clip-path ON the nested
 		// <svg> would be read in its 64-unit space and blank the centre.
 		expect(svg).toMatch(/<g clip-path="url\(#identicon-clip\)"><svg [^>]*viewBox="0 0 64 64"/);
-		// The canonical app icon (design/icon/app-icon.svg), not the in-app sailboat.
+		// The canonical app icon (docs/design/icon/app-icon.svg), not the in-app sailboat.
 		expect(svg).toContain('fill="#f46d50"');
 		expect(svg).not.toContain('#ff6a45');
 	});

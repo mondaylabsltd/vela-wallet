@@ -131,15 +131,15 @@ val syncVelaI18nAssets = tasks.register<Sync>("syncVelaI18nAssets") {
     into(layout.buildDirectory.dir("generated/velaI18n/i18n"))
 }
 
-// Launch animations (spec 012 FR-001/FR-002): design/onboarding/launch is THE
+// Launch animations (spec 012 FR-001/FR-002): docs/design/onboarding/launch is THE
 // source of truth and no app keeps a copy. Only the `core` framings ship — the
 // `full` pair exists to pin the apps' box ratio and is never loaded (research D0/D3).
 //
 // The include pattern is a GLOB, not a list, so adding a second animation needs
 // no edit here (FR-004).
 val syncVelaAnimationAssets = tasks.register<Sync>("syncVelaAnimationAssets") {
-    description = "Copies launch animations (design/onboarding/launch) into build assets (spec 012)."
-    from(velaRepoRoot.resolve("design/onboarding/launch")) {
+    description = "Copies launch animations (docs/design/onboarding/launch) into build assets (spec 012)."
+    from(velaRepoRoot.resolve("docs/design/onboarding/launch")) {
         include("*-core-*.json")
     }
     into(layout.buildDirectory.dir("generated/velaAnimations/animations"))
@@ -149,7 +149,7 @@ val syncVelaAnimationAssets = tasks.register<Sync>("syncVelaAnimationAssets") {
         val produced = destinationDir.listFiles { f -> f.name.endsWith(".json") }?.size ?: 0
         check(produced >= 4) {
             "expected at least 4 launch animation assets, found $produced in $destinationDir — " +
-                "is design/onboarding/launch present and named " +
+                "is docs/design/onboarding/launch present and named " +
                 "vela-wallet-launch-{phone|desktop}-core-{dark|light}.json?"
         }
     }

@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * The application icon — THE canonical mark (design/icon/app-icon.svg),
+	 * The application icon — THE canonical mark (docs/design/icon/app-icon.svg),
 	 * drawn inline for the one surface that leaves the app: the receive share
 	 * card. Geometry and colours are the icon file's, verbatim (asset content,
 	 * audit-whitelisted like `BrandMark.svelte`), because a picture in someone

@@ -388,3 +388,65 @@ to their user-level MCP config, not the repo.
 Also noted here: the same file had vanished from the working tree once
 during the session before this ruling (like the root `package.json` earlier)
 and was restored from git; the deletion above is the deliberate one.
+
+## The hostname moved (founder, 2026-09-11) — and ruling nine
+
+The founder pointed `wallet.getvela.app` at the Worker the same day the tree
+was deleted, and reported the marketing site's front-page links landing on
+404s. Live probe at the time of the report:
+
+| Path | Answer |
+| --- | --- |
+| `/` | 307 → `/en` (Accept-Language `zh` → `/zh`) |
+| `/en/wallet` | 200, `<title>Vela Wallet — the passkey wallet</title>`, 65 `_app/immutable` assets, no `/_expo/` |
+| `/zh/create` | 200 |
+| `/onboarding`, `/onboarding?mode=create` | 404 |
+| `/pay?to=…&chain=1` | 404 |
+| `/web-request` | 404 |
+
+What changed in the site (`app-web/getvela.app`), all on this branch and
+**not yet deployed** — the site deploys by hand (`bun run deploy`):
+
+- the six `wallet.getvela.app/onboarding[?mode=create]` links were already
+  `https://wallet.getvela.app/` from the earlier doc pass (the Worker's `/`
+  negotiates the locale; the site itself has no locale routes to deep-link
+  from, so the welcome page is the honest target);
+- `/pay` no longer forwards to a 404: it forwards to the wallet's front door
+  with the query kept, and its comment says to point it back at `/pay` when
+  that route ships (owed, spec Part B);
+- the whitepaper's WebAuthn-proxy sentence was already corrected;
+- `hooks.server.ts` CORS already allows any `*.getvela.app` origin, so the
+  Worker's calls to `/api/exchange-rate` (the one site API the Worker wallet
+  uses) work unchanged; `/api/bundler`, `/api/nft`, `/api/transactions`,
+  `/api/wallet`, `/api/proxy` have no caller in the Worker wallet today
+  (it talks to `vela-relay.getvela.app` and `ethereum-data` directly) — left
+  in place, noted for a later cleanup;
+- the `.well-known` AASA / assetlinks documents describe the native shells'
+  app ids and are unaffected.
+
+README §Build for Web and runbook 05 now say the hostname is served by the
+Worker (the "frozen Pages" paragraphs are gone); the runbook keeps the
+rollback (re-attach the Pages last deployment) and asks the founder to pause
+Pages auto-deploys if still connected.
+
+**Ruling nine** — the founder moved `agent-rules/` → `docs/agent-rules/` and
+`design/` → `docs/design/` by hand ("同时我做了一些目录迁移你能看到的，保持文档一致").
+Every reader re-pointed: the Android gradle sync of the launch animations,
+the iOS pbxproj input path and the regenerated `animations-input.xcfilelist`,
+the desktop's `include_str!` of the two Lottie files, `gen-app-icons.sh` and
+`generate-desktop-icons.sh`'s `icon_src`, `lint-lottie-assets.mjs`'s
+`DESIGN_DIR`, `gen-intro-art.mjs` and the committed intro contract's
+`source` line, app-web's CLAUDE.md screenshot pointer, and ~50 provenance
+comments across the four shells; `docs/requirements/{GUIDE,O02,README}` and
+the fact bank say `docs/agent-rules/`. Root after: `.github .gitignore
+.specify LICENSE README.md app-* assets docs rust scripts specs`.
+
+## CI on the evening's commits
+
+- `4b7ec84a` (scripts/ move): all eight `CI` jobs green.
+- `c5c3d48d` (public → assets, the deletions, the workflows) and `f82999b2`
+  (`.mcp.json`): `CI` green on all eight jobs, and the four new packaging
+  workflows ran their pull-request lanes green — `Web extension package`
+  (manifest check + the extension build), `Android package`, `iOS package`
+  and `Clear-signing package` (metadata / package jobs; the release lanes
+  are tag-gated and did not run).

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Render the desktop application icons - Linux hicolor, the Windows .ico and the
-# macOS .iconset - from the canonical vector source in design/icon/, the same
+# macOS .iconset - from the canonical vector source in docs/design/icon/, the same
 # file every mobile and web icon comes from (scripts/gen-app-icons.sh).
 #
 # The results are committed under packaging/icons/ so that building a package
 # needs no image tooling; only this script does. Re-run it after editing
-# design/icon/app-icon.svg, and commit the diff:
+# docs/design/icon/app-icon.svg, and commit the diff:
 #
 #     ./scripts/generate-desktop-icons.sh
 set -euo pipefail
@@ -14,7 +14,7 @@ project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 repo_root="$(cd "$project_root/../.." && pwd)"
 
 appid="app.getvela.VelaWallet"
-icon_src="$repo_root/design/icon"
+icon_src="$repo_root/docs/design/icon"
 source_svg="$icon_src/app-icon.svg"
 out_dir="$project_root/packaging/icons"
 
@@ -106,6 +106,6 @@ echo
 echo "Written under ${out_dir#"$repo_root"/}:"
 printf '  %-34s %s\n' "$appid.ico" \
   "$("${im[@]}" identify "$out_dir/$appid.ico" 2>/dev/null | wc -l) members"
-printf '  %-34s %s\n' "scalable/$appid.svg" "copied from design/icon/app-icon.svg"
+printf '  %-34s %s\n' "scalable/$appid.svg" "copied from docs/design/icon/app-icon.svg"
 printf '  %-34s %s\n' "macos/AppIcon.iconset/" "$(find "$iconset" -name '*.png' | wc -l) PNGs"
 printf '  %-34s %s\n' "hicolor PNGs" "${#sizes[@]} sizes"

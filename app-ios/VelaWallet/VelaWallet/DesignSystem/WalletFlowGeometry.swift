@@ -3,7 +3,7 @@
 //  VelaWallet
 //
 //  Wallet-flow geometry the token set does not name (spec 021), measured
-//  from design/wallet-2 at the 390×844 design frame (@2x pixels ÷ 2).
+//  from docs/design/wallet-2 at the 390×844 design frame (@2x pixels ÷ 2).
 //  Licensed by docs/design-system.md ("if a needed token doesn't exist…
 //  propose a semantic name") — kept here, never inline in views. Same
 //  arrangement as WalletGeometry next door.

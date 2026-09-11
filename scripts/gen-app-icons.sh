@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Render every app icon in the repository from the canonical vector source in
-# design/icon/. Run it after editing those SVGs, and commit the result:
+# docs/design/icon/. Run it after editing those SVGs, and commit the result:
 #
 #     ./scripts/gen-app-icons.sh
 #
@@ -27,12 +27,12 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-icon_src="$repo_root/design/icon"
+icon_src="$repo_root/docs/design/icon"
 ios_iconset="$repo_root/app-ios/VelaWallet/VelaWallet/Assets.xcassets/AppIcon.appiconset"
 android_res="$repo_root/app-android/vela-wallet/app/src/main/res"
 site_static="$repo_root/app-web/getvela.app/static"
 
-tile_color="#f46d50"   # must match the <rect> fill in design/icon/app-icon.svg
+tile_color="#f46d50"   # must match the <rect> fill in docs/design/icon/app-icon.svg
 svg_px=68              # the SVGs' intrinsic size, for the density calculation
 
 # Android's adaptive icon (API 26+) is the VECTOR in app-android's drawable/,

@@ -3,7 +3,7 @@
 	 * In-app brand mark (docs/design-system.md §Brand): transparent sailboat, hull
 	 * color follows the UI mode, sails from the mode's asset. Never boxed on
 	 * the app-icon background. Colors below are ASSET content taken verbatim
-	 * from design/onboarding/logo-{light,dark}.svg (audit-whitelisted).
+	 * from docs/design/onboarding/logo-{light,dark}.svg (audit-whitelisted).
 	 */
 	interface Props {
 		/** Rendered box in px (SVG is square-ish, 258×260). */

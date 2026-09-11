@@ -539,7 +539,7 @@ rather than a detail:
 
 Every icon in the repository — this app's, both native projects', and the
 marketing site's — is rendered from one vector source,
-[design/icon/](../../design/icon/):
+[docs/design/icon/](../../docs/design/icon/):
 
 | Source | Used for |
 |---|---|

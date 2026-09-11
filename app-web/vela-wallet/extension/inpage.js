@@ -60,7 +60,7 @@ import { CHANNEL, RDNS, WALLET_NAME, ERR, rpcError, toHexChainId } from './lib/p
 		'vela-' + Date.now().toString(16) + Math.floor(Math.random() * 1e9).toString(16);
 
 	// The wallet's mark, as a data URI (EIP-6963 requires one — a remote icon
-	// URL would leak every dApp visit to our host). This is design/icon/
+	// URL would leak every dApp visit to our host). This is docs/design/icon/
 	// app-icon.svg verbatim — THE canonical mark every platform's icon is
 	// rendered from — URI-encoded rather than base64 so it stays readable here
 	// and in a stranger's dev tools. SVG, so a wallet picker draws it crisp at

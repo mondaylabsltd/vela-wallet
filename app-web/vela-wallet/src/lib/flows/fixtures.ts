@@ -1,6 +1,6 @@
 /**
  * Canonical wallet-flow fixtures (spec 021 — the single canon all four
- * platforms port). Content is verbatim from `design/wallet-2/`; builders merge
+ * platforms port). Content is verbatim from `docs/design/wallet-2/`; builders merge
  * it with resolved messages into display-ready view models.
  *
  * Pure data plus assembly. Nothing here fetches, signs, formats a number or

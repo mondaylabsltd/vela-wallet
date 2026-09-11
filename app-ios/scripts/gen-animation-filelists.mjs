@@ -2,12 +2,12 @@
 /**
  * Launch-animation build-declaration generator (spec 012-launch-animation-lottie).
  *
- * Source  <-  design/onboarding/launch/*-core-*.json                (repo root)
+ * Source  <-  docs/design/onboarding/launch/*-core-*.json                (repo root)
  * Output  ->  app-ios/scripts/animations-input.xcfilelist    (declared reads)
  *             app-ios/scripts/animations-output.xcfilelist   (declared writes)
  *
  * iOS keeps NO copy of the animations: the Xcode build phase
- * `Bundle launch animations` copies them straight from design/onboarding/launch
+ * `Bundle launch animations` copies them straight from docs/design/onboarding/launch
  * into VelaWallet.app at build time. This is the arrangement spec 010 introduced
  * for locale catalogs, applied to a second asset family — and the reason the two
  * .xcfilelists exist at all is that they are what grants the sandboxed build
@@ -32,7 +32,7 @@ import { basename, join } from 'node:path';
 
 const APP_ROOT = join(import.meta.dirname, '..');
 const REPO_ROOT = join(APP_ROOT, '..');
-const SOURCE_DIR = join(REPO_ROOT, 'design', 'onboarding', 'launch');
+const SOURCE_DIR = join(REPO_ROOT, 'docs', 'design', 'onboarding', 'launch');
 const INPUT_LIST = join(APP_ROOT, 'scripts', 'animations-input.xcfilelist');
 const OUTPUT_LIST = join(APP_ROOT, 'scripts', 'animations-output.xcfilelist');
 
@@ -45,7 +45,7 @@ const OUTPUT_LIST = join(APP_ROOT, 'scripts', 'animations-output.xcfilelist');
 const NAME_RE = /^vela-wallet-([a-z0-9]+(?:-[a-z0-9]+)*?)-(phone|desktop)-(core|full)-(dark|light)\.json$/;
 
 /** SRCROOT is app-ios/VelaWallet, so ../../ reaches the repo root. */
-const INPUT_PREFIX = '$(SRCROOT)/../../design/onboarding/launch';
+const INPUT_PREFIX = '$(SRCROOT)/../../docs/design/onboarding/launch';
 /**
  * TARGET_BUILD_DIR, not BUILT_PRODUCTS_DIR: the two diverge for install/archive
  * builds and only the former tracks the bundle being assembled (spec 010 D2).
@@ -59,7 +59,7 @@ function shippedAnimations() {
 	} catch {
 		throw new Error(
 			`launch animation directory not found: ${SOURCE_DIR}\n` +
-				'design/onboarding/launch is the source of truth for every app (spec 012 FR-001).'
+				'docs/design/onboarding/launch is the source of truth for every app (spec 012 FR-001).'
 		);
 	}
 	const json = entries.filter((f) => f.endsWith('.json')).sort();

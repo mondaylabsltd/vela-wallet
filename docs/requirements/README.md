@@ -206,7 +206,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 | ID | Title | Status | Deps |
 |---|---|---|---|
 | O01 | Parallel-Space Test Environment | ✅ | — |
-| O02 | Engineering Rules & AI-Coding Accountability (`agent-rules/`) | ✅ | — |
+| O02 | Engineering Rules & AI-Coding Accountability (`docs/agent-rules/`) | ✅ | — |
 | O03 | Store Launch Readiness (iOS / Android Submission) | 🚧 | — |
 | O04 | Roadmap, Alpha Status & Public On-Chain Verification | ✅ | A02 |
 

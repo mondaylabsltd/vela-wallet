@@ -290,7 +290,7 @@
 				"$(SRCROOT)/../scripts/animations-input.xcfilelist",
 			);
 			inputPaths = (
-				"$(SRCROOT)/../../design/onboarding/launch",
+				"$(SRCROOT)/../../docs/design/onboarding/launch",
 			);
 			name = "Bundle launch animations";
 			outputFileListPaths = (

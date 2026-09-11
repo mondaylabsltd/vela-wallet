@@ -80,7 +80,7 @@ The four shells are only worth having if they cannot drift apart. Each shared as
 | The web wasm artifact | `rust/crates/vela-core-wasm` | `rust/pkg-web/` (the JS glue) + `assets/wasm/vela_core_bg.<fingerprint>.wasm` (`npm --prefix scripts run build:wasm`) |
 | Design tokens | [docs/design-tokens.json](docs/design-tokens.json) (Penpot DTCG export) | `tokens.css` / `tokens.ts` for web, `Tokens.swift` for iOS — literals are test-banned in product UI |
 | Behavior | the conformance corpus in `rust/crates/vela-core/tests/vectors/` — the crypto/ABI/Safe/WebAuthn vectors are frozen goldens; the identicon and i18n vectors regenerate from the pinned `identicons-esm` and `i18next` packages | replayed through Rust, the Kotlin bindings, the Swift bindings and the shipped web artifact |
-| App icons | [design/icon/](design/icon/) | every platform's icon set (see [App icons](#app-icons)) |
+| App icons | [docs/design/icon/](docs/design/icon/) | every platform's icon set (see [App icons](#app-icons)) |
 
 Two parity suites compare the Rust ports against the npm packages the corpus was extracted from: the full 17,115 locale/key cross-product plus 50,000 fuzzed option bundles for i18n, and every address literal in the repo plus 200,000 random seeds for identicons. Keeping those two packages installed is what the npm package in `scripts/` is for.
 
@@ -148,7 +148,7 @@ Setup, system dependencies and release steps are in
 
 Every icon in the repository — both native projects, the desktop
 packages and this site's favicons — is rendered from one vector source,
-[design/icon/](design/icon/). Nothing is hand-exported, so the platforms cannot
+[docs/design/icon/](docs/design/icon/). Nothing is hand-exported, so the platforms cannot
 drift apart:
 
 ```bash
@@ -174,7 +174,7 @@ pnpm preview    # wrangler dev of the built worker on :4173
 
 `pnpm build` runs the vela-core wasm i18n engine in Node to prerender each `/{locale}` page, so no translation runtime and no wasm reach the deployed Worker. Cloudflare builds the same command from the repo; CI runs it too, so a broken build fails the PR rather than the deploy.
 
-**Which build serves `wallet.getvela.app` (as of 2026-09-11)**: still the last Cloudflare Pages deployment of the retired Expo bundle — frozen at the last `main` commit Pages built successfully (936f1b3f), because the Pages build command (the root `build:web` script) was deleted with the Expo tree. The Worker is the live build. Moving the hostname to the Worker is the five-step checklist in [specs/039 § "The move itself"](specs/039-retire-expo-tree/spec.md); the deployment runbook ([docs/project-takeover/05](docs/project-takeover/05-deployment-runbook.md)) records the same. Until then, nothing on that hostname updates.
+**`wallet.getvela.app` is served by this Worker** since 2026-09-11 (the founder moved the hostname off the retired Expo build's Cloudflare Pages deployment the same day the tree was deleted; verified: `/` answers a 307 to the visitor's locale, `/en/wallet` is the SvelteKit page). The old Expo paths — `/onboarding`, `/pay`, `/web-request` — no longer exist; the wallet's URL space is `/{locale}/…`. The deployment runbook ([docs/project-takeover/05](docs/project-takeover/05-deployment-runbook.md)) has the smoke test and the rollback (the Pages project's last deployment can be re-attached).
 
 ## Self-Deploy Service Endpoints
 
