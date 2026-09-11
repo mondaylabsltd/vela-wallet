@@ -134,7 +134,7 @@ specs/039-retire-expo-tree/
 ├── scripts/                                          # THE tooling package: package.json + lockfile live here (+ check-expo-residue.mjs)
 ├── specs/
 ├── README.md  LICENSE                                # the only markdown at the root; ROADMAP/WHITEPAPER/design-system moved under docs/ (founder ruling)
-└── .github/  .specify/  .gitignore  .mcp.json
+└── .github/  .specify/  .gitignore                   # (.mcp.json deleted — founder, 2026-09-11; the two web apps keep their own)
 ```
 
 Gone from the root: `src/`, `e2e/`, `modules/`, `plugins/`, `targets/`,

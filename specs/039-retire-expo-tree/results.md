@@ -374,3 +374,17 @@ design docs packages rust scripts specs`.
   that predates this branch — this branch changed only two comment lines in
   that file, which regenerate identically — left as found, not in CI.
 - CI on `4b7ec84a` (the scripts/ move): all eight jobs green.
+
+## Ruling eight — `.mcp.json` (2026-09-11)
+
+*"这个能删掉嘛，感觉它孤零零放着很奇怪"*. The root `.mcp.json` registered
+one MCP server for AI sessions opened at the repository root — the
+LottieFiles Creator tool used while the launch animation was drawn (spec
+012). Nothing in the build or the shells reads it; `app-web/vela-wallet` and
+`app-web/getvela.app` keep their own `.mcp.json` (the Svelte MCP server the
+web CLAUDE.md names). Deleted. Anyone who wants the Lottie tool back adds it
+to their user-level MCP config, not the repo.
+
+Also noted here: the same file had vanished from the working tree once
+during the session before this ruling (like the root `package.json` earlier)
+and was restored from git; the deletion above is the deliberate one.
