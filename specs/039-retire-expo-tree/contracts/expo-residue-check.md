@@ -23,10 +23,14 @@ files are not its business — test 2 covers those and is a one-line
 3. **Expo terms in executable config.** In `.github/workflows/*.yml`: any
    non-comment line (not starting with optional whitespace then `#`)
    matching the term regex. In every tracked `package.json`: any `scripts`
-   value matching the term regex.
+   value matching the term regex. The checker's own name (`expo-residue`,
+   `check:expo-residue`) is the one term allowed.
 4. **Dead commands anywhere.** In every tracked text file (any extension,
    including `.md`), any line matching
-   `/(npx\s+expo\b|\bexpo\s+(start|export|run|prebuild|lint|install)\b|\beas\s+(build|submit|credentials|update)\b|npm\s+run\s+(web|build:web|test:e2e|test:e2e:headed|test:live|typecheck)\b|\bmetro\b.*\b(start|bundle)\b)/i`
+   `/(npx\s+expo\b|\bexpo\s+(start|export|run|prebuild|lint|install)\b|\beas\s+(build|submit|credentials|update)\b|npm\s+run\s+(web|build:web|test:live)\b|\bnpx\s+metro\b|\bmetro\s+(start|bundle)\b)/i`
+   — only commands that existed at the repository ROOT for the Expo tree;
+   `npm run test:e2e` and the like are alive in the shells and are not
+   matched
    — unless the document is **banner'd**: its first 20 lines contain a line
    matching `/^>\s*\*\*(History\s*\(\d{4}-\d{2}-\d{2}\)|勘误\s*[（(]\d{4}-\d{2}-\d{2})/`.
    A banner'd document is exempt from rule 4 in full (the banner precedes
