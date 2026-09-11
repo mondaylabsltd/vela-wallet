@@ -8,7 +8,7 @@
 
 | # | 知识域 | 目标等级 | 核心证据文件 |
 |---|--------|---------|-------------|
-| D1 | 项目目的/商业模型/核心用户流程 | L4 | 01-system-overview.md, WHITEPAPER.md |
+| D1 | 项目目的/商业模型/核心用户流程 | L4 | 01-system-overview.md, docs/WHITEPAPER.md |
 | D2 | 代码结构与模块边界 | L4 | src/ 布局, 01 仓库布局节 |
 | D3 | 密码学身份链（passkey→P-256→Safe 地址） | L5 | src/modules/passkey/, services/attestation-parser.ts, safe-address.ts, public-key-upload.ts |
 | D4 | 交易提交链（sendUserOp / 4337 / bundler） | L5 | services/safe-transaction.ts, bundler-service.ts, tempo.ts |

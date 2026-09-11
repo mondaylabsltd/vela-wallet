@@ -66,7 +66,7 @@ roughly one requirement per meaningful behavior, and leave room for the roadmap 
 | B01 | Seedless Thesis & WebAuthn P-256 Passkey Registration | ✅ | A04 |
 | B02 | Biometric-Per-Transaction (No Persistent Unlock Session) | ✅ | B01 |
 | B03 | rpId Resolution Across Native / Web / Subdomains | ✅ | B01 |
-| B04 | WebAuthn Proxy Extension (Domain-Loss / Dev Passkeys) | ✅ | B03 |
+| B04 | WebAuthn Proxy Extension (Domain-Loss / Dev Passkeys) | 🗑 deleted 2026-09-11 (spec 039) | B03 |
 | B05 | Incompatible Passkey Provider Rejection | ✅ | B01 |
 | B06 | Safe v1.4.1 Account Model & Canonical Contract Set | ✅ | B01 |
 | B07 | Counterfactual CREATE2 Address Derivation (Same Address Every Chain) | ✅ | B01, B06 |

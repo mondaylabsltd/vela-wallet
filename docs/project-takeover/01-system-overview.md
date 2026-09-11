@@ -41,11 +41,8 @@ app-web/clearsigning/ 零构建的清晰签名静态页(见其 HANDOVER.md)
 app-desktop/vela-wallet/  桌面壳(gpui)
 app-ios/             iOS 壳(VelaWallet 工程 + VelaCoreKit SPM 包)
 app-android/         Android 壳
-app-browser-extension/chrome-ext-webauthn-proxy/  独立开发工具(passkey rpId 代理插件)
-packages/vela-sdk/   dApp 侧 SDK(`@vela-wallet/sdk`);钱包侧页面欠 app-web(spec 039 Part B)
-packages/safe-recovery-extension/  Safe 所有者恢复扩展(独立 npm 项目)
-public/i18n/         gen-i18n 生成的 15 份语言目录,iOS/Android/Web 与两道闸门都从此路径读
-public/vela_core_bg.<hash>.wasm  build:wasm 产物,app-web 的 sync-wasm 从此复制
+assets/i18n/         gen-i18n 生成的 15 份语言目录,iOS/Android/Web 与两道闸门都从此路径读
+assets/wasm/vela_core_bg.<hash>.wasm  build:wasm 产物,app-web 的 sync-wasm 从此复制
 assets/fonts/        Plus Jakarta Sans TTF(桌面 include_bytes!)
 design/              图标 SVG 源、Lottie 启动动画、插画
 scripts/             工具包(package.json 在此,根目录无 npm 文件):gen-i18n、gen-identicon-features、
@@ -94,6 +91,6 @@ WalletPair 中继与 remote-inject 桥已随 Expo 应用退役(创始人在 spec
 
 ## CI/CD
 
-`.github/workflows/ci.yml`,PR 与 main 推送触发。八个 job:`app`(`scripts/` 工具闸门:语料/头像预言机再生成与 diff、Lottie 与可达性 lint、两道 parity、Safe 扩展、SDK 构建、Expo 残留检查)、`web`(app-web `pnpm build`)、`site`(getvela.app `bun run check`)、`rust`(fmt/clippy/测试/wasm 金丝雀/web 产物一致/onboarding 类型一致/Swift 生成/Kotlin 语料)、`rust-macos`(Swift 语料)、`desktop`(fmt/clippy/test)、`android`(生成 Kotlin 绑定 + assembleDebug + 单测)、`ios`(xcframework + xcodebuild test)。
+`.github/workflows/ci.yml`,PR 与 main 推送触发。八个 job:`app`(`scripts/` 工具闸门:语料/头像预言机再生成与 diff、Lottie 与可达性 lint、两道 parity、Expo 残留检查)、`web`(app-web `pnpm build`)、`site`(getvela.app `bun run check`)、`rust`(fmt/clippy/测试/wasm 金丝雀/web 产物一致/onboarding 类型一致/Swift 生成/Kotlin 语料)、`rust-macos`(Swift 语料)、`desktop`(fmt/clippy/test)、`android`(生成 Kotlin 绑定 + assembleDebug + 单测)、`ios`(xcframework + xcodebuild test)。
 
 部署:Web 钱包由 Cloudflare 从 `app-web/vela-wallet` 自建 Worker `vela-wallet-web`(与 CI 无耦合,**CI 绿 ≠ 已发布**);官网手动 `bun run deploy`;iOS/Android 见 `05-deployment-runbook.md`。

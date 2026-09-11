@@ -27,7 +27,7 @@
 		 * on. Deliberately not the same as `disabled`: a dimmed button reads as
 		 * "unavailable", which is the one thing "working" must never look like.
 		 * The button keeps full emphasis, holds its size, and turns a spinner
-		 * where its label was (DESIGN_SYSTEM.md — "Loading state:
+		 * where its label was (docs/design-system.md — "Loading state:
 		 * ActivityIndicator replacing text").
 		 */
 		loading?: boolean;

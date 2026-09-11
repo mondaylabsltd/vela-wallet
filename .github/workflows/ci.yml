@@ -10,8 +10,8 @@
 # The `app` job is the TOOLING gate: the generators and the corpus oracles
 # that every shell depends on (identicon and i18n vectors replayed against
 # the pinned npm packages, the regenerated artefacts diffed against what is
-# committed, the Lottie and reachability lints, the parity gates, the Safe
-# recovery extension, the HTTPS wallet SDK, and the Expo-residue check). The
+# committed, the Lottie and reachability lints, the parity gates, and the
+# Expo-residue check). The
 # npm package that installs the oracles lives in `scripts/` — the repository
 # root carries no npm state (founder ruling, spec 039). The job keeps the
 # name `app` because branch protection requires a check called that; what it
@@ -49,19 +49,6 @@ jobs:
       # The tooling package (i18next, identicons-esm, @noble/*) — scripts/,
       # not the root.
       - run: npm ci --prefix scripts
-      - name: Install Safe extension dependencies
-        run: npm ci --prefix packages/safe-recovery-extension
-      - name: Check Safe extension
-        run: |
-          npm run check --prefix packages/safe-recovery-extension
-          npm test --prefix packages/safe-recovery-extension
-          npm run build --prefix packages/safe-recovery-extension
-      # The SDK installs its own `typescript` (its lockfile is committed); nothing
-      # at the repository root provides `tsc` any more.
-      - name: Build HTTPS wallet SDK
-        run: |
-          npm ci --prefix packages/vela-sdk
-          npm run build --prefix packages/vela-sdk
       # Half of this gate retired with the TypeScript oracle it compared against.
       #
       # primitives/abi/eip712/safe/webauthn.json were extracted from the
@@ -99,7 +86,7 @@ jobs:
       # The i18n corpus lives in the crate and is THE source of truth (spec
       # 004-rust-i18n FR-010). Every downstream artefact — the shared Rust path
       # table, the fifteen compiled-in catalogs, the datetime data, and the
-      # per-locale JSON under public/i18n that app-ios, app-android and app-web
+      # per-locale JSON under assets/i18n that app-ios, app-android and app-web
       # all read — is generated from it. Regenerating and requiring a zero diff
       # is what stops them drifting apart: an edit committed to the corpus
       # without regenerating would leave a shell rendering the old string while
@@ -110,7 +97,7 @@ jobs:
           git diff --exit-code -- rust/crates/vela-core/src/i18n/paths.rs \
                                   rust/crates/vela-core/src/i18n_catalogs \
                                   rust/crates/vela-core/src/l10n/datetime_data.rs \
-                                  public/i18n \
+                                  assets/i18n \
             || { echo "::error::The generated i18n artefacts no longer match rust/crates/vela-core/i18n/locales. Run 'npm --prefix scripts run gen:i18n' and commit the result TOGETHER WITH the corpus change — a corpus edit and its regenerated artefacts belong in one commit."; exit 1; }
       # Reports the six known corpus defects (FR-018) and fails only on NEW ones.
       # It fixes nothing on purpose: silently "improving" a translated string during

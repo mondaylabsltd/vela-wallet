@@ -2,7 +2,7 @@
 //  Typography.swift
 //  VelaWallet
 //
-//  Type roles per design-system.md (complete recipes, never ad-hoc font
+//  Type roles per docs/design-system.md (complete recipes, never ad-hoc font
 //  calls). Plus Jakarta Sans is bundled (DesignSystem/Fonts); CJK falls
 //  through to the system face — DV-003, matching the shipped RN app.
 //

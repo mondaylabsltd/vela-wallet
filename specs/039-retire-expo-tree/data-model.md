@@ -21,19 +21,17 @@ Invariant (FR-397): no row may read `MISSING` without `owed` or a ruling.
 
 | Path | Consumer | Proving command |
 | --- | --- | --- |
-| `public/i18n/*.json` | app-ios | `cd app-ios/VelaWallet && xcodebuild test …` (CI `ios`) / `app-ios/scripts/bundle-catalogs.sh` |
+| `assets/i18n/*.json` (was `public/i18n`) | app-ios | `cd app-ios/VelaWallet && xcodebuild test …` (CI `ios`) / `app-ios/scripts/bundle-catalogs.sh` |
 | | app-android | `./gradlew :app:testDebugUnitTest -PvelaSkipRustBuild` (CI `android`) |
 | | app-web | `cd app-web/vela-wallet && pnpm build` |
 | | gates | `npm run verify:i18n`; `node rust/scripts/verify-web.mjs` |
-| `public/vela_core_bg.<hash>.wasm` | app-web | `cd app-web/vela-wallet && pnpm run sync:wasm -- --check` |
+| `assets/wasm/vela_core_bg.<hash>.wasm` (was `public/`) | app-web | `cd app-web/vela-wallet && pnpm run sync:wasm -- --check` |
 | | rust scripts | `node rust/scripts/verify-web.mjs` |
 | | scripts/onchain | `bun run src/status.ts` (manual; network) |
 | `assets/fonts/PlusJakartaSans_*.ttf` | app-desktop | `cd app-desktop/vela-wallet && cargo build` |
 | `design/icon/*.svg` | icon pipeline (app-ios, app-android, getvela.app) | `./scripts/gen-app-icons.sh` then `git diff --stat` (zero) — `assets/images/*` were the script's Expo outputs and are deleted |
-| root `node_modules` (`i18next`, `identicons-esm`) | gates | `npm run dump:vectors && git diff --exit-code rust/crates/vela-core/tests/vectors/`; `npm run verify:identicon`; `npm run gen:identicon-features && git diff --exit-code` |
-| root `node_modules` (`@noble/curves`, `@noble/hashes`) | scripts/onchain | `bun run src/generate.ts` (manual) |
-| root `node_modules` (`typescript`) | packages/vela-sdk | `npm run build --prefix packages/vela-sdk` |
-| `packages/safe-recovery-extension` | itself | `npm ci --prefix … && npm run check --prefix … && npm test --prefix … && npm run build --prefix …` |
+| `scripts/node_modules` (`i18next`, `identicons-esm`) | gates | `npm run dump:vectors && git diff --exit-code rust/crates/vela-core/tests/vectors/`; `npm run verify:identicon`; `npm run gen:identicon-features && git diff --exit-code` |
+| `scripts/node_modules` (`@noble/curves`, `@noble/hashes`) | scripts/onchain | `bun run src/generate.ts` (manual) |
 | `design/`, `scripts/__fixtures__/` | Lottie lint | `npm run lint:lottie:self-test && npm run lint:lottie` |
 | `app-android`, `app-ios`, `app-desktop` navigation roots | reachability | `node scripts/check-native-reachability.mjs` |
 

@@ -43,12 +43,12 @@ cd ../app-android/vela-wallet && ./gradlew :app:installDebug
 
 | 命令 | 用途 |
 |---|---|
-| `gen:i18n` | 语料 → Rust 目录 + `public/i18n`(改语料必须一起提交产物;加键要改脚本里的路径计数) |
+| `gen:i18n` | 语料 → Rust 目录 + `assets/i18n`(改语料必须一起提交产物;加键要改脚本里的路径计数) |
 | `lint:i18n` / `verify:i18n` | 语料缺陷登记 / Rust i18n 与 `i18next` 的 parity |
 | `gen:identicon-features` / `verify:identicon` | 头像图形表再生成 / 与 `identicons-esm` 的 parity |
 | `dump:vectors` | 从 npm 预言机重导 identicon/i18n 语料向量(CI 要求零 diff) |
 | `gen:core-types` | Rust 枚举 → `app-web/vela-wallet/src/lib/*/generated`(CI 要求零 diff) |
-| `build:wasm` / `verify:wasm` | 重建 `rust/pkg-web` + `public/vela_core_bg.<hash>.wasm`(**改过 `rust/` 下任何 `.rs`/`Cargo.toml`,连注释都算,推送前必须重建**)/ 用发布产物回放语料 |
+| `build:wasm` / `verify:wasm` | 重建 `rust/pkg-web` + `assets/wasm/vela_core_bg.<hash>.wasm`(**改过 `rust/` 下任何 `.rs`/`Cargo.toml`,连注释都算,推送前必须重建**)/ 用发布产物回放语料 |
 | `lint:lottie` / `check:native-reachability` | 启动动画资产合法性 / 每个原生壳的页面都能从导航根到达 |
 | `check:expo-residue` | Expo 残留检查(删掉的路径、根目录 npm 文件、依赖、CI 步骤、文档里的死命令) |
 

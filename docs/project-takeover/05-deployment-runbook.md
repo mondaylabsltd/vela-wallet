@@ -11,6 +11,7 @@
 | iOS App | .ipa | App Store Connect | Xcode Archive(`app-ios/VelaWallet/VelaWallet.xcodeproj`);EAS 已随 Expo 退役 |
 | Android App | .aab | Google Play | `app-android/vela-wallet` 的 gradle release 构建;**签名密钥方案待创始人定**(EAS 托管 keystore 已随 Expo 退役,见 `docs/store-submission/`) |
 | 桌面 | .exe / .app / .rpm / .deb / Flatpak | GitHub Releases | `desktop-v*` tag 触发 `.github/workflows/desktop-*-packages.yml` |
+| Chrome 扩展 | `vela-wallet-extension-<version>.zip`(`app-web/vela-wallet/extension/dist` 打包) | GitHub Releases → 手动上传 Chrome Web Store | `extension-v<version>` tag 触发 `.github/workflows/web-extension-package.yml`(tag 版本必须等于 `extension/manifest.json` 的 `version`;手动 `workflow_dispatch` 只出包不发布) |
 
 另有两个**独立仓库**的服务(不在本仓库,部署互不耦合但语义耦合):vela-relay(gas 报价与错误文案)、p256-index(公钥索引)。
 
@@ -31,7 +32,7 @@ iOS/Android 的编译与单测由 CI 的 `ios`/`android` job 跑;本地跑法见
 - [ ] 若改过 bundler 错误文案或相关解析:与 vela-relay 仓库联合验证
 - [ ] 若改过授权额度守卫 / 签名编码:在平行空间(`/[locale]/parallel`)手动过一遍清晰签名场景
 - [ ] 若改过语料:`npm --prefix scripts run gen:i18n` 的产物已与语料一起提交(CI 会 diff)
-- [ ] 若改过 `rust/` 下任何 `.rs` 或 `Cargo.toml`(注释也算):`npm --prefix scripts run build:wasm` 已重建并提交 `rust/pkg-web` + `public/vela_core_bg.<hash>.wasm`(`--check` 对每个 Rust 文件取指纹,039 的第一轮 CI 就是栽在一条注释上)
+- [ ] 若改过 `rust/` 下任何 `.rs` 或 `Cargo.toml`(注释也算):`npm --prefix scripts run build:wasm` 已重建并提交 `rust/pkg-web` + `assets/wasm/vela_core_bg.<hash>.wasm`(`--check` 对每个 Rust 文件取指纹,039 的第一轮 CI 就是栽在一条注释上)
 
 ## Web 钱包发布(Worker,自动)
 
@@ -48,7 +49,7 @@ iOS/Android 的编译与单测由 CI 的 `ios`/`android` job 跑;本地跑法见
 
 `wallet.getvela.app` 从冻结的 Pages 部署迁到 Worker:
 
-1. 仓库里我们自己指向旧路径的链接已改为 `https://wallet.getvela.app/`(官网六处);SDK 默认的 `/web-request` 与 `/pay` 是**欠账**(spec 039 Part B),迁移前补齐或接受 404
+1. 仓库里我们自己指向旧路径的链接已改为 `https://wallet.getvela.app/`(官网六处);`/pay` 支付链接页是**欠账**(spec 039 Part B),迁移前补齐或接受 404(HTTPS SDK 与其 `/web-request` 已于 2026-09-11 整个删除,不再欠)
 2. 面板:给 Worker `vela-wallet-web` 加自定义域名 `wallet.getvela.app`;把 Pages 项目从该域名解绑,并**暂停 Pages 的自动部署**(否则每次 merge 都报一次失败构建)
 3. 迁移前后各做一次上面的 Smoke Test,结果记入 `specs/039-retire-expo-tree/results.md`
 4. 回滚:把域名重新绑回 Pages 项目的最后一次部署(静态、无状态、秒级)

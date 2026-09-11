@@ -209,11 +209,12 @@ replaceable.
 
 One honest caveat: WebAuthn ties a passkey to a relying-party domain
 (`getvela.app`). If that domain were permanently lost, passkeys bound to it would
-need help to work elsewhere. Vela ships an open-source WebAuthn proxy browser
-extension for exactly that disaster-recovery case — today a developer/recovery
-tool rather than a polished consumer flow. Independent on-chain access also
-depends on the destination chain's P-256 (RIP-7212) support, which is improving
-across chains.
+need help to work elsewhere — a tool that can present the original relying
+party to the authenticator. Vela used to ship a developer-grade browser
+extension for that case and retired it in September 2026; a consumer-grade
+recovery path for domain loss is still open work, and we say so rather than
+imply it exists. Independent on-chain access also depends on the destination
+chain's P-256 (RIP-7212) support, which is improving across chains.
 
 ## Privacy
 

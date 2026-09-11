@@ -1,5 +1,5 @@
 /**
- * The brand mark as data (design-system.md §Brand) — the same three paths
+ * The brand mark as data (docs/design-system.md §Brand) — the same three paths
  * `BrandMark.svelte` draws, for surfaces that cannot mount a component: the
  * receive share image is composed as an SVG string and rasterised, so it
  * needs the geometry and the dark-UI asset's own colours as values. Asset

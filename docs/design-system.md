@@ -122,3 +122,64 @@ Effects: shadow.sm / motion.base
 ```
 
 If a needed token does not exist, say so explicitly and propose a semantic token name and its intended role. Do not create a hidden one-off value.
+
+## Inherited rules (merged from the retired `DESIGN_SYSTEM.md`, 2026-09-11)
+
+The Expo-era design system document was folded into this brief when that app
+was retired (spec 039). Everything React Native-specific in it (`createStyles`,
+`withSpring`, `Pressable`, `lucide-react-native`) is gone; the rules below are
+the platform-neutral ones every shell still follows, kept here so the code
+comments that cite them keep pointing at a living document.
+
+### Principles
+
+- **Warm precision.** A warm neutral palette with one bold accent; every
+  element sits on the 4px spacing grid (`space.*`), never in between.
+- **Depth through shadow, not border.** Raised surfaces use `shadow.sm`
+  (`shadow.md` for hero/elevated cards); borders are for inputs and dividers,
+  not for separating areas.
+- **Motion with purpose.** Every animation does a job: a press confirms the
+  element is interactive, an entrance establishes reading order, a pulse
+  signals ongoing activity. Never decorate. Nothing longer than
+  `motion.slow` (400ms) except the launch animation.
+- **Icons over text** where the meaning is universal (back, close); text
+  where the action has consequences ("Confirm & Send").
+
+### Motion
+
+| Context | Animation | Config |
+| --- | --- | --- |
+| Button press | scale to 0.97 | spring (each shell's native spring; the damping is mirrored across shells) |
+| List-row press | scale to 0.98 | spring |
+| Screen content entry | fade + rise | 300–400ms |
+| Staggered sections | fade + rise with delay | delay = N × 50ms |
+| Status indicator | opacity pulse | 0.3 ↔ 1.0, 800ms each way |
+
+Rules: springs for interactive feedback, never a plain timing curve; at most
+two properties animate on one element at once; an entrance completes within
+500ms including its delay; no bounce or elastic easing on content.
+
+### Button states
+
+- **Pressed**: the scale above plus the platform's haptic where it has one;
+  a press must always be felt.
+- **Loading state**: a busy button turns a spinner where its label was and
+  keeps its size and colour — busy is not disabled. Dimming means "cannot be
+  used", and the two must never look alike.
+- **Navigation buttons never show a loading state**; only value-moving
+  actions do.
+
+### Screen patterns
+
+- **Navigation bar**: `[ back/close ]  [ title ]  [ spacer as wide as the left ]`
+  — the title is `typography.title`; small nav targets get a generous hit
+  area (44px control or an 8px slop).
+- **Section header**: uppercase `typography.label` in `color.fg.subtle`,
+  letter-spaced, optional action on the right.
+- **Form field**: uppercase label above; input on `color.bg.sunken`,
+  `radius.lg`, 1px `color.border.base`, `space.xl` padding; helper actions
+  (Scan, MAX) beside the input at `space.md`.
+- **Empty state**: an icon in a 56px sunken circle, a title, one or two
+  sentences in `color.fg.muted`, then the call to action.
+- **Confirmation card**: a raised card of label/value rows separated by 1px
+  dividers — label muted, value semibold.

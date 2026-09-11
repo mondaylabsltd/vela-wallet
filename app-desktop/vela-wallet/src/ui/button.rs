@@ -14,7 +14,7 @@ use gpui::{
 /// `Busy` is NOT `Disabled`: the action is running and this button is what the
 /// person is waiting on. It keeps full emphasis and turns a spinner where its
 /// label was, because a dimmed control reads as "unavailable" — the one thing
-/// "working" must never look like (DESIGN_SYSTEM.md, "Loading state").
+/// "working" must never look like (docs/design-system.md, "Loading state").
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ButtonState {
     Enabled,

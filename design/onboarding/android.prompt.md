@@ -5,7 +5,7 @@
 - 仅支持 Android 移动端，不需要适配平板、桌面端或其他平台。
 - 首发版本优先实现 Onboarding（新手引导）流程。
 - 设计稿位于：`/Volumes/data/production/vela-wallet/design/onboarding`，请以其视觉与交互为准。
-- 集成并遵循 `design-system.md` 中定义的设计系统，包括颜色、字体、间距、圆角、组件规范及深浅色主题策略。
+- 集成并遵循 `docs/design-system.md` 中定义的设计系统，包括颜色、字体、间距、圆角、组件规范及深浅色主题策略。
 - 接入 `rust/crates/vela-core` 中现有的国际化能力，完整支持 i18n/l10n；所有面向用户的文案必须可本地化，避免在界面代码中硬编码文本。
 - 支持浅色模式和深色模式，并确保两种模式下的可读性、对比度和视觉一致性。
 
@@ -26,7 +26,7 @@
 - 仅支持 Android 移动端，不需要适配平板、桌面端或其他平台。
 - 首发版本优先实现 Onboarding（新手引导）流程。
 - 设计稿位于：`/Volumes/data/production/vela-wallet/design/onboarding`，请以其视觉与交互为准。
-- 集成并遵循 `design-system.md` 中定义的设计系统，包括颜色、字体、间距、圆角、组件规范及深浅色主题策略。
+- 集成并遵循 `docs/design-system.md` 中定义的设计系统，包括颜色、字体、间距、圆角、组件规范及深浅色主题策略。
 - 接入 `rust/crates/vela-core` 中现有的国际化能力，完整支持 i18n/l10n；所有面向用户的文案必须可本地化，避免在界面代码中硬编码文本。
 - 支持浅色模式和深色模式，并确保两种模式下的可读性、对比度和视觉一致性。
 

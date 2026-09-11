@@ -237,9 +237,11 @@ three.
 
 1. **Nothing at the root exists only for Expo.** The root listing after the
    cut holds the shells (`app-*`), `rust/`, `packages/`, `scripts/`, `docs/`,
-   `design/`, `specs/`, `assets/`, `public/`, `agent-rules/`, the licence,
-   the four top-level markdown files, and dotfiles that a surviving tool
-   reads. **No `package.json`, lockfile or `node_modules` at the root**: the
+   `design/`, `specs/`, `assets/`, `agent-rules/`, the licence, `README.md`
+   alone among markdown files (the founder's fourth ruling: every other
+   document lives under `docs/`), and dotfiles that a surviving tool reads.
+   `public/` is gone too (third ruling): its generated i18n catalogs and the
+   wasm artifact live under `assets/`. **No `package.json`, lockfile or `node_modules` at the root**: the
    tooling package lives in `scripts/` (founder, 2026-09-11, second ruling:
    *"用一个专门的 scripts 目录来管理，而不是放到根目录"*). No `app.json`, no `metro.*`, no
    `index*.js`, no root `jest.*`, no root `playwright.config.ts`, no stray
@@ -437,7 +439,7 @@ planning before it is called present).
 | Capability | Expo | app-web | Status |
 | --- | --- | --- | --- |
 | EIP-1193 / EIP-6963 provider via browser extension | — | `extension/inpage.js:2,244,417`; `lib/dapp/transport.ts` | app-web only (spec 027) — not a row owed |
-| **HTTPS wallet SDK popup** (`/web-request`, `VELA_WEB_*`) | `app/web-request.tsx`; `services/web-popup-transport.ts`; `packages/vela-sdk/src/protocol.ts` | none — no `VELA_WEB`, `MessagePort` or `window.opener` handling under `app-web/` | **MISSING → owed** (item 2; the SDK package is kept) |
+| **HTTPS wallet SDK popup** (`/web-request`, `VELA_WEB_*`) | `app/web-request.tsx`; `services/web-popup-transport.ts`; `packages/vela-sdk/src/protocol.ts` | none — no `VELA_WEB`, `MessagePort` or `window.opener` handling under `app-web/` | **dropped — ruling** 2026-09-11 (*"packages/vela-sdk 这个能删掉了吗"* → deleted with `docs/https-web-wallet.md` and its CI step; never published to npm, no consumer) |
 | WalletPair relay pairing + Connect screen | `screens/connect/ConnectScreen.tsx:38`; `services/walletpair-transport.ts:135` (*"web and mobile"*) | none | **dropped — ruling**, spec 027 input (2026-09-04): *"现在不用支持 walletpair 以及 remote inject 因为它们不成熟"*. The Expo tree is the last implementation; history keeps it |
 | Remote-inject (SSE + POST) bridge | `services/dapp-transport.ts:81,262` | none | dropped — same ruling |
 | Session list / disconnect | `screens/wallet/ConnectionsView.tsx:248` (live session card) | `routes/[locale]/settings/+page.svelte:52,139,257` (per-origin grants, revoke one / all) | present in a different shape — grants, not live sessions, because the transport is the extension; nothing to port |
@@ -507,7 +509,7 @@ choose the day; none of them holds Part A back.
 | Receive request mode + `/pay` page (items 3, 6) | `payment-request.ts` session, `eip681.ts` parser + `buildPayLink`, `PayRequest` type; an amount control on `ReceiveQr`, a `[locale]/pay` route into the send flow | small–medium |
 | Our own links (item 1) | marketing site ×6, SDK default, docs | trivial; do it in Part A's doc pass |
 | In-app bug report submit | `getvela.app/api/bug-report` proxy exists; `FeedbackBody.svelte` links out | small |
-| HTTPS SDK wallet half (item 2) | `packages/vela-sdk/src/protocol.ts` is the contract; the popup surface and consent page are new in the shell | medium |
+| ~~HTTPS SDK wallet half (item 2)~~ | dropped 2026-09-11 — the SDK package is deleted, nothing is owed | — |
 | EIP-7708 sentinel-address feed path | verify the core's feed rule covers it; port if not | verify |
 | `[locale]/import` placeholder | either route it to the login or remove the page | trivial |
 

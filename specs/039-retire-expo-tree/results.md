@@ -297,3 +297,80 @@ Run 34599463891 on `472ac163`: `app`, `web`, `site`, `rust-macos`,
 `desktop`, **`android`**, **`ios`** all green; only `rust` red (the
 fingerprint, above). The founder's constraint — the four shells unaffected —
 holds on a runner that builds the bindings and the xcframework from scratch.
+
+## Rulings three to six — the root gets cleaner still (2026-09-11)
+
+The founder, going through the root directory after the first pass:
+
+1. **`public/` → `assets/`.** *"public 不需要了，可以迁移到更合适的目录下吧 比如 assets"*.
+   `public/i18n/` is now `assets/i18n/` and the wasm is `assets/wasm/`; the
+   root has no `public/`. Twenty-one files re-pointed across five toolchains
+   (gen-i18n, both parity/verify scripts, app-web's engine + gallery + two
+   e2e + README, app-ios pbxproj + Loc.swift + bundle-catalogs + the file-list
+   generator and its regenerated `.xcfilelist`, app-android gradle + seven
+   fixture tests, the Kotlin and Swift harnesses, CI, build-web/load-wasm/
+   sync-wasm/wasm-init/onchain, the clearsigning samples, README + takeover docs).
+2. **`packages/safe-recovery-extension` deleted.** *"可以删了"* — against the
+   assessment that it was the domain-loss escape hatch; the founder's call.
+   CI loses its two steps; README loses its section; 01 loses its line.
+3. **`app-browser-extension/` (the WebAuthn proxy) deleted.** *"这个也可以删掉了，同时更新文档"*.
+   README loses the "WebAuthn Proxy Extension" section and the Web-Notes
+   pointer; `docs/requirements/B04` gets a history banner and its index row
+   says deleted; B03's FR-3 says the seam stays (`passkey.ts` keeps reading
+   `window.__VELA_WEBAUTHN_PROXY_RPID__`; the comment says why); the
+   marketing site's whitepaper stops claiming the extension ships — it now
+   says the domain-loss recovery path is open work; `100-marketing-leads.md`
+   items 31 and 79 are annotated as void.
+4. **Only README.md at the root.** *"根目录下只应该有 readme.md 其他 md 文档迁移到 docs 下吧"*.
+   `ROADMAP.md`, `WHITEPAPER.md` and `design-system.md` moved to `docs/`;
+   `DESIGN_SYSTEM.md` (the Expo-era design system, already banner'd as
+   history) was **merged** into `docs/design-system.md` as an "Inherited
+   rules" section — the platform-neutral principles, the motion table, the
+   button states (the "Loading state" rule five shells' button components
+   cite), the screen patterns — and deleted. Every reference to the four
+   files was re-pointed (iOS/web token generators and their generated
+   outputs, the design prompts, five button components, the marketing leads).
+
+The root directory after this pass: `.github .gitignore .mcp.json .specify
+LICENSE README.md agent-rules app-android app-desktop app-ios app-web assets
+design docs packages rust scripts specs`.
+
+## Ruling seven, the packaging workflows, and the final verification (2026-09-11)
+
+- **`packages/vela-sdk` deleted** (*"这个能删掉了吗"*): never published to npm,
+  no consumer in the tree, its wallet half already gone with the Expo app.
+  `docs/https-web-wallet.md`, the CI build step and the README feature
+  bullet go with it; `packages/` no longer exists. The owed table loses its
+  "HTTPS SDK wallet half" row — nothing is owed. The rust core's comments
+  that cite `web-request.tsx` line numbers are provenance and stay.
+- **Four packaging workflows**, modelled on `desktop-windows-packages.yml`
+  (tag cuts a release, manual run only builds, PR runs the cheap checks),
+  all **unsigned** by the founder's word (*"不用考虑签名"*):
+  `web-extension-package.yml` (`extension-v*`, zip of
+  `app-web/vela-wallet/extension/dist`; the manifest's five measured
+  constraints are the metadata check), `android-package.yml` (`android-v*`,
+  unsigned release APK + AAB, cross-compiles the core for the three ABIs
+  with cargo-ndk), `ios-package.yml` (`ios-v*`, device archive with code
+  signing disabled, packaged as an unsigned `.ipa` zip plus the
+  `.xcarchive`), `clearsigning-package.yml` (`clearsigning-v*`, the static
+  folder zipped from an explicit allow-list, inline-script check). Each
+  checks that the tag's version equals the manifest / `versionName` /
+  `MARKETING_VERSION`. The runbook's 部署单元一览 lists them.
+- **Second wasm rebuild**: the `public/i18n` → `assets/i18n` edit touched a
+  comment in `rust/crates/vela-core-wasm/Cargo.toml`, which the fingerprint
+  covers; asset now `229a0b69308a`, same 3,734,673 bytes, `--check` and
+  `sync-wasm --check` green.
+- **Verification after rulings 3–7**, all exit 0 unless noted: residue
+  self-test + check; `gen:i18n` + diff (now `assets/i18n`); `dump:vectors` +
+  diff; `verify:i18n`; `verify:identicon`; `verify:wasm`; `build-web --check`
+  (after the rebuild); `sync-wasm --check`; `gen-core-types --check`; Lottie +
+  reachability; `getvela.app` `bun run check` (1749 files, 0 errors — the
+  whitepaper edit included); app-web `pnpm check` / unit (same two
+  pre-existing failures) / `pnpm build` / `welcome-ssr` e2e (reads
+  `assets/i18n`); Android `testDebugUnitTest` (reads `assets/i18n`); iOS
+  `xcodebuild build` (the regenerated `.xcfilelist` and the moved pbxproj
+  path); desktop `cargo test`. The web token generator `--check` is green;
+  the iOS one reports a drift at `Tokens.swift:18` (a blank line vs `}`)
+  that predates this branch — this branch changed only two comment lines in
+  that file, which regenerate identically — left as found, not in CI.
+- CI on `4b7ec84a` (the scripts/ move): all eight jobs green.

@@ -45,7 +45,7 @@ struct Theme {
     var borderStrong: Color { palette.borderStrong.color }
     var onAccent: Color { palette.onAccent.color }
 
-    /// Brand mark hull — themed per design-system.md brand rules
+    /// Brand mark hull — themed per docs/design-system.md brand rules
     /// (Warm Graphite in light UI, Dusk Ivory in dark UI); sails constant.
     var markHull: Color { scheme == .dark ? Brand.hullDark.color : Brand.hullLight.color }
 
@@ -72,7 +72,7 @@ extension TokenColor {
     }
 }
 
-/// Brand constants from design-system.md's brand section (mode-dependent by
+/// Brand constants from docs/design-system.md's brand section (mode-dependent by
 /// rule, not part of the Penpot color sets — see spec 007 logo tokens).
 enum Brand {
     static let sailMain = TokenColor(argb: 0xFF_FF6A45)
@@ -83,7 +83,7 @@ enum Brand {
 
 /// Welcome-screen geometry the token set does not name, measured from
 /// `design/onboarding/W1 Welcome _ default.png` at the 390×844 design frame
-/// (@2x pixels ÷ 2). Licensed by design-system.md ("if a needed token doesn't
+/// (@2x pixels ÷ 2). Licensed by docs/design-system.md ("if a needed token doesn't
 /// exist… propose a semantic name") — kept here, never inline in views.
 enum WelcomeGeometry {
     /// The v2 mark: a 60pt glyph beside a small tracked wordmark, not v1's
@@ -126,7 +126,7 @@ enum WelcomeGeometry {
 
 /// Onboarding-flow (create/login sheet) geometry the token set does not
 /// name, measured from `design/onboarding/create|login/*.png` at the
-/// 390×844 design frame (spec 014). Same design-system.md license as
+/// 390×844 design frame (spec 014). Same docs/design-system.md license as
 /// `WelcomeGeometry` — values live here, never inline in views.
 enum FlowGeometry {
     /// Outcome status-badge circle (mock ≈ 112 px @2x).

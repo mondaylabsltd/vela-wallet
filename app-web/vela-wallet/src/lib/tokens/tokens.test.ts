@@ -3,7 +3,7 @@
  *  1. Drift gate — committed tokens.css/tokens.ts byte-equal a fresh
  *     regeneration from docs/design-tokens.json.
  *  2. Literal audit — no hard-coded visual values outside the token layer
- *     (design-system.md rule 1), with the documented whitelist.
+ *     (docs/design-system.md rule 1), with the documented whitelist.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';

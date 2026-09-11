@@ -173,7 +173,7 @@
 
 **30. 没有 KYC、没有邮箱、没有 cookie 追踪。** 官网用无 cookie、自托管分析（whitepaper "Privacy"）。→ 面向隐私优先地区/人群的强卖点，也是合规简洁度卖点。
 
-**31. "如果 Vela 消失了会怎样"——他们真写了这一页。** 资金在你的链上 Safe，bundler 可替换；唯一诚实警告是 rpId 域名依赖，并已附开源 WebAuthn proxy 扩展做灾备（whitepaper "If Vela disappears"）。→ 极少有钱包敢写"我们倒闭了你怎么办"，这页本身就是病毒级信任内容。
+**31. "如果 Vela 消失了会怎样"——他们真写了这一页。** 资金在你的链上 Safe，bundler 可替换；唯一诚实警告是 rpId 域名依赖，并已附开源 WebAuthn proxy 扩展做灾备（whitepaper "If Vela disappears"）。→ 极少有钱包敢写"我们倒闭了你怎么办"，这页本身就是病毒级信任内容。 （注：该扩展已于 2026-09-11 随 spec 039 删除；这条卖点需改写为「资金在你的链上 Safe」本身，不再引用扩展）
 
 **32. 公钥发布在 Gnosis 链上的智能合约里，不依赖 Vela 服务器存活。** （`docs/recovery.md`、`public-key-index.ts`）→ "恢复你账户的能力，不绑在我们活不活着上"。
 
@@ -217,9 +217,9 @@
 
 **50. 文字可缩放 0.85×–1.28×，无障碍友好。** 全局 `useStyles` 即时重算样式，切换无闪烁（`docs/text-scale-architecture.md`）。→ 面向老年/视障/无障碍合规，是商店审核与 ESG 叙事加分项。
 
-**51. 温暖精确的设计语言。** 暖中性底色 `#FAFAF8` + 单一橙色强调 `#E8572A`，靠阴影而非边框分层，4px 栅格（`DESIGN_SYSTEM.md`）。→ "不像冷冰冰的加密 App"——视觉差异化，吸引非极客人群。
+**51. 温暖精确的设计语言。** 暖中性底色 `#FAFAF8` + 单一橙色强调 `#E8572A`，靠阴影而非边框分层，4px 栅格（`docs/design-system.md`）。→ "不像冷冰冰的加密 App"——视觉差异化，吸引非极客人群。
 
-**52. 动效有目的、不超 400ms。** 按压 spring 0.97、入场 FadeInDown、状态脉冲（`DESIGN_SYSTEM.md` §7）。→ "克制的高级感"，给设计圈/产品圈传播的调性内容。
+**52. 动效有目的、不超 400ms。** 按压 spring 0.97、入场 FadeInDown、状态脉冲（`docs/design-system.md` §7）。→ "克制的高级感"，给设计圈/产品圈传播的调性内容。
 
 **53. EIP-5792 批量调用（wallet_sendCalls）原生支持。** dApp 可一次性请求多步操作（`use-dapp-signing.ts`、walletpair capabilities）。→ 面向 DeFi 重度用户/dApp 开发者的兼容性卖点。
 
@@ -277,7 +277,7 @@
 
 **78. ENSIP-19 Basename 反向解析全支持。** Base 链 reverseRegistrar 流程（`recipient-identity.ts`、README 表）。→ 命名服务覆盖度，DeFi/L2 用户友好。
 
-**79. WebAuthn proxy 扩展做域名灾备 & 开发态调试。** 当 rpId 域名不可用时通过扩展自有 origin 代理 WebAuthn（README、扩展 self-heal 提示）。→ "连'域名没了 passkey 怎么办'都准备了后路"。
+**79. WebAuthn proxy 扩展做域名灾备 & 开发态调试。** 当 rpId 域名不可用时通过扩展自有 origin 代理 WebAuthn（README、扩展 self-heal 提示）。→ "连'域名没了 passkey 怎么办'都准备了后路"。 （注：该扩展已于 2026-09-11 随 spec 039 删除，此条作废）
 
 **80. i18n key 类型化、编译期校验。** `i18next.d.ts` 增强，写错 key 直接 `tsc` 报错（`docs/localization.md`）。→ "翻译不会漏不会错"的质量保证，给本地化合作方信心。
 

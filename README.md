@@ -15,7 +15,6 @@ It is built as **one shared Rust core and one native shell per platform** — Sw
 - **On-chain pricing** — DEX quotes (Uniswap V3, PancakeSwap, Aerodrome) with Chainlink oracle fallback. No third-party price API dependency.
 - **Deposit detection** — Balance monitoring that notices incoming transfers as they land.
 - **dApp connection** — The browser-extension build of the web shell injects an EIP-1193 / EIP-6963 provider into any page (spec [027](specs/027-web-extension-provider/spec.md)). The desktop and native shells sign what the core's clear-signing decoder can explain.
-- **HTTPS wallet SDK** — dApps can integrate [`@vela-wallet/sdk`](packages/vela-sdk/README.md); the wallet-side page it opens is owed to the web shell (spec 039 Part B) and until then is served by the frozen Expo build.
 - **Cross-device recovery** — Passkeys sync through the platform provider (iCloud Keychain, Google Password Manager); the wallet address is a function of every founding key, so any one key rebuilds it on a new device.
 - **Fully self-hostable** — All four backend services (chain data, passkey index, bundler, currency rates) are published on GitHub and can be self-deployed.
 
@@ -67,7 +66,7 @@ One implementation reaches four surfaces: UniFFI generates the Swift and Kotlin 
 | --- | --- | --- | --- |
 | iOS | [app-ios/VelaWallet](app-ios/VelaWallet) | SwiftUI + VelaCoreKit (SPM package wrapping the xcframework) | `./rust/scripts/build-ios-xcframework.sh`, then open `VelaWallet.xcodeproj`, ⌘R |
 | Android | [app-android/vela-wallet](app-android/vela-wallet) | Kotlin + Jetpack Compose + the UniFFI Kotlin bindings | generate the bindings (see [.github/workflows/ci.yml](.github/workflows/ci.yml) `android`), then `./gradlew :app:installDebug` |
-| Web | [app-web/vela-wallet](app-web/vela-wallet/README.md) | SvelteKit 2 / Svelte 5 on Cloudflare Workers; also builds the Chrome extension | `pnpm install && pnpm dev` |
+| Web | [app-web/vela-wallet](app-web/vela-wallet/README.md) | SvelteKit 2 / Svelte 5 on Cloudflare Workers; also builds the Chrome extension (`pnpm build:extension`; a release zip is cut by `git tag extension-v<version>` → [web-extension-package.yml](.github/workflows/web-extension-package.yml)) | `pnpm install && pnpm dev` |
 | Desktop | [app-desktop/vela-wallet](app-desktop/vela-wallet/README.md) | Rust + [gpui](https://github.com/zed-industries/zed) | `cargo run` |
 
 ### One source of truth for everything shared
@@ -76,8 +75,9 @@ The four shells are only worth having if they cannot drift apart. Each shared as
 
 | Shared asset | Source of truth | Generated into |
 | --- | --- | --- |
-| Translations (15 locales) | `rust/crates/vela-core/i18n/locales/` | compiled-in Rust catalogs and `public/i18n/<locale>.json`, which iOS, Android and the web shell all read (`npm run gen:i18n`) |
-| Wire types (Crux events, operations, views) | the Rust enums in `rust/crates/vela-core/src/app/` | `app-web/vela-wallet/src/lib/{onboarding,session,core}/generated` (`npm run gen:core-types`) |
+| Translations (15 locales) | `rust/crates/vela-core/i18n/locales/` | compiled-in Rust catalogs and `assets/i18n/<locale>.json`, which iOS, Android and the web shell all read (`npm --prefix scripts run gen:i18n`) |
+| Wire types (Crux events, operations, views) | the Rust enums in `rust/crates/vela-core/src/app/` | `app-web/vela-wallet/src/lib/{onboarding,session,core}/generated` (`npm --prefix scripts run gen:core-types`) |
+| The web wasm artifact | `rust/crates/vela-core-wasm` | `rust/pkg-web/` (the JS glue) + `assets/wasm/vela_core_bg.<fingerprint>.wasm` (`npm --prefix scripts run build:wasm`) |
 | Design tokens | [docs/design-tokens.json](docs/design-tokens.json) (Penpot DTCG export) | `tokens.css` / `tokens.ts` for web, `Tokens.swift` for iOS — literals are test-banned in product UI |
 | Behavior | the conformance corpus in `rust/crates/vela-core/tests/vectors/` — the crypto/ABI/Safe/WebAuthn vectors are frozen goldens; the identicon and i18n vectors regenerate from the pinned `identicons-esm` and `i18next` packages | replayed through Rust, the Kotlin bindings, the Swift bindings and the shipped web artifact |
 | App icons | [design/icon/](design/icon/) | every platform's icon set (see [App icons](#app-icons)) |
@@ -103,15 +103,15 @@ The repository root carries no npm state. The generators and gates every shell d
 
 ```bash
 npm ci --prefix scripts                       # four packages: the two npm oracles + @noble/* for scripts/onchain
-npm --prefix scripts run gen:i18n             # corpus → Rust catalogs + public/i18n (commit together with the corpus edit)
+npm --prefix scripts run gen:i18n             # corpus → Rust catalogs + assets/i18n (commit together with the corpus edit)
 npm --prefix scripts run gen:core-types       # Rust enums → app-web's generated/ wire types
-npm --prefix scripts run build:wasm           # vela-core → rust/pkg-web + public/vela_core_bg.<hash>.wasm
+npm --prefix scripts run build:wasm           # vela-core → rust/pkg-web + assets/wasm/vela_core_bg.<hash>.wasm
 npm --prefix scripts run verify:i18n          # parity: Rust i18n vs the pinned i18next
 npm --prefix scripts run verify:identicon     # parity: Rust identicons vs the pinned identicons-esm
 npm --prefix scripts run check:expo-residue   # the Expo tree stays retired (fails CI on a dead command in any doc)
 ```
 
-`i18next` and `identicons-esm` are the oracles the conformance corpus is replayed against; `@noble/curves` and `@noble/hashes` are resolved from `scripts/node_modules` by `scripts/onchain/`. Do not "clean up" those four. `packages/vela-sdk` and `packages/safe-recovery-extension` install their own dependencies.
+`i18next` and `identicons-esm` are the oracles the conformance corpus is replayed against; `@noble/curves` and `@noble/hashes` are resolved from `scripts/node_modules` by `scripts/onchain/`. Do not "clean up" those four.
 
 ## Platform Support
 
@@ -119,7 +119,7 @@ Capabilities differ per shell and are documented where they were built: each she
 
 ### Web Notes
 
-- **Passkey rpId**: Uses the registrable domain (`getvela.app`) so passkeys work across subdomains and are consistent with the native shells. The [WebAuthn proxy extension](#webauthn-proxy-extension-domain-recovery--dev-passkeys) lets previews and local dev use the same rpId.
+- **Passkey rpId**: Uses the registrable domain (`getvela.app`) so passkeys work across subdomains and are consistent with the native shells. Local dev and preview hosts get their own rpId (`localhost` / the preview hostname) and therefore their own passkeys; the parallel space (`/[locale]/parallel`) is how a preview is exercised with a fixed key set instead.
 - **Local storage**: IndexedDB for wallet records, `localStorage` for the onboarding keys and the endpoint override. No cross-device sync — accounts are stored in the browser only; the passkey and the public-key index rebuild them elsewhere.
 - **dApps**: the same code builds a Chrome extension that injects the provider into pages (`app-web/vela-wallet/extension/`); the plain web app has no in-page dApp transport.
 
@@ -223,73 +223,6 @@ Before your first transaction on a network, you need to fund a **dedicated gas r
 ### Max Send
 
 When sending the maximum amount of a native token (ETH, BNB, etc.), the wallet automatically reserves enough for the transaction's gas fee (EntryPoint prefund). This prevents "insufficient balance" failures.
-
-## WebAuthn Proxy Extension (Domain Recovery / Dev Passkeys)
-
-If the production domain (`getvela.app`) becomes unavailable, passkeys bound to it will stop working on the new hosting domain because WebAuthn ties credentials to the rpId (relying party ID). The included Chrome extension solves this by proxying WebAuthn calls through the extension's own origin, which has `host_permissions` for `getvela.app`.
-
-This also enables local development and preview deployments to authenticate with production passkeys.
-
-### How rpId is resolved
-
-
-| Environment                                           | Without extension | With extension |
-| ------------------------------------------------------- | ------------------- | ---------------- |
-| `getvela.app` / `*.getvela.app`                       | `getvela.app`     | `getvela.app`  |
-| `localhost` / `127.0.0.1`                             | `localhost`       | `getvela.app`  |
-| Preview domains (`*.pages.dev`, `*.vercel.app`, etc.) | current hostname  | `getvela.app`  |
-
-Without the extension, each environment uses its own rpId and maintains independent passkeys. With the extension installed, all environments share the `getvela.app` rpId and the same set of passkeys.
-
-### Supported preview domains
-
-`pages.dev`, `workers.dev`, `github.io`, `vercel.app`, `netlify.app`, `deno.dev`, `fly.dev`, `railway.app`, `render.com`, `surge.sh`, `ngrok-free.app`, `trycloudflare.com`
-
-### Setup
-
-1. Open `chrome://extensions/` and enable **Developer mode**.
-2. Click **Load unpacked** and select the `app-browser-extension/chrome-ext-webauthn-proxy/` directory.
-3. Grant the requested permissions when prompted.
-4. Navigate to your dev/preview URL — the extension activates automatically.
-
-When a page calls `navigator.credentials.create()` or `.get()` with a non-matching rpId, the extension intercepts the call, opens a small popup window, and performs the WebAuthn ceremony with `rpId: "getvela.app"`. The system authenticator prompt (Touch ID / Windows Hello) appears as usual, and the result is passed back to the page.
-
-### How it works
-
-```
-Page JS (any domain)
-  │  navigator.credentials.create/get intercepted
-  ▼
-inject.js (MAIN world, document_start)
-  │  serialize options, window.postMessage
-  ▼
-bridge.js (ISOLATED world, has chrome.runtime API)
-  │  chrome.runtime.sendMessage
-  ▼
-background.js (service worker)
-  │  chrome.windows.create → opens popup
-  ▼
-webauthn.html/js (extension origin, has host_permissions)
-  │  navigator.credentials.create/get({ rpId: "getvela.app" })
-  │  → System authenticator prompt (Touch ID / Windows Hello)
-  ▼
-Result flows back: webauthn.js → background → bridge → inject → page
-```
-
-### Important notes
-
-- The `clientDataJSON.origin` in the WebAuthn response will be `chrome-extension://<id>`, not the page origin. Your relying party server must accept this origin when validating credentials created through the extension.
-- The extension sets `window.__VELA_WEBAUTHN_PROXY_RPID__` in the page context. The web shell reads this global (`app-web/vela-wallet/src/lib/onboarding/core/passkey.ts`) to ensure public key uploads and server queries use the same rpId as the WebAuthn call.
-- This extension is for development and disaster recovery only. Do not publish it to the Chrome Web Store.
-
-### Safe owner recovery extension
-
-The repository also includes [`packages/safe-recovery-extension`](packages/safe-recovery-extension/README.md),
-which lets `app.safe.global` control a Safe whose owner list contains Vela's
-shared WebAuthn signer contract. The contract owner only authorizes the SafeTx;
-it cannot originate an outer transaction. The extension therefore uses a local,
-gas-only EOA relayer to submit the signed `execTransaction`, after simulating it
-and checking that the Safe calldata contains the WebAuthn contract signature.
 
 ## Recipient Identity Resolution
 

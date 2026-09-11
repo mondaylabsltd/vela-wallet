@@ -4,7 +4,7 @@
 //
 //  Contacts geometry + motion the token set does not name (spec 018,
 //  research.md D9), measured from design/contacts/C1…C6 at the 390×844
-//  design frame (mock pixels ≈ points). Licensed by design-system.md
+//  design frame (mock pixels ≈ points). Licensed by docs/design-system.md
 //  ("if a needed token doesn't exist… propose a semantic name") — values
 //  live here, never inline in views (audit-literals).
 //
