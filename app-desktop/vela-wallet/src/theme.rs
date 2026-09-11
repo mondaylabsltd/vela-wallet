@@ -420,6 +420,26 @@ pub fn text_mono_address() -> Pixels {
 
 /// Monospace family for addresses. Menlo ships on macOS; the DejaVu face is
 /// the broadly-present fallback on the Linux CI/dev images this app targets.
+/// The UI face — Plus Jakarta Sans, the family the web declares in
+/// `--font-ui` and iOS bundles in `DesignSystem/Fonts`. Named here and applied
+/// at every page root (spec 038 finding 8): before this the desktop named a
+/// family for MONO only, so all other text fell to gpui's default — the host's
+/// system font — one typeface away from the product the web shows.
+pub fn font_ui() -> &'static str {
+    "Plus Jakarta Sans"
+}
+
+/// The four faces the app loads at startup (`main.rs`), from the repo's
+/// shared `assets/fonts/`. TTF, because gpui's font database reads TTF/OTF
+/// and not the woff2 the web ships. CJK and mono fall back to the host's
+/// faces — recorded in `specs/038-first-run-parity/results.md`.
+pub const UI_FONT_FILES: [&[u8]; 4] = [
+    include_bytes!("../../../assets/fonts/PlusJakartaSans_400Regular.ttf"),
+    include_bytes!("../../../assets/fonts/PlusJakartaSans_500Medium.ttf"),
+    include_bytes!("../../../assets/fonts/PlusJakartaSans_600SemiBold.ttf"),
+    include_bytes!("../../../assets/fonts/PlusJakartaSans_700Bold.ttf"),
+];
+
 pub fn font_mono() -> &'static str {
     if cfg!(target_os = "macos") {
         "Menlo"
@@ -488,6 +508,24 @@ pub const LAUNCH_LARGE_SCREEN_MIN_W: f32 = 768.;
 /// Existing tests must not sit through the animation, and a sleep long enough
 /// to outlast it is exactly the flaky waiting this replaces. Same shape as the
 /// `VELA_THEME` override this app already has.
+/// The launch animation replays after a week (spec 012's rule, spec 038's
+/// desktop). Shared verbatim with the web's `app.html` pre-paint block and
+/// `$lib/launch/constants.ts`; the test at the bottom of this file reads the
+/// web's copy and asserts the number agrees. Storage key: `vela.launch.played`.
+pub const LAUNCH_REPLAY_AFTER_MS: f64 = 604_800_000.;
+pub const LAUNCH_PLAYED_KEY: &str = "vela.launch.played";
+/// The intro plays once, ever (founder direction, 2026-09-01). Storage key
+/// shared with the web.
+pub const INTRO_SEEN_KEY: &str = "vela.intro.seen";
+
+/// Is the launch animation due on this start?
+pub fn launch_due(last_played_ms: Option<f64>, now_ms: f64) -> bool {
+    match last_played_ms {
+        None => true,
+        Some(last) => !last.is_finite() || now_ms - last >= LAUNCH_REPLAY_AFTER_MS,
+    }
+}
+
 pub fn launch_disabled() -> bool {
     std::env::var("VELA_SKIP_LAUNCH_ANIMATION").as_deref() == Ok("1")
 }
@@ -886,5 +924,52 @@ mod tests {
             large(768., 1024.),
             "a tablet at the threshold must resolve large-screen"
         );
+    }
+}
+
+#[cfg(test)]
+mod fonts_bundled {
+    use super::UI_FONT_FILES;
+
+    /// SC-424: the faces travel with the app. Each bundled file is a TrueType
+    /// (sfnt version 0x00010000) of a plausible size — a truncated or
+    /// mis-copied file would otherwise fail silently at `add_fonts` and the
+    /// app would render in the system face with nothing to say why.
+    #[test]
+    fn the_four_faces_are_truetype_files() {
+        for (index, bytes) in UI_FONT_FILES.iter().enumerate() {
+            assert_eq!(&bytes[..4], &[0x00, 0x01, 0x00, 0x00], "font {index}: not sfnt/TrueType");
+            assert!(bytes.len() > 50_000, "font {index}: {} bytes is not a whole face", bytes.len());
+        }
+    }
+}
+
+#[cfg(test)]
+mod launch_gate {
+    use super::*;
+
+    /// SC-422: the desktop's replay window is the web's number, read from the
+    /// web's own pre-paint block so the two cannot drift.
+    #[test]
+    fn the_replay_window_is_the_webs() {
+        let html = include_str!("../../../app-web/vela-wallet/src/app.html");
+        assert!(
+            html.contains("604800000"),
+            "the web's app.html no longer names the replay window"
+        );
+        assert_eq!(LAUNCH_REPLAY_AFTER_MS, 604_800_000.);
+        assert!(html.contains(LAUNCH_PLAYED_KEY), "storage key differs from the web");
+        assert!(html.contains(INTRO_SEEN_KEY), "intro key differs from the web");
+    }
+
+    #[test]
+    fn due_when_never_played_or_older_than_a_week() {
+        let now = 1_800_000_000_000.;
+        assert!(launch_due(None, now));
+        assert!(launch_due(Some(now - LAUNCH_REPLAY_AFTER_MS), now));
+        assert!(launch_due(Some(now - LAUNCH_REPLAY_AFTER_MS - 1.), now));
+        assert!(!launch_due(Some(now - 1.), now));
+        assert!(!launch_due(Some(now - LAUNCH_REPLAY_AFTER_MS + 1.), now));
+        assert!(launch_due(Some(f64::NAN), now), "a corrupt flag plays it");
     }
 }

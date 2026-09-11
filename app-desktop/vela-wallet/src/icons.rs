@@ -16,7 +16,7 @@ use gpui::{Hsla, RenderImage, Rgba};
 use crate::raster::{empty_render_image, render_image_from_pixmap};
 
 /// Rasterize at 2× the logical size for retina crispness.
-const RASTER_SCALE: u32 = 2;
+pub(crate) const RASTER_SCALE: u32 = 2;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Icon {
@@ -296,7 +296,7 @@ impl IconCache {
     }
 }
 
-fn rasterize(svg: &str, size: u32) -> Option<Arc<RenderImage>> {
+pub(crate) fn rasterize(svg: &str, size: u32) -> Option<Arc<RenderImage>> {
     let options = resvg::usvg::Options::default();
     let tree = resvg::usvg::Tree::from_str(svg, &options).ok()?;
     let mut pixmap = resvg::tiny_skia::Pixmap::new(size, size)?;

@@ -22,6 +22,8 @@ mod onboarding_flow;
 mod outcome;
 mod parallel_space;
 mod passkey_directory;
+mod intro_art;
+mod passkey_icons;
 mod raster;
 mod resident;
 mod session;
@@ -245,6 +247,16 @@ fn main() {
     app.run(|cx: &mut App| {
         // Storage is read before the first window opens, so the route guard has
         // a real answer to give on frame one.
+        // The UI face, before any window: every page root names it, and a
+        // family named before it is loaded renders in the fallback face until
+        // the next frame — a visible flash on a wallet's first screen.
+        let fonts = theme::UI_FONT_FILES
+            .iter()
+            .map(|bytes| std::borrow::Cow::Borrowed(*bytes))
+            .collect();
+        if let Err(error) = cx.text_system().add_fonts(fonts) {
+            eprintln!("[vela-wallet] bundled fonts could not be loaded: {error}");
+        }
         session::boot(cx);
 
         cx.on_action(|_: &Quit, cx| cx.quit());

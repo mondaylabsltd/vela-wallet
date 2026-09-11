@@ -10258,6 +10258,7 @@ impl Render for WalletPage {
         let explore_form = self.explore_form_dialog(&theme, window, cx);
         let mut root = div()
             .size_full()
+            .font_family(theme::font_ui())
             .relative()
             .bg(theme.bg_base)
             .text_color(theme.fg_base)

@@ -14,6 +14,8 @@
 	 */
 	import type { KeyMethod } from '$lib/onboarding/generated/KeyMethod';
 	import { methodCopy } from '$lib/onboarding/core/copy';
+	import { methodIcon } from '$lib/onboarding/passkey-icons';
+	import PasskeyMethodIcon from '$lib/ui/onboarding/PasskeyMethodIcon.svelte';
 
 	interface Props {
 		open: boolean;
@@ -32,7 +34,7 @@
 			{@const copy = methodCopy(method)}
 			<li>
 				<button class="method" type="button" onclick={() => onPick(method)}>
-					<span class="icon" aria-hidden="true" data-method={method}></span>
+					<PasskeyMethodIcon id={methodIcon(method)} />
 					<span class="text">
 						<span class="name">{strings(copy.title)}</span>
 						<span class="caption">{strings(copy.body)}</span>
@@ -68,31 +70,6 @@
 
 	.method:hover {
 		background: var(--color-bg-sunken);
-	}
-
-	.icon {
-		flex: 0 0 var(--icon-lg);
-		height: var(--icon-lg);
-		border: var(--border-emphasis) solid var(--color-fg-muted);
-		border-radius: var(--radius-sm);
-	}
-
-	/* The three shapes the design draws: a wide laptop, a tall phone, a squat
-	   key. Proportion is the whole signal — a person picks the one that looks
-	   like the thing in their hand. */
-	.icon[data-method='platform'] {
-		width: var(--icon-lg);
-		height: var(--icon-base);
-	}
-
-	.icon[data-method='hybrid'] {
-		width: var(--icon-base);
-		height: var(--icon-lg);
-	}
-
-	.icon[data-method='security_key'] {
-		width: var(--icon-lg);
-		height: var(--icon-sm);
 	}
 
 	.text {

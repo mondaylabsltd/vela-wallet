@@ -14,10 +14,9 @@
 //! reviewed once and then drift. A gallery that drew its own copy would drift
 //! with them.
 
-use gpui::{
-    App, Div, FontWeight, InteractiveElement as _, ParentElement, SharedString,
-    StatefulInteractiveElement as _, Styled, Window, div, px, rgb,
-};
+use std::cell::RefCell;
+
+use gpui::{App, Div, div, FontWeight, ImageSource, img, InteractiveElement as _, ParentElement, px, rgb, SharedString, StatefulInteractiveElement as _, Styled, Window};
 use qrcode::{Color as QrColor, QrCode};
 
 use vela_core::app::KeyMethod;
@@ -25,6 +24,7 @@ use vela_core::app::KeyMethod;
 use crate::ctap::usb::{TouchKind, TouchRequest};
 use crate::executor::passkey::{CredentialChoice, PinRequest};
 use crate::loc::Loc;
+use crate::passkey_icons::{Palette, PasskeyIcon, PasskeyIconCache};
 use crate::outcome::{SHEET_PAD, SHEET_RADIUS, SHEET_W};
 use crate::theme::{self, FLOW_GAP_LG, FLOW_GAP_MD, FLOW_GAP_SM, TOUCH_DISC, Theme};
 use crate::ui::{ButtonVariant, NameFieldStrings, text_field, vela_button, vela_button_opts};
@@ -124,18 +124,33 @@ pub fn touch_card(theme: &Theme, loc: &Loc, waiting: &TouchRequest) -> Div {
 /// security key (or a phone) is reachable even where a platform passkey would be
 /// the silent default. `Platform` has no route on the desktop and shows as
 /// unavailable-with-a-reason, exactly as it does in the create picker.
+/// The method rows' mark size — the web's `--icon-lg`.
+pub const METHOD_ICON_PX: u32 = 24;
+
 pub fn signin_method_card(
     theme: &Theme,
     loc: &Loc,
+    icons: &RefCell<PasskeyIconCache>,
     on_pick: std::sync::Arc<dyn Fn(KeyMethod, &mut Window, &mut App)>,
     on_dismiss: impl Fn(&gpui::ClickEvent, &mut Window, &mut App) + 'static,
 ) -> Div {
+    // The row's mark (spec 038, #190): the founder's set, with "this device"
+    // resolved to the platform this binary runs on. Paper = the card's own
+    // surface, so the USB key's slots read as slots.
+    let palette = Palette {
+        ink: theme.fg_muted,
+        muted: theme.fg_subtle,
+        paper: theme.bg_raised,
+    };
     // "This device" is real on exactly one desktop. Windows has Windows Hello
     // behind `webauthn.dll`; macOS and Linux reach no platform authenticator
     // from gpui at all, so there the row stays greyed and says why.
     let this_device = crate::executor::passkey::platform_supported();
     let entry = |method: KeyMethod, title_key: &str, body_key: &str, available: bool| {
         let on_pick = on_pick.clone();
+        let mark = icons
+            .borrow_mut()
+            .image(PasskeyIcon::for_method(method), palette, METHOD_ICON_PX);
         let row = div()
             .id(("signin-method", method as u64))
             .w_full()
@@ -145,6 +160,12 @@ pub fn signin_method_card(
             .py(px(FLOW_GAP_MD))
             .border_b_1()
             .border_color(theme.border_card)
+            .child(
+                img(ImageSource::Render(mark))
+                    .w(px(METHOD_ICON_PX as f32))
+                    .h(px(METHOD_ICON_PX as f32))
+                    .flex_none(),
+            )
             .child(
                 div()
                     .flex_1()

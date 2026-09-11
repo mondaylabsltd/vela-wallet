@@ -46,6 +46,7 @@ use crate::loc::Loc;
 use crate::onboarding_flow::{self, FLOW_STEPS, FlowEvent, FlowHost, FlowSink, render_create_flow};
 use crate::outcome::{ActionId, Prompt, SHEET_PAD, SHEET_RADIUS, SHEET_W, outcome_sheet};
 use crate::passkey_directory::{self, PasskeyDirectory};
+use crate::passkey_icons::PasskeyIconCache;
 use crate::session;
 use crate::theme::{
     self, CONTENT_PAD_X, CONTENT_PAD_Y, FLOW_COLUMN_W, FLOW_GAP_LG, FLOW_GAP_MD, GAP_HERO_CTA,
@@ -109,6 +110,8 @@ pub struct OnboardingPage {
     launch: Option<LaunchAnimation>,
     /// The DONE card's avatar (spec 015 D1's rasterizer, reused).
     identicons: RefCell<IdenticonCache>,
+    /// The method rows' marks (spec 038).
+    passkey_icons: RefCell<PasskeyIconCache>,
     /// Names and marks for models the compiled catalog cannot name — asked
     /// once per AAGUID, from the render pass that first needs one.
     directory: RefCell<PasskeyDirectory>,
@@ -197,7 +200,13 @@ impl OnboardingPage {
         let login_view = login.view();
 
         let mut page = Self {
-            launch: if theme::launch_disabled() {
+            // Spec 038: the 7-day replay window the web has had since spec 012.
+            // Before this the desktop played it on EVERY start.
+            launch: if theme::launch_disabled()
+                || !theme::launch_due(
+                    storage::read_epoch_ms(theme::LAUNCH_PLAYED_KEY),
+                    crate::executor::now_ms(),
+                ) {
                 None
             } else {
                 Some(LaunchAnimation::new(mode, cx))
@@ -206,6 +215,7 @@ impl OnboardingPage {
             loc,
             focus_handle,
             identicons: RefCell::default(),
+            passkey_icons: RefCell::default(),
             directory: RefCell::default(),
             creating: false,
             create,
@@ -710,6 +720,7 @@ impl OnboardingPage {
         let card = hardware::signin_method_card(
             theme,
             &self.loc,
+            &self.passkey_icons,
             on_pick,
             cx.listener(|this, _, _, cx| {
                 this.signin_methods_open = false;
@@ -1029,6 +1040,7 @@ impl Render for OnboardingPage {
             });
             let host = FlowHost {
                 theme: &theme,
+                passkey_icons: &self.passkey_icons,
                 loc: &self.loc,
                 view: &self.create_view,
                 name_focus: &self.name_focus,
@@ -1103,6 +1115,7 @@ impl Render for OnboardingPage {
         let mut root = div()
             .size_full()
             .relative()
+            .font_family(theme::font_ui())
             .bg(theme.bg_base)
             .child(page.opacity(page_opacity));
 
@@ -1161,7 +1174,11 @@ impl Render for OnboardingPage {
 
         let root = match overlay {
             None => {
-                self.launch = None;
+                // The animation has finished (or was never due). Record the
+                // finish ONCE — this arm runs every frame afterwards.
+                if self.launch.take().is_some() {
+                    storage::write_epoch_ms(theme::LAUNCH_PLAYED_KEY, crate::executor::now_ms());
+                }
                 root
             }
             Some(overlay) => {
