@@ -31,9 +31,9 @@ apps per quickstart.md (SC-429).
 
 ## Phase 2: Foundational (blocking)
 
-- [ ] T004 Generalise `rasterize(svg, size)` to `rasterize_sized(svg, w, h)` in `app-desktop/vela-wallet/src/icons.rs` (non-square canvas; the intro art is 160×128) keeping the existing square call sites
-- [ ] T005 [P] Add `theme::font_ui() -> &'static str` returning `"Plus Jakarta Sans"` in `app-desktop/vela-wallet/src/theme.rs`
-- [ ] T006 [P] Add `read_epoch_ms(key)` / `write_epoch_ms(key, now)` helpers over `read_value`/`write_value` in `app-desktop/vela-wallet/src/executor/storage.rs` (used by the intro and launch gates)
+- [x] T004 Generalise `rasterize(svg, size)` to `rasterize_sized(svg, w, h)` in `app-desktop/vela-wallet/src/icons.rs` (non-square canvas; the intro art is 160×128) keeping the existing square call sites
+- [x] T005 [P] Add `theme::font_ui() -> &'static str` returning `"Plus Jakarta Sans"` in `app-desktop/vela-wallet/src/theme.rs`
+- [x] T006 [P] Add `read_epoch_ms(key)` / `write_epoch_ms(key, now)` helpers over `read_value`/`write_value` in `app-desktop/vela-wallet/src/executor/storage.rs` (used by the intro and launch gates)
 - [ ] T007 [P] Add `ceremony::FailureKind`→detail plumbing: `PasskeyFailure` in `app-desktop/vela-wallet/src/executor/passkey.rs` carries the peer-close reason string (used by US2)
 
 ---
@@ -85,7 +85,7 @@ the intro is composed like its neighbours (SC-411…415).
 - [x] T030 [US6] Desktop: render the "this machine could not get out" line on Welcome (reuse `onboarding.settings.warningText`'s slot with the existing `network` corpus sentence if one fits; else add ONE key `onboarding.settings.transportFailedText` to all 15 locales) in `app-desktop/vela-wallet/src/onboarding.rs`; never the endpoint card for this state — SC-421
 - [x] T031 [P] [US6] Web: surface `transport_failed` the same way in `app-web/vela-wallet/src/routes/[locale]/+page.svelte` (the `endpointWarning` block)
 - [x] T032 [P] [US6] Candidate-chain test in `app-desktop/vela-wallet/src/executor/proxy.rs` `mod tests`: env proxy at a refusing port + system proxy absent → falls to direct; env refusing + system live → system; all refusing → `Local` — SC-431
-- [ ] T033 [US6] Move the caBLE tunnel dial in `app-desktop/vela-wallet/src/ctap/cable.rs` (`dialing … through`) onto the same candidate chain (it currently resolves its own proxy)
+- [x] T033 [US6] Move the caBLE tunnel dial in `app-desktop/vela-wallet/src/ctap/cable.rs` (`dialing … through`) onto the same candidate chain (it currently resolves its own proxy)
 
 ## Phase 6: US3 — Desktop intro and the 7-day launch gate (P2)
 
@@ -94,13 +94,13 @@ days (SC-416, 417, 422).
 
 **Independent test**: quickstart rows 416/417 and 422.
 
-- [ ] T034 [P] [US3] Hand-port `specs/020-intro-carousel/contracts/intro-illustrations.json` to `app-desktop/vela-wallet/src/intro_art.rs` (three illustrations, elements with role/mode/width/opacity/d) and an SVG builder that substitutes theme colours (line = `fg_subtle`, accent = `accent`, outline fill = `bg_base`)
-- [ ] T035 [P] [US3] Test in `app-desktop/vela-wallet/src/intro_art.rs` `mod tests` that reads the contract JSON and asserts every path `d` and opacity matches — SC-417
-- [ ] T036 [US3] Create `app-desktop/vela-wallet/src/intro.rs`: `IntroState { index, drag_px, dragging }`, slide data from the three `onboarding.intro.*` key pairs via `Loc`, `render(...)` with rail (tagline slot), viewport with the three cells, dots, Skip (not on last), Next / Create / Sign-in buttons; drag via `on_mouse_down` / `on_mouse_move` / `on_mouse_up` on the viewport, ←/→ via `KeyDownEvent`; art via `rasterize_sized` cached per (id, dark)
-- [ ] T037 [US3] Route it in `app-desktop/vela-wallet/src/onboarding.rs`: `intro: Option<IntroState>` set at construction when `storage::read_epoch_ms("vela.intro.seen")` is `None`; render after the launch overlay and before Welcome; `leave_intro()` writes the flag and routes Create → `start_create`, Sign-in → open the method picker, Skip → Welcome — SC-416
-- [ ] T038 [US3] Launch gate: `LAUNCH_REPLAY_AFTER_MS: u64 = 604_800_000` in `app-desktop/vela-wallet/src/theme.rs`; in `onboarding.rs` construct `LaunchAnimation` only when `vela.launch.played` is absent or older; write the flag when the animation finishes or is skipped (`launch = None` sites) — SC-422
-- [ ] T039 [P] [US3] Test `launch_gate` in `app-desktop/vela-wallet/src/theme.rs` `mod tests`: the constant equals the number in `app-web/vela-wallet/src/app.html` (read the file relative to the workspace) and `constants.ts` — SC-422
-- [ ] T040 [US3] Dev seam: `VELA_INTRO=1` forces the intro (mirror of `?intro`) in `app-desktop/vela-wallet/src/onboarding.rs`, listed in the README's dev switches
+- [x] T034 [P] [US3] Hand-port `specs/020-intro-carousel/contracts/intro-illustrations.json` to `app-desktop/vela-wallet/src/intro_art.rs` (three illustrations, elements with role/mode/width/opacity/d) and an SVG builder that substitutes theme colours (line = `fg_subtle`, accent = `accent`, outline fill = `bg_base`)
+- [x] T035 [P] [US3] Test in `app-desktop/vela-wallet/src/intro_art.rs` `mod tests` that reads the contract JSON and asserts every path `d` and opacity matches — SC-417
+- [x] T036 [US3] Create `app-desktop/vela-wallet/src/intro.rs`: `IntroState { index, drag_px, dragging }`, slide data from the three `onboarding.intro.*` key pairs via `Loc`, `render(...)` with rail (tagline slot), viewport with the three cells, dots, Skip (not on last), Next / Create / Sign-in buttons; drag via `on_mouse_down` / `on_mouse_move` / `on_mouse_up` on the viewport, ←/→ via `KeyDownEvent`; art via `rasterize_sized` cached per (id, dark)
+- [x] T037 [US3] Route it in `app-desktop/vela-wallet/src/onboarding.rs`: `intro: Option<IntroState>` set at construction when `storage::read_epoch_ms("vela.intro.seen")` is `None`; render after the launch overlay and before Welcome; `leave_intro()` writes the flag and routes Create → `start_create`, Sign-in → open the method picker, Skip → Welcome — SC-416
+- [x] T038 [US3] Launch gate: `LAUNCH_REPLAY_AFTER_MS: u64 = 604_800_000` in `app-desktop/vela-wallet/src/theme.rs`; in `onboarding.rs` construct `LaunchAnimation` only when `vela.launch.played` is absent or older; write the flag when the animation finishes or is skipped (`launch = None` sites) — SC-422
+- [x] T039 [P] [US3] Test `launch_gate` in `app-desktop/vela-wallet/src/theme.rs` `mod tests`: the constant equals the number in `app-web/vela-wallet/src/app.html` (read the file relative to the workspace) and `constants.ts` — SC-422
+- [x] T040 [US3] Dev seam: `VELA_INTRO=1` forces the intro (mirror of `?intro`) in `app-desktop/vela-wallet/src/onboarding.rs`, listed in the README's dev switches
 
 ## Phase 7: US4 — One typeface, the web's weights (P2)
 
@@ -108,10 +108,10 @@ days (SC-416, 417, 422).
 
 **Independent test**: quickstart row 423/424.
 
-- [ ] T041 [US4] Load the four TTFs with `cx.text_system().add_fonts(vec![Cow::Borrowed(include_bytes!(...))])` at startup in `app-desktop/vela-wallet/src/main.rs` before the first window opens
-- [ ] T042 [US4] Apply `.font_family(theme::font_ui())` on the root `div` of `OnboardingPage::render` (`onboarding.rs`) and `WalletPage::render` (`wallet/page.rs`) and the gallery root (`gallery.rs`)
-- [ ] T043 [P] [US4] Test `fonts_bundled` in `app-desktop/vela-wallet/src/theme.rs` `mod tests`: the four `include_bytes!` parse as TTF (`ttf-parser` is already a transitive dep via cosmic-text; else assert magic bytes + size) — SC-424
-- [ ] T044 [US4] Weight audit: `button.rs:115,168` BOLD → SEMIBOLD; `logo.rs:71` EXTRA_BOLD → BOLD; then walk the remaining `FontWeight::` sites in `app-desktop/vela-wallet/src/**` against the web token at the same control (headline bold, body regular, caption medium/semibold per the web component) and record each change in `specs/038-first-run-parity/results.md` — SC-423
+- [x] T041 [US4] Load the four TTFs with `cx.text_system().add_fonts(vec![Cow::Borrowed(include_bytes!(...))])` at startup in `app-desktop/vela-wallet/src/main.rs` before the first window opens
+- [x] T042 [US4] Apply `.font_family(theme::font_ui())` on the root `div` of `OnboardingPage::render` (`onboarding.rs`) and `WalletPage::render` (`wallet/page.rs`) and the gallery root (`gallery.rs`)
+- [x] T043 [P] [US4] Test `fonts_bundled` in `app-desktop/vela-wallet/src/theme.rs` `mod tests`: the four `include_bytes!` parse as TTF (`ttf-parser` is already a transitive dep via cosmic-text; else assert magic bytes + size) — SC-424
+- [~] T044 [US4] (the two pinned sites done; the wider walk pending) Weight audit: `button.rs:115,168` BOLD → SEMIBOLD; `logo.rs:71` EXTRA_BOLD → BOLD; then walk the remaining `FontWeight::` sites in `app-desktop/vela-wallet/src/**` against the web token at the same control (headline bold, body regular, caption medium/semibold per the web component) and record each change in `specs/038-first-run-parity/results.md` — SC-423
 - [ ] T045 [US4] Record the CJK/mono deviation (OS fallback faces) in `specs/038-first-run-parity/results.md` with the TTF-sourcing follow-up
 
 ## Phase 8: US5 — Passkey method icons, platform-resolved; web sign-in picker (P2)
@@ -121,14 +121,14 @@ same three ways in as the desktop (SC-428, 438).
 
 **Independent test**: quickstart rows 428 and 438.
 
-- [ ] T046 [P] [US5] Web: `app-web/vela-wallet/src/lib/onboarding/passkey-icons.ts` — the six icons from `contracts/passkey-icons.json` as `currentColor` path data + `platformIcon(method)` (UA rule from the contract's `platform_rule`)
-- [ ] T047 [P] [US5] Web: `app-web/vela-wallet/src/lib/ui/onboarding/PasskeyMethodIcon.svelte` rendering an inline `<svg viewBox="0 0 16 16">` (USB normalised from 80 → 16 by `transform="scale(0.2)"`), roles: ink = `currentColor`, muted = `var(--color-fg-subtle)`, paper = `var(--color-bg-base)`
-- [ ] T048 [US5] Replace the bordered boxes in `app-web/vela-wallet/src/lib/ui/onboarding/v2/AddMethodPicker.svelte` with `<PasskeyMethodIcon method={method} />`; delete the three `[data-method]` size rules — #190
-- [ ] T049 [P] [US5] Test `passkey-icons.test.ts` in `app-web/vela-wallet/src/lib/onboarding/`: paths match the contract JSON; `platformIcon` table (mac+safari → apple, mac+chrome → chrome-mac, windows → windows, android → google, other → fido2)
-- [ ] T050 [P] [US5] Desktop: add `Icon::PasskeyApple | PasskeyWindows | PasskeyGoogle | PasskeyChromeMac | PasskeyFido2 | PasskeyUsb` to `app-desktop/vela-wallet/src/icons.rs` with the contract's paths as SVG templates (colour substitution as the existing icons do; USB's `muted`/`paper` roles as two extra substitutions); `platform_icon()` via `cfg!(target_os)`
-- [ ] T051 [US5] Desktop: draw the icon in each row of `hardware::signin_method_card` and the create picker (`app-desktop/vela-wallet/src/hardware.rs` / `onboarding_flow.rs`) at `--icon-lg`
-- [ ] T052 [P] [US5] Test in `app-desktop/vela-wallet/src/icons.rs` `mod tests`: each passkey icon template rasterises (non-empty pixmap) and the path data equals the contract JSON — SC-428
-- [ ] T053 [US5] Web sign-in picker: in `app-web/vela-wallet/src/routes/[locale]/+page.svelte` the "I already have a wallet" button opens `AddMethodPicker` in place (`open` state, same expand pattern as create); `onPick={(method) => signIn(method)}`; `signIn` dispatches `{ type: 'sign_in', method }`; the intro's sign-in button does the same — finding 20
+- [x] T046 [P] [US5] Web: `app-web/vela-wallet/src/lib/onboarding/passkey-icons.ts` — the six icons from `contracts/passkey-icons.json` as `currentColor` path data + `platformIcon(method)` (UA rule from the contract's `platform_rule`)
+- [x] T047 [P] [US5] Web: `app-web/vela-wallet/src/lib/ui/onboarding/PasskeyMethodIcon.svelte` rendering an inline `<svg viewBox="0 0 16 16">` (USB normalised from 80 → 16 by `transform="scale(0.2)"`), roles: ink = `currentColor`, muted = `var(--color-fg-subtle)`, paper = `var(--color-bg-base)`
+- [x] T048 [US5] Replace the bordered boxes in `app-web/vela-wallet/src/lib/ui/onboarding/v2/AddMethodPicker.svelte` with `<PasskeyMethodIcon method={method} />`; delete the three `[data-method]` size rules — #190
+- [x] T049 [P] [US5] Test `passkey-icons.test.ts` in `app-web/vela-wallet/src/lib/onboarding/`: paths match the contract JSON; `platformIcon` table (mac+safari → apple, mac+chrome → chrome-mac, windows → windows, android → google, other → fido2)
+- [x] T050 [P] [US5] Desktop: add `Icon::PasskeyApple | PasskeyWindows | PasskeyGoogle | PasskeyChromeMac | PasskeyFido2 | PasskeyUsb` to `app-desktop/vela-wallet/src/icons.rs` with the contract's paths as SVG templates (colour substitution as the existing icons do; USB's `muted`/`paper` roles as two extra substitutions); `platform_icon()` via `cfg!(target_os)`
+- [x] T051 [US5] Desktop: draw the icon in each row of `hardware::signin_method_card` and the create picker (`app-desktop/vela-wallet/src/hardware.rs` / `onboarding_flow.rs`) at `--icon-lg`
+- [x] T052 [P] [US5] Test in `app-desktop/vela-wallet/src/icons.rs` `mod tests`: each passkey icon template rasterises (non-empty pixmap) and the path data equals the contract JSON — SC-428
+- [x] T053 [US5] Web sign-in picker: in `app-web/vela-wallet/src/routes/[locale]/+page.svelte` the "I already have a wallet" button opens `AddMethodPicker` in place (`open` state, same expand pattern as create); `onPick={(method) => signIn(method)}`; `signIn` dispatches `{ type: 'sign_in', method }`; the intro's sign-in button does the same — finding 20
 - [ ] T054 [P] [US5] e2e in `app-web/vela-wallet/e2e/welcome-layout.e2e.ts`: pressing "I already have a wallet" shows three rows with icons at 390 and 1440
 
 ## Phase 9: US7 — Panics become a sheet; money fallbacks become view state (P2)

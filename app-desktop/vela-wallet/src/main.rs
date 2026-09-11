@@ -22,6 +22,7 @@ mod onboarding_flow;
 mod outcome;
 mod parallel_space;
 mod passkey_directory;
+mod intro;
 mod intro_art;
 mod passkey_icons;
 mod raster;

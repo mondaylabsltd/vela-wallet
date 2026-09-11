@@ -323,6 +323,31 @@ mod tests {
         engine
     }
 
+    /// Spec 038: the desktop intro's nine keys resolve without echo in the
+    /// languages the visual pass uses.
+    #[test]
+    fn intro_keys_resolve_without_echo() {
+        const INTRO_KEYS: [&str; 9] = [
+            "onboarding.intro.skip",
+            "onboarding.intro.next",
+            "onboarding.intro.pageOf",
+            "onboarding.intro.noSeedTitle",
+            "onboarding.intro.noSeedBody",
+            "onboarding.intro.custodyTitle",
+            "onboarding.intro.custodyBody",
+            "onboarding.intro.chainsTitle",
+            "onboarding.intro.chainsBody",
+        ];
+        for lng in ["en", "zh", "de", "zh-TW", "ru"] {
+            let engine = engine_for(lng);
+            for key in INTRO_KEYS {
+                let value = engine.t(key, &Options::default()).expect("t() is total");
+                assert_ne!(value, key, "{lng}: {key} echoed");
+                assert!(has_words(&value), "{lng}: {key} has no words");
+            }
+        }
+    }
+
     /// SC-004 as a test: no key echoes in the languages the visual pass uses,
     /// and zh/de actually differ from en (proves the catalog loaded).
     #[test]

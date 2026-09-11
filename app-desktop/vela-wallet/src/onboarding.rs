@@ -42,6 +42,7 @@ use crate::executor::{
 };
 use crate::hardware;
 use crate::identicon::IdenticonCache;
+use crate::intro;
 use crate::loc::Loc;
 use crate::onboarding_flow::{self, FLOW_STEPS, FlowEvent, FlowHost, FlowSink, render_create_flow};
 use crate::outcome::{ActionId, Prompt, SHEET_PAD, SHEET_RADIUS, SHEET_W, outcome_sheet};
@@ -116,6 +117,9 @@ pub struct OnboardingPage {
     /// once per AAGUID, from the render pass that first needs one.
     directory: RefCell<PasskeyDirectory>,
 
+    /// The first-run intro is up (spec 038). `None` once left — or on every
+    /// run after the first, unless `VELA_INTRO=1` asks for it.
+    intro: Option<intro::IntroState>,
     /// The create journey has taken over the page.
     creating: bool,
     create: CoreHost<CreateWallet>,
@@ -217,6 +221,13 @@ impl OnboardingPage {
             identicons: RefCell::default(),
             passkey_icons: RefCell::default(),
             directory: RefCell::default(),
+            intro: if std::env::var("VELA_INTRO").as_deref() == Ok("1")
+                || storage::read_epoch_ms(theme::INTRO_SEEN_KEY).is_none()
+            {
+                Some(intro::IntroState::default())
+            } else {
+                None
+            },
             creating: false,
             create,
             create_view,
@@ -270,6 +281,26 @@ impl OnboardingPage {
             .login
             .dispatch(vela_core::app::login::Event::SignIn { method });
         self.pump_login(pending, cx);
+        cx.notify();
+    }
+
+    /// One intro event. The state decides; the page marks it seen and routes.
+    fn on_intro_event(&mut self, event: intro::IntroEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        let Some(state) = self.intro.as_mut() else {
+            return;
+        };
+        if let Some(exit) = state.apply(event) {
+            // Seen: whichever way this ends, they have read it. Marked on the
+            // press rather than on success, so a cancelled passkey prompt
+            // drops them on Welcome, not back into the introduction.
+            storage::write_epoch_ms(theme::INTRO_SEEN_KEY, crate::executor::now_ms());
+            self.intro = None;
+            match exit {
+                intro::IntroExit::Skip => {}
+                intro::IntroExit::Create => self.start_create(cx),
+                intro::IntroExit::SignIn => self.signin_methods_open = true,
+            }
+        }
         cx.notify();
     }
 
@@ -1052,7 +1083,20 @@ impl Render for OnboardingPage {
             };
             render_create_flow(&host, window)
         } else {
-            self.welcome(&theme, window, cx)
+            if self.intro.is_some() {
+                let entity = cx.entity();
+                let sink: intro::IntroSink = Rc::new(move |event, window, cx| {
+                    entity.update(cx, |page, cx| page.on_intro_event(event, window, cx));
+                });
+                // Two disjoint fields borrowed at once — the state mutably
+                // (the art cache), the strings immutably.
+                match self.intro.as_mut() {
+                    Some(state) => intro::render_intro(state, &theme, &self.loc, sink),
+                    None => self.welcome(&theme, window, cx),
+                }
+            } else {
+                self.welcome(&theme, window, cx)
+            }
         };
 
         // The rail's slot. Inside the journey it names the step; outside it —
@@ -1156,7 +1200,7 @@ impl Render for OnboardingPage {
         };
         let root = root
             .track_focus(&self.focus_handle)
-            .on_key_down(cx.listener(|_, event: &KeyDownEvent, window, _| {
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let ks = &event.keystroke;
                 let macos_chord = cfg!(target_os = "macos")
                     && ks.key == "f"
@@ -1164,6 +1208,17 @@ impl Render for OnboardingPage {
                     && ks.modifiers.platform;
                 if ks.key == "f11" || macos_chord {
                     window.toggle_fullscreen();
+                }
+                // The intro pages by keyboard too (spec 038 SC-416).
+                if this.intro.is_some() {
+                    let event = match ks.key.as_str() {
+                        "right" => Some(intro::IntroEvent::Next),
+                        "left" => Some(intro::IntroEvent::Prev),
+                        _ => None,
+                    };
+                    if let Some(event) = event {
+                        this.on_intro_event(event, window, cx);
+                    }
                 }
             }));
         let root = if draws_titlebar {
