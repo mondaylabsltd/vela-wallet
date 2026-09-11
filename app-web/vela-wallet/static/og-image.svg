@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <!--
+    Spec 038 #meta: the social preview card. Text-free on purpose — one image
+    serves fifteen locales, and the title/description beside it are the
+    page's own og:/twitter: tags. The mark is static/favicon.svg, the
+    canonical app icon, at 4× on the brand ground; scripts/gen-og-image.mjs
+    renders it to og-image.png (a card must be a raster for every crawler).
+  -->
+  <rect width="1200" height="630" fill="#FAFAF8"/>
+  <g transform="translate(464 179) scale(4)">
+<rect x="1" y="1" width="66" height="66" rx="18" ry="18" fill="#f46d50"/>
+  <path d="M33,12C25,21,20,32,17,42L33,42L33,12Z" fill="#fff3ec"/>
+  <path d="M36,19C45,25,50,34,52,42L36,42L36,19Z" fill="#ffc6b0"/>
+  <path d="M13,46L55,46C52,52,47,55,40,55L28,55C21,55,16,52,13,46Z" fill="#5a4037"/>
+  </g>
+</svg>

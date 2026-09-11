@@ -144,6 +144,10 @@ function wizardErrorText(error: NetWizardErrorKind | null): string {
     case 'not_compatible':
       // Reachable only on the scan path, which never renders this controller.
       return 'Check failed';
+    case 'check_failed':
+      // Spec 038 #E1: the probes could not run (RPC down, timeout) — not a
+      // verdict on the chain. Same path as above; the sentence is the corpus's.
+      return "Unable to verify \u2014 RPC request failed";
   }
 }
 

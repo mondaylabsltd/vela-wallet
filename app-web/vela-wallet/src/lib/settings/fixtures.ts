@@ -839,7 +839,9 @@ function balanceDetail(m: SettingsMessages): BalanceDetailModel {
 		done: [
 			{ id: 'ethereum', mark: MARKS.ethereum, name: 'Ethereum', amount: '$2,412.11' },
 			{ id: 'bnb', mark: MARKS.bnb, name: 'BNB Chain', amount: '$850.29' }
-		]
+		],
+		sectionUnpriced: 'Some tokens couldn’t be priced.',
+		unpriced: []
 	};
 }
 

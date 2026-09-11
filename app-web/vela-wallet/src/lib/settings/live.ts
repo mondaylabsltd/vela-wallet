@@ -12,7 +12,7 @@
 import { fill } from '$lib/wallet/messages';
 import { shortenAddress } from '$lib/wallet/identity';
 import { currencyDisplayName } from './core/currency-catalog';
-import { moneyText } from '$lib/wallet/live';
+import { moneyText, trimBalance } from '$lib/wallet/live';
 import type { SessionAccountRow } from '$lib/core/generated/SessionAccountRow';
 import {
 	formatBytes,
@@ -28,7 +28,7 @@ import { chainMeta as chainInfo } from '$lib/services/chains';
 import { TEMPO_FEE_TOKEN_DECIMALS } from '$lib/services/tempo';
 import { encodeQr } from '$lib/wallet/qr';
 import { MASK } from '$lib/wallet/fixtures';
-import { trimBalance } from '$lib/wallet/live';
+
 import type { NetChainIndexEntry } from '$lib/core/generated/NetChainIndexEntry';
 import type { NetNetworkRow } from '$lib/core/generated/NetNetworkRow';
 import type { NetProbeHealth } from '$lib/core/generated/NetProbeHealth';
@@ -228,12 +228,18 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 
 	if (wizard.phase === 'error') {
 		// The wizard stopped. The core says why as data; the words are ours —
-		// and inconclusive is NEVER worded as incompatible (invariant ③).
+		// and inconclusive is NEVER worded as incompatible (invariant ③). The
+		// scan path now keeps the two apart too (spec 038 #E1): a probe that
+		// failed is "unable to verify", with the re-check, and no setup tool.
+		const inconclusive = wizard.error?.type === 'check_failed';
 		return {
 			...base,
 			results: [],
-			callout: { tone: 'warning', text: m.addNetwork.incompatibleHint },
-			secondary: m.addNetwork.openChainSetupTool,
+			callout: {
+				tone: 'warning',
+				text: inconclusive ? m.addNetwork.unableToVerify : m.addNetwork.incompatibleHint
+			},
+			secondary: inconclusive ? undefined : m.addNetwork.openChainSetupTool,
 			recheck: m.addNetwork.recheckWithRpc
 		};
 	}
@@ -648,15 +654,16 @@ function currentExamples(): { number: string; date: string; time: string } {
 const FORMAT_SAMPLE = new Date(2026, 5, 13, 13, 45);
 
 /**
- * The language choices with the stored one ticked. `locale` is the page's own
- * — what 跟随系统 currently resolves to — because the fixture's note names a
- * canon locale that is right only on the board.
+ * The language choices with the ACTIVE one ticked (spec 038 #E5). On the web
+ * a locale is a route: the page is in `locale` whatever the stored choice
+ * says, and a row ticked for a language the person is not reading is a lie —
+ * the founder saw 简体中文 ticked on `/en`. "Follow system" is ticked only
+ * while nothing is pinned; choosing a language navigates (settings page).
  */
 function liveLanguageRows(m: SettingsMessages, locale: string): SelectRowModel[] {
 	return languageRows(m, locale).map((row) => ({
 		...row,
-		selected:
-			preferences.language === 'auto' ? row.id === 'system' : row.id === preferences.language
+		selected: preferences.language === 'auto' ? row.id === 'system' : row.id === locale
 	}));
 }
 
@@ -1104,7 +1111,9 @@ export function liveRpcFix(input: LiveRpcFixInput, m: RescueMessages): RpcFixMod
 export function liveBalanceDetail(
 	view: BalanceView,
 	currency: CurrencyView,
-	m: RescueMessages
+	m: RescueMessages,
+	/** The hero's own sentence, reused as the third section's title (spec 038 #E8). */
+	unpricedLabel: string
 ): BalanceDetailModel {
 	const pending: BalanceDetailModel['pending'] = view.rate_limited_chain_ids.map((id) => ({
 		id: String(id),
@@ -1151,7 +1160,16 @@ export function liveBalanceDetail(
 		pendingNote: m.balanceDetail.networksNote,
 		pending,
 		sectionDone: m.balanceDetail.updatedLabel,
-		done
+		done,
+		// The hero's "some tokens couldn't be priced" is a link to this dialog,
+		// and the dialog must answer it by name (spec 038 #E8).
+		sectionUnpriced: unpricedLabel,
+		unpriced: view.unpriced_tokens.map((token) => ({
+			id: `${token.chain_id}:${token.token_address ?? token.symbol}`,
+			mark: rescueMark(token.chain_id),
+			name: token.symbol,
+			detail: `${chainName(token.chain_id)} · ${view.hidden ? MASK : trimBalance(token.balance)}`
+		}))
 	};
 }
 

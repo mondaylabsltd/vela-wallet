@@ -17,15 +17,17 @@
 
 use gpui::{Hsla, SharedString};
 
+use vela_core::app::activity_feed::FeedBatchKind;
 use vela_core::app::activity_feed::{FeedRow, FeedTxStatus, FeedView};
 use vela_core::app::balance_dashboard::{BalanceToken, BalanceView};
 use vela_core::app::manage_tokens::MtokView;
 use vela_core::app::network_admin::BUILTIN_CHAINS;
 use vela_core::app::payment_request::PaymentRequestView;
 use vela_core::app::receive_watch::ReceiveWatchView;
-use vela_core::l10n::currency::{FiatOptions, format_fiat};
-use vela_core::l10n::datetime::{Civil, TimePreset, format_time};
-use vela_core::l10n::number::{NumberPreset, format_token_amount};
+use vela_core::app::send::SendReceiptKind;
+use vela_core::l10n::currency::format_fiat;
+use vela_core::l10n::datetime::{Civil, format_time};
+use vela_core::l10n::number::format_token_amount;
 
 use crate::flows::FlowStrings;
 use crate::wallet::fill;
@@ -39,10 +41,11 @@ use vela_core::app::send::{
 };
 
 use crate::flows::fixtures::{
-    AddressCard, AssetsEmpty, AssetsPanel, BatchImport, BatchRow, ContactPick, CtaState,
-    DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeTokenPick, FeeTokenRow, FilterChip,
-    HistoryGroup, NetworkRow, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard, SendConfirm,
-    SendForm, SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, TokenMark, address_lines,
+    AddressCard, AssetsEmpty, AssetsPanel, BatchImport, BatchRow, BreakdownRow, ContactPick,
+    CtaState, DepositEntry as FlowDeposit, FactLead, FactRow, FeeRow, FeeTokenPick, FeeTokenRow,
+    FilterChip, HistoryGroup, NetworkRow, ReceiveGate, ReceiveList, ReceiveQr, RecipientCard,
+    SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, StatusChip, StatusTone, TokenMark,
+    address_lines,
 };
 use crate::wallet::fixtures::{AssetRowModel, Fiat, MASK};
 
@@ -91,7 +94,11 @@ fn asset_row(
         balance: if hidden {
             SharedString::from(MASK)
         } else {
-            SharedString::from(format_token_amount(amount, NumberPreset::CommaDot, false))
+            SharedString::from(format_token_amount(
+                amount,
+                crate::executor::format_prefs::current().number,
+                false,
+            ))
         },
         fiat: if hidden {
             Fiat::Masked
@@ -106,7 +113,7 @@ fn asset_row(
                 "USD",
                 "$",
                 locale,
-                FiatOptions::default(),
+                crate::executor::format_prefs::fiat_options(),
             )))
         },
     }
@@ -296,7 +303,7 @@ fn day_label(day_start_ms: f64, s: &FlowStrings) -> SharedString {
     let civil = Civil::from_unix_millis(day_start_ms as i64, 0);
     SharedString::from(vela_core::l10n::datetime::format_date(
         &civil,
-        vela_core::l10n::datetime::DatePreset::Iso,
+        crate::executor::format_prefs::current().date,
     ))
 }
 
@@ -375,7 +382,10 @@ pub fn tx_detail(
     }
 
     let status = record.map_or(FeedTxStatus::Confirmed, |record| record.status);
+    let (breakdown_title, breakdown) = detail_parts(item, s);
     Some(crate::flows::fixtures::TxDetail {
+        breakdown_title,
+        breakdown,
         title: SharedString::from(crate::wallet::fill(
             if incoming {
                 &s.tx_label_received
@@ -410,7 +420,7 @@ pub fn tx_detail(
                 "USD",
                 "$",
                 locale,
-                FiatOptions::default(),
+                crate::executor::format_prefs::fiat_options(),
             ))
         },
         positive: incoming,
@@ -423,7 +433,11 @@ pub fn tx_detail(
 fn stamp(timestamp_sec: f64, s: &FlowStrings, locale: &str) -> String {
     let epoch_ms = timestamp_sec * 1000.0;
     let civil = crate::executor::local_civil(epoch_ms);
-    let clock = format_time(&civil, TimePreset::H24, locale);
+    let clock = format_time(
+        &civil,
+        crate::executor::format_prefs::current().time,
+        locale,
+    );
     let day = day_label(crate::executor::day_start_ms(epoch_ms), s);
     format!("{day} {clock}")
 }
@@ -620,7 +634,7 @@ fn deposits(view: &ReceiveWatchView, locale: &str) -> Vec<FlowDeposit> {
         .map(|entry| FlowDeposit {
             time: SharedString::from(format_time(
                 &crate::executor::local_civil(entry.at_epoch_ms),
-                TimePreset::H24,
+                crate::executor::format_prefs::current().time,
                 locale,
             )),
             rows: entry
@@ -630,7 +644,11 @@ fn deposits(view: &ReceiveWatchView, locale: &str) -> Vec<FlowDeposit> {
                     (
                         SharedString::from(format!(
                             "+{} {}",
-                            format_token_amount(item.amount, NumberPreset::CommaDot, false),
+                            format_token_amount(
+                                item.amount,
+                                crate::executor::format_prefs::current().number,
+                                false
+                            ),
                             item.symbol
                         )),
                         SharedString::from(match item.usd {
@@ -640,7 +658,13 @@ fn deposits(view: &ReceiveWatchView, locale: &str) -> Vec<FlowDeposit> {
                             Some(usd) => format!(
                                 "{}  {}",
                                 chain_name(item.chain_id),
-                                format_fiat(usd, "USD", "$", locale, FiatOptions::default())
+                                format_fiat(
+                                    usd,
+                                    "USD",
+                                    "$",
+                                    locale,
+                                    crate::executor::format_prefs::fiat_options()
+                                )
                             ),
                             None => chain_name(item.chain_id),
                         }),
@@ -719,14 +743,24 @@ fn native_symbol(chain_id: u32) -> String {
 }
 
 fn trimmed(amount: f64) -> String {
-    format_token_amount(amount, NumberPreset::CommaDot, false)
+    format_token_amount(
+        amount,
+        crate::executor::format_prefs::current().number,
+        false,
+    )
 }
 
 fn fiat_line(usd: Option<f64>, locale: &str) -> Option<SharedString> {
     usd.map(|usd| {
         SharedString::from(format!(
             "≈ {}",
-            format_fiat(usd, "USD", "$", locale, FiatOptions::default())
+            format_fiat(
+                usd,
+                "USD",
+                "$",
+                locale,
+                crate::executor::format_prefs::fiat_options()
+            )
         ))
     })
 }
@@ -786,7 +820,13 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
     let (symbol, chain_id) = fee_symbol(i.send, i.fee);
     let quote = i.send.fee.as_ref().or(i.fee.fee.as_ref());
     FeeRow {
-        label: i.s.network_fee.clone(),
+        // A figure the relay did not quote — a local fallback from defaults —
+        // is an ESTIMATE and is labelled as one (spec 038 finding 14).
+        label: if quote.is_some_and(|fee| !fee.quoted) {
+            i.s.fee_token_estimate.clone()
+        } else {
+            i.s.network_fee.clone()
+        },
         mark: TokenMark {
             ticker: symbol.into(),
             badge: tint(chain_id),
@@ -818,7 +858,7 @@ fn send_token_row(
                 "USD",
                 "$",
                 locale,
-                FiatOptions::default(),
+                crate::executor::format_prefs::fiat_options(),
             ))),
         },
     }
@@ -1600,7 +1640,9 @@ pub fn send_form(i: &SendInputs<'_>) -> SendForm {
                     )
                 )
                 .into(),
-                format!("{} {symbol}", send.token_amount)
+                // The core's SUM of the rows (`confirm_amount`); `token_amount`
+                // is the single field, empty in a split (spec 038 #D4).
+                format!("{} {symbol}", send.confirm_amount)
                     .trim()
                     .to_owned()
                     .into(),
@@ -1708,7 +1750,28 @@ pub fn send_confirm(i: &SendInputs<'_>) -> SendConfirm {
             .into(),
         subline: fiat_line(usd, i.locale).unwrap_or_default(),
         facts,
-        breakdown: Vec::new(),
+        // Spec 038 #D2: a split's confirm lists every recipient by name and
+        // amount — what is about to be signed, in full.
+        breakdown: if send.split_mode {
+            send.recipients
+                .iter()
+                .map(|draft| BreakdownRow {
+                    seed: (!draft.address.is_empty())
+                        .then(|| SharedString::from(draft.address.clone())),
+                    label: draft
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| shorten(&draft.address))
+                        .into(),
+                    value: format!("{} {symbol}", draft.amount)
+                        .trim()
+                        .to_owned()
+                        .into(),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        },
         notice,
         cta: s.confirm_send.clone(),
         // Signing and submitting are waits; `can_confirm` is the core's gate
@@ -1745,6 +1808,7 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
         .and_then(|identity| identity.name.clone())
         .unwrap_or_else(|| shorten(&send.recipient));
     let status = send.receipt.as_ref().map(|receipt| receipt.status);
+    let (breakdown_title, breakdown) = receipt_parts(send, s, &symbol);
 
     // Why it is held, when the core knows: `hold_reason` is the difference
     // between a payment that is queued and one that is over, and between
@@ -1765,6 +1829,8 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
 
     if status == Some(SendReceiptStatus::Failed) || send.tx_status == SendTxStatus::Error {
         return SendReceipt {
+            breakdown_title: None,
+            breakdown: Vec::new(),
             title: tx_error_text(send, s).unwrap_or_else(|| s.tx_error_generic.clone()),
             captions: rejected.into_iter().collect(),
             hash: None,
@@ -1779,16 +1845,22 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
             .filter(|amount| !amount.is_empty())
             .unwrap_or_else(|| send.confirm_amount.clone());
         return SendReceipt {
+            breakdown_title: breakdown_title.clone(),
+            breakdown: breakdown.clone(),
             title: fill(
                 &fill(&s.tx_confirmed_title, "amount", &amount),
                 "symbol",
                 &symbol,
             )
             .into(),
+            // A split names its count here and its people below; "To " with
+            // nobody after it was what the single-recipient line read as.
             captions: vec![
                 format!(
                     "{} · {}",
-                    fill(&s.to_name, "name", &to),
+                    breakdown_title
+                        .as_ref()
+                        .map_or_else(|| fill(&s.to_name, "name", &to), ToString::to_string),
                     chain_name(chain_id)
                 )
                 .into(),
@@ -1802,11 +1874,38 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
     }
     if status == Some(SendReceiptStatus::Submitted) {
         return SendReceipt {
+            breakdown_title: breakdown_title.clone(),
+            breakdown: breakdown.clone(),
             title: s.tx_submitted_title.clone(),
             // A held payment is NOT waiting for a confirmation: it is queued
             // until fees settle, and it says so in place of the ordinary wait
             // rather than beside it.
-            captions: vec![held.unwrap_or_else(|| s.tx_waiting_confirm.clone())],
+            captions: {
+                // Spec 038 #D3: count, don't spin. The core hands over when the
+                // relay accepted the op and this chain's usual time; the shell
+                // owns the clock and the sentences are the corpus's.
+                let mut lines = vec![held.unwrap_or_else(|| s.tx_waiting_confirm.clone())];
+                if let Some(receipt) = send.receipt.as_ref()
+                    && let (Some(at), Some(typical)) =
+                        (receipt.submitted_at_ms, receipt.typical_inclusion_s)
+                {
+                    let elapsed = ((crate::executor::now_ms() - at) / 1000.0).max(0.0) as u64;
+                    lines.push(
+                        fill(
+                            &fill(&s.tx_typical_time, "chainName", &chain_name(chain_id)),
+                            "estSecs",
+                            &typical.to_string(),
+                        )
+                        .into(),
+                    );
+                    lines.push(if elapsed >= u64::from(typical) * 2 {
+                        s.tx_slow_confirm.clone()
+                    } else {
+                        fill(&s.tx_elapsed, "elapsed", &elapsed.to_string()).into()
+                    });
+                }
+                lines
+            },
             hash: send
                 .tx_hash
                 .clone()
@@ -1817,11 +1916,115 @@ pub fn send_receipt(i: &SendInputs<'_>) -> SendReceipt {
     }
     // Signing or submitting: nothing has been accepted yet.
     SendReceipt {
+        breakdown_title,
+        breakdown,
         title: s.tx_submitting.clone(),
         captions: vec![s.tx_preparing.clone(), s.tx_background_hint.clone()],
         hash: None,
         cta: s.tx_close_background.clone(),
     }
+}
+
+/// Spec 038 #D2: a split's parts on the receipt as on the confirm — from the
+/// receipt's own transfers once the core froze them, from the drafts before
+/// that. Nothing for a single send or a sweep (a sweep's parts are assets,
+/// and its one recipient is already the caption).
+fn receipt_parts(
+    send: &SendView,
+    s: &FlowStrings,
+    symbol: &str,
+) -> (Option<SharedString>, Vec<BreakdownRow>) {
+    let frozen: Vec<BreakdownRow> = match send.receipt.as_ref() {
+        Some(receipt) if matches!(receipt.kind, Some(SendReceiptKind::Split)) => receipt
+            .transfers
+            .iter()
+            .map(|transfer| BreakdownRow {
+                seed: Some(SharedString::from(transfer.to.clone())),
+                label: transfer
+                    .to_name
+                    .clone()
+                    .unwrap_or_else(|| shorten(&transfer.to))
+                    .into(),
+                value: format!("{} {}", transfer.amount, transfer.symbol)
+                    .trim()
+                    .to_owned()
+                    .into(),
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    let rows = if !frozen.is_empty() {
+        frozen
+    } else if send.split_mode {
+        send.recipients
+            .iter()
+            .map(|draft| BreakdownRow {
+                seed: (!draft.address.is_empty())
+                    .then(|| SharedString::from(draft.address.clone())),
+                label: draft
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| shorten(&draft.address))
+                    .into(),
+                value: format!("{} {symbol}", draft.amount)
+                    .trim()
+                    .to_owned()
+                    .into(),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    if rows.is_empty() {
+        return (None, Vec::new());
+    }
+    let title = fill(&s.recipient_count, "count", &rows.len().to_string());
+    (Some(title.into()), rows)
+}
+
+/// Spec 038 #D2: a folded batch row opens to what it folded — the split's
+/// recipients by name and avatar, the sweep's assets — under the facts,
+/// where the single send's "To" would have been.
+fn detail_parts(
+    item: &vela_core::app::activity_feed::FeedItem,
+    s: &FlowStrings,
+) -> (Option<SharedString>, Vec<BreakdownRow>) {
+    let Some(batch) = item.batch.as_ref() else {
+        return (None, Vec::new());
+    };
+    let split = batch.kind == FeedBatchKind::Split;
+    let rows: Vec<BreakdownRow> = batch
+        .transfers
+        .iter()
+        .map(|transfer| BreakdownRow {
+            seed: split.then(|| SharedString::from(transfer.to.clone())),
+            label: if split {
+                transfer
+                    .to_name
+                    .clone()
+                    .unwrap_or_else(|| shorten(&transfer.to))
+                    .into()
+            } else {
+                transfer.symbol.clone().into()
+            },
+            value: format!("{} {}", trimmed_str(&transfer.value), transfer.symbol)
+                .trim()
+                .to_owned()
+                .into(),
+        })
+        .collect();
+    if rows.is_empty() {
+        return (None, Vec::new());
+    }
+    let title = split.then(|| fill(&s.recipient_count, "count", &rows.len().to_string()).into());
+    (title, rows)
+}
+
+/// A decimal string as the shell prints token amounts.
+fn trimmed_str(value: &str) -> String {
+    value
+        .parse::<f64>()
+        .map_or_else(|_| value.to_owned(), trimmed)
 }
 
 /// DSD2fL — the fee coin sheet. Every row the relay published, including the
@@ -2107,6 +2310,8 @@ mod tests {
             transfers: Vec::new(),
             amount: "0.001".to_owned(),
             usd_value: 0.0,
+            submitted_at_ms: None,
+            typical_inclusion_s: None,
         });
         send_receipt(&SendInputs {
             send: &send,
@@ -2117,6 +2322,72 @@ mod tests {
             identity_name: "Golden",
             identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
         })
+    }
+
+    /// Spec 038 #D2: a split's receipt lists every recipient the core froze,
+    /// with an avatar each, and counts them where the single send names its
+    /// one recipient — never "To " with nobody after it.
+    #[test]
+    fn a_split_receipt_lists_its_recipients_and_counts_them() {
+        use vela_core::app::send::{
+            Send, SendReceiptKind, SendReceiptStatus, SendReceiptTransfer, SendReceiptView,
+        };
+        let s = strings();
+        let wallet = wallet_strings();
+        let fee = CoreHost::<vela_core::app::fee_policy::FeePolicy>::new().view();
+        let mut send = CoreHost::<Send>::new().view();
+        let transfer = |to: &str, name: Option<&str>, amount: &str| SendReceiptTransfer {
+            to: to.to_owned(),
+            to_name: name.map(str::to_owned),
+            amount: amount.to_owned(),
+            symbol: "ETH".to_owned(),
+            logo_urls: Vec::new(),
+            usd_value: 0.0,
+        };
+        send.tx_hash = Some("0xtx".to_owned());
+        send.receipt = Some(SendReceiptView {
+            status: SendReceiptStatus::Confirmed,
+            hold_reason: None,
+            kind: Some(SendReceiptKind::Split),
+            transfers: vec![
+                transfer(&format!("0x{}", "cd".repeat(20)), Some("Alice"), "0.2"),
+                transfer(&format!("0x{}", "ef".repeat(20)), None, "0.3"),
+            ],
+            amount: "0.5".to_owned(),
+            usd_value: 0.0,
+            submitted_at_ms: None,
+            typical_inclusion_s: None,
+        });
+        let receipt = send_receipt(&SendInputs {
+            send: &send,
+            fee: &fee,
+            s: &s,
+            wallet: &wallet,
+            locale: "en",
+            identity_name: "Golden",
+            identity_address: "0x88cCA0EeDbF2C4426110bbFc998F048689266894",
+        });
+        let title = fill(&s.recipient_count, "count", "2");
+        assert_eq!(receipt.breakdown_title.as_deref(), Some(title.as_str()));
+        let labels: Vec<&str> = receipt
+            .breakdown
+            .iter()
+            .map(|row| row.label.as_ref())
+            .collect();
+        assert_eq!(labels[0], "Alice");
+        assert!(labels[1].starts_with("0xef"), "{}", labels[1]);
+        assert!(receipt.breakdown.iter().all(|row| row.seed.is_some()));
+        assert_eq!(receipt.breakdown[1].value.as_ref(), "0.3 ETH");
+        assert!(
+            receipt.captions[0].contains(&title),
+            "{}",
+            receipt.captions[0]
+        );
+
+        // A single send carries no parts.
+        let single = receipt_with(SendReceiptStatus::Confirmed, None);
+        assert!(single.breakdown.is_empty());
+        assert!(single.breakdown_title.is_none());
     }
 
     /// A payment queued until fees settle is NOT waiting for a confirmation.

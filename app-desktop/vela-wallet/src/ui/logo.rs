@@ -68,7 +68,8 @@ pub fn vela_wordmark(theme: &Theme) -> Div {
         .items_center()
         .gap(word_gap)
         .text_size(size)
-        .font_weight(FontWeight::EXTRA_BOLD)
+        // BOLD, as the web's `.wordmark` (`--weight-bold`) — spec 038 finding 8.
+        .font_weight(FontWeight::BOLD)
         .text_color(theme.fg_base)
         .child(word("VELA"))
         .child(word("WALLET"))

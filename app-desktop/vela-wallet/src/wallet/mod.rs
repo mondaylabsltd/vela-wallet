@@ -40,6 +40,9 @@ pub struct WalletStrings {
     pub total_balance: SharedString,
     pub live_indicator: SharedString,
     pub balance_stale: SharedString,
+    /// Nothing could be read and nothing is known (spec 038): the network
+    /// sentence, not a $0.
+    pub balance_unreachable: SharedString,
     pub balance_unpriced: SharedString,
     pub no_price: SharedString,
     pub action_receive: SharedString,
@@ -111,6 +114,7 @@ impl WalletStrings {
             total_balance: s("home.totalBalance"),
             live_indicator: s("home.liveIndicator"),
             balance_stale: s("home.balanceStale"),
+            balance_unreachable: s("onboarding.common.networkBody"),
             balance_unpriced: s("home.balanceUnpriced"),
             no_price: s("home.balanceDetailNoPrice"),
             action_receive: s("componentsUi.dock.receive"),

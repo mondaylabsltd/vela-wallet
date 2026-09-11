@@ -72,6 +72,11 @@ const WEB_ADDITIONS = [
 		'spec 019: the screen column beside the rail. Content ends where it ends there; the mobile layout anchors its CTA to the bottom of the viewport, which is a phone pattern and stays on phones'
 	],
 	[
+		'layout-frameMax',
+		'1920px',
+		'spec 038 T078: the widest the signed-in frame and the onboarding frame grow before centring on the page ground. The mocks were drawn at 1440 and every column in them is left-anchored; on a 4 K display that left three quarters of the screen empty. 1920 keeps the composition the mocks drew and lets it sit in the middle of anything wider'
+	],
+	[
 		'layout-onboardingFrameGutter',
 		'72px',
 		"spec 019: the desktop flow frame's horizontal breathing room — the column plus twice this is the frame's max width"

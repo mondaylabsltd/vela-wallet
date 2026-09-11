@@ -46,6 +46,46 @@ fn authenticated() -> Sut {
 // Reachability probe (FR-023)
 // ---------------------------------------------------------------------------
 
+/// Spec 038: a probe that never left the machine is the person's network,
+/// not our service. The verdict carries that bit so the screen can say
+/// "check your network" and withhold the endpoint field.
+#[test]
+fn three_local_failures_say_this_machine_could_not_get_out() {
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    for _ in 0..3 {
+        if let [ShellOperation::Wait { .. }] =
+            sut.resolve(ShellResult::IndexTransportFailed).as_slice()
+        {
+            sut.resolve(ShellResult::Waited);
+        }
+    }
+    let view = sut.view();
+    assert!(view.endpoint_unreachable, "unreachable either way");
+    assert!(view.transport_failed, "and this time it is the machine");
+
+    // A remote failure on the LAST probe decides the sentence: the index was
+    // reached for by a route that existed, so no local claim.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    sut.resolve(ShellResult::IndexTransportFailed);
+    sut.resolve(ShellResult::Waited);
+    sut.resolve(ShellResult::IndexTransportFailed);
+    sut.resolve(ShellResult::Waited);
+    sut.resolve(ShellResult::IndexHealth { ok: false });
+    let view = sut.view();
+    assert!(view.endpoint_unreachable);
+    assert!(!view.transport_failed);
+
+    // Reachable clears both, as a re-probe after a fixed network would.
+    let mut sut = Sut::new();
+    sut.dispatch(Event::Start);
+    sut.resolve(ShellResult::IndexTransportFailed);
+    sut.resolve(ShellResult::Waited);
+    sut.resolve(ShellResult::IndexHealth { ok: true });
+    assert!(!sut.view().transport_failed);
+}
+
 /// Three failed probes, spaced, before the endpoint settings are surfaced.
 #[test]
 fn three_failed_probes_declare_the_index_unreachable() {

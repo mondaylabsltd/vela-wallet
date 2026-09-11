@@ -77,7 +77,7 @@
 		type ManageTokensSession
 	} from '$lib/wallet/core/manage-tokens-session';
 	import type { MtokView } from '$lib/core/generated/MtokView';
-	import { getAllNetworksSync, networkId } from '$lib/services/networks';
+	import { getAllNetworksSync, getCustomChainIdsSync, networkId } from '$lib/services/networks';
 	import {
 		makeRecipientId,
 		sendTokenId,
@@ -94,6 +94,7 @@
 	import SigningHost from '$lib/signing/SigningHost.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import type { SendOpenParams } from '$lib/core/generated/SendOpenParams';
+	import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
 	import type { SendView } from '$lib/core/generated/SendView';
 
 	import { WEB_DESTINATIONS, webNavItems } from '$lib/wallet/destinations';
@@ -161,6 +162,18 @@
 	 */
 	let selectedAssetId = $state<string | null>(null);
 	let selectedTxId = $state<string | null>(null);
+
+	/**
+	 * Spec 038 #E9: the networks the person added, listed in the filter from
+	 * the moment they exist rather than from the first balance that lands on
+	 * them. `networksVersion` ticks when the set changes.
+	 */
+	let networksVersion = $state(0);
+	$effect(() => subscribeNetworks(() => (networksVersion += 1)));
+	const customChainIds = $derived.by(() => {
+		void networksVersion;
+		return getCustomChainIdsSync();
+	});
 	/**
 	 * The network whose code the receive screen shows (spec 028 Phase 9, T482):
 	 * the row that was tapped, or the sidebar's filter (T495). The list and the
@@ -267,6 +280,8 @@
 					unit: (id: string) =>
 						batchSession?.dispatch({ type: 'set_unit', unit: id === 'fiat' ? 'fiat' : 'token' }),
 					paste: (text: string) => batchSession?.dispatch({ type: 'set_raw_text', text }),
+					rate: (text: string) => batchSession?.dispatch({ type: 'edit_rate', text }),
+					resetRate: () => batchSession?.dispatch({ type: 'reset_rate_to_auto' }),
 					pickFile: () => batchSession?.dispatch({ type: 'pick_file_requested' }),
 					saveTemplate: () => batchSession?.dispatch({ type: 'save_template_requested' }),
 					apply: () => {
@@ -513,7 +528,9 @@
 				credentialLoaded: () => {},
 				signingStarted: () => {},
 				receiptUpdate: () => {},
-				alert: (kind) => console.warn('[send] alert:', kind),
+				// Kept on screen until the person edits or moves on (spec 038 #D4);
+				// it used to be a console line nobody reading the form could see.
+				alert: (kind) => (sendAlert = kind),
 				close: () => closeSend(),
 				feeQuote: async (request) => {
 					const outcome = await feeQuote.requestQuote(request);
@@ -747,6 +764,21 @@
 	});
 
 	/** The live inputs the send overlays read, or `undefined` while none is open. */
+	/** The core's last refusal, shown on the form/confirm until an edit or a move. */
+	let sendAlert = $state<SendAlertKind | null>(null);
+	// What the person can change: a stage, a field, a row. Any of it changing
+	// is the person acting on the refusal, and the line comes down. The
+	// refusal's own render changes none of these, so it stays up.
+	const sendAlertScope = $derived(
+		sendView
+			? `${sendView.stage}|${sendView.recipient}|${sendView.amount}|${sendView.recipients.map((r) => `${r.address}:${r.amount}`).join(',')}`
+			: ''
+	);
+	$effect(() => {
+		void sendAlertScope;
+		sendAlert = null;
+	});
+
 	const sendInputs = $derived(
 		sendView && identity
 			? {
@@ -758,7 +790,8 @@
 					identicon: avatarSvgForClient,
 					sweepPicking,
 					chainFilter: chainFilter.chainId,
-					classFilter: sendClassFilter
+					classFilter: sendClassFilter,
+					alert: sendAlert
 				}
 			: undefined
 	);
@@ -1085,6 +1118,7 @@
 		identity === null
 			? data.desktop
 			: withLiveWalletDesktop(webNav(desktopWithIdentity(data.desktop, identity)), {
+					customChainIds,
 					...liveInputs,
 					// Two things cannot occupy one column (founder, 2026-09-05: the
 					// token's detail and the picker were drawn side by side). While a
@@ -1261,7 +1295,12 @@
 	 */
 	let chainSheetOpen = $state(false);
 	const chainRows = $derived(
-		liveChainRows(balance.view, data.walletMessages.networkFilter.allNetworks, chainFilter.chainId)
+		liveChainRows(
+			balance.view,
+			data.walletMessages.networkFilter.allNetworks,
+			chainFilter.chainId,
+			customChainIds
+		)
 	);
 
 	/**
@@ -1305,7 +1344,9 @@
 	const rpcRestored = $derived(
 		rpcSaved && rpcDraft === null && rescueRow?.rpc_health?.type === 'ok'
 	);
-	const balanceDetailModel = $derived(liveBalanceDetail(balance.view, currency.view, rm));
+	const balanceDetailModel = $derived(
+		liveBalanceDetail(balance.view, currency.view, rm, data.walletMessages.balance.unpriced)
+	);
 	const relayerModel = $derived(
 		sendView?.treasury_bootstrap ? liveRelayer(sendView.treasury_bootstrap, rm) : undefined
 	);

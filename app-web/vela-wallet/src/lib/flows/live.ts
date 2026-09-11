@@ -10,6 +10,7 @@
  * second builder for four strings.
  */
 
+import { feedPositionOf } from '$lib/wallet/live-detail';
 import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
@@ -288,10 +289,13 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 		hidden || token.price_usd === null
 			? m.balance.noPrice
 			: moneyText(held * token.price_usd, currency);
-	const rows = (inputs.feed?.rows ?? [])
+	const items = (inputs.feed?.rows ?? [])
 		.flatMap((row) => (row.type === 'item' ? [row.item] : []))
-		.filter((item) => item.chain_id === token.chain_id && item.symbol === token.symbol)
-		.map((item) => liveActivityRow(item, m, hidden));
+		.filter((item) => item.chain_id === token.chain_id && item.symbol === token.symbol);
+	const rows = items.map((item) => liveActivityRow(item, m, hidden));
+	// Each row can open its own detail — through the history's own index,
+	// so it is the same screen, reached the same way (spec 038 #E2).
+	const rowTargets = items.map((item) => feedPositionOf(inputs.feed, item.id));
 	const facts: FactRowModel[] = [
 		{
 			label: fm['tokenDetail.labelPrice'],
@@ -326,6 +330,7 @@ function liveTokenDetail(model: TokenDetailModel, inputs: FlowsLiveInputs): Toke
 		fiat,
 		facts,
 		rows,
+		rowTargets,
 		explorerUrl: tokenExplorerURL(token, view.address)
 	};
 }
@@ -708,6 +713,17 @@ function withLiveDesktopBody(model: DesktopFlowModel, inputs: FlowsLiveInputs): 
 				? {
 						...model,
 						body: { kind: 'add-token', model: liveAddToken(model.body.model, inputs.addToken) }
+					}
+				: model;
+		// The importer is a SHEET on the phone and a column BODY here; the sheet
+		// arm below the phone's switch never reached this shape, so the desktop
+		// drew the fixture over a live session — tabs that would not switch, a
+		// rate nobody could edit (spec 038 #E6).
+		case 'batch-import':
+			return inputs.batch
+				? {
+						...model,
+						body: { kind: 'batch-import', model: liveBatchImport(model.body.model, inputs.batch) }
 					}
 				: model;
 		case 'contact-pick':

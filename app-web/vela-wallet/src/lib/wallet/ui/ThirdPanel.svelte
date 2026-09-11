@@ -15,10 +15,23 @@
 		backLabel?: string;
 		onback?: () => void;
 		onclose?: () => void;
+		/**
+		 * Which screen the column is showing (spec 038 #D4). When it changes the
+		 * content scrolls back to its top: a confirm opened after a long split
+		 * form used to inherit the form's scroll offset and open on its last
+		 * rows, hero and count above the fold.
+		 */
+		scrollKey?: string;
 		children: Snippet;
 	}
 
-	let { title, closeLabel, backLabel, onback, onclose, children }: Props = $props();
+	let { title, closeLabel, backLabel, onback, onclose, scrollKey, children }: Props = $props();
+
+	let content = $state<HTMLDivElement | null>(null);
+	$effect(() => {
+		void scrollKey;
+		if (content) content.scrollTop = 0;
+	});
 
 	function onkeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') onclose?.();
@@ -39,7 +52,7 @@
 			<Icon icon={UTILITY_ICONS.x} size="lg" />
 		</button>
 	</header>
-	<div class="content">
+	<div class="content" bind:this={content}>
 		{@render children()}
 	</div>
 </aside>

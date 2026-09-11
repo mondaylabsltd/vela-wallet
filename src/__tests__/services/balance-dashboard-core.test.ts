@@ -96,7 +96,7 @@ function apiToken(over: Partial<APIToken> = {}): APIToken {
 }
 
 const INITIAL: BalanceView = {
-  address: null, display_total_usd: null, balance_unknown: true, balance_partial: false,
+  address: null, display_total_usd: null, balance_unknown: true, balance_partial: false, unreachable: false,
   notice: null, hidden: false, refreshing: false, last_refreshed_at_ms: null,
   tokens: [], unpriced_tokens: [], failed_chain_ids: [], rate_limited_chain_ids: [],
   banner_chain_ids: [], holdings_loading: false, cached_total_usd: null,

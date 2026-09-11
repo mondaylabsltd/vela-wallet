@@ -251,3 +251,67 @@ test('the Welcome page loads no wasm until someone commits to a flow', async ({ 
 
 	expect(wasmRequests, 'Welcome must not fetch the onboarding core').toEqual([]);
 });
+
+/**
+ * Spec 038 SC-413/414: on a FIRST run the landing page must never be the
+ * first frame — the intro is decided before paint by app.html — and yet the
+ * prerendered document must still BE the landing page for crawlers.
+ */
+test('a first run never paints Welcome before the intro', async ({ page }) => {
+	// A fresh context has no `vela.intro.seen`; the launch animation is
+	// skipped so it cannot mask the frame under test.
+	await page.goto('/en?skipLaunch', { waitUntil: 'commit' });
+	// Before hydration: the attribute is on <html> and Welcome is hidden.
+	await expect(page.locator('html')).toHaveAttribute('data-intro', 'pending');
+	const welcomeOpacity = await page
+		.locator('main[data-intro-page]')
+		.evaluate((el) => getComputedStyle(el).opacity)
+		.catch(() => '0');
+	expect(welcomeOpacity).toBe('0');
+	// After hydration: the intro is up and the attribute is gone.
+	await expect(page.locator('.intro')).toBeVisible();
+	await expect(page.locator('html')).not.toHaveAttribute('data-intro', 'pending');
+});
+
+test('the prerendered document still carries the landing page', async ({ request }) => {
+	const html = await (await request.get('/en')).text();
+	expect(html).toContain('data-intro-page');
+	expect(html).toContain(escapeHtml(corpus('en').heroTitle));
+	// And the pre-paint decision is in the head, before any module.
+	expect(html.indexOf(`'${INTRO_SEEN_KEY}'`)).toBeGreaterThan(-1);
+	expect(html.indexOf(`'${INTRO_SEEN_KEY}'`)).toBeLessThan(html.indexOf('<body'));
+});
+
+/**
+ * Spec 038 #meta / SC-440: a shared link is a real card. Every locale's
+ * prerendered document carries the og/twitter set, the description fits a
+ * preview, and the image is served.
+ */
+for (const locale of ['en', 'zh'] as const) {
+	test(`/${locale} carries the share card`, async ({ request }) => {
+		const html = await (await request.get(`/${locale}`)).text();
+		for (const tag of [
+			'property="og:site_name" content="Vela Wallet"',
+			'property="og:type" content="website"',
+			'property="og:title"',
+			'property="og:description"',
+			`property="og:url" content="https://app.getvela.app/${locale}"`,
+			'property="og:image" content="https://app.getvela.app/og-image.png"',
+			'property="og:image:width" content="1200"',
+			'name="twitter:card" content="summary_large_image"',
+			'name="twitter:image"'
+		]) {
+			expect(html, tag).toContain(tag);
+		}
+		const description = html.match(/property="og:description" content="([^"]*)"/)?.[1] ?? '';
+		expect(description.length).toBeGreaterThan(0);
+		expect(description.length).toBeLessThanOrEqual(111); // 110 + the ellipsis
+		expect((html.match(/og:locale:alternate/g) ?? []).length).toBe(14);
+	});
+}
+
+test('the share image is served as a PNG', async ({ request }) => {
+	const response = await request.get('/og-image.png');
+	expect(response.status()).toBe(200);
+	expect(response.headers()['content-type']).toContain('image/png');
+});

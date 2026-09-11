@@ -350,6 +350,26 @@ pub fn load_registry_endpoint() -> Option<String> {
 /// this key (`ethereumDataURL`, `bundlerServiceURL`, `fiatRatesURL`), and the
 /// whole-value write this used to do would have erased them — and theirs would
 /// have erased this.
+/// A first-run / replay flag: epoch milliseconds, or `None` when never
+/// written (spec 038). The two callers — the intro's "seen" and the launch
+/// animation's "played" — use the SAME key names as the web (`vela.intro.seen`,
+/// `vela.launch.played`) so the four shells share one vocabulary.
+pub fn read_epoch_ms(key: &str) -> Option<f64> {
+    read_value(key)
+        .ok()
+        .flatten()
+        .and_then(|value| value.as_f64())
+}
+
+/// Write such a flag. Best-effort in the same way the web's is: an unwritable
+/// store means a second viewing, which is cosmetic; a front door that fails
+/// because a decoration could not write is not.
+pub fn write_epoch_ms(key: &str, now_ms: f64) {
+    if let Err(error) = write_value(key, Value::from(now_ms)) {
+        eprintln!("[vela-wallet] {key} could not be saved: {error}");
+    }
+}
+
 pub fn save_registry_endpoint(url: &str) -> Result<()> {
     let mut fields = Map::new();
     fields.insert("passkeyIndexURL".to_owned(), json!(url));

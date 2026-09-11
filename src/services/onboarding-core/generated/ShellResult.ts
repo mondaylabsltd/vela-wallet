@@ -33,4 +33,4 @@ unit_ids: Array<number>, } | { "type": "registry_unit", metadata_hex: string, me
  * abort). Only the shell can tell that from a 4xx, so this one bit of
  * classification is delegated.
  */
-network: boolean, } | { "type": "index_health", ok: boolean, } | { "type": "waited" } | { "type": "prompt_answered", accepted: boolean, } | { "type": "onboarding_completed" };
+network: boolean, } | { "type": "index_health", ok: boolean, } | { "type": "index_transport_failed" } | { "type": "waited" } | { "type": "prompt_answered", accepted: boolean, } | { "type": "onboarding_completed" };

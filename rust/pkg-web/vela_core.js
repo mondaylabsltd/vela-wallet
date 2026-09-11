@@ -3294,14 +3294,17 @@ export function parsePublicKey(hex) {
  * @param {string} aaguid
  * @param {string} json
  * @param {boolean} dark
+ * @param {string | null} [origin]
  * @returns {any}
  */
-export function passkeyDirectoryEntry(aaguid, json, dark) {
+export function passkeyDirectoryEntry(aaguid, json, dark, origin) {
     const ptr0 = passStringToWasm0(aaguid, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ptr1 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len1 = WASM_VECTOR_LEN;
-    const ret = wasm.passkeyDirectoryEntry(ptr0, len0, ptr1, len1, dark);
+    var ptr2 = isLikeNone(origin) ? 0 : passStringToWasm0(origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len2 = WASM_VECTOR_LEN;
+    const ret = wasm.passkeyDirectoryEntry(ptr0, len0, ptr1, len1, dark, ptr2, len2);
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
@@ -3312,19 +3315,25 @@ export function passkeyDirectoryEntry(aaguid, json, dark) {
  * **Where to ask about a model the compiled catalog cannot name**, or
  * `undefined` when there is nothing to ask: a malformed or all-zero AAGUID, or
  * one the catalog already answers offline.
+ *
+ * `origin` is the directory node the person's service-endpoint settings
+ * name (spec 038 #E4); absent, the crate's default.
  * @param {string} aaguid
+ * @param {string | null} [origin]
  * @returns {string | undefined}
  */
-export function passkeyDirectoryUrl(aaguid) {
+export function passkeyDirectoryUrl(aaguid, origin) {
     const ptr0 = passStringToWasm0(aaguid, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.passkeyDirectoryUrl(ptr0, len0);
-    let v2;
+    var ptr1 = isLikeNone(origin) ? 0 : passStringToWasm0(origin, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    var len1 = WASM_VECTOR_LEN;
+    const ret = wasm.passkeyDirectoryUrl(ptr0, len0, ptr1, len1);
+    let v3;
     if (ret[0] !== 0) {
-        v2 = getStringFromWasm0(ret[0], ret[1]).slice();
+        v3 = getStringFromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     }
-    return v2;
+    return v3;
 }
 
 /**

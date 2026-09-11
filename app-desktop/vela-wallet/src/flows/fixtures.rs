@@ -261,6 +261,9 @@ pub struct HistoryGroup {
 pub struct TxDetail {
     pub title: SharedString,
     pub status: StatusChip,
+    /// Spec 038 #D2 — a folded batch row: its parts, under the facts.
+    pub breakdown_title: Option<SharedString>,
+    pub breakdown: Vec<BreakdownRow>,
     pub amount: SharedString,
     pub fiat: SharedString,
     pub positive: bool,
@@ -496,6 +499,9 @@ pub struct BatchImport {
 
 #[derive(Clone)]
 pub struct BreakdownRow {
+    /// A recipient's address, for the avatar beside the name (spec 038 #D2);
+    /// `None` for an asset row, which carries no person.
+    pub seed: Option<SharedString>,
     pub label: SharedString,
     pub value: SharedString,
 }
@@ -517,6 +523,10 @@ pub struct SendConfirm {
 pub struct SendReceipt {
     pub title: SharedString,
     pub captions: Vec<SharedString>,
+    /// Spec 038 #D2 — a split: "N recipients", then every one of them, on
+    /// the receipt as on the confirm.
+    pub breakdown_title: Option<SharedString>,
+    pub breakdown: Vec<BreakdownRow>,
     pub hash: Option<(SharedString, SharedString)>,
     pub cta: SharedString,
 }
@@ -807,6 +817,8 @@ fn tx_detail(s: &FlowStrings, received: bool) -> TxDetail {
     });
 
     TxDetail {
+        breakdown_title: None,
+        breakdown: Vec::new(),
         title: if received {
             fill(&s.tx_label_received, "symbol", "USDT").into()
         } else {
@@ -1161,6 +1173,8 @@ fn send_confirm(s: &FlowStrings) -> SendConfirm {
 
 fn send_receipt(s: &FlowStrings) -> SendReceipt {
     SendReceipt {
+        breakdown_title: None,
+        breakdown: Vec::new(),
         title: s.tx_submitted_title.clone(),
         captions: vec![
             s.tx_waiting_confirm.clone(),

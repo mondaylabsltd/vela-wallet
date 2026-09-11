@@ -15,6 +15,8 @@ export interface WalletMessages {
 		liveIndicator: string;
 		stale: string;
 		unpriced: string;
+		/** Spec 038: nothing could be read and nothing is known. */
+		unreachable: string;
 		noPrice: string;
 		a11yHide: string;
 		a11yShow: string;
@@ -135,6 +137,8 @@ export const WALLET_KEYS = [
 	'assets.emptySubtext',
 	'assets.rpcUnavailableSingle',
 	'assets.rpcUnavailableMultiple',
+	// Spec 038: the home's sentence for a first launch with no network.
+	'onboarding.common.networkBody',
 	'componentsUi.networkFilter.pillAll',
 	'componentsUi.networkFilter.selectChain',
 	'componentsUi.networkFilter.allNetworks',

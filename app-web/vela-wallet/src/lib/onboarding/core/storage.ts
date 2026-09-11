@@ -151,6 +151,8 @@ export type ServiceEndpoints = {
 	passkeyIndexURL?: string;
 	bundlerServiceURL?: string;
 	fiatRatesURL?: string;
+	/** Spec 038 #E4 — where an unknown AAGUID is looked up; absent = the default node. */
+	aaguidDirectoryURL?: string;
 };
 
 export function loadServiceEndpoints(): ServiceEndpoints {

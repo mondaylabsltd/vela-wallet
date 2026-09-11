@@ -12,6 +12,11 @@ export type BalanceView = { address: string | null,
  */
 display_total_usd: number | null, balance_unknown: boolean, balance_partial: boolean, 
 /**
+ * Nothing could be read and nothing is known: the first fetch failed
+ * with no cache to fall back on. A skeleton and a reason, never a zero.
+ */
+unreachable: boolean, 
+/**
  * `Some` only when partial AND the silent retries are exhausted
  * (invariant ③).
  */

@@ -101,7 +101,7 @@ impl PasskeyFailure {
         }
     }
 
-    fn classified(kind: FailureKind, message: impl Into<String>) -> Self {
+    pub(crate) fn classified(kind: FailureKind, message: impl Into<String>) -> Self {
         Self {
             kind,
             // `not_supported` on desktop is the one classified failure that
@@ -117,6 +117,21 @@ impl PasskeyFailure {
 /// the ceremony's vocabulary lives beside the CTAP client so a shell without
 /// the crux machines can still use it.
 fn ceremony_failure(error: CeremonyError) -> PasskeyFailure {
+    // The phone (or the relay) closed the tunnel while we were waiting on it:
+    // the person cancelled on the phone, or it had no credential for this
+    // relying party. Either way it is the phone's answer, not an error of
+    // ours — a cancellation, named as one, rather than "Other" with a
+    // transport sentence in it (spec 038 finding 18).
+    if error
+        .message
+        .as_deref()
+        .is_some_and(|message| message.contains(cable::TUNNEL_CLOSED))
+    {
+        return PasskeyFailure::classified(
+            FailureKind::Cancelled,
+            "your phone ended the session before signing".to_owned(),
+        );
+    }
     PasskeyFailure {
         kind: match error.kind {
             ceremony::FailureKind::Cancelled => FailureKind::Cancelled,
@@ -897,17 +912,18 @@ fn register_hybrid(
 ) -> Result<Registration, PasskeyFailure> {
     let mut cable = run_hybrid(ceremony, false)?;
     let host = DesktopHost { ceremony };
-    let registration = ceremony::Client {
+    let outcome = ceremony::Client {
         cable: cable.as_mut(),
         host: &host,
         rp_id: RELYING_PARTY,
         rp_name: RELYING_PARTY_NAME,
         origin: ORIGIN,
     }
-    .register(name, exclude_credential_ids)
-    .map_err(ceremony_failure)?;
+    .register(name, exclude_credential_ids);
+    // See `assert_hybrid`: the card comes down on every exit, the goodbye only
+    // on a success.
     (ceremony.touch)(None);
-    // See `assert_hybrid`: the shutdown frame is the polite goodbye.
+    let registration = outcome.map_err(ceremony_failure)?;
     cable.cancel();
 
     Ok(Registration {
@@ -919,30 +935,48 @@ fn register_hybrid(
     })
 }
 
+/// The assertion itself, over an already-established cable — split from the
+/// transport so the teardown rule below is a unit test rather than a phone.
+///
+/// `credential_id` is `None` for a sign-in (any discoverable credential) and
+/// `Some` for recovery's second signature, where the allow list pins the same
+/// credential the first signature used.
+fn assert_over(
+    cable: &mut dyn Cable,
+    ceremony: &Ceremony,
+    challenge: &[u8],
+    credential_id: Option<&str>,
+) -> Result<ceremony::Assertion, PasskeyFailure> {
+    let host = DesktopHost { ceremony };
+    let outcome = ceremony::Client {
+        cable,
+        host: &host,
+        rp_id: RELYING_PARTY,
+        rp_name: RELYING_PARTY_NAME,
+        origin: ORIGIN,
+    }
+    .assert(challenge, credential_id);
+    // The "check your phone" card comes down on EVERY exit. It used to come
+    // down only after a success, so a phone that hung up mid-assertion left
+    // the card over the failure sheet with no way out (spec 038 finding 18).
+    (ceremony.touch)(None);
+    let assertion = outcome.map_err(ceremony_failure)?;
+    // Say goodbye before dropping the channel: the caBLE shutdown frame lets the
+    // phone end its session loop cleanly instead of decrypting the transport
+    // teardown as a garbled frame (a BAD_DECRYPT in its log after every success).
+    // Only after a success — on a failure the tunnel is usually the thing that
+    // died, and the port refuses the write anyway.
+    cable.cancel();
+    Ok(assertion)
+}
+
 fn assert_hybrid(
     challenge: &[u8],
     credential_id: Option<&str>,
     ceremony: &Ceremony,
 ) -> Result<Assertion, PasskeyFailure> {
     let mut cable = run_hybrid(ceremony, true)?;
-    let host = DesktopHost { ceremony };
-    // `credential_id` is `None` for a sign-in (any discoverable credential) and
-    // `Some` for recovery's second signature, where the allow list pins the same
-    // credential the first signature used.
-    let assertion = ceremony::Client {
-        cable: cable.as_mut(),
-        host: &host,
-        rp_id: RELYING_PARTY,
-        rp_name: RELYING_PARTY_NAME,
-        origin: ORIGIN,
-    }
-    .assert(challenge, credential_id)
-    .map_err(ceremony_failure)?;
-    (ceremony.touch)(None);
-    // Say goodbye before dropping the channel: the caBLE shutdown frame lets the
-    // phone end its session loop cleanly instead of decrypting the transport
-    // teardown as a garbled frame (a BAD_DECRYPT in its log after every success).
-    cable.cancel();
+    let assertion = assert_over(cable.as_mut(), ceremony, challenge, credential_id)?;
     // The user handle is where a recovered wallet's NAME survives; when a
     // recovery lands on the "Wallet" fallback, this line says which link broke
     // (handle absent vs. handle present but not `name‖NUL‖uuid`).
@@ -1092,6 +1126,74 @@ mod tests {
             &proof.client_data_json[proof.challenge_index as usize
                 ..proof.challenge_index as usize + r#""challenge":""#.len()],
             r#""challenge":""#
+        );
+    }
+
+    /// Spec 038 finding 18 / SC-427: a phone that hangs up mid-assertion must
+    /// take the "check your phone" card down and be reported as a
+    /// cancellation — the sheet then names it, and Back works.
+    #[test]
+    fn hybrid_teardown_clears_the_touch_card_on_a_peer_close() {
+        use std::sync::Mutex;
+
+        struct HungUp;
+        impl Cable for HungUp {
+            fn exchange(
+                &mut self,
+                _request: &[u8],
+                _touch: Option<TouchKind>,
+            ) -> Result<Vec<u8>, CableError> {
+                Err(CableError::Other(
+                    crate::ctap::cable::TUNNEL_CLOSED.to_owned(),
+                ))
+            }
+            fn cancel(&mut self) {
+                unreachable!("no goodbye into a closed tunnel");
+            }
+            fn product(&self) -> &str {
+                "phone"
+            }
+            fn path(&self) -> &str {
+                "cable"
+            }
+        }
+
+        let touches: Arc<Mutex<Vec<bool>>> = Arc::default();
+        let seen = Arc::clone(&touches);
+        let ceremony = Ceremony {
+            touch: Arc::new(move |request| {
+                if let Ok(mut log) = seen.lock() {
+                    log.push(request.is_some());
+                }
+            }),
+            pin: Arc::new(|_| None),
+            pick: Arc::new(|_| None),
+            qr: Arc::new(|_| {}),
+            window: 0,
+        };
+        // The card is up — the phone had announced a touch.
+        (ceremony.touch)(Some(TouchRequest {
+            kind: TouchKind::Presence,
+            product: "phone".to_owned(),
+            remote: true,
+        }));
+
+        let failure = match assert_over(&mut HungUp, &ceremony, &[0x11; 32], None) {
+            Err(failure) => failure,
+            Ok(_) => unreachable!("a closed tunnel cannot sign"),
+        };
+        assert_eq!(failure.kind, FailureKind::Cancelled);
+        assert!(
+            failure
+                .message
+                .as_deref()
+                .is_some_and(|m| m.contains("phone"))
+        );
+        let log = touches.lock().map(|log| log.clone()).unwrap_or_default();
+        assert_eq!(
+            log.last(),
+            Some(&false),
+            "the card must come down on the failure path"
         );
     }
 

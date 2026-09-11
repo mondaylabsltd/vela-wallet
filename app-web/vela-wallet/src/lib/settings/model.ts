@@ -489,6 +489,9 @@ export interface BalanceDetailModel {
 	}[];
 	sectionDone: string;
 	done: { id: string; mark: ChainMarkModel; name: string; amount: string }[];
+	/** Spec 038 #E8: the tokens the hero's notice is about, by name and network. */
+	sectionUnpriced: string;
+	unpriced: { id: string; mark: ChainMarkModel; name: string; detail: string }[];
 }
 
 /** SR4: fund this chain's bundler treasury. */

@@ -15,6 +15,7 @@ import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeeEstimateView } from '$lib/core/generated/FeeEstimateView';
 import type { FeeView } from '$lib/core/generated/FeeView';
 import type { SendToken } from '$lib/core/generated/SendToken';
+import type { SendAlertKind } from '$lib/core/generated/SendAlertKind';
 import type { SendView } from '$lib/core/generated/SendView';
 import { isStable } from '$lib/services/activity';
 import { chainName, nativeSymbol } from '$lib/services/networks';
@@ -34,7 +35,8 @@ import type {
 	SendFormModel,
 	SendPickModel,
 	SendReceiptModel,
-	TokenMarkModel
+	TokenMarkModel,
+	BreakdownRowModel
 } from './model';
 import type { AssetRowModel } from '$lib/wallet/model';
 
@@ -63,6 +65,12 @@ export interface SendLiveInputs {
 	 */
 	chainFilter?: number | null;
 	classFilter?: SendClassFilter;
+	/**
+	 * The core's last `ShowAlert`, kept by the page until the person edits
+	 * or moves on (spec 038 #D4). The phone raised these natively; the web
+	 * had a `console.warn` where the sentence should have been.
+	 */
+	alert?: SendAlertKind | null;
 }
 
 /** SD1's chips: all, the stables, the chains' own coins, the rest. */
@@ -187,7 +195,10 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 			? (quote.fee_asset.symbol ?? nativeSymbol(chainId))
 			: nativeSymbol(chainId);
 	return {
-		label: m['componentsUi.gas.networkFee'],
+		// A figure the relay did not quote — a local fallback from defaults —
+		// is an ESTIMATE and is labelled as one (spec 038 Part B, finding 14):
+		// the core carries the fact as `quoted`; the label is where it shows.
+		label: quote && !quote.quoted ? m['send.feeTokenEstimate'] : m['componentsUi.gas.networkFee'],
 		mark: tokenMarkFor(
 			chainId,
 			symbol,
@@ -400,17 +411,48 @@ export function liveSendForm(model: SendFormModel, inputs: SendLiveInputs): Send
 				]
 			: undefined,
 		// Split shows the total above the fee; single's amount is the hero.
+		// The total is the core's SUM of the rows (`confirm_amount`) —
+		// `token_amount` is the single field, empty in a split, which is why
+		// the row read "Total · XDAI" with no figure (spec 038 #D4).
 		summary: split
 			? {
 					label: m['send.splitTotalLabel'],
-					value: `${send.token_amount} ${token?.symbol ?? ''}`.trim()
+					value: `${send.confirm_amount} ${token?.symbol ?? ''}`.trim()
 				}
 			: undefined,
 		amount: split ? undefined : amountBlock,
 		recipient: split ? undefined : recipientBlock,
 		fee: feeRow(inputs, model.fee),
+		alert: alertWords(inputs.alert, m),
 		cta: m['send.continueBtn']
 	};
+}
+
+/**
+ * The core's alert kind, in the corpus's words — semantic keys only, the same
+ * mapping the desktop draws (`send_alert_words`). Title and body joined by a
+ * middle dot where both exist; a kind with one sentence gets that sentence.
+ */
+export function alertWords(
+	kind: SendAlertKind | null | undefined,
+	m: WalletFlowMessages
+): string | undefined {
+	if (!kind) return undefined;
+	switch (kind.type) {
+		case 'invalid_address':
+			return `${m['send.alertInvalidAddressTitle']} · ${m['send.alertInvalidAddressBody']}`;
+		case 'invalid_amount':
+			return `${m['send.alertInvalidAmountTitle']} · ${m['send.alertInvalidAmountBody']}`;
+		case 'insufficient_balance':
+		case 'split_over_balance':
+			return `${m['send.alertInsufficientBalanceTitle']} · ${m['send.alertInsufficientBalanceBody']}`;
+		case 'load_tokens_failed':
+			return m['send.alertLoadTokensError'];
+		case 'estimate_failed':
+			return `${m['send.alertEstimateFailedTitle']} · ${m['send.alertEstimateFailedBody']}`;
+		case 'account_unavailable':
+			return m['send.alertAccountUnavailableBody'];
+	}
 }
 
 /** The address, split across the drawn two lines. Empty reads as the placeholder. */
@@ -459,7 +501,10 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			lead: { kind: 'token', mark: chainMark(chainId) }
 		},
 		{
-			label: m['send.estFeeLabel'],
+			label:
+				(send.fee ?? inputs.fee.fee)?.quoted === false
+					? m['send.feeTokenEstimate']
+					: m['send.estFeeLabel'],
 			value: feeText(send.fee ?? inputs.fee.fee)
 		}
 	];
@@ -491,6 +536,30 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			}),
 			facts,
 			breakdown,
+			alert: alertWords(inputs.alert, m),
+			cta: m['send.confirmSendBtn']
+		};
+	}
+
+	// SD3b — the split's confirm (spec 038 #D2): how many, and every one of
+	// them by name and avatar, so what is about to be signed can be read in
+	// full — not "3 recipients" and a total.
+	if (send.split_mode && send.recipients.length > 0) {
+		const symbol = token?.symbol ?? '';
+		const breakdown = send.recipients.map((draft) => ({
+			identiconSvg: draft.address ? identicon(draft.address) : undefined,
+			address: draft.address || undefined,
+			label: draft.name ?? shortenAddress(draft.address),
+			value: `${draft.amount} ${symbol}`.trim()
+		}));
+		const countLine = fill(m['send.recipientCount_other'], { count: send.recipients.length });
+		return {
+			...model,
+			amount: `${send.confirm_amount} ${symbol}`.trim(),
+			subline: `${countLine} · ${chainName(chainId)}${usd === null ? '' : ` · ≈ ${moneyText(usd, currency)}`}`,
+			facts: facts.filter((fact) => fact.label !== m['send.toLabel']),
+			breakdown,
+			alert: alertWords(inputs.alert, m),
 			cta: m['send.confirmSendBtn']
 		};
 	}
@@ -501,6 +570,7 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 		subline: usd === null ? '' : `≈ ${moneyText(usd, currency)}`,
 		facts,
 		breakdown: undefined,
+		alert: alertWords(inputs.alert, m),
 		cta: m['send.confirmSendBtn']
 	};
 }
@@ -517,9 +587,10 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
  * while it was still in the air.
  */
 export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs): SendReceiptModel {
-	const { send, m } = inputs;
+	const { send, m, identicon } = inputs;
 	const token = send.selected_token;
 	const chainId = token?.chain_id ?? 1;
+	const parts = receiptParts(send, m, token?.symbol ?? '', identicon);
 	const header = {
 		...model.header,
 		title: token ? fill(m['send.sendTitle'], { symbol: token.symbol }) : model.header.title
@@ -545,12 +616,17 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 		return {
 			...model,
 			header,
+			...parts,
 			stage: 'confirmed',
 			title: fill(m['send.txConfirmedTitle'], {
 				amount: send.receipt?.amount ?? send.confirm_amount,
 				symbol: token?.symbol ?? ''
 			}),
-			captions: [`${fill(m['history.toName'], { name: to })} · ${chainName(chainId)}`],
+			// A split names its count here and its people below; "To " with
+			// nobody after it was what the single-recipient line read as.
+			captions: [
+				`${parts.breakdownTitle ?? fill(m['history.toName'], { name: to })} · ${chainName(chainId)}`
+			],
 			hash: send.tx_hash
 				? {
 						label: m['componentsTx.receipt.txHash'],
@@ -564,12 +640,28 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 	}
 
 	if (status === 'submitted') {
+		const receipt = send.receipt;
+		const eta =
+			receipt?.submitted_at_ms != null && receipt.typical_inclusion_s != null
+				? {
+						submittedAtMs: receipt.submitted_at_ms,
+						typicalS: receipt.typical_inclusion_s,
+						typicalLine: fill(m['send.txTypicalTime'], {
+							chainName: chainName(chainId),
+							estSecs: receipt.typical_inclusion_s
+						}),
+						elapsedTemplate: m['send.txElapsed'],
+						slowLine: m['send.txSlowConfirm']
+					}
+				: undefined;
 		return {
 			...model,
 			header,
+			...parts,
 			stage: 'submitted',
 			title: m['send.txSubmittedTitle'],
 			captions: [m['send.txWaitingConfirm']],
+			eta,
 			hash: send.user_op_hash
 				? {
 						label: m['componentsTx.receipt.txHash'],
@@ -586,12 +678,49 @@ export function liveSendReceipt(model: SendReceiptModel, inputs: SendLiveInputs)
 	return {
 		...model,
 		header,
+		...parts,
 		stage: 'submitting',
 		title: m['send.txSubmitting'],
 		captions: [m['send.txPreparingBiometric'], m['send.txBackgroundHint']],
 		hash: undefined,
 		cta: m['send.txCloseBackground'],
 		ctaAccent: false
+	};
+}
+
+/**
+ * Spec 038 #D2: a split's parts on the receipt as on the confirm — from the
+ * receipt's own transfers once the core froze them, from the drafts before
+ * that. Nothing for a single send or a sweep (the sweep's parts are assets,
+ * and its one recipient is already the caption).
+ */
+function receiptParts(
+	send: SendView,
+	m: WalletFlowMessages,
+	symbol: string,
+	identicon: (seed: string) => string
+): { breakdownTitle?: string; breakdown?: BreakdownRowModel[] } {
+	const frozen = send.receipt?.kind === 'split' ? send.receipt.transfers : [];
+	const rows: BreakdownRowModel[] =
+		frozen.length > 0
+			? frozen.map((transfer) => ({
+					identiconSvg: identicon(transfer.to),
+					address: transfer.to,
+					label: transfer.to_name ?? shortenAddress(transfer.to),
+					value: `${transfer.amount} ${transfer.symbol}`.trim()
+				}))
+			: send.split_mode
+				? send.recipients.map((draft) => ({
+						identiconSvg: draft.address ? identicon(draft.address) : undefined,
+						address: draft.address || undefined,
+						label: draft.name ?? shortenAddress(draft.address),
+						value: `${draft.amount} ${symbol}`.trim()
+					}))
+				: [];
+	if (rows.length === 0) return { breakdownTitle: undefined, breakdown: undefined };
+	return {
+		breakdownTitle: fill(m['send.recipientCount_other'], { count: rows.length }),
+		breakdown: rows
 	};
 }
 

@@ -194,12 +194,17 @@ impl Machine for TxTracker {
                             now_ms: now_ms(),
                         },
                         Some(resolution) => {
+                            let logs = resolution.logs.clone();
                             remember_receipt(&hash, resolution.sender, resolution.logs);
                             if resolution.confirmed {
-                                TrackShellResult::Receipt {
+                                // With the authentic logs: the core decides whether
+                                // the Safe inside the op actually executed (spec 038
+                                // #D1 — `ExecutionFailure` under a `success: true`).
+                                TrackShellResult::ReceiptWithLogs {
                                     user_op_hash: hash,
                                     tx_hash: resolution.tx_hash,
                                     now_ms: now_ms(),
+                                    logs,
                                 }
                             } else {
                                 TrackShellResult::ReceiptFailed {

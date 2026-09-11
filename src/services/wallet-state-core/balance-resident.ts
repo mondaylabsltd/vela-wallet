@@ -50,6 +50,7 @@ const INITIAL_VIEW: BalanceView = {
   address: null,
   display_total_usd: null,
   balance_unknown: true,
+  unreachable: false,
   balance_partial: false,
   notice: null,
   hidden: false,

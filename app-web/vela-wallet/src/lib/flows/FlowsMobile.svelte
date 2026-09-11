@@ -99,6 +99,9 @@
 
 	/** The batch importer's handlers, when its own core is live. */
 	interface BatchActions {
+	/** Spec 038 #E6: the rate typed in place, and back to the fetched one. */
+	rate: (text: string) => void;
+	resetRate: () => void;
 		unit(id: string): void;
 		paste(text: string): void;
 		pickFile(): void;
@@ -284,6 +287,10 @@
 			>
 				<TokenDetail
 					model={sheet.model}
+					onselect={(i) => {
+						const target = sheet.model.rowTargets?.[i];
+						if (target !== undefined) go('tx-detail', target);
+					}}
 					onsend={() => go('send-token')}
 					onreceive={() => go('receive-token')}
 				/>
@@ -342,6 +349,8 @@
 					model={sheet.model}
 					onunit={batch ? (id) => batch.unit(id) : undefined}
 					onpaste={batch ? (text) => batch.paste(text) : undefined}
+					onrate={batch ? (text) => batch.rate(text) : undefined}
+					onresetrate={batch ? () => batch.resetRate() : undefined}
 					onfile={batch ? () => batch.pickFile() : undefined}
 					ontemplate={batch ? () => batch.saveTemplate() : undefined}
 					onapply={batch ? () => batch.apply() : undefined}

@@ -1,0 +1,10 @@
+# Spec 038 (T077): the development run, spelled once.
+#
+#   VELA_PARALLEL_SPACE=1 cargo dev
+#
+# `dev` builds with the parallel-space fixtures; the environment variable is
+# still the person's to set, because a dev build that does NOT set it is the
+# real app reaching real authenticators — and that difference must stay a
+# deliberate choice, not an alias's side effect.
+[alias]
+dev = "run --features dev-fixtures"

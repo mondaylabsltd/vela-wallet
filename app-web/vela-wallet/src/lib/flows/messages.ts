@@ -175,11 +175,28 @@ export const WALLET_FLOW_KEYS = [
 	'send.batchRateSection',
 	'send.batchRateLabel',
 	'send.batchRateHint',
+	'send.batchRateFailed',
+	'send.batchRateLoading',
+	'send.batchRateReset',
 	'send.batchParsedCount',
 	'send.batchBadAddress',
 	'send.batchRejected_one',
 	'send.batchRejected_other',
 	'send.batchApply_other',
+	'send.batchApply_one',
+	'send.batchApplyEmpty',
+
+	// send · the core's alerts, worded (spec 038 #D4)
+	'send.alertEstimateFailedTitle',
+	'send.alertEstimateFailedBody',
+	'send.alertAccountUnavailableBody',
+	'send.alertInvalidAddressTitle',
+	'send.alertInvalidAddressBody',
+	'send.alertInvalidAmountTitle',
+	'send.alertInvalidAmountBody',
+	'send.alertInsufficientBalanceTitle',
+	'send.alertInsufficientBalanceBody',
+	'send.alertLoadTokensError',
 
 	// send · confirm
 	'send.confirmTitle',
@@ -199,6 +216,8 @@ export const WALLET_FLOW_KEYS = [
 	'send.txConfirmedTitle',
 	'send.txWaitingConfirm',
 	'send.txTypicalTime',
+	'send.txElapsed',
+	'send.txSlowConfirm',
 	'componentsTx.receipt.txHash',
 	'componentsTx.receipt.done'
 ] as const;

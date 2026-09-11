@@ -1,0 +1,191 @@
+/**
+ * The passkey method icons — the web port of
+ * `specs/038-first-run-parity/contracts/passkey-icons.json` (founder's set).
+ *
+ * Hand-ported like the intro art: the contract is the source, this file is
+ * what the renderer speaks, and `passkey-icons.test.ts` re-reads the contract
+ * and asserts every element still matches. Three roles, not `currentColor`
+ * alone: the USB key is drawn as a grey body with white cut-outs OVER the
+ * mark, and a single colour would lose the slots.
+ */
+
+export type PasskeyIconId = 'apple' | 'windows' | 'google' | 'chrome-mac' | 'fido2' | 'usb';
+
+export type PasskeyIconRole = 'ink' | 'muted' | 'paper';
+
+export interface PasskeyIconElement {
+	tag: 'path' | 'rect' | 'circle';
+	role: PasskeyIconRole;
+	attrs: Record<string, string>;
+}
+
+export interface PasskeyIcon {
+	id: PasskeyIconId;
+	viewBox: [number, number];
+	elements: readonly PasskeyIconElement[];
+}
+
+export const PASSKEY_ICONS: Record<PasskeyIconId, PasskeyIcon> = {
+	apple: {
+		id: 'apple',
+		viewBox: [16, 16],
+		elements: [
+			{
+				tag: 'path',
+				role: 'ink',
+				attrs: {
+					d: 'M13.625 5.775c-.066.04-1.625.862-1.625 2.687.074 2.08 1.967 2.81 2 2.81-.033.04-.286.995-1.037 1.996-.595.862-1.256 1.732-2.26 1.732-.956 0-1.299-.575-2.4-.575-1.184 0-1.519.575-2.425.575-1.004 0-1.714-.916-2.343-1.77-.816-1.119-1.51-2.873-1.534-4.558-.016-.893.163-1.771.62-2.516.645-1.041 1.796-1.748 3.053-1.771.963-.03 1.82.629 2.408.629.563 0 1.616-.629 2.808-.629.514 0 1.885.148 2.735 1.39zM8 4.207c-.172-.816.301-1.631.742-2.151C9.306 1.426 10.196 1 10.963 1a2.952 2.952 0 0 1-.816 2.197c-.498.63-1.355 1.103-2.146 1.01z'
+				}
+			}
+		]
+	},
+	windows: {
+		id: 'windows',
+		viewBox: [16, 16],
+		elements: [
+			{
+				tag: 'path',
+				role: 'ink',
+				attrs: {
+					d: 'M14 7.6H8.4V2H14v5.6zm-6.4 0V2H2v5.6h5.6zM2 8.4h5.6V14H2V8.4zm6.4 0V14H14V8.4H8.4z',
+					'fill-rule': 'evenodd',
+					'clip-rule': 'evenodd'
+				}
+			}
+		]
+	},
+	google: {
+		id: 'google',
+		viewBox: [16, 16],
+		elements: [
+			{
+				tag: 'path',
+				role: 'ink',
+				attrs: {
+					d: 'M15 6.545h-3.818v1.91H15v-1.91zM4.5 11A3.51 3.51 0 0 1 1 7.5 3.51 3.51 0 0 1 4.5 4 3.51 3.51 0 0 1 8 7.5 3.51 3.51 0 0 1 4.5 11zm0-5.09c-.875 0-1.59.715-1.59 1.59 0 .875.715 1.59 1.59 1.59.875 0 1.59-.715 1.59-1.59 0-.875-.715-1.59-1.59-1.59z'
+				}
+			},
+			{
+				tag: 'path',
+				role: 'ink',
+				attrs: {
+					d: 'M11.182 8.455v1.909h1.272v-.637c0-.35.287-.636.637-.636.35 0 .636.286.636.636v.637H15v-1.91h-3.818zM7.873 6.545h-2.1c.19.27.318.59.318.955 0 .366-.127.684-.318.955h2.1c.08-.303.127-.62.127-.955 0-.334-.048-.652-.127-.955z'
+				}
+			},
+			{
+				tag: 'path',
+				role: 'ink',
+				attrs: {
+					d: 'M11.182 6.545h-3.31c.08.303.128.62.128.955 0 .334-.048.652-.127.955h3.309v-1.91z'
+				}
+			}
+		]
+	},
+	'chrome-mac': {
+		id: 'chrome-mac',
+		viewBox: [16, 16],
+		elements: [
+			{
+				tag: 'path',
+				role: 'ink',
+				attrs: {
+					d: 'M14.667 12V3.333c0-.733-.6-1.333-1.334-1.333H2.667c-.734 0-1.334.6-1.334 1.333V12H0c0 .733.6 1.333 1.333 1.333h13.334c.733 0 1.333-.6 1.333-1.333h-1.333zm-12-8.667h10.666v8H2.667v-8z'
+				}
+			},
+			{
+				tag: 'path',
+				role: 'ink',
+				attrs: {
+					d: 'M6.667 7.36c0 .367.133.68.393.94.26.26.573.393.94.393s.68-.133.94-.393c.26-.26.393-.573.393-.94s-.133-.68-.393-.94A1.284 1.284 0 0 0 8 6.027c-.367 0-.68.133-.94.393-.26.26-.393.573-.393.94zM8 9.36c.073 0 .14 0 .207-.007.066-.006.133-.02.2-.033l-.787 1.353a3.23 3.23 0 0 1-2.107-1.08 3.209 3.209 0 0 1-.853-2.226c0-.234.02-.46.067-.68.046-.22.113-.427.2-.627L6.26 8.367c.173.3.413.54.72.726.307.187.647.274 1.02.274V9.36zm0-4c-.447 0-.84.127-1.187.387-.346.26-.586.586-.72.986L5.307 5.38c.306-.413.693-.74 1.153-.987a3.213 3.213 0 0 1 1.527-.373c.553 0 1.053.12 1.52.36.466.24.846.567 1.153.973H7.993L8 5.36zm3.053.667a3.136 3.136 0 0 1 .287 1.333c0 .86-.28 1.6-.847 2.227a3.252 3.252 0 0 1-2.086 1.086L9.74 8.367c.087-.147.147-.3.193-.474.047-.173.074-.346.074-.526 0-.26-.047-.507-.14-.727a2.212 2.212 0 0 0-.38-.607h1.566v-.006z'
+				}
+			}
+		]
+	},
+	fido2: {
+		id: 'fido2',
+		viewBox: [16, 16],
+		elements: [
+			{
+				tag: 'path',
+				role: 'ink',
+				attrs: { d: 'M8 6.667A1.333 1.333 0 1 0 8 4a1.333 1.333 0 0 0 0 2.667z' }
+			},
+			{
+				tag: 'path',
+				role: 'ink',
+				attrs: {
+					d: 'M8 1.333c-2.207 0-4 1.794-4 4v5.334C4 11.4 4.6 12 5.333 12H6v1.333c0 .734.6 1.334 1.333 1.334h1.334c.733 0 1.333-.6 1.333-1.334V12h.667C11.4 12 12 11.4 12 10.667V5.333c0-2.206-1.793-4-4-4zm2.667 9.334H5.333V5.333a2.666 2.666 0 1 1 5.334 0v5.334z'
+				}
+			}
+		]
+	},
+	usb: {
+		id: 'usb',
+		viewBox: [80, 80],
+		elements: [
+			{
+				tag: 'path',
+				role: 'ink',
+				attrs: { d: 'M33 11C33 9.89543 33.8954 9 35 9H47C48.1046 9 49 9.89543 49 11V25H33V11Z' }
+			},
+			{ tag: 'rect', role: 'paper', attrs: { x: '35', y: '11', width: '2', height: '12' } },
+			{ tag: 'rect', role: 'paper', attrs: { x: '40', y: '11', width: '2', height: '12' } },
+			{ tag: 'rect', role: 'paper', attrs: { x: '45', y: '11', width: '2', height: '12' } },
+			{
+				tag: 'path',
+				role: 'muted',
+				attrs: {
+					d: 'M31.7686 23H50.2272C51.2135 23 52.0737 23.7553 52.3154 24.8335C54.1052 32.8185 55.0001 40.7432 55.0001 48.6075C55.0001 56.5746 53.5305 64.5403 50.5915 72.5044C50.2573 73.41 49.4728 74 48.6029 74H33.3977C32.5275 74 31.7429 73.4096 31.4089 72.5036C28.4697 64.5306 27.0001 56.5398 27.0001 48.531C27.0001 40.6305 27.8939 32.7296 29.6816 24.8282C29.9249 23.7526 30.7841 23 31.7686 23Z'
+				}
+			},
+			{
+				tag: 'path',
+				role: 'ink',
+				attrs: {
+					d: 'M41.0001 54C44.8661 54 48.0001 50.866 48.0001 47C48.0001 43.134 44.8661 40 41.0001 40C37.1341 40 34.0001 43.134 34.0001 47C34.0001 50.866 37.1341 54 41.0001 54Z'
+				}
+			},
+			{
+				tag: 'path',
+				role: 'paper',
+				attrs: {
+					d: 'M41.0001 68C43.2092 68 45.0001 66.2091 45.0001 64C45.0001 61.7909 43.2092 60 41.0001 60C38.7909 60 37.0001 61.7909 37.0001 64C37.0001 66.2091 38.7909 68 41.0001 68Z'
+				}
+			}
+		]
+	}
+};
+
+/**
+ * What a method row shows (spec 038 #190, the founder's revision of
+ * 2026-09-11 evening): "this device" is THE DEVICE — a laptop or a phone by
+ * form factor, never a vendor's mark, because the platform authenticator on
+ * a given machine is not reliably Apple's, Google's or Microsoft's; "phone or
+ * tablet" is the camera that scans the code; the security key keeps the USB
+ * mark from the founder's set.
+ */
+export type MethodGlyph =
+	| { kind: 'lucide'; name: 'laptop' | 'smartphone' | 'scan-line' }
+	| { kind: 'mark'; id: PasskeyIconId };
+
+/** A coarse pointer (a finger) or a mobile UA means the device is a phone. */
+export function isHandheld(
+	ua: string = navigator.userAgent,
+	coarse: boolean = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+): boolean {
+	return coarse || /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+}
+
+export function methodGlyph(
+	method: 'platform' | 'hybrid' | 'security_key',
+	handheld: boolean = isHandheld()
+): MethodGlyph {
+	switch (method) {
+		case 'platform':
+			return { kind: 'lucide', name: handheld ? 'smartphone' : 'laptop' };
+		case 'hybrid':
+			return { kind: 'lucide', name: 'scan-line' };
+		case 'security_key':
+			return { kind: 'mark', id: 'usb' };
+	}
+}

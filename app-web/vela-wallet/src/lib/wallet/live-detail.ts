@@ -13,6 +13,7 @@ import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedView } from '$lib/core/generated/FeedView';
 import type { WalletFlowMessages } from '$lib/flows/messages';
 import type {
+	BreakdownRowModel,
 	DesktopFlowModel,
 	FactRowModel,
 	FlowScreenModel,
@@ -59,6 +60,29 @@ export function feedItemAt(
 		}
 		if (g === -1) g = 0;
 		if (g === group && r === row) return entry.item;
+		r += 1;
+	}
+	return undefined;
+}
+
+/**
+ * The history screen's (group × 100 + row) index for a feed item id — the
+ * inverse of `feedItemAt`, so a screen that lists a SUBSET of the feed (a
+ * token's own rows, spec 038 #E2) can open the same transaction detail the
+ * history opens, through the same navigation.
+ */
+export function feedPositionOf(feed: FeedView | null | undefined, id: string): number | undefined {
+	if (!feed) return undefined;
+	let g = -1;
+	let r = 0;
+	for (const entry of feed.rows) {
+		if (entry.type === 'header') {
+			g += 1;
+			r = 0;
+			continue;
+		}
+		if (g === -1) g = 0;
+		if (entry.item.id === id) return g * 100 + r;
 		r += 1;
 	}
 	return undefined;
@@ -130,8 +154,43 @@ export function liveTxDetail(item: FeedItem, ctx: TxDetailContext): TxDetailMode
 		});
 	}
 
+	// Spec 038 #D2: a folded batch row opens to what it folded — the split's
+	// recipients by name and avatar, the sweep's assets by their marks —
+	// under the facts, where the single send's "To" would have been.
+	const batch = item.batch;
+	const parts: BreakdownRowModel[] =
+		batch === null
+			? []
+			: batch.transfers.map((transfer) =>
+					batch.kind === 'split'
+						? {
+								identiconSvg: ctx.identicon(transfer.to),
+								address: transfer.to,
+								label: transfer.to_name ?? shortenAddress(transfer.to),
+								value: `${trimBalance(transfer.value)} ${transfer.symbol}`
+							}
+						: {
+								lead: {
+									ticker: transfer.symbol,
+									badgeColor: chainColor(item.chain_id),
+									logoUrls: transfer.logo_urls ?? undefined,
+									badgeHidden: true
+								},
+								label: transfer.symbol,
+								value: `${trimBalance(transfer.value)} ${transfer.symbol}`
+							}
+				);
+	const breakdownTitle =
+		batch === null || parts.length === 0
+			? undefined
+			: batch.kind === 'split'
+				? fill(m['send.recipientCount_other'], { count: parts.length })
+				: fill(m['send.multiSendSummary'], { n: parts.length, chain: chainName(item.chain_id) });
+
 	const amount = item.value === null ? '' : `${trimBalance(item.value)} `;
 	return {
+		breakdownTitle,
+		breakdown: parts.length > 0 ? parts : undefined,
 		title: fill(received ? m['history.txLabelReceived'] : m['history.txLabelSent'], {
 			symbol: item.symbol
 		}),

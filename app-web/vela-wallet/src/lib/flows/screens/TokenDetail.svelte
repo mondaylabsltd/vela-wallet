@@ -17,9 +17,11 @@
 		onreceive?: () => void;
 		onsend?: () => void;
 		onexplorer?: () => void;
+		/** A transaction row was tapped (spec 038 #E2). */
+		onselect?: (index: number) => void;
 	}
 
-	let { model, onreceive, onsend, onexplorer }: Props = $props();
+	let { model, onreceive, onsend, onexplorer, onselect }: Props = $props();
 
 	let copiedIndex = $state(-1);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -65,7 +67,7 @@
 	<h3>{model.transactionsTitle}</h3>
 	<ul class="rows">
 		{#each model.rows as row, i (i)}
-			<li><ActivityRow {row} /></li>
+			<li><ActivityRow {row} onclick={onselect ? () => onselect(i) : undefined} /></li>
 		{/each}
 	</ul>
 

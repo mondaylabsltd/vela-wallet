@@ -88,6 +88,7 @@ describe('logo URLs', () => {
 				display_total_usd: null,
 				balance_unknown: false,
 				balance_partial: false,
+				unreachable: false,
 				notice: null,
 				hidden: false,
 				refreshing: false,

@@ -2,6 +2,7 @@
 	import type { AssetDetailPanelModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
 	import ActivityRow from './ActivityRow.svelte';
+	import type { ActivityRowModel } from '../model';
 	import Icon from './Icon.svelte';
 	import TokenIcon from './TokenIcon.svelte';
 	import { copyText } from '$lib/services/clipboard';
@@ -11,9 +12,11 @@
 		/** The two actions, live. Absent in the gallery, where they are drawn. */
 		onsend?: () => void;
 		onreceive?: () => void;
+		/** A transaction row was tapped — the same detail the home's rows open (spec 038 #E2). */
+		onselect?: (row: ActivityRowModel) => void;
 	}
 
-	let { panel, onsend, onreceive }: Props = $props();
+	let { panel, onsend, onreceive, onselect }: Props = $props();
 
 	let copiedIndex = $state(-1);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -91,7 +94,7 @@
 	<h3>{panel.transactionsTitle}</h3>
 	<ul class="rows">
 		{#each panel.rows as row, i (i)}
-			<li><ActivityRow {row} /></li>
+			<li><ActivityRow {row} onclick={onselect ? () => onselect(row) : undefined} /></li>
 		{/each}
 	</ul>
 </div>

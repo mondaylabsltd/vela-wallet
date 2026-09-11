@@ -24,7 +24,7 @@ test.beforeEach(async ({ page }) => {
 	);
 });
 
-const WIDTHS = [320, 375, 768, 1279, 1280, 1440, 1920];
+const WIDTHS = [320, 375, 768, 1279, 1280, 1440, 1920, 3840];
 
 for (const width of WIDTHS) {
 	test(`no horizontal overflow at ${width}px`, async ({ page }) => {
@@ -114,6 +114,30 @@ test('sign-in stays on Welcome — it has no steps to show', async ({ page }) =>
 	await expect(page).toHaveURL('/en');
 });
 
+/**
+ * Spec 038 SC-428 (T054): "I already have a wallet" opens the three ways in
+ * by name — a sheet on the phone, a dialog at desktop width — each row with
+ * its glyph, so a security key or a phone is reachable without the browser's
+ * own sheet deciding.
+ */
+for (const [width, height] of [
+	[390, 844],
+	[1440, 900]
+] as const) {
+	test(`sign-in offers the three ways in, with icons, at ${width}px`, async ({ page }) => {
+		await page.setViewportSize({ width, height });
+		await page.goto('/en');
+		await page.getByRole('button', { name: 'I already have a wallet' }).click();
+		await expect(page.getByRole('heading', { name: 'Sign In' })).toBeVisible();
+		const rows = page.locator('.methods .method');
+		await expect(rows).toHaveCount(3);
+		for (let i = 0; i < 3; i += 1) {
+			await expect(rows.nth(i).locator('svg')).toBeVisible();
+		}
+		await expect(page).toHaveURL('/en');
+	});
+}
+
 test('mobile brand mark and wordmark share one row', async ({ page }) => {
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/en');
@@ -127,4 +151,49 @@ test('mobile brand mark and wordmark share one row', async ({ page }) => {
 	const markMid = markBox.y + markBox.height / 2;
 	expect(markMid).toBeGreaterThan(wordBox.y);
 	expect(markMid).toBeLessThan(wordBox.y + wordBox.height);
+});
+
+/**
+ * Spec 038 SC-411/412: the intro is composed like the two screens either side
+ * of it. `?intro` forces it regardless of the seen flag the suite sets above.
+ */
+test.describe('the first-run intro', () => {
+	for (const width of [1280, 1440]) {
+		test(`stands beside the rail at ${width}px`, async ({ page }) => {
+			await page.setViewportSize({ width, height: 900 });
+			await page.goto('/en?intro');
+			await expect(page.locator('.intro .rail')).toBeVisible();
+			// No hole: the column ends where its content ends, not at the
+			// viewport's bottom. The dots sit within the content, not pinned.
+			const column = (await page.locator('.intro .column').boundingBox())!;
+			expect(column.height).toBeLessThan(900 - 1);
+			const overflow = await page.evaluate(
+				() => document.documentElement.scrollWidth - document.documentElement.clientWidth
+			);
+			expect(overflow).toBe(0);
+		});
+	}
+
+	test('keeps the phone composition below the breakpoint', async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.goto('/en?intro');
+		await expect(page.locator('.intro .rail')).toBeHidden();
+		await expect(page.getByRole('button', { name: 'Skip' })).toBeVisible();
+		// The column fills the height: the footer rides the bottom.
+		const column = (await page.locator('.intro .column').boundingBox())!;
+		expect(column.height).toBeGreaterThan(844 - 2);
+	});
+
+	test('the last slide puts the two ways in side by side at 1440px', async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/en?intro');
+		await page.keyboard.press('ArrowRight');
+		await page.keyboard.press('ArrowRight');
+		const create = (await page.getByRole('link', { name: 'Create Wallet' }).boundingBox())!;
+		const signIn = (await page
+			.getByRole('button', { name: 'I already have a wallet' })
+			.boundingBox())!;
+		expect(signIn.x).toBeGreaterThan(create.x + create.width - 1);
+		expect(Math.abs(signIn.y - create.y)).toBeLessThan(2);
+	});
 });

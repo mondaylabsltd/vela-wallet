@@ -252,6 +252,9 @@ export interface TxDetailModel {
 	 * drawn fixtures, where the detail is a picture; present on a live row.
 	 */
 	deleteLabel?: string;
+	/** Spec 038 #D2 — a folded batch row: its parts, under the facts. */
+	breakdownTitle?: string;
+	breakdown?: BreakdownRowModel[];
 }
 
 /* ------------------------------------------------------------------ assets */
@@ -285,6 +288,8 @@ export interface TokenDetailModel {
 	facts: FactRowModel[];
 	transactionsTitle: string;
 	rows: ActivityRowModel[];
+	/** Live only (spec 038 #E2): per row, the history index that opens its detail. */
+	rowTargets?: (number | undefined)[];
 	viewOnExplorer: string;
 	/** Where "view on explorer" leads — live only; absent, the control is drawn inert. */
 	explorerUrl?: string;
@@ -433,6 +438,12 @@ export interface SendFormModel {
 	/** split and sweep: the total line above the fee. */
 	summary?: { label: string; value: string };
 	fee: FeeRowModel;
+	/**
+	 * The core's last refusal, in the corpus's words (spec 038 #D4): an
+	 * estimate that failed, an address that is not one. Live only; the
+	 * phone raised these as native alerts, this shell had logged them.
+	 */
+	alert?: string;
 	cta: string;
 }
 
@@ -483,6 +494,12 @@ export interface BatchImportModel {
 	rateSection: string;
 	rateLabel: string;
 	rateValue: string;
+	/** Live only (spec 038 #E6): the rate as typed, editable in place. */
+	rateInput?: string;
+	/** The person overrode the fetched rate; the reset control shows. */
+	rateEdited?: boolean;
+	/** "Auto" — the reset control's word. */
+	rateReset?: string;
 	rateHint: string;
 	parsedLabel: string;
 	rows: { ok: boolean; address: string; conversion: string }[];
@@ -500,15 +517,25 @@ export interface SendConfirmModel {
 	subline: string;
 	facts: FactRowModel[];
 	/** SD3b's recipient list / SD3c's asset list, as a second card. */
-	breakdown?: {
-		lead?: TokenMarkModel;
-		identiconSvg?: string;
-		/** With `identiconSvg`: its seed, for the viewer. */
-		address?: string;
-		label: string;
-		value: string;
-	}[];
+	breakdown?: BreakdownRowModel[];
+	/** The core's last refusal, worded — see `SendFormModel.alert`. */
+	alert?: string;
 	cta: string;
+}
+
+/**
+ * One part of a batch: a recipient with an avatar (a split) or an asset with
+ * its mark (a sweep). The same row on the confirm, the receipt and the
+ * transaction detail (spec 038 #D2), so what was signed, what is landing and
+ * what landed read as one thing.
+ */
+export interface BreakdownRowModel {
+	lead?: TokenMarkModel;
+	identiconSvg?: string;
+	/** With `identiconSvg`: its seed, for the viewer. */
+	address?: string;
+	label: string;
+	value: string;
 }
 
 export type ReceiptStage = 'submitting' | 'submitted' | 'confirmed' | 'failed';
@@ -523,6 +550,24 @@ export interface SendReceiptModel {
 	/** submitted / confirmed: the hash and its copy affordance. */
 	hash?: { label: string; value: string; copyLabel: string };
 	viewOnExplorer?: string;
+	/**
+	 * Spec 038 #D3 — live, while submitted: when the relay accepted the op and
+	 * how long this chain usually takes, so the screen can count rather than
+	 * spin. The screen owns the clock; the sentence is the corpus's.
+	 */
+	eta?: {
+		submittedAtMs: number;
+		typicalS: number;
+		/** "Gnosis typically confirms in ~15s" — already filled. */
+		typicalLine: string;
+		/** "{{elapsed}}s elapsed — almost there" — the screen fills the number. */
+		elapsedTemplate: string;
+		/** Past twice the typical time. */
+		slowLine: string;
+	};
+	/** Spec 038 #D2 — a split: "N recipients", then every one of them. */
+	breakdownTitle?: string;
+	breakdown?: BreakdownRowModel[];
 	/** The single bottom button: "Close · keep running" or "Done". */
 	cta: string;
 	ctaAccent: boolean;

@@ -16,12 +16,16 @@ mod gallery;
 mod hardware;
 mod icons;
 mod identicon;
+mod intro;
+mod intro_art;
 mod loc;
 mod onboarding;
 mod onboarding_flow;
 mod outcome;
+mod panic_report;
 mod parallel_space;
 mod passkey_directory;
+mod passkey_icons;
 mod raster;
 mod resident;
 mod session;
@@ -223,6 +227,9 @@ fn open_window_with<V: gpui::Render + 'static>(
 }
 
 fn main() {
+    // Spec 038: a panic on a worker thread becomes a sheet, not a vanished
+    // window. Installed before anything can spawn.
+    panic_report::install();
     // LastWindowClosed instead of gpui's macOS default (keep running): a
     // keep-running single-window app must reopen its window from the Dock
     // icon, and that path is dead on macOS 26 — AppKit's TextInputUI panel
@@ -245,6 +252,16 @@ fn main() {
     app.run(|cx: &mut App| {
         // Storage is read before the first window opens, so the route guard has
         // a real answer to give on frame one.
+        // The UI face, before any window: every page root names it, and a
+        // family named before it is loaded renders in the fallback face until
+        // the next frame — a visible flash on a wallet's first screen.
+        let fonts = theme::UI_FONT_FILES
+            .iter()
+            .map(|bytes| std::borrow::Cow::Borrowed(*bytes))
+            .collect();
+        if let Err(error) = cx.text_system().add_fonts(fonts) {
+            eprintln!("[vela-wallet] bundled fonts could not be loaded: {error}");
+        }
         session::boot(cx);
 
         cx.on_action(|_: &Quit, cx| cx.quit());

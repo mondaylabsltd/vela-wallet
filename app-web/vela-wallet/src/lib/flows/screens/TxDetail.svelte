@@ -8,6 +8,7 @@
 	 */
 	import Button from '$lib/ui/Button.svelte';
 	import AmountHero from '../ui/AmountHero.svelte';
+	import Breakdown from '../ui/Breakdown.svelte';
 	import FactRow from '../ui/FactRow.svelte';
 	import StatusChip from '../ui/StatusChip.svelte';
 	import { copyText } from '$lib/services/clipboard';
@@ -47,6 +48,10 @@
 			<li><FactRow {fact} copied={copiedIndex === i} oncopy={() => copy(i)} /></li>
 		{/each}
 	</ul>
+
+	{#if model.breakdown !== undefined}
+		<div class="parts"><Breakdown rows={model.breakdown} title={model.breakdownTitle} /></div>
+	{/if}
 
 	<div class="cta">
 		{#if model.explorerUrl !== undefined}
@@ -89,6 +94,10 @@
 
 	li + li {
 		border-top: var(--border-hairline) solid var(--color-border-base);
+	}
+
+	.parts {
+		padding-top: var(--space-lg);
 	}
 
 	.cta {

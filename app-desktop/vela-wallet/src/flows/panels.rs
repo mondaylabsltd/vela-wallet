@@ -22,9 +22,9 @@ use super::components::{
     status_chip, token_header_card,
 };
 use super::fixtures::{
-    AddToken, AddTokenResult, AssetsPanel, BatchImport, ContactPick, CtaState, DepositEntry,
-    FeeTokenPick, FlowBody, HistoryGroup, ReceiveList, ReceiveQr, ScanModal, SendConfirm, SendForm,
-    SendNotice, SendPick, SendReceipt, TxDetail,
+    AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
+    DepositEntry, FeeTokenPick, FlowBody, HistoryGroup, ReceiveList, ReceiveQr, ScanModal,
+    SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, TxDetail,
 };
 
 /// One prepared click listener. The page builds these from `cx.listener`
@@ -156,6 +156,62 @@ fn column() -> Div {
 }
 
 /// The hairline that separates rows in every list here.
+/// The parts of a batch (spec 038 #D2): every recipient of a split by name
+/// and avatar, every asset of a sweep by name — one list, drawn the same on
+/// the confirm, the receipt and the transaction detail, so what was signed,
+/// what is landing and what landed read as one thing.
+fn breakdown_list(
+    theme: &Theme,
+    identicons: &mut IdenticonCache,
+    title: Option<&SharedString>,
+    rows: &[BreakdownRow],
+) -> Div {
+    let mut block = div().flex().flex_col().gap(px(6.));
+    if let Some(title) = title {
+        block = block.child(
+            div()
+                .text_size(theme::text_label())
+                .text_color(theme.fg_subtle)
+                .child(title.clone()),
+        );
+    }
+    let mut list = div()
+        .flex()
+        .flex_col()
+        .px(px(12.))
+        .rounded(px(12.))
+        .bg(theme.bg_sunken);
+    for item in rows {
+        let mut row = div().flex().items_center().gap(px(8.)).py(px(8.));
+        if let Some(seed) = item.seed.as_ref() {
+            row = row.child(crate::wallet::components::identicon_avatar(
+                identicons,
+                seed.as_ref(),
+                24.,
+            ));
+        }
+        list = list.child(
+            row.child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .whitespace_nowrap()
+                    .truncate()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_base)
+                    .child(item.label.clone()),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_base)
+                    .child(item.value.clone()),
+            ),
+        );
+    }
+    block.child(list)
+}
+
 fn divider(theme: &Theme) -> Div {
     div().h(px(1.)).bg(theme.divider)
 }
@@ -226,7 +282,9 @@ pub fn render(
             actions.notice_action,
             actions.notice_dismiss,
         ),
-        FlowBody::SendReceipt(model) => send_receipt(model, theme, icons, actions.advance),
+        FlowBody::SendReceipt(model) => {
+            send_receipt(model, theme, icons, identicons, actions.advance)
+        }
         // The page routes this away before it gets here; a column-shaped
         // viewfinder is the thing DS1L exists to avoid.
         FlowBody::Scan(model) => scan_placeholder(model, theme),
@@ -517,6 +575,14 @@ fn tx_detail(
             col = col.child(divider(theme));
         }
         col = col.child(fact_row(theme, icons, identicons, fact));
+    }
+    if !model.breakdown.is_empty() {
+        col = col.child(breakdown_list(
+            theme,
+            identicons,
+            model.breakdown_title.as_ref(),
+            &model.breakdown,
+        ));
     }
     col.child(ghost_button(theme, model.view_on_explorer.clone()))
 }
@@ -1738,35 +1804,7 @@ fn send_confirm(
     col = col.child(card);
 
     if !model.breakdown.is_empty() {
-        let mut list = div()
-            .flex()
-            .flex_col()
-            .px(px(12.))
-            .rounded(px(12.))
-            .bg(theme.bg_sunken);
-        for item in &model.breakdown {
-            list = list.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .py(px(8.))
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_base)
-                            .child(item.label.clone()),
-                    )
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_base)
-                            .child(item.value.clone()),
-                    ),
-            );
-        }
-        col = col.child(list);
+        col = col.child(breakdown_list(theme, identicons, None, &model.breakdown));
     }
 
     if let Some(notice) = &model.notice {
@@ -1786,6 +1824,7 @@ fn send_receipt(
     model: &SendReceipt,
     theme: &Theme,
     icons: &mut IconCache,
+    identicons: &mut IdenticonCache,
     advance: Option<Click>,
 ) -> Div {
     let mut col = column().child(
@@ -1830,6 +1869,15 @@ fn send_receipt(
                 })
                 .child(caption.clone()),
         );
+    }
+
+    if !model.breakdown.is_empty() {
+        col = col.child(breakdown_list(
+            theme,
+            identicons,
+            model.breakdown_title.as_ref(),
+            &model.breakdown,
+        ));
     }
 
     if let Some((label, value)) = &model.hash {

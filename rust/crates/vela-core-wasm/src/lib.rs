@@ -551,18 +551,33 @@ pub fn passkey_provider_icon_data_uri(aaguid: &str, dark: bool) -> Option<String
 /// **Where to ask about a model the compiled catalog cannot name**, or
 /// `undefined` when there is nothing to ask: a malformed or all-zero AAGUID, or
 /// one the catalog already answers offline.
+///
+/// `origin` is the directory node the person's service-endpoint settings
+/// name (spec 038 #E4); absent, the crate's default.
 #[wasm_bindgen(js_name = passkeyDirectoryUrl)]
 #[must_use]
-pub fn passkey_directory_url(aaguid: &str) -> Option<String> {
-    vela_core::passkey::directory_lookup_url(aaguid)
+pub fn passkey_directory_url(aaguid: &str, origin: Option<String>) -> Option<String> {
+    match origin {
+        Some(origin) => vela_core::passkey::directory_lookup_url_at(&origin, aaguid),
+        None => vela_core::passkey::directory_lookup_url(aaguid),
+    }
 }
 
 /// **Read a directory answer.** `undefined` unless the body is about the AAGUID
 /// that was asked about and carries a usable name; `iconUrl` is present only
 /// when the path is the service's own shape.
 #[wasm_bindgen(js_name = passkeyDirectoryEntry)]
-pub fn passkey_directory_entry(aaguid: &str, json: &str, dark: bool) -> JsResult<JsValue> {
-    let Some(entry) = vela_core::passkey::directory_entry(aaguid, json, dark) else {
+pub fn passkey_directory_entry(
+    aaguid: &str,
+    json: &str,
+    dark: bool,
+    origin: Option<String>,
+) -> JsResult<JsValue> {
+    let entry = match origin {
+        Some(origin) => vela_core::passkey::directory_entry_at(&origin, aaguid, json, dark),
+        None => vela_core::passkey::directory_entry(aaguid, json, dark),
+    };
+    let Some(entry) = entry else {
         return Ok(JsValue::UNDEFINED);
     };
     serde_wasm_bindgen::to_value(&entry).map_err(|e| JsValue::from_str(&e.to_string()))
