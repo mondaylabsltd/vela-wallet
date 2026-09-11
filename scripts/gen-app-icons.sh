@@ -4,8 +4,8 @@
 #
 #     ./scripts/gen-app-icons.sh
 #
-# Covers the Expo app (iOS/Android/web), the two native projects, and the
-# marketing site. Desktop icons (Linux hicolor, Windows .ico, macOS .iconset)
+# Covers the two native projects (app-ios, app-android) and the marketing
+# site. Desktop icons (Linux hicolor, Windows .ico, macOS .iconset)
 # come from the same SVGs via
 # app-desktop/vela-wallet/scripts/generate-desktop-icons.sh.
 #
@@ -28,7 +28,6 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 icon_src="$repo_root/design/icon"
-images="$repo_root/assets/images"
 ios_iconset="$repo_root/app-ios/VelaWallet/VelaWallet/Assets.xcassets/AppIcon.appiconset"
 android_res="$repo_root/app-android/vela-wallet/app/src/main/res"
 site_static="$repo_root/app-web/getvela.app/static"
@@ -36,15 +35,12 @@ site_static="$repo_root/app-web/getvela.app/static"
 tile_color="#f46d50"   # must match the <rect> fill in design/icon/app-icon.svg
 svg_px=68              # the SVGs' intrinsic size, for the density calculation
 
-# How much of an Android adaptive foreground the mark may occupy.
-#
-# NOT a matter of taste. Rendering the mark at the scale the tile design uses
-# puts its furthest point at 184px on a 512 canvas, while Android only
-# guarantees the inner 170.7px radius - so the sail tips and the hull get
-# clipped on any circular launcher. 0.68 reproduces the proportion the mark has
-# inside its tile (furthest point at ~73% of the icon's half-width) within the
-# guaranteed circle instead of within the full canvas.
-android_fg_scale=0.68
+# Android's adaptive icon (API 26+) is the VECTOR in app-android's drawable/,
+# maintained there; only the pre-26 mipmap rasters are rendered here. The
+# 66.7% safe-zone rule still applies to that vector: the mark's furthest point
+# must stay inside the inner 170.7px of a 512 canvas or the sail tips and the
+# hull get clipped on a circular launcher (the retired Expo layers used a 0.68
+# inset for exactly this).
 
 die() { echo "error: $*" >&2; exit 1; }
 step() { echo "==> $*"; }
@@ -75,25 +71,6 @@ render() {
     -resize "${2}x${2}" -depth 8 -strip -define png:color-type=6 "$3"
 }
 
-# render_inset <svg> <size> <scale> <out> - the mark shrunk by <scale> and
-# re-centred on a full-size transparent canvas. This is what keeps Android's
-# foreground inside the guaranteed circle.
-render_inset() {
-  local inner
-  inner="$(awk -v s="$2" -v f="$3" 'BEGIN { printf "%d", s * f }')"
-  "${im[@]}" -background none -density "$(density_for "$inner")" "$icon_src/$1.svg" \
-    -resize "${inner}x${inner}" \
-    -gravity center -background none -extent "${2}x${2}" \
-    -depth 8 -strip -define png:color-type=6 "$4"
-}
-
-# solid <size> <colour> <out> - flat opaque square, no alpha channel left in the
-# file (`-alpha off` alone only hides it).
-solid() {
-  "${im[@]}" -size "${1}x${1}" "xc:$2" -alpha remove -alpha off \
-    -depth 8 -strip -define png:color-type=2 "$3"
-}
-
 # flat_square <size> <out> - the mark over an opaque full-bleed tile. Used
 # wherever the platform masks corners itself and rejects alpha.
 flat_square() {
@@ -102,20 +79,6 @@ flat_square() {
        -resize "${1}x${1}" \) \
     -composite -alpha remove -alpha off -depth 8 -strip -define png:color-type=2 "$2"
 }
-
-# ------------------------------------------------------------------ Expo app --
-
-step "Expo: iOS icon (full-bleed square, alpha stripped)"
-flat_square 1024 "$images/icon.png"
-cp "$images/icon.png" "$repo_root/assets/expo.icon/Assets/icon.png"
-
-step "Expo: Android adaptive layers"
-render_inset app-mark 512 "$android_fg_scale" "$images/android-icon-foreground.png"
-solid 512 "$tile_color" "$images/android-icon-background.png"
-render_inset app-mark-mono 512 "$android_fg_scale" "$images/android-icon-monochrome.png"
-
-step "Expo: web favicon"
-render app-icon 48 "$images/favicon.png"
 
 # ------------------------------------------------------- native iOS project --
 
@@ -221,12 +184,6 @@ while IFS= read -r f; do
   printf '  %-58s %s\n' "${f#"$repo_root"/}" \
     "$("${im[@]}" identify -format '%wx%h %[channels]' "${f}[0]" 2>/dev/null)"
 done <<EOF
-$images/icon.png
-$repo_root/assets/expo.icon/Assets/icon.png
-$images/android-icon-foreground.png
-$images/android-icon-background.png
-$images/android-icon-monochrome.png
-$images/favicon.png
 $ios_iconset/icon-1024.png
 $ios_iconset/icon-1024-dark.png
 $ios_iconset/icon-1024-tinted.png
@@ -237,29 +194,10 @@ $site_static/web-app-manifest-512x512.png
 $site_static/vela-logo.png
 EOF
 
-# Guard the two mistakes that are invisible until a store submission or a
-# circular launcher, long after the commit that caused them.
-[[ "$("${im[@]}" identify -format '%[channels]' "$images/icon.png")" == *a* ]] &&
+# Guard the mistake that is invisible until a store submission, long after
+# the commit that caused it.
+[[ "$("${im[@]}" identify -format '%[channels]' "$ios_iconset/icon-1024.png")" == *a* ]] &&
   die "the iOS icon has an alpha channel; App Store submission will reject it"
-
-python3 - "$images/android-icon-foreground.png" <<'PY'
-import sys, math
-try:
-    from PIL import Image
-except ModuleNotFoundError:
-    sys.exit(0)          # optional check; do not fail the build over it
-im = Image.open(sys.argv[1]).convert("RGBA")
-w, h = im.size
-cx, cy = w / 2, h / 2
-a = im.getchannel("A").load()
-worst = max((math.hypot(x - cx, y - cy)
-             for y in range(h) for x in range(w) if a[x, y] > 8), default=0)
-allowed = w * 0.6667 / 2
-if worst > allowed:
-    sys.exit(f"error: the Android foreground reaches {worst:.0f}px but only "
-             f"{allowed:.0f}px is guaranteed visible; lower android_fg_scale")
-print(f"\nAndroid foreground reaches {worst:.0f}px of the {allowed:.0f}px "
-      f"guaranteed radius ({worst / allowed * 100:.0f}%).")
 PY
 
 echo "iOS icon has no alpha channel."
