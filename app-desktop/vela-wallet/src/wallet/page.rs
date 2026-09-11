@@ -506,6 +506,8 @@ pub struct WalletPage {
     /// The resolved locale, kept for the cable's own dialogs (touch / PIN /
     /// pick), which take it whole.
     loc: Loc,
+    /// A survived panic's report, shown as the failure sheet (spec 038).
+    crash: Option<crate::outcome::Prompt>,
     /// One per editable settings field, made on first use.
     endpoint_focuses: Vec<gpui::FocusHandle>,
     /// Which network card's probes have been asked for, so opening one asks
@@ -905,6 +907,7 @@ impl WalletPage {
             identicons: IdenticonCache::default(),
             focus_handle,
             loc,
+            crash: None,
         }
     }
 
@@ -10180,6 +10183,17 @@ impl WalletPage {
 impl Render for WalletPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::of(self.theme_mode());
+        // A survived panic (spec 038): the failure sheet, "Something went
+        // wrong", with the report behind the disclosure.
+        if self.crash.is_none()
+            && let Some(detail) = crate::panic_report::take()
+        {
+            self.crash = Some(crate::outcome::Prompt::new(
+                vela_core::app::PromptKind::CreateFailed { detail },
+                false,
+                0,
+            ));
+        }
 
         // Windows and Linux CSD have no system caption, so the page draws one
         // (spec 015 results.md deviation 5 assumed Windows was a native path;
@@ -10301,6 +10315,38 @@ impl Render for WalletPage {
         }
         if let Some(network_remove) = network_remove {
             root = root.child(network_remove);
+        }
+        if let Some(prompt) = &self.crash {
+            let entity = cx.entity();
+            root = root.child(crate::outcome::outcome_sheet(
+                &theme,
+                &self.loc,
+                prompt,
+                move |id, _window, cx| {
+                    entity
+                        .update(cx, |page, cx| {
+                            use crate::outcome::ActionId;
+                            match id {
+                                ActionId::ToggleDetails => {
+                                    if let Some(prompt) = page.crash.as_mut() {
+                                        prompt.details_expanded = !prompt.details_expanded;
+                                    }
+                                }
+                                ActionId::ReportError => {
+                                    if let Some(details) =
+                                        page.crash.as_ref().and_then(|p| p.details.clone())
+                                    {
+                                        cx.write_to_clipboard(gpui::ClipboardItem::new_string(details));
+                                    }
+                                }
+                                ActionId::Accept | ActionId::Decline | ActionId::EditIndexEndpoint => {
+                                    page.crash = None;
+                                }
+                            }
+                            cx.notify();
+                        });
+                },
+            ));
         }
         let root = root
             .track_focus(&self.focus_handle)

@@ -35,6 +35,7 @@ const BALANCE: BalanceView = {
 	display_total_usd: 3.85,
 	balance_unknown: false,
 	balance_partial: false,
+	unreachable: false,
 	notice: null,
 	hidden: false,
 	refreshing: false,

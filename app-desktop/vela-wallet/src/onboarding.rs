@@ -1036,6 +1036,17 @@ impl OnboardingPage {
 impl Render for OnboardingPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = Theme::of(self.mode);
+        // A survived panic (spec 038): the ordinary failure sheet, "Something
+        // went wrong", with the report behind the disclosure. Effect id 0
+        // resolves nothing when the sheet closes — there is no effect.
+        if self.prompt.is_none()
+            && let Some(detail) = crate::panic_report::take()
+        {
+            self.prompt = Some((
+                Machine::Login,
+                Prompt::new(vela_core::app::PromptKind::CreateFailed { detail }, false, 0),
+            ));
+        }
         let tiling = frame_tiling(window);
 
         // A modal takes the keyboard on the frame it appears, and only then:

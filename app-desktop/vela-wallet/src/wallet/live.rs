@@ -31,7 +31,11 @@ use crate::wallet::fixtures::{
 ///   their money is gone.
 #[must_use]
 pub fn balance(view: &BalanceView, s: &WalletStrings, locale: &str) -> BalanceModel {
-    let status = if view.refreshing {
+    let status = if view.unreachable {
+        // A first launch with no network: say so, over the skeleton, rather
+        // than show a settled-looking zero (spec 038 finding 15).
+        Some((StatusKind::Warning, s.balance_unreachable.clone()))
+    } else if view.refreshing {
         Some((StatusKind::Refreshing, s.balance_stale.clone()))
     } else {
         view.notice.map(|notice| {

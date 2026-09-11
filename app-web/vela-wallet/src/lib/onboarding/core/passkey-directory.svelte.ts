@@ -14,6 +14,7 @@
  * only the transport and the memory.
  */
 import { browser } from '$app/environment';
+import { NET_TIMEOUTS, fetchWithTimeout } from '$lib/services/net';
 import { passkeyDirectoryEntry, passkeyDirectoryUrl } from './wasm-client';
 
 export interface DirectoryEntry {
@@ -57,7 +58,12 @@ async function lookup(aaguid: string, dark: boolean, key: string): Promise<void>
 		return;
 	}
 	try {
-		const response = await fetch(url, { headers: { Accept: 'application/json' } });
+		// On the app's timeout table (spec 038): the one bare fetch left.
+		const response = await fetchWithTimeout(
+			url,
+			{ headers: { Accept: 'application/json' } },
+			{ timeoutMs: NET_TIMEOUTS.ethereumData }
+		);
 		entries[key] = response.ok
 			? ((passkeyDirectoryEntry(aaguid, await response.text(), dark) as DirectoryEntry) ?? null)
 			: null;

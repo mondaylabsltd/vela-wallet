@@ -39,6 +39,7 @@ function view(tokens: BalanceToken[]): BalanceView {
 		display_total_usd: 300,
 		balance_unknown: false,
 		balance_partial: false,
+		unreachable: false,
 		notice: null,
 		hidden: false,
 		refreshing: false,

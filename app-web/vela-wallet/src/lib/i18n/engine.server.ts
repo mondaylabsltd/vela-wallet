@@ -115,6 +115,7 @@ export function resolveWalletMessages(locale: Locale): WalletMessages {
 			liveIndicator: k('home.liveIndicator'),
 			stale: k('home.balanceStale'),
 			unpriced: k('home.balanceUnpriced'),
+			unreachable: k('onboarding.common.networkBody'),
 			noPrice: k('home.balanceDetailNoPrice'),
 			a11yHide: k('home.a11yHideBalance'),
 			a11yShow: k('home.a11yShowBalance')

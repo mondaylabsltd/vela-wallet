@@ -374,9 +374,86 @@ fn slow_chains_keep_their_last_value_mid_refresh() {
         tokens: vec![token(1, "ETH", "15", Some(1.0))],
     });
     let view = sut.view();
-    assert_eq!(view.display_total_usd, Some(35.0), "56 kept its last value");
+    // Spec 038 #188: the LIST streams (56 kept its last value, 1 updated),
+    // but the FIGURE holds at the last settle until this refresh settles.
+    assert_eq!(view.display_total_usd, Some(30.0), "held until settle");
     assert_eq!(view.tokens.len(), 2);
     assert_eq!(view.tokens[0].symbol, "BNB", "sorted by USD value desc");
+    assert!(view.refreshing);
+    sut.resolve(settled(
+        ADDR_A,
+        vec![
+            token(1, "ETH", "15", Some(1.0)),
+            token(56, "BNB", "20", Some(1.0)),
+        ],
+        vec![],
+        vec![],
+    ));
+    assert_eq!(sut.view().display_total_usd, Some(35.0), "moved once, at settle");
+}
+
+/// Spec 038 #188, the first load: seven chains answering one by one must not
+/// paint seven different totals, and "some tokens couldn't be priced" must
+/// not flash before the prices have arrived.
+#[test]
+fn the_figure_moves_once_per_refresh_and_unpriced_waits_for_settle() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(62.0),
+    });
+    // Two chains land, one still unpriced.
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(1, "ETH", "50", Some(1.0))],
+    });
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(56, "BNB", "40", None)],
+    });
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(62.0), "the cached figure holds");
+    assert_eq!(view.notice, None, "no unpriced notice mid-stream");
+    // Settle: everything priced now.
+    sut.resolve(settled(
+        ADDR_A,
+        vec![
+            token(1, "ETH", "50", Some(1.0)),
+            token(56, "BNB", "40", Some(1.0)),
+        ],
+        vec![],
+        vec![],
+    ));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(90.0));
+    assert_eq!(view.notice, None);
+    assert!(!view.unreachable);
+}
+
+/// Spec 038 finding 15: a first launch with the network cut is "unreachable",
+/// never a settled-looking $0.00.
+#[test]
+fn an_errored_first_load_is_unreachable_not_zero() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    sut.resolve(Res::FetchErrored {
+        address: ADDR_A.to_owned(),
+        pull: false,
+    });
+    let view = sut.view();
+    assert!(view.unreachable);
+    assert!(!view.balance_unknown, "the skeleton closed; the reason is different");
+    assert_eq!(view.tokens.len(), 0);
+    // A later successful fetch clears it.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled(ADDR_A, vec![token(1, "ETH", "1", Some(1.0))], vec![], vec![]));
+    assert!(!sut.view().unreachable);
 }
 
 /// ⑤: a previous account's slow answers can never paint the new account —

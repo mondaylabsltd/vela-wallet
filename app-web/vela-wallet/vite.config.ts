@@ -71,6 +71,9 @@ export default defineConfig({
 	},
 	plugins: [
 		sveltekit({
+			// Spec 038: poll the deployed version so a deploy mid-session turns
+			// the next navigation into a full load (see +layout.svelte).
+			version: { pollInterval: 60_000 },
 			compilerOptions: {
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
 				runes: ({ filename }) =>

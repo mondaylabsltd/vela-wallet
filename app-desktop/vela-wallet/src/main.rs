@@ -24,6 +24,7 @@ mod parallel_space;
 mod passkey_directory;
 mod intro;
 mod intro_art;
+mod panic_report;
 mod passkey_icons;
 mod raster;
 mod resident;
@@ -226,6 +227,9 @@ fn open_window_with<V: gpui::Render + 'static>(
 }
 
 fn main() {
+    // Spec 038: a panic on a worker thread becomes a sheet, not a vanished
+    // window. Installed before anything can spawn.
+    panic_report::install();
     // LastWindowClosed instead of gpui's macOS default (keep running): a
     // keep-running single-window app must reopen its window from the Dock
     // icon, and that path is dead on macOS 26 — AppKit's TextInputUI panel

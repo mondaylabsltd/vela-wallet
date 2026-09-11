@@ -60,3 +60,38 @@ advance on failure) — T028 partial; the caBLE tunnel dial (T033) not moved;
 `failed_inside_this_machine` recognises resolver failures by libc's sentence
 (three desktops' words listed in `resolver_said_no`) because `std` surfaces
 `getaddrinfo` as an `Uncategorized` io error, not `HostNotFound`.
+
+### Slice 2 — typeface, marks, launch gate, desktop intro (commits 1ee5256e, 44a069bf)
+
+See the two commit messages; desktop 376 → 387.
+
+### Slice 3 — stability (core #188 / unreachable, panic sheet, web offline & version)
+
+**Core** — `balance_dashboard.rs`: `fetch_in_flight` + `last_settled_total`;
+the FIGURE holds at the last settle while chains stream and moves once, at
+settle; `BalanceNotice::Unpriced` is raised only at rest; `BalanceView.unreachable`
+when the first fetch errored with no tokens and no cache. The existing
+`slow_chains_keep_their_last_value_mid_refresh` test asserted the old climbing
+total and was rewritten to the new rule (the LIST still streams); two new
+tests. Bindings regenerated (`gen-core-types.mjs wallet-state`).
+
+**Desktop** — `panic_report.rs`: process hook + mailbox; `resident.rs::pump`
+runs every blocking/streaming work inside `catch_unwind` (a panic leaves the
+operation unresolved and the screen in its last state); both pages raise the
+report as the ordinary failure sheet ("Something went wrong", details,
+Report). `VELA_TEST_PANIC=1` panics once inside the next background work.
+Home: `unreachable` → the network sentence over the skeleton.
+
+**Web** — `+layout.svelte`: `online`/`offline` listeners (offline line;
+reconnect calls `invalidateAllPools()`), `beforeNavigate` + `updated.current`
+→ full load, `vite:preloadError` → reload; `vite.config.ts`
+`version.pollInterval`; `passkey-directory.svelte.ts` on `fetchWithTimeout`;
+home `unreachable` line; #189 favicon deleted.
+
+Not in this slice: fee fallback flag (T059–T061), the `pool.rs`/`chainlink.rs`
+callers' candidate retry (T028 partial), the remaining `FontWeight::` walk
+(T044), #191 reproduction, #meta, Part D.
+
+Screenshots: the desktop app was launched with `VELA_INTRO=1` on a fresh
+state (launch animation → intro confirmed from the log), but a window-only
+capture needs the no-TCC harness — the visual pass (SC-429) is still owed.

@@ -205,10 +205,26 @@ where
                 Answer::Now(result) => self.resolve(id, result, cx),
                 Answer::Blocking(work) => {
                     cx.spawn(async move |resident, cx| {
-                        let result = cx.background_executor().spawn(async move { work() }).await;
-                        resident
-                            .update(cx, |resident, cx| resident.resolve(id, result, cx))
-                            .ok();
+                        // Spec 038: a panic in the work is survived here. The
+                        // operation is then left unresolved — the machine keeps
+                        // its last state — and the hook's report becomes the
+                        // page's failure sheet.
+                        let result = cx
+                            .background_executor()
+                            .spawn(async move {
+                                if crate::panic_report::test_panic_requested() {
+                                    panic!("VELA_TEST_PANIC: a deliberate panic in background work");
+                                }
+                                crate::panic_report::guarded(work)
+                            })
+                            .await;
+                        if let Some(result) = result {
+                            resident
+                                .update(cx, |resident, cx| resident.resolve(id, result, cx))
+                                .ok();
+                        } else {
+                            resident.update(cx, |_, cx| cx.notify()).ok();
+                        }
                     })
                     .detach();
                 }
@@ -226,7 +242,7 @@ where
                     cx.spawn(async move |resident, cx| {
                         let work = cx
                             .background_executor()
-                            .spawn(async move { work(&Sink(tx)) });
+                            .spawn(async move { crate::panic_report::guarded(|| work(&Sink(tx))) });
                         // Drains until every sender is gone, which happens when
                         // `work` returns and drops the sink it was handed. So
                         // this loop cannot outlive the operation, and cannot
@@ -237,10 +253,18 @@ where
                                 .update(cx, |resident, cx| resident.dispatch(event, cx))
                                 .ok();
                         }
-                        let result = work.await;
-                        resident
-                            .update(cx, |resident, cx| resident.resolve(id, result, cx))
-                            .ok();
+                        match work.await {
+                            Some(result) => {
+                                resident
+                                    .update(cx, |resident, cx| resident.resolve(id, result, cx))
+                                    .ok();
+                            }
+                            // Survived a panic: the report is in the mailbox,
+                            // the next render raises it (spec 038).
+                            None => {
+                                resident.update(cx, |_, cx| cx.notify()).ok();
+                            }
+                        }
                     })
                     .detach();
                 }

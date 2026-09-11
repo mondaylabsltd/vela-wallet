@@ -201,7 +201,16 @@ export function liveBalance(
 	// is the core's rule — this only chooses what to show meanwhile).
 	const total = view.display_total_usd ?? view.cached_total_usd;
 	if (total === null) {
-		return { ...base, currency: currency.rate !== null ? currency.code : 'USD', state: 'loading' };
+		return {
+			...base,
+			currency: currency.rate !== null ? currency.code : 'USD',
+			state: 'loading',
+			// Spec 038 finding 15: a first launch with no network is
+			// "unreachable" over the skeleton, never a settled-looking $0.
+			...(view.unreachable
+				? { status: { kind: 'warning' as const, text: m.balance.unreachable } }
+				: {})
+		};
 	}
 
 	const parts = moneyParts(total, currency);

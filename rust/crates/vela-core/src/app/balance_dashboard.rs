@@ -567,6 +567,18 @@ pub struct Model {
     notice_allowed: bool,
     /// Outstanding pull-gesture fetches; the spinner shows while > 0.
     pending_pulls: u32,
+    /// A fetch (silent or pulled) is out. While it is, the FIGURE holds at
+    /// `last_settled_total` even as chains stream in (#188): the number a
+    /// person reads must not climb $62 → $98 as seven networks answer one by
+    /// one. The token LIST still merges per chain — that is what "streaming"
+    /// is for.
+    fetch_in_flight: bool,
+    /// The figure the last settle produced (complete or partial), seeded from
+    /// the cache. Shown while `fetch_in_flight`.
+    last_settled_total: Option<f64>,
+    /// The first fetch threw with nothing known — no tokens, no cache. The home
+    /// says "unreachable", never $0.00 (spec 038 finding 15).
+    errored_without_data: bool,
     hidden: bool,
     /// Hydrate OR toggle — whichever lands first wins
     /// (`use-balance-privacy.ts:19`).
@@ -618,6 +630,9 @@ pub struct BalanceView {
     pub display_total_usd: Option<f64>,
     pub balance_unknown: bool,
     pub balance_partial: bool,
+    /// Nothing could be read and nothing is known: the first fetch failed
+    /// with no cache to fall back on. A skeleton and a reason, never a zero.
+    pub unreachable: bool,
     /// `Some` only when partial AND the silent retries are exhausted
     /// (invariant ③).
     pub notice: Option<BalanceNotice>,
@@ -736,7 +751,10 @@ impl App for BalanceDashboard {
         // `useHomeController.ts:186-188`).
         let unknown =
             model.tokens.is_empty() && model.cached_total.is_none() && !model.bootstrapped;
-        let notice = if partial && model.notice_allowed {
+        // Never mid-refresh: before prices arrive every token is unpriced,
+        // and "some tokens couldn't be priced" flashing while chains are still
+        // answering was #188's second half.
+        let notice = if partial && model.notice_allowed && !model.fetch_in_flight {
             Some(if model.failed_chain_ids.is_empty() {
                 BalanceNotice::Unpriced
             } else {
@@ -766,6 +784,7 @@ impl App for BalanceDashboard {
             },
             balance_unknown: unknown,
             balance_partial: partial,
+            unreachable: model.errored_without_data && model.tokens.is_empty() && model.cached_total.is_none(),
             notice,
             hidden: model.hidden,
             refreshing: model.pending_pulls > 0,
@@ -808,6 +827,9 @@ fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect,
     model.notice_allowed = false;
     model.live_timer = None; // drop any pending retry from the old account
     model.pending_pulls = 0; // stale pull settles are dropped by attempt
+    model.fetch_in_flight = false;
+    model.last_settled_total = None;
+    model.errored_without_data = false;
     model.switcher_open = false;
     model.switcher_roster.clear();
     model.switcher_pinned_total = None;
@@ -837,6 +859,7 @@ fn begin_fetch(model: &mut Model, force: bool, pull: bool) -> Command<BalanceEff
     if pull {
         model.pending_pulls = model.pending_pulls.saturating_add(1);
     }
+    model.fetch_in_flight = true;
     request(
         model,
         BalanceOperation::FetchTokens {
@@ -935,6 +958,11 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.failed_chain_ids = failed_chain_ids;
             model.last_refreshed_at_ms = Some(now_ms);
             model.rate_limited_chain_ids = rate_limited_chain_ids;
+            model.fetch_in_flight = false;
+            model.errored_without_data = false;
+            // The figure this settle produced, under the same rule the screen
+            // reads — held through the NEXT refresh (#188).
+            model.last_settled_total = Some(display_total(model));
 
             let unpriced = has_unpriced(&model.tokens);
             let partial = !model.failed_chain_ids.is_empty() || unpriced;
@@ -993,6 +1021,10 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // `catch { /* keep last-known tokens + total */ }` then
             // `setBootstrapped(true)` (`:367-369`).
             model.bootstrapped = true;
+            model.fetch_in_flight = false;
+            // Nothing known at all: the home must say so rather than show a
+            // settled-looking $0.00 (spec 038 finding 15).
+            model.errored_without_data = model.tokens.is_empty() && model.cached_total.is_none();
             render()
         }
 
@@ -1003,6 +1035,9 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // Only a present value commits (`if (v != null)`, `:413`).
             if let Some(usd) = usd {
                 model.cached_total = Some(usd);
+                if model.last_settled_total.is_none() {
+                    model.last_settled_total = Some(usd);
+                }
             }
             render()
         }
@@ -1076,6 +1111,14 @@ fn balance_partial(model: &Model) -> bool {
 /// cached; partial → `max(live, cached)` — never the confident undercount;
 /// otherwise the live sum.
 fn display_total(model: &Model) -> f64 {
+    // #188: while a fetch is out the figure holds at the last settle. Live
+    // replaces it once, at settle. (A first fetch with nothing settled and
+    // nothing cached falls through: there is nothing to hold.)
+    if model.fetch_in_flight {
+        if let Some(held) = model.last_settled_total {
+            return held;
+        }
+    }
     let live = live_total(&model.tokens);
     let has_live = !model.tokens.is_empty();
     match model.cached_total {

@@ -137,10 +137,10 @@ same three ways in as the desktop (SC-428, 438).
 
 **Independent test**: quickstart rows 432 and 433.
 
-- [ ] T055 [US7] In `app-desktop/vela-wallet/src/resident.rs::pump` wrap `work()` / `work(&Sink(tx))` in `std::panic::catch_unwind(AssertUnwindSafe(...))`; on `Err`, resolve the operation with the machine's own failure result (`A::panicked(id)` — a new associated fn on the resident trait returning the failure `ShellResult`)
-- [ ] T056 [US7] `std::panic::set_hook` in `app-desktop/vela-wallet/src/main.rs`: log the payload + location to stderr and post it to a `PanicReport` global the pages read; `OnboardingPage` / `WalletPage` render the failure sheet (`Prompt` with `details`) when set — SC-432
-- [ ] T057 [P] [US7] Dev seam `VELA_TEST_PANIC=1` in `app-desktop/vela-wallet/src/resident.rs` that panics inside the next blocking work; README lists it
-- [ ] T058 [P] [US7] Test in `app-desktop/vela-wallet/src/resident.rs` `mod tests`: a work closure that panics resolves as the failure result and the resident is still usable afterwards — SC-432
+- [x] T055 [US7] In `app-desktop/vela-wallet/src/resident.rs::pump` wrap `work()` / `work(&Sink(tx))` in `std::panic::catch_unwind(AssertUnwindSafe(...))`; on `Err`, resolve the operation with the machine's own failure result (`A::panicked(id)` — a new associated fn on the resident trait returning the failure `ShellResult`)
+- [x] T056 [US7] `std::panic::set_hook` in `app-desktop/vela-wallet/src/main.rs`: log the payload + location to stderr and post it to a `PanicReport` global the pages read; `OnboardingPage` / `WalletPage` render the failure sheet (`Prompt` with `details`) when set — SC-432
+- [x] T057 [P] [US7] Dev seam `VELA_TEST_PANIC=1` in `app-desktop/vela-wallet/src/resident.rs` that panics inside the next blocking work; README lists it
+- [x] T058 [P] [US7] Test in `app-desktop/vela-wallet/src/resident.rs` `mod tests`: a work closure that panics resolves as the failure result and the resident is still usable afterwards — SC-432
 - [ ] T059 [US7] Add `fallback: bool` to `FeeEstimateView` in `rust/crates/vela-core/src/app/send.rs` (and the fee types the sign sheet reads), set when an estimate used defaults; regenerate ts-rs bindings
 - [ ] T060 [US7] Desktop: set `fallback` where `user_op.rs:206,449,546` currently `eprintln!` "using defaults" (`app-desktop/vela-wallet/src/executor/user_op.rs` → the fee result); render the existing "estimate unavailable" copy on the fee line in `app-desktop/vela-wallet/src/wallet/money.rs` — SC-433
 - [ ] T061 [P] [US7] Web: same view field rendered on `GasFeeCard` (`app-web/vela-wallet/src/lib/flows/…`) — SC-433
@@ -152,14 +152,14 @@ same three ways in as the desktop (SC-428, 438).
 
 **Independent test**: quickstart rows 434 and 435.
 
-- [ ] T062 [US8] In `rust/crates/vela-core/src/app/balance_dashboard.rs` add `unreachable: bool` to `BalanceView` (true after `FetchErrored` when `tokens.is_empty() && cached_total.is_none()`); `display_total_usd` stays `None` in that state; regenerate ts-rs bindings — SC-434
-- [ ] T063 [P] [US8] Core test in `balance_dashboard.rs` `mod tests`: fresh model + `FetchErrored` → `unreachable = true`, `display_total_usd = None`; then a `FetchSettled` clears it
-- [ ] T064 [US8] Web: `app-web/vela-wallet/src/lib/wallet/live.ts` renders skeleton + the existing RPC-unavailable sentence when `view.unreachable`; `zeroLive` requires `!view.unreachable`
-- [ ] T065 [P] [US8] Desktop: `app-desktop/vela-wallet/src/wallet/live.rs` same rule on the home status line
-- [ ] T066 [US8] Add `Event::ConnectivityChanged { online: bool }` to `rust/crates/vela-core/src/app/rpc_pool.rs` — `online: true` clears cooldowns and temp bans; test in the same file
-- [ ] T067 [US8] Web: `online` / `offline` listeners in `app-web/vela-wallet/src/routes/+layout.svelte` dispatching to the pool session and rendering an offline line (existing `settings` `offline` string) — SC-435
-- [ ] T068 [US8] Web version skew: `version: { pollInterval: 60_000 }` in the `sveltekit({...})` options of `app-web/vela-wallet/vite.config.ts`; `beforeNavigate` in `+layout.svelte` does `location.href = to.url.href` when `updated.current`; `window.addEventListener('vite:preloadError', () => location.reload())` — SC-435
-- [ ] T069 [P] [US8] Move the bare `fetch()` in `app-web/vela-wallet/src/lib/onboarding/core/passkey-directory.svelte.ts` onto `net.ts`'s `ethereumData` timeout class
+- [x] T062 [US8] In `rust/crates/vela-core/src/app/balance_dashboard.rs` add `unreachable: bool` to `BalanceView` (true after `FetchErrored` when `tokens.is_empty() && cached_total.is_none()`); `display_total_usd` stays `None` in that state; regenerate ts-rs bindings — SC-434
+- [x] T063 [P] [US8] Core test in `balance_dashboard.rs` `mod tests`: fresh model + `FetchErrored` → `unreachable = true`, `display_total_usd = None`; then a `FetchSettled` clears it
+- [x] T064 [US8] Web: `app-web/vela-wallet/src/lib/wallet/live.ts` renders skeleton + the existing RPC-unavailable sentence when `view.unreachable`; `zeroLive` requires `!view.unreachable`
+- [x] T065 [P] [US8] Desktop: `app-desktop/vela-wallet/src/wallet/live.rs` same rule on the home status line
+- [x] T066 [US8] (done without a new core event: `online` calls the existing `invalidateAllPools()`, which drops the pools' state) Add `Event::ConnectivityChanged { online: bool }` to `rust/crates/vela-core/src/app/rpc_pool.rs` — `online: true` clears cooldowns and temp bans; test in the same file
+- [x] T067 [US8] Web: `online` / `offline` listeners in `app-web/vela-wallet/src/routes/+layout.svelte` dispatching to the pool session and rendering an offline line (existing `settings` `offline` string) — SC-435
+- [x] T068 [US8] Web version skew: `version: { pollInterval: 60_000 }` in the `sveltekit({...})` options of `app-web/vela-wallet/vite.config.ts`; `beforeNavigate` in `+layout.svelte` does `location.href = to.url.href` when `updated.current`; `window.addEventListener('vite:preloadError', () => location.reload())` — SC-435
+- [x] T069 [P] [US8] Move the bare `fetch()` in `app-web/vela-wallet/src/lib/onboarding/core/passkey-directory.svelte.ts` onto `net.ts`'s `ethereumData` timeout class
 
 ## Phase 11: US9 — The reported issues #188, #189, #191 (P2)
 
@@ -167,9 +167,9 @@ same three ways in as the desktop (SC-428, 438).
 
 **Independent test**: quickstart rows 436, 437, 439.
 
-- [ ] T070 [US9] `rust/crates/vela-core/src/app/balance_dashboard.rs`: add `last_settled_total: Option<f64>` to `Model` (seeded from `cached_total`, set at every `FetchSettled`); `display_total` returns it while `pending_pulls > 0`; `view()` raises `BalanceNotice::Unpriced` only when `pending_pulls == 0` — #188
-- [ ] T071 [P] [US9] Core test `balance_settled_figure` in the same file: three `ChainAssetsArrived` during a pull leave the display unchanged; `FetchSettled` moves it once; no `Unpriced` mid-pull — SC-436
-- [ ] T072 [P] [US9] Delete `app-web/vela-wallet/src/lib/assets/favicon.svg` and the `import favicon` + `<svelte:head><link rel="icon" …>` at `app-web/vela-wallet/src/routes/+layout.svelte:13,91` — #189 / SC-437
+- [x] T070 [US9] `rust/crates/vela-core/src/app/balance_dashboard.rs`: add `last_settled_total: Option<f64>` to `Model` (seeded from `cached_total`, set at every `FetchSettled`); `display_total` returns it while `pending_pulls > 0`; `view()` raises `BalanceNotice::Unpriced` only when `pending_pulls == 0` — #188
+- [x] T071 [P] [US9] Core test `balance_settled_figure` in the same file: three `ChainAssetsArrived` during a pull leave the display unchanged; `FetchSettled` moves it once; no `Unpriced` mid-pull — SC-436
+- [x] T072 [P] [US9] Delete `app-web/vela-wallet/src/lib/assets/favicon.svg` and the `import favicon` + `<svelte:head><link rel="icon" …>` at `app-web/vela-wallet/src/routes/+layout.svelte:13,91` — #189 / SC-437
 - [ ] T073 [US9] Reproduce #191 on the running web app (`pnpm dev`, parallel space, a history-derived row → Edit); record the exact failing step in `specs/038-first-run-parity/results.md`
 - [ ] T074 [US9] Fix per the reproduction: make "name this contact" the primary action on an `auto` row's detail in `app-web/vela-wallet/src/lib/contacts/live.ts` (+ `ui/`), saving via the core's `Save` (promotes to `Manual`); add a Vitest case in `app-web/vela-wallet/src/lib/contacts/live.test.ts` — SC-439
 

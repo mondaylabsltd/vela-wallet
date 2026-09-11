@@ -19,6 +19,7 @@ const PRISTINE: BalanceView = {
 	display_total_usd: null,
 	balance_unknown: true,
 	balance_partial: false,
+	unreachable: false,
 	notice: null,
 	hidden: false,
 	refreshing: false,
