@@ -677,21 +677,26 @@ fn post(
     timeout_ms: u32,
 ) -> (RpcTransportOutcome, Option<Value>) {
     let payload = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params });
-    // Per URL: an endpoint on this machine is never reached through a proxy.
-    let agent = proxy::agent_for(url, Duration::from_millis(u64::from(timeout_ms)));
-    let mut request = agent.post(url).header("content-type", "application/json");
-    // Invariant ②: a bundler call carries the same-chain RPC the pool verified.
-    if let Some(rpc) = x_rpc_url {
-        request = request.header("X-Rpc-Url", rpc);
-    }
-
-    let mut response = match request.send_json(&payload) {
-        Ok(response) => response,
-        Err(ureq::Error::StatusCode(status)) => {
-            return (RpcTransportOutcome::HttpError { status }, None);
+    // Per URL: an endpoint on this machine is never reached through a proxy;
+    // everything else walks the candidate chain (spec 038 Part B, T028), so a
+    // dead proxy in the environment does not get every RPC endpoint banned.
+    let timeout = Duration::from_millis(u64::from(timeout_ms));
+    let mut response = match proxy::with_candidates_for(url, timeout, |agent| {
+        let mut request = agent.post(url).header("content-type", "application/json");
+        // Invariant ②: a bundler call carries the same-chain RPC the pool verified.
+        if let Some(rpc) = x_rpc_url {
+            request = request.header("X-Rpc-Url", rpc);
         }
-        Err(ureq::Error::Timeout(_)) => return (RpcTransportOutcome::Timeout, None),
-        Err(_) => return (RpcTransportOutcome::Network, None),
+        request.send_json(&payload)
+    }) {
+        Ok(response) => response,
+        Err(failure) => {
+            return match failure.error {
+                ureq::Error::StatusCode(status) => (RpcTransportOutcome::HttpError { status }, None),
+                ureq::Error::Timeout(_) => (RpcTransportOutcome::Timeout, None),
+                _ => (RpcTransportOutcome::Network, None),
+            };
+        }
     };
 
     let mut text = String::new();

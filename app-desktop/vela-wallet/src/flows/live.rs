@@ -781,7 +781,13 @@ fn send_fee_row(i: &SendInputs<'_>) -> FeeRow {
     let (symbol, chain_id) = fee_symbol(i.send, i.fee);
     let quote = i.send.fee.as_ref().or(i.fee.fee.as_ref());
     FeeRow {
-        label: i.s.network_fee.clone(),
+        // A figure the relay did not quote — a local fallback from defaults —
+        // is an ESTIMATE and is labelled as one (spec 038 finding 14).
+        label: if quote.is_some_and(|fee| !fee.quoted) {
+            i.s.fee_token_estimate.clone()
+        } else {
+            i.s.network_fee.clone()
+        },
         mark: TokenMark {
             ticker: symbol.into(),
             badge: tint(chain_id),

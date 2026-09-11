@@ -975,6 +975,13 @@ pub enum NetWizardErrorKind {
     /// this FLATTENS an inconclusive RPC failure into not-compatible; the
     /// wizard keeps the distinction via [`NetCompatibility::rpc_failure`].
     NotCompatible { chain_id: u32 },
+    /// The check could not reach a verdict — the RPC probes failed, so
+    /// nothing was learned about the chain (spec 038 #E1). Distinct from
+    /// [`Self::NotCompatible`], which is a verdict: the scan path used to
+    /// flatten both into "not compatible" (ported verbatim from
+    /// `add-network.ts:47`), and a machine whose proxy was refusing told the
+    /// founder that Celo was incompatible. Celo is not. Additive.
+    CheckFailed { chain_id: u32 },
 }
 
 // ---------------------------------------------------------------------------
@@ -1910,11 +1917,19 @@ fn finish_check(model: &mut Model, compat: NetCompatibility) -> Command<NetEffec
         return save_custom_network(model, record);
     }
 
-    // Verbatim `add-network.ts:47`: rpcFailed and truly-incompatible both
-    // flatten to `not-compatible` on this path (module doc).
+    // Two verdicts, kept apart (spec 038 #E1): a probe that failed says
+    // "could not check" — with the retry the wizard already draws — and
+    // never "not compatible". `add-network.ts:47` flattened them; that was
+    // the trap, not a rule worth porting.
     model.wizard.phase = WizardPhase::Error {
-        kind: NetWizardErrorKind::NotCompatible {
-            chain_id: compat.chain_id,
+        kind: if compat.rpc_failure.is_some() {
+            NetWizardErrorKind::CheckFailed {
+                chain_id: compat.chain_id,
+            }
+        } else {
+            NetWizardErrorKind::NotCompatible {
+                chain_id: compat.chain_id,
+            }
         },
     };
     render()

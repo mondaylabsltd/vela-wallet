@@ -187,7 +187,10 @@ function feeRow(inputs: SendLiveInputs, template: FeeRowModel): FeeRowModel {
 			? (quote.fee_asset.symbol ?? nativeSymbol(chainId))
 			: nativeSymbol(chainId);
 	return {
-		label: m['componentsUi.gas.networkFee'],
+		// A figure the relay did not quote — a local fallback from defaults —
+		// is an ESTIMATE and is labelled as one (spec 038 Part B, finding 14):
+		// the core carries the fact as `quoted`; the label is where it shows.
+		label: quote && !quote.quoted ? m['send.feeTokenEstimate'] : m['componentsUi.gas.networkFee'],
 		mark: tokenMarkFor(
 			chainId,
 			symbol,
@@ -459,7 +462,10 @@ export function liveSendConfirm(model: SendConfirmModel, inputs: SendLiveInputs)
 			lead: { kind: 'token', mark: chainMark(chainId) }
 		},
 		{
-			label: m['send.estFeeLabel'],
+			label:
+				(send.fee ?? inputs.fee.fee)?.quoted === false
+					? m['send.feeTokenEstimate']
+					: m['send.estFeeLabel'],
 			value: feeText(send.fee ?? inputs.fee.fee)
 		}
 	];

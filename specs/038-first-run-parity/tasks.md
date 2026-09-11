@@ -80,7 +80,7 @@ the intro is composed like its neighbours (SC-411…415).
 - [x] T025 [P] [US6] Unit-test the `scutil` parser in `app-desktop/vela-wallet/src/executor/proxy.rs` `mod tests` against the captured output in `research.md` (HTTPS wins over SOCKS; disabled entries skipped; `ExceptionsList` parsed)
 - [x] T026 [US6] Replace the `OnceLock` in `system_proxy()` with `Mutex<CandidateState>` (`order: [System, Env, Direct]`, `current`, `last_derived: Instant`) in `app-desktop/vela-wallet/src/executor/proxy.rs`; add `advance_after_failure()` and `reset_after_success()`; re-derive after any failure or after `PROXY_REDERIVE_AFTER = 60 s`
 - [x] T027 [US6] Make `agent_for(url)` in `app-desktop/vela-wallet/src/executor/proxy.rs` build from the current candidate; loopback targets stay direct (existing rule)
-- [~] T028 [US6] (registry + relay `rest_get` done; `pool.rs`, `chainlink.rs`, `chain.rs` still on `proxy::agent`, which now at least reads the CURRENT candidate) In `app-desktop/vela-wallet/src/executor/registry.rs` (and the other `proxy::agent` callers: `relay.rs`, `pool.rs`, `chainlink.rs`, `chain.rs`) retry ONCE on the next candidate when `classify()` says `network: true`; after the last candidate set `RegistryError.transport = Local`
+- [x] T028 [US6] (registry, relay `rest_get` and the RPC pool walk the chain; `chainlink.rs`/`chain.rs` read the current candidate through `proxy::agent`) In `app-desktop/vela-wallet/src/executor/registry.rs` (and the other `proxy::agent` callers: `relay.rs`, `pool.rs`, `chainlink.rs`, `chain.rs`) retry ONCE on the next candidate when `classify()` says `network: true`; after the last candidate set `RegistryError.transport = Local`
 - [x] T029 [US6] Add `transport_failed: bool` to `LoginView` in `rust/crates/vela-core/src/app/login.rs`, set from a new `index_failed { network: true, local: true }` result; regenerate ts-rs bindings (both generation commands, per the multi-passkey memory)
 - [x] T030 [US6] Desktop: render the "this machine could not get out" line on Welcome (reuse `onboarding.settings.warningText`'s slot with the existing `network` corpus sentence if one fits; else add ONE key `onboarding.settings.transportFailedText` to all 15 locales) in `app-desktop/vela-wallet/src/onboarding.rs`; never the endpoint card for this state — SC-421
 - [x] T031 [P] [US6] Web: surface `transport_failed` the same way in `app-web/vela-wallet/src/routes/[locale]/+page.svelte` (the `endpointWarning` block)
@@ -141,9 +141,9 @@ same three ways in as the desktop (SC-428, 438).
 - [x] T056 [US7] `std::panic::set_hook` in `app-desktop/vela-wallet/src/main.rs`: log the payload + location to stderr and post it to a `PanicReport` global the pages read; `OnboardingPage` / `WalletPage` render the failure sheet (`Prompt` with `details`) when set — SC-432
 - [x] T057 [P] [US7] Dev seam `VELA_TEST_PANIC=1` in `app-desktop/vela-wallet/src/resident.rs` that panics inside the next blocking work; README lists it
 - [x] T058 [P] [US7] Test in `app-desktop/vela-wallet/src/resident.rs` `mod tests`: a work closure that panics resolves as the failure result and the resident is still usable afterwards — SC-432
-- [ ] T059 [US7] Add `fallback: bool` to `FeeEstimateView` in `rust/crates/vela-core/src/app/send.rs` (and the fee types the sign sheet reads), set when an estimate used defaults; regenerate ts-rs bindings
-- [ ] T060 [US7] Desktop: set `fallback` where `user_op.rs:206,449,546` currently `eprintln!` "using defaults" (`app-desktop/vela-wallet/src/executor/user_op.rs` → the fee result); render the existing "estimate unavailable" copy on the fee line in `app-desktop/vela-wallet/src/wallet/money.rs` — SC-433
-- [ ] T061 [P] [US7] Web: same view field rendered on `GasFeeCard` (`app-web/vela-wallet/src/lib/flows/…`) — SC-433
+- [x] T059 [US7] (no new field: the core already carried `quoted`) Add `fallback: bool` to `FeeEstimateView` in `rust/crates/vela-core/src/app/send.rs` (and the fee types the sign sheet reads), set when an estimate used defaults; regenerate ts-rs bindings
+- [x] T060 [US7] Desktop: set `fallback` where `user_op.rs:206,449,546` currently `eprintln!` "using defaults" (`app-desktop/vela-wallet/src/executor/user_op.rs` → the fee result); render the existing "estimate unavailable" copy on the fee line in `app-desktop/vela-wallet/src/wallet/money.rs` — SC-433
+- [x] T061 [P] [US7] Web: same view field rendered on `GasFeeCard` (`app-web/vela-wallet/src/lib/flows/…`) — SC-433
 
 ## Phase 10: US8 — "Unreachable" is a state; the web survives offline and a deploy (P2)
 
@@ -193,7 +193,7 @@ same three ways in as the desktop (SC-428, 438).
 
 ## Phase 11c: US12 — The founder's evening pass (Part E) (P2)
 
-- [~] T074m [US12] (Celo probed live: all 11 contracts + RIP-7212 present ⇒ the desktop's verdict was a failed probe flattened to 'incompatible'; the verdict split is still to build) #E1: split `NotCompatible` from "could not check" in core `network_admin.rs` (`NetWizardErrorKind::CheckFailed` with retry) and render both on web + desktop; run the eleven probes + P-256 against Celo from the desktop and record which fails — SC-444
+- [x] T074m [US12] (Celo probed live: all 11 contracts + RIP-7212 present; the scan path now answers `CheckFailed` → 'unable to verify' on both shells) #E1: split `NotCompatible` from "could not check" in core `network_admin.rs` (`NetWizardErrorKind::CheckFailed` with retry) and render both on web + desktop; run the eleven probes + P-256 against Celo from the desktop and record which fails — SC-444
 - [x] T074n [US12] #E2: `TokenDetail.svelte` `onselect(id)` → page opens `tx-detail` by feed id (`findFeedItem`); `FlowsPanel`/`FlowsMobile` wiring — SC-445
 - [ ] T074o [US12] #E3: reproduce which surface ignores the date format (web feed / desktop); fix that surface
 - [ ] T074p [US12] #E4: client — the AAGUID lookup base URL comes from the same settings object as the index (default = our node once it exists); server task filed in `biubiu-projects`

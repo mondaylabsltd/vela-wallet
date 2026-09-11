@@ -154,3 +154,16 @@ code (69–24 421 bytes) and the RIP-7212 precompile at 0x100 answers `…01` to
 the core's own payload. Celo is compatible; the desktop's "not compatible"
 was a failed probe (its old proxy path) flattened to that verdict — the
 module doc's own admitted trap. The verdict split is still to build.
+
+### Slice 6 — E1 verdict split, the estimate label, the pool on the chain
+
+- #E1: `NetWizardErrorKind::CheckFailed` (additive) — the scan path answers it
+  when the probes failed instead of flattening to `NotCompatible` (the
+  `add-network.ts:47` port was the trap; its test now pins the split). Web:
+  "Unable to verify — RPC request failed" with re-check, no setup tool;
+  desktop: the same sentence via `wizard_unable_to_verify`.
+- Finding 14 (fee fallbacks): the core already carried `FeeEstimateView.quoted`
+  ("the relay's own quote, not a local fallback"); both shells now label such a
+  row "Estimated fee" (`send.feeTokenEstimate`) instead of "Network fee".
+- T028: `proxy::with_candidates_for(url, …)` — loopback stays direct, every
+  other RPC-pool call walks system → env → direct; `agent_for` retired.

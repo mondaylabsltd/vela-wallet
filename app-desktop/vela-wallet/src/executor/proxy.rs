@@ -97,30 +97,6 @@ pub fn agent(timeout: Duration) -> Agent {
     agent_over(current().proxy(), timeout)
 }
 
-/// The agent for ONE url, which is the same agent unless the target is local.
-///
-/// A proxy is a way to reach the outside; `127.0.0.1` is not outside. A local
-/// node — `http://127.0.0.1:8545`, an ordinary way to run a wallet — is
-/// unreachable through a SOCKS proxy that has no route back to this machine,
-/// and the pool reads that as an endpoint that failed and bans it. Found by
-/// spec 032 phase 31, when this session's own proxy started refusing and four
-/// pool tests (which serve loopback HTTP) went red without a line of their
-/// code changing.
-///
-/// `NO_PROXY` cannot be relied on for this: it is only consulted when `ureq`
-/// picks the proxy from the environment itself, and [`system_proxy`]
-/// deliberately replaces that pick with a rewritten one.
-pub fn agent_for(url: &str, timeout: Duration) -> Agent {
-    if is_local(url) {
-        return Agent::config_builder()
-            .timeout_global(Some(timeout))
-            .proxy(None)
-            .build()
-            .new_agent();
-    }
-    agent(timeout)
-}
-
 /// Is this url on this machine (or its own network's name for it)?
 fn is_local(url: &str) -> bool {
     let host = url
@@ -352,6 +328,23 @@ pub fn with_candidates<T>(
             Err(error) => return Err(Transport { error, local: false }),
         }
     }
+}
+
+/// [`with_candidates`] for ONE url: a loopback target never takes a proxy
+/// (the [`agent_for`] rule), so it runs direct and once; everything else
+/// walks the chain. The pool's per-endpoint calls go through here (T028).
+pub fn with_candidates_for<T>(
+    url: &str,
+    timeout: Duration,
+    mut call: impl FnMut(&Agent) -> Result<T, ureq::Error>,
+) -> Result<T, Transport> {
+    if is_local(url) {
+        return call(&agent_over(None, timeout)).map_err(|error| Transport {
+            local: failed_inside_this_machine(&error),
+            error,
+        });
+    }
+    with_candidates(timeout, call)
 }
 
 fn agent_over(proxy: Option<&Proxy>, timeout: Duration) -> Agent {

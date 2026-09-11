@@ -228,12 +228,18 @@ export function liveAddNetwork(wizard: NetWizardView, m: SettingsMessages): AddN
 
 	if (wizard.phase === 'error') {
 		// The wizard stopped. The core says why as data; the words are ours —
-		// and inconclusive is NEVER worded as incompatible (invariant ③).
+		// and inconclusive is NEVER worded as incompatible (invariant ③). The
+		// scan path now keeps the two apart too (spec 038 #E1): a probe that
+		// failed is "unable to verify", with the re-check, and no setup tool.
+		const inconclusive = wizard.error?.type === 'check_failed';
 		return {
 			...base,
 			results: [],
-			callout: { tone: 'warning', text: m.addNetwork.incompatibleHint },
-			secondary: m.addNetwork.openChainSetupTool,
+			callout: {
+				tone: 'warning',
+				text: inconclusive ? m.addNetwork.unableToVerify : m.addNetwork.incompatibleHint
+			},
+			secondary: inconclusive ? undefined : m.addNetwork.openChainSetupTool,
 			recheck: m.addNetwork.recheckWithRpc
 		};
 	}

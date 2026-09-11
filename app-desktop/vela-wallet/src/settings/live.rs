@@ -498,6 +498,8 @@ pub fn wizard_notice(view: &NetWizardView, s: &SettingsStrings) -> Option<Wizard
                     SharedString::from(crate::wallet::fill(&s.wizard_no_rpc, "name", &name))
                 }
                 NetWizardErrorKind::NotCompatible { .. } => s.wizard_incompatible.clone(),
+                // Not a verdict: the probes never reached the chain (spec 038 #E1).
+                NetWizardErrorKind::CheckFailed { .. } => s.wizard_unable_to_verify.clone(),
             })
         }),
     }

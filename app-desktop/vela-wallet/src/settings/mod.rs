@@ -144,6 +144,8 @@ pub struct SettingsStrings {
     /// because at this point the wizard HAS resolved it.
     pub wizard_no_rpc: String,
     pub wizard_incompatible: SharedString,
+    /// Spec 038 #E1: the probes failed — not a verdict.
+    pub wizard_unable_to_verify: SharedString,
     pub endpoints_reset: SharedString,
     pub endpoints_guide: SharedString,
     // storage panel
@@ -292,6 +294,7 @@ impl SettingsStrings {
             wizard_not_found: s("addToken.errorChainNotFound"),
             wizard_no_rpc: raw("assets.rpcUnavailableSingle"),
             wizard_incompatible: s("settingsModals.addNetwork.incompatible"),
+            wizard_unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
             endpoints_reset: s("settingsModals.endpoints.resetToDefaults"),
             endpoints_guide: s("settingsModals.endpoints.selfHostGuide"),
             storage_subtitle: s("settings.storage.subtitle"),
