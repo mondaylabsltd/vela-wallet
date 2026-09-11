@@ -401,7 +401,13 @@ fn chain_tokens_for(
         });
     }
 
-    if let Some(wrapped) = &wrapped {
+    // Not on a chain whose "wrapped" native IS the native (spec 038, the
+    // founder's Celo report): the core knows the two, and listing both would
+    // count one holding twice. The address still serves the price quote below.
+    if let Some(wrapped) = wrapped
+        .as_ref()
+        .filter(|w| !vela_core::app::balance_dashboard::wrapped_native_is_the_native(chain_id, w))
+    {
         let balance_at = calls.len();
         calls.push(Call3 {
             target: wrapped.clone(),

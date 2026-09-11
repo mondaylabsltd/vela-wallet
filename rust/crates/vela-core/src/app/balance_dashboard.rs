@@ -154,6 +154,29 @@ pub fn token_balance_double(balance: &str) -> f64 {
     }
 }
 
+/// Chains whose native asset is itself an ERC-20 (spec 038, the founder's
+/// Celo report): the chain data names that contract as the "wrapped" native,
+/// but nothing is wrapped — `balanceOf` there and the native balance are ONE
+/// balance, and a shell that lists both counts the holding twice (CELO 6.96 +
+/// WCELO 6.96). Every shell's balance walk asks here before adding the
+/// wrapped slot; the address still serves the native price quote.
+#[must_use]
+pub fn native_token_as_erc20(chain_id: u32) -> Option<&'static str> {
+    match chain_id {
+        // Celo mainnet — the GoldToken.
+        42220 => Some("0x471ece3750da237f93b8e339c536989b8978a438"),
+        // Celo Alfajores.
+        44787 => Some("0xf194afdf50b03e69bd7d057c1aa9e10c9954e4c9"),
+        _ => None,
+    }
+}
+
+/// Whether the chain's "wrapped" native at `address` is the native itself.
+#[must_use]
+pub fn wrapped_native_is_the_native(chain_id: u32, address: &str) -> bool {
+    native_token_as_erc20(chain_id).is_some_and(|known| known.eq_ignore_ascii_case(address))
+}
+
 /// `tokenUsdValue` (`models/types.ts:68-70`): balance × (price ?? 0).
 pub fn token_usd_value(token: &BalanceToken) -> f64 {
     token_balance_double(&token.balance) * token.price_usd.unwrap_or(0.0)
@@ -979,6 +1002,13 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                     usd,
                 });
                 model.cached_total = Some(usd);
+                // The switcher's row for THIS account is this figure too (spec
+                // 038, the founder's "10,289 here, 10,315 there"): the row used
+                // to keep whatever its own per-account fetch had found at some
+                // other instant, so the hero and the account list disagreed by
+                // however far prices had moved in between. One settle, one
+                // number, every screen.
+                upsert_balance(&mut model.switcher_balances, &address, usd);
             }
             // `clearTimeout` at every settle (`:352`): a previously armed
             // retry may no longer fire.

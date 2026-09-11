@@ -973,6 +973,64 @@ fn fix_resolved_removes_the_chain_and_reloads() {
 // Machine — invariant ⑩: the account switcher paints cache first
 // ===========================================================================
 
+/// Spec 038: the figure the hero shows after a complete settle is the figure
+/// the switcher's row for the same account shows — not whatever that row's
+/// own fetch found at another instant.
+#[test]
+fn a_complete_settle_is_the_switcher_s_figure_for_the_active_account() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled(
+            ADDR_A,
+            vec![token(1, "ETH", "100", Some(1.0))],
+            vec![],
+            vec![],
+        ),
+    );
+    sut.resolve(Res::BalanceCacheWritten);
+    assert!(sut.view().switcher.balances.contains(&BalanceCacheEntry {
+        address: ADDR_A.to_owned(),
+        usd: 100.0
+    }));
+
+    // Prices move; the next settle moves the hero — and the row with it.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled(
+        ADDR_A,
+        vec![token(1, "ETH", "100", Some(2.0))],
+        vec![],
+        vec![],
+    ));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(200.0));
+    assert!(view.switcher.balances.contains(&BalanceCacheEntry {
+        address: ADDR_A.to_owned(),
+        usd: 200.0
+    }));
+    // A partial settle writes nothing — the row keeps the last complete figure.
+}
+
+#[test]
+fn celo_s_wrapped_native_is_the_native_and_weth_is_not() {
+    use vela_core::app::balance_dashboard::wrapped_native_is_the_native;
+    assert!(wrapped_native_is_the_native(
+        42220,
+        "0x471EcE3750Da237f93B8E339c536989b8978a438"
+    ));
+    assert!(!wrapped_native_is_the_native(
+        1,
+        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+    ));
+    assert!(!wrapped_native_is_the_native(
+        1,
+        "0x471ece3750da237f93b8e339c536989b8978a438"
+    ));
+}
+
 #[test]
 fn switcher_paints_cache_before_refreshing_every_account() {
     let mut sut = booted(
@@ -1125,5 +1183,11 @@ fn cached_balances_without_a_pending_open_are_ignored() {
         .is_empty());
     let view = sut.view();
     assert!(!view.switcher.open, "stale open must not pop on account B");
-    assert!(view.switcher.balances.is_empty());
+    // The stale answer's figure (1.0 for A) never lands; what A's row holds
+    // is its own last complete settle (0.0), which is the settle's business.
+    assert!(!view
+        .switcher
+        .balances
+        .iter()
+        .any(|entry| entry.address == ADDR_A && entry.usd == 1.0));
 }

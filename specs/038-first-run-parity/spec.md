@@ -639,6 +639,21 @@ the first needs a reproduction before it is fixed.
   was the builtin table until a Settings write refreshed it, so a fresh load
   neither fetched nor listed Celo, assets or not. The snapshot is read once
   per document before the first balance fetch (SC-451).
+- **#E10 — CELO counted twice.** On Celo the native asset is itself an
+  ERC-20 (the GoldToken, which the chain data names as the "wrapped"
+  native), so the native balance call and that token's `balanceOf` return
+  the same coins; both shells listed CELO 6.96 and WCELO 6.96 and summed
+  both. The core now names the chains whose wrapped native is the native
+  (`native_token_as_erc20`); both balance walks skip the slot and keep the
+  address for the price quote (SC-452).
+- **#E11 — two totals on screen disagreed.** The hero read ¥10,289.33 and
+  the account list ¥10,315.95 for the same account. The account list is the
+  switcher's cache, filled by its own per-account fetch at another instant,
+  so the two figures were two moments' prices. A complete settle now writes
+  the hero's figure into the switcher's row for the active account: one
+  settle, one number, every screen (SC-453). The hero itself is the last
+  complete figure held through a partial round (#188), which is why it can
+  sit a little above the live rows while a chain is failing or rate-limited.
 
 ### Success Criteria (Parts B and C)
 
@@ -691,6 +706,10 @@ the first needs a reproduction before it is fixed.
 - **SC-451**: (#E9) a network added in Settings is listed in the wallet's
   network filter, and its balances fetched, on the very next fresh load of
   the wallet page — no Settings visit required.
+- **SC-452**: (#E10) on Celo the holding is listed once, as CELO, and the
+  total counts it once.
+- **SC-453**: (#E11) after a complete balance settle the account list's
+  figure for the active account equals the hero's.
 - **SC-439**: (#191) a history-suggested contact can be given a name from its
   detail, and the name survives a reload.
 

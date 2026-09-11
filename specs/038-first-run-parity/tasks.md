@@ -203,6 +203,8 @@ same three ways in as the desktop (SC-428, 438).
 - [x] T074t [US12] #E8: `BalanceDetailModel.unpriced` from `view.unpriced_tokens`; section in `BalanceDetailBody.svelte`; desktop's balance detail the same — SC-449
 
 - [x] T074u [US12] (second cut: `ensureCustomNetworks()` — the snapshot is read once per document, awaited by the balance boot and kicked off by the root layout; verified on a cold load of /en/wallet after adding Celo: "Celo Mainnet 0" beside the three funded chains — SC-451) #E9: `liveChainRows` lists every network the person added (count 0 until its balance lands); `getCustomChainIdsSync` + `subscribeNetworks` on the wallet page
+- [x] T074v [US12] #E10: core `native_token_as_erc20` / `wrapped_native_is_the_native`; web `wallet-api.ts` and desktop `executor/balances.rs` skip the wrapped slot on those chains — SC-452
+- [x] T074w [US12] #E11: core `FetchSettled` (complete) upserts the active account into `switcher_balances`; the account list follows the hero — SC-453
 - [x] T074v [US5] #190 revised: "this device" = the device (laptop / phone by form factor), "phone or tablet" = the scanner, USB keeps its mark; web sign-in picker in a sheet (a dialog at desktop widths)
 
 ## Phase 12: US10 — The two dev commands, and a sheet that tells the truth (P3)

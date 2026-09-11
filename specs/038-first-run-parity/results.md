@@ -390,6 +390,35 @@ question for the founder, not changed here. No overflow, nothing clipped,
 at any of the four widths. The sign-in picker e2e (T054) passes at 390 and
 1440.
 
+### Slice 14 — the founder's balance questions (#E10, #E11)
+
+Nineteen rows pasted from the wallet, hero ¥10,289.33, the account list
+¥10,315.95.
+
+- **CELO twice.** The list carried `CELO 6.962666` and `WCELO 6.962666` —
+  the same coins. Celo's native asset is an ERC-20 (the GoldToken,
+  `0x471E…a438`), which the chain data files under `wrappedNativeToken`;
+  both shells' balance walks add a "wrapped" slot for every chain that has
+  one, so the native balance call and `balanceOf` on the GoldToken both
+  returned 6.96 and the total summed both. The fact now lives once, in the
+  core (`balance_dashboard::native_token_as_erc20`, Celo mainnet and
+  Alfajores); the web walk (`wallet-api.ts`) and the desktop walk
+  (`executor/balances.rs`) skip the slot there and keep the address for the
+  native price quote. Tests on the core and the web.
+- **Two totals.** The account list's figure is the balance core's switcher
+  cache, filled by a per-account fetch that runs when the switcher (or the
+  Settings account page) opens — a second fetch at a second instant, so with
+  ETH and BNB moving the two figures drifted ¥26. Now a complete settle
+  writes the hero's figure into the switcher's row for the active account
+  (core test: the row follows the hero from 100 to 200 when the price
+  doubles). A partial settle writes nothing, as before.
+- **The hero above the rows' sum.** The nineteen rows sum to ¥10,287.79;
+  the hero read ¥10,289.33. The hero is `max(live, last complete)` — the
+  #188 rule that keeps the figure from dropping while a chain is failing or
+  rate-limited — so during a partial round it can sit above the live rows
+  by the missing chain's share, with the partial notice showing. Not
+  changed; it is the rule the founder asked for in #188.
+
 ## Deviations
 
 - **CJK and monospace faces on the desktop (US4, T045).** Plus Jakarta Sans
