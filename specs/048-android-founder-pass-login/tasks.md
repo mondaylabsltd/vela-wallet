@@ -38,34 +38,34 @@
 
 ## Phase 5 — US3 Filters, links and second-tier controls (P2)
 
-- [ ] T022 [US3] Class filter: `SendClassFilter` + `sendTokenClass` ported into `feature/send/SendLive.kt`; `FlowHost.SendCallbacks.onFilter`; chips selected state; `VelaHaptic.Select`
-- [ ] T023 [US3] Chain filter: 全部网络 pill (`FlowChrome.kt`) → the NavHost chain sheet; `SendLive.pick`, `FlowLive.assets` narrow by it; `WalletController.chainFilterChanged` dispatched to the feed; pill shows the chosen network; sweep pin wins
-- [ ] T024 [US3] Explorer links: `FlowLive` fills `explorerUrl` (from `explorer_url` of the chain) on R2/A2/T2 models; `FlowHost` passes `onExplorer` → `context.openUrl`
-- [ ] T025 [US3] Token detail: 转账 → `send.open(preselected_symbol, preselected_network)`; 收款 → the token's own code (R3); activity rows tappable → tx detail; 删除记录 on A2 → feed delete with confirm
-- [ ] T026 [US3] Home hero: `WalletScreen` passes `onToggleVisibility` → `togglePrivacy`, and `onStatusClick` → a rescue sheet hosted from the home (RpcFix / BalanceDetail bodies made reachable from `feature/wallet`)
-- [ ] T027 [US3] Scanner flip: `feature/scan/CameraScanner.kt` `lensFacing` state + rebind; `LiveScanSurface.kt` `ScanTool.Flip`; disabled without a front camera
-- [ ] T028 [US3] Recipient picker: 扫码 row in the live send (`FlowHost.kt:273`), group rows (`SendLive.kt` `groups`, `onGroup` → `seedSplit`), per-row 通讯录 pick on split cards (`FlowRows.kt` → `openRowPicker(id)`)
-- [ ] T029 [US3] Add token: 原生币 tab + chain suggestion pick (`FlowHost`/`FlowLive`/`FlowScreens` → the network_admin wizard events)
-- [ ] T030 [US3] Settings: `VelaUrlField(onValueChange, onAction)`; network detail overrides → `override_field_edited/blurred`; "+ 添加网络" foot clickable; add-network custom RPC + 重新检查; provider 检查密钥/获取密钥 (`provider_test_requested`) + drpc link; language sheet contribute link; feedback box editable (`SettingsScreen.kt`, `SettingsPrimitives.kt`, `SettingsController.kt`)
-- [ ] T031 [US3] Contacts: 最近往来 · 全部 (`history.filterAll` → history filtered to the contact), swipe 转账/删除 branches, export CSV/JSON choice sheet
-- [ ] T032 [US3] Device pass for US3 per quickstart
+- [X] T022 [US3] Class filter: `SendClassFilter` + `sendTokenClass` ported into `feature/send/SendLive.kt`; `FlowHost.SendCallbacks.onFilter`; chips selected state; `VelaHaptic.Select`
+- [X] T023 [US3] Chain filter: 全部网络 pill (`FlowChrome.kt`) → the NavHost chain sheet; `SendLive.pick`, `FlowLive.assets` narrow by it; `WalletController.chainFilterChanged` dispatched to the feed; pill shows the chosen network; sweep pin wins
+- [X] T024 [US3] Explorer links: `FlowLive` fills `explorerUrl` (from `explorer_url` of the chain) on R2/A2/T2 models; `FlowHost` passes `onExplorer` → `context.openUrl`
+- [X] T025 [US3] Token detail: 转账 → `send.open(preselected_symbol, preselected_network)`; 收款 → the token's own code (R3); activity rows tappable → tx detail; 删除记录 on A2 → feed delete with confirm
+- [X] T026 [US3] Home hero: `WalletScreen` passes `onToggleVisibility` → `togglePrivacy`, and `onStatusClick` → a rescue sheet hosted from the home (RpcFix / BalanceDetail bodies made reachable from `feature/wallet`)
+- [X] T027 [US3] Scanner flip: `feature/scan/CameraScanner.kt` `lensFacing` state + rebind; `LiveScanSurface.kt` `ScanTool.Flip`; disabled without a front camera
+- [X] T028 [US3] Recipient picker: 扫码 row in the live send (`FlowHost.kt:273`), group rows (`SendLive.kt` `groups`, `onGroup` → `seedSplit`), per-row 通讯录 pick on split cards (`FlowRows.kt` → `openRowPicker(id)`)
+- [X] T029 [US3] Add token: 原生币 tab + chain suggestion pick (`FlowHost`/`FlowLive`/`FlowScreens` → the network_admin wizard events)
+- [X] T030 [US3] Settings: `VelaUrlField(onValueChange, onAction)`; network detail overrides → `override_field_edited/blurred`; "+ 添加网络" foot clickable; add-network custom RPC + 重新检查; provider 检查密钥/获取密钥 (`provider_test_requested`) + drpc link; language sheet contribute link; feedback box editable (`SettingsScreen.kt`, `SettingsPrimitives.kt`, `SettingsController.kt`)
+- [X] T031 [US3] Contacts: 最近往来 · 全部 (`history.filterAll` → history filtered to the contact), swipe 转账/删除 branches, export CSV/JSON choice sheet
+- [X] T032 [US3] Device pass for US3 per quickstart
 
 ## Phase 6 — US4 Slider and haptics (P2)
 
-- [ ] T033 [US4] `core/designsystem/components/VelaSlider.kt` — drag with snapping, tap on dots, `Detent` per step crossed; `SettingsPrimitives.VelaTextScaleSlider` replaced; the sample text scales live
-- [ ] T034 [US4] Apply `VelaHaptic.Select` to switches, class/chain filter chips, network / fee-token / account picks, favourite, copy; `Detent` on the signing slider threshold; audit that no navigating tap, tab, Back or sheet has one
-- [ ] T035 [US4] Device pass: `haptic` log lines per quickstart (one per step crossed, one per selection, zero for scroll/tab/back/sheet); system haptics off → silent
+- [X] T033 [US4] `core/designsystem/components/VelaSlider.kt` — drag with snapping, tap on dots, `Detent` per step crossed; `SettingsPrimitives.VelaTextScaleSlider` replaced; the sample text scales live
+- [X] T034 [US4] Apply `VelaHaptic.Select` to switches, class/chain filter chips, network / fee-token / account picks, favourite, copy; `Detent` on the signing slider threshold; audit that no navigating tap, tab, Back or sheet has one
+- [X] T035 [US4] Device pass: `haptic` log lines per quickstart (one per step crossed, one per selection, zero for scroll/tab/back/sheet); system haptics off → silent
 
 ## Phase 7 — US5 Visual parity (P3)
 
-- [ ] T036 [US5] Scanner look: bracket weight at the web's, one status line (`feature/scan/ScanSurface.kt`)
-- [ ] T037 [US5] Settings home rows absent on the live route (`VelaNavHost.kt:1255`), feedback box editable — screenshots against the web
+- [X] T036 [US5] Scanner look: bracket weight at the web's, one status line (`feature/scan/ScanSurface.kt`)
+- [X] T037 [US5] Settings home rows absent on the live route (`VelaNavHost.kt:1255`), feedback box editable — screenshots against the web
 
 ## Phase 8 — Closeout
 
-- [ ] T038 Rulers re-run (`scripts/check-android-event-parity.mjs`, `check-android-dropped-judgement.mjs`); no new strong diffs
-- [ ] T039 `results.md`: the 40-row after-state table, the login fix evidence (core/web/Android), deviations; `docs/KNOWN-BUGS.md` entries (the login bug, the desktop's silent skip); tasks marked; memory
-- [ ] T040 Commits per phase on 048; the web changes flagged for the web owner's review (the founder said the web needs the storage fix too)
+- [X] T038 Rulers re-run (`scripts/check-android-event-parity.mjs`, `check-android-dropped-judgement.mjs`); no new strong diffs
+- [X] T039 `results.md`: the 40-row after-state table, the login fix evidence (core/web/Android), deviations; `docs/KNOWN-BUGS.md` entries (the login bug, the desktop's silent skip); tasks marked; memory
+- [X] T040 Commits per phase on 048; the web changes flagged for the web owner's review (the founder said the web needs the storage fix too)
 
 ## Dependencies
 
