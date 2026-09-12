@@ -177,8 +177,11 @@ suite 405 → **408, 0 failures**.
   the app is away, `tracker.notify posted hash=0xea070ceb09 tx=0x9880164a13`,
   and `dumpsys notification` holds
   `NotificationRecord pkg=app.getvela.wallet … channel=transactions`.
-- *Deep link*: launching with `--es vela.receipt 已收到 USDT | 已确认…` shows
-  `已收到 USDT | 已确认 | −0.001 XDAI | 发送方 | 0x9F3c…21aE | 网络 | ETH | Ethereum | 代币合约 | 0xdAC1…1ec7 | 日期 | 今天 11:20 | 哈希 | 0x8f3a…c21d | 在区块浏览器中查看` — NOT the row's detail; recorded as owed.
+- *Deep link*: launching with `--es vela.receipt <hash>` opened the detail
+  sheet with the fixture's title, counterparty, network, date and hash around
+  a live amount (`已收到 USDT | … | 0x9F3c…21aE | Ethereum | 0xdAC1…1ec7`) —
+  NOT the row's detail. Fixed in phase 5 (`FlowLive.txDetail` now builds every
+  line from the item); re-driven there.
 
 **Device-found defects, fixed in this phase**:
 5. The tracker's first poll at `open()` asked the pool for chain 100 before
@@ -192,6 +195,64 @@ suite 405 → **408, 0 failures**.
    resume. `trackSubmitted` now hands the worker the clock when nobody is in
    front.
 
+### Phase 5 — the screen says what the core refuses (T041–T044)
+
+**What changed**: `SendLive.alertText` maps every `SendAlertKind` to the
+corpus's title and body; `formWarning` renders `amount_warning` and the
+same-asset ceiling (`SendFeeIssueView`, base units → `fromBase`) under the
+amount; `confirmNotice` puts the treasury shortfall (`treasury_bootstrap`,
+with the amount hint in the chain's coin), the relay's refusal (`tx_error`)
+and the passkey wait (`tx_status == Signing`) in one slot above the slider,
+each with its one action (`retryAfterBootstrap` / `retryAfterError` /
+`cancelSigning`). The slider is off whenever a notice is up. The recipient's
+identicon is drawn only for a well-formed address (the anti-poisoning rule);
+half-typed text gets the placeholder. `FlowLive.txDetail` builds title,
+status, counterparty (alias first), network, date and hash from the tapped
+item.
+
+**Tests** (`SendRefusalsTest`, debug set, real machines + scripted relay):
+malformed address → `InvalidAddress` at Continue, in the corpus's words;
+over-balance → the ceiling sentence on the form AND the same body as the
+`InsufficientBalance` alert at Continue; a parked signer + `cancelSigning` →
+back on Confirm, no error, one signature, nothing at the relay, and the second
+slide is a second prompt (2 signs, 1 relay call); a relay rejection → the
+confirm notice with `txRetryBtn`, `retryAfterError` clears it. `SendLiveTest`
+covers each notice, the Cancel action, every alert title, the units, the
+identicon gate; `FlowLiveTest` the live detail lines. Suite: 419, 0 failures.
+
+**Device** (Xiaomi, parallel space, Gnosis, balance 0.62897 XDAI):
+- *Malformed address* (`p5-alert-invalid.png`): `0xabc` + 0.001 → Continue →
+  `地址无效 | 请输入有效的以太坊地址（0x...）。 | 完成`.
+- *Over balance* (`p5-form-ceiling.png`, `p5-alert-overbalance.png`): amount
+  5 → the form reads `发送 5 加网络费 0.01，共需 5.01 XDAI；当前余额为
+  0.62897。 最多可发送 0.61897 XDAI。`; Continue with a real address →
+  `余额不足 | 总额超过你的余额。 | 完成`.
+- *Identicon* (`p5-form-ceiling.png` vs `p5-form-ceiling-valid.png`): `0xabc`
+  shows the placeholder mark; the founder's address its own.
+- *Deep link re-driven* (`p5-deeplink-detail.png`): `--es vela.receipt
+  0x3623cd94…` → `已发送 XDAI | 已确认 | −0.001 XDAI | 接收方 | 觉得九点半 |
+  网络 | Gnosis | 日期 | 今天 10:42 | 哈希 | 0xebadf95f…420219 |
+  在区块浏览器中查看` — the row's own lines, alias from the contacts machine.
+- *Cancel during signing*: not drivable here — the fixture keyset signs in a
+  millisecond, so there is no window to cancel in. Proven in the test with a
+  parked signer; on the device it needs the founder's passkey (SC-002/004).
+- *Treasury low / relay refusal*: not stageable against the real relay;
+  test-covered.
+
+**Device-found defects, fixed in this phase**:
+7. The first cut printed the ceiling in base units (`发送 5000000000000000000
+   加网络费 10000000000000000 …`) — the core's doc says "the shell formats"
+   and the JVM test had asserted on the key, not the figure.
+8. `0xabc` earned an address-specific identicon.
+9. The keyboard: `uiautomator` lists the Continue button under an open IME,
+   so a scripted tap lands on the keyboard — close it with BACK
+   (`dumpsys input_method` → `mInputShown=false`) before tapping. Not a
+   product defect; recorded for the next device loop.
+10. The stage stays `Confirm` while the passkey prompt is up (`tx_status =
+    Signing`); the first cut put Cancel on the receipt page, which nobody is
+    looking at then. The test caught it (`SD3`, not `SD4A`).
+
+
 ## Success criteria
 
 | SC | Claim | Verified | Evidence |
@@ -199,8 +260,8 @@ suite 405 → **408, 0 failures**.
 | SC-001 | dust leaves the fixture Safe; receipt confirmed | **device** | phase 3 + 4 logs; tx `0x5316cb66…7447`, receipt screen `已发送 0.001 XDAI … 0xcf735a61…81b03c` |
 | SC-002 | the founder's own passkey, one prompt | — | — |
 | SC-003 | force-stop / reopen / notification | **device** | phase 4 log: force-stop → `tracker.patch confirmed tx=0xebadf95f…`; HOME → `tracker.notify posted`, `NotificationRecord … channel=transactions` |
-| SC-004 | one prompt per attempt after cancel | — | — |
-| SC-005 | every refusal worded on screen | — | — |
+| SC-004 | one prompt per attempt after cancel | test | `SendRefusalsTest`: parked signer, cancel → Confirm, 1 sign, 0 relay calls; second slide → 2 signs, 1 relay call. Device needs a real passkey (no cancel window with the fixture keyset) |
+| SC-005 | every refusal worded on screen | **device** | phase 5: `地址无效…`, `余额不足…`, the ceiling sentence in human units; treasury/relay notices test-covered |
 | SC-006 | fee token changed, re-quoted, paid | — | — |
 | SC-007 | no send fixture in the live route | test + grep | the send states no longer fall to `drawn.base`; `Scan`/`BatchImport` keep theirs by design |
 | SC-008 | drift gate exhaustive; tests grow | — | — |

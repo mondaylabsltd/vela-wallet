@@ -1,6 +1,7 @@
 package app.getvela.wallet
 
 import app.getvela.wallet.core.i18n.I18nRuntime
+import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.flows.FlowBase
 import app.getvela.wallet.feature.flows.FlowFixtures
@@ -278,6 +279,29 @@ class FlowLiveTest {
         assertTrue(detail.amount.contains("USDT"))
         assertEquals(true, detail.positive)
         assertEquals("$120.00", detail.fiat)
+    }
+
+    /**
+     * Spec 043 phase 4, device-found: the notification's deep link opened the
+     * sheet with the fixture's "received USDT" title and facts around a live
+     * amount. Every line is the tapped item's now.
+     */
+    @Test
+    fun `a transaction detail carries its own title, status and facts`() {
+        val feed = feedOf(feedItem("sent", received = false, value = "0.001", symbol = "XDAI", chainId = 100))
+
+        val detail = FlowLive.txDetail(txFixture(), feed, id = "sent", strings = strings, chainNames = mapOf(100 to "Gnosis"))!!
+
+        assertEquals(strings.t(I18nKeys.Flows.TX_LABEL_SENT, mapOf("symbol" to "XDAI")), detail.title)
+        assertEquals(strings.t(I18nKeys.Flows.STATUS_PENDING), detail.status.text)
+        assertEquals(
+            listOf(I18nKeys.Flows.DETAIL_TO, I18nKeys.Flows.DETAIL_CHAIN, I18nKeys.Flows.DETAIL_DATE, I18nKeys.Flows.DETAIL_HASH).map { strings.t(it) },
+            detail.facts.map { it.label },
+        )
+        assertEquals("Gnosis", detail.facts[1].value)
+        assertTrue("the counterparty is the item's, shortened", detail.facts[0].value.startsWith("0x9F3c"))
+        assertTrue("no chain hash yet: the row's own id", detail.facts[3].value.startsWith("sent"))
+        assertTrue(detail.facts[2].value.startsWith(strings.t(I18nKeys.Flows.DAY_TODAY)))
     }
 
     /** An unpriced payment shows no fiat line, not a confident zero. */

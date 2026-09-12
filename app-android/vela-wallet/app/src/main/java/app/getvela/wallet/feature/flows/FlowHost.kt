@@ -182,6 +182,7 @@ private fun FlowHostContent(
                 SendConfirmBody(
                     model = base.model,
                     onConfirm = { send?.onConfirm?.invoke() ?: onNavigate(FlowStep.SendReceipt) },
+                    onNoticeAction = { send?.onNoticeAction?.invoke() },
                 )
             }
             is FlowBase.SendReceipt -> FlowScaffold(header = base.model.header, onBack = onBack) {
@@ -360,4 +361,6 @@ class SendCallbacks(
     val onSheetDismissed: () -> Unit,
     val onReceiptCta: () -> Unit,
     val onExplorer: () -> Unit,
+    /** The confirm page's notice offered an action: retry after a treasury top-up or after a failed submit. */
+    val onNoticeAction: () -> Unit = {},
 )

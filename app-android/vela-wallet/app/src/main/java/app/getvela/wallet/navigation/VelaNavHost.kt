@@ -29,6 +29,7 @@ import app.getvela.wallet.feature.send.core.SendAlertKind
 import app.getvela.wallet.feature.send.core.SendAmountWarning
 import app.getvela.wallet.feature.send.core.SendDisplayContext
 import app.getvela.wallet.feature.send.core.SendStage
+import app.getvela.wallet.feature.send.core.SendTxStatus
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.explore.ExploreFixtures
 import app.getvela.wallet.feature.explore.ExploreScreen
@@ -456,7 +457,18 @@ fun VelaNavHost(
                             if (feeSheetOpen) feeSheetOpen = false
                             if (sendView.show_contact_picker) send.closeContactPicker()
                         },
-                        onReceiptCta = { send.done() },
+                        onReceiptCta = {
+                            // The receipt's one button: Cancel while the ceremony is up (the
+                            // core's checkpoint), Done or "keep running" otherwise.
+                            if (sendView.tx_status == SendTxStatus.Signing) send.cancelSigning() else send.done()
+                        },
+                        onNoticeAction = {
+                            when {
+                                sendView.treasury_bootstrap != null -> send.retryAfterBootstrap()
+                                sendView.tx_error != null -> send.retryAfterError()
+                                sendView.tx_status == SendTxStatus.Signing -> send.cancelSigning()
+                            }
+                        },
                         onExplorer = {
                             val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency), session.activeName, session.address)
                             SendLive.explorerUrl(sendView, ctx)?.let { url ->
@@ -961,21 +973,7 @@ private val SEND_STATES = setOf(
  */
 @Composable
 private fun SendAlertDialog(kind: SendAlertKind, strings: VelaStrings, onDismiss: () -> Unit) {
-    val (title, body) = when (kind) {
-        is SendAlertKind.EstimateFailed ->
-            strings.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to strings.t(I18nKeys.Flows.ALERT_ESTIMATE_BODY)
-        SendAlertKind.LoadTokensFailed -> strings.t(I18nKeys.Flows.ALERT_LOAD_TOKENS) to ""
-        is SendAlertKind.InsufficientBalance -> when (val warning = kind.warning) {
-            is SendAmountWarning.InsufficientForGas ->
-                strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_FOR_GAS, mapOf("sym" to (warning.symbol ?: ""))) to ""
-            is SendAmountWarning.NeedGas -> strings.t(I18nKeys.Flows.WARN_NEED_GAS, mapOf("sym" to (warning.symbol ?: ""))) to ""
-            is SendAmountWarning.NotEnoughToken -> strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_GAS, mapOf("sym" to warning.symbol)) to ""
-            is SendAmountWarning.CannotConvert -> strings.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to warning.code, "symbol" to warning.symbol)) to ""
-            null -> strings.t(I18nKeys.Flows.TX_ERROR_GENERIC) to ""
-        }
-        SendAlertKind.InvalidAddress, SendAlertKind.InvalidAmount, SendAlertKind.SplitOverBalance, SendAlertKind.AccountUnavailable ->
-            strings.t(I18nKeys.Flows.TX_ERROR_GENERIC) to kind.toString()
-    }
+    val (title, body) = SendLive.alertText(kind, strings)
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -1038,7 +1036,7 @@ private fun liveFlow(
         // about the wrong payment and one about the right payment look equally
         // authoritative, and only one of them is wrong.
         is FlowSheet.TxDetail ->
-            FlowLive.txDetail(sheet.model, feed, selected, strings)?.let(FlowSheet::TxDetail)
+            FlowLive.txDetail(sheet.model, feed, selected, strings, chainNames)?.let(FlowSheet::TxDetail)
         is FlowSheet.TokenDetail -> FlowLive.tokenDetail(
             fallback = sheet.model,
             view = balances,

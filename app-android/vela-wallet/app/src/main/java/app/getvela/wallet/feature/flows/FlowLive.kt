@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.flows
 
 import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.settings.core.NetView
 import app.getvela.wallet.feature.wallet.AssetFiatModel
@@ -136,6 +137,7 @@ object FlowLive {
         feed: FeedView,
         id: String?,
         strings: VelaStrings,
+        chainNames: Map<Int, String> = emptyMap(),
     ): TxDetailModel? {
         val item = feed.rows
             .filterIsInstance<FeedRow.Item>()
@@ -148,7 +150,47 @@ object FlowLive {
             ?.stripTrailingZeros()
             ?.toPlainString()
             .orEmpty()
+        val counterparty = item.counterparty.orEmpty()
+        val hash = item.tx_hash?.takeIf { it.isNotBlank() } ?: item.id
+        // Spec 043 phase 4 (device-found): the notification's deep link opened
+        // this sheet with the fixture's title, status, counterparty, network,
+        // date and hash around a live amount. Every line is the item's now.
+        val facts = buildList {
+            add(
+                FactRowModel(
+                    label = strings.t(if (received) I18nKeys.Flows.DETAIL_FROM else I18nKeys.Flows.DETAIL_TO),
+                    value = item.alias ?: shortAddress(counterparty),
+                    lead = counterparty.takeIf { it.isNotBlank() }?.let { FactLead.Identicon(it) },
+                    mono = item.alias == null,
+                    copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
+                ),
+            )
+            add(
+                FactRowModel(
+                    label = strings.t(I18nKeys.Flows.DETAIL_CHAIN),
+                    value = chainNames[item.chain_id] ?: item.chain_id.toString(),
+                    lead = FactLead.Token(TokenMarkModel(item.symbol, WalletLive.badge(item.chain_id.toLong()))),
+                ),
+            )
+            add(FactRowModel(label = strings.t(I18nKeys.Flows.DETAIL_DATE), value = detailDate(item.timestamp, strings)))
+            add(
+                FactRowModel(
+                    label = strings.t(I18nKeys.Flows.DETAIL_HASH),
+                    value = if (hash.length > 16) "${hash.take(10)}…${hash.takeLast(6)}" else hash,
+                    mono = true,
+                    copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
+                ),
+            )
+        }
         return fallback.copy(
+            title = strings.t(if (received) I18nKeys.Flows.TX_LABEL_RECEIVED else I18nKeys.Flows.TX_LABEL_SENT, mapOf("symbol" to item.symbol)),
+            // A hash the chain named means the transfer landed; a send still
+            // waiting carries only its operation hash.
+            status = if (item.tx_hash.isNullOrBlank() && !received) {
+                StatusChipModel(strings.t(I18nKeys.Flows.STATUS_PENDING), StatusTone.Warning)
+            } else {
+                StatusChipModel(strings.t(I18nKeys.Flows.STATUS_CONFIRMED), StatusTone.Success)
+            },
             amount = "${if (received) "+" else "\u2212"}$amount ${item.symbol}".trim(),
             positive = received,
             // The fiat line is the core's own `usd_value`, which is 0 when
@@ -161,7 +203,21 @@ object FlowLive {
             } else {
                 ""
             },
+            facts = facts,
         )
+    }
+
+    /** "今天 11:20" or a dated line, from the item's epoch seconds, on this device's clock. */
+    private fun detailDate(timestampSeconds: Double, strings: VelaStrings): String {
+        val millis = (timestampSeconds * 1000).toLong()
+        val calendar = java.util.Calendar.getInstance().apply { timeInMillis = millis }
+        val today = java.util.Calendar.getInstance()
+        val sameDay = calendar.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
+            calendar.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
+        val time = String.format(java.util.Locale.US, "%02d:%02d", calendar.get(java.util.Calendar.HOUR_OF_DAY), calendar.get(java.util.Calendar.MINUTE))
+        return if (sameDay) "${strings.t(I18nKeys.Flows.DAY_TODAY)} $time" else {
+            String.format(java.util.Locale.US, "%04d-%02d-%02d %s", calendar.get(java.util.Calendar.YEAR), calendar.get(java.util.Calendar.MONTH) + 1, calendar.get(java.util.Calendar.DAY_OF_MONTH), time)
+        }
     }
 
     /**

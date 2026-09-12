@@ -599,6 +599,26 @@ object I18nKeys {
         /** The notification when a verdict lands while the app is away (phase 4). */
         const val TX_CONFIRMED_NOTICE = "componentsTx.receipt.statusConfirmed"
         const val TX_CONFIRMED_NOTICE_BODY = "send.txSubmittedTitle"
+        // Phase 5: every refusal in the core's words.
+        const val ALERT_INVALID_ADDRESS_TITLE = "send.alertInvalidAddressTitle"
+        const val ALERT_INVALID_ADDRESS_BODY = "send.alertInvalidAddressBody"
+        const val ALERT_INVALID_AMOUNT_TITLE = "send.alertInvalidAmountTitle"
+        const val ALERT_INVALID_AMOUNT_BODY = "send.alertInvalidAmountBody"
+        const val ALERT_INSUFFICIENT_TITLE = "send.alertInsufficientBalanceTitle"
+        const val ALERT_INSUFFICIENT_BODY = "send.alertInsufficientBalanceBody"
+        const val ALERT_ACCOUNT_UNAVAILABLE_BODY = "send.alertAccountUnavailableBody"
+        const val SAME_FEE_TITLE = "send.sameFeeTokenTitle"
+        const val SAME_FEE_BODY = "send.sameFeeTokenBody"
+        const val SAME_FEE_MAX = "send.sameFeeTokenMax"
+        const val TREASURY_TITLE = "componentsUi.treasuryBootstrap.title"
+        const val TREASURY_LEAD = "componentsUi.treasuryBootstrap.lead"
+        const val TREASURY_AMOUNT_HINT = "componentsUi.treasuryBootstrap.amountHint"
+        const val TREASURY_RETRY = "componentsUi.treasuryBootstrap.retryBtn"
+        const val TX_ERROR_BUNDLER_FUND = "send.txErrorBundlerFund"
+        const val TX_RETRY = "send.txRetryBtn"
+        const val CANCEL = "home.cancel"
+        const val STATUS_PENDING = "componentsTx.detail.statusPending"
+        const val STATUS_SUCCEEDED = "componentsTx.detail.statusSucceeded"
     }
 
     /**

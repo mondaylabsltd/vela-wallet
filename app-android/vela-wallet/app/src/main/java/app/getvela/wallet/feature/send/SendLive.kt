@@ -21,6 +21,10 @@ import app.getvela.wallet.feature.flows.SendPickModel
 import app.getvela.wallet.feature.flows.SendReceiptModel
 import app.getvela.wallet.feature.flows.SendTokenCardModel
 import app.getvela.wallet.feature.flows.TokenMarkModel
+import app.getvela.wallet.feature.send.core.SendAlertKind
+import app.getvela.wallet.feature.send.core.SendAmountWarning
+import app.getvela.wallet.feature.send.core.SendTreasuryAsset
+import app.getvela.wallet.feature.send.core.SendTxErrorKey
 import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeView
@@ -64,6 +68,8 @@ object SendLive {
     )
 
     /** Which drawn state the live view is in — the flow host renders by this. */
+    private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
+
     fun flowState(view: SendView, feeSheetOpen: Boolean): FlowState = when (view.stage) {
         SendStage.SelectToken, SendStage.LockResolving, SendStage.LockError -> FlowState.SD1
         SendStage.EnterDetails -> when {
@@ -136,7 +142,9 @@ object SendLive {
             recipient = RecipientFieldModel(
                 label = s.t(I18nKeys.Flows.RECIPIENT_LABEL),
                 lines = addressLines(view.recipient),
-                identiconSeed = view.recipient.ifBlank { "0x0000000000000000000000000000000000000000" },
+                // Only a real address earns an identicon (the founder's
+                // anti-poisoning rule); half-typed text gets the placeholder.
+                identiconSeed = view.recipient.takeIf { ADDRESS.matches(it) } ?: "0x0000000000000000000000000000000000000000",
                 pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
                 scanLabel = null,
                 note = view.recipient_identity?.name,
@@ -149,7 +157,44 @@ object SendLive {
             summary = null,
             fee = feeRow(fallback.fee, view.fee, view.estimating_gas || view.fee_busy || fee.busy, ctx),
             ctaEnabled = view.can_continue,
+            warning = formWarning(view, ctx),
         )
+    }
+
+    /** The core's live refusal on the form — the amount warning, or the same-asset fee ceiling. */
+    internal fun formWarning(view: SendView, ctx: Context): String? {
+        val s = ctx.strings
+        view.same_asset_fee_issue?.let { issue ->
+            // The core hands base-unit decimal strings ("the shell formats");
+            // device-found: the first cut printed 5000000000000000000 XDAI.
+            val decimals = view.selected_token?.decimals ?: 18
+            fun human(base: String) = fromBase(base, decimals)
+            return s.t(
+                I18nKeys.Flows.SAME_FEE_BODY,
+                mapOf("amount" to human(issue.transfer_amount), "fee" to human(issue.fee_amount), "total" to human(issue.total), "symbol" to issue.symbol, "balance" to human(issue.balance)),
+            ) + " " + s.t(I18nKeys.Flows.SAME_FEE_MAX, mapOf("amount" to human(issue.max_transfer_amount), "symbol" to issue.symbol))
+        }
+        return view.amount_warning?.let { warningText(it, s) }
+    }
+
+    /** One sentence per `SendAmountWarning`, the web's keys. */
+    fun warningText(warning: SendAmountWarning, s: VelaStrings): String = when (warning) {
+        is SendAmountWarning.NotEnoughToken -> s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY)
+        is SendAmountWarning.InsufficientForGas -> s.t(I18nKeys.Flows.WARN_INSUFFICIENT_FOR_GAS, mapOf("sym" to (warning.symbol ?: "")))
+        is SendAmountWarning.NeedGas -> s.t(I18nKeys.Flows.WARN_NEED_GAS, mapOf("sym" to (warning.symbol ?: "")))
+        is SendAmountWarning.CannotConvert -> s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to warning.code, "symbol" to warning.symbol))
+    }
+
+    /** Title and body for every `SendAlertKind` — the core's refusal, in the core's words. */
+    fun alertText(kind: SendAlertKind, s: VelaStrings): Pair<String, String> = when (kind) {
+        SendAlertKind.InvalidAddress -> s.t(I18nKeys.Flows.ALERT_INVALID_ADDRESS_TITLE) to s.t(I18nKeys.Flows.ALERT_INVALID_ADDRESS_BODY)
+        SendAlertKind.InvalidAmount -> s.t(I18nKeys.Flows.ALERT_INVALID_AMOUNT_TITLE) to s.t(I18nKeys.Flows.ALERT_INVALID_AMOUNT_BODY)
+        is SendAlertKind.InsufficientBalance ->
+            s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_TITLE) to (kind.warning?.let { warningText(it, s) } ?: s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY))
+        SendAlertKind.SplitOverBalance -> s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_TITLE) to s.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY)
+        SendAlertKind.LoadTokensFailed -> s.t(I18nKeys.Flows.ALERT_LOAD_TOKENS) to ""
+        is SendAlertKind.EstimateFailed -> s.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to s.t(I18nKeys.Flows.ALERT_ESTIMATE_BODY)
+        SendAlertKind.AccountUnavailable -> s.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to s.t(I18nKeys.Flows.ALERT_ACCOUNT_UNAVAILABLE_BODY)
     }
 
     private fun feeRow(fallback: FeeRowModel, estimate: FeeEstimateView?, busy: Boolean, ctx: Context): FeeRowModel {
@@ -243,8 +288,34 @@ object SendLive {
                 ),
             ),
             breakdown = emptyList(),
-            ctaEnabled = view.can_confirm && !view.sending,
+            ctaEnabled = view.can_confirm && !view.sending && view.treasury_bootstrap == null && view.tx_error == null,
+            notice = confirmNotice(view, ctx),
+            noticeAction = when {
+                view.treasury_bootstrap != null -> s.t(I18nKeys.Flows.TREASURY_RETRY)
+                view.tx_error != null -> s.t(I18nKeys.Flows.TX_RETRY)
+                // The stage stays Confirm while the passkey prompt is up; the
+                // one honest button under it is Cancel — the core's checkpoint.
+                view.tx_status == SendTxStatus.Signing -> s.t(I18nKeys.Flows.CANCEL)
+                else -> null
+            },
         )
+    }
+
+    /** What stopped the confirm page: the relay's treasury, or a submit the relay refused. */
+    internal fun confirmNotice(view: SendView, ctx: Context): String? {
+        val s = ctx.strings
+        view.treasury_bootstrap?.let { status ->
+            val decimals = if (status.asset == SendTreasuryAsset.PathUsd) 6 else 18
+            val symbol = if (status.asset == SendTreasuryAsset.PathUsd) "pathUSD" else nativeSymbol(status.chain_id, ctx)
+            val short = (status.floor.toBigDecimalOrNull() ?: BigDecimal.ZERO) - (status.balance.toBigDecimalOrNull() ?: BigDecimal.ZERO)
+            val hint = s.t(I18nKeys.Flows.TREASURY_AMOUNT_HINT, mapOf("amount" to fromBase(short.max(BigDecimal.ZERO).toPlainString(), decimals), "symbol" to symbol))
+            return "${s.t(I18nKeys.Flows.TREASURY_TITLE)} · ${s.t(I18nKeys.Flows.TREASURY_LEAD)} $hint"
+        }
+        return when (view.tx_error) {
+            SendTxErrorKey.BundlerFund -> s.t(I18nKeys.Flows.TX_ERROR_BUNDLER_FUND)
+            SendTxErrorKey.Generic -> s.t(I18nKeys.Flows.TX_ERROR_GENERIC)
+            null -> if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC) else null
+        }
     }
 
     // -- SD4 ---------------------------------------------------------------------
@@ -278,7 +349,10 @@ object SendLive {
                 captions = listOf(s.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC), s.t(I18nKeys.Flows.TX_BACKGROUND_HINT)),
                 hash = null,
                 viewOnExplorer = null,
-                cta = s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
+                // While the ceremony is up the one honest button is Cancel —
+                // the core's checkpoint; a "keep running" here would leave a
+                // prompt nobody can answer.
+                cta = if (view.tx_status == SendTxStatus.Signing) s.t(I18nKeys.Flows.CANCEL) else s.t(I18nKeys.Flows.TX_CLOSE_BACKGROUND),
                 ctaAccent = false,
             )
             receipt.status == SendReceiptStatus.Confirmed -> fallback.copy(

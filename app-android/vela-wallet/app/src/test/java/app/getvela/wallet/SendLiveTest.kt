@@ -7,6 +7,13 @@ import app.getvela.wallet.feature.flows.FlowFixtures
 import app.getvela.wallet.feature.flows.FlowSheet
 import app.getvela.wallet.feature.flows.FlowState
 import app.getvela.wallet.feature.flows.ReceiptStage
+import app.getvela.wallet.feature.send.core.SendAlertKind
+import app.getvela.wallet.feature.send.core.SendFeeIssueView
+import app.getvela.wallet.feature.send.core.SendAmountWarning
+import app.getvela.wallet.feature.send.core.SendTreasuryAsset
+import app.getvela.wallet.feature.send.core.SendTreasuryStatus
+import app.getvela.wallet.feature.send.core.SendTxErrorKey
+import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.send.core.FeeAssetView
 import app.getvela.wallet.feature.send.core.FeeEstimateView
@@ -159,5 +166,79 @@ class SendLiveTest {
         assertEquals(FlowState.SD3, SendLive.flowState(SendView(stage = SendStage.Confirm), false))
         assertEquals(FlowState.SD4A, SendLive.flowState(SendView(stage = SendStage.Receipt), false))
         assertEquals(FlowState.SD4C, SendLive.flowState(SendView(stage = SendStage.Receipt, receipt = SendReceiptView(status = SendReceiptStatus.Confirmed, amount = "1", usd_value = 0.0)), false))
+    }
+
+    // -- phase 5: refusals in the core's words --------------------------------
+
+    @Test
+    fun `the form's warning is the core's amount warning, or the same-asset fee ceiling`() {
+        val short = SendView(stage = SendStage.EnterDetails, selected_token = xdai, amount_warning = SendAmountWarning.NotEnoughToken("XDAI"))
+        assertEquals(strings.t(I18nKeys.Flows.ALERT_INSUFFICIENT_BODY), SendLive.formWarning(short, ctx()))
+        val gas = SendView(stage = SendStage.EnterDetails, selected_token = xdai, amount_warning = SendAmountWarning.NeedGas("XDAI"))
+        assertTrue(SendLive.formWarning(gas, ctx())!!.contains("XDAI"))
+        assertNull(SendLive.formWarning(SendView(stage = SendStage.EnterDetails, selected_token = xdai), ctx()))
+        // Device-found: the core's figures are base units; the sentence must not be.
+        val ceiling = SendView(
+            stage = SendStage.EnterDetails, selected_token = xdai,
+            same_asset_fee_issue = SendFeeIssueView(symbol = "XDAI", transfer_amount = "5000000000000000000", balance = "628970000000000000", fee_amount = "10000000000000000", total = "5010000000000000000", max_transfer_amount = "618970000000000000"),
+        )
+        val sentence = SendLive.formWarning(ceiling, ctx())!!
+        assertTrue(sentence, sentence.contains("0.61897") && sentence.contains("0.01") && !sentence.contains("000000000"))
+    }
+
+    @Test
+    fun `half-typed text gets the placeholder identicon, a real address its own`() {
+        val drawn = (FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm).model
+        val typing = SendLive.form(drawn, SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = "0xabc"), FeeView(), ctx())
+        assertEquals("0x0000000000000000000000000000000000000000", typing.recipient!!.identiconSeed)
+        val done = SendLive.form(drawn, SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = recipient), FeeView(), ctx())
+        assertEquals(recipient, done.recipient!!.identiconSeed)
+    }
+
+    @Test
+    fun `the confirm page names what stopped it and offers the one action`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val refused = SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true, tx_status = SendTxStatus.Error, tx_error = SendTxErrorKey.BundlerFund)
+        val confirm = SendLive.confirm(drawn, refused, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.TX_ERROR_BUNDLER_FUND), confirm.notice)
+        assertEquals(strings.t(I18nKeys.Flows.TX_RETRY), confirm.noticeAction)
+        assertFalse(confirm.ctaEnabled)
+
+        val low = SendView(
+            stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true,
+            treasury_bootstrap = SendTreasuryStatus(chain_id = 100, address = "0x1111111111111111111111111111111111111111", asset = SendTreasuryAsset.Native, balance = "100000000000000000", floor = "1000000000000000000", bootstrap_needed = true),
+        )
+        val treasury = SendLive.confirm(drawn, low, ctx())
+        assertTrue(treasury.notice!!.contains(strings.t(I18nKeys.Flows.TREASURY_TITLE)))
+        assertTrue("the hint carries the shortfall in the chain's coin", treasury.notice!!.contains("0.9"))
+        assertEquals(strings.t(I18nKeys.Flows.TREASURY_RETRY), treasury.noticeAction)
+        assertFalse(treasury.ctaEnabled)
+
+        val fine = SendLive.confirm(drawn, SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true), ctx())
+        assertNull(fine.notice)
+        assertTrue(fine.ctaEnabled)
+    }
+
+    @Test
+    fun `while the prompt is up the confirm page offers Cancel and nothing else`() {
+        val drawn = (FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm).model
+        val signing = SendLive.confirm(drawn, SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true, sending = true, tx_status = SendTxStatus.Signing), ctx())
+        assertEquals(strings.t(I18nKeys.Flows.TX_PREPARING_BIOMETRIC), signing.notice)
+        assertEquals(strings.t(I18nKeys.Flows.CANCEL), signing.noticeAction)
+        assertFalse(signing.ctaEnabled)
+    }
+
+    @Test
+    fun `every alert kind has a title in the corpus`() {
+        val kinds = listOf(
+            SendAlertKind.InvalidAddress, SendAlertKind.InvalidAmount, SendAlertKind.InsufficientBalance(SendAmountWarning.NeedGas("XDAI")),
+            SendAlertKind.SplitOverBalance, SendAlertKind.LoadTokensFailed, SendAlertKind.AccountUnavailable,
+        )
+        kinds.forEach { kind ->
+            val (title, _) = SendLive.alertText(kind, strings)
+            assertTrue("$kind has words", title.isNotBlank() && !title.startsWith("send.") && !title.startsWith("componentsUi."))
+        }
+        val (_, body) = SendLive.alertText(SendAlertKind.InsufficientBalance(SendAmountWarning.NeedGas("XDAI")), strings)
+        assertTrue(body.contains("XDAI"))
     }
 }

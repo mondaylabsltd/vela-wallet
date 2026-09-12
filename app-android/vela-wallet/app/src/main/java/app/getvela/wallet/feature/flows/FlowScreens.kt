@@ -843,6 +843,16 @@ fun SendFormBody(
         model.amount?.let {
             AmountInput(amount = it, onDenom = onDenom, onValueChange = onAmountChange)
         }
+        model.warning?.let {
+            Text(
+                text = it,
+                color = colors.warningBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                modifier = Modifier.padding(bottom = VelaSpacing.lg),
+            )
+        }
         model.recipient?.let {
             RecipientField(
                 field = it,
@@ -1215,6 +1225,7 @@ fun SendConfirmBody(
     model: SendConfirmModel,
     modifier: Modifier = Modifier,
     onConfirm: () -> Unit = {},
+    onNoticeAction: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -1293,6 +1304,27 @@ fun SendConfirmBody(
                             fontSize = VelaTextSize.base,
                         )
                     }
+                }
+            }
+        }
+        model.notice?.let { notice ->
+            Spacer(modifier = Modifier.height(VelaSpacing.lg))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.bgRaised, RoundedCornerShape(VelaRadius.lg))
+                    .padding(VelaSpacing.lg),
+            ) {
+                Text(
+                    text = notice,
+                    color = colors.warningBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                )
+                model.noticeAction?.let { action ->
+                    Spacer(modifier = Modifier.height(VelaSpacing.md))
+                    FlowCta(label = action, onClick = onNoticeAction, accent = false, modifier = Modifier.fillMaxWidth())
                 }
             }
         }

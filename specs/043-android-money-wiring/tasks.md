@@ -251,22 +251,22 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
 
 ## Phase 5 — User Story 3: the screen says what the core refuses (P2)
 
-- [ ] **T041** [US3] `…/feature/send/SendLive.kt` — every `SendAlertKind`,
+- [X] **T041** [US3] `…/feature/send/SendLive.kt` — every `SendAlertKind`,
       `SendEstimateFailure`, `SendSubmitFailure` and `SendTreasuryProbe`
       rendered as the core's wording in the drawn slots (form inline error,
       confirm banner, receipt *failed* title/caption, the treasury sheet
       states SD3B/SD3C); Continue disabled exactly when the view says so.
-- [ ] **T042** [US3] `…/feature/send/core/SendController.kt` — the cancel
+- [X] **T042** [US3] `…/feature/send/core/SendController.kt` — the cancel
       checkpoints: `cancelSigning` cancels the signer job and dispatches
       `CancelSigning`; `back` from confirm dispatches `Back`; a second
       `slideConfirm` while signing is ignored by the core (assert, do not
       re-implement).
-- [ ] **T043** [P] [US3] `…test/SendRefusalsTest.kt` — for each refusal in
+- [X] **T043** [P] [US3] `…test/SendRefusalsTest.kt` — for each refusal in
       the spec's User Story 3: the view carries the core's word and the
       builder shows it; cancel at signing → signer called once, view back at
       confirm; a relay rejection → `failed` with the message; the treasury
       404 → the sheet.
-- [ ] **T044** [US3] `[device]` drive each refusal (`quickstart.md`
+- [X] **T044** [US3] `[device]` drive each refusal (`quickstart.md`
       "Refusals"), screenshot each; cancel during signing in the REAL space
       with the founder present is SC-002/SC-004 — in the parallel space
       assert the prompt count through the signer's log line (SC-004,

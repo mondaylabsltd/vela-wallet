@@ -399,6 +399,8 @@ data class SendFormModel(
     val cta: String,
     /** Spec 043: the core's `can_continue`; a drawn form is always enabled. */
     val ctaEnabled: Boolean = true,
+    /** Spec 043 phase 5: the core's amount warning or same-asset fee ceiling, as a sentence. */
+    val warning: String? = null,
 )
 
 /** SD2e — the contact picker. */
@@ -493,6 +495,9 @@ data class SendConfirmModel(
     val cta: String,
     /** Spec 043: the core's `can_confirm`; a drawn confirm is always enabled. */
     val ctaEnabled: Boolean = true,
+    /** Spec 043 phase 5: the core's refusal on this page (treasury low, submit failed) and the action it offers. */
+    val notice: String? = null,
+    val noticeAction: String? = null,
 )
 
 enum class ReceiptStage { Submitting, Submitted, Confirmed, Failed }
