@@ -1,6 +1,18 @@
 package app.getvela.wallet.feature.settings.components
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.layout.onSizeChanged
+import app.getvela.wallet.core.platform.rememberVelaHaptic
+import app.getvela.wallet.core.platform.VelaHaptic
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +33,8 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -260,6 +274,8 @@ fun VelaUrlField(
     action: String? = null,
     onValueChange: ((String) -> Unit)? = null,
     keyboard: KeyboardType = KeyboardType.Uri,
+    /** Spec 048: the in-field action (检查密钥 / 获取密钥) does something. */
+    onAction: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     val border = when (tone) {
@@ -346,6 +362,7 @@ fun VelaUrlField(
             }
             if (action != null) {
                 Text(
+                    modifier = Modifier.clickable(enabled = onAction != null) { onAction?.invoke() },
                     text = action,
                     color = colors.infoBase,
                     fontFamily = VelaFontFamily,
@@ -377,6 +394,7 @@ fun VelaSegmentedControl(
     modifier: Modifier = Modifier,
     onSelect: (String) -> Unit = {},
 ) {
+    val segmentHaptic = rememberVelaHaptic()
     val colors = VelaTheme.colors
     Row(
         // The label is the GROUP's name, not a visible caption: the phone mock
@@ -401,7 +419,7 @@ fun VelaSegmentedControl(
                     .heightIn(min = VelaSizing.controlSm)
                     .clip(RoundedCornerShape(VelaRadius.md))
                     .background(if (selected) colors.bgRaised else Color.Transparent)
-                    .clickable { onSelect(id) },
+                    .clickable { segmentHaptic(VelaHaptic.Select); onSelect(id) },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
             ) {
@@ -437,11 +455,23 @@ fun VelaSegmentedControl(
 
 /**
  * A ——●—— A. The tick row plus the two glyph ends, sized to what they promise.
- * A picture of the control: spec 023 is UI only, so nothing moves yet.
+ *
+ * Spec 048 (the founder: 调整字号大小不能滑动，只能点小圆点，没有震动; then
+ * 滑动很不跟手): a real slider — dragged or tapped, snapping to its steps, one
+ * Detent per step crossed — the web's range input over its row of tick dots.
+ * The thumb follows the finger on local state; the scale is committed when
+ * the finger lifts. Committing per step re-laid the whole page out under the
+ * drag, and the gesture died after one step.
  */
 @Composable
 fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, onChange: (Int) -> Unit = {}) {
     val colors = VelaTheme.colors
+    val haptic = rememberVelaHaptic()
+    val dragging = remember { mutableStateOf<Int?>(null) }
+    val emitted = remember { mutableStateOf(index) }
+    LaunchedEffect(index) { if (dragging.value == null) emitted.value = index }
+    val change = rememberUpdatedState(onChange)
+    val shown = dragging.value ?: index
     Row(
         modifier = modifier.fillMaxWidth().padding(vertical = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
@@ -454,26 +484,73 @@ fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, o
             fontWeight = VelaFontWeight.bold,
             fontSize = VelaTextSize.base,
         )
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(VelaIconSize.xl2)
+                .semantics { contentDescription = "text-scale-slider" },
         ) {
-            repeat(steps) { i ->
-                Box(
-                    modifier = Modifier
-                        .size(VelaIconSize.lg)
-                        .clip(RoundedCornerShape(VelaRadius.full))
-                        .clickable { onChange(i) }
-                        .semantics { contentDescription = "text-scale-$i" },
-                    contentAlignment = Alignment.Center,
+            // The width is read through state, not a gesture key, so a re-layout
+            // never restarts the pointerInput mid-drag.
+            val widthPx = remember { mutableStateOf(0f) }
+            fun stepAt(x: Float): Int {
+                val width = widthPx.value
+                if (steps <= 1 || width <= 0f) return 0
+                val slot = width / steps
+                return (x / slot).toInt().coerceIn(0, steps - 1)
+            }
+            fun settle(x: Float, commit: Boolean) {
+                val next = stepAt(x)
+                if (next != emitted.value) {
+                    emitted.value = next
+                    haptic(VelaHaptic.Detent)
+                }
+                if (commit) {
+                    dragging.value = null
+                    if (next != index) change.value(next)
+                } else {
+                    dragging.value = next
+                }
+            }
+            fun release() {
+                val at = dragging.value ?: return
+                val slot = if (steps <= 1) 0f else widthPx.value / steps
+                settle(at * slot + slot / 2f, commit = true)
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onSizeChanged { widthPx.value = it.width.toFloat() }
+                    .pointerInput(steps) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { position -> settle(position.x, commit = false) },
+                            onDragEnd = { release() },
+                            onDragCancel = { release() },
+                            onHorizontalDrag = { event, _ -> event.consume(); settle(event.position.x, commit = false) },
+                        )
+                    }
+                    .pointerInput(steps) { detectTapGestures { position -> settle(position.x, commit = true) } },
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(if (i == index) VelaIconSize.lg else VelaSpacing.sm)
-                            .clip(RoundedCornerShape(VelaRadius.full))
-                            .background(if (i == index) colors.fgMuted else colors.borderStrong),
-                    )
+                    repeat(steps) { i ->
+                        Box(
+                            modifier = Modifier
+                                .size(VelaIconSize.lg)
+                                .semantics { contentDescription = "text-scale-$i" },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(if (i == shown) VelaIconSize.lg else VelaSpacing.sm)
+                                    .clip(RoundedCornerShape(VelaRadius.full))
+                                    .background(if (i == shown) colors.fgMuted else colors.borderStrong),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -486,3 +563,4 @@ fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, o
         )
     }
 }
+

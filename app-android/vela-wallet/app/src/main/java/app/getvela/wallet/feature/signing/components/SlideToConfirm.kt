@@ -1,6 +1,8 @@
 package app.getvela.wallet.feature.signing.components
 
 import androidx.compose.animation.core.animateFloatAsState
+import app.getvela.wallet.core.platform.rememberVelaHaptic
+import app.getvela.wallet.core.platform.VelaHaptic
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -56,6 +58,8 @@ fun SlideToConfirm(
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Spec 048: the threshold is a detent the finger feels.
+    val slideHaptic = rememberVelaHaptic()
     val colors = VelaTheme.colors
     val label = "$hint · $action"
     var progress by remember { mutableFloatStateOf(0f) }
@@ -77,6 +81,7 @@ fun SlideToConfirm(
                     if (enabled && !done) {
                         progress = 1f
                         done = true
+                        slideHaptic(VelaHaptic.Detent)
                         onConfirm()
                     }
                     true
@@ -126,6 +131,7 @@ fun SlideToConfirm(
                             if (progress >= ExploreMetrics.SLIDE_COMMIT) {
                                 progress = 1f
                                 done = true
+                                slideHaptic(VelaHaptic.Detent)
                                 onConfirm()
                             } else {
                                 progress = 0f
