@@ -1,6 +1,9 @@
 package app.getvela.wallet.feature.send
 
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.feature.flows.ContactGroupModel
+import androidx.compose.ui.graphics.Color
+import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.contacts.core.ContactsView
@@ -113,12 +116,45 @@ object SendLive {
 
     // -- SD1 ---------------------------------------------------------------------
 
-    internal fun pick(fallback: SendPickModel, view: SendView, ctx: Context, sweepPicking: Boolean = false): SendPickModel {
+    /** The web's stablecoin set (`services/activity.ts`), the Tether glyph folded to T. */
+    private val STABLE_SYMBOLS = setOf("USDT", "USDT0", "USDC", "USDC.E", "DAI", "BUSD", "TUSD", "FDUSD", "USDE", "PYUSD", "USDP", "GUSD", "LUSD", "FRAX", "USDD")
+
+    private fun isStable(symbol: String): Boolean = symbol.uppercase().replace("₮", "T") in STABLE_SYMBOLS
+
+    /** Spec 048: the web's `sendTokenClass` — a native coin pays gas, a known stable is stable, the rest is other. */
+    fun sendTokenClass(token: SendToken): String = when {
+        token.token_address == null -> "gas"
+        isStable(token.symbol) -> "stable"
+        else -> "other"
+    }
+
+    /** The picker's rows after both narrowings, as indices into `view.tokens`, in the core's order (the web's `visibleSendTokens`). */
+    fun visibleTokens(view: SendView, chainFilter: Int?, classFilter: String): List<Int> =
+        view.tokens.indices.filter { i ->
+            val token = view.tokens[i]
+            (chainFilter == null || token.chain_id.toInt() == chainFilter) &&
+                (classFilter == "all" || sendTokenClass(token) == classFilter)
+        }
+
+    internal fun pick(
+        fallback: SendPickModel,
+        view: SendView,
+        ctx: Context,
+        sweepPicking: Boolean = false,
+        chainFilter: Int? = null,
+        classFilter: String = "all",
+    ): SendPickModel {
         val s = ctx.strings
-        val rows = view.tokens.map { token -> assetRow(token, ctx) }
+        val visible = visibleTokens(view, chainFilter, classFilter)
+        val rows = visible.map { i -> assetRow(view.tokens[i], ctx) }
+        VelaLog.event("send.pick", "narrowed", "class" to classFilter, "chain" to chainFilter, "visible" to visible.size, "of" to view.tokens.size, "networks" to view.tokens.map { it.network }.distinct().take(4))
+        // Spec 048: the chips and the pill say what narrowed the list.
+        val filters = fallback.filters.map { it.copy(selected = it.id == classFilter) }
+        val pill = fallback.header.pill?.let { p -> p.copy(label = chainFilter?.let { ctx.chainNames[it] } ?: p.label) }
         if (!sweepPicking) {
             return fallback.copy(
-                // Filters stay drawn but inert; the door reads "send several".
+                header = fallback.header.copy(pill = pill),
+                filters = filters,
                 notice = null,
                 selection = null,
                 rows = rows,
@@ -131,7 +167,8 @@ object SendLive {
         val count = view.multi_selected_ids.size
         val chainName = chain?.let { ctx.chainNames[it] ?: "chain-$it" } ?: ""
         return fallback.copy(
-            header = fallback.header.copy(title = s.t(I18nKeys.Flows.MULTI_SEND_TITLE)),
+            header = fallback.header.copy(title = s.t(I18nKeys.Flows.MULTI_SEND_TITLE), pill = pill),
+            filters = filters,
             notice = chain?.let {
                 SendNoticeModel(
                     mark = WalletLive.mark(it, nativeSymbol(it, ctx), null),
@@ -435,7 +472,14 @@ object SendLive {
     // -- SD2E --------------------------------------------------------------------
 
     fun contactSheet(fallback: ContactPickModel, book: ContactsView): ContactPickModel = fallback.copy(
-        groups = emptyList(),
+        // Spec 048: the book's groups, each a door to the whole group as split rows.
+        groups = book.groups.map { g ->
+            ContactGroupModel(
+                name = g.name,
+                count = g.members.size.toString(),
+                colors = fallback.groups.firstOrNull()?.colors ?: (Color.Gray to Color.White),
+            )
+        },
         contacts = book.contacts.map { contact ->
             ContactEntryModel(
                 name = contact.name ?: contact.resolved_name ?: shortAddress(contact.address),

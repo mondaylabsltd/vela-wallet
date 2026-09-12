@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.settings
 
 import app.getvela.wallet.feature.wallet.WalletLive
+import app.getvela.wallet.feature.settings.core.NetNetworkRow
 import app.getvela.wallet.feature.browser.ExploreLive
 import app.getvela.wallet.feature.send.core.SendTreasuryStatus
 import app.getvela.wallet.feature.send.core.SendTreasuryAsset
@@ -485,6 +486,22 @@ object SettingsLive {
             ),
         )
     }
+
+    /**
+     * Spec 048: the network detail page for THIS network — name, chain, the
+     * RPC and explorer overrides as the core holds them. Before this the page
+     * showed the fixture's Ethereum whichever row was tapped.
+     */
+    fun networkDetail(fallback: NetworkDetailModel, row: NetNetworkRow, strings: VelaStrings): NetworkDetailModel = fallback.copy(
+        title = row.display_name,
+        subtitle = strings.t(I18nKeys.SettingsUi.CHAIN_ID, mapOf("chainId" to row.chain_id.toString())) + " · " + row.native_symbol,
+        mark = ChainMarkModel(row.display_name.take(1).uppercase(), markColour(row.chain_id), Marks.chainLogoUrl(row.chain_id.toInt())),
+        name = row.display_name,
+        rpc = fallback.rpc.copy(value = row.rpc_url, badge = null, tone = null),
+        explorer = fallback.explorer.copy(value = row.explorer_url),
+        callout = null,
+        chainId = row.chain_id,
+    )
 
     /** The accounts sheet: this device's accounts, the active one ticked; the drawn amount is not known here and stays blank. */
     fun withAccounts(model: SettingsScreenModel, accounts: List<Pair<String, String>>, activeIndex: Int, strings: VelaStrings): SettingsScreenModel = model.copy(

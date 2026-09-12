@@ -590,6 +590,12 @@ class WalletController(
     }
 
     /** A pull-to-refresh, or the screen coming back into view. */
+    /** Spec 048: a token detail's 收款 — the request machine shows THAT asset's code. */
+    fun assetPicked(chainId: Int, tokenAddress: String?, symbol: String, decimals: Int, networkName: String) {
+        VelaLog.event("receive", "asset picked", "chain" to chainId, "symbol" to symbol)
+        requestHost.dispatch(PaymentRequestEvent.AssetPicked(chain_id = chainId, token_address = tokenAddress, symbol = symbol, decimals = decimals, network_name = networkName), PaymentRequestEvent.serializer())
+    }
+
     /** Spec 047 (the founder, 2026-09-12): the home's account switcher — the core keeps the per-account totals it shows. */
     fun switcherOpened(addresses: List<String>) = balanceHost.dispatch(BalanceEvent.SwitcherOpened(addresses), BalanceEvent.serializer())
 

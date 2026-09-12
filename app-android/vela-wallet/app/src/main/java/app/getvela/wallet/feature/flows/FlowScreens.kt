@@ -831,6 +831,7 @@ fun SendFormBody(
     onRecipientChange: ((String) -> Unit)? = null,
     onRecipientAmount: ((Int, String) -> Unit)? = null,
     onRecipientAddress: ((Int, String) -> Unit)? = null,
+    onRecipientPick: ((Int) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -931,6 +932,7 @@ fun SendFormBody(
                 onRemove = { onRemoveRecipient(index) },
                 onAmountChange = onRecipientAmount?.let { edit -> { text -> edit(index, text) } },
                 onAddressChange = onRecipientAddress?.let { edit -> { text -> edit(index, text) } },
+                onPick = onRecipientPick?.let { pick -> { pick(index) } },
             )
             Spacer(modifier = Modifier.height(VelaSpacing.sm))
         }

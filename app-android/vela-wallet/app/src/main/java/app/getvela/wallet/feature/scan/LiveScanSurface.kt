@@ -1,6 +1,9 @@
 package app.getvela.wallet.feature.scan
 
 import android.Manifest
+import app.getvela.wallet.core.platform.rememberVelaHaptic
+import app.getvela.wallet.core.platform.VelaHaptic
+import androidx.camera.core.CameraSelector
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.layout.fillMaxSize
@@ -53,6 +56,9 @@ fun LiveScanSurface(model: ScanModel, callbacks: ScanCallbacks, modifier: Modifi
     var torch by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var cameraDead by remember { mutableStateOf(false) }
+    // Spec 048: 翻转 — the other camera; CameraScanner falls back to the back one when there is no front camera.
+    var lensFacing by remember { mutableStateOf(CameraSelector.LENS_FACING_BACK) }
+    val haptic = rememberVelaHaptic()
     LaunchedEffect(Unit) {
         if (!granted && !asked) {
             asked = true
@@ -66,7 +72,10 @@ fun LiveScanSurface(model: ScanModel, callbacks: ScanCallbacks, modifier: Modifi
         onTool = { tool ->
             when (tool) {
                 ScanTool.Torch -> torch = !torch
-                ScanTool.Flip -> Unit
+                ScanTool.Flip -> {
+                    lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) CameraSelector.LENS_FACING_FRONT else CameraSelector.LENS_FACING_BACK
+                    haptic(VelaHaptic.Select)
+                }
                 ScanTool.Gallery -> scope.launch {
                     val bytes = runCatching { callbacks.pickImage() }.getOrNull() ?: return@launch
                     val text = withContext(Dispatchers.Default) {
@@ -87,6 +96,7 @@ fun LiveScanSurface(model: ScanModel, callbacks: ScanCallbacks, modifier: Modifi
             {
                 CameraScanner(
                     torch = torch,
+                    lensFacing = lensFacing,
                     onDecoded = callbacks.onDecoded,
                     onUnavailable = { cameraDead = true },
                     modifier = Modifier.fillMaxSize(),

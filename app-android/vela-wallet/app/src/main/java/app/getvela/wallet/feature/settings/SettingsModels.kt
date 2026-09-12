@@ -212,6 +212,8 @@ data class NetworkDetailModel(
     val rpc: UrlFieldModel,
     val explorer: UrlFieldModel,
     val callout: CalloutModel? = null,
+    /** Spec 048: which chain the overrides are written for. */
+    val chainId: Long = 0,
 )
 
 @Immutable

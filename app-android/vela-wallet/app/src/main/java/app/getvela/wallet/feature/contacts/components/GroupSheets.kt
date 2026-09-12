@@ -137,3 +137,22 @@ fun ContactQrSheet(
         VelaSecondaryButton(closeLabel, onClick = onDismiss, modifier = Modifier.fillMaxWidth())
     }
 }
+
+/** Spec 048: 导出 offers the format, as the web's export sheet does. */
+@Composable
+fun ExportFormatSheet(
+    title: String,
+    cancelLabel: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ContactsSheet(onDismiss) {
+        SheetTitle(title)
+        VelaSecondaryButton("CSV", onClick = { onPick("csv") }, modifier = Modifier.fillMaxWidth())
+        Spacer(modifier = Modifier.height(VelaSpacing.lg))
+        VelaSecondaryButton("JSON", onClick = { onPick("json") }, modifier = Modifier.fillMaxWidth())
+        Spacer(modifier = Modifier.height(VelaSpacing.lg))
+        VelaSecondaryButton(cancelLabel, onClick = onDismiss, modifier = Modifier.fillMaxWidth())
+    }
+}
+

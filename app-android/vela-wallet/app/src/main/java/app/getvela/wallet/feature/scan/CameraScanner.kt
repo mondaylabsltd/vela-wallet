@@ -36,6 +36,8 @@ fun CameraScanner(
     onDecoded: (String) -> Unit,
     onUnavailable: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Spec 048: which camera — 翻转 rebinds to the other one when the device has it. */
+    lensFacing: Int = CameraSelector.LENS_FACING_BACK,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -47,7 +49,7 @@ fun CameraScanner(
     var camera by remember { mutableStateOf<Camera?>(null) }
     var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(lensFacing) {
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             val cameraProvider = runCatching { future.get() }.getOrNull()
@@ -75,7 +77,9 @@ fun CameraScanner(
             }
             try {
                 cameraProvider.unbindAll()
-                camera = cameraProvider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                val wanted = CameraSelector.Builder().requireLensFacing(lensFacing).build()
+                val selector = if (runCatching { cameraProvider.hasCamera(wanted) }.getOrDefault(false)) wanted else CameraSelector.DEFAULT_BACK_CAMERA
+                camera = cameraProvider.bindToLifecycle(lifecycleOwner, selector, preview, analysis)
                 provider = cameraProvider
             } catch (error: Exception) {
                 VelaLog.failure("scan.camera", "bind failed", error)

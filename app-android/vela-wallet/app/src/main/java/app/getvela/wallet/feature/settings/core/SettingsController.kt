@@ -212,8 +212,10 @@ class SettingsController(
 
     fun expandOverride(chainId: Long) = net(NetEvent.OverrideExpanded(chainId))
 
-    fun editOverride(chainId: Long, field: NetOverrideField, value: String) =
+    fun editOverride(chainId: Long, field: NetOverrideField, value: String) {
+        VelaLog.event("net", "override edited", "chain" to chainId, "field" to field.name, "chars" to value.length)
         net(NetEvent.OverrideFieldEdited(chainId, field, value))
+    }
 
     /**
      * The commit point for an override.
@@ -222,7 +224,16 @@ class SettingsController(
      * why an editable field must report BOTH: the edits keep the box in sync,
      * and this is what asks the core to accept them.
      */
-    fun commitOverride(chainId: Long) = net(NetEvent.OverrideBlurred(chainId))
+    fun commitOverride(chainId: Long) {
+        VelaLog.event("net", "override committed", "chain" to chainId)
+        net(NetEvent.OverrideBlurred(chainId))
+    }
+
+    /** Spec 048: a provider's 检查密钥 — the core probes the key it was given. */
+    fun testProvider(provider: NetProviderId) {
+        VelaLog.event("net", "provider test", "provider" to provider.name)
+        net(NetEvent.ProviderTestRequested(provider))
+    }
 
     fun openEndpoints() = net(NetEvent.EndpointsOpened)
 

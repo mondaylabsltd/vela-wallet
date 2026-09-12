@@ -1,6 +1,8 @@
 package app.getvela.wallet
 
 import kotlinx.coroutines.flow.MutableStateFlow
+import app.getvela.wallet.feature.settings.SettingsPage
+import app.getvela.wallet.feature.settings.SettingsOverlay
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
 import app.getvela.wallet.feature.flows.WalletFlowEntry
 import app.getvela.wallet.feature.send.core.SendOpenParams
@@ -83,6 +85,10 @@ class AppContainer(private val app: Application) {
     val pendingFlow = MutableStateFlow<WalletFlowEntry?>(null)
     /** Spec 048: split rows to seed into the send machine right after it opens (a group's 群发转账). */
     val pendingSplitSeed = MutableStateFlow<List<SendRecipientDraft>?>(null)
+    /** Spec 048: the home's status line opens the matching rescue sheet on the settings page. */
+    val pendingSettingsOverlay = MutableStateFlow<SettingsOverlay?>(null)
+    /** Spec 048: the add-token 原生币 tab opens the settings' add-network page. */
+    val pendingSettingsPage = MutableStateFlow<SettingsPage?>(null)
 
     /** Spec 047 D1: the preferences that have no machine — the web's keys, applied app-wide. */
     val preferences = Preferences(

@@ -145,6 +145,8 @@ data class ReceiveQrModel(
     val warning: String,
     val saveImage: String,
     val viewOnExplorer: String,
+    /** Spec 048: where 在区块浏览器中查看 goes; `null` when the chain has no explorer. */
+    val explorerUrl: String? = null,
 )
 
 /** R4 — the image "Save image" produces, not a screen someone navigates to. */
@@ -201,6 +203,8 @@ data class TxDetailModel(
     val positive: Boolean,
     val facts: List<FactRowModel>,
     val viewOnExplorer: String,
+    /** Spec 048: where 在区块浏览器中查看 goes; `null` when the chain has no explorer. */
+    val explorerUrl: String? = null,
 )
 
 /* ------------------------------------------------------------------ assets */
@@ -240,6 +244,8 @@ data class TokenDetailModel(
     val transactionsTitle: String,
     val rows: List<ActivityRowModel>,
     val viewOnExplorer: String,
+    /** Spec 048: where 在区块浏览器中查看 goes; `null` when the chain has no explorer. */
+    val explorerUrl: String? = null,
 )
 
 /* -------------------------------------------------------------- add token  */

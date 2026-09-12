@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.flows
 
 import app.getvela.wallet.feature.scan.ScanCallbacks
+import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.scan.LiveScanSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -63,6 +64,16 @@ fun FlowHost(
     onNavigate: (FlowStep) -> Unit = {},
     /** Spec 048: a list row opens ITS item — the step with the row's id (the history and asset lists dropped it). */
     onOpen: (FlowStep, String) -> Unit = { _, _ -> },
+    /** Spec 048: 在区块浏览器中查看 — the explorer page for an address, a hash, a token. */
+    onOpenUrl: (String) -> Unit = {},
+    /** Spec 048: a token detail's 转账 opens the form with THAT token (the web's `send-token`). */
+    onSendToken: ((String) -> Unit)? = null,
+    /** Spec 048: a token detail's 收款 opens that token's own code, by the holding's id. */
+    onReceiveToken: ((String) -> Unit)? = null,
+    /** Spec 048: a receive network row's QR opens THAT network's code (the row index). */
+    onReceiveNetwork: ((Int) -> Unit)? = null,
+    /** Spec 048: the item the open sheet is about — the receive-token door needs it. */
+    selected: String? = null,
     /** Spec 043: when the send is live, its taps go to the machine, not to the fixture's steps. */
     send: SendCallbacks? = null,
     addToken: AddTokenCallbacks? = null,
@@ -74,10 +85,10 @@ fun FlowHost(
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            FlowHostContent(model, modifier, onBack, onNavigate, onOpen, send, addToken, onSaveImage)
+            FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage)
         }
     } else {
-        FlowHostContent(model, modifier, onBack, onNavigate, onOpen, send, addToken, onSaveImage)
+        FlowHostContent(model, modifier, onBack, onNavigate, onOpen, onOpenUrl, onSendToken, onReceiveToken, onReceiveNetwork, selected, send, addToken, onSaveImage)
     }
 }
 
@@ -108,6 +119,16 @@ private fun FlowHostContent(
     onBack: () -> Unit,
     onNavigate: (FlowStep) -> Unit,
     onOpen: (FlowStep, String) -> Unit = { _, _ -> },
+    /** Spec 048: 在区块浏览器中查看 — the explorer page for an address, a hash, a token. */
+    onOpenUrl: (String) -> Unit = {},
+    /** Spec 048: a token detail's 转账 opens the form with THAT token (the web's `send-token`). */
+    onSendToken: ((String) -> Unit)? = null,
+    /** Spec 048: a token detail's 收款 opens that token's own code, by the holding's id. */
+    onReceiveToken: ((String) -> Unit)? = null,
+    /** Spec 048: a receive network row's QR opens THAT network's code (the row index). */
+    onReceiveNetwork: ((Int) -> Unit)? = null,
+    /** Spec 048: the item the open sheet is about — the receive-token door needs it. */
+    selected: String? = null,
     send: SendCallbacks? = null,
     addToken: AddTokenCallbacks? = null,
     onSaveImage: (() -> Unit)? = null,
@@ -129,7 +150,7 @@ private fun FlowHostContent(
             is FlowBase.Receive -> FlowScaffold(header = base.model.header, onBack = onBack) {
                 ReceiveListBody(
                     model = base.model,
-                    onQr = { onNavigate(FlowStep.ReceiveQr) },
+                    onQr = { index -> onReceiveNetwork?.invoke(index) ?: onNavigate(FlowStep.ReceiveQr) },
                 )
             }
             is FlowBase.History -> FlowScaffold(
@@ -167,6 +188,7 @@ private fun FlowHostContent(
                 onPill = { onNavigate(FlowStep.Chains) },
             ) {
                 SendPickBody(
+                    onFilter = { id -> send?.onFilter?.invoke(id) },
                     model = base.model,
                     onSelect = { index -> send?.onSelectToken?.invoke(index) ?: onNavigate(FlowStep.SendForm) },
                     onSelectAll = { send?.onSelectAll?.invoke() },
@@ -198,6 +220,7 @@ private fun FlowHostContent(
                     onRemoveRecipient = { index -> send?.onRemoveRecipient?.invoke(index) },
                     onRecipientAmount = send?.let { it.onRecipientAmount },
                     onRecipientAddress = send?.let { it.onRecipientAddress },
+                    onRecipientPick = send?.onRecipientPick,
                     onContinue = { send?.onContinue?.invoke() ?: onNavigate(FlowStep.SendConfirm) },
                     onMax = { if (send != null) send.onMax() },
                     onDenom = { if (send != null) send.onDenom() },
@@ -223,7 +246,7 @@ private fun FlowHostContent(
         }
 
         model.sheet?.let { sheet ->
-            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, send = send, addToken = addToken, onSaveImage = onSaveImage)
+            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, onOpenUrl = onOpenUrl, onSendToken = onSendToken, onReceiveToken = onReceiveToken, selected = selected, send = send, addToken = addToken, onSaveImage = onSaveImage)
         }
     }
 }
@@ -236,7 +259,7 @@ private fun FlowHostContent(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, send: SendCallbacks? = null, addToken: AddTokenCallbacks? = null, onSaveImage: (() -> Unit)? = null) {
+private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, onOpenUrl: (String) -> Unit = {}, onSendToken: ((String) -> Unit)? = null, onReceiveToken: ((String) -> Unit)? = null, selected: String? = null, send: SendCallbacks? = null, addToken: AddTokenCallbacks? = null, onSaveImage: (() -> Unit)? = null) {
     var dismissed by remember(sheet) { mutableStateOf(false) }
     if (dismissed) return
 
@@ -265,21 +288,24 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, send
                 dismiss()
             }
             when (sheet) {
-                is FlowSheet.ReceiveQr -> ReceiveQrBody(model = sheet.model, onSave = { onSaveImage?.invoke() })
-                is FlowSheet.TxDetail -> TxDetailBody(model = sheet.model)
+                is FlowSheet.ReceiveQr -> ReceiveQrBody(model = sheet.model, onSave = { onSaveImage?.invoke() }, onExplorer = { VelaLog.event("flows", "explorer", "url" to sheet.model.explorerUrl); sheet.model.explorerUrl?.let(onOpenUrl) })
+                is FlowSheet.TxDetail -> TxDetailBody(model = sheet.model, onExplorer = { VelaLog.event("flows", "explorer", "url" to sheet.model.explorerUrl); sheet.model.explorerUrl?.let(onOpenUrl) })
                 is FlowSheet.TokenDetail -> TokenDetailBody(
                     model = sheet.model,
-                    onReceive = { onNavigate(FlowStep.Receive) },
-                    onSend = { onNavigate(FlowStep.SendForm) },
+                    onReceive = { selected?.takeIf { onReceiveToken != null }?.let { onReceiveToken?.invoke(it) } ?: onNavigate(FlowStep.Receive) },
+                    onSend = { selected?.takeIf { onSendToken != null }?.let { onSendToken?.invoke(it) } ?: onNavigate(FlowStep.SendForm) },
+                    onExplorer = { VelaLog.event("flows", "explorer", "url" to sheet.model.explorerUrl); sheet.model.explorerUrl?.let(onOpenUrl) },
                 )
                 is FlowSheet.AddToken -> AddTokenBody(
                     model = sheet.model,
                     onValueChange = addToken?.let { cb -> { text: String -> cb.onInput(text) } },
                     onSubmit = { addToken?.onSubmit?.invoke() },
+                    onTab = { id -> addToken?.onTab?.invoke(id) },
                 )
                 is FlowSheet.ContactPick -> ContactPickBody(
                     model = sheet.model,
-                    onScan = { if (send == null) onNavigate(FlowStep.Scan) },
+                    onScan = { if (send == null) onNavigate(FlowStep.Scan) else send.onScanOpen?.invoke() },
+                    onGroup = { index -> send?.onGroup?.invoke(index) },
                     onSelect = { index -> send?.onContactSelect?.invoke(index) },
                 )
                 is FlowSheet.FeeToken -> FeeTokenBody(
@@ -414,6 +440,12 @@ class SendCallbacks(
     val onRecipientAddress: (Int, String) -> Unit = { _, _ -> },
     // Spec 046 US3 — the scanner: the form's scan icon, and the live surface's needs.
     val onScanOpen: (() -> Unit)? = null,
+    /** Spec 048: the SD1 class chips — 全部 / 稳定币 / Gas 币 / 其他. */
+    val onFilter: (String) -> Unit = {},
+    /** Spec 048: a group row in the recipient picker — the whole group as split rows. */
+    val onGroup: (Int) -> Unit = {},
+    /** Spec 048: a split row's own 通讯录 pick. */
+    val onRecipientPick: ((Int) -> Unit)? = null,
     val scan: ScanCallbacks? = null,
     // Spec 045 US2 — the sweep pick: select-all and the pick's own button.
     val onSelectAll: () -> Unit = {},
@@ -432,4 +464,6 @@ class SendCallbacks(
 class AddTokenCallbacks(
     val onInput: (String) -> Unit,
     val onSubmit: () -> Unit,
+    /** Spec 048: 原生币 — the native coin of a network is a NETWORK to add; the tab opens that flow. */
+    val onTab: (String) -> Unit = {},
 )

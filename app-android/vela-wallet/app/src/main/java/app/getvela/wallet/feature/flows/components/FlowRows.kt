@@ -279,6 +279,8 @@ fun RecipientCard(
     onRemove: () -> Unit = {},
     onAmountChange: ((String) -> Unit)? = null,
     onAddressChange: ((String) -> Unit)? = null,
+    /** Spec 048: this row's own 通讯录 pick (the web's `pickContactFor(i)`). */
+    onPick: (() -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Row(
@@ -290,6 +292,17 @@ fun RecipientCard(
     ) {
         IdenticonImage(seed = recipient.identiconSeed, size = VelaIconSize.xl2)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
+        if (onPick != null) {
+            Icon(
+                imageVector = VelaIcons.NavContactsOutline,
+                contentDescription = "pick-contact-" + recipient.ordinal,
+                tint = colors.fgSubtle,
+                modifier = Modifier
+                    .size(VelaIconSize.md)
+                    .clickable(onClick = onPick),
+            )
+            Spacer(modifier = Modifier.width(VelaSpacing.md))
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = recipient.ordinal,

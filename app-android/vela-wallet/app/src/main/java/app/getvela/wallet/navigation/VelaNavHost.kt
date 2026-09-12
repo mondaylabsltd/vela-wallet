@@ -1,6 +1,14 @@
 package app.getvela.wallet.navigation
 
 import app.getvela.wallet.core.diagnostics.CrashSheet
+import app.getvela.wallet.feature.settings.SettingsPage
+import app.getvela.wallet.feature.settings.core.NetOverrideField
+import app.getvela.wallet.feature.wallet.core.BalanceToken
+import app.getvela.wallet.feature.contacts.core.ContactFileFormat
+import app.getvela.wallet.feature.contacts.components.ExportFormatSheet
+import app.getvela.wallet.core.marks.Marks
+import app.getvela.wallet.feature.flows.components.ChainFilterSheet
+import app.getvela.wallet.feature.flows.components.ChainFilterRow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
@@ -416,7 +424,34 @@ fun VelaNavHost(
                     wallet.open(session.address)
                 }
 
-                val flows = rememberFlowNavState()
+                // Spec 048: the 全部网络 pill and the SD1 class chips are shell render
+            // state (as on the web); the feed machine is told the chain, the asset
+            // and send lists narrow themselves; a sweep's pinned chain wins.
+            var classFilter by rememberSaveable { mutableStateOf("all") }
+            var chainFilter by rememberSaveable { mutableStateOf<Int?>(null) }
+            var chainSheetOpen by remember { mutableStateOf(false) }
+            // Spec 048: a token detail's 转账 — that token, chosen once the send machine lists it.
+            var pendingSelectToken by remember { mutableStateOf<Pair<Int, String?>?>(null) }
+            // Spec 048: a token detail's 收款 — that asset, applied once the receive flow has started the request machine.
+            var pendingReceiveAsset by remember { mutableStateOf<ReceiveAssetPick?>(null) }
+            val haptic = rememberVelaHaptic()
+            val explorers = remember(networks.networks) { networks.networks.associate { it.chain_id.toInt() to it.explorer_url } }
+            if (chainSheetOpen) {
+                ChainFilterSheet(
+                    title = strings.t(I18nKeys.Wallet.ALL_NETWORKS),
+                    allLabel = strings.t(I18nKeys.Wallet.ALL_NETWORKS),
+                    rows = networks.networks.map { ChainFilterRow(it.chain_id.toInt(), it.display_name, Marks.chainLogoUrl(it.chain_id.toInt()), WalletLive.badge(it.chain_id)) },
+                    selected = chainFilter,
+                    onPick = { id ->
+                        chainFilter = id
+                        wallet.filterChain(id)
+                        haptic(VelaHaptic.Select)
+                        chainSheetOpen = false
+                    },
+                    onDismiss = { chainSheetOpen = false },
+                )
+            }
+            val flows = rememberFlowNavState()
             // Spec 048: a flow another route asked for (contacts: 转账 / 收款 / 群发转账)
             // opens once the wallet is back on top. Entered first, cleared after —
             // clearing the trigger first would cancel this very effect.
@@ -498,6 +533,7 @@ fun VelaNavHost(
                         onSelect = { index ->
                             switcherOpen = false
                             wallet.switcherClosed()
+                            haptic(VelaHaptic.Select)
                             application.container.session.switchAccount(index)
                         },
                         onPrimary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.CREATE) },
@@ -566,6 +602,15 @@ fun VelaNavHost(
                 // the send is open.
                 val send = application.container.send
                 val sendView by send.send.collectAsStateWithLifecycle()
+                LaunchedEffect(sendView.tokens.size, pendingSelectToken) {
+                    val wanted = pendingSelectToken ?: return@LaunchedEffect
+                    val token = sendView.tokens.firstOrNull { it.chain_id.toInt() == wanted.first && (it.token_address ?: "").equals(wanted.second ?: "", ignoreCase = true) }
+                    if (token != null) {
+                        pendingSelectToken = null
+                        VelaLog.event("send", "token preselected", "symbol" to token.symbol)
+                        send.selectToken(SendLive.tokenId(token))
+                    }
+                }
                 val feeView by send.fee.collectAsStateWithLifecycle()
                 val sendClosed by send.closed.collectAsStateWithLifecycle()
                 val sendAlert by send.alert.collectAsStateWithLifecycle()
@@ -654,7 +699,7 @@ fun VelaNavHost(
                     val explorers = remember(networks.networks) {
                         networks.networks.associate { it.chain_id.toInt() to it.explorer_url }
                     }
-                    val flowModel = remember(liveState, sendView, feeView, batchView, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking) {
+                    val flowModel = remember(liveState, sendView, feeView, batchView, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking, chainFilter, classFilter) {
                         val drawn = FlowFixtures.build(liveState, strings)
                         val ctx = SendLive.Context(
                             strings = strings,
@@ -664,8 +709,9 @@ fun VelaNavHost(
                             fromName = session.activeName,
                             fromAddress = session.address,
                         )
+                        VelaLog.event("send.base", drawn.base::class.simpleName ?: "?", "state" to liveState.name, "top" to flowState.name)
                         val base = when (val base = drawn.base) {
-                            is FlowBase.SendPick -> FlowBase.SendPick(SendLive.pick(base.model, sendView, ctx, sweepPicking))
+                            is FlowBase.SendPick -> FlowBase.SendPick(SendLive.pick(base.model, sendView, ctx, sweepPicking, sendView.multi_chain_id ?: chainFilter, classFilter))
                             is FlowBase.SendForm -> FlowBase.SendForm(SendLive.form(base.model, sendView, feeView, ctx))
                             is FlowBase.SendConfirm -> FlowBase.SendConfirm(SendLive.confirm(base.model, sendView, ctx))
                             is FlowBase.SendReceipt -> FlowBase.SendReceipt(SendLive.receipt(base.model, sendView, ctx))
@@ -690,21 +736,32 @@ fun VelaNavHost(
                             }
                         },
                         onOpen = { step, id -> VelaLog.event("flows", "open", "step" to step.name, "id" to id.take(24)); flows.push(step, id) },
+                        onOpenUrl = { context.openUrl(it) },
                         onNavigate = { step ->
                             when (step) {
                                 FlowStep.FeeToken -> feeSheetOpen = true
                                 FlowStep.ContactPick -> send.openContactPicker()
+                                FlowStep.Chains -> chainSheetOpen = true
                                 else -> Unit
                             }
                         },
                         send = SendCallbacks(
                             onSelectToken = { index ->
-                                sendView.tokens.getOrNull(index)?.let { token ->
+                                val visible = SendLive.visibleTokens(sendView, sendView.multi_chain_id ?: chainFilter, classFilter)
+                                sendView.tokens.getOrNull(visible.getOrNull(index) ?: -1)?.let { token ->
                                     val id = SendLive.tokenId(token)
                                     if (sweepPicking) send.toggleSweep(id) else send.selectToken(id)
                                 }
                             },
                             onScanOpen = { send.openScanner() },
+                            onFilter = { id -> classFilter = id; haptic(VelaHaptic.Select) },
+                            onGroup = { index ->
+                                VelaLog.event("send", "group seed", "index" to index, "groups" to contactsBook.groups.size)
+                                contactsBook.groups.getOrNull(index)?.let { g ->
+                                    send.seedSplit(g.members.mapIndexed { k, member -> SendRecipientDraft(id = "group-${g.id}-$k", address = member.address, amount = "", name = member.name) })
+                                }
+                            },
+                            onRecipientPick = { index -> sendView.recipients.getOrNull(index)?.id?.let { send.openRowPicker(it) } },
                             scan = ScanCallbacks(
                                 onDecoded = { text -> send.scanned(text) },
                                 onClose = {
@@ -728,6 +785,7 @@ fun VelaNavHost(
                             onContinue = { send.continueTapped() },
                             onConfirm = { send.slideConfirm() },
                             onFeeSelect = { index ->
+                                haptic(VelaHaptic.Select)
                                 feeView.options.getOrNull(index)?.let { send.chooseFeeToken(it.contract) }
                                 feeSheetOpen = false
                             },
@@ -788,10 +846,21 @@ fun VelaNavHost(
                     // leaks shows somebody the wrong information; a fixture address
                     // here sends their money to a stranger, permanently — so the
                     // watch and the request machine start the moment this opens.
-                    LaunchedEffect(flowState, session.address) {
-                        if (session.address.isNotEmpty() && flowState in RECEIVE_STATES) {
+                    // Keyed on being IN the receive flow, not on the step: a Start per
+                    // step reset the asset a token detail's 收款 had just picked (spec 048).
+                    val receiving = flowState in RECEIVE_STATES
+                    LaunchedEffect(receiving, session.address) {
+                        if (session.address.isNotEmpty() && receiving) {
                             wallet.openReceive(session.address, PAY_LINK_BASE)
                         }
+                    }
+                    // Spec 048: a token detail's 收款 — its asset, picked once the request
+                    // machine has started (picking during the start was overwritten).
+                    LaunchedEffect(request.gate_loading, pendingReceiveAsset) {
+                        val t = pendingReceiveAsset ?: return@LaunchedEffect
+                        if (request.gate_loading) return@LaunchedEffect
+                        pendingReceiveAsset = null
+                        wallet.assetPicked(t.chainId, t.tokenAddress, t.symbol, t.decimals, t.networkName)
                     }
                     val flowModel = remember(
                         flowState,
@@ -819,6 +888,8 @@ fun VelaNavHost(
                                 selected = flows.selected,
                                 strings = strings,
                                 manageTokens = manageTokens,
+                                chainFilter = chainFilter,
+                                explorers = explorers,
                             )
                         }
                     }
@@ -829,13 +900,40 @@ fun VelaNavHost(
                         model = flowModel,
                         onBack = { flows.back() },
                         onOpen = { step, id -> VelaLog.event("flows", "open", "step" to step.name, "id" to id.take(24)); flows.push(step, id) },
-                        onNavigate = { flows.push(it) },
+                        onOpenUrl = { context.openUrl(it) },
+                        onNavigate = { step -> if (step == FlowStep.Chains) chainSheetOpen = true else flows.push(step) },
+                        selected = flows.selected,
+                        onReceiveNetwork = { index ->
+                            networks.networks.getOrNull(index)?.let { row ->
+                                pendingReceiveAsset = ReceiveAssetPick(row.chain_id.toInt(), null, row.native_symbol, 18, row.display_name)
+                                flows.push(FlowStep.ReceiveQr)
+                            }
+                        },
+                        onSendToken = { id ->
+                            balances.tokens.firstOrNull { WalletLive.holdingId(it.chain_id, it.token_address) == id }?.let { t ->
+                                pendingSelectToken = t.chain_id to t.token_address
+                                flows.enter(WalletFlowEntry.Send)
+                            }
+                        },
+                        onReceiveToken = { id ->
+                            balances.tokens.firstOrNull { WalletLive.holdingId(it.chain_id, it.token_address) == id }?.let { t ->
+                                pendingReceiveAsset = ReceiveAssetPick(t.chain_id, t.token_address, t.symbol, t.decimals, chainNames[t.chain_id] ?: t.name)
+                                flows.enter(WalletFlowEntry.Receive)
+                                flows.push(FlowStep.ReceiveQr, id)
+                            }
+                        },
                         onSaveImage = {
                             val drawn = (FlowFixtures.build(FlowState.R4, strings).base as? FlowBase.Share)?.model
                             if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings, request.asset.chain_id)
                         },
                         addToken = AddTokenCallbacks(
                             onInput = { wallet.addTokenInput(it.trim()) },
+                            onTab = { id ->
+                                if (id == "native") {
+                                    application.container.pendingSettingsPage.value = SettingsPage.AddNetwork
+                                    navController.push(VelaDestinations.SETTINGS)
+                                }
+                            },
                             onSubmit = { manageTokens.found.firstOrNull()?.let { wallet.addTokenSave(it.chain_id) } },
                         ),
                     )
@@ -953,6 +1051,13 @@ fun VelaNavHost(
                                 wallet.switcherOpened(session.accounts.map { it.address })
                                 switcherOpen = true
                             },
+                            onToggleVisibility = { wallet.togglePrivacy(); haptic(VelaHaptic.Select) },
+                            onStatusClick = {
+                                // Spec 048: the status line's rescue — the RPC fix when a network failed, the per-chain detail otherwise.
+                                application.container.pendingSettingsOverlay.value =
+                                    if (application.container.pool.view.value.failed_chains.isNotEmpty()) SettingsOverlay.RpcFix else SettingsOverlay.BalanceDetail
+                                navController.push(VelaDestinations.SETTINGS)
+                            },
                         )
                     }
                 }
@@ -1026,6 +1131,7 @@ fun VelaNavHost(
                 var groupEdit by remember { mutableStateOf<Pair<String?, String>?>(null) }
                 var groupMenu by remember { mutableStateOf(false) }
                 var confirmingGroupDelete by remember { mutableStateOf(false) }
+                var exportChoice by remember { mutableStateOf(false) }
                 val haptic = rememberVelaHaptic()
                 val openSendTo = { address: String ->
                     VelaLog.event("contacts", "open send to", "address" to address.take(10))
@@ -1115,6 +1221,17 @@ fun VelaNavHost(
                     }
                 }
 
+                if (exportChoice) {
+                    ExportFormatSheet(
+                        title = strings.t(I18nKeys.Contacts.EXPORT_TITLE),
+                        cancelLabel = ContactsFixtures.addMenu(strings).cancel,
+                        onPick = { format ->
+                            exportChoice = false
+                            contacts.exportBook(format = if (format == "csv") ContactFileFormat.Csv else ContactFileFormat.Json)
+                        },
+                        onDismiss = { exportChoice = false },
+                    )
+                }
                 contactQr?.let { address ->
                     ContactQrSheet(
                         name = book.contacts.firstOrNull { it.address == address }?.name ?: address,
@@ -1188,7 +1305,7 @@ fun VelaNavHost(
                                     formEdit = null
                                 }
                                 "contacts.form.cancel" -> formEdit = null
-                                "contacts.favourite" -> selected?.let { contacts.toggleFavourite(it.address) }
+                                "contacts.favourite" -> selected?.let { haptic(VelaHaptic.Select); contacts.toggleFavourite(it.address) }
                                 // Spec 045 US6: the book travels through the picker and the share sheet.
                                 "contacts.importFile" -> {
                                     menuOpen = false
@@ -1196,7 +1313,7 @@ fun VelaNavHost(
                                 }
                                 "contacts.exportTitle" -> {
                                     menuOpen = false
-                                    contacts.exportBook()
+                                    exportChoice = true
                                 }
                                 "contacts.notice.close" -> contacts.acknowledgeImport()
                                 // Groups, both ways.
@@ -1236,6 +1353,11 @@ fun VelaNavHost(
                                 }
                             }
                             "contacts.manage" -> groupEdit = null to ""
+                            "history.filterAll" -> {
+                                // The detail already lists every row with this person; 全部 opens the history itself.
+                                application.container.pendingFlow.value = WalletFlowEntry.Activity
+                                navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+                            }
                             "contacts.groupMenu" -> groupMenu = true
                             "contacts.back" -> {
                                     confirmingDelete = false
@@ -1311,6 +1433,10 @@ fun VelaNavHost(
                 val scope = rememberCoroutineScope()
                 val prefs by application.container.preferences.view.collectAsStateWithLifecycle()
                 val poolView by application.container.pool.view.collectAsStateWithLifecycle()
+                // Spec 048: the network whose detail page is open (its overrides are written for it).
+                var openNetworkId by rememberSaveable { mutableStateOf<String?>(null) }
+                val settingsHaptic = rememberVelaHaptic()
+                var requestedPage by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
                 val sessionView = session
                 val i18nState by application.container.i18nRuntime.state.collectAsStateWithLifecycle()
                 var storageReport by remember { mutableStateOf<DeviceStorage.Report?>(null) }
@@ -1345,6 +1471,26 @@ fun VelaNavHost(
                     m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
                     m = SettingsLive.withBanner(m, poolView.failed_chains, chainNamesNow, strings)
                     m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, strings)
+                    // Spec 048: the network detail is THIS network's, not the fixture's.
+                    openNetworkId?.let { id ->
+                        networks.networks.firstOrNull { it.id == id }?.let { row ->
+                            m = m.copy(networkDetail = SettingsLive.networkDetail(m.networkDetail, row, strings))
+                        }
+                    }
+                    // Spec 048: a page another route asked for (the add-token 原生代币 tab). Kept
+                    // in state: the flow is consumed once, and the page must hold across the
+                    // recompositions that follow (a key that flips back re-initialised the screen).
+                    application.container.pendingSettingsPage.value?.let { requested ->
+                        application.container.pendingSettingsPage.value = null
+                        VelaLog.event("settings", "page requested", "page" to requested.name)
+                        requestedPage = requested
+                    }
+                    requestedPage?.let { m = m.copy(page = it) }
+                    // Spec 048: the home's status line asked for a rescue sheet.
+                    application.container.pendingSettingsOverlay.value?.let { requested ->
+                        application.container.pendingSettingsOverlay.value = null
+                        m = m.copy(overlay = requested)
+                    }
                     // A partial wipe names what stayed, in the sheet itself (028's rule: the person stays signed in).
                     eraseFailed?.let { left -> m = m.copy(eraseSheet = m.eraseSheet.copy(body = m.eraseSheet.body + "\n\n" + left.joinToString(", "))) }
                     m
@@ -1380,14 +1526,28 @@ fun VelaNavHost(
                                 }
                             }
                         },
-                        onFeedbackSend = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(feedbackUrl))) } },
+                        onFeedbackSend = { text ->
+                            // Spec 048: what was typed leads the report; the device lines follow.
+                            val body = listOf(text.trim(), liveModel.feedback.previewLines.joinToString("\n")).filter { it.isNotBlank() }.joinToString("\n\n")
+                            val url = "https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=" +
+                                java.net.URLEncoder.encode("[android] ", "UTF-8") + "&body=" + java.net.URLEncoder.encode(body, "UTF-8")
+                            VelaLog.event("feedback", "send", "typed" to text.length)
+                            runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                        },
+                        onOverrideEdited = { chainId, field, value ->
+                            settings.editOverride(chainId, if (field == "explorer") NetOverrideField.Explorer else NetOverrideField.Rpc, value)
+                        },
+                        onOverrideCommitted = { chainId -> settings.commitOverride(chainId) },
+                        onCustomRpc = { settings.editCustomRpc(it) },
+                        onRecheckNetwork = { liveModel.addNetwork.query.toLongOrNull()?.let { settings.addNetworkByChainId(it) } },
+                        onProviderTest = { id -> NetProviderId.entries.firstOrNull { it.name.equals(id, ignoreCase = true) }?.let { settings.testProvider(it) } },
                         onFeedbackGithub = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/mondaylabsltd/vela-wallet/issues"))) } },
                         onOpenLink = { value ->
                             val url = if (value.startsWith("http")) value else "https://$value"
                             runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
                         },
                         onRelayerRetry = { scope.launch { treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status } },
-                        onAccountSelect = { index -> application.container.session.switchAccount(index) },
+                        onAccountSelect = { index -> settingsHaptic(VelaHaptic.Select); application.container.session.switchAccount(index) },
                         onAccountPrimary = { navController.push(VelaDestinations.CREATE) },
                         onAccountSecondary = { navController.push(VelaDestinations.WELCOME) },
                         onSelectTab = selectFromPushed,
@@ -1428,9 +1588,11 @@ fun VelaNavHost(
                         onSearchNetwork = { query -> settings.searchNetworks(query) },
                         onConfirmAddNetwork = { settings.confirmAddNetwork() },
                         onPickNetwork = { chainId ->
+                            settingsHaptic(VelaHaptic.Select)
                             chainId.toLongOrNull()?.let { settings.selectChain(it) }
                         },
                         onOpenNetwork = { id ->
+                            openNetworkId = id
                             settings.networks.value.networks
                                 .firstOrNull { it.id == id }
                                 ?.let { settings.expandOverride(it.chain_id) }
@@ -1694,6 +1856,8 @@ private fun liveFlow(
     selected: String?,
     strings: VelaStrings,
     manageTokens: MtokView = MtokView(),
+    chainFilter: Int? = null,
+    explorers: Map<Int, String> = emptyMap(),
 ): FlowScreenModel = drawn.copy(
     base = when (val base = drawn.base) {
         is FlowBase.Receive -> FlowBase.Receive(
@@ -1702,19 +1866,19 @@ private fun liveFlow(
             FlowLive.receiveNetworks(base.model, networks, address, WalletLive::badge),
         )
         is FlowBase.History ->
-            FlowBase.History(FlowLive.history(base.model, feed, strings))
+            FlowBase.History(FlowLive.history(base.model, feed, strings, chainFilter = chainFilter, chainNames = chainNames))
         is FlowBase.Assets ->
-            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency))
+            FlowBase.Assets(FlowLive.assets(base.model, balances, chainNames, currency, chainFilter))
         else -> drawn.base
     },
     sheet = when (val sheet = drawn.sheet) {
         is FlowSheet.ReceiveQr ->
-            FlowSheet.ReceiveQr(FlowLive.receiveQr(sheet.model, address, name, request))
+            FlowSheet.ReceiveQr(FlowLive.receiveQr(sheet.model, address, name, request, explorers, strings))
         // **A detail with no target shows nothing, not a fixture.** A screen
         // about the wrong payment and one about the right payment look equally
         // authoritative, and only one of them is wrong.
         is FlowSheet.TxDetail ->
-            FlowLive.txDetail(sheet.model, feed, selected, strings, chainNames)?.let(FlowSheet::TxDetail)
+            FlowLive.txDetail(sheet.model, feed, selected, strings, chainNames, explorers)?.let(FlowSheet::TxDetail)
         is FlowSheet.TokenDetail -> FlowLive.tokenDetail(
             fallback = sheet.model,
             view = balances,
@@ -1723,8 +1887,12 @@ private fun liveFlow(
             chainNames = chainNames,
             currency = currency,
             strings = strings,
+            explorers = explorers,
         )?.let(FlowSheet::TokenDetail)
         is FlowSheet.AddToken -> FlowSheet.AddToken(FlowLive.addToken(sheet.model, manageTokens, strings))
         else -> drawn.sheet
     },
 )
+
+/** Spec 048: the asset a receive code is asked for — a token detail's 收款, or a network row's QR. */
+private data class ReceiveAssetPick(val chainId: Int, val tokenAddress: String?, val symbol: String, val decimals: Int, val networkName: String)

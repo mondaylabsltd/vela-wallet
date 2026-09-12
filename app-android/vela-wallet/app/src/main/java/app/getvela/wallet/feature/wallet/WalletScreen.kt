@@ -75,16 +75,19 @@ fun WalletScreen(
     onFlow: (WalletFlowEntry, String?) -> Unit = { _, _ -> },
     /** Spec 047: the header's name line opens the account switcher. */
     onSwitcher: () -> Unit = {},
+    /** Spec 048: the hero's amount hides the figures; its status line opens the rescue sheet. */
+    onToggleVisibility: () -> Unit = {},
+    onStatusClick: () -> Unit = {},
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher)
+            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick)
         }
     } else {
-        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher)
+        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher, onToggleVisibility, onStatusClick)
     }
 
     model.sheet?.let { sheet ->
@@ -111,6 +114,8 @@ private fun WalletHomeContent(
     onSelectTab: (VelaTab) -> Unit = {},
     onFlow: (WalletFlowEntry, String?) -> Unit = { _, _ -> },
     onSwitcher: () -> Unit = {},
+    onToggleVisibility: () -> Unit = {},
+    onStatusClick: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -150,7 +155,7 @@ private fun WalletHomeContent(
                     identiconLabel = strings.t(I18nKeys.Wallet.IDENTICON_A11Y_OPEN),
                 )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl3))
-                BalanceDisplay(model = model.balance)
+                BalanceDisplay(model = model.balance, onToggleVisibility = onToggleVisibility, onStatusClick = onStatusClick)
                 Spacer(modifier = Modifier.height(VelaSpacing.xl3))
                 ActionButtonRow(
                     actions = model.actions,

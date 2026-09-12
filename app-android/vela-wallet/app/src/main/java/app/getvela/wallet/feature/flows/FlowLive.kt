@@ -41,7 +41,30 @@ object FlowLive {
         address: String,
         name: String,
         request: PaymentRequestView,
+        explorers: Map<Int, String> = emptyMap(),
+        strings: VelaStrings? = null,
     ): ReceiveQrModel = fallback.copy(
+        explorerUrl = explorers[request.asset.chain_id]?.let { "${it.trimEnd('/')}/address/$address" },
+        // Spec 048 (device-found): the sheet said "Ethereum" and drew ETH for every
+        // network row and every token — the fixture's asset. It is the request
+        // machine's asset now: the title, the mark in the code, the contract line.
+        title = strings?.let { st ->
+            val asset = request.asset
+            if (asset.token_address != null) {
+                st.t(I18nKeys.Flows.RECEIVE_QR_ASSET, mapOf("network" to asset.network_name, "symbol" to asset.symbol))
+            } else {
+                st.t(I18nKeys.Flows.RECEIVE_QR_NETWORK, mapOf("network" to asset.network_name))
+            }
+        } ?: fallback.title,
+        centre = WalletLive.mark(request.asset.chain_id, request.asset.symbol, request.asset.token_address),
+        contract = request.asset.token_address?.let { contract ->
+            ContractLineModel(
+                label = strings?.t(I18nKeys.Flows.RECEIVE_TOKEN_CONTRACT) ?: (fallback.contract?.label ?: ""),
+                value = shortAddress(contract),
+                copyLabel = strings?.t(I18nKeys.Flows.COPY_ADDRESS) ?: (fallback.contract?.copyLabel ?: ""),
+                copyValue = contract,
+            )
+        },
         account = fallback.account.copy(
             name = name,
             // The identicon is drawn FROM the address, so a stale seed is a
@@ -131,13 +154,21 @@ object FlowLive {
         feed: FeedView,
         strings: VelaStrings,
         now: Long = System.currentTimeMillis(),
+        chainFilter: Int? = null,
+        chainNames: Map<Int, String> = emptyMap(),
     ): HistoryModel {
+        // The feed machine narrows the rows itself (`chain_filter_changed`); the pill says which chain.
         val groups = WalletLive.activity(feed, strings, now)
         return fallback.copy(
+            header = fallback.header.copy(pill = pill(fallback.header.pill, chainFilter, chainNames)),
             mode = if (groups.isEmpty()) HistoryMode.Empty else HistoryMode.Rows,
             groups = groups,
         )
     }
+
+    /** Spec 048: the 全部网络 pill reads the chosen network's name, or its drawn "all" label. */
+    fun pill(drawn: FlowPillModel?, chainFilter: Int?, chainNames: Map<Int, String>): FlowPillModel? =
+        drawn?.let { p -> p.copy(label = chainFilter?.let { chainNames[it] } ?: p.label) }
 
     /**
      * A2 — one transaction, the one that was tapped.
@@ -153,6 +184,7 @@ object FlowLive {
         id: String?,
         strings: VelaStrings,
         chainNames: Map<Int, String> = emptyMap(),
+        explorers: Map<Int, String> = emptyMap(),
     ): TxDetailModel? {
         val item = feed.rows
             .filterIsInstance<FeedRow.Item>()
@@ -200,6 +232,7 @@ object FlowLive {
             )
         }
         return fallback.copy(
+            explorerUrl = explorers[item.chain_id]?.let { "${it.trimEnd('/')}/tx/$hash" },
             title = strings.t(if (received) I18nKeys.Flows.TX_LABEL_RECEIVED else I18nKeys.Flows.TX_LABEL_SENT, mapOf("symbol" to item.symbol)),
             // A hash the chain named means the transfer landed; a send still
             // waiting carries only its operation hash.
@@ -287,9 +320,13 @@ object FlowLive {
         view: BalanceView,
         chainNames: Map<Int, String>,
         currency: CurrencyView,
+        chainFilter: Int? = null,
     ): AssetsModel {
+        // Spec 048: narrowed to the chosen network (the row id starts with its chain id).
         val rows = WalletLive.assetRows(view, chainNames, currency)
+            .filter { chainFilter == null || it.id.startsWith("$chainFilter:") }
         return fallback.copy(
+            header = fallback.header.copy(pill = pill(fallback.header.pill, chainFilter, chainNames)),
             rows = rows,
             // The guided-empty body replaces the list; it must not sit under
             // one. A wallet that holds something is not an empty wallet.
@@ -313,6 +350,7 @@ object FlowLive {
         currency: CurrencyView,
         strings: VelaStrings,
         now: Long = System.currentTimeMillis(),
+        explorers: Map<Int, String> = emptyMap(),
     ): TokenDetailModel? {
         val token = view.tokens
             .firstOrNull { WalletLive.holdingId(it.chain_id, it.token_address) == id }
@@ -331,6 +369,7 @@ object FlowLive {
             },
         )
         return fallback.copy(
+            explorerUrl = explorers[token.chain_id]?.let { base -> token.token_address?.let { "${base.trimEnd('/')}/token/$it" } ?: "${base.trimEnd('/')}/address/${row.id.substringAfter(':')}" },
             mark = TokenMarkModel(token.symbol, row.badgeColor, row.logoUrls, row.badgeLogoUrl, row.badgeHidden),
             symbol = token.symbol,
             chain = row.chain,

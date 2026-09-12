@@ -231,7 +231,21 @@ object WalletLive {
         strings: VelaStrings,
         money: Money,
     ): BalanceModel {
-        if (view.hidden) return fallback.copy(state = BalanceStateKind.Hidden)
+        val live = balanceVisible(fallback, view, strings, money)
+        // Spec 048 (device-found): hidden used to return the FIXTURE with a hidden
+        // state — "$1,383 · USD" under the eye. Hidden is the live label with
+        // the figures masked.
+        // The currency is the person's own even while hidden: with the total withheld the
+        // visible builder falls back to the drawn "USD".
+        return if (view.hidden) live.copy(state = BalanceStateKind.Hidden, integer = "••••", decimals = null, currency = money.code) else live
+    }
+
+    private fun balanceVisible(
+        fallback: BalanceModel,
+        view: BalanceView,
+        strings: VelaStrings,
+        money: Money,
+    ): BalanceModel {
 
         val total = view.display_total_usd
 
