@@ -12,38 +12,38 @@ NDK build; `JAVA_HOME` = Android Studio's JBR.
 
 ## Phase 0 — Measure and the bridge (Setup)
 
-- [ ] **T001** Baselines into `specs/044-android-dapp-browser-signing/results.md`:
+- [X] **T001** Baselines into `specs/044-android-dapp-browser-signing/results.md`:
       arm64 `.so` at 043's tip (16,187,032), unit-test count (431), the
       system WebView version on the Xiaomi (`dumpsys package com.google.android.webview`),
       whether `DOCUMENT_START_SCRIPT` is supported there.
-- [ ] **T002** `rust/crates/vela-core-uniffi/src/onboarding_bridge.rs` — six
+- [X] **T002** `rust/crates/vela-core-uniffi/src/onboarding_bridge.rs` — six
       `bridge_object!`s: `DappPermissionsCore`, `ExploreSitesCore`,
       `BrowserHistoryCore`, `SignRequestCore`, `ClearSigningCore`,
       `ApprovalGuardCore`.
-- [ ] **T003** `rust/crates/vela-core-uniffi/src/lib.rs` — export
+- [X] **T003** `rust/crates/vela-core-uniffi/src/lib.rs` — export
       `dapp_origin_of(url) -> Option<String>` (the core's `origin_of`);
       `cargo fmt`; regenerate Kotlin bindings; full NDK build.
-- [ ] **T004** [P] `…/feature/browser/core/DpermWire.kt` — events (11),
+- [X] **T004** [P] `…/feature/browser/core/DpermWire.kt` — events (11),
       operations (8), results (2), `DpermPageEvent`, `DpermRespondPayload`,
       `DpermRejectReason`, `DpermGrant`, `DpermView`/`DpermConsentView`/
       `DpermPopupView`, from the ts-rs mirrors.
-- [ ] **T005** [P] `…/feature/browser/core/ExploreWire.kt` + `BhistWire.kt` —
+- [X] **T005** [P] `…/feature/browser/core/ExploreWire.kt` + `BhistWire.kt` —
       events (16 / 5), operations (2 / 3), results (2 / 2), `ExploreDoc`,
       `ExploreSite`, `ExploreGroup`, `ExploreTab`, `ExploreView`,
       `BhistEntry`, `BhistView`.
-- [ ] **T006** [P] `…/feature/signing/core/SignWire.kt` — events (13),
+- [X] **T006** [P] `…/feature/signing/core/SignWire.kt` — events (13),
       operations (7), results (7), `SignView`/`SignRequestView`/
       `SignFundingView`, `SignAccountRef`, `SignApproveOpts`,
       `SignResponsePayload`, `SignRecord`, `SignSubmitOutcome`, …
-- [ ] **T007** [P] `…/feature/signing/core/ClearWire.kt` + `GuardWire.kt` —
+- [X] **T007** [P] `…/feature/signing/core/ClearWire.kt` + `GuardWire.kt` —
       clear: events (5), operations (5), results (5), `ClearSigningView`,
       `ClearMessageView`, `ClearSignResult`, `ClearSignField`, …; guard:
       events (11), operations (3), results (3), `GuardView`,
       `GuardEditorView`, `GuardLegView`, `GuardDetectedApproval`, ….
-- [ ] **T008** `…/core/crux/CoreBridge.kt` — `asBridge()` for the six;
+- [X] **T008** `…/core/crux/CoreBridge.kt` — `asBridge()` for the six;
       `app/src/test/…/CoreWireDriftTest.kt` — the six families (views
       subsets, operations/results/closed families exhaustive).
-- [ ] **T009** `app/src/test/…/BridgeSmokeTest.kt` — each of the six is
+- [X] **T009** `app/src/test/…/BridgeSmokeTest.kt` — each of the six is
       created, receives its first event, answers a view, no fault.
 
 **Checkpoint**: 431 → ≥ 437 tests; drift gate green for six families.

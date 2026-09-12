@@ -26,6 +26,8 @@ import app.getvela.wallet.feature.send.core.FeeEstimateView
 import app.getvela.wallet.feature.send.core.FeeEvent
 import app.getvela.wallet.feature.send.core.FeeFailure
 import app.getvela.wallet.feature.send.core.FeeGasOutcome
+import app.getvela.wallet.feature.browser.core.*
+import app.getvela.wallet.feature.signing.core.*
 import app.getvela.wallet.feature.send.core.FeeOperation
 import app.getvela.wallet.feature.send.core.FeeOptionView
 import app.getvela.wallet.feature.send.core.FeeShellResult
@@ -769,6 +771,133 @@ class CoreWireDriftTest {
     }
 
     // -- assertions ----------------------------------------------------------
+
+
+    // -- spec 044: the in-app browser and what it signs --------------------
+
+    @Test
+    fun dappPermissionsWiresMatchTheMirrors() {
+        assertFieldsExist<DpermView>("DpermView")
+        assertFieldsExist<DpermConsentView>("DpermConsentView")
+        assertFieldsExist<DpermPopupView>("DpermPopupView")
+        assertFieldsExist<DpermGrant>("DpermGrant")
+        assertVariantsExhaustive<DpermOperation>("DpermOperation")
+        assertVariantsExhaustive<DpermShellResult>("DpermShellResult")
+        assertVariantsExhaustive<DpermPageEvent>("DpermPageEvent")
+        assertVariantsExhaustive<DpermRespondPayload>("DpermRespondPayload")
+        assertVariantsExhaustive<DpermPopupOutcome>("DpermPopupOutcome")
+        assertStringUnion<DpermRejectReason>("DpermRejectReason")
+        assertVariantsExist<DpermEvent>("DpermEvent")
+        assertVariantFields(DpermOperation.serializer(), "DpermOperation")
+        assertVariantFields(DpermEvent.serializer(), "DpermEvent")
+    }
+
+    @Test
+    fun exploreAndHistoryWiresMatchTheMirrors() {
+        assertFieldsExist<ExploreView>("ExploreView")
+        assertFieldsExist<ExploreGroupView>("ExploreGroupView")
+        assertFieldsExist<ExploreDoc>("ExploreDoc")
+        assertFieldsExist<ExploreSite>("ExploreSite")
+        assertFieldsExist<ExploreGroup>("ExploreGroup")
+        assertFieldsExist<ExploreTab>("ExploreTab")
+        assertVariantsExhaustive<ExploreOperation>("ExploreOperation")
+        assertVariantsExhaustive<ExploreShellResult>("ExploreShellResult")
+        assertStringUnion<ExploreSystemGroup>("ExploreSystemGroup")
+        assertVariantsExist<ExploreEvent>("ExploreEvent")
+        assertVariantFields(ExploreEvent.serializer(), "ExploreEvent")
+        assertFieldsExist<BhistView>("BhistView")
+        assertFieldsExist<BhistEntry>("BhistEntry")
+        assertVariantsExhaustive<BhistOperation>("BhistOperation")
+        assertVariantsExhaustive<BhistShellResult>("BhistShellResult")
+        assertVariantsExist<BhistEvent>("BhistEvent")
+        assertVariantFields(BhistEvent.serializer(), "BhistEvent")
+    }
+
+    @Test
+    fun signRequestWiresMatchTheMirrors() {
+        assertFieldsExist<SignView>("SignView")
+        assertFieldsExist<SignRequestView>("SignRequestView")
+        assertFieldsExist<SignFundingView>("SignFundingView")
+        assertFieldsExist<SignFundingNeeded>("SignFundingNeeded")
+        assertFieldsExist<SignAccountRef>("SignAccountRef")
+        assertFieldsExist<SignApproveOpts>("SignApproveOpts")
+        assertFieldsExist<SignDappIdentity>("SignDappIdentity")
+        assertFieldsExist<SignRecord>("SignRecord")
+        assertFieldsExist<SignQuotedFee>("SignQuotedFee")
+        assertFieldsExist<SignErrorNotice>("SignErrorNotice")
+        assertFieldsExist<SignTrackerHandoff>("SignTrackerHandoff")
+        assertVariantsExhaustive<SignOperation>("SignOperation")
+        assertVariantsExhaustive<SignShellResult>("SignShellResult")
+        assertVariantsExhaustive<SignResponsePayload>("SignResponsePayload")
+        assertVariantsExhaustive<SignSubmitOutcome>("SignSubmitOutcome")
+        assertVariantsExhaustive<SignSponsorship>("SignSponsorship")
+        assertVariantsExhaustive<SignRecordClose>("SignRecordClose")
+        assertVariantsExhaustive<SignNotice>("SignNotice")
+        assertStringUnion<SignSurface>("SignSurface")
+        assertStringUnion<SignSwipeAction>("SignSwipeAction")
+        assertStringUnion<SignMethodKind>("SignMethodKind")
+        assertStringUnion<SignErrorKind>("SignErrorKind")
+        assertStringUnion<SignFundingPresentation>("SignFundingPresentation")
+        assertStringUnion<SignRecordKind>("SignRecordKind")
+        assertStringUnion<SignRecordStatus>("SignRecordStatus")
+        assertStringUnion<SignSettledOutcome>("SignSettledOutcome")
+        assertVariantsExist<SignEvent>("SignEvent")
+        assertVariantFields(SignOperation.serializer(), "SignOperation")
+        assertVariantFields(SignEvent.serializer(), "SignEvent")
+    }
+
+    @Test
+    fun clearSigningWiresMatchTheMirrors() {
+        assertFieldsExist<ClearSigningView>("ClearSigningView")
+        assertFieldsExist<ClearMessageView>("ClearMessageView")
+        assertFieldsExist<ClearSignResult>("ClearSignResult")
+        assertFieldsExist<ClearSignField>("ClearSignField")
+        assertFieldsExist<ClearBlindTyped>("ClearBlindTyped")
+        assertFieldsExist<ClearBlindField>("ClearBlindField")
+        assertFieldsExist<ClearSiweFields>("ClearSiweFields")
+        assertFieldsExist<ClearLocale>("ClearLocale")
+        assertVariantsExhaustive<ClearOperation>("ClearOperation")
+        assertVariantsExhaustive<ClearShellResult>("ClearShellResult")
+        assertVariantsExhaustive<ClearConfirm>("ClearConfirm")
+        assertStringUnion<ClearFieldRole>("ClearFieldRole")
+        assertStringUnion<ClearSignType>("ClearSignType")
+        assertStringUnion<ClearSignMethod>("ClearSignMethod")
+        assertStringUnion<ClearRisk>("ClearRisk")
+        assertStringUnion<ClearDangerClass>("ClearDangerClass")
+        assertStringUnion<ClearSurface>("ClearSurface")
+        assertStringUnion<ClearProbe>("ClearProbe")
+        assertStringUnion<ClearSiweBinding>("ClearSiweBinding")
+        assertStringUnion<ClearDateFormat>("ClearDateFormat")
+        assertStringUnion<ClearNumberFormat>("ClearNumberFormat")
+        assertStringUnion<ClearTimeFormat>("ClearTimeFormat")
+        assertVariantsExist<ClearSigningEvent>("ClearSigningEvent")
+        assertVariantFields(ClearOperation.serializer(), "ClearOperation")
+        assertVariantFields(ClearSigningEvent.serializer(), "ClearSigningEvent")
+    }
+
+    @Test
+    fun approvalGuardWiresMatchTheMirrors() {
+        assertFieldsExist<GuardView>("GuardView")
+        assertFieldsExist<GuardEditorView>("GuardEditorView")
+        assertFieldsExist<GuardLegView>("GuardLegView")
+        assertFieldsExist<GuardBatchView>("GuardBatchView")
+        assertFieldsExist<GuardIncreaseTotalView>("GuardIncreaseTotalView")
+        assertFieldsExist<GuardTokenMetaView>("GuardTokenMetaView")
+        assertFieldsExist<GuardTokenMetaEntry>("GuardTokenMetaEntry")
+        assertFieldsExist<GuardDetectedApproval>("GuardDetectedApproval")
+        assertVariantsExhaustive<GuardOperation>("GuardOperation")
+        assertVariantsExhaustive<GuardShellResult>("GuardShellResult")
+        assertVariantsExhaustive<GuardChoice>("GuardChoice")
+        assertVariantsExhaustive<GuardLocus>("GuardLocus")
+        assertStringUnion<GuardApprovalKind>("GuardApprovalKind")
+        assertStringUnion<GuardAmountError>("GuardAmountError")
+        assertStringUnion<GuardBlockReason>("GuardBlockReason")
+        assertStringUnion<GuardEditorMode>("GuardEditorMode")
+        assertStringUnion<GuardSurface>("GuardSurface")
+        assertVariantsExist<GuardEvent>("GuardEvent")
+        assertVariantFields(GuardOperation.serializer(), "GuardOperation")
+        assertVariantFields(GuardEvent.serializer(), "GuardEvent")
+    }
 
     /** Every field this Kotlin class names must exist in the mirror. */
     private inline fun <reified T> assertFieldsExist(tsName: String) {

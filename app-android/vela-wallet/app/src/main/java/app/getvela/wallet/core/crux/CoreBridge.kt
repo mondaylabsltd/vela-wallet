@@ -8,6 +8,12 @@ import uniffi.vela_core_uniffi.DisplayCurrencyCore
 import uniffi.vela_core_uniffi.LoginCore
 import uniffi.vela_core_uniffi.FeePolicyCore
 import uniffi.vela_core_uniffi.ManageTokensCore
+import uniffi.vela_core_uniffi.ApprovalGuardCore
+import uniffi.vela_core_uniffi.ClearSigningCore
+import uniffi.vela_core_uniffi.SignRequestCore
+import uniffi.vela_core_uniffi.BrowserHistoryCore
+import uniffi.vela_core_uniffi.ExploreSitesCore
+import uniffi.vela_core_uniffi.DappPermissionsCore
 import uniffi.vela_core_uniffi.SendCore
 import uniffi.vela_core_uniffi.TxTrackerCore
 import uniffi.vela_core_uniffi.NetworkAdminCore
@@ -85,6 +91,24 @@ fun ActivityFeedCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
 fun ManageTokensCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun DappPermissionsCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun ExploreSitesCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun BrowserHistoryCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun SignRequestCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun ClearSigningCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun ApprovalGuardCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
 // Spec 043: the send path's three machines.

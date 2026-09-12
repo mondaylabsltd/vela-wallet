@@ -1302,6 +1302,23 @@ pub fn relay_error_message(error_json: String) -> String {
     vela_core::user_op::relay_error_message(&error_json)
 }
 
+/// The origin of a page's URL, normalised the way the browser normalises
+/// it (spec 044): the key a grant is stored under, and the one fact about
+/// a page the shell attaches to every request. `None` for anything that
+/// is not an http(s) URL.
+#[uniffi::export]
+pub fn dapp_origin_of(url: String) -> Option<String> {
+    vela_core::app::dapp_permissions::origin_of(&url)
+}
+
+/// Is this provider method one that asks for a signature? The routing
+/// table's first question (spec 044), answered by the core so the shell's
+/// allowlist and the machine's own notion of "a signing method" cannot drift.
+#[uniffi::export]
+pub fn dapp_is_signing_method(method: String) -> bool {
+    vela_core::app::sign_request::is_signing_method(&method)
+}
+
 /// The EntryPoint every Vela operation is submitted against.
 #[uniffi::export]
 pub fn entry_point_address() -> String {

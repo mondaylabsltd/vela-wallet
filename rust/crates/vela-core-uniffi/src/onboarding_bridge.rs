@@ -326,3 +326,45 @@ bridge_object!(
     PaymentRequestCore,
     vela_core::app::payment_request::PaymentRequest
 );
+
+// -- spec 044: the in-app browser and what it signs ---------------------------
+
+bridge_object!(
+    /// Per-origin dApp permissions and the in-app browser's consent flow:
+    /// the reads it answers itself, the grants it keeps, the requests it
+    /// forwards to signing, the events the page hears.
+    DappPermissionsCore,
+    vela_core::app::dapp_permissions::DappPermissions
+);
+
+bridge_object!(
+    /// The browser's own memory: favourites, groups and open tabs.
+    ExploreSitesCore,
+    vela_core::app::explore_sites::ExploreSites
+);
+
+bridge_object!(
+    /// Recently-opened dApps, deduped by origin.
+    BrowserHistoryCore,
+    vela_core::app::browser_history::BrowserHistory
+);
+
+bridge_object!(
+    /// A dApp signing request's lifecycle: arrival, review, the gas
+    /// pre-check, the ceremony, the response, the record.
+    SignRequestCore,
+    vela_core::app::sign_request::SignRequest
+);
+
+bridge_object!(
+    /// Clear signing: what a transaction or message DOES, and how
+    /// dangerous it is — the never-blind ladder.
+    ClearSigningCore,
+    vela_core::app::clear_signing::ClearSigning
+);
+
+bridge_object!(
+    /// The approval guard: an unlimited approval never leaves the wallet.
+    ApprovalGuardCore,
+    vela_core::app::approval_guard::ApprovalGuard
+);
