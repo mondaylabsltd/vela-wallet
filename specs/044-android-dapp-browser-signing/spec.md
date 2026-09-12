@@ -23,16 +23,18 @@ painted over it, a CS12 signing sheet that signs nothing), and every dApp
 that could ask the wallet for something has no way to reach it.
 
 Everything that decides is already in the core, and none of it is reachable
-from the phone. Eight machines cover the whole journey — what an origin may
-be told and when it must ask (`dapp_permissions`), the live session with a
-page (`dapp_session`), the instant answers an already-connected page expects
-(`ext_cache`), the browser's own memory of favourites, groups and tabs
-(`explore_sites`) and of recent sites (`browser_history`), the request
-lifecycle from arrival to answer (`sign_request`), what a request means
-and how dangerous it is (`clear_signing`, the largest machine in the core),
-and the rule that an unlimited approval never leaves the wallet
-(`approval_guard`). Sixteen machines cross the Android bridge today; these
-eight do not. The words a page sees are shared too: the provider script the
+from the phone. Six machines cover the whole journey — what an origin may
+be told and when it must ask, including the instant answers an
+already-connected page expects (`dapp_permissions`), the browser's own
+memory of favourites, groups and tabs (`explore_sites`) and of recent sites
+(`browser_history`), the request lifecycle from arrival to answer
+(`sign_request`), what a request means and how dangerous it is
+(`clear_signing`, the largest machine in the core), and the rule that an
+unlimited approval never leaves the wallet (`approval_guard`). Sixteen
+machines cross the Android bridge today; these six do not. (Two more
+machines in the same family belong to other doorways and stay out: the
+extension's service-worker cache and the paired-session machine — the
+desktop's in-app browser composes exactly these six.) The words a page sees are shared too: the provider script the
 extension ships and the desktop injects into its system webview is one file,
 and the desktop's table of who answers which request was ported from the
 same script and is tested against it.
@@ -64,9 +66,9 @@ core's refusal until 046's add-network path exists.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 0 - The eight machines cross the bridge, and a page can see the wallet (Priority: P1, enabling)
+### User Story 0 - The six machines cross the bridge, and a page can see the wallet (Priority: P1, enabling)
 
-The eight browser-and-signing machines are driven from the phone the way the
+The six browser-and-signing machines are driven from the phone the way the
 sixteen before them are, and a page opened in the app finds a wallet that
 announces itself with Vela's own name.
 
@@ -75,13 +77,13 @@ cheapest place to catch drift: every wire family is checked against the
 core's generated mirrors before a screen depends on it.
 
 **Independent Test**: the drift gate covers every event, operation, result
-and closed error family of the eight machines; a page loaded in the in-app
+and closed error family of the six machines; a page loaded in the in-app
 browser reports the discovery announcement and the legacy global, with
 Vela's name, on the device.
 
 **Acceptance Scenarios**:
 
-1. **Given** a debug build, **When** each of the eight machines is created
+1. **Given** a debug build, **When** each of the six machines is created
    and sent its first event, **Then** it answers with a view and no fault.
 2. **Given** the in-app browser opens a page that listens for wallet
    discovery, **When** the page loads, **Then** it hears one announcement
@@ -273,7 +275,7 @@ and fires the disconnect event on the page.
 
 ### Functional Requirements
 
-- **FR-001 (The bridge)**: the eight browser-and-signing machines MUST be
+- **FR-001 (The bridge)**: the six browser-and-signing machines MUST be
   driven from the Android shell the way the sixteen before them are, and
   every wire family MUST pass the drift gate against the core's generated
   mirrors: views may be subsets, operations and results exhaustive.
@@ -300,7 +302,8 @@ and fires the disconnect event on the page.
   machine; the consent surface MUST lead with the origin as the fact and
   present the site's name and icon as claims.
 - **FR-007 (The instant answers)**: the account and chain an already-granted
-  origin expects MUST come from the cached grant without opening a sheet.
+  origin expects MUST come from the permissions machine's grant mirror
+  without opening a sheet.
 - **FR-008 (Events to the page)**: the page MUST hear account changes, chain
   changes and disconnects as the standard provider events, when and only
   when the core says they happened.
@@ -342,7 +345,7 @@ and fires the disconnect event on the page.
 - **Grant**: what an origin has been given — account, chain, provenance and
   age. Owned by the permissions machine.
 - **Cached answer**: the account and chain a granted origin may be told
-  immediately. Owned by the cache machine.
+  immediately. The permissions machine's grant mirror.
 - **Site memory**: favourites, groups, open tabs and recents. Owned by the
   explore and history machines, persisted in the shared store shape.
 - **Signing record**: a request's lifecycle from arrival to answer, its
@@ -371,7 +374,7 @@ and fires the disconnect event on the page.
 - **SC-008** (device): favourites, groups, tabs and recents survive a
   force-stop; leaving and re-entering 探索 finds the page where it was, and
   nothing of the page is visible outside 探索.
-- **SC-009**: the drift gate is exhaustive for the eight new wire families;
+- **SC-009**: the drift gate is exhaustive for the six new wire families;
   the unit-test count grows by at least the number of new executors and
   live builders.
 - **SC-010**: the classification table's parity test against the shared
