@@ -53,7 +53,10 @@ const dirs = (p) =>
  */
 const EXEMPT = {
 	desktop: new Set([]),
-	android: new Set([]),
+	// `send` draws no screen of its own: the send flow's pages are the `flows`
+	// family's (SendFormBody, SendConfirmBody, …), and `send/SendLive.kt` only
+	// builds their models from the core's view (spec 043).
+	android: new Set(['send']),
 	ios: new Set([])
 };
 
