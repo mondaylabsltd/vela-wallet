@@ -323,3 +323,85 @@ text and the value reads `1 USDC`.
    on-chain check was driven with the digest computed on the host and the
    page's own `eth_call`.
 
+## Closeout (T042–T046)
+
+**Gates, as CI runs them** (tip after this section's commit):
+
+| Gate | Result |
+| --- | --- |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings` | clean |
+| `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures` | every crate `ok` |
+| `gen-onboarding-types --check` | 25 generated types current |
+| `build-web.mjs` rebuild → `--check` | current, wasm 3,734,673 bytes; fingerprint `4ddebb5886c6` → `952889fad35d` (four Rust edits in 044: six bridges, `dapp_origin_of`, `dapp_is_signing_method`, `safe_message_hash` + `eip1271_signature`) |
+| `verify-web.mjs` | 46,528 conformance cases green |
+| `check-expo-residue` | rules 1–4 ok |
+| `check-native-reachability` | pass — `browser` exempted WITH its reason beside `send` |
+| `verify-i18n-parity` | 73,160 comparisons, zero divergences |
+| Android unit tests | **455, 0 failures** (431 at 043's tip) |
+
+**Bridge size (T043, SC-011)**:
+
+| Artefact | 043's tip | 044 | Δ |
+| --- | --- | --- | --- |
+| `libvela_core_uniffi.so` arm64-v8a | 16,187,032 | 18,906,920 | **+2,719,888** (+2.59 MB) |
+| armeabi-v7a / x86_64 | 11,696,444 / 15,417,408 | 14,188,916 / 18,403,144 | +2.38 / +2.85 MB |
+| `libvela_dev_fixtures.so` arm64 (debug only) | 1,351,056 | 1,351,048 | — |
+
+Six machines (`clear_signing` alone is 5,038 lines) and four exports for
++2.59 MB — under the plan's 19.5 MB ceiling. The release APK
+(`app-release-unsigned.apk`) carries the core library per ABI and the two
+provider scripts, and **no fixtures library and no network security
+config** (both live in the debug source set).
+
+**SC-007** (T044): `ExploreFixtures.buildState` / `SigningFixtures.build`
+appear in the navigation package only as the drawn fallbacks the live
+builders overlay (E2 for the 探索 section, CS1 for a request's sheet) and
+on the gallery route; the demo page's CS12 sheet no longer reaches the live
+route. **SC-009**: `CoreWireDriftTest` covers the six wires (58
+assertions); the suite grew 431 → 455. **SC-010**: `DappRpcParityTest`
+parses `protocol.js` and matches the table.
+
+**What 045–047 inherit**: the deeper message surface (SIWE binding shown,
+danger classes), the balance-change simulation block (`sim_blocks`) and
+the scanner — 046; a list of every connected origin (not drawn on the
+phone) and the AddToken native tab — 047; `wallet_switchEthereumChain` to
+a chain the wallet lacks is the core's 4902 (add-network by request is
+046's path); sponsorship is answered `Denied` (no relay path on this
+shell, as on the desktop); the `onPageStarted` injection fallback exists
+but ran nowhere (the Xiaomi's WebView supports document-start scripts).
+Nothing found in 044 belongs in `docs/KNOWN-BUGS.md`: every device-found
+defect was Android-local and is fixed.
+
+## Success criteria
+
+| SC | Claim | Verified | Evidence |
+| --- | --- | --- | --- |
+| SC-001 | the provider announces in a page | **device** | phase 1: `announced: [{name: "Vela Wallet", rdns: "app.getvela", sameAsWindowEthereum: true, frozenInfo: true}]`, legacy present |
+| SC-002 | the test dApp connects; a public dApp connects | **device (half)** | phase 3: the test dApp connects to `0x88cC…6894`; Uniswap listed Vela Wallet in its wallet picker and the pick was tapped, but its flow did not issue `eth_requestAccounts` in two scripted attempts — see Owed |
+| SC-003 | a chain read equals the pool's | **device** | phase 3: `eth_blockNumber → 0x2df947f` with `rpc.post eth_blockNumber host=rpc.gnosischain.com` |
+| SC-004 | dust leaves because a page asked | **device** | phase 4: `发送 −0.001 xDAI → 0x7687…D141`, one signature, tx `0x0698bf84…8fe3` printed by the page, tracker confirmed, feed row |
+| SC-005 | unlimited blocked, leaves bounded | **device** | phase 5: no slide until 自定义 `1`; tx `0x3a20c194…7fab` confirmed |
+| SC-006 | a message sign-in verifies | **device** | phase 5: 417-byte envelope; `isValidSignature` → `0x1626ba7e` through the page's read proxy |
+| SC-007 | connections listed, revoked, page hears disconnect | **device** | phase 3: E7 sheet → 断开连接 → `accountsChanged []`, `disconnect`; consent again → 4001 once. A list of ALL origins is not drawn on the phone |
+| SC-008 | memory survives; the page is where it was; nothing over the wallet | **device** | phase 2 |
+| SC-009 | drift exhaustive; tests grow | test | 58 assertions; 431 → 455 |
+| SC-010 | routing parity with the script | test | `DappRpcParityTest` |
+| SC-011 | release build clean | **inspected** | `unzip -l app-release-unsigned.apk` |
+| SC-012 | the founder's own passkey answers a page | — | needs a finger |
+
+## Owed
+
+- **SC-012** — one signature from the founder's own passkey answering a
+  page; everything else on the path is the code the parallel space drove.
+- **SC-002's public-dApp half** — Uniswap's wallet picker lists Vela Wallet
+  (the discovery works on a real dApp) and tapping it did not produce an
+  `eth_requestAccounts` in two scripted passes; a human tap, or a look at
+  Uniswap's connector flow, decides whether that is their UI or ours.
+- **A list of every connected origin** — the phone's 022 drawings have one
+  sheet per site; the desktop and web list them. 047.
+- **The `personal_sign` verification button on the test dApp** depends on
+  a CDN script the phone did not load; the check was driven from the host
+  with the page's own `eth_call`. Vendor a keccak into `dev/testdapp/` for
+  the next loop.
+

@@ -185,19 +185,20 @@ NDK build; `JAVA_HOME` = Android Studio's JBR.
 
 ## Phase 6 — Closeout
 
-- [ ] **T042** Gates as CI runs them: `cargo fmt/clippy/test`, Android unit
+- [X] **T042** Gates as CI runs them: `cargo fmt/clippy/test`, Android unit
       tests, `check-expo-residue`, `check-native-reachability`,
       `verify-i18n-parity`, `gen-onboarding-types --check`; `build-web.mjs`
       rebuild + `--check` LAST.
-- [ ] **T043** Bridge size against T001 and the ≤ 19.5 MB ceiling; the
+- [X] **T043** Bridge size against T001 and the ≤ 19.5 MB ceiling; the
       release APK inspected (no fixtures, no debug network config).
-- [ ] **T044** `grep -rn 'ExploreFixtures.buildState\|SigningFixtures.build' …/navigation/`
+- [X] **T044** `grep -rn 'ExploreFixtures.buildState\|SigningFixtures.build' …/navigation/`
       — only drawn fallbacks the live builders overlay.
-- [ ] **T045** `results.md` — per SC: device (screenshot + text) or test;
+- [X] **T045** `results.md` — per SC: device (screenshot + text) or test;
       the `.so` delta; what 045–047 inherit (WalletPair out; SIWE depth,
       simulation, scanner → 046; the AddToken native tab → 047).
 - [ ] **T046** SC-012: the founder answers a page with their own passkey —
-      recorded as done only when it happened. Memory updated.
+      recorded as done only when it happened. Memory updated. *(memory
+      updated 2026-09-12; SC-012 still needs a finger — see results Owed)*
 
 ## Dependencies
 
