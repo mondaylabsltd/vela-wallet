@@ -4,6 +4,13 @@ import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.contacts.core.ContactsView
 import app.getvela.wallet.feature.flows.AmountFieldModel
+import app.getvela.wallet.feature.send.core.BatchUnit as WireBatchUnit
+import app.getvela.wallet.feature.send.core.BatchView
+import app.getvela.wallet.feature.send.core.BatchRateStatus
+import app.getvela.wallet.feature.send.core.BATCH_MAX_RECIPIENTS
+import app.getvela.wallet.feature.flows.BatchUnit
+import app.getvela.wallet.feature.flows.BatchRowModel
+import app.getvela.wallet.feature.flows.BatchImportModel
 import app.getvela.wallet.feature.send.core.SweepPick
 import app.getvela.wallet.feature.flows.SweepRowModel
 import app.getvela.wallet.feature.flows.SendSelectionModel
@@ -85,6 +92,7 @@ object SendLive {
     fun flowState(view: SendView, feeSheetOpen: Boolean): FlowState = when (view.stage) {
         SendStage.SelectToken, SendStage.LockResolving, SendStage.LockError -> FlowState.SD1
         SendStage.EnterDetails -> when {
+            view.show_batch_import -> FlowState.SD2C
             view.show_contact_picker -> FlowState.SD2E
             feeSheetOpen -> FlowState.SD2F
             else -> FlowState.SD2
@@ -140,6 +148,57 @@ object SendLive {
             } else {
                 SendCtaModel(s.t(I18nKeys.Flows.MULTI_SEND_TITLE), accent = false)
             },
+        )
+    }
+
+    // -- SD2c: the batch sheet (spec 045 US3) --------------------------------------
+
+    /** The web's `liveBatchImport`, word for word: the core parsed, priced and gated; this only says so. */
+    internal fun batchImport(fallback: BatchImportModel, batch: BatchView, view: SendView, ctx: Context): BatchImportModel {
+        val s = ctx.strings
+        val symbol = view.selected_token?.symbol ?: ""
+        val count = batch.recipient_count
+        return fallback.copy(
+            unitFiat = s.t(I18nKeys.Flows.BATCH_UNIT_FIAT, mapOf("code" to batch.fiat_code)),
+            unitToken = s.t(I18nKeys.Flows.BATCH_UNIT_TOKEN, mapOf("sym" to symbol)),
+            unit = if (batch.unit == WireBatchUnit.Fiat) BatchUnit.Fiat else BatchUnit.Token,
+            pasteValue = batch.raw_text,
+            rateLabel = s.t(I18nKeys.Flows.BATCH_RATE_LABEL, mapOf("sym" to symbol)),
+            rateHint = s.t(I18nKeys.Flows.BATCH_RATE_HINT, mapOf("code" to batch.fiat_code, "sym" to symbol)),
+            rateValue = when (batch.rate_status) {
+                BatchRateStatus.Ok -> "${batch.rate_input} ${batch.fiat_code}"
+                BatchRateStatus.Loading -> s.t(I18nKeys.Flows.BATCH_RATE_LOADING)
+                // Unknown, and said so: the core has already refused to apply.
+                BatchRateStatus.Failed -> s.t(I18nKeys.Flows.BATCH_RATE_FAILED)
+            },
+            rateInput = batch.rate_input,
+            rateEdited = batch.rate_edited,
+            rateReset = s.t(I18nKeys.Flows.BATCH_RATE_RESET),
+            parsedLabel = s.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to count.toString())),
+            rows = batch.preview.map { row ->
+                BatchRowModel(
+                    ok = row.ok,
+                    address = row.name ?: row.address,
+                    conversion = if (row.token_amount.isNotEmpty()) "${row.token_amount} $symbol" else row.raw_amount,
+                )
+            },
+            rejectedText = if (batch.rejected > 0) {
+                s.t(if (batch.rejected == 1) I18nKeys.Flows.BATCH_REJECTED_ONE else I18nKeys.Flows.BATCH_REJECTED_OTHER, mapOf("count" to batch.rejected.toString()))
+            } else {
+                null
+            },
+            note = when {
+                batch.over_cap -> s.t(I18nKeys.Flows.BATCH_OVER_CAP, mapOf("n" to BATCH_MAX_RECIPIENTS.toString()))
+                batch.over_balance -> s.t(I18nKeys.Flows.BATCH_OVER_BALANCE, mapOf("sym" to symbol))
+                batch.template_saved -> s.t(I18nKeys.Flows.BATCH_TEMPLATE_SAVED)
+                else -> null
+            },
+            cta = when (count) {
+                0 -> s.t(I18nKeys.Flows.BATCH_APPLY_EMPTY)
+                1 -> s.t(I18nKeys.Flows.BATCH_APPLY_ONE, mapOf("count" to "1"))
+                else -> s.t(I18nKeys.Flows.BATCH_APPLY_OTHER, mapOf("count" to count.toString()))
+            },
+            ctaDisabled = !batch.can_apply,
         )
     }
 

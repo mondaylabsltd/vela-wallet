@@ -560,6 +560,15 @@ object I18nKeys {
         const val BATCH_BAD_ADDRESS = "send.batchBadAddress"
         const val BATCH_REJECTED_ONE = "send.batchRejected_one"
         const val BATCH_APPLY_OTHER = "send.batchApply_other"
+        const val BATCH_REJECTED_OTHER = "send.batchRejected_other"
+        const val BATCH_APPLY_ONE = "send.batchApply_one"
+        const val BATCH_APPLY_EMPTY = "send.batchApplyEmpty"
+        const val BATCH_RATE_LOADING = "send.batchRateLoading"
+        const val BATCH_RATE_FAILED = "send.batchRateFailed"
+        const val BATCH_RATE_RESET = "send.batchRateReset"
+        const val BATCH_OVER_CAP = "send.batchOverCap"
+        const val BATCH_OVER_BALANCE = "send.batchOverBalance"
+        const val BATCH_TEMPLATE_SAVED = "send.batchTemplateSaved"
 
         // Send · confirm.
         const val CONFIRM_TITLE = "send.confirmTitle"

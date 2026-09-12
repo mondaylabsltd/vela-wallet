@@ -477,6 +477,11 @@ data class BatchImportModel(
     val rejectedText: String? = null,
     val cta: String,
     val ctaDisabled: Boolean,
+    /** Live only (spec 045): the editable rate, whether it was edited, the "auto" reset word, and one note (cap, balance, template). */
+    val rateInput: String? = null,
+    val rateEdited: Boolean = false,
+    val rateReset: String? = null,
+    val note: String? = null,
 )
 
 /** SD3 — the confirmation. */

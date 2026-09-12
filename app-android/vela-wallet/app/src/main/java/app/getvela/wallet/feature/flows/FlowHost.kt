@@ -270,7 +270,16 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, send
                     model = sheet.model,
                     onSelect = { index -> send?.onFeeSelect?.invoke(index) },
                 )
-                is FlowSheet.BatchImport -> BatchImportBody(model = sheet.model)
+                is FlowSheet.BatchImport -> BatchImportBody(
+                    model = sheet.model,
+                    onUnit = { id -> send?.onBatchUnit?.invoke(id) },
+                    onFile = { send?.onBatchFile?.invoke() },
+                    onTemplate = { send?.onBatchTemplate?.invoke() },
+                    onApply = { send?.onBatchApply?.invoke() },
+                    onPaste = send?.onBatchPaste,
+                    onRate = send?.onBatchRate,
+                    onRateReset = { send?.onBatchRateReset?.invoke() },
+                )
             }
         }
     }
@@ -388,6 +397,14 @@ class SendCallbacks(
     // Spec 045 US2 — the sweep pick: select-all and the pick's own button.
     val onSelectAll: () -> Unit = {},
     val onPickCta: (() -> Unit)? = null,
+    // Spec 045 US3 — the batch sheet.
+    val onBatchUnit: (String) -> Unit = {},
+    val onBatchPaste: ((String) -> Unit)? = null,
+    val onBatchFile: () -> Unit = {},
+    val onBatchTemplate: () -> Unit = {},
+    val onBatchRate: ((String) -> Unit)? = null,
+    val onBatchRateReset: () -> Unit = {},
+    val onBatchApply: () -> Unit = {},
 )
 
 /** Spec 043 T046: the add-token sheet is the `manage_tokens` machine's when these are present. */

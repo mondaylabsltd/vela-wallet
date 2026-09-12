@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import uniffi.vela_core_uniffi.FeePolicyCore
+import uniffi.vela_core_uniffi.BatchImportCore
+import app.getvela.wallet.feature.documents.DocumentPorts
 import uniffi.vela_core_uniffi.SendCore
 import uniffi.vela_core_uniffi.WalletKeyRecord
 
@@ -49,6 +51,10 @@ class SendController(
     feedChanged: () -> Unit = {},
     /** Spec 043 T048: a name for the recipient, through the app's waterfall. */
     identity: suspend (String) -> SendRecipientIdentity? = { null },
+    /** Spec 045 US3: the display currency the batch prices in, the wallet's fiat-rate waterfall, the platform's documents. */
+    private val currencyCode: () -> String = { "USD" },
+    fiatRate: suspend (String) -> Double? = { null },
+    documents: () -> DocumentPorts? = { null },
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
         VelaLog.event("send.track", "no tracker bound", "hash" to hash.take(12))
@@ -166,6 +172,26 @@ class SendController(
 
     /** The send machine's view — every screen reads this and nothing else. */
     val send: StateFlow<SendView> = sendHost.view
+
+    // Spec 045 US3: the payroll batch — its own machine, hosted beside the send.
+    private val batchExecutor = BatchExecutor(fiatRate = fiatRate, documents = documents)
+
+    private val batchHost = CoreHost(
+        bridge = BatchImportCore().asBridge(),
+        scope = scope,
+        initial = BatchView(),
+        serializer = BatchView.serializer(),
+        perform = JsonShell.perform(BatchOperation.serializer(), BatchShellResult.serializer(), batchExecutor::perform),
+        escapedFailure = JsonShell.escapedFailure(
+            BatchOperation.serializer(),
+            BatchShellResult.serializer(),
+            fallback = BatchShellResult.FilePickFailed,
+            answer = batchExecutor::neutralAnswer,
+        ),
+        onFault = { error -> VelaLog.failure("send.batch.fault", "core fault", error) },
+    )
+
+    val batch: StateFlow<BatchView> = batchHost.view
 
     /** The fee session's view — the fee-token sheet reads this. */
     val fee: StateFlow<FeeView> = feeHost.view
@@ -294,9 +320,47 @@ class SendController(
     /** The picker for ONE split row: the picked address lands in that row. */
     fun openRowPicker(id: String) = dispatch(SendEvent.OpenContactPicker(id))
 
-    fun openBatchImport() = dispatch(SendEvent.OpenBatchImport)
+    /** 导入表格: the sheet opens on the send's flag and the batch machine opens on the token. */
+    fun openBatch() {
+        val token = send.value.selected_token ?: return
+        dispatch(SendEvent.OpenBatchImport)
+        batchHost.dispatch(
+            BatchEvent.Open(
+                token = BatchToken(symbol = token.symbol, decimals = token.decimals, balance = token.balance, price_usd = token.price_usd),
+                currency_code = currencyCode(),
+                max_recipients = BATCH_MAX_RECIPIENTS,
+            ),
+            BatchEvent.serializer(),
+        )
+    }
 
-    fun closeBatchImport() = dispatch(SendEvent.CloseBatchImport)
+    fun closeBatch() = dispatch(SendEvent.CloseBatchImport)
+
+    fun batchUnit(unit: BatchUnit) = batchHost.dispatch(BatchEvent.SetUnit(unit), BatchEvent.serializer())
+
+    fun batchFiatCode(code: String) = batchHost.dispatch(BatchEvent.SetFiatCode(code), BatchEvent.serializer())
+
+    fun batchText(text: String) = batchHost.dispatch(BatchEvent.SetRawText(text), BatchEvent.serializer())
+
+    fun batchPickFile() = batchHost.dispatch(BatchEvent.PickFileRequested, BatchEvent.serializer())
+
+    fun batchTemplate() = batchHost.dispatch(BatchEvent.SaveTemplateRequested, BatchEvent.serializer())
+
+    fun batchRate(text: String) = batchHost.dispatch(BatchEvent.EditRate(text), BatchEvent.serializer())
+
+    fun batchResetRate() = batchHost.dispatch(BatchEvent.ResetRateToAuto, BatchEvent.serializer())
+
+    /**
+     * Apply: the core parsed and priced the rows; the send machine seeds its
+     * split from exactly those (ids minted there), and nothing is recomputed.
+     * `SeedSplitRecipients` also shuts the sheet.
+     */
+    fun batchApply() {
+        val view = batch.value
+        if (!view.can_apply || view.recipients.isEmpty()) return
+        batchHost.dispatch(BatchEvent.Apply, BatchEvent.serializer())
+        seedSplit(view.recipients.map { SendRecipientDraft(id = "", address = it.address, amount = it.amount, name = it.name) })
+    }
 
     // -- Sweep (spec 045 US2): several tokens to one address. Whether the tick
     // boxes are showing is the shell's flag (the core's `multi_select_mode`

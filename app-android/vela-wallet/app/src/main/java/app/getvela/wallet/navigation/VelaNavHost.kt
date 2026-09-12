@@ -26,6 +26,7 @@ import app.getvela.wallet.feature.send.core.MtokView
 import app.getvela.wallet.feature.flows.AddTokenCallbacks
 import app.getvela.wallet.feature.flows.RecipientAction
 import app.getvela.wallet.feature.flows.SendCallbacks
+import app.getvela.wallet.feature.send.core.BatchUnit as WireBatchUnit
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.send.core.SendAccountRef
 import app.getvela.wallet.feature.send.core.SendAlertKind
@@ -402,6 +403,7 @@ fun VelaNavHost(
             val contactsBook by application.container.contacts.view.collectAsStateWithLifecycle()
             var feeSheetOpen by rememberSaveable { mutableStateOf(false) }
             val sweepPicking by send.sweepPicking.collectAsStateWithLifecycle()
+            val batchView by send.batch.collectAsStateWithLifecycle()
             val sendOpen = flows.top in SEND_STATES
             LaunchedEffect(sendOpen, session.address) {
                 if (sendOpen && session.address.isNotEmpty()) {
@@ -464,7 +466,7 @@ fun VelaNavHost(
                 val explorers = remember(networks.networks) {
                     networks.networks.associate { it.chain_id.toInt() to it.explorer_url }
                 }
-                val flowModel = remember(liveState, sendView, feeView, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking) {
+                val flowModel = remember(liveState, sendView, feeView, batchView, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking) {
                     val drawn = FlowFixtures.build(liveState, strings)
                     val ctx = SendLive.Context(
                         strings = strings,
@@ -484,6 +486,7 @@ fun VelaNavHost(
                     val sheet = when (val sheet = drawn.sheet) {
                         is FlowSheet.FeeToken -> FlowSheet.FeeToken(SendLive.feeSheet(sheet.model, feeView, ctx))
                         is FlowSheet.ContactPick -> FlowSheet.ContactPick(SendLive.contactSheet(sheet.model, contactsBook))
+                        is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx))
                         else -> sheet
                     }
                     drawn.copy(base = base, sheet = sheet)
@@ -530,14 +533,23 @@ fun VelaNavHost(
                         onSheetDismissed = {
                             if (feeSheetOpen) feeSheetOpen = false
                             if (sendView.show_contact_picker) send.closeContactPicker()
+                            if (sendView.show_batch_import) send.closeBatch()
                         },
+                        // Spec 045 US3: the batch sheet's taps go to the batch machine.
+                        onBatchUnit = { id -> send.batchUnit(if (id == "fiat") WireBatchUnit.Fiat else WireBatchUnit.Token) },
+                        onBatchPaste = { text -> send.batchText(text) },
+                        onBatchFile = { send.batchPickFile() },
+                        onBatchTemplate = { send.batchTemplate() },
+                        onBatchRate = { text -> send.batchRate(text) },
+                        onBatchRateReset = { send.batchResetRate() },
+                        onBatchApply = { send.batchApply() },
                         // Spec 045 US1: the split's rows, by index on screen → id in the core.
                         onAddRecipient = { send.enterSplit() },
                         onRecipientAction = { action ->
                             when (action) {
                                 RecipientAction.Add -> send.splitAdd()
                                 RecipientAction.Contacts -> send.openContactPicker()
-                                RecipientAction.Import -> send.openBatchImport()
+                                RecipientAction.Import -> send.openBatch()
                             }
                         },
                         onRemoveRecipient = { index -> sendView.recipients.getOrNull(index)?.let { send.splitRemove(it.id) } },

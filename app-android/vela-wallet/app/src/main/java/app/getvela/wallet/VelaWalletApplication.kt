@@ -212,6 +212,10 @@ class AppContainer(private val app: Application) {
     @Volatile
     var passkeySigner: UserOpSigner? = null
 
+    /** Spec 045: the platform's documents (picker, creator, share sheet); the activity attaches them in onCreate. */
+    @Volatile
+    var documents: app.getvela.wallet.feature.documents.DocumentPorts? = null
+
     /** A notification was tapped: the row to open once the wallet is showing (phase 4). */
     val pendingReceipt = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
@@ -239,6 +243,9 @@ class AppContainer(private val app: Application) {
             refreshBalances = { wallet.refresh() },
             feedChanged = { wallet.feedReconciled() },
             identity = { address -> identity.resolve(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
+            currencyCode = { settings.currency.value.code },
+            fiatRate = { code -> settings.fiatRate(code) },
+            documents = { documents },
         ).also { controller ->
             // The two halves of the handoff: the send hands the tracker a
             // hash; the tracker hands the send its verdict.

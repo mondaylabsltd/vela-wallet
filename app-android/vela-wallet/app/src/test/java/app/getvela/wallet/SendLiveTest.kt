@@ -38,6 +38,12 @@ import app.getvela.wallet.feature.send.core.SendRecipientDraft
 import app.getvela.wallet.feature.flows.RecipientAction
 import app.getvela.wallet.feature.flows.SendFormMode
 import app.getvela.wallet.feature.send.core.SendMultiSpecView
+import app.getvela.wallet.feature.flows.BatchUnit
+import app.getvela.wallet.feature.send.core.BatchPreviewRow
+import app.getvela.wallet.feature.send.core.BatchRateStatus
+import app.getvela.wallet.feature.send.core.BatchRecipient
+import app.getvela.wallet.feature.send.core.BatchView
+import app.getvela.wallet.feature.send.core.BatchUnit as WireBatchUnit
 import org.junit.Test
 
 /**
@@ -361,5 +367,46 @@ class SendLiveTest {
         assertEquals(strings.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT), live.recipient!!.note)
         assertEquals(recipient, live.recipient!!.raw)
         assertTrue(live.ctaEnabled)
+    }
+
+    // -- Spec 045 US3: the batch sheet ---------------------------------------
+
+    @Test
+    fun `the batch sheet says what the core parsed, priced and gated`() {
+        val drawn = FlowFixtures.build(FlowState.SD2C, strings).sheet as FlowSheet.BatchImport
+        val view = SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, split_mode = true, show_batch_import = true)
+        val loading = SendLive.batchImport(drawn.model, BatchView(opened = true, unit = WireBatchUnit.Fiat, fiat_code = "GBP", rate_status = BatchRateStatus.Loading), view, ctx())
+        assertEquals(BatchUnit.Fiat, loading.unit)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_RATE_LOADING), loading.rateValue)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_APPLY_EMPTY), loading.cta)
+        assertTrue(loading.ctaDisabled)
+        assertTrue(loading.rows.isEmpty())
+
+        val priced = SendLive.batchImport(
+            drawn.model,
+            BatchView(
+                opened = true, unit = WireBatchUnit.Token, fiat_code = "GBP", raw_text = "a,1", rate_status = BatchRateStatus.Ok, rate_input = "0.78", rate_edited = true,
+                preview = listOf(
+                    BatchPreviewRow(line = 1, name = "Founder", address = recipient, valid = true, raw_amount = "0.001", token_amount = "0.001", ok = true),
+                    BatchPreviewRow(line = 2, address = "0x12zz", valid = false, raw_amount = "5", token_amount = "", ok = false),
+                ),
+                rejected = 1, recipient_count = 1, total_token = "0.001", can_apply = true,
+                recipients = listOf(BatchRecipient(recipient, "0.001", "Founder")),
+            ),
+            view, ctx(),
+        )
+        assertEquals(BatchUnit.Token, priced.unit)
+        assertEquals("0.78 GBP", priced.rateValue)
+        assertEquals("0.78", priced.rateInput)
+        assertTrue(priced.rateEdited)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_PARSED_COUNT, mapOf("n" to "1")), priced.parsedLabel)
+        assertEquals(listOf(true, false), priced.rows.map { it.ok })
+        assertEquals("Founder", priced.rows[0].address)
+        assertEquals("0.001 XDAI", priced.rows[0].conversion)
+        assertEquals("5", priced.rows[1].conversion)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_REJECTED_ONE, mapOf("count" to "1")), priced.rejectedText)
+        assertEquals(strings.t(I18nKeys.Flows.BATCH_APPLY_ONE, mapOf("count" to "1")), priced.cta)
+        assertFalse(priced.ctaDisabled)
+        assertEquals(FlowState.SD2C, SendLive.flowState(view, feeSheetOpen = false))
     }
 }

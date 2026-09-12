@@ -167,3 +167,6 @@ sealed class BatchShellResult {
     @SerialName("template_save_failed")
     data object TemplateSaveFailed : BatchShellResult()
 }
+
+/** The core's cap (`BATCH_MAX_RECIPIENTS`): the importer trims to it. */
+const val BATCH_MAX_RECIPIENTS = 60

@@ -87,6 +87,9 @@ class SettingsController(
         rates = { code -> rates?.resolve(code) },
     )
 
+    /** Spec 045: the same rate waterfall, for a code the batch prices in (`null` = cannot price, never 1). */
+    suspend fun fiatRate(code: String): Double? = rates?.resolve(code)
+
     private val currencyHost = CoreHost(
         bridge = DisplayCurrencyCore().asBridge(),
         scope = scope,

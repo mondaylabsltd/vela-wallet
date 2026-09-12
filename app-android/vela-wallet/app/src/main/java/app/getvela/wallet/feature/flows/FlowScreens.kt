@@ -1,5 +1,13 @@
 package app.getvela.wallet.feature.flows
 
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -1105,6 +1113,9 @@ fun BatchImportBody(
     onFile: () -> Unit = {},
     onTemplate: () -> Unit = {},
     onApply: () -> Unit = {},
+    onPaste: ((String) -> Unit)? = null,
+    onRate: ((String) -> Unit)? = null,
+    onRateReset: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -1114,11 +1125,30 @@ fun BatchImportBody(
             onSelect = onUnit,
         )
         Spacer(modifier = Modifier.height(VelaSpacing.md))
-        FlowMonoField(
-            value = model.pasteValue,
-            placeholder = model.pastePlaceholder,
-            minLines = 4,
-        )
+        if (onPaste != null) {
+            // Local echo, as the amount hero: the machine's view lags fast typing.
+            var typed by remember { mutableStateOf(model.pasteValue) }
+            val sent = remember { ArrayDeque<String>().apply { addLast(model.pasteValue) } }
+            LaunchedEffect(model.pasteValue) { if (model.pasteValue !in sent) typed = model.pasteValue }
+            FlowMonoField(
+                value = typed,
+                placeholder = model.pastePlaceholder,
+                minLines = 4,
+                modifier = Modifier.semantics { contentDescription = "batch-paste" },
+                onValueChange = { next ->
+                    typed = next
+                    sent.addLast(next)
+                    if (sent.size > 256) sent.removeFirst()
+                    onPaste(next)
+                },
+            )
+        } else {
+            FlowMonoField(
+                value = model.pasteValue,
+                placeholder = model.pastePlaceholder,
+                minLines = 4,
+            )
+        }
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1168,12 +1198,46 @@ fun BatchImportBody(
                 fontSize = VelaTextSize.base,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                text = "${model.rateLabel} ${model.rateValue}",
-                color = colors.fgBase,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.base,
-            )
+            if (onRate != null && model.rateInput != null) {
+                // The rate is the core's number; edited here it goes back as text.
+                val rateStyle = TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, textAlign = TextAlign.End)
+                var typedRate by remember { mutableStateOf(model.rateInput) }
+                val sentRate = remember { ArrayDeque<String>().apply { addLast(model.rateInput) } }
+                LaunchedEffect(model.rateInput) { if (model.rateInput !in sentRate) typedRate = model.rateInput }
+                Text(text = model.rateLabel, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
+                Spacer(modifier = Modifier.width(VelaSpacing.xs))
+                BasicTextField(
+                    value = typedRate,
+                    onValueChange = { next ->
+                        typedRate = next
+                        sentRate.addLast(next)
+                        if (sentRate.size > 256) sentRate.removeFirst()
+                        onRate(next)
+                    },
+                    singleLine = true,
+                    textStyle = rateStyle,
+                    cursorBrush = SolidColor(colors.accentBase),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.width(88.dp).semantics { contentDescription = "batch-rate" },
+                )
+                if (model.rateEdited && model.rateReset != null) {
+                    Spacer(modifier = Modifier.width(VelaSpacing.xs))
+                    Text(
+                        text = model.rateReset,
+                        color = colors.accentBase,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.sm,
+                        modifier = Modifier.clickable(onClick = onRateReset),
+                    )
+                }
+            } else {
+                Text(
+                    text = "${model.rateLabel} ${model.rateValue}",
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                )
+            }
             Spacer(modifier = Modifier.width(VelaSpacing.sm))
             Icon(
                 imageVector = VelaIcons.Pencil,
@@ -1235,6 +1299,15 @@ fun BatchImportBody(
             )
         }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
+        model.note?.let {
+            Text(
+                text = it,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.padding(bottom = VelaSpacing.md),
+            )
+        }
         FlowCta(
             label = model.cta,
             onClick = onApply,
