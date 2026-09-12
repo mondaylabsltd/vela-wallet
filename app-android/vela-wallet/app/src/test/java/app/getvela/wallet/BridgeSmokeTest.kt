@@ -7,6 +7,13 @@ import app.getvela.wallet.feature.browser.core.BhistEvent
 import app.getvela.wallet.feature.browser.core.BhistOperation
 import app.getvela.wallet.feature.browser.core.BhistShellResult
 import app.getvela.wallet.feature.browser.core.BhistView
+import app.getvela.wallet.feature.send.core.BatchEvent
+import app.getvela.wallet.feature.send.core.BatchOperation
+import app.getvela.wallet.feature.send.core.BatchShellResult
+import app.getvela.wallet.feature.send.core.BatchToken
+import app.getvela.wallet.feature.send.core.BatchUnit
+import app.getvela.wallet.feature.send.core.BatchView
+import uniffi.vela_core_uniffi.BatchImportCore
 import app.getvela.wallet.feature.browser.core.DpermEvent
 import app.getvela.wallet.feature.browser.core.DpermOperation
 import app.getvela.wallet.feature.browser.core.DpermShellResult
@@ -86,6 +93,7 @@ class BridgeSmokeTest {
         SignOperation.serializer().descriptor.serialName -> SignOperation.SwitchActiveAccount(0) as O
         ClearOperation.serializer().descriptor.serialName -> ClearOperation.Now as O
         GuardOperation.serializer().descriptor.serialName -> GuardOperation.ReadTokenMetadata(1, emptyList()) as O
+        BatchOperation.serializer().descriptor.serialName -> BatchOperation.PickFile as O
         else -> error("no dummy for ${op.descriptor.serialName}")
     }
 
@@ -164,6 +172,28 @@ class BridgeSmokeTest {
         }
         guard.dispatch(GuardEvent.RevokeChosen, GuardEvent.serializer())
         withTimeout(10_000) { guard.view.first { true } }
+
+        // The payroll batch (spec 045): open with a token, paste two rows,
+        // the core parses and (rate resolved) prices them.
+        val batch = host(BatchImportCore().asBridge(), BatchView(), BatchView.serializer(), BatchOperation.serializer(), BatchShellResult.serializer()) { op ->
+            when (op) {
+                is BatchOperation.FetchUsdFiatRate -> BatchShellResult.RateResolved(op.code, 1.0)
+                BatchOperation.PickFile -> BatchShellResult.FilePickCancelled
+                is BatchOperation.SaveTemplateFile -> BatchShellResult.TemplateSaved
+            }
+        }
+        batch.dispatch(
+            BatchEvent.Open(BatchToken("USDT", 6, "100", 1.0), "USD", 60),
+            BatchEvent.serializer(),
+        )
+        batch.dispatch(BatchEvent.SetUnit(BatchUnit.Token), BatchEvent.serializer())
+        batch.dispatch(
+            BatchEvent.SetRawText("0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141, 1\n0x88cCA0EeDbF2C4426110bbFc998F048689266894, 2"),
+            BatchEvent.serializer(),
+        )
+        val parsed = withTimeout(10_000) { batch.view.first { it.recipient_count == 2 } }
+        assertTrue(parsed.can_apply)
+        assertEquals("3", parsed.total_token)
 
         assertTrue("no core faults: $faults", faults.isEmpty())
     }

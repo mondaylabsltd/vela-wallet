@@ -17,6 +17,21 @@ import app.getvela.wallet.feature.contacts.core.ContactSource
 import app.getvela.wallet.feature.contacts.core.ContactTombstone
 import app.getvela.wallet.feature.contacts.core.ContactTxKind
 import app.getvela.wallet.feature.contacts.core.ContactsView
+import app.getvela.wallet.feature.contacts.core.ContactExportFile
+import app.getvela.wallet.feature.contacts.core.ContactExportScope
+import app.getvela.wallet.feature.contacts.core.ContactFileFormat
+import app.getvela.wallet.feature.contacts.core.ContactImportFailure
+import app.getvela.wallet.feature.contacts.core.ContactSection
+import app.getvela.wallet.feature.send.core.BatchEvent
+import app.getvela.wallet.feature.send.core.BatchFileContent
+import app.getvela.wallet.feature.send.core.BatchOperation
+import app.getvela.wallet.feature.send.core.BatchPreviewRow
+import app.getvela.wallet.feature.send.core.BatchRateStatus
+import app.getvela.wallet.feature.send.core.BatchRecipient
+import app.getvela.wallet.feature.send.core.BatchShellResult
+import app.getvela.wallet.feature.send.core.BatchToken
+import app.getvela.wallet.feature.send.core.BatchUnit
+import app.getvela.wallet.feature.send.core.BatchView
 import app.getvela.wallet.feature.send.core.FeeAssetKind
 import app.getvela.wallet.feature.send.core.FeeAssetQuote
 import app.getvela.wallet.feature.send.core.FeeAssetView
@@ -191,6 +206,7 @@ import app.getvela.wallet.feature.settings.core.NetWizardView
 import java.io.File
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.descriptors.elementNames
 import kotlinx.serialization.descriptors.PolymorphicKind
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.serializer
@@ -278,6 +294,11 @@ class CoreWireDriftTest {
         assertFieldsExist<ContactGroupInput>("ContactGroupInput")
         assertFieldsExist<ContactImportEntry>("ContactImportEntry")
         assertFieldsExist<ContactImportGroup>("ContactImportGroup")
+        assertFieldsExist<ContactSection>("ContactSection")
+        assertFieldsExist<ContactExportFile>("ContactExportFile")
+        assertVariantsExhaustive<ContactExportScope>("ContactExportScope")
+        assertVariantsExhaustive<ContactImportFailure>("ContactImportFailure")
+        assertEquals(listOf("json", "csv"), ContactFileFormat.serializer().descriptor.elementNames.toList())
     }
 
     @Test
@@ -811,6 +832,22 @@ class CoreWireDriftTest {
         assertVariantsExhaustive<BhistShellResult>("BhistShellResult")
         assertVariantsExist<BhistEvent>("BhistEvent")
         assertVariantFields(BhistEvent.serializer(), "BhistEvent")
+    }
+
+    /** The `batch_import` machine (spec 045): the wire the payroll batch crosses. */
+    @Test
+    fun `batch import wire matches the core`() {
+        assertFieldsExist<BatchView>("BatchView")
+        assertFieldsExist<BatchToken>("BatchToken")
+        assertFieldsExist<BatchPreviewRow>("BatchPreviewRow")
+        assertFieldsExist<BatchRecipient>("BatchRecipient")
+        assertVariantsExhaustive<BatchOperation>("BatchOperation")
+        assertVariantsExhaustive<BatchShellResult>("BatchShellResult")
+        assertVariantsExhaustive<BatchFileContent>("BatchFileContent")
+        assertVariantsExhaustive<BatchEvent>("BatchImportEvent")
+        assertVariantFields(BatchEvent.serializer(), "BatchImportEvent")
+        assertEquals(listOf("fiat", "token"), BatchUnit.serializer().descriptor.elementNames.toList())
+        assertEquals(listOf("loading", "ok", "failed"), BatchRateStatus.serializer().descriptor.elementNames.toList())
     }
 
     @Test

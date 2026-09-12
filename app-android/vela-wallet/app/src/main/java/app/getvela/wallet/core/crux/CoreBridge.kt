@@ -9,6 +9,7 @@ import uniffi.vela_core_uniffi.LoginCore
 import uniffi.vela_core_uniffi.FeePolicyCore
 import uniffi.vela_core_uniffi.ManageTokensCore
 import uniffi.vela_core_uniffi.ApprovalGuardCore
+import uniffi.vela_core_uniffi.BatchImportCore
 import uniffi.vela_core_uniffi.ClearSigningCore
 import uniffi.vela_core_uniffi.SignRequestCore
 import uniffi.vela_core_uniffi.BrowserHistoryCore
@@ -109,6 +110,10 @@ fun ClearSigningCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
 fun ApprovalGuardCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+// Spec 045: the payroll batch the split rows are seeded from.
+fun BatchImportCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
 // Spec 043: the send path's three machines.

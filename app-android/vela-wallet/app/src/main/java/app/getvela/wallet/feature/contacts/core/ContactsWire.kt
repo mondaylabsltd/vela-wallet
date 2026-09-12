@@ -27,9 +27,62 @@ data class ContactsView(
      */
     val contacts: List<Contact> = emptyList(),
     val groups: List<ContactGroupView> = emptyList(),
+    val sections: List<ContactSection> = emptyList(),
     val last_import: ContactImportReport? = null,
+    val import_failure: ContactImportFailure? = null,
+    val export: ContactExportFile? = null,
     val recipient: ContactRecipientView? = null,
 )
+
+/** One letter of the A–Z directory: the addresses filed under it, in the book's order. */
+@Serializable
+data class ContactSection(val letter: String, val addresses: List<String> = emptyList())
+
+/** A file the core wrote; sits in the view until `ExportTaken`. `contacts` is `u32`. */
+@Serializable
+data class ContactExportFile(
+    val filename: String,
+    val mime: String,
+    val content: String,
+    val contacts: Int = 0,
+)
+
+@Serializable
+sealed class ContactExportScope {
+    @Serializable
+    @SerialName("all")
+    data object All : ContactExportScope()
+
+    @Serializable
+    @SerialName("group")
+    data class Group(val id: String) : ContactExportScope()
+}
+
+@Serializable
+enum class ContactFileFormat {
+    @SerialName("json") Json,
+    @SerialName("csv") Csv,
+}
+
+/** Why an import file was refused, before anything was written. */
+@Serializable
+sealed class ContactImportFailure {
+    @Serializable
+    @SerialName("malformed_json")
+    data object MalformedJson : ContactImportFailure()
+
+    @Serializable
+    @SerialName("no_address_column")
+    data object NoAddressColumn : ContactImportFailure()
+
+    @Serializable
+    @SerialName("empty")
+    data object Empty : ContactImportFailure()
+
+    @Serializable
+    @SerialName("unknown_group")
+    data object UnknownGroup : ContactImportFailure()
+}
 
 /**
  * One address-book entry.
@@ -246,6 +299,44 @@ sealed class ContactEvent {
     @Serializable
     @SerialName("inspect_recipient")
     data class InspectRecipient(val chain_id: Int, val address: String) : ContactEvent()
+
+    /** A picked file's text; the core parses JSON or CSV and existing wins. */
+    @Serializable
+    @SerialName("import_file")
+    data class ImportFile(
+        val content: String,
+        val filename: String? = null,
+        val into_group: String? = null,
+        val now_ms: Double,
+    ) : ContactEvent()
+
+    @Serializable
+    @SerialName("import_acknowledged")
+    data object ImportAcknowledged : ContactEvent()
+
+    @Serializable
+    @SerialName("export_requested")
+    data class ExportRequested(
+        val scope: ContactExportScope,
+        val format: ContactFileFormat,
+        val exported_at_iso: String,
+    ) : ContactEvent()
+
+    @Serializable
+    @SerialName("export_taken")
+    data object ExportTaken : ContactEvent()
+
+    @Serializable
+    @SerialName("add_group_members")
+    data class AddGroupMembers(val id: String, val members: List<String>) : ContactEvent()
+
+    @Serializable
+    @SerialName("remove_group_member")
+    data class RemoveGroupMember(val id: String, val address: String) : ContactEvent()
+
+    @Serializable
+    @SerialName("set_contact_groups")
+    data class SetContactGroups(val address: String, val group_ids: List<String>) : ContactEvent()
 }
 
 // -- what the core asks the shell to do --------------------------------------

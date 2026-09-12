@@ -368,3 +368,10 @@ bridge_object!(
     ApprovalGuardCore,
     vela_core::app::approval_guard::ApprovalGuard
 );
+
+bridge_object!(
+    /// The payroll batch: pasted or picked rows, the rate, the preview and
+    /// the recipients the send machine seeds its split from (spec 045).
+    BatchImportCore,
+    vela_core::app::batch_import::BatchImport
+);
