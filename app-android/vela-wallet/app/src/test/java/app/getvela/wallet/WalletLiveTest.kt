@@ -35,7 +35,7 @@ class WalletLiveTest {
     private val strings: VelaStrings by lazy {
         val root = System.getProperty("vela.repo.root")
             ?: error("vela.repo.root not set — run via Gradle (testOptions wires it)")
-        I18nRuntime { tag -> File(root, "public/i18n/$tag.json").readBytes() }
+        I18nRuntime { tag -> File(root, "assets/i18n/$tag.json").readBytes() }
             .apply { initialize("en") }
     }
 
