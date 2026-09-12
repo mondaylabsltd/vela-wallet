@@ -50,32 +50,32 @@ NDK build; `JAVA_HOME` = Android Studio's JBR.
 
 ## Phase 1 — Foundational: the engine and the provider (US0)
 
-- [ ] **T010** `app-android/vela-wallet/gradle/libs.versions.toml` +
+- [X] **T010** `app-android/vela-wallet/gradle/libs.versions.toml` +
       `app/build.gradle.kts` — `androidx.webkit`; a `syncVelaProviderAssets`
       task copying `app-web/vela-wallet/extension/inpage.js` and
       `lib/protocol.js` into `app/src/main/assets/provider/` (like
       `syncVelaI18nAssets`); `.gitignore` the synced copies.
-- [ ] **T011** `…/feature/browser/core/ProviderBridge.kt` — the provider
+- [X] **T011** `…/feature/browser/core/ProviderBridge.kt` — the provider
       bundle (`provider_script()`'s IIFE) + the bridge script (`BRIDGE_JS`
       with `VelaHost.post`), injected via `WebViewCompat.addDocumentStartJavaScript`
       (fallback `onPageStarted`, logged `browser.inject path=…`); the
       `@JavascriptInterface` sink; `deliver(json)` via `evaluateJavascript`;
       top-frame-only in the script.
-- [ ] **T012** `…/feature/browser/core/DappRpc.kt` — `Route`, the three
+- [X] **T012** `…/feature/browser/core/DappRpc.kt` — `Route`, the three
       method sets, `route(method)`, `switchChainParam`, `hexChainId`
       (desktop `dapp_rpc.rs`).
-- [ ] **T013** [P] `app/src/test/…/DappRpcParityTest.kt` — parses
+- [X] **T013** [P] `app/src/test/…/DappRpcParityTest.kt` — parses
       `extension/lib/protocol.js` (via `vela.repo.root`) and compares the
       sets; `BUNDLER`/`READ_ONLY`/`READ_PROXY` blocks.
-- [ ] **T014** `app/src/debug/res/xml/network_security_config.xml` +
+- [X] **T014** `app/src/debug/res/xml/network_security_config.xml` +
       debug manifest — cleartext to `127.0.0.1`/`localhost` only;
       `app-android/vela-wallet/dev/testdapp/index.html` — Connect, Sign,
       Block number, Send dust, Approve unlimited, printing every answer and
       every event.
-- [ ] **T015** `…/feature/explore/…` — a `BrowserPage` composable
+- [X] **T015** `…/feature/explore/…` — a `BrowserPage` composable
       (`AndroidView` hosting the tab's engine) in the browsing slot where
       `DemoPage` draws; the drawn `DemoPage` stays for the gallery.
-- [ ] **T016** `[device]` SC-001: the test page prints `announced: Vela`
+- [X] **T016** `[device]` SC-001: the test page prints `announced: Vela`
       and `window.ethereum: present`; `browser.inject path=document-start`
       (or the fallback, recorded).
 

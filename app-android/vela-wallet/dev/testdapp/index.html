@@ -1,0 +1,60 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vela test dApp (Android)</title>
+<style>
+  body { font: 16px/1.4 system-ui, sans-serif; margin: 16px; }
+  button { font-size: 18px; padding: 12px 16px; margin: 6px 6px 6px 0; }
+  pre { white-space: pre-wrap; word-break: break-all; background: #f4f4f4; padding: 12px; }
+</style>
+<body>
+  <h1>Vela test dApp</h1>
+  <p>Spec 044's device harness: the web's <code>e2e/testdapp/index.html</code> plus the two buttons that move money.</p>
+  <button id="connect" type="button">Connect</button>
+  <button id="chain" type="button">Chain</button>
+  <button id="block" type="button">Block number</button>
+  <button id="switch" type="button">Switch to Gnosis</button>
+  <button id="sign" type="button">Sign</button>
+  <button id="send" type="button">Send dust</button>
+  <button id="approve" type="button">Approve unlimited</button>
+  <pre id="out">waiting…</pre>
+  <script>
+    const out = document.getElementById('out');
+    const state = { announced: [], legacy: null, results: {}, events: [] };
+    const show = () => (out.textContent = JSON.stringify(state, null, 2));
+    window.addEventListener('eip6963:announceProvider', (ev) => {
+      const { info, provider } = ev.detail;
+      state.announced.push({ name: info.name, rdns: info.rdns, sameAsWindowEthereum: provider === window.ethereum, frozenInfo: Object.isFrozen(info) });
+      window.__velaProvider = provider;
+      for (const event of ['accountsChanged', 'chainChanged', 'connect', 'disconnect']) {
+        provider.on(event, (data) => { state.events.push({ event, data }); show(); });
+      }
+      show();
+    });
+    window.dispatchEvent(new Event('eip6963:requestProvider'));
+    state.legacy = window.ethereum ? { present: true, isMetaMask: window.ethereum.isMetaMask === true, isVela: window.ethereum.isVela === true } : { present: false };
+    show();
+    const FOUNDER = '0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141';
+    const GNOSIS_USDC = '0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83';
+    const SPENDER = '0x1111111111111111111111111111111111111111';
+    const MAX = 'f'.repeat(64);
+    const me = () => (state.results.eth_requestAccounts && state.results.eth_requestAccounts.result || [])[0] || window.ethereum.selectedAddress;
+    window.__ask = async (method, params) => {
+      try {
+        const result = await window.ethereum.request({ method, params: params ?? [] });
+        state.results[method] = { ok: true, result };
+      } catch (error) {
+        state.results[method] = { ok: false, code: error.code, message: error.message };
+      }
+      show();
+      return state.results[method];
+    };
+    document.getElementById('connect').onclick = () => window.__ask('eth_requestAccounts');
+    document.getElementById('chain').onclick = () => window.__ask('eth_chainId');
+    document.getElementById('block').onclick = () => window.__ask('eth_blockNumber');
+    document.getElementById('switch').onclick = () => window.__ask('wallet_switchEthereumChain', [{ chainId: '0x64' }]);
+    document.getElementById('sign').onclick = () => window.__ask('personal_sign', ['0x48656c6c6f2c2056656c61', me()]);
+    document.getElementById('send').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: FOUNDER, value: '0x38d7ea4c68000' }]);
+    document.getElementById('approve').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: GNOSIS_USDC, data: '0x095ea7b3' + SPENDER.slice(2).padStart(64, '0') + MAX, value: '0x0' }]);
+  </script>
+</body>

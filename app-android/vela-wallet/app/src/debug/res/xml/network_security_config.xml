@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Spec 044, DEBUG ONLY: the local test dApp is served to the phone over the
+  cable (`adb reverse tcp:8137 tcp:8137`) as plain http on the loopback
+  address. Nothing else may be cleartext; the release build carries no
+  network security config at all.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

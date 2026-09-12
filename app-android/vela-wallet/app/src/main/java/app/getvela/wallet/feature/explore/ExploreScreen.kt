@@ -71,11 +71,20 @@ fun ExploreScreen(
     modifier: Modifier = Modifier,
     signing: SigningScreenModel? = null,
     onSelectTab: (VelaTab) -> Unit = {},
+    /** Spec 044: the live page, drawn where the demo page is when present. */
+    page: (@Composable () -> Unit)? = null,
+    /** Spec 044: which view to open on when a live page exists. */
+    initialView: ExploreView? = null,
+    /** Spec 044: the address typed on the start page becomes a real navigation. */
+    onOpenUrl: ((String) -> Unit)? = null,
+    onClosePage: () -> Unit = {},
+    onPageBack: () -> Unit = {},
+    onPageForward: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
 
-    var viewOverride by rememberSaveable(model.state) { mutableStateOf<ExploreView?>(null) }
+    var viewOverride by rememberSaveable(model.state, initialView) { mutableStateOf(initialView) }
     var sheet by remember(model.state) { mutableStateOf(model.sheet) }
     var signingUp by remember(model.state) { mutableStateOf(false) }
     /// Groups hidden HERE rather than in the fixture: hiding is something a
@@ -112,11 +121,11 @@ fun ExploreScreen(
                     secureLabel = strings.t("explore.secureSite"),
                     closeLabel = strings.t("explore.closePage"),
                     menuLabel = strings.t("explore.siteMenu"),
-                    onClose = { viewOverride = ExploreView.Start },
+                    onClose = { onClosePage(); viewOverride = ExploreView.Start },
                     onMenu = { sheet = model.siteMenuSheet },
                 )
                 Box(Modifier.weight(1f)) {
-                    DemoPage(model.browser.page, onAction = { if (signing != null) signingUp = true })
+                    if (page != null) page() else DemoPage(model.browser.page, onAction = { if (signing != null) signingUp = true })
                 }
                 BrowserToolbar(
                     modifier = Modifier.navigationBarsPadding(),
@@ -136,6 +145,7 @@ fun ExploreScreen(
                 StartPage(
                     model = model,
                     hidden = hidden,
+                    onOpenUrl = onOpenUrl?.let { open -> { text: String -> open(text); viewOverride = ExploreView.Browsing } },
                     onBrowse = { viewOverride = ExploreView.Browsing },
                     onTabs = { viewOverride = ExploreView.Tabs },
                     onManageGroups = { sheet = model.groupManageSheet },
@@ -210,6 +220,7 @@ private fun StartPage(
     model: ExploreScreenModel,
     hidden: Set<String>,
     onBrowse: () -> Unit,
+    onOpenUrl: ((String) -> Unit)? = null,
     onTabs: () -> Unit,
     onManageGroups: () -> Unit,
     modifier: Modifier = Modifier,
@@ -266,7 +277,7 @@ private fun StartPage(
         ExploreSearchField(
             placeholder = model.searchPlaceholder,
             scanLabel = model.scanLabel,
-            onSubmit = { onBrowse() },
+            onSubmit = { text -> if (onOpenUrl != null && text.isNotBlank()) onOpenUrl(text) else onBrowse() },
         )
 
         model.empty?.let {

@@ -335,6 +335,14 @@ fun VelaNavHost(
             // Which body the signed-in shell is showing. Survives rotation for
             // the same reason the flow stack does.
             var section by rememberSaveable { mutableStateOf(VelaTab.Wallet) }
+            // Spec 044: a page opened from outside 探索 (a deep link, the dev seam) shows itself.
+            val browserOpenRequested by application.container.browser.openRequested.collectAsStateWithLifecycle()
+            LaunchedEffect(browserOpenRequested) {
+                if (browserOpenRequested) {
+                    section = VelaTab.Explore
+                    application.container.browser.openRequested.value = false
+                }
+            }
             // Back unwinds the flow stack first, then leaves 探索 for 钱包 —
             // Back out of a browser should land on the wallet, not on Welcome.
             BackHandler(enabled = flows.isOpen) { flows.back() }
@@ -583,10 +591,32 @@ fun VelaNavHost(
                         SigningFixtures.build(SigningScreenState.CS12, strings)
                             .withSignerIdentity(session.activeName, session.address)
                     }
+                    // Spec 044: a live tab replaces the drawn demo page; the
+                    // address typed on the start page opens a real site.
+                    val browser = application.container.browser
+                    val engine by browser.current.collectAsStateWithLifecycle()
+                    val engineState by (engine?.state ?: kotlinx.coroutines.flow.MutableStateFlow(app.getvela.wallet.feature.browser.core.EngineState())).collectAsStateWithLifecycle()
+                    val liveModel = engine?.let {
+                        exploreModel.copy(
+                            browser = exploreModel.browser.copy(
+                                url = engineState.url,
+                                host = engineState.host.ifEmpty { exploreModel.browser.host },
+                                secure = engineState.secure,
+                                canBack = engineState.canBack,
+                                canForward = engineState.canForward,
+                            ),
+                        )
+                    } ?: exploreModel
                     ExploreScreen(
-                        model = exploreModel,
+                        model = liveModel,
                         signing = signing,
                         onSelectTab = select,
+                        page = engine?.let { e -> { app.getvela.wallet.feature.explore.components.BrowserPage(e) } },
+                        initialView = if (engine != null) app.getvela.wallet.feature.explore.ExploreView.Browsing else null,
+                        onOpenUrl = { browser.open(it) },
+                        onClosePage = { browser.close() },
+                        onPageBack = { browser.back() },
+                        onPageForward = { browser.forward() },
                     )
                 } else {
                     // The holdings, the feed and the currency are this device's

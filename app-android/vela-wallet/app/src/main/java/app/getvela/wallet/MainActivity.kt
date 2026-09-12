@@ -249,6 +249,7 @@ class MainActivity : ComponentActivity() {
         val container = (application as VelaWalletApplication).container
         container.applySystemLocale()
         receiptRequested()?.let { container.pendingReceipt.value = it }
+        intent?.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
         when (parallelSpaceRequested()) {
             true -> ParallelSpaceHook.enter()
             false -> ParallelSpaceHook.leave()

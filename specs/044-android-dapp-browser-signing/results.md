@@ -44,3 +44,48 @@ store has answered (`Start → ReadHistory → Loaded`), and `BhistView` has no
 "ready" flag — a visit dispatched a millisecond after `Start` is dropped.
 The controller must wait for the load (the executor's answer is the
 signal) before recording the first visit; the smoke test does.
+
+### Phase 1 — the engine and the provider (T010–T016)
+
+**What changed**: `androidx.webkit`; a `syncVelaProviderAssets` Gradle
+task copies `extension/inpage.js` and `extension/lib/protocol.js` from the
+web tree into the APK (`assets/provider/`, 16,420 + 13,758 bytes) — one
+script, not a fork; `ProviderBridge` strips the two module keywords at load
+(the desktop's `provider_script()`), wraps the pair in one scope, adds the
+desktop's `BRIDGE_JS` with `VelaHost.post` in place of `window.ipc` (top
+frame only), installs both with `WebViewCompat.addDocumentStartJavaScript`
+(fallback: `onPageStarted`, logged), and delivers answers through
+`window.__velaDeliver`. `BrowserEngine` (one `WebView` per tab, the
+shell's facts: URL, origin through the core's `dapp_origin_of`, host,
+secure, back/forward) and a phase-1 `BrowserController` (open, close,
+back, forward, the request sink, the open-from-outside seam). `DappRpc`
+— the desktop's routing table with the core's `dapp_is_signing_method` as
+its first question. A debug-only network security config permits
+cleartext to the loopback address; `dev/testdapp/index.html` extends the
+web's test dApp with Chain / Block number / Switch / Send dust / Approve
+unlimited. `ExploreScreen` gained a page slot, an initial view, an
+open-URL callback; the start page's search field opens a real site.
+
+**Tests**: `DappRpcParityTest` — the three method sets parsed from
+`protocol.js` equal the Kotlin table; routes fail closed (`eth_sign` and
+`eth_signTransaction` unsupported, `personal_sign` and
+`eth_signTypedData_v4` sign, bundler reads flagged); the switch parameter
+reads hex and decimal.
+
+**Device** (SC-001, `p44-1-provider.png`): `am start … --es vela.openUrl
+http://127.0.0.1:8137/` (served over `adb reverse`) → 探索 opens on the
+page with the address bar reading `127.0.0.1:8137`; the page's own state,
+read through Chrome DevTools (debug builds expose the engine;
+`devtools.sh` in the scratchpad evaluates an expression):
+`announced: [{name: "Vela Wallet", rdns: "app.getvela",
+sameAsWindowEthereum: true, frozenInfo: true}], legacy: {present: true,
+isMetaMask: true, isVela: true}`; `browser.inject path=DocumentStart`
+(WebView 151). The provider's own warm-up asked `eth_chainId` and
+`eth_accounts` at load — unanswered until phase 3.
+
+**Device-found**: a document-start script asks BEFORE `onPageStarted` has
+told anyone the URL — the first cut attached an empty URL to those
+requests (`url=`). The bridge now reads `WebView.url` on the UI thread at
+the moment of each request. Also: `uiautomator` does not list the page's
+text nodes, so the page's state is read through DevTools, not the dump.
+

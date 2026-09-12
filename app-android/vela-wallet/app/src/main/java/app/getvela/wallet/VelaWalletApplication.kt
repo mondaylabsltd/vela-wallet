@@ -11,6 +11,7 @@ import app.getvela.wallet.feature.wallet.core.TrackerNotifier
 import app.getvela.wallet.feature.send.core.UserOpSigner
 import app.getvela.wallet.feature.send.core.SendHapticKind
 import app.getvela.wallet.feature.send.core.SendController
+import app.getvela.wallet.feature.browser.core.BrowserController
 import app.getvela.wallet.feature.contacts.core.ContactIdentity
 import app.getvela.wallet.feature.contacts.core.IdentityResolver
 import app.getvela.wallet.feature.send.core.SendRecipientIdentity
@@ -247,6 +248,15 @@ class AppContainer(private val app: Application) {
                 if (outcome != null) controller.receiptUpdate(hash, outcome)
             }
         }
+    }
+
+    /** The in-app browser (spec 044): the tab engines, the provider bridge, the request sink. */
+    val browser: BrowserController by lazy {
+        BrowserController(
+            context = app,
+            scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+            debuggable = BuildConfig.DEBUG,
+        )
     }
 
     val contacts: ContactsController by lazy {
