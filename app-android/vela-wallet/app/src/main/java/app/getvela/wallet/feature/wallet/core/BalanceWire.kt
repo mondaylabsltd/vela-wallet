@@ -76,6 +76,14 @@ data class BalanceView(
     val display_total_usd: Double? = null,
     val balance_unknown: Boolean = false,
     val balance_partial: Boolean = false,
+    /**
+     * Nothing could be read and nothing is known: the first fetch failed with
+     * no cache to fall back on (#188, spec 038 finding 15). The core's
+     * `display_total_usd` is `0.0` in this state — which is exactly the number
+     * this flag exists to keep off the hero. A skeleton and a reason, never a
+     * zero.
+     */
+    val unreachable: Boolean = false,
     val notice: BalanceNotice? = null,
     val hidden: Boolean = false,
     val refreshing: Boolean = false,

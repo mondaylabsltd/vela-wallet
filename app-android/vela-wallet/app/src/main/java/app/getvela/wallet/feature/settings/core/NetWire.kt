@@ -313,6 +313,16 @@ sealed class NetWizardErrorKind {
     @Serializable
     @SerialName("not_compatible")
     data class NotCompatible(val chain_id: Long) : NetWizardErrorKind()
+
+    /**
+     * The chain's checks could not be completed (main, spec 038): not "this
+     * chain is wrong" but "we could not find out". A closed family the drift
+     * gate checks exhaustively, and for a reason — a kind the phone cannot
+     * decode is not a wrong message, it is a thrown exception in the wizard.
+     */
+    @Serializable
+    @SerialName("check_failed")
+    data class CheckFailed(val chain_id: Long) : NetWizardErrorKind()
 }
 
 // ---------------------------------------------------------------------------

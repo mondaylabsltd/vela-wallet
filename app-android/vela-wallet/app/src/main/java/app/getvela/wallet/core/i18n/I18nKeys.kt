@@ -275,6 +275,13 @@ object I18nKeys {
         const val LIVE_INDICATOR = "home.liveIndicator"
         const val BALANCE_STALE = "home.balanceStale"
         const val BALANCE_UNPRICED = "home.balanceUnpriced"
+        /**
+         * The hero's reason when a first load could read nothing and nothing is
+         * cached (#188, spec 038 finding 15). Borrowed from the onboarding
+         * flow's network line — the same key the web and desktop shells bind
+         * for this state, so one corpus string serves three heroes.
+         */
+        const val BALANCE_UNREACHABLE = "onboarding.common.networkBody"
         const val NO_PRICE = "home.balanceDetailNoPrice"
         const val A11Y_HIDE_BALANCE = "home.a11yHideBalance"
         const val A11Y_SHOW_BALANCE = "home.a11yShowBalance"

@@ -152,6 +152,25 @@ class WalletLiveTest {
         assertEquals("$0", model.balance.integer)
     }
 
+    /**
+     * A first launch that could read nothing, with nothing cached. The core's
+     * `display_total_usd` is 0.0 here, not null — and rendering it was the bug
+     * spec 038 finding 15 names: a settled-looking "$0.00" over an unreadable
+     * chain. The flag keeps that number off the hero; a skeleton and a reason
+     * take its place, and the three zero-ish states stay distinct.
+     */
+    @Test
+    fun `an unreachable first load shows no number`() {
+        val model = home(BalanceView(display_total_usd = 0.0, unreachable = true))
+
+        assertEquals(BalanceStateKind.Loading, model.balance.state)
+        assertNull(model.balance.integer)
+        val status = model.balance.status
+        assertNotNull("an empty hero with no reason given is the bug", status)
+        assertEquals(BalanceStatusKind.Warning, status!!.kind)
+        assertTrue(status.text.isNotBlank())
+    }
+
     /** One priced holding is enough for a total; the rest show "—" in their rows. */
     @Test
     fun `a partly priced wallet totals what it could price`() {
