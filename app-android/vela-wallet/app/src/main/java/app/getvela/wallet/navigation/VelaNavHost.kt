@@ -860,11 +860,13 @@ fun VelaNavHost(
                 form = formLabels?.let { ContactsLive.form(it, edit = formEdit == true, name = formName, address = formAddress) },
                 notice = ContactsLive.importNotice(book, strings, close = strings.t(I18nKeys.Flows.CLOSE)),
                 menu = when {
-                    // The group's member picker: everyone in the book who is not in it yet.
+                    // The group's member picker: the whole book, ticked where it is
+                    // in the group; a tap adds (AddGroupMembers) or removes (RemoveGroupMember).
                     memberPicker && group != null -> ActionMenuModel(
-                        items = book.contacts
-                            .filter { c -> group.members.none { it.address == c.address } }
-                            .map { c -> MenuItemModel(id = "contacts.member.add:" + c.address, icon = ContactsIcon.AddContact, label = ContactsLive.displayName(c)) },
+                        items = book.contacts.map { c ->
+                            val member = group.members.any { it.address == c.address }
+                            MenuItemModel(id = "contacts.member.toggle:" + c.address, icon = ContactsIcon.AddContact, label = (if (member) "✓ " else "") + ContactsLive.displayName(c))
+                        },
                         cancel = menuCancel,
                     )
                     // The contact's groups: every group, ticked when it holds this person.
@@ -938,12 +940,11 @@ fun VelaNavHost(
                             }
                             "contacts.searchClear" -> query = ""
                             else -> when {
-                                id.startsWith("contacts.member.add:") -> openGroup?.let { gid ->
-                                    contacts.addGroupMembers(gid, listOf(id.removePrefix("contacts.member.add:")))
+                                id.startsWith("contacts.member.toggle:") -> openGroup?.let { gid ->
+                                    val address = id.removePrefix("contacts.member.toggle:")
+                                    val member = group?.members?.any { it.address == address } == true
+                                    if (member) contacts.removeGroupMember(gid, address) else contacts.addGroupMembers(gid, listOf(address))
                                     memberPicker = false
-                                }
-                                id.startsWith("contacts.member.remove:") -> openGroup?.let { gid ->
-                                    contacts.removeGroupMember(gid, id.removePrefix("contacts.member.remove:"))
                                 }
                                 id.startsWith("contacts.group.toggle:") -> selected?.let { contact ->
                                     val gid = id.removePrefix("contacts.group.toggle:")

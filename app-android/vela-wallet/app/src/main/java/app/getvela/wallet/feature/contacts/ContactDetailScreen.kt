@@ -37,6 +37,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaTextSize
 import app.getvela.wallet.feature.contacts.components.AddressBlock
 import app.getvela.wallet.feature.contacts.components.ContactsMetrics
 import app.getvela.wallet.feature.contacts.components.ContactsNavHeader
+import app.getvela.wallet.feature.contacts.components.ActionMenuSheet
 import app.getvela.wallet.feature.contacts.components.DeleteConfirmSheet
 import app.getvela.wallet.feature.contacts.components.DestructiveTextButton
 import app.getvela.wallet.feature.contacts.components.EmptyStateCta
@@ -217,6 +218,14 @@ fun ContactDetailScreen(
         }
     }
 
+    // Spec 045 US6: the contact's group picker is a menu sheet over this page.
+    model.menu?.let { menu ->
+        ActionMenuSheet(
+            model = menu,
+            onDismiss = actions.onDismissMenu,
+            onItem = { actions.onAction(it.id) },
+        )
+    }
     model.deleteConfirm?.let { confirm ->
         DeleteConfirmSheet(
             model = confirm,

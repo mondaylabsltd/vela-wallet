@@ -49,17 +49,17 @@
 
 ## Phase 6 — US5b/US6/US7 Contacts wired (P1/P2)
 
-- [ ] T027 [US5] `ContactsController`: `openAdd()`, `openEdit(address)`, `formName/formAddress`, `saveForm()` → `Save{input, now_ms}` (core validation; the view's outcome shown), `toggleFavourite(address)`, `closeForm()`; `ContactsLive.form(view, draft)`; `ContactsMachineTest` save/favourite
-- [ ] T028 [US6] `ContactsController`: `export(scope, format)` → `ExportRequested` → view `export` → `DocumentPorts.share` → `ExportTaken`; `import(intoGroup?)` → `DocumentPorts.pick` → `ImportFile` → `last_import`/`import_failure` shown → `ImportAcknowledged`; `ContactsLive` report/failure words (`importDone*`, `importFail*`)
-- [ ] T029 [US6] Groups both ways: detail chips editable → `SetContactGroups{address, group_ids}`; group sheet members → `AddGroupMembers`/`RemoveGroupMember`; `ContactsMachineTest`
-- [ ] T030 [US7] Inspection on open: `InspectRecipient{chain_id, address}` on detail open; `ContactsLive.detail` draws `contractTag`/`walletTag` from `recipient.is_contract`/`kind`, `firstTimeTagNeutral` from `first_interaction`
-- [ ] T031 [US5] `VelaNavHost` + `ContactsRoute`: form sheet raised from Add/Edit, star, ⋯ menu Import/Export, group member editing; `DocumentPorts` bound in `MainActivity`
-- [ ] T032 Device: form add + edit + star + force-stop (SC-005); export via share sheet → Files, import back → existing wins (SC-006); founder = Wallet, USDC contract = Contract (SC-007)
+- [x] T027 [US5] `ContactsController`: `openAdd()`, `openEdit(address)`, `formName/formAddress`, `saveForm()` → `Save{input, now_ms}` (core validation; the view's outcome shown), `toggleFavourite(address)`, `closeForm()`; `ContactsLive.form(view, draft)`; `ContactsMachineTest` save/favourite
+- [x] T028 [US6] `ContactsController`: `export(scope, format)` → `ExportRequested` → view `export` → `DocumentPorts.share` → `ExportTaken`; `import(intoGroup?)` → `DocumentPorts.pick` → `ImportFile` → `last_import`/`import_failure` shown → `ImportAcknowledged`; `ContactsLive` report/failure words (`importDone*`, `importFail*`)
+- [x] T029 [US6] Groups both ways: detail chips editable → `SetContactGroups{address, group_ids}`; group sheet members → `AddGroupMembers`/`RemoveGroupMember`; `ContactsMachineTest`
+- [x] T030 [US7] Inspection on open: `InspectRecipient{chain_id, address}` on detail open; `ContactsLive.detail` draws `contractTag`/`walletTag` from `recipient.is_contract`/`kind`, `firstTimeTagNeutral` from `first_interaction`
+- [x] T031 [US5] `VelaNavHost` + `ContactsRoute`: form sheet raised from Add/Edit, star, ⋯ menu Import/Export, group member editing; `DocumentPorts` bound in `MainActivity`
+- [x] T032 Device: form add + edit + star + force-stop (SC-005); export via share sheet → Files, import back → existing wins (SC-006); founder = Wallet, USDC contract = Contract (SC-007)
 
 ## Phase 7 — Closeout
 
-- [ ] T033 Gates: unit suite 0 failures, `CoreWireDriftTest`, `check-native-reachability.mjs` (android set + reasons), `build-web.mjs --check`, .so size under 19.5 MB
-- [ ] T034 `specs/045-android-send-contacts-parity/results.md` (phases, device evidence, owed), memory update
+- [x] T033 Gates: unit suite 0 failures, `CoreWireDriftTest`, `check-native-reachability.mjs` (android set + reasons), `build-web.mjs --check`, .so size under 19.5 MB
+- [x] T034 `specs/045-android-send-contacts-parity/results.md` (phases, device evidence, owed), memory update
 
 ## Dependencies
 Phase 0 → all. Phase 1 → Phase 3 (batch feeds split). Phase 5 → Phase 6. Phases 2, 4 independent after 0.

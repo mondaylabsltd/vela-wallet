@@ -59,7 +59,9 @@ const EXEMPT = {
 	// `browser` (spec 044) draws no screen either: the in-app browser's pages
 	// are the `explore` family's, hosted by `BrowserPage` there; `browser/`
 	// holds the machines, the provider bridge and the live model builder.
-	android: new Set(['send', 'browser']),
+	// documents (045): the platform's picker/creator/share sheet, an Activity-bound
+	// port with no screen of its own — reached from the batch sheet and the contacts menu.
+	android: new Set(['send', 'browser', 'documents']),
 	ios: new Set([])
 };
 
