@@ -811,6 +811,12 @@
    "pickTitle": "Ví nào?",
    "pickBody": "{{product}} đang giữ nhiều hơn một ví Vela. Hãy chọn ví bạn muốn đăng nhập.",
    "pickUnnamed": "Ví chưa đặt tên"
+  },
+  "storage": {
+   "unreadableTitle": "Không đọc được dữ liệu ví trong trình duyệt này",
+   "unreadableBody": "Danh sách ví đã lưu có dạng mà phiên bản này không đọc được. Đăng nhập lại để dựng lại từ passkey của bạn, hoặc đặt lại bản sao trong trình duyệt này. Bản thân ví không bị ảnh hưởng: nó nằm trên chuỗi, sau passkey của bạn.",
+   "signInAgain": "Đăng nhập lại",
+   "resetCopy": "Đặt lại bản sao trong trình duyệt này"
   }
  },
  "connect": {

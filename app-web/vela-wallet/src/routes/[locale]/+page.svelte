@@ -76,6 +76,29 @@
 	 * second login session.
 	 */
 	let starting = $state(false);
+	/**
+	 * Spec 048: the core refused this browser's stored records (the retired
+	 * client's spelling, or plain damage). The loop answered the machine with
+	 * its failure; this is the sentence and the two ways out.
+	 */
+	let storageFault = $state<string | null>(null);
+	const storageCopy: PromptCopy = $derived({
+		title: strings('onboarding.storage.unreadableTitle'),
+		message: strings('onboarding.storage.unreadableBody'),
+		confirm: {
+			confirmLabel: strings('onboarding.storage.resetCopy'),
+			cancelLabel: strings('onboarding.storage.signInAgain')
+		}
+	});
+	async function answerStorage(reset: boolean) {
+		storageFault = null;
+		session.fault = null;
+		login?.dispose();
+		login = null;
+		loginView = null;
+		starting = false;
+		if (reset) await session.resetLocalCopy();
+	}
 
 	/**
 	 * The sign-in method picker is open (spec 038 finding 20). The web used to
@@ -138,7 +161,12 @@
 				await loadOnboardingCore();
 				login = createLoginSession({
 					onView: (next) => (loginView = next),
-					deps: { prompt, complete }
+					deps: { prompt, complete },
+					onError: (error) => {
+						console.error('[login] core fault:', error);
+						storageFault = error instanceof Error ? error.message : String(error);
+						starting = false;
+					}
 				});
 				login.start({ type: 'start' });
 			}
@@ -266,6 +294,14 @@
 			pending?.resolve(accepted);
 			pending = null;
 		}}
+	/>
+{/if}
+
+{#if storageFault !== null || session.fault !== null}
+	<PromptSheet
+		copy={storageCopy}
+		dismissLabel={strings('onboarding.storage.signInAgain')}
+		onAnswer={(accepted) => void answerStorage(accepted)}
 	/>
 {/if}
 

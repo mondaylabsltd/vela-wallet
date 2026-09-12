@@ -811,6 +811,12 @@
    "pickTitle": "登入邊個錢包？",
    "pickBody": "{{product}} 上面存咗唔止一個 Vela 錢包，揀返你要登入嗰個。",
    "pickUnnamed": "未命名錢包"
+  },
+  "storage": {
+   "unreadableTitle": "呢個瀏覽器入面嘅錢包資料讀唔到",
+   "unreadableBody": "儲存咗嘅錢包清單係呢個版本讀唔明嘅格式。重新登入可以用你嘅 passkey 重建，或者重設呢個瀏覽器入面嘅副本。錢包本身唔受影響：佢喺鏈上，由你嘅 passkey 保護。",
+   "signInAgain": "重新登入",
+   "resetCopy": "重設呢個瀏覽器嘅副本"
   }
  },
  "connect": {

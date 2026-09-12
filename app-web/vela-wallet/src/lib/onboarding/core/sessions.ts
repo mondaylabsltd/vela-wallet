@@ -46,7 +46,8 @@ export function createCreateWalletSession(
 			onView: options.onView,
 			execute: createOnboardingExecutor(options.deps),
 			toFailure: operationFailure,
-			onError: options.onError
+			// Never silent (spec 048): a caller that passes no handler still gets the fault reported.
+			onError: options.onError ?? ((error) => console.error('[onboarding] core fault:', error))
 		}
 	);
 }
@@ -58,7 +59,8 @@ export function createLoginSession(options: SessionOptions<LoginView>): LoginSes
 			onView: options.onView,
 			execute: createOnboardingExecutor(options.deps),
 			toFailure: operationFailure,
-			onError: options.onError
+			// Never silent (spec 048): a caller that passes no handler still gets the fault reported.
+			onError: options.onError ?? ((error) => console.error('[onboarding] core fault:', error))
 		}
 	);
 }

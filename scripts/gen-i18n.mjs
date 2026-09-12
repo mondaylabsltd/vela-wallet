@@ -269,9 +269,9 @@ for (let i = 1; i < PATHS.length; i++) {
 //   ("Unverified") and `unverifiedWarning` describe the doubt but neither is a
 //   value a row can carry, and the row the person reads is the amount itself.
 //   No new branch — it hangs off the existing `componentsUi.signing`.
-if (PATHS.length !== 1628) fail(`expected 1628 paths (1544 leaf + 84 branch), got ${PATHS.length}`);
-if (leafSet.size !== 1544) fail(`expected 1544 leaf paths, got ${leafSet.size}`);
-if (branchSet.size !== 84) fail(`expected 84 branch paths, got ${branchSet.size}`);
+if (PATHS.length !== 1633) fail(`expected 1633 paths (1548 leaf + 85 branch), got ${PATHS.length}`);
+if (leafSet.size !== 1548) fail(`expected 1548 leaf paths, got ${leafSet.size}`);
+if (branchSet.size !== 85) fail(`expected 85 branch paths, got ${branchSet.size}`);
 
 /** Pack a bit-per-path bitmap, LSB first within each byte. */
 function packBits(bits) {

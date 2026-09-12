@@ -814,6 +814,12 @@
    "pickTitle": "Quel portefeuille ?",
    "pickBody": "{{product}} contient plusieurs portefeuilles Vela. Choisissez celui auquel vous connecter.",
    "pickUnnamed": "Portefeuille sans nom"
+  },
+  "storage": {
+   "unreadableTitle": "Les données du portefeuille de ce navigateur sont illisibles",
+   "unreadableBody": "La liste de portefeuilles enregistrée a une forme que cette version ne peut pas lire. Reconnectez-vous pour la reconstruire depuis votre passkey, ou réinitialisez la copie de ce navigateur. Le portefeuille lui-même est intact : il vit sur la chaîne, derrière votre passkey.",
+   "signInAgain": "Se reconnecter",
+   "resetCopy": "Réinitialiser la copie de ce navigateur"
   }
  },
  "connect": {

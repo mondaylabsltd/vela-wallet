@@ -63,6 +63,10 @@ class CoreDriver(
 ) {
     private val gate = Mutex()
     private val running = mutableMapOf<ULong, Job>()
+    /** The operation behind each in-flight effect, so a refused answer can be re-answered as its failure (spec 048). */
+    private val operations = mutableMapOf<ULong, JSONObject>()
+    /** Effects already answered with their failure — a second refusal only reports. */
+    private val escaped = mutableSetOf<ULong>()
     private var disposed = false
 
     /** Emit the core's current view without sending anything. */
@@ -115,6 +119,7 @@ class CoreDriver(
             val effect = effects?.optJSONObject(i) ?: continue
             val id = effect.optLong("id").toULong()
             val operation = effect.optJSONObject("operation") ?: continue
+            operations[id] = operation
             run(id, operation)
         }
     }
@@ -153,8 +158,31 @@ class CoreDriver(
         gate.withLock {
             if (disposed) return
             runCatching { JSONObject(bridge.resolveEffect(id, resultJson)) }
-                .onSuccess(::apply)
-                .onFailure(onFault)
+                .onSuccess {
+                    operations.remove(id)
+                    escaped.remove(id)
+                    apply(it)
+                }
+                .onFailure { error ->
+                    onFault(error)
+                    // Property 3 (spec 048): the core refused the answer — a shape it
+                    // cannot read, the way the retired client's records were — and
+                    // the machine is still waiting on this effect. It gets the
+                    // effect's own failure once; a second refusal only reports.
+                    // Device-found 2026-09-12 on the web: the alternative is a
+                    // session that says `loading` forever.
+                    val operation = operations[id]
+                    if (operation != null && escaped.add(id)) {
+                        val failure = runCatching { escapedFailure(operation, error) }.getOrNull()
+                        if (failure != null) {
+                            runCatching { JSONObject(bridge.resolveEffect(id, failure)) }
+                                .onSuccess { operations.remove(id); apply(it) }
+                                .onFailure(onFault)
+                        }
+                    } else {
+                        operations.remove(id)
+                    }
+                }
         }
     }
 }

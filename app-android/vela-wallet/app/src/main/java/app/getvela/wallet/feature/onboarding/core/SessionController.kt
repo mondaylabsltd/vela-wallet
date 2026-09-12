@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.onboarding.core
 
 import app.getvela.wallet.core.crux.CoreDriver
+import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.crux.asBridge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,7 +45,12 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
         scope = scope,
         perform = { operation -> executor.perform(operation) },
         onView = { json -> _view.value = SessionView.from(json) },
-        escapedFailure = OnboardingExecutor::escapedFailure,
+        escapedFailure = SessionExecutor::escapedFailure,
+        // Spec 048: a session fault — the store's records refused by the core,
+        // a malformed event — is written down. The driver answers the machine
+        // with the effect's failure, so the route settles on onboarding rather
+        // than `loading` forever; this line is how a support thread finds it.
+        onFault = { error -> VelaLog.failure("session.fault", "the session machine faulted", error) },
     )
 
     /** Read storage and settle on a route. Called once, at launch. */

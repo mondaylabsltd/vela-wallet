@@ -308,3 +308,11 @@ A bare `popBackStack()` on 钱包 from 通讯录/设置: the fading route still 
 
 The manifest refuses `ACCESS_NETWORK_STATE` (recorded 2026-08-25: a connectivity check lies behind captive portals and on VPNs), so a default-network callback never fires. The offline line comes from `NetHealth`: three consecutive calls that never reached a server.
 
+## WEB-LOGIN-1 (fixed 2026-09-12, spec 048) — sign-in signed and then nothing, until the browser's storage was cleared
+
+Since `wallet.getvela.app` moved to the SvelteKit shell (2026-09-11) the site reads the retired Expo client's `vela.accounts` at the same origin — written in camelCase (`publicKeyHex`, `createdAt`, `keys[].credentialId`). The core's `Account` read snake_case only; the wasm bridge refused the answer; the login and session effect loops had no error handler, so the machine stayed in `LoadingAccounts` with the button busy. Fixed on three layers: the core reads both spellings (hand-written readers; `#[serde(alias)]` trips ts-rs), the web normalises and rewrites the list once and tolerates absent `keys`, and a refused answer is now answered to the machine as its failure (`storage_failed` / `accounts_unavailable`) with a visible prompt: sign in again, or reset this browser's copy.
+
+## DESKTOP-1 (open, 2026-09-12, spec 048) — an unreadable account record is skipped silently
+
+The desktop's own store (`wallet.json`) is written only by the current core, so the old spelling never reaches it; but `load_accounts` skips a record it cannot read without saying so — a wallet that "looks signed out". Recorded, not changed in 048.
+

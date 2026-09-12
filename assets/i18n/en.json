@@ -818,6 +818,12 @@
    "pickTitle": "Which wallet?",
    "pickBody": "{{product}} holds more than one Vela wallet. Choose the one to sign in to.",
    "pickUnnamed": "Unnamed wallet"
+  },
+  "storage": {
+   "unreadableTitle": "This browser's wallet data can't be read",
+   "unreadableBody": "The stored wallet list is in a form this version cannot read. Sign in again to rebuild it from your passkey, or reset this browser's copy. The wallet itself is untouched: it lives on the chain, behind your passkey.",
+   "signInAgain": "Sign in again",
+   "resetCopy": "Reset this browser's copy"
   }
  },
  "connect": {

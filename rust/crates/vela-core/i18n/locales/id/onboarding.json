@@ -261,6 +261,12 @@
 			"pickTitle": "Dompet yang mana?",
 			"pickBody": "{{product}} menyimpan lebih dari satu dompet Vela. Pilih yang ingin Anda masuki.",
 			"pickUnnamed": "Dompet tanpa nama"
+		},
+		"storage": {
+			"unreadableTitle": "Data dompet di browser ini tidak dapat dibaca",
+			"unreadableBody": "Daftar dompet yang tersimpan berbentuk sesuatu yang tidak bisa dibaca versi ini. Masuk lagi untuk membangunnya kembali dari passkey Anda, atau setel ulang salinan di browser ini. Dompetnya sendiri tidak tersentuh: ia ada di chain, di balik passkey Anda.",
+			"signInAgain": "Masuk lagi",
+			"resetCopy": "Setel ulang salinan browser ini"
 		}
 	}
 }

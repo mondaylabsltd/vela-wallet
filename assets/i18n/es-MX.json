@@ -814,6 +814,12 @@
    "pickTitle": "¿Cuál cartera?",
    "pickBody": "{{product}} guarda más de una cartera Vela. Elige en cuál quieres entrar.",
    "pickUnnamed": "Cartera sin nombre"
+  },
+  "storage": {
+   "unreadableTitle": "No se pueden leer los datos de la wallet en este navegador",
+   "unreadableBody": "La lista de wallets guardada tiene un formato que esta versión no puede leer. Inicia sesión de nuevo para reconstruirla desde tu passkey, o restablece la copia de este navegador. La wallet en sí no cambia: vive en la cadena, detrás de tu passkey.",
+   "signInAgain": "Iniciar sesión de nuevo",
+   "resetCopy": "Restablecer la copia de este navegador"
   }
  },
  "connect": {

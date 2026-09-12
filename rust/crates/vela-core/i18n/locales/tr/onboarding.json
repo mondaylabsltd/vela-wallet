@@ -261,6 +261,12 @@
 			"pickTitle": "Hangi cüzdan?",
 			"pickBody": "{{product}} birden fazla Vela cüzdanı içeriyor. Giriş yapmak istediğinizi seçin.",
 			"pickUnnamed": "Adsız cüzdan"
+		},
+		"storage": {
+			"unreadableTitle": "Bu tarayıcıdaki cüzdan verileri okunamıyor",
+			"unreadableBody": "Kayıtlı cüzdan listesi bu sürümün okuyamadığı bir biçimde. Passkey'inizden yeniden oluşturmak için tekrar giriş yapın ya da bu tarayıcıdaki kopyayı sıfırlayın. Cüzdanın kendisi dokunulmamıştır: zincirde, passkey'inizin arkasında durur.",
+			"signInAgain": "Tekrar giriş yap",
+			"resetCopy": "Bu tarayıcıdaki kopyayı sıfırla"
 		}
 	}
 }
