@@ -567,6 +567,7 @@ fun VelaNavHost(
                                 sendView.tx_status == SendTxStatus.Signing -> send.cancelSigning()
                             }
                         },
+                        onNoticeSecondary = { send.dismissTreasurySheet() },
                         onExplorer = {
                             val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency), session.activeName, session.address)
                             SendLive.explorerUrl(sendView, ctx)?.let { url ->

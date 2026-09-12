@@ -1332,6 +1332,7 @@ fun SendConfirmBody(
     modifier: Modifier = Modifier,
     onConfirm: () -> Unit = {},
     onNoticeAction: () -> Unit = {},
+    onNoticeSecondary: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -1431,6 +1432,20 @@ fun SendConfirmBody(
                 model.noticeAction?.let { action ->
                     Spacer(modifier = Modifier.height(VelaSpacing.md))
                     FlowCta(label = action, onClick = onNoticeAction, accent = false, modifier = Modifier.fillMaxWidth())
+                }
+                model.noticeSecondary?.let { secondary ->
+                    Spacer(modifier = Modifier.height(VelaSpacing.sm))
+                    Text(
+                        text = secondary,
+                        color = colors.fgMuted,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.sm,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onNoticeSecondary)
+                            .padding(vertical = VelaSpacing.sm),
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
         }

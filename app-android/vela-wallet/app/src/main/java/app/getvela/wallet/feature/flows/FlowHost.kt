@@ -195,6 +195,7 @@ private fun FlowHostContent(
                     model = base.model,
                     onConfirm = { send?.onConfirm?.invoke() ?: onNavigate(FlowStep.SendReceipt) },
                     onNoticeAction = { send?.onNoticeAction?.invoke() },
+                    onNoticeSecondary = { send?.onNoticeSecondary?.invoke() },
                 )
             }
             is FlowBase.SendReceipt -> FlowScaffold(header = base.model.header, onBack = onBack) {
@@ -388,6 +389,8 @@ class SendCallbacks(
     val onExplorer: () -> Unit,
     /** The confirm page's notice offered an action: retry after a treasury top-up or after a failed submit. */
     val onNoticeAction: () -> Unit = {},
+    /** Spec 045 US4: the notice's second exit (the treasury pause's "not now"). */
+    val onNoticeSecondary: () -> Unit = {},
     // Spec 045 US1 — the split's rows. Absent, the form keeps the fixture's hops.
     val onAddRecipient: (() -> Unit)? = null,
     val onRecipientAction: ((RecipientAction) -> Unit)? = null,

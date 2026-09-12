@@ -508,6 +508,8 @@ data class SendConfirmModel(
     /** Spec 043 phase 5: the core's refusal on this page (treasury low, submit failed) and the action it offers. */
     val notice: String? = null,
     val noticeAction: String? = null,
+    /** Spec 045 US4: the notice's second exit — "not now" beside the treasury retry, the facts kept. */
+    val noticeSecondary: String? = null,
 )
 
 enum class ReceiptStage { Submitting, Submitted, Confirmed, Failed }

@@ -500,6 +500,9 @@ object SendLive {
             },
             ctaEnabled = view.can_confirm && !view.sending && view.treasury_bootstrap == null && view.tx_error == null,
             notice = confirmNotice(view, ctx),
+            // The treasury pause has two exits (spec 045 US4): the core's retry,
+            // and "not now" — DismissTreasurySheet, the facts kept.
+            noticeSecondary = if (view.treasury_bootstrap != null) s.t(I18nKeys.Flows.FUNDING_CANCEL) else null,
             noticeAction = when {
                 view.treasury_bootstrap != null -> s.t(I18nKeys.Flows.TREASURY_RETRY)
                 view.tx_error != null -> s.t(I18nKeys.Flows.TX_RETRY)

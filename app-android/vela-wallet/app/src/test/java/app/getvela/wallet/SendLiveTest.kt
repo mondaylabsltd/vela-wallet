@@ -409,4 +409,25 @@ class SendLiveTest {
         assertFalse(priced.ctaDisabled)
         assertEquals(FlowState.SD2C, SendLive.flowState(view, feeSheetOpen = false))
     }
+
+    // -- Spec 045 US4: the treasury pause's second exit ---------------------
+
+    @Test
+    fun `the treasury pause offers retry and not-now, with the facts kept`() {
+        val drawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val paused = SendView(
+            stage = SendStage.Confirm, tokens = listOf(xdai), selected_token = xdai, recipient = recipient, confirm_amount = "0.001",
+            fee = fee(), can_confirm = true,
+            treasury_bootstrap = SendTreasuryStatus(chain_id = 100, address = me, asset = SendTreasuryAsset.Native, balance = "0", floor = "1000000000000000000", bootstrap_needed = true),
+        )
+        val live = SendLive.confirm(drawn.model, paused, ctx())
+        assertEquals(strings.t(I18nKeys.Flows.TREASURY_RETRY), live.noticeAction)
+        assertEquals(strings.t(I18nKeys.Flows.FUNDING_CANCEL), live.noticeSecondary)
+        assertFalse(live.ctaEnabled)
+        assertEquals(4, live.facts.size)
+        val resumed = SendLive.confirm(drawn.model, paused.copy(treasury_bootstrap = null), ctx())
+        assertNull(resumed.notice)
+        assertNull(resumed.noticeSecondary)
+        assertTrue(resumed.ctaEnabled)
+    }
 }

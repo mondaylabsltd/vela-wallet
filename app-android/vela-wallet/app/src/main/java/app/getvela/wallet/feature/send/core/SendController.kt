@@ -205,6 +205,7 @@ class SendController(
         scope.launch {
             var lastFee: FeeEstimateView? = null
             var lastBusy = false
+            var lastStale = false
             feeHost.view.collect { view ->
                 if (view.busy != lastBusy) {
                     lastBusy = view.busy
@@ -214,6 +215,21 @@ class SendController(
                 if (estimate != null && estimate !== lastFee) {
                     lastFee = estimate
                     dispatch(SendEvent.FeeUpdated(estimate))
+                }
+                // Spec 045 US4: a quote goes stale while the person reads the
+                // confirm page (the policy's TTL). Re-ask once per stale flip,
+                // with the same request, while the page is open and idle; the
+                // fresh estimate flows back through FeeUpdated above.
+                if (view.stale != lastStale) {
+                    lastStale = view.stale
+                    val current = send.value
+                    val request = lastQuote
+                    if (view.stale && !view.busy && request != null &&
+                        current.stage == SendStage.Confirm && current.tx_status == SendTxStatus.Idle && !current.sending
+                    ) {
+                        VelaLog.event("send.fee", "re-quote on stale", "chain" to request.chain_id)
+                        feeHost.dispatch(request, FeeEvent.serializer())
+                    }
                 }
             }
         }
@@ -225,6 +241,10 @@ class SendController(
 
     // -- the fee bridge (research D7) ----------------------------------------------
 
+    /** The last quote asked, re-asked verbatim when it goes stale on the confirm page (spec 045 US4). */
+    @Volatile
+    private var lastQuote: FeeEvent.QuoteRequested? = null
+
     private suspend fun requestQuote(
         chainId: Int,
         account: String,
@@ -234,18 +254,17 @@ class SendController(
     ): SendFeeOutcome {
         val deployed = relayRef.isDeployed(chainId, account) ?: false
         val before = feeHost.view.value.fee
-        feeHost.dispatch(
-            FeeEvent.QuoteRequested(
-                chain_id = chainId,
-                account = account,
-                deployed = deployed,
-                public_key_available = publicKeyAvailable,
-                tier = FeeTier.Fast,
-                calls = calls,
-                fee_token = gasFeeToken,
-            ),
-            FeeEvent.serializer(),
+        val request = FeeEvent.QuoteRequested(
+            chain_id = chainId,
+            account = account,
+            deployed = deployed,
+            public_key_available = publicKeyAvailable,
+            tier = FeeTier.Fast,
+            calls = calls,
+            fee_token = gasFeeToken,
         )
+        lastQuote = request
+        feeHost.dispatch(request, FeeEvent.serializer())
         // Settled = not busy, and either a NEW estimate or a failure. The
         // reference check is what keeps a stale estimate from answering a
         // fresh request; every commit decodes a fresh object.

@@ -569,6 +569,7 @@ object I18nKeys {
         const val BATCH_OVER_CAP = "send.batchOverCap"
         const val BATCH_OVER_BALANCE = "send.batchOverBalance"
         const val BATCH_TEMPLATE_SAVED = "send.batchTemplateSaved"
+        const val FUNDING_CANCEL = "componentsUi.funding.cancel"
 
         // Send · confirm.
         const val CONFIRM_TITLE = "send.confirmTitle"
