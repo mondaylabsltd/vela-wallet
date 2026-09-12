@@ -108,7 +108,10 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
             .put("created_at_iso", Instant.now().toString())
             .put("keys", keys)
         val container = (app as VelaWalletApplication).container
-        container.session.accountEstablished(JSONObject().put("type", "add_account").put("account", account))
+        // Persist first: the session core's add_account saves only the active
+        // index (it is the onboarding machines that write records), and a
+        // relaunch restores from the store.
+        scope.launch { container.session.addAccount(account) }
     }
 
     override fun leave() {

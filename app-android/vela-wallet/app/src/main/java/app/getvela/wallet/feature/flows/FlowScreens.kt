@@ -783,6 +783,8 @@ fun SendFormBody(
     onMax: (Int) -> Unit = {},
     onAddRecipient: () -> Unit = {},
     onContinue: () -> Unit = {},
+    onAmountChange: ((String) -> Unit)? = null,
+    onRecipientChange: ((String) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -839,10 +841,15 @@ fun SendFormBody(
             Spacer(modifier = Modifier.height(VelaSpacing.sm))
         }
         model.amount?.let {
-            AmountInput(amount = it, onDenom = onDenom)
+            AmountInput(amount = it, onDenom = onDenom, onValueChange = onAmountChange)
         }
         model.recipient?.let {
-            RecipientField(field = it, onPick = onPickRecipient, onScan = onScan)
+            RecipientField(
+                field = it,
+                onPick = onPickRecipient,
+                onScan = onScan,
+                onValueChange = onRecipientChange,
+            )
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
         }
         model.addRecipient?.let {
@@ -879,6 +886,7 @@ fun SendFormBody(
             onClick = onContinue,
             accent = true,
             modifier = Modifier.fillMaxWidth(),
+            enabled = model.ctaEnabled,
         )
     }
 }
@@ -1294,6 +1302,7 @@ fun SendConfirmBody(
             onClick = onConfirm,
             accent = true,
             modifier = Modifier.fillMaxWidth(),
+            enabled = model.ctaEnabled,
         )
     }
 }

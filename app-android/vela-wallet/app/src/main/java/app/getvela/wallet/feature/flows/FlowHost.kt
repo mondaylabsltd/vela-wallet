@@ -59,16 +59,18 @@ fun FlowHost(
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onNavigate: (FlowStep) -> Unit = {},
+    /** Spec 043: when the send is live, its taps go to the machine, not to the fixture's steps. */
+    send: SendCallbacks? = null,
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            FlowHostContent(model, modifier, onBack, onNavigate)
+            FlowHostContent(model, modifier, onBack, onNavigate, send)
         }
     } else {
-        FlowHostContent(model, modifier, onBack, onNavigate)
+        FlowHostContent(model, modifier, onBack, onNavigate, send)
     }
 }
 
@@ -98,6 +100,7 @@ private fun FlowHostContent(
     modifier: Modifier,
     onBack: () -> Unit,
     onNavigate: (FlowStep) -> Unit,
+    send: SendCallbacks? = null,
 ) {
     Box(modifier = modifier.fillMaxSize().background(VelaTheme.colors.bgBase)) {
         when (val base = model.base) {
@@ -148,8 +151,8 @@ private fun FlowHostContent(
             ) {
                 SendPickBody(
                     model = base.model,
-                    onSelect = { onNavigate(FlowStep.SendForm) },
-                    onCta = { onNavigate(FlowStep.SendMulti) },
+                    onSelect = { index -> send?.onSelectToken?.invoke(index) ?: onNavigate(FlowStep.SendForm) },
+                    onCta = { if (send == null) onNavigate(FlowStep.SendMulti) },
                 )
             }
             is FlowBase.SendForm -> FlowScaffold(header = base.model.header, onBack = onBack) {
@@ -168,22 +171,30 @@ private fun FlowHostContent(
                         )
                     },
                     onAddRecipient = { onNavigate(FlowStep.AddRecipient) },
-                    onContinue = { onNavigate(FlowStep.SendConfirm) },
+                    onContinue = { send?.onContinue?.invoke() ?: onNavigate(FlowStep.SendConfirm) },
+                    onMax = { if (send != null) send.onMax() },
+                    onDenom = { if (send != null) send.onDenom() },
+                    onAmountChange = send?.onAmountChange,
+                    onRecipientChange = send?.onRecipientChange,
                 )
             }
             is FlowBase.SendConfirm -> FlowScaffold(header = base.model.header, onBack = onBack) {
                 SendConfirmBody(
                     model = base.model,
-                    onConfirm = { onNavigate(FlowStep.SendReceipt) },
+                    onConfirm = { send?.onConfirm?.invoke() ?: onNavigate(FlowStep.SendReceipt) },
                 )
             }
             is FlowBase.SendReceipt -> FlowScaffold(header = base.model.header, onBack = onBack) {
-                SendReceiptBody(model = base.model, onCta = { onNavigate(FlowStep.Done) })
+                SendReceiptBody(
+                    model = base.model,
+                    onCta = { send?.onReceiptCta?.invoke() ?: onNavigate(FlowStep.Done) },
+                    onExplorer = { send?.onExplorer?.invoke() },
+                )
             }
         }
 
         model.sheet?.let { sheet ->
-            FlowSheetHost(sheet = sheet, onNavigate = onNavigate)
+            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, send = send)
         }
     }
 }
@@ -196,13 +207,17 @@ private fun FlowHostContent(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit) {
+private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, send: SendCallbacks? = null) {
     var dismissed by remember(sheet) { mutableStateOf(false) }
     if (dismissed) return
 
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val dismiss = {
+        dismissed = true
+        send?.onSheetDismissed?.invoke()
+    }
     ModalBottomSheet(
-        onDismissRequest = { dismissed = true },
+        onDismissRequest = { dismiss() },
         sheetState = state,
         containerColor = VelaTheme.colors.bgBase,
         dragHandle = { FlowSheetHandle() },
@@ -218,7 +233,7 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit) {
                 ),
         ) {
             SheetTitleRow(title = sheetTitle(sheet), close = sheetClose(sheet)) {
-                dismissed = true
+                dismiss()
             }
             when (sheet) {
                 is FlowSheet.ReceiveQr -> ReceiveQrBody(model = sheet.model)
@@ -231,9 +246,13 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit) {
                 is FlowSheet.AddToken -> AddTokenBody(model = sheet.model)
                 is FlowSheet.ContactPick -> ContactPickBody(
                     model = sheet.model,
-                    onScan = { onNavigate(FlowStep.Scan) },
+                    onScan = { if (send == null) onNavigate(FlowStep.Scan) },
+                    onSelect = { index -> send?.onContactSelect?.invoke(index) },
                 )
-                is FlowSheet.FeeToken -> FeeTokenBody(model = sheet.model)
+                is FlowSheet.FeeToken -> FeeTokenBody(
+                    model = sheet.model,
+                    onSelect = { index -> send?.onFeeSelect?.invoke(index) },
+                )
                 is FlowSheet.BatchImport -> BatchImportBody(model = sheet.model)
             }
         }
@@ -321,3 +340,24 @@ private fun SheetTitleRow(title: String?, close: String, onClose: () -> Unit) {
         }
     }
 }
+
+/**
+ * Spec 043: what a LIVE send does with a tap. Absent, every screen keeps the
+ * fixture's behaviour (pushing the next drawn step), which is what the gallery
+ * wants. Present, taps reach the send machine and the machine decides what is
+ * on screen next.
+ */
+class SendCallbacks(
+    val onSelectToken: (Int) -> Unit,
+    val onAmountChange: (String) -> Unit,
+    val onRecipientChange: (String) -> Unit,
+    val onMax: () -> Unit,
+    val onDenom: () -> Unit,
+    val onContinue: () -> Unit,
+    val onConfirm: () -> Unit,
+    val onFeeSelect: (Int) -> Unit,
+    val onContactSelect: (Int) -> Unit,
+    val onSheetDismissed: () -> Unit,
+    val onReceiptCta: () -> Unit,
+    val onExplorer: () -> Unit,
+)

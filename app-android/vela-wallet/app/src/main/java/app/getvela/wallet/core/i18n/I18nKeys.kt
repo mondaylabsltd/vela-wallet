@@ -578,6 +578,24 @@ object I18nKeys {
         const val TX_TYPICAL_TIME = "send.txTypicalTime"
         const val TX_HASH = "componentsTx.receipt.txHash"
         const val DONE = "componentsTx.receipt.done"
+
+        // Spec 043: the live send's remaining words — every one already in
+        // the corpus; the fixture never needed them because it never failed.
+        const val FEE_ESTIMATING = "componentsUi.gas.estimating"
+        const val CANNOT_CONVERT = "send.warnCannotConvert"
+        const val TX_PREPARING = "send.txPreparing"
+        const val TX_SIGNING = "send.txSigning"
+        const val STATUS_FAILED = "componentsTx.receipt.statusFailed"
+        const val TX_FAILED_HINT = "componentsTx.receipt.failedHint"
+        const val TX_HELD_FEES = "send.txHeldFees"
+        const val TX_REJECTED_FEES = "send.txRejectedFees"
+        const val ALERT_ESTIMATE_TITLE = "send.alertEstimateFailedTitle"
+        const val ALERT_ESTIMATE_BODY = "send.alertEstimateFailedBody"
+        const val ALERT_LOAD_TOKENS = "send.alertLoadTokensError"
+        const val TX_ERROR_GENERIC = "send.txErrorGeneric"
+        const val WARN_INSUFFICIENT_FOR_GAS = "send.warnInsufficientForGas"
+        const val WARN_INSUFFICIENT_GAS = "send.warnInsufficientGas"
+        const val WARN_NEED_GAS = "send.warnNeedGas"
     }
 
     /**

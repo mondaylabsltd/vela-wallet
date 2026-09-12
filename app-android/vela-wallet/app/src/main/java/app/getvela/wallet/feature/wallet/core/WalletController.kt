@@ -128,7 +128,8 @@ class WalletController(
         onFault = { error -> VelaLog.failure("wallet.trust.fault", "core fault", error) },
     )
 
-    private val feedExecutor = FeedExecutor(
+    /** Internal for the send path (spec 043): it writes the pending row here. */
+    internal val feedExecutor = FeedExecutor(
         store = store,
         ownAccounts = ownAccounts,
         haptic = haptic,
@@ -360,6 +361,14 @@ class WalletController(
 
     /** The Activity surface's near-real-time poll, while it is on screen. */
     fun liveTick() = feedHost.dispatch(FeedEvent.LiveTick, FeedEvent.serializer())
+
+    /**
+     * Rows changed under the feed — a send wrote its pending row (spec 043),
+     * the tracker patched a verdict (phase 4): re-read the store now rather
+     * than at the next focus tick, so the home shows the row at submit.
+     */
+    fun feedReconciled(resolved: Int = 0) =
+        feedHost.dispatch(FeedEvent.ReconcileCompleted(resolved_count = resolved), FeedEvent.serializer())
 
     /** The network chip filter; `null` = every chain. */
     fun filterChain(chainId: Int?) =

@@ -19,6 +19,15 @@ import app.getvela.wallet.core.data.ThemePreference
 import app.getvela.wallet.core.i18n.LocalVelaStrings
 import androidx.compose.foundation.layout.Box
 import app.getvela.wallet.dev.ParallelSpaceHook
+import app.getvela.wallet.feature.flows.FlowStep
+import app.getvela.wallet.feature.flows.SendCallbacks
+import app.getvela.wallet.feature.send.SendLive
+import app.getvela.wallet.feature.send.core.SendAccountRef
+import app.getvela.wallet.feature.send.core.SendAlertKind
+import app.getvela.wallet.feature.send.core.SendAmountWarning
+import app.getvela.wallet.feature.send.core.SendDisplayContext
+import app.getvela.wallet.feature.send.core.SendStage
+import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.explore.ExploreFixtures
 import app.getvela.wallet.feature.explore.ExploreScreen
 import app.getvela.wallet.feature.explore.ExploreScreenState
@@ -148,7 +157,11 @@ fun VelaNavHost(
 
     // Credential Manager raises system UI, which needs an Activity — not the
     // application context the ViewModel was constructed with.
-    LaunchedEffect(context) { onboarding.attach(context) }
+    LaunchedEffect(context) {
+        onboarding.attach(context)
+        // Spec 043: the send path signs with the same ceremony sign-in uses.
+        application.container.passkeySigner = onboarding.signer()
+    }
 
     /**
      * The route guard.
@@ -323,8 +336,117 @@ fun VelaNavHost(
                 section = VelaTab.Wallet
             }
 
+            // Spec 043: the send is live. Its screens are drawn by the same
+            // fixtures as before, but which screen is on and every figure on
+            // it come from the send machine — the flow stack only marks that
+            // the send is open.
+            val send = application.container.send
+            val sendView by send.send.collectAsStateWithLifecycle()
+            val feeView by send.fee.collectAsStateWithLifecycle()
+            val sendClosed by send.closed.collectAsStateWithLifecycle()
+            val sendAlert by send.alert.collectAsStateWithLifecycle()
+            val contactsBook by application.container.contacts.view.collectAsStateWithLifecycle()
+            var feeSheetOpen by rememberSaveable { mutableStateOf(false) }
+            val sendOpen = flows.top in SEND_STATES
+            LaunchedEffect(sendOpen, session.address) {
+                if (sendOpen && session.address.isNotEmpty()) {
+                    feeSheetOpen = false
+                    val money = WalletLive.Money.of(currency)
+                    send.open(
+                        account = SendAccountRef(id = session.address, address = session.address, name = session.activeName),
+                        display = SendDisplayContext(
+                            code = money.code,
+                            rate = currency.rate?.takeIf { currency.committed && it.isFinite() && it > 0.0 },
+                            fiat_decimals = 2,
+                        ),
+                    )
+                }
+            }
+            LaunchedEffect(sendClosed) {
+                if (sendClosed && flows.top in SEND_STATES) flows.close()
+            }
+            sendAlert?.let { kind ->
+                SendAlertDialog(kind = kind, strings = strings, onDismiss = send::dismissAlert)
+            }
+
             val flowState = flows.top
-            if (flowState != null) {
+            if (flowState != null && flowState in SEND_STATES) {
+                val liveState = SendLive.flowState(sendView, feeSheetOpen)
+                val explorers = remember(networks.networks) {
+                    networks.networks.associate { it.chain_id.toInt() to it.explorer_url }
+                }
+                val flowModel = remember(liveState, sendView, feeView, contactsBook, strings, currency, chainNames, explorers, session.address) {
+                    val drawn = FlowFixtures.build(liveState, strings)
+                    val ctx = SendLive.Context(
+                        strings = strings,
+                        chainNames = chainNames,
+                        explorers = explorers,
+                        money = WalletLive.Money.of(currency),
+                        fromName = session.activeName,
+                        fromAddress = session.address,
+                    )
+                    val base = when (val base = drawn.base) {
+                        is FlowBase.SendPick -> FlowBase.SendPick(SendLive.pick(base.model, sendView, ctx))
+                        is FlowBase.SendForm -> FlowBase.SendForm(SendLive.form(base.model, sendView, feeView, ctx))
+                        is FlowBase.SendConfirm -> FlowBase.SendConfirm(SendLive.confirm(base.model, sendView, ctx))
+                        is FlowBase.SendReceipt -> FlowBase.SendReceipt(SendLive.receipt(base.model, sendView, ctx))
+                        else -> base
+                    }
+                    val sheet = when (val sheet = drawn.sheet) {
+                        is FlowSheet.FeeToken -> FlowSheet.FeeToken(SendLive.feeSheet(sheet.model, feeView, ctx))
+                        is FlowSheet.ContactPick -> FlowSheet.ContactPick(SendLive.contactSheet(sheet.model, contactsBook))
+                        else -> sheet
+                    }
+                    drawn.copy(base = base, sheet = sheet)
+                }
+                val activity = context
+                FlowHost(
+                    model = flowModel,
+                    onBack = {
+                        if (sendView.stage == SendStage.SelectToken || sendView.stage == SendStage.Receipt) {
+                            flows.close()
+                        } else {
+                            send.back()
+                        }
+                    },
+                    onNavigate = { step ->
+                        when (step) {
+                            FlowStep.FeeToken -> feeSheetOpen = true
+                            FlowStep.ContactPick -> send.openContactPicker()
+                            else -> Unit
+                        }
+                    },
+                    send = SendCallbacks(
+                        onSelectToken = { index -> sendView.tokens.getOrNull(index)?.let { send.selectToken(SendLive.tokenId(it)) } },
+                        onAmountChange = { send.setAmount(it) },
+                        onRecipientChange = { send.setRecipient(it.trim()) },
+                        onMax = { send.tapMax() },
+                        onDenom = { send.toggleFiatInput() },
+                        onContinue = { send.continueTapped() },
+                        onConfirm = { send.slideConfirm() },
+                        onFeeSelect = { index ->
+                            feeView.options.getOrNull(index)?.let { send.chooseFeeToken(it.contract) }
+                            feeSheetOpen = false
+                        },
+                        onContactSelect = { index ->
+                            contactsBook.contacts.getOrNull(index)?.let { send.pickedAddress(it.address) }
+                        },
+                        onSheetDismissed = {
+                            if (feeSheetOpen) feeSheetOpen = false
+                            if (sendView.show_contact_picker) send.closeContactPicker()
+                        },
+                        onReceiptCta = { send.done() },
+                        onExplorer = {
+                            val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency), session.activeName, session.address)
+                            SendLive.explorerUrl(sendView, ctx)?.let { url ->
+                                runCatching {
+                                    activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                                }
+                            }
+                        },
+                    ),
+                )
+            } else if (flowState != null) {
                 val request by wallet.request.collectAsStateWithLifecycle()
                 // The receive screen shows an ADDRESS. Every other fixture that
                 // leaks shows somebody the wrong information; a fixture address
@@ -804,6 +926,46 @@ private const val TERMS_URL = "https://getvela.app/terms"
 
 /** The flow states that show somebody their own address. */
 private val RECEIVE_STATES = setOf(FlowState.R1, FlowState.R2)
+
+/** Spec 043: the drawn send states; the flow stack holds SD1 while the send is live. */
+private val SEND_STATES = setOf(
+    FlowState.SD1, FlowState.SD1B, FlowState.SD2, FlowState.SD2B, FlowState.SD2C, FlowState.SD2D,
+    FlowState.SD2E, FlowState.SD2F, FlowState.SD3, FlowState.SD3B, FlowState.SD3C,
+    FlowState.SD4A, FlowState.SD4B, FlowState.SD4C,
+)
+
+/**
+ * The core's refusal, in the core's words (spec 043 phase 3; phase 5 gives
+ * every kind its own sentence). Never a spinner: the machine already stopped.
+ */
+@Composable
+private fun SendAlertDialog(kind: SendAlertKind, strings: VelaStrings, onDismiss: () -> Unit) {
+    val (title, body) = when (kind) {
+        is SendAlertKind.EstimateFailed ->
+            strings.t(I18nKeys.Flows.ALERT_ESTIMATE_TITLE) to strings.t(I18nKeys.Flows.ALERT_ESTIMATE_BODY)
+        SendAlertKind.LoadTokensFailed -> strings.t(I18nKeys.Flows.ALERT_LOAD_TOKENS) to ""
+        is SendAlertKind.InsufficientBalance -> when (val warning = kind.warning) {
+            is SendAmountWarning.InsufficientForGas ->
+                strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_FOR_GAS, mapOf("sym" to (warning.symbol ?: ""))) to ""
+            is SendAmountWarning.NeedGas -> strings.t(I18nKeys.Flows.WARN_NEED_GAS, mapOf("sym" to (warning.symbol ?: ""))) to ""
+            is SendAmountWarning.NotEnoughToken -> strings.t(I18nKeys.Flows.WARN_INSUFFICIENT_GAS, mapOf("sym" to warning.symbol)) to ""
+            is SendAmountWarning.CannotConvert -> strings.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to warning.code, "symbol" to warning.symbol)) to ""
+            null -> strings.t(I18nKeys.Flows.TX_ERROR_GENERIC) to ""
+        }
+        SendAlertKind.InvalidAddress, SendAlertKind.InvalidAmount, SendAlertKind.SplitOverBalance, SendAlertKind.AccountUnavailable ->
+            strings.t(I18nKeys.Flows.TX_ERROR_GENERIC) to kind.toString()
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                androidx.compose.material3.Text(strings.t(I18nKeys.Flows.DONE))
+            }
+        },
+        title = { androidx.compose.material3.Text(title) },
+        text = { if (body.isNotEmpty()) androidx.compose.material3.Text(body) },
+    )
+}
 
 /**
  * Where a pay link points.

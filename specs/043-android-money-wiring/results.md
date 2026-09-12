@@ -79,17 +79,88 @@ the bridge grew; no exception in logcat.
 Gates at the checkpoint: `cargo test` (core `user_op`: 27 ok), clippy clean
 for both crates, drift 53 / feed 17 / relay 10 tests green.
 
+### Phase 2 — the parallel space (T018–T024)
+
+`vela-dev-fixtures-uniffi` (857 KB host, three ABIs into `src/debug/jniLibs`),
+`ParallelSpaceBinding` per build type, the door (`--ez vela.parallelSpace
+true|false`), the badge, `ParallelSpaceTest` (2). **Which wallet**: the
+MULTI-key golden Safe `0x88cCA0…6894` every client's parallel space sends
+from — a single-key fixture Safe would be a wallet nobody funded.
+
+**Device** (`043-p2-parallel-home.png`, `-receive.png`, `-relaunch.png`,
+`-left.png`): entering shows `Parallel space | 0x88cC…6894 | £0.53 | XDAI
+Gnosis 0.71697` with the badge `平行空间 · #0 · 0x88cC…6894`; the receive
+screen lists `0x88cC…6894` on all 13 networks; a relaunch WITHOUT the extra
+keeps the space (badge and account); `--ez vela.parallelSpace false` returns
+to `觉得九点半 | 0x7687…D141 | £3.73`, no badge, no fixture record left.
+
+Two device-found defects on the way: (1) after a relaunch the badge stayed
+but the ACCOUNT reverted — the session core's `add_account` persists only
+the active index (the record is the onboarding machines' write), so the
+provider now writes the record first and, once the boot has answered,
+switches to it if the boot already read it or appends it otherwise; (2) a
+second `Boot` is ignored by the core, so leaving re-establishes the store's
+list through `set_wallet` instead.
+
+### Phase 3 — the send (T025–T034)
+
+`FeeExecutor` (6 arms), `SendExecutor` (18 arms, `sendUserOpInBand`'s
+order), `SendController` (send + fee hosts, the D7 bridge both ways),
+`SendLive` (pick / form / confirm / receipt / fee sheet / contact sheet,
+every figure the view's), `SendCallbacks` through `FlowHost`, editable amount
+and recipient inputs (drawn read-only until now), the alert dialog, the
+container's `RelayClient` and `SendController`, the passkey signer bound
+from the onboarding ceremony. Tests: `FeeMachineTest` (3),
+`SendMachineTest` (2, debug source set, the fixture keyset signs),
+`SendLiveTest` (6); suite 394 → **405, 0 failures**.
+
+**Device — money moved.** In the parallel space on the Xiaomi: 转账 → XDAI /
+Gnosis → `0.001` to `0x76875e38…D141` (the founder's own wallet) → Continue
+(`网络费 0.01 xDAI`) → confirm (`0.001 XDAI · 发送方 Parallel space · 收款人
+0x7687…D141 · 网络 Gnosis · 预估手续费 ~0.01 xDAI · 确认并发送`) → receipt
+`交易已提交至网络 | 等待区块链确认... | Gnosis 通常在约 15 秒内确认`. The
+fixture keyset signed (`parallel signed credential=76656c612d66`), the relay
+accepted (`sender=0x88cCA0… nonce=0x8`), userOp
+`0x2658de219bc212de74f61b811fa88949d89b033b3b5a1ce958913202e0252684`, and
+the relay's receipt says **`success: true`, tx
+`0x5316cb6628e16a97e7731a16fb9a66cd4029565404ec66c887c31b40de567447`, block
+`0x2df8cad`** — https://gnosisscan.io/tx/0x5316cb6628e16a97e7731a16fb9a66cd4029565404ec66c887c31b40de567447.
+The pending row was on disk before `TrackSubmitted` (`feed.write stored
+rows=1` precedes `TrackHandedOff` in the log), and after closing the receipt
+the home reads `今天 | 已发送 | 至 觉得九点半 | −0.001 XDAI` with the balance
+down to `0.70597 XDAI`. A second dust send repeated it. Screenshots
+`043-p3-pick/form/form-filled/confirm/receipt/home-after-send.png`.
+
+**Device-found defects, all fixed in this phase** (none visible to a test
+that drives the machine directly):
+1. The amount and recipient inputs drove their text straight from the
+   machine's round trip; fast typing dropped characters (`0.001` → `.01`, a
+   42-character address lost six). The fields keep a local echo and ignore
+   views that merely echo what they sent.
+2. `load_account_credential` was answered by credential id only; the screens
+   open the send with the ADDRESS → `AccountUnavailable` on the first
+   Continue. Both spellings are accepted.
+3. `vela_getInBandGasQuote` rows carry the balance as HEX and `feeToken` as
+   JSON null; the parser expected decimals and dropped every row →
+   `EstimateFailed`. Re-transcribed from the desktop's `parse_quote_row`.
+4. The feed re-read only on focus, so the pending row appeared after a
+   relaunch, not at submit. `records_persisted` now dispatches the feed's
+   `ReconcileCompleted`.
+
+Not yet (phase 4): the receipt stays *submitted* until the tracker exists;
+`TrackSubmitted` is acknowledged and logged (`no tracker bound`).
+
 ## Success criteria
 
 | SC | Claim | Verified | Evidence |
 | --- | --- | --- | --- |
-| SC-001 | dust leaves the fixture Safe; receipt confirmed | — | — |
+| SC-001 | dust leaves the fixture Safe; receipt confirmed | **device (half)**: submitted + on-chain success via the relay's receipt; *confirmed on the receipt screen* awaits phase 4 | phase 3 log, gnosisscan tx `0x5316cb66…7447` |
 | SC-002 | the founder's own passkey, one prompt | — | — |
 | SC-003 | force-stop / reopen / notification | — | — |
 | SC-004 | one prompt per attempt after cancel | — | — |
 | SC-005 | every refusal worded on screen | — | — |
 | SC-006 | fee token changed, re-quoted, paid | — | — |
-| SC-007 | no send fixture in the live route | — | — |
+| SC-007 | no send fixture in the live route | test + grep | the send states no longer fall to `drawn.base`; `Scan`/`BatchImport` keep theirs by design |
 | SC-008 | drift gate exhaustive; tests grow | — | — |
 | SC-009 | `live in 042` markers gone | — | — |
 | SC-010 | release APK carries no fixture key material | — | — |

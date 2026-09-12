@@ -227,6 +227,13 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
      * Called from the composition on every entry. Cheap and idempotent — it
      * rebuilds only the passkey executor, which holds the context.
      */
+    /**
+     * Spec 043: the send path signs with the same ceremony sign-in uses —
+     * this executor, attached to the real activity. `null` until attached.
+     */
+    fun signer(): app.getvela.wallet.feature.send.core.UserOpSigner? =
+        passkey?.let { app.getvela.wallet.feature.send.core.PasskeyUserOpSigner(it) }
+
     fun attach(activityContext: android.content.Context) {
         if (passkey == null) {
             val isRealActivity = activityContext is app.getvela.wallet.MainActivity

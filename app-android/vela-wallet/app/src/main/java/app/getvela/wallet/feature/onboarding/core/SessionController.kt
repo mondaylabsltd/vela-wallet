@@ -5,6 +5,7 @@ import app.getvela.wallet.core.crux.asBridge
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import org.json.JSONObject
 import uniffi.vela_core_uniffi.SessionCore
 
@@ -66,14 +67,39 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
         driver.dispatch(JSONObject().put("type", "switch_account").put("index", index).toString())
 
     /**
-     * The parallel space's exit (spec 043): drop the fixture record it appended
-     * and re-read the store, so the session is the person's real accounts
-     * again. Not a sign-out — nothing else on the device changes.
+     * Append an account the ONBOARDING machines did not write (spec 043's
+     * parallel space). The session core's `add_account` persists only the
+     * active index — the record itself is the create/login machines' write
+     * (`ShellOperation::SaveAccount`) — so the record is written first. Then,
+     * once the boot has answered (its `accounts_loaded` may land before or
+     * after that write), the account is either already in the list — switch
+     * to it — or appended; never both.
+     */
+    suspend fun addAccount(record: JSONObject) {
+        store.saveAccount(record)
+        val settled = view.first { !it.loading }
+        val address = record.optString("address")
+        val present = settled.accounts.firstOrNull { it.address.equals(address, ignoreCase = true) }
+        if (present != null) {
+            switchAccount(present.index)
+        } else {
+            accountEstablished(JSONObject().put("type", "add_account").put("account", record))
+        }
+    }
+
+    /**
+     * The parallel space's exit (spec 043): drop the fixture record and hand
+     * the session the store's list again through `set_wallet` — the same
+     * shape a boot restores, because `Boot` itself runs once per process.
+     * Not a sign-out: nothing else on the device changes.
      */
     suspend fun removeFixtureAccount(credentialIdHex: String) {
         store.removeAccount(credentialIdHex)
         store.saveActiveIndex(0)
-        boot()
+        val accounts = store.loadAccounts()
+        accountEstablished(
+            JSONObject().put("type", "set_wallet").put("accounts", accounts).put("active_index", 0),
+        )
     }
 
     fun signOut() = driver.dispatch(event("sign_out"))

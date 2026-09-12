@@ -31,6 +31,18 @@ object Haptics {
         }
     }
 
+    /** Spec 043: the send machine's `haptic { kind: success }` — money left. */
+    fun success(context: Context) = play(context, VibrationEffect.EFFECT_DOUBLE_CLICK)
+
+    /** Spec 043: `haptic { kind: error }` — a refusal the person should feel. */
+    fun error(context: Context) = play(context, VibrationEffect.EFFECT_HEAVY_CLICK)
+
+    private fun play(context: Context, effect: Int) {
+        val vibrator = vibrator(context) ?: return
+        if (!vibrator.hasVibrator()) return
+        runCatching { vibrator.vibrate(VibrationEffect.createPredefined(effect)) }
+    }
+
     private fun vibrator(context: Context): Vibrator? = runCatching {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val manager = context.getSystemService(VibratorManager::class.java)

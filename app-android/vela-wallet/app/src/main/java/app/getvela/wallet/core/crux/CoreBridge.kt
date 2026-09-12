@@ -6,7 +6,10 @@ import uniffi.vela_core_uniffi.ContactsCore
 import uniffi.vela_core_uniffi.CreateWalletCore
 import uniffi.vela_core_uniffi.DisplayCurrencyCore
 import uniffi.vela_core_uniffi.LoginCore
+import uniffi.vela_core_uniffi.FeePolicyCore
 import uniffi.vela_core_uniffi.ManageTokensCore
+import uniffi.vela_core_uniffi.SendCore
+import uniffi.vela_core_uniffi.TxTrackerCore
 import uniffi.vela_core_uniffi.NetworkAdminCore
 import uniffi.vela_core_uniffi.PaymentRequestCore
 import uniffi.vela_core_uniffi.ReceiveWatchCore
@@ -82,6 +85,16 @@ fun ActivityFeedCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
 fun ManageTokensCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+// Spec 043: the send path's three machines.
+fun SendCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun FeePolicyCore.asBridge(): CoreBridge =
+    bridgeOf(this::dispatch, this::resolveEffect, this::view)
+
+fun TxTrackerCore.asBridge(): CoreBridge =
     bridgeOf(this::dispatch, this::resolveEffect, this::view)
 
 fun TokenTrustCore.asBridge(): CoreBridge =

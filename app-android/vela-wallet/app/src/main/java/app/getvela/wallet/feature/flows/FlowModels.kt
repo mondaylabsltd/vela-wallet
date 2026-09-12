@@ -348,7 +348,13 @@ data class FeeRowModel(
 )
 
 @Immutable
-data class AmountFieldModel(val value: String, val fiat: String, val denomLabel: String)
+data class AmountFieldModel(
+    val value: String,
+    val fiat: String,
+    val denomLabel: String,
+    /** Spec 043: the live figure as typed; `null` = a drawn, read-only field. */
+    val raw: String? = null,
+)
 
 @Immutable
 data class RecipientFieldModel(
@@ -360,6 +366,8 @@ data class RecipientFieldModel(
     val scanLabel: String? = null,
     /** Sweep's "every token goes to the same address". */
     val note: String? = null,
+    /** Spec 043: the live address as typed; `null` = a drawn, read-only field. */
+    val raw: String? = null,
 )
 
 enum class RecipientAction { Add, Contacts, Import }
@@ -389,6 +397,8 @@ data class SendFormModel(
     val summary: SummaryLineModel? = null,
     val fee: FeeRowModel,
     val cta: String,
+    /** Spec 043: the core's `can_continue`; a drawn form is always enabled. */
+    val ctaEnabled: Boolean = true,
 )
 
 /** SD2e — the contact picker. */
@@ -481,6 +491,8 @@ data class SendConfirmModel(
     val facts: List<FactRowModel>,
     val breakdown: List<BreakdownRowModel> = emptyList(),
     val cta: String,
+    /** Spec 043: the core's `can_confirm`; a drawn confirm is always enabled. */
+    val ctaEnabled: Boolean = true,
 )
 
 enum class ReceiptStage { Submitting, Submitted, Confirmed, Failed }

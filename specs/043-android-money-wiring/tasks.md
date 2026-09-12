@@ -152,15 +152,15 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
 
 ## Phase 3 — User Story 1: send a token to someone (P1) 🎯 MVP
 
-- [ ] **T025** [US1] `…/feature/send/core/FeeExecutor.kt` — the six arms per
+- [X] **T025** [US1] `…/feature/send/core/FeeExecutor.kt` — the six arms per
       `contracts/shell-operations.md` (gas signals in parallel through the
       pool; bundler quote; in-band quotes; fee recipient; gas estimate via
       `user_op_draft` with the dummy signature; TTL as a cancellable delay).
       `neutralAnswer` per arm.
-- [ ] **T026** [P] [US1] `…test/FeeMachineTest.kt` — the real `FeePolicyCore`
+- [X] **T026** [P] [US1] `…test/FeeMachineTest.kt` — the real `FeePolicyCore`
       through JNA with `FakeRelay`: a quote lands with the estimate the
       view renders; `SelectFeeAsset` re-quotes; TTL expiry flips the view.
-- [ ] **T027** [US1] `…/feature/send/core/SendExecutor.kt` — the 18 arms:
+- [X] **T027** [US1] `…/feature/send/core/SendExecutor.kt` — the 18 arms:
       `fetch_tokens` from the balance view + `NetView`; `estimate_fee` by
       dispatching `QuoteRequested` into the fee host and awaiting its
       estimate (D7); `probe_treasury`; `load_account_credential` from
@@ -171,40 +171,40 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
       logged); `resolve_identity`/`resolve_risk`; `simulate_calls` → null;
       `start_timer`; `haptic`; `show_alert`/`close` → controller callbacks;
       `add_network` → `Error`.
-- [ ] **T028** [US1] `…/feature/send/core/SendController.kt` — hosts
+- [X] **T028** [US1] `…/feature/send/core/SendController.kt` — hosts
       `SendCore`, `FeePolicyCore` (and `ManageTokensCore` from Phase 6);
       `open(address)`, `close()`, the event intents the screens call
       (`selectToken`, `setRecipient`, `setAmount`, `tapMax`, `continue`,
       `back`, `chooseFeeToken`, `slideConfirm`, `cancelSigning`, `done`…);
       StateFlows `send`, `fee`; lifecycle: one attempt per `open`.
       Registered in `VelaWalletApplication.kt`'s container.
-- [ ] **T029** [P] [US1] `…test/SendMachineTest.kt` — the real `SendCore`
+- [X] **T029** [P] [US1] `…test/SendMachineTest.kt` — the real `SendCore`
       through JNA with `FakeRelay` and a fake `UserOpSigner`: pick → form →
       Continue quotes → confirm shows the quoted fee → confirm signs once →
       submitted → records persisted BEFORE `track_submitted`; Max on the fee
       token equals balance minus reserve; the generation lock drops a stale
       answer.
-- [ ] **T030** [US1] `…/feature/send/SendLive.kt` — `sendPick(fallback,
+- [X] **T030** [US1] `…/feature/send/SendLive.kt` — `sendPick(fallback,
       view, balances, chainNames, currency)`, `sendForm(...)`,
       `sendConfirm(...)`, `sendReceipt(...)`, `feeTokenSheet(...)`,
       `contactPickSheet(fallback, book)`: every figure and string from the
       core's view, the fixture only for labels; the receipt's
       `ReceiptStage` from the view's stage.
-- [ ] **T031** [P] [US1] `…test/SendLiveTest.kt` — the four builders against
+- [X] **T031** [P] [US1] `…test/SendLiveTest.kt` — the four builders against
       hand-built views: no fixture number survives; hidden balance stays
       hidden; the fee row shows the fee token; a `submitted` view renders
       the hash and the explorer link.
-- [ ] **T032** [US1] `navigation/VelaNavHost.kt` — `liveFlow`'s `else ->
+- [X] **T032** [US1] `navigation/VelaNavHost.kt` — `liveFlow`'s `else ->
       drawn.base/sheet` branches gain `SendPick/SendForm/SendConfirm/
       SendReceipt` and `FeeToken/ContactPick`; the 转账 entry opens
       `SendController.open`; `FlowHost` callbacks (`onContinue`, `onConfirm`,
       `onFee`, `onPickRecipient`, `onCta`) dispatch controller intents
       instead of pushing fixture steps; Back dispatches `Back`. Delete
       nothing drawn: the `Scan`/`BatchImport` branches keep their fixture.
-- [ ] **T033** [US1] `…/feature/flows/FlowScreens.kt` — where a send screen
+- [X] **T033** [US1] `…/feature/flows/FlowScreens.kt` — where a send screen
       has a control with no callback (amount field, recipient field, Max,
       the slide-to-confirm), give it one; no new drawing.
-- [ ] **T034** [US1] `[device]` in the parallel space: 转账 → Gnosis xDAI →
+- [X] **T034** [US1] `[device]` in the parallel space: 转账 → Gnosis xDAI →
       recipient = fixture account 1 → dust → Continue shows a fee →
       confirm → receipt *submitted* with a hash; the explorer shows it
       (SC-001 first half). Screenshot every screen.

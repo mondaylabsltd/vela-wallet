@@ -29,32 +29,6 @@ import org.junit.Test
  */
 class RelayClientTest {
 
-    /** Scripted port: a queue of bodies per method, REST answers per path, a call log. */
-    private class FakeRelayPort : RelayPort {
-        val rpc = HashMap<String, ArrayDeque<RpcResult>>()
-        val rest = HashMap<String, RestAnswer>()
-        val calls = ArrayList<String>()
-        var base: String? = "https://relay.test"
-
-        fun answer(method: String, vararg bodies: RpcResult) {
-            rpc.getOrPut(method) { ArrayDeque() }.addAll(bodies)
-        }
-
-        override suspend fun call(chainId: Int, method: String, params: List<Any?>, kind: RpcKind): RpcResult {
-            calls += "$kind:$method"
-            return rpc[method]?.removeFirstOrNull() ?: RpcResult.Failed(rateLimited = false)
-        }
-
-        override suspend fun bundlerBase(chainId: Int): String? = base
-
-        override suspend fun bestRpcUrl(chainId: Int): String? = "https://rpc.test"
-
-        override suspend fun restGet(url: String, xRpcUrl: String?): RestAnswer {
-            calls += "GET:$url"
-            return rest[url] ?: RestAnswer.Failed
-        }
-    }
-
     private val port = FakeRelayPort()
     private var clock = 1_000L
     private val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, now = { clock }, retryDelayMs = 0)
@@ -99,7 +73,7 @@ class RelayClientTest {
     fun `in-band quotes are cached for eight seconds and cleared on demand`() = runBlocking {
         val row = JSONObject()
             .put("recipient", "0x2222222222222222222222222222222222222222")
-            .put("asset", "native").put("balance", "1000").put("decimals", 18)
+            .put("asset", "native").put("balance", "0x3e8").put("decimals", 18)
             .put("symbol", "XDAI").put("usdBalance", "1000").put("usdPrice", "1")
         port.answer("vela_getInBandGasQuote", body(JSONArray().put(row)), body(JSONArray().put(row)))
 
@@ -117,10 +91,10 @@ class RelayClientTest {
     @Test
     fun `without a native price only the native row survives`() = runBlocking {
         val native = JSONObject().put("recipient", "0x2222222222222222222222222222222222222222")
-            .put("asset", "native").put("balance", "1").put("decimals", 18).put("symbol", "ETH").put("usdBalance", "0")
+            .put("asset", "native").put("balance", "0x1").put("decimals", 18).put("symbol", "ETH").put("usdBalance", "0")
         val usdc = JSONObject().put("recipient", "0x2222222222222222222222222222222222222222")
             .put("asset", "erc20").put("feeToken", "0x3333333333333333333333333333333333333333")
-            .put("balance", "1").put("decimals", 6).put("symbol", "USDC").put("usdBalance", "1").put("usdPrice", "1")
+            .put("balance", "0x1").put("decimals", 6).put("symbol", "USDC").put("usdBalance", "1").put("usdPrice", "1")
         port.answer("vela_getInBandGasQuote", body(JSONArray().put(native).put(usdc)))
         assertEquals(listOf(FeeAssetKind.Native), relay.inBandQuotes(1, "0xabc")!!.map { it.asset })
     }

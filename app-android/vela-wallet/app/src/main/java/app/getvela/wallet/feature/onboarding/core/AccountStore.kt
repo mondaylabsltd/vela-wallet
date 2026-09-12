@@ -23,7 +23,10 @@ import org.json.JSONObject
  * vocabulary is `JSONObject` rather than a Kotlin data class — a data class is
  * exactly the shape that invites a field-by-field copy.
  */
-class AccountStore(context: Context) {
+class AccountStore internal constructor(private val store: KeyValueStore) {
+
+    /** The app's own DataStore; tests hand in a fake (spec 043). */
+    constructor(context: Context) : this(VelaStore(context))
 
     /**
      * The account records live in the wallet's one key-value space, beside the
@@ -32,7 +35,6 @@ class AccountStore(context: Context) {
      * settings machine, and two DataStore instances over one file is a runtime
      * error, not a merge.
      */
-    private val store = VelaStore(context)
 
     /** Read the account list. Order is the core's, never re-sorted here. */
     suspend fun loadAccounts(): JSONArray = readList(KEY_ACCOUNTS)

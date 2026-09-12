@@ -204,9 +204,14 @@ class MainActivity : ComponentActivity() {
      * nothing there. Remembered across relaunches; sign-out leaves.
      *
      *   adb shell am start -n app.getvela.wallet/.MainActivity --ez vela.parallelSpace true
+     *   … --ez vela.parallelSpace false   # leave without signing the device out
      */
-    private fun parallelSpaceRequested(): Boolean =
-        intent?.getBooleanExtra("vela.parallelSpace", false) == true
+    private fun parallelSpaceRequested(): Boolean? =
+        if (intent?.hasExtra("vela.parallelSpace") == true) {
+            intent?.getBooleanExtra("vela.parallelSpace", false)
+        } else {
+            null
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
@@ -237,7 +242,11 @@ class MainActivity : ComponentActivity() {
 
         val container = (application as VelaWalletApplication).container
         container.applySystemLocale()
-        if (parallelSpaceRequested()) ParallelSpaceHook.enter()
+        when (parallelSpaceRequested()) {
+            true -> ParallelSpaceHook.enter()
+            false -> ParallelSpaceHook.leave()
+            null -> Unit
+        }
 
         // Null until the persisted preference is actually read — the splash stays up,
         // so the first frame can never render the wrong palette (data-model MainUiState).

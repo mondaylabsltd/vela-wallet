@@ -3,6 +3,12 @@ package app.getvela.wallet
 import android.app.Application
 import app.getvela.wallet.core.data.ThemePreferenceRepository
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.feature.send.core.UserOpSigner
+import app.getvela.wallet.feature.send.core.SendHapticKind
+import app.getvela.wallet.feature.send.core.SendController
+import app.getvela.wallet.feature.send.core.RelayClient
+import app.getvela.wallet.feature.send.core.PoolRelayPort
+import app.getvela.wallet.dev.ParallelSpaceHook
 import app.getvela.wallet.dev.ParallelSpaceBinding
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.LocaleResolver
@@ -128,6 +134,54 @@ class AppContainer(private val app: Application) {
     }
 
     /** The address book, on the same terms as [settings]. */
+    /**
+     * Spec 043: the relay as the send path talks to it — through the pool,
+     * so the relay's endpoints are banned and cooled down like a chain's.
+     * App-resident for its two small caches.
+     */
+    val relay: RelayClient by lazy {
+        RelayClient(
+            port = PoolRelayPort(pool),
+            // The pool names the relay for every chain the settings machine
+            // knows; this is the built-in service for one it does not.
+            builtinBase = { DEFAULT_BUNDLER_SERVICE_URL },
+        )
+    }
+
+    /**
+     * The passkey signer, once an activity has attached the ceremony
+     * (`OnboardingViewModel.attach`). Inside the parallel space the fixture
+     * signer takes precedence; outside it, this is the only signer.
+     */
+    @Volatile
+    var passkeySigner: UserOpSigner? = null
+
+    /** Spec 043: the send path's host — one per process, one attempt per open. */
+    val send: SendController by lazy {
+        SendController(
+            scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
+            relay = relay,
+            pool = pool,
+            feed = wallet.feedExecutor,
+            accountStore = accountStore,
+            balances = { wallet.balances.value },
+            networks = { settings.networks.value },
+            signer = {
+                ParallelSpaceHook.signer()
+                    ?: passkeySigner
+                    ?: error("no signer attached: the send began before an activity attached the passkey ceremony")
+            },
+            haptic = { kind ->
+                when (kind) {
+                    SendHapticKind.Success -> Haptics.success(app)
+                    SendHapticKind.Error -> Haptics.error(app)
+                }
+            },
+            refreshBalances = { wallet.refresh() },
+            feedChanged = { wallet.feedReconciled() },
+        )
+    }
+
     val contacts: ContactsController by lazy {
         ContactsController(
             context = app,
@@ -224,3 +278,6 @@ class VelaWalletApplication : Application() {
         container.start()
     }
 }
+
+/** `network_admin::DEFAULT_BUNDLER_SERVICE_URL` — the relay every client ships with. */
+private const val DEFAULT_BUNDLER_SERVICE_URL = "https://vela-relay.getvela.app"

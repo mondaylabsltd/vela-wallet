@@ -1,6 +1,15 @@
 package app.getvela.wallet.feature.flows.components
 
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
@@ -259,6 +268,8 @@ fun AmountInput(
     amount: AmountFieldModel,
     modifier: Modifier = Modifier,
     onDenom: () -> Unit = {},
+    /** Spec 043: present ⇒ the figure is typed here, in the same type as the drawn one. */
+    onValueChange: ((String) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Column(
@@ -267,15 +278,51 @@ fun AmountInput(
             .padding(vertical = VelaSpacing.xl3),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text = amount.value,
+        val heroStyle = TextStyle(
             color = colors.fgBase,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.bold,
             fontSize = VelaTextSize.xl5,
             lineHeight = VelaLeading.amountHero * VelaTextSize.xl5,
-            maxLines = 1,
+            textAlign = TextAlign.Center,
         )
+        if (onValueChange != null && amount.raw != null) {
+            // Local echo (spec 043, device-found): every keystroke goes to the
+            // machine, but the field shows what was typed until the machine's
+            // OWN value changes for another reason (Max, ⇄). Driving the field
+            // straight from the round trip dropped characters under fast
+            // typing — "0.001" arrived as ".01".
+            var typed by remember { mutableStateOf(amount.raw) }
+            // Every value this field SENT, so a machine view that lags behind
+            // the typing (device-found: a 42-character paste lost six
+            // characters to stale intermediate views) is recognised as an echo
+            // and ignored; only a value the field never sent — Max, ⇄, a
+            // picked contact, the core's own normalisation — resyncs it.
+            val sent = remember { ArrayDeque<String>().apply { addLast(amount.raw) } }
+            LaunchedEffect(amount.raw) { if (amount.raw !in sent) typed = amount.raw }
+            BasicTextField(
+                value = typed,
+                onValueChange = { next ->
+                    typed = next
+                    sent.addLast(next)
+                    if (sent.size > 256) sent.removeFirst()
+                    onValueChange(next)
+                },
+                singleLine = true,
+                textStyle = heroStyle,
+                cursorBrush = SolidColor(colors.accentBase),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.Center) {
+                        if (typed.isEmpty()) Text(text = "0", style = heroStyle.copy(color = colors.fgSubtle))
+                        inner()
+                    }
+                },
+            )
+        } else {
+            Text(text = amount.value, style = heroStyle, maxLines = 1)
+        }
         Spacer(modifier = Modifier.height(VelaSpacing.sm))
         Row(
             modifier = Modifier.clickable(onClick = onDenom).padding(VelaSpacing.xs),
@@ -604,6 +651,8 @@ fun RecipientField(
     modifier: Modifier = Modifier,
     onPick: () -> Unit = {},
     onScan: () -> Unit = {},
+    /** Spec 043: present ⇒ the address is typed or pasted here. */
+    onValueChange: ((String) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -624,16 +673,53 @@ fun RecipientField(
             IdenticonImage(seed = field.identiconSeed, size = VelaIconSize.xl2)
             Spacer(modifier = Modifier.width(VelaSpacing.md))
             Column(modifier = Modifier.weight(1f)) {
-                listOf(field.lines.first, field.lines.second)
-                    .filter { it.isNotEmpty() }
-                    .forEach { line ->
-                        Text(
-                            text = line,
-                            color = colors.fgBase,
-                            fontFamily = VelaMonoFontFamily,
-                            fontSize = VelaTextSize.base,
-                        )
-                    }
+                if (onValueChange != null && field.raw != null) {
+                    val monoStyle = TextStyle(
+                        color = colors.fgBase,
+                        fontFamily = VelaMonoFontFamily,
+                        fontSize = VelaTextSize.base,
+                    )
+                    // Same local echo as the amount: a pasted address must
+                    // not lose characters to the round trip.
+                    var typed by remember { mutableStateOf(field.raw) }
+                    // Every value this field SENT, so a machine view that lags behind
+                    // the typing (device-found: a 42-character paste lost six
+                    // characters to stale intermediate views) is recognised as an echo
+                    // and ignored; only a value the field never sent — Max, ⇄, a
+                    // picked contact, the core's own normalisation — resyncs it.
+                    val sent = remember { ArrayDeque<String>().apply { addLast(field.raw) } }
+                    LaunchedEffect(field.raw) { if (field.raw !in sent) typed = field.raw }
+                    BasicTextField(
+                        value = typed,
+                        onValueChange = { next ->
+                            typed = next
+                            sent.addLast(next)
+                            if (sent.size > 256) sent.removeFirst()
+                            onValueChange(next)
+                        },
+                        maxLines = 2,
+                        textStyle = monoStyle,
+                        cursorBrush = SolidColor(colors.accentBase),
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { inner ->
+                            if (typed.isEmpty()) {
+                                Text(text = "0x…", style = monoStyle.copy(color = colors.fgSubtle))
+                            }
+                            inner()
+                        },
+                    )
+                } else {
+                    listOf(field.lines.first, field.lines.second)
+                        .filter { it.isNotEmpty() }
+                        .forEach { line ->
+                            Text(
+                                text = line,
+                                color = colors.fgBase,
+                                fontFamily = VelaMonoFontFamily,
+                                fontSize = VelaTextSize.base,
+                            )
+                        }
+                }
             }
             FlowIconButton(
                 icon = VelaIcons.UserRound,

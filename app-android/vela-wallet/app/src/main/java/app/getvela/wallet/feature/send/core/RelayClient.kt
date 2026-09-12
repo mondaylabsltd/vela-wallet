@@ -47,7 +47,9 @@ class RelayClient(
 
     private suspend fun restGet(chainId: Int, path: String): RestAnswer {
         val base = (port.bundlerBase(chainId) ?: builtinBase()).trimEnd('/')
-        return port.restGet("$base$path", port.bestRpcUrl(chainId))
+        val answer = port.restGet("$base$path", port.bestRpcUrl(chainId))
+        VelaLog.event("relay.rest", path, "base" to base, "outcome" to answer::class.simpleName, "status" to (answer as? RestAnswer.Status)?.code)
+        return answer
     }
 
     /** `GET /v1/treasury/{chain}` — 404 is "this chain is not covered", never "down". */
@@ -101,8 +103,17 @@ class RelayClient(
 
     // -- bundler JSON-RPC -------------------------------------------------------
 
-    private suspend fun bundlerCall(chainId: Int, method: String, params: List<Any?>): JSONObject? =
-        (port.call(chainId, method, params, RpcKind.Bundler) as? RpcResult.Body)?.json
+    private suspend fun bundlerCall(chainId: Int, method: String, params: List<Any?>): JSONObject? {
+        val answer = port.call(chainId, method, params, RpcKind.Bundler)
+        val body = (answer as? RpcResult.Body)?.json
+        VelaLog.event(
+            "relay.rpc", method,
+            "chain" to chainId,
+            "outcome" to answer::class.simpleName,
+            "error" to body?.optJSONObject("error")?.optString("message")?.take(80),
+        )
+        return body
+    }
 
     private val quoteCache = HashMap<String, Pair<List<FeeAssetQuote>, Long>>()
 
@@ -129,6 +140,13 @@ class RelayClient(
         return usable
     }
 
+    /**
+     * One `vela_getInBandGasQuote` row, or nothing if it is not well-formed —
+     * the desktop's `parse_quote_row`, field for field. The relay writes
+     * `balance` as HEX ("0x9f33…"), `feeToken` as JSON null for the native
+     * row, the USD figures as decimal strings; the first device run parsed
+     * the balance as a decimal and dropped every row.
+     */
     private fun quoteRow(row: JSONObject): FeeAssetQuote? {
         val recipient = row.optString("recipient").takeIf(::isAddress) ?: return null
         val kind = when (row.optString("asset")) {
@@ -136,16 +154,22 @@ class RelayClient(
             "erc20" -> FeeAssetKind.Erc20
             else -> return null
         }
+        val feeToken = row.optString("feeToken").takeIf(::isAddress)
         val decimals = row.optInt("decimals", -1).takeIf { it >= 0 } ?: return null
+        val symbol = row.optString("symbol").trim().ifBlank { return null }
+        val usdPrice = decimalText(row.opt("usdPrice"))
+        // USD values are conversion metadata: native gas prices from gas units
+        // alone, a stablecoin needs its own price or it cannot be converted.
+        if (kind == FeeAssetKind.Erc20 && (feeToken == null || usdPrice == null)) return null
         return FeeAssetQuote(
             recipient = recipient,
             asset = kind,
-            fee_token = row.optString("feeToken").takeIf(::isAddress),
-            balance = decimalText(row.opt("balance")) ?: return null,
+            fee_token = if (kind == FeeAssetKind.Erc20) feeToken else null,
+            balance = bigHex(row.opt("balance")).toString(),
             decimals = decimals,
-            symbol = row.optString("symbol").ifBlank { return null },
+            symbol = symbol,
             usd_balance = decimalText(row.opt("usdBalance")) ?: "0",
-            usd_price = decimalText(row.opt("usdPrice")),
+            usd_price = usdPrice,
         )
     }
 
@@ -364,11 +388,15 @@ class RelayClient(
             return runCatching { BigInteger(text.removePrefix("0x").ifEmpty { "0" }, 16).toString() }.getOrNull()
         }
 
-        /** A decimal the relay wrote as a string or a number, as a decimal string. */
-        fun decimalText(value: Any?): String? = when (value) {
-            is String -> value.trim().takeIf { it.isNotEmpty() && it.all { c -> c.isDigit() || c == '.' } }
-            is Number -> value.toString()
-            else -> null
+        /** A decimal the relay wrote as a string or a number, as a decimal string (`decimal_text`). */
+        fun decimalText(value: Any?): String? {
+            val raw = when (value) {
+                is String -> value.trim()
+                is Number -> value.toString()
+                else -> return null
+            }
+            val parsed = raw.toDoubleOrNull() ?: return null
+            return raw.takeIf { parsed.isFinite() && parsed >= 0.0 }
         }
     }
 }
