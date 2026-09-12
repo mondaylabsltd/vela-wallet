@@ -76,9 +76,17 @@ desktop and iOS jobs (their trees are untouched).
 
 ## Owed
 
-- **Device pass (SC-004).** The four 041 home checks and the three main checks
-  (探索 round trip, held figure, unreachable skeleton) on the Xiaomi test
-  device. Unit-tested here, not device-tested.
+- **Device pass (SC-004) — partly done, 2026-09-12 08:36, Xiaomi `alioth`.**
+  The debug APK with the merged core (full NDK build; the `-PvelaSkipRustBuild`
+  APK carried a stale `.so` without `wrapped_native_is_the_native`) installed
+  and opened cold: own account `0x7687…D141`, total **£3.73 · GBP**, holdings
+  ETH/Arbitrum 0.002 (£3.71) and POL/Polygon 0.152784 (£0.01), four tabs.
+  探索 opens as a section (favourites + recents, the E2 fixture), Back returns
+  to the wallet; 通讯录 opens this device's book — the rows Alice/Bob/Carol are
+  real stored rows written by `ContactsPersistenceTest` in 040, confirmed by
+  reading the DataStore file with `run-as`, not a fixture leak. No exception
+  in logcat. **Not driven**: the held figure during refresh and the
+  unreachable skeleton (both need a network fault staged on the device).
 - **The wizard's `check_failed` has no Android rendering site** because no
   `when` over `NetWizardErrorKind` exists yet; it decodes and the wizard's
   generic error line shows. A per-kind message is 043 material if the
