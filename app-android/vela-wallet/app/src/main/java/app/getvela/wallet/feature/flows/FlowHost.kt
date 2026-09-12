@@ -61,6 +61,8 @@ fun FlowHost(
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onNavigate: (FlowStep) -> Unit = {},
+    /** Spec 048: a list row opens ITS item — the step with the row's id (the history and asset lists dropped it). */
+    onOpen: (FlowStep, String) -> Unit = { _, _ -> },
     /** Spec 043: when the send is live, its taps go to the machine, not to the fixture's steps. */
     send: SendCallbacks? = null,
     addToken: AddTokenCallbacks? = null,
@@ -72,10 +74,10 @@ fun FlowHost(
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            FlowHostContent(model, modifier, onBack, onNavigate, send, addToken, onSaveImage)
+            FlowHostContent(model, modifier, onBack, onNavigate, onOpen, send, addToken, onSaveImage)
         }
     } else {
-        FlowHostContent(model, modifier, onBack, onNavigate, send, addToken, onSaveImage)
+        FlowHostContent(model, modifier, onBack, onNavigate, onOpen, send, addToken, onSaveImage)
     }
 }
 
@@ -105,6 +107,7 @@ private fun FlowHostContent(
     modifier: Modifier,
     onBack: () -> Unit,
     onNavigate: (FlowStep) -> Unit,
+    onOpen: (FlowStep, String) -> Unit = { _, _ -> },
     send: SendCallbacks? = null,
     addToken: AddTokenCallbacks? = null,
     onSaveImage: (() -> Unit)? = null,
@@ -136,7 +139,10 @@ private fun FlowHostContent(
             ) {
                 HistoryBody(
                     model = base.model,
-                    onSelect = { _, _ -> onNavigate(FlowStep.TxDetail) },
+                    onSelect = { group, row ->
+                        val id = base.model.groups.getOrNull(group)?.rows?.getOrNull(row)?.id
+                        if (!id.isNullOrEmpty()) onOpen(FlowStep.TxDetail, id)
+                    },
                 )
             }
             is FlowBase.Assets -> FlowScaffold(
@@ -147,7 +153,10 @@ private fun FlowHostContent(
             ) {
                 AssetsBody(
                     model = base.model,
-                    onSelect = { onNavigate(FlowStep.TokenDetail) },
+                    onSelect = { index ->
+                        val id = base.model.rows.getOrNull(index)?.id
+                        if (!id.isNullOrEmpty()) onOpen(FlowStep.TokenDetail, id)
+                    },
                     onAdd = { onNavigate(FlowStep.AddToken) },
                     onReceive = { onNavigate(FlowStep.Receive) },
                 )

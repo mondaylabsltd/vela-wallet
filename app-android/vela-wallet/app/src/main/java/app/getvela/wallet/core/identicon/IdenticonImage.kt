@@ -1,6 +1,8 @@
 package app.getvela.wallet.core.identicon
 
 import android.graphics.BitmapFactory
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.foundation.clickable
 import android.util.LruCache
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -39,7 +41,21 @@ fun IdenticonImage(
     size: Dp,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
+    /**
+     * Spec 048 (the founder: 说好了 identicon 要能点击放大): every artwork drawn
+     * from an address opens the viewer, the way the web's `Identicon.svelte`
+     * is a button. The viewer is hosted once, at the NavHost, and reached
+     * through [LocalIdenticonViewer]; a site that manages its own tap, or
+     * draws for a picture (the share card), passes `false`.
+     */
+    tappable: Boolean = true,
 ) {
+    val open = LocalIdenticonViewer.current
+    val modifier = if (tappable && open != null && seed.isNotBlank()) {
+        modifier.clip(CircleShape).clickable { open(seed) }
+    } else {
+        modifier
+    }
     val density = LocalDensity.current
     val sizePx = with(density) { size.roundToPx() }.coerceAtLeast(1)
     val bitmap = remember(seed, sizePx) { identiconBitmap(seed, sizePx) }
@@ -79,3 +95,6 @@ private fun identiconBitmap(seed: String, sizePx: Int): ImageBitmap? = runCatchi
         ?: return@runCatching null
     decoded.asImageBitmap().also { identiconCache.put(key, it) }
 }.getOrNull()
+
+/** The NavHost-hosted identicon viewer: `seed -> open the sheet`. `null` where nothing hosts one (previews, the gallery). */
+val LocalIdenticonViewer = compositionLocalOf<((String) -> Unit)?> { null }

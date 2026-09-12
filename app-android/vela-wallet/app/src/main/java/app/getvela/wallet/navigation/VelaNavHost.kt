@@ -1,6 +1,21 @@
 package app.getvela.wallet.navigation
 
 import app.getvela.wallet.core.diagnostics.CrashSheet
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.contacts.core.ContactGroupInput
+import app.getvela.wallet.feature.contacts.components.GroupMenuSheet
+import app.getvela.wallet.feature.contacts.components.GroupEditSheet
+import app.getvela.wallet.feature.contacts.components.GroupDeleteConfirmSheet
+import app.getvela.wallet.feature.contacts.components.ContactQrSheet
+import app.getvela.wallet.core.platform.rememberVelaHaptic
+import app.getvela.wallet.core.platform.VelaHaptic
+import app.getvela.wallet.core.platform.Gallery
+import app.getvela.wallet.core.platform.Clipboard
+import app.getvela.wallet.feature.wallet.components.IdenticonViewerSheet
+import app.getvela.wallet.core.identicon.LocalIdenticonViewer
+import androidx.compose.runtime.CompositionLocalProvider
 import app.getvela.wallet.core.net.NetHealth
 import app.getvela.wallet.feature.wallet.components.AccountSwitcherSheet
 import app.getvela.wallet.feature.wallet.BalanceStatusKind
@@ -274,1040 +289,1171 @@ fun VelaNavHost(
     }
 
     Box {
-    NavHost(navController = navController, startDestination = startDestination) {
-        composable(VelaDestinations.WELCOME) {
-            val welcome: WelcomeViewModel = viewModel()
-            var showSignInMethods by rememberSaveable { mutableStateOf(false) }
-            WelcomeScreen(
-                darkTheme = darkTheme,
-                signingIn = onboarding.loginView.busy,
-                onIntent = { intent ->
-                    when (intent) {
-                        // PUSHED, not swapped: `navigateSingleTop` clears the
-                        // back stack down to and including the start
-                        // destination, which is right for the session guard's
-                        // jumps and wrong here — it left the create flow as the
-                        // only entry, so its own back affordance had nothing to
-                        // pop and did nothing at all (device-found 2026-08-25).
-                        OnboardingIntent.CreateWallet ->
-                            navController.push(VelaDestinations.CREATE)
-                        // Signing in offers the same three authenticators
-                        // creating does — the picker opens, and the chosen
-                        // method runs the "who are you?" ceremony on that route.
-                        OnboardingIntent.RecoverWallet -> showSignInMethods = true
-                    }
-                },
-                onLongPressLogo = welcome::showSettings,
-            )
-            if (showSignInMethods) {
-                SignInMethodSheet(
-                    onPick = { method ->
-                        showSignInMethods = false
-                        onboarding.beginSignIn(method)
-                    },
-                    onDismiss = { showSignInMethods = false },
-                )
-            }
-            if (welcome.settingsSheetVisible) {
-                ThemeSettingsSheet(
-                    current = themePreference,
-                    onSelect = onThemeSelected,
-                    onDismiss = welcome::hideSettings,
-                )
-            }
-        }
-
-        composable(VelaDestinations.CREATE) {
-            CreateFlowScreen(
-                model = onboarding,
-                // Leaving the flow, which is a different event from the screen
-                // leaving composition — see the DisposableEffect in
-                // CreateFlowScreen. The machine holds drafted passkeys, so it is
-                // dropped HERE, where somebody actually said they were done.
-                onExit = {
-                    onboarding.disposeCreate()
-                    navController.popUnlessRoot()
-                },
-                onOpenPrivacy = { context.openUrl(PRIVACY_URL) },
-                onOpenTerms = { context.openUrl(TERMS_URL) },
-            )
-        }
-
-        composable(VelaDestinations.IMPORT) {
-            ImportPlaceholderScreen(
-                darkTheme = darkTheme,
-                onBack = { navController.popUnlessRoot() },
-            )
-        }
-
-        composable(VelaDestinations.WALLET) {
-            val strings = LocalVelaStrings.current
-            // Fixture-driven still (spec 015 FR-005) apart from the two things
-            // that identify the wallet — its address and its name, both now the
-            // real ones. A home screen showing a fixture address after a real
-            // create would be the app telling the person their money is
-            // somewhere it is not; a fixture NAME over their own address and
-            // identicon told them they were signed in as somebody else
-            // (device-found 2026-08-26).
-            // The chain-select sheet used to open from the header's network
-            // pill; the pill is gone (founder call, 2026-08-26 — it cost the
-            // name and address their width), and with it this screen's H8
-            // state. The sheet keeps its fixtures for the gallery.
-            val model = remember(strings, session.address, session.activeName) {
-                WalletFixtures.buildMobileState(WalletScreenState.H1, strings)
-                    .withAddress(session.address).withName(session.activeName)
-            }
-            // Spec 021: Receive / Send / Activity / Assets, as pushed screens
-            // inside this route. The system Back unwinds the flow stack before
-            // it leaves the wallet — on a phone that is the most common way out
-            // of a flow, and losing the whole wallet from four screens deep is
-            // not what the gesture means.
-            // The holdings are this person's own from spec 041; the activity
-            // feed and the flows are still fixtures until phases 5 and 6.
-            val wallet = application.container.wallet
-            val balances by wallet.balances.collectAsStateWithLifecycle()
-            val feed by wallet.feed.collectAsStateWithLifecycle()
-            // Spec 047: the header's account switcher (the founder, 2026-09-12).
-            var switcherOpen by remember { mutableStateOf(false) }
-            val manageTokens by wallet.manageTokens.collectAsStateWithLifecycle()
-            // The display currency the person chose, and the rate that makes it
-            // showable. Without a rate the core leaves the figure in dollars.
-            val currency by application.container.settings.currency.collectAsStateWithLifecycle()
-            val networks by application.container.settings.networks.collectAsStateWithLifecycle()
-            val chainNames = remember(networks.networks) {
-                networks.networks.associate { it.chain_id.toInt() to it.display_name }
-            }
-            LaunchedEffect(session.address) {
-                if (session.address.isEmpty()) return@LaunchedEffect
-                // ORDER MATTERS. The pool asks the network machine which
-                // endpoints a chain has, so a fetch dispatched before that
-                // machine has read storage finds no chains at all and settles
-                // with nothing — silently, and with no second chance, because
-                // nothing re-triggers when the list later arrives.
-                val settings = application.container.settings
-                settings.startNetworks()
-                settings.networks.first { it.loaded }
-                // The hero is a money figure, and which currency it is in is
-                // this machine's answer. Refreshed here rather than only on the
-                // settings screen, because somebody who never opens settings
-                // still has a display currency — and until this runs the core
-                // has no rate and the wallet shows dollars.
-                settings.refreshCurrency()
-                wallet.open(session.address)
-            }
-
-            val flows = rememberFlowNavState()
-            val scope = rememberCoroutineScope()
-            // Spec 047 FR-006, under the manifest's rule (no ACCESS_NETWORK_STATE:
-            // "offline" is what the calls did, not what the radio claims): three
-            // calls in a row that never reached a server, cleared by the first
-            // answered one. Coming back refreshes what went stale meanwhile.
-            val online by NetHealth.online.collectAsStateWithLifecycle()
-            var wasOffline by remember { mutableStateOf(false) }
-            LaunchedEffect(online) {
-                if (!online) wasOffline = true else if (wasOffline) { wasOffline = false; wallet.refresh() }
-            }
-            val payLink by application.container.pendingPayLink.collectAsStateWithLifecycle()
-            LaunchedEffect(payLink) {
-                val uri = payLink ?: return@LaunchedEffect
-                // Consumed at the END: clearing the trigger here re-keys this
-                // effect to null and cancels the very coroutine doing the work
-                // (device-found 2026-09-12 — the link was "received" and then
-                // nothing, because the wait for the core's verdict was cancelled).
-                VelaLog.event("paylink", "received", "uri" to uri.toString().take(80))
-                val pay = PayLink.parse(uri.toString()) as? PayLink.Pay
-                val request = pay?.let { wallet.validatePayLink(it.to, it.chain, it.token, it.amount, it.sym, it.dec, it.net) }
-                if (request == null) {
-                    VelaLog.event("paylink", "refused by the core", "uri" to uri.toString().take(80))
-                    application.container.pendingPayLink.compareAndSet(uri, null)
-                    return@LaunchedEffect
-                }
-                VelaLog.event("paylink", "validated", "chain" to request.chain_id, "amount" to request.amount)
-                application.container.pendingSendParams.value = SendOpenParams(
-                    prefilled_recipient = request.recipient,
-                    prefilled_chain_id = request.chain_id.toString(),
-                    prefilled_token_address = request.token_address,
-                    prefilled_amount_base = request.amount_base,
-                    locked = true,
-                )
-                flows.enter(WalletFlowEntry.Send)
-                application.container.pendingPayLink.compareAndSet(uri, null)
-            }
-            var captureShare by remember { mutableStateOf<ShareCardModel?>(null) }
-            captureShare?.let { card ->
-                ShareCardCapture(card) { bytes ->
-                    captureShare = null
-                    if (bytes == null) {
-                        VelaLog.event("share", "render failed")
-                    } else {
-                        scope.launch {
-                            val name = "vela-receive-${session.address.takeLast(6)}.png"
-                            application.container.documents?.share(name, "image/png", bytes)
-                        }
-                    }
-                }
-            }
-            if (switcherOpen) {
-                AccountSwitcherSheet(
-                    sheet = WalletLive.accountSwitcher(
-                        session.accounts.map { it.name to it.address },
-                        session.activeIndex,
-                        balances.switcher,
-                        currency,
-                        strings,
-                    ),
-                    onDismiss = { switcherOpen = false; wallet.switcherClosed() },
-                    onSelect = { index ->
-                        switcherOpen = false
-                        wallet.switcherClosed()
-                        application.container.session.switchAccount(index)
-                    },
-                    onPrimary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.CREATE) },
-                    onSecondary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.WELCOME) },
-                )
-            }
-            // Spec 044: a page opened from outside 探索 (a deep link, the dev seam) shows itself.
-            val browserOpenRequested by application.container.browser.openRequested.collectAsStateWithLifecycle()
-            LaunchedEffect(browserOpenRequested) {
-                if (browserOpenRequested) {
-                    section = VelaTab.Explore
-                    application.container.browser.openRequested.value = false
-                }
-            }
-            // Back unwinds the flow stack first, then leaves 探索 for 钱包 —
-            // Back out of a browser should land on the wallet, not on Welcome.
-            BackHandler(enabled = flows.isOpen) { flows.back() }
-            // Spec 044: a page asked for a signature — the sheet over whatever is
-            // showing, read from the four machines; dismissing is the refusal.
-            val signingController by application.container.signing.collectAsStateWithLifecycle()
-            signingController?.let { controller ->
-                val signView by controller.sign.collectAsStateWithLifecycle()
-                val clearView by controller.clear.collectAsStateWithLifecycle()
-                val guardView by controller.guard.collectAsStateWithLifecycle()
-                val signFee by controller.fee.collectAsStateWithLifecycle()
-                val signSim by controller.sim.collectAsStateWithLifecycle()
-                val signRequest by controller.request.collectAsStateWithLifecycle()
-                val signChain = signRequest?.chainId ?: 0
-                val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
-                    strings = strings,
-                    chainName = chainNames[signChain] ?: signChain.toString(),
-                    chainDot = WalletLive.badge(signChain.toLong()),
-                    nativeSymbol = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.native_symbol ?: "ETH",
-                    walletName = session.activeName,
-                    walletAddress = session.address,
-                    origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
-                )
-                signRequest?.let { request ->
-                    if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
-                        val drawn = remember(strings) { SigningFixtures.build(SigningScreenState.CS1, strings) }
-                        app.getvela.wallet.feature.signing.SigningSheet(
-                            model = app.getvela.wallet.feature.signing.SigningLive.model(drawn, request, signView, clearView, guardView, signFee, signCtx, signSim),
-                            // The swipe: a reject before the commitment point, a dismiss after — the core routes it.
-                            onDismiss = { controller.swipeDismissed() },
-                            onConfirm = { controller.approve() },
-                            onChip = { id ->
-                                when (id) {
-                                    "requested" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Requested)
-                                    "balance" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Balance)
-                                    "custom" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom)
-                                    "revoke" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Revoke)
-                                }
-                            },
-                            onCustomAmount = { controller.guardCustomAmount(it) },
-                        )
-                    }
-                }
-            }
-            BackHandler(enabled = !flows.isOpen && section == VelaTab.Explore) {
-                section = VelaTab.Wallet
-            }
-
-            // Spec 043: the send is live. Its screens are drawn by the same
-            // fixtures as before, but which screen is on and every figure on
-            // it come from the send machine — the flow stack only marks that
-            // the send is open.
-            val send = application.container.send
-            val sendView by send.send.collectAsStateWithLifecycle()
-            val feeView by send.fee.collectAsStateWithLifecycle()
-            val sendClosed by send.closed.collectAsStateWithLifecycle()
-            val sendAlert by send.alert.collectAsStateWithLifecycle()
-            val contactsBook by application.container.contacts.view.collectAsStateWithLifecycle()
-            var feeSheetOpen by rememberSaveable { mutableStateOf(false) }
-            val sweepPicking by send.sweepPicking.collectAsStateWithLifecycle()
-            val mainActivity = LocalContext.current.let { ctx ->
-                generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }.firstOrNull { it is MainActivity } as? MainActivity
-            }
-            val batchView by send.batch.collectAsStateWithLifecycle()
-            val sendOpen = flows.top in SEND_STATES
-            LaunchedEffect(sendOpen, session.address) {
-                if (sendOpen && session.address.isNotEmpty()) {
-                    feeSheetOpen = false
-                    val money = WalletLive.Money.of(currency)
-                    // Spec 047 D8: a validated /pay link opens the send locked, once.
-                    val linkParams = application.container.pendingSendParams.value?.also { application.container.pendingSendParams.value = null }
-                    send.open(
-                        params = linkParams ?: SendOpenParams(),
-                        account = SendAccountRef(id = session.address, address = session.address, name = session.activeName),
-                        display = SendDisplayContext(
-                            code = money.code,
-                            rate = currency.rate?.takeIf { currency.committed && it.isFinite() && it > 0.0 },
-                            fiat_decimals = 2,
-                        ),
-                    )
-                    // The picker lists this device's book, which only the
-                    // contacts screen used to load (device-found, phase 6).
-                    application.container.contacts.open(session.address)
-                    // Spec 046 US3: the home's 扫码 enters here with the scanner on top.
-                    if (flows.top == FlowState.S1) send.openScanner()
-                }
-            }
-            LaunchedEffect(sendClosed) {
-                if (sendClosed && flows.top in SEND_STATES) flows.close()
-            }
-            // The notification permission, asked at the first submit and never at
-            // launch (research D6): a refusal degrades to the in-app receipt.
-            val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-            LaunchedEffect(sendView.stage) {
-                if (sendView.stage == SendStage.Receipt && android.os.Build.VERSION.SDK_INT >= 33) {
-                    val granted = androidx.core.content.ContextCompat.checkSelfPermission(
-                        context, android.Manifest.permission.POST_NOTIFICATIONS,
-                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                    if (!granted) askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                }
-            }
-            // A tapped notification opens the wallet on that row.
-            val pendingReceipt by application.container.pendingReceipt.collectAsStateWithLifecycle()
-            LaunchedEffect(pendingReceipt) {
-                pendingReceipt?.let { hash ->
-                    application.container.pendingReceipt.value = null
-                    flows.enter(WalletFlowEntry.TxDetail, hash)
-                }
-            }
-            sendAlert?.let { kind ->
-                SendAlertDialog(kind = kind, strings = strings, onDismiss = send::dismissAlert)
-            }
-
-            val flowState = flows.top
-            if (flowState != null && flowState in SEND_STATES) {
-                val liveState = SendLive.flowState(sendView, feeSheetOpen)
-                // The system back key on a live send page is the header's back —
-                // the drawn stack's `flows.back()` closed the whole flow from
-                // any page, confirm included (device-found, phase 6).
-                BackHandler(enabled = sendOpen) {
-                    when {
-                        feeSheetOpen -> feeSheetOpen = false
-                        // The scanner closes first; entered from home, the whole flow goes with it.
-                        sendView.show_scanner -> {
-                            send.closeScanner()
-                            if (sendView.stage == SendStage.SelectToken && flowState == FlowState.S1) flows.close()
-                        }
-                        // Back out of the sweep pick first: the tick boxes go, the list stays.
-                        sweepPicking && sendView.stage == SendStage.SelectToken -> send.cancelSweep()
-                        sendView.stage == SendStage.SelectToken || sendView.stage == SendStage.Receipt -> flows.close()
-                        else -> send.back()
-                    }
-                }
-                val explorers = remember(networks.networks) {
-                    networks.networks.associate { it.chain_id.toInt() to it.explorer_url }
-                }
-                val flowModel = remember(liveState, sendView, feeView, batchView, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking) {
-                    val drawn = FlowFixtures.build(liveState, strings)
-                    val ctx = SendLive.Context(
-                        strings = strings,
-                        chainNames = chainNames,
-                        explorers = explorers,
-                        money = WalletLive.Money.of(currency),
-                        fromName = session.activeName,
-                        fromAddress = session.address,
-                    )
-                    val base = when (val base = drawn.base) {
-                        is FlowBase.SendPick -> FlowBase.SendPick(SendLive.pick(base.model, sendView, ctx, sweepPicking))
-                        is FlowBase.SendForm -> FlowBase.SendForm(SendLive.form(base.model, sendView, feeView, ctx))
-                        is FlowBase.SendConfirm -> FlowBase.SendConfirm(SendLive.confirm(base.model, sendView, ctx))
-                        is FlowBase.SendReceipt -> FlowBase.SendReceipt(SendLive.receipt(base.model, sendView, ctx))
-                        else -> base
-                    }
-                    val sheet = when (val sheet = drawn.sheet) {
-                        is FlowSheet.FeeToken -> FlowSheet.FeeToken(SendLive.feeSheet(sheet.model, feeView, ctx))
-                        is FlowSheet.ContactPick -> FlowSheet.ContactPick(SendLive.contactSheet(sheet.model, contactsBook))
-                        is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx))
-                        else -> sheet
-                    }
-                    drawn.copy(base = base, sheet = sheet)
-                }
-                val activity = context
-                FlowHost(
-                    model = flowModel,
-                    onBack = {
-                        if (sendView.stage == SendStage.SelectToken || sendView.stage == SendStage.Receipt) {
-                            flows.close()
-                        } else {
-                            send.back()
+    // Spec 048: the identicon viewer, hosted once — every artwork drawn from an
+    // address opens it (see IdenticonImage.tappable), so twelve screens do not
+    // each carry a sheet of their own.
+    var identiconViewer by remember { mutableStateOf<String?>(null) }
+    CompositionLocalProvider(LocalIdenticonViewer provides { seed -> identiconViewer = seed }) {
+        NavHost(navController = navController, startDestination = startDestination) {
+            composable(VelaDestinations.WELCOME) {
+                val welcome: WelcomeViewModel = viewModel()
+                var showSignInMethods by rememberSaveable { mutableStateOf(false) }
+                WelcomeScreen(
+                    darkTheme = darkTheme,
+                    signingIn = onboarding.loginView.busy,
+                    onIntent = { intent ->
+                        when (intent) {
+                            // PUSHED, not swapped: `navigateSingleTop` clears the
+                            // back stack down to and including the start
+                            // destination, which is right for the session guard's
+                            // jumps and wrong here — it left the create flow as the
+                            // only entry, so its own back affordance had nothing to
+                            // pop and did nothing at all (device-found 2026-08-25).
+                            OnboardingIntent.CreateWallet ->
+                                navController.push(VelaDestinations.CREATE)
+                            // Signing in offers the same three authenticators
+                            // creating does — the picker opens, and the chosen
+                            // method runs the "who are you?" ceremony on that route.
+                            OnboardingIntent.RecoverWallet -> showSignInMethods = true
                         }
                     },
-                    onNavigate = { step ->
-                        when (step) {
-                            FlowStep.FeeToken -> feeSheetOpen = true
-                            FlowStep.ContactPick -> send.openContactPicker()
-                            else -> Unit
-                        }
-                    },
-                    send = SendCallbacks(
-                        onSelectToken = { index ->
-                            sendView.tokens.getOrNull(index)?.let { token ->
-                                val id = SendLive.tokenId(token)
-                                if (sweepPicking) send.toggleSweep(id) else send.selectToken(id)
-                            }
+                    onLongPressLogo = welcome::showSettings,
+                )
+                if (showSignInMethods) {
+                    SignInMethodSheet(
+                        onPick = { method ->
+                            showSignInMethods = false
+                            onboarding.beginSignIn(method)
                         },
-                        onScanOpen = { send.openScanner() },
-                        scan = ScanCallbacks(
-                            onDecoded = { text -> send.scanned(text) },
-                            onClose = {
+                        onDismiss = { showSignInMethods = false },
+                    )
+                }
+                if (welcome.settingsSheetVisible) {
+                    ThemeSettingsSheet(
+                        current = themePreference,
+                        onSelect = onThemeSelected,
+                        onDismiss = welcome::hideSettings,
+                    )
+                }
+            }
+
+            composable(VelaDestinations.CREATE) {
+                CreateFlowScreen(
+                    model = onboarding,
+                    // Leaving the flow, which is a different event from the screen
+                    // leaving composition — see the DisposableEffect in
+                    // CreateFlowScreen. The machine holds drafted passkeys, so it is
+                    // dropped HERE, where somebody actually said they were done.
+                    onExit = {
+                        onboarding.disposeCreate()
+                        navController.popUnlessRoot()
+                    },
+                    onOpenPrivacy = { context.openUrl(PRIVACY_URL) },
+                    onOpenTerms = { context.openUrl(TERMS_URL) },
+                )
+            }
+
+            composable(VelaDestinations.IMPORT) {
+                ImportPlaceholderScreen(
+                    darkTheme = darkTheme,
+                    onBack = { navController.popUnlessRoot() },
+                )
+            }
+
+            composable(VelaDestinations.WALLET) {
+                val strings = LocalVelaStrings.current
+                // Fixture-driven still (spec 015 FR-005) apart from the two things
+                // that identify the wallet — its address and its name, both now the
+                // real ones. A home screen showing a fixture address after a real
+                // create would be the app telling the person their money is
+                // somewhere it is not; a fixture NAME over their own address and
+                // identicon told them they were signed in as somebody else
+                // (device-found 2026-08-26).
+                // The chain-select sheet used to open from the header's network
+                // pill; the pill is gone (founder call, 2026-08-26 — it cost the
+                // name and address their width), and with it this screen's H8
+                // state. The sheet keeps its fixtures for the gallery.
+                val model = remember(strings, session.address, session.activeName) {
+                    WalletFixtures.buildMobileState(WalletScreenState.H1, strings)
+                        .withAddress(session.address).withName(session.activeName)
+                }
+                // Spec 021: Receive / Send / Activity / Assets, as pushed screens
+                // inside this route. The system Back unwinds the flow stack before
+                // it leaves the wallet — on a phone that is the most common way out
+                // of a flow, and losing the whole wallet from four screens deep is
+                // not what the gesture means.
+                // The holdings are this person's own from spec 041; the activity
+                // feed and the flows are still fixtures until phases 5 and 6.
+                val wallet = application.container.wallet
+                val balances by wallet.balances.collectAsStateWithLifecycle()
+                val feed by wallet.feed.collectAsStateWithLifecycle()
+                // Spec 047: the header's account switcher (the founder, 2026-09-12).
+                var switcherOpen by remember { mutableStateOf(false) }
+                val manageTokens by wallet.manageTokens.collectAsStateWithLifecycle()
+                // The display currency the person chose, and the rate that makes it
+                // showable. Without a rate the core leaves the figure in dollars.
+                val currency by application.container.settings.currency.collectAsStateWithLifecycle()
+                val networks by application.container.settings.networks.collectAsStateWithLifecycle()
+                val chainNames = remember(networks.networks) {
+                    networks.networks.associate { it.chain_id.toInt() to it.display_name }
+                }
+                LaunchedEffect(session.address) {
+                    if (session.address.isEmpty()) return@LaunchedEffect
+                    // ORDER MATTERS. The pool asks the network machine which
+                    // endpoints a chain has, so a fetch dispatched before that
+                    // machine has read storage finds no chains at all and settles
+                    // with nothing — silently, and with no second chance, because
+                    // nothing re-triggers when the list later arrives.
+                    val settings = application.container.settings
+                    settings.startNetworks()
+                    settings.networks.first { it.loaded }
+                    // The hero is a money figure, and which currency it is in is
+                    // this machine's answer. Refreshed here rather than only on the
+                    // settings screen, because somebody who never opens settings
+                    // still has a display currency — and until this runs the core
+                    // has no rate and the wallet shows dollars.
+                    settings.refreshCurrency()
+                    wallet.open(session.address)
+                }
+
+                val flows = rememberFlowNavState()
+            // Spec 048: a flow another route asked for (contacts: 转账 / 收款 / 群发转账)
+            // opens once the wallet is back on top. Entered first, cleared after —
+            // clearing the trigger first would cancel this very effect.
+            val pendingFlow by application.container.pendingFlow.collectAsStateWithLifecycle()
+            LaunchedEffect(pendingFlow) {
+                val entry = pendingFlow ?: return@LaunchedEffect
+                VelaLog.event("flows", "pending flow", "entry" to entry.name, "top" to flows.top?.name)
+                flows.enter(entry)
+                application.container.pendingFlow.value = null
+            }
+                val scope = rememberCoroutineScope()
+                // Spec 047 FR-006, under the manifest's rule (no ACCESS_NETWORK_STATE:
+                // "offline" is what the calls did, not what the radio claims): three
+                // calls in a row that never reached a server, cleared by the first
+                // answered one. Coming back refreshes what went stale meanwhile.
+                val online by NetHealth.online.collectAsStateWithLifecycle()
+                var wasOffline by remember { mutableStateOf(false) }
+                LaunchedEffect(online) {
+                    if (!online) wasOffline = true else if (wasOffline) { wasOffline = false; wallet.refresh() }
+                }
+                val payLink by application.container.pendingPayLink.collectAsStateWithLifecycle()
+                LaunchedEffect(payLink) {
+                    val uri = payLink ?: return@LaunchedEffect
+                    // Consumed at the END: clearing the trigger here re-keys this
+                    // effect to null and cancels the very coroutine doing the work
+                    // (device-found 2026-09-12 — the link was "received" and then
+                    // nothing, because the wait for the core's verdict was cancelled).
+                    VelaLog.event("paylink", "received", "uri" to uri.toString().take(80))
+                    val pay = PayLink.parse(uri.toString()) as? PayLink.Pay
+                    val request = pay?.let { wallet.validatePayLink(it.to, it.chain, it.token, it.amount, it.sym, it.dec, it.net) }
+                    if (request == null) {
+                        VelaLog.event("paylink", "refused by the core", "uri" to uri.toString().take(80))
+                        application.container.pendingPayLink.compareAndSet(uri, null)
+                        return@LaunchedEffect
+                    }
+                    VelaLog.event("paylink", "validated", "chain" to request.chain_id, "amount" to request.amount)
+                    application.container.pendingSendParams.value = SendOpenParams(
+                        prefilled_recipient = request.recipient,
+                        prefilled_chain_id = request.chain_id.toString(),
+                        prefilled_token_address = request.token_address,
+                        prefilled_amount_base = request.amount_base,
+                        locked = true,
+                    )
+                    flows.enter(WalletFlowEntry.Send)
+                    application.container.pendingPayLink.compareAndSet(uri, null)
+                }
+                var captureShare by remember { mutableStateOf<ShareCardModel?>(null) }
+                captureShare?.let { card ->
+                    ShareCardCapture(card) { bytes ->
+                        captureShare = null
+                        if (bytes == null) {
+                            VelaLog.event("share", "render failed")
+                        } else {
+                            scope.launch {
+                                val name = "vela-receive-${session.address.takeLast(6)}.png"
+                                // Spec 048: 保存图片 saves — into the gallery, the way the web
+                                // downloads a file; the share sheet is the way out when the
+                                // gallery refuses.
+                                val saved = withContext(Dispatchers.IO) { Gallery.savePng(context, name, bytes) }
+                                if (saved != null) {
+                                    android.widget.Toast.makeText(context, strings.t(I18nKeys.Flows.SAVED_BODY), android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    application.container.documents?.share(name, "image/png", bytes)
+                                }
+                            }
+                        }
+                    }
+                }
+                if (switcherOpen) {
+                    AccountSwitcherSheet(
+                        sheet = WalletLive.accountSwitcher(
+                            session.accounts.map { it.name to it.address },
+                            session.activeIndex,
+                            balances.switcher,
+                            currency,
+                            strings,
+                        ),
+                        onDismiss = { switcherOpen = false; wallet.switcherClosed() },
+                        onSelect = { index ->
+                            switcherOpen = false
+                            wallet.switcherClosed()
+                            application.container.session.switchAccount(index)
+                        },
+                        onPrimary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.CREATE) },
+                        onSecondary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.WELCOME) },
+                    )
+                }
+                // Spec 044: a page opened from outside 探索 (a deep link, the dev seam) shows itself.
+                val browserOpenRequested by application.container.browser.openRequested.collectAsStateWithLifecycle()
+                LaunchedEffect(browserOpenRequested) {
+                    if (browserOpenRequested) {
+                        section = VelaTab.Explore
+                        application.container.browser.openRequested.value = false
+                    }
+                }
+                // Back unwinds the flow stack first, then leaves 探索 for 钱包 —
+                // Back out of a browser should land on the wallet, not on Welcome.
+                BackHandler(enabled = flows.isOpen) { flows.back() }
+                // Spec 044: a page asked for a signature — the sheet over whatever is
+                // showing, read from the four machines; dismissing is the refusal.
+                val signingController by application.container.signing.collectAsStateWithLifecycle()
+                signingController?.let { controller ->
+                    val signView by controller.sign.collectAsStateWithLifecycle()
+                    val clearView by controller.clear.collectAsStateWithLifecycle()
+                    val guardView by controller.guard.collectAsStateWithLifecycle()
+                    val signFee by controller.fee.collectAsStateWithLifecycle()
+                    val signSim by controller.sim.collectAsStateWithLifecycle()
+                    val signRequest by controller.request.collectAsStateWithLifecycle()
+                    val signChain = signRequest?.chainId ?: 0
+                    val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
+                        strings = strings,
+                        chainName = chainNames[signChain] ?: signChain.toString(),
+                        chainDot = WalletLive.badge(signChain.toLong()),
+                        nativeSymbol = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.native_symbol ?: "ETH",
+                        walletName = session.activeName,
+                        walletAddress = session.address,
+                        origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
+                    )
+                    signRequest?.let { request ->
+                        if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
+                            val drawn = remember(strings) { SigningFixtures.build(SigningScreenState.CS1, strings) }
+                            app.getvela.wallet.feature.signing.SigningSheet(
+                                model = app.getvela.wallet.feature.signing.SigningLive.model(drawn, request, signView, clearView, guardView, signFee, signCtx, signSim),
+                                // The swipe: a reject before the commitment point, a dismiss after — the core routes it.
+                                onDismiss = { controller.swipeDismissed() },
+                                onConfirm = { controller.approve() },
+                                onChip = { id ->
+                                    when (id) {
+                                        "requested" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Requested)
+                                        "balance" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Balance)
+                                        "custom" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom)
+                                        "revoke" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Revoke)
+                                    }
+                                },
+                                onCustomAmount = { controller.guardCustomAmount(it) },
+                            )
+                        }
+                    }
+                }
+                BackHandler(enabled = !flows.isOpen && section == VelaTab.Explore) {
+                    section = VelaTab.Wallet
+                }
+
+                // Spec 043: the send is live. Its screens are drawn by the same
+                // fixtures as before, but which screen is on and every figure on
+                // it come from the send machine — the flow stack only marks that
+                // the send is open.
+                val send = application.container.send
+                val sendView by send.send.collectAsStateWithLifecycle()
+                val feeView by send.fee.collectAsStateWithLifecycle()
+                val sendClosed by send.closed.collectAsStateWithLifecycle()
+                val sendAlert by send.alert.collectAsStateWithLifecycle()
+                val contactsBook by application.container.contacts.view.collectAsStateWithLifecycle()
+                var feeSheetOpen by rememberSaveable { mutableStateOf(false) }
+                val sweepPicking by send.sweepPicking.collectAsStateWithLifecycle()
+                val mainActivity = LocalContext.current.let { ctx ->
+                    generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }.firstOrNull { it is MainActivity } as? MainActivity
+                }
+                val batchView by send.batch.collectAsStateWithLifecycle()
+                val sendOpen = flows.top in SEND_STATES
+                LaunchedEffect(sendOpen, session.address) {
+                    if (sendOpen && session.address.isNotEmpty()) {
+                        feeSheetOpen = false
+                        val money = WalletLive.Money.of(currency)
+                        // Spec 047 D8: a validated /pay link opens the send locked, once.
+                        val linkParams = application.container.pendingSendParams.value?.also { application.container.pendingSendParams.value = null }
+                        send.open(
+                            params = linkParams ?: SendOpenParams(),
+                            account = SendAccountRef(id = session.address, address = session.address, name = session.activeName),
+                            display = SendDisplayContext(
+                                code = money.code,
+                                rate = currency.rate?.takeIf { currency.committed && it.isFinite() && it > 0.0 },
+                                fiat_decimals = 2,
+                            ),
+                        )
+                        // Spec 048: a group's 群发转账 arrives as split rows to seed right
+                        // after the machine opens (the web seeds the same way).
+                        application.container.pendingSplitSeed.value?.let { seed ->
+                            application.container.pendingSplitSeed.value = null
+                            send.seedSplit(seed)
+                        }
+                        // The picker lists this device's book, which only the
+                        // contacts screen used to load (device-found, phase 6).
+                        application.container.contacts.open(session.address)
+                        // Spec 046 US3: the home's 扫码 enters here with the scanner on top.
+                        if (flows.top == FlowState.S1) send.openScanner()
+                    }
+                }
+                LaunchedEffect(sendClosed) {
+                    if (sendClosed && flows.top in SEND_STATES) flows.close()
+                }
+                // The notification permission, asked at the first submit and never at
+                // launch (research D6): a refusal degrades to the in-app receipt.
+                val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+                LaunchedEffect(sendView.stage) {
+                    if (sendView.stage == SendStage.Receipt && android.os.Build.VERSION.SDK_INT >= 33) {
+                        val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                            context, android.Manifest.permission.POST_NOTIFICATIONS,
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        if (!granted) askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+                // A tapped notification opens the wallet on that row.
+                val pendingReceipt by application.container.pendingReceipt.collectAsStateWithLifecycle()
+                LaunchedEffect(pendingReceipt) {
+                    pendingReceipt?.let { hash ->
+                        application.container.pendingReceipt.value = null
+                        flows.enter(WalletFlowEntry.TxDetail, hash)
+                    }
+                }
+                sendAlert?.let { kind ->
+                    SendAlertDialog(kind = kind, strings = strings, onDismiss = send::dismissAlert)
+                }
+
+                val flowState = flows.top
+                if (flowState != null && flowState in SEND_STATES) {
+                    val liveState = SendLive.flowState(sendView, feeSheetOpen)
+                    // The system back key on a live send page is the header's back —
+                    // the drawn stack's `flows.back()` closed the whole flow from
+                    // any page, confirm included (device-found, phase 6).
+                    BackHandler(enabled = sendOpen) {
+                        when {
+                            feeSheetOpen -> feeSheetOpen = false
+                            // The scanner closes first; entered from home, the whole flow goes with it.
+                            sendView.show_scanner -> {
                                 send.closeScanner()
                                 if (sendView.stage == SendStage.SelectToken && flowState == FlowState.S1) flows.close()
-                            },
-                            requestPermission = { mainActivity?.requestCameraPermission() ?: false },
-                            pickImage = { application.container.documents?.pick(listOf("image/*"))?.bytes },
-                            permissionText = strings.t(I18nKeys.Flows.SCAN_PERMISSION_TEXT),
-                            grantLabel = strings.t(I18nKeys.Flows.SCAN_GRANT),
-                            noQrFound = strings.t(I18nKeys.Flows.SCAN_NO_QR),
-                            cameraUnavailable = strings.t(I18nKeys.Flows.SCAN_CAMERA_UNAVAILABLE),
-                            decodeFailed = strings.t(I18nKeys.Flows.SCAN_ERROR_IMAGE),
-                        ),
-                        onSelectAll = { send.selectAllValuable(sendView.tokens.map(SendLive::tokenId)) },
-                        onPickCta = { if (sweepPicking) send.confirmSweep() else send.startSweep() },
-                        onAmountChange = { send.setAmount(it) },
-                        onRecipientChange = { send.setRecipient(it.trim()) },
-                        onMax = { send.tapMax() },
-                        onDenom = { send.toggleFiatInput() },
-                        onContinue = { send.continueTapped() },
-                        onConfirm = { send.slideConfirm() },
-                        onFeeSelect = { index ->
-                            feeView.options.getOrNull(index)?.let { send.chooseFeeToken(it.contract) }
-                            feeSheetOpen = false
-                        },
-                        onContactSelect = { index ->
-                            contactsBook.contacts.getOrNull(index)?.let { send.pickedAddress(it.address) }
-                        },
-                        onSheetDismissed = {
-                            if (feeSheetOpen) feeSheetOpen = false
-                            if (sendView.show_contact_picker) send.closeContactPicker()
-                            if (sendView.show_batch_import) send.closeBatch()
-                        },
-                        // Spec 045 US3: the batch sheet's taps go to the batch machine.
-                        onBatchUnit = { id -> send.batchUnit(if (id == "fiat") WireBatchUnit.Fiat else WireBatchUnit.Token) },
-                        onBatchPaste = { text -> send.batchText(text) },
-                        onBatchFile = { send.batchPickFile() },
-                        onBatchTemplate = { send.batchTemplate() },
-                        onBatchRate = { text -> send.batchRate(text) },
-                        onBatchRateReset = { send.batchResetRate() },
-                        onBatchApply = { send.batchApply() },
-                        // Spec 045 US1: the split's rows, by index on screen → id in the core.
-                        onAddRecipient = { send.enterSplit() },
-                        onRecipientAction = { action ->
-                            when (action) {
-                                RecipientAction.Add -> send.splitAdd()
-                                RecipientAction.Contacts -> send.openContactPicker()
-                                RecipientAction.Import -> send.openBatch()
                             }
-                        },
-                        onRemoveRecipient = { index -> sendView.recipients.getOrNull(index)?.let { send.splitRemove(it.id) } },
-                        onRecipientAmount = { index, text -> sendView.recipients.getOrNull(index)?.let { send.splitAmount(it.id, text) } },
-                        onRecipientAddress = { index, text -> sendView.recipients.getOrNull(index)?.let { send.splitAddress(it.id, text.trim()) } },
-                        onReceiptCta = {
-                            // The receipt's one button: Cancel while the ceremony is up (the
-                            // core's checkpoint), Done or "keep running" otherwise.
-                            if (sendView.tx_status == SendTxStatus.Signing) send.cancelSigning() else send.done()
-                        },
-                        onNoticeAction = {
-                            when {
-                                sendView.treasury_bootstrap != null -> send.retryAfterBootstrap()
-                                sendView.tx_error != null -> send.retryAfterError()
-                                sendView.tx_status == SendTxStatus.Signing -> send.cancelSigning()
-                            }
-                        },
-                        onNoticeSecondary = { send.dismissTreasurySheet() },
-                        onExplorer = {
-                            val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency), session.activeName, session.address)
-                            SendLive.explorerUrl(sendView, ctx)?.let { url ->
-                                runCatching {
-                                    activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-                                }
-                            }
-                        },
-                    ),
-                )
-            } else if (flowState != null) {
-                val request by wallet.request.collectAsStateWithLifecycle()
-                // The receive screen shows an ADDRESS. Every other fixture that
-                // leaks shows somebody the wrong information; a fixture address
-                // here sends their money to a stranger, permanently — so the
-                // watch and the request machine start the moment this opens.
-                LaunchedEffect(flowState, session.address) {
-                    if (session.address.isNotEmpty() && flowState in RECEIVE_STATES) {
-                        wallet.openReceive(session.address, PAY_LINK_BASE)
+                            // Back out of the sweep pick first: the tick boxes go, the list stays.
+                            sweepPicking && sendView.stage == SendStage.SelectToken -> send.cancelSweep()
+                            sendView.stage == SendStage.SelectToken || sendView.stage == SendStage.Receipt -> flows.close()
+                            else -> send.back()
+                        }
                     }
-                }
-                val flowModel = remember(
-                    flowState,
-                    strings,
-                    session.address,
-                    networks,
-                    request,
-                    balances,
-                    feed,
-                    currency,
-                    flows.selected,
-                    manageTokens,
-                ) {
-                    FlowFixtures.build(flowState, strings).let { drawn ->
-                        liveFlow(
-                            drawn = drawn,
-                            address = session.address,
-                            name = session.activeName,
-                            networks = networks,
-                            request = request,
-                            balances = balances,
-                            feed = feed,
-                            currency = currency,
-                            chainNames = chainNames,
-                            selected = flows.selected,
+                    val explorers = remember(networks.networks) {
+                        networks.networks.associate { it.chain_id.toInt() to it.explorer_url }
+                    }
+                    val flowModel = remember(liveState, sendView, feeView, batchView, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking) {
+                        val drawn = FlowFixtures.build(liveState, strings)
+                        val ctx = SendLive.Context(
                             strings = strings,
-                            manageTokens = manageTokens,
+                            chainNames = chainNames,
+                            explorers = explorers,
+                            money = WalletLive.Money.of(currency),
+                            fromName = session.activeName,
+                            fromAddress = session.address,
                         )
+                        val base = when (val base = drawn.base) {
+                            is FlowBase.SendPick -> FlowBase.SendPick(SendLive.pick(base.model, sendView, ctx, sweepPicking))
+                            is FlowBase.SendForm -> FlowBase.SendForm(SendLive.form(base.model, sendView, feeView, ctx))
+                            is FlowBase.SendConfirm -> FlowBase.SendConfirm(SendLive.confirm(base.model, sendView, ctx))
+                            is FlowBase.SendReceipt -> FlowBase.SendReceipt(SendLive.receipt(base.model, sendView, ctx))
+                            else -> base
+                        }
+                        val sheet = when (val sheet = drawn.sheet) {
+                            is FlowSheet.FeeToken -> FlowSheet.FeeToken(SendLive.feeSheet(sheet.model, feeView, ctx))
+                            is FlowSheet.ContactPick -> FlowSheet.ContactPick(SendLive.contactSheet(sheet.model, contactsBook))
+                            is FlowSheet.BatchImport -> FlowSheet.BatchImport(SendLive.batchImport(sheet.model, batchView, sendView, ctx))
+                            else -> sheet
+                        }
+                        drawn.copy(base = base, sheet = sheet)
                     }
-                }
-                // The add-token sheet is the `manage_tokens` machine's: opening
-                // it loads the already-added rows (spec 043 T046).
-                LaunchedEffect(flowState) { if (flowState == FlowState.T3) wallet.openAddToken() }
-                FlowHost(
-                    model = flowModel,
-                    onBack = { flows.back() },
-                    onNavigate = { flows.push(it) },
-                    onSaveImage = {
-                        val drawn = (FlowFixtures.build(FlowState.R4, strings).base as? FlowBase.Share)?.model
-                        if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings)
-                    },
-                    addToken = AddTokenCallbacks(
-                        onInput = { wallet.addTokenInput(it.trim()) },
-                        onSubmit = { manageTokens.found.firstOrNull()?.let { wallet.addTokenSave(it.chain_id) } },
-                    ),
-                )
-            } else {
-                // Spec 022/029: 探索 is a real destination now rather than an
-                // inert chip — the same signed-in shell with a different body,
-                // which is why it is a SECTION of this route and not a route of
-                // its own. A browser tab is not somewhere a person should be
-                // able to deep-link into before they have a wallet.
-                val select: (VelaTab) -> Unit = { tab ->
-                    when (tab) {
-                        // 设置 has a screen now (spec 023), and the 退出登录 row
-                        // inside it is where signing out lives. Until then the
-                        // TAB itself signed you out — which meant tapping 设置
-                        // to change your language logged you out instead. That
-                        // regression must not come back through this `when`.
-                        VelaTab.Settings -> navController.push(VelaDestinations.SETTINGS)
-                        VelaTab.Explore -> section = VelaTab.Explore
-                        VelaTab.Wallet -> section = VelaTab.Wallet
-                        // 通讯录 refused to navigate for a good reason: it
-                        // would have shown a signed-in person six strangers.
-                        // That reason expired with spec 040 — the screen reads
-                        // this device's own book now — so the tab works.
-                        VelaTab.Contacts -> navController.push(VelaDestinations.CONTACTS)
-                    }
-                }
-                if (section == VelaTab.Explore) {
-                    // The browser shows the SIGNED-IN account, never the
-                    // fixture one: a connection panel naming a stranger's
-                    // account would be the wallet lying about what it just
-                    // granted.
-                    val exploreModel = remember(strings, session.address, session.activeName) {
-                        ExploreFixtures.buildState(ExploreScreenState.E2, strings)
-                            .withIdentity(session.activeName, session.address)
-                    }
-                    // Spec 044: the tab is a browser with a memory — the core's
-                    // favourites, groups, tabs and recents; a live page where
-                    // the demo page was drawn.
-                    val browser = application.container.browser
-                    LaunchedEffect(Unit) { browser.start() }
-                    val engine by browser.current.collectAsStateWithLifecycle()
-                    val engineState by (engine?.state ?: kotlinx.coroutines.flow.MutableStateFlow(app.getvela.wallet.feature.browser.core.EngineState())).collectAsStateWithLifecycle()
-                    val exploreView by browser.explore.collectAsStateWithLifecycle()
-                    val historyView by browser.history.collectAsStateWithLifecycle()
-                    val permissions by browser.permissions.collectAsStateWithLifecycle()
-                    val browserChain by browser.browserChain.collectAsStateWithLifecycle()
-                    val identity = app.getvela.wallet.feature.browser.ExploreLive.Identity(
-                        accountName = session.activeName,
-                        accountAddress = session.address,
-                        chainName = chainNames[browserChain] ?: browserChain.toString(),
-                        chainDot = WalletLive.badge(browserChain.toLong()),
-                    )
-                    val liveModel = remember(exploreModel, exploreView, historyView, engineState, engine, strings, permissions, identity) {
-                        app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings, permissions, identity)
-                    }
-                    val consentCard = permissions.consent?.let { c ->
-                        app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, engine?.let { engineState }, strings, identity)
-                    }
-                    ExploreScreen(
-                        model = liveModel,
-                        // The drawn CS12 sheet belongs to the demo page, which a
-                        // live route never draws (SC-007): a request's sheet is
-                        // raised from the container's signing state instead.
-                        signing = null,
-                        onSelectTab = select,
-                        page = engine?.let { e -> { app.getvela.wallet.feature.explore.components.BrowserPage(e) } },
-                        initialView = if (engine != null) app.getvela.wallet.feature.explore.ExploreView.Browsing else null,
-                        onOpenUrl = { browser.open(it) },
-                        onClosePage = { browser.close() },
-                        onPageBack = { browser.back() },
-                        onPageForward = { browser.forward() },
-                        live = app.getvela.wallet.feature.explore.ExploreCallbacks(
-                            onOpenSite = { url -> browser.open(url) },
-                            onTabOpen = { id -> browser.selectTab(id) },
-                            onTabClose = { id -> browser.closeTab(id) },
-                            onTabNew = { browser.newTab() },
-                            onTabsCloseAll = { browser.closeAllTabs() },
-                            onGroupToggle = { id, hidden ->
-                                when (id) {
-                                    "favorites" -> browser.setSystemGroupHidden(app.getvela.wallet.feature.browser.core.ExploreSystemGroup.Favorites, hidden)
-                                    "recent" -> browser.setSystemGroupHidden(app.getvela.wallet.feature.browser.core.ExploreSystemGroup.Recent, hidden)
-                                    else -> browser.setGroupHidden(id, hidden)
-                                }
-                            },
-                            onGroupNew = { browser.createGroup(strings.t("explore.newGroup")) },
-                            onSiteMenuPick = { id ->
-                                when (id) {
-                                    "refresh" -> browser.reload()
-                                    "favorite" -> browser.addFavorite()
-                                    "close" -> browser.close()
-                                }
-                            },
-                            onBookmark = { browser.addFavorite() },
-                            onRecentClear = { browser.clearRecent() },
-                            onDisconnect = { browser.revoke() },
-                            onConsent = { approved -> if (approved) browser.consentApproved() else browser.consentRejected() },
-                        ),
-                        consent = consentCard,
-                    )
-                } else {
-                    // The holdings, the feed and the currency are this device's
-                    // own (spec 041); the fixture `model` only carries the
-                    // labels the live builder cannot compute.
-                    WalletScreen(
-                        model = WalletLive.home(model, balances, feed, currency, strings, chainNames).let { home ->
-                            // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
-                            if (online) home else home.copy(balance = home.balance.copy(status = BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))))
+                    val activity = context
+                    FlowHost(
+                        model = flowModel,
+                        onBack = {
+                            if (sendView.stage == SendStage.SelectToken || sendView.stage == SendStage.Receipt) {
+                                flows.close()
+                            } else {
+                                send.back()
+                            }
                         },
-                        onSelectTab = select,
-                        // The id says WHICH row was tapped. Without it every row
-                        // opened the same detail, so this person's own POL showed
-                        // somebody else's transaction.
-                        onFlow = { entry, id -> flows.enter(entry, id) },
-                        onSwitcher = {
-                            wallet.switcherOpened(session.accounts.map { it.address })
-                            switcherOpen = true
-                        },
-                    )
-                }
-            }
-        }
-
-        // Spec 022: the browser on its own route, for review. The in-app entry
-        // is the 探索 tab inside WALLET; this is the `vela.startDestination`
-        // door, which is why it is in DEVELOPER_ROUTES and exempt from the
-        // route guard.
-        composable(VelaDestinations.EXPLORE) {
-            val strings = LocalVelaStrings.current
-            val model = remember(strings) {
-                ExploreFixtures.buildState(ExploreScreenState.E2, strings)
-            }
-            val signing = remember(strings) {
-                SigningFixtures.build(SigningScreenState.CS12, strings)
-            }
-            ExploreScreen(model = model, signing = signing)
-        }
-
-        composable(VelaDestinations.GALLERY) {
-            GalleryScreen(systemDarkTheme = darkTheme)
-        }
-
-        composable(VelaDestinations.CONTACTS) {
-            val strings = LocalVelaStrings.current
-            val contacts = application.container.contacts
-            val book by contacts.view.collectAsStateWithLifecycle()
-            var menuOpen by rememberSaveable { mutableStateOf(false) }
-            var query by rememberSaveable { mutableStateOf("") }
-            // Spec 045 US5/US6: the form (null = closed, false = add, true = edit),
-            // its two fields, the open group, and the two pickers.
-            var formEdit by rememberSaveable { mutableStateOf<Boolean?>(null) }
-            var formName by rememberSaveable { mutableStateOf("") }
-            var formAddress by rememberSaveable { mutableStateOf("") }
-            var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
-            var memberPicker by rememberSaveable { mutableStateOf(false) }
-            var groupPicker by rememberSaveable { mutableStateOf(false) }
-            var openContact by rememberSaveable { mutableStateOf<String?>(null) }
-
-            // Read the book for THIS account: the core keys history-derived
-            // entries by whose wallet they belong to.
-            LaunchedEffect(session.address) {
-                contacts.open(session.address.takeIf { it.isNotEmpty() })
-            }
-
-            // The labels — titles, empty-state copy, the tab bar — come from
-            // the fixture builder, which has already resolved them through the
-            // i18n engine. The PEOPLE come from the core.
-            val labels = remember(strings, menuOpen) {
-                ContactsFixtures.buildMobileState(
-                    if (menuOpen) ContactsScreenState.C5 else ContactsScreenState.C1,
-                    strings,
-                )
-            }
-            // The NO-ACTIVITY detail variant, not C2. C2 is Alice-the-fixture
-            // and she has two transactions; a contact saved a minute ago has
-            // none, and until spec 041 there is no local store to ask.
-            val detailLabels = remember(strings) {
-                ContactsFixtures.contactDetailNoActivity(strings)
-            }
-            // C3 is the empty book: the only fixture state that carries the
-            // "no contacts yet" copy and its two calls to action.
-            val emptyState = remember(strings) {
-                ContactsFixtures.buildMobileState(ContactsScreenState.C3, strings).empty
-            }
-
-            var confirmingDelete by rememberSaveable { mutableStateOf(false) }
-
-            // ONE lookup, and everything below reads it. The detail page, the
-            // confirm sheet's wording and the delete itself all take the same
-            // `selected` — the desktop sibling shipped a page that displayed
-            // contact A while its delete acted on contact B, because the target
-            // was looked up twice.
-            val selected = openContact?.let { address ->
-                book.contacts.firstOrNull { it.address == address }
-            }
-            val listModel = ContactsLive.home(labels, book, query, emptyState)
-            val model = if (selected != null) {
-                listModel.copy(
-                    detail = ContactsLive.detail(
-                        fallback = detailLabels,
-                        contact = selected,
-                        view = book,
-                        // The activity this device holds, filtered to this
-                        // person by the page itself.
-                        feed = application.container.wallet.feed.value,
-                        strings = strings,
-                    ),
-                    deleteConfirm = if (confirmingDelete) {
-                        // Named after the contact on screen: a confirmation that
-                        // says "delete Alice?" while removing Bob is worse than
-                        // no confirmation at all.
-                        ContactsFixtures.deleteConfirm(
-                            strings,
-                            ContactsLive.displayName(selected),
-                        )
-                    } else {
-                        null
-                    },
-                )
-            } else {
-                listModel
-            }
-
-            // Spec 045 US7: opening a contact asks the core about the address —
-            // the parallel space's chain, Gnosis, is where this wallet pays.
-            LaunchedEffect(openContact) {
-                openContact?.let { contacts.inspect(chainId = 100, address = it) }
-            }
-            val group = openGroup?.let { id -> book.groups.firstOrNull { it.id == id } }
-            val groupLabels = remember(strings) { ContactsFixtures.groupDetail(strings) }
-            val menuCancel = remember(strings) { ContactsFixtures.addMenu(strings).cancel }
-            val formLabels = remember(strings, formEdit) { formEdit?.let { ContactsFixtures.contactForm(strings, edit = it) } }
-            val shown = model.copy(
-                groupDetail = if (selected == null && group != null) ContactsLive.groupDetail(groupLabels, group) else model.groupDetail,
-                form = formLabels?.let { ContactsLive.form(it, edit = formEdit == true, name = formName, address = formAddress) },
-                notice = ContactsLive.importNotice(book, strings, close = strings.t(I18nKeys.Flows.CLOSE)),
-                menu = when {
-                    // The group's member picker: the whole book, ticked where it is
-                    // in the group; a tap adds (AddGroupMembers) or removes (RemoveGroupMember).
-                    memberPicker && group != null -> ActionMenuModel(
-                        items = book.contacts.map { c ->
-                            val member = group.members.any { it.address == c.address }
-                            MenuItemModel(id = "contacts.member.toggle:" + c.address, icon = ContactsIcon.AddContact, label = (if (member) "✓ " else "") + ContactsLive.displayName(c))
-                        },
-                        cancel = menuCancel,
-                    )
-                    // The contact's groups: every group, ticked when it holds this person.
-                    groupPicker && selected != null -> ActionMenuModel(
-                        items = book.groups.map { g ->
-                            val member = g.members.any { it.address == selected.address }
-                            MenuItemModel(id = "contacts.group.toggle:" + g.id, icon = ContactsIcon.MoveGroup, label = if (member) "✓ " + g.name else g.name)
-                        },
-                        cancel = menuCancel,
-                    )
-                    else -> model.menu
-                },
-            )
-            BackHandler(enabled = openContact != null || openGroup != null || formEdit != null) {
-                when {
-                    formEdit != null -> formEdit = null
-                    openContact != null -> {
-                        confirmingDelete = false
-                        openContact = null
-                    }
-                    else -> openGroup = null
-                }
-            }
-
-            ContactsRoute(
-                model = shown,
-                actions = ContactsActions(
-                    onAction = { id ->
-                        when (id) {
-                            "contacts.addContact" -> menuOpen = true
-                            // Spec 045 US5: the form — add from the menu, edit from the detail.
-                            "contacts.addTitle" -> {
-                                menuOpen = false
-                                formName = ""
-                                formAddress = ""
-                                formEdit = false
-                            }
-                            "contacts.edit" -> selected?.let { contact ->
-                                formName = contact.name ?: contact.resolved_name ?: ""
-                                formAddress = contact.address
-                                formEdit = true
-                            }
-                            "contacts.form.save" -> {
-                                contacts.save(ContactSaveInput(address = formAddress.trim(), name = formName.trim()))
-                                formEdit = null
-                            }
-                            "contacts.form.cancel" -> formEdit = null
-                            "contacts.favourite" -> selected?.let { contacts.toggleFavourite(it.address) }
-                            // Spec 045 US6: the book travels through the picker and the share sheet.
-                            "contacts.importFile" -> {
-                                menuOpen = false
-                                contacts.importBook()
-                            }
-                            "contacts.exportTitle" -> {
-                                menuOpen = false
-                                contacts.exportBook()
-                            }
-                            "contacts.notice.close" -> contacts.acknowledgeImport()
-                            // Groups, both ways.
-                            "contacts.addMember" -> memberPicker = true
-                            "contacts.moveGroup", "contacts.sectionGroups" -> groupPicker = true
-                            "contacts.deleteContact" -> confirmingDelete = true
-                            "contacts.delete" -> selected?.let { contact ->
-                                contacts.delete(contact.address)
-                                confirmingDelete = false
-                                openContact = null
-                            }
-                            "contacts.back" -> {
-                                confirmingDelete = false
-                                openContact = null
-                            }
-                            "contacts.searchClear" -> query = ""
-                            else -> when {
-                                id.startsWith("contacts.member.toggle:") -> openGroup?.let { gid ->
-                                    val address = id.removePrefix("contacts.member.toggle:")
-                                    val member = group?.members?.any { it.address == address } == true
-                                    if (member) contacts.removeGroupMember(gid, address) else contacts.addGroupMembers(gid, listOf(address))
-                                    memberPicker = false
-                                }
-                                id.startsWith("contacts.group.toggle:") -> selected?.let { contact ->
-                                    val gid = id.removePrefix("contacts.group.toggle:")
-                                    val current = book.groups.filter { g -> g.members.any { it.address == contact.address } }.map { it.id }
-                                    contacts.setContactGroups(contact.address, if (gid in current) current - gid else current + gid)
-                                    groupPicker = false
-                                }
+                        onOpen = { step, id -> VelaLog.event("flows", "open", "step" to step.name, "id" to id.take(24)); flows.push(step, id) },
+                        onNavigate = { step ->
+                            when (step) {
+                                FlowStep.FeeToken -> feeSheetOpen = true
+                                FlowStep.ContactPick -> send.openContactPicker()
                                 else -> Unit
                             }
-                        }
-                    },
-                    onContact = { contact -> openContact = contact.addressFull },
-                    onGroup = { row -> openGroup = book.groups.firstOrNull { it.name == row.name }?.id },
-                    onFormName = { formName = it },
-                    onFormAddress = { formAddress = it },
-                    onQueryChange = { typed -> query = typed },
-                    onDismissMenu = {
-                        menuOpen = false
-                        confirmingDelete = false
-                        memberPicker = false
-                        groupPicker = false
-                    },
-                    onTab = selectFromPushed,
-                ),
-            )
-        }
-
-        composable(VelaDestinations.CONTACTS_GALLERY) {
-            ContactsGalleryScreen(systemDarkTheme = darkTheme)
-        }
-
-        composable(VelaDestinations.SETTINGS) {
-            val strings = LocalVelaStrings.current
-            // Fixture-driven still (spec 023 scope) apart from the two things
-            // that identify the account — its name and address, both the real
-            // ones. A fixture name over a real address would tell somebody they
-            // are signed in as a stranger (spec 019's finding).
-            val model = remember(strings, session.address, session.activeName) {
-                SettingsFixtures.buildState(SettingsScreenState.ST1, strings)
-                    .withIdentity(
-                        name = session.activeName,
-                        address = session.address,
-                        display = shortenAddress(session.address),
+                        },
+                        send = SendCallbacks(
+                            onSelectToken = { index ->
+                                sendView.tokens.getOrNull(index)?.let { token ->
+                                    val id = SendLive.tokenId(token)
+                                    if (sweepPicking) send.toggleSweep(id) else send.selectToken(id)
+                                }
+                            },
+                            onScanOpen = { send.openScanner() },
+                            scan = ScanCallbacks(
+                                onDecoded = { text -> send.scanned(text) },
+                                onClose = {
+                                    send.closeScanner()
+                                    if (sendView.stage == SendStage.SelectToken && flowState == FlowState.S1) flows.close()
+                                },
+                                requestPermission = { mainActivity?.requestCameraPermission() ?: false },
+                                pickImage = { application.container.documents?.pick(listOf("image/*"))?.bytes },
+                                permissionText = strings.t(I18nKeys.Flows.SCAN_PERMISSION_TEXT),
+                                grantLabel = strings.t(I18nKeys.Flows.SCAN_GRANT),
+                                noQrFound = strings.t(I18nKeys.Flows.SCAN_NO_QR),
+                                cameraUnavailable = strings.t(I18nKeys.Flows.SCAN_CAMERA_UNAVAILABLE),
+                                decodeFailed = strings.t(I18nKeys.Flows.SCAN_ERROR_IMAGE),
+                            ),
+                            onSelectAll = { send.selectAllValuable(sendView.tokens.map(SendLive::tokenId)) },
+                            onPickCta = { if (sweepPicking) send.confirmSweep() else send.startSweep() },
+                            onAmountChange = { send.setAmount(it) },
+                            onRecipientChange = { send.setRecipient(it.trim()) },
+                            onMax = { send.tapMax() },
+                            onDenom = { send.toggleFiatInput() },
+                            onContinue = { send.continueTapped() },
+                            onConfirm = { send.slideConfirm() },
+                            onFeeSelect = { index ->
+                                feeView.options.getOrNull(index)?.let { send.chooseFeeToken(it.contract) }
+                                feeSheetOpen = false
+                            },
+                            onContactSelect = { index ->
+                                contactsBook.contacts.getOrNull(index)?.let { send.pickedAddress(it.address) }
+                            },
+                            onSheetDismissed = {
+                                if (feeSheetOpen) feeSheetOpen = false
+                                if (sendView.show_contact_picker) send.closeContactPicker()
+                                if (sendView.show_batch_import) send.closeBatch()
+                            },
+                            // Spec 045 US3: the batch sheet's taps go to the batch machine.
+                            onBatchUnit = { id -> send.batchUnit(if (id == "fiat") WireBatchUnit.Fiat else WireBatchUnit.Token) },
+                            onBatchPaste = { text -> send.batchText(text) },
+                            onBatchFile = { send.batchPickFile() },
+                            onBatchTemplate = { send.batchTemplate() },
+                            onBatchRate = { text -> send.batchRate(text) },
+                            onBatchRateReset = { send.batchResetRate() },
+                            onBatchApply = { send.batchApply() },
+                            // Spec 045 US1: the split's rows, by index on screen → id in the core.
+                            onAddRecipient = { send.enterSplit() },
+                            onRecipientAction = { action ->
+                                when (action) {
+                                    RecipientAction.Add -> send.splitAdd()
+                                    RecipientAction.Contacts -> send.openContactPicker()
+                                    RecipientAction.Import -> send.openBatch()
+                                }
+                            },
+                            onRemoveRecipient = { index -> sendView.recipients.getOrNull(index)?.let { send.splitRemove(it.id) } },
+                            onRecipientAmount = { index, text -> sendView.recipients.getOrNull(index)?.let { send.splitAmount(it.id, text) } },
+                            onRecipientAddress = { index, text -> sendView.recipients.getOrNull(index)?.let { send.splitAddress(it.id, text.trim()) } },
+                            onReceiptCta = {
+                                // The receipt's one button: Cancel while the ceremony is up (the
+                                // core's checkpoint), Done or "keep running" otherwise.
+                                if (sendView.tx_status == SendTxStatus.Signing) send.cancelSigning() else send.done()
+                            },
+                            onNoticeAction = {
+                                when {
+                                    sendView.treasury_bootstrap != null -> send.retryAfterBootstrap()
+                                    sendView.tx_error != null -> send.retryAfterError()
+                                    sendView.tx_status == SendTxStatus.Signing -> send.cancelSigning()
+                                }
+                            },
+                            onNoticeSecondary = { send.dismissTreasurySheet() },
+                            onExplorer = {
+                                val ctx = SendLive.Context(strings, chainNames, explorers, WalletLive.Money.of(currency), session.activeName, session.address)
+                                SendLive.explorerUrl(sendView, ctx)?.let { url ->
+                                    runCatching {
+                                        activity.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                                    }
+                                }
+                            },
+                        ),
                     )
-            }
-            // The display currency, the networks, the service endpoints and the
-            // provider keys are the person's own. What is still the ST1 fixture
-            // is everything that needs a network to be true: RPC health and
-            // latency pills, the storage figures, the relayer panel. Those wait
-            // for spec 041 and render their unknown state until then.
-            val settings = application.container.settings
-            val currency by settings.currency.collectAsStateWithLifecycle()
-            val networks by settings.networks.collectAsStateWithLifecycle()
-            // Spec 047 US1: the rows read the device — preferences, the pool,
-            // the session, the store's own keys, the relay's treasury.
-            val scope = rememberCoroutineScope()
-            val prefs by application.container.preferences.view.collectAsStateWithLifecycle()
-            val poolView by application.container.pool.view.collectAsStateWithLifecycle()
-            val sessionView = session
-            val i18nState by application.container.i18nRuntime.state.collectAsStateWithLifecycle()
-            var storageReport by remember { mutableStateOf<DeviceStorage.Report?>(null) }
-            var storageTick by remember { mutableStateOf(0) }
-            var treasury by remember { mutableStateOf<SendTreasuryStatus?>(null) }
-            var eraseFailed by remember { mutableStateOf<List<String>?>(null) }
-            val chainNamesNow = remember(networks.networks) { networks.networks.associate { it.chain_id.toInt() to it.display_name } }
-            LaunchedEffect(Unit) {
-                settings.refreshCurrency()
-                settings.startNetworks()
-            }
-            LaunchedEffect(storageTick) { storageReport = DeviceStorage.measure(VelaStore(context)) }
-            LaunchedEffect(Unit) {
-                treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status
-            }
-            val liveModel = run {
-                var m = SettingsLive.withWizard(
-                    SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings),
-                    networks,
-                    strings,
-                )
-                m = SettingsLive.withPreferences(
-                    m, prefs, i18nState.language, strings,
-                    theme = when (themePreference) { ThemePreference.Light -> "light"; ThemePreference.Dark -> "dark"; else -> "auto" },
-                )
-                storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
-                m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
-                m = SettingsLive.withFeedback(
-                    m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, "Android ${android.os.Build.VERSION.RELEASE}", i18nState.language,
-                    poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() }, VelaLog.recentFailures(), strings,
-                )
-                m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
-                m = SettingsLive.withBanner(m, poolView.failed_chains, chainNamesNow, strings)
-                m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, strings)
-                // A partial wipe names what stayed, in the sheet itself (028's rule: the person stays signed in).
-                eraseFailed?.let { left -> m = m.copy(eraseSheet = m.eraseSheet.copy(body = m.eraseSheet.body + "\n\n" + left.joinToString(", "))) }
-                m
-            }
-            val feedbackUrl = remember(liveModel.feedback.previewLines) {
-                "https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=" +
-                    java.net.URLEncoder.encode("[android] ", "UTF-8") +
-                    "&body=" + java.net.URLEncoder.encode(liveModel.feedback.previewLines.joinToString("\n"), "UTF-8")
-            }
-            SettingsRoute(
-                model = liveModel,
-                actions = SettingsActions(
-                    onSegment = { group, id ->
-                        when (group) {
-                            "theme" -> onThemeSelected(when (id) { "light" -> ThemePreference.Light; "dark" -> ThemePreference.Dark; else -> ThemePreference.Auto })
-                            "avatar" -> application.container.preferences.setAvatarStyle(id)
+                } else if (flowState != null) {
+                    val request by wallet.request.collectAsStateWithLifecycle()
+                    // The receive screen shows an ADDRESS. Every other fixture that
+                    // leaks shows somebody the wrong information; a fixture address
+                    // here sends their money to a stranger, permanently — so the
+                    // watch and the request machine start the moment this opens.
+                    LaunchedEffect(flowState, session.address) {
+                        if (session.address.isNotEmpty() && flowState in RECEIVE_STATES) {
+                            wallet.openReceive(session.address, PAY_LINK_BASE)
                         }
-                    },
-                    onTextScale = { index -> TextScaleLevel.entries.getOrNull(index)?.let { application.container.preferences.setTextScale(it) } },
-                    onStorageClear = { itemId -> scope.launch { DeviceStorage.clear(VelaStore(context), itemId); storageTick++ } },
-                    onClearCaches = { scope.launch { DeviceStorage.clearCaches(VelaStore(context)); application.container.wallet.refresh(); storageTick++ } },
-                    onErase = {
-                        scope.launch {
-                            // The keep-list: the account records and the pending-upload
-                            // ledger, which sign-out's own path owns (028's one exception).
-                            val left = DeviceStorage.erase(VelaStore(context), keep = setOf("vela.accounts", "vela.activeAccountIndex", "vela.pendingUploads"))
-                            if (left.isEmpty()) {
-                                eraseFailed = null
-                                application.container.session.signOut()
-                                application.container.session.signOutConfirmed()
-                            } else {
-                                eraseFailed = left
-                            }
+                    }
+                    val flowModel = remember(
+                        flowState,
+                        strings,
+                        session.address,
+                        networks,
+                        request,
+                        balances,
+                        feed,
+                        currency,
+                        flows.selected,
+                        manageTokens,
+                    ) {
+                        FlowFixtures.build(flowState, strings).let { drawn ->
+                            liveFlow(
+                                drawn = drawn,
+                                address = session.address,
+                                name = session.activeName,
+                                networks = networks,
+                                request = request,
+                                balances = balances,
+                                feed = feed,
+                                currency = currency,
+                                chainNames = chainNames,
+                                selected = flows.selected,
+                                strings = strings,
+                                manageTokens = manageTokens,
+                            )
                         }
-                    },
-                    onFeedbackSend = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(feedbackUrl))) } },
-                    onFeedbackGithub = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/mondaylabsltd/vela-wallet/issues"))) } },
-                    onOpenLink = { value ->
-                        val url = if (value.startsWith("http")) value else "https://$value"
-                        runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
-                    },
-                    onRelayerRetry = { scope.launch { treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status } },
-                    onAccountSelect = { index -> application.container.session.switchAccount(index) },
-                    onAccountPrimary = { navController.push(VelaDestinations.CREATE) },
-                    onAccountSecondary = { navController.push(VelaDestinations.WELCOME) },
-                    onSelectTab = selectFromPushed,
-                    // The way out of a signed-in wallet, on the row a person
-                    // would look for it.
-                    onSignOut = { application.container.session.signOut() },
-                    onOpenContacts = { navController.push(VelaDestinations.CONTACTS) },
-                    onSheetSelect = { sheet, id ->
-                        val prefsStore = application.container.preferences
-                        when (sheet) {
-                            SettingsOverlay.Currency -> settings.chooseCurrency(id)
-                            SettingsOverlay.Language -> {
-                                prefsStore.setLanguage(id)
-                                application.container.applyLanguage(id)
-                            }
-                            SettingsOverlay.NumberFormat -> SettingsLive.numberKeyAt(id)?.let { prefsStore.setNumberFormat(NumberFormatKey.of(it)) }
-                            SettingsOverlay.DateFormat -> SettingsLive.dateKeyAt(id)?.let { prefsStore.setDateFormat(DateFormatKey.of(it)) }
-                            SettingsOverlay.TimeFormat -> SettingsLive.timeKeyAt(id)?.let { prefsStore.setTimeFormat(TimeFormatKey.of(it)) }
-                            else -> Unit
+                    }
+                    // The add-token sheet is the `manage_tokens` machine's: opening
+                    // it loads the already-added rows (spec 043 T046).
+                    LaunchedEffect(flowState) { if (flowState == FlowState.T3) wallet.openAddToken() }
+                    FlowHost(
+                        model = flowModel,
+                        onBack = { flows.back() },
+                        onOpen = { step, id -> VelaLog.event("flows", "open", "step" to step.name, "id" to id.take(24)); flows.push(step, id) },
+                        onNavigate = { flows.push(it) },
+                        onSaveImage = {
+                            val drawn = (FlowFixtures.build(FlowState.R4, strings).base as? FlowBase.Share)?.model
+                            if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings, request.asset.chain_id)
+                        },
+                        addToken = AddTokenCallbacks(
+                            onInput = { wallet.addTokenInput(it.trim()) },
+                            onSubmit = { manageTokens.found.firstOrNull()?.let { wallet.addTokenSave(it.chain_id) } },
+                        ),
+                    )
+                } else {
+                    // Spec 022/029: 探索 is a real destination now rather than an
+                    // inert chip — the same signed-in shell with a different body,
+                    // which is why it is a SECTION of this route and not a route of
+                    // its own. A browser tab is not somewhere a person should be
+                    // able to deep-link into before they have a wallet.
+                    val select: (VelaTab) -> Unit = { tab ->
+                        when (tab) {
+                            // 设置 has a screen now (spec 023), and the 退出登录 row
+                            // inside it is where signing out lives. Until then the
+                            // TAB itself signed you out — which meant tapping 设置
+                            // to change your language logged you out instead. That
+                            // regression must not come back through this `when`.
+                            VelaTab.Settings -> navController.push(VelaDestinations.SETTINGS)
+                            VelaTab.Explore -> section = VelaTab.Explore
+                            VelaTab.Wallet -> section = VelaTab.Wallet
+                            // 通讯录 refused to navigate for a good reason: it
+                            // would have shown a signed-in person six strangers.
+                            // That reason expired with spec 040 — the screen reads
+                            // this device's own book now — so the tab works.
+                            VelaTab.Contacts -> navController.push(VelaDestinations.CONTACTS)
                         }
-                    },
-                    // The field ids are the core's own enum names, put there by
-                    // SettingsLive. The screen reports "this box changed"; which
-                    // machine event that is stays here, so a new editable field
-                    // is a line in one place rather than a callback per box.
-                    onFieldEdited = { fieldId, value ->
-                        endpointField(fieldId)?.let { settings.editEndpoint(it, value) }
-                        providerId(fieldId)?.let { settings.editProviderKey(it, value) }
-                    },
-                    onFieldCommitted = { fieldId ->
-                        endpointField(fieldId)?.let { settings.commitEndpoint(it) }
-                        providerId(fieldId)?.let { settings.commitProviderKey(it) }
-                    },
-                    onRemoveNetwork = { id -> settings.deleteNetwork(id) },
-                    // The row carries a display id; the machine speaks chain
-                    // ids. The network list already holds both, so the lookup
-                    // is a read rather than a second identity to keep in sync.
-                    onSearchNetwork = { query -> settings.searchNetworks(query) },
-                    onConfirmAddNetwork = { settings.confirmAddNetwork() },
-                    onPickNetwork = { chainId ->
-                        chainId.toLongOrNull()?.let { settings.selectChain(it) }
-                    },
-                    onOpenNetwork = { id ->
-                        settings.networks.value.networks
-                            .firstOrNull { it.id == id }
-                            ?.let { settings.expandOverride(it.chain_id) }
-                    },
-                    onResetEndpoints = { settings.resetEndpoints() },
-                ),
-            )
-        }
+                    }
+                    if (section == VelaTab.Explore) {
+                        // The browser shows the SIGNED-IN account, never the
+                        // fixture one: a connection panel naming a stranger's
+                        // account would be the wallet lying about what it just
+                        // granted.
+                        val exploreModel = remember(strings, session.address, session.activeName) {
+                            ExploreFixtures.buildState(ExploreScreenState.E2, strings)
+                                .withIdentity(session.activeName, session.address)
+                        }
+                        // Spec 044: the tab is a browser with a memory — the core's
+                        // favourites, groups, tabs and recents; a live page where
+                        // the demo page was drawn.
+                        val browser = application.container.browser
+                        LaunchedEffect(Unit) { browser.start() }
+                        val engine by browser.current.collectAsStateWithLifecycle()
+                        val engineState by (engine?.state ?: kotlinx.coroutines.flow.MutableStateFlow(app.getvela.wallet.feature.browser.core.EngineState())).collectAsStateWithLifecycle()
+                        val exploreView by browser.explore.collectAsStateWithLifecycle()
+                        val historyView by browser.history.collectAsStateWithLifecycle()
+                        val permissions by browser.permissions.collectAsStateWithLifecycle()
+                        val browserChain by browser.browserChain.collectAsStateWithLifecycle()
+                        val identity = app.getvela.wallet.feature.browser.ExploreLive.Identity(
+                            accountName = session.activeName,
+                            accountAddress = session.address,
+                            chainName = chainNames[browserChain] ?: browserChain.toString(),
+                            chainDot = WalletLive.badge(browserChain.toLong()),
+                        )
+                        val liveModel = remember(exploreModel, exploreView, historyView, engineState, engine, strings, permissions, identity) {
+                            app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings, permissions, identity)
+                        }
+                        val consentCard = permissions.consent?.let { c ->
+                            app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, engine?.let { engineState }, strings, identity)
+                        }
+                        ExploreScreen(
+                            model = liveModel,
+                            // The drawn CS12 sheet belongs to the demo page, which a
+                            // live route never draws (SC-007): a request's sheet is
+                            // raised from the container's signing state instead.
+                            signing = null,
+                            onSelectTab = select,
+                            page = engine?.let { e -> { app.getvela.wallet.feature.explore.components.BrowserPage(e) } },
+                            initialView = if (engine != null) app.getvela.wallet.feature.explore.ExploreView.Browsing else null,
+                            onOpenUrl = { browser.open(it) },
+                            onClosePage = { browser.close() },
+                            onPageBack = { browser.back() },
+                            onPageForward = { browser.forward() },
+                            live = app.getvela.wallet.feature.explore.ExploreCallbacks(
+                                onOpenSite = { url -> browser.open(url) },
+                                onTabOpen = { id -> browser.selectTab(id) },
+                                onTabClose = { id -> browser.closeTab(id) },
+                                onTabNew = { browser.newTab() },
+                                onTabsCloseAll = { browser.closeAllTabs() },
+                                onGroupToggle = { id, hidden ->
+                                    when (id) {
+                                        "favorites" -> browser.setSystemGroupHidden(app.getvela.wallet.feature.browser.core.ExploreSystemGroup.Favorites, hidden)
+                                        "recent" -> browser.setSystemGroupHidden(app.getvela.wallet.feature.browser.core.ExploreSystemGroup.Recent, hidden)
+                                        else -> browser.setGroupHidden(id, hidden)
+                                    }
+                                },
+                                onGroupNew = { browser.createGroup(strings.t("explore.newGroup")) },
+                                onSiteMenuPick = { id ->
+                                    when (id) {
+                                        "refresh" -> browser.reload()
+                                        "favorite" -> browser.addFavorite()
+                                        "close" -> browser.close()
+                                    }
+                                },
+                                onBookmark = { browser.addFavorite() },
+                                onRecentClear = { browser.clearRecent() },
+                                onDisconnect = { browser.revoke() },
+                                onConsent = { approved -> if (approved) browser.consentApproved() else browser.consentRejected() },
+                            ),
+                            consent = consentCard,
+                        )
+                    } else {
+                        // The holdings, the feed and the currency are this device's
+                        // own (spec 041); the fixture `model` only carries the
+                        // labels the live builder cannot compute.
+                        WalletScreen(
+                            model = WalletLive.home(model, balances, feed, currency, strings, chainNames).let { home ->
+                                // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
+                                if (online) home else home.copy(balance = home.balance.copy(status = BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))))
+                            },
+                            onSelectTab = select,
+                            // The id says WHICH row was tapped. Without it every row
+                            // opened the same detail, so this person's own POL showed
+                            // somebody else's transaction.
+                            onFlow = { entry, id -> flows.enter(entry, id) },
+                            onSwitcher = {
+                                wallet.switcherOpened(session.accounts.map { it.address })
+                                switcherOpen = true
+                            },
+                        )
+                    }
+                }
+            }
 
-        composable(VelaDestinations.SETTINGS_GALLERY) {
-            SettingsGalleryScreen(
-                systemDarkTheme = settingsDark ?: darkTheme,
-                initialState = settingsState,
-            )
-        }
+            // Spec 022: the browser on its own route, for review. The in-app entry
+            // is the 探索 tab inside WALLET; this is the `vela.startDestination`
+            // door, which is why it is in DEVELOPER_ROUTES and exempt from the
+            // route guard.
+            composable(VelaDestinations.EXPLORE) {
+                val strings = LocalVelaStrings.current
+                val model = remember(strings) {
+                    ExploreFixtures.buildState(ExploreScreenState.E2, strings)
+                }
+                val signing = remember(strings) {
+                    SigningFixtures.build(SigningScreenState.CS12, strings)
+                }
+                ExploreScreen(model = model, signing = signing)
+            }
 
-        composable(VelaDestinations.FLOWS_GALLERY) {
-            FlowGalleryScreen(systemDarkTheme = darkTheme, initialState = startFlowState)
+            composable(VelaDestinations.GALLERY) {
+                GalleryScreen(systemDarkTheme = darkTheme)
+            }
+
+            composable(VelaDestinations.CONTACTS) {
+                val strings = LocalVelaStrings.current
+                val contacts = application.container.contacts
+                val book by contacts.view.collectAsStateWithLifecycle()
+                var menuOpen by rememberSaveable { mutableStateOf(false) }
+                var query by rememberSaveable { mutableStateOf("") }
+                // Spec 045 US5/US6: the form (null = closed, false = add, true = edit),
+                // its two fields, the open group, and the two pickers.
+                var formEdit by rememberSaveable { mutableStateOf<Boolean?>(null) }
+                var formName by rememberSaveable { mutableStateOf("") }
+                var formAddress by rememberSaveable { mutableStateOf("") }
+                var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
+                var memberPicker by rememberSaveable { mutableStateOf(false) }
+                var groupPicker by rememberSaveable { mutableStateOf(false) }
+                var openContact by rememberSaveable { mutableStateOf<String?>(null) }
+
+                // Read the book for THIS account: the core keys history-derived
+                // entries by whose wallet they belong to.
+                LaunchedEffect(session.address) {
+                    contacts.open(session.address.takeIf { it.isNotEmpty() })
+                }
+
+                // The labels — titles, empty-state copy, the tab bar — come from
+                // the fixture builder, which has already resolved them through the
+                // i18n engine. The PEOPLE come from the core.
+                val labels = remember(strings, menuOpen) {
+                    ContactsFixtures.buildMobileState(
+                        if (menuOpen) ContactsScreenState.C5 else ContactsScreenState.C1,
+                        strings,
+                    )
+                }
+                // The NO-ACTIVITY detail variant, not C2. C2 is Alice-the-fixture
+                // and she has two transactions; a contact saved a minute ago has
+                // none, and until spec 041 there is no local store to ask.
+                val detailLabels = remember(strings) {
+                    ContactsFixtures.contactDetailNoActivity(strings)
+                }
+                // C3 is the empty book: the only fixture state that carries the
+                // "no contacts yet" copy and its two calls to action.
+                val emptyState = remember(strings) {
+                    ContactsFixtures.buildMobileState(ContactsScreenState.C3, strings).empty
+                }
+
+                var confirmingDelete by rememberSaveable { mutableStateOf(false) }
+                // Spec 048: the doors the contacts machine had no drawing for on the phone.
+                var contactQr by remember { mutableStateOf<String?>(null) }
+                var groupEdit by remember { mutableStateOf<Pair<String?, String>?>(null) }
+                var groupMenu by remember { mutableStateOf(false) }
+                var confirmingGroupDelete by remember { mutableStateOf(false) }
+                val haptic = rememberVelaHaptic()
+                val openSendTo = { address: String ->
+                    VelaLog.event("contacts", "open send to", "address" to address.take(10))
+                    application.container.pendingSendParams.value = SendOpenParams(prefilled_recipient = address)
+                    application.container.pendingFlow.value = WalletFlowEntry.Send
+                    navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+                }
+
+                // ONE lookup, and everything below reads it. The detail page, the
+                // confirm sheet's wording and the delete itself all take the same
+                // `selected` — the desktop sibling shipped a page that displayed
+                // contact A while its delete acted on contact B, because the target
+                // was looked up twice.
+                val selected = openContact?.let { address ->
+                    book.contacts.firstOrNull { it.address == address }
+                }
+                val listModel = ContactsLive.home(labels, book, query, emptyState)
+                val model = if (selected != null) {
+                    listModel.copy(
+                        detail = ContactsLive.detail(
+                            fallback = detailLabels,
+                            contact = selected,
+                            view = book,
+                            // The activity this device holds, filtered to this
+                            // person by the page itself.
+                            feed = application.container.wallet.feed.value,
+                            strings = strings,
+                        ),
+                        deleteConfirm = if (confirmingDelete) {
+                            // Named after the contact on screen: a confirmation that
+                            // says "delete Alice?" while removing Bob is worse than
+                            // no confirmation at all.
+                            ContactsFixtures.deleteConfirm(
+                                strings,
+                                ContactsLive.displayName(selected),
+                            )
+                        } else {
+                            null
+                        },
+                    )
+                } else {
+                    listModel
+                }
+
+                // Spec 045 US7: opening a contact asks the core about the address —
+                // the parallel space's chain, Gnosis, is where this wallet pays.
+                LaunchedEffect(openContact) {
+                    openContact?.let { contacts.inspect(chainId = 100, address = it) }
+                }
+                val group = openGroup?.let { id -> book.groups.firstOrNull { it.id == id } }
+                val groupLabels = remember(strings) { ContactsFixtures.groupDetail(strings) }
+                val menuCancel = remember(strings) { ContactsFixtures.addMenu(strings).cancel }
+                val formLabels = remember(strings, formEdit) { formEdit?.let { ContactsFixtures.contactForm(strings, edit = it) } }
+                val shown = model.copy(
+                    groupDetail = if (selected == null && group != null) ContactsLive.groupDetail(groupLabels, group) else model.groupDetail,
+                    form = formLabels?.let { ContactsLive.form(it, edit = formEdit == true, name = formName, address = formAddress) },
+                    notice = ContactsLive.importNotice(book, strings, close = strings.t(I18nKeys.Flows.CLOSE)),
+                    menu = when {
+                        // The group's member picker: the whole book, ticked where it is
+                        // in the group; a tap adds (AddGroupMembers) or removes (RemoveGroupMember).
+                        memberPicker && group != null -> ActionMenuModel(
+                            items = book.contacts.map { c ->
+                                val member = group.members.any { it.address == c.address }
+                                MenuItemModel(id = "contacts.member.toggle:" + c.address, icon = ContactsIcon.AddContact, label = (if (member) "✓ " else "") + ContactsLive.displayName(c))
+                            },
+                            cancel = menuCancel,
+                        )
+                        // The contact's groups: every group, ticked when it holds this person.
+                        groupPicker && selected != null -> ActionMenuModel(
+                            items = book.groups.map { g ->
+                                val member = g.members.any { it.address == selected.address }
+                                MenuItemModel(id = "contacts.group.toggle:" + g.id, icon = ContactsIcon.MoveGroup, label = if (member) "✓ " + g.name else g.name)
+                            },
+                            cancel = menuCancel,
+                        )
+                        else -> model.menu
+                    },
+                )
+                BackHandler(enabled = openContact != null || openGroup != null || formEdit != null) {
+                    when {
+                        formEdit != null -> formEdit = null
+                        openContact != null -> {
+                            confirmingDelete = false
+                            openContact = null
+                        }
+                        else -> openGroup = null
+                    }
+                }
+
+                contactQr?.let { address ->
+                    ContactQrSheet(
+                        name = book.contacts.firstOrNull { it.address == address }?.name ?: address,
+                        address = address,
+                        copyLabel = strings.t(I18nKeys.Flows.COPY_ADDRESS),
+                        copiedLabel = strings.t(I18nKeys.Flow.COPIED),
+                        closeLabel = strings.t(I18nKeys.Flows.DONE),
+                        onDismiss = { contactQr = null },
+                    )
+                }
+                groupEdit?.let { (id, initial) ->
+                    GroupEditSheet(
+                        title = strings.t(if (id == null) I18nKeys.Contacts.GROUP_NEW else I18nKeys.Contacts.GROUP_RENAME),
+                        initialName = initial,
+                        nameLabel = strings.t(I18nKeys.Contacts.GROUP_EDIT),
+                        saveLabel = strings.t(I18nKeys.Flows.DONE),
+                        cancelLabel = ContactsFixtures.addMenu(strings).cancel,
+                        onSave = { name ->
+                            contacts.saveGroup(ContactGroupInput(id = id, name = name))
+                            haptic(VelaHaptic.Select)
+                            groupEdit = null
+                        },
+                        onDismiss = { groupEdit = null },
+                    )
+                }
+                if (groupMenu) {
+                    GroupMenuSheet(
+                        title = group?.name ?: "",
+                        renameLabel = strings.t(I18nKeys.Contacts.GROUP_RENAME),
+                        deleteLabel = strings.t(I18nKeys.Contacts.GROUP_DELETE),
+                        cancelLabel = ContactsFixtures.addMenu(strings).cancel,
+                        onRename = { groupMenu = false; group?.let { groupEdit = it.id to it.name } },
+                        onDelete = { groupMenu = false; confirmingGroupDelete = true },
+                        onDismiss = { groupMenu = false },
+                    )
+                }
+                if (confirmingGroupDelete) {
+                    GroupDeleteConfirmSheet(
+                        title = strings.t(I18nKeys.Contacts.GROUP_DELETE) + (group?.let { " · " + it.name } ?: ""),
+                        confirmLabel = strings.t(I18nKeys.Contacts.GROUP_DELETE),
+                        cancelLabel = ContactsFixtures.addMenu(strings).cancel,
+                        onConfirm = {
+                            group?.let { contacts.deleteGroup(it.id) }
+                            confirmingGroupDelete = false
+                            openGroup = null
+                        },
+                        onDismiss = { confirmingGroupDelete = false },
+                    )
+                }
+                ContactsRoute(
+                    model = shown,
+                    actions = ContactsActions(
+                        onAction = { id ->
+                        VelaLog.event("contacts", "action", "id" to id)
+                            when (id) {
+                                "contacts.addContact" -> menuOpen = true
+                                // Spec 045 US5: the form — add from the menu, edit from the detail.
+                                "contacts.addTitle" -> {
+                                    menuOpen = false
+                                    formName = ""
+                                    formAddress = ""
+                                    formEdit = false
+                                }
+                                "contacts.edit" -> selected?.let { contact ->
+                                    formName = contact.name ?: contact.resolved_name ?: ""
+                                    formAddress = contact.address
+                                    formEdit = true
+                                }
+                                "contacts.form.save" -> {
+                                    contacts.save(ContactSaveInput(address = formAddress.trim(), name = formName.trim()))
+                                    formEdit = null
+                                }
+                                "contacts.form.cancel" -> formEdit = null
+                                "contacts.favourite" -> selected?.let { contacts.toggleFavourite(it.address) }
+                                // Spec 045 US6: the book travels through the picker and the share sheet.
+                                "contacts.importFile" -> {
+                                    menuOpen = false
+                                    contacts.importBook()
+                                }
+                                "contacts.exportTitle" -> {
+                                    menuOpen = false
+                                    contacts.exportBook()
+                                }
+                                "contacts.notice.close" -> contacts.acknowledgeImport()
+                                // Groups, both ways.
+                                "contacts.addMember" -> memberPicker = true
+                                "contacts.moveGroup", "contacts.sectionGroups" -> groupPicker = true
+                                "contacts.deleteContact" -> confirmingDelete = true
+                                "contacts.delete" -> selected?.let { contact ->
+                                    contacts.delete(contact.address)
+                                    confirmingDelete = false
+                                    openContact = null
+                                }
+                                "contacts.copyAddress" -> selected?.let { contact ->
+                                if (Clipboard.copy(context, "address", contact.address)) haptic(VelaHaptic.Select)
+                            }
+                            "contacts.action.Send" -> selected?.let { contact -> openSendTo(contact.address) }
+                            "contacts.action.Receive" -> {
+                                application.container.pendingFlow.value = WalletFlowEntry.Receive
+                                navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+                            }
+                            "contacts.action.Qr" -> contactQr = selected?.address
+                            "contacts.batchSend" -> group?.let { g ->
+                                val members = g.members
+                                if (members.size == 1) {
+                                    openSendTo(members.first().address)
+                                } else {
+                                    application.container.pendingSplitSeed.value = members.mapIndexed { i, member ->
+                                        SendRecipientDraft(
+                                            id = "group-${g.id}-$i",
+                                            address = member.address,
+                                            amount = "",
+                                            name = member.name,
+                                        )
+                                    }
+                                    application.container.pendingSendParams.value = SendOpenParams(preselected_multi = "split")
+                                    application.container.pendingFlow.value = WalletFlowEntry.Send
+                                    navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+                                }
+                            }
+                            "contacts.manage" -> groupEdit = null to ""
+                            "contacts.groupMenu" -> groupMenu = true
+                            "contacts.back" -> {
+                                    confirmingDelete = false
+                                    openContact = null
+                                }
+                                "contacts.searchClear" -> query = ""
+                                else -> when {
+                                    id.startsWith("contacts.member.toggle:") -> openGroup?.let { gid ->
+                                        val address = id.removePrefix("contacts.member.toggle:")
+                                        val member = group?.members?.any { it.address == address } == true
+                                        if (member) contacts.removeGroupMember(gid, address) else contacts.addGroupMembers(gid, listOf(address))
+                                        memberPicker = false
+                                    }
+                                    id.startsWith("contacts.swipeSend:") -> openSendTo(id.removePrefix("contacts.swipeSend:"))
+                                    id.startsWith("contacts.swipeDelete:") -> {
+                                        openContact = id.removePrefix("contacts.swipeDelete:")
+                                        confirmingDelete = true
+                                    }
+                                    id.startsWith("contacts.group.toggle:") -> selected?.let { contact ->
+                                        val gid = id.removePrefix("contacts.group.toggle:")
+                                        val current = book.groups.filter { g -> g.members.any { it.address == contact.address } }.map { it.id }
+                                        contacts.setContactGroups(contact.address, if (gid in current) current - gid else current + gid)
+                                        groupPicker = false
+                                    }
+                                    else -> Unit
+                                }
+                            }
+                        },
+                        onContact = { contact -> openContact = contact.addressFull },
+                        onGroup = { row -> openGroup = book.groups.firstOrNull { it.name == row.name }?.id },
+                        onFormName = { formName = it },
+                        onFormAddress = { formAddress = it },
+                        onQueryChange = { typed -> query = typed },
+                        onDismissMenu = {
+                            menuOpen = false
+                            confirmingDelete = false
+                            memberPicker = false
+                            groupPicker = false
+                        },
+                        onTab = selectFromPushed,
+                    ),
+                )
+            }
+
+            composable(VelaDestinations.CONTACTS_GALLERY) {
+                ContactsGalleryScreen(systemDarkTheme = darkTheme)
+            }
+
+            composable(VelaDestinations.SETTINGS) {
+                val strings = LocalVelaStrings.current
+                // Fixture-driven still (spec 023 scope) apart from the two things
+                // that identify the account — its name and address, both the real
+                // ones. A fixture name over a real address would tell somebody they
+                // are signed in as a stranger (spec 019's finding).
+                val model = remember(strings, session.address, session.activeName) {
+                    SettingsFixtures.buildState(SettingsScreenState.ST1, strings)
+                        .withIdentity(
+                            name = session.activeName,
+                            address = session.address,
+                            display = shortenAddress(session.address),
+                        )
+                }
+                // The display currency, the networks, the service endpoints and the
+                // provider keys are the person's own. What is still the ST1 fixture
+                // is everything that needs a network to be true: RPC health and
+                // latency pills, the storage figures, the relayer panel. Those wait
+                // for spec 041 and render their unknown state until then.
+                val settings = application.container.settings
+                val currency by settings.currency.collectAsStateWithLifecycle()
+                val networks by settings.networks.collectAsStateWithLifecycle()
+                // Spec 047 US1: the rows read the device — preferences, the pool,
+                // the session, the store's own keys, the relay's treasury.
+                val scope = rememberCoroutineScope()
+                val prefs by application.container.preferences.view.collectAsStateWithLifecycle()
+                val poolView by application.container.pool.view.collectAsStateWithLifecycle()
+                val sessionView = session
+                val i18nState by application.container.i18nRuntime.state.collectAsStateWithLifecycle()
+                var storageReport by remember { mutableStateOf<DeviceStorage.Report?>(null) }
+                var storageTick by remember { mutableStateOf(0) }
+                var treasury by remember { mutableStateOf<SendTreasuryStatus?>(null) }
+                var eraseFailed by remember { mutableStateOf<List<String>?>(null) }
+                val chainNamesNow = remember(networks.networks) { networks.networks.associate { it.chain_id.toInt() to it.display_name } }
+                LaunchedEffect(Unit) {
+                    settings.refreshCurrency()
+                    settings.startNetworks()
+                }
+                LaunchedEffect(storageTick) { storageReport = DeviceStorage.measure(VelaStore(context)) }
+                LaunchedEffect(Unit) {
+                    treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status
+                }
+                val liveModel = run {
+                    var m = SettingsLive.withWizard(
+                        SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings),
+                        networks,
+                        strings,
+                    )
+                    m = SettingsLive.withPreferences(
+                        m, prefs, i18nState.language, strings,
+                        theme = when (themePreference) { ThemePreference.Light -> "light"; ThemePreference.Dark -> "dark"; else -> "auto" },
+                    )
+                    storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
+                    m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
+                    m = SettingsLive.withFeedback(
+                        m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, "Android ${android.os.Build.VERSION.RELEASE}", i18nState.language,
+                        poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() }, VelaLog.recentFailures(), strings,
+                    )
+                    m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
+                    m = SettingsLive.withBanner(m, poolView.failed_chains, chainNamesNow, strings)
+                    m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, strings)
+                    // A partial wipe names what stayed, in the sheet itself (028's rule: the person stays signed in).
+                    eraseFailed?.let { left -> m = m.copy(eraseSheet = m.eraseSheet.copy(body = m.eraseSheet.body + "\n\n" + left.joinToString(", "))) }
+                    m
+                }
+                val feedbackUrl = remember(liveModel.feedback.previewLines) {
+                    "https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=" +
+                        java.net.URLEncoder.encode("[android] ", "UTF-8") +
+                        "&body=" + java.net.URLEncoder.encode(liveModel.feedback.previewLines.joinToString("\n"), "UTF-8")
+                }
+                SettingsRoute(
+                    model = liveModel,
+                    actions = SettingsActions(
+                        onSegment = { group, id ->
+                            when (group) {
+                                "theme" -> onThemeSelected(when (id) { "light" -> ThemePreference.Light; "dark" -> ThemePreference.Dark; else -> ThemePreference.Auto })
+                                "avatar" -> application.container.preferences.setAvatarStyle(id)
+                            }
+                        },
+                        onTextScale = { index -> TextScaleLevel.entries.getOrNull(index)?.let { application.container.preferences.setTextScale(it) } },
+                        onStorageClear = { itemId -> scope.launch { DeviceStorage.clear(VelaStore(context), itemId); storageTick++ } },
+                        onClearCaches = { scope.launch { DeviceStorage.clearCaches(VelaStore(context)); application.container.wallet.refresh(); storageTick++ } },
+                        onErase = {
+                            scope.launch {
+                                // The keep-list: the account records and the pending-upload
+                                // ledger, which sign-out's own path owns (028's one exception).
+                                val left = DeviceStorage.erase(VelaStore(context), keep = setOf("vela.accounts", "vela.activeAccountIndex", "vela.pendingUploads"))
+                                if (left.isEmpty()) {
+                                    eraseFailed = null
+                                    application.container.session.signOut()
+                                    application.container.session.signOutConfirmed()
+                                } else {
+                                    eraseFailed = left
+                                }
+                            }
+                        },
+                        onFeedbackSend = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(feedbackUrl))) } },
+                        onFeedbackGithub = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/mondaylabsltd/vela-wallet/issues"))) } },
+                        onOpenLink = { value ->
+                            val url = if (value.startsWith("http")) value else "https://$value"
+                            runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                        },
+                        onRelayerRetry = { scope.launch { treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status } },
+                        onAccountSelect = { index -> application.container.session.switchAccount(index) },
+                        onAccountPrimary = { navController.push(VelaDestinations.CREATE) },
+                        onAccountSecondary = { navController.push(VelaDestinations.WELCOME) },
+                        onSelectTab = selectFromPushed,
+                        // The way out of a signed-in wallet, on the row a person
+                        // would look for it.
+                        onSignOut = { application.container.session.signOut() },
+                        onOpenContacts = { navController.push(VelaDestinations.CONTACTS) },
+                        onSheetSelect = { sheet, id ->
+                            val prefsStore = application.container.preferences
+                            when (sheet) {
+                                SettingsOverlay.Currency -> settings.chooseCurrency(id)
+                                SettingsOverlay.Language -> {
+                                    prefsStore.setLanguage(id)
+                                    application.container.applyLanguage(id)
+                                }
+                                SettingsOverlay.NumberFormat -> SettingsLive.numberKeyAt(id)?.let { prefsStore.setNumberFormat(NumberFormatKey.of(it)) }
+                                SettingsOverlay.DateFormat -> SettingsLive.dateKeyAt(id)?.let { prefsStore.setDateFormat(DateFormatKey.of(it)) }
+                                SettingsOverlay.TimeFormat -> SettingsLive.timeKeyAt(id)?.let { prefsStore.setTimeFormat(TimeFormatKey.of(it)) }
+                                else -> Unit
+                            }
+                        },
+                        // The field ids are the core's own enum names, put there by
+                        // SettingsLive. The screen reports "this box changed"; which
+                        // machine event that is stays here, so a new editable field
+                        // is a line in one place rather than a callback per box.
+                        onFieldEdited = { fieldId, value ->
+                            endpointField(fieldId)?.let { settings.editEndpoint(it, value) }
+                            providerId(fieldId)?.let { settings.editProviderKey(it, value) }
+                        },
+                        onFieldCommitted = { fieldId ->
+                            endpointField(fieldId)?.let { settings.commitEndpoint(it) }
+                            providerId(fieldId)?.let { settings.commitProviderKey(it) }
+                        },
+                        onRemoveNetwork = { id -> settings.deleteNetwork(id) },
+                        // The row carries a display id; the machine speaks chain
+                        // ids. The network list already holds both, so the lookup
+                        // is a read rather than a second identity to keep in sync.
+                        onSearchNetwork = { query -> settings.searchNetworks(query) },
+                        onConfirmAddNetwork = { settings.confirmAddNetwork() },
+                        onPickNetwork = { chainId ->
+                            chainId.toLongOrNull()?.let { settings.selectChain(it) }
+                        },
+                        onOpenNetwork = { id ->
+                            settings.networks.value.networks
+                                .firstOrNull { it.id == id }
+                                ?.let { settings.expandOverride(it.chain_id) }
+                        },
+                        onResetEndpoints = { settings.resetEndpoints() },
+                    ),
+                )
+            }
+
+            composable(VelaDestinations.SETTINGS_GALLERY) {
+                SettingsGalleryScreen(
+                    systemDarkTheme = settingsDark ?: darkTheme,
+                    initialState = settingsState,
+                )
+            }
+
+            composable(VelaDestinations.FLOWS_GALLERY) {
+                FlowGalleryScreen(systemDarkTheme = darkTheme, initialState = startFlowState)
+            }
         }
+    }
+    identiconViewer?.let { seed ->
+        IdenticonViewerSheet(address = seed, onDismiss = { identiconViewer = null })
     }
 
     // Hosted OUTSIDE the NavHost, deliberately. A prompt can be raised by either

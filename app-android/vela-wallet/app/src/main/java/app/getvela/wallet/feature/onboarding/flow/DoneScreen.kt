@@ -1,6 +1,8 @@
 package app.getvela.wallet.feature.onboarding.flow
 
 import androidx.compose.foundation.background
+import app.getvela.wallet.core.platform.Clipboard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,11 +28,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.times
 import app.getvela.wallet.core.designsystem.components.VelaAddressStrip
 import app.getvela.wallet.core.designsystem.components.VelaIcons
@@ -233,7 +233,7 @@ fun ColumnScope.DoneScreen(
 @Composable
 private fun DoneAddress(address: String, copyLabel: String, copiedLabel: String) {
     val colors = VelaTheme.colors
-    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     var copied by remember { mutableStateOf(false) }
 
     LaunchedEffect(copied) {
@@ -248,8 +248,7 @@ private fun DoneAddress(address: String, copyLabel: String, copiedLabel: String)
             .fillMaxWidth()
             .clip(RoundedCornerShape(VelaRadius.sm))
             .clickable {
-                clipboard.setText(AnnotatedString(address))
-                copied = true
+                if (Clipboard.copy(context, "address", address)) copied = true
             }
             .semantics { contentDescription = copyLabel },
     ) {

@@ -422,7 +422,7 @@ object ContactsFixtures {
                 query = if (searching) SEARCH_QUERY else "",
             ),
             groupsSectionTitle = strings.t(I18nKeys.Contacts.SECTION_GROUPS),
-            groupsAction = strings.t(I18nKeys.Contacts.MANAGE),
+            groupsAction = strings.t(I18nKeys.Contacts.GROUP_NEW),
             groups = if (empty || searching) emptyList() else groupRows(strings),
             contactsSectionTitle = strings.t(I18nKeys.Contacts.SECTION_CONTACTS),
             totalLabel = strings.t(

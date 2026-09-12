@@ -16,11 +16,13 @@ fun IdenticonAvatar(
     modifier: Modifier = Modifier,
     size: Dp = WalletMetrics.avatarSize,
     contentDescription: String? = null,
+    tappable: Boolean = true,
 ) {
     IdenticonImage(
         seed = seed,
         size = size,
         modifier = modifier,
         contentDescription = contentDescription,
+        tappable = tappable,
     )
 }

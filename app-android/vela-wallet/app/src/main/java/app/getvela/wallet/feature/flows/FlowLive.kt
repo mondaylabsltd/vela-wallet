@@ -60,7 +60,9 @@ object FlowLive {
      * address is safe on.
      */
     /** R4 — the share card for THIS account (spec 047 US2): its identicon, name, address and network. */
-    fun shareCard(fallback: ShareCardModel, address: String, name: String, networkName: String, strings: VelaStrings): ShareCardModel = fallback.copy(
+    fun shareCard(fallback: ShareCardModel, address: String, name: String, networkName: String, strings: VelaStrings, chainId: Int? = null): ShareCardModel = fallback.copy(
+        code = address,
+        chainLogoUrl = chainId?.let { Marks.chainLogoUrl(it) },
         name = name.ifBlank { shortAddress(address) },
         lines = addressLines(address),
         identiconSeed = address,
@@ -90,6 +92,7 @@ object FlowLive {
         // labels carry the wording.
         val template = fallback.rows.firstOrNull()
         return fallback.copy(
+            address = address,
             subtitle = fallback.subtitle.replaceFirst(
                 Regex("\\d+"),
                 view.networks.size.toString(),
@@ -172,6 +175,7 @@ object FlowLive {
                 FactRowModel(
                     label = strings.t(if (received) I18nKeys.Flows.DETAIL_FROM else I18nKeys.Flows.DETAIL_TO),
                     value = item.alias ?: shortAddress(counterparty),
+                    copyValue = counterparty,
                     lead = counterparty.takeIf { it.isNotBlank() }?.let { FactLead.Identicon(it) },
                     mono = item.alias == null,
                     copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
@@ -191,6 +195,7 @@ object FlowLive {
                     value = if (hash.length > 16) "${hash.take(10)}…${hash.takeLast(6)}" else hash,
                     mono = true,
                     copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
+                    copyValue = hash,
                 ),
             )
         }

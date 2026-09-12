@@ -1,6 +1,10 @@
 package app.getvela.wallet.feature.flows
 
 import androidx.compose.foundation.text.BasicTextField
+import app.getvela.wallet.core.platform.rememberVelaHaptic
+import app.getvela.wallet.core.platform.VelaHaptic
+import app.getvela.wallet.core.platform.Clipboard
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
@@ -115,6 +119,8 @@ fun ReceiveListBody(
     val colors = VelaTheme.colors
     var query by remember { mutableStateOf("") }
     val (copied, setCopied) = rememberCopyTick()
+    val context = LocalContext.current
+    val haptic = rememberVelaHaptic()
     val shown = remember(query, model.rows) {
         if (query.isBlank()) {
             model.rows.withIndex().toList()
@@ -156,7 +162,7 @@ fun ReceiveListBody(
                 NetworkRow(
                     row = entry.value,
                     copied = copied == entry.index,
-                    onCopy = { setCopied(entry.index) },
+                    onCopy = { if (Clipboard.copy(context, entry.value.copyLabel, model.address)) { haptic(VelaHaptic.Select); setCopied(entry.index) } },
                     onQr = { onQr(entry.index) },
                 )
             }
@@ -174,6 +180,8 @@ fun ReceiveQrBody(
 ) {
     val colors = VelaTheme.colors
     val (copied, setCopied) = rememberCopyTick()
+    val context = LocalContext.current
+    val haptic = rememberVelaHaptic()
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -209,14 +217,14 @@ fun ReceiveQrBody(
                     tint = if (copied == 1) colors.successBase else colors.fgSubtle,
                     modifier = Modifier
                         .size(VelaIconSize.sm)
-                        .clickable { setCopied(1) },
+                        .clickable { if (Clipboard.copy(context, contract.copyLabel, contract.copyValue ?: contract.value)) { haptic(VelaHaptic.Select); setCopied(1) } },
                 )
             }
         }
         AddressCard(
             account = model.account,
             copied = copied == 0,
-            onCopy = { setCopied(0) },
+            onCopy = { if (Clipboard.copy(context, model.account.copyLabel, model.account.lines.first + model.account.lines.second)) { haptic(VelaHaptic.Select); setCopied(0) } },
         )
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -330,6 +338,8 @@ fun TxDetailBody(
 ) {
     val colors = VelaTheme.colors
     val (copied, setCopied) = rememberCopyTick()
+    val context = LocalContext.current
+    val haptic = rememberVelaHaptic()
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -347,7 +357,7 @@ fun TxDetailBody(
         HairlineDivider()
         model.facts.forEachIndexed { index, fact ->
             if (index > 0) HairlineDivider()
-            FactRow(fact = fact, copied = copied == index, onCopy = { setCopied(index) })
+            FactRow(fact = fact, copied = copied == index, onCopy = { if (Clipboard.copy(context, fact.copy ?: fact.label, fact.copyValue ?: fact.value)) { haptic(VelaHaptic.Select); setCopied(index) } })
         }
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
         FlowCta(
@@ -452,6 +462,8 @@ fun TokenDetailBody(
 ) {
     val colors = VelaTheme.colors
     val (copied, setCopied) = rememberCopyTick()
+    val context = LocalContext.current
+    val haptic = rememberVelaHaptic()
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -510,7 +522,7 @@ fun TokenDetailBody(
         HairlineDivider()
         model.facts.forEachIndexed { index, fact ->
             if (index > 0) HairlineDivider()
-            FactRow(fact = fact, copied = copied == index, onCopy = { setCopied(index) })
+            FactRow(fact = fact, copied = copied == index, onCopy = { if (Clipboard.copy(context, fact.copy ?: fact.label, fact.copyValue ?: fact.value)) { haptic(VelaHaptic.Select); setCopied(index) } })
         }
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
         Text(
@@ -1480,6 +1492,8 @@ fun SendReceiptBody(
 ) {
     val colors = VelaTheme.colors
     var copied by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val haptic = rememberVelaHaptic()
 
     Column(modifier = modifier.fillMaxWidth()) {
         StatusHero(stage = model.stage, title = model.title, captions = model.captions)
@@ -1513,7 +1527,7 @@ fun SendReceiptBody(
                     tint = if (copied) colors.successBase else colors.fgSubtle,
                     modifier = Modifier
                         .size(VelaIconSize.sm)
-                        .clickable { copied = true },
+                        .clickable { if (Clipboard.copy(context, hash.copyLabel, hash.copyValue ?: hash.value)) { haptic(VelaHaptic.Select); copied = true } },
                 )
             }
             Spacer(modifier = Modifier.height(VelaSpacing.md))

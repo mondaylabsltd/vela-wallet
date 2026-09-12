@@ -1,6 +1,8 @@
 package app.getvela.wallet.feature.contacts.components
 
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import app.getvela.wallet.core.platform.rememberVelaHaptic
+import app.getvela.wallet.core.platform.VelaHaptic
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -22,9 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.IntOffset
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -54,7 +54,7 @@ fun AlphaIndexRail(
     onLetter: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
-    val haptics = LocalHapticFeedback.current
+    val haptic = rememberVelaHaptic()
     val reduced = rememberReducedMotion()
 
     var activeIndex by remember { mutableIntStateOf(-1) }
@@ -95,7 +95,7 @@ fun AlphaIndexRail(
                             if (index != activeIndex) {
                                 activeIndex = index
                                 // One selection tick per crossed letter (SPEC).
-                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                haptic(VelaHaptic.Detent)
                                 onLetter(letters[index])
                             }
                         }

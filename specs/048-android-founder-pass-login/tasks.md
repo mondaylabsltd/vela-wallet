@@ -5,36 +5,36 @@
 
 ## Phase 1 — Setup
 
-- [ ] T001 Confirm the stacked branch `048-android-founder-pass-login` on 047, `.specify/feature.json`, and the test toolchains (cargo with `i18n-all,crux`, the web's vitest/Playwright with an isolated `--output` and port, gradle with the JBR `JAVA_HOME`)
+- [X] T001 Confirm the stacked branch `048-android-founder-pass-login` on 047, `.specify/feature.json`, and the test toolchains (cargo with `i18n-all,crux`, the web's vitest/Playwright with an isolated `--output` and port, gradle with the JBR `JAVA_HOME`)
 
 ## Phase 2 — Foundational
 
-- [ ] T002 [P] `core/platform/Clipboard.kt` — one `Clipboard.copy(context, label, text): Boolean` with a `VelaLog` line; the three existing writers (`VelaAddressStrip.kt`, `IdenticonViewerSheet.kt`, `DoneScreen.kt`) call it
-- [ ] T003 [P] `core/platform/VelaHaptic.kt` — `Detent | Select | Success | Reject` through `performHapticFeedback` (API-level constants), a `haptic <class>` log line, and `docs/design-system/haptics.md` with the policy; `VelaButton` and `AlphaIndexRail` route through it
-- [ ] T004 [P] `core/platform/Gallery.kt` — `Gallery.savePng(context, name, bytes): Uri?` through MediaStore `Pictures/Vela`
-- [ ] T005 [P] NavHost hosts: `identiconViewer: String?` + `IdenticonViewerSheet`, and `ChainFilter` state (`chainId: Int?`) with the chain sheet, in `navigation/VelaNavHost.kt`; `IdenticonAvatar` gains `onTap: ((String) -> Unit)?`
+- [X] T002 [P] `core/platform/Clipboard.kt` — one `Clipboard.copy(context, label, text): Boolean` with a `VelaLog` line; the three existing writers (`VelaAddressStrip.kt`, `IdenticonViewerSheet.kt`, `DoneScreen.kt`) call it
+- [X] T003 [P] `core/platform/VelaHaptic.kt` — `Detent | Select | Success | Reject` through `performHapticFeedback` (API-level constants), a `haptic <class>` log line, and `docs/design-system/haptics.md` with the policy; `VelaButton` and `AlphaIndexRail` route through it
+- [X] T004 [P] `core/platform/Gallery.kt` — `Gallery.savePng(context, name, bytes): Uri?` through MediaStore `Pictures/Vela`
+- [X] T005 [P] NavHost hosts: `identiconViewer: String?` + `IdenticonViewerSheet`, and `ChainFilter` state (`chainId: Int?`) with the chain sheet, in `navigation/VelaNavHost.kt`; `IdenticonAvatar` gains `onTap: ((String) -> Unit)?`
 
 ## Phase 3 — US1 Login recovery (P1)
 
-- [ ] T006 [US1] Core: `#[serde(alias)]` on `Account.public_key_hex/created_at_iso`, `AccountKey.credential_id/public_key_hex`, `PendingUpload*` camelCase names in `rust/crates/vela-core/src/app/mod.rs`; unit test that both spellings deserialize equal
-- [ ] T007 [US1] Core tests: `tests/app_login.rs` `an_expo_era_record_still_opens_the_wallet` (with and without keys); `tests/app_session.rs` `an_expo_era_record_restores_the_session`
-- [ ] T008 [US1] Web: `onboarding/core/storage.ts` normaliser (`fromStoredAccount` restored, keys kept, transports `""`), one-time rewrite when any record was old, header corrected; `services/accounts.ts` `keys ?? []`; `storage.test.ts`
-- [ ] T009 [US1] Web: `core/effect-loop.ts` — `onError` required; a refused `resolve` feeds `toFailure(effect, error)` once per effect id; `effect-loop.test.ts`
-- [ ] T010 [US1] Web: the login page and the session store pass `onError` and show the prompt (sign in again / reset this browser's copy) via the existing prompt sheet; `starting`/`loginView` reset so the button is pressable; corpus keys `onboarding.storage.*` in all locales (the i18n gates: wasm bytes + fingerprint)
-- [ ] T011 [US1] Web e2e `e2e/login-old-shape.e2e.ts`: seed the old shape → `/en/wallet` leaves loading; parallel-space sign-in lands on the wallet; an unreadable seed shows the prompt
-- [ ] T012 [US1] Android: `CoreDriver.resolve` answers the machine with `escapedFailure` when the bridge refuses a result; `SessionController` passes `onFault` (log `session.fault` + visible fault view); `SessionOldShapeTest` with a FakeStore
-- [ ] T013 [US1] Rebuild the web wasm (`node rust/scripts/build-web.mjs` + `--check`), the Android `.so`, and run `cargo test`, vitest, gradle; device: seed the old shape into the Xiaomi's store (debug hook) → the session leaves loading; web manual check per quickstart
+- [X] T006 [US1] Core: `#[serde(alias)]` on `Account.public_key_hex/created_at_iso`, `AccountKey.credential_id/public_key_hex`, `PendingUpload*` camelCase names in `rust/crates/vela-core/src/app/mod.rs`; unit test that both spellings deserialize equal
+- [X] T007 [US1] Core tests: `tests/app_login.rs` `an_expo_era_record_still_opens_the_wallet` (with and without keys); `tests/app_session.rs` `an_expo_era_record_restores_the_session`
+- [X] T008 [US1] Web: `onboarding/core/storage.ts` normaliser (`fromStoredAccount` restored, keys kept, transports `""`), one-time rewrite when any record was old, header corrected; `services/accounts.ts` `keys ?? []`; `storage.test.ts`
+- [X] T009 [US1] Web: `core/effect-loop.ts` — `onError` required; a refused `resolve` feeds `toFailure(effect, error)` once per effect id; `effect-loop.test.ts`
+- [X] T010 [US1] Web: the login page and the session store pass `onError` and show the prompt (sign in again / reset this browser's copy) via the existing prompt sheet; `starting`/`loginView` reset so the button is pressable; corpus keys `onboarding.storage.*` in all locales (the i18n gates: wasm bytes + fingerprint)
+- [X] T011 [US1] Web e2e `e2e/login-old-shape.e2e.ts`: seed the old shape → `/en/wallet` leaves loading; parallel-space sign-in lands on the wallet; an unreadable seed shows the prompt
+- [X] T012 [US1] Android: `CoreDriver.resolve` answers the machine with `escapedFailure` when the bridge refuses a result; `SessionController` passes `onFault` (log `session.fault` + visible fault view); `SessionOldShapeTest` with a FakeStore
+- [X] T013 [US1] Rebuild the web wasm (`node rust/scripts/build-web.mjs` + `--check`), the Android `.so`, and run `cargo test`, vitest, gradle; device: seed the old shape into the Xiaomi's store (debug hook) → the session leaves loading; web manual check per quickstart
 
 ## Phase 4 — US2 Every button does what it says (P1)
 
-- [ ] T014 [US2] Copy controls in `feature/flows/FlowScreens.kt` (R1 rows, R2 address/contract, A2 address/hash, T2 facts, SD4 hash) and `feature/contacts/ContactDetailScreen.kt` (`contacts.copyAddress` branch) call `Clipboard.copy`; tick only on success; `VelaHaptic.Select`
-- [ ] T015 [US2] List rows carry ids: `feature/flows/FlowHost.kt` (`onSelect` → `onNavigate(step, id)`), `FlowNav.push` refuses a detail step without an id; `FlowLive.txDetail/tokenDetail` by id
-- [ ] T016 [US2] Share image: `ShareCardModel.code` + `chainLogoUrl` (`FlowModels.kt`), `ShareCardArtwork.kt` redrawn after `share-image.ts` (foot, app icon, wordmark, logo pill, real `QrCard(payload)`), `ShareCardCapture` at 960×1400, 保存图片 → `Gallery.savePng` + snackbar, share as the second action
-- [ ] T017 [US2] Contacts dock: `VelaNavHost.kt` branches for `contacts.action.Send` (send.open prefilled recipient), `Receive`, `Qr` (contact code sheet)
-- [ ] T018 [US2] 群发转账: `contacts.batchSend` → `send.open` + `SendController.seedSplit(members as SendRecipientDraft)`; one member → prefilled form; group of zero → the split entry empty
-- [ ] T019 [US2] Groups: `contacts.manage` relabelled 新建分组 (`ContactsFixtures.kt` via corpus `contacts.groupNew`) → `GroupEditSheet` (name, colour) → `saveGroup`; `contacts.groupMenu` → menu sheet (rename → `saveGroup(id, name)`, delete → confirm → `deleteGroup`)
-- [ ] T020 [US2] Identicon viewer from the twelve sites: `ContactRow.kt`, `ContactDetailScreen.kt`, `SettingsRows.kt` account row, `SettingsScreen.kt` accounts sheet, `AccountSwitcherSheet.kt`, `FlowBlocks.kt` address card + recipient field, `FlowRows.kt` split card + contact-pick row + fact lead, `FlowScreens.kt` breakdown, `SigningComponents.kt` signer row — each `onTap` → the NavHost host
-- [ ] T021 [US2] Device pass for US2 per quickstart (clipboard paste-back, list rows + Back count, saved PNG decoded with `zbarimg`, contact dock, 群发转账 rows, group create/rename/delete, viewer from each site)
+- [X] T014 [US2] Copy controls in `feature/flows/FlowScreens.kt` (R1 rows, R2 address/contract, A2 address/hash, T2 facts, SD4 hash) and `feature/contacts/ContactDetailScreen.kt` (`contacts.copyAddress` branch) call `Clipboard.copy`; tick only on success; `VelaHaptic.Select`
+- [X] T015 [US2] List rows carry ids: `feature/flows/FlowHost.kt` (`onSelect` → `onNavigate(step, id)`), `FlowNav.push` refuses a detail step without an id; `FlowLive.txDetail/tokenDetail` by id
+- [X] T016 [US2] Share image: `ShareCardModel.code` + `chainLogoUrl` (`FlowModels.kt`), `ShareCardArtwork.kt` redrawn after `share-image.ts` (foot, app icon, wordmark, logo pill, real `QrCard(payload)`), `ShareCardCapture` at 960×1400, 保存图片 → `Gallery.savePng` + snackbar, share as the second action
+- [X] T017 [US2] Contacts dock: `VelaNavHost.kt` branches for `contacts.action.Send` (send.open prefilled recipient), `Receive`, `Qr` (contact code sheet)
+- [X] T018 [US2] 群发转账: `contacts.batchSend` → `send.open` + `SendController.seedSplit(members as SendRecipientDraft)`; one member → prefilled form; group of zero → the split entry empty
+- [X] T019 [US2] Groups: `contacts.manage` relabelled 新建分组 (`ContactsFixtures.kt` via corpus `contacts.groupNew`) → `GroupEditSheet` (name, colour) → `saveGroup`; `contacts.groupMenu` → menu sheet (rename → `saveGroup(id, name)`, delete → confirm → `deleteGroup`)
+- [X] T020 [US2] Identicon viewer from the twelve sites: `ContactRow.kt`, `ContactDetailScreen.kt`, `SettingsRows.kt` account row, `SettingsScreen.kt` accounts sheet, `AccountSwitcherSheet.kt`, `FlowBlocks.kt` address card + recipient field, `FlowRows.kt` split card + contact-pick row + fact lead, `FlowScreens.kt` breakdown, `SigningComponents.kt` signer row — each `onTap` → the NavHost host
+- [X] T021 [US2] Device pass for US2 per quickstart (clipboard paste-back, list rows + Back count, saved PNG decoded with `zbarimg`, contact dock, 群发转账 rows, group create/rename/delete, viewer from each site)
 
 ## Phase 5 — US3 Filters, links and second-tier controls (P2)
 

@@ -1,6 +1,8 @@
 package app.getvela.wallet
 
 import kotlinx.coroutines.flow.MutableStateFlow
+import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.flows.WalletFlowEntry
 import app.getvela.wallet.feature.send.core.SendOpenParams
 import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.core.diagnostics.CrashReport
@@ -41,6 +43,7 @@ import app.getvela.wallet.feature.onboarding.core.AccountStore
 import app.getvela.wallet.feature.onboarding.core.RegistryClient
 import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.settings.core.SettingsController
+import app.getvela.wallet.core.data.DebugSeed
 import app.getvela.wallet.core.data.VelaStore
 import app.getvela.wallet.core.platform.Haptics
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
@@ -76,6 +79,10 @@ class AppContainer(private val app: Application) {
 
     /** A validated `/pay` request waiting for the send flow to open (locked), consumed once. */
     val pendingSendParams = MutableStateFlow<SendOpenParams?>(null)
+    /** Spec 048: a wallet flow another route asked for (contacts: 转账 / 收款 / 群发转账), entered once the wallet is back on top. */
+    val pendingFlow = MutableStateFlow<WalletFlowEntry?>(null)
+    /** Spec 048: split rows to seed into the send machine right after it opens (a group's 群发转账). */
+    val pendingSplitSeed = MutableStateFlow<List<SendRecipientDraft>?>(null)
 
     /** Spec 047 D1: the preferences that have no machine — the web's keys, applied app-wide. */
     val preferences = Preferences(
@@ -454,7 +461,16 @@ class AppContainer(private val app: Application) {
         i18nExecutor.execute {
             i18nRuntime.initialize(LocaleResolver.resolve(currentLocales()))
         }
-        session.boot()
+        if (BuildConfig.DEBUG) {
+            // Spec 048: a raw store seed for the device pass, applied before the
+            // session reads (see DebugSeed). Release builds boot straight away.
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
+                DebugSeed.apply(app, VelaStore(app))
+                session.boot()
+            }
+        } else {
+            session.boot()
+        }
     }
 
     /** Re-resolves the system locale (activity recreation on locale change). */

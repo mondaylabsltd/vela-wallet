@@ -1,6 +1,9 @@
 package app.getvela.wallet.feature.flows
 
 import android.graphics.Bitmap
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -31,9 +34,11 @@ fun ShareCardCapture(model: ShareCardModel, onCaptured: (ByteArray?) -> Unit) {
     val layer = rememberGraphicsLayer()
     val done = rememberUpdatedState(onCaptured)
     VelaTheme(darkTheme = false) {
+        // Spec 048: the web's card is 480 wide, saved at 2× — the same here.
+        CompositionLocalProvider(LocalDensity provides Density(density = 2f, fontScale = 1f)) {
         Box(
             modifier = Modifier
-                .width(360.dp)
+                .width(480.dp)
                 .alpha(0f)
                 .drawWithContent {
                     layer.record { this@drawWithContent.drawContent() }
@@ -41,6 +46,7 @@ fun ShareCardCapture(model: ShareCardModel, onCaptured: (ByteArray?) -> Unit) {
                 },
         ) {
             ShareCardArtwork(model = model)
+        }
         }
     }
     LaunchedEffect(model) {

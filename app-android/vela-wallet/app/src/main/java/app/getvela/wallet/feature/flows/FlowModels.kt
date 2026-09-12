@@ -83,6 +83,8 @@ data class FactRowModel(
     val mono: Boolean = false,
     /** Shows a copy affordance under this accessible name. */
     val copy: String? = null,
+    /** Spec 048: what the copy affordance puts on the clipboard when `value` is a shortened form. */
+    val copyValue: String? = null,
 )
 
 enum class StatusTone { Success, Warning, Error, Info }
@@ -114,6 +116,8 @@ data class ReceiveListModel(
     /** Shown in place of the rows when the search matches nothing. */
     val emptyText: String,
     val rows: List<NetworkRowModel>,
+    /** Spec 048: the full address every row's copy puts on the clipboard. */
+    val address: String = "",
 )
 
 /** The account card that sits above every QR: whose address this is. */
@@ -127,7 +131,7 @@ data class AddressCardModel(
 )
 
 @Immutable
-data class ContractLineModel(val label: String, val value: String, val copyLabel: String)
+data class ContractLineModel(val label: String, val value: String, val copyLabel: String, val copyValue: String? = null)
 
 @Immutable
 data class ReceiveQrModel(
@@ -153,6 +157,10 @@ data class ShareCardModel(
     val networkMark: TokenMarkModel,
     val identiconSeed: String,
     val wordmark: String,
+    /** Spec 048: what the code encodes — the address; blank draws the gallery's placeholder pattern. */
+    val code: String = "",
+    /** Spec 048: the network pill's logo from the chain-data endpoint; the lettered disc is the fallback. */
+    val chainLogoUrl: String? = null,
 )
 
 /* -------------------------------------------------------------------- scan */
@@ -524,7 +532,7 @@ data class SendConfirmModel(
 enum class ReceiptStage { Submitting, Submitted, Confirmed, Failed }
 
 @Immutable
-data class ReceiptHashModel(val label: String, val value: String, val copyLabel: String)
+data class ReceiptHashModel(val label: String, val value: String, val copyLabel: String, val copyValue: String? = null)
 
 /** SD4 — the receipt, in whichever of its states the transaction is in. */
 @Immutable

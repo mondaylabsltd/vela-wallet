@@ -18,6 +18,10 @@ import org.junit.Test
  * the four clients (SC-003). Runs on the real engine via the host dylib, same
  * as WalletFixturesTest.
  */
+/**
+ * Spec 048: the 分组 section's action is 新建分组 (the web's `contacts.groupNew`) —
+ * the only door to creating a group; the mock's 管理 opened nothing.
+ */
 class ContactsFixturesTest {
 
     private val repoRoot = File(
@@ -110,7 +114,7 @@ class ContactsFixturesTest {
         assertEquals("搜索名字、ENS 或地址", model.search.placeholder)
         assertTrue(!model.search.filtering)
         assertEquals("分组", model.groupsSectionTitle)
-        assertEquals("管理", model.groupsAction)
+        assertEquals("新建分组", model.groupsAction)
         assertEquals(
             listOf("家人" to "3 人", "工作" to "5 人", "交易所" to "2 人"),
             model.groups.map { it.name to it.countLabel },

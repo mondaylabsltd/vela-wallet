@@ -588,7 +588,7 @@ object SendLive {
                         "${s.t(I18nKeys.Flows.TO_NAME, mapOf("name" to (receipt.transfers.firstOrNull()?.to_name ?: shortAddress(view.recipient))))} · $chain",
                     )
                 },
-                hash = hash?.let { ReceiptHashModel(label = s.t(I18nKeys.Flows.TX_HASH), value = shortHash(it), copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS)) },
+                hash = hash?.let { ReceiptHashModel(label = s.t(I18nKeys.Flows.TX_HASH), value = shortHash(it), copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS), copyValue = it) },
                 viewOnExplorer = explorer?.let { s.t(I18nKeys.Flows.VIEW_ON_EXPLORER) },
                 cta = s.t(I18nKeys.Flows.DONE),
                 ctaAccent = true,
@@ -603,7 +603,7 @@ object SendLive {
                         else -> s.t(I18nKeys.Flows.TX_REJECTED_FEES)
                     },
                 ),
-                hash = hash?.let { ReceiptHashModel(label = s.t(I18nKeys.Flows.TX_HASH), value = shortHash(it), copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS)) },
+                hash = hash?.let { ReceiptHashModel(label = s.t(I18nKeys.Flows.TX_HASH), value = shortHash(it), copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS), copyValue = it) },
                 viewOnExplorer = explorer?.takeIf { hash != null }?.let { s.t(I18nKeys.Flows.VIEW_ON_EXPLORER) },
                 cta = s.t(I18nKeys.Flows.DONE),
                 ctaAccent = true,

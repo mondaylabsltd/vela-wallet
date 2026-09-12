@@ -1,6 +1,7 @@
 package app.getvela.wallet.core.platform
 
 import android.content.Context
+import app.getvela.wallet.core.diagnostics.VelaLog
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -24,6 +25,7 @@ import android.os.VibratorManager
 object Haptics {
 
     fun moneyIn(context: Context) {
+        VelaLog.event("haptic", "money-in")
         val vibrator = vibrator(context) ?: return
         if (!vibrator.hasVibrator()) return
         runCatching {
@@ -32,10 +34,16 @@ object Haptics {
     }
 
     /** Spec 043: the send machine's `haptic { kind: success }` — money left. */
-    fun success(context: Context) = play(context, VibrationEffect.EFFECT_DOUBLE_CLICK)
+    fun success(context: Context) {
+        VelaLog.event("haptic", "success")
+        play(context, VibrationEffect.EFFECT_DOUBLE_CLICK)
+    }
 
     /** Spec 043: `haptic { kind: error }` — a refusal the person should feel. */
-    fun error(context: Context) = play(context, VibrationEffect.EFFECT_HEAVY_CLICK)
+    fun error(context: Context) {
+        VelaLog.event("haptic", "reject")
+        play(context, VibrationEffect.EFFECT_HEAVY_CLICK)
+    }
 
     private fun play(context: Context, effect: Int) {
         val vibrator = vibrator(context) ?: return

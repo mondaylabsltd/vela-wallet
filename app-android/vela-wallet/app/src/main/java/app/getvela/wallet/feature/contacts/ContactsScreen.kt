@@ -228,10 +228,10 @@ fun ContactsScreen(
                                         swipeSendLabel = model.swipeSendLabel,
                                         swipeDeleteLabel = model.swipeDeleteLabel,
                                         onClick = { actions.onContact(contact) },
-                                        onSwipeSend = { actions.onAction("contacts.swipeSend") },
+                                        onSwipeSend = { actions.onAction("contacts.swipeSend:" + contact.addressFull) },
                                         // Swipe-delete always raises the
                                         // destructive confirmation (FR-008).
-                                        onSwipeDelete = { actions.onAction("contacts.swipeDelete") },
+                                        onSwipeDelete = { actions.onAction("contacts.swipeDelete:" + contact.addressFull) },
                                     )
                                     Hairline()
                                 }

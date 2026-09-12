@@ -427,6 +427,8 @@ object I18nKeys {
      * already there. Only the thirty-three the mocks genuinely added are new.
      */
     object Flows {
+        /** Spec 048: the toast after 保存图片 put the card in the gallery. */
+        const val SAVED_BODY = "receive.request.savedBody"
         // Chrome shared by every flow screen.
         const val BACK = "receive.a11yBack"
         const val CLOSE = "componentsUi.identiconViewer.close"
