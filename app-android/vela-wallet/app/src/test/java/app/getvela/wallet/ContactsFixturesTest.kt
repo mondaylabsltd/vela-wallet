@@ -32,7 +32,7 @@ class ContactsFixturesTest {
     @Test
     fun stateInventoryMatchesTheGalleryContract() {
         assertEquals(
-            listOf("C1", "C1S", "C1F", "C2", "C2S", "C3", "C4", "C5", "C6"),
+            listOf("C1", "C1S", "C1F", "C2", "C2S", "C3", "C4", "C5", "C6", "C7", "C8", "C9"),
             ContactsScreenState.entries.map { it.name },
         )
     }

@@ -23,6 +23,7 @@ import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.contacts.components.ActionMenuSheet
+import app.getvela.wallet.feature.contacts.components.ContactFormSheet
 import app.getvela.wallet.feature.contacts.components.AlphaIndexRail
 import app.getvela.wallet.feature.contacts.components.AlphaSectionHeader
 import app.getvela.wallet.feature.contacts.components.ContactRow
@@ -55,6 +56,9 @@ data class ContactsActions(
      * fixture state pins its own query and must not be editable out of it.
      */
     val onQueryChange: ((String) -> Unit)? = null,
+    /** Spec 045 US5: the form's two fields (typed text, not an action id). */
+    val onFormName: (String) -> Unit = {},
+    val onFormAddress: (String) -> Unit = {},
 )
 
 /**
@@ -257,6 +261,15 @@ fun ContactsScreen(
             model = menu,
             onDismiss = actions.onDismissMenu,
             onItem = { actions.onAction(it.id) },
+        )
+    }
+    model.form?.let { form ->
+        ContactFormSheet(
+            model = form,
+            onDismiss = { actions.onAction("contacts.form.cancel") },
+            onName = actions.onFormName,
+            onAddress = actions.onFormAddress,
+            onSave = { actions.onAction("contacts.form.save") },
         )
     }
 }

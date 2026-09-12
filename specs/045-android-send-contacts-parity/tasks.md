@@ -28,24 +28,24 @@
 
 ## Phase 3 — US3 Batch import (P2)
 
-- [ ] T015 [P] [US3] `feature/documents/DocumentPorts.kt`: Activity-bound `pick(mimes) → Picked(name, bytes)?`, `create(name, mime, bytes) → Boolean`, `share(name, mime, bytes)` (FileProvider + `ACTION_SEND`); `res/xml/file_paths.xml`; manifest provider
-- [ ] T016 [P] [US3] `feature/send/core/XlsxMatrix.kt`: zip + `xl/sharedStrings.xml` + `xl/worksheets/sheet1.xml` → `List<List<String>>`; `XlsxMatrixTest` with a tiny generated workbook
-- [ ] T017 [US3] `feature/send/core/BatchExecutor.kt`: `FetchUsdFiatRate` via the wallet's fiat-rate port, `PickFile` → `DocumentPorts.pick` (csv/txt → Text, xlsx → Matrix; cancelled/failed), `SaveTemplateFile` → `DocumentPorts.create`; `BatchMachineTest`
-- [ ] T018 [US3] `SendController` hosts `batch` (`openBatch()` sends `OpenBatchImport` + `BatchEvent.Open{token, currency, max}`; `batchUnit/fiat/rawText/pickFile/saveTemplate/editRate/resetRate/apply/close`); `Apply` → `SeedSplitRecipients` from `BatchView.recipients`
-- [ ] T019 [US3] `SendLive.batchImport(view)` mirroring the web's `liveBatchImport` (units, rate states loading/ok/failed, preview rows ok/bad, rejected text, CTA count/disabled); `FlowHost` batch sheet callbacks; `SendLiveTest`
-- [ ] T020 [US3] Device: push `two-rows.csv`, pick through DocumentsUI, preview 2, apply → 2 split rows → send lands (SC-003); template saved through the creator
+- [x] T015 [P] [US3] `feature/documents/DocumentPorts.kt`: Activity-bound `pick(mimes) → Picked(name, bytes)?`, `create(name, mime, bytes) → Boolean`, `share(name, mime, bytes)` (FileProvider + `ACTION_SEND`); `res/xml/file_paths.xml`; manifest provider
+- [x] T016 [P] [US3] `feature/send/core/XlsxMatrix.kt`: zip + `xl/sharedStrings.xml` + `xl/worksheets/sheet1.xml` → `List<List<String>>`; `XlsxMatrixTest` with a tiny generated workbook
+- [x] T017 [US3] `feature/send/core/BatchExecutor.kt`: `FetchUsdFiatRate` via the wallet's fiat-rate port, `PickFile` → `DocumentPorts.pick` (csv/txt → Text, xlsx → Matrix; cancelled/failed), `SaveTemplateFile` → `DocumentPorts.create`; `BatchMachineTest`
+- [x] T018 [US3] `SendController` hosts `batch` (`openBatch()` sends `OpenBatchImport` + `BatchEvent.Open{token, currency, max}`; `batchUnit/fiat/rawText/pickFile/saveTemplate/editRate/resetRate/apply/close`); `Apply` → `SeedSplitRecipients` from `BatchView.recipients`
+- [x] T019 [US3] `SendLive.batchImport(view)` mirroring the web's `liveBatchImport` (units, rate states loading/ok/failed, preview rows ok/bad, rejected text, CTA count/disabled); `FlowHost` batch sheet callbacks; `SendLiveTest`
+- [x] T020 [US3] Device: push `two-rows.csv`, pick through DocumentsUI, preview 2, apply → 2 split rows → send lands (SC-003); template saved through the creator
 
 ## Phase 4 — US4 Treasury exit + stale quote (P2)
 
-- [ ] T021 [US4] `SendController.dismissTreasury()` → `DismissTreasurySheet`; confirm notice gets the second action (`componentsUi.funding.cancel`); `SendLive` confirm `noticeSecondary`; stale `FeeView.stale` on the confirm page → `requestQuote()` once per stale flip; `SendMachineTest`
-- [ ] T022 [US4] Device: stale quote refreshes on the confirm page (wait the TTL, fee line updates, slide still works) (SC-004)
+- [x] T021 [US4] `SendController.dismissTreasury()` → `DismissTreasurySheet`; confirm notice gets the second action (`componentsUi.funding.cancel`); `SendLive` confirm `noticeSecondary`; stale `FeeView.stale` on the confirm page → `requestQuote()` once per stale flip; `SendMachineTest`
+- [x] T022 [US4] Device: stale quote refreshes on the confirm page (wait the TTL, fee line updates, slide still works) (SC-004)
 
 ## Phase 5 — US5a Contact form and star, drawn (P1)
 
-- [ ] T023 [P] [US5] `feature/contacts/ContactsModels.kt`: `ContactFormModel`, `ContactDetailModel.favourite: FavouriteControlModel(on, label)`, `ContactInspectionModel(tag, firstTime?)`
-- [ ] T024 [P] [US5] `feature/contacts/ContactsFixtures.kt`: C7 add (empty, save disabled), C8 edit (filled), C9 detail with the star on + inspection; gallery entries in the contacts gallery list
-- [ ] T025 [US5] `feature/contacts/components/ContactForm.kt` (018 vocabulary: sheet, two fields, error line, Save/Cancel), the star in the detail header, the inspection tag row in `ContactDetailScreen`; `ContactsFixturesTest` counts
-- [ ] T026 [US5] Device: gallery C7/C8/C9 screenshots on the Xiaomi (drawn states before wiring)
+- [x] T023 [P] [US5] `feature/contacts/ContactsModels.kt`: `ContactFormModel`, `ContactDetailModel.favourite: FavouriteControlModel(on, label)`, `ContactInspectionModel(tag, firstTime?)`
+- [x] T024 [P] [US5] `feature/contacts/ContactsFixtures.kt`: C7 add (empty, save disabled), C8 edit (filled), C9 detail with the star on + inspection; gallery entries in the contacts gallery list
+- [x] T025 [US5] `feature/contacts/components/ContactForm.kt` (018 vocabulary: sheet, two fields, error line, Save/Cancel), the star in the detail header, the inspection tag row in `ContactDetailScreen`; `ContactsFixturesTest` counts
+- [x] T026 [US5] Device: gallery C7/C8/C9 screenshots on the Xiaomi (drawn states before wiring)
 
 ## Phase 6 — US5b/US6/US7 Contacts wired (P1/P2)
 

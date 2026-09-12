@@ -57,6 +57,9 @@ private enum class ContactsGalleryEntry(val label: String) {
     C4("C4"),
     C5("C5"),
     C6("C6"),
+    C7("C7"),
+    C8("C8"),
+    C9("C9"),
     Components("Components"),
     ;
 
@@ -71,6 +74,9 @@ private enum class ContactsGalleryEntry(val label: String) {
             C4 -> ContactsScreenState.C4
             C5 -> ContactsScreenState.C5
             C6 -> ContactsScreenState.C6
+            C7 -> ContactsScreenState.C7
+            C8 -> ContactsScreenState.C8
+            C9 -> ContactsScreenState.C9
             Components -> null
         }
 }

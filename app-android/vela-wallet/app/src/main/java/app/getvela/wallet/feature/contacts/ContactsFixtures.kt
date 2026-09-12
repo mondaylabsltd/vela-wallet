@@ -330,6 +330,31 @@ object ContactsFixtures {
         deleteLabel = strings.t(I18nKeys.Contacts.DELETE_CONTACT),
     )
 
+    /** C7 / C8 — the add form (empty, Save gated) and the edit form (filled). */
+    fun contactForm(strings: VelaStrings, edit: Boolean): ContactFormModel = ContactFormModel(
+        title = strings.t(if (edit) I18nKeys.Contacts.EDIT_TITLE else I18nKeys.Contacts.ADD_TITLE),
+        nameLabel = strings.t(I18nKeys.Contacts.NAME_LABEL),
+        namePlaceholder = strings.t(I18nKeys.Contacts.NAME_PLACEHOLDER),
+        addressLabel = strings.t(I18nKeys.Contacts.ADDRESS_LABEL),
+        addressPlaceholder = strings.t(I18nKeys.Contacts.ADDRESS_PLACEHOLDER),
+        name = if (edit) ALICE.name else "",
+        address = if (edit) ALICE.addressFull else "",
+        error = null,
+        save = strings.t(I18nKeys.Contacts.SAVE),
+        cancel = strings.t(I18nKeys.Contacts.CANCEL),
+        saveEnabled = edit,
+        addressLocked = edit,
+    )
+
+    /** C9 — the detail with the star on and the core's inspection drawn. */
+    fun contactDetailInspected(strings: VelaStrings): ContactDetailModel = contactDetail(strings).copy(
+        favourite = FavouriteControlModel(on = true, label = strings.t(I18nKeys.Contacts.SECTION_FAVORITES)),
+        inspection = ContactInspectionModel(
+            tag = strings.t(I18nKeys.Contacts.WALLET_TAG),
+            firstTime = strings.t(I18nKeys.Contacts.FIRST_TIME_TAG),
+        ),
+    )
+
     /**
      * Contact-with-no-activity variant (spec edge case; not mocked) — the
      * 最近往来 section falls back to the reused empty treatment.
@@ -416,6 +441,9 @@ object ContactsFixtures {
             ContactsScreenState.C1S -> base.copy(revealedIndex = REVEALED_INDEX)
 
             ContactsScreenState.C2 -> base.copy(detail = contactDetail(strings))
+            ContactsScreenState.C7 -> base.copy(form = contactForm(strings, edit = false))
+            ContactsScreenState.C8 -> base.copy(detail = contactDetail(strings), form = contactForm(strings, edit = true))
+            ContactsScreenState.C9 -> base.copy(detail = contactDetailInspected(strings))
 
             ContactsScreenState.C2S -> base.copy(
                 detail = contactDetail(strings),

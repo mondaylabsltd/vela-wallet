@@ -1,5 +1,16 @@
 package app.getvela.wallet.feature.contacts
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import app.getvela.wallet.core.designsystem.tokens.VelaIconSize
+import app.getvela.wallet.core.designsystem.tokens.VelaRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -102,6 +113,60 @@ fun ContactDetailScreen(
                     fontSize = VelaTextSize.base,
                     maxLines = 1,
                 )
+                detail.inspection?.let { inspection ->
+                    // Spec 045 US7: the core's word on this address — contract or
+                    // wallet, and whether the wallet has paid it before.
+                    Spacer(modifier = Modifier.height(VelaSpacing.md))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        inspection.tag?.let { tag ->
+                            Text(
+                                text = tag,
+                                color = colors.fgMuted,
+                                fontFamily = VelaFontFamily,
+                                fontSize = VelaTextSize.xs,
+                                modifier = Modifier
+                                    .background(colors.bgRaised, RoundedCornerShape(VelaRadius.full))
+                                    .padding(horizontal = VelaSpacing.md, vertical = VelaSpacing.xs)
+                                    .semantics { contentDescription = "contact-inspection-tag" },
+                            )
+                        }
+                        inspection.firstTime?.let { first ->
+                            if (inspection.tag != null) Spacer(modifier = Modifier.width(VelaSpacing.sm))
+                            Text(
+                                text = first,
+                                color = colors.fgSubtle,
+                                fontFamily = VelaFontFamily,
+                                fontSize = VelaTextSize.xs,
+                            )
+                        }
+                    }
+                }
+                detail.favourite?.let { favourite ->
+                    // Spec 045 US5: the favourite star — 018's section word as its label.
+                    Spacer(modifier = Modifier.height(VelaSpacing.md))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(VelaRadius.full))
+                            .clickable { actions.onAction("contacts.favourite") }
+                            .padding(horizontal = VelaSpacing.md, vertical = VelaSpacing.xs)
+                            .semantics { contentDescription = if (favourite.on) "favourite-on" else "favourite-off" },
+                    ) {
+                        Icon(
+                            imageVector = VelaIcons.Star,
+                            contentDescription = null,
+                            tint = if (favourite.on) colors.accentBase else colors.fgSubtle,
+                            modifier = Modifier.size(VelaIconSize.sm),
+                        )
+                        Spacer(modifier = Modifier.width(VelaSpacing.xs))
+                        Text(
+                            text = favourite.label,
+                            color = if (favourite.on) colors.accentBase else colors.fgMuted,
+                            fontFamily = VelaFontFamily,
+                            fontSize = VelaTextSize.sm,
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.height(VelaSpacing.lg))
                 GroupChips(
                     model = detail.chips,

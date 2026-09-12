@@ -17,6 +17,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import app.getvela.wallet.feature.contacts.core.ContactRecipientView
+import app.getvela.wallet.core.i18n.I18nKeys
 import org.junit.Test
 
 /**
@@ -312,5 +314,30 @@ class ContactsLiveTest {
         )
 
         assertEquals(1, detail.activity.rows.size)
+    }
+
+    // -- Spec 045 US5/US7: the star and the core's inspection on the detail --
+
+    @Test
+    fun `the detail carries the star and the core's inspection of this address`() {
+        val fallback = ContactsFixtures.contactDetail(strings)
+        val alice = Contact(address = "0x1111111111111111111111111111111111111111", name = "Alice", favorite = true)
+        val judged = ContactsView(
+            loaded = true, contacts = listOf(alice),
+            recipient = ContactRecipientView(address = alice.address.uppercase(), is_contract = true, first_interaction = true),
+        )
+        val live = ContactsLive.detail(fallback, alice, judged, strings = strings)
+        assertEquals(true, live.favourite?.on)
+        assertEquals(strings.t(I18nKeys.Contacts.SECTION_FAVORITES), live.favourite?.label)
+        assertEquals(strings.t(I18nKeys.Contacts.CONTRACT_TAG), live.inspection?.tag)
+        assertEquals(strings.t(I18nKeys.Contacts.FIRST_TIME_TAG), live.inspection?.firstTime)
+
+        val other = judged.copy(recipient = ContactRecipientView(address = "0x2222222222222222222222222222222222222222", is_contract = false))
+        assertNull(ContactsLive.detail(fallback, alice, other, strings = strings).inspection)
+        val unjudged = judged.copy(recipient = ContactRecipientView(address = alice.address, is_contract = null, first_interaction = false))
+        val quiet = ContactsLive.detail(fallback, alice.copy(favorite = false), unjudged, strings = strings)
+        assertNull(quiet.inspection?.tag)
+        assertNull(quiet.inspection?.firstTime)
+        assertEquals(false, quiet.favourite?.on)
     }
 }

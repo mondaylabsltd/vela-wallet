@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.contacts
 
+import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.contacts.core.Contact
 import app.getvela.wallet.feature.contacts.core.ContactGroupView
@@ -198,6 +199,23 @@ object ContactsLive {
             // inventing product copy is not this feature's call, so a contact
             // with no history keeps its heading and stands empty.
             activity = fallback.activity.copy(rows = withThisPerson, empty = null),
+            // Spec 045 US5/US7: the star is the contact's flag; the inspection
+            // is the core's `recipient` when it is about THIS address — a
+            // contract-or-wallet verdict only once judged (`is_contract` null =
+            // not judged, never "wallet"), first-time from its history rule.
+            favourite = strings?.let { FavouriteControlModel(on = contact.favorite, label = it.t(I18nKeys.Contacts.SECTION_FAVORITES)) },
+            inspection = strings?.let { s ->
+                view.recipient?.takeIf { it.address.equals(contact.address, ignoreCase = true) }?.let { seen ->
+                    ContactInspectionModel(
+                        tag = when (seen.is_contract) {
+                            true -> s.t(I18nKeys.Contacts.CONTRACT_TAG)
+                            false -> s.t(I18nKeys.Contacts.WALLET_TAG)
+                            null -> null
+                        },
+                        firstTime = if (seen.first_interaction) s.t(I18nKeys.Contacts.FIRST_TIME_TAG) else null,
+                    )
+                }
+            },
         )
     }
 

@@ -15,7 +15,7 @@ import app.getvela.wallet.feature.wallet.TabsModel
  */
 
 /** Mobile gallery inventory (data-model.md §Screen states). */
-enum class ContactsScreenState { C1, C1S, C1F, C2, C2S, C3, C4, C5, C6 }
+enum class ContactsScreenState { C1, C1S, C1F, C2, C2S, C3, C4, C5, C6, C7, C8, C9 }
 
 @Immutable
 data class ContactModel(
@@ -109,6 +109,9 @@ data class ContactDetailModel(
     val actions: List<ContactActionModel>,
     val address: AddressBlockModel,
     val activity: RecentActivityModel,
+    /** Spec 045 US5/US7: the favourite control and the core's inspection of this address. */
+    val favourite: FavouriteControlModel? = null,
+    val inspection: ContactInspectionModel? = null,
     /** Accessible name for the header pencil. */
     val editLabel: String,
     val deleteLabel: String,
@@ -124,6 +127,36 @@ data class GroupDetailModel(
     val batchSendHint: String,
     /** Accessible name for the header ⋯ button. */
     val manageLabel: String,
+)
+
+/** The favourite star (spec 045 US5): on or off, with 018's word for the section it files under. */
+@Immutable
+data class FavouriteControlModel(val on: Boolean, val label: String)
+
+/** What the core says about the address on open (spec 045 US7): contract or wallet, and first time or not. */
+@Immutable
+data class ContactInspectionModel(val tag: String? = null, val firstTime: String? = null)
+
+/**
+ * The add/edit contact form (spec 045 US5, drawn from 018's vocabulary): two
+ * fields, one error line, Save and Cancel. The core validates; `error` is its
+ * word, `saveEnabled` its gate.
+ */
+@Immutable
+data class ContactFormModel(
+    val title: String,
+    val nameLabel: String,
+    val namePlaceholder: String,
+    val addressLabel: String,
+    val addressPlaceholder: String,
+    val name: String,
+    val address: String,
+    val error: String? = null,
+    val save: String,
+    val cancel: String,
+    val saveEnabled: Boolean,
+    /** Editing an existing contact: the address is the contact's identity and stays put. */
+    val addressLocked: Boolean = false,
 )
 
 /**
@@ -153,6 +186,7 @@ data class ContactsHomeModel(
     val groupDetail: GroupDetailModel? = null,
     val menu: ActionMenuModel? = null,
     val deleteConfirm: DeleteConfirmModel? = null,
+    val form: ContactFormModel? = null,
     /**
      * Index of the contact whose swipe actions are revealed, counted across the
      * flattened section list (c1s pins it so the gallery renders the state with
