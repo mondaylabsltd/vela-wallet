@@ -158,7 +158,7 @@ fun ScanSurface(
                                 ScanTool.Torch -> VelaIcons.Zap
                                 ScanTool.Flip -> VelaIcons.RotateCcw
                             },
-                            contentDescription = null,
+                            contentDescription = tool.label,
                             tint = colors.fgBase,
                             modifier = Modifier.size(VelaIconSize.md),
                         )
@@ -194,7 +194,7 @@ private fun ScanFrame(modifier: Modifier = Modifier, preview: (@Composable () ->
                 .aspectRatio(1f)
                 .then(if (preview == null) Modifier.background(colors.bgSunken, RoundedCornerShape(VelaRadius.md)) else Modifier)
                 .drawBehind {
-                    val stroke = VelaBorder.emphasis.toPx() * 2
+                    val stroke = VelaBorder.emphasis.toPx() // spec 048: the web's --border-emphasis, not double
                     val arm = bracket.toPx()
                     val w = size.width
                     val h = size.height
