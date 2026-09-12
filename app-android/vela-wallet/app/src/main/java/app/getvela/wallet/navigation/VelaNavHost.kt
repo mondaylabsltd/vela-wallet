@@ -600,8 +600,19 @@ fun VelaNavHost(
                     val engineState by (engine?.state ?: kotlinx.coroutines.flow.MutableStateFlow(app.getvela.wallet.feature.browser.core.EngineState())).collectAsStateWithLifecycle()
                     val exploreView by browser.explore.collectAsStateWithLifecycle()
                     val historyView by browser.history.collectAsStateWithLifecycle()
-                    val liveModel = remember(exploreModel, exploreView, historyView, engineState, engine, strings) {
-                        app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings)
+                    val permissions by browser.permissions.collectAsStateWithLifecycle()
+                    val browserChain by browser.browserChain.collectAsStateWithLifecycle()
+                    val identity = app.getvela.wallet.feature.browser.ExploreLive.Identity(
+                        accountName = session.activeName,
+                        accountAddress = session.address,
+                        chainName = chainNames[browserChain] ?: browserChain.toString(),
+                        chainDot = WalletLive.badge(browserChain.toLong()),
+                    )
+                    val liveModel = remember(exploreModel, exploreView, historyView, engineState, engine, strings, permissions, identity) {
+                        app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings, permissions, identity)
+                    }
+                    val consentCard = permissions.consent?.let { c ->
+                        app.getvela.wallet.feature.browser.ExploreLive.consent(exploreModel.connection, c, engine?.let { engineState }, strings, identity)
                     }
                     ExploreScreen(
                         model = liveModel,
@@ -636,7 +647,10 @@ fun VelaNavHost(
                             },
                             onBookmark = { browser.addFavorite() },
                             onRecentClear = { browser.clearRecent() },
+                            onDisconnect = { browser.revoke() },
+                            onConsent = { approved -> if (approved) browser.consentApproved() else browser.consentRejected() },
                         ),
+                        consent = consentCard,
                     )
                 } else {
                     // The holdings, the feed and the currency are this device's

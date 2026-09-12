@@ -256,8 +256,19 @@ class AppContainer(private val app: Application) {
             context = app,
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
             store = VelaStore(app),
+            pool = pool,
+            feed = wallet.feedExecutor,
+            knownChains = { settings.networks.value.networks.map { it.chain_id.toInt() } },
             debuggable = BuildConfig.DEBUG,
-        )
+        ).also { controller ->
+            // The permissions machine is told the session's accounts as the
+            // desktop tells it at birth, and again on every change.
+            CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
+                session.view.collect { view ->
+                    if (!view.loading) controller.accountsChanged(view.accounts.map { it.address }, view.address.takeIf { it.isNotBlank() })
+                }
+            }
+        }
     }
 
     val contacts: ContactsController by lazy {

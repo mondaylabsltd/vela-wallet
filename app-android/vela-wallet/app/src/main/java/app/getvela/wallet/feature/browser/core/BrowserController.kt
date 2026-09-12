@@ -8,6 +8,13 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import app.getvela.wallet.core.diagnostics.VelaLog
+import uniffi.vela_core_uniffi.DappPermissionsCore
+import org.json.JSONObject
+import org.json.JSONArray
+import app.getvela.wallet.feature.wallet.core.RpcResult
+import app.getvela.wallet.feature.wallet.core.RpcPool
+import app.getvela.wallet.feature.wallet.core.RpcKind
+import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import uniffi.vela_core_uniffi.ExploreSitesCore
 import uniffi.vela_core_uniffi.BrowserHistoryCore
 import kotlinx.coroutines.CompletableDeferred
@@ -133,6 +140,12 @@ class BrowserController(
     private val context: Context,
     private val scope: CoroutineScope,
     store: KeyValueStore,
+    /** The person's own endpoints: a page's chain reads go through them (FR-005). */
+    private val pool: RpcPool? = null,
+    /** The feed's store: the "connected to" row (`type: "connect"`). */
+    private val feed: FeedExecutor? = null,
+    /** The chains this wallet has — the settings machine's rows; a page may switch only to one of them. */
+    private val knownChains: () -> List<Int> = { emptyList() },
     /** Debug builds expose the engines to Chrome DevTools — the device loop reads a page's own state through it. */
     debuggable: Boolean = false,
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
@@ -141,11 +154,115 @@ class BrowserController(
         if (debuggable) WebView.setWebContentsDebuggingEnabled(true)
     }
 
+    // -- permissions (spec 044 phase 3) ----------------------------------------
+
+    /** The chain the browser is on. The desktop starts on Gnosis too. */
+    private val _browserChain = MutableStateFlow(100)
+    val browserChain: StateFlow<Int> = _browserChain
+
+    /** Which tab a request came from, so the answer goes back to it and nowhere else. */
+    private val requestTab = HashMap<String, String>()
+
+    /** Forwarded requests not yet answered: a navigation settles them with the core's error. */
+    private val openIds = LinkedHashSet<String>()
+
+    private val router: RequestRouter = RequestRouter(
+        object : RequestRouter.Ports {
+            override fun browserChain(): Int = _browserChain.value
+            override fun knownChains(): List<Int> = this@BrowserController.knownChains()
+            override fun switchChain(chainId: Int) {
+                _browserChain.value = chainId
+                dpermHost.dispatch(DpermEvent.ChainChanged(chainId), DpermEvent.serializer())
+            }
+
+            override suspend fun poolCall(chainId: Int, method: String, params: JSONArray, bundler: Boolean): JSONObject? {
+                val pool = pool ?: return null
+                val list = (0 until params.length()).map { params.opt(it) }
+                return (pool.call(chainId, method, list, if (bundler) RpcKind.Bundler else RpcKind.Rpc) as? RpcResult.Body)?.json
+            }
+
+            override fun respond(id: String, json: JSONObject) = answer(id, json)
+            override fun sign(id: String, method: String, paramsJson: String, origin: String) {
+                // Phase 4 hands this to the signing controller; until then the
+                // page hears "not yet" rather than waiting forever.
+                onSignRequest?.invoke(id, method, paramsJson, origin)
+                    ?: answer(id, BrowserExecutor.errorJson(id, 4900, "Vela cannot answer $method yet"))
+            }
+        },
+    )
+
+    /** Phase 4 binds the signing controller here. */
+    var onSignRequest: ((id: String, method: String, paramsJson: String, origin: String) -> Unit)? = null
+
+    private val browserExecutor: BrowserExecutor = BrowserExecutor(
+        store = store,
+        ports = object : BrowserExecutor.Ports {
+            override fun respond(id: String, json: JSONObject) = answer(id, json)
+            override fun emit(json: JSONObject) {
+                _current.value?.deliver(json.toString())
+            }
+
+            override fun settleForwarded(code: Int, message: String) {
+                val open = openIds.toList()
+                openIds.clear()
+                open.forEach { id -> answer(id, BrowserExecutor.errorJson(id, code, message)) }
+            }
+
+            override fun saveConnectionRecord(row: JSONObject) {
+                val feed = feed ?: return
+                scope.launch(Dispatchers.IO) { feed.writeRecords(listOf(row)) }
+            }
+
+            override fun forward(id: String, method: String, paramsJson: String, origin: String) {
+                openIds += id
+                scope.launch(Dispatchers.Main.immediate) {
+                    router.route(id, method, paramsJson, origin)
+                }
+            }
+        },
+    )
+
+    private val dpermHost: CoreHost<DpermView> = CoreHost(
+        bridge = DappPermissionsCore().asBridge(),
+        scope = scope,
+        initial = DpermView(),
+        serializer = DpermView.serializer(),
+        perform = JsonShell.perform(DpermOperation.serializer(), DpermShellResult.serializer(), browserExecutor::perform),
+        escapedFailure = JsonShell.escapedFailure(DpermOperation.serializer(), DpermShellResult.serializer(), fallback = DpermShellResult.Ack, answer = browserExecutor::neutralAnswer),
+        onFault = { error -> VelaLog.failure("browser.perm.fault", "core fault", error) },
+    )
+
+    /** Consent, the connected address, the current origin — the core's. */
+    val permissions: StateFlow<DpermView> = dpermHost.view
+
+    /** An answer to the page that asked; the id is retired once answered. */
+    private fun answer(id: String, json: JSONObject) {
+        openIds.remove(id)
+        val tabId = requestTab.remove(id)
+        val engine = tabId?.let { engines[it] } ?: _current.value
+        engine?.deliver(json.toString())
+        VelaLog.event("browser.answer", "page answered", "id" to id.take(12), "kind" to if (json.has("error")) "error:${json.getJSONObject("error").optInt("code")}" else "result")
+    }
+
+    /** The session's accounts: told to the machine as the desktop tells it at birth, and on every change. */
+    fun accountsChanged(addresses: List<String>, active: String?) {
+        dpermHost.dispatch(DpermEvent.AccountsUpdated(addresses.takeIf { it.isNotEmpty() }), DpermEvent.serializer())
+        if (!active.isNullOrBlank()) dpermHost.dispatch(DpermEvent.AccountSwitched(active, now()), DpermEvent.serializer())
+        dpermHost.dispatch(DpermEvent.ChainChanged(_browserChain.value), DpermEvent.serializer())
+    }
+
+    fun consentApproved() = dpermHost.dispatch(DpermEvent.ConsentApproved(now()), DpermEvent.serializer())
+    fun consentRejected() = dpermHost.dispatch(DpermEvent.ConsentRejected, DpermEvent.serializer())
+    fun revoke(origin: String? = null) = dpermHost.dispatch(DpermEvent.RevokeRequested(origin ?: permissions.value.current_origin), DpermEvent.serializer())
+
+    /** The document the machine judges requests against: the SELECTED tab's, told on every load and every tab switch. */
+    private fun navigated(url: String) = dpermHost.dispatch(DpermEvent.NavigationStarted(url), DpermEvent.serializer())
+
     private val historyLoaded = CompletableDeferred<Unit>()
     private val exploreExecutor = ExploreExecutor(store)
     private val bhistExecutor = BhistExecutor(store, onLoaded = { historyLoaded.complete(Unit) })
 
-    private val exploreHost = CoreHost(
+    private val exploreHost: CoreHost<ExploreView> = CoreHost(
         bridge = ExploreSitesCore().asBridge(),
         scope = scope,
         initial = ExploreView(),
@@ -155,7 +272,7 @@ class BrowserController(
         onFault = { error -> VelaLog.failure("browser.explore.fault", "core fault", error) },
     )
 
-    private val bhistHost = CoreHost(
+    private val bhistHost: CoreHost<BhistView> = CoreHost(
         bridge = BrowserHistoryCore().asBridge(),
         scope = scope,
         initial = BhistView(),
@@ -206,7 +323,13 @@ class BrowserController(
         val engine = selected?.url?.let { url ->
             engines.getOrPut(selected.id) { newEngine(selected.id).also { it.load(url) } }
         }
-        if (_current.value !== engine) _current.value = engine
+        if (_current.value !== engine) {
+            _current.value = engine
+            // The machine judges requests against the selected document. Told
+            // here too, because it may have been born after the page loaded
+            // (the desktop's second run-time finding).
+            engine?.state?.value?.url?.takeIf { it.isNotBlank() }?.let { navigated(it) }
+        }
     }
 
     private fun newEngine(tabId: String) = BrowserEngine(
@@ -215,10 +338,24 @@ class BrowserController(
         onIncoming = { request ->
             VelaLog.event("browser.request", "page asked", "method" to request.method, "url" to request.url.take(64))
             _incoming.tryEmit(tabId to request)
+            requestTab[request.id] = tabId
+            dpermHost.dispatch(
+                DpermEvent.ProviderRequest(
+                    id = request.id,
+                    method = request.method,
+                    params_json = request.paramsJson,
+                    // The WEBVIEW's URL through the core's own origin rule — never the envelope's claim.
+                    origin = dappOriginOf(request.url).orEmpty(),
+                    // True by construction: the bridge posts only from the top frame.
+                    is_main_frame = true,
+                ),
+                DpermEvent.serializer(),
+            )
         },
         onNavigated = { url ->
             VelaLog.event("browser.nav", "document load", "url" to url.take(96))
             exploreHost.dispatch(ExploreEvent.TabNavigated(id = tabId, url = url, title = null), ExploreEvent.serializer())
+            if (_current.value?.id == tabId) navigated(url)
         },
         onMeta = { url, title, favicon ->
             exploreHost.dispatch(ExploreEvent.TabNavigated(id = tabId, url = url, title = title.ifBlank { null }), ExploreEvent.serializer())

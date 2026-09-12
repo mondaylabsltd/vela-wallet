@@ -2,6 +2,9 @@ package app.getvela.wallet.feature.browser
 
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.feature.browser.core.DpermConsentView
+import app.getvela.wallet.feature.browser.core.DpermView
+import app.getvela.wallet.feature.explore.ConnectionModel
 import app.getvela.wallet.feature.browser.core.BhistEntry
 import app.getvela.wallet.feature.browser.core.BhistView
 import app.getvela.wallet.feature.browser.core.EngineState
@@ -27,13 +30,24 @@ import app.getvela.wallet.feature.explore.TileModel
  * A site's `id` is the URL it opens — what a tap has to hand back.
  */
 object ExploreLive {
+    /** What the connection surfaces need to know about the wallet and the browser's chain. */
+    data class Identity(
+        val accountName: String = "",
+        val accountAddress: String = "",
+        val chainName: String = "",
+        val chainDot: Color = Color.Unspecified,
+    )
+
     fun home(
         fallback: ExploreScreenModel,
         view: ExploreView,
         history: BhistView,
         engine: EngineState?,
         strings: VelaStrings,
+        permissions: DpermView = DpermView(),
+        identity: Identity = Identity(),
     ): ExploreScreenModel {
+        val connected = engine?.origin != null && permissions.connected_address != null && permissions.current_origin == engine.origin
         val favorites = view.favorites.map { tileOf(it) }
         val populated = favorites.isNotEmpty() || history.entries.isNotEmpty() || view.groups.isNotEmpty()
         val groups = buildList {
@@ -71,7 +85,11 @@ object ExploreLive {
                 canForward = engine?.canForward ?: false,
                 bookmarked = bookmarked,
                 tabCount = tabs.size,
+                connected = connected,
+                accountName = identity.accountName.ifBlank { fallback.browser.accountName },
+                accountSeed = identity.accountAddress.ifBlank { fallback.browser.accountSeed },
             ),
+            connection = engine?.let { e -> connection(fallback.connection, e, strings, permissions, identity) } ?: fallback.connection,
             tabs = tabs,
             groupManageSheet = ExploreSheet.GroupManage(
                 title = strings.t("explore.manageGroups"),
@@ -92,6 +110,48 @@ object ExploreLive {
             } ?: fallback.siteMenuSheet,
         )
     }
+
+    /** E7 — the connection sheet for the page in front: the CORE's origin and address, the wallet's own name. */
+    fun connection(fallback: ConnectionModel, e: EngineState, strings: VelaStrings, permissions: DpermView, identity: Identity): ConnectionModel {
+        val connected = permissions.connected_address != null && permissions.current_origin == e.origin
+        return fallback.copy(
+            site = SiteModel(id = e.url, name = e.title.ifBlank { e.host }, host = e.host, letter = letterOf(e.host), tint = tintOf(e.host)),
+            statusLine = listOfNotNull(
+                if (e.secure) strings.t("explore.secureSite") else strings.t("connect.browser.a11yInsecure"),
+                strings.t("explore.connectedTag").takeIf { connected },
+            ).joinToString(" · "),
+            accountName = identity.accountName.ifBlank { fallback.accountName },
+            accountAddress = shortAddress(permissions.connected_address ?: identity.accountAddress),
+            accountSeed = permissions.connected_address ?: identity.accountAddress.ifBlank { fallback.accountSeed },
+            networkName = identity.chainName.ifBlank { fallback.networkName },
+            networkDot = if (identity.chainDot == Color.Unspecified) fallback.networkDot else identity.chainDot,
+        )
+    }
+
+    /**
+     * The consent card (spec 044 FR-006): the drawn connection sheet in its
+     * not-yet-connected form. The origin is the CORE's (`DpermConsentView`);
+     * the words are `connect.browser.*`; the site's own name is not asked.
+     */
+    fun consent(fallback: ConnectionModel, consent: DpermConsentView, engine: EngineState?, strings: VelaStrings, identity: Identity): ConnectionModel {
+        val host = consent.origin.substringAfter("://").substringBefore('/')
+        return fallback.copy(
+            title = strings.t("connect.browser.title", mapOf("host" to host)),
+            site = SiteModel(id = consent.origin, name = host, host = host, letter = letterOf(host), tint = tintOf(host)),
+            statusLine = if (consent.origin.startsWith("https://")) strings.t("explore.secureSite") else strings.t("connect.browser.a11yInsecure"),
+            accountName = identity.accountName.ifBlank { fallback.accountName },
+            accountAddress = shortAddress(identity.accountAddress),
+            accountSeed = identity.accountAddress.ifBlank { fallback.accountSeed },
+            networkName = identity.chainName.ifBlank { fallback.networkName },
+            networkDot = if (identity.chainDot == Color.Unspecified) fallback.networkDot else identity.chainDot,
+            explainer = strings.t("connect.browser.body"),
+            disconnect = strings.t("connect.browser.connect"),
+            footnote = strings.t("connect.browser.cancel"),
+        )
+    }
+
+    fun shortAddress(address: String): String =
+        if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address
 
     /** A recent row shows the title over the host it actually is. */
     fun siteOf(entry: BhistEntry): SiteModel = SiteModel(

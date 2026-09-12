@@ -76,6 +76,10 @@ class ExploreCallbacks(
     val onSiteMenuPick: (String) -> Unit,
     val onBookmark: () -> Unit,
     val onRecentClear: () -> Unit,
+    /** The connection sheet's disconnect: the permissions machine's revoke (spec 044). */
+    val onDisconnect: () -> Unit = {},
+    /** The consent card's answer (spec 044). */
+    val onConsent: (approved: Boolean) -> Unit = {},
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -95,6 +99,8 @@ fun ExploreScreen(
     onPageBack: () -> Unit = {},
     onPageForward: () -> Unit = {},
     live: ExploreCallbacks? = null,
+    /** Spec 044: the core is asking whether this origin may connect; drawn as the connection sheet's not-yet-connected form. */
+    consent: ConnectionModel? = null,
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -190,6 +196,22 @@ fun ExploreScreen(
         }
     }
 
+    consent?.let { card ->
+        ModalBottomSheet(
+            onDismissRequest = { live?.onConsent(false) },
+            containerColor = colors.bgBase,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                ConnectionPanel(
+                    connection = card,
+                    closeLabel = strings.t("connect.browser.cancel"),
+                    onClose = { live?.onConsent(false) },
+                    onDisconnect = { live?.onConsent(true) },
+                )
+            }
+        }
+    }
     sheet?.let { current ->
         ModalBottomSheet(
             onDismissRequest = { sheet = null },
@@ -232,10 +254,10 @@ fun ExploreScreen(
                     )
 
                     is ExploreSheet.Connection -> ConnectionPanel(
-                        connection = current.connection,
+                        connection = if (live != null) model.connection else current.connection,
                         closeLabel = strings.t("explore.close"),
                         onClose = { sheet = null },
-                        onDisconnect = { sheet = null },
+                        onDisconnect = { sheet = null; live?.onDisconnect() },
                     )
                 }
             }

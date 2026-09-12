@@ -106,25 +106,25 @@ NDK build; `JAVA_HOME` = Android Studio's JBR.
 
 ## Phase 3 — User Story 2: connect (P1)
 
-- [ ] **T023** `…/feature/browser/core/BrowserExecutor.kt` — dperm's eight
+- [X] **T023** `…/feature/browser/core/BrowserExecutor.kt` — dperm's eight
       arms per `contracts/shell-operations.md`; `ForwardToSigning` routes
       with `DappRpc` (Sign → phase 4's controller; State / Switch / Ack /
       Read / Unsupported answered here).
-- [ ] **T024** `BrowserController` — the dperm host; `ProviderRequest` from
+- [X] **T024** `BrowserController` — the dperm host; `ProviderRequest` from
       the bridge with `origin = dappOriginOf(webView.url)`; `NavigationStarted`
       on every load and once at birth; `AccountsUpdated`/`AccountSwitched`
       from the session; `ChainChanged` from settings; `RevokeRequested`.
-- [ ] **T025** `ExploreLive` + `ExploreScreen` — the consent card (E7's
+- [X] **T025** `ExploreLive` + `ExploreScreen` — the consent card (E7's
       sheet, not-yet-connected form) from `DpermConsentView`: origin as the
       fact, claimed name/icon as claims, account, network; approve/reject
       callbacks; the connected pill and the connection sheet from
       `DpermView` (E7).
-- [ ] **T026** [P] `app/src/test/…/BrowserMachineTest.kt` — never-connected
+- [X] **T026** [P] `app/src/test/…/BrowserMachineTest.kt` — never-connected
       → consent → approve answers one address; second ask instant; dismiss
       → 4001 once; a read proxied through a fake pool; switch to a known
       chain emits `chainChanged`; unknown → 4902; revoke → `disconnect` and
       consent again; grant keyed by origin, not URL.
-- [ ] **T027** `[device]` SC-002 + SC-003 + SC-007: the test dApp connects
+- [X] **T027** `[device]` SC-002 + SC-003 + SC-007: the test dApp connects
       and prints `0x88cC…6894`; second Connect without a sheet; Block number
       equals the pool's; `app.uniswap.org` shows the address; revoke → the
       page prints `disconnect`.

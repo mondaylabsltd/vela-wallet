@@ -143,3 +143,53 @@ stable letter/colour per host. Suite: 446, 0 failures.
    close buttons as clickables beside the cards; a tap aimed by bounds must
    pick the card (`android.view.View`, x < 100), or it closes the tab.
 
+### Phase 3 — connect (T023–T027)
+
+**What changed**: `BrowserExecutor` — dperm's eight arms (grants under
+`vela.perm.<origin>`; answers and events in the wire's shapes; the
+desktop's words for the core's reasons; the "connected to" row in the
+feed's shape; a forwarded request handed to `RequestRouter`).
+`RequestRouter` — the desktop's `Route::State/Switch/Ack/Read/Unsupported`
+arms: `eth_chainId` hex and `net_version` decimal from the browser's
+chain, a switch only to a chain the settings machine has (else 4902), an
+acknowledgement that changes nothing, reads through the person's pool
+(`RpcKind.Bundler` for the 4337 methods), 4900 for the rest; a signature
+goes to phase 4's controller (until then: 4900, never a silent wait).
+`BrowserController` hosts `dapp_permissions`: seeded like the desktop
+(`AccountsUpdated`, `AccountSwitched`, `ChainChanged(100)` — the session's
+accounts, re-told on every change), `ProviderRequest` from the bridge with
+the origin through the core's `dapp_origin_of`, `NavigationStarted` on
+every load of the selected tab and on every tab switch (the desktop's
+"born after the load" finding), answers routed back to the tab that
+asked, open forwarded ids settled by a navigation. `ExploreLive` draws the
+connected pill, the E7 connection sheet (the CORE's origin and address;
+the wallet's own name) and the consent card (the sheet's not-yet-connected
+form: `connect.browser.title/body/connect/cancel`).
+
+**Tests**: `BrowserMachineTest` — consent carries the core's origin;
+approval answers one address and writes the `connect` row; the grant is
+keyed by origin, not URL; the second ask is instant; a read is forwarded,
+never answered by the executor; revoke fires `disconnect` and re-asks; a
+dismissal is 4001 once. The router: facts in both notations, a pool read,
+a node error passed through, no endpoint → -32603, a switch to a known
+chain (and 4902 for an unknown one), an acknowledgement, 4900 for
+`eth_signTransaction`, a signature forwarded. Suite: 448, 0 failures.
+
+**Device** (SC-002, SC-003, SC-007; `p44-3-consent.png`,
+`p44-3-connected.png`, `p44-3-connection.png`), the page's own state read
+through DevTools:
+- Connect → the consent sheet: `1 | 127.0.0.1:8137 | 不安全站点 — 未加密 |
+  取消 | Parallel space | 0x88cC…6894 | 切换账户 | 网络 | Gnosis |
+  该网站想查看你的地址并请求你签名。未经你批准，它无法转移任何资金。 |
+  连接 | 取消` → 连接 → `eth_requestAccounts: ["0x88cCA0…6894"]`, events
+  `connect {chainId: "0x64"}`, `accountsChanged`.
+- Second Connect: the same answer, no sheet.
+- `eth_chainId → "0x64"`; `eth_blockNumber → "0x2df947f"` while the pool
+  logged `rpc.post eth_blockNumber host=rpc.gnosischain.com outcome=ok`.
+- `wallet_switchEthereumChain 0x1` → `null`, event `chainChanged "0x1"`,
+  `eth_chainId → "0x1"`; the next consent card reads `网络 Ethereum`.
+- The account pill → the connection sheet → 断开连接 → events
+  `accountsChanged []`, `disconnect {code: 4900}`; Connect → consent again
+  → 取消 → `{ok: false, code: 4001, message: "User rejected the request"}`,
+  once.
+
