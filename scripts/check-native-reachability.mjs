@@ -56,7 +56,10 @@ const EXEMPT = {
 	// `send` draws no screen of its own: the send flow's pages are the `flows`
 	// family's (SendFormBody, SendConfirmBody, …), and `send/SendLive.kt` only
 	// builds their models from the core's view (spec 043).
-	android: new Set(['send']),
+	// `browser` (spec 044) draws no screen either: the in-app browser's pages
+	// are the `explore` family's, hosted by `BrowserPage` there; `browser/`
+	// holds the machines, the provider bridge and the live model builder.
+	android: new Set(['send', 'browser']),
 	ios: new Set([])
 };
 

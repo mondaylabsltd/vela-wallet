@@ -626,10 +626,6 @@ fun VelaNavHost(
                         ExploreFixtures.buildState(ExploreScreenState.E2, strings)
                             .withIdentity(session.activeName, session.address)
                     }
-                    val signing = remember(strings, session.address, session.activeName) {
-                        SigningFixtures.build(SigningScreenState.CS12, strings)
-                            .withSignerIdentity(session.activeName, session.address)
-                    }
                     // Spec 044: the tab is a browser with a memory — the core's
                     // favourites, groups, tabs and recents; a live page where
                     // the demo page was drawn.
@@ -655,7 +651,10 @@ fun VelaNavHost(
                     }
                     ExploreScreen(
                         model = liveModel,
-                        signing = signing,
+                        // The drawn CS12 sheet belongs to the demo page, which a
+                        // live route never draws (SC-007): a request's sheet is
+                        // raised from the container's signing state instead.
+                        signing = null,
                         onSelectTab = select,
                         page = engine?.let { e -> { app.getvela.wallet.feature.explore.components.BrowserPage(e) } },
                         initialView = if (engine != null) app.getvela.wallet.feature.explore.ExploreView.Browsing else null,
