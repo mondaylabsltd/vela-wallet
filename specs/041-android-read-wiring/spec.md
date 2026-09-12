@@ -45,7 +45,9 @@ fail-closed today and carry `// live in 041`:
 The count going to zero is how this feature knows it is finished.
 
 **Standing exclusions**: sending money, signing, the dApp browser and the
-explore tab are spec 042. The camera (QR scanning, flow state `S1`) is a
+explore tab are the next Android spec (this line said "spec 042" until 042
+became the merge with `main` on 2026-09-12 — see `specs/042-android-merge-main`).
+The camera (QR scanning, flow state `S1`) is a
 separate capability, not wiring. Adding a custom network — deferred from 040
 because it needs the chain index this feature lands — comes back in scope here.
 
