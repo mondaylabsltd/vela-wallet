@@ -344,6 +344,7 @@ object ContactsFixtures {
         cancel = strings.t(I18nKeys.Contacts.CANCEL),
         saveEnabled = edit,
         addressLocked = edit,
+        invalidAddress = strings.t(I18nKeys.Contacts.INVALID_ADDRESS),
     )
 
     /** C9 — the detail with the star on and the core's inspection drawn. */

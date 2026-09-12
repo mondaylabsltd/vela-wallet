@@ -46,6 +46,10 @@ import app.getvela.wallet.feature.contacts.ContactsActions
 import app.getvela.wallet.feature.contacts.ContactsFixtures
 import app.getvela.wallet.feature.contacts.ContactsLive
 import app.getvela.wallet.feature.contacts.ContactsRoute
+import app.getvela.wallet.feature.contacts.core.ContactSaveInput
+import app.getvela.wallet.feature.contacts.MenuItemModel
+import app.getvela.wallet.feature.contacts.ContactsIcon
+import app.getvela.wallet.feature.contacts.ActionMenuModel
 import app.getvela.wallet.feature.contacts.ContactsScreenState
 import app.getvela.wallet.feature.contacts.gallery.ContactsGalleryScreen
 import app.getvela.wallet.feature.onboarding.OnboardingIntent
@@ -767,6 +771,14 @@ fun VelaNavHost(
             val book by contacts.view.collectAsStateWithLifecycle()
             var menuOpen by rememberSaveable { mutableStateOf(false) }
             var query by rememberSaveable { mutableStateOf("") }
+            // Spec 045 US5/US6: the form (null = closed, false = add, true = edit),
+            // its two fields, the open group, and the two pickers.
+            var formEdit by rememberSaveable { mutableStateOf<Boolean?>(null) }
+            var formName by rememberSaveable { mutableStateOf("") }
+            var formAddress by rememberSaveable { mutableStateOf("") }
+            var openGroup by rememberSaveable { mutableStateOf<String?>(null) }
+            var memberPicker by rememberSaveable { mutableStateOf(false) }
+            var groupPicker by rememberSaveable { mutableStateOf(false) }
             var openContact by rememberSaveable { mutableStateOf<String?>(null) }
 
             // Read the book for THIS account: the core keys history-derived
@@ -834,17 +846,86 @@ fun VelaNavHost(
                 listModel
             }
 
-            BackHandler(enabled = openContact != null) {
-                confirmingDelete = false
-                openContact = null
+            // Spec 045 US7: opening a contact asks the core about the address —
+            // the parallel space's chain, Gnosis, is where this wallet pays.
+            LaunchedEffect(openContact) {
+                openContact?.let { contacts.inspect(chainId = 100, address = it) }
+            }
+            val group = openGroup?.let { id -> book.groups.firstOrNull { it.id == id } }
+            val groupLabels = remember(strings) { ContactsFixtures.groupDetail(strings) }
+            val menuCancel = remember(strings) { ContactsFixtures.addMenu(strings).cancel }
+            val formLabels = remember(strings, formEdit) { formEdit?.let { ContactsFixtures.contactForm(strings, edit = it) } }
+            val shown = model.copy(
+                groupDetail = if (selected == null && group != null) ContactsLive.groupDetail(groupLabels, group) else model.groupDetail,
+                form = formLabels?.let { ContactsLive.form(it, edit = formEdit == true, name = formName, address = formAddress) },
+                notice = ContactsLive.importNotice(book, strings, close = strings.t(I18nKeys.Flows.CLOSE)),
+                menu = when {
+                    // The group's member picker: everyone in the book who is not in it yet.
+                    memberPicker && group != null -> ActionMenuModel(
+                        items = book.contacts
+                            .filter { c -> group.members.none { it.address == c.address } }
+                            .map { c -> MenuItemModel(id = "contacts.member.add:" + c.address, icon = ContactsIcon.AddContact, label = ContactsLive.displayName(c)) },
+                        cancel = menuCancel,
+                    )
+                    // The contact's groups: every group, ticked when it holds this person.
+                    groupPicker && selected != null -> ActionMenuModel(
+                        items = book.groups.map { g ->
+                            val member = g.members.any { it.address == selected.address }
+                            MenuItemModel(id = "contacts.group.toggle:" + g.id, icon = ContactsIcon.MoveGroup, label = if (member) "✓ " + g.name else g.name)
+                        },
+                        cancel = menuCancel,
+                    )
+                    else -> model.menu
+                },
+            )
+            BackHandler(enabled = openContact != null || openGroup != null || formEdit != null) {
+                when {
+                    formEdit != null -> formEdit = null
+                    openContact != null -> {
+                        confirmingDelete = false
+                        openContact = null
+                    }
+                    else -> openGroup = null
+                }
             }
 
             ContactsRoute(
-                model = model,
+                model = shown,
                 actions = ContactsActions(
                     onAction = { id ->
                         when (id) {
                             "contacts.addContact" -> menuOpen = true
+                            // Spec 045 US5: the form — add from the menu, edit from the detail.
+                            "contacts.addTitle" -> {
+                                menuOpen = false
+                                formName = ""
+                                formAddress = ""
+                                formEdit = false
+                            }
+                            "contacts.edit" -> selected?.let { contact ->
+                                formName = contact.name ?: contact.resolved_name ?: ""
+                                formAddress = contact.address
+                                formEdit = true
+                            }
+                            "contacts.form.save" -> {
+                                contacts.save(ContactSaveInput(address = formAddress.trim(), name = formName.trim()))
+                                formEdit = null
+                            }
+                            "contacts.form.cancel" -> formEdit = null
+                            "contacts.favourite" -> selected?.let { contacts.toggleFavourite(it.address) }
+                            // Spec 045 US6: the book travels through the picker and the share sheet.
+                            "contacts.importFile" -> {
+                                menuOpen = false
+                                contacts.importBook()
+                            }
+                            "contacts.exportTitle" -> {
+                                menuOpen = false
+                                contacts.exportBook()
+                            }
+                            "contacts.notice.close" -> contacts.acknowledgeImport()
+                            // Groups, both ways.
+                            "contacts.addMember" -> memberPicker = true
+                            "contacts.moveGroup", "contacts.sectionGroups" -> groupPicker = true
                             "contacts.deleteContact" -> confirmingDelete = true
                             "contacts.delete" -> selected?.let { contact ->
                                 contacts.delete(contact.address)
@@ -856,14 +937,34 @@ fun VelaNavHost(
                                 openContact = null
                             }
                             "contacts.searchClear" -> query = ""
-                            else -> Unit
+                            else -> when {
+                                id.startsWith("contacts.member.add:") -> openGroup?.let { gid ->
+                                    contacts.addGroupMembers(gid, listOf(id.removePrefix("contacts.member.add:")))
+                                    memberPicker = false
+                                }
+                                id.startsWith("contacts.member.remove:") -> openGroup?.let { gid ->
+                                    contacts.removeGroupMember(gid, id.removePrefix("contacts.member.remove:"))
+                                }
+                                id.startsWith("contacts.group.toggle:") -> selected?.let { contact ->
+                                    val gid = id.removePrefix("contacts.group.toggle:")
+                                    val current = book.groups.filter { g -> g.members.any { it.address == contact.address } }.map { it.id }
+                                    contacts.setContactGroups(contact.address, if (gid in current) current - gid else current + gid)
+                                    groupPicker = false
+                                }
+                                else -> Unit
+                            }
                         }
                     },
                     onContact = { contact -> openContact = contact.addressFull },
+                    onGroup = { row -> openGroup = book.groups.firstOrNull { it.name == row.name }?.id },
+                    onFormName = { formName = it },
+                    onFormAddress = { formAddress = it },
                     onQueryChange = { typed -> query = typed },
                     onDismissMenu = {
                         menuOpen = false
                         confirmingDelete = false
+                        memberPicker = false
+                        groupPicker = false
                     },
                     onTab = { tab ->
                         if (tab == VelaTab.Wallet) navController.popBackStack()

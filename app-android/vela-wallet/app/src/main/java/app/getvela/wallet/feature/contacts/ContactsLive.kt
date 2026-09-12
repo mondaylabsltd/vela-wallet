@@ -227,6 +227,42 @@ object ContactsLive {
     }
 
     /** One group's page: its own members, in the core's membership order. */
+    /**
+     * The add/edit form (spec 045 US5): the web's rule verbatim — a valid
+     * 0x address, a non-empty name; the address error shows once something
+     * was typed there. Editing keeps the address (it is the contact's identity).
+     */
+    fun form(fallback: ContactFormModel, edit: Boolean, name: String, address: String): ContactFormModel {
+        val trimmed = address.trim()
+        val valid = ADDRESS.matches(trimmed)
+        return fallback.copy(
+            name = name,
+            address = address,
+            error = if (trimmed.isNotEmpty() && !valid) fallback.error ?: fallback.invalidWord() else null,
+            saveEnabled = valid && name.isNotBlank(),
+            addressLocked = edit,
+        )
+    }
+
+    private fun ContactFormModel.invalidWord(): String = invalidAddress
+
+    /** After an import (spec 045 US6): the core's report, or its refusal — one sheet, one sentence, one Close. */
+    fun importNotice(view: ContactsView, strings: VelaStrings, close: String): ContactNoticeModel? {
+        view.import_failure?.let {
+            return ContactNoticeModel(
+                title = strings.t(I18nKeys.Contacts.IMPORT_FAIL_TITLE),
+                body = strings.t(I18nKeys.Contacts.IMPORT_FAIL_BODY),
+                close = close,
+            )
+        }
+        val report = view.last_import ?: return null
+        val body = strings.t(I18nKeys.Contacts.IMPORT_DONE_BODY, mapOf("added" to report.added.toString(), "skipped" to report.skipped.toString()))
+        val invalid = if (report.invalid > 0) " " + strings.t(I18nKeys.Contacts.IMPORT_DONE_INVALID, mapOf("invalid" to report.invalid.toString())) else ""
+        return ContactNoticeModel(title = strings.t(I18nKeys.Contacts.IMPORT_DONE_TITLE), body = body + invalid, close = close)
+    }
+
+    private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
+
     fun groupDetail(fallback: GroupDetailModel, group: ContactGroupView): GroupDetailModel =
         fallback.copy(
             name = group.name,

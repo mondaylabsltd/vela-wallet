@@ -24,6 +24,7 @@ import app.getvela.wallet.core.designsystem.tokens.VelaSizing
 import app.getvela.wallet.core.designsystem.tokens.VelaSpacing
 import app.getvela.wallet.feature.contacts.components.ActionMenuSheet
 import app.getvela.wallet.feature.contacts.components.ContactFormSheet
+import app.getvela.wallet.feature.contacts.components.ContactNoticeSheet
 import app.getvela.wallet.feature.contacts.components.AlphaIndexRail
 import app.getvela.wallet.feature.contacts.components.AlphaSectionHeader
 import app.getvela.wallet.feature.contacts.components.ContactRow
@@ -95,6 +96,19 @@ private fun ContactsRouteContent(
         model.detail != null -> ContactDetailScreen(model, modifier, actions)
         model.groupDetail != null -> GroupDetailScreen(model, modifier, actions)
         else -> ContactsScreen(model, modifier, actions)
+    }
+    // Spec 045: the form and the import notice sit over whichever page is showing.
+    model.notice?.let { notice ->
+        ContactNoticeSheet(model = notice, onDismiss = { actions.onAction("contacts.notice.close") })
+    }
+    model.form?.let { form ->
+        ContactFormSheet(
+            model = form,
+            onDismiss = { actions.onAction("contacts.form.cancel") },
+            onName = actions.onFormName,
+            onAddress = actions.onFormAddress,
+            onSave = { actions.onAction("contacts.form.save") },
+        )
     }
 }
 
@@ -261,15 +275,6 @@ fun ContactsScreen(
             model = menu,
             onDismiss = actions.onDismissMenu,
             onItem = { actions.onAction(it.id) },
-        )
-    }
-    model.form?.let { form ->
-        ContactFormSheet(
-            model = form,
-            onDismiss = { actions.onAction("contacts.form.cancel") },
-            onName = actions.onFormName,
-            onAddress = actions.onFormAddress,
-            onSave = { actions.onAction("contacts.form.save") },
         )
     }
 }

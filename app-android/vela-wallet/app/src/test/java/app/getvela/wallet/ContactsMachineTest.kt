@@ -22,6 +22,9 @@ import org.json.JSONArray
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import app.getvela.wallet.feature.contacts.core.ContactExportScope
+import app.getvela.wallet.feature.contacts.core.ContactFileFormat
+import app.getvela.wallet.feature.contacts.core.ContactGroupInput
 import org.junit.Test
 
 /**
@@ -204,5 +207,79 @@ class ContactsMachineTest {
         const val ALICE = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         const val BOB = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
         const val CAROL = "0xcccccccccccccccccccccccccccccccccccccccc"
+    }
+
+    // -- Spec 045: the star, the book's travel, groups both ways --------------
+
+    private val alice = "0x1111111111111111111111111111111111111111"
+    private val bob = "0x2222222222222222222222222222222222222222"
+
+    @Test
+    fun theStarFlipsAndPersists() {
+        val store = FakeStore()
+        val host = host(store)
+        host.send(ContactEvent.AccountSwitched(null))
+        host.settle { it.loaded }
+        host.send(save(alice, "Alice"))
+        host.settle { v -> v.contacts.any { it.address == alice } }
+        host.send(ContactEvent.ToggleFavorite(alice, 1_725_000_001_000.0))
+        val starred = host.settle { v -> v.contacts.first { it.address == alice }.favorite }
+        assertTrue(starred.contacts.first { it.address == alice }.favorite)
+        assertTrue(store.await(KeyValueStore.Keys.CONTACTS) { it?.contains("\"favorite\":true") == true } != null)
+        host.send(ContactEvent.ToggleFavorite(alice, 1_725_000_002_000.0))
+        host.settle { v -> !v.contacts.first { it.address == alice }.favorite }
+    }
+
+    @Test
+    fun anExportIsTheCoresFileAndAnImportOfItSaysExistingWins() {
+        val host = host(FakeStore())
+        host.send(ContactEvent.AccountSwitched(null))
+        host.settle { it.loaded }
+        host.send(save(alice, "Alice"))
+        host.settle { v -> v.contacts.any { it.address == alice } }
+        host.send(ContactEvent.ExportRequested(ContactExportScope.All, ContactFileFormat.Json, "2026-09-12T00:00:00Z"))
+        val exported = host.settle { it.export != null }.export!!
+        assertEquals("application/json", exported.mime)
+        assertTrue(exported.filename.endsWith(".json"))
+        assertEquals(1, exported.contacts)
+        assertTrue(exported.content.contains(alice))
+        host.send(ContactEvent.ExportTaken)
+        host.settle { it.export == null }
+
+        // Existing wins: the same file back changes nothing and says so.
+        host.send(ContactEvent.ImportFile(content = exported.content, filename = exported.filename, into_group = null, now_ms = 1_725_000_003_000.0))
+        val reported = host.settle { it.last_import != null }
+        assertEquals(0, reported.last_import!!.added)
+        assertEquals(1, reported.last_import!!.skipped)
+        assertEquals("Alice", reported.contacts.first { it.address == alice }.name)
+        host.send(ContactEvent.ImportAcknowledged)
+        host.settle { it.last_import == null }
+
+        host.send(ContactEvent.ImportFile(content = "not json, not a table", filename = "x.txt", into_group = null, now_ms = 1_725_000_004_000.0))
+        assertTrue(host.settle { it.import_failure != null }.import_failure != null)
+        host.send(ContactEvent.ImportAcknowledged)
+        host.settle { it.import_failure == null }
+    }
+
+    @Test
+    fun groupMembershipFromBothSides() {
+        val host = host(FakeStore())
+        host.send(ContactEvent.AccountSwitched(null))
+        host.settle { it.loaded }
+        host.send(save(alice, "Alice"))
+        host.send(save(bob, "Bob"))
+        host.settle { v -> v.contacts.count { it.address == alice || it.address == bob } == 2 }
+        host.send(ContactEvent.GroupSave(ContactGroupInput(name = "Team")))
+        val team = host.settle { v -> v.groups.any { it.name == "Team" } }.groups.first { it.name == "Team" }
+        host.send(ContactEvent.AddGroupMembers(team.id, listOf(alice, bob)))
+        host.settle { v -> v.groups.first { it.id == team.id }.members.size == 2 }
+        host.send(ContactEvent.RemoveGroupMember(team.id, bob))
+        val one = host.settle { v -> v.groups.first { it.id == team.id }.members.size == 1 }
+        assertEquals(alice, one.groups.first { it.id == team.id }.members.single().address)
+        host.send(ContactEvent.SetContactGroups(alice, emptyList()))
+        host.settle { v -> v.groups.first { it.id == team.id }.members.isEmpty() }
+        host.send(ContactEvent.SetContactGroups(bob, listOf(team.id)))
+        val back = host.settle { v -> v.groups.first { it.id == team.id }.members.size == 1 }
+        assertEquals(bob, back.groups.first { it.id == team.id }.members.single().address)
     }
 }

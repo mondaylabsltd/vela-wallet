@@ -19,6 +19,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.contacts.core.ContactRecipientView
 import app.getvela.wallet.core.i18n.I18nKeys
+import app.getvela.wallet.feature.contacts.core.ContactImportFailure
+import app.getvela.wallet.feature.contacts.core.ContactImportReport
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 /**
@@ -339,5 +342,31 @@ class ContactsLiveTest {
         assertNull(quiet.inspection?.tag)
         assertNull(quiet.inspection?.firstTime)
         assertEquals(false, quiet.favourite?.on)
+    }
+
+    @Test
+    fun `the form follows the web's rule, a valid address and a name, and the edit keeps its address`() {
+        val add = ContactsFixtures.contactForm(strings, edit = false)
+        val empty = ContactsLive.form(add, edit = false, name = "", address = "")
+        assertFalse(empty.saveEnabled)
+        assertNull(empty.error)
+        val typing = ContactsLive.form(add, edit = false, name = "Founder", address = "0x7687")
+        assertFalse(typing.saveEnabled)
+        assertEquals(strings.t(I18nKeys.Contacts.INVALID_ADDRESS), typing.error)
+        val ready = ContactsLive.form(add, edit = false, name = "Founder", address = " 0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141 ")
+        assertTrue(ready.saveEnabled)
+        assertNull(ready.error)
+        assertFalse(ready.addressLocked)
+        val edit = ContactsLive.form(ContactsFixtures.contactForm(strings, edit = true), edit = true, name = "", address = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141")
+        assertTrue(edit.addressLocked)
+        assertFalse(edit.saveEnabled)
+
+        val report = ContactsLive.importNotice(ContactsView(loaded = true, last_import = ContactImportReport(added = 0, skipped = 3, invalid = 1)), strings, close = "关闭")
+        assertEquals(strings.t(I18nKeys.Contacts.IMPORT_DONE_TITLE), report?.title)
+        assertTrue(report!!.body.contains("3"))
+        assertTrue(report.body.contains("1"))
+        val refused = ContactsLive.importNotice(ContactsView(loaded = true, import_failure = ContactImportFailure.NoAddressColumn), strings, close = "关闭")
+        assertEquals(strings.t(I18nKeys.Contacts.IMPORT_FAIL_TITLE), refused?.title)
+        assertNull(ContactsLive.importNotice(ContactsView(loaded = true), strings, close = "关闭"))
     }
 }

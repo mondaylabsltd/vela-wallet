@@ -133,6 +133,10 @@ data class GroupDetailModel(
 @Immutable
 data class FavouriteControlModel(val on: Boolean, val label: String)
 
+/** One sentence from the core after an import (spec 045 US6): the report, or why the file was refused. */
+@Immutable
+data class ContactNoticeModel(val title: String, val body: String, val close: String)
+
 /** What the core says about the address on open (spec 045 US7): contract or wallet, and first time or not. */
 @Immutable
 data class ContactInspectionModel(val tag: String? = null, val firstTime: String? = null)
@@ -157,6 +161,8 @@ data class ContactFormModel(
     val saveEnabled: Boolean,
     /** Editing an existing contact: the address is the contact's identity and stays put. */
     val addressLocked: Boolean = false,
+    /** The core's word for a bad address, shown on the error line once something was typed. */
+    val invalidAddress: String = "",
 )
 
 /**
@@ -187,6 +193,7 @@ data class ContactsHomeModel(
     val menu: ActionMenuModel? = null,
     val deleteConfirm: DeleteConfirmModel? = null,
     val form: ContactFormModel? = null,
+    val notice: ContactNoticeModel? = null,
     /**
      * Index of the contact whose swipe actions are revealed, counted across the
      * flattened section list (c1s pins it so the gallery renders the state with

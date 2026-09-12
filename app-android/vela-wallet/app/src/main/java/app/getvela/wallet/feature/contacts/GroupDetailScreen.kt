@@ -93,6 +93,8 @@ fun GroupDetailScreen(
                         contact = member,
                         avatarSize = ContactsMetrics.memberAvatar,
                         onClick = { actions.onContact(member) },
+                        // Spec 045 US6: a member swiped away leaves the group (RemoveGroupMember), not the book.
+                        onSwipeDelete = { actions.onAction("contacts.member.remove:" + member.addressFull) },
                     )
                     Hairline()
                 }

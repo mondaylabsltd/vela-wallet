@@ -358,6 +358,7 @@ class AppContainer(private val app: Application) {
                 (pool.call(chainId, "eth_getCode", listOf(address, "latest")) as? RpcResult.Body)
                     ?.json?.optString("result")?.takeIf { it.startsWith("0x") }
             },
+            documents = { documents },
         )
     }
 
