@@ -18,3 +18,5 @@ local.properties
 
 # spec 008: cross-compiled natives are build artifacts (rust/scripts/build-android.sh)
 app/src/main/jniLibs/
+# spec 043: the debug-only fixtures library (rust/scripts/build-dev-fixtures.sh)
+app/src/debug/jniLibs/

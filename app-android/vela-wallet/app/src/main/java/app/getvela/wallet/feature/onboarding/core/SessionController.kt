@@ -65,6 +65,17 @@ class SessionController(private val store: AccountStore, scope: CoroutineScope) 
     fun switchAccount(index: Int) =
         driver.dispatch(JSONObject().put("type", "switch_account").put("index", index).toString())
 
+    /**
+     * The parallel space's exit (spec 043): drop the fixture record it appended
+     * and re-read the store, so the session is the person's real accounts
+     * again. Not a sign-out — nothing else on the device changes.
+     */
+    suspend fun removeFixtureAccount(credentialIdHex: String) {
+        store.removeAccount(credentialIdHex)
+        store.saveActiveIndex(0)
+        boot()
+    }
+
     fun signOut() = driver.dispatch(event("sign_out"))
 
     fun signOutConfirmed() = driver.dispatch(event("sign_out_confirmed"))

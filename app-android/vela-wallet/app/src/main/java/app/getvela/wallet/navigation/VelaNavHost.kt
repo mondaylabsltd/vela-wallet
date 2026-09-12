@@ -17,6 +17,8 @@ import androidx.navigation.compose.rememberNavController
 import app.getvela.wallet.VelaWalletApplication
 import app.getvela.wallet.core.data.ThemePreference
 import app.getvela.wallet.core.i18n.LocalVelaStrings
+import androidx.compose.foundation.layout.Box
+import app.getvela.wallet.dev.ParallelSpaceHook
 import app.getvela.wallet.feature.explore.ExploreFixtures
 import app.getvela.wallet.feature.explore.ExploreScreen
 import app.getvela.wallet.feature.explore.ExploreScreenState
@@ -190,6 +192,7 @@ fun VelaNavHost(
         }
     }
 
+    Box {
     NavHost(navController = navController, startDestination = startDestination) {
         composable(VelaDestinations.WELCOME) {
             val welcome: WelcomeViewModel = viewModel()
@@ -708,7 +711,10 @@ fun VelaNavHost(
     session.signOut?.let { sheet ->
         SignOutSheet(
             pendingUploadWarning = sheet.pendingUploadWarning,
-            onConfirm = { application.container.session.signOutConfirmed() },
+            onConfirm = {
+                ParallelSpaceHook.leave()
+                application.container.session.signOutConfirmed()
+            },
             onDismiss = { application.container.session.signOutDismissed() },
         )
     }
@@ -720,6 +726,10 @@ fun VelaNavHost(
             onSave = onboarding::saveEndpoint,
             onDismiss = onboarding::dismissEndpointSheet,
         )
+    }
+    // Spec 043: the parallel space's badge, over every route while active;
+    // nothing in release, nothing outside the space.
+    ParallelSpaceHook.Badge()
     }
 }
 

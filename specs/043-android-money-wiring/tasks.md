@@ -111,32 +111,32 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
 
 ## Phase 2 — User Story 0: the parallel space (P1, enabling)
 
-- [ ] **T018** [US0] `rust/crates/vela-dev-fixtures-uniffi/` — new cdylib
+- [X] **T018** [US0] `rust/crates/vela-dev-fixtures-uniffi/` — new cdylib
       crate (`Cargo.toml` with `vela-core = { features = ["dev-fixtures"] }`,
       `uniffi` setup like `vela-core-uniffi`), exporting `fixture_accounts`,
       `fixture_assert(challenge, allow_credential_ids, preferred)`,
       `fixture_registration(index)` over `vela_core::dev_fixtures`
       (`resolve_signer` :226, `build_assertion` :260, `build_registration`
       :311). Add it to the workspace; `cargo clippy -D warnings` clean.
-- [ ] **T019** [US0] `rust/scripts/build-android.sh` — when
+- [X] **T019** [US0] `rust/scripts/build-android.sh` — when
       `VELA_DEV_FIXTURES=1`, also `cargo ndk … -p vela-dev-fixtures-uniffi`
       into `app/src/debug/jniLibs/`; `rust/scripts/smoke-kotlin.sh`-style
       bindgen into `rust/bindings/kotlin-dev/` (gitignored like
       `bindings/kotlin`).
-- [ ] **T020** [US0] `app/build.gradle.kts` — debug source set:
+- [X] **T020** [US0] `app/build.gradle.kts` — debug source set:
       `kotlin.srcDir("rust/bindings/kotlin-dev")`, `jniLibs.srcDir("src/debug/jniLibs")`;
       `cargoNdkBuild` sets `VELA_DEV_FIXTURES=1` for the debug variant only;
       release packages neither (SC-010 check: `unzip -l` the release APK).
-- [ ] **T021** [US0] `app/src/debug/java/app/getvela/wallet/dev/ParallelSpace.kt`
+- [X] **T021** [US0] `app/src/debug/java/app/getvela/wallet/dev/ParallelSpace.kt`
       — the door (intent extra `vela.parallelSpace`, persisted key
       `vela.parallelSpace`, `vela.parallel.signWith`), the badge composable,
       the `UserOpSigner` backed by `fixtureAssert`, and the session sign-in
       as fixture account 0 (through `SessionController` with the fixture's
       credential id and derived address); `ParallelSpaceHook` binds to it.
-- [ ] **T022** [US0] `MainActivity.kt` — read the extra; `VelaNavHost.kt` —
+- [X] **T022** [US0] `MainActivity.kt` — read the extra; `VelaNavHost.kt` —
       draw `ParallelSpaceHook.badge` over every route when active; sign-out
       clears the flag.
-- [ ] **T023** [P] [US0] `…test/ParallelSpaceTest.kt` (debug unit test source
+- [X] **T023** [P] [US0] `…test/ParallelSpaceTest.kt` (debug unit test source
       set) — the fixture address equals the core's `multi_address()` /
       account 0 address; an assertion from `fixtureAssert` verifies with
       `webauthn_signing_hash` + the fixture public key; `active()` false

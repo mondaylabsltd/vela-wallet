@@ -31,3 +31,10 @@ cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 --platform 29 -o "$OUT" \
   build --release -p vela-core-uniffi
 
 echo "OK: $(find "$OUT" -name 'libvela_core_uniffi.so' | wc -l | tr -d ' ') ABIs in $OUT"
+
+# The parallel space's keyset for the DEBUG variant (spec 043, research D2):
+# a second library into app/src/debug/jniLibs, which only a debug APK packages.
+# VELA_SKIP_DEV_FIXTURES=1 skips it (a release-only build has no use for it).
+if [ "${VELA_SKIP_DEV_FIXTURES:-0}" != "1" ]; then
+  bash "$ROOT/rust/scripts/build-dev-fixtures.sh"
+fi

@@ -2,6 +2,7 @@ package app.getvela.wallet
 
 import android.graphics.Color
 import android.os.Bundle
+import app.getvela.wallet.dev.ParallelSpaceHook
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -197,6 +198,16 @@ class MainActivity : ComponentActivity() {
      */
     private fun startFlowState(): String? = intent?.getStringExtra("vela.flowState")
 
+    /**
+     * The parallel space's door (spec 043, research D2). Debug builds only —
+     * release builds have no provider behind the hook, and the extra does
+     * nothing there. Remembered across relaunches; sign-out leaves.
+     *
+     *   adb shell am start -n app.getvela.wallet/.MainActivity --ez vela.parallelSpace true
+     */
+    private fun parallelSpaceRequested(): Boolean =
+        intent?.getBooleanExtra("vela.parallelSpace", false) == true
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         // A fresh process, not a configuration change or a restored activity.
@@ -226,6 +237,7 @@ class MainActivity : ComponentActivity() {
 
         val container = (application as VelaWalletApplication).container
         container.applySystemLocale()
+        if (parallelSpaceRequested()) ParallelSpaceHook.enter()
 
         // Null until the persisted preference is actually read — the splash stays up,
         // so the first frame can never render the wrong palette (data-model MainUiState).

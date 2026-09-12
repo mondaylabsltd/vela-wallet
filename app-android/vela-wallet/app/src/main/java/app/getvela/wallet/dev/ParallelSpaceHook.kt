@@ -30,6 +30,15 @@ object ParallelSpaceHook {
     /** Inside the space right now — the badge answers to this, not to the build type. */
     fun active(): Boolean = provider?.active() == true
 
+    /** The door: enter (a debug intent extra), leave (sign-out). No-ops without a provider. */
+    fun enter() {
+        provider?.enter()
+    }
+
+    fun leave() {
+        provider?.leave()
+    }
+
     /** The fixture signer when active, else `null` (the real passkey signs). */
     fun signer(): UserOpSigner? = provider?.takeIf { it.active() }?.signer()
 
@@ -46,6 +55,10 @@ object ParallelSpaceHook {
 /** What the debug source set provides; absent in release. */
 interface ParallelSpaceProvider {
     fun active(): Boolean
+
+    fun enter()
+
+    fun leave()
 
     fun signer(): UserOpSigner
 

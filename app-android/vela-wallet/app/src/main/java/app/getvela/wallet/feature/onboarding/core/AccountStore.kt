@@ -63,6 +63,21 @@ class AccountStore(context: Context) {
      * wallet present, which the core forbids — so it fails closed here rather
      * than arriving at the wire.
      */
+    /**
+     * Drop one account record by id, leaving the others as they are. The
+     * parallel space's exit (spec 043): the fixture account it appended goes,
+     * the person's real accounts stay.
+     */
+    suspend fun removeAccount(id: String) {
+        val existing = loadAccounts()
+        val kept = JSONArray()
+        for (index in 0 until existing.length()) {
+            val record = existing.optJSONObject(index) ?: continue
+            if (record.optString("id") != id) kept.put(record)
+        }
+        writeRaw(KEY_ACCOUNTS, kept.toString())
+    }
+
     suspend fun loadActiveIndex(): Int =
         readRaw(KEY_ACTIVE_INDEX)?.trim()?.toIntOrNull()?.takeIf { it > 0 } ?: 0
 
