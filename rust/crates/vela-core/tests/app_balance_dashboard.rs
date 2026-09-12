@@ -13,11 +13,10 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::balance_dashboard::{
-    best_group_price, best_native_dex_price, choose_native_price,
-    first_grouped_quote_price, token_balance_double,
-    token_usd_value, BalanceCacheEntry, BalanceDashboard, BalanceNotice, BalanceOperation as Op,
-    BalanceShellResult as Res, BalanceToken, Event, NativePriceSource, NativeQuoteGroup,
-    FALLBACK_RETRY_DELAY_MS, MAX_PARTIAL_RETRIES, PARTIAL_RETRY_DELAYS_MS,
+    best_group_price, best_native_dex_price, choose_native_price, first_grouped_quote_price,
+    token_balance_double, token_usd_value, BalanceCacheEntry, BalanceDashboard, BalanceNotice,
+    BalanceOperation as Op, BalanceShellResult as Res, BalanceToken, Event, NativePriceSource,
+    NativeQuoteGroup, FALLBACK_RETRY_DELAY_MS, MAX_PARTIAL_RETRIES, PARTIAL_RETRY_DELAYS_MS,
 };
 
 type Sut = DomainDriver<BalanceDashboard>;
@@ -220,7 +219,7 @@ fn first_grouped_quote_price_scales_each_group_by_its_own_decimals() {
     // and an ingest valuation.
     let groups = vec![
         NativeQuoteGroup {
-            amounts_out: vec![],                     // USDC: dead pool
+            amounts_out: vec![], // USDC: dead pool
             quote_decimals: Some(6),
         },
         NativeQuoteGroup {
