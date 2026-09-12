@@ -89,7 +89,7 @@ object SendLive {
     /** Which drawn state the live view is in — the flow host renders by this. */
     private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
 
-    fun flowState(view: SendView, feeSheetOpen: Boolean): FlowState = when (view.stage) {
+    fun flowState(view: SendView, feeSheetOpen: Boolean): FlowState = if (view.show_scanner && view.stage != SendStage.Receipt) FlowState.S1 else when (view.stage) {
         SendStage.SelectToken, SendStage.LockResolving, SendStage.LockError -> FlowState.SD1
         SendStage.EnterDetails -> when {
             view.show_batch_import -> FlowState.SD2C

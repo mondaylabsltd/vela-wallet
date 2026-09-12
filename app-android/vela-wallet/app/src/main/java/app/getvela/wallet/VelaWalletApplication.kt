@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.feature.send.core.SendAddNetworkOutcome
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import app.getvela.wallet.feature.signing.core.SimDeltas
 import android.app.Application
@@ -248,6 +249,11 @@ class AppContainer(private val app: Application) {
             currencyCode = { settings.currency.value.code },
             fiatRate = { code -> settings.fiatRate(code) },
             documents = { documents },
+            addNetwork = { chainId ->
+                settings.addNetworkByChainId(chainId)
+                kotlinx.coroutines.withTimeoutOrNull(10_000L) { settings.networks.first { it.last_added_chain_id == chainId } }
+                    ?.let { SendAddNetworkOutcome.Added } ?: SendAddNetworkOutcome.NotFound
+            },
         ).also { controller ->
             // The two halves of the handoff: the send hands the tracker a
             // hash; the tracker hands the send its verdict.

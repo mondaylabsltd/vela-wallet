@@ -26,6 +26,8 @@ import app.getvela.wallet.feature.send.core.MtokView
 import app.getvela.wallet.feature.flows.AddTokenCallbacks
 import app.getvela.wallet.feature.flows.RecipientAction
 import app.getvela.wallet.feature.flows.SendCallbacks
+import app.getvela.wallet.MainActivity
+import app.getvela.wallet.feature.scan.ScanCallbacks
 import app.getvela.wallet.feature.send.core.BatchUnit as WireBatchUnit
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.send.core.SendAccountRef
@@ -370,6 +372,7 @@ fun VelaNavHost(
                     nativeSymbol = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.native_symbol ?: "ETH",
                     walletName = session.activeName,
                     walletAddress = session.address,
+                    origin = signRequest?.origin?.substringAfter("://")?.substringBefore('/'),
                 )
                 signRequest?.let { request ->
                     if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
@@ -408,6 +411,9 @@ fun VelaNavHost(
             val contactsBook by application.container.contacts.view.collectAsStateWithLifecycle()
             var feeSheetOpen by rememberSaveable { mutableStateOf(false) }
             val sweepPicking by send.sweepPicking.collectAsStateWithLifecycle()
+            val mainActivity = LocalContext.current.let { ctx ->
+                generateSequence(ctx) { (it as? android.content.ContextWrapper)?.baseContext }.firstOrNull { it is MainActivity } as? MainActivity
+            }
             val batchView by send.batch.collectAsStateWithLifecycle()
             val sendOpen = flows.top in SEND_STATES
             LaunchedEffect(sendOpen, session.address) {
@@ -425,6 +431,8 @@ fun VelaNavHost(
                     // The picker lists this device's book, which only the
                     // contacts screen used to load (device-found, phase 6).
                     application.container.contacts.open(session.address)
+                    // Spec 046 US3: the home's 扫码 enters here with the scanner on top.
+                    if (flows.top == FlowState.S1) send.openScanner()
                 }
             }
             LaunchedEffect(sendClosed) {
@@ -462,6 +470,11 @@ fun VelaNavHost(
                 BackHandler(enabled = sendOpen) {
                     when {
                         feeSheetOpen -> feeSheetOpen = false
+                        // The scanner closes first; entered from home, the whole flow goes with it.
+                        sendView.show_scanner -> {
+                            send.closeScanner()
+                            if (sendView.stage == SendStage.SelectToken && flowState == FlowState.S1) flows.close()
+                        }
                         // Back out of the sweep pick first: the tick boxes go, the list stays.
                         sweepPicking && sendView.stage == SendStage.SelectToken -> send.cancelSweep()
                         sendView.stage == SendStage.SelectToken || sendView.stage == SendStage.Receipt -> flows.close()
@@ -520,6 +533,21 @@ fun VelaNavHost(
                                 if (sweepPicking) send.toggleSweep(id) else send.selectToken(id)
                             }
                         },
+                        onScanOpen = { send.openScanner() },
+                        scan = ScanCallbacks(
+                            onDecoded = { text -> send.scanned(text) },
+                            onClose = {
+                                send.closeScanner()
+                                if (sendView.stage == SendStage.SelectToken && flowState == FlowState.S1) flows.close()
+                            },
+                            requestPermission = { mainActivity?.requestCameraPermission() ?: false },
+                            pickImage = { application.container.documents?.pick(listOf("image/*"))?.bytes },
+                            permissionText = strings.t(I18nKeys.Flows.SCAN_PERMISSION_TEXT),
+                            grantLabel = strings.t(I18nKeys.Flows.SCAN_GRANT),
+                            noQrFound = strings.t(I18nKeys.Flows.SCAN_NO_QR),
+                            cameraUnavailable = strings.t(I18nKeys.Flows.SCAN_CAMERA_UNAVAILABLE),
+                            decodeFailed = strings.t(I18nKeys.Flows.SCAN_ERROR_IMAGE),
+                        ),
                         onSelectAll = { send.selectAllValuable(sendView.tokens.map(SendLive::tokenId)) },
                         onPickCta = { if (sweepPicking) send.confirmSweep() else send.startSweep() },
                         onAmountChange = { send.setAmount(it) },
@@ -1228,6 +1256,7 @@ private val RECEIVE_STATES = setOf(FlowState.R1, FlowState.R2)
 
 /** Spec 043: the drawn send states; the flow stack holds SD1 while the send is live. */
 private val SEND_STATES = setOf(
+    FlowState.S1,
     FlowState.SD1, FlowState.SD1B, FlowState.SD2, FlowState.SD2B, FlowState.SD2C, FlowState.SD2D,
     FlowState.SD2E, FlowState.SD2F, FlowState.SD3, FlowState.SD3B, FlowState.SD3C,
     FlowState.SD4A, FlowState.SD4B, FlowState.SD4C,

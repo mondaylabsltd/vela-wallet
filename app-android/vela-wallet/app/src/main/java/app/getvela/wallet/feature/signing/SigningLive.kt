@@ -43,6 +43,8 @@ object SigningLive {
         val nativeSymbol: String,
         val walletName: String,
         val walletAddress: String,
+        /** The page's host, for the SIWE verdict's words (spec 046). */
+        val origin: String? = null,
     )
 
     private fun VelaStrings.s(key: String) = t("componentsUi.signing.$key")
@@ -203,7 +205,7 @@ object SigningLive {
         if (clear.resolved && clear.result == null && clear.message == null && clear.blind_typed == null && dataBytes == 0 && to != null) {
             return plainTransferBlocks(to, valueHex, ctx)
         }
-        return blocksBySurface(clear, to, dataBytes, s)
+        return blocksBySurface(clear, to, dataBytes, s, ctx.origin)
     }
 
     private fun plainTransferBlocks(to: String, valueHex: String?, ctx: Context): List<SigningBlock> {
@@ -216,11 +218,11 @@ object SigningLive {
         )
     }
 
-    private fun blocksBySurface(clear: ClearSigningView, to: String?, dataBytes: Int, s: VelaStrings): List<SigningBlock> = when (clear.surface) {
+    private fun blocksBySurface(clear: ClearSigningView, to: String?, dataBytes: Int, s: VelaStrings, origin: String? = null): List<SigningBlock> = when (clear.surface) {
         ClearSurface.None -> emptyList()
         ClearSurface.Loading -> listOf(SigningBlock.Sentence(s.s("loading"), SigningTone.Neutral))
         ClearSurface.ClearSign -> clear.result?.let { resultBlocks(it, s) }.orEmpty()
-        ClearSurface.EthSign, ClearSurface.MessageSign -> clear.message?.let { messageBlocks(it, s) }.orEmpty()
+        ClearSurface.EthSign, ClearSurface.MessageSign -> clear.message?.let { messageBlocks(it, s, origin) }.orEmpty()
         ClearSurface.BlindTypedData -> clear.blind_typed?.let { typed ->
             buildList {
                 add(SigningBlock.Intent(typed.primary_type ?: s.s("signTypedData"), SigningTone.Caution))
@@ -269,7 +271,7 @@ object SigningLive {
         mono = field.address != null,
     )
 
-    private fun messageBlocks(message: ClearMessageView, s: VelaStrings): List<SigningBlock> = buildList {
+    private fun messageBlocks(message: ClearMessageView, s: VelaStrings, origin: String? = null): List<SigningBlock> = buildList {
         val signingIn = message.siwe != null
         val danger = message.danger_class == ClearDangerClass.EthSign || message.danger_class == ClearDangerClass.SiwePhish
         add(SigningBlock.Intent(if (signingIn) s.s("signInIntent") else s.s("signMessage"), if (danger) SigningTone.Danger else SigningTone.Neutral))
@@ -284,9 +286,10 @@ object SigningLive {
                 siwe.uri?.let { add(SigningRow(s.s("siweOrigin"), it)) }
             }
             add(SigningBlock.Rows(rows))
+            val domain = siwe.domain_host ?: siwe.domain
             when (message.binding) {
-                ClearSiweBinding.Ok -> add(SigningBlock.Positive(s.s("siweOk")))
-                ClearSiweBinding.Mismatch -> add(SigningBlock.Warning(SigningTone.Danger, s.s("siweMismatch")))
+                ClearSiweBinding.Ok -> add(SigningBlock.Positive(s.s("siweOk", mapOf("domain" to domain))))
+                ClearSiweBinding.Mismatch -> add(SigningBlock.Warning(SigningTone.Danger, s.s("siweMismatch", mapOf("domain" to domain, "origin" to (origin ?: "")))))
                 else -> Unit
             }
         }

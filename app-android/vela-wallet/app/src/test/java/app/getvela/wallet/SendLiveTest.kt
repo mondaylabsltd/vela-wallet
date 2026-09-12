@@ -44,6 +44,8 @@ import app.getvela.wallet.feature.send.core.BatchRateStatus
 import app.getvela.wallet.feature.send.core.BatchRecipient
 import app.getvela.wallet.feature.send.core.BatchView
 import app.getvela.wallet.feature.send.core.BatchUnit as WireBatchUnit
+import app.getvela.wallet.feature.send.core.SendController
+import app.getvela.wallet.feature.send.core.SendScan
 import org.junit.Test
 
 /**
@@ -429,5 +431,22 @@ class SendLiveTest {
         assertNull(resumed.notice)
         assertNull(resumed.noticeSecondary)
         assertTrue(resumed.ctaEnabled)
+    }
+
+    // -- Spec 046 US3: the scanner ------------------------------------------
+
+    @Test
+    fun `the scanner is its own state while the core's flag is up, and a decode becomes the core's scan`() {
+        assertEquals(FlowState.S1, SendLive.flowState(SendView(stage = SendStage.SelectToken, show_scanner = true), feeSheetOpen = false))
+        assertEquals(FlowState.S1, SendLive.flowState(SendView(stage = SendStage.EnterDetails, show_scanner = true), feeSheetOpen = false))
+        assertEquals(FlowState.SD1, SendLive.flowState(SendView(stage = SendStage.SelectToken), feeSheetOpen = false))
+        val request = SendController.scanOf("ethereum:$recipient@100?value=1000000000000000") as SendScan.Request
+        assertEquals(recipient, request.recipient)
+        assertEquals(100, request.chain_id)
+        assertEquals("1000000000000000", request.amount_base_units)
+        assertNull(request.token_address)
+        val text = SendController.scanOf("  $recipient ") as SendScan.Text
+        assertEquals(recipient, text.data)
+        assertTrue(SendController.scanOf("ethereum:0xddafbb505ad214d7b80b1f830fccc89b60fb7a83@1/approve?address=$recipient&uint256=1") is SendScan.Text)
     }
 }

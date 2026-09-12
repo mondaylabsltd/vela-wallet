@@ -1,5 +1,7 @@
 package app.getvela.wallet.feature.flows
 
+import app.getvela.wallet.feature.scan.ScanCallbacks
+import app.getvela.wallet.feature.scan.LiveScanSurface
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -106,7 +108,8 @@ private fun FlowHostContent(
 ) {
     Box(modifier = modifier.fillMaxSize().background(VelaTheme.colors.bgBase)) {
         when (val base = model.base) {
-            is FlowBase.Scan -> ScanSurface(model = base.model, onClose = onBack)
+            is FlowBase.Scan -> send?.scan?.let { live -> LiveScanSurface(model = base.model, callbacks = live) }
+                ?: ScanSurface(model = base.model, onClose = onBack)
             is FlowBase.Share -> Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -168,7 +171,7 @@ private fun FlowHostContent(
                 SendFormBody(
                     model = base.model,
                     onPickRecipient = { onNavigate(FlowStep.ContactPick) },
-                    onScan = { onNavigate(FlowStep.Scan) },
+                    onScan = { send?.onScanOpen?.invoke() ?: onNavigate(FlowStep.Scan) },
                     onFee = { onNavigate(FlowStep.FeeToken) },
                     onRecipientAction = { action ->
                         send?.onRecipientAction?.invoke(action) ?: onNavigate(
@@ -397,6 +400,9 @@ class SendCallbacks(
     val onRemoveRecipient: (Int) -> Unit = {},
     val onRecipientAmount: (Int, String) -> Unit = { _, _ -> },
     val onRecipientAddress: (Int, String) -> Unit = { _, _ -> },
+    // Spec 046 US3 — the scanner: the form's scan icon, and the live surface's needs.
+    val onScanOpen: (() -> Unit)? = null,
+    val scan: ScanCallbacks? = null,
     // Spec 045 US2 — the sweep pick: select-all and the pick's own button.
     val onSelectAll: () -> Unit = {},
     val onPickCta: (() -> Unit)? = null,

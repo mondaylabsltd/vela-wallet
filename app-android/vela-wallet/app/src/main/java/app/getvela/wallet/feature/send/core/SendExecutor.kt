@@ -94,6 +94,9 @@ class SendExecutor(
     interface SendPorts {
         fun signingStarted()
 
+        /** Spec 046 US3: a scanned chain the wallet lacks — the settings machine adds it (or does not know it). */
+        suspend fun addNetwork(chainId: Long): SendAddNetworkOutcome = SendAddNetworkOutcome.NotFound
+
         fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int)
 
         fun haptic(kind: SendHapticKind)
@@ -120,9 +123,8 @@ class SendExecutor(
         is SendOperation.ResolveTokenMetadata -> SendShellResult.TokenMetadata(
             tokenMetadata(operation.chain_id, operation.address),
         )
-        // The scanner is the only entry (046); on this base a chain the wallet
-        // does not have stays "not added".
-        is SendOperation.AddNetwork -> SendShellResult.NetworkAdded(SendAddNetworkOutcome.Error)
+        // Spec 046 US3: the scan path — `AddByChainIdRequested` in the settings machine.
+        is SendOperation.AddNetwork -> SendShellResult.NetworkAdded(ports.addNetwork(operation.chain_id.toLong()))
         is SendOperation.EstimateFee -> {
             // A batch takes precedence only when it HAS legs; an empty one
             // would otherwise silence the single call beside it.

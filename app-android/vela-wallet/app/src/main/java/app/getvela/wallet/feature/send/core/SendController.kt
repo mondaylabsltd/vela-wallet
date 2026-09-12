@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.send.core
 
+import app.getvela.wallet.feature.scan.Eip681
 import app.getvela.wallet.core.crux.CoreHost
 import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
@@ -55,6 +56,8 @@ class SendController(
     private val currencyCode: () -> String = { "USD" },
     fiatRate: suspend (String) -> Double? = { null },
     documents: () -> DocumentPorts? = { null },
+    /** Spec 046 US3: a scanned chain the wallet lacks goes to the settings machine. */
+    addNetwork: suspend (Long) -> SendAddNetworkOutcome = { SendAddNetworkOutcome.NotFound },
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
         VelaLog.event("send.track", "no tracker bound", "hash" to hash.take(12))
@@ -98,6 +101,7 @@ class SendController(
     )
 
     private val ports: SendExecutor.SendPorts = object : SendExecutor.SendPorts {
+        override suspend fun addNetwork(chainId: Long): SendAddNetworkOutcome = addNetwork(chainId)
         override fun signingStarted() {
             dispatch(SendEvent.SigningStarted)
         }
@@ -340,6 +344,14 @@ class SendController(
     fun openRowPicker(id: String) = dispatch(SendEvent.OpenContactPicker(id))
 
     /** 导入表格: the sheet opens on the send's flag and the batch machine opens on the token. */
+    // -- Scanner (spec 046 US3): the core's flag opens the surface; a decode
+    // becomes ScanResolved and the core decides what it means.
+    fun openScanner() = dispatch(SendEvent.OpenScanner)
+
+    fun closeScanner() = dispatch(SendEvent.CloseScanner)
+
+    fun scanned(text: String) = dispatch(SendEvent.ScanResolved(scanOf(text)))
+
     fun openBatch() {
         val token = send.value.selected_token ?: return
         dispatch(SendEvent.OpenBatchImport)
@@ -434,7 +446,17 @@ class SendController(
         _alert.value = null
     }
 
-    private companion object {
+    internal companion object {
+        /** A decoded text as the core's scan: a payment request through the tokenizer, anything else as text. */
+        fun scanOf(text: String): SendScan = Eip681.parse(text)?.let { request ->
+            SendScan.Request(
+                recipient = request.recipient,
+                chain_id = request.chainId?.toInt(),
+                token_address = request.tokenAddress,
+                amount_base_units = request.amountBaseUnits,
+            )
+        } ?: SendScan.Text(data = text.trim())
+
         /** Well above the core's own 15 s estimate timeout; a guard, not a policy. */
         const val QUOTE_TIMEOUT_MS = 30_000L
     }
