@@ -8,6 +8,8 @@ import uniffi.vela_core_uniffi.RelayRejection
 import uniffi.vela_core_uniffi.UserOpCall
 import uniffi.vela_core_uniffi.UserOpFeeMode
 import uniffi.vela_core_uniffi.WebAuthnAssertion
+import uniffi.vela_core_uniffi.eip1271Signature
+import uniffi.vela_core_uniffi.safeMessageHash
 import uniffi.vela_core_uniffi.classifyRelayRejection
 import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
 import uniffi.vela_core_uniffi.parseExistingUserOpHash
@@ -55,6 +57,40 @@ class UserOpSpine(
     class Refused(val failure: Failure) : Exception()
 
     private fun other(message: String): Nothing = throw Refused(Failure.Other(message))
+
+    /**
+     * A page's message (spec 044): the Safe message hash under the Safe's
+     * own domain is the passkey's challenge; the assertion is encoded as the
+     * EIP-1271 envelope — `isValidSignature` verifies it on chain. One
+     * ceremony, nothing submitted. Returns the signature hex.
+     */
+    suspend fun signMessage(chainId: Int, account: String, originalHash: ByteArray, signingStarted: () -> Unit = {}): String {
+        val keys = accounts.keysOf(account)
+        if (keys.isEmpty()) other("No passkey credential for the active account")
+        val pinned = keys.first()
+        val challenge = runCatching { safeMessageHash(originalHash, chainId.toULong(), account) }
+            .getOrElse { other(it.message ?: "The message could not be hashed") }
+        signingStarted()
+        val (transports, method) = accounts.routingOf(account)
+        val assertion: Assertion = try {
+            signer().sign(challenge, pinned.credentialId, transports, method)
+        } catch (failure: PasskeyFailure) {
+            if (failure.kind == FailureKind.Cancelled) throw Refused(Failure.PasskeyCancelled)
+            other(failure.message ?: "the passkey ceremony failed")
+        }
+        val signature = runCatching {
+            eip1271Signature(
+                WebAuthnAssertion(
+                    authenticatorData = SendExecutor.unhex(assertion.authenticatorDataHex),
+                    clientDataJson = SendExecutor.unhex(assertion.clientDataJsonHex),
+                    signatureDer = SendExecutor.unhex(assertion.signatureDerHex),
+                ),
+                assertion.credentialIdHex,
+                keys,
+            )
+        }.getOrElse { other(it.message ?: "Failed to create signature") }
+        return "0x" + signature.joinToString("") { b -> "%02x".format(b.toInt() and 0xff) }
+    }
 
     /**
      * Assembles, signs once and submits; returns the accepted user-operation

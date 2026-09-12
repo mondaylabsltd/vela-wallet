@@ -52,6 +52,10 @@ data class AllowanceChip(val id: String, val label: String, val state: ChipState
     enum class ChipState { Idle, Selected, Disabled }
 }
 
+/** Spec 044: the custom-amount field the guard's editor opens. */
+@Immutable
+data class AllowanceInput(val value: String, val symbol: String, val placeholder: String, val error: String? = null)
+
 @Immutable
 data class PartyBadge(val text: String, val tone: SigningTone)
 
@@ -85,6 +89,8 @@ sealed interface SigningBlock {
         val chips: List<AllowanceChip>,
         val note: String? = null,
         val resultingTotal: SigningRow? = null,
+        /** Spec 044: present while the Custom chip is selected. */
+        val custom: AllowanceInput? = null,
     ) : SigningBlock
 
     data class Party(

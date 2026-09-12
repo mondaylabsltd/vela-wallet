@@ -25,6 +25,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import uniffi.vela_dev_fixtures.fixtureAccounts
@@ -181,5 +182,48 @@ class DappSignMachineTest {
         assertEquals(0, signs)
         assertTrue(store.values[KeyValueStore.Keys.TRANSACTIONS].isNullOrEmpty())
         withTimeout(10_000) { c.closed.first { it } }
+    }
+
+    @Test
+    fun `a page's sign-in message is signed once as an EIP-1271 envelope, nothing submitted`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        val c = controller()
+        c.open(IncomingRequest("r2", "personal_sign", JSONArray().put("0x48656c6c6f2c2056656c61").put(safe).toString(), origin, "tab-1", 100))
+        withTimeout(20_000) { c.sign.first { it.surface == SignSurface.Sheet } }
+        val read = withTimeout(20_000) { c.clear.first { it.message != null } }
+        assertEquals("Hello, Vela", read.message!!.decoded_text)
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r2" }) delay(50) }
+        val signature = answers.first { it.first == "tab-1/r2" }.second.getString("result")
+        assertTrue("an EIP-1271 envelope, not a bare 65-byte signature: ${signature.length}", signature.startsWith("0x") && signature.length > 300)
+        assertEquals(1, signs)
+        assertEquals("nothing reached the relay", 0, port.calls.count { it.endsWith("eth_sendUserOperation") })
+        withTimeout(10_000) { c.closed.first { it } }
+    }
+
+    @Test
+    fun `an unlimited approval is blocked until bounded, then leaves bounded`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        val c = controller()
+        val usdc = "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83"
+        val spender = "0x1111111111111111111111111111111111111111"
+        val data = "0x095ea7b3" + spender.drop(2).padStart(64, '0') + "f".repeat(64)
+        c.open(IncomingRequest("r3", "eth_sendTransaction", JSONArray().put(JSONObject().put("from", safe).put("to", usdc).put("data", data).put("value", "0x0")).toString(), origin, "tab-1", 100))
+        val guard = withTimeout(20_000) { c.guard.first { it.detected != null } }
+        assertTrue(guard.detected!!.is_unbounded)
+        assertFalse("the guard holds the slide", guard.confirm_allowed)
+        c.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom)
+        c.guardCustomAmount("1")
+        val bounded = withTimeout(20_000) { c.guard.first { it.confirm_allowed && it.rewritten_params_json != null } }
+        assertTrue("the calldata carries the bounded amount", bounded.rewritten_params_json!!.contains("095ea7b3"))
+        assertFalse(bounded.rewritten_params_json!!.contains("f".repeat(64)))
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r3" }) delay(50) }
+        assertTrue(answers.first { it.first == "tab-1/r3" }.second.has("result"))
+        assertEquals(1, signs)
+        assertEquals(1, port.calls.count { it.endsWith("eth_sendUserOperation") })
     }
 }

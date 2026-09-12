@@ -64,4 +64,25 @@ class SigningLiveTest {
         assertTrue(blind.blocks.any { it is SigningBlock.Warning })
         assertEquals(strings.t("componentsUi.signing.confirmLabel"), blind.confirmAction)
     }
+
+    @Test
+    fun `the guard's verdict draws the cap, the chips the core offers, and the custom field`() {
+        val detected = app.getvela.wallet.feature.signing.core.GuardDetectedApproval(
+            kind = app.getvela.wallet.feature.signing.core.GuardApprovalKind.Erc20Approve, token_address = "0xdd", spender = "0x1111111111111111111111111111111111111111",
+            amount_raw = null, is_unbounded = true, editable = true, locus = app.getvela.wallet.feature.signing.core.GuardLocus.CalldataWord(1),
+        )
+        val editor = app.getvela.wallet.feature.signing.core.GuardEditorView(mode = null, requested_finite = false, has_balance_cap = false)
+        val blocked = GuardView(surface = app.getvela.wallet.feature.signing.core.GuardSurface.ApprovalEditor, detected = detected, meta = app.getvela.wallet.feature.signing.core.GuardTokenMetaView("USDC", 6, true, false), editor = editor, confirm_allowed = false)
+        val blocks = SigningLive.guardBlocks(blocked, strings)
+        val allowance = blocks.filterIsInstance<SigningBlock.Allowance>().single()
+        assertEquals(strings.t("componentsUi.signingApprove.unlimitedValue"), allowance.value)
+        assertEquals(app.getvela.wallet.feature.signing.AllowanceChip.ChipState.Disabled, allowance.chips.first { it.id == "requested" }.state)
+        assertTrue(allowance.note!!.contains(strings.t("componentsUi.signingApprove.choosePrompt")))
+        assertTrue(blocks.any { it is SigningBlock.Warning })
+        val custom = blocked.copy(editor = editor.copy(mode = app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom, custom_text = "1", display_amount_raw = "1000000", choice = app.getvela.wallet.feature.signing.core.GuardChoice.Amount("1000000")), confirm_allowed = true)
+        val bounded = SigningLive.guardBlocks(custom, strings).filterIsInstance<SigningBlock.Allowance>().single()
+        assertEquals("1 USDC", bounded.value)
+        assertEquals("1", bounded.custom!!.value)
+        assertEquals(app.getvela.wallet.feature.signing.AllowanceChip.ChipState.Selected, bounded.chips.first { it.id == "custom" }.state)
+    }
 }

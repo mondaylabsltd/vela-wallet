@@ -183,15 +183,18 @@ class SigningController(
             GuardEvent.serializer(),
         )
         SignExecutor.callsOf(request.method, request.paramsJson)?.let { calls ->
+            val feeCalls = calls.map { FeeCall(to = it.to, value = it.value, data = it.data) }
+            requestQuote(request.chainId, feeCalls)
+            // A quote goes stale while the person reads (the policy's TTL);
+            // while the sheet is still up and nothing is signing, ask again —
+            // otherwise the slide stays shut with no way to open it.
             scope.launch {
-                val deployed = relay.isDeployed(request.chainId, wallet.address) ?: return@launch
-                feeHost.dispatch(
-                    FeeEvent.QuoteRequested(
-                        chain_id = request.chainId, account = wallet.address, deployed = deployed, public_key_available = true,
-                        tier = FeeTier.Fast, calls = calls.map { FeeCall(to = it.to, value = it.value, data = it.data) }, fee_token = null,
-                    ),
-                    FeeEvent.serializer(),
-                )
+                feeHost.view.collect { fee ->
+                    val view = signHost.view.value
+                    if (fee.stale && !fee.busy && view.surface == SignSurface.Sheet && !view.is_signing && !view.is_submitting && !answered) {
+                        requestQuote(request.chainId, feeCalls)
+                    }
+                }
             }
         }
         // The controller's own scope (the container's is Main.immediate); no
@@ -205,6 +208,19 @@ class SigningController(
                 }
                 if (view.surface == SignSurface.Hidden && view.request == null && _request.value != null && answered) _closed.value = true
             }
+        }
+    }
+
+    private fun requestQuote(chainId: Int, calls: List<FeeCall>) {
+        scope.launch {
+            val deployed = relay.isDeployed(chainId, wallet.address) ?: return@launch
+            feeHost.dispatch(
+                FeeEvent.QuoteRequested(
+                    chain_id = chainId, account = wallet.address, deployed = deployed, public_key_available = true,
+                    tier = FeeTier.Fast, calls = calls, fee_token = null,
+                ),
+                FeeEvent.serializer(),
+            )
         }
     }
 

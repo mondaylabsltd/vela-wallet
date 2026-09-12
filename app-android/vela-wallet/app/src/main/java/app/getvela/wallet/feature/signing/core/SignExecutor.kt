@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.signing.core
 
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.browser.core.BrowserExecutor
+import app.getvela.wallet.feature.send.core.SendExecutor
 import app.getvela.wallet.feature.send.core.UserOpSpine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
@@ -114,6 +115,7 @@ class SignExecutor(
     }
 
     private suspend fun signAndSubmit(op: SignOperation.SignAndSubmit): SignSubmitOutcome {
+        if (op.method == "personal_sign" || op.method.contains("signTypedData")) return signMessage(op)
         val calls = callsOf(op.method, op.params_json)
             ?: return SignSubmitOutcome.Failed("${op.method} carried no transaction this wallet could read")
         return try {
@@ -144,6 +146,21 @@ class SignExecutor(
         }
     }
 
+    /** A message: hashed the way the page's verifier hashes it, signed once, answered as the EIP-1271 envelope. */
+    private suspend fun signMessage(op: SignOperation.SignAndSubmit): SignSubmitOutcome {
+        val original = messageHash(op.method, op.params_json)
+            ?: return SignSubmitOutcome.Failed("${op.method} carried nothing this wallet could sign")
+        return try {
+            SignSubmitOutcome.Succeeded(spine.signMessage(op.chain_id, op.address, original, signingStarted = { ports.signingStarted() }))
+        } catch (refused: UserOpSpine.Refused) {
+            when (val failure = refused.failure) {
+                UserOpSpine.Failure.PasskeyCancelled -> SignSubmitOutcome.PasskeyCancelled
+                is UserOpSpine.Failure.Other -> SignSubmitOutcome.Failed(failure.message ?: "Signing failed")
+                else -> SignSubmitOutcome.Failed("Signing failed")
+            }
+        }
+    }
+
     private suspend fun awaitReceipt(chainId: Int, userOpHash: String): String? {
         val deadline = System.currentTimeMillis() + receiptWaitMs
         while (System.currentTimeMillis() < deadline) {
@@ -156,6 +173,27 @@ class SignExecutor(
     }
 
     companion object {
+        /**
+         * What the page's verifier will hash: `personal_sign` is the
+         * EIP-191 prefix over the bytes (hex or text, the web's rule); typed
+         * data is its EIP-712 digest, computed by the core.
+         */
+        fun messageHash(method: String, paramsJson: String): ByteArray? {
+            val params = runCatching { JSONArray(paramsJson) }.getOrNull() ?: return null
+            return if (method == "personal_sign") {
+                val payload = params.optString(0).ifBlank { return null }
+                val bytes = if (isHexPayload(payload)) SendExecutor.unhex(payload) else payload.toByteArray(Charsets.UTF_8)
+                val prefix = "\u0019Ethereum Signed Message:\n${bytes.size}".toByteArray(Charsets.UTF_8)
+                uniffi.vela_core_uniffi.keccak256(prefix + bytes)
+            } else {
+                val typed = params.opt(1)?.let { if (it is String) it else it.toString() } ?: return null
+                runCatching { uniffi.vela_core_uniffi.hashTypedData(typed) }.getOrNull()
+            }
+        }
+
+        private fun isHexPayload(payload: String): Boolean =
+            payload.startsWith("0x") && payload.length % 2 == 0 && payload.drop(2).all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
+
         /** The page's answer in the wire's shape; the core chose `ok`/`err` and the code. */
         fun responseJson(id: String, payload: SignResponsePayload): JSONObject = when (payload) {
             is SignResponsePayload.Ok -> BrowserExecutor.resultJson(id, payload.result)

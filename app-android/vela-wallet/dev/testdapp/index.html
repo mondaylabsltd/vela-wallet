@@ -17,7 +17,9 @@
   <button id="sign" type="button">Sign</button>
   <button id="send" type="button">Send dust</button>
   <button id="approve" type="button">Approve unlimited</button>
+  <button id="verify" type="button">Verify sign</button>
   <pre id="out">waiting…</pre>
+  <script src="https://cdn.jsdelivr.net/npm/js-sha3@0.9.3/build/sha3.min.js"></script>
   <script>
     const out = document.getElementById('out');
     const state = { announced: [], legacy: null, results: {}, events: [] };
@@ -55,6 +57,20 @@
     document.getElementById('switch').onclick = () => window.__ask('wallet_switchEthereumChain', [{ chainId: '0x64' }]);
     document.getElementById('sign').onclick = () => window.__ask('personal_sign', ['0x48656c6c6f2c2056656c61', me()]);
     document.getElementById('send').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: FOUNDER, value: '0x38d7ea4c68000' }]);
+    // EIP-1271 through the wallet's own read proxy: isValidSignature(bytes32,bytes) must answer its selector.
+    document.getElementById('verify').onclick = async () => {
+      const sig = state.results.personal_sign && state.results.personal_sign.result;
+      if (!sig) { state.results.verify = { ok: false, message: 'sign first' }; show(); return; }
+      const msg = new TextEncoder().encode('Hello, Vela');
+      const prefix = new TextEncoder().encode('\x19Ethereum Signed Message:\n' + msg.length);
+      const bytes = new Uint8Array(prefix.length + msg.length); bytes.set(prefix); bytes.set(msg, prefix.length);
+      const hash = sha3.keccak256(bytes);
+      const sigHex = sig.slice(2);
+      const data = '0x1626ba7e' + hash + (64).toString(16).padStart(64, '0') + (sigHex.length / 2).toString(16).padStart(64, '0') + sigHex + '0'.repeat((64 - (sigHex.length % 64)) % 64);
+      const r = await window.__ask('eth_call', [{ to: me(), data }, 'latest']);
+      state.results.verify = { ok: r.ok, magic: r.ok ? String(r.result).slice(0, 10) : null, valid: r.ok && String(r.result).slice(0, 10) === '0x1626ba7e', error: r.ok ? null : r.message };
+      show();
+    };
     document.getElementById('approve').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: GNOSIS_USDC, data: '0x095ea7b3' + SPENDER.slice(2).padStart(64, '0') + MAX, value: '0x0' }]);
   </script>
 </body>

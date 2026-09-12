@@ -15,6 +15,12 @@ import app.getvela.wallet.feature.signing.core.ClearSignType
 import app.getvela.wallet.feature.signing.core.ClearSigningView
 import app.getvela.wallet.feature.signing.core.ClearSiweBinding
 import app.getvela.wallet.feature.signing.core.ClearSurface
+import app.getvela.wallet.feature.signing.core.GuardAmountError
+import app.getvela.wallet.feature.signing.core.GuardEditorMode
+import app.getvela.wallet.feature.signing.core.GuardEditorView
+import app.getvela.wallet.feature.signing.core.GuardIncreaseTotalView
+import app.getvela.wallet.feature.signing.core.GuardSurface
+import app.getvela.wallet.feature.signing.core.GuardTokenMetaView
 import app.getvela.wallet.feature.signing.core.GuardView
 import app.getvela.wallet.feature.signing.core.IncomingRequest
 import app.getvela.wallet.feature.signing.core.SignErrorKind
@@ -41,13 +47,14 @@ object SigningLive {
     private fun VelaStrings.s(key: String) = t("componentsUi.signing.$key")
     private fun VelaStrings.s(key: String, vars: Map<String, String>) = t("componentsUi.signing.$key", vars)
     private fun VelaStrings.a(key: String) = t("componentsUi.signingApprove.$key")
+    private fun VelaStrings.a(key: String, vars: Map<String, String>) = t("componentsUi.signingApprove.$key", vars)
 
     fun model(fallback: SigningScreenModel, request: IncomingRequest, sign: SignView, clear: ClearSigningView, guard: GuardView, fee: FeeView, ctx: Context): SigningScreenModel {
         val s = ctx.strings
         val host = request.origin.substringAfter("://").substringBefore('/').ifBlank { request.origin }
         val facts = SigningController.firstCall(request.paramsJson)
         val dataBytes = facts?.second?.removePrefix("0x")?.length?.div(2) ?: 0
-        val blocks = statusBlocks(sign, s) + blocks(clear, facts?.first, facts?.third, dataBytes, ctx)
+        val blocks = statusBlocks(sign, s) + blocks(clear, facts?.first, facts?.third, dataBytes, ctx) + guardBlocks(guard, s)
         return fallback.copy(
             dappName = host,
             dappHost = host,
@@ -76,6 +83,87 @@ object SigningLive {
             confirmAction = confirmLabel(clear, s),
             confirmEnabled = confirmEnabled(sign, guard, fee, clear),
             panelTitle = s.s("signatureRequest"),
+        )
+    }
+
+    /**
+     * The guard's verdict on an approval (the desktop's `guard_editor`): the
+     * spending cap with the chips the core offers, the custom amount when
+     * chosen, the notes, the resulting total for an increase; an off-chain
+     * permit that cannot be capped; a batch's legs.
+     */
+    fun guardBlocks(guard: GuardView, s: VelaStrings): List<SigningBlock> = when (guard.surface) {
+        GuardSurface.None -> emptyList()
+        GuardSurface.PermitSign -> buildList {
+            guard.detected?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
+            add(SigningBlock.Warning(SigningTone.Danger, s.a("permitCantCap")))
+        }
+        GuardSurface.ApprovalEditor -> buildList {
+            guard.editor?.let { editor -> add(allowanceBlock(editor, guard.meta, guard.increase_total, guard.decimals_unverified, guard.expired, s)) }
+            guard.detected?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
+            if (guard.detected?.is_unbounded == true && guard.editor?.choice == null) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
+        }
+        GuardSurface.Batch -> buildList {
+            guard.batch?.legs?.forEachIndexed { index, leg ->
+                leg.editor?.let { editor -> add(allowanceBlock(editor, leg.meta, null, false, false, s, prefix = "#${index + 1} ")) }
+                leg.approval?.let { add(SigningBlock.Party(s.a("spenderLabel"), ExploreLive.shortAddress(it.spender), it.spender)) }
+            }
+            if (guard.batch?.any_uncapped == true) add(SigningBlock.Warning(SigningTone.Danger, s.s("unlimitedWarning")))
+        }
+    }
+
+    private fun allowanceBlock(
+        editor: GuardEditorView,
+        meta: GuardTokenMetaView,
+        increase: GuardIncreaseTotalView?,
+        decimalsUnverified: Boolean,
+        expired: Boolean,
+        s: VelaStrings,
+        prefix: String = "",
+    ): SigningBlock.Allowance {
+        fun chip(id: String, label: String, mode: GuardEditorMode, offered: Boolean) = AllowanceChip(
+            id = id, label = label,
+            state = when {
+                !offered -> AllowanceChip.ChipState.Disabled
+                editor.mode == mode -> AllowanceChip.ChipState.Selected
+                else -> AllowanceChip.ChipState.Idle
+            },
+        )
+        val chips = listOf(
+            chip("requested", s.a("requested"), GuardEditorMode.Requested, editor.requested_finite),
+            chip("balance", s.a("balanceCap"), GuardEditorMode.Balance, editor.has_balance_cap),
+            chip("custom", s.a("custom"), GuardEditorMode.Custom, true),
+            chip("revoke", s.a("revoke"), GuardEditorMode.Revoke, true),
+        )
+        val value = editor.display_amount_raw?.toBigIntegerOrNull()?.let { units ->
+            "${SendLive.fromBase(units.toString(), meta.decimals)} ${meta.symbol}".trim()
+        } ?: s.a("unlimitedValue")
+        val notes = buildList {
+            if (!editor.requested_finite) add(s.a("unlimitedDisabled") + "\n" + s.a("choosePrompt"))
+            if (decimalsUnverified) add(s.a("decimalsUnverified"))
+            if (expired) add(s.a("expired"))
+        }
+        return SigningBlock.Allowance(
+            label = prefix + s.a("spendingCap"),
+            value = value,
+            valueTone = if (editor.choice != null) SigningTone.Neutral else SigningTone.Danger,
+            chips = chips,
+            note = notes.takeIf { it.isNotEmpty() }?.joinToString("\n"),
+            resultingTotal = increase?.let { total ->
+                SigningRow(s.a("resultingTotal"), total.total ?: s.a("resultingTotalUnknown", mapOf("amount" to total.increment)))
+            },
+            custom = if (editor.mode == GuardEditorMode.Custom) {
+                AllowanceInput(
+                    value = editor.custom_text, symbol = meta.symbol, placeholder = "0",
+                    error = when (editor.error) {
+                        GuardAmountError.InvalidAmount -> s.a("invalidAmount")
+                        GuardAmountError.UnlimitedDisabled -> s.a("unlimitedDisabled")
+                        null -> null
+                    },
+                )
+            } else {
+                null
+            },
         )
     }
 

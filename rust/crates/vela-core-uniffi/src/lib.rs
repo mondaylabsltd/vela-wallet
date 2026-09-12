@@ -1319,6 +1319,44 @@ pub fn dapp_is_signing_method(method: String) -> bool {
     vela_core::app::sign_request::is_signing_method(&method)
 }
 
+/// The Safe message hash a passkey signs for EIP-1271 verification (spec
+/// 044): `SafeMessage(bytes message)` under the SAFE's own domain, so a
+/// page's `personal_sign` / typed-data signature verifies on chain.
+#[uniffi::export]
+pub fn safe_message_hash(
+    original_hash: Vec<u8>,
+    chain_id: u64,
+    safe_address: String,
+) -> Result<Vec<u8>, CoreError> {
+    vela_core::user_op::compute_safe_message_hash(&original_hash, chain_id, &safe_address)
+        .map_err(Into::into)
+}
+
+/// The assertion as an EIP-1271 signature (spec 044): the user-operation
+/// envelope's checks and encoding, without the validity window.
+#[uniffi::export]
+pub fn eip1271_signature(
+    assertion: WebAuthnAssertion,
+    credential_id: String,
+    keys: Vec<WalletKeyRecord>,
+) -> Result<Vec<u8>, CoreError> {
+    let keys: Vec<vela_core::user_op::WalletKey> = keys
+        .into_iter()
+        .map(|key| vela_core::user_op::WalletKey {
+            credential_id: key.credential_id,
+            public_key_hex: key.public_key_hex,
+        })
+        .collect();
+    vela_core::user_op::eip1271_envelope_signature(
+        &assertion.authenticator_data,
+        &assertion.client_data_json,
+        &assertion.signature_der,
+        &credential_id,
+        &keys,
+    )
+    .map_err(Into::into)
+}
+
 /// The EntryPoint every Vela operation is submitted against.
 #[uniffi::export]
 pub fn entry_point_address() -> String {

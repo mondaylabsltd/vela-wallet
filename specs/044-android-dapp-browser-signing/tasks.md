@@ -169,17 +169,17 @@ NDK build; `JAVA_HOME` = Android Studio's JBR.
 
 ## Phase 5 — User Stories 4 + 5: the guard, sign-in, connections (P2)
 
-- [ ] **T037** `SigningLive` + `SigningSheet` — the guard's block and the
+- [X] **T037** `SigningLive` + `SigningSheet` — the guard's block and the
       editor (presets, custom amount, revoke) from `GuardEditorView`;
       batch legs from `GuardLegView`.
-- [ ] **T038** `SigningLive` — the message block for `personal_sign` /
+- [X] **T038** `SigningLive` — the message block for `personal_sign` /
       typed data from `ClearMessageView` (rung: message; SIWE depth is 046).
-- [ ] **T039** `ExploreLive` — the connections list (two origins, account,
+- [X] **T039** `ExploreLive` — the connections list (two origins, account,
       chain) and revoke from `DpermView` + the stored grants.
-- [ ] **T040** [P] `app/src/test/…/GuardEditorTest.kt`, `SigningLiveTest.kt`
+- [X] **T040** [P] `app/src/test/…/GuardEditorTest.kt`, `SigningLiveTest.kt`
       — unlimited blocked, bounded passes, batch blocked by one leg;
       message block words.
-- [ ] **T041** `[device]` SC-005 + SC-006: Approve unlimited blocked, bounded
+- [X] **T041** `[device]` SC-005 + SC-006: Approve unlimited blocked, bounded
       `1` leaves (calldata checked); Sign → the page's EIP-1271 check prints
       `valid`.
 

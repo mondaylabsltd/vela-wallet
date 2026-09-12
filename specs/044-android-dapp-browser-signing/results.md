@@ -256,3 +256,70 @@ routes; and, from the test: JUnit4 refuses a test method that returns
 `runBlocking`'s value (`runBlocking<Unit>`), and a controller that forces
 `Dispatchers.Main` cannot be driven on the JVM.
 
+### Phase 5 — the guard, sign-in, connections (T037–T041)
+
+**What changed**: two more rules exported so the shell never re-types
+them — `safe_message_hash` (the `SafeMessage(bytes)` digest under the
+Safe's own domain) and `eip1271_signature` (the user-operation envelope's
+checks and encoding without the validity window; `eip1271_envelope_signature`
+in the core beside `envelope_signature`). `UserOpSpine.signMessage`: one
+ceremony over the Safe message hash, the assertion encoded as the EIP-1271
+envelope, nothing submitted. `SignExecutor` answers `personal_sign`
+(EIP-191 prefix over hex or text, keccak by the core) and typed data (the
+core's EIP-712 digest) through it. `SigningLive.guardBlocks` — the
+desktop's `guard_editor`: the spending cap with the chips the core offers
+(Requested disabled when unbounded), the custom field while Custom is
+chosen, the notes, the resulting total for an increase, the spender, the
+unlimited warning; a permit that cannot be capped; a batch's legs. The
+drawn `AllowanceEditor` gained taps on its chips and a custom-amount
+field; the sheet threads them to the machine (`guardPreset`,
+`guardCustomAmount`). The connection sheet (E7) revokes; a list of every
+connected origin is not drawn on the phone (022 drew one sheet per site)
+— inherited by 047.
+
+**Tests**: `DappSignMachineTest` +2 — a page's `personal_sign` is read
+(`Hello, Vela`), signed once, answered as an envelope longer than a bare
+signature, nothing reaches the relay; an unlimited `approve` holds the
+slide (`confirm_allowed = false`), Custom `1` rewrites the calldata (the
+unlimited word is gone), the bounded operation is signed once and reaches
+the relay. `SigningLiveTest` +1 — the cap reads Unlimited with Requested
+disabled and the choose prompt; with Custom chosen the field carries the
+text and the value reads `1 USDC`.
+
+**Device** (SC-005, SC-006; `p44-5-approve-blocked.png`,
+`p44-5-approve-bounded.png`, `p44-5-sign.png`):
+- *Approve unlimited* on the test dApp → the sheet `Approve | Amount
+  Unlimited | Spender 0x1111…1111 | 授权上限 无限额 | 请求额度(off) 按余额
+  自定义 撤销 | 为保护你的资产，已禁用无限授权 / 请设置一个有限的金额以继续。 |
+  被授权方 0x1111…1111 | 无限额 — 该合约可以花费你的所有代币 | 网络费 ~0.01
+  xDAI` — and no slide. 自定义 → `1` → `授权上限 1 USDC`, the slide appears
+  (`滑动以确认 · 确认`) → slide → the page prints
+  `eth_sendTransaction: {ok: true, result: "0x3a20c194…7fab"}`; the
+  tracker confirmed it (`tracker.patch confirmed tx=0x3a20c19464`). The
+  unlimited word never left the wallet; what left was the bounded calldata
+  the guard rewrote.
+- *Sign* → `签名消息 | Hello, Vela | 无网络费用 — 链下签名 | 签名账户 Parallel
+  space | 滑动以确认 · 签名` → slide → `personal_sign: {ok: true, result:
+  "0x0000…94a4f6af…0041…"}` — a 417-byte EIP-1271 envelope. Verified
+  through the page's own read proxy: `eth_call isValidSignature(bytes32,
+  bytes)` on the Safe with the EIP-191 digest of the message
+  (`cbb9acfd…683b`) answered the magic value — `{ok: true, magic:
+  "0x1626ba7e", valid: true}` (`rpc.post eth_call host=rpc.gnosischain.com
+  outcome=ok`).
+- *Connections*: the E7 sheet revokes the site in front (phase 3); a list
+  of every connected origin is not drawn on the phone — 047.
+
+**Device-found**:
+1. A tall sheet puts the slide below the fold: `uiautomator` listed it at
+   `[0,0][0,0]` and a drag by those bounds went nowhere; the loop scrolls
+   the sheet first. Not a product defect — recorded for the next pass.
+2. The fee quote's TTL fired while the person read the approval; the slide
+   would have shut with no way to reopen it. The controller now re-quotes
+   when the quote goes stale under an open, idle sheet.
+3. While a request is open, a second one from the same page is refused
+   (`-32002 Another request is open`) rather than queued — the desktop's
+   `ConsentBusy` rule on the permissions side, applied to signing here.
+4. The test dApp's CDN script (`js-sha3`) did not load on the phone; the
+   on-chain check was driven with the digest computed on the host and the
+   page's own `eth_call`.
+

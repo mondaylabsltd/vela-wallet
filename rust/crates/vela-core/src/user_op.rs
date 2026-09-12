@@ -1357,6 +1357,38 @@ pub fn envelope_signature(
 /// `parseBundlerUnderfunded`: is this the relay saying the per-Safe gas
 /// account is short? Wording-tolerant — the relay has reworded it before
 /// ("…bundler EOA" → "…bundler gas account … Deposit to:").
+/// The assertion as an EIP-1271 signature (spec 044): the same
+/// compatibility check, DER → raw low-S, client-data fields and signer
+/// lookup as [`envelope_signature`], encoded WITHOUT the validity window —
+/// `Safe4337Module.isValidSignature` calls `checkNSignatures` directly.
+pub fn eip1271_envelope_signature(
+    authenticator_data: &[u8],
+    client_data_json: &[u8],
+    signature_der: &[u8],
+    credential_id: &str,
+    keys: &[WalletKey],
+) -> Result<Vec<u8>, CoreError> {
+    if let Err(reason) = crate::webauthn::validate_client_data(
+        crate::ClientDataKind::Get,
+        client_data_json,
+        authenticator_data,
+    ) {
+        return Err(CoreError::InvalidClientData(format!(
+            "Your device's identity provider is not compatible with Vela Wallet. Please switch to Google Password Manager.\n\n{reason}"
+        )));
+    }
+    let raw = crate::webauthn::der_signature_to_raw_low_s(signature_der)?;
+    if raw.len() != 64 {
+        return Err(CoreError::InvalidSignature(format!(
+            "raw signature is {} bytes, not 64",
+            raw.len()
+        )));
+    }
+    let fields = extract_client_data_fields(client_data_json);
+    let signer = signer_address_for(keys, Some(credential_id))?;
+    build_eip1271_signature(authenticator_data, &fields, &raw[..32], &raw[32..], &signer)
+}
+
 #[must_use]
 pub fn is_bundler_underfunded(message: &str) -> bool {
     let lower = message.to_lowercase();

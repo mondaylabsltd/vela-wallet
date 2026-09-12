@@ -372,6 +372,15 @@ fun VelaNavHost(
                             // The swipe: a reject before the commitment point, a dismiss after — the core routes it.
                             onDismiss = { controller.swipeDismissed() },
                             onConfirm = { controller.approve() },
+                            onChip = { id ->
+                                when (id) {
+                                    "requested" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Requested)
+                                    "balance" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Balance)
+                                    "custom" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Custom)
+                                    "revoke" -> controller.guardPreset(app.getvela.wallet.feature.signing.core.GuardEditorMode.Revoke)
+                                }
+                            },
+                            onCustomAmount = { controller.guardCustomAmount(it) },
                         )
                     }
                 }
