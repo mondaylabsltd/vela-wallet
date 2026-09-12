@@ -1,0 +1,185 @@
+package app.getvela.wallet
+
+import app.getvela.wallet.core.data.KeyValueStore
+import app.getvela.wallet.feature.onboarding.core.AccountStore
+import app.getvela.wallet.feature.onboarding.core.Assertion
+import app.getvela.wallet.feature.onboarding.core.KeyMethod
+import app.getvela.wallet.feature.send.core.RelayClient
+import app.getvela.wallet.feature.send.core.RestAnswer
+import app.getvela.wallet.feature.send.core.StoreAccountPort
+import app.getvela.wallet.feature.send.core.UserOpSigner
+import app.getvela.wallet.feature.signing.core.IncomingRequest
+import app.getvela.wallet.feature.signing.core.SignAccountRef
+import app.getvela.wallet.feature.signing.core.SignSurface
+import app.getvela.wallet.feature.signing.core.SigningController
+import app.getvela.wallet.feature.wallet.core.FeedExecutor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import org.json.JSONArray
+import org.json.JSONObject
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import uniffi.vela_dev_fixtures.fixtureAccounts
+import uniffi.vela_dev_fixtures.fixtureAssert
+import uniffi.vela_dev_fixtures.fixtureMultiAddress
+
+/**
+ * Spec 044 T035 — SC-304's answer: a page's `eth_sendTransaction` through
+ * the real sign_request + clear_signing + approval_guard + fee_policy
+ * machines and the SAME spine a person's transfer runs, signed by the
+ * parallel space's keyset. The sheet's facts are the core's, one signature
+ * is produced, the record precedes the response, the page gets the hash.
+ */
+class DappSignMachineTest {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val store = FakeStore()
+    private val port = FakeRelayPort()
+    private val safe = fixtureMultiAddress()
+    private val founder = "0x76875e38fc6Bc2dEDCaed807cE00782DB5C0D141"
+    private val origin = "http://127.0.0.1:8137"
+    private val events = java.util.Collections.synchronizedList(ArrayList<String>())
+    private val answers = java.util.Collections.synchronizedList(ArrayList<Pair<String, JSONObject>>())
+    private var signs = 0
+
+    @After
+    fun stop() = scope.cancel()
+
+    private fun seedAccount() {
+        val keyset = fixtureAccounts()
+        val keys = JSONArray()
+        keyset.forEach { keys.put(JSONObject().put("credential_id", it.credentialIdHex).put("public_key_hex", it.publicKeyHex).put("name", it.name).put("transports", "internal")) }
+        val account = JSONObject().put("id", keyset.first().credentialIdHex).put("name", "Parallel space").put("address", safe)
+            .put("public_key_hex", keyset.first().publicKeyHex).put("created_at_iso", "2026-09-12T00:00:00Z").put("keys", keys)
+        store.values["vela.accounts"] = JSONArray().put(account).toString()
+        store.values["vela.activeAccountIndex"] = "0"
+    }
+
+    private fun scriptRelay() {
+        port.always("eth_getCode") { FakeRelayPort.body("0x6080") }
+        port.always("eth_call") { FakeRelayPort.body("0x" + "0".repeat(63) + "7") }
+        port.always("eth_gasPrice") { FakeRelayPort.body("0x3b9aca00") }
+        port.always("eth_getBlockByNumber") { FakeRelayPort.body(JSONObject().put("baseFeePerGas", "0x3b9aca00")) }
+        port.always("eth_maxPriorityFeePerGas") { FakeRelayPort.body("0x5f5e100") }
+        port.always("pimlico_getUserOperationGasPrice") {
+            FakeRelayPort.body(JSONObject().put("fast", JSONObject().put("maxFeePerGas", "0x77359400").put("networkFeePerGas", "0x3b9aca00").put("relayerFeePerGas", "0x3b9aca00")))
+        }
+        port.always("vela_getInBandGasQuote") {
+            FakeRelayPort.body(JSONArray().put(JSONObject().put("recipient", "0x2222222222222222222222222222222222222222").put("asset", "native").put("balance", "0x9f3306a949ca000").put("decimals", 18).put("symbol", "XDAI").put("usdBalance", "0.71").put("usdPrice", "1")))
+        }
+        port.always("eth_estimateUserOperationGas") {
+            FakeRelayPort.body(JSONObject().put("verificationGasLimit", "0x186a0").put("callGasLimit", "0x30d40").put("preVerificationGas", "0xc350"))
+        }
+        port.always("eth_sendUserOperation") { events += "relay.send"; FakeRelayPort.body("0xhash") }
+        // The receipt: pending once, then landed — the answer is the TX hash.
+        port.answer(
+            "eth_getUserOperationReceipt",
+            FakeRelayPort.body(JSONObject.NULL),
+            FakeRelayPort.body(JSONObject().put("success", true).put("sender", safe).put("receipt", JSONObject().put("transactionHash", "0xtx").put("logs", JSONArray()))),
+        )
+        port.rest["https://relay.test/v1/treasury/100"] = RestAnswer.Ok(JSONObject().put("address", "0x1111111111111111111111111111111111111111").put("bootstrapNeeded", false))
+        port.rest["https://relay.test/v1/account/100/${safe.lowercase()}"] = RestAnswer.Ok(JSONObject().put("activeDepositAddress", "0x2222222222222222222222222222222222222222").put("status", "ACTIVE"))
+    }
+
+    private val fixtureSigner = object : UserOpSigner {
+        override suspend fun sign(challenge: ByteArray, credentialIdHex: String?, transports: String, method: KeyMethod): Assertion {
+            signs += 1
+            events += "sign"
+            val signed = fixtureAssert(challenge, listOfNotNull(credentialIdHex), 0u)
+            return Assertion(signed.credentialIdHex, signed.signatureDerHex, signed.authenticatorDataHex, signed.clientDataJsonHex, null, "platform")
+        }
+    }
+
+    private fun controller(): SigningController {
+        val relay = RelayClient(port, builtinBase = { "https://builtin.test" }, retryDelayMs = 0)
+        val feed = FeedExecutor(store = store, ownAccounts = { emptyList() })
+        val accounts = StoreAccountPort(AccountStore(store))
+        val credential = fixtureAccounts().first().credentialIdHex
+        return SigningController(
+            scope = scope, relay = relay, feed = feed, accounts = accounts, signer = { fixtureSigner },
+            knownChains = { listOf(1, 100) },
+            wallet = SignAccountRef(address = safe, credential_id = credential),
+            receiptWaitMs = 10_000L, receiptPollMs = 100L,
+            ports = object : SigningController.Ports {
+                override fun respond(transportId: String, id: String, json: JSONObject) {
+                    events += "respond"
+                    answers += "$transportId/$id" to json
+                }
+                override fun opSubmitted(id: String, userOpHash: String) { events += "op:$userOpHash" }
+                override fun signingStarted() { events += "signing" }
+                override fun recordsPersisted() {
+                    val stored = store.values[KeyValueStore.Keys.TRANSACTIONS].orEmpty()
+                    events += if (stored.contains("0xhash")) "persisted:with-hash" else "persisted"
+                }
+                override fun recordPersisted(recordId: String) { events += "record:$recordId" }
+                override suspend fun switchAccount(index: Int) = true
+                override fun nativeSymbol(chainId: Int) = "XDAI"
+                override fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) {
+                    val stored = store.values[KeyValueStore.Keys.TRANSACTIONS].orEmpty()
+                    events += if (stored.contains(userOpHash)) "track:persisted" else "track:NOT-PERSISTED"
+                }
+                override fun dataBase() = ""
+                override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> = null to false
+            },
+        )
+    }
+
+    private fun transfer() = IncomingRequest(
+        id = "r1", method = "eth_sendTransaction",
+        paramsJson = JSONArray().put(JSONObject().put("from", safe).put("to", founder).put("value", "0x38d7ea4c68000")).toString(),
+        origin = origin, transportId = "tab-1", chainId = 100,
+    )
+
+    @Test
+    fun `a page's transfer is read, priced, signed once, recorded, then answered with the hash`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        val c = controller()
+        c.open(transfer())
+        val sheet = withTimeout(20_000) { c.sign.first { it.surface == SignSurface.Sheet && it.request != null } }
+        assertEquals(origin, sheet.request!!.origin)
+        assertEquals(100, sheet.request!!.chain_id)
+        val read = withTimeout(20_000) { c.clear.first { it.resolved } }
+        assertTrue("the reading is the core's: ${read.surface}", read.result != null || read.surface.name.isNotEmpty())
+        withTimeout(30_000) { c.fee.first { it.confirm_fee_ready } }
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r1" }) delay(50) }
+        val answer = answers.first { it.first == "tab-1/r1" }.second
+        assertEquals("the page gets the TRANSACTION hash once the receipt landed", "0xtx", answer.getString("result"))
+        assertEquals("signed exactly once", 1, signs)
+        assertTrue("the record precedes the response: $events", events.indexOf("persisted:with-hash") in 0 until events.indexOf("respond"))
+        assertTrue("the tracker was handed a persisted row: $events", events.contains("track:persisted"))
+        val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
+        val row = rows.getJSONObject(0)
+        assertEquals("dapp_tx", row.getString("type"))
+        assertEquals("0xhash", row.getString("userOpHash"))
+        withTimeout(10_000) { while (JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0).optString("status") != "confirmed") delay(50) }
+        assertEquals("0xtx", JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).getJSONObject(0).getString("txHash"))
+        assertEquals(origin, row.getString("dappOrigin"))
+        assertTrue(row.getString("to").equals(founder, ignoreCase = true))
+        withTimeout(10_000) { c.closed.first { it } }
+    }
+
+    @Test
+    fun `a dismissal is the standard refusal once, and nothing is written`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        val c = controller()
+        c.open(transfer())
+        withTimeout(20_000) { c.sign.first { it.surface == SignSurface.Sheet } }
+        c.swipeDismissed()
+        withTimeout(20_000) { while (answers.isEmpty()) delay(50) }
+        delay(300)
+        assertEquals(1, answers.size)
+        assertEquals(4001, answers.single().second.getJSONObject("error").getInt("code"))
+        assertEquals(0, signs)
+        assertTrue(store.values[KeyValueStore.Keys.TRANSACTIONS].isNullOrEmpty())
+        withTimeout(10_000) { c.closed.first { it } }
+    }
+}

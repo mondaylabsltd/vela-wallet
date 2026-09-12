@@ -40,6 +40,7 @@ object Abi {
     private const val SEL_GET_AMOUNTS_OUT = "5509a1ac" // getAmountsOut(uint256,(address,address,bool,address)[])
     private const val SEL_SYMBOL = "95d89b41" // symbol()
     private const val SEL_NAME = "06fdde03" // name()
+    private const val SEL_ALLOWANCE = "dd62ed3e" // allowance(address,address)
     private const val SEL_LATEST_ROUND = "feaf968c" // latestRoundData()
 
     /** One entry in a Multicall3 batch. `allowFailure` is always true here. */
@@ -88,6 +89,8 @@ object Abi {
     fun encodeSymbol(): String = "0x$SEL_SYMBOL"
 
     fun encodeName(): String = "0x$SEL_NAME"
+
+    fun encodeAllowance(owner: String, spender: String): String = "0x" + SEL_ALLOWANCE + addressWord(owner) + addressWord(spender)
 
     fun encodeGetEthBalance(address: String): String =
         "0x" + SEL_GET_ETH_BALANCE + addressWord(address)

@@ -243,123 +243,28 @@ class SendExecutor(
 
     private fun other(message: String): Nothing = throw SubmitRefused(SendSubmitFailure.Other(message))
 
-    private suspend fun submitInner(op: SendOperation.SubmitUserOp): String {
-        val keys = accounts.keysOf(op.account)
-        if (keys.isEmpty()) other("No passkey credential for the active account")
-        val pinned = keys.first()
-        val calls = op.calls.map { UserOpCall(to = it.to, value = it.value, data = it.data) }
-        val tempo = isChainWithoutNativeCoin(op.chain_id.toUInt())
+    private val spine = UserOpSpine(relay, accounts, signer)
 
-        // Deployment status and the nonce, together, with the two refusals.
-        val deployed = relay.isDeployed(op.chain_id, op.account)
-            ?: other("The network could not be reached. Please try again.")
-        val nonce = if (deployed) {
-            relay.nonce(op.chain_id, op.account) ?: other("The account's nonce could not be read. Please try again.")
-        } else {
-            "0x0"
-        }
-        val floors = userOpFloors(op.chain_id.toUInt(), deployed, (calls.size + 1).toUInt())
-
-        // The fee leg: EXACTLY the displayed quote (invariant ①). A caller with
-        // no confirm screen would fall back to a send-time quote; this client
-        // always has one, and a missing quote is a refusal, not a guess.
-        val quoted = op.quoted_fee
-            ?.takeIf { quotedFeeUsable(it.amount, it.recipient) }
-            ?: other("The fee quote has expired. Please review the updated fee and try again.")
-        val feeToken = if (tempo) op.gas_fee_token ?: TEMPO_DEFAULT_FEE_TOKEN else op.gas_fee_token
-        val settled: UserOpFeeMode
-        val placeholder: UserOpFeeMode
-        if (tempo) {
-            val collector = relay.accountInfo(op.chain_id, op.account)?.feeRecipient()
-                ?: other("The Tempo gas relayer is unavailable right now. Please try again.")
-            if (!quoted.recipient.equals(collector, ignoreCase = true)) {
-                other("The gas quote has expired. Please review the updated fee and try again.")
-            }
-            settled = UserOpFeeMode.Tempo(feeToken = feeToken!!, collector = collector, reimbursement = quoted.amount)
-            placeholder = UserOpFeeMode.Tempo(feeToken = feeToken, collector = collector, reimbursement = "1")
-        } else {
-            settled = UserOpFeeMode.InBand(gasFeeToken = feeToken, amount = quoted.amount, recipient = quoted.recipient)
-            // Estimated with a PLACEHOLDER leg whose recipient is the Safe
-            // itself — a self-transfer always succeeds and has the real leg's
-            // exact calldata shape.
-            placeholder = UserOpFeeMode.InBand(gasFeeToken = feeToken, amount = "1", recipient = op.account)
-        }
-
-        var draft = runCatching {
-            userOpDraft(
-                sender = op.account,
-                nonce = nonce,
-                deployed = deployed,
-                keyHexes = keys.map { it.publicKeyHex },
-                calls = calls,
-                fee = placeholder,
-                floors = floors,
-            )
-        }.getOrElse { other(it.message ?: "The operation could not be assembled.") }
-
-        val hasContractCall = userOpHasContractCall(calls)
-        when (val estimate = relay.estimateUserOpGas(op.chain_id, userOpRelayJson(draft, feeToken.takeIf { tempo }))) {
-            is RelayClient.EstimateAnswer.Estimated -> draft = userOpApplyEstimate(
-                draft,
-                estimate.verificationGasLimit,
-                estimate.callGasLimit,
-                estimate.preVerificationGas,
-                floors,
-            )
-            is RelayClient.EstimateAnswer.Refused, RelayClient.EstimateAnswer.Unreachable -> {
-                VelaLog.event("send.submit", "estimate failed, defaults", "contract" to hasContractCall)
-                if (hasContractCall) {
-                    other("Could not estimate gas for this transaction. The network may be busy — please try again.")
-                }
-            }
-        }
-        draft = userOpWithCalls(draft, calls, settled)
-
-        // The challenge is the SafeOp hash; the ceremony is the one seam.
-        val challenge = userOpSafeOpHash(draft, op.chain_id.toUInt())
-        ports.signingStarted()
-        val (transports, method) = accounts.routingOf(op.account)
-        val assertion: Assertion = try {
-            signer().sign(challenge, pinned.credentialId, transports, method)
-        } catch (failure: PasskeyFailure) {
-            if (failure.kind == FailureKind.Cancelled) throw SubmitRefused(SendSubmitFailure.PasskeyCancelled)
-            other(failure.message ?: "the passkey ceremony failed")
-        }
-        val signed = runCatching {
-            userOpSign(
-                draft,
-                WebAuthnAssertion(
-                    authenticatorData = unhex(assertion.authenticatorDataHex),
-                    clientDataJson = unhex(assertion.clientDataJsonHex),
-                    signatureDer = unhex(assertion.signatureDerHex),
-                ),
-                assertion.credentialIdHex,
-                keys,
-            )
-        }.getOrElse { other(it.message ?: "Failed to create signature") }
-
-        return when (val answer = relay.sendUserOp(op.chain_id, userOpRelayJson(signed, feeToken.takeIf { tempo }))) {
-            is RelayClient.SubmitAnswer.Accepted -> answer.userOpHash
-            is RelayClient.SubmitAnswer.Rejected -> {
-                val message = relayErrorMessage(answer.errorJson)
-                // A previous op is still pending: poll ITS receipt instead of failing.
-                parseExistingUserOpHash(message)?.let { existing ->
-                    VelaLog.event("send.submit", "previous op pending", "hash" to existing.take(12))
-                    return existing
-                }
-                throw SubmitRefused(
-                    when (val rejection = classifyRelayRejection(message)) {
-                        RelayRejection.RelayerUnavailable -> SendSubmitFailure.RelayerUnavailable
-                        RelayRejection.BundlerUnderfunded -> SendSubmitFailure.BundlerUnderfunded
-                        is RelayRejection.Other -> SendSubmitFailure.Other(rejection.message.ifBlank { null })
-                    },
-                )
-            }
-            RelayClient.SubmitAnswer.Unreachable -> other("The gas relayer could not be reached. Please try again.")
-        }
+    /** The spine (spec 044 T028): one implementation for a person's transfer and a dApp's transaction. */
+    private suspend fun submitInner(op: SendOperation.SubmitUserOp): String = try {
+        spine.submit(
+            chainId = op.chain_id,
+            account = op.account,
+            calls = op.calls.map { UserOpCall(to = it.to, value = it.value, data = it.data) },
+            gasFeeToken = op.gas_fee_token,
+            quotedFee = op.quoted_fee?.let { UserOpSpine.Quoted(it.amount, it.recipient) },
+            signingStarted = { ports.signingStarted() },
+        )
+    } catch (refused: UserOpSpine.Refused) {
+        throw SubmitRefused(
+            when (val failure = refused.failure) {
+                UserOpSpine.Failure.PasskeyCancelled -> SendSubmitFailure.PasskeyCancelled
+                UserOpSpine.Failure.RelayerUnavailable -> SendSubmitFailure.RelayerUnavailable
+                UserOpSpine.Failure.BundlerUnderfunded -> SendSubmitFailure.BundlerUnderfunded
+                is UserOpSpine.Failure.Other -> SendSubmitFailure.Other(failure.message)
+            },
+        )
     }
-
-    // -- helpers --------------------------------------------------------------------
 
     /** The feed's own camelCase row for a submitted send (data-model.md). */
     private fun feedRow(record: SendTxRecord): JSONObject = JSONObject()
@@ -400,13 +305,13 @@ class SendExecutor(
         SendOperation.Close -> SendShellResult.Closed
     }
 
-    private companion object {
+    internal companion object {
         /** The id half the core keys tokens on; the chain id is the whole story here. */
         fun network(chainId: Int) = "chain-$chainId"
 
         /** `fee_policy::TEMPO_DEFAULT_FEE_TOKEN` — pathUSD. */
-        const val TEMPO_DEFAULT_FEE_TOKEN = "0x20c0000000000000000000000000000000000000"
+        internal const val TEMPO_DEFAULT_FEE_TOKEN = "0x20c0000000000000000000000000000000000000"
 
-        fun unhex(text: String): ByteArray = text.removePrefix("0x").chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        internal fun unhex(text: String): ByteArray = text.removePrefix("0x").chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     }
 }

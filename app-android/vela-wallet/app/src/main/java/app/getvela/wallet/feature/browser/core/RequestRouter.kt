@@ -30,6 +30,19 @@ class RequestRouter(
 
         /** A signature request: the signing machines' (phase 4). */
         fun sign(id: String, method: String, paramsJson: String, origin: String)
+
+        /**
+         * A user-operation hash this wallet submitted for a page: the page
+         * was answered with it as its "transaction hash" (the web's
+         * non-blocking rule), so its receipt lookups are translated —
+         * `null` when the hash is not one of ours.
+         */
+        suspend fun receiptFor(userOpHash: String): Receipt?
+    }
+
+    sealed class Receipt {
+        data object Pending : Receipt()
+        data class Landed(val txHash: String) : Receipt()
     }
 
     suspend fun route(id: String, method: String, paramsJson: String, origin: String) {
@@ -58,7 +71,18 @@ class RequestRouter(
             // because a page asked while it had the floor.
             DappRpc.Route.Ack -> ports.respond(id, BrowserExecutor.resultJson(id, null))
             is DappRpc.Route.Read -> {
-                val params = runCatching { JSONArray(paramsJson) }.getOrElse { JSONArray() }
+                var params = runCatching { JSONArray(paramsJson) }.getOrElse { JSONArray() }
+                // A receipt asked for by a user-operation hash we answered
+                // with: pending → nothing yet; landed → the node's receipt
+                // for the real transaction (spec 028's translation).
+                if (method == "eth_getTransactionReceipt" || method == "eth_getTransactionByHash") {
+                    val asked = params.optString(0)
+                    when (val receipt = asked.takeIf { it.startsWith("0x") }?.let { ports.receiptFor(it) }) {
+                        RequestRouter.Receipt.Pending -> { ports.respond(id, BrowserExecutor.resultJson(id, null)); return }
+                        is RequestRouter.Receipt.Landed -> params = JSONArray().put(receipt.txHash)
+                        null -> Unit
+                    }
+                }
                 val body = ports.poolCall(ports.browserChain(), method, params, route.bundler)
                 val error = body?.optJSONObject("error")
                 when {

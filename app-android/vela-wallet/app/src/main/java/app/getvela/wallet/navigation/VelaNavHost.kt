@@ -346,6 +346,36 @@ fun VelaNavHost(
             // Back unwinds the flow stack first, then leaves 探索 for 钱包 —
             // Back out of a browser should land on the wallet, not on Welcome.
             BackHandler(enabled = flows.isOpen) { flows.back() }
+            // Spec 044: a page asked for a signature — the sheet over whatever is
+            // showing, read from the four machines; dismissing is the refusal.
+            val signingController by application.container.signing.collectAsStateWithLifecycle()
+            signingController?.let { controller ->
+                val signView by controller.sign.collectAsStateWithLifecycle()
+                val clearView by controller.clear.collectAsStateWithLifecycle()
+                val guardView by controller.guard.collectAsStateWithLifecycle()
+                val signFee by controller.fee.collectAsStateWithLifecycle()
+                val signRequest by controller.request.collectAsStateWithLifecycle()
+                val signChain = signRequest?.chainId ?: 0
+                val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
+                    strings = strings,
+                    chainName = chainNames[signChain] ?: signChain.toString(),
+                    chainDot = WalletLive.badge(signChain.toLong()),
+                    nativeSymbol = networks.networks.firstOrNull { it.chain_id.toInt() == signChain }?.native_symbol ?: "ETH",
+                    walletName = session.activeName,
+                    walletAddress = session.address,
+                )
+                signRequest?.let { request ->
+                    if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
+                        val drawn = remember(strings) { SigningFixtures.build(SigningScreenState.CS1, strings) }
+                        app.getvela.wallet.feature.signing.SigningSheet(
+                            model = app.getvela.wallet.feature.signing.SigningLive.model(drawn, request, signView, clearView, guardView, signFee, signCtx),
+                            // The swipe: a reject before the commitment point, a dismiss after — the core routes it.
+                            onDismiss = { controller.swipeDismissed() },
+                            onConfirm = { controller.approve() },
+                        )
+                    }
+                }
+            }
             BackHandler(enabled = !flows.isOpen && section == VelaTab.Explore) {
                 section = VelaTab.Wallet
             }

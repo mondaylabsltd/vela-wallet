@@ -193,3 +193,66 @@ through DevTools:
   → 取消 → `{ok: false, code: 4001, message: "User rejected the request"}`,
   once.
 
+### Phase 4 — sign, and it lands (T028–T036) — SC-304's answer
+
+**What changed**: `UserOpSpine` — the submit spine extracted from
+`SendExecutor.submitInner` (same order, same ports); a person's transfer
+and a dApp's transaction are ONE implementation now (`SendMachineTest`
+unchanged, green). `SignExecutor` (seven arms: the page answered through
+the owning tab; the pre-check and sponsorship answered as the desktop
+answers them; `SignAndSubmit` through the spine with `OpSubmitted`
+mid-flight, the record awaited before the answer, and the desktop's
+`await_receipt` — the page's `eth_sendTransaction` resolves to the
+TRANSACTION hash, the op hash only when the receipt is late; records in
+the feed's `dapp_tx` shape; the account switch acknowledged).
+`ClearExecutor` (descriptors from the settings machine's data endpoint,
+openchain → 4byte selectors cached, routed `eth_call` with the
+answered/reverted/could-not-ask distinction, clock, timer). `GuardExecutor`
+(metadata by `aggregate3`, allowance and balance reads).
+`SigningController` — born per forwarded request, four hosts that die
+together; `NetworksChanged` and `AccountsChanged` BEFORE `RequestArrived`;
+`clear_kickoff` by method; the fee quoted for the request's calls; the
+tracker handed the hash only once every record it names is on disk.
+`SigningLive` — the drawn sheet from the four views: the dApp is the host,
+the blocks the core's reading (a plain native transfer with no calldata
+reads as Send with its amount and recipient — the core resolves it without
+a descriptor; drawing the blind card for it read a dust send as a contract
+interaction, device-found), the fee from the policy, the slide open only
+when the request, the guard and the fee all say so, its verb the core's
+intent in the corpus's words. `RequestRouter` translates
+`eth_getTransactionReceipt` for a hash this browser answered a page with.
+The sheet is raised by the container's `signing` state over whatever is
+showing; dismissing it is the swipe the core routes (a reject before the
+commitment point, a dismiss after).
+
+**Tests**: `DappSignMachineTest` (debug set, fixture keyset): a page's
+`eth_sendTransaction` → the sheet carries the core's origin and chain, the
+reading resolves, the fee is ready, the gate opens → approve → one
+signature, the record is on disk before the tracker is handed the hash and
+before the page is answered, the page receives the TX hash once the
+scripted receipt lands, the row flips to confirmed with it; a swipe before
+commitment → 4001 once, nothing written, the controller closes.
+`SigningLiveTest`: the plain transfer reads as Send/amount/recipient with
+`confirmSend`; the slide waits for the guard and the fee; bytes stay blind.
+Suite: 450, 0 failures (+ SigningLiveTest 2).
+
+**Device** (SC-004; `p44-4-sheet-send.png`, `p44-4-submitted.png`,
+`p44-4-answered.png`, `p44-4-home.png`): Send dust on the test dApp → the
+sheet `1 | 127.0.0.1:8137 | Gnosis | 发送 | −0.001 xDAI | 接收方 |
+0x7687…D141 | 技术细节 | 网络费 ~0.01 xDAI | 签名账户 Parallel space |
+滑动以确认 · 确认发送` → slide (the parallel space signs) → `已提交 —
+等待链上确认` → the page prints `eth_sendTransaction: {ok: true, result:
+"0x0698bf846a…8fe3"}` — the TX hash, after the receipt; the tracker
+patched the row (`tracker.patch confirmed ids=1 tx=0x0698bf846a`) and the
+home feed lists it. The first pass (`p44-4-sheet.png`) had read the same
+transfer as `合约交互 | 无法解码 — 无 ERC-7730 描述符（0 字节）` — fixed
+before this pass; its transfer `0x0fbee0f5…4429` also landed.
+
+**Device-found defects, fixed**: the blind card for a no-calldata transfer;
+the slide's verb printed the intent id (`确认send`) — mapped to
+`confirmSend`; `DismissTapped` is not the refusal (the core's dismiss is
+silent for a committed op) — the sheet's close is the swipe, which the core
+routes; and, from the test: JUnit4 refuses a test method that returns
+`runBlocking`'s value (`runBlocking<Unit>`), and a controller that forces
+`Dispatchers.Main` cannot be driven on the JVM.
+

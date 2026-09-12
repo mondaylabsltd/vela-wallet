@@ -131,37 +131,37 @@ NDK build; `JAVA_HOME` = Android Studio's JBR.
 
 ## Phase 4 — User Story 3: sign, and it lands (P1) 🎯 SC-304's answer
 
-- [ ] **T028** `…/feature/send/core/UserOpSpine.kt` — extracted from
+- [X] **T028** `…/feature/send/core/UserOpSpine.kt` — extracted from
       `SendExecutor.submitInner` (same order, same ports); `SendExecutor`
       calls it; `SendMachineTest` still green (one implementation, D7).
-- [ ] **T029** `…/feature/signing/core/SignExecutor.kt` — the seven arms:
+- [X] **T029** `…/feature/signing/core/SignExecutor.kt` — the seven arms:
       `SendResponse` → the owning tab's bridge; `CheckBundlerFunding` →
       `probeTreasury`; `AttemptSponsorship` (off in the parallel space);
       `SignAndSubmit` → `UserOpSpine`, `OpSubmitted` mid-flight, the
       receipt's tx hash at the end; `PersistRecord`/`UpdateRecord` →
       `FeedExecutor` (`dapp_tx`); `SwitchActiveAccount` verified.
-- [ ] **T030** [P] `…/feature/signing/core/ClearExecutor.kt` —
+- [X] **T030** [P] `…/feature/signing/core/ClearExecutor.kt` —
       descriptors (`HttpGet`), selector DBs (openchain → 4byte, cached),
       `RpcEthCall` via the pool, `Now`/`Timer`.
-- [ ] **T031** [P] `…/feature/signing/core/GuardExecutor.kt` — metadata via
+- [X] **T031** [P] `…/feature/signing/core/GuardExecutor.kt` — metadata via
       `aggregate3`, allowance/balance `eth_call`s.
-- [ ] **T032** `…/feature/signing/core/SigningController.kt` — born per
+- [X] **T032** `…/feature/signing/core/SigningController.kt` — born per
       forwarded request: sign + clear + guard + fee hosts; `NetworksChanged`
       and `AccountsChanged` BEFORE `RequestArrived`; `clear_kickoff` by
       method; `approve_opts` from the three views; dies with the request.
-- [ ] **T033** `…/feature/signing/SigningLive.kt` — `SignView` +
+- [X] **T033** `…/feature/signing/SigningLive.kt` — `SignView` +
       `ClearSigningView` + `GuardView` + `FeeView` → `SigningScreenModel`
       (dApp identity = the host; blocks; tech disclosure; fee; signer;
       confirm label/enabled; status/funding blocks).
-- [ ] **T034** `VelaNavHost.kt` — the sheet raised by a forwarded request
+- [X] **T034** `VelaNavHost.kt` — the sheet raised by a forwarded request
       over the browser (and over the wallet if the request arrives while
       away); slide → `ApproveTapped`; close/back/swipe → one refusal; the
       tracker handoff to `WalletController.trackSubmitted`.
-- [ ] **T035** [P] `app/src/testDebug/…/DappSignMachineTest.kt` — a page's
+- [X] **T035** [P] `app/src/testDebug/…/DappSignMachineTest.kt` — a page's
       `eth_sendTransaction` through the real machines with the fixture
       keyset: sheet facts, one signature, record before response, the
       page answered with the hash; reject → 4001 once, nothing written.
-- [ ] **T036** `[device]` SC-004: Send dust from the test dApp → the sheet
+- [X] **T036** `[device]` SC-004: Send dust from the test dApp → the sheet
       → slide → hash printed by the page → pending row → confirmed; the
       relay receipt matches.
 

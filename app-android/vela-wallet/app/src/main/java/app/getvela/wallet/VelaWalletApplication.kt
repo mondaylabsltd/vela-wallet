@@ -16,6 +16,12 @@ import app.getvela.wallet.feature.contacts.core.ContactIdentity
 import app.getvela.wallet.feature.contacts.core.IdentityResolver
 import app.getvela.wallet.feature.send.core.SendRecipientIdentity
 import org.json.JSONObject
+import app.getvela.wallet.feature.signing.core.SigningController
+import app.getvela.wallet.feature.signing.core.IncomingRequest
+import app.getvela.wallet.feature.signing.core.SignAccountRef
+import app.getvela.wallet.feature.send.core.StoreAccountPort
+import app.getvela.wallet.feature.browser.core.BrowserExecutor
+import app.getvela.wallet.feature.settings.core.NetEndpointField
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.PoolRelayPort
 import app.getvela.wallet.dev.ParallelSpaceHook
@@ -258,9 +264,13 @@ class AppContainer(private val app: Application) {
             store = VelaStore(app),
             pool = pool,
             feed = wallet.feedExecutor,
+            relay = relay,
             knownChains = { settings.networks.value.networks.map { it.chain_id.toInt() } },
             debuggable = BuildConfig.DEBUG,
         ).also { controller ->
+            // A page asked for a signature: the four signing machines are born
+            // for it, answer it, and die with it (spec 044 phase 4).
+            controller.onSignRequest = { request -> openSigning(controller, request) }
             // The permissions machine is told the session's accounts as the
             // desktop tells it at birth, and again on every change.
             CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate).launch {
@@ -268,6 +278,63 @@ class AppContainer(private val app: Application) {
                     if (!view.loading) controller.accountsChanged(view.accounts.map { it.address }, view.address.takeIf { it.isNotBlank() })
                 }
             }
+        }
+    }
+
+    /** The signing sheet's controller while a page's request is open (spec 044). */
+    val signing = kotlinx.coroutines.flow.MutableStateFlow<SigningController?>(null)
+
+    private val signingScope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
+
+    private fun openSigning(browser: BrowserController, request: BrowserController.SignRequest) {
+        signingScope.launch {
+            val address = session.view.value.address
+            val accountPort = StoreAccountPort(AccountStore(app))
+            val credential = accountPort.keysOf(address).firstOrNull()?.credentialId
+            if (address.isBlank() || credential == null) {
+                browser.answerFromSigning(request.transportId, request.id, BrowserExecutor.errorJson(request.id, 4100, "No wallet account available"))
+                return@launch
+            }
+            // One request at a time: a second while the sheet is up is the core's ConsentBusy on the permissions side; here it is refused plainly.
+            signing.value?.let { open ->
+                browser.answerFromSigning(request.transportId, request.id, BrowserExecutor.errorJson(request.id, -32002, "Another request is open"))
+                return@launch
+            }
+            lateinit var controller: SigningController
+            controller = SigningController(
+                scope = signingScope,
+                relay = relay,
+                feed = wallet.feedExecutor,
+                accounts = accountPort,
+                signer = { ParallelSpaceHook.signer() ?: passkeySigner ?: error("no signer bound") },
+                knownChains = { settings.networks.value.networks.map { it.chain_id.toInt() } },
+                wallet = SignAccountRef(address = address, credential_id = credential),
+                ports = object : SigningController.Ports {
+                    override fun respond(transportId: String, id: String, json: org.json.JSONObject) {
+                        browser.answerFromSigning(transportId, id, json)
+                        controller.markAnswered()
+                    }
+                    override fun opSubmitted(id: String, userOpHash: String) = browser.rememberUserOp(userOpHash)
+                    override fun signingStarted() = Unit
+                    override fun recordsPersisted() = wallet.feedReconciled()
+                    override fun recordPersisted(recordId: String) = Unit
+                    override suspend fun switchAccount(index: Int): Boolean { session.switchAccount(index); return true }
+                    override fun nativeSymbol(chainId: Int): String =
+                        settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }?.native_symbol ?: "ETH"
+                    override fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) = wallet.trackSubmitted(userOpHash, recordIds, chainId)
+                    override fun dataBase(): String = settings.endpointUrl(NetEndpointField.EthereumData)
+                    override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> {
+                        val body = (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)?.json
+                            ?: return null to false
+                        val error = body.optJSONObject("error")
+                        if (error != null) return null to error.optString("message").contains("revert", ignoreCase = true)
+                        return body.optString("result").takeIf { it.startsWith("0x") } to false
+                    }
+                },
+            )
+            signing.value = controller
+            controller.open(IncomingRequest(id = request.id, method = request.method, paramsJson = request.paramsJson, origin = request.origin, transportId = request.transportId, chainId = request.chainId))
+            controller.closed.collect { closed -> if (closed) { if (signing.value === controller) signing.value = null; throw kotlinx.coroutines.CancellationException("answered") } }
         }
     }
 

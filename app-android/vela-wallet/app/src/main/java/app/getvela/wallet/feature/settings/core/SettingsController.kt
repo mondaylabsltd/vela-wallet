@@ -58,7 +58,7 @@ class SettingsController(
      * has not loaded yet. Resolving at call time is what makes that legal, and
      * an explicit return type is what lets the compiler see it.
      */
-    private fun endpointUrl(field: NetEndpointField): String =
+    internal fun endpointUrl(field: NetEndpointField): String =
         networkHost.view.value.endpoints
             .firstOrNull { row -> row.field == field }
             ?.let { row -> row.value.ifBlank { row.default_value } }

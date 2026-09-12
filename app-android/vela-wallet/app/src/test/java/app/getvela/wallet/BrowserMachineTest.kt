@@ -134,6 +134,7 @@ class BrowserMachineTest {
                 }
                 override fun respond(id: String, json: JSONObject) { answers += id to json }
                 override fun sign(id: String, method: String, paramsJson: String, origin: String) { forwarded += "$id:$method" }
+                override suspend fun receiptFor(userOpHash: String): RequestRouter.Receipt? = null
             },
         )
         router.route("s1", "eth_chainId", "[]", origin)

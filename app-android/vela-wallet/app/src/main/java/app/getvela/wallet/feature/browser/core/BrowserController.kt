@@ -14,6 +14,7 @@ import org.json.JSONArray
 import app.getvela.wallet.feature.wallet.core.RpcResult
 import app.getvela.wallet.feature.wallet.core.RpcPool
 import app.getvela.wallet.feature.wallet.core.RpcKind
+import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.wallet.core.FeedExecutor
 import uniffi.vela_core_uniffi.ExploreSitesCore
 import uniffi.vela_core_uniffi.BrowserHistoryCore
@@ -144,6 +145,8 @@ class BrowserController(
     private val pool: RpcPool? = null,
     /** The feed's store: the "connected to" row (`type: "connect"`). */
     private val feed: FeedExecutor? = null,
+    /** The relay: receipts for the user operations this browser submitted for pages. */
+    private val relay: RelayClient? = null,
     /** The chains this wallet has — the settings machine's rows; a page may switch only to one of them. */
     private val knownChains: () -> List<Int> = { emptyList() },
     /** Debug builds expose the engines to Chrome DevTools — the device loop reads a page's own state through it. */
@@ -183,16 +186,43 @@ class BrowserController(
 
             override fun respond(id: String, json: JSONObject) = answer(id, json)
             override fun sign(id: String, method: String, paramsJson: String, origin: String) {
-                // Phase 4 hands this to the signing controller; until then the
-                // page hears "not yet" rather than waiting forever.
-                onSignRequest?.invoke(id, method, paramsJson, origin)
-                    ?: answer(id, BrowserExecutor.errorJson(id, 4900, "Vela cannot answer $method yet"))
+                val handler = onSignRequest
+                if (handler == null) {
+                    answer(id, BrowserExecutor.errorJson(id, 4900, "Vela cannot answer $method yet"))
+                    return
+                }
+                handler(SignRequest(id = id, method = method, paramsJson = paramsJson, origin = origin, transportId = requestTab[id] ?: _current.value?.id.orEmpty(), chainId = _browserChain.value))
+            }
+
+            override suspend fun receiptFor(userOpHash: String): RequestRouter.Receipt? {
+                if (userOpHash.lowercase() !in knownOps) return null
+                val relay = relay ?: return RequestRouter.Receipt.Pending
+                return when (val receipt = relay.userOpReceipt(_browserChain.value, userOpHash)) {
+                    is RelayClient.ReceiptAnswer.Resolved -> RequestRouter.Receipt.Landed(receipt.txHash)
+                    else -> RequestRouter.Receipt.Pending
+                }
             }
         },
     )
 
+    /** A signature request with the shell's facts attached, for the signing controller (phase 4). */
+    data class SignRequest(val id: String, val method: String, val paramsJson: String, val origin: String, val transportId: String, val chainId: Int)
+
     /** Phase 4 binds the signing controller here. */
-    var onSignRequest: ((id: String, method: String, paramsJson: String, origin: String) -> Unit)? = null
+    var onSignRequest: ((SignRequest) -> Unit)? = null
+
+    /** User-operation hashes this browser answered pages with; their receipt lookups are translated. */
+    private val knownOps = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    fun rememberUserOp(hash: String) { knownOps += hash.lowercase() }
+
+    /** The signing controller's answer to a page, delivered to the tab that asked. */
+    fun answerFromSigning(transportId: String, id: String, json: JSONObject) {
+        openIds.remove(id)
+        requestTab.remove(id)
+        (engines[transportId] ?: _current.value)?.deliver(json.toString())
+        VelaLog.event("browser.answer", "page answered by signing", "id" to id.take(12), "kind" to if (json.has("error")) "error:${json.getJSONObject("error").optInt("code")}" else "result")
+    }
 
     private val browserExecutor: BrowserExecutor = BrowserExecutor(
         store = store,
