@@ -3,6 +3,11 @@ package app.getvela.wallet
 import android.app.Application
 import app.getvela.wallet.core.data.ThemePreferenceRepository
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.i18n.I18nKeys
+import app.getvela.wallet.feature.send.core.SendReceiptOutcome
+import app.getvela.wallet.feature.send.core.TrackStatus
+import app.getvela.wallet.feature.wallet.core.TrackerWorker
+import app.getvela.wallet.feature.wallet.core.TrackerNotifier
 import app.getvela.wallet.feature.send.core.UserOpSigner
 import app.getvela.wallet.feature.send.core.SendHapticKind
 import app.getvela.wallet.feature.send.core.SendController
@@ -27,6 +32,8 @@ import app.getvela.wallet.feature.wallet.core.WalletController
 import java.util.Locale
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.SupervisorJob
 
 /**
@@ -99,7 +106,16 @@ class AppContainer(private val app: Application) {
     val pool: RpcPool by lazy {
         RpcPool(
             store = VelaStore(app),
-            endpoints = NetworkEndpointSource { settings.networks.value },
+            endpoints = NetworkEndpointSource(
+                networks = { settings.networks.value },
+                // A chain asked for before the rows exist would be configured
+                // empty for the whole process (spec 043 phase 4).
+                ready = {
+                    kotlinx.coroutines.withTimeoutOrNull(15_000) {
+                        settings.networks.first { it.loaded && it.networks.isNotEmpty() }
+                    }
+                },
+            ),
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO),
         )
     }
@@ -130,6 +146,16 @@ class AppContainer(private val app: Application) {
             },
             haptic = { Haptics.moneyIn(app) },
             foreground = { foregroundActivities > 0 },
+            // Spec 043: the tracker follows a submitted send to its verdict.
+            relay = relay,
+            notifyConfirmed = { hash, chain, tx ->
+                TrackerNotifier.notifyConfirmed(
+                    app, hash, chain, tx,
+                    title = i18nRuntime.t(I18nKeys.Flows.TX_CONFIRMED_NOTICE),
+                    body = i18nRuntime.t(I18nKeys.Flows.TX_CONFIRMED_NOTICE_BODY),
+                )
+            },
+            backgroundPoll = { TrackerWorker.enqueue(app) },
         )
     }
 
@@ -156,6 +182,9 @@ class AppContainer(private val app: Application) {
     @Volatile
     var passkeySigner: UserOpSigner? = null
 
+    /** A notification was tapped: the row to open once the wallet is showing (phase 4). */
+    val pendingReceipt = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
     /** Spec 043: the send path's host — one per process, one attempt per open. */
     val send: SendController by lazy {
         SendController(
@@ -179,7 +208,21 @@ class AppContainer(private val app: Application) {
             },
             refreshBalances = { wallet.refresh() },
             feedChanged = { wallet.feedReconciled() },
-        )
+        ).also { controller ->
+            // The two halves of the handoff: the send hands the tracker a
+            // hash; the tracker hands the send its verdict.
+            controller.onTrackSubmitted = { hash, ids, chain -> wallet.trackSubmitted(hash, ids, chain) }
+            wallet.onTrackVerdict = { hash, status, tx ->
+                val outcome = when (status) {
+                    TrackStatus.Confirmed -> SendReceiptOutcome.Confirmed(tx_hash = tx.orEmpty())
+                    TrackStatus.Dropped -> SendReceiptOutcome.Failed(rejected = false)
+                    TrackStatus.Rejected -> SendReceiptOutcome.Failed(rejected = true)
+                    TrackStatus.FeeHeld -> SendReceiptOutcome.FeeHeld
+                    else -> null
+                }
+                if (outcome != null) controller.receiptUpdate(hash, outcome)
+            }
+        }
     }
 
     val contacts: ContactsController by lazy {
@@ -238,6 +281,12 @@ class AppContainer(private val app: Application) {
     }
 
     fun start() {
+        // Debug trace of the pool's chain verdicts (spec 043 phase 4).
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
+            pool.view.collect { view ->
+                VelaLog.event("rpc.pool", "verdicts", "failed" to view.failed_chains, "rateLimited" to view.rate_limited_chains, "banned" to view.banned.map { "${it.url} at=${it.banned_at_ms} permanent=${it.permanent}" })
+            }
+        }
         // The balance machine has had a focus-driven auto-refresh since spec
         // 041 phase 4 and nothing was telling it; the receive watcher needs the
         // same signal to stop polling from a pocket.

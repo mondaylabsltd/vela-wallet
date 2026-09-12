@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.wallet.core
 
+import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.net.VelaHttp
 import java.io.IOException
@@ -77,6 +78,18 @@ class RpcPoolExecutor(
                     timeoutMs = operation.timeout_ms,
                 )
                 result.body?.let { registry.keepBody(operation.call_id, operation.url, it) }
+                // Debug trace (spec 043 phase 4, device-found): which host,
+                // which method, what came back. The pool's verdicts are the
+                // core's; this is the only place the raw outcome is visible.
+                VelaLog.event(
+                    "rpc.post", operation.method,
+                    "host" to runCatching { java.net.URI(operation.url).host }.getOrNull(),
+                    "outcome" to when (val o = result.outcome) {
+                        is RpcTransportOutcome.HttpError -> "http ${o.status}"
+                        is RpcTransportOutcome.Response -> if (o.error == null) "ok" else "rpc error ${o.error.code}"
+                        else -> o::class.simpleName
+                    },
+                )
                 RpcShellResult.PostOutcome(
                     call_id = operation.call_id,
                     url = operation.url,

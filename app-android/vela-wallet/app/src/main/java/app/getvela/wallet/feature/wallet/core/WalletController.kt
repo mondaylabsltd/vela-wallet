@@ -2,6 +2,18 @@ package app.getvela.wallet.feature.wallet.core
 
 import android.content.Context
 import app.getvela.wallet.core.crux.CoreHost
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import uniffi.vela_core_uniffi.TxTrackerCore
+import app.getvela.wallet.feature.send.core.TrackerExecutor
+import app.getvela.wallet.feature.send.core.TrackView
+import app.getvela.wallet.feature.send.core.TrackStatus
+import app.getvela.wallet.feature.send.core.TrackShellResult
+import app.getvela.wallet.feature.send.core.TrackRecordStatus
+import app.getvela.wallet.feature.send.core.TrackOperation
+import app.getvela.wallet.feature.send.core.TrackEvent
+import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.data.VelaStore
@@ -54,6 +66,12 @@ class WalletController(
      * not active, so this answer is what ends the polling.
      */
     private val foreground: () -> Boolean = { true },
+    /** Spec 043: the relay the tracker polls; `null` keeps the tracker off (tests of the read path). */
+    relay: RelayClient? = null,
+    /** A confirmation landed while the app was away: the platform's notification. */
+    notifyConfirmed: (userOpHash: String, chainId: Int, txHash: String) -> Unit = { _, _, _ -> },
+    /** Pending hashes remain and the app went to the background: keep polling from a worker. */
+    backgroundPoll: () -> Unit = {},
 ) {
 
     private val store = VelaStore(context)
@@ -302,6 +320,101 @@ class WalletController(
     fun acknowledgeReceive() =
         requestHost.dispatch(PaymentRequestEvent.Acknowledge, PaymentRequestEvent.serializer())
 
+    // -- the tracker (spec 043 phase 4) ------------------------------------------------
+
+    private val notifyPort: (String, Int, String) -> Unit = notifyConfirmed
+    private val backgroundPollPort: () -> Unit = backgroundPoll
+
+    private val trackerExecutor: TrackerExecutor? = relay?.let { relayClient ->
+        TrackerExecutor(
+            relay = relayClient,
+            feed = feedExecutor,
+            ports = object : TrackerExecutor.TrackerPorts {
+                override fun recordsPatched(ids: List<String>, status: TrackRecordStatus, txHash: String?) {
+                    feedReconciled(ids.size)
+                }
+
+                override fun notifyConfirmed(userOpHash: String, chainId: Int, txHash: String) {
+                    // Only when nobody is looking: a person on the receipt page
+                    // sees the verdict there.
+                    if (!foreground()) notifyPort(userOpHash, chainId, txHash)
+                }
+
+                override fun receiptLogsConfirmed(from: String, chainId: Int, logs: List<TrustReceiptLog>) {
+                    trustHost.dispatch(
+                        TrustEvent.ReceiptLogsConfirmed(from = from, chain_id = chainId, logs = logs),
+                        TrustEvent.serializer(),
+                    )
+                }
+            },
+        )
+    }
+
+    private val trackerHost: CoreHost<TrackView>? = trackerExecutor?.let { tracker ->
+        CoreHost(
+            bridge = TxTrackerCore().asBridge(),
+            scope = scope,
+            initial = TrackView(),
+            serializer = TrackView.serializer(),
+            perform = JsonShell.perform(TrackOperation.serializer(), TrackShellResult.serializer()) { operation ->
+                tracker.perform(operation).also { result ->
+                    VelaLog.event("tracker.arm", operation::class.simpleName ?: "?", "answer" to (result::class.simpleName ?: "?"))
+                }
+            },
+            escapedFailure = JsonShell.escapedFailure(
+                TrackOperation.serializer(),
+                TrackShellResult.serializer(),
+                fallback = TrackShellResult.Notified,
+                answer = tracker::neutralAnswer,
+            ),
+            onFault = { error -> VelaLog.failure("wallet.tracker.fault", "core fault", error) },
+        )
+    }
+
+    /** Every hash the core is following, with its verdict. */
+    val tracker: StateFlow<TrackView> = trackerHost?.view ?: MutableStateFlow(TrackView())
+
+    /**
+     * A verdict for the send that is on screen: the three the send machine
+     * accepts as `ReceiptUpdate`, once per change; a slow or unreachable poll
+     * sends nothing (the desktop's `on_tracker`, invariant ⑤).
+     */
+    var onTrackVerdict: (userOpHash: String, status: TrackStatus, txHash: String?) -> Unit = { _, _, _ -> }
+
+    private val lastVerdict = HashMap<String, TrackStatus>()
+
+    /** The send machine's `track_submitted`: the row is on disk, follow the hash. */
+    fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) {
+        val host = trackerHost
+        if (host == null) {
+            VelaLog.event("tracker", "no relay: not tracking", "hash" to userOpHash.take(12))
+            return
+        }
+        host.dispatch(
+            TrackEvent.Submitted(user_op_hash = userOpHash, record_ids = recordIds, chain_id = chainId),
+            TrackEvent.serializer(),
+        )
+        // Device-found (spec 043 phase 4): a person taps confirm and leaves
+        // before the relay answers. `backgrounded()` ran with nothing pending,
+        // the submit landed afterwards, and no clock ticked until the next
+        // resume. The handoff itself hands the worker the clock when nobody is
+        // in front.
+        if (!foreground()) backgroundPollPort()
+    }
+
+    /** The clock the core owns the cadence of; the shell only says "now". */
+    fun trackerTick() {
+        trackerHost?.dispatch(TrackEvent.Tick, TrackEvent.serializer())
+    }
+
+    /** Back in front: re-read what is still pending and poll it. */
+    fun trackerResumed() {
+        trackerHost?.dispatch(TrackEvent.AppResumed, TrackEvent.serializer())
+    }
+
+    /** Anything still without a verdict? (the background worker's stop condition) */
+    fun trackerHasPending(): Boolean = tracker.value.entries.any { it.status == TrackStatus.Pending }
+
     init {
         // The knot: the executor emits `chain_assets_arrived` as each chain
         // lands, and the machine that consumes those events is built FROM the
@@ -310,6 +423,30 @@ class WalletController(
         // The second knot, the same shape: the scan writes through the feed's
         // own store, so it is built FROM the executor it then serves.
         feedExecutor.scan = { address -> scanner.runOnce(address) }
+        trackerHost?.let { host ->
+            scope.launch {
+                host.view.collect { view ->
+                    view.entries.forEach { entry ->
+                        val key = entry.user_op_hash.lowercase()
+                        if (lastVerdict[key] == entry.status) return@forEach
+                        lastVerdict[key] = entry.status
+                        when (entry.status) {
+                            TrackStatus.Confirmed, TrackStatus.Dropped, TrackStatus.Rejected, TrackStatus.FeeHeld ->
+                                onTrackVerdict(entry.user_op_hash, entry.status, entry.tx_hash)
+                            TrackStatus.Pending, TrackStatus.Unreachable, TrackStatus.AcceptedNotLanded -> Unit
+                        }
+                    }
+                }
+            }
+            // The foreground clock: 3 s, as the web and desktop residents tick,
+            // only while something is pending and somebody is looking.
+            scope.launch {
+                while (true) {
+                    delay(TRACKER_TICK_MS)
+                    if (foreground() && trackerHasPending()) host.dispatch(TrackEvent.Tick, TrackEvent.serializer())
+                }
+            }
+        }
     }
 
     /** What the home screen renders. */
@@ -334,6 +471,7 @@ class WalletController(
         // buzzes. That distinction is the core's, and it needs telling.
         feedHost.dispatch(FeedEvent.PrivacyChanged(hidden), FeedEvent.serializer())
         feedHost.dispatch(FeedEvent.AccountSwitched(address), FeedEvent.serializer())
+        trackerResumed()
     }
 
     /** A pull-to-refresh, or the screen coming back into view. */
@@ -354,10 +492,13 @@ class WalletController(
     fun focused() {
         balanceHost.dispatch(BalanceEvent.AppFocused, BalanceEvent.serializer())
         feedHost.dispatch(FeedEvent.FocusTick, FeedEvent.serializer())
+        trackerResumed()
     }
 
-    fun backgrounded() =
+    fun backgrounded() {
         balanceHost.dispatch(BalanceEvent.AppBackgrounded, BalanceEvent.serializer())
+        if (trackerHasPending()) backgroundPollPort()
+    }
 
     /** The Activity surface's near-real-time poll, while it is on screen. */
     fun liveTick() = feedHost.dispatch(FeedEvent.LiveTick, FeedEvent.serializer())
@@ -386,5 +527,8 @@ class WalletController(
          * open — it proceeds with what it knows, and the next tick asks again.
          */
         const val HELD_CHAINS_WAIT_MS = 12_000L
+
+        /** The residents' tick (web `TICK_MS`, desktop `TICK`). */
+        const val TRACKER_TICK_MS = 3_000L
     }
 }

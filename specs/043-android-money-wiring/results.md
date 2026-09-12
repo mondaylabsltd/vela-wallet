@@ -150,13 +150,55 @@ that drives the machine directly):
 Not yet (phase 4): the receipt stays *submitted* until the tracker exists;
 `TrackSubmitted` is acknowledged and logged (`no tracker bound`).
 
+### Phase 4 — the receipt outlives the screen (T035–T040)
+
+`TrackerExecutor` (6 arms, receipt logs cached per hash for
+`notify_confirmed` → `token_trust::ReceiptLogsConfirmed`), the tracker hosted
+in `WalletController` (3-second foreground tick only while something is
+pending; `AppResumed` on open and focus; the verdict collector → the send
+machine's `ReceiptUpdate`, once per change), `TrackerWorker` (WorkManager,
+15 s × 8 while the app is away), `TrackerNotifier` (channel `transactions`,
+deep link `vela.receipt=<hash>`), the permission asked at the first receipt,
+`FeedExecutor` patched by the verdict and re-read. `TrackerMachineTest` (3);
+suite 405 → **408, 0 failures**.
+
+**Device**:
+- *Receipt flips on screen* (`043-p4-receipt-confirmed.png`): within 6 s of
+  confirming, `已发送 0.001 XDAI | 至 0x7687…D141 · Gnosis | 交易哈希
+  0xcf735a61…81b03c | 在区块浏览器中查看 | 完成`.
+- *Resume from the store*: after the seeds fix (below), a cold start found the
+  two older pending sends, polled, and confirmed both
+  (`tracker.patch confirmed tx=0x5316cb66…`, `tx=0xb0316de1…`).
+- *Force-stop* (`043-p4-after-forcestop.png`): confirm → `am force-stop` four
+  seconds later → reopen: the row is on the home, `LoadPendingTxs →
+  PollReceipt → ReceiptWithLogs → tracker.patch confirmed tx=0xebadf95f…`.
+- *Notification* (`043-p4-notification.png`): confirm → HOME within 1.5 s →
+  the worker ticks (`tracker.worker tick round=0,1`), the receipt lands while
+  the app is away, `tracker.notify posted hash=0xea070ceb09 tx=0x9880164a13`,
+  and `dumpsys notification` holds
+  `NotificationRecord pkg=app.getvela.wallet … channel=transactions`.
+- *Deep link*: launching with `--es vela.receipt 已收到 USDT | 已确认…` shows
+  `已收到 USDT | 已确认 | −0.001 XDAI | 发送方 | 0x9F3c…21aE | 网络 | ETH | Ethereum | 代币合约 | 0xdAC1…1ec7 | 日期 | 今天 11:20 | 哈希 | 0x8f3a…c21d | 在区块浏览器中查看` — NOT the row's detail; recorded as owed.
+
+**Device-found defects, fixed in this phase**:
+5. The tracker's first poll at `open()` asked the pool for chain 100 before
+   the settings machine had its rows; the endpoint source answered "no row",
+   the pool kept that empty config for the whole process, and Gnosis was dead
+   — no balance, no send, no receipt — until the next launch. The source now
+   waits (≤15 s) for a loaded, non-empty list before answering. A regression
+   only the device could show: every JVM test seeds its rows up front.
+6. Confirm, then leave before the relay answers: `backgrounded()` saw nothing
+   pending, the submit landed afterwards, and no clock ticked until the next
+   resume. `trackSubmitted` now hands the worker the clock when nobody is in
+   front.
+
 ## Success criteria
 
 | SC | Claim | Verified | Evidence |
 | --- | --- | --- | --- |
-| SC-001 | dust leaves the fixture Safe; receipt confirmed | **device (half)**: submitted + on-chain success via the relay's receipt; *confirmed on the receipt screen* awaits phase 4 | phase 3 log, gnosisscan tx `0x5316cb66…7447` |
+| SC-001 | dust leaves the fixture Safe; receipt confirmed | **device** | phase 3 + 4 logs; tx `0x5316cb66…7447`, receipt screen `已发送 0.001 XDAI … 0xcf735a61…81b03c` |
 | SC-002 | the founder's own passkey, one prompt | — | — |
-| SC-003 | force-stop / reopen / notification | — | — |
+| SC-003 | force-stop / reopen / notification | **device** | phase 4 log: force-stop → `tracker.patch confirmed tx=0xebadf95f…`; HOME → `tracker.notify posted`, `NotificationRecord … channel=transactions` |
 | SC-004 | one prompt per attempt after cancel | — | — |
 | SC-005 | every refusal worded on screen | — | — |
 | SC-006 | fee token changed, re-quoted, paid | — | — |

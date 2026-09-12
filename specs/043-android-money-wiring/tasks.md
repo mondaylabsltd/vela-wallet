@@ -215,32 +215,32 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
 
 ## Phase 4 — User Story 2: money in flight outlives the screen (P1)
 
-- [ ] **T035** [US2] `…/feature/send/core/TrackerExecutor.kt` — the six arms:
+- [X] **T035** [US2] `…/feature/send/core/TrackerExecutor.kt` — the six arms:
       `poll_receipt` (cache logs per hash), `poll_status`,
       `load_pending_txs` from `FeedExecutor.pendingRecords()`,
       `update_tx_records` → `patchRecords` then dispatch
       `activity_feed::ReconcileCompleted`, `notify_confirmed` → notification
       when no activity is foregrounded + `token_trust::ReceiptLogsConfirmed`,
       `now`.
-- [ ] **T036** [US2] `…/feature/wallet/core/WalletController.kt` — host
+- [X] **T036** [US2] `…/feature/wallet/core/WalletController.kt` — host
       `TxTrackerCore`; `submitted(hash, recordIds, chainId)`; a 3-second
       `Tick` while foregrounded; `AppResumed` on resume; `SendExecutor`'s
       `track_submitted` now hands off here and answers `track_handed_off`;
       the receipt verdict back to the send host as `ReceiptUpdate`.
-- [ ] **T037** [US2] `…/feature/wallet/core/TrackerWork.kt` — WorkManager
+- [X] **T037** [US2] `…/feature/wallet/core/TrackerWork.kt` — WorkManager
       worker (D5): expedited one-time on background with pending records,
       ~30 s cadence for the core's 120 s window, then periodic (15-minute
       floor) until the core abandons; `NotificationChannel("transactions")`,
       the notification with a deep link that opens the wallet with the flow
       stack seeded to that receipt (`MainActivity` extra `vela.receipt`).
-- [ ] **T038** [US2] `…/feature/send/core/SendController.kt` — request
+- [X] **T038** [US2] `…/feature/send/core/SendController.kt` — request
       `POST_NOTIFICATIONS` at the first submit (never at launch); a refusal
       is remembered and degrades to the in-app receipt.
-- [ ] **T039** [P] [US2] `…test/TrackerMachineTest.kt` — the real
+- [X] **T039** [P] [US2] `…test/TrackerMachineTest.kt` — the real
       `TxTrackerCore` with `FakeRelay`: pending → receipt → patched →
       `ReconcileCompleted` seen; a failed receipt patches `failed`; a
       restart (`load_pending_txs`) resumes a hash with no `Submitted`.
-- [ ] **T040** [US2] `[device]` submit, `am force-stop`, reopen: the pending
+- [X] **T040** [US2] `[device]` submit, `am force-stop`, reopen: the pending
       row is on the home; wait: *confirmed*; the receipt page says so.
       Then submit and press Home: the notification arrives; tapping it opens
       the receipt (SC-001 second half, SC-003).

@@ -18,6 +18,8 @@ import app.getvela.wallet.VelaWalletApplication
 import app.getvela.wallet.core.data.ThemePreference
 import app.getvela.wallet.core.i18n.LocalVelaStrings
 import androidx.compose.foundation.layout.Box
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import app.getvela.wallet.dev.ParallelSpaceHook
 import app.getvela.wallet.feature.flows.FlowStep
 import app.getvela.wallet.feature.flows.SendCallbacks
@@ -364,6 +366,25 @@ fun VelaNavHost(
             }
             LaunchedEffect(sendClosed) {
                 if (sendClosed && flows.top in SEND_STATES) flows.close()
+            }
+            // The notification permission, asked at the first submit and never at
+            // launch (research D6): a refusal degrades to the in-app receipt.
+            val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+            LaunchedEffect(sendView.stage) {
+                if (sendView.stage == SendStage.Receipt && android.os.Build.VERSION.SDK_INT >= 33) {
+                    val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                        context, android.Manifest.permission.POST_NOTIFICATIONS,
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (!granted) askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                }
+            }
+            // A tapped notification opens the wallet on that row.
+            val pendingReceipt by application.container.pendingReceipt.collectAsStateWithLifecycle()
+            LaunchedEffect(pendingReceipt) {
+                pendingReceipt?.let { hash ->
+                    application.container.pendingReceipt.value = null
+                    flows.enter(WalletFlowEntry.TxDetail, hash)
+                }
             }
             sendAlert?.let { kind ->
                 SendAlertDialog(kind = kind, strings = strings, onDismiss = send::dismissAlert)

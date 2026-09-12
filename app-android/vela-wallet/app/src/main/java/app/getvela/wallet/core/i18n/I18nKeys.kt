@@ -596,6 +596,9 @@ object I18nKeys {
         const val WARN_INSUFFICIENT_FOR_GAS = "send.warnInsufficientForGas"
         const val WARN_INSUFFICIENT_GAS = "send.warnInsufficientGas"
         const val WARN_NEED_GAS = "send.warnNeedGas"
+        /** The notification when a verdict lands while the app is away (phase 4). */
+        const val TX_CONFIRMED_NOTICE = "componentsTx.receipt.statusConfirmed"
+        const val TX_CONFIRMED_NOTICE_BODY = "send.txSubmittedTitle"
     }
 
     /**

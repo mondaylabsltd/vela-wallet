@@ -199,6 +199,12 @@ class MainActivity : ComponentActivity() {
     private fun startFlowState(): String? = intent?.getStringExtra("vela.flowState")
 
     /**
+     * The notification's door (spec 043 phase 4): a send's verdict landed while
+     * the app was away; open the wallet on that row.
+     */
+    private fun receiptRequested(): String? = intent?.getStringExtra("vela.receipt")?.takeIf { it.startsWith("0x") }
+
+    /**
      * The parallel space's door (spec 043, research D2). Debug builds only —
      * release builds have no provider behind the hook, and the extra does
      * nothing there. Remembered across relaunches; sign-out leaves.
@@ -242,6 +248,7 @@ class MainActivity : ComponentActivity() {
 
         val container = (application as VelaWalletApplication).container
         container.applySystemLocale()
+        receiptRequested()?.let { container.pendingReceipt.value = it }
         when (parallelSpaceRequested()) {
             true -> ParallelSpaceHook.enter()
             false -> ParallelSpaceHook.leave()
