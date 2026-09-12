@@ -1,6 +1,8 @@
 package app.getvela.wallet.navigation
 
 import app.getvela.wallet.core.diagnostics.CrashSheet
+import app.getvela.wallet.core.net.NetHealth
+import app.getvela.wallet.feature.wallet.components.AccountSwitcherSheet
 import app.getvela.wallet.feature.wallet.BalanceStatusKind
 import app.getvela.wallet.feature.wallet.BalanceStatusModel
 import app.getvela.wallet.feature.flows.ShareCardCapture
@@ -187,6 +189,37 @@ fun VelaNavHost(
     val session by application.container.session.view.collectAsStateWithLifecycle()
     val onboarding: OnboardingViewModel = viewModel()
 
+    // Which body the signed-in shell shows. 钱包 and 探索 are SECTIONS of the
+    // wallet route; 通讯录 and 设置 are routes pushed over it. Hoisted out of
+    // the wallet route (spec 047) so a pushed route's tab bar can pick a
+    // section on its way back — before this, 探索 on 通讯录/设置 answered
+    // nothing at all (device-found 2026-09-12: 「点击探索没反应」). Survives
+    // rotation for the same reason the flow stack does.
+    var section by rememberSaveable { mutableStateOf(VelaTab.Wallet) }
+
+    /**
+     * A tab tapped on a route pushed over the wallet (通讯录, 设置). The two
+     * sections are reached by leaving the route; the other pushed route is
+     * swapped in, so the stack never grows past wallet + one.
+     *
+     * `popBackStack(WALLET, …)` and not a bare `popBackStack()`: the bare one
+     * pops whatever is on top, and a second tap during the exit fade — the
+     * fading screen still takes taps — popped the WALLET itself and left an
+     * empty NavHost. That is the blank app under the parallel-space badge
+     * (device-found 2026-09-12); with predictive back moving the task to the
+     * back rather than finishing, only a swipe-kill got out of it.
+     */
+    val selectFromPushed: (VelaTab) -> Unit = { tab ->
+        when (tab) {
+            VelaTab.Wallet, VelaTab.Explore -> {
+                section = tab
+                navController.popBackStack(VelaDestinations.WALLET, inclusive = false)
+            }
+            VelaTab.Contacts -> navController.swapOverWallet(VelaDestinations.CONTACTS)
+            VelaTab.Settings -> navController.swapOverWallet(VelaDestinations.SETTINGS)
+        }
+    }
+
     // Credential Manager raises system UI, which needs an Activity — not the
     // application context the ViewModel was constructed with.
     LaunchedEffect(context) {
@@ -230,6 +263,9 @@ fun VelaNavHost(
                 // were three keys into (device-found 2026-08-26).
                 SessionRoute.Onboarding ->
                     if (onboarding.createView == null) {
+                        // The next wallet opens on 钱包, as it did when the
+                        // section lived (and died) with the wallet route.
+                        section = VelaTab.Wallet
                         navController.navigateSingleTop(VelaDestinations.WELCOME)
                     }
                 SessionRoute.Loading -> Unit
@@ -290,7 +326,7 @@ fun VelaNavHost(
                 // dropped HERE, where somebody actually said they were done.
                 onExit = {
                     onboarding.disposeCreate()
-                    navController.popBackStack()
+                    navController.popUnlessRoot()
                 },
                 onOpenPrivacy = { context.openUrl(PRIVACY_URL) },
                 onOpenTerms = { context.openUrl(TERMS_URL) },
@@ -300,7 +336,7 @@ fun VelaNavHost(
         composable(VelaDestinations.IMPORT) {
             ImportPlaceholderScreen(
                 darkTheme = darkTheme,
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popUnlessRoot() },
             )
         }
 
@@ -331,6 +367,8 @@ fun VelaNavHost(
             val wallet = application.container.wallet
             val balances by wallet.balances.collectAsStateWithLifecycle()
             val feed by wallet.feed.collectAsStateWithLifecycle()
+            // Spec 047: the header's account switcher (the founder, 2026-09-12).
+            var switcherOpen by remember { mutableStateOf(false) }
             val manageTokens by wallet.manageTokens.collectAsStateWithLifecycle()
             // The display currency the person chose, and the rate that makes it
             // showable. Without a rate the core leaves the figure in dollars.
@@ -359,9 +397,75 @@ fun VelaNavHost(
             }
 
             val flows = rememberFlowNavState()
-            // Which body the signed-in shell is showing. Survives rotation for
-            // the same reason the flow stack does.
-            var section by rememberSaveable { mutableStateOf(VelaTab.Wallet) }
+            val scope = rememberCoroutineScope()
+            // Spec 047 FR-006, under the manifest's rule (no ACCESS_NETWORK_STATE:
+            // "offline" is what the calls did, not what the radio claims): three
+            // calls in a row that never reached a server, cleared by the first
+            // answered one. Coming back refreshes what went stale meanwhile.
+            val online by NetHealth.online.collectAsStateWithLifecycle()
+            var wasOffline by remember { mutableStateOf(false) }
+            LaunchedEffect(online) {
+                if (!online) wasOffline = true else if (wasOffline) { wasOffline = false; wallet.refresh() }
+            }
+            val payLink by application.container.pendingPayLink.collectAsStateWithLifecycle()
+            LaunchedEffect(payLink) {
+                val uri = payLink ?: return@LaunchedEffect
+                // Consumed at the END: clearing the trigger here re-keys this
+                // effect to null and cancels the very coroutine doing the work
+                // (device-found 2026-09-12 — the link was "received" and then
+                // nothing, because the wait for the core's verdict was cancelled).
+                VelaLog.event("paylink", "received", "uri" to uri.toString().take(80))
+                val pay = PayLink.parse(uri.toString()) as? PayLink.Pay
+                val request = pay?.let { wallet.validatePayLink(it.to, it.chain, it.token, it.amount, it.sym, it.dec, it.net) }
+                if (request == null) {
+                    VelaLog.event("paylink", "refused by the core", "uri" to uri.toString().take(80))
+                    application.container.pendingPayLink.compareAndSet(uri, null)
+                    return@LaunchedEffect
+                }
+                VelaLog.event("paylink", "validated", "chain" to request.chain_id, "amount" to request.amount)
+                application.container.pendingSendParams.value = SendOpenParams(
+                    prefilled_recipient = request.recipient,
+                    prefilled_chain_id = request.chain_id.toString(),
+                    prefilled_token_address = request.token_address,
+                    prefilled_amount_base = request.amount_base,
+                    locked = true,
+                )
+                flows.enter(WalletFlowEntry.Send)
+                application.container.pendingPayLink.compareAndSet(uri, null)
+            }
+            var captureShare by remember { mutableStateOf<ShareCardModel?>(null) }
+            captureShare?.let { card ->
+                ShareCardCapture(card) { bytes ->
+                    captureShare = null
+                    if (bytes == null) {
+                        VelaLog.event("share", "render failed")
+                    } else {
+                        scope.launch {
+                            val name = "vela-receive-${session.address.takeLast(6)}.png"
+                            application.container.documents?.share(name, "image/png", bytes)
+                        }
+                    }
+                }
+            }
+            if (switcherOpen) {
+                AccountSwitcherSheet(
+                    sheet = WalletLive.accountSwitcher(
+                        session.accounts.map { it.name to it.address },
+                        session.activeIndex,
+                        balances.switcher,
+                        currency,
+                        strings,
+                    ),
+                    onDismiss = { switcherOpen = false; wallet.switcherClosed() },
+                    onSelect = { index ->
+                        switcherOpen = false
+                        wallet.switcherClosed()
+                        application.container.session.switchAccount(index)
+                    },
+                    onPrimary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.CREATE) },
+                    onSecondary = { switcherOpen = false; wallet.switcherClosed(); navController.push(VelaDestinations.WELCOME) },
+                )
+            }
             // Spec 044: a page opened from outside 探索 (a deep link, the dev seam) shows itself.
             val browserOpenRequested by application.container.browser.openRequested.collectAsStateWithLifecycle()
             LaunchedEffect(browserOpenRequested) {
@@ -635,47 +739,6 @@ fun VelaNavHost(
                 )
             } else if (flowState != null) {
                 val request by wallet.request.collectAsStateWithLifecycle()
-                val scope = rememberCoroutineScope()
-                // Spec 047: online or not (the home's line, a refresh on reconnect),
-                // a `/pay` link waiting to be validated, a share card being rendered.
-                val online by application.container.connectivity.online.collectAsStateWithLifecycle()
-                var wasOffline by remember { mutableStateOf(false) }
-                LaunchedEffect(online) {
-                    if (!online) wasOffline = true else if (wasOffline) { wasOffline = false; wallet.refresh() }
-                }
-                val payLink by application.container.pendingPayLink.collectAsStateWithLifecycle()
-                LaunchedEffect(payLink) {
-                    val uri = payLink ?: return@LaunchedEffect
-                    application.container.pendingPayLink.value = null
-                    val pay = (PayLink.parse(uri.toString()) as? PayLink.Pay) ?: return@LaunchedEffect
-                    val request = wallet.validatePayLink(pay.to, pay.chain, pay.token, pay.amount, pay.sym, pay.dec, pay.net)
-                    if (request == null) {
-                        VelaLog.event("paylink", "refused by the core", "uri" to uri.toString().take(80))
-                        return@LaunchedEffect
-                    }
-                    application.container.pendingSendParams.value = SendOpenParams(
-                        prefilled_recipient = request.recipient,
-                        prefilled_chain_id = request.chain_id.toString(),
-                        prefilled_token_address = request.token_address,
-                        prefilled_amount_base = request.amount_base,
-                        locked = true,
-                    )
-                    flows.enter(WalletFlowEntry.Send)
-                }
-                var captureShare by remember { mutableStateOf<ShareCardModel?>(null) }
-                captureShare?.let { card ->
-                    ShareCardCapture(card) { bytes ->
-                        captureShare = null
-                        if (bytes == null) {
-                            VelaLog.event("share", "render failed")
-                        } else {
-                            scope.launch {
-                                val name = "vela-receive-${session.address.takeLast(6)}.png"
-                                application.container.documents?.share(name, "image/png", bytes)
-                            }
-                        }
-                    }
-                }
                 // The receive screen shows an ADDRESS. Every other fixture that
                 // leaks shows somebody the wrong information; a fixture address
                 // here sends their money to a stranger, permanently — so the
@@ -830,7 +893,6 @@ fun VelaNavHost(
                     // The holdings, the feed and the currency are this device's
                     // own (spec 041); the fixture `model` only carries the
                     // labels the live builder cannot compute.
-                    val online by application.container.connectivity.online.collectAsStateWithLifecycle()
                     WalletScreen(
                         model = WalletLive.home(model, balances, feed, currency, strings, chainNames).let { home ->
                             // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
@@ -841,6 +903,10 @@ fun VelaNavHost(
                         // opened the same detail, so this person's own POL showed
                         // somebody else's transaction.
                         onFlow = { entry, id -> flows.enter(entry, id) },
+                        onSwitcher = {
+                            wallet.switcherOpened(session.accounts.map { it.address })
+                            switcherOpen = true
+                        },
                     )
                 }
             }
@@ -1067,9 +1133,7 @@ fun VelaNavHost(
                         memberPicker = false
                         groupPicker = false
                     },
-                    onTab = { tab ->
-                        if (tab == VelaTab.Wallet) navController.popBackStack()
-                    },
+                    onTab = selectFromPushed,
                 ),
             )
         }
@@ -1184,9 +1248,7 @@ fun VelaNavHost(
                     onAccountSelect = { index -> application.container.session.switchAccount(index) },
                     onAccountPrimary = { navController.push(VelaDestinations.CREATE) },
                     onAccountSecondary = { navController.push(VelaDestinations.WELCOME) },
-                    onSelectTab = { tab ->
-                        if (tab == VelaTab.Wallet) navController.popBackStack()
-                    },
+                    onSelectTab = selectFromPushed,
                     // The way out of a signed-in wallet, on the row a person
                     // would look for it.
                     onSignOut = { application.container.session.signOut() },
@@ -1357,6 +1419,30 @@ private fun NavHostController.navigateSingleTop(route: String) {
         launchSingleTop = true
         popUpTo(graph.startDestinationId) { inclusive = true }
     }
+}
+
+/**
+ * Replace whatever sits above the wallet with [route]: 通讯录 ⇄ 设置 from each
+ * other's tab bar, without stacking one on the other. A no-op on the route
+ * itself, like [push].
+ */
+private fun NavHostController.swapOverWallet(route: String) {
+    if (currentDestination?.route == route) return
+    navigate(route) {
+        launchSingleTop = true
+        popUpTo(VelaDestinations.WALLET)
+    }
+}
+
+/**
+ * Pop the route on top, never the last one. A bare `popBackStack()` on the
+ * only entry empties the NavHost, and an empty NavHost is a blank app that
+ * neither Back (the task moves to the back) nor a relaunch (`singleTop`)
+ * recovers — a double-tap on a back affordance during the exit fade is all
+ * it takes (spec 047, device-found 2026-09-12).
+ */
+private fun NavHostController.popUnlessRoot() {
+    if (previousBackStackEntry != null) popBackStack()
 }
 
 /**

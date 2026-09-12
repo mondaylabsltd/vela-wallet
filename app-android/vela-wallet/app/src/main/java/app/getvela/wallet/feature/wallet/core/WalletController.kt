@@ -522,11 +522,20 @@ class WalletController(
      * request this wallet honours.
      */
     suspend fun validatePayLink(to: String?, chain: String?, token: String?, amount: String?, sym: String?, dec: String?, net: String?): PayRequest? {
+        val before = requestHost.view.value
         requestHost.dispatch(
             PaymentRequestEvent.LinkOpened(to = to, chain = chain, token = token, amount = amount, sym = sym, dec = dec, net = net),
             PaymentRequestEvent.serializer(),
         )
-        val settled = kotlinx.coroutines.withTimeoutOrNull(5_000L) { requestHost.view.first { it.pay_valid != null } } ?: return null
+        // The verdict of THIS link, not the one the model kept from the last:
+        // the view the dispatch published is a new object; only when nothing
+        // was published yet do we wait for it.
+        val settled = requestHost.view.value.takeIf { it !== before }
+            ?: kotlinx.coroutines.withTimeoutOrNull(5_000L) { requestHost.view.first { it !== before } }
+        if (settled == null) {
+            VelaLog.event("paylink", "no verdict from the core within 5 s")
+            return null
+        }
         return if (settled.pay_valid == true) settled.pay else null
     }
 
@@ -581,6 +590,11 @@ class WalletController(
     }
 
     /** A pull-to-refresh, or the screen coming back into view. */
+    /** Spec 047 (the founder, 2026-09-12): the home's account switcher — the core keeps the per-account totals it shows. */
+    fun switcherOpened(addresses: List<String>) = balanceHost.dispatch(BalanceEvent.SwitcherOpened(addresses), BalanceEvent.serializer())
+
+    fun switcherClosed() = balanceHost.dispatch(BalanceEvent.SwitcherClosed, BalanceEvent.serializer())
+
     fun refresh(force: Boolean = false, pull: Boolean = false) =
         balanceHost.dispatch(
             BalanceEvent.RefreshRequested(force = force, pull = pull),

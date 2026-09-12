@@ -2,8 +2,8 @@ package app.getvela.wallet
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import app.getvela.wallet.feature.send.core.SendOpenParams
+import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.core.diagnostics.CrashReport
-import app.getvela.wallet.core.net.ConnectivityWatch
 import app.getvela.wallet.core.data.Preferences
 import app.getvela.wallet.feature.send.core.SendAddNetworkOutcome
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
@@ -70,7 +70,6 @@ class AppContainer(private val app: Application) {
     val themeRepository = ThemePreferenceRepository(app)
 
     /** Spec 047 D9: online or not, from the platform. */
-    val connectivity = ConnectivityWatch(app).also { it.start() }
 
     /** Spec 047 D8: a `/pay` link handed to the wallet route, consumed once. */
     val pendingPayLink = MutableStateFlow<android.net.Uri?>(null)
@@ -438,6 +437,10 @@ class AppContainer(private val app: Application) {
     }
 
     fun start() {
+        // Spec 047: logos come from the chain-data endpoint (the founder's ruling); the base follows the endpoints table.
+        CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
+            settings.ethereumDataBase().collect { base -> Marks.base = base }
+        }
         // Debug trace of the pool's chain verdicts (spec 043 phase 4).
         CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Default).launch {
             pool.view.collect { view ->

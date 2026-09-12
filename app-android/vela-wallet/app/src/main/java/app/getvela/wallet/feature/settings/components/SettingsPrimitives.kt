@@ -37,6 +37,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import app.getvela.wallet.core.designsystem.components.VelaIcons
+import app.getvela.wallet.core.marks.RemoteLogo
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaBorder
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
@@ -164,20 +165,24 @@ fun VelaCallout(callout: CalloutModel, modifier: Modifier = Modifier) {
 /** A chain's circular avatar — one letter over its own brand colour. */
 @Composable
 fun VelaChainMark(mark: ChainMarkModel, size: Dp = VelaSpacing.xl4) {
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(RoundedCornerShape(VelaRadius.full))
-            .background(Color(mark.colorArgb)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = mark.letter,
-            color = Color.White,
-            fontFamily = VelaFontFamily,
-            fontWeight = VelaFontWeight.bold,
-            fontSize = VelaTextSize.base,
-        )
+    // Spec 047: the chain's own logo when the chain-data endpoint has one; the
+    // letter over the brand colour stays the fallback (the web's RemoteLogo).
+    RemoteLogo(urls = listOfNotNull(mark.logoUrl), size = size) {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .clip(RoundedCornerShape(VelaRadius.full))
+                .background(Color(mark.colorArgb)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = mark.letter,
+                color = Color.White,
+                fontFamily = VelaFontFamily,
+                fontWeight = VelaFontWeight.bold,
+                fontSize = VelaTextSize.base,
+            )
+        }
     }
 }
 

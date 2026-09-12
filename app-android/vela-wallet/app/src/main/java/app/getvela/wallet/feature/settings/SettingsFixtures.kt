@@ -148,24 +148,10 @@ object SettingsFixtures {
 
     // --- Pages ---------------------------------------------------------------
 
+    // The founder's ruling (2026-09-12, spec 047): the settings home carries no
+    // 通讯录 row (the tab bar has the book) and no 反馈 row (the crash sheet and
+    // About reach the issue tracker). The feedback sheet stays drawn for those.
     private fun sections(s: VelaStrings, advancedOpen: Boolean): List<SettingsSectionModel> = listOf(
-        SettingsSectionModel(
-            rows = listOf(
-                SettingsRowModel(
-                    id = "contacts",
-                    title = s.t(I18nKeys.SettingsUi.NAV_CONTACTS),
-                    icon = SettingsIcon.Contacts,
-                    subtitle = s.t(I18nKeys.SettingsUi.CONTACTS_SUBTITLE),
-                ),
-                SettingsRowModel(
-                    id = "feedback",
-                    title = s.t(I18nKeys.SettingsUi.FEEDBACK_TITLE),
-                    icon = SettingsIcon.Feedback,
-                    subtitle = s.t(I18nKeys.SettingsUi.FEEDBACK_SUBTITLE),
-                    trailing = RowTrailing.External,
-                ),
-            ),
-        ),
         SettingsSectionModel(
             label = s.t(I18nKeys.SettingsUi.SECTION_APPEARANCE),
             appearanceControls = true,

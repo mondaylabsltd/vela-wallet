@@ -99,6 +99,10 @@ data class AssetRowModel(
     val balance: String,
     val fiat: AssetFiatModel,
     val masked: Boolean,
+    /** Spec 047: the web's logo rules — candidates in order, the badge's logo, the badge hidden when it repeats the token. */
+    val logoUrls: List<String> = emptyList(),
+    val badgeLogoUrl: String? = null,
+    val badgeHidden: Boolean = false,
 )
 
 enum class SectionMode { Rows, Empty, Loading }

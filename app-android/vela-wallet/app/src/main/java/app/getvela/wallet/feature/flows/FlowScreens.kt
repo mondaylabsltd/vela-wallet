@@ -455,7 +455,7 @@ fun TokenDetailBody(
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TokenIcon(ticker = model.mark.ticker, badgeColor = model.mark.badgeColor)
+            TokenIcon(mark = model.mark)
             Spacer(modifier = Modifier.width(VelaSpacing.lg))
             Column {
                 Text(
@@ -569,9 +569,7 @@ fun AddTokenBody(
                     .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TokenIcon(
-                    ticker = network.mark.ticker,
-                    badgeColor = network.mark.badgeColor,
+                TokenIcon(mark = network.mark,
                     inline = true,
                 )
                 Spacer(modifier = Modifier.width(VelaSpacing.md))
@@ -637,7 +635,7 @@ fun AddTokenBody(
                     .padding(VelaSpacing.lg),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TokenIcon(ticker = result.mark.ticker, badgeColor = result.mark.badgeColor)
+                TokenIcon(mark = result.mark)
                 Spacer(modifier = Modifier.width(VelaSpacing.lg))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -674,7 +672,7 @@ fun AddTokenBody(
                     .padding(VelaSpacing.lg),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TokenIcon(ticker = result.mark.ticker, badgeColor = result.mark.badgeColor)
+                    TokenIcon(mark = result.mark)
                     Spacer(modifier = Modifier.width(VelaSpacing.lg))
                     Text(
                         text = result.name,
@@ -849,6 +847,9 @@ fun SendFormBody(
                         ticker = row.symbol,
                         chain = row.balanceLabel,
                         badgeColor = row.mark.badgeColor,
+                        logoUrls = row.mark.logoUrls,
+                        badgeLogoUrl = row.mark.badgeLogoUrl,
+                        badgeHidden = row.mark.badgeHidden,
                         balance = row.amount,
                         fiat = AssetFiatModel.None,
                         masked = false,
@@ -1384,9 +1385,7 @@ fun SendConfirmBody(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         item.lead?.let {
-                            TokenIcon(
-                                ticker = it.ticker,
-                                badgeColor = it.badgeColor,
+                            TokenIcon(mark = it,
                                 inline = true,
                             )
                             Spacer(modifier = Modifier.width(VelaSpacing.md))

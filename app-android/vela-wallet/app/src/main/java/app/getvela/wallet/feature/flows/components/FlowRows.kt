@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import app.getvela.wallet.core.designsystem.components.VelaIcons
+import app.getvela.wallet.core.marks.RemoteLogo
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.tokens.VelaFontFamily
 import app.getvela.wallet.core.designsystem.tokens.VelaFontWeight
@@ -79,22 +80,26 @@ fun NetworkRow(
             .padding(vertical = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(VelaSizing.chainBadge)
-                .background(row.badgeColor, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = row.code,
-                // The chain colours are brand fills, dark enough for white in
-                // both appearances — so the mode-invariant white, not fgInverse.
-                color = VelaOnAccent,
-                fontFamily = VelaFontFamily,
-                fontWeight = VelaFontWeight.bold,
-                fontSize = VelaTextSize.xs,
-                maxLines = 1,
-            )
+        // Spec 047: the network's logo from the chain-data endpoint; the code
+        // over the brand colour is the fallback (the web's RemoteLogo).
+        RemoteLogo(urls = listOfNotNull(row.logoUrl), size = VelaSizing.chainBadge) {
+            Box(
+                modifier = Modifier
+                    .size(VelaSizing.chainBadge)
+                    .background(row.badgeColor, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = row.code,
+                    // The chain colours are brand fills, dark enough for white in
+                    // both appearances — so the mode-invariant white, not fgInverse.
+                    color = VelaOnAccent,
+                    fontFamily = VelaFontFamily,
+                    fontWeight = VelaFontWeight.bold,
+                    fontSize = VelaTextSize.xs,
+                    maxLines = 1,
+                )
+            }
         }
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
@@ -191,9 +196,7 @@ fun FactRow(
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
             }
             is FactLead.Token -> {
-                TokenIcon(
-                    ticker = lead.mark.ticker,
-                    badgeColor = lead.mark.badgeColor,
+                TokenIcon(mark = lead.mark,
                     inline = true,
                 )
                 Spacer(modifier = Modifier.width(VelaSpacing.sm))
@@ -409,7 +412,7 @@ fun FeeTokenRow(
             .padding(VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TokenIcon(ticker = row.mark.ticker, badgeColor = row.mark.badgeColor)
+        TokenIcon(mark = row.mark)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
             Text(

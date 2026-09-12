@@ -7,6 +7,7 @@ import app.getvela.wallet.feature.send.core.SendTreasuryAsset
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.settings.core.DeviceStorage
 import app.getvela.wallet.core.format.TextScaleLevel
+import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
@@ -144,6 +145,7 @@ object SettingsLive {
                             mark = ChainMarkModel(
                                 letter = entry.name.take(1).uppercase(),
                                 colorArgb = markColour(entry.chain_id),
+                                logoUrl = Marks.chainLogoUrl(entry.chain_id.toInt()),
                             ),
                             name = entry.name,
                             meta = strings.t(
@@ -159,6 +161,7 @@ object SettingsLive {
                         mark = ChainMarkModel(
                             letter = it.name.take(1).uppercase(),
                             colorArgb = markColour(it.chain_id),
+                            logoUrl = Marks.chainLogoUrl(it.chain_id.toInt()),
                         ),
                         name = it.name,
                         meta = strings.t(
@@ -239,6 +242,7 @@ object SettingsLive {
                     mark = ChainMarkModel(
                         letter = row.display_name.take(1).uppercase(),
                         colorArgb = markColour(row.chain_id),
+                        logoUrl = Marks.chainLogoUrl(row.chain_id.toInt()),
                     ),
                     name = row.display_name,
                     meta = strings.t(
@@ -460,7 +464,7 @@ object SettingsLive {
         val amount = SendLive.fromBase(short.max(java.math.BigDecimal.ZERO).toPlainString(), decimals)
         return model.copy(
             relayer = model.relayer.copy(
-                mark = ChainMarkModel(symbol.take(3).uppercase(), WalletLive.badge(chainId.toLong()).value.toLong() and 0xFFFFFFFFL),
+                mark = ChainMarkModel(symbol.take(3).uppercase(), WalletLive.badge(chainId.toLong()).value.toLong() and 0xFFFFFFFFL, Marks.chainLogoUrl(chainId.toInt())),
                 name = chainName,
                 amountHint = strings.t(I18nKeys.SettingsUi.RELAYER_AMOUNT_HINT, mapOf("amount" to amount, "symbol" to (if (status.asset == SendTreasuryAsset.PathUsd) "pathUSD" else symbol))),
                 addressDisplay = ExploreLive.shortAddress(status.address),
@@ -476,7 +480,7 @@ object SettingsLive {
             rpcBanner = drawn.copy(
                 chips = failedChains.map { id ->
                     val name = chainNames[id] ?: "chain-$id"
-                    RpcBannerChipModel(id = id.toString(), mark = ChainMarkModel(name.take(1).uppercase(), WalletLive.badge(id.toLong()).value.toLong() and 0xFFFFFFFFL), name = name, action = drawn.chips.firstOrNull()?.action.orEmpty())
+                    RpcBannerChipModel(id = id.toString(), mark = ChainMarkModel(name.take(1).uppercase(), WalletLive.badge(id.toLong()).value.toLong() and 0xFFFFFFFFL, Marks.chainLogoUrl(id)), name = name, action = drawn.chips.firstOrNull()?.action.orEmpty())
                 },
             ),
         )
@@ -485,7 +489,8 @@ object SettingsLive {
     /** The accounts sheet: this device's accounts, the active one ticked; the drawn amount is not known here and stays blank. */
     fun withAccounts(model: SettingsScreenModel, accounts: List<Pair<String, String>>, activeIndex: Int, strings: VelaStrings): SettingsScreenModel = model.copy(
         accountsSheet = model.accountsSheet.copy(
-            summary = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to accounts.size.toString())),
+            // The count line ends in the separator that precedes a total; this sheet shows none, so the separator goes too.
+            summary = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to accounts.size.toString())).trimEnd(' ', '·'),
             rows = accounts.mapIndexed { i, (name, address) ->
                 AccountsSheetRowModel(name = name.ifBlank { ExploreLive.shortAddress(address) }, addressDisplay = ExploreLive.shortAddress(address), addressFull = address, amount = "", selected = i == activeIndex)
             },

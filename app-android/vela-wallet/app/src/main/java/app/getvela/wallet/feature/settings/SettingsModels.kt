@@ -174,7 +174,7 @@ data class ConfirmSheetModel(
 
 /** A chain's circular avatar: a letter over a fixture-supplied brand colour. */
 @Immutable
-data class ChainMarkModel(val letter: String, val colorArgb: Long)
+data class ChainMarkModel(val letter: String, val colorArgb: Long, /** Spec 047: the chain's logo from the chain-data endpoint; the letter is the fallback. */ val logoUrl: String? = null)
 
 @Immutable
 data class NetworkRowModel(

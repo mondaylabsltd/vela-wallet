@@ -134,7 +134,7 @@ object SendLive {
             header = fallback.header.copy(title = s.t(I18nKeys.Flows.MULTI_SEND_TITLE)),
             notice = chain?.let {
                 SendNoticeModel(
-                    mark = TokenMarkModel(nativeSymbol(it, ctx), WalletLive.badge(it.toLong())),
+                    mark = WalletLive.mark(it, nativeSymbol(it, ctx), null),
                     text = s.t(I18nKeys.Flows.MULTI_SEND_NOTICE, mapOf("network" to chainName)),
                 )
             },
@@ -227,7 +227,7 @@ object SendLive {
             sweepSummary = s.t(I18nKeys.Flows.MULTI_SEND_SUMMARY, mapOf("n" to picked.size.toString(), "chain" to (ctx.chainNames[chainId] ?: "chain-$chainId"))),
             sweepRows = picked.map { row ->
                 SweepRowModel(
-                    mark = TokenMarkModel(row.symbol, WalletLive.badge(row.chain_id.toLong())),
+                    mark = WalletLive.mark(row.chain_id.toInt(), row.symbol, row.token_address, row.logo_urls),
                     symbol = row.symbol,
                     balanceLabel = s.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to trim(row.balance))),
                     amount = trim(sweepAmount(view, row)),
@@ -252,6 +252,9 @@ object SendLive {
         ticker = token.symbol,
         chain = ctx.chainNames[token.chain_id] ?: token.network,
         badgeColor = WalletLive.badge(token.chain_id.toLong()),
+        logoUrls = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls).logoUrls,
+        badgeLogoUrl = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls).badgeLogoUrl,
+        badgeHidden = WalletLive.mark(token.chain_id.toInt(), token.symbol, token.token_address, token.logo_urls).badgeHidden,
         balance = "${trim(token.balance)} ${token.symbol}",
         fiat = token.price_usd?.let { price ->
             AssetFiatModel.Value(ctx.money.symbol + fixed2(ctx.money.convert(amount(token.balance) * price)))
@@ -275,7 +278,7 @@ object SendLive {
             header = fallback.header.copy(title = s.t(I18nKeys.Flows.SEND_TITLE, mapOf("symbol" to symbol))),
             token = token?.let {
                 SendTokenCardModel(
-                    mark = TokenMarkModel(it.symbol, WalletLive.badge(it.chain_id.toLong())),
+                    mark = WalletLive.mark(it.chain_id.toInt(), it.symbol, it.token_address, it.logo_urls),
                     symbol = it.symbol,
                     detail = "$chain · ${s.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to trim(it.balance)))}",
                     max = s.t(I18nKeys.Flows.MAX),
@@ -403,15 +406,14 @@ object SendLive {
     /** "0.0021 XDAI" from the estimate: the fee asset's own units, never re-priced here. */
     private fun feeText(estimate: FeeEstimateView?, ctx: Context): Pair<String, TokenMarkModel?> {
         if (estimate == null) return "—" to null
-        val colour = WalletLive.badge(estimate.chain_id.toLong())
         return when (val asset = estimate.fee_asset) {
             is FeeAssetView.Native -> {
                 val symbol = nativeSymbol(estimate.chain_id, ctx)
-                "${fromBase(estimate.total_wei, 18)} $symbol" to TokenMarkModel(symbol, colour)
+                "${fromBase(estimate.total_wei, 18)} $symbol" to WalletLive.mark(estimate.chain_id.toInt(), symbol, null)
             }
             is FeeAssetView.Erc20 -> {
                 val symbol = asset.symbol ?: "TOKEN"
-                "${fromBase(asset.amount, asset.decimals)} $symbol" to TokenMarkModel(symbol, colour)
+                "${fromBase(asset.amount, asset.decimals)} $symbol" to WalletLive.mark(estimate.chain_id.toInt(), symbol, asset.token)
             }
         }
     }
@@ -421,7 +423,7 @@ object SendLive {
     internal fun feeSheet(fallback: FeeTokenPickModel, fee: FeeView, ctx: Context): FeeTokenPickModel = fallback.copy(
         rows = fee.options.map { option ->
             FeeTokenRowModel(
-                mark = TokenMarkModel(option.symbol, WalletLive.badge((fee.fee?.chain_id ?: 0).toLong())),
+                mark = WalletLive.mark((fee.fee?.chain_id ?: 0).toInt(), option.symbol, option.contract),
                 symbol = option.symbol,
                 balanceLabel = ctx.strings.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to trim(fromBase(option.balance, option.decimals)))),
                 fee = option.amount?.let { "~${trim(fromBase(it, option.decimals))} ${option.symbol}" } ?: "—",
@@ -481,7 +483,7 @@ object SendLive {
                 FactRowModel(
                     label = s.t(I18nKeys.Flows.DETAIL_CHAIN),
                     value = chain,
-                    lead = token?.let { FactLead.Token(TokenMarkModel(it.symbol, WalletLive.badge(it.chain_id.toLong()))) },
+                    lead = token?.let { FactLead.Token(WalletLive.mark(it.chain_id.toInt(), it.symbol, it.token_address, it.logo_urls)) },
                 ),
                 FactRowModel(
                     label = s.t(I18nKeys.Flows.EST_FEE),

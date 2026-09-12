@@ -1,7 +1,13 @@
 package app.getvela.wallet.feature.wallet
 
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.feature.wallet.core.BalanceSwitcherView
+import app.getvela.wallet.feature.settings.AccountsSheetRowModel
+import app.getvela.wallet.feature.settings.AccountsSheetModel
+import app.getvela.wallet.feature.browser.ExploreLive
 import androidx.compose.ui.graphics.Color
+import app.getvela.wallet.core.marks.Marks
+import app.getvela.wallet.feature.flows.TokenMarkModel
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.core.CurrencyView
@@ -319,6 +325,9 @@ object WalletLive {
         // device has no row for the chain — never a blank line.
         chain = chainNames[token.chain_id] ?: token.name,
         badgeColor = badgeColour(token.chain_id),
+        logoUrls = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).logoUrls,
+        badgeLogoUrl = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).badgeLogoUrl,
+        badgeHidden = Marks.tokenMark(token.chain_id, token.symbol, token.token_address).badgeHidden,
         balance = "${trimAmount(token.balance)} ${token.symbol}",
         fiat = token.price_usd?.let { price ->
             val value = money.convert(amountAsDouble(token.balance) * price)
@@ -350,6 +359,54 @@ object WalletLive {
      * receive screen.
      */
     fun badge(chainId: Long): Color = badgeColour(chainId.toInt())
+
+    /**
+     * Spec 047: the home's account switcher — every account on this device
+     * with the total the balance machine keeps for it (`switcher.balances`,
+     * filled after `SwitcherOpened`), the active one ticked. A total not yet
+     * known is blank rather than a zero the person does not have.
+     */
+    fun accountSwitcher(
+        accounts: List<Pair<String, String>>,
+        activeIndex: Int,
+        switcher: BalanceSwitcherView,
+        currency: CurrencyView,
+        strings: VelaStrings,
+    ): AccountsSheetModel {
+        val money = Money.of(currency)
+        // "2 accounts · Total $5.65": the corpus's count line ends in the
+        // separator so the total follows it, the way the web's sheet reads.
+        val total = switcher.balances.sumOf { it.usd }
+        val known = switcher.balances.isNotEmpty()
+        val count = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to accounts.size.toString()))
+        return AccountsSheetModel(
+            title = strings.t(I18nKeys.SettingsUi.ACCOUNTS_TITLE),
+            summary = if (known) count + strings.t(I18nKeys.SettingsUi.ACCOUNTS_TOTAL, mapOf("amount" to money.fiat(total))) else count.trimEnd(' ', '·'),
+            rows = accounts.mapIndexed { i, (name, address) ->
+                val short = ExploreLive.shortAddress(address)
+                val usd = switcher.balances.firstOrNull { it.address.equals(address, ignoreCase = true) }?.usd
+                AccountsSheetRowModel(
+                    name = name.ifBlank { short },
+                    addressDisplay = short,
+                    addressFull = address,
+                    amount = usd?.let { money.fiat(it) } ?: "",
+                    selected = i == activeIndex,
+                )
+            },
+            primary = strings.t(I18nKeys.SettingsUi.ACCOUNT_CREATE),
+            secondary = strings.t(I18nKeys.SettingsUi.ACCOUNT_SIGN_IN),
+        )
+    }
+
+    /**
+     * Spec 047: every token mark on the phone — the drawn colour plus the
+     * web's logo rules (`tokenMarkFor`): the coin's chain logo for a native
+     * coin, the asset entry for a token, the badge hidden when it would repeat.
+     */
+    fun mark(chainId: Int, symbol: String, tokenAddress: String?, logoUrls: List<String> = emptyList()): TokenMarkModel {
+        val m = Marks.tokenMark(chainId, symbol, tokenAddress, logoUrls)
+        return TokenMarkModel(symbol, badgeColour(chainId), m.logoUrls, m.badgeLogoUrl, m.badgeHidden)
+    }
 
     private fun badgeColour(chainId: Int): Color = BADGES[chainId.mod(BADGES.size)]
 

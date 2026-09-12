@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.flows
 
 import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.send.core.MtokView
 import app.getvela.wallet.core.i18n.I18nKeys
@@ -98,6 +99,7 @@ object FlowLive {
                     name = row.display_name,
                     code = row.native_symbol,
                     badgeColor = badge(row.chain_id),
+                    logoUrl = Marks.chainLogoUrl(row.chain_id.toInt()),
                     addressDisplay = shown,
                     copyLabel = template?.copyLabel.orEmpty(),
                     qrLabel = template?.qrLabel.orEmpty(),
@@ -179,7 +181,7 @@ object FlowLive {
                 FactRowModel(
                     label = strings.t(I18nKeys.Flows.DETAIL_CHAIN),
                     value = chainNames[item.chain_id] ?: item.chain_id.toString(),
-                    lead = FactLead.Token(TokenMarkModel(item.symbol, WalletLive.badge(item.chain_id.toLong()))),
+                    lead = FactLead.Token(WalletLive.mark(item.chain_id, item.symbol, null)),
                 ),
             )
             add(FactRowModel(label = strings.t(I18nKeys.Flows.DETAIL_DATE), value = detailDate(item.timestamp, strings)))
@@ -229,7 +231,7 @@ object FlowLive {
         val result: AddTokenResult = when {
             view.detecting -> AddTokenResult.Searching(strings.t(I18nKeys.Flows.ADD_SEARCHING))
             first != null -> AddTokenResult.Token(
-                mark = TokenMarkModel(first.symbol, WalletLive.badge(first.chain_id.toLong())),
+                mark = WalletLive.mark(first.chain_id, first.symbol, view.input_address.takeIf { view.address_valid }),
                 name = first.name,
                 detail = "${first.symbol} · ${strings.t(I18nKeys.Flows.ADD_LABEL_DECIMALS)} ${first.decimals} · ${first.network_name}",
                 chip = if (first.added) StatusChipModel(strings.t(I18nKeys.Flows.ADD_TOKEN_ADDED), StatusTone.Success) else null,
@@ -324,7 +326,7 @@ object FlowLive {
             },
         )
         return fallback.copy(
-            mark = TokenMarkModel(token.symbol, row.badgeColor),
+            mark = TokenMarkModel(token.symbol, row.badgeColor, row.logoUrls, row.badgeLogoUrl, row.badgeHidden),
             symbol = token.symbol,
             chain = row.chain,
             balance = row.balance,

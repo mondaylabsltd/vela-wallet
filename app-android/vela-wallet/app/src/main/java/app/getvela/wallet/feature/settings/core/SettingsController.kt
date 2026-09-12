@@ -58,6 +58,10 @@ class SettingsController(
      * has not loaded yet. Resolving at call time is what makes that legal, and
      * an explicit return type is what lets the compiler see it.
      */
+    /** Spec 047: the chain-data base every logo is fetched from — follows the endpoints table as it is edited. */
+    internal fun ethereumDataBase(): kotlinx.coroutines.flow.Flow<String> =
+        kotlinx.coroutines.flow.flow { networkHost.view.collect { emit(endpointUrl(NetEndpointField.EthereumData)) } }
+
     internal fun endpointUrl(field: NetEndpointField): String =
         networkHost.view.value.endpoints
             .firstOrNull { row -> row.field == field }

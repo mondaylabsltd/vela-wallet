@@ -1199,7 +1199,7 @@ private fun ConfirmSheetBody(
 }
 
 @Composable
-private fun AccountsSheetBody(sheet: AccountsSheetModel, onSelect: (Int) -> Unit = {}, onPrimary: () -> Unit = {}, onSecondary: () -> Unit = {}) {
+internal fun AccountsSheetBody(sheet: AccountsSheetModel, onSelect: (Int) -> Unit = {}, onPrimary: () -> Unit = {}, onSecondary: () -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(sheet.title)
     Text(

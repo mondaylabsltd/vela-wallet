@@ -52,7 +52,14 @@ data class FlowPillModel(val dots: List<Color>, val label: String)
 
 /** A token's circular mark: three-letter glyph plus its chain colour. */
 @Immutable
-data class TokenMarkModel(val ticker: String, val badgeColor: Color)
+data class TokenMarkModel(
+    val ticker: String,
+    val badgeColor: Color,
+    /** Spec 047: the web's `tokenMarkFor` — logo candidates in order, the chain badge's logo, and whether the badge is hidden because it would repeat the token. */
+    val logoUrls: List<String> = emptyList(),
+    val badgeLogoUrl: String? = null,
+    val badgeHidden: Boolean = false,
+)
 
 /** Leading art on a fact row's value side. */
 @Immutable
@@ -94,6 +101,8 @@ data class NetworkRowModel(
     val addressDisplay: String,
     val copyLabel: String,
     val qrLabel: String,
+    /** Spec 047: the network's own logo from the chain-data endpoint; the drawn code stays the fallback. */
+    val logoUrl: String? = null,
 )
 
 @Immutable

@@ -564,7 +564,7 @@ fun NoticeBanner(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         mark?.let {
-            TokenIcon(ticker = it.ticker, badgeColor = it.badgeColor, inline = true)
+            TokenIcon(mark = it, inline = true)
             Spacer(modifier = Modifier.width(VelaSpacing.md))
         }
         Text(
@@ -596,7 +596,7 @@ fun TokenHeaderCard(
             .padding(VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TokenIcon(ticker = token.mark.ticker, badgeColor = token.mark.badgeColor)
+        TokenIcon(mark = token.mark)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -841,7 +841,7 @@ fun FeeRow(fee: FeeRowModel, modifier: Modifier = Modifier, onOpen: () -> Unit =
             fontSize = VelaTextSize.base,
         )
         Spacer(modifier = Modifier.weight(1f))
-        TokenIcon(ticker = fee.mark.ticker, badgeColor = fee.mark.badgeColor, inline = true)
+        TokenIcon(mark = fee.mark, inline = true)
         Spacer(modifier = Modifier.width(VelaSpacing.sm))
         Text(
             text = fee.value,

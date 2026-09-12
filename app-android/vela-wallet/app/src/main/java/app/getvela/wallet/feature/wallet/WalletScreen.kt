@@ -73,16 +73,18 @@ fun WalletScreen(
      * where this screen is a picture.
      */
     onFlow: (WalletFlowEntry, String?) -> Unit = { _, _ -> },
+    /** Spec 047: the header's name line opens the account switcher. */
+    onSwitcher: () -> Unit = {},
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            WalletHomeContent(model, modifier, onSelectTab, onFlow)
+            WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher)
         }
     } else {
-        WalletHomeContent(model, modifier, onSelectTab, onFlow)
+        WalletHomeContent(model, modifier, onSelectTab, onFlow, onSwitcher)
     }
 
     model.sheet?.let { sheet ->
@@ -108,6 +110,7 @@ private fun WalletHomeContent(
      */
     onSelectTab: (VelaTab) -> Unit = {},
     onFlow: (WalletFlowEntry, String?) -> Unit = { _, _ -> },
+    onSwitcher: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val strings = LocalVelaStrings.current
@@ -143,6 +146,7 @@ private fun WalletHomeContent(
                 WalletHeaderRow(
                     header = model.header,
                     onIdenticon = { viewingIdenticon = true },
+                onSwitcher = onSwitcher,
                     identiconLabel = strings.t(I18nKeys.Wallet.IDENTICON_A11Y_OPEN),
                 )
                 Spacer(modifier = Modifier.height(VelaSpacing.xl3))

@@ -42,6 +42,7 @@ fun CrashSheet(strings: VelaStrings, version: String) {
     var report by remember { mutableStateOf(CrashReport.read(context)) }
     val record = report ?: return
     val colors = VelaTheme.colors
+    androidx.compose.runtime.LaunchedEffect(record) { VelaLog.event("crash.sheet", "raised", "message" to record.message.take(60)) }
     val dismiss = {
         CrashReport.clear(context)
         report = null
@@ -63,6 +64,7 @@ fun CrashSheet(strings: VelaStrings, version: String) {
             VelaPrimaryButton(
                 strings.t(I18nKeys.SettingsUi.BUG_SEND),
                 onClick = {
+                    VelaLog.event("crash.sheet", "report tapped")
                     val body = "Version: v$version\nThread: ${record.thread}\n${record.message}\n${record.stack}"
                     val url = "https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=" +
                         java.net.URLEncoder.encode("[android] ${record.message.take(60)}", "UTF-8") +

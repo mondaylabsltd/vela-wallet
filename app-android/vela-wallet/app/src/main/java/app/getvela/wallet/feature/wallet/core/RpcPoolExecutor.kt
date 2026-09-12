@@ -2,6 +2,7 @@ package app.getvela.wallet.feature.wallet.core
 
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.data.KeyValueStore
+import app.getvela.wallet.core.net.NetHealth
 import app.getvela.wallet.core.net.VelaHttp
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -288,6 +289,7 @@ class OkHttpTransport : RpcTransport {
 
         try {
             call.execute().use { response ->
+                NetHealth.reached()
                 if (!response.isSuccessful) {
                     return@withContext RpcPostResult(RpcTransportOutcome.HttpError(response.code))
                 }
@@ -309,6 +311,7 @@ class OkHttpTransport : RpcTransport {
             // core would ban an endpoint that was merely slow.
             RpcPostResult(RpcTransportOutcome.Timeout)
         } catch (network: IOException) {
+            NetHealth.unreached()
             RpcPostResult(RpcTransportOutcome.Network)
         }
     }
