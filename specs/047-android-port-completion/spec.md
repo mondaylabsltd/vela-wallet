@@ -92,9 +92,7 @@ describe the install/verify loop the next person runs.
   draws (R4) and handed through the documents port.
 - FR-005 Deep links are validated by the core (`LinkOpened` → `pay`), never by
   the shell; the manifest declares the scheme and the host.
-- FR-006 Offline state comes from the platform's connectivity callback; the
-  panic sheet from a default uncaught-exception handler that persists first
-  and rethrows.
+- FR-006 Offline state comes from what the calls did, not from the radio: three consecutive calls that never reached a server put the offline line on the home, and the first answered call clears it and refreshes what went stale (the manifest's standing rule — no ACCESS_NETWORK_STATE — because a connectivity check lies behind captive portals and on working VPNs).
 - FR-007 Every US verified on the Xiaomi.
 
 ## Success Criteria

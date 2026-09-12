@@ -1,5 +1,24 @@
 # Known bugs
 
+## ANDROID-1 (open, 2026-09-12, spec 047) — the parallel-space flag was found off at 047's first launch
+
+**Symptom:** after 046's last device run (badge on, fixture account active), 047's first
+launch showed the founder's real account and the light theme; `shared_prefs/vela.parallel.xml`
+read `active=false`. No sign-out was tapped and no launch carried `vela.parallelSpace=false`.
+**Status:** not reproduced since; re-entered with `--ez vela.parallelSpace true`. Watch for a
+second occurrence before hunting; `DebugParallelSpace.leave()` is the only writer.
+
+## ANDROID-2 (open, 2026-09-12, spec 045) — the sweep pick opened during the first launch after install once showed no rows
+
+**Symptom:** tapping 发送多个代币 before the balances had arrived, on the first launch after
+an install, left the pick empty for the wait's length; the plain pick and later cold starts
+showed rows in ~2 s. Not reproduced.
+
+## ANDROID-3 (fixed 2026-09-12, spec 046) — SIWE verdicts printed the corpus placeholders
+
+**Symptom:** 044's signing sheet showed `已验证登录到 {{domain}}` raw. **Fix:** the words take
+the domain and the origin (`SigningLive.messageBlocks`).
+
 ## BUG-7 (✅ FIXED 2026-07-09, fund-path) — an extension sign could be double-submitted on a re-launch
 
 **Symptom / risk:** the App-Group sign mailbox had no lifecycle — `sign-req-<rid>.json`
@@ -272,3 +291,20 @@ device concurrent proof is **2/4** (extension real-signature ✓, no-leak ✓; w
 blocked). Harness ready → 4/4 once the app's wallet holds a session. Keepalive workaround is
 impossible (`DAppSession.ping()` no-ops unless `connected`, dapp-session.ts:294; the drop isn't
 idle-based — a lone peer waits 38s+ clean).
+
+## ANDROID-4 (fixed 2026-09-12, spec 047) — 探索 did nothing on 通讯录 and 设置
+
+The tab bars of the two routes pushed over the wallet answered only 钱包; 探索 (and the other pushed route) were dead taps — no state change, no frame. The wallet section state was `rememberSaveable` inside the wallet route, unreachable from a pushed route. Fixed by hoisting `section` to the NavHost and giving the pushed routes a real tab handler.
+
+## ANDROID-5 (fixed 2026-09-12, spec 047) — a double 钱包 tap left a blank app under the badge
+
+A bare `popBackStack()` on 钱包 from 通讯录/设置: the fading route still takes taps for ~700 ms, so a second tap popped the wallet itself and emptied the NavHost. With predictive back moving the task to the back and `singleTop`, only a swipe-kill recovered. Fixed with `popBackStack(WALLET, inclusive = false)` and `popUnlessRoot()`.
+
+## ANDROID-6 (fixed 2026-09-12, spec 047) — a `/pay` link was received and then nothing
+
+`LaunchedEffect(payLink)` cleared its own trigger first, which re-keyed the effect to null and cancelled the coroutine waiting for the core's verdict. The link is consumed when the work is done; the verdict read is the one this dispatch produced.
+
+## ANDROID-7 (closed by design 2026-09-12, spec 047) — no offline line from the connectivity callback
+
+The manifest refuses `ACCESS_NETWORK_STATE` (recorded 2026-08-25: a connectivity check lies behind captive portals and on VPNs), so a default-network callback never fires. The offline line comes from `NetHealth`: three consecutive calls that never reached a server.
+
