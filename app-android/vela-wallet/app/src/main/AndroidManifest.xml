@@ -24,6 +24,9 @@
       front of somebody.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Spec 046: the scanner. Not required hardware: the photo path works without a camera. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <!--
       VIBRATE (spec 041, the money-in buzz).
