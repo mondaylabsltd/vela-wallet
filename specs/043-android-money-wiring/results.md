@@ -314,6 +314,59 @@ EIP-137 vectors; over-long names refused). Suite: 431, 0 failures.
     stack had one entry); it is the header's back now.
 
 
+## Closeout (T052–T056)
+
+**Gates, as CI runs them** (tip `c92c962b`):
+
+| Gate | Result |
+| --- | --- |
+| `cargo fmt --all --check` | clean |
+| `cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings` | clean |
+| `cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures` | every crate `ok` |
+| `gen-onboarding-types --check` | 25 generated types current |
+| `build-web.mjs` rebuild → `--check` | current, wasm 3,734,673 bytes; fingerprint `e9404f2f4c68` → `4ddebb5886c6` (every Rust edit in 043 moved it) |
+| `verify-web.mjs` | 46,528 conformance cases green |
+| `check-expo-residue` | rules 1–4 ok |
+| `check-native-reachability` | pass — `send` exempted WITH its reason (its pages are the `flows` family's) |
+| `verify-i18n-parity` | 73,160 comparisons, zero divergences |
+| Android unit tests | **431, 0 failures** (369 at 042's tip) |
+
+**Bridge size (T053, SC-010)**:
+
+| Artefact | 042's tip | 043 | Δ |
+| --- | --- | --- | --- |
+| `libvela_core_uniffi.so` arm64-v8a | 14,003,760 | 16,187,032 | **+2,183,272** (+2.08 MB) |
+| armeabi-v7a / x86_64 | 9,782,332 / 13,095,864 | 11,696,444 / 15,417,408 | +1.91 / +2.32 MB |
+| `libvela_dev_fixtures.so` arm64 (debug source set only) | — | 1,351,056 | debug APK only |
+
+The T001 ceiling (≤ 15.1 MB arm64, from 041's ~357 KB/machine) was
+**missed by ~1.0 MB**: `send` is the core's largest machine (the batch,
+split and sweep arms come along even in single mode), and the submit spine
+(`user_op.rs` +474 lines, the uniffi surface +351) is new export weight.
+The release APK carries `libvela_core_uniffi.so` per ABI and **no fixtures
+library** (`unzip -l` of `app-release-unsigned.apk`).
+
+**SC-007** (T054): `FlowFixtures.build` appears twice in the navigation
+package, both as the drawn fallback the live builders overlay
+(`liveState`/`flowState` → `SendLive.*`, `FlowLive.*`); no send state falls
+through to `drawn.base`/`drawn.sheet` (`SendLiveTest`, `FlowLiveTest`).
+**SC-008**: `CoreWireDriftTest` covers the send, fee, tracker and
+manage-tokens wires (184 references); the suite grew 369 → 431.
+
+**The D3 split** (T055): `vela-core::user_op` is 1,630 lines, of which 474
+landed in 043 as the submit spine's pure half; the desktop's twins
+(`executor/user_op.rs` 896 lines, `executor/relay.rs` 916) were **not
+re-pointed** — see Owed.
+
+**What 044–047 inherit**: Scan (`S1`, the camera) and BatchImport (`SD2C`)
+keep their fixtures by design; `simulate_calls` answers `null`
+(`SimResolved(null)`, 046); the AddToken sheet's *native* tab (the
+`network_admin` wizard the web drives, spec 028 T3b) is still drawn; split
+and sweep (`SD1B`/`SD2B`, 045); SC-002 needs a finger. Nothing found in 043
+belongs in `docs/KNOWN-BUGS.md`: the three device-found defects were
+Android-local and are fixed.
+
+
 ## Success criteria
 
 | SC | Claim | Verified | Evidence |
@@ -325,10 +378,23 @@ EIP-137 vectors; over-long names refused). Suite: 431, 0 failures.
 | SC-005 | every refusal worded on screen | **device** | phase 5: `地址无效…`, `余额不足…`, the ceiling sentence in human units; treasury/relay notices test-covered |
 | SC-006 | fee token changed, re-quoted, paid | test | `FeeMachineTest` re-quote; the sheet is live on the device but the Safe has one fee asset on Gnosis |
 | SC-007 | no send fixture in the live route | test + grep | the send states no longer fall to `drawn.base`; `Scan`/`BatchImport` keep theirs by design |
-| SC-008 | drift gate exhaustive; tests grow | — | — |
+| SC-008 | drift gate exhaustive; tests grow | test | `CoreWireDriftTest` (184 refs to the four wires); 369 → 431 tests, 0 failures |
 | SC-009 | `live in 042` markers gone | grep | phase 6: `grep -rn 'live in 042' app-android` → nothing |
-| SC-010 | release APK carries no fixture key material | — | — |
+| SC-010 | release APK carries no fixture key material | **inspected** | `app-release-unsigned.apk`: `libvela_core_uniffi.so` per ABI only; `libvela_dev_fixtures.so` lives in `src/debug/jniLibs` |
 
 ## Owed
 
+- **SC-002 — the founder's own passkey send**: one prompt, dust from the
+  real wallet. Needs a finger on the sensor; everything else on the path is
+  the same code the parallel space drove (`ParallelSpaceHook.signer() ?:
+  passkeySigner`).
+- **SC-006 — change the fee token and pay in it**: the sheet is live, but
+  the golden Safe holds one fee asset on Gnosis. Needs a Safe with a
+  stablecoin the relay quotes (`FeeMachineTest` covers the re-quote).
+- **The AddToken sheet's native tab**: drawn, not the `network_admin`
+  wizard yet (the web's T3b); the ERC-20 tab is live.
+- **Zero-balance custom tokens are invisible**: `BalanceExecutor` drops
+  zero rows (041), so a token added by address appears with its first
+  balance. The web hides zero rows too; if a "just added, empty" row is
+  wanted, it is a rule for the core's dashboard, not a shell patch.
 - **The desktop's twin of the submit spine** (T014): `app-desktop/vela-wallet/src/executor/user_op.rs` still carries `to_multi_send_call`, `envelope`, `classify_rejection`, `usable` and the draft/padding order in its own words; `relay.rs` keeps `parse_bundler_error` / `is_bundler_underfunded`. Re-point them at `vela_core::user_op` in a desktop session (it needs a desktop build to prove nothing moved).

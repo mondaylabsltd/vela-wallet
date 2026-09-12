@@ -314,20 +314,20 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
 
 ## Phase 7 — Closeout
 
-- [ ] **T052** Gates as CI runs them: `cargo fmt/clippy/test` (workspace),
+- [X] **T052** Gates as CI runs them: `cargo fmt/clippy/test` (workspace),
       the Android unit tests, `check-expo-residue`, `check-native-reachability`,
       `gen-onboarding-types --check`; then `build-web.mjs` rebuild + `--check`
       LAST (every Rust edit moved the fingerprint).
-- [ ] **T053** Bridge size: the arm64 `.so` after, against T001; the debug
+- [X] **T053** Bridge size: the arm64 `.so` after, against T001; the debug
       APK's extra fixtures `.so`; the release APK inspected (SC-010).
-- [ ] **T054** `grep -rn 'FlowFixtures.build' …/navigation/` — the send
+- [X] **T054** `grep -rn 'FlowFixtures.build' …/navigation/` — the send
       states no longer fall to `drawn.base`/`drawn.sheet` (SC-007).
-- [ ] **T055** `specs/043-android-money-wiring/results.md` — per SC:
+- [X] **T055** `specs/043-android-money-wiring/results.md` — per SC:
       device-verified (screenshot + UI text) or test-only; the `.so` delta;
       the D3 split's line counts and whether the desktop was re-pointed;
       what 044–046 inherit (Scan, BatchImport, `simulate_calls`,
       `add_network`); `docs/KNOWN-BUGS.md` if anything was found.
-- [ ] **T056** Update the memory of the device loop and the program status.
+- [X] **T056** Update the memory of the device loop and the program status.
 
 ---
 
