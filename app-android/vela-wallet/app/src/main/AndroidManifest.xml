@@ -136,11 +136,26 @@
             android:screenOrientation="portrait"
             android:theme="@style/Theme.VelaWallet"
             android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTop"
             tools:ignore="LockedOrientationActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Spec 047 D8: the wallet's own scheme, and the pay links the receive flow shares. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="velawallet" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="wallet.getvela.app" android:pathPrefix="/pay" />
+                <data android:scheme="https" android:host="getvela.app" android:pathPrefix="/pay" />
             </intent-filter>
         </activity>
         <provider

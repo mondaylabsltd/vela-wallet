@@ -517,6 +517,20 @@ class WalletController(
     val balances: StateFlow<BalanceView> = balanceHost.view
 
     /**
+     * Spec 047 D8: the `/pay` grammar is the core's — `LinkOpened` on the
+     * request machine, the answer read from `pay` / `pay_valid`. `null` = not a
+     * request this wallet honours.
+     */
+    suspend fun validatePayLink(to: String?, chain: String?, token: String?, amount: String?, sym: String?, dec: String?, net: String?): PayRequest? {
+        requestHost.dispatch(
+            PaymentRequestEvent.LinkOpened(to = to, chain = chain, token = token, amount = amount, sym = sym, dec = dec, net = net),
+            PaymentRequestEvent.serializer(),
+        )
+        val settled = kotlinx.coroutines.withTimeoutOrNull(5_000L) { requestHost.view.first { it.pay_valid != null } } ?: return null
+        return if (settled.pay_valid == true) settled.pay else null
+    }
+
+    /**
      * Spec 046 US1: the simulated deltas judged by the trust machine — the two
      * facts it judges a RECEIVED amount by are pushed first (what this wallet
      * holds on the chain, the registry's stables and wrapped native), then

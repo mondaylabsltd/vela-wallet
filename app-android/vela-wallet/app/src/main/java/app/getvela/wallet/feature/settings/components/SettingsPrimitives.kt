@@ -435,7 +435,7 @@ fun VelaSegmentedControl(
  * A picture of the control: spec 023 is UI only, so nothing moves yet.
  */
 @Composable
-fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier) {
+fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier, onChange: (Int) -> Unit = {}) {
     val colors = VelaTheme.colors
     Row(
         modifier = modifier.fillMaxWidth().padding(vertical = VelaSpacing.lg),
@@ -457,10 +457,19 @@ fun VelaTextScaleSlider(steps: Int, index: Int, modifier: Modifier = Modifier) {
             repeat(steps) { i ->
                 Box(
                     modifier = Modifier
-                        .size(if (i == index) VelaIconSize.lg else VelaSpacing.sm)
+                        .size(VelaIconSize.lg)
                         .clip(RoundedCornerShape(VelaRadius.full))
-                        .background(if (i == index) colors.fgMuted else colors.borderStrong),
-                )
+                        .clickable { onChange(i) }
+                        .semantics { contentDescription = "text-scale-$i" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(if (i == index) VelaIconSize.lg else VelaSpacing.sm)
+                            .clip(RoundedCornerShape(VelaRadius.full))
+                            .background(if (i == index) colors.fgMuted else colors.borderStrong),
+                    )
+                }
             }
         }
         Text(

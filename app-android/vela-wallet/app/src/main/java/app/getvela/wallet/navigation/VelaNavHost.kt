@@ -1,5 +1,24 @@
 package app.getvela.wallet.navigation
 
+import app.getvela.wallet.core.diagnostics.CrashSheet
+import app.getvela.wallet.feature.wallet.BalanceStatusKind
+import app.getvela.wallet.feature.wallet.BalanceStatusModel
+import app.getvela.wallet.feature.flows.ShareCardCapture
+import app.getvela.wallet.feature.flows.ShareCardModel
+import app.getvela.wallet.feature.send.core.SendOpenParams
+import app.getvela.wallet.feature.wallet.core.PayLink
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import app.getvela.wallet.feature.settings.core.DeviceStorage
+import app.getvela.wallet.feature.send.core.SendTreasuryStatus
+import app.getvela.wallet.feature.send.core.SendTreasuryProbe
+import app.getvela.wallet.core.format.TimeFormatKey
+import app.getvela.wallet.core.format.TextScaleLevel
+import app.getvela.wallet.core.format.NumberFormatKey
+import app.getvela.wallet.core.format.DateFormatKey
+import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.data.VelaStore
+import app.getvela.wallet.BuildConfig
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -420,7 +439,10 @@ fun VelaNavHost(
                 if (sendOpen && session.address.isNotEmpty()) {
                     feeSheetOpen = false
                     val money = WalletLive.Money.of(currency)
+                    // Spec 047 D8: a validated /pay link opens the send locked, once.
+                    val linkParams = application.container.pendingSendParams.value?.also { application.container.pendingSendParams.value = null }
                     send.open(
+                        params = linkParams ?: SendOpenParams(),
                         account = SendAccountRef(id = session.address, address = session.address, name = session.activeName),
                         display = SendDisplayContext(
                             code = money.code,
@@ -613,6 +635,47 @@ fun VelaNavHost(
                 )
             } else if (flowState != null) {
                 val request by wallet.request.collectAsStateWithLifecycle()
+                val scope = rememberCoroutineScope()
+                // Spec 047: online or not (the home's line, a refresh on reconnect),
+                // a `/pay` link waiting to be validated, a share card being rendered.
+                val online by application.container.connectivity.online.collectAsStateWithLifecycle()
+                var wasOffline by remember { mutableStateOf(false) }
+                LaunchedEffect(online) {
+                    if (!online) wasOffline = true else if (wasOffline) { wasOffline = false; wallet.refresh() }
+                }
+                val payLink by application.container.pendingPayLink.collectAsStateWithLifecycle()
+                LaunchedEffect(payLink) {
+                    val uri = payLink ?: return@LaunchedEffect
+                    application.container.pendingPayLink.value = null
+                    val pay = (PayLink.parse(uri.toString()) as? PayLink.Pay) ?: return@LaunchedEffect
+                    val request = wallet.validatePayLink(pay.to, pay.chain, pay.token, pay.amount, pay.sym, pay.dec, pay.net)
+                    if (request == null) {
+                        VelaLog.event("paylink", "refused by the core", "uri" to uri.toString().take(80))
+                        return@LaunchedEffect
+                    }
+                    application.container.pendingSendParams.value = SendOpenParams(
+                        prefilled_recipient = request.recipient,
+                        prefilled_chain_id = request.chain_id.toString(),
+                        prefilled_token_address = request.token_address,
+                        prefilled_amount_base = request.amount_base,
+                        locked = true,
+                    )
+                    flows.enter(WalletFlowEntry.Send)
+                }
+                var captureShare by remember { mutableStateOf<ShareCardModel?>(null) }
+                captureShare?.let { card ->
+                    ShareCardCapture(card) { bytes ->
+                        captureShare = null
+                        if (bytes == null) {
+                            VelaLog.event("share", "render failed")
+                        } else {
+                            scope.launch {
+                                val name = "vela-receive-${session.address.takeLast(6)}.png"
+                                application.container.documents?.share(name, "image/png", bytes)
+                            }
+                        }
+                    }
+                }
                 // The receive screen shows an ADDRESS. Every other fixture that
                 // leaks shows somebody the wrong information; a fixture address
                 // here sends their money to a stranger, permanently — so the
@@ -658,6 +721,10 @@ fun VelaNavHost(
                     model = flowModel,
                     onBack = { flows.back() },
                     onNavigate = { flows.push(it) },
+                    onSaveImage = {
+                        val drawn = (FlowFixtures.build(FlowState.R4, strings).base as? FlowBase.Share)?.model
+                        if (drawn != null) captureShare = FlowLive.shareCard(drawn, session.address, session.activeName, request.asset.network_name, strings)
+                    },
                     addToken = AddTokenCallbacks(
                         onInput = { wallet.addTokenInput(it.trim()) },
                         onSubmit = { manageTokens.found.firstOrNull()?.let { wallet.addTokenSave(it.chain_id) } },
@@ -763,8 +830,12 @@ fun VelaNavHost(
                     // The holdings, the feed and the currency are this device's
                     // own (spec 041); the fixture `model` only carries the
                     // labels the live builder cannot compute.
+                    val online by application.container.connectivity.online.collectAsStateWithLifecycle()
                     WalletScreen(
-                        model = WalletLive.home(model, balances, feed, currency, strings, chainNames),
+                        model = WalletLive.home(model, balances, feed, currency, strings, chainNames).let { home ->
+                            // Spec 047 D9: no network at all is said on the hero, not guessed from a slow pool.
+                            if (online) home else home.copy(balance = home.balance.copy(status = BalanceStatusModel(BalanceStatusKind.Warning, strings.t(I18nKeys.SettingsUi.NETWORK_OFFLINE))))
+                        },
                         onSelectTab = select,
                         // The id says WHICH row was tapped. Without it every row
                         // opened the same detail, so this person's own POL showed
@@ -1029,21 +1100,90 @@ fun VelaNavHost(
             val settings = application.container.settings
             val currency by settings.currency.collectAsStateWithLifecycle()
             val networks by settings.networks.collectAsStateWithLifecycle()
+            // Spec 047 US1: the rows read the device — preferences, the pool,
+            // the session, the store's own keys, the relay's treasury.
+            val scope = rememberCoroutineScope()
+            val prefs by application.container.preferences.view.collectAsStateWithLifecycle()
+            val poolView by application.container.pool.view.collectAsStateWithLifecycle()
+            val sessionView = session
+            val i18nState by application.container.i18nRuntime.state.collectAsStateWithLifecycle()
+            var storageReport by remember { mutableStateOf<DeviceStorage.Report?>(null) }
+            var storageTick by remember { mutableStateOf(0) }
+            var treasury by remember { mutableStateOf<SendTreasuryStatus?>(null) }
+            var eraseFailed by remember { mutableStateOf<List<String>?>(null) }
+            val chainNamesNow = remember(networks.networks) { networks.networks.associate { it.chain_id.toInt() to it.display_name } }
             LaunchedEffect(Unit) {
                 settings.refreshCurrency()
                 settings.startNetworks()
             }
-            SettingsRoute(
-                model = SettingsLive.withWizard(
-                    SettingsLive.withNetworks(
-                        SettingsLive.withCurrency(model, currency),
-                        networks,
-                        strings,
-                    ),
+            LaunchedEffect(storageTick) { storageReport = DeviceStorage.measure(VelaStore(context)) }
+            LaunchedEffect(Unit) {
+                treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status
+            }
+            val liveModel = run {
+                var m = SettingsLive.withWizard(
+                    SettingsLive.withNetworks(SettingsLive.withCurrency(model, currency), networks, strings),
                     networks,
                     strings,
-                ),
+                )
+                m = SettingsLive.withPreferences(
+                    m, prefs, i18nState.language, strings,
+                    theme = when (themePreference) { ThemePreference.Light -> "light"; ThemePreference.Dark -> "dark"; else -> "auto" },
+                )
+                storageReport?.let { m = SettingsLive.withStorage(m, it, strings) }
+                m = SettingsLive.withAbout(m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, networks.networks.size, strings)
+                m = SettingsLive.withFeedback(
+                    m, BuildConfig.VERSION_NAME, BuildConfig.GIT_COMMIT, "Android ${android.os.Build.VERSION.RELEASE}", i18nState.language,
+                    poolView.failed_chains.map { chainNamesNow[it] ?: it.toString() }, VelaLog.recentFailures(), strings,
+                )
+                m = SettingsLive.withRelayer(m, chainNamesNow[100] ?: "Gnosis", 100, "xDAI", treasury, strings)
+                m = SettingsLive.withBanner(m, poolView.failed_chains, chainNamesNow, strings)
+                m = SettingsLive.withAccounts(m, sessionView.accounts.map { it.name to it.address }, sessionView.activeIndex, strings)
+                // A partial wipe names what stayed, in the sheet itself (028's rule: the person stays signed in).
+                eraseFailed?.let { left -> m = m.copy(eraseSheet = m.eraseSheet.copy(body = m.eraseSheet.body + "\n\n" + left.joinToString(", "))) }
+                m
+            }
+            val feedbackUrl = remember(liveModel.feedback.previewLines) {
+                "https://github.com/mondaylabsltd/vela-wallet/issues/new?template=bug.yml&title=" +
+                    java.net.URLEncoder.encode("[android] ", "UTF-8") +
+                    "&body=" + java.net.URLEncoder.encode(liveModel.feedback.previewLines.joinToString("\n"), "UTF-8")
+            }
+            SettingsRoute(
+                model = liveModel,
                 actions = SettingsActions(
+                    onSegment = { group, id ->
+                        when (group) {
+                            "theme" -> onThemeSelected(when (id) { "light" -> ThemePreference.Light; "dark" -> ThemePreference.Dark; else -> ThemePreference.Auto })
+                            "avatar" -> application.container.preferences.setAvatarStyle(id)
+                        }
+                    },
+                    onTextScale = { index -> TextScaleLevel.entries.getOrNull(index)?.let { application.container.preferences.setTextScale(it) } },
+                    onStorageClear = { itemId -> scope.launch { DeviceStorage.clear(VelaStore(context), itemId); storageTick++ } },
+                    onClearCaches = { scope.launch { DeviceStorage.clearCaches(VelaStore(context)); application.container.wallet.refresh(); storageTick++ } },
+                    onErase = {
+                        scope.launch {
+                            // The keep-list: the account records and the pending-upload
+                            // ledger, which sign-out's own path owns (028's one exception).
+                            val left = DeviceStorage.erase(VelaStore(context), keep = setOf("vela.accounts", "vela.activeAccountIndex", "vela.pendingUploads"))
+                            if (left.isEmpty()) {
+                                eraseFailed = null
+                                application.container.session.signOut()
+                                application.container.session.signOutConfirmed()
+                            } else {
+                                eraseFailed = left
+                            }
+                        }
+                    },
+                    onFeedbackSend = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(feedbackUrl))) } },
+                    onFeedbackGithub = { runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/mondaylabsltd/vela-wallet/issues"))) } },
+                    onOpenLink = { value ->
+                        val url = if (value.startsWith("http")) value else "https://$value"
+                        runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+                    },
+                    onRelayerRetry = { scope.launch { treasury = (application.container.relay.probeTreasury(100) as? SendTreasuryProbe.LowFloat)?.status } },
+                    onAccountSelect = { index -> application.container.session.switchAccount(index) },
+                    onAccountPrimary = { navController.push(VelaDestinations.CREATE) },
+                    onAccountSecondary = { navController.push(VelaDestinations.WELCOME) },
                     onSelectTab = { tab ->
                         if (tab == VelaTab.Wallet) navController.popBackStack()
                     },
@@ -1052,10 +1192,18 @@ fun VelaNavHost(
                     onSignOut = { application.container.session.signOut() },
                     onOpenContacts = { navController.push(VelaDestinations.CONTACTS) },
                     onSheetSelect = { sheet, id ->
-                        // Only the currency sheet has a machine behind it yet.
-                        // The others still render their fixture rows and are
-                        // deliberately inert rather than pretending to save.
-                        if (sheet == SettingsOverlay.Currency) settings.chooseCurrency(id)
+                        val prefsStore = application.container.preferences
+                        when (sheet) {
+                            SettingsOverlay.Currency -> settings.chooseCurrency(id)
+                            SettingsOverlay.Language -> {
+                                prefsStore.setLanguage(id)
+                                application.container.applyLanguage(id)
+                            }
+                            SettingsOverlay.NumberFormat -> SettingsLive.numberKeyAt(id)?.let { prefsStore.setNumberFormat(NumberFormatKey.of(it)) }
+                            SettingsOverlay.DateFormat -> SettingsLive.dateKeyAt(id)?.let { prefsStore.setDateFormat(DateFormatKey.of(it)) }
+                            SettingsOverlay.TimeFormat -> SettingsLive.timeKeyAt(id)?.let { prefsStore.setTimeFormat(TimeFormatKey.of(it)) }
+                            else -> Unit
+                        }
                     },
                     // The field ids are the core's own enum names, put there by
                     // SettingsLive. The screen reports "this box changed"; which
@@ -1105,6 +1253,8 @@ fun VelaNavHost(
     // sheet nested in one route's composable would vanish the moment the route
     // guard moved, taking the question with it and leaving the core waiting for
     // an answer nobody can give.
+    // Spec 047 D10: the last run's crash, or a core fault, raised once.
+    CrashSheet(strings = LocalVelaStrings.current, version = BuildConfig.VERSION_NAME)
     onboarding.pending?.let { prompt ->
         FlowSheet(
             kind = prompt.kind,

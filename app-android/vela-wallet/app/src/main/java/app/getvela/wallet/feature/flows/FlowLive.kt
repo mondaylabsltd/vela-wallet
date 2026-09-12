@@ -58,6 +58,14 @@ object FlowLive {
      * visit never flashes a code before the warning about which networks this
      * address is safe on.
      */
+    /** R4 — the share card for THIS account (spec 047 US2): its identicon, name, address and network. */
+    fun shareCard(fallback: ShareCardModel, address: String, name: String, networkName: String, strings: VelaStrings): ShareCardModel = fallback.copy(
+        name = name.ifBlank { shortAddress(address) },
+        lines = addressLines(address),
+        identiconSeed = address,
+        networkNote = strings.t(I18nKeys.Flows.SHARE_CARD_NETWORK_NOTE, mapOf("network" to networkName)),
+    )
+
     fun receiveGateOpen(request: PaymentRequestView): Boolean =
         !request.gate_loading && request.acknowledged
 

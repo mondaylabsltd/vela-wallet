@@ -64,16 +64,18 @@ fun FlowHost(
     /** Spec 043: when the send is live, its taps go to the machine, not to the fixture's steps. */
     send: SendCallbacks? = null,
     addToken: AddTokenCallbacks? = null,
+    /** Spec 047 US2: the receive sheet's 保存图片, when the host can render and share the card. */
+    onSaveImage: (() -> Unit)? = null,
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            FlowHostContent(model, modifier, onBack, onNavigate, send, addToken)
+            FlowHostContent(model, modifier, onBack, onNavigate, send, addToken, onSaveImage)
         }
     } else {
-        FlowHostContent(model, modifier, onBack, onNavigate, send, addToken)
+        FlowHostContent(model, modifier, onBack, onNavigate, send, addToken, onSaveImage)
     }
 }
 
@@ -105,6 +107,7 @@ private fun FlowHostContent(
     onNavigate: (FlowStep) -> Unit,
     send: SendCallbacks? = null,
     addToken: AddTokenCallbacks? = null,
+    onSaveImage: (() -> Unit)? = null,
 ) {
     Box(modifier = modifier.fillMaxSize().background(VelaTheme.colors.bgBase)) {
         when (val base = model.base) {
@@ -211,7 +214,7 @@ private fun FlowHostContent(
         }
 
         model.sheet?.let { sheet ->
-            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, send = send, addToken = addToken)
+            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, send = send, addToken = addToken, onSaveImage = onSaveImage)
         }
     }
 }
@@ -224,7 +227,7 @@ private fun FlowHostContent(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, send: SendCallbacks? = null, addToken: AddTokenCallbacks? = null) {
+private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, send: SendCallbacks? = null, addToken: AddTokenCallbacks? = null, onSaveImage: (() -> Unit)? = null) {
     var dismissed by remember(sheet) { mutableStateOf(false) }
     if (dismissed) return
 
@@ -253,7 +256,7 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, send
                 dismiss()
             }
             when (sheet) {
-                is FlowSheet.ReceiveQr -> ReceiveQrBody(model = sheet.model)
+                is FlowSheet.ReceiveQr -> ReceiveQrBody(model = sheet.model, onSave = { onSaveImage?.invoke() })
                 is FlowSheet.TxDetail -> TxDetailBody(model = sheet.model)
                 is FlowSheet.TokenDetail -> TokenDetailBody(
                     model = sheet.model,

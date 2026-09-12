@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.feature.wallet.core.PayLink
 import kotlinx.coroutines.flow.first
 import android.graphics.Color
 import android.os.Bundle
@@ -276,6 +277,11 @@ class MainActivity : ComponentActivity() {
         }
         receiptRequested()?.let { container.pendingReceipt.value = it }
         intent?.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
+        routeDeepLink(intent, container)
+        // Spec 047 US4: a forced crash for the device pass — debug builds only.
+        if (BuildConfig.DEBUG && intent?.getBooleanExtra("vela.testPanic", false) == true) {
+            android.os.Handler(mainLooper).postDelayed({ throw IllegalStateException("vela.testPanic") }, 2_000)
+        }
         when (parallelSpaceRequested()) {
             true -> ParallelSpaceHook.enter()
             false -> ParallelSpaceHook.leave()
@@ -382,6 +388,24 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val container = (application as VelaWalletApplication).container
+        intent.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
+        routeDeepLink(intent, container)
+    }
+
+    /** Spec 047 D8: `velawallet://` and `/pay` links, tokenized here, validated by the core on the wallet route. */
+    private fun routeDeepLink(intent: android.content.Intent?, container: AppContainer) {
+        val data = intent?.data ?: return
+        when (val link = PayLink.parse(data.toString())) {
+            is PayLink.Open -> container.browser.open(link.url, fromOutside = true)
+            is PayLink.Pay -> container.pendingPayLink.value = data
+            null -> Unit
         }
     }
 }

@@ -27,6 +27,14 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        // Spec 047: the About page and the bug report name the build. A provider,
+        // not a process at configuration time — the configuration cache refuses that.
+        val gitCommit = providers.exec {
+            commandLine("git", "rev-parse", "--short", "HEAD")
+            isIgnoreExitValue = true
+        }.standardOutput.asText.map { it.trim().ifEmpty { "unknown" } }.getOrElse("unknown")
+        buildConfigField("String", "GIT_COMMIT", "\"$gitCommit\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Only the ABIs rust/scripts/build-android.sh produces — prunes the extra

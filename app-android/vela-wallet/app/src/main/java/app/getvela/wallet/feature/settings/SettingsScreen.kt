@@ -132,6 +132,19 @@ data class SettingsActions(
     val onConfirmAddNetwork: () -> Unit = {},
     /** 恢复默认 on the service-endpoints page. */
     val onResetEndpoints: () -> Unit = {},
+    // Spec 047 US1: the rows that do what they say.
+    val onSegment: (group: String, id: String) -> Unit = { _, _ -> },
+    val onTextScale: (Int) -> Unit = {},
+    val onStorageClear: (String) -> Unit = {},
+    val onClearCaches: () -> Unit = {},
+    val onErase: () -> Unit = {},
+    val onFeedbackSend: () -> Unit = {},
+    val onFeedbackGithub: () -> Unit = {},
+    val onOpenLink: (String) -> Unit = {},
+    val onRelayerRetry: () -> Unit = {},
+    val onAccountSelect: (Int) -> Unit = {},
+    val onAccountPrimary: () -> Unit = {},
+    val onAccountSecondary: () -> Unit = {},
 )
 
 @Composable
@@ -194,6 +207,18 @@ fun SettingsRoute(
         onPickNetwork = actions.onPickNetwork,
         onConfirmAddNetwork = actions.onConfirmAddNetwork,
         onResetEndpoints = actions.onResetEndpoints,
+        onSegment = actions.onSegment,
+        onTextScale = actions.onTextScale,
+        onStorageClear = actions.onStorageClear,
+        onClearCaches = { actions.onClearCaches(); overlay = SettingsOverlay.None },
+        onErase = actions.onErase,
+        onFeedbackSend = actions.onFeedbackSend,
+        onFeedbackGithub = actions.onFeedbackGithub,
+        onOpenLink = actions.onOpenLink,
+        onRelayerRetry = actions.onRelayerRetry,
+        onAccountSelect = { index -> actions.onAccountSelect(index); overlay = SettingsOverlay.None },
+        onAccountPrimary = actions.onAccountPrimary,
+        onAccountSecondary = actions.onAccountSecondary,
     )
 }
 
@@ -221,6 +246,18 @@ fun SettingsScreen(
     onPickNetwork: (String) -> Unit = {},
     onConfirmAddNetwork: () -> Unit = {},
     onResetEndpoints: () -> Unit = {},
+    onSegment: (String, String) -> Unit = { _, _ -> },
+    onTextScale: (Int) -> Unit = {},
+    onStorageClear: (String) -> Unit = {},
+    onClearCaches: () -> Unit = {},
+    onErase: () -> Unit = {},
+    onFeedbackSend: () -> Unit = {},
+    onFeedbackGithub: () -> Unit = {},
+    onOpenLink: (String) -> Unit = {},
+    onRelayerRetry: () -> Unit = {},
+    onAccountSelect: (Int) -> Unit = {},
+    onAccountPrimary: () -> Unit = {},
+    onAccountSecondary: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
 
@@ -272,6 +309,8 @@ fun SettingsScreen(
                             onRow = onRow,
                             onToggleAdvanced = onToggleAdvanced,
                             onOpenOverlay = onOpenOverlay,
+                            onSegment = onSegment,
+                            onTextScale = onTextScale,
                         )
                     }
                     else -> {
@@ -289,6 +328,8 @@ fun SettingsScreen(
                             onPickNetwork = onPickNetwork,
                             onConfirmAddNetwork = onConfirmAddNetwork,
                             onResetEndpoints = onResetEndpoints,
+                            onStorageClear = onStorageClear,
+                            onOpenLink = onOpenLink,
                         )
                     }
                 }
@@ -308,6 +349,14 @@ fun SettingsScreen(
                 onDismiss = onDismissOverlay,
                 onSignOut = onSignOut,
                 onSheetSelect = onSheetSelect,
+                onClearCaches = onClearCaches,
+                onErase = onErase,
+                onFeedbackSend = onFeedbackSend,
+                onFeedbackGithub = onFeedbackGithub,
+                onRelayerRetry = onRelayerRetry,
+                onAccountSelect = onAccountSelect,
+                onAccountPrimary = onAccountPrimary,
+                onAccountSecondary = onAccountSecondary,
             )
         }
     }
@@ -376,6 +425,8 @@ private fun SettingsHomeBody(
     onRow: (String) -> Unit,
     onToggleAdvanced: () -> Unit,
     onOpenOverlay: (SettingsOverlay) -> Unit,
+    onSegment: (String, String) -> Unit = { _, _ -> },
+    onTextScale: (Int) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     VelaAccountRow(model.account) { onOpenOverlay(SettingsOverlay.Accounts) }
@@ -402,13 +453,14 @@ private fun SettingsHomeBody(
         // The three appearance controls are not rows: they are the control
         // itself, shown inline under 语言 (ST1).
         if (section.appearanceControls) {
-            VelaTextScaleSlider(model.textScale.steps, model.textScale.index)
+            VelaTextScaleSlider(model.textScale.steps, model.textScale.index, onChange = onTextScale)
             VelaSegmentedControl(
                 label = model.theme.label,
                 segments = model.theme.segments.map { seg ->
                     Triple(seg.id, seg.label, seg.icon?.let(::settingsIcon))
                 },
                 selectedId = model.theme.selected,
+                onSelect = { onSegment("theme", it) },
             )
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
             VelaSegmentedControl(
@@ -417,6 +469,7 @@ private fun SettingsHomeBody(
                     Triple(seg.id, seg.label, seg.icon?.let(::settingsIcon))
                 },
                 selectedId = model.avatar.selected,
+                onSelect = { onSegment("avatar", it) },
             )
         }
     }
@@ -483,6 +536,8 @@ private fun SettingsPageBody(
     onPickNetwork: (String) -> Unit = {},
     onConfirmAddNetwork: () -> Unit = {},
     onResetEndpoints: () -> Unit = {},
+    onStorageClear: (String) -> Unit = {},
+    onOpenLink: (String) -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     when (page) {
@@ -774,6 +829,7 @@ private fun SettingsPageBody(
             model.storage.groups.forEach { group ->
                 VelaStorageGroup(
                     group = group,
+                    onClear = onStorageClear,
                     onGroupAction = { onOpenOverlay(SettingsOverlay.ClearCaches) },
                 )
             }
@@ -807,7 +863,7 @@ private fun SettingsPageBody(
             )
             model.about.rows.forEach { VelaKeyValueRow(it) }
             Spacer(modifier = Modifier.height(VelaSpacing.xl3))
-            model.about.links.forEach { VelaKeyValueRow(it) }
+            model.about.links.forEach { VelaKeyValueRow(it, modifier = Modifier.clickable { onOpenLink(it.value) }) }
             Text(
                 text = model.about.footer,
                 color = colors.fgSubtle,
@@ -949,6 +1005,14 @@ private fun SettingsSheet(
     onDismiss: () -> Unit,
     onSignOut: () -> Unit,
     onSheetSelect: (SettingsOverlay, String) -> Unit = { _, _ -> },
+    onClearCaches: () -> Unit = {},
+    onErase: () -> Unit = {},
+    onFeedbackSend: () -> Unit = {},
+    onFeedbackGithub: () -> Unit = {},
+    onRelayerRetry: () -> Unit = {},
+    onAccountSelect: (Int) -> Unit = {},
+    onAccountPrimary: () -> Unit = {},
+    onAccountSecondary: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -979,7 +1043,7 @@ private fun SettingsSheet(
                 .padding(bottom = VelaSpacing.xl3),
         ) {
             when (overlay) {
-                SettingsOverlay.Accounts -> AccountsSheetBody(model.accountsSheet)
+                SettingsOverlay.Accounts -> AccountsSheetBody(model.accountsSheet, onSelect = onAccountSelect, onPrimary = onAccountPrimary, onSecondary = onAccountSecondary)
                 SettingsOverlay.SignOut -> ConfirmSheetBody(
                     model.signOutSheet,
                     onConfirm = onSignOut,
@@ -1002,18 +1066,18 @@ private fun SettingsSheet(
                 }
                 SettingsOverlay.ClearCaches -> ConfirmSheetBody(
                     model.clearCachesSheet,
-                    onConfirm = onDismiss,
+                    onConfirm = onClearCaches,
                     onCancel = onDismiss,
                 )
                 SettingsOverlay.EraseDevice -> ConfirmSheetBody(
                     model.eraseSheet,
-                    onConfirm = onDismiss,
+                    onConfirm = onErase,
                     onCancel = onDismiss,
                 )
-                SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback)
+                SettingsOverlay.Feedback -> FeedbackSheetBody(model.feedback, onSend = onFeedbackSend, onGithub = onFeedbackGithub)
                 SettingsOverlay.RpcFix -> RpcFixSheetBody(model.rpcFix, onDismiss)
                 SettingsOverlay.BalanceDetail -> BalanceDetailSheetBody(model.balanceDetail)
-                SettingsOverlay.Relayer -> RelayerSheetBody(model.relayer, onDismiss)
+                SettingsOverlay.Relayer -> RelayerSheetBody(model.relayer, onRelayerRetry)
                 SettingsOverlay.None -> Unit
             }
         }
@@ -1135,7 +1199,7 @@ private fun ConfirmSheetBody(
 }
 
 @Composable
-private fun AccountsSheetBody(sheet: AccountsSheetModel) {
+private fun AccountsSheetBody(sheet: AccountsSheetModel, onSelect: (Int) -> Unit = {}, onPrimary: () -> Unit = {}, onSecondary: () -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(sheet.title)
     Text(
@@ -1153,7 +1217,7 @@ private fun AccountsSheetBody(sheet: AccountsSheetModel) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable {}
+                .clickable { onSelect(index) }
                 .padding(vertical = VelaSpacing.lg),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.lg),
@@ -1201,13 +1265,13 @@ private fun AccountsSheetBody(sheet: AccountsSheetModel) {
         }
     }
     Spacer(modifier = Modifier.height(VelaSpacing.xl3))
-    VelaPrimaryButton(sheet.primary, onClick = {}, modifier = Modifier.fillMaxWidth())
+    VelaPrimaryButton(sheet.primary, onClick = onPrimary, modifier = Modifier.fillMaxWidth())
     Spacer(modifier = Modifier.height(VelaSpacing.lg))
-    VelaSecondaryButton(sheet.secondary, onClick = {}, modifier = Modifier.fillMaxWidth())
+    VelaSecondaryButton(sheet.secondary, onClick = onSecondary, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable
-private fun FeedbackSheetBody(model: FeedbackModel) {
+private fun FeedbackSheetBody(model: FeedbackModel, onSend: () -> Unit = {}, onGithub: () -> Unit = {}) {
     val colors = VelaTheme.colors
     SheetTitle(model.title, model.subtitle)
     VelaUrlField(label = "", value = "", placeholder = model.placeholder)
@@ -1243,14 +1307,14 @@ private fun FeedbackSheetBody(model: FeedbackModel) {
     Spacer(modifier = Modifier.height(VelaSpacing.xl))
     VelaCallout(CalloutModel(CalloutTone.Info, model.consent))
     Spacer(modifier = Modifier.height(VelaSpacing.xl))
-    VelaPrimaryButton(model.send, onClick = {}, modifier = Modifier.fillMaxWidth())
+    VelaPrimaryButton(model.send, onClick = onSend, modifier = Modifier.fillMaxWidth())
     Text(
         text = model.githubLink,
         color = colors.infoBase,
         fontFamily = VelaFontFamily,
         fontSize = VelaTextSize.base,
         textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(top = VelaSpacing.lg),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onGithub).padding(top = VelaSpacing.lg),
     )
 }
 

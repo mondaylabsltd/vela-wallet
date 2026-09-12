@@ -74,7 +74,20 @@ object VelaLog {
     /** One line: a step that failed, with the exception's own chain. */
     fun failure(scope: String, message: String, error: Throwable, vararg fields: Pair<String, Any?>) {
         write(scope, message, fields.toList(), error)
+        if (scope.endsWith(".fault")) onFault?.invoke(scope, error)
+        synchronized(recent) {
+            recent.addLast("$scope: $message (${error.javaClass.simpleName})")
+            if (recent.size > 8) recent.removeFirst()
+        }
     }
+
+    /** Spec 047 D10: a core fault reaches the failure sheet like a crash would. */
+    @Volatile
+    var onFault: ((String, Throwable) -> Unit)? = null
+
+    /** The last few failures, for the bug report's preview (spec 047). */
+    private val recent = ArrayDeque<String>()
+    fun recentFailures(): List<String> = synchronized(recent) { recent.toList() }
 
     /**
      * Credential ids are long and the interesting part is whether two lines are

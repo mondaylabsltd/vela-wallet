@@ -1,5 +1,13 @@
 package app.getvela.wallet.feature.settings
 
+import app.getvela.wallet.feature.wallet.WalletLive
+import app.getvela.wallet.feature.browser.ExploreLive
+import app.getvela.wallet.feature.send.core.SendTreasuryStatus
+import app.getvela.wallet.feature.send.core.SendTreasuryAsset
+import app.getvela.wallet.feature.send.SendLive
+import app.getvela.wallet.feature.settings.core.DeviceStorage
+import app.getvela.wallet.core.format.TextScaleLevel
+import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.settings.core.CurrencyCatalog
@@ -315,4 +323,172 @@ object SettingsLive {
      */
     private fun currencyRowValue(view: CurrencyView): String =
         "${view.code} · ${CurrencyCatalog.glyph(view.code)}"
+
+    // -- Spec 047 US1: the rows that read the device, not a fixture -----------------
+
+    private val NUMBER_KEYS = listOf("auto", "comma_dot", "dot_comma", "space_comma", "indian")
+    private val DATE_KEYS = listOf("auto", "ymd_slash", "mdy_slash", "dmy_slash", "dmy_dot", "iso")
+    private val TIME_KEYS = listOf("auto", "h24", "h12")
+
+    /** The sheets' rows are drawn samples indexed 0..n in the web's key order; the selected one is the preference. */
+    private fun selectSheet(sheet: SelectSheetModel, keys: List<String>, chosen: String): SelectSheetModel {
+        val index = keys.indexOf(chosen).coerceAtLeast(0)
+        return sheet.copy(rows = sheet.rows.mapIndexed { i, row -> row.copy(selected = i == index) })
+    }
+
+    fun formatKeyAt(keys: List<String>, rowId: String): String? = rowId.toIntOrNull()?.let { keys.getOrNull(it) }
+    fun numberKeyAt(rowId: String) = formatKeyAt(NUMBER_KEYS, rowId)
+    fun dateKeyAt(rowId: String) = formatKeyAt(DATE_KEYS, rowId)
+    fun timeKeyAt(rowId: String) = formatKeyAt(TIME_KEYS, rowId)
+
+    /**
+     * Language, the three formats, the text scale and the avatar style, from
+     * the person's preferences: the rows say the choice, the sheets tick it,
+     * the controls sit on it. `system` shows the resolved language beside it.
+     */
+    fun withPreferences(
+        model: SettingsScreenModel,
+        prefs: app.getvela.wallet.core.data.PrefsView,
+        activeLanguage: String,
+        strings: VelaStrings,
+        theme: String,
+    ): SettingsScreenModel {
+        val endonym = { tag: String -> SettingsFixtures.LOCALE_ENDONYMS.firstOrNull { it.first == tag }?.second ?: tag }
+        val languageValue = if (prefs.language == "system") "${endonym(activeLanguage)} · ${strings.t(I18nKeys.SettingsUi.COMMON_SYSTEM)}" else endonym(prefs.language)
+        val numberSheet = selectSheet(model.numberSheet, NUMBER_KEYS, prefs.numberFormat.wire)
+        val dateSheet = selectSheet(model.dateSheet, DATE_KEYS, prefs.dateFormat.wire)
+        val timeSheet = selectSheet(model.timeSheet, TIME_KEYS, prefs.timeFormat.wire)
+        fun sample(sheet: SelectSheetModel) = sheet.rows.firstOrNull { it.selected }?.label ?: sheet.rows.firstOrNull()?.label.orEmpty()
+        return model.copy(
+            sections = model.sections.map { section ->
+                section.copy(
+                    rows = section.rows.map { row ->
+                        when (row.id) {
+                            "language" -> row.copy(value = languageValue)
+                            "number-format" -> row.copy(value = sample(numberSheet))
+                            "date-format" -> row.copy(value = sample(dateSheet))
+                            "time-format" -> row.copy(value = sample(timeSheet))
+                            else -> row
+                        }
+                    },
+                )
+            },
+            languageSheet = model.languageSheet.copy(
+                rows = model.languageSheet.rows.map { row -> row.copy(selected = row.id == prefs.language) },
+            ),
+            numberSheet = numberSheet,
+            dateSheet = dateSheet,
+            timeSheet = timeSheet,
+            theme = model.theme.copy(selected = theme),
+            avatar = model.avatar.copy(selected = prefs.avatarStyle),
+            textScale = model.textScale.copy(steps = TextScaleLevel.entries.size, index = prefs.textScale.ordinal),
+        )
+    }
+
+    /** The storage page from the device's own keys (spec 047 D4). */
+    fun withStorage(model: SettingsScreenModel, report: DeviceStorage.Report, strings: VelaStrings): SettingsScreenModel {
+        val total = report.totalBytes
+        val (amount, unit) = bytesText(total)
+        fun size(bytes: Long) = bytesText(bytes).let { "${it.first} ${it.second}" }
+        val groups = model.storage.groups.map { group ->
+            group.copy(
+                items = group.items.map { item ->
+                    val measured = report.items.firstOrNull { it.id == item.id } ?: return@map item
+                    val count = measured.records?.let { n ->
+                        when (item.id) {
+                            "contacts" -> strings.t(I18nKeys.SettingsUi.COUNT_CONTACTS, mapOf("count" to n.toString()))
+                            "custom", "dapps" -> strings.t(I18nKeys.SettingsUi.COUNT_ITEMS, mapOf("count" to n.toString()))
+                            else -> strings.t(I18nKeys.SettingsUi.COUNT_RECORDS, mapOf("count" to n.toString()))
+                        }
+                    }
+                    item.copy(meta = listOfNotNull(count, size(measured.bytes)).joinToString(" · "))
+                },
+            )
+        }
+        val user = report.bytesOf(DeviceStorage.Group.User); val cache = report.bytesOf(DeviceStorage.Group.Cache); val sessions = report.bytesOf(DeviceStorage.Group.Sessions)
+        val denom = (user + cache + sessions).coerceAtLeast(1)
+        return model.copy(
+            storage = model.storage.copy(
+                amount = amount,
+                unit = unit,
+                summary = strings.t(I18nKeys.SettingsUi.STORAGE_SUMMARY, mapOf("count" to report.totalRecords.toString())),
+                segments = model.storage.segments.map { seg ->
+                    seg.copy(fraction = when (seg.id) { "user" -> user; "cache" -> cache; else -> sessions }.toFloat() / denom)
+                },
+                groups = groups,
+            ),
+        )
+    }
+
+    internal fun bytesText(bytes: Long): Pair<String, String> = when {
+        bytes >= 1_000_000 -> Formats.current.number(java.math.BigDecimal(bytes).divide(java.math.BigDecimal(1_000_000)), 1, 1) to "MB"
+        bytes >= 1_000 -> Formats.current.number(java.math.BigDecimal(bytes).divide(java.math.BigDecimal(1_000)), 0, 0) to "KB"
+        else -> bytes.toString() to "B"
+    }
+
+    /** About: the build's version and commit, the wallet's network count. */
+    fun withAbout(model: SettingsScreenModel, version: String, commit: String, networkCount: Int, strings: VelaStrings): SettingsScreenModel = model.copy(
+        about = model.about.copy(
+            version = strings.t(I18nKeys.SettingsUi.ABOUT_VERSION, mapOf("version" to version, "commit" to commit)),
+            rows = model.about.rows.map { row ->
+                if (row.label == strings.t(I18nKeys.SettingsUi.ABOUT_NETWORKS_LABEL)) row.copy(value = strings.t(I18nKeys.SettingsUi.ABOUT_NETWORKS_VALUE, mapOf("count" to networkCount.toString()))) else row
+            },
+        ),
+        sections = model.sections.map { section ->
+            section.copy(rows = section.rows.map { row -> if (row.id == "about") row.copy(value = strings.t(I18nKeys.SettingsUi.ABOUT_VERSION, mapOf("version" to version, "commit" to commit))) else row })
+        },
+    )
+
+    /** Feedback: the preview lines are the device's (version, platform, language, failed chains, recent failures). */
+    fun withFeedback(model: SettingsScreenModel, version: String, commit: String, platform: String, language: String, failedChains: List<String>, failures: List<String>, strings: VelaStrings): SettingsScreenModel = model.copy(
+        feedback = model.feedback.copy(
+            previewLines = listOf(
+                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_VERSION)}: v$version ($commit)",
+                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_PLATFORM)}: $platform",
+                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_LANGUAGE)}: $language",
+                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_RPC)}: ${failedChains.ifEmpty { listOf(strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_NONE)) }.joinToString(", ")}",
+                "${strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_FAILURES)}: ${failures.ifEmpty { listOf(strings.t(I18nKeys.SettingsUi.BUG_PREVIEW_NONE)) }.joinToString("; ")}",
+            ),
+        ),
+    )
+
+    /** The relayer panel from the treasury probe: the address to fund and the shortfall, in the chain's coin. */
+    fun withRelayer(model: SettingsScreenModel, chainName: String, chainId: Int, symbol: String, status: SendTreasuryStatus?, strings: VelaStrings): SettingsScreenModel {
+        if (status == null) return model
+        val decimals = if (status.asset == SendTreasuryAsset.PathUsd) 6 else 18
+        val short = (status.floor.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO) - (status.balance.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO)
+        val amount = SendLive.fromBase(short.max(java.math.BigDecimal.ZERO).toPlainString(), decimals)
+        return model.copy(
+            relayer = model.relayer.copy(
+                mark = ChainMarkModel(symbol.take(3).uppercase(), WalletLive.badge(chainId.toLong()).value.toLong() and 0xFFFFFFFFL),
+                name = chainName,
+                amountHint = strings.t(I18nKeys.SettingsUi.RELAYER_AMOUNT_HINT, mapOf("amount" to amount, "symbol" to (if (status.asset == SendTreasuryAsset.PathUsd) "pathUSD" else symbol))),
+                addressDisplay = ExploreLive.shortAddress(status.address),
+            ),
+        )
+    }
+
+    /** The RPC banner names the pool's failed chains; absent when none failed. */
+    fun withBanner(model: SettingsScreenModel, failedChains: List<Int>, chainNames: Map<Int, String>, strings: VelaStrings): SettingsScreenModel {
+        if (failedChains.isEmpty()) return model.copy(rpcBanner = null)
+        val drawn = model.rpcBanner ?: return model
+        return model.copy(
+            rpcBanner = drawn.copy(
+                chips = failedChains.map { id ->
+                    val name = chainNames[id] ?: "chain-$id"
+                    RpcBannerChipModel(id = id.toString(), mark = ChainMarkModel(name.take(1).uppercase(), WalletLive.badge(id.toLong()).value.toLong() and 0xFFFFFFFFL), name = name, action = drawn.chips.firstOrNull()?.action.orEmpty())
+                },
+            ),
+        )
+    }
+
+    /** The accounts sheet: this device's accounts, the active one ticked; the drawn amount is not known here and stays blank. */
+    fun withAccounts(model: SettingsScreenModel, accounts: List<Pair<String, String>>, activeIndex: Int, strings: VelaStrings): SettingsScreenModel = model.copy(
+        accountsSheet = model.accountsSheet.copy(
+            summary = strings.t(I18nKeys.SettingsUi.ACCOUNTS_COUNT, mapOf("count" to accounts.size.toString())),
+            rows = accounts.mapIndexed { i, (name, address) ->
+                AccountsSheetRowModel(name = name.ifBlank { ExploreLive.shortAddress(address) }, addressDisplay = ExploreLive.shortAddress(address), addressFull = address, amount = "", selected = i == activeIndex)
+            },
+        ),
+    )
 }

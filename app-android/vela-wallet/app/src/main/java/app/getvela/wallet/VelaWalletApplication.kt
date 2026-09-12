@@ -1,5 +1,9 @@
 package app.getvela.wallet
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import app.getvela.wallet.feature.send.core.SendOpenParams
+import app.getvela.wallet.core.diagnostics.CrashReport
+import app.getvela.wallet.core.net.ConnectivityWatch
 import app.getvela.wallet.core.data.Preferences
 import app.getvela.wallet.feature.send.core.SendAddNetworkOutcome
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
@@ -64,6 +68,15 @@ class AppContainer(private val app: Application) {
     }
 
     val themeRepository = ThemePreferenceRepository(app)
+
+    /** Spec 047 D9: online or not, from the platform. */
+    val connectivity = ConnectivityWatch(app).also { it.start() }
+
+    /** Spec 047 D8: a `/pay` link handed to the wallet route, consumed once. */
+    val pendingPayLink = MutableStateFlow<android.net.Uri?>(null)
+
+    /** A validated `/pay` request waiting for the send flow to open (locked), consumed once. */
+    val pendingSendParams = MutableStateFlow<SendOpenParams?>(null)
 
     /** Spec 047 D1: the preferences that have no machine — the web's keys, applied app-wide. */
     val preferences = Preferences(
@@ -473,6 +486,9 @@ class VelaWalletApplication : Application() {
         // First, so a crash in composition is itself on the record. Debug
         // builds only; see VelaLog.
         VelaLog.install(this)
+        // Spec 047 D10: a crash is written first, then rethrown; the next launch raises it.
+        CrashReport.install(this, BuildConfig.VERSION_NAME)
+        VelaLog.onFault = { scope, error -> CrashReport.recordFault(this, scope, error, BuildConfig.VERSION_NAME) }
         // The parallel space's door, if this build type has one (spec 043,
         // research D2): a release build installs nothing here.
         ParallelSpaceBinding.install(this)
