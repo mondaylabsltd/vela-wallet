@@ -17,6 +17,79 @@ import app.getvela.wallet.feature.contacts.core.ContactSource
 import app.getvela.wallet.feature.contacts.core.ContactTombstone
 import app.getvela.wallet.feature.contacts.core.ContactTxKind
 import app.getvela.wallet.feature.contacts.core.ContactsView
+import app.getvela.wallet.feature.send.core.FeeAssetKind
+import app.getvela.wallet.feature.send.core.FeeAssetQuote
+import app.getvela.wallet.feature.send.core.FeeAssetView
+import app.getvela.wallet.feature.send.core.FeeBundlerQuote
+import app.getvela.wallet.feature.send.core.FeeCall
+import app.getvela.wallet.feature.send.core.FeeEstimateView
+import app.getvela.wallet.feature.send.core.FeeEvent
+import app.getvela.wallet.feature.send.core.FeeFailure
+import app.getvela.wallet.feature.send.core.FeeGasOutcome
+import app.getvela.wallet.feature.send.core.FeeOperation
+import app.getvela.wallet.feature.send.core.FeeOptionView
+import app.getvela.wallet.feature.send.core.FeeShellResult
+import app.getvela.wallet.feature.send.core.FeeTier
+import app.getvela.wallet.feature.send.core.FeeView
+import app.getvela.wallet.feature.send.core.MtokCustomToken
+import app.getvela.wallet.feature.send.core.MtokEvent
+import app.getvela.wallet.feature.send.core.MtokFound
+import app.getvela.wallet.feature.send.core.MtokNetwork
+import app.getvela.wallet.feature.send.core.MtokOperation
+import app.getvela.wallet.feature.send.core.MtokShellResult
+import app.getvela.wallet.feature.send.core.MtokTokenMeta
+import app.getvela.wallet.feature.send.core.MtokView
+import app.getvela.wallet.feature.send.core.SendAccountRef
+import app.getvela.wallet.feature.send.core.SendAddNetworkMsg
+import app.getvela.wallet.feature.send.core.SendAddNetworkOutcome
+import app.getvela.wallet.feature.send.core.SendAlertKind
+import app.getvela.wallet.feature.send.core.SendAmountWarning
+import app.getvela.wallet.feature.send.core.SendChainInfo
+import app.getvela.wallet.feature.send.core.SendDisplayContext
+import app.getvela.wallet.feature.send.core.SendEstimateFailure
+import app.getvela.wallet.feature.send.core.SendEvent
+import app.getvela.wallet.feature.send.core.SendFeeIssueView
+import app.getvela.wallet.feature.send.core.SendFeeOutcome
+import app.getvela.wallet.feature.send.core.SendHapticKind
+import app.getvela.wallet.feature.send.core.SendHoldReason
+import app.getvela.wallet.feature.send.core.SendLockError
+import app.getvela.wallet.feature.send.core.SendMultiSpecView
+import app.getvela.wallet.feature.send.core.SendOpenParams
+import app.getvela.wallet.feature.send.core.SendOperation
+import app.getvela.wallet.feature.send.core.SendQuotedFee
+import app.getvela.wallet.feature.send.core.SendReceiptKind
+import app.getvela.wallet.feature.send.core.SendReceiptOutcome
+import app.getvela.wallet.feature.send.core.SendReceiptStatus
+import app.getvela.wallet.feature.send.core.SendReceiptTransfer
+import app.getvela.wallet.feature.send.core.SendReceiptView
+import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.send.core.SendRecipientIdentity
+import app.getvela.wallet.feature.send.core.SendRecipientRisk
+import app.getvela.wallet.feature.send.core.SendScan
+import app.getvela.wallet.feature.send.core.SendShellResult
+import app.getvela.wallet.feature.send.core.SendStage
+import app.getvela.wallet.feature.send.core.SendSubmitFailure
+import app.getvela.wallet.feature.send.core.SendTimerTag
+import app.getvela.wallet.feature.send.core.SendToken
+import app.getvela.wallet.feature.send.core.SendTokenMeta
+import app.getvela.wallet.feature.send.core.SendTreasuryAsset
+import app.getvela.wallet.feature.send.core.SendTreasuryProbe
+import app.getvela.wallet.feature.send.core.SendTreasuryStatus
+import app.getvela.wallet.feature.send.core.SendTxErrorKey
+import app.getvela.wallet.feature.send.core.SendTxRecord
+import app.getvela.wallet.feature.send.core.SendTxStatus
+import app.getvela.wallet.feature.send.core.SendUnitIssue
+import app.getvela.wallet.feature.send.core.SendView
+import app.getvela.wallet.feature.send.core.TrackEntryView
+import app.getvela.wallet.feature.send.core.TrackEvent
+import app.getvela.wallet.feature.send.core.TrackLifecycle
+import app.getvela.wallet.feature.send.core.TrackOperation
+import app.getvela.wallet.feature.send.core.TrackPendingRecord
+import app.getvela.wallet.feature.send.core.TrackRecordPatch
+import app.getvela.wallet.feature.send.core.TrackRecordStatus
+import app.getvela.wallet.feature.send.core.TrackShellResult
+import app.getvela.wallet.feature.send.core.TrackStatus
+import app.getvela.wallet.feature.send.core.TrackView
 import app.getvela.wallet.feature.settings.core.CurrencyEvent
 import app.getvela.wallet.feature.wallet.core.BalanceCacheEntry
 import app.getvela.wallet.feature.wallet.core.BalanceEvent
@@ -581,6 +654,118 @@ class CoreWireDriftTest {
         assertStringUnion<NetOverrideField>("NetOverrideField")
         assertStringUnion<NetWizardPhase>("NetWizardPhase")
         assertStringUnion<NetRpcFailureKind>("NetRpcFailureKind")
+    }
+
+
+    // -- send / fee_policy / tx_tracker / manage_tokens (spec 043) ---------------
+    //
+    // Money crosses these four. The exhaustive families include the closed
+    // error and verdict enums: a refusal the phone cannot decode is not a
+    // wrong message, it is an exception on the confirm screen.
+
+    @Test
+    fun sendViewsMatchTheGeneratedMirrors() {
+        assertFieldsExist<SendView>("SendView")
+        assertFieldsExist<SendToken>("SendToken")
+        assertFieldsExist<SendChainInfo>("SendChainInfo")
+        assertFieldsExist<SendTokenMeta>("SendTokenMeta")
+        assertFieldsExist<SendTreasuryStatus>("SendTreasuryStatus")
+        assertFieldsExist<SendQuotedFee>("SendQuotedFee")
+        assertFieldsExist<SendTxRecord>("SendTxRecord")
+        assertFieldsExist<SendRecipientIdentity>("SendRecipientIdentity")
+        assertFieldsExist<SendRecipientRisk>("SendRecipientRisk")
+        assertFieldsExist<SendFeeIssueView>("SendFeeIssueView")
+        assertFieldsExist<SendUnitIssue>("SendUnitIssue")
+        assertFieldsExist<SendRecipientDraft>("SendRecipientDraft")
+        assertFieldsExist<SendMultiSpecView>("SendMultiSpecView")
+        assertFieldsExist<SendReceiptView>("SendReceiptView")
+        assertFieldsExist<SendReceiptTransfer>("SendReceiptTransfer")
+        assertFieldsExist<SendAccountRef>("SendAccountRef")
+        assertFieldsExist<SendOpenParams>("SendOpenParams")
+        assertFieldsExist<SendDisplayContext>("SendDisplayContext")
+    }
+
+    @Test
+    fun sendOperationsResultsAndVerdictsAreExhaustive() {
+        assertVariantsExhaustive<SendOperation>("SendOperation")
+        assertVariantsExhaustive<SendShellResult>("SendShellResult")
+        assertVariantsExhaustive<SendSubmitFailure>("SendSubmitFailure")
+        assertVariantsExhaustive<SendAlertKind>("SendAlertKind")
+        assertVariantsExhaustive<SendAmountWarning>("SendAmountWarning")
+        assertVariantsExhaustive<SendTreasuryProbe>("SendTreasuryProbe")
+        assertVariantsExhaustive<SendFeeOutcome>("SendFeeOutcome")
+        assertVariantsExhaustive<SendAddNetworkOutcome>("SendAddNetworkOutcome")
+        assertVariantsExhaustive<SendAddNetworkMsg>("SendAddNetworkMsg")
+        assertVariantsExhaustive<SendLockError>("SendLockError")
+        assertVariantsExhaustive<SendScan>("SendScan")
+        assertVariantsExhaustive<SendReceiptOutcome>("SendReceiptOutcome")
+    }
+
+    @Test
+    fun sendEventsExist() {
+        assertVariantsExist<SendEvent>("SendEvent")
+    }
+
+    @Test
+    fun sendStringUnionsMatch() {
+        assertStringUnion<SendEstimateFailure>("SendEstimateFailure")
+        assertStringUnion<SendTreasuryAsset>("SendTreasuryAsset")
+        assertStringUnion<SendTxStatus>("SendTxStatus")
+        assertStringUnion<SendTxErrorKey>("SendTxErrorKey")
+        assertStringUnion<SendTimerTag>("SendTimerTag")
+        assertStringUnion<SendHapticKind>("SendHapticKind")
+        assertStringUnion<SendStage>("SendStage")
+        assertStringUnion<SendReceiptStatus>("SendReceiptStatus")
+        assertStringUnion<SendHoldReason>("SendHoldReason")
+        assertStringUnion<SendReceiptKind>("SendReceiptKind")
+    }
+
+    @Test
+    fun feeViewsMatchTheGeneratedMirrors() {
+        assertFieldsExist<FeeView>("FeeView")
+        assertFieldsExist<FeeOptionView>("FeeOptionView")
+        assertFieldsExist<FeeEstimateView>("FeeEstimateView")
+        assertFieldsExist<FeeBundlerQuote>("FeeBundlerQuote")
+        assertFieldsExist<FeeAssetQuote>("FeeAssetQuote")
+        assertFieldsExist<FeeCall>("FeeCall")
+    }
+
+    @Test
+    fun feeOperationsResultsAndOutcomesAreExhaustive() {
+        assertVariantsExhaustive<FeeOperation>("FeeOperation")
+        assertVariantsExhaustive<FeeShellResult>("FeeShellResult")
+        assertVariantsExhaustive<FeeGasOutcome>("FeeGasOutcome")
+        assertVariantsExhaustive<FeeAssetView>("FeeAssetView")
+        assertVariantsExist<FeeEvent>("FeeEvent")
+        assertStringUnion<FeeTier>("FeeTier")
+        assertStringUnion<FeeFailure>("FeeFailure")
+        assertStringUnion<FeeAssetKind>("FeeAssetKind")
+    }
+
+    @Test
+    fun trackerViewsOperationsAndResultsMatch() {
+        assertFieldsExist<TrackView>("TrackView")
+        assertFieldsExist<TrackEntryView>("TrackEntryView")
+        assertFieldsExist<TrackPendingRecord>("TrackPendingRecord")
+        assertFieldsExist<TrackRecordPatch>("TrackRecordPatch")
+        assertVariantsExhaustive<TrackOperation>("TrackOperation")
+        assertVariantsExhaustive<TrackShellResult>("TrackShellResult")
+        assertVariantsExist<TrackEvent>("TrackEvent")
+        assertStringUnion<TrackLifecycle>("TrackLifecycle")
+        assertStringUnion<TrackStatus>("TrackStatus")
+        assertStringUnion<TrackRecordStatus>("TrackRecordStatus")
+    }
+
+    @Test
+    fun manageTokensViewsOperationsAndResultsMatch() {
+        assertFieldsExist<MtokView>("MtokView")
+        assertFieldsExist<MtokCustomToken>("MtokCustomToken")
+        assertFieldsExist<MtokFound>("MtokFound")
+        assertFieldsExist<MtokNetwork>("MtokNetwork")
+        assertFieldsExist<MtokTokenMeta>("MtokTokenMeta")
+        assertVariantsExhaustive<MtokOperation>("MtokOperation")
+        assertVariantsExhaustive<MtokShellResult>("MtokShellResult")
+        assertVariantsExist<MtokEvent>("MtokEvent")
     }
 
     // -- assertions ----------------------------------------------------------

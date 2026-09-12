@@ -35,6 +35,9 @@
       simply does nothing, and so does one without a vibrator.
     -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- Spec 043: a confirmation that lands while the app is away is delivered as
+         a notification. Requested at the first submit, never at launch (research D6). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!--
       Bluetooth (spec 019, caBLE "sign in with your phone" as INITIATOR).

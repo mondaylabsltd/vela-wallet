@@ -279,6 +279,28 @@ bridge_object!(
 );
 
 bridge_object!(
+    /// The send flow: token, recipient, amount, quote, confirm, sign, submit,
+    /// persist, hand off to the tracker. Three modes; Android drives single
+    /// in spec 043, split/sweep in 045.
+    SendCore,
+    vela_core::app::send::Send
+);
+
+bridge_object!(
+    /// Fee quotes: gas signals, the relay's quote, in-band fee assets, the
+    /// fee recipient, the gas estimate, the quote's TTL.
+    FeePolicyCore,
+    vela_core::app::fee_policy::FeePolicy
+);
+
+bridge_object!(
+    /// Post-submit lifecycle: receipt and status polling, record patches,
+    /// the confirmation notice. Owns the cadence; the shell supplies a clock.
+    TxTrackerCore,
+    vela_core::app::tx_tracker::TxTracker
+);
+
+bridge_object!(
     /// Manual custom-token management.
     ManageTokensCore,
     vela_core::app::manage_tokens::ManageTokens

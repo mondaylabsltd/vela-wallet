@@ -20,17 +20,17 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
 
 ## Phase 0 — Measure and the bridge (Setup)
 
-- [ ] **T001** Record the arm64-v8a `.so` baseline (14,003,760 bytes at
+- [X] **T001** Record the arm64-v8a `.so` baseline (14,003,760 bytes at
       042's tip) in `specs/043-android-money-wiring/results.md`; 041's
       per-machine figure (~357 KB) is the ceiling for +3.
-- [ ] **T002** Add `bridge_object!` for `SendCore` (`vela_core::app::send::Send`),
+- [X] **T002** Add `bridge_object!` for `SendCore` (`vela_core::app::send::Send`),
       `FeePolicyCore` (`fee_policy::FeePolicy`), `TxTrackerCore`
       (`tx_tracker::TxTracker`) in `rust/crates/vela-core-uniffi/src/onboarding_bridge.rs`
       beside `ManageTokensCore` (:281). Confirm the machine type names in
       each `app/*.rs` before writing.
-- [ ] **T003** Regenerate `rust/bindings/kotlin/` (quickstart) and rebuild
+- [X] **T003** Regenerate `rust/bindings/kotlin/` (quickstart) and rebuild
       the three ABIs; record the `.so` delta against T001.
-- [ ] **T004** [P] `…/feature/send/core/SendWire.kt` — `SendOperation` (18),
+- [X] **T004** [P] `…/feature/send/core/SendWire.kt` — `SendOperation` (18),
       `SendShellResult`, `SendEvent` (the 043 subset dispatched, all 40
       decoded where the view carries them), `SendView` and the value types
       (`SendToken`, `SendChainInfo`, `SendTreasuryProbe`, `SendFeeOutcome`,
@@ -38,25 +38,25 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
       `SendTxRecord`, `SendQuotedFee`, `FeeCall`). snake_case `@SerialName`
       throughout; numerics as the ts-rs mirror says (u32 → Int/Long per
       041's rule, amounts as String).
-- [ ] **T005** [P] `…/feature/send/core/FeeWire.kt` — `FeeOperation` (6),
+- [X] **T005** [P] `…/feature/send/core/FeeWire.kt` — `FeeOperation` (6),
       `FeeShellResult`, `FeeEvent`, `FeeView`, `FeeEstimateView`,
       `FeeAssetView`, `FeeBundlerQuote`, `FeeAssetQuote`, `FeeGasOutcome`,
       `FeeTier`.
-- [ ] **T006** [P] `…/feature/send/core/TrackerWire.kt` — `TrackOperation`
+- [X] **T006** [P] `…/feature/send/core/TrackerWire.kt` — `TrackOperation`
       (6), `TrackShellResult` (incl. `receipt_with_logs` with
       `TrustReceiptLog`), `TrackEvent`, `TrackView`, `TrackPendingRecord`,
       `TrackRecordPatch`, `TrackLifecycle`.
-- [ ] **T007** [P] `…/feature/send/core/MtokWire.kt` — `MtokOperation` (5),
+- [X] **T007** [P] `…/feature/send/core/MtokWire.kt` — `MtokOperation` (5),
       `MtokShellResult`, `MtokEvent`, `MtokView`, `MtokTokenMeta`,
       `MtokCustomToken`.
-- [ ] **T008** `…test/CoreWireDriftTest.kt` — `assertFieldsExist` for the
+- [X] **T008** `…test/CoreWireDriftTest.kt` — `assertFieldsExist` for the
       four views and their rows; `assertVariantsExhaustive` for the four
       operation/result families and for `SendSubmitFailure`,
       `SendAlertKind`, `SendTreasuryProbe`, `FeeGasOutcome`,
       `TrackLifecycle`; `assertVariantsExist` for the four event families.
       Run it red-then-green against the mirrors in
       `app-web/vela-wallet/src/lib/core/generated/`.
-- [ ] **T009** [P] `app/build.gradle.kts` + `gradle/libs.versions.toml`: add
+- [X] **T009** [P] `app/build.gradle.kts` + `gradle/libs.versions.toml`: add
       `androidx.work:work-runtime-ktx`; `AndroidManifest.xml`: add
       `POST_NOTIFICATIONS`. No other new dependency.
 
