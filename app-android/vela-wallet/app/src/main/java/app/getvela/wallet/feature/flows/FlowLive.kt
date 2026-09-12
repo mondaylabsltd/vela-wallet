@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.flows
 
 import app.getvela.wallet.core.i18n.VelaStrings
+import app.getvela.wallet.feature.send.core.MtokView
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.feature.settings.core.CurrencyView
 import app.getvela.wallet.feature.settings.core.NetView
@@ -204,6 +205,45 @@ object FlowLive {
                 ""
             },
             facts = facts,
+        )
+    }
+
+    /**
+     * T3 — the add-token sheet's ERC-20 half, from the `manage_tokens` view
+     * (spec 043 T046; the web's `liveAddToken`). The drawn model keeps only
+     * the labels; the field, the card, the chip and the button are the
+     * core's state.
+     */
+    fun addToken(fallback: AddTokenModel, view: MtokView, strings: VelaStrings): AddTokenModel {
+        val first = view.found.firstOrNull()
+        val typed = view.input_address.isNotBlank()
+        val result: AddTokenResult = when {
+            view.detecting -> AddTokenResult.Searching(strings.t(I18nKeys.Flows.ADD_SEARCHING))
+            first != null -> AddTokenResult.Token(
+                mark = TokenMarkModel(first.symbol, WalletLive.badge(first.chain_id.toLong())),
+                name = first.name,
+                detail = "${first.symbol} · ${strings.t(I18nKeys.Flows.ADD_LABEL_DECIMALS)} ${first.decimals} · ${first.network_name}",
+                chip = if (first.added) StatusChipModel(strings.t(I18nKeys.Flows.ADD_TOKEN_ADDED), StatusTone.Success) else null,
+            )
+            view.not_found -> AddTokenResult.NotFound(
+                "${strings.t(I18nKeys.Flows.ADD_NOT_FOUND_TITLE)} — ${strings.t(I18nKeys.Flows.ADD_NOT_FOUND_MESSAGE)}",
+            )
+            else -> AddTokenResult.None
+        }
+        return fallback.copy(
+            tab = AddTokenTab.Erc20,
+            // The lookup runs on every network at once; there is no network to pick.
+            network = null,
+            fieldLabel = strings.t(I18nKeys.Flows.ADD_TOKEN_ADDRESS),
+            fieldValue = view.input_address,
+            fieldError = when {
+                view.save_error -> strings.t(I18nKeys.Flows.ADD_ERROR_SAVE)
+                typed && !view.address_valid -> strings.t(I18nKeys.Flows.ADD_INVALID_ADDRESS)
+                else -> null
+            },
+            result = result,
+            cta = strings.t(I18nKeys.Flows.ADD_TO_WALLET),
+            ctaDisabled = first == null || first.added || view.saving,
         )
     }
 

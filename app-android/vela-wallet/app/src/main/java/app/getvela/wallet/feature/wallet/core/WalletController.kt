@@ -2,6 +2,14 @@ package app.getvela.wallet.feature.wallet.core
 
 import android.content.Context
 import app.getvela.wallet.core.crux.CoreHost
+import org.json.JSONObject
+import uniffi.vela_core_uniffi.ManageTokensCore
+import app.getvela.wallet.feature.send.core.MtokView
+import app.getvela.wallet.feature.send.core.MtokShellResult
+import app.getvela.wallet.feature.send.core.MtokOperation
+import app.getvela.wallet.feature.send.core.MtokNetwork
+import app.getvela.wallet.feature.send.core.MtokExecutor
+import app.getvela.wallet.feature.send.core.MtokEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -41,6 +49,8 @@ import uniffi.vela_core_uniffi.TokenTrustCore
  * rebuilt per screen re-runs its boot, and on this screen that means re-reading
  * a dozen chains every time somebody switches tabs.
  */
+private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
+
 class WalletController(
     context: Context,
     private val networks: StateFlow<NetView>,
@@ -204,6 +214,60 @@ class WalletController(
         ),
         onFault = { error -> VelaLog.failure("wallet.feed.fault", "core fault", error) },
     )
+
+    // -- add a token (spec 043 T045) ------------------------------------------
+
+    private val mtokExecutor = MtokExecutor(
+        store = store,
+        ethCall = { chainId, to, data ->
+            (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)
+                ?.json?.optString("result")?.takeIf { it.startsWith("0x") && it != "0x" }
+        },
+        // The token cache is gone: the balance walk prices the new row.
+        onInvalidated = { refresh(force = true) },
+        haptic = haptic,
+    )
+
+    private val mtokHost = CoreHost(
+        bridge = ManageTokensCore().asBridge(),
+        scope = scope,
+        initial = MtokView(),
+        serializer = MtokView.serializer(),
+        perform = JsonShell.perform(
+            MtokOperation.serializer(),
+            MtokShellResult.serializer(),
+            mtokExecutor::perform,
+        ),
+        escapedFailure = JsonShell.escapedFailure(
+            MtokOperation.serializer(),
+            MtokShellResult.serializer(),
+            fallback = MtokShellResult.CacheInvalidated,
+            answer = mtokExecutor::neutralAnswer,
+        ),
+        onFault = { error -> VelaLog.failure("wallet.mtok.fault", "core fault", error) },
+    )
+
+    /** The add-token sheet's state, the core's. */
+    val manageTokens: StateFlow<MtokView> = mtokHost.view
+
+    /** The sheet opened: load the already-added tokens. */
+    fun openAddToken() = mtokHost.dispatch(MtokEvent.Start, MtokEvent.serializer())
+
+    /**
+     * A character typed or pasted. The core judges validity and clears the
+     * cards; a well-formed address is looked up on every network at once.
+     */
+    fun addTokenInput(text: String) {
+        mtokHost.dispatch(MtokEvent.AddressInput(text), MtokEvent.serializer())
+        if (ADDRESS.matches(text.trim())) {
+            val rows = networks.value.networks.map { MtokNetwork(chain_id = it.chain_id.toInt(), name = it.display_name) }
+            if (rows.isNotEmpty()) mtokHost.dispatch(MtokEvent.DetectRequested(rows), MtokEvent.serializer())
+        }
+    }
+
+    fun addTokenSave(chainId: Int) = mtokHost.dispatch(MtokEvent.SaveRequested(chainId), MtokEvent.serializer())
+
+    fun deleteCustomToken(id: String) = mtokHost.dispatch(MtokEvent.DeleteRequested(id), MtokEvent.serializer())
 
     // -- the receive screen ---------------------------------------------------
 
@@ -532,3 +596,4 @@ class WalletController(
         const val TRACKER_TICK_MS = 3_000L
     }
 }
+

@@ -278,32 +278,32 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
 
 ## Phase 6 — User Story 4: the sheets, and the arms 042 left (P2)
 
-- [ ] **T045** [US4] `…/feature/send/core/MtokExecutor.kt` — the five arms
+- [X] **T045** [US4] `…/feature/send/core/MtokExecutor.kt` — the five arms
       (one Multicall3 `aggregate3` through the pool using `Abi.kt`;
       `vela.customTokens` read/write/remove; invalidate → balance refresh);
       `ManageTokensCore` hosted in `SendController` (or `WalletController`
       if the assets sheet also needs it — decide by who opens AddToken).
-- [ ] **T046** [US4] `…/feature/send/SendLive.kt` + `VelaNavHost.kt` —
+- [X] **T046** [US4] `…/feature/send/SendLive.kt` + `VelaNavHost.kt` —
       `AddToken` sheet live: address input → `AddressInput`/`DetectRequested`
       → result → `SaveRequested`; the new token appears in the pick list
       after `InvalidateTokenCache`.
-- [ ] **T047** [US4] `…/feature/send/SendLive.kt` — the fee-token sheet's
+- [X] **T047** [US4] `…/feature/send/SendLive.kt` — the fee-token sheet's
       rows from `FeeView` assets (balance, fee in that token, selected);
       `ChooseFeeToken` → `SelectFeeAsset` → re-quote; the contact-pick sheet
       from `ContactsView` (favourites first, then the book); `PickedAddress`.
-- [ ] **T048** [US4] `…/feature/contacts/core/ContactsExecutor.kt:119` —
+- [X] **T048** [US4] `…/feature/contacts/core/ContactsExecutor.kt:119` —
       `ResolveIdentity`: index lookup by wallet ref, then the name-service
       reverse resolution the web does (`recipient-identity.ts:191`,
       `NAME_SERVICES`), cached; the same helper answers send's
       `resolve_identity`. Remove the `// live in 042` marker.
-- [ ] **T049** [US4] `…/feature/settings/core/NetworkAdminExecutor.kt:209`
+- [X] **T049** [US4] `…/feature/settings/core/NetworkAdminExecutor.kt:209`
       (+ `NetworkProbes.kt:59` if it is the same cache) — `ClearBundlerCache`
       → `RelayClient.clear()`. Remove the markers; `grep 'live in 042'`
       returns nothing.
-- [ ] **T050** [P] [US4] `…test/MtokMachineTest.kt`, `…test/IdentityWaterfallTest.kt`
+- [X] **T050** [P] [US4] `…test/MtokMachineTest.kt`, `…test/IdentityWaterfallTest.kt`
       — add a token by address through the real machine with a fake
       multicall; the waterfall's order and cache.
-- [ ] **T051** [US4] `[device]` change the fee token on confirm and send in
+- [X] **T051** [US4] `[device]` change the fee token on confirm and send in
       it (SC-006); pick a contact and see the field fill; add a token by
       address and send it. Then SC-002: the founder sends dust from their
       own wallet, one prompt — recorded as done only when it happened.

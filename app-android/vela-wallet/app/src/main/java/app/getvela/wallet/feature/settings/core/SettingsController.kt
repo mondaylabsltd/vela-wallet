@@ -42,6 +42,8 @@ class SettingsController(
      * which is the same thing it read for the whole of spec 040.
      */
     pool: RpcPool? = null,
+    /** Spec 043: the settings screen's "clear caches" reaches the relay client too. */
+    clearBundlerCache: () -> Unit = {},
 ) {
 
     private val store = VelaStore(context)
@@ -117,6 +119,7 @@ class SettingsController(
             // A chain id means only that one's endpoints were reconfigured.
             if (chainId == null) pool?.invalidateAll() else pool?.refreshChain(chainId.toInt())
         },
+        clearBundlerCache = clearBundlerCache,
     )
 
     private val networkHost = CoreHost(

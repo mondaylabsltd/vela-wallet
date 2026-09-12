@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -540,6 +541,8 @@ fun AddTokenBody(
     onTab: (String) -> Unit = {},
     onNetwork: () -> Unit = {},
     onSubmit: () -> Unit = {},
+    /** Spec 043: present ⇒ the address is typed or pasted here. */
+    onValueChange: ((String) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -581,12 +584,35 @@ fun AddTokenBody(
             }
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
         }
-        FlowMonoField(
-            value = model.fieldValue,
-            label = model.fieldLabel,
-            placeholder = model.fieldPlaceholder,
-            error = model.fieldError,
-        )
+        if (onValueChange != null) {
+            // Local echo: the field shows what was typed the instant it was
+            // typed, and the core's echo of it is ignored — only a value the
+            // field never sent (a paste the core normalised, a reset) replaces
+            // the text. Round-tripping every keystroke dropped characters on
+            // the device (spec 043 phase 3).
+            var typed by remember { mutableStateOf(model.fieldValue) }
+            val sent = remember { ArrayDeque<String>().apply { addLast(model.fieldValue) } }
+            LaunchedEffect(model.fieldValue) { if (model.fieldValue !in sent) typed = model.fieldValue }
+            FlowMonoField(
+                value = typed,
+                label = model.fieldLabel,
+                placeholder = model.fieldPlaceholder,
+                error = model.fieldError,
+                onValueChange = { next ->
+                    typed = next
+                    sent.addLast(next)
+                    while (sent.size > 8) sent.removeFirst()
+                    onValueChange(next)
+                },
+            )
+        } else {
+            FlowMonoField(
+                value = model.fieldValue,
+                label = model.fieldLabel,
+                placeholder = model.fieldPlaceholder,
+                error = model.fieldError,
+            )
+        }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         when (val result = model.result) {
             AddTokenResult.None -> Unit

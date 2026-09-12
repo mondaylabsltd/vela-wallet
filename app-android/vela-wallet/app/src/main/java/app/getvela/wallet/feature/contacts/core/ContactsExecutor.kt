@@ -39,6 +39,12 @@ class ContactsExecutor(
      */
     private val registryName: suspend (String) -> String? = { null },
     /**
+     * Spec 043: the whole waterfall (own accounts → cache → the index → the
+     * name services), when the app has one. `null` keeps the index-only seam
+     * above, which is what the storage tests run against.
+     */
+    private val identity: (suspend (String) -> ContactIdentity?)? = null,
+    /**
      * `eth_getCode` on one chain. `null` is unknown, and the default is
      * therefore honest: with no chain reader wired, nothing has been checked.
      */
@@ -110,13 +116,8 @@ class ContactsExecutor(
          */
         is ContactOperation.ResolveIdentity -> ContactShellResult.IdentityResolved(
             address = operation.address,
-            identity = registryName(operation.address)?.let {
-                ContactIdentity(name = it, source = "passkey")
-            },
-            // The ENS-style reverse waterfall (.bnb, .arb, Basenames) needs a
-            // namehash, which needs keccak256 — the core has one for selectors
-            // and it should be the owner of this too rather than a third
-            // hand-written copy. // live in 042
+            identity = identity?.let { resolve -> resolve(operation.address) }
+                ?: registryName(operation.address)?.let { ContactIdentity(name = it, source = "passkey") },
         )
 
         /*
@@ -178,8 +179,11 @@ class ContactsExecutor(
                     // means is the core's rule, not this one's.
                     else -> null
                 },
-                to = row.optString("to").ifBlank { null },
-                to_name = row.optString("toName").ifBlank { null },
+                to = row.textOrNull("to"),
+                // `optString` renders a JSON null as the word "null" — which
+                // is what the picker printed as a person's name (device-found,
+                // spec 043 phase 6).
+                to_name = row.textOrNull("toName"),
                 timestamp_ms = if (seconds.isNaN()) null else seconds * 1000,
             )
         }
@@ -287,3 +291,7 @@ class ContactsExecutor(
     private fun Double.toLongOrDouble(): Any =
         if (this == toLong().toDouble()) toLong() else this
 }
+
+/** A string field, or `null` when absent, JSON-null or blank — never the word "null". */
+private fun JSONObject.textOrNull(key: String): String? =
+    if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() && it != "null" }

@@ -22,6 +22,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import app.getvela.wallet.dev.ParallelSpaceHook
 import app.getvela.wallet.feature.flows.FlowStep
+import app.getvela.wallet.feature.send.core.MtokView
+import app.getvela.wallet.feature.flows.AddTokenCallbacks
 import app.getvela.wallet.feature.flows.SendCallbacks
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.send.core.SendAccountRef
@@ -302,6 +304,7 @@ fun VelaNavHost(
             val wallet = application.container.wallet
             val balances by wallet.balances.collectAsStateWithLifecycle()
             val feed by wallet.feed.collectAsStateWithLifecycle()
+            val manageTokens by wallet.manageTokens.collectAsStateWithLifecycle()
             // The display currency the person chose, and the rate that makes it
             // showable. Without a rate the core leaves the figure in dollars.
             val currency by application.container.settings.currency.collectAsStateWithLifecycle()
@@ -363,6 +366,9 @@ fun VelaNavHost(
                             fiat_decimals = 2,
                         ),
                     )
+                    // The picker lists this device's book, which only the
+                    // contacts screen used to load (device-found, phase 6).
+                    application.container.contacts.open(session.address)
                 }
             }
             LaunchedEffect(sendClosed) {
@@ -394,6 +400,16 @@ fun VelaNavHost(
             val flowState = flows.top
             if (flowState != null && flowState in SEND_STATES) {
                 val liveState = SendLive.flowState(sendView, feeSheetOpen)
+                // The system back key on a live send page is the header's back —
+                // the drawn stack's `flows.back()` closed the whole flow from
+                // any page, confirm included (device-found, phase 6).
+                BackHandler(enabled = sendOpen) {
+                    when {
+                        feeSheetOpen -> feeSheetOpen = false
+                        sendView.stage == SendStage.SelectToken || sendView.stage == SendStage.Receipt -> flows.close()
+                        else -> send.back()
+                    }
+                }
                 val explorers = remember(networks.networks) {
                     networks.networks.associate { it.chain_id.toInt() to it.explorer_url }
                 }
@@ -500,6 +516,7 @@ fun VelaNavHost(
                     feed,
                     currency,
                     flows.selected,
+                    manageTokens,
                 ) {
                     FlowFixtures.build(flowState, strings).let { drawn ->
                         liveFlow(
@@ -514,13 +531,21 @@ fun VelaNavHost(
                             chainNames = chainNames,
                             selected = flows.selected,
                             strings = strings,
+                            manageTokens = manageTokens,
                         )
                     }
                 }
+                // The add-token sheet is the `manage_tokens` machine's: opening
+                // it loads the already-added rows (spec 043 T046).
+                LaunchedEffect(flowState) { if (flowState == FlowState.T3) wallet.openAddToken() }
                 FlowHost(
                     model = flowModel,
                     onBack = { flows.back() },
                     onNavigate = { flows.push(it) },
+                    addToken = AddTokenCallbacks(
+                        onInput = { wallet.addTokenInput(it.trim()) },
+                        onSubmit = { manageTokens.found.firstOrNull()?.let { wallet.addTokenSave(it.chain_id) } },
+                    ),
                 )
             } else {
                 // Spec 022/029: 探索 is a real destination now rather than an
@@ -1016,6 +1041,7 @@ private fun liveFlow(
     chainNames: Map<Int, String>,
     selected: String?,
     strings: VelaStrings,
+    manageTokens: MtokView = MtokView(),
 ): FlowScreenModel = drawn.copy(
     base = when (val base = drawn.base) {
         is FlowBase.Receive -> FlowBase.Receive(
@@ -1046,6 +1072,7 @@ private fun liveFlow(
             currency = currency,
             strings = strings,
         )?.let(FlowSheet::TokenDetail)
+        is FlowSheet.AddToken -> FlowSheet.AddToken(FlowLive.addToken(sheet.model, manageTokens, strings))
         else -> drawn.sheet
     },
 )

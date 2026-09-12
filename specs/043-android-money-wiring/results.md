@@ -253,6 +253,67 @@ identicon gate; `FlowLiveTest` the live detail lines. Suite: 419, 0 failures.
     looking at then. The test caught it (`SD3`, not `SD4A`).
 
 
+### Phase 6 — the sheets, and the arms 042 left (T045–T051)
+
+**What changed**: `MtokExecutor` (five arms: one Multicall3 `aggregate3`
+per network for `name`/`symbol`/`decimals`, the SAME `vela.customTokens`
+rows the balance walk and `token_trust` read, invalidate → a forced balance
+refresh); `ManageTokensCore` hosted in `WalletController` (`manageTokens`,
+`openAddToken` / `addTokenInput` / `addTokenSave` / `deleteCustomToken`), the
+sheet live through `FlowLive.addToken` + `AddTokenCallbacks` (the field
+types with local echo; a well-formed address is looked up on every network
+at once). `IdentityResolver` — the desktop's `identity.rs` in Kotlin: own
+accounts → 24 h positive cache (`vela.recipientIdentity`, one document) →
+the passkey index → `.bnb`/`.arb`/`.g`/Basename/ENS asked together, answered
+in priority order, namehash on the core's `keccak256`; the contacts machine
+and the send machine ask the same one (`ContactsExecutor.identity`,
+`SendExecutor.identity`). `ClearBundlerCache` → `RelayClient.clearCaches()`
+through `SettingsController(clearBundlerCache)`; the websocket endpoint
+probe is one `eth_chainId` frame over OkHttp's socket. `grep 'live in 042'`
+→ nothing.
+
+**Tests**: `MtokMachineTest` (real machine, fake multicall: found on the one
+answering network, saved as a camelCase row, priced once; nothing answers →
+`not_found`; half an address looks nothing up; an already-stored token is
+recognised at save time and not written twice — the web's verbatim rule:
+the card reads "added" only after a save attempt). `IdentityWaterfallTest`
+(own account without a call; index before names; a reverse record decoded
+and labelled ENS; misses not cached; 24 h expiry; zero address never asked;
+EIP-137 vectors; over-long names refused). Suite: 431, 0 failures.
+
+**Device** (Xiaomi, parallel space):
+- *Add a token* (`p6-addtoken-found.png`, `p6-addtoken-added.png`): 资产 →
+  添加 → paste Gnosis USDC (`0xDDAf…7A83`) → the card `USD//C on xDai |
+  USDC · 精度 6 · Gnosis` from a real multicall → 添加到钱包 → chip
+  `已添加`; the store holds
+  `{"contractAddress":"0xddaf…7a83","symbol":"USDC","name":"USD//C on xDai","decimals":6,"networkName":"Gnosis"}`.
+  The row does not appear in 资产 or the pick list: the Safe holds none,
+  and the balance walk drops zero rows (`BalanceExecutor`, 041's rule) — it
+  appears with its first balance.
+- *Contact pick* (`p6-contact-sheet.png`, `p6-contact-filled.png`): the
+  person icon → `选择联系人 | 扫码填写地址 | 通讯录 | 0x7687…d141 | Bob |
+  Carol | Alice` → tap → the field fills with the address and the identity
+  line reads `觉得九点半` — the passkey index, through the waterfall — and
+  the confirm page says `收款人 觉得九点半 · 0x7687…d141`.
+- *Fee-token sheet* (`p6-fee-sheet.png`): 网络费 → `手续费币种 | XDAI |
+  余额 0.62897 | ~0.01 XDAI | 预估费用` — live from `FeeView`. One option:
+  the relay's Gnosis quote lists only the native coin for this Safe, so a
+  change of fee token (SC-006) cannot be shown here; `FeeMachineTest`
+  covers the re-quote.
+- *System back*: confirm → BACK → the form (amount, recipient, identity
+  line intact) → BACK → the pick → BACK → home.
+- *SC-002* (the founder's own passkey): not done — needs a finger.
+
+**Device-found defects, fixed in this phase**:
+11. The picker was empty: the contacts machine was only opened by the
+    contacts screen. It opens with the send flow now.
+12. The history-derived contact was named `null` — `org.json.optString`
+    renders a JSON null as the word; `ContactsExecutor` now reads record
+    names null-safely (the feed executor already did).
+13. The system back key closed the whole send flow from any page (the drawn
+    stack had one entry); it is the header's back now.
+
+
 ## Success criteria
 
 | SC | Claim | Verified | Evidence |
@@ -262,10 +323,10 @@ identicon gate; `FlowLiveTest` the live detail lines. Suite: 419, 0 failures.
 | SC-003 | force-stop / reopen / notification | **device** | phase 4 log: force-stop → `tracker.patch confirmed tx=0xebadf95f…`; HOME → `tracker.notify posted`, `NotificationRecord … channel=transactions` |
 | SC-004 | one prompt per attempt after cancel | test | `SendRefusalsTest`: parked signer, cancel → Confirm, 1 sign, 0 relay calls; second slide → 2 signs, 1 relay call. Device needs a real passkey (no cancel window with the fixture keyset) |
 | SC-005 | every refusal worded on screen | **device** | phase 5: `地址无效…`, `余额不足…`, the ceiling sentence in human units; treasury/relay notices test-covered |
-| SC-006 | fee token changed, re-quoted, paid | — | — |
+| SC-006 | fee token changed, re-quoted, paid | test | `FeeMachineTest` re-quote; the sheet is live on the device but the Safe has one fee asset on Gnosis |
 | SC-007 | no send fixture in the live route | test + grep | the send states no longer fall to `drawn.base`; `Scan`/`BatchImport` keep theirs by design |
 | SC-008 | drift gate exhaustive; tests grow | — | — |
-| SC-009 | `live in 042` markers gone | — | — |
+| SC-009 | `live in 042` markers gone | grep | phase 6: `grep -rn 'live in 042' app-android` → nothing |
 | SC-010 | release APK carries no fixture key material | — | — |
 
 ## Owed

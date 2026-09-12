@@ -498,6 +498,9 @@ object I18nKeys {
         const val ADD_NOT_COMPATIBLE = "addToken.notCompatible"
         const val ADD_NETWORK_ADDED = "addToken.networkAdded"
         const val ADD_NETWORK_BTN = "addToken.addNetworkBtn"
+        const val ADD_SEARCHING = "addToken.searchingNetworks"
+        const val ADD_ERROR_SAVE = "addToken.errorSaveToken"
+        const val ADD_LABEL_DECIMALS = "addToken.labelDecimals"
         const val ADD_DEPLOY_CONTRACTS = "addToken.deployContracts"
         const val ADD_ERROR_NOT_COMPATIBLE = "addToken.errorNotCompatible"
 

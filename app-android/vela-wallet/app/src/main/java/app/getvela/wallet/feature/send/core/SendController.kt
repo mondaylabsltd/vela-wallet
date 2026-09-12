@@ -47,6 +47,8 @@ class SendController(
     refreshBalances: () -> Unit,
     /** The feed re-reads the store; the wallet controller binds it. */
     feedChanged: () -> Unit = {},
+    /** Spec 043 T048: a name for the recipient, through the app's waterfall. */
+    identity: suspend (String) -> SendRecipientIdentity? = { null },
     /** The tracker handoff; the wallet controller binds it (phase 4). */
     var onTrackSubmitted: (userOpHash: String, recordIds: List<String>, chainId: Int) -> Unit = { hash, _, _ ->
         VelaLog.event("send.track", "no tracker bound", "hash" to hash.take(12))
@@ -136,7 +138,7 @@ class SendController(
                 publicKeyAvailable: Boolean,
             ): SendFeeOutcome = requestQuote(chainId, account, calls, gasFeeToken, publicKeyAvailable)
         },
-        ports = ports,
+        ports = ports,        identity = identity,
     )
 
     private val sendHost = CoreHost(

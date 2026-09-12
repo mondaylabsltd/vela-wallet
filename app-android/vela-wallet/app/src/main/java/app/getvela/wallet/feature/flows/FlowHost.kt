@@ -61,16 +61,17 @@ fun FlowHost(
     onNavigate: (FlowStep) -> Unit = {},
     /** Spec 043: when the send is live, its taps go to the machine, not to the fixture's steps. */
     send: SendCallbacks? = null,
+    addToken: AddTokenCallbacks? = null,
 ) {
     if (model.textScale != 1f) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * model.textScale),
         ) {
-            FlowHostContent(model, modifier, onBack, onNavigate, send)
+            FlowHostContent(model, modifier, onBack, onNavigate, send, addToken)
         }
     } else {
-        FlowHostContent(model, modifier, onBack, onNavigate, send)
+        FlowHostContent(model, modifier, onBack, onNavigate, send, addToken)
     }
 }
 
@@ -101,6 +102,7 @@ private fun FlowHostContent(
     onBack: () -> Unit,
     onNavigate: (FlowStep) -> Unit,
     send: SendCallbacks? = null,
+    addToken: AddTokenCallbacks? = null,
 ) {
     Box(modifier = modifier.fillMaxSize().background(VelaTheme.colors.bgBase)) {
         when (val base = model.base) {
@@ -195,7 +197,7 @@ private fun FlowHostContent(
         }
 
         model.sheet?.let { sheet ->
-            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, send = send)
+            FlowSheetHost(sheet = sheet, onNavigate = onNavigate, send = send, addToken = addToken)
         }
     }
 }
@@ -208,7 +210,7 @@ private fun FlowHostContent(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, send: SendCallbacks? = null) {
+private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, send: SendCallbacks? = null, addToken: AddTokenCallbacks? = null) {
     var dismissed by remember(sheet) { mutableStateOf(false) }
     if (dismissed) return
 
@@ -244,7 +246,11 @@ private fun FlowSheetHost(sheet: FlowSheet, onNavigate: (FlowStep) -> Unit, send
                     onReceive = { onNavigate(FlowStep.Receive) },
                     onSend = { onNavigate(FlowStep.SendForm) },
                 )
-                is FlowSheet.AddToken -> AddTokenBody(model = sheet.model)
+                is FlowSheet.AddToken -> AddTokenBody(
+                    model = sheet.model,
+                    onValueChange = addToken?.let { cb -> { text: String -> cb.onInput(text) } },
+                    onSubmit = { addToken?.onSubmit?.invoke() },
+                )
                 is FlowSheet.ContactPick -> ContactPickBody(
                     model = sheet.model,
                     onScan = { if (send == null) onNavigate(FlowStep.Scan) },
@@ -363,4 +369,10 @@ class SendCallbacks(
     val onExplorer: () -> Unit,
     /** The confirm page's notice offered an action: retry after a treasury top-up or after a failed submit. */
     val onNoticeAction: () -> Unit = {},
+)
+
+/** Spec 043 T046: the add-token sheet is the `manage_tokens` machine's when these are present. */
+class AddTokenCallbacks(
+    val onInput: (String) -> Unit,
+    val onSubmit: () -> Unit,
 )

@@ -39,6 +39,8 @@ class NetworkAdminExecutor(
     private val probes: NetworkProbes? = null,
     /** Forget an endpoint's history in the pool; `null` = every chain. */
     private val invalidatePools: (Long?) -> Unit = {},
+    /** Spec 043: forget what the relay client learned (`RelayClient.clearCaches`). */
+    private val clearBundlerCache: () -> Unit = {},
 ) {
 
     @Suppress("LongMethod")
@@ -205,9 +207,12 @@ class NetworkAdminExecutor(
             NetShellResult.Invalidated
         }
 
-        // Still an acknowledged no-op: there is no bundler client to cache
-        // anything yet. Answered, never skipped. // live in 042
-        is NetOperation.ClearBundlerCache -> NetShellResult.BundlerCacheCleared
+        // The relay client's memory — deployment, nonces, resolved base URLs —
+        // is what a person clearing caches expects to go with the pool's.
+        is NetOperation.ClearBundlerCache -> {
+            clearBundlerCache()
+            NetShellResult.BundlerCacheCleared
+        }
     }
 
     /**

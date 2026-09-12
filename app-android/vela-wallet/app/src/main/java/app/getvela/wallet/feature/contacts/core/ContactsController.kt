@@ -25,12 +25,15 @@ class ContactsController(
     registryName: suspend (String) -> String? = { null },
     /** `eth_getCode` on one chain, for the contract badge. `null` = unchecked. */
     code: suspend (Int, String) -> String? = { _, _ -> null },
+    /** Spec 043 T048: the whole waterfall; `null` keeps the index-only seam. */
+    identity: (suspend (String) -> ContactIdentity?)? = null,
 ) {
 
     private val executor = ContactsExecutor(
         store = VelaStore(context),
         registryName = registryName,
         code = code,
+        identity = identity,
     )
 
     private val host = CoreHost(

@@ -11,6 +11,10 @@ import app.getvela.wallet.feature.wallet.core.TrackerNotifier
 import app.getvela.wallet.feature.send.core.UserOpSigner
 import app.getvela.wallet.feature.send.core.SendHapticKind
 import app.getvela.wallet.feature.send.core.SendController
+import app.getvela.wallet.feature.contacts.core.ContactIdentity
+import app.getvela.wallet.feature.contacts.core.IdentityResolver
+import app.getvela.wallet.feature.send.core.SendRecipientIdentity
+import org.json.JSONObject
 import app.getvela.wallet.feature.send.core.RelayClient
 import app.getvela.wallet.feature.send.core.PoolRelayPort
 import app.getvela.wallet.dev.ParallelSpaceHook
@@ -85,6 +89,25 @@ class AppContainer(private val app: Application) {
             context = app,
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
             pool = pool,
+            // "Clear caches" forgets what the relay client learned too —
+            // deployment, nonces, resolved base URLs (spec 043 T049).
+            clearBundlerCache = { relay.clearCaches() },
+        )
+    }
+
+    /**
+     * A name for an address (spec 043 T048): own accounts → cache → the
+     * passkey index → the name services. Contacts and send ask the same one.
+     */
+    val identity: IdentityResolver by lazy {
+        IdentityResolver(
+            store = VelaStore(app),
+            ownAccounts = { session.view.value.accounts.map { it.address to it.name } },
+            registryName = { address -> RegistryClient().nameForAddress(address) },
+            ethCall = { chainId, to, data ->
+                (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)
+                    ?.json?.optString("result")?.takeIf { it.startsWith("0x") && it != "0x" }
+            },
         )
     }
 
@@ -208,6 +231,7 @@ class AppContainer(private val app: Application) {
             },
             refreshBalances = { wallet.refresh() },
             feedChanged = { wallet.feedReconciled() },
+            identity = { address -> identity.resolve(address)?.let { SendRecipientIdentity(name = it.name, source = it.source) } },
         ).also { controller ->
             // The two halves of the handoff: the send hands the tracker a
             // hash; the tracker hands the send its verdict.
@@ -233,6 +257,7 @@ class AppContainer(private val app: Application) {
             // characters. The index this asks is the same one onboarding
             // publishes to, through the same client.
             registryName = { address -> RegistryClient().nameForAddress(address) },
+            identity = { address -> identity.resolve(address)?.let { ContactIdentity(name = it.name, source = it.source) } },
             code = { chainId, address ->
                 (pool.call(chainId, "eth_getCode", listOf(address, "latest")) as? RpcResult.Body)
                     ?.json?.optString("result")?.takeIf { it.startsWith("0x") }

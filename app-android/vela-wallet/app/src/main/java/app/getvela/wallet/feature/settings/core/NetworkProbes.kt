@@ -54,13 +54,13 @@ class NetworkProbes(
     /** `eth_chainId` against this URL, and what it took. */
     suspend fun probeRpc(url: String): Probe {
         val started = System.currentTimeMillis()
-        // A websocket endpoint needs a websocket probe, which this shell does
-        // not have. Reporting "no chain id" is honest — the core renders that
-        // as unknown, not as broken. // live in 042
-        if (url.startsWith("ws://") || url.startsWith("wss://")) {
-            return Probe(null, elapsed(started))
+        // A websocket endpoint gets a websocket probe: one `eth_chainId`
+        // frame, one reply, and the socket closed (spec 043 T049).
+        val result = if (url.startsWith("ws://") || url.startsWith("wss://")) {
+            wsRpc(url, "eth_chainId", JSONArray())
+        } else {
+            jsonRpc(url, "eth_chainId", JSONArray())
         }
-        val result = jsonRpc(url, "eth_chainId", JSONArray())
         return Probe(
             reportedChainId = (result as? String)?.let(::parseHexChainId),
             latencyMs = elapsed(started),
@@ -258,6 +258,42 @@ class NetworkProbes(
                     else response.body?.string() to null
                 }
         }.getOrNull()
+    }
+
+    /** One JSON-RPC frame over a websocket; the first reply, or `null` when nothing comes back in time. */
+    private suspend fun wsRpc(url: String, method: String, params: JSONArray): Any? = withContext(Dispatchers.IO) {
+        val payload = JSONObject().put("jsonrpc", "2.0").put("id", 1).put("method", method).put("params", params).toString()
+        val reply = kotlinx.coroutines.CompletableDeferred<Any?>()
+        val socket = runCatching {
+            client(PROBE_TIMEOUT_MS).newWebSocket(
+                Request.Builder().url(url).build(),
+                object : okhttp3.WebSocketListener() {
+                    override fun onOpen(webSocket: okhttp3.WebSocket, response: okhttp3.Response) {
+                        webSocket.send(payload)
+                    }
+
+                    override fun onMessage(webSocket: okhttp3.WebSocket, text: String) {
+                        val json = runCatching { JSONObject(text) }.getOrNull()
+                        val result = json?.takeIf { !(it.has("error") && !it.isNull("error")) }?.opt("result")
+                        reply.complete(result)
+                        webSocket.close(1000, null)
+                    }
+
+                    override fun onFailure(webSocket: okhttp3.WebSocket, t: Throwable, response: okhttp3.Response?) {
+                        reply.complete(null)
+                    }
+
+                    override fun onClosing(webSocket: okhttp3.WebSocket, code: Int, reason: String) {
+                        reply.complete(null)
+                    }
+                },
+            )
+        }.getOrNull() ?: return@withContext null
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(PROBE_TIMEOUT_MS) { reply.await() }
+        } finally {
+            socket.cancel()
+        }
     }
 
     private fun client(timeoutMs: Long) = VelaHttp.client.newBuilder()

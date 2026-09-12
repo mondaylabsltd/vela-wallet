@@ -64,6 +64,8 @@ class SendExecutor(
     private val feeQuoter: FeeQuoter,
     private val ports: SendPorts,
     private val now: () -> Double = { System.currentTimeMillis().toDouble() },
+    /** Spec 043 T048: the identity waterfall the contacts machine also asks. */
+    private val identity: suspend (String) -> SendRecipientIdentity? = { null },
 ) {
 
     /** The account store, as the send path reads it. */
@@ -156,9 +158,7 @@ class SendExecutor(
             ports.trackSubmitted(operation.user_op_hash, operation.record_ids, operation.chain_id)
             SendShellResult.TrackHandedOff
         }
-        // The naming waterfall lands with the 042 backfill (T048); until then
-        // a recipient is an address.
-        is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(null)
+        is SendOperation.ResolveIdentity -> SendShellResult.IdentityResolved(identity(operation.address))
         // `first_time` needs the local send history by counterparty (the
         // contacts machine's `has_prior_interaction`); it lands with the
         // identity backfill (T048). `null` = not judged, never "yes".
