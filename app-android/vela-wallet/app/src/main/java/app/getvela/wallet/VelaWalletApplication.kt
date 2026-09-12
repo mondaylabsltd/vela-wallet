@@ -1,5 +1,7 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
+import app.getvela.wallet.feature.signing.core.SimDeltas
 import android.app.Application
 import app.getvela.wallet.core.data.ThemePreferenceRepository
 import app.getvela.wallet.core.diagnostics.VelaLog
@@ -330,6 +332,12 @@ class AppContainer(private val app: Application) {
                         settings.networks.value.networks.firstOrNull { it.chain_id.toInt() == chainId }?.native_symbol ?: "ETH"
                     override fun trackSubmitted(userOpHash: String, recordIds: List<String>, chainId: Int) = wallet.trackSubmitted(userOpHash, recordIds, chainId)
                     override fun dataBase(): String = settings.endpointUrl(NetEndpointField.EthereumData)
+                    override suspend fun simulate(chainId: Int, wallet: String, calls: List<SimDeltas.Call>): List<TrustSimJudgment>? {
+                        val body = SimDeltas.body(wallet, calls) ?: return null
+                        val answer = (pool.call(chainId, "eth_simulateV1", listOf(body, "latest")) as? RpcResult.Body)?.json ?: return null
+                        val logs = SimDeltas.logsOf(answer) ?: return null
+                        return this@AppContainer.wallet.judgeSimDeltas(wallet, chainId, SimDeltas.deriveDeltas(logs, wallet))
+                    }
                     override suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean> {
                         val body = (pool.call(chainId, "eth_call", listOf(JSONObject().put("to", to).put("data", data), "latest")) as? RpcResult.Body)?.json
                             ?: return null to false

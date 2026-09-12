@@ -360,6 +360,7 @@ fun VelaNavHost(
                 val clearView by controller.clear.collectAsStateWithLifecycle()
                 val guardView by controller.guard.collectAsStateWithLifecycle()
                 val signFee by controller.fee.collectAsStateWithLifecycle()
+                val signSim by controller.sim.collectAsStateWithLifecycle()
                 val signRequest by controller.request.collectAsStateWithLifecycle()
                 val signChain = signRequest?.chainId ?: 0
                 val signCtx = app.getvela.wallet.feature.signing.SigningLive.Context(
@@ -374,7 +375,7 @@ fun VelaNavHost(
                     if (signView.surface != app.getvela.wallet.feature.signing.core.SignSurface.Hidden) {
                         val drawn = remember(strings) { SigningFixtures.build(SigningScreenState.CS1, strings) }
                         app.getvela.wallet.feature.signing.SigningSheet(
-                            model = app.getvela.wallet.feature.signing.SigningLive.model(drawn, request, signView, clearView, guardView, signFee, signCtx),
+                            model = app.getvela.wallet.feature.signing.SigningLive.model(drawn, request, signView, clearView, guardView, signFee, signCtx, signSim),
                             // The swipe: a reject before the commitment point, a dismiss after — the core routes it.
                             onDismiss = { controller.swipeDismissed() },
                             onConfirm = { controller.approve() },

@@ -516,6 +516,34 @@ class WalletController(
     /** What the home screen renders. */
     val balances: StateFlow<BalanceView> = balanceHost.view
 
+    /**
+     * Spec 046 US1: the simulated deltas judged by the trust machine — the two
+     * facts it judges a RECEIVED amount by are pushed first (what this wallet
+     * holds on the chain, the registry's stables and wrapped native), then
+     * `SimDeltasComputed`; the answer is read once `sim.ready`. Never a write.
+     */
+    suspend fun judgeSimDeltas(address: String, chainId: Int, deltas: List<TrustAssetDelta>): List<TrustSimJudgment>? {
+        val held = balances.value.tokens
+            .filter { it.chain_id == chainId }
+            .mapNotNull { it.token_address?.lowercase() }
+        trustHost.dispatch(TrustEvent.HeldTokensSnapshot(address = address.lowercase(), chain_id = chainId, tokens = held), TrustEvent.serializer())
+        runCatching { chains.forChain(chainId) }.getOrNull()?.let { info ->
+            trustHost.dispatch(
+                TrustEvent.RegistryTokensSnapshot(
+                    chain_id = chainId,
+                    stables = info.stables.mapNotNull { it.contract?.lowercase() },
+                    wrapped_native = info.wrappedNative?.lowercase(),
+                ),
+                TrustEvent.serializer(),
+            )
+        }
+        trustHost.dispatch(TrustEvent.SimDeltasComputed(address = address.lowercase(), chain_id = chainId, deltas = deltas), TrustEvent.serializer())
+        val settled = kotlinx.coroutines.withTimeoutOrNull(15_000L) {
+            trustHost.view.first { view -> view.sim?.let { it.ready && it.chain_id == chainId && it.address.equals(address, ignoreCase = true) } == true }
+        } ?: return null
+        return settled.sim?.judgments
+    }
+
     /** The activity feed: day-grouped rows, already in render order. */
     val feed: StateFlow<FeedView> = feedHost.view
 

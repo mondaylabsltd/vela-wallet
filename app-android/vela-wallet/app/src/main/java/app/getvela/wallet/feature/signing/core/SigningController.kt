@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.signing.core
 
+import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import app.getvela.wallet.core.crux.CoreHost
 import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
@@ -88,7 +89,19 @@ class SigningController(
 
         /** `eth_call` through the pool: `(result, reverted)`. */
         suspend fun ethCall(chainId: Int, to: String, data: String): Pair<String?, Boolean>
+
+        /** Spec 046 US1: the simulated balance changes, judged by the trust machine; `null` = could not simulate. */
+        suspend fun simulate(chainId: Int, wallet: String, calls: List<SimDeltas.Call>): List<TrustSimJudgment>? = null
     }
+
+    /** What the simulation said (spec 046 US1): pending (`null`), the judgments, or unavailable. */
+    sealed class SimOutcome {
+        data class Ready(val judgments: List<TrustSimJudgment>) : SimOutcome()
+        data object Unavailable : SimOutcome()
+    }
+
+    private val _sim = MutableStateFlow<SimOutcome?>(null)
+    val sim: StateFlow<SimOutcome?> = _sim
 
     private val signExecutor = SignExecutor(
         spine = UserOpSpine(relay, accounts, signer),
@@ -185,6 +198,13 @@ class SigningController(
         SignExecutor.callsOf(request.method, request.paramsJson)?.let { calls ->
             val feeCalls = calls.map { FeeCall(to = it.to, value = it.value, data = it.data) }
             requestQuote(request.chainId, feeCalls)
+            // Spec 046 US1: the one block a site cannot author. Read only.
+            scope.launch {
+                val judged = runCatching { ports.simulate(request.chainId, wallet.address, calls.map { SimDeltas.Call(it.to, it.value, it.data) }) }
+                    .onFailure { VelaLog.failure("signing.sim", "simulation failed", it) }
+                    .getOrNull()
+                _sim.value = judged?.let { SimOutcome.Ready(it) } ?: SimOutcome.Unavailable
+            }
             // A quote goes stale while the person reads (the policy's TTL);
             // while the sheet is still up and nothing is signing, ask again —
             // otherwise the slide stays shut with no way to open it.

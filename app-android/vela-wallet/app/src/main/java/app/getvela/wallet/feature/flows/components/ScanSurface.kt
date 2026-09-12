@@ -1,5 +1,8 @@
 package app.getvela.wallet.feature.flows.components
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +57,11 @@ fun ScanSurface(
     modifier: Modifier = Modifier,
     onClose: () -> Unit = {},
     onTool: (ScanTool) -> Unit = {},
+    /** Spec 046: the camera behind the brackets, and one status line (permission, no code found). */
+    preview: (@Composable () -> Unit)? = null,
+    status: String? = null,
+    statusAction: String? = null,
+    onStatusAction: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(
@@ -85,7 +93,7 @@ fun ScanSurface(
         }
 
         Spacer(modifier = Modifier.weight(1f))
-        ScanFrame(modifier = Modifier.align(Alignment.CenterHorizontally))
+        ScanFrame(modifier = Modifier.align(Alignment.CenterHorizontally), preview = preview)
         Text(
             text = model.hint,
             color = colors.fgMuted,
@@ -96,6 +104,32 @@ fun ScanSurface(
                 .fillMaxWidth()
                 .padding(vertical = VelaSpacing.xl),
         )
+        status?.let {
+            Text(
+                text = it,
+                color = colors.warningBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = VelaSizing.screenPaddingX)
+                    .semantics { contentDescription = "scan-status" },
+            )
+            statusAction?.let { action ->
+                Text(
+                    text = action,
+                    color = colors.accentBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onStatusAction)
+                        .padding(vertical = VelaSpacing.md),
+                )
+            }
+        }
         Spacer(modifier = Modifier.weight(1f))
 
         Row(
@@ -144,14 +178,21 @@ fun ScanSurface(
 
 /** Corner brackets over an inert feed placeholder. */
 @Composable
-private fun ScanFrame(modifier: Modifier = Modifier) {
+private fun ScanFrame(modifier: Modifier = Modifier, preview: (@Composable () -> Unit)? = null) {
     val colors = VelaTheme.colors
     BoxWithConstraints(modifier = modifier.fillMaxWidth(fraction = 0.68f)) {
         val bracket = VelaIconSize.xl2
+        preview?.let { camera ->
+            Box(
+                modifier = Modifier
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(VelaRadius.md)),
+            ) { camera() }
+        }
         Box(
             modifier = Modifier
                 .aspectRatio(1f)
-                .background(colors.bgSunken, RoundedCornerShape(VelaRadius.md))
+                .then(if (preview == null) Modifier.background(colors.bgSunken, RoundedCornerShape(VelaRadius.md)) else Modifier)
                 .drawBehind {
                     val stroke = VelaBorder.emphasis.toPx() * 2
                     val arm = bracket.toPx()

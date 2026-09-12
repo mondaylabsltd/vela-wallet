@@ -23,6 +23,12 @@ object SimDeltas {
 
     /** The `eth_simulateV1` params: one block-state call carrying every call; `null` when there is nothing to simulate. */
     fun payload(from: String, calls: List<Call>): JSONArray? {
+        val body = body(from, calls) ?: return null
+        return JSONArray().put(body).put("latest")
+    }
+
+    /** The first param alone (the pool takes `[body, "latest"]` as a list). */
+    fun body(from: String, calls: List<Call>): JSONObject? {
         val first = calls.firstOrNull() ?: return null
         if (first.to.isEmpty()) return null
         val entries = JSONArray()
@@ -33,12 +39,11 @@ object SimDeltas {
             entries.put(entry)
         }
         val block = JSONObject().put("calls", entries)
-        val body = JSONObject()
+        return JSONObject()
             .put("blockStateCalls", JSONArray().put(block))
             .put("validation", false)
             .put("traceTransfers", true)
             .put("returnFullTransactions", false)
-        return JSONArray().put(body).put("latest")
     }
 
     /** The logs of every succeeded call in every simulated block; `null` when the answer is an error or empty. */

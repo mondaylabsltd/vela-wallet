@@ -226,4 +226,22 @@ class DappSignMachineTest {
         assertEquals(1, signs)
         assertEquals(1, port.calls.count { it.endsWith("eth_sendUserOperation") })
     }
+
+    /** Spec 046 US2: eth_sign is presented as the danger it is and, once read, signed over the same envelope. */
+    @Test
+    fun `eth_sign is the danger surface, not the calm message view, and still signs when approved`() = runBlocking<Unit> {
+        seedAccount(); scriptRelay()
+        val c = controller()
+        c.open(IncomingRequest("r5", "eth_sign", JSONArray().put(safe).put("0x48656c6c6f2c2056656c61").toString(), origin, "tab-1", 100))
+        withTimeout(20_000) { c.sign.first { it.surface == SignSurface.Sheet } }
+        val read = withTimeout(20_000) { c.clear.first { it.message != null } }
+        assertEquals(app.getvela.wallet.feature.signing.core.ClearDangerClass.EthSign, read.message!!.danger_class)
+        withTimeout(20_000) { c.sign.first { it.confirm_gate_open } }
+        c.approve()
+        withTimeout(30_000) { while (answers.none { it.first == "tab-1/r5" }) delay(50) }
+        val signature = answers.first { it.first == "tab-1/r5" }.second.getString("result")
+        assertTrue(signature.startsWith("0x") && signature.length > 300)
+        assertEquals(1, signs)
+        withTimeout(10_000) { c.closed.first { it } }
+    }
 }

@@ -115,7 +115,7 @@ class SignExecutor(
     }
 
     private suspend fun signAndSubmit(op: SignOperation.SignAndSubmit): SignSubmitOutcome {
-        if (op.method == "personal_sign" || op.method.contains("signTypedData")) return signMessage(op)
+        if (op.method == "personal_sign" || op.method == "eth_sign" || op.method.contains("signTypedData")) return signMessage(op)
         val calls = callsOf(op.method, op.params_json)
             ?: return SignSubmitOutcome.Failed("${op.method} carried no transaction this wallet could read")
         return try {
@@ -180,8 +180,11 @@ class SignExecutor(
          */
         fun messageHash(method: String, paramsJson: String): ByteArray? {
             val params = runCatching { JSONArray(paramsJson) }.getOrNull() ?: return null
-            return if (method == "personal_sign") {
-                val payload = params.optString(0).ifBlank { return null }
+            // Spec 046 US2: `eth_sign` is `[address, data]` — the same EIP-191
+            // envelope over `data` (EIP-1474's rule), the params swapped. The
+            // sheet has already shown it as the danger it is (ClearSignMethod::EthSign).
+            return if (method == "personal_sign" || method == "eth_sign") {
+                val payload = params.optString(if (method == "eth_sign") 1 else 0).ifBlank { return null }
                 val bytes = if (isHexPayload(payload)) SendExecutor.unhex(payload) else payload.toByteArray(Charsets.UTF_8)
                 val prefix = "\u0019Ethereum Signed Message:\n${bytes.size}".toByteArray(Charsets.UTF_8)
                 uniffi.vela_core_uniffi.keccak256(prefix + bytes)

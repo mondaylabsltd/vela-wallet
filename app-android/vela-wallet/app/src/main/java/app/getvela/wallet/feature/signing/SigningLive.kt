@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.signing
 
+import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.browser.ExploreLive
@@ -49,12 +50,12 @@ object SigningLive {
     private fun VelaStrings.a(key: String) = t("componentsUi.signingApprove.$key")
     private fun VelaStrings.a(key: String, vars: Map<String, String>) = t("componentsUi.signingApprove.$key", vars)
 
-    fun model(fallback: SigningScreenModel, request: IncomingRequest, sign: SignView, clear: ClearSigningView, guard: GuardView, fee: FeeView, ctx: Context): SigningScreenModel {
+    fun model(fallback: SigningScreenModel, request: IncomingRequest, sign: SignView, clear: ClearSigningView, guard: GuardView, fee: FeeView, ctx: Context, sim: SigningController.SimOutcome? = null): SigningScreenModel {
         val s = ctx.strings
         val host = request.origin.substringAfter("://").substringBefore('/').ifBlank { request.origin }
         val facts = SigningController.firstCall(request.paramsJson)
         val dataBytes = facts?.second?.removePrefix("0x")?.length?.div(2) ?: 0
-        val blocks = statusBlocks(sign, s) + blocks(clear, facts?.first, facts?.third, dataBytes, ctx) + guardBlocks(guard, s)
+        val blocks = statusBlocks(sign, s) + blocks(clear, facts?.first, facts?.third, dataBytes, ctx) + simBlocks(sim, ctx) + guardBlocks(guard, s)
         return fallback.copy(
             dappName = host,
             dappHost = host,
@@ -291,6 +292,52 @@ object SigningLive {
         }
         if (message.danger_class == ClearDangerClass.EthSign) add(SigningBlock.Warning(SigningTone.Danger, s.s("ethSignWarning")))
     }
+
+    /**
+     * Spec 046 US1 — the one block a site cannot author: the simulated balance
+     * changes as the trust machine judged them. Sent amounts render whenever
+     * the token's symbol resolved; a received unverified token says so and
+     * carries no confident figure (the asymmetric rule, spec 017 ⑥).
+     */
+    fun simBlocks(sim: SigningController.SimOutcome?, ctx: Context): List<SigningBlock> {
+        val s = ctx.strings
+        return when (sim) {
+            null -> emptyList()
+            SigningController.SimOutcome.Unavailable -> listOf(SigningBlock.Warning(SigningTone.Caution, s.s("simUnavailableWarning")))
+            is SigningController.SimOutcome.Ready -> {
+                if (sim.judgments.isEmpty()) {
+                    return listOf(SigningBlock.Balances(s.s("balanceChangesTitle"), emptyList(), s.s("simResultNoChange")))
+                }
+                var unverified = false
+                val rows = sim.judgments.map { judgment ->
+                    when (judgment) {
+                        is TrustSimJudgment.Native -> deltaRow(ctx.nativeSymbol, judgment.delta, 18)
+                        is TrustSimJudgment.Erc20Trusted -> deltaRow(judgment.symbol, judgment.delta, judgment.decimals)
+                        is TrustSimJudgment.Erc20Unverified -> {
+                            unverified = true
+                            BalanceDeltaRow(s.s("balanceUnverifiedToken"), signedRaw(judgment.delta), SigningTone.Caution)
+                        }
+                    }
+                }
+                listOf(
+                    SigningBlock.Balances(
+                        title = s.s("balanceChangesTitle"),
+                        rows = rows,
+                        note = if (unverified) s.s("unverifiedWarning") else null,
+                        noteTone = if (unverified) SigningTone.Caution else SigningTone.Neutral,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun deltaRow(symbol: String, delta: String, decimals: Int): BalanceDeltaRow {
+        val negative = delta.startsWith("-")
+        val magnitude = SendLive.fromBase(delta.removePrefix("-"), decimals)
+        return BalanceDeltaRow(symbol, (if (negative) "−" else "+") + magnitude, if (negative) SigningTone.Neutral else SigningTone.Success)
+    }
+
+    private fun signedRaw(delta: String): String = if (delta.startsWith("-")) "−" + delta.drop(1) else "+$delta"
 
     fun feeModel(clear: ClearSigningView, fee: FeeView, ctx: Context): FeeModel {
         val offChain = clear.result?.sign_type == ClearSignType.Signature || clear.surface == ClearSurface.MessageSign || clear.surface == ClearSurface.EthSign || clear.surface == ClearSurface.BlindTypedData

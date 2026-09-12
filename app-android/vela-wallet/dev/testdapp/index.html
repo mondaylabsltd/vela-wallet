@@ -18,6 +18,9 @@
   <button id="send" type="button">Send dust</button>
   <button id="approve" type="button">Approve unlimited</button>
   <button id="verify" type="button">Verify sign</button>
+  <button id="siwe" type="button">SIWE</button>
+  <button id="siwe-bad" type="button">SIWE (other domain)</button>
+  <button id="ethsign" type="button">eth_sign</button>
   <pre id="out">waiting…</pre>
   <script src="https://cdn.jsdelivr.net/npm/js-sha3@0.9.3/build/sha3.min.js"></script>
   <script>
@@ -57,6 +60,12 @@
     document.getElementById('switch').onclick = () => window.__ask('wallet_switchEthereumChain', [{ chainId: '0x64' }]);
     document.getElementById('sign').onclick = () => window.__ask('personal_sign', ['0x48656c6c6f2c2056656c61', me()]);
     document.getElementById('send').onclick = () => window.__ask('eth_sendTransaction', [{ from: me(), to: FOUNDER, value: '0x38d7ea4c68000' }]);
+    // Spec 046 US2: a SIWE message for this page's origin, and one that names another domain.
+    const hex = (text) => '0x' + Array.from(new TextEncoder().encode(text)).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const siwe = (domain, uri) => `${domain} wants you to sign in with your Ethereum account:\n${me()}\n\nSign in to the test dApp.\n\nURI: ${uri}\nVersion: 1\nChain ID: 100\nNonce: 8fj2kd93lq\nIssued At: 2026-09-12T00:00:00.000Z`;
+    document.getElementById('siwe').onclick = () => window.__ask('personal_sign', [hex(siwe(location.host, location.origin)), me()]);
+    document.getElementById('siwe-bad').onclick = () => window.__ask('personal_sign', [hex(siwe('evil.example', 'https://evil.example')), me()]);
+    document.getElementById('ethsign').onclick = () => window.__ask('eth_sign', [me(), '0x48656c6c6f2c2056656c61']);
     // EIP-1271 through the wallet's own read proxy: isValidSignature(bytes32,bytes) must answer its selector.
     document.getElementById('verify').onclick = async () => {
       const sig = state.results.personal_sign && state.results.personal_sign.result;

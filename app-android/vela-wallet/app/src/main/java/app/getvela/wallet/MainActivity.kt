@@ -57,6 +57,20 @@ class MainActivity : ComponentActivity() {
      * [securityKeyCeremony] it must be registered before STARTED, so it lives
      * here and the onboarding flow calls [requestBluetoothPermission].
      */
+    /** Spec 046: the camera, for the scanner; registered before STARTED like the others. */
+    private lateinit var cameraPermissionLauncher:
+        androidx.activity.result.ActivityResultLauncher<String>
+    private var cameraPermissionAnswer:
+        kotlinx.coroutines.CompletableDeferred<Boolean>? = null
+
+    suspend fun requestCameraPermission(): Boolean {
+        if (checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) return true
+        val answer = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        cameraPermissionAnswer = answer
+        cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+        return answer.await()
+    }
+
     private lateinit var bluetoothPermissionLauncher:
         androidx.activity.result.ActivityResultLauncher<Array<String>>
     private var bluetoothPermissionAnswer:
@@ -226,6 +240,12 @@ class MainActivity : ComponentActivity() {
         val coldStart = savedInstanceState == null && !launchAnimationDisabled() && !galleryRequested()
         super.onCreate(savedInstanceState)
         securityKeyCeremony = SecurityKeyCeremony(this)
+        cameraPermissionLauncher = registerForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            cameraPermissionAnswer?.complete(granted)
+            cameraPermissionAnswer = null
+        }
         (application as VelaWalletApplication).container.documents = app.getvela.wallet.feature.documents.ActivityDocumentPorts(this)
         bluetoothPermissionLauncher = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),

@@ -21,6 +21,9 @@ import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import app.getvela.wallet.feature.signing.core.SigningController
+import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
+import app.getvela.wallet.feature.signing.SigningTone
 import org.junit.Test
 
 /** Spec 044: the signing sheet is the four views, in the corpus's words. */
@@ -84,5 +87,32 @@ class SigningLiveTest {
         assertEquals("1 USDC", bounded.value)
         assertEquals("1", bounded.custom!!.value)
         assertEquals(app.getvela.wallet.feature.signing.AllowanceChip.ChipState.Selected, bounded.chips.first { it.id == "custom" }.state)
+    }
+
+    // -- Spec 046 US1: the balance-change block --------------------------------
+
+    @Test
+    fun `the balance block says what moves, as the trust machine judged it`() {
+        val ready = SigningController.SimOutcome.Ready(
+            listOf(
+                TrustSimJudgment.Native("-1000000000000000"),
+                TrustSimJudgment.Erc20Trusted(token = "0xddaf", delta = "12000000", symbol = "USDC", decimals = 6),
+                TrustSimJudgment.Erc20Unverified(token = "0xbad", delta = "5"),
+            ),
+        )
+        val blocks = SigningLive.simBlocks(ready, ctx)
+        val balances = blocks.single() as SigningBlock.Balances
+        assertEquals(strings.t("componentsUi.signing.balanceChangesTitle"), balances.title)
+        assertEquals(listOf("XDAI", "USDC", strings.t("componentsUi.signing.balanceUnverifiedToken")), balances.rows.map { it.symbol })
+        assertEquals(listOf("−0.001", "+12", "+5"), balances.rows.map { it.delta })
+        assertEquals(listOf(SigningTone.Neutral, SigningTone.Success, SigningTone.Caution), balances.rows.map { it.tone })
+        assertEquals(strings.t("componentsUi.signing.unverifiedWarning"), balances.note)
+
+        val none = SigningLive.simBlocks(SigningController.SimOutcome.Ready(emptyList()), ctx).single() as SigningBlock.Balances
+        assertEquals(strings.t("componentsUi.signing.simResultNoChange"), none.note)
+        assertTrue(none.rows.isEmpty())
+        val unavailable = SigningLive.simBlocks(SigningController.SimOutcome.Unavailable, ctx).single() as SigningBlock.Warning
+        assertEquals(strings.t("componentsUi.signing.simUnavailableWarning"), unavailable.text)
+        assertTrue(SigningLive.simBlocks(null, ctx).isEmpty())
     }
 }

@@ -457,6 +457,11 @@ object I18nKeys {
         const val SCAN_FROM_GALLERY = "componentsUi.scanner.fromGallery"
         const val SCAN_TORCH = "componentsUi.scanner.torch"
         const val SCAN_FLIP = "componentsUi.scanner.flipCamera"
+        const val SCAN_PERMISSION_TEXT = "componentsUi.scanner.permissionText"
+        const val SCAN_GRANT = "componentsUi.scanner.grantPermission"
+        const val SCAN_NO_QR = "componentsUi.scanner.noQrFoundMsg"
+        const val SCAN_CAMERA_UNAVAILABLE = "componentsUi.scanner.cameraUnavailable"
+        const val SCAN_ERROR_IMAGE = "componentsUi.scanner.errorImage"
 
         // Activity.
         const val HISTORY_TITLE = "history.navTitle"
