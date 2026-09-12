@@ -255,6 +255,7 @@ class AppContainer(private val app: Application) {
         BrowserController(
             context = app,
             scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+            store = VelaStore(app),
             debuggable = BuildConfig.DEBUG,
         )
     }

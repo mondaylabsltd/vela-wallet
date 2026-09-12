@@ -591,22 +591,18 @@ fun VelaNavHost(
                         SigningFixtures.build(SigningScreenState.CS12, strings)
                             .withSignerIdentity(session.activeName, session.address)
                     }
-                    // Spec 044: a live tab replaces the drawn demo page; the
-                    // address typed on the start page opens a real site.
+                    // Spec 044: the tab is a browser with a memory — the core's
+                    // favourites, groups, tabs and recents; a live page where
+                    // the demo page was drawn.
                     val browser = application.container.browser
+                    LaunchedEffect(Unit) { browser.start() }
                     val engine by browser.current.collectAsStateWithLifecycle()
                     val engineState by (engine?.state ?: kotlinx.coroutines.flow.MutableStateFlow(app.getvela.wallet.feature.browser.core.EngineState())).collectAsStateWithLifecycle()
-                    val liveModel = engine?.let {
-                        exploreModel.copy(
-                            browser = exploreModel.browser.copy(
-                                url = engineState.url,
-                                host = engineState.host.ifEmpty { exploreModel.browser.host },
-                                secure = engineState.secure,
-                                canBack = engineState.canBack,
-                                canForward = engineState.canForward,
-                            ),
-                        )
-                    } ?: exploreModel
+                    val exploreView by browser.explore.collectAsStateWithLifecycle()
+                    val historyView by browser.history.collectAsStateWithLifecycle()
+                    val liveModel = remember(exploreModel, exploreView, historyView, engineState, engine, strings) {
+                        app.getvela.wallet.feature.browser.ExploreLive.home(exploreModel, exploreView, historyView, engine?.let { engineState }, strings)
+                    }
                     ExploreScreen(
                         model = liveModel,
                         signing = signing,
@@ -617,6 +613,30 @@ fun VelaNavHost(
                         onClosePage = { browser.close() },
                         onPageBack = { browser.back() },
                         onPageForward = { browser.forward() },
+                        live = app.getvela.wallet.feature.explore.ExploreCallbacks(
+                            onOpenSite = { url -> browser.open(url) },
+                            onTabOpen = { id -> browser.selectTab(id) },
+                            onTabClose = { id -> browser.closeTab(id) },
+                            onTabNew = { browser.newTab() },
+                            onTabsCloseAll = { browser.closeAllTabs() },
+                            onGroupToggle = { id, hidden ->
+                                when (id) {
+                                    "favorites" -> browser.setSystemGroupHidden(app.getvela.wallet.feature.browser.core.ExploreSystemGroup.Favorites, hidden)
+                                    "recent" -> browser.setSystemGroupHidden(app.getvela.wallet.feature.browser.core.ExploreSystemGroup.Recent, hidden)
+                                    else -> browser.setGroupHidden(id, hidden)
+                                }
+                            },
+                            onGroupNew = { browser.createGroup(strings.t("explore.newGroup")) },
+                            onSiteMenuPick = { id ->
+                                when (id) {
+                                    "refresh" -> browser.reload()
+                                    "favorite" -> browser.addFavorite()
+                                    "close" -> browser.close()
+                                }
+                            },
+                            onBookmark = { browser.addFavorite() },
+                            onRecentClear = { browser.clearRecent() },
+                        ),
                     )
                 } else {
                     // The holdings, the feed and the currency are this device's

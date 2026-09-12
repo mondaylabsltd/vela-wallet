@@ -83,24 +83,24 @@ NDK build; `JAVA_HOME` = Android Studio's JBR.
 
 ## Phase 2 — User Story 1: browse with a memory (P1)
 
-- [ ] **T017** `…/feature/browser/core/ExploreExecutor.kt` +
+- [X] **T017** `…/feature/browser/core/ExploreExecutor.kt` +
       `BhistExecutor.kt` — `vela.explore` / `vela.browserHistory` read and
       write in the shared shape.
-- [ ] **T018** `…/feature/browser/core/BrowserController.kt` — hosts
+- [X] **T018** `…/feature/browser/core/BrowserController.kt` — hosts
       explore + bhist (+ dperm, phase 3); tab engines keyed by
       `ExploreTab.id`; `VisitRecorded` on document load with the WebView's
       title/favicon; intents: open URL, back/forward, new/close/select tab,
       favourite add/remove/rename, group create/rename/delete/hide/member.
-- [ ] **T019** `…/feature/browser/ExploreLive.kt` — `ExploreView` +
+- [X] **T019** `…/feature/browser/ExploreLive.kt` — `ExploreView` +
       `BhistView` + engines → `ExploreScreenModel` (E1–E6: start empty /
       with favourites, group manage sheet, browsing, tabs, site menu).
-- [ ] **T020** `…/navigation/VelaNavHost.kt` + `…/feature/explore/ExploreScreen.kt`
+- [X] **T020** `…/navigation/VelaNavHost.kt` + `…/feature/explore/ExploreScreen.kt`
       — the 探索 section reads `ExploreLive`; callbacks to the controller;
       leaving the section leaves the `AndroidView` (FR-013).
-- [ ] **T021** [P] `app/src/test/…/ExploreMachineTest.kt`,
+- [X] **T021** [P] `app/src/test/…/ExploreMachineTest.kt`,
       `ExploreLiveTest.kt` — favourites/groups/tabs round-trip; recents
       deduped by origin; the live model from a view.
-- [ ] **T022** `[device]` SC-008: favourite + group + second tab survive
+- [X] **T022** `[device]` SC-008: favourite + group + second tab survive
       `am force-stop`; leave/return keeps the page; a wallet-tab screenshot
       has no page pixels.
 
