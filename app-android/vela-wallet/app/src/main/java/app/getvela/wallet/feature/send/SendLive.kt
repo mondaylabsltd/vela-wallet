@@ -4,6 +4,11 @@ import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.contacts.core.ContactsView
 import app.getvela.wallet.feature.flows.AmountFieldModel
+import app.getvela.wallet.feature.send.core.SweepPick
+import app.getvela.wallet.feature.flows.SweepRowModel
+import app.getvela.wallet.feature.flows.SendSelectionModel
+import app.getvela.wallet.feature.flows.SendNoticeModel
+import app.getvela.wallet.feature.flows.SendCtaModel
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
 import app.getvela.wallet.feature.flows.SendFormMode
 import app.getvela.wallet.feature.flows.BreakdownRowModel
@@ -99,13 +104,88 @@ object SendLive {
 
     // -- SD1 ---------------------------------------------------------------------
 
-    internal fun pick(fallback: SendPickModel, view: SendView, ctx: Context): SendPickModel = fallback.copy(
-        // Filters and the multi-send door stay drawn but inert in 043; the
-        // notice and the selection belong to multi-select (045).
-        notice = null,
-        selection = null,
-        rows = view.tokens.map { token -> assetRow(token, ctx) },
-    )
+    internal fun pick(fallback: SendPickModel, view: SendView, ctx: Context, sweepPicking: Boolean = false): SendPickModel {
+        val s = ctx.strings
+        val rows = view.tokens.map { token -> assetRow(token, ctx) }
+        if (!sweepPicking) {
+            return fallback.copy(
+                // Filters stay drawn but inert; the door reads "send several".
+                notice = null,
+                selection = null,
+                rows = rows,
+                cta = SendCtaModel(s.t(I18nKeys.Flows.MULTI_SEND_TITLE), accent = false),
+            )
+        }
+        // Spec 045 US2: the tick per row is `multi_selected_ids`, the greying
+        // is `multi_chain_id` (a sweep is one chain), and the CTA counts.
+        val chain = view.multi_chain_id
+        val count = view.multi_selected_ids.size
+        val chainName = chain?.let { ctx.chainNames[it] ?: "chain-$it" } ?: ""
+        return fallback.copy(
+            header = fallback.header.copy(title = s.t(I18nKeys.Flows.MULTI_SEND_TITLE)),
+            notice = chain?.let {
+                SendNoticeModel(
+                    mark = TokenMarkModel(nativeSymbol(it, ctx), WalletLive.badge(it.toLong())),
+                    text = s.t(I18nKeys.Flows.MULTI_SEND_NOTICE, mapOf("network" to chainName)),
+                )
+            },
+            rows = rows,
+            selection = SendSelectionModel(
+                selected = view.tokens.map { tokenId(it) in view.multi_selected_ids },
+                dimmed = SweepPick.dimmed(view),
+                selectAll = s.t(I18nKeys.Flows.SELECT_ALL_VALUABLE),
+            ),
+            cta = if (count > 0) {
+                SendCtaModel(s.t(I18nKeys.Flows.MULTI_SEND_CONTINUE, mapOf("n" to count.toString(), "chain" to chainName)), accent = true)
+            } else {
+                SendCtaModel(s.t(I18nKeys.Flows.MULTI_SEND_TITLE), accent = false)
+            },
+        )
+    }
+
+    /** The tokens a sweep moves, in the pick's order. */
+    private fun pickedTokens(view: SendView): List<SendToken> =
+        view.tokens.filter { tokenId(it) in view.multi_selected_ids }
+
+    /**
+     * The amount a sweep moves for one token: the core's reserved spec when it
+     * has computed one (net of the gas the fee coin pays), else the balance the
+     * spec will become. Both are the core's HUMAN decimal strings.
+     */
+    private fun sweepAmount(view: SendView, token: SendToken): String =
+        view.multi_specs.firstOrNull { it.token_address == token.token_address }?.amount ?: token.balance
+
+    /** SD2d — the sweep's form: the picked rows with the core's amounts, one recipient for all. */
+    internal fun sweepForm(fallback: SendFormModel, view: SendView, fee: FeeView, ctx: Context): SendFormModel {
+        val s = ctx.strings
+        val picked = pickedTokens(view)
+        val chainId = view.multi_chain_id ?: view.selected_token?.chain_id ?: 1
+        return fallback.copy(
+            header = fallback.header.copy(title = s.t(I18nKeys.Flows.MULTI_SEND_TITLE)),
+            mode = SendFormMode.Sweep,
+            token = null,
+            sweepSummary = s.t(I18nKeys.Flows.MULTI_SEND_SUMMARY, mapOf("n" to picked.size.toString(), "chain" to (ctx.chainNames[chainId] ?: "chain-$chainId"))),
+            sweepRows = picked.map { row ->
+                SweepRowModel(
+                    mark = TokenMarkModel(row.symbol, WalletLive.badge(row.chain_id.toLong())),
+                    symbol = row.symbol,
+                    balanceLabel = s.t(I18nKeys.Flows.BALANCE_LABEL, mapOf("amount" to trim(row.balance))),
+                    amount = trim(sweepAmount(view, row)),
+                    max = s.t(I18nKeys.Flows.MAX),
+                )
+            },
+            amount = null,
+            addRecipient = null,
+            recipients = emptyList(),
+            recipientActions = emptyList(),
+            summary = null,
+            recipient = recipientModel(view, ctx).copy(note = s.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT)),
+            fee = feeRow(fallback.fee, view.fee, view.estimating_gas || view.fee_busy || fee.busy, ctx),
+            cta = s.t(I18nKeys.Flows.CONTINUE),
+            ctaEnabled = view.can_continue,
+            warning = formWarning(view, ctx),
+        )
+    }
 
     private fun assetRow(token: SendToken, ctx: Context): AssetRowModel = AssetRowModel(
         id = tokenId(token),
@@ -122,6 +202,7 @@ object SendLive {
     // -- SD2 ---------------------------------------------------------------------
 
     internal fun form(fallback: SendFormModel, view: SendView, fee: FeeView, ctx: Context): SendFormModel {
+        if (view.multi_select_mode) return sweepForm(fallback, view, fee, ctx)
         val s = ctx.strings
         val token = view.selected_token
         val symbol = token?.symbol ?: ""
@@ -428,7 +509,9 @@ object SendLive {
             receipt.status == SendReceiptStatus.Confirmed -> fallback.copy(
                 header = header,
                 stage = ReceiptStage.Confirmed,
-                title = s.t(I18nKeys.Flows.TX_CONFIRMED_TITLE, mapOf("amount" to receipt.amount, "symbol" to symbol)),
+                // A split's title carries the core's SUM (`confirm_amount`), not
+                // the single-send scalar the receipt view keeps for one person.
+                title = s.t(I18nKeys.Flows.TX_CONFIRMED_TITLE, mapOf("amount" to (if (receipt.transfers.size > 1 && view.confirm_amount.isNotEmpty()) view.confirm_amount else receipt.amount), "symbol" to symbol)),
                 // A split's parts on the receipt as on the confirm (spec 038
                 // #D2): the count, then every person with their amount.
                 captions = if (receipt.transfers.size > 1) {

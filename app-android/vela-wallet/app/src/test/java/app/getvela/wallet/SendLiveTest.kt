@@ -37,6 +37,7 @@ import org.junit.Assert.assertTrue
 import app.getvela.wallet.feature.send.core.SendRecipientDraft
 import app.getvela.wallet.feature.flows.RecipientAction
 import app.getvela.wallet.feature.flows.SendFormMode
+import app.getvela.wallet.feature.send.core.SendMultiSpecView
 import org.junit.Test
 
 /**
@@ -302,5 +303,63 @@ class SendLiveTest {
         assertEquals("0.001 XDAI", live.breakdown[0].value)
         assertEquals(recipient, live.breakdown[0].identiconSeed)
         assertEquals("0x88cC…6894", live.breakdown[1].label)
+    }
+
+    // -- Spec 045 US2: the sweep pick and form -------------------------------
+
+    private val usdc = SendToken(network = "chain-100", chain_id = 100, symbol = "USDC", balance = "3", decimals = 6, token_address = "0xddafbb505ad214d7b80b1f830fccc89b60fb7a83", price_usd = 1.0)
+    private val eth = SendToken(network = "chain-1", chain_id = 1, symbol = "ETH", balance = "0.01", decimals = 18, token_address = null, price_usd = 3000.0)
+
+    @Test
+    fun `the pick offers the sweep door, then ticks, dims and counts once picking`() {
+        val drawn = FlowFixtures.build(FlowState.SD1, strings).base as FlowBase.SendPick
+        val tokens = listOf(xdai, usdc, eth)
+        val plain = SendLive.pick(drawn.model, SendView(tokens = tokens), ctx())
+        assertNull(plain.selection)
+        assertNull(plain.notice)
+        assertEquals(strings.t(I18nKeys.Flows.MULTI_SEND_TITLE), plain.cta.label)
+        assertFalse(plain.cta.accent)
+
+        val unpinned = SendLive.pick(drawn.model, SendView(tokens = tokens), ctx(), sweepPicking = true)
+        assertEquals(listOf(false, false, false), unpinned.selection!!.selected)
+        assertEquals(listOf(false, false, false), unpinned.selection!!.dimmed)
+        assertNull(unpinned.notice)
+        assertEquals(strings.t(I18nKeys.Flows.MULTI_SEND_TITLE), unpinned.header.title)
+
+        val pinned = SendLive.pick(
+            drawn.model,
+            SendView(tokens = tokens, multi_chain_id = 100, multi_selected_ids = listOf(SendLive.tokenId(xdai))),
+            ctx(),
+            sweepPicking = true,
+        )
+        assertEquals(listOf(true, false, false), pinned.selection!!.selected)
+        assertEquals(listOf(false, false, true), pinned.selection!!.dimmed)
+        assertTrue(pinned.notice!!.text.contains("Gnosis"))
+        assertEquals(strings.t(I18nKeys.Flows.MULTI_SEND_CONTINUE, mapOf("n" to "1", "chain" to "Gnosis")), pinned.cta.label)
+        assertTrue(pinned.cta.accent)
+        assertEquals(strings.t(I18nKeys.Flows.SELECT_ALL_VALUABLE), pinned.selection!!.selectAll)
+    }
+
+    @Test
+    fun `the sweep form lists the picked rows with the core's amounts and one recipient`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val view = SendView(
+            stage = SendStage.EnterDetails, tokens = listOf(xdai, usdc, eth), selected_token = xdai,
+            multi_select_mode = true, multi_chain_id = 100,
+            multi_selected_ids = listOf(SendLive.tokenId(xdai), SendLive.tokenId(usdc)),
+            multi_specs = listOf(SendMultiSpecView(token_address = null, decimals = 18, amount = "0.4")),
+            recipient = recipient, can_continue = true,
+        )
+        val live = SendLive.form(drawn.model, view, FeeView(), ctx())
+        assertEquals(SendFormMode.Sweep, live.mode)
+        assertNull(live.token)
+        assertNull(live.amount)
+        assertEquals(strings.t(I18nKeys.Flows.MULTI_SEND_SUMMARY, mapOf("n" to "2", "chain" to "Gnosis")), live.sweepSummary)
+        assertEquals(listOf("XDAI", "USDC"), live.sweepRows.map { it.symbol })
+        assertEquals("0.4", live.sweepRows[0].amount)
+        assertEquals("3", live.sweepRows[1].amount)
+        assertEquals(strings.t(I18nKeys.Flows.MULTI_SEND_SAME_RECIPIENT), live.recipient!!.note)
+        assertEquals(recipient, live.recipient!!.raw)
+        assertTrue(live.ctaEnabled)
     }
 }

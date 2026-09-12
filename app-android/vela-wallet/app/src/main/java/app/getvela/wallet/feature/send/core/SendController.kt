@@ -298,6 +298,31 @@ class SendController(
 
     fun closeBatchImport() = dispatch(SendEvent.CloseBatchImport)
 
+    // -- Sweep (spec 045 US2): several tokens to one address. Whether the tick
+    // boxes are showing is the shell's flag (the core's `multi_select_mode`
+    // flips only when the selection is confirmed, as on the web and desktop).
+    private val _sweepPicking = MutableStateFlow(false)
+    val sweepPicking: StateFlow<Boolean> = _sweepPicking
+
+    fun startSweep() {
+        _sweepPicking.value = true
+        dispatch(SendEvent.SetMultiNetwork(null))
+    }
+
+    fun cancelSweep() {
+        _sweepPicking.value = false
+        dispatch(SendEvent.SetMultiNetwork(null))
+    }
+
+    fun toggleSweep(tokenId: String) = SweepPick.tap(send.value, tokenId).forEach(::dispatch)
+
+    fun selectAllValuable(visibleIds: List<String>) = SweepPick.selectAll(send.value, visibleIds).forEach(::dispatch)
+
+    fun confirmSweep() {
+        _sweepPicking.value = false
+        dispatch(SendEvent.ConfirmMultiSelection)
+    }
+
     fun continueTapped() = dispatch(SendEvent.Continue)
 
     fun back() = dispatch(SendEvent.Back)

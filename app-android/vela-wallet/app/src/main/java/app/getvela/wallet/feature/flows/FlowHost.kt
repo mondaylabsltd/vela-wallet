@@ -154,7 +154,14 @@ private fun FlowHostContent(
                 SendPickBody(
                     model = base.model,
                     onSelect = { index -> send?.onSelectToken?.invoke(index) ?: onNavigate(FlowStep.SendForm) },
-                    onCta = { if (send == null) onNavigate(FlowStep.SendMulti) },
+                    onSelectAll = { send?.onSelectAll?.invoke() },
+                    onCta = {
+                        val cta = send?.onPickCta
+                        when {
+                            cta != null -> cta()
+                            send == null -> onNavigate(FlowStep.SendMulti)
+                        }
+                    },
                 )
             }
             is FlowBase.SendForm -> FlowScaffold(header = base.model.header, onBack = onBack) {
@@ -378,6 +385,9 @@ class SendCallbacks(
     val onRemoveRecipient: (Int) -> Unit = {},
     val onRecipientAmount: (Int, String) -> Unit = { _, _ -> },
     val onRecipientAddress: (Int, String) -> Unit = { _, _ -> },
+    // Spec 045 US2 — the sweep pick: select-all and the pick's own button.
+    val onSelectAll: () -> Unit = {},
+    val onPickCta: (() -> Unit)? = null,
 )
 
 /** Spec 043 T046: the add-token sheet is the `manage_tokens` machine's when these are present. */

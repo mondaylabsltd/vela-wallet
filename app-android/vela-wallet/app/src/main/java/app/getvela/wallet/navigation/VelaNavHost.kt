@@ -401,6 +401,7 @@ fun VelaNavHost(
             val sendAlert by send.alert.collectAsStateWithLifecycle()
             val contactsBook by application.container.contacts.view.collectAsStateWithLifecycle()
             var feeSheetOpen by rememberSaveable { mutableStateOf(false) }
+            val sweepPicking by send.sweepPicking.collectAsStateWithLifecycle()
             val sendOpen = flows.top in SEND_STATES
             LaunchedEffect(sendOpen, session.address) {
                 if (sendOpen && session.address.isNotEmpty()) {
@@ -454,6 +455,8 @@ fun VelaNavHost(
                 BackHandler(enabled = sendOpen) {
                     when {
                         feeSheetOpen -> feeSheetOpen = false
+                        // Back out of the sweep pick first: the tick boxes go, the list stays.
+                        sweepPicking && sendView.stage == SendStage.SelectToken -> send.cancelSweep()
                         sendView.stage == SendStage.SelectToken || sendView.stage == SendStage.Receipt -> flows.close()
                         else -> send.back()
                     }
@@ -461,7 +464,7 @@ fun VelaNavHost(
                 val explorers = remember(networks.networks) {
                     networks.networks.associate { it.chain_id.toInt() to it.explorer_url }
                 }
-                val flowModel = remember(liveState, sendView, feeView, contactsBook, strings, currency, chainNames, explorers, session.address) {
+                val flowModel = remember(liveState, sendView, feeView, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking) {
                     val drawn = FlowFixtures.build(liveState, strings)
                     val ctx = SendLive.Context(
                         strings = strings,
@@ -472,7 +475,7 @@ fun VelaNavHost(
                         fromAddress = session.address,
                     )
                     val base = when (val base = drawn.base) {
-                        is FlowBase.SendPick -> FlowBase.SendPick(SendLive.pick(base.model, sendView, ctx))
+                        is FlowBase.SendPick -> FlowBase.SendPick(SendLive.pick(base.model, sendView, ctx, sweepPicking))
                         is FlowBase.SendForm -> FlowBase.SendForm(SendLive.form(base.model, sendView, feeView, ctx))
                         is FlowBase.SendConfirm -> FlowBase.SendConfirm(SendLive.confirm(base.model, sendView, ctx))
                         is FlowBase.SendReceipt -> FlowBase.SendReceipt(SendLive.receipt(base.model, sendView, ctx))
@@ -503,7 +506,14 @@ fun VelaNavHost(
                         }
                     },
                     send = SendCallbacks(
-                        onSelectToken = { index -> sendView.tokens.getOrNull(index)?.let { send.selectToken(SendLive.tokenId(it)) } },
+                        onSelectToken = { index ->
+                            sendView.tokens.getOrNull(index)?.let { token ->
+                                val id = SendLive.tokenId(token)
+                                if (sweepPicking) send.toggleSweep(id) else send.selectToken(id)
+                            }
+                        },
+                        onSelectAll = { send.selectAllValuable(sendView.tokens.map(SendLive::tokenId)) },
+                        onPickCta = { if (sweepPicking) send.confirmSweep() else send.startSweep() },
                         onAmountChange = { send.setAmount(it) },
                         onRecipientChange = { send.setRecipient(it.trim()) },
                         onMax = { send.tapMax() },

@@ -5,26 +5,26 @@
 
 ## Phase 0 — Wires (blocking)
 
-- [ ] T001 Bridge `batch_import` as `BatchImportCore` in `rust/crates/vela-core-uniffi/src/onboarding_bridge.rs`; regenerate Kotlin bindings; move the web wasm fingerprint (`node rust/scripts/build-web.mjs`)
-- [ ] T002 [P] `app-android/.../feature/send/core/BatchWire.kt`: `BatchEvent` (10), `BatchOperation` (3), `BatchShellResult` (6, `FileContent` text|matrix), `BatchView` (+ preview rows, recipients); numerics from Rust (`u32` → Int, `f64` → Double)
-- [ ] T003 [P] `app-android/.../feature/contacts/core/ContactsWire.kt`: + `ImportFile`, `ImportAcknowledged`, `ExportRequested`, `ExportTaken`, `AddGroupMembers`, `RemoveGroupMember`, `SetContactGroups`; view + `sections`, `import_failure`, `export`; types `ContactExportFile`, `ContactExportScope`, `ContactFileFormat`, `ContactImportFailure`, `ContactSection`
-- [ ] T004 `CoreWireDriftTest`: the batch family (events/operations/results exhaustive, view subset) and the contacts additions; `BridgeSmokeTest` opens `BatchImportCore`
-- [ ] T005 Rebuild the device .so (`./gradlew :app:assembleDebug`), install, smoke on the Xiaomi
+- [x] T001 Bridge `batch_import` as `BatchImportCore` in `rust/crates/vela-core-uniffi/src/onboarding_bridge.rs`; regenerate Kotlin bindings; move the web wasm fingerprint (`node rust/scripts/build-web.mjs`)
+- [x] T002 [P] `app-android/.../feature/send/core/BatchWire.kt`: `BatchEvent` (10), `BatchOperation` (3), `BatchShellResult` (6, `FileContent` text|matrix), `BatchView` (+ preview rows, recipients); numerics from Rust (`u32` → Int, `f64` → Double)
+- [x] T003 [P] `app-android/.../feature/contacts/core/ContactsWire.kt`: + `ImportFile`, `ImportAcknowledged`, `ExportRequested`, `ExportTaken`, `AddGroupMembers`, `RemoveGroupMember`, `SetContactGroups`; view + `sections`, `import_failure`, `export`; types `ContactExportFile`, `ContactExportScope`, `ContactFileFormat`, `ContactImportFailure`, `ContactSection`
+- [x] T004 `CoreWireDriftTest`: the batch family (events/operations/results exhaustive, view subset) and the contacts additions; `BridgeSmokeTest` opens `BatchImportCore`
+- [x] T005 Rebuild the device .so (`./gradlew :app:assembleDebug`), install, smoke on the Xiaomi
 
 ## Phase 1 — US1 Split (P1)
 
-- [ ] T006 [P] [US1] `feature/send/core/SplitRows.kt`: `amountEdited(rows, id, amount)`, `rowRemoved(rows, id)`, `rowAppended(rows)` (new id `""`), untouched rows byte-identical; `SplitRowsTest`
-- [ ] T007 [US1] `SendController`: `enterSplit()`, `splitAmount(id, text)`, `splitRemove(id)`, `splitAdd()`, `seedSplit(recipients)`, `pickContacts`-seeding via `SeedSplitRecipients`; the split form's recipient address edit through `RecipientsChanged`
-- [ ] T008 [US1] `SendLive`: split form from `SendView.recipients` (cards: ordinal, name/short address, identicon seed, amount, remove label), summary (count, total, fee), actions Add/Contacts/Import, CTA gate = `can_continue`; the confirm's `To` = `RECIPIENT_COUNT`; `SendLiveTest` split cases
-- [ ] T009 [US1] `FlowHost` + `VelaNavHost`: row callbacks (`onRecipientAmount(id)`, `onRecipientRemove(id)`, `onRecipientAction(Add|Contacts|Import)`), the mode switch from the form (single → split)
-- [ ] T010 [US1] Device: XDAI split to founder + Safe (0.001 each) → one op hash, two feed rows (SC-001); record in results.md
+- [x] T006 [P] [US1] `feature/send/core/SplitRows.kt`: `amountEdited(rows, id, amount)`, `rowRemoved(rows, id)`, `rowAppended(rows)` (new id `""`), untouched rows byte-identical; `SplitRowsTest`
+- [x] T007 [US1] `SendController`: `enterSplit()`, `splitAmount(id, text)`, `splitRemove(id)`, `splitAdd()`, `seedSplit(recipients)`, `pickContacts`-seeding via `SeedSplitRecipients`; the split form's recipient address edit through `RecipientsChanged`
+- [x] T008 [US1] `SendLive`: split form from `SendView.recipients` (cards: ordinal, name/short address, identicon seed, amount, remove label), summary (count, total, fee), actions Add/Contacts/Import, CTA gate = `can_continue`; the confirm's `To` = `RECIPIENT_COUNT`; `SendLiveTest` split cases
+- [x] T009 [US1] `FlowHost` + `VelaNavHost`: row callbacks (`onRecipientAmount(id)`, `onRecipientRemove(id)`, `onRecipientAction(Add|Contacts|Import)`), the mode switch from the form (single → split)
+- [x] T010 [US1] Device: XDAI split to founder + Safe (0.001 each) → one op hash, two feed rows (SC-001); record in results.md
 
 ## Phase 2 — US2 Sweep pick (P1)
 
-- [ ] T011 [US2] `SendController`: `sweepPicking` flag, `startSweep()`, `toggleSweep(tokenId)` (first tick → `SetMultiNetwork(chain)` then `ToggleMultiToken`), `selectAllValuable(visibleIds)`, `clearSweep()`, `confirmSweep()` → `ConfirmMultiSelection`; `SendMachineTest` sweep cases (pin, dim refused, select-all scoped)
-- [ ] T012 [US2] `SendLive`: pick in multi mode — `SendSelectionModel(selected, dimmed, selectAll)`, rows off-chain dimmed and not tappable, notice `MULTI_SEND_SUMMARY`-style chain line, CTA counts `multi_selected_ids`; sweep form (SD2D) rows from `multi_specs` + shared recipient; `SendLiveTest`
-- [ ] T013 [US2] `FlowHost` + `VelaNavHost`: pick callbacks (`onToggle`, `onSelectAll`, `onSweepContinue`), the "send several" entry from the pick
-- [ ] T014 [US2] Device: tick XDAI pins Gnosis, other chains dim, select-all scoped, clear re-pins (SC-002); sweep send test-covered with two scripted tokens
+- [x] T011 [US2] `SendController`: `sweepPicking` flag, `startSweep()`, `toggleSweep(tokenId)` (first tick → `SetMultiNetwork(chain)` then `ToggleMultiToken`), `selectAllValuable(visibleIds)`, `clearSweep()`, `confirmSweep()` → `ConfirmMultiSelection`; `SendMachineTest` sweep cases (pin, dim refused, select-all scoped)
+- [x] T012 [US2] `SendLive`: pick in multi mode — `SendSelectionModel(selected, dimmed, selectAll)`, rows off-chain dimmed and not tappable, notice `MULTI_SEND_SUMMARY`-style chain line, CTA counts `multi_selected_ids`; sweep form (SD2D) rows from `multi_specs` + shared recipient; `SendLiveTest`
+- [x] T013 [US2] `FlowHost` + `VelaNavHost`: pick callbacks (`onToggle`, `onSelectAll`, `onSweepContinue`), the "send several" entry from the pick
+- [x] T014 [US2] Device: tick XDAI pins Gnosis, other chains dim, select-all scoped, clear re-pins (SC-002); sweep send test-covered with two scripted tokens
 
 ## Phase 3 — US3 Batch import (P2)
 
