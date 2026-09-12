@@ -59,6 +59,9 @@ interface KeyValueStore {
      */
     suspend fun remove(vararg keys: String): Boolean
 
+    /** Every key the store holds — the storage page's and the erase's one honest input (spec 047 D4). */
+    suspend fun allKeys(): List<String> = emptyList()
+
     /** The keys spec 040's machines own. Names are the contract — see [VelaStore]. */
     object Keys {
         const val CONTACTS = "vela.contacts"
@@ -130,6 +133,9 @@ class VelaStore(private val context: Context) : KeyValueStore {
             keys.forEach { preferences.remove(stringPreferencesKey(it)) }
         }
     }.isSuccess
+
+    override suspend fun allKeys(): List<String> =
+        runCatching { context.velaStore.data.first().asMap().keys.map { it.name } }.getOrDefault(emptyList())
 }
 
 /**

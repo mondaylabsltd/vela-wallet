@@ -50,12 +50,17 @@ fun ThemePreference.isDarkEffective(): Boolean = when (this) {
 @Composable
 fun VelaTheme(
     darkTheme: Boolean,
+    /** Spec 047: the person's text-scale level, multiplied into the system font scale. */
+    fontScale: Float = 1f,
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) VelaColorsDark else VelaColorsLight
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val scaled = androidx.compose.ui.unit.Density(density.density, density.fontScale * fontScale)
     CompositionLocalProvider(
         LocalVelaColors provides colors,
         LocalVelaDarkTheme provides darkTheme,
+        androidx.compose.ui.platform.LocalDensity provides scaled,
     ) {
         MaterialTheme(
             colorScheme = colors.toMaterialScheme(darkTheme),

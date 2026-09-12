@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.send
 
+import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.contacts.core.ContactsView
@@ -648,7 +649,7 @@ object SendLive {
 
     private fun amount(human: String): Double = human.toDoubleOrNull() ?: 0.0
 
-    private fun fixed2(value: Double): String = BigDecimal(value).setScale(2, RoundingMode.DOWN).toPlainString()
+    private fun fixed2(value: Double): String = Formats.current.fixed2(value)
 
     fun shortAddress(address: String): String =
         if (address.length > 12) "${address.take(6)}…${address.takeLast(4)}" else address

@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import kotlinx.coroutines.flow.first
 import android.graphics.Color
 import android.os.Bundle
 import app.getvela.wallet.dev.ParallelSpaceHook
@@ -268,7 +269,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val container = (application as VelaWalletApplication).container
-        container.applySystemLocale()
+        // Spec 047: the stored language wins over the system once the preferences are read.
+        lifecycleScope.launch {
+            val prefs = container.preferences.view.first { it.loaded }
+            if (prefs.language != "system") container.applyLanguage(prefs.language) else container.applySystemLocale()
+        }
         receiptRequested()?.let { container.pendingReceipt.value = it }
         intent?.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
         when (parallelSpaceRequested()) {
@@ -317,7 +322,8 @@ class MainActivity : ComponentActivity() {
             val layoutDirection =
                 if (i18nState.direction == "rtl") LayoutDirection.Rtl else LayoutDirection.Ltr
 
-            VelaTheme(darkTheme = darkTheme) {
+            val prefs by container.preferences.view.collectAsStateWithLifecycle()
+            VelaTheme(darkTheme = darkTheme, fontScale = prefs.textScale.factor) {
                 val colors = VelaTheme.colors
 
                 // Spec 012. `coldStart` is true only for a fresh process — a

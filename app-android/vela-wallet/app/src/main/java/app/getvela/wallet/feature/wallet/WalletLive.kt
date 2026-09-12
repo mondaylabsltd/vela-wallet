@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.wallet
 
+import app.getvela.wallet.core.format.Formats
 import androidx.compose.ui.graphics.Color
 import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
@@ -133,8 +134,7 @@ object WalletLive {
         return when (days) {
             0L -> strings.t(I18nKeys.Wallet.DAY_TODAY)
             1L -> strings.t(I18nKeys.Wallet.DAY_YESTERDAY)
-            else -> DateFormat.getDateInstance(DateFormat.MEDIUM)
-                .format(Date(header.day_start_ms.toLong()))
+            else -> Formats.current.date(header.day_start_ms.toLong())
         }
     }
 
@@ -291,7 +291,7 @@ object WalletLive {
         val cents = rounded.subtract(BigDecimal(whole)).movePointRight(2).abs().toBigInteger()
         return fallback.copy(
             state = if (rounded.signum() == 0) BalanceStateKind.ZeroLive else BalanceStateKind.Normal,
-            integer = money.symbol + groupThousands(whole.toString()),
+            integer = money.symbol + Formats.current.groupDigits(whole.toString()),
             decimals = cents.toString().padStart(2, '0'),
             // The label beside the figure names the currency it is in.
             currency = money.code,
@@ -322,9 +322,7 @@ object WalletLive {
         balance = "${trimAmount(token.balance)} ${token.symbol}",
         fiat = token.price_usd?.let { price ->
             val value = money.convert(amountAsDouble(token.balance) * price)
-            AssetFiatModel.Value(
-                money.symbol + BigDecimal(value).setScale(2, RoundingMode.DOWN).toPlainString(),
-            )
+            AssetFiatModel.Value(money.symbol + Formats.current.fixed2(value))
         } ?: AssetFiatModel.NoPrice("—"),
         masked = false,
     )
@@ -371,6 +369,9 @@ object WalletLive {
         private val rate: Double?,
     ) {
         fun convert(usd: Double): Double = rate?.let { usd * it } ?: usd
+
+        /** A fiat figure in this money, drawn with the person's number format (spec 047 D2). */
+        fun fiat(usd: Double): String = symbol + Formats.current.fixed2(convert(usd))
 
         companion object {
             fun of(view: CurrencyView): Money {

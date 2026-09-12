@@ -1,0 +1,47 @@
+package app.getvela.wallet
+
+import app.getvela.wallet.core.data.Preferences
+import app.getvela.wallet.core.format.DateFormatKey
+import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.format.NumberFormatKey
+import app.getvela.wallet.core.format.TextScaleLevel
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class PreferencesTest {
+    @Test
+    fun `the web's keys, read back and written`() = runBlocking<Unit> {
+        val store = FakeStore(mapOf("vela.language" to "fr", "vela.localePrefs" to """{"numberFormat":"dot_comma","dateFormat":"iso","timeFormat":"h12","textScale":"large"}""", "vela.avatarStyle" to "initials"))
+        var published: Formats? = null
+        val prefs = Preferences(store, kotlinx.coroutines.CoroutineScope(Dispatchers.Unconfined), { Locale.US }, { published = it })
+        prefs.load()
+        val loaded = withTimeout(5_000) { prefs.view.first { it.loaded } }
+        assertEquals("fr", loaded.language)
+        assertEquals(NumberFormatKey.DotComma, loaded.numberFormat)
+        assertEquals(DateFormatKey.Iso, loaded.dateFormat)
+        assertEquals(TextScaleLevel.Large, loaded.textScale)
+        assertEquals("initials", loaded.avatarStyle)
+        assertEquals("1.234,50", published!!.fixed2(1234.5))
+
+        prefs.setNumberFormat(NumberFormatKey.Indian)
+        prefs.setLanguage("system")
+        assertEquals("system", store.values["vela.language"])
+        assertEquals(true, store.values["vela.localePrefs"]!!.contains("\"numberFormat\":\"indian\""))
+        assertEquals("12,34,567.00", published!!.fixed2(1234567.0))
+    }
+
+    @Test
+    fun `an empty store is the defaults`() = runBlocking<Unit> {
+        val prefs = Preferences(FakeStore(), kotlinx.coroutines.CoroutineScope(Dispatchers.Unconfined), { Locale.US }, {})
+        prefs.load()
+        val v = withTimeout(5_000) { prefs.view.first { it.loaded } }
+        assertEquals("system", v.language)
+        assertEquals(NumberFormatKey.Auto, v.numberFormat)
+        assertEquals("identicon", v.avatarStyle)
+    }
+}

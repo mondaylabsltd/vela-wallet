@@ -1,5 +1,6 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.core.data.Preferences
 import app.getvela.wallet.feature.send.core.SendAddNetworkOutcome
 import app.getvela.wallet.feature.wallet.core.TrustSimJudgment
 import app.getvela.wallet.feature.signing.core.SimDeltas
@@ -63,6 +64,13 @@ class AppContainer(private val app: Application) {
     }
 
     val themeRepository = ThemePreferenceRepository(app)
+
+    /** Spec 047 D1: the preferences that have no machine — the web's keys, applied app-wide. */
+    val preferences = Preferences(
+        store = VelaStore(app),
+        scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate),
+        locale = { app.resources.configuration.locales[0] ?: java.util.Locale.getDefault() },
+    ).also { it.load() }
 
     val accountStore = AccountStore(app)
 
@@ -437,6 +445,15 @@ class AppContainer(private val app: Application) {
     fun applySystemLocale() {
         i18nExecutor.execute {
             i18nRuntime.setLocale(LocaleResolver.resolve(currentLocales()))
+        }
+    }
+
+    /** Spec 047: the language preference — a tag, or `system` (the OS's locales through the resolver). */
+    fun applyLanguage(choice: String) {
+        if (choice == "system" || choice.isBlank()) return applySystemLocale()
+        i18nExecutor.execute {
+            runCatching { i18nRuntime.setLocale(LocaleResolver.resolve(listOf(java.util.Locale.forLanguageTag(choice)))) }
+                .onFailure { VelaLog.failure("i18n", "language preference failed", it) }
         }
     }
 

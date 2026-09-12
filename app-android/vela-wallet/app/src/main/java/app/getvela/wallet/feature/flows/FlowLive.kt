@@ -1,5 +1,6 @@
 package app.getvela.wallet.feature.flows
 
+import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.send.core.MtokView
 import app.getvela.wallet.core.i18n.I18nKeys
@@ -254,10 +255,9 @@ object FlowLive {
         val today = java.util.Calendar.getInstance()
         val sameDay = calendar.get(java.util.Calendar.YEAR) == today.get(java.util.Calendar.YEAR) &&
             calendar.get(java.util.Calendar.DAY_OF_YEAR) == today.get(java.util.Calendar.DAY_OF_YEAR)
-        val time = String.format(java.util.Locale.US, "%02d:%02d", calendar.get(java.util.Calendar.HOUR_OF_DAY), calendar.get(java.util.Calendar.MINUTE))
-        return if (sameDay) "${strings.t(I18nKeys.Flows.DAY_TODAY)} $time" else {
-            String.format(java.util.Locale.US, "%04d-%02d-%02d %s", calendar.get(java.util.Calendar.YEAR), calendar.get(java.util.Calendar.MONTH) + 1, calendar.get(java.util.Calendar.DAY_OF_MONTH), time)
-        }
+        // The person's date and time presets (spec 047 D2), not a fixed US shape.
+        val time = Formats.current.time(millis)
+        return if (sameDay) "${strings.t(I18nKeys.Flows.DAY_TODAY)} $time" else "${Formats.current.date(millis)} $time"
     }
 
     /**

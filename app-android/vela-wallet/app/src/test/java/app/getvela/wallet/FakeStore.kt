@@ -35,4 +35,5 @@ class FakeStore(initial: Map<String, String> = emptyMap()) : KeyValueStore {
         keys.forEach { values.remove(it) }
         return true
     }
+    override suspend fun allKeys(): List<String> = values.keys.toList()
 }
