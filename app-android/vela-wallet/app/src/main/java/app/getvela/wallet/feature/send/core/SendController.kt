@@ -274,6 +274,30 @@ class SendController(
 
     fun pickedAddress(address: String) = dispatch(SendEvent.PickedAddress(address))
 
+    // -- Split (spec 045 US1): one token to several people; the rows are the
+    // core's drafts and every edit goes back as the whole list.
+    fun enterSplit() = dispatch(SendEvent.EnterSplitMode)
+
+    fun splitAmount(id: String, amount: String) =
+        dispatch(SendEvent.RecipientsChanged(SplitRows.amountEdited(send.value.recipients, id, amount)))
+
+    fun splitAddress(id: String, address: String) =
+        dispatch(SendEvent.RecipientsChanged(SplitRows.addressEdited(send.value.recipients, id, address)))
+
+    fun splitRemove(id: String) = dispatch(SendEvent.RecipientsChanged(SplitRows.removed(send.value.recipients, id)))
+
+    fun splitAdd() = dispatch(SendEvent.RecipientsChanged(SplitRows.appended(send.value.recipients)))
+
+    /** A whole list at once — a group, a batch; ids minted by the core. */
+    fun seedSplit(recipients: List<SendRecipientDraft>) = dispatch(SendEvent.SeedSplitRecipients(recipients))
+
+    /** The picker for ONE split row: the picked address lands in that row. */
+    fun openRowPicker(id: String) = dispatch(SendEvent.OpenContactPicker(id))
+
+    fun openBatchImport() = dispatch(SendEvent.OpenBatchImport)
+
+    fun closeBatchImport() = dispatch(SendEvent.CloseBatchImport)
+
     fun continueTapped() = dispatch(SendEvent.Continue)
 
     fun back() = dispatch(SendEvent.Back)

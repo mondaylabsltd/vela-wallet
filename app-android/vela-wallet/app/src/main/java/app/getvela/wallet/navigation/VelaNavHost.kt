@@ -24,6 +24,7 @@ import app.getvela.wallet.dev.ParallelSpaceHook
 import app.getvela.wallet.feature.flows.FlowStep
 import app.getvela.wallet.feature.send.core.MtokView
 import app.getvela.wallet.feature.flows.AddTokenCallbacks
+import app.getvela.wallet.feature.flows.RecipientAction
 import app.getvela.wallet.feature.flows.SendCallbacks
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.send.core.SendAccountRef
@@ -520,6 +521,18 @@ fun VelaNavHost(
                             if (feeSheetOpen) feeSheetOpen = false
                             if (sendView.show_contact_picker) send.closeContactPicker()
                         },
+                        // Spec 045 US1: the split's rows, by index on screen → id in the core.
+                        onAddRecipient = { send.enterSplit() },
+                        onRecipientAction = { action ->
+                            when (action) {
+                                RecipientAction.Add -> send.splitAdd()
+                                RecipientAction.Contacts -> send.openContactPicker()
+                                RecipientAction.Import -> send.openBatchImport()
+                            }
+                        },
+                        onRemoveRecipient = { index -> sendView.recipients.getOrNull(index)?.let { send.splitRemove(it.id) } },
+                        onRecipientAmount = { index, text -> sendView.recipients.getOrNull(index)?.let { send.splitAmount(it.id, text) } },
+                        onRecipientAddress = { index, text -> sendView.recipients.getOrNull(index)?.let { send.splitAddress(it.id, text.trim()) } },
                         onReceiptCta = {
                             // The receipt's one button: Cancel while the ceremony is up (the
                             // core's checkpoint), Done or "keep running" otherwise.

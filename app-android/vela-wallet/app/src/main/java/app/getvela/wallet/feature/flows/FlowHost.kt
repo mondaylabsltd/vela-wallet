@@ -164,7 +164,7 @@ private fun FlowHostContent(
                     onScan = { onNavigate(FlowStep.Scan) },
                     onFee = { onNavigate(FlowStep.FeeToken) },
                     onRecipientAction = { action ->
-                        onNavigate(
+                        send?.onRecipientAction?.invoke(action) ?: onNavigate(
                             when (action) {
                                 RecipientAction.Import -> FlowStep.BatchImport
                                 RecipientAction.Contacts -> FlowStep.ContactPick
@@ -172,7 +172,10 @@ private fun FlowHostContent(
                             }
                         )
                     },
-                    onAddRecipient = { onNavigate(FlowStep.AddRecipient) },
+                    onAddRecipient = { send?.onAddRecipient?.invoke() ?: onNavigate(FlowStep.AddRecipient) },
+                    onRemoveRecipient = { index -> send?.onRemoveRecipient?.invoke(index) },
+                    onRecipientAmount = send?.let { it.onRecipientAmount },
+                    onRecipientAddress = send?.let { it.onRecipientAddress },
                     onContinue = { send?.onContinue?.invoke() ?: onNavigate(FlowStep.SendConfirm) },
                     onMax = { if (send != null) send.onMax() },
                     onDenom = { if (send != null) send.onDenom() },
@@ -369,6 +372,12 @@ class SendCallbacks(
     val onExplorer: () -> Unit,
     /** The confirm page's notice offered an action: retry after a treasury top-up or after a failed submit. */
     val onNoticeAction: () -> Unit = {},
+    // Spec 045 US1 — the split's rows. Absent, the form keeps the fixture's hops.
+    val onAddRecipient: (() -> Unit)? = null,
+    val onRecipientAction: ((RecipientAction) -> Unit)? = null,
+    val onRemoveRecipient: (Int) -> Unit = {},
+    val onRecipientAmount: (Int, String) -> Unit = { _, _ -> },
+    val onRecipientAddress: (Int, String) -> Unit = { _, _ -> },
 )
 
 /** Spec 043 T046: the add-token sheet is the `manage_tokens` machine's when these are present. */

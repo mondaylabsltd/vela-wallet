@@ -327,6 +327,11 @@ data class RecipientCardModel(
     val identiconSeed: String,
     val amount: String,
     val removeLabel: String,
+    /** The core's row id, the address and the bare amount — set on a LIVE row, which is editable in place (spec 045). */
+    val id: String = "",
+    val address: String = "",
+    val amountValue: String? = null,
+    val addressPlaceholder: String = "",
 )
 
 /** SD2d's sweep row: one token, its amount, and a Max. */

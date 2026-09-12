@@ -4,6 +4,13 @@ import app.getvela.wallet.core.i18n.I18nKeys
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.contacts.core.ContactsView
 import app.getvela.wallet.feature.flows.AmountFieldModel
+import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.flows.SendFormMode
+import app.getvela.wallet.feature.flows.BreakdownRowModel
+import app.getvela.wallet.feature.flows.SummaryLineModel
+import app.getvela.wallet.feature.flows.RecipientCardModel
+import app.getvela.wallet.feature.flows.RecipientActionModel
+import app.getvela.wallet.feature.flows.RecipientAction
 import app.getvela.wallet.feature.flows.ContactEntryModel
 import app.getvela.wallet.feature.flows.ContactPickModel
 import app.getvela.wallet.feature.flows.FactLead
@@ -133,31 +140,74 @@ object SendLive {
                     max = s.t(I18nKeys.Flows.MAX),
                 )
             },
-            amount = AmountFieldModel(
-                value = view.amount.ifEmpty { "0" },
-                fiat = if (view.amount_fiat_code != null) "${view.token_amount} $symbol" else fiatLine,
-                denomLabel = view.amount_fiat_code ?: ctx.money.code,
-                raw = view.amount,
-            ),
-            recipient = RecipientFieldModel(
-                label = s.t(I18nKeys.Flows.RECIPIENT_LABEL),
-                lines = addressLines(view.recipient),
-                // Only a real address earns an identicon (the founder's
-                // anti-poisoning rule); half-typed text gets the placeholder.
-                identiconSeed = view.recipient.takeIf { ADDRESS.matches(it) } ?: "0x0000000000000000000000000000000000000000",
-                pickLabel = s.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
-                scanLabel = null,
-                note = view.recipient_identity?.name,
-                raw = view.recipient,
-            ),
-            // Split is 045: the door stays shut on this base.
-            addRecipient = null,
-            recipients = emptyList(),
-            recipientActions = emptyList(),
-            summary = null,
+            // Spec 045 US1: the door into a split, and — once through it —
+            // the core's rows. Split mode is the core's flag; these are its
+            // drafts, edited in place and sent back as the whole list.
+            mode = if (view.split_mode) SendFormMode.Split else SendFormMode.Single,
+            addRecipient = if (view.split_mode) null else s.t(I18nKeys.Flows.ADD_RECIPIENT),
+            // Only a real address earns an identicon (the founder's anti-poisoning rule).
+            amount = if (view.split_mode) null else amountModel(view, symbol, fiatLine, ctx),
+            recipient = if (view.split_mode) null else recipientModel(view, ctx),
+            recipients = if (view.split_mode) view.recipients.mapIndexed { index, draft -> splitRow(draft, index, symbol, ctx) } else emptyList(),
+            recipientActions = if (view.split_mode) {
+                listOf(
+                    RecipientActionModel(RecipientAction.Add, s.t(I18nKeys.Flows.ADD_RECIPIENT)),
+                    RecipientActionModel(RecipientAction.Contacts, s.t(I18nKeys.Flows.FROM_CONTACTS)),
+                    RecipientActionModel(RecipientAction.Import, s.t(I18nKeys.Flows.BATCH_IMPORT)),
+                )
+            } else {
+                emptyList()
+            },
+            summary = if (view.split_mode) splitSummary(view, symbol, ctx) else null,
             fee = feeRow(fallback.fee, view.fee, view.estimating_gas || view.fee_busy || fee.busy, ctx),
             ctaEnabled = view.can_continue,
             warning = formWarning(view, ctx),
+        )
+    }
+
+    private fun amountModel(view: SendView, symbol: String, fiatLine: String, ctx: Context) = AmountFieldModel(
+        value = view.amount.ifEmpty { "0" },
+        fiat = if (view.amount_fiat_code != null) "${view.token_amount} $symbol" else fiatLine,
+        denomLabel = view.amount_fiat_code ?: ctx.money.code,
+        raw = view.amount,
+    )
+
+    private fun recipientModel(view: SendView, ctx: Context) = RecipientFieldModel(
+        label = ctx.strings.t(I18nKeys.Flows.RECIPIENT_LABEL),
+        lines = addressLines(view.recipient),
+        identiconSeed = view.recipient.takeIf { ADDRESS.matches(it) } ?: "0x0000000000000000000000000000000000000000",
+        pickLabel = ctx.strings.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
+        scanLabel = null,
+        note = view.recipient_identity?.name,
+        raw = view.recipient,
+    )
+
+    /** One of the split's rows as the card draws it: the core's draft, editable in place. */
+    internal fun splitRow(draft: SendRecipientDraft, index: Int, symbol: String, ctx: Context): RecipientCardModel {
+        val s = ctx.strings
+        return RecipientCardModel(
+            ordinal = s.t(I18nKeys.Flows.RECIPIENT_N, mapOf("n" to (index + 1).toString())),
+            name = draft.name ?: if (ADDRESS.matches(draft.address)) shortAddress(draft.address) else "",
+            identiconSeed = draft.address.takeIf { ADDRESS.matches(it) } ?: "0x0000000000000000000000000000000000000000",
+            amount = "${draft.amount} $symbol".trim(),
+            removeLabel = s.t(I18nKeys.Flows.REMOVE_RECIPIENT),
+            id = draft.id,
+            address = draft.address,
+            amountValue = draft.amount,
+            addressPlaceholder = s.t(I18nKeys.Flows.RECIPIENT_LABEL),
+        )
+    }
+
+    /** The split's total above the fee: the core's SUM of the rows (`confirm_amount`), never the single field. */
+    internal fun splitSummary(view: SendView, symbol: String, ctx: Context): SummaryLineModel {
+        val s = ctx.strings
+        val total = view.confirm_amount.toBigDecimalOrNull() ?: BigDecimal.ZERO
+        val fiat = view.selected_token?.price_usd?.let { price ->
+            " · ≈ ${ctx.money.symbol}${fixed2(ctx.money.convert(total.toDouble() * price))}"
+        } ?: ""
+        return SummaryLineModel(
+            label = "${s.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to view.recipients.size.toString()))}",
+            value = "${view.confirm_amount} $symbol".trim() + fiat,
         )
     }
 
@@ -266,17 +316,27 @@ object SendLive {
         } ?: ""
         val (feeLine, _) = feeText(view.fee, ctx)
         val recipientName = view.recipient_identity?.name
+        val split = view.split_mode && view.recipients.isNotEmpty()
         return fallback.copy(
             amount = "${view.confirm_amount} $symbol",
             subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) } ?: fiat,
             facts = listOf(
                 FactRowModel(label = s.t(I18nKeys.Flows.FROM_LABEL), value = ctx.fromName.ifBlank { shortAddress(ctx.fromAddress) }, lead = FactLead.Identicon(ctx.fromAddress)),
-                FactRowModel(
-                    label = s.t(I18nKeys.Flows.TO_LABEL),
-                    value = recipientName?.let { "$it · ${shortAddress(view.recipient)}" } ?: shortAddress(view.recipient),
-                    lead = FactLead.Identicon(view.recipient),
-                    mono = recipientName == null,
-                ),
+                // SD3b (spec 038 #D2): a split names its count here and every
+                // one of its people below, so what is signed can be read in full.
+                if (split) {
+                    FactRowModel(
+                        label = s.t(I18nKeys.Flows.TO_LABEL),
+                        value = s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to view.recipients.size.toString())),
+                    )
+                } else {
+                    FactRowModel(
+                        label = s.t(I18nKeys.Flows.TO_LABEL),
+                        value = recipientName?.let { "$it · ${shortAddress(view.recipient)}" } ?: shortAddress(view.recipient),
+                        lead = FactLead.Identicon(view.recipient),
+                        mono = recipientName == null,
+                    )
+                },
                 FactRowModel(
                     label = s.t(I18nKeys.Flows.DETAIL_CHAIN),
                     value = chain,
@@ -287,7 +347,17 @@ object SendLive {
                     value = if (view.fee != null) "~$feeLine" else s.t(I18nKeys.Flows.FEE_ESTIMATING),
                 ),
             ),
-            breakdown = emptyList(),
+            breakdown = if (split) {
+                view.recipients.map { draft ->
+                    BreakdownRowModel(
+                        identiconSeed = draft.address.takeIf { ADDRESS.matches(it) },
+                        label = draft.name ?: shortAddress(draft.address),
+                        value = "${draft.amount} $symbol".trim(),
+                    )
+                }
+            } else {
+                emptyList()
+            },
             ctaEnabled = view.can_confirm && !view.sending && view.treasury_bootstrap == null && view.tx_error == null,
             notice = confirmNotice(view, ctx),
             noticeAction = when {
@@ -359,9 +429,17 @@ object SendLive {
                 header = header,
                 stage = ReceiptStage.Confirmed,
                 title = s.t(I18nKeys.Flows.TX_CONFIRMED_TITLE, mapOf("amount" to receipt.amount, "symbol" to symbol)),
-                captions = listOf(
-                    "${s.t(I18nKeys.Flows.TO_NAME, mapOf("name" to (receipt.transfers.firstOrNull()?.to_name ?: shortAddress(view.recipient))))} · $chain",
-                ),
+                // A split's parts on the receipt as on the confirm (spec 038
+                // #D2): the count, then every person with their amount.
+                captions = if (receipt.transfers.size > 1) {
+                    listOf(
+                        "${s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to receipt.transfers.size.toString()))} · $chain",
+                    ) + receipt.transfers.map { part -> "${part.to_name ?: shortAddress(part.to)} · ${part.amount} ${part.symbol}".trim() }
+                } else {
+                    listOf(
+                        "${s.t(I18nKeys.Flows.TO_NAME, mapOf("name" to (receipt.transfers.firstOrNull()?.to_name ?: shortAddress(view.recipient))))} · $chain",
+                    )
+                },
                 hash = hash?.let { ReceiptHashModel(label = s.t(I18nKeys.Flows.TX_HASH), value = shortHash(it), copyLabel = s.t(I18nKeys.Flows.COPY_ADDRESS)) },
                 viewOnExplorer = explorer?.let { s.t(I18nKeys.Flows.VIEW_ON_EXPLORER) },
                 cta = s.t(I18nKeys.Flows.DONE),

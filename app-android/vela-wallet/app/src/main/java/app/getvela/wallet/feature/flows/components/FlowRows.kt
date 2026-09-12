@@ -1,5 +1,18 @@
 package app.getvela.wallet.feature.flows.components
 
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -261,6 +274,8 @@ fun RecipientCard(
     recipient: RecipientCardModel,
     modifier: Modifier = Modifier,
     onRemove: () -> Unit = {},
+    onAmountChange: ((String) -> Unit)? = null,
+    onAddressChange: ((String) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Row(
@@ -280,24 +295,81 @@ fun RecipientCard(
                 fontSize = VelaTextSize.xs,
                 maxLines = 1,
             )
-            Text(
-                text = recipient.name,
-                color = colors.fgBase,
-                fontFamily = VelaMonoFontFamily,
-                fontSize = VelaTextSize.base,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (onAddressChange != null) {
+                // A live row: the address is typed (or picked) in place. Local
+                // echo as the amount hero does — the machine's view lags fast typing.
+                val addressStyle = TextStyle(color = colors.fgBase, fontFamily = VelaMonoFontFamily, fontSize = VelaTextSize.base)
+                var typedAddress by remember(recipient.id) { mutableStateOf(recipient.address) }
+                val sentAddress = remember(recipient.id) { ArrayDeque<String>().apply { addLast(recipient.address) } }
+                LaunchedEffect(recipient.address) { if (recipient.address !in sentAddress) typedAddress = recipient.address }
+                BasicTextField(
+                    value = typedAddress,
+                    onValueChange = { next ->
+                        typedAddress = next
+                        sentAddress.addLast(next)
+                        if (sentAddress.size > 256) sentAddress.removeFirst()
+                        onAddressChange(next)
+                    },
+                    singleLine = true,
+                    textStyle = addressStyle,
+                    cursorBrush = SolidColor(colors.accentBase),
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "recipient-address-${recipient.ordinal}" },
+                    decorationBox = { inner ->
+                        if (typedAddress.isEmpty()) {
+                            Text(text = recipient.addressPlaceholder, style = addressStyle.copy(color = colors.fgSubtle), maxLines = 1)
+                        }
+                        inner()
+                    },
+                )
+                if (recipient.name.isNotEmpty() && recipient.name != recipient.address) {
+                    Text(text = recipient.name, color = colors.fgMuted, fontFamily = VelaFontFamily, fontSize = VelaTextSize.xs, maxLines = 1)
+                }
+            } else {
+                Text(
+                    text = recipient.name,
+                    color = colors.fgBase,
+                    fontFamily = VelaMonoFontFamily,
+                    fontSize = VelaTextSize.base,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
-        Text(
-            text = recipient.amount,
+        val amountStyle = TextStyle(
             color = colors.fgBase,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.semibold,
             fontSize = VelaTextSize.lg,
-            maxLines = 1,
+            textAlign = TextAlign.End,
         )
+        if (onAmountChange != null && recipient.amountValue != null) {
+            var typed by remember(recipient.id) { mutableStateOf(recipient.amountValue) }
+            val sent = remember(recipient.id) { ArrayDeque<String>().apply { addLast(recipient.amountValue) } }
+            LaunchedEffect(recipient.amountValue) { if (recipient.amountValue !in sent) typed = recipient.amountValue }
+            BasicTextField(
+                value = typed,
+                onValueChange = { next ->
+                    typed = next
+                    sent.addLast(next)
+                    if (sent.size > 256) sent.removeFirst()
+                    onAmountChange(next)
+                },
+                singleLine = true,
+                textStyle = amountStyle,
+                cursorBrush = SolidColor(colors.accentBase),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.width(96.dp).semantics { contentDescription = "recipient-amount-${recipient.ordinal}" },
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterEnd) {
+                        if (typed.isEmpty()) Text(text = "0", style = amountStyle.copy(color = colors.fgSubtle))
+                        inner()
+                    }
+                },
+            )
+        } else {
+            Text(text = recipient.amount, style = amountStyle, maxLines = 1)
+        }
         Spacer(modifier = Modifier.width(VelaSpacing.md))
         Icon(
             imageVector = VelaIcons.Close,

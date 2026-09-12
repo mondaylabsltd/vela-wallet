@@ -34,6 +34,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import app.getvela.wallet.feature.send.core.SendRecipientDraft
+import app.getvela.wallet.feature.flows.RecipientAction
+import app.getvela.wallet.feature.flows.SendFormMode
 import org.junit.Test
 
 /**
@@ -89,7 +92,7 @@ class SendLiveTest {
         assertEquals(recipient, live.recipient!!.raw)
         assertTrue(live.fee.value, live.fee.value.contains("0.0021") && live.fee.value.contains("xDAI"))
         assertTrue(live.ctaEnabled)
-        assertNull("split is 045", live.addRecipient)
+        assertEquals("the door into a split (045)", strings.t(I18nKeys.Flows.ADD_RECIPIENT), live.addRecipient)
         assertTrue(live.header.title.contains("XDAI"))
 
         val gated = SendLive.form(drawn.model, view.copy(can_continue = false, fee = null, estimating_gas = true), FeeView(), ctx())
@@ -240,5 +243,64 @@ class SendLiveTest {
         }
         val (_, body) = SendLive.alertText(SendAlertKind.InsufficientBalance(SendAmountWarning.NeedGas("XDAI")), strings)
         assertTrue(body.contains("XDAI"))
+    }
+
+    // -- Spec 045 US1: the split --------------------------------------------
+
+    private val splitView = SendView(
+        stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai, split_mode = true,
+        recipients = listOf(
+            SendRecipientDraft("rcpt_1", recipient, "0.001", "Founder"),
+            SendRecipientDraft("rcpt_2", me, "0.001"),
+            SendRecipientDraft("rcpt_3", "", ""),
+        ),
+        confirm_amount = "0.002", can_continue = false,
+    )
+
+    @Test
+    fun `the split form draws the core's rows, editable, and its total`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val live = SendLive.form(drawn.model, splitView, FeeView(), ctx())
+        assertEquals(SendFormMode.Split, live.mode)
+        assertNull(live.amount)
+        assertNull(live.recipient)
+        assertNull(live.addRecipient)
+        assertEquals(3, live.recipients.size)
+        assertEquals("Founder", live.recipients[0].name)
+        assertEquals("rcpt_1", live.recipients[0].id)
+        assertEquals("0.001", live.recipients[0].amountValue)
+        assertEquals("0.001 XDAI", live.recipients[0].amount)
+        assertEquals("0x88cC…6894", live.recipients[1].name)
+        assertEquals("", live.recipients[2].name)
+        assertEquals("0x0000000000000000000000000000000000000000", live.recipients[2].identiconSeed)
+        assertEquals(listOf(RecipientAction.Add, RecipientAction.Contacts, RecipientAction.Import), live.recipientActions.map { it.id })
+        assertEquals("0.002 XDAI · ≈ $0.00", live.summary?.value)
+        assertTrue(live.summary!!.label.contains("3"))
+        assertFalse(live.ctaEnabled)
+    }
+
+    @Test
+    fun `a single form offers the door into a split`() {
+        val drawn = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+        val live = SendLive.form(drawn.model, SendView(stage = SendStage.EnterDetails, tokens = listOf(xdai), selected_token = xdai), FeeView(), ctx())
+        assertEquals(SendFormMode.Single, live.mode)
+        assertEquals(strings.t(I18nKeys.Flows.ADD_RECIPIENT), live.addRecipient)
+        assertTrue(live.recipients.isEmpty())
+        assertNull(live.summary)
+    }
+
+    @Test
+    fun `the split's confirm names the count and every person below it`() {
+        val drawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+        val view = splitView.copy(stage = SendStage.Confirm, recipients = splitView.recipients.take(2), can_confirm = true, fee = fee())
+        val live = SendLive.confirm(drawn.model, view, ctx())
+        assertEquals("0.002 XDAI", live.amount)
+        val to = live.facts.first { it.label == strings.t(I18nKeys.Flows.TO_LABEL) }
+        assertEquals(strings.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to "2")), to.value)
+        assertEquals(2, live.breakdown.size)
+        assertEquals("Founder", live.breakdown[0].label)
+        assertEquals("0.001 XDAI", live.breakdown[0].value)
+        assertEquals(recipient, live.breakdown[0].identiconSeed)
+        assertEquals("0x88cC…6894", live.breakdown[1].label)
     }
 }
