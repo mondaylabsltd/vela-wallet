@@ -957,6 +957,357 @@ pub fn wrapped_native_is_the_native(chain_id: u32, address: String) -> bool {
     vela_core::app::balance_dashboard::wrapped_native_is_the_native(chain_id, &address)
 }
 
+// ---------------------------------------------------------------------------
+// The submit spine (spec 043): a draft, its hash, its signature, its wire form
+// ---------------------------------------------------------------------------
+//
+// Kotlin drives the ORDER (nonce and deployment reads, the estimate, the
+// assertion, the submit and its retry) and passes the operation back and
+// forth as a record; every byte of the operation is assembled here. No shell
+// computes a hash, a leg, a limit or a signature.
+
+/// One call of the batch: base units as a DECIMAL string, `0x`-hex data.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct UserOpCall {
+    pub to: String,
+    pub value: String,
+    pub data: String,
+}
+
+/// One founding key of the wallet — `04‖x‖y` hex — with the credential that owns it.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct WalletKeyRecord {
+    pub credential_id: String,
+    pub public_key_hex: String,
+}
+
+/// The operation as the shell carries it between steps. Gas fields are
+/// DECIMAL strings; bytes are bytes. Opaque to the shell by contract.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct UserOpDraft {
+    pub sender: String,
+    pub nonce: String,
+    pub init_code: Vec<u8>,
+    pub call_data: Vec<u8>,
+    pub verification_gas_limit: String,
+    pub call_gas_limit: String,
+    pub pre_verification_gas: String,
+    pub max_fee_per_gas: String,
+    pub max_priority_fee_per_gas: String,
+    pub paymaster_and_data: Vec<u8>,
+    pub signature: Vec<u8>,
+}
+
+/// What the batch's fee leg is: none (an estimate of the bare calls), the
+/// in-band leg (native value or a stablecoin `transfer` to the relay's
+/// recipient), or Tempo's stablecoin reimbursement to its collector.
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum UserOpFeeMode {
+    EstimateOnly,
+    InBand {
+        gas_fee_token: Option<String>,
+        amount: String,
+        recipient: String,
+    },
+    Tempo {
+        fee_token: String,
+        collector: String,
+        reimbursement: String,
+    },
+}
+
+/// The gas floors a path starts from (decimal strings).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct GasFloorsRecord {
+    pub verification: String,
+    pub call: String,
+}
+
+fn u128_of(text: &str, what: &str) -> Result<u128, CoreError> {
+    text.trim().parse::<u128>().map_err(|_| {
+        CoreError::InvalidQuantity(format!("{what} is not a base-unit integer: `{text}`"))
+    })
+}
+
+fn floors_of(record: &GasFloorsRecord) -> Result<vela_core::user_op::GasFloors, CoreError> {
+    Ok(vela_core::user_op::GasFloors {
+        verification: u128_of(&record.verification, "verification floor")?,
+        call: u128_of(&record.call, "call floor")?,
+    })
+}
+
+fn draft_of(op: &vela_core::user_op::UserOperation) -> UserOpDraft {
+    UserOpDraft {
+        sender: op.sender.clone(),
+        nonce: op.nonce.clone(),
+        init_code: op.init_code.clone(),
+        call_data: op.call_data.clone(),
+        verification_gas_limit: op.verification_gas_limit.to_string(),
+        call_gas_limit: op.call_gas_limit.to_string(),
+        pre_verification_gas: op.pre_verification_gas.to_string(),
+        max_fee_per_gas: op.max_fee_per_gas.to_string(),
+        max_priority_fee_per_gas: op.max_priority_fee_per_gas.to_string(),
+        paymaster_and_data: op.paymaster_and_data.clone(),
+        signature: op.signature.clone(),
+    }
+}
+
+fn op_of(draft: &UserOpDraft) -> Result<vela_core::user_op::UserOperation, CoreError> {
+    Ok(vela_core::user_op::UserOperation {
+        sender: draft.sender.clone(),
+        nonce: draft.nonce.clone(),
+        init_code: draft.init_code.clone(),
+        call_data: draft.call_data.clone(),
+        verification_gas_limit: u128_of(&draft.verification_gas_limit, "verificationGasLimit")?,
+        call_gas_limit: u128_of(&draft.call_gas_limit, "callGasLimit")?,
+        pre_verification_gas: u128_of(&draft.pre_verification_gas, "preVerificationGas")?,
+        max_fee_per_gas: u128_of(&draft.max_fee_per_gas, "maxFeePerGas")?,
+        max_priority_fee_per_gas: u128_of(&draft.max_priority_fee_per_gas, "maxPriorityFeePerGas")?,
+        paymaster_and_data: draft.paymaster_and_data.clone(),
+        signature: draft.signature.clone(),
+    })
+}
+
+fn inner_calls(calls: &[UserOpCall]) -> Result<Vec<vela_core::user_op::MultiSendCall>, CoreError> {
+    calls
+        .iter()
+        .map(|call| vela_core::user_op::to_multi_send_call(&call.to, &call.value, &call.data))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(Into::into)
+}
+
+fn batch_for(
+    inner: &[vela_core::user_op::MultiSendCall],
+    fee: &UserOpFeeMode,
+) -> Result<Vec<vela_core::user_op::MultiSendCall>, CoreError> {
+    Ok(match fee {
+        UserOpFeeMode::EstimateOnly => inner.to_vec(),
+        UserOpFeeMode::InBand {
+            gas_fee_token,
+            amount,
+            recipient,
+        } => vela_core::user_op::in_band_batch(
+            inner,
+            gas_fee_token.as_deref(),
+            recipient,
+            u128_of(amount, "fee amount")?,
+        )?,
+        UserOpFeeMode::Tempo {
+            fee_token,
+            collector,
+            reimbursement,
+        } => vela_core::user_op::tempo_batch(
+            inner,
+            fee_token,
+            collector,
+            u128_of(reimbursement, "reimbursement")?,
+        )?,
+    })
+}
+
+/// The floors for a chain and a deployment state: the in-band pair, or
+/// Tempo's (its call floor grows with the sub-call count — the person's
+/// calls plus the reimbursement leg).
+#[uniffi::export]
+pub fn user_op_floors(chain_id: u32, deployed: bool, sub_calls: u32) -> GasFloorsRecord {
+    let floors = if vela_core::app::fee_policy::is_tempo_chain(chain_id) {
+        vela_core::user_op::GasFloors::tempo(
+            deployed,
+            vela_core::app::fee_policy::tempo_call_gas_limit(sub_calls),
+        )
+    } else {
+        vela_core::user_op::GasFloors::in_band(deployed)
+    };
+    GasFloorsRecord {
+        verification: floors.verification.to_string(),
+        call: floors.call.to_string(),
+    }
+}
+
+/// A draft operation: the batch (calls + the fee leg `fee` names) as MultiSend
+/// calldata, the floors as limits, the estimation dummy as signature, and —
+/// for an undeployed account — the initCode for its founding keys.
+#[uniffi::export]
+pub fn user_op_draft(
+    sender: String,
+    nonce: String,
+    deployed: bool,
+    key_hexes: Vec<String>,
+    calls: Vec<UserOpCall>,
+    fee: UserOpFeeMode,
+    floors: GasFloorsRecord,
+) -> Result<UserOpDraft, CoreError> {
+    let init_code = if deployed {
+        Vec::new()
+    } else {
+        vela_core::user_op::build_init_code_for_keys(&key_hexes)?
+    };
+    let inner = inner_calls(&calls)?;
+    let batch = batch_for(&inner, &fee)?;
+    let op = vela_core::user_op::draft_operation(
+        &sender,
+        &nonce,
+        init_code,
+        &batch,
+        floors_of(&floors)?,
+    )?;
+    Ok(draft_of(&op))
+}
+
+/// The relay's raw estimate onto the draft: ×1.5 on the two limits, each held
+/// to its floor, +10,000 on preVerificationGas.
+#[uniffi::export]
+pub fn user_op_apply_estimate(
+    draft: UserOpDraft,
+    verification_gas_limit: String,
+    call_gas_limit: String,
+    pre_verification_gas: String,
+    floors: GasFloorsRecord,
+) -> Result<UserOpDraft, CoreError> {
+    let mut op = op_of(&draft)?;
+    vela_core::user_op::apply_estimate(
+        &mut op,
+        vela_core::user_op::GasEstimate {
+            verification_gas_limit: u128_of(&verification_gas_limit, "verificationGasLimit")?,
+            call_gas_limit: u128_of(&call_gas_limit, "callGasLimit")?,
+            pre_verification_gas: u128_of(&pre_verification_gas, "preVerificationGas")?,
+        },
+        floors_of(&floors)?,
+    );
+    Ok(draft_of(&op))
+}
+
+/// The batch with the SETTLED fee leg onto a draft whose gas the estimate
+/// already sized: only the calldata changes.
+#[uniffi::export]
+pub fn user_op_with_calls(
+    draft: UserOpDraft,
+    calls: Vec<UserOpCall>,
+    fee: UserOpFeeMode,
+) -> Result<UserOpDraft, CoreError> {
+    let mut op = op_of(&draft)?;
+    let inner = inner_calls(&calls)?;
+    vela_core::user_op::replace_calls(&mut op, &batch_for(&inner, &fee)?)?;
+    Ok(draft_of(&op))
+}
+
+/// The SafeOp EIP-712 hash — the challenge the passkey signs.
+#[uniffi::export]
+pub fn user_op_safe_op_hash(draft: UserOpDraft, chain_id: u32) -> Result<Vec<u8>, CoreError> {
+    Ok(vela_core::user_op::calculate_safe_op_hash(
+        &op_of(&draft)?,
+        u64::from(chain_id),
+    )?)
+}
+
+/// The assertion as the operation's signature: compatibility-checked, DER →
+/// raw low-S, the client-data fields cut out, the verifier named by the
+/// credential that signed. A credential outside `keys` is an error.
+#[uniffi::export]
+pub fn user_op_sign(
+    draft: UserOpDraft,
+    assertion: WebAuthnAssertion,
+    credential_id: String,
+    keys: Vec<WalletKeyRecord>,
+) -> Result<UserOpDraft, CoreError> {
+    let keys: Vec<vela_core::user_op::WalletKey> = keys
+        .into_iter()
+        .map(|key| vela_core::user_op::WalletKey {
+            credential_id: key.credential_id,
+            public_key_hex: key.public_key_hex,
+        })
+        .collect();
+    let mut op = op_of(&draft)?;
+    op.signature = vela_core::user_op::envelope_signature(
+        &assertion.authenticator_data,
+        &assertion.client_data_json,
+        &assertion.signature_der,
+        &credential_id,
+        &keys,
+    )?;
+    Ok(draft_of(&op))
+}
+
+/// The v0.7 JSON-RPC dictionary the relay takes (`factory`/`factoryData`
+/// split out), plus Tempo's `feeToken` when given.
+#[uniffi::export]
+pub fn user_op_relay_json(
+    draft: UserOpDraft,
+    fee_token: Option<String>,
+) -> Result<String, CoreError> {
+    let op = op_of(&draft)?;
+    let extra: Vec<(&str, &str)> = fee_token
+        .as_deref()
+        .map(|token| vec![("feeToken", token)])
+        .unwrap_or_default();
+    Ok(vela_core::user_op::user_op_to_json(&op, &extra).to_string())
+}
+
+/// Whether any call is more than a plain transfer — then a failed estimate
+/// must refuse rather than submit with the defaults.
+#[uniffi::export]
+pub fn user_op_has_contract_call(calls: Vec<UserOpCall>) -> Result<bool, CoreError> {
+    Ok(vela_core::user_op::batch_has_contract_call(&inner_calls(
+        &calls,
+    )?))
+}
+
+/// A displayed quote is usable when it is positive and names a real address.
+#[uniffi::export]
+pub fn quoted_fee_usable(amount: String, recipient: String) -> bool {
+    amount
+        .trim()
+        .parse::<u128>()
+        .is_ok_and(|amount| vela_core::user_op::quoted_fee_usable(amount, &recipient))
+}
+
+/// The relay's `[existingHash:0x…]` marker: a previous operation is still
+/// pending, and this is its hash to poll instead of failing.
+#[uniffi::export]
+pub fn parse_existing_user_op_hash(message: String) -> Option<String> {
+    vela_core::user_op::parse_existing_user_op_hash(&message)
+}
+
+/// `parseBundlerUnderfunded`: the relay saying the per-Safe gas account is short.
+#[uniffi::export]
+pub fn is_bundler_underfunded(message: String) -> bool {
+    vela_core::user_op::is_bundler_underfunded(&message)
+}
+
+/// Why the relay refused a submit, on the axis the send machine speaks.
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum RelayRejection {
+    RelayerUnavailable,
+    BundlerUnderfunded,
+    Other { message: String },
+}
+
+/// The relay's sentence, classified the way `classifySubmit` does.
+#[uniffi::export]
+pub fn classify_relay_rejection(message: String) -> RelayRejection {
+    match vela_core::user_op::classify_relay_rejection(&message) {
+        vela_core::user_op::RelayRejection::RelayerUnavailable => {
+            RelayRejection::RelayerUnavailable
+        }
+        vela_core::user_op::RelayRejection::BundlerUnderfunded => {
+            RelayRejection::BundlerUnderfunded
+        }
+        vela_core::user_op::RelayRejection::Other(message) => RelayRejection::Other { message },
+    }
+}
+
+/// `parseBundlerError`: the JSON-RPC `error` member as one sentence.
+#[uniffi::export]
+pub fn relay_error_message(error_json: String) -> String {
+    vela_core::user_op::relay_error_message(&error_json)
+}
+
+/// The EntryPoint every Vela operation is submitted against.
+#[uniffi::export]
+pub fn entry_point_address() -> String {
+    vela_core::safe::ENTRY_POINT.to_owned()
+}
+
 /// The source ladder and its sanity band: a DEX price that disagrees with
 /// Chainlink by too much loses to Chainlink.
 #[uniffi::export]

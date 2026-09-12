@@ -145,6 +145,37 @@ class RpcPool(
         }
     }
 
+    /**
+     * The REST base of the bundler this chain's pool would submit to — the
+     * relay's `/v1/treasury` and `/v1/account` must be asked of the SAME relay
+     * (spec 043, the pool's invariant ③). `null` when the chain names none;
+     * the caller falls back to the built-in service.
+     */
+    suspend fun bundlerBase(chainId: Int): String? = ask(chainId) { callId, now ->
+        RpcEvent.BundlerBaseRequested(call_id = callId, chain_id = chainId, now_ms = now)
+    }.let { (it as? RpcCallVerdict.BundlerBase)?.base_url }
+
+    /**
+     * The RPC URL this chain's pool would reach for first — it rides
+     * `X-Rpc-Url` on the relay's REST calls so the relay reads the chain
+     * through the endpoint this wallet trusts (invariant ②).
+     */
+    suspend fun bestRpcUrl(chainId: Int): String? = ask(chainId) { callId, now ->
+        RpcEvent.BestRpcUrlRequested(call_id = callId, chain_id = chainId, now_ms = now)
+    }.let { (it as? RpcCallVerdict.BestRpcUrl)?.url }
+
+    private suspend fun ask(chainId: Int, event: (String, Double) -> RpcEvent): RpcCallVerdict {
+        val callId = "q${nextId.incrementAndGet()}"
+        val waiting = Waiting(RpcPayload("", emptyList()))
+        calls[callId] = waiting
+        try {
+            host.dispatch(event(callId, System.currentTimeMillis().toDouble()), RpcEvent.serializer())
+            return waiting.settled.await()
+        } finally {
+            calls.remove(callId)
+        }
+    }
+
     /** Forget every endpoint verdict — the settings screen's "clear caches". */
     fun invalidateAll() = host.dispatch(RpcEvent.InvalidateAll, RpcEvent.serializer())
 

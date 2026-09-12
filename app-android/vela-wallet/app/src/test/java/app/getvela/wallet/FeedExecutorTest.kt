@@ -230,4 +230,77 @@ class FeedExecutorTest {
         assertEquals(200, loaded.records.size)
         assertEquals("tx-250", loaded.records.first().id)
     }
+
+    // -- the send path's writes (spec 043) --------------------------------------
+
+    private fun pendingRow(id: String, hash: String = "0xop$id", timestamp: Double = 1_756_900_000.0) = JSONObject()
+        .put("id", id)
+        .put("userOpHash", hash)
+        .put("txHash", "")
+        .put("from", "0x9F3c000000000000000000000000000000000000")
+        .put("to", "0x1111111111111111111111111111111111111111")
+        .put("value", "1")
+        .put("symbol", "XDAI")
+        .put("decimals", 18)
+        .put("chainId", 100)
+        .put("timestamp", timestamp)
+        .put("type", "send")
+
+    /** A submitted send is a row the feed reads as pending — before any tracking. */
+    @Test
+    fun `a written send row is a pending row the feed reads`() = runBlocking {
+        val feed = executor()
+        assertTrue(feed.writeRecords(listOf(pendingRow("s1"))))
+
+        val loaded = feed.perform(FeedOperation.ReadTxStore("0x9F3c000000000000000000000000000000000000", 1)) as FeedShellResult.StoreLoaded
+        assertEquals(1, loaded.records.size)
+        assertEquals(FeedTxStatus.Pending, loaded.records.single().status)
+        assertEquals(FeedTxKind.Send, loaded.records.single().kind)
+        assertEquals(listOf("s1"), feed.pendingRecords().map { it.optString("id") })
+    }
+
+    /** A retried submit re-persists the same id: one row, not two. */
+    @Test
+    fun `writing the same id twice keeps one row`() = runBlocking {
+        val feed = executor()
+        feed.writeRecords(listOf(pendingRow("s1")))
+        feed.writeRecords(listOf(pendingRow("s1", hash = "0xop-second")))
+
+        val rows = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS))
+        assertEquals(1, rows.length())
+        assertEquals("0xop-second", rows.getJSONObject(0).optString("userOpHash"))
+    }
+
+    /** The tracker's verdict flips the row and fills the hash; other rows are untouched. */
+    @Test
+    fun `a patch flips exactly the named rows`() = runBlocking {
+        val feed = executor()
+        feed.writeRecords(listOf(pendingRow("s1"), pendingRow("s2")))
+        assertTrue(feed.patchRecords(listOf("s1"), "confirmed", "0xtx1"))
+
+        val byId = JSONArray(store.values.getValue(KeyValueStore.Keys.TRANSACTIONS)).let { array ->
+            (0 until array.length()).associate { array.getJSONObject(it).optString("id") to array.getJSONObject(it) }
+        }
+        assertEquals("confirmed", byId.getValue("s1").optString("status"))
+        assertEquals("0xtx1", byId.getValue("s1").optString("txHash"))
+        assertEquals("", byId.getValue("s2").optString("status"))
+        assertEquals(listOf("s2"), feed.pendingRecords().map { it.optString("id") })
+    }
+
+    /** A received transfer is never "pending" to the tracker: the scan wrote it confirmed. */
+    @Test
+    fun `pending rows are the submitted kinds without a verdict`() = runBlocking {
+        write(storedRow(id = "r1", type = "receive", status = "confirmed"))
+        val feed = executor()
+        feed.writeRecords(listOf(pendingRow("s1")))
+        feed.patchRecords(listOf("s1"), "failed", null)
+        assertTrue(feed.pendingRecords().isEmpty())
+    }
+
+    /** Storage that refuses is a refused write — the core must not hear `records_persisted`. */
+    @Test
+    fun `a refused write says so`() = runBlocking {
+        store.refuseWrites = true
+        assertTrue(!executor().writeRecords(listOf(pendingRow("s1"))))
+    }
 }

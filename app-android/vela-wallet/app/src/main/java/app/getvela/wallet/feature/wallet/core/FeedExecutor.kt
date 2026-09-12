@@ -217,6 +217,78 @@ class FeedExecutor(
     }
 
     /**
+     * Write rows the SEND path produced — at submit, before tracking begins
+     * (spec 043, the core's ordering invariant ⑥). Same lock, same camelCase
+     * shape, same cap as the incoming scan. A row whose id is already stored
+     * is REPLACED, not duplicated: a retried submit re-persists the same
+     * record, and the feed must show one row for one operation.
+     *
+     * Answers whether the store took the write; the core hears
+     * `records_persisted` only on `true`, so a storage fault stops the
+     * tracker from following a row nobody can see.
+     */
+    suspend fun writeRecords(rows: List<JSONObject>): Boolean = writeLock.withLock {
+        if (rows.isEmpty()) return@withLock true
+        val raw = store.read(KeyValueStore.Keys.TRANSACTIONS)
+        val existing = raw?.let { runCatching { JSONArray(it) }.getOrNull() } ?: JSONArray()
+        val incomingIds = rows.mapNotNull { it.optString("id").ifBlank { null } }.toSet()
+
+        val merged = ArrayList<JSONObject>(rows)
+        for (index in 0 until existing.length()) {
+            val row = existing.optJSONObject(index) ?: continue
+            if (row.optString("id") !in incomingIds) merged.add(row)
+        }
+        merged.sortByDescending { it.optDouble("timestamp", 0.0) }
+
+        val capped = JSONArray()
+        merged.take(TX_CAP).forEach(capped::put)
+        val ok = store.write(KeyValueStore.Keys.TRANSACTIONS, capped.toString())
+        VelaLog.event("feed.write", if (ok) "stored" else "refused", "rows" to rows.size)
+        ok
+    }
+
+    /**
+     * The tracker's verdict onto the rows it followed: `status` becomes
+     * `confirmed` or `failed`, `txHash` fills in when the relay named one.
+     * Rows not named are untouched; a patch for an id nobody stored is a
+     * no-op, not an error — a row may have been deleted while in flight.
+     */
+    suspend fun patchRecords(ids: List<String>, status: String, txHash: String?): Boolean =
+        writeLock.withLock {
+            if (ids.isEmpty()) return@withLock true
+            val raw = store.read(KeyValueStore.Keys.TRANSACTIONS) ?: return@withLock true
+            val array = runCatching { JSONArray(raw) }.getOrNull() ?: return@withLock true
+            val wanted = ids.toSet()
+            var touched = false
+            for (index in 0 until array.length()) {
+                val row = array.optJSONObject(index) ?: continue
+                if (row.optString("id") !in wanted) continue
+                row.put("status", status)
+                if (!txHash.isNullOrBlank()) row.put("txHash", txHash)
+                touched = true
+            }
+            if (!touched) return@withLock true
+            store.write(KeyValueStore.Keys.TRANSACTIONS, array.toString())
+        }
+
+    /**
+     * The rows the tracker must still follow after a restart: no terminal
+     * status, and of a kind that was submitted from here (`send`, `dapp_tx`).
+     * A received transfer is never "pending" in this sense — the scan wrote
+     * it confirmed.
+     */
+    suspend fun pendingRecords(): List<JSONObject> {
+        val raw = store.read(KeyValueStore.Keys.TRANSACTIONS) ?: return emptyList()
+        val array = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+        return (0 until array.length()).mapNotNull { index ->
+            val row = array.optJSONObject(index) ?: return@mapNotNull null
+            val terminal = row.optString("status") in setOf("confirmed", "failed")
+            val tracked = row.optString("type") in setOf("send", "dapp_tx", "dappTx")
+            row.takeIf { !terminal && tracked && it.optString("userOpHash").isNotBlank() }
+        }
+    }
+
+    /**
      * Local midnight for an epoch-seconds timestamp, in milliseconds.
      *
      * The device's calendar, not arithmetic: `timestamp - timestamp % 86400`

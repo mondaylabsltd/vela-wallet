@@ -3,6 +3,7 @@ package app.getvela.wallet
 import android.app.Application
 import app.getvela.wallet.core.data.ThemePreferenceRepository
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.dev.ParallelSpaceBinding
 import app.getvela.wallet.core.i18n.I18nRuntime
 import app.getvela.wallet.core.i18n.LocaleResolver
 import app.getvela.wallet.feature.contacts.core.ContactsController
@@ -216,6 +217,9 @@ class VelaWalletApplication : Application() {
         // First, so a crash in composition is itself on the record. Debug
         // builds only; see VelaLog.
         VelaLog.install(this)
+        // The parallel space's door, if this build type has one (spec 043,
+        // research D2): a release build installs nothing here.
+        ParallelSpaceBinding.install(this)
         container = AppContainer(this)
         container.start()
     }

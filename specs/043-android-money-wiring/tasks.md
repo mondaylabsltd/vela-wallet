@@ -64,7 +64,7 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
 
 ## Phase 1 — Foundational: transport, store, assembly, seams
 
-- [ ] **T010** `…/feature/send/core/RelayClient.kt` — bundler JSON-RPC
+- [X] **T010** `…/feature/send/core/RelayClient.kt` — bundler JSON-RPC
       (`eth_estimateUserOperationGas`, `eth_sendUserOperation`,
       `eth_getUserOperationReceipt`, `eth_getUserOperationStatus`,
       `pimlico_getUserOperationGasPrice`, `vela_getInBandGasQuote`) and REST
@@ -72,17 +72,17 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
       `GET /v1/account/{chain}/{safe}`) through `RpcPool` against the
       chain's bundler endpoint (`NetworkEndpointSource.kt:54`); the 8-second
       in-band quote cache with `clear()` (D8). Uses `VelaHttp` only.
-- [ ] **T011** [P] `…test/RelayClientTest.kt` with `…test/FakeRelay.kt` — a
+- [X] **T011** [P] `…test/RelayClientTest.kt` with `…test/FakeRelay.kt` — a
       scripted transport: each method's happy answer, a 404 treasury, a
       rejection message, a rate-limit; the cache's TTL.
-- [ ] **T012** `…/feature/wallet/core/FeedExecutor.kt` — `writeRecords(rows)`
+- [X] **T012** `…/feature/wallet/core/FeedExecutor.kt` — `writeRecords(rows)`
       and `patchRecords(ids, status, txHash)` under `writeLock`, camelCase
       shape of `:135–172`, de-dupe by id, `TX_CAP`; `pendingRecords()` for
       `load_pending_txs` (no terminal status, `type ∈ {send, dapp_tx}`) (D4).
-- [ ] **T013** [P] `…test/FeedExecutorTest.kt` — a pending row written then
+- [X] **T013** [P] `…test/FeedExecutorTest.kt` — a pending row written then
       read by the feed; a patch flips it; the cap holds; a second write with
       the same id is one row.
-- [ ] **T014** `rust/crates/vela-core/src/user_op.rs` — move the pure half of
+- [X] **T014** `rust/crates/vela-core/src/user_op.rs` — move the pure half of
       `app-desktop/vela-wallet/src/executor/user_op.rs` (D3): the in-band
       and Tempo legs, `fallback_fee`, `key_set_of`, `to_multi_send_call`,
       the draft (nonce/gas fields, init code, dummy signature for estimate),
@@ -90,17 +90,17 @@ screenshot and the `uiautomator` text are in the scratchpad and quoted in
       code (`cargo test` in `app-desktop/vela-wallet` stays green) — or, if
       its churn is too large for this spec, leave the desktop copy and
       record the two copies in `results.md` as owed.
-- [ ] **T015** `rust/crates/vela-core-uniffi/src/lib.rs` — export
+- [X] **T015** `rust/crates/vela-core-uniffi/src/lib.rs` — export
       `user_op_draft(...)`, `user_op_finalize(...)`,
       `classify_relay_rejection(...)` per `contracts/shell-operations.md`;
       `cargo fmt`, regenerate bindings; a `rust/crates/vela-core/tests/`
       case that a draft's SafeOp hash equals the desktop's for the same
       inputs (a golden from 032's SC-303 send).
-- [ ] **T016** `…/feature/send/core/UserOpSigner.kt` — the seam (D9):
+- [X] **T016** `…/feature/send/core/UserOpSigner.kt` — the seam (D9):
       `suspend fun sign(challenge: ByteArray, credentialIds: List<String>,
       method: KeyMethod): Assertion`; default = `PasskeyExecutor.assert`
       with rpId `getvela.app`; cancellable; exactly one call per attempt.
-- [ ] **T017** `…/dev/ParallelSpaceHook.kt` (main source set) — the seam the
+- [X] **T017** `…/dev/ParallelSpaceHook.kt` (main source set) — the seam the
       app calls: `active(): Boolean`, `signer(): UserOpSigner?`,
       `fixtureAccount(): FixtureAccount?`, `badge: @Composable`; release
       implementation returns false/null/nothing.

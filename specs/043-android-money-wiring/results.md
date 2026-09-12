@@ -43,6 +43,42 @@ the Xiaomi; home reads `觉得九点半 | 0x7687…D141 | 总余额 · GBP | £3
 Polygon 0.152784 POL £0.01 | 钱包 | 通讯录 | 探索 | 设置`. Same figure as before
 the bridge grew; no exception in logcat.
 
+### Phase 1 — foundational: transport, store, assembly, seams (T010–T017)
+
+- **`RelayClient`** (T010): bundler JSON-RPC through the pool with
+  `RpcKind.Bundler`, REST against the base THE POOL names (`RpcPool.bundlerBase`
+  and `bestRpcUrl` added — the core already answered `BundlerBaseRequested`;
+  Android had never asked), `X-Rpc-Url` riding every REST call, the web's two
+  caches (quotes 8 s, account info 30 s), the submit retry loop. Ten tests
+  (T011) on a scripted port: 404 = uncovered, busy = retried, refusal = not,
+  a hashless receipt = pending, the caches' clocks.
+- **The feed's writes** (T012): `writeRecords` (replace-by-id, same lock, same
+  cap), `patchRecords`, `pendingRecords` (submitted kinds without a verdict).
+  Five tests (T013), including the refused-store answer.
+- **The submit spine's pure half into the core** (T014): `to_multi_send_call`,
+  `quoted_fee_usable`, `GasFloors` (in-band / Tempo), `in_band_batch`,
+  `tempo_batch`, `draft_operation`, `apply_estimate`, `replace_calls`,
+  `envelope_signature`, `classify_relay_rejection`, `relay_error_message`,
+  `is_bundler_underfunded` — 1,090 lines of `user_op.rs` become ~1,430, six
+  new tests including the fixture-signed envelope. **The desktop was NOT
+  re-pointed**: its `executor/user_op.rs` keeps a twin of these functions
+  (~250 lines); re-pointing it means a desktop build this session did not
+  run. Owed, named below.
+- **uniffi** (T015): `UserOpDraft` / `UserOpCall` / `WalletKeyRecord` /
+  `GasFloorsRecord` records, `UserOpFeeMode` and `RelayRejection` enums, and
+  `user_op_floors`, `user_op_draft`, `user_op_apply_estimate`,
+  `user_op_with_calls`, `user_op_safe_op_hash`, `user_op_sign`,
+  `user_op_relay_json`, `user_op_has_contract_call`, `quoted_fee_usable`,
+  `parse_existing_user_op_hash`, `is_bundler_underfunded`,
+  `classify_relay_rejection`, `relay_error_message`, `entry_point_address`.
+  No Kotlin computes a hash, a leg, a limit or a signature.
+- **Seams** (T016, T017): `UserOpSigner` (default = onboarding's
+  `PasskeyExecutor.assert`, rpId `getvela.app`); `ParallelSpaceHook` in main
+  with a `ParallelSpaceBinding` per build type — release installs nothing.
+
+Gates at the checkpoint: `cargo test` (core `user_op`: 27 ok), clippy clean
+for both crates, drift 53 / feed 17 / relay 10 tests green.
+
 ## Success criteria
 
 | SC | Claim | Verified | Evidence |
@@ -60,4 +96,4 @@ the bridge grew; no exception in logcat.
 
 ## Owed
 
-(filled at close)
+- **The desktop's twin of the submit spine** (T014): `app-desktop/vela-wallet/src/executor/user_op.rs` still carries `to_multi_send_call`, `envelope`, `classify_rejection`, `usable` and the draft/padding order in its own words; `relay.rs` keeps `parse_bundler_error` / `is_bundler_underfunded`. Re-point them at `vela_core::user_op` in a desktop session (it needs a desktop build to prove nothing moved).
