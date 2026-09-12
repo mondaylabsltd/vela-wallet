@@ -1,6 +1,7 @@
 package app.getvela.wallet.feature.onboarding.core
 
 import android.content.Context
+import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.core.data.KeyValueStore
 import app.getvela.wallet.core.data.VelaStore
 import org.json.JSONArray
@@ -55,6 +56,9 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
             }
         }
         if (!replaced) merged.put(account)
+        // ANDROID-8 (docs/KNOWN-BUGS.md): a record vanished from this list once
+        // and nothing said so. Every upsert now leaves a count behind.
+        VelaLog.event("accounts", "upsert", "before" to accounts.length(), "after" to merged.length(), "replaced" to replaced)
         writeRaw(KEY_ACCOUNTS, merged.toString())
     }
 
@@ -163,8 +167,17 @@ class AccountStore internal constructor(private val store: KeyValueStore) {
      */
     private suspend fun readList(key: String): JSONArray {
         val raw = readRaw(key) ?: return JSONArray()
-        return runCatching { JSONArray(raw) }.getOrElse { JSONArray() }
+        // Spec 048 (ANDROID-8): a value that is there but cannot be read is NOT an
+        // empty list. Read as empty, the next upsert merged with nothing and wrote
+        // the list back without the accounts it could not see. It throws instead;
+        // the session answers `accounts_unavailable`, and nothing is written.
+        return runCatching { JSONArray(raw) }.getOrElse { error ->
+            throw IllegalStateException("stored list under $key is unreadable (${raw.length} chars)", error)
+        }
     }
+
+    /** The stored account list as written — for guards that must know whether the store holds records at all. */
+    suspend fun rawAccounts(): String? = readRaw(KEY_ACCOUNTS)
 
     private companion object {
         const val KEY_ACCOUNTS = "vela.accounts"

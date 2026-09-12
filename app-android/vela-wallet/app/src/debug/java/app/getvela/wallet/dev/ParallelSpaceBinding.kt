@@ -23,6 +23,7 @@ import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -111,7 +112,26 @@ private class DebugParallelSpace(private val app: Application) : ParallelSpacePr
         // Persist first: the session core's add_account saves only the active
         // index (it is the onboarding machines that write records), and a
         // relaunch restores from the store.
-        scope.launch { container.session.addAccount(account) }
+        //
+        // ANDROID-8 (docs/KNOWN-BUGS.md): the device's own record vanished
+        // once around this add. So the add is refused — the space not entered —
+        // when the stored list cannot be read, or when the session shows fewer
+        // records than the store holds: an upsert over a list the session
+        // cannot see is how a transient read failure becomes a permanent loss.
+        scope.launch {
+            val stored = runCatching { container.accountStore.loadAccounts().length() }.getOrElse { -1 }
+            val settled = container.session.view.first { !it.loading }
+            if (stored < 0 || settled.accounts.size < stored) {
+                prefs.edit().putBoolean(KEY_ACTIVE, false).apply()
+                VelaLog.event("parallel", "enter refused", "stored" to stored, "seen" to settled.accounts.size)
+                return@launch
+            }
+            runCatching { container.session.addAccount(account) }
+                .onFailure {
+                    prefs.edit().putBoolean(KEY_ACTIVE, false).apply()
+                    VelaLog.failure("parallel", "enter refused: the record could not be written", it)
+                }
+        }
     }
 
     override fun leave() {
