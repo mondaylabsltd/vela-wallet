@@ -911,10 +911,12 @@ pub struct NativePriceChoice {
 pub fn best_native_dex_price(groups: Vec<NativeQuoteGroup>) -> Option<f64> {
     let groups: Vec<vela_core::app::balance_dashboard::NativeQuoteGroup> = groups
         .into_iter()
-        .map(|group| vela_core::app::balance_dashboard::NativeQuoteGroup {
-            amounts_out: group.amounts_out,
-            quote_decimals: group.quote_decimals,
-        })
+        .map(
+            |group| vela_core::app::balance_dashboard::NativeQuoteGroup {
+                amounts_out: group.amounts_out,
+                quote_decimals: group.quote_decimals,
+            },
+        )
         .collect();
     vela_core::app::balance_dashboard::best_native_dex_price(&groups)
 }
@@ -935,12 +937,24 @@ pub fn best_native_dex_price(groups: Vec<NativeQuoteGroup>) -> Option<f64> {
 pub fn first_grouped_quote_price(groups: Vec<NativeQuoteGroup>) -> Option<f64> {
     let groups: Vec<vela_core::app::balance_dashboard::NativeQuoteGroup> = groups
         .into_iter()
-        .map(|group| vela_core::app::balance_dashboard::NativeQuoteGroup {
-            amounts_out: group.amounts_out,
-            quote_decimals: group.quote_decimals,
-        })
+        .map(
+            |group| vela_core::app::balance_dashboard::NativeQuoteGroup {
+                amounts_out: group.amounts_out,
+                quote_decimals: group.quote_decimals,
+            },
+        )
         .collect();
     vela_core::app::balance_dashboard::first_grouped_quote_price(&groups)
+}
+
+/// Whether the chain's "wrapped" native at `address` is the native itself
+/// (spec 038, the founder's Celo report): on Celo the GoldToken IS the coin,
+/// so a balance walk that lists both counts one holding twice — CELO 6.96 and
+/// WCELO 6.96. Every shell asks here before adding the wrapped slot; the rule
+/// lives in the core so four shells cannot drift on which chains it names.
+#[uniffi::export]
+pub fn wrapped_native_is_the_native(chain_id: u32, address: String) -> bool {
+    vela_core::app::balance_dashboard::wrapped_native_is_the_native(chain_id, &address)
 }
 
 /// The source ladder and its sanity band: a DEX price that disagrees with
@@ -952,8 +966,11 @@ pub fn choose_native_price(
     chainlink_eth: Option<f64>,
 ) -> NativePriceChoice {
     use vela_core::app::balance_dashboard::NativePriceSource as Source;
-    match vela_core::app::balance_dashboard::choose_native_price(dex, chainlink_local, chainlink_eth)
-    {
+    match vela_core::app::balance_dashboard::choose_native_price(
+        dex,
+        chainlink_local,
+        chainlink_eth,
+    ) {
         Some(chosen) => NativePriceChoice {
             price: Some(chosen.price),
             source: match chosen.source {

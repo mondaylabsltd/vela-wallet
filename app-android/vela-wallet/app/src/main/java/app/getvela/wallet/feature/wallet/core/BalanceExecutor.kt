@@ -18,6 +18,7 @@ import uniffi.vela_core_uniffi.bestNativeDexPrice
 import uniffi.vela_core_uniffi.firstGroupedQuotePrice
 import uniffi.vela_core_uniffi.chooseNativePrice
 import uniffi.vela_core_uniffi.isChainWithoutNativeCoin
+import uniffi.vela_core_uniffi.wrappedNativeIsTheNative
 
 /**
  * The only place the `balance_dashboard` core touches the outside world.
@@ -279,7 +280,13 @@ class BalanceExecutor(
             )
         }
 
+        // The chain data names a "wrapped" native, but on Celo nothing is
+        // wrapped: the GoldToken IS the coin, and `balanceOf` there and the
+        // native balance are ONE balance. Listing both showed CELO 6.96 and
+        // WCELO 6.96 to the founder and counted the holding twice (spec 038).
+        // The core owns which chains this is true of; the walk only asks.
         val wrapped = chain?.wrappedNative
+            ?.takeUnless { wrappedNativeIsTheNative(chainId.toUInt(), it) }
         if (wrapped != null) {
             val balanceIndex = calls.size
             calls.add(Abi.Call(wrapped, Abi.encodeBalanceOf(address)))
