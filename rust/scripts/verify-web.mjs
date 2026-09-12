@@ -52,7 +52,7 @@ const indexOf = (section, svg) => fragmentIndex.get(`${section}:${svg}`) ?? null
 // `Values::Static` in the Rust suite — the cheapest available proof that the two
 // representations agree (spec 004 T048).
 const LOCALES = ['en', 'zh', 'zh-TW', 'zh-HK', 'ja', 'ko', 'vi', 'id', 'tr', 'es-MX', 'pt-BR', 'fr', 'de', 'ru', 'it'];
-const ASSET_DIR = join(RUST_DIR, '..', 'public', 'i18n');
+const ASSET_DIR = join(RUST_DIR, '..', 'assets', 'i18n');
 const assets = Object.fromEntries(
   LOCALES.map((l) => [l, new Uint8Array(readFileSync(join(ASSET_DIR, `${l}.json`)))]),
 );

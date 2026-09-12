@@ -15,26 +15,45 @@
 	 */
 	import type { Snippet } from 'svelte';
 	import { RECEIVE_MODULES, RECEIVE_SEED, qrPattern } from '$lib/wallet/qr-pattern';
+	import type { QrCode } from '$lib/wallet/qr';
 
 	interface Props {
 		label: string;
+		/**
+		 * The code to draw (spec 028 T412). ABSENT means the drawn placeholder —
+		 * which is what the galleries pass, because their screenshots are canon
+		 * and a fixture that encoded a real address would put real addresses in
+		 * the gallery. Every LIVE surface passes a real code.
+		 */
+		code?: QrCode;
 		/** Drawn over the centre of the code, on its own white cut-out. */
 		centre?: Snippet;
 	}
 
-	let { label, centre }: Props = $props();
+	let { label, code, centre }: Props = $props();
 
-	const N = RECEIVE_MODULES;
-	const cells = qrPattern(N, RECEIVE_SEED);
+	const N = $derived(code ? code.modules : RECEIVE_MODULES);
+	/** The placeholder path, built once from the pattern, when there is no code. */
+	const path = $derived(code ? code.path : patternPath(RECEIVE_MODULES, RECEIVE_SEED));
+
+	/** The pattern as one path, so both branches render through the same element
+	 *  and the placeholder keeps rendering exactly the pixels it used to. */
+	function patternPath(n: number, seed: number): string {
+		const cells = qrPattern(n, seed);
+		let d = '';
+		for (let y = 0; y < n; y++) {
+			for (let x = 0; x < n; x++) if (cells[y][x]) d += `M${x} ${y}h1v1h-1z`;
+		}
+		return d;
+	}
 </script>
 
 <div class="card">
 	<svg viewBox="0 0 {N} {N}" role="img" aria-label={label} shape-rendering="crispEdges">
-		{#each cells as row, r (r)}
-			{#each row as on, c (c)}
-				{#if on}<rect x={c} y={r} width="1" height="1" />{/if}
-			{/each}
-		{/each}
+		<!-- One path, not a rect per module: per-cell rendering leaves hairline
+		     white gridlines from pixel rounding, and a code with gridlines
+		     photographs badly — which is how most people read one. -->
+		<path d={path} />
 	</svg>
 	{#if centre}
 		<span class="centre">{@render centre()}</span>

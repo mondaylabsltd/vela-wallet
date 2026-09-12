@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="color-scheme" content="dark light" />
+		<title>Vela</title>
+		<!--
+			The side panel's doorway (spec 027, sidebar surface).
+
+			`side_panel.default_path` is one static path, and every page the wallet
+			has is prerendered per locale. So the panel opens HERE, and panel.js
+			sends it on to `<locale>/request.html` — the same page a request window
+			shows — as a plain navigation inside the extension's own origin. No
+			inline script: MV3 extension pages refuse it (constraint 2 in README).
+		-->
+		<script src="panel.js"></script>
+	</head>
+	<body></body>
+</html>

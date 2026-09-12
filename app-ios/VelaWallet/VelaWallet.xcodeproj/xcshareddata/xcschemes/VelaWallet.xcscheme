@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared scheme, committed on purpose (spec 029).
+
+  Xcode autocreates a per-user scheme under xcuserdata/ the first time somebody
+  opens this project, which is why nobody noticed it was missing: it works on
+  every machine that has ever opened the project, and on no machine that has
+  not. `xcodebuild -scheme VelaWallet` on a clean checkout — a CI runner, a new
+  contributor — could not resolve. A scheme that exists only in somebody's
+  xcuserdata is a scheme CI does not have.
+-->
+<Scheme
+   LastUpgradeVersion = "2630"
+   version = "1.7">
+   <BuildAction
+      parallelizeBuildables = "YES"
+      buildImplicitDependencies = "YES">
+      <BuildActionEntries>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "23ED5E353019A42200EA9C55"
+               BuildableName = "VelaWallet.app"
+               BlueprintName = "VelaWallet"
+               ReferencedContainer = "container:VelaWallet.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <TestAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      shouldUseLaunchSchemeArgsEnv = "YES">
+      <Testables>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "23ED5E463019A42500EA9C55"
+               BuildableName = "VelaWalletTests.xctest"
+               BlueprintName = "VelaWalletTests"
+               ReferencedContainer = "container:VelaWallet.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <!--
+           The UI tests are skipped in the shared scheme. ScreenshotSweepTests
+           launches the app once per gallery fixture and pulls images out of the
+           .xcresult; that is a review instrument for a person, not a gate, and
+           on a CI runner it is minutes of simulator time for no signal. Run
+           them explicitly with -only-testing when you want pictures.
+         -->
+         <TestableReference
+            skipped = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "23ED5E503019A42500EA9C55"
+               BuildableName = "VelaWalletUITests.xctest"
+               BlueprintName = "VelaWalletUITests"
+               ReferencedContainer = "container:VelaWallet.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
+   </TestAction>
+   <LaunchAction
+      buildConfiguration = "Debug"
+      selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+      selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+      launchStyle = "0"
+      useCustomWorkingDirectory = "NO"
+      ignoresPersistentStateOnLaunch = "NO"
+      debugDocumentVersioning = "YES"
+      debugServiceExtension = "internal"
+      allowLocationSimulation = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "23ED5E353019A42200EA9C55"
+            BuildableName = "VelaWallet.app"
+            BlueprintName = "VelaWallet"
+            ReferencedContainer = "container:VelaWallet.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </LaunchAction>
+   <ProfileAction
+      buildConfiguration = "Release"
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      savedToolIdentifier = ""
+      useCustomWorkingDirectory = "NO"
+      debugDocumentVersioning = "YES">
+      <BuildableProductRunnable
+         runnableDebuggingMode = "0">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "23ED5E353019A42200EA9C55"
+            BuildableName = "VelaWallet.app"
+            BlueprintName = "VelaWallet"
+            ReferencedContainer = "container:VelaWallet.xcodeproj">
+         </BuildableReference>
+      </BuildableProductRunnable>
+   </ProfileAction>
+   <AnalyzeAction buildConfiguration = "Debug"></AnalyzeAction>
+   <ArchiveAction buildConfiguration = "Release" revealArchiveInOrganizer = "YES"></ArchiveAction>
+</Scheme>

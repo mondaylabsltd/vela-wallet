@@ -19,7 +19,7 @@
 	let { placeholder, value = $bindable(''), oninput }: Props = $props();
 </script>
 
-<div class="field">
+<div class="field" data-field>
 	<span class="glyph" aria-hidden="true"><Icon icon={UTILITY_ICONS.search} size="md" /></span>
 	<input
 		type="search"
@@ -60,16 +60,8 @@
 		color: var(--color-fg-subtle);
 	}
 
-	input:focus {
-		outline: none;
-	}
-
-	/* The ring goes on the field, not the bare input: the input has no border
-	   of its own, so a default focus ring would draw inside the fill. */
-	.field:focus-within {
-		outline: var(--border-emphasis) solid var(--color-fixed-focusRingOuter);
-		outline-offset: var(--border-emphasis);
-	}
+	/* Focus is the field's, not the bare input's, and it is app.css's rule
+	   (`data-field`): one quiet edge, the same on every field. */
 
 	/* Safari draws its own clear affordance; the field has no room for two. */
 	input::-webkit-search-cancel-button {

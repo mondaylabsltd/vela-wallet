@@ -218,6 +218,17 @@ function decodeRawChainData(data: unknown): NetRawChainData | null {
 	};
 }
 
+/** The core's `chain_id` is a `u32`; an id the core cannot represent is not a row. */
+const MAX_CHAIN_ID = 0xffff_ffff;
+
+/**
+ * The live index carries chain ids above `u32::MAX` (7078815900 is the first).
+ * One such row used to pass through as a JS number, serde then refused the
+ * ENTIRE `search_index` result over it, and the add-network wizard sat on
+ * 搜索中 forever with nothing in any log. A row the core cannot represent is
+ * dropped here — the shell's one job on this path is to hand the core rows it
+ * can read (found by the iOS session, spec 050; fixed for web in 028 US5).
+ */
 function decodeSearchIndex(rows: unknown): NetChainIndexEntry[] {
 	if (!Array.isArray(rows)) return [];
 	const out: NetChainIndexEntry[] = [];
@@ -225,7 +236,7 @@ function decodeSearchIndex(rows: unknown): NetChainIndexEntry[] {
 		if (raw === null || typeof raw !== 'object') continue;
 		const r = raw as Record<string, unknown>;
 		const chainId = Number(r.chainId);
-		if (!Number.isFinite(chainId)) continue;
+		if (!Number.isInteger(chainId) || chainId < 0 || chainId > MAX_CHAIN_ID) continue;
 		out.push({
 			chain_id: chainId,
 			name: asString(r.name),

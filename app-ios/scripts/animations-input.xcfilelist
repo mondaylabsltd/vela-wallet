@@ -1,4 +1,4 @@
-$(SRCROOT)/../../design/onboarding/launch/vela-wallet-launch-desktop-core-dark.json
-$(SRCROOT)/../../design/onboarding/launch/vela-wallet-launch-desktop-core-light.json
-$(SRCROOT)/../../design/onboarding/launch/vela-wallet-launch-phone-core-dark.json
-$(SRCROOT)/../../design/onboarding/launch/vela-wallet-launch-phone-core-light.json
+$(SRCROOT)/../../docs/design/onboarding/launch/vela-wallet-launch-desktop-core-dark.json
+$(SRCROOT)/../../docs/design/onboarding/launch/vela-wallet-launch-desktop-core-light.json
+$(SRCROOT)/../../docs/design/onboarding/launch/vela-wallet-launch-phone-core-dark.json
+$(SRCROOT)/../../docs/design/onboarding/launch/vela-wallet-launch-phone-core-light.json

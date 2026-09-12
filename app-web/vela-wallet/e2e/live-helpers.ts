@@ -18,7 +18,7 @@ const APP_ROOT = join(import.meta.dirname, '..');
  *  corpus, never hardcoded copy. */
 export function en(path: string): string {
 	const raw = JSON.parse(
-		readFileSync(join(APP_ROOT, '..', '..', 'public', 'i18n', 'en.json'), 'utf8')
+		readFileSync(join(APP_ROOT, '..', '..', 'assets', 'i18n', 'en.json'), 'utf8')
 	) as Record<string, unknown>;
 	const value = path.split('.').reduce<unknown>((node, key) => {
 		if (node === null || typeof node !== 'object') return undefined;
@@ -44,6 +44,14 @@ const TEST_ACCOUNT = {
  * live surfaces show is this, never the fixture's.
  */
 export const TEST_ACCOUNT_SHORT = '0x0cE19C…084e2e';
+
+/**
+ * The same address in full. It lives here because the shortened form is a
+ * TRAP: spec 028's receive-code test was first written against a middle
+ * reconstructed from `0x0cE19C…084e2e`, which is unguessable by construction.
+ * Anything asserting the whole address reads it from here.
+ */
+export const TEST_ACCOUNT_ADDRESS = '0x0cE19Cc09A0b561B1AB9ee3B88C93685F5084e2e';
 
 /** Runs before every document in the context: intro seen + wallet present. */
 export async function seedSignedIn(page: Page): Promise<void> {
@@ -86,11 +94,22 @@ export function collectScripts(page: Page): string[] {
  */
 export function chunkSource(url: string): string {
 	const path = new URL(url).pathname.replace(/^\//, '');
-	try {
-		return readFileSync(join(process.cwd(), '.svelte-kit/output/client', path), 'utf8');
-	} catch {
-		return '';
+	// `.svelte-kit/cloudflare` is what the preview SERVES. `output/client` is
+	// not: since 027 the extension build runs after the web build and re-emits
+	// it under `app/` (Chrome refuses `_`-prefixed paths), so a served
+	// `/_app/…` URL never resolved there and every chunk read back as '' —
+	// which made every `chunksCarrying` budget in this suite pass vacuously
+	// for two specs. Found by 028's decoder budget, whose positive control
+	// (open the scanner, the decoders MUST appear) is the only reason it could
+	// not pass by accident.
+	for (const root of ['.svelte-kit/cloudflare', '.svelte-kit/output/client']) {
+		try {
+			return readFileSync(join(process.cwd(), root, path), 'utf8');
+		} catch {
+			/* try the next root */
+		}
 	}
+	return '';
 }
 
 /** The subset of `urls` whose chunk source carries `needle` — a budget leak. */

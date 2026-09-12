@@ -180,7 +180,10 @@ export function createTxTrackerExecutor(ports: TrackShellPorts) {
 					.map(toTrustLog)
 					.filter((log): log is TrustReceiptLog => log !== null);
 				remember(logsByHash, hash, logs);
-				return { type: 'receipt', user_op_hash: hash, tx_hash: txHash, now_ms };
+				// With the authentic logs: the core decides whether the Safe inside
+				// the op actually executed (spec 038 #D1 — `ExecutionFailure` under
+				// a `success: true` is a failed payment, not a confirmed one).
+				return { type: 'receipt_with_logs', user_op_hash: hash, tx_hash: txHash, now_ms, logs };
 			}
 
 			case 'poll_status': {

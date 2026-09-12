@@ -6,13 +6,13 @@ import staticAdapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 
 /**
- * `design/onboarding/launch` is the repo-wide source of truth for animations
+ * `docs/design/onboarding/launch` is the repo-wide source of truth for animations
  * (spec 012 FR-001) and lives OUTSIDE this app. Aliasing it, plus opening it to
  * the dev server's fs allow-list, is what lets Vite emit the four `core` files
  * as hashed assets served from our own origin — no copy under app-web/, and no
  * third-party CDN at runtime.
  */
-const LAUNCH_ANIMATIONS = fileURLToPath(new URL('../../design/onboarding/launch', import.meta.url));
+const LAUNCH_ANIMATIONS = fileURLToPath(new URL('../../docs/design/onboarding/launch', import.meta.url));
 
 /**
  * Spec 027: the same application, built a second way.
@@ -60,8 +60,20 @@ export default defineConfig({
 	server: {
 		fs: { allow: [LAUNCH_ANIMATIONS] }
 	},
+	/**
+	 * The two QR decoders, pre-bundled (spec 028). Without this, vitest's browser
+	 * project discovers them mid-run, re-optimises and RELOADS the test — which
+	 * Vitest itself warns "may cause flaky behaviour or duplicated test runs".
+	 * Naming them here is the fix it asks for.
+	 */
+	optimizeDeps: {
+		include: ['@undecaf/zbar-wasm', 'jsqr']
+	},
 	plugins: [
 		sveltekit({
+			// Spec 038: poll the deployed version so a deploy mid-session turns
+			// the next navigation into a full load (see +layout.svelte).
+			version: { pollInterval: 60_000 },
 			compilerOptions: {
 				// Force runes mode for the project, except for libraries. Can be removed in svelte 6.
 				runes: ({ filename }) =>

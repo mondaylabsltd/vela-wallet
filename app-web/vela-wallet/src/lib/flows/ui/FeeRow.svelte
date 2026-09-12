@@ -22,7 +22,14 @@
 
 <button type="button" class="row" aria-label={fee.openLabel} onclick={onopen}>
 	<span class="label">{fee.label}</span>
-	<TokenIcon ticker={fee.mark.ticker} badgeColor={fee.mark.badgeColor} size="inline" />
+	<TokenIcon
+		ticker={fee.mark.ticker}
+		badgeColor={fee.mark.badgeColor}
+		logoUrls={fee.mark.logoUrls}
+		badgeLogoUrl={fee.mark.badgeLogoUrl}
+		badgeHidden={fee.mark.badgeHidden}
+		size="inline"
+	/>
 	<span class="value">{fee.value}</span>
 	<Icon icon={UTILITY_ICONS['chevron-right']} size="sm" />
 </button>

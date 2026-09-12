@@ -21,7 +21,7 @@
 	let query = $state(untrack(() => search.query) ?? '');
 </script>
 
-<label class="field {layout}">
+<label class="field {layout}" data-field>
 	<Icon icon={UTILITY_ICONS.search} size="sm" />
 	<input
 		type="search"

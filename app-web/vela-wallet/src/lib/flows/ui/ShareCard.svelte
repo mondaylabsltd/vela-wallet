@@ -1,18 +1,25 @@
 <script lang="ts">
 	/**
-	 * R4 — what "Save image" produces (spec 021).
+	 * R4 — what "Save image" produces (spec 021; redrawn spec 028 Phase 10 to
+	 * the founder's reference).
 	 *
 	 * Not a screen. It is a 480×700 render product that ends up in someone's
 	 * photo library and then in a chat, so its geometry is fixed, its colours
 	 * are mode-invariant, and it carries the wordmark: away from the app, the
-	 * card has to say what it is on its own.
+	 * card has to say what it is on its own. The foot is white with one curve
+	 * across its top, and the mark on it is the APP ICON — the same icon that
+	 * sits beside the picture on a phone — never the in-app sailboat.
 	 *
 	 * The identicon sits in the middle of the code (founder direction): a card
 	 * whose address was doctored would carry artwork that no longer matches the
 	 * characters printed under it.
+	 *
+	 * `share-image.ts` composes the very same card as an SVG string for the
+	 * saved PNG; the two are kept in step by hand, and the gallery shows this one.
 	 */
 	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import BrandMark from '$lib/ui/BrandMark.svelte';
+	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import AppIcon from '$lib/ui/AppIcon.svelte';
 	import type { ShareCardModel } from '../model';
 	import QRCard from './QRCard.svelte';
 
@@ -27,7 +34,7 @@
 	<p class="headline">{model.headline}</p>
 
 	<div class="sheet">
-		<QRCard label={model.headline}>
+		<QRCard label={model.headline} code={model.code}>
 			{#snippet centre()}
 				<Identicon svg={model.identiconSvg} size="row" />
 			{/snippet}
@@ -38,16 +45,22 @@
 			{#each model.lines as line, i (i)}<span>{line}</span>{/each}
 		</p>
 		<p class="note">
-			<span class="mark" style:background={model.networkMark.badgeColor}>
-				{model.networkMark.ticker}
-			</span>
+			<TokenIcon
+				size="inline"
+				ticker={model.networkMark.ticker}
+				badgeColor={model.networkMark.badgeColor}
+				logoUrls={model.networkMark.logoUrls}
+				badgeHidden
+			/>
 			{model.networkNote}
 		</p>
 	</div>
 
-	<div class="brand">
-		<BrandMark />
-		<span class="wordmark">{model.wordmark}</span>
+	<div class="foot">
+		<div class="brand">
+			<AppIcon size={44} />
+			<span class="wordmark">{model.wordmark}</span>
+		</div>
 	</div>
 </div>
 
@@ -63,14 +76,14 @@
 		align-items: center;
 		width: var(--layout-shareCardW);
 		height: var(--layout-shareCardH);
-		padding: var(--space-2xl);
 		background: var(--color-accent-base);
 		color: var(--color-onAccent);
+		overflow: hidden;
 	}
 
 	.headline {
 		margin: 0;
-		padding-block: var(--space-lg) var(--space-2xl);
+		padding-block: var(--space-3xl) var(--space-2xl);
 		font-family: var(--font-display);
 		font-size: var(--text-3xl);
 		font-weight: var(--weight-bold);
@@ -82,7 +95,7 @@
 		flex-direction: column;
 		align-items: center;
 		gap: var(--space-md);
-		width: 100%;
+		width: calc(100% - var(--space-2xl) * 2);
 		padding: var(--space-2xl);
 		border-radius: var(--radius-2xl);
 		background: var(--color-onAccent);
@@ -119,31 +132,30 @@
 		font-size: var(--text-sm);
 	}
 
-	.mark {
-		display: inline-flex;
+	/* The foot is the white end of the card's own palette; its top edge is
+	   one arc across the whole width (half the width each side, a fixed
+	   rise), which is the reference's curve rather than two rounded corners. */
+	.foot {
+		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: var(--icon-xl);
-		height: var(--icon-xl);
-		border-radius: var(--radius-full);
-		font-size: var(--text-xs);
-		font-weight: var(--weight-bold);
-		color: var(--color-onAccent);
+		width: 100%;
+		margin-top: auto;
+		padding-block: var(--space-4xl) var(--space-2xl);
+		border-radius: 50% 50% 0 0 / var(--space-4xl) var(--space-4xl) 0 0;
+		background: var(--color-onAccent);
+		color: var(--color-fixed-shadowInk);
 	}
 
 	.brand {
 		display: flex;
 		align-items: center;
-		gap: var(--space-lg);
-		margin-top: auto;
-		padding-block: var(--space-xl);
+		gap: var(--space-md);
 	}
 
 	.wordmark {
 		font-family: var(--font-display);
 		font-size: var(--text-3xl);
 		font-weight: var(--weight-bold);
-		/* Off the accent field, on the white end of the card's own palette. */
-		color: var(--color-onAccent);
 	}
 </style>

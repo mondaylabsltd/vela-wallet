@@ -46,7 +46,7 @@ export function exploreSidebar(sidebar: SidebarModel): SidebarModel {
 }
 
 /** Every phone state, in mock order (the gallery's inventory). */
-export const MOBILE_STATES = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7'] as const;
+export const MOBILE_STATES = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'] as const;
 
 /** Every desktop state. DE4 is the third column carrying a signing request. */
 export const DESKTOP_STATES = ['de1', 'de2', 'de3', 'de4'] as const;
@@ -240,6 +240,18 @@ function siteMenuSheet(m: ExploreMessages): SiteMenuSheet {
 	};
 }
 
+/** The same menu as a sheet, for the phone gallery (E8). */
+function recentMenuSheet(m: ExploreMessages): SiteMenuSheet {
+	return {
+		kind: 'site-menu',
+		site: SITES.polymarket,
+		// A history row's second line is where it has BEEN, not whether the
+		// page is secure right now — there is no page open to be secure.
+		statusLine: SITES.polymarket.host,
+		items: recentMenuItems(m)
+	};
+}
+
 function siteMenuItems(m: ExploreMessages): MenuItemModel[] {
 	return [
 		{ id: 'refresh', icon: 'refresh-cw', label: m.refresh },
@@ -249,6 +261,22 @@ function siteMenuItems(m: ExploreMessages): MenuItemModel[] {
 		{ id: 'system', icon: 'external-link', label: m.openInSystemBrowser },
 		{ id: 'disconnect', icon: 'power', label: m.disconnect },
 		{ id: 'close', icon: 'x', label: m.closePage }
+	];
+}
+
+/**
+ * The menu on a row in Recent (spec 032 phase 40).
+ *
+ * History rows had no menu at all, so the core's `delete_origin` — one site
+ * forgotten, rather than the whole list cleared — could not be reached from
+ * any client. Three items in the order somebody wants them: the two harmless
+ * ones, then the destructive one behind a divider.
+ */
+function recentMenuItems(m: ExploreMessages): MenuItemModel[] {
+	return [
+		{ id: 'new-tab', icon: 'external-link', label: m.openInNewTab },
+		{ id: 'favorite', icon: 'star', label: m.addToFavorites },
+		{ id: 'delete', icon: 'trash-2', label: m.delete, danger: true }
 	];
 }
 
@@ -350,6 +378,7 @@ export function buildMobileState(
 		menus: {
 			groupManage: groupManageSheet(m),
 			siteMenu: siteMenuSheet(m),
+			recentMenu: recentMenuSheet(m),
 			connection: connectionSheet(m, identicon)
 		},
 		navLabels: m.nav
@@ -360,6 +389,8 @@ export function buildMobileState(
 			return { ...base, sheet: base.menus.groupManage };
 		case 'e6':
 			return { ...base, sheet: base.menus.siteMenu };
+		case 'e8':
+			return { ...base, sheet: base.menus.recentMenu };
 		case 'e7':
 			return { ...base, sheet: base.menus.connection };
 		default:

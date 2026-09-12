@@ -485,8 +485,7 @@ export function buildDesktopState(
 				{ id: 'settings', label: m.shell.navSettings, selected: false }
 			],
 			networksTitle: m.shell.networksTitle,
-			networks: chainRowsFor(m.shell.allNetworks),
-			searchPlaceholder: m.shell.commandBarPlaceholder
+			networks: chainRowsFor(m.shell.allNetworks)
 		},
 		title: m.title,
 		search: { placeholder: m.searchPlaceholder, shortcut: '⌘F' },

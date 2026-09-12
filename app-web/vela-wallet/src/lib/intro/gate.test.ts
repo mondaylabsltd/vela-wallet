@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FORCE_PARAM, SKIP_PARAM, STORAGE_KEY, markIntroSeen, shouldShowIntro } from './gate';
 
@@ -65,5 +67,42 @@ describe('intro gate', () => {
 		// Showing twice is cosmetic; a front door that throws is not.
 		expect(shouldShowIntro(hostileWindow())).toBe(true);
 		expect(() => markIntroSeen(hostileWindow())).not.toThrow();
+	});
+});
+
+/**
+ * The pre-paint copy of the rule (spec 038). `app.html` decides before any
+ * module loads whether Welcome is hidden under the intro, and cannot import
+ * this module to do it — so the constants are written there by hand, and this
+ * is what keeps the two from drifting: a renamed key here would otherwise hide
+ * Welcome for an intro the component then declines to show.
+ */
+describe('the pre-paint copy in app.html', () => {
+	const html = readFileSync(join(import.meta.dirname, '..', '..', 'app.html'), 'utf8');
+	const block = html.slice(html.indexOf('Spec 038'), html.indexOf('</script>'));
+
+	it('exists, and reads the same storage key', () => {
+		expect(block.length).toBeGreaterThan(0);
+		expect(block).toContain(`localStorage.getItem('${STORAGE_KEY}')`);
+	});
+
+	it('honours both query params, force before skip', () => {
+		expect(block).toContain(`introParams.has('${FORCE_PARAM}')`);
+		expect(block).toContain(`introParams.has('${SKIP_PARAM}')`);
+		expect(block.indexOf(`has('${FORCE_PARAM}')`)).toBeLessThan(
+			block.indexOf(`has('${SKIP_PARAM}')`)
+		);
+	});
+
+	it('shows the intro when storage throws, like the module', () => {
+		// The catch branch must still set the attribute — a blocked storage
+		// shows the intro twice at worst; a blank first run is not acceptable.
+		const catchBranch = block.slice(block.indexOf('catch (e)'));
+		expect(catchBranch).toContain("dataset.intro = 'pending'");
+	});
+
+	it('only ever sets the attribute the CSS hides on', () => {
+		const css = readFileSync(join(import.meta.dirname, '..', '..', 'app.css'), 'utf8');
+		expect(css).toContain("html[data-intro='pending'] [data-intro-page]");
 	});
 });

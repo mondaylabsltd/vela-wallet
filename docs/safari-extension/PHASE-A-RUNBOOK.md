@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. The iOS Safari extension has no packaging in the tree today (`targets/safari` and `packages/safari-extension` were Expo-only); re-homing it under `app-ios/` is its own spec — see spec 039 "Two packages".
+
 # Phase A runbook — the real EIP-1193/6963 provider
 
 **Status:** implemented 2026-07-06. Local verification green (10 `node --test` unit + 12 Playwright browser conformance). Adversarially reviewed (8 confirmed findings, all fixed + re-verified). Device validation via `e2e/safari` is the remaining human step.

@@ -11,6 +11,8 @@
 
 pub mod components;
 pub mod fixtures;
+pub mod live;
+pub mod model;
 
 use gpui::SharedString;
 
@@ -34,6 +36,10 @@ pub struct SettingsStrings {
     pub nav_storage: SharedString,
     pub nav_about: SharedString,
     // account panel
+    /// "Total {{amount}}" — the second half of the summary. The count template
+    /// ends in "· ", and the live panel printed that dangling separator with
+    /// nothing after it until spec 034, because this half needs per-account
+    /// balances nobody had asked the core for.
     pub accounts_total: String,
     pub accounts_count: String,
     pub account_create: SharedString,
@@ -71,9 +77,20 @@ pub struct SettingsStrings {
     pub rpc_url: SharedString,
     pub explorer: SharedString,
     pub network_custom: SharedString,
+    /// The custom-network delete, and the confirmation the core leaves to the
+    /// shell in so many words.
+    pub network_remove_title: SharedString,
+    pub network_remove_body: SharedString,
+    pub network_remove_cancel: SharedString,
+    pub network_remove_confirm: SharedString,
     /// The prefix a slow endpoint's pill wears: "Slower · 1.2s".
     pub network_slow: SharedString,
     pub network_save_hint: SharedString,
+    /// While the blur's chain-id verdict is outstanding. The standing hint
+    /// says "saved as soon as you leave the field", which for those seconds
+    /// is not yet true — the override is written only once the RPC agrees
+    /// about which chain it serves.
+    pub network_save_checking: SharedString,
     pub compatible: SharedString,
     pub compatibility_check: SharedString,
     pub check_safe: SharedString,
@@ -87,6 +104,9 @@ pub struct SettingsStrings {
     pub provider_connected: SharedString,
     pub provider_not_set: SharedString,
     pub provider_check_key: SharedString,
+    /// The explicit re-run. A key blur already tests, so this is for the
+    /// person who changed nothing and wants to know whether it works NOW.
+    pub provider_test: SharedString,
     pub provider_get_key: SharedString,
     pub provider_supports: String,
     pub provider_avg_latency: String,
@@ -100,6 +120,32 @@ pub struct SettingsStrings {
     pub endpoint_relay_hint: SharedString,
     pub endpoint_fiat: SharedString,
     pub endpoint_fiat_hint: SharedString,
+    /// The three ways a service endpoint can be wrong, in the same words the
+    /// RN `ServiceHealthBadge` uses — one wording per state across clients.
+    pub health_https_required: SharedString,
+    pub health_offline: SharedString,
+    pub health_invalid: SharedString,
+    /// The wizard's retry, for a chain the probe could not reach — never a
+    /// condemnation (the core's invariant ③).
+    pub recheck: SharedString,
+    /// What the wizard is DOING between a click and a verdict. The dialog is
+    /// otherwise inert while the index resolves and the probes run, which is
+    /// the specific silence phase 6 found on the send screen: a screen that
+    /// looks broken because nobody said it was working.
+    pub wizard_searching: SharedString,
+    pub wizard_checking: SharedString,
+    /// The four ways the wizard STOPS (`NetWizardErrorKind`). The core decides
+    /// which; these are only the words, and all four were already in the
+    /// corpus — the scan path and the add-token screen say the same things.
+    pub wizard_already_added: SharedString,
+    pub wizard_not_found: SharedString,
+    /// `{{name}} RPC unavailable`: the registry listed no endpoint for the
+    /// resolved chain, and no custom RPC was typed. Carries the chain's name
+    /// because at this point the wizard HAS resolved it.
+    pub wizard_no_rpc: String,
+    pub wizard_incompatible: SharedString,
+    /// Spec 038 #E1: the probes failed — not a verdict.
+    pub wizard_unable_to_verify: SharedString,
     pub endpoints_reset: SharedString,
     pub endpoints_guide: SharedString,
     // storage panel
@@ -151,6 +197,10 @@ pub struct SettingsStrings {
     pub rpc_report: SharedString,
     pub rpc_unavailable_multiple: String,
     pub rpc_fix_action: SharedString,
+    /// The one refusal the override gate makes: this endpoint answered
+    /// `eth_chainId` with ANOTHER chain's id, so nothing was written. Carries
+    /// `{{expected}}` and `{{actual}}`.
+    pub rpc_wrong_chain: String,
     pub offline: SharedString,
 }
 
@@ -202,8 +252,13 @@ impl SettingsStrings {
             rpc_url: s("settingsModals.network.fieldRpcUrl"),
             explorer: s("settingsModals.network.fieldExplorer"),
             network_custom: s("settings.networks.custom"),
+            network_remove_title: s("settingsModals.network.removeTitle"),
+            network_remove_body: s("settingsModals.network.removeBody"),
+            network_remove_cancel: s("settingsModals.network.removeCancel"),
+            network_remove_confirm: s("settingsModals.network.removeConfirm"),
             network_slow: s("settings.networks.slow"),
             network_save_hint: s("settings.networks.saveHint"),
+            network_save_checking: s("componentsUi.funding.checking"),
             compatible: s("settingsModals.addNetwork.compatible"),
             compatibility_check: s("settingsModals.addNetwork.compatibilityCheck"),
             check_safe: s("settingsModals.addNetwork.checkSafe"),
@@ -215,6 +270,7 @@ impl SettingsStrings {
             providers_desc: s("settingsModals.rpcProviders.description"),
             provider_connected: s("activity.connected"),
             provider_not_set: s("settingsModals.rpcProviders.notSet"),
+            provider_test: s("settingsModals.rpcProviders.test"),
             provider_check_key: s("settingsModals.rpcProviders.checkKey"),
             provider_get_key: s("settingsModals.rpcProviders.getKey"),
             provider_supports: raw("settingsModals.rpcProviders.supportsCount"),
@@ -228,6 +284,17 @@ impl SettingsStrings {
             endpoint_relay_hint: s("settingsModals.endpoints.bundlerHint"),
             endpoint_fiat: s("settingsModals.endpoints.fiatLabel"),
             endpoint_fiat_hint: s("settingsModals.endpoints.fiatHint"),
+            health_https_required: s("settingsModals.health.httpsRequired"),
+            health_offline: s("settingsModals.health.offline"),
+            health_invalid: s("settingsModals.health.invalid"),
+            recheck: s("settingsModals.addNetwork.recheck"),
+            wizard_searching: s("settingsModals.addNetwork.searching"),
+            wizard_checking: s("settingsModals.addNetwork.checkingCompatibility"),
+            wizard_already_added: s("addToken.errorAlreadyAdded"),
+            wizard_not_found: s("addToken.errorChainNotFound"),
+            wizard_no_rpc: raw("assets.rpcUnavailableSingle"),
+            wizard_incompatible: s("settingsModals.addNetwork.incompatible"),
+            wizard_unable_to_verify: s("settingsModals.addNetwork.unableToVerify"),
             endpoints_reset: s("settingsModals.endpoints.resetToDefaults"),
             endpoints_guide: s("settingsModals.endpoints.selfHostGuide"),
             storage_subtitle: s("settings.storage.subtitle"),
@@ -276,7 +343,49 @@ impl SettingsStrings {
             rpc_report: s("assets.rpcReport"),
             rpc_unavailable_multiple: raw("assets.rpcUnavailableMultiple"),
             rpc_fix_action: s("assets.rpcFix"),
+            rpc_wrong_chain: raw("assets.rpcFixWrongChain"),
             offline: s("settingsModals.health.offline"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The words this cut newly reads.
+    ///
+    /// All five already existed — the phone drew this dialog and this button
+    /// years ago, so the corpus carries them in fifteen languages and the
+    /// desktop's half of the feature costs zero new keys. What a test can still
+    /// catch is a key that does not resolve, which is how a confirm dialog ends
+    /// up with `settingsModals.network.removeTitle` as its title.
+    #[test]
+    fn the_remove_and_test_words_resolve() {
+        {
+            // `Loc::from_env` honours VELA_LANG; the env-independent check is
+            // that the resolved strings differ from their keys, which is the
+            // same shape `wallet_strings_resolve_without_echo` uses.
+            let s = SettingsStrings::resolve(&crate::loc::Loc::from_env());
+            for (value, key) in [
+                (
+                    &s.network_remove_title,
+                    "settingsModals.network.removeTitle",
+                ),
+                (&s.network_remove_body, "settingsModals.network.removeBody"),
+                (
+                    &s.network_remove_cancel,
+                    "settingsModals.network.removeCancel",
+                ),
+                (
+                    &s.network_remove_confirm,
+                    "settingsModals.network.removeConfirm",
+                ),
+                (&s.provider_test, "settingsModals.rpcProviders.test"),
+            ] {
+                assert_ne!(value.as_ref(), key, "`{key}` echoed the key");
+                assert!(!value.is_empty(), "`{key}` resolved empty");
+            }
         }
     }
 }

@@ -5,7 +5,10 @@ const STORAGE_SUITES = [
 	'**/pool-resilience.e2e.ts',
 	'**/home-truth.e2e.ts',
 	'**/reopen-pending.e2e.ts',
-	'**/parallel-entry.e2e.ts'
+	'**/parallel-entry.e2e.ts',
+	// 028's preferences: what a person chose has to survive a reload on every
+	// engine, and an erase has to leave nothing behind on any of them.
+	'**/preferences.e2e.ts'
 ];
 
 export default defineConfig({

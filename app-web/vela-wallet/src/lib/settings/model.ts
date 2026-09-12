@@ -12,6 +12,7 @@
  * and a confirm sheet cover almost all of them. The types below name that
  * vocabulary once; the screens are compositions.
  */
+import type { QrCode } from '$lib/wallet/qr';
 import type { UtilityIconId } from '$lib/wallet/icons';
 
 /** Mobile mocks ST1–ST16 plus the SR1–SR5 rescue set. */
@@ -193,6 +194,8 @@ export interface SettingsSectionModel {
 export interface AccountRowModel {
 	name: string;
 	addressDisplay: string;
+	/** The seed of the artwork — what the identicon viewer shows beside it. */
+	addressFull: string;
 	/** Inline identicon SVG from vela-core, seeded by the full address. */
 	identiconSvg: string;
 	/** Trailing text action — "切换账户". */
@@ -251,6 +254,8 @@ export interface AccountsSheetModel {
 	rows: {
 		name: string;
 		addressDisplay: string;
+		/** The seed of the artwork — what the identicon viewer shows beside it. */
+		addressFull: string;
 		identiconSvg: string;
 		amount: string;
 		selected: boolean;
@@ -275,6 +280,8 @@ export interface ConfirmSheetModel {
 export interface ChainMarkModel {
 	letter: string;
 	color: string;
+	/** Live only: the chain's logo on the data endpoint; the letter shows until it loads, and if it never does. */
+	logoUrl?: string;
 }
 
 export interface NetworkRowModel {
@@ -482,6 +489,9 @@ export interface BalanceDetailModel {
 	}[];
 	sectionDone: string;
 	done: { id: string; mark: ChainMarkModel; name: string; amount: string }[];
+	/** Spec 038 #E8: the tokens the hero's notice is about, by name and network. */
+	sectionUnpriced: string;
+	unpriced: { id: string; mark: ChainMarkModel; name: string; detail: string }[];
 }
 
 /** SR4: fund this chain's bundler treasury. */
@@ -497,6 +507,10 @@ export interface RelayerModel {
 	copyLabel: string;
 	callout: CalloutModel;
 	primary: string;
+	/** The full address behind the display, for the copy (spec 028 Phase 8). Live only. */
+	address?: string;
+	/** The code of that address. Absent in the gallery, where the drawn placeholder stands. */
+	code?: QrCode;
 }
 
 /** SR5: the passkey index is unreachable, and onboarding needs it. */
@@ -525,7 +539,14 @@ export interface SettingsHomeModel {
 	signOut: { label: string };
 	erase: { title: string; subtitle: string };
 	/** Pages, all pre-built so the state switcher is a pure choice. */
-	networks: { title: string; subtitle: string; rows: NetworkRowModel[]; addLabel: string };
+	networks: {
+		title: string;
+		subtitle: string;
+		rows: NetworkRowModel[];
+		addLabel: string;
+		/** The custom row's delete control (spec 028 Phase 8) — it used to borrow `addLabel`. */
+		removeLabel: string;
+	};
 	networkDetail: NetworkDetailModel;
 	addNetwork: AddNetworkModel;
 	rpcProviders: RpcProvidersModel;
@@ -568,6 +589,13 @@ export interface FormRowModel {
 	kind: 'dropdown' | 'segmented' | 'slider';
 	/** Dropdown's current value. */
 	value?: string;
+	/**
+	 * What this row's dropdown offers, when it is live (spec 028 T433). Absent
+	 * in the fixtures, where `SettingsDesktopModel.dropdown` pins ONE menu open
+	 * because DST3 is a board OF that menu — a live panel instead carries every
+	 * row's options and opens whichever one is tapped.
+	 */
+	options?: SelectRowModel[];
 }
 
 export interface DropdownModel {
@@ -610,12 +638,15 @@ export interface SettingsDesktopModel {
 		title: string;
 		subtitle: string;
 		addLabel: string;
+		removeLabel: string;
 		rows: NetworkRowModel[];
 		detail: NetworkDetailModel;
 	};
 	rpcProviders: RpcProvidersModel;
 	endpoints: EndpointsModel;
 	storage: StorageModel;
+	/** The desktop's clear-all-caches confirm, as a dialog (spec 028 Phase 8). */
+	clearCachesSheet: ConfirmSheetModel;
 	about: AboutModel;
 	addNetwork: AddNetworkModel;
 	rpcFix: RpcFixModel;

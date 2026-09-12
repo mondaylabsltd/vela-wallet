@@ -21,7 +21,14 @@
 
 <p class="banner">
 	{#if mark !== undefined}
-		<TokenIcon ticker={mark.ticker} badgeColor={mark.badgeColor} size="inline" />
+		<TokenIcon
+			ticker={mark.ticker}
+			badgeColor={mark.badgeColor}
+			logoUrls={mark.logoUrls}
+			badgeLogoUrl={mark.badgeLogoUrl}
+			badgeHidden={mark.badgeHidden}
+			size="inline"
+		/>
 	{/if}
 	<span>{text}</span>
 </p>

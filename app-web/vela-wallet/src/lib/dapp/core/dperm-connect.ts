@@ -41,6 +41,7 @@
 import { DappPermissionsCore } from '$lib/core/client';
 
 import type { DpermEvent } from '$lib/core/generated/DpermEvent';
+import type { DpermGrant } from '$lib/core/generated/DpermGrant';
 import type { DpermOperation } from '$lib/core/generated/DpermOperation';
 import type { DpermShellResult } from '$lib/core/generated/DpermShellResult';
 import type { DpermView } from '$lib/core/generated/DpermView';
@@ -147,6 +148,104 @@ export function planPopupConnect(question: PopupConnectQuestion): PopupConnectPl
 			throw new Error('dapp_permissions authored an incomplete connection');
 		}
 		return { grant, record, respond };
+	} finally {
+		core.free();
+	}
+}
+
+/** What the wallet observed when its active account changed. */
+export interface AccountSwitchQuestion {
+	origin: string;
+	/** The `vela.perm.<origin>` value as read. */
+	storedGrant: DpermGrant;
+	/** Every wallet address; `null`/empty means "not known yet". */
+	currentAddresses: string[] | null;
+	/** The account the wallet switched TO. */
+	activeAddress: string;
+	nowMs: number;
+}
+
+/** What the core authored for one connected site on an account switch. */
+export type AccountSwitchPlan =
+	/** `WriteGrant` — the grant re-pinned to the new address. */
+	| { kind: 'repin'; grant: DpermGrant }
+	/** `RemoveGrant` — the grant's own account left the wallet. */
+	| { kind: 'remove' }
+	/** The core said nothing: the site was not connected, or nothing changed. */
+	| { kind: 'none' };
+
+/**
+ * The wallet switched accounts — what does a connected site hear?
+ *
+ * `account_switched` is the core's rule (`dapp_permissions.rs`): a CONNECTED
+ * origin's grant is re-pinned to the new address, and the page is told
+ * `accountsChanged([new])`. In the in-app browser that rule fires for the one
+ * current origin; the extension has a granted origin per site, so it is asked
+ * once per grant, on a throwaway core seeded the way the popup seeds it — the
+ * address set, then a navigation to the origin so the core reads the grant
+ * and holds the site as connected, then the switch.
+ *
+ * The `EmitEvent` the core authors alongside is not performed here: the
+ * worker announces a grant CHANGE to every tab of the origin (its storage
+ * listener), which is the same event, from the same fact, for every writer.
+ *
+ * **`loadCore()` must have resolved before this is called.**
+ */
+export function planAccountSwitch(question: AccountSwitchQuestion): AccountSwitchPlan {
+	const core = new DappPermissionsCore();
+	try {
+		const dispatch = (event: DpermEvent): DispatchResult =>
+			JSON.parse(core.dispatch(JSON.stringify(event))) as DispatchResult;
+		const resolve = (effectId: number, result: DpermShellResult): DispatchResult =>
+			JSON.parse(core.resolve_effect(BigInt(effectId), JSON.stringify(result))) as DispatchResult;
+
+		dispatch({ type: 'accounts_updated', addresses: question.currentAddresses });
+		// The chain the grant records is the chain the site CONNECTED on — an
+		// audit fact — and a switch of account must not rewrite it.
+		dispatch({ type: 'chain_changed', chain_id: question.storedGrant.chain_id });
+
+		// A navigation to the origin: the core reads the grant and, finding one
+		// for a present address, holds the site as connected.
+		const queue = dispatch({
+			type: 'navigation_started',
+			url: `${question.origin}/`
+		}).effects;
+		while (queue.length > 0) {
+			const { id, operation } = queue.shift()!;
+			if (operation.type !== 'read_grant') continue;
+			queue.push(
+				...resolve(id, {
+					type: 'grant_read',
+					origin: operation.origin,
+					grant: question.storedGrant
+				}).effects
+			);
+		}
+
+		// The site's own first question after a load. This is where the core
+		// physically drops a grant whose account LEFT the wallet
+		// (`should_drop_grant`, on the decision path) — and answers `[]` or the
+		// address otherwise, an answer nobody here is waiting for.
+		for (const { operation } of dispatch({
+			type: 'provider_request',
+			id: 'follow',
+			method: 'eth_accounts',
+			params_json: '[]',
+			origin: question.origin,
+			is_main_frame: true
+		}).effects) {
+			if (operation.type === 'remove_grant') return { kind: 'remove' };
+		}
+
+		for (const { operation } of dispatch({
+			type: 'account_switched',
+			address: question.activeAddress,
+			now_ms: question.nowMs
+		}).effects) {
+			if (operation.type === 'write_grant') return { kind: 'repin', grant: operation.grant };
+			if (operation.type === 'remove_grant') return { kind: 'remove' };
+		}
+		return { kind: 'none' };
 	} finally {
 		core.free();
 	}

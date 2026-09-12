@@ -41,7 +41,10 @@ export type SigningStateId =
 	| 'cs30'
 	| 'cs31'
 	| 'cs32'
-	| 'cs33';
+	| 'cs33'
+	/** Spec 032 phase 39: a cap being TYPED, and the same field refused. */
+	| 'cs34'
+	| 'cs35';
 
 /** Semantic weight. `accent` is the intent sentence; the rest colour warnings. */
 export type Tone = 'neutral' | 'accent' | 'success' | 'caution' | 'danger';
@@ -68,6 +71,21 @@ export interface KeyValueRow {
 	value: string;
 	valueTone?: Tone;
 	mono?: boolean;
+}
+
+/**
+ * The typed cap, when `Custom` is the chosen chip.
+ *
+ * The value is the CORE's `custom_text` rather than a local echo, so a
+ * keystroke the machine rejected never appears as though it had been taken.
+ */
+export interface AllowanceInput {
+	value: string;
+	/** The coin the number counts in — the field's own label. */
+	symbol: string;
+	placeholder: string;
+	/** The core's verdict on what is typed so far. */
+	error?: string;
 }
 
 export interface AllowanceChip {
@@ -111,6 +129,8 @@ export type Block =
 			chips: AllowanceChip[];
 			note?: string;
 			resultingTotal?: KeyValueRow;
+			/** Drawn under the chips: the field a custom cap is typed into. */
+			custom?: AllowanceInput;
 	  }
 	| { kind: 'party'; label: string; name: string; address?: string; badge?: PartyBadge }
 	| { kind: 'rows'; rows: KeyValueRow[] }
@@ -179,7 +199,13 @@ export interface SigningModel {
 	/** cs29 ships the disclosure open — the whole point of that mock. */
 	techOpen: boolean;
 	fee: FeeModel;
-	signer: { label: string; name: string; identiconSvg: string };
+	signer: {
+		label: string;
+		name: string;
+		identiconSvg: string;
+		/** The signing account's address — the identicon viewer's seed. Live only. */
+		address?: string;
+	};
 	/**
 	 * The slide. There is no reject button anywhere in this vocabulary:
 	 * closing the sheet is the rejection (product contract, SPEC 签名).

@@ -513,3 +513,97 @@ export function recoverPublicKeyFromAssertions(
 		return null;
 	}
 }
+
+// ---------------------------------------------------------------------------
+// user_op — the core's assembly, for checking the shell's (spec 028 Phase 8)
+// ---------------------------------------------------------------------------
+
+/** One sub-call as the shell built it (`MultiSendCall`'s shape). */
+export interface AttestCall {
+	to: string;
+	/** Hex, `0x` optional, empty meaning zero. */
+	value: string;
+	data: Uint8Array;
+}
+
+/** The in-band fee leg by its inputs — the core builds the leg itself. */
+export interface AttestFeeLeg {
+	gasFeeToken: string | null;
+	recipient: string;
+	amount: bigint;
+}
+
+export interface AttestCalls {
+	inner: AttestCall[];
+	fee: AttestFeeLeg | null;
+	alwaysMultiSend: boolean;
+}
+
+/** The operation as it will be hashed; `signature` is not part of the hash. */
+export interface AttestOp {
+	sender: string;
+	nonce: string;
+	initCode: Uint8Array;
+	callData: Uint8Array;
+	verificationGasLimit: bigint;
+	callGasLimit: bigint;
+	preVerificationGas: bigint;
+	maxFeePerGas: bigint;
+	maxPriorityFeePerGas: bigint;
+	paymasterAndData: Uint8Array;
+}
+
+/**
+ * The SafeOp hash the core computes for `op` — after rebuilding the calldata
+ * from `calls` and refusing when the bytes differ. `calls === null` attests
+ * the hash alone (the legacy path hands over finished calldata).
+ */
+export function attestSafeOpHash(
+	op: AttestOp,
+	calls: AttestCalls | null,
+	chainId: number
+): Uint8Array {
+	return translated(() => {
+		const opJson = JSON.stringify({
+			sender: op.sender,
+			nonce: op.nonce,
+			init_code_hex: toHex(op.initCode),
+			call_data_hex: toHex(op.callData),
+			verification_gas_limit: op.verificationGasLimit.toString(),
+			call_gas_limit: op.callGasLimit.toString(),
+			pre_verification_gas: op.preVerificationGas.toString(),
+			max_fee_per_gas: op.maxFeePerGas.toString(),
+			max_priority_fee_per_gas: op.maxPriorityFeePerGas.toString(),
+			paymaster_and_data_hex: toHex(op.paymasterAndData)
+		});
+		const callsJson =
+			calls === null
+				? ''
+				: JSON.stringify({
+						inner: calls.inner.map((call) => ({
+							to: call.to,
+							value_hex: call.value,
+							data_hex: toHex(call.data)
+						})),
+						fee:
+							calls.fee === null
+								? null
+								: {
+										gas_fee_token: calls.fee.gasFeeToken,
+										recipient: calls.fee.recipient,
+										amount_hex: '0x' + calls.fee.amount.toString(16)
+									},
+						always_multi_send: calls.alwaysMultiSend
+					});
+		return wasm.attestSafeOpHash(opJson, callsJson, BigInt(chainId));
+	});
+}
+
+/** The Safe message hash (EIP-1271) as the core computes it. */
+export function attestSafeMessageHash(
+	originalHash: Uint8Array,
+	chainId: number,
+	safeAddress: string
+): Uint8Array {
+	return translated(() => wasm.attestSafeMessageHash(originalHash, BigInt(chainId), safeAddress));
+}

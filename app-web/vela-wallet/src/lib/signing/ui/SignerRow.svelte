@@ -1,21 +1,27 @@
 <script lang="ts">
+	/**
+	 * "Signing as · ◉ name" — the account that will sign. The artwork is the
+	 * same identicon the wallet header draws, and it opens the same viewer
+	 * (founder call, 2026-09-05): the signing sheet is the one place a person
+	 * most needs to be sure whose key is about to be used.
+	 */
+	import Identicon from '$lib/wallet/ui/Identicon.svelte';
+
 	interface Props {
 		label: string;
 		name: string;
 		identiconSvg: string;
+		/** The account's address; present, the artwork opens the viewer on it. */
+		address?: string;
 	}
 
-	let { label, name, identiconSvg }: Props = $props();
+	let { label, name, identiconSvg, address }: Props = $props();
 </script>
 
 <div class="signer">
 	<span class="label">{label}</span>
 	<span class="who">
-		<!-- Rendered by vela-core; the same artwork the wallet header draws. -->
-		<span class="identicon"
-			><!-- eslint-disable-next-line svelte/no-at-html-tags -- trusted vela-core output, no user content -->
-			{@html identiconSvg}</span
-		>
+		<Identicon svg={identiconSvg} size="inline" {address} />
 		<span class="name">{name}</span>
 	</span>
 </div>
@@ -37,17 +43,6 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-md);
-	}
-
-	.identicon {
-		display: flex;
-		width: var(--icon-md);
-		height: var(--icon-md);
-	}
-
-	.identicon :global(svg) {
-		width: 100%;
-		height: 100%;
 	}
 
 	.name {

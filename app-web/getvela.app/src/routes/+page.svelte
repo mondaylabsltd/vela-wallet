@@ -296,7 +296,7 @@
 				>GitHub</a
 			>
 			<a
-				href="https://wallet.getvela.app/onboarding"
+				href="https://wallet.getvela.app/"
 				target="_blank"
 				rel="noopener"
 				data-rybbit-event="cta_click"
@@ -318,7 +318,7 @@
 			</p>
 			<div class="hero-cta">
 				<a
-					href="https://wallet.getvela.app/onboarding?mode=create"
+					href="https://wallet.getvela.app/"
 					target="_blank"
 					rel="noopener"
 					class="btn btn-primary"
@@ -326,7 +326,7 @@
 					data-rybbit-prop-location="hero">Create a wallet — no seed phrase</a
 				>
 				<a
-					href="https://wallet.getvela.app/onboarding"
+					href="https://wallet.getvela.app/"
 					target="_blank"
 					rel="noopener"
 					class="hero-signin"
@@ -929,7 +929,7 @@
 			The web wallet is live and free. No install, no seed phrase — just authenticate and go.
 		</p>
 		<a
-			href="https://wallet.getvela.app/onboarding?mode=create"
+			href="https://wallet.getvela.app/"
 			target="_blank"
 			rel="noopener"
 			class="btn btn-primary btn-cta-main"

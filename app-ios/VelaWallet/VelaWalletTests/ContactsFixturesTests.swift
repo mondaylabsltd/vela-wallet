@@ -4,7 +4,7 @@
 //
 //  Spec 018 fixture canon (data-model.md, FR-012): the builders must
 //  reproduce the mock content verbatim so visual diffing against
-//  design/contacts/ stays meaningful. Pins the state-id inventory, the zh
+//  docs/design/contacts/ stays meaningful. Pins the state-id inventory, the zh
 //  copy, and the 8+1 canon addresses byte-exact.
 //
 

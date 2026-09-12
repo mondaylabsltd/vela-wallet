@@ -38,7 +38,7 @@ to overwrite an existing keyset without `--force`.
 
 - `npm run build:wasm` at the repo root whenever the Rust wasm surface
   changed — the scripts load `rust/pkg-web` + the fingerprinted
-  `public/vela_core_bg.<hash>.wasm` and will miss new exports otherwise.
+  `assets/wasm/vela_core_bg.<hash>.wasm` and will miss new exports otherwise.
 - bun (loads the pkg-web ESM glue directly; no bundler).
 
 ## Relay contract (mirrors src/services/safe-transaction.ts)

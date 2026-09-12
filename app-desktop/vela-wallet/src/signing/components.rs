@@ -5,7 +5,10 @@
 //! the ones nobody has drawn yet, come out of one code path.
 
 use gpui::prelude::FluentBuilder as _;
-use gpui::{Div, Hsla, ParentElement, SharedString, Styled, div, px};
+use gpui::{
+    Div, Hsla, InteractiveElement as _, ParentElement, SharedString,
+    StatefulInteractiveElement as _, Styled, div, px,
+};
 
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
@@ -90,7 +93,37 @@ pub fn header(theme: &Theme, model: &SigningModel) -> Div {
 }
 
 /// One block, rendered.
+/// One block, with the allowance chips ARMED.
+///
+/// The chips are a control, not a picture, and only when a machine is behind
+/// them: `actions` carries one per chip, in the order the block lists them.
+/// Passing none draws exactly what the gallery draws — the same rule the slide
+/// follows (spec 032 phase 21), and what keeps the 33 drawn scenarios
+/// pixel-identical after the editor went live.
+pub fn block_with_actions(
+    theme: &Theme,
+    icons: &mut IconCache,
+    item: &Block,
+    actions: Vec<Option<crate::flows::panels::Click>>,
+    field: Option<crate::flows::panels::AddressField>,
+    window: &gpui::Window,
+) -> Div {
+    block_inner(theme, icons, item, actions, field, Some(window))
+}
+
 pub fn block(theme: &Theme, icons: &mut IconCache, item: &Block) -> Div {
+    block_inner(theme, icons, item, Vec::new(), None, None)
+}
+
+fn block_inner(
+    theme: &Theme,
+    icons: &mut IconCache,
+    item: &Block,
+    mut actions: Vec<Option<crate::flows::panels::Click>>,
+    mut input: Option<crate::flows::panels::AddressField>,
+    window: Option<&gpui::Window>,
+) -> Div {
+    let _ = &mut actions;
     match item {
         Block::Intent { text, tone } => div()
             .text_size(theme::text_row_sub())
@@ -122,36 +155,34 @@ pub fn block(theme: &Theme, icons: &mut IconCache, item: &Block) -> Div {
                         .child(caption),
                 );
             }
-            let mut value_row = div()
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .child(
-                    div()
-                        .text_size(if *card {
-                            px(20.)
-                        } else if *compact {
-                            px(26.)
-                        } else {
-                            px(32.)
-                        })
-                        .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(ink)
-                        .child(SharedString::from(format!("{}{}", line.sign, line.value))),
-                );
+            let mut value_row = div().flex().items_center().gap(px(8.)).child(
+                div()
+                    .text_size(if *card {
+                        px(20.)
+                    } else if *compact {
+                        px(26.)
+                    } else {
+                        px(32.)
+                    })
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(ink)
+                    .child(SharedString::from(format!("{}{}", line.sign, line.value))),
+            );
             if let Some(mark) = &line.token {
                 value_row = value_row.child(letter_avatar(mark.0.clone(), mark.1, 22.));
             }
-            col = col.child(value_row.child(
-                div()
-                    .text_size(theme::text_row_title())
-                    .text_color(if line.tone == Tone::Neutral {
-                        theme.fg_muted
-                    } else {
-                        ink
-                    })
-                    .child(line.symbol.clone()),
-            ));
+            col = col.child(
+                value_row.child(
+                    div()
+                        .text_size(theme::text_row_title())
+                        .text_color(if line.tone == Tone::Neutral {
+                            theme.fg_muted
+                        } else {
+                            ink
+                        })
+                        .child(line.symbol.clone()),
+                ),
+            );
             if let Some(text) = note.clone().or_else(|| line.fiat.clone()) {
                 col = col.child(
                     div()
@@ -251,30 +282,132 @@ pub fn block(theme: &Theme, icons: &mut IconCache, item: &Block) -> Div {
             chips,
             note,
             resulting_total,
+            custom,
         } => {
             let mut chip_row = div().flex().flex_wrap().gap(px(8.));
-            for (chip_label, state) in chips {
+            let mut chip_actions = actions.into_iter();
+            for (index, (chip_label, state)) in chips.iter().enumerate() {
                 let selected = *state == ChipState::Selected;
                 let disabled = *state == ChipState::Disabled;
-                chip_row = chip_row.child(
+                // A disabled chip is never armed, whatever the caller passed:
+                // "Requested" greyed out is this wallet refusing that amount,
+                // and a click that took it would be the refusal undone by the
+                // control that states it.
+                let action = chip_actions.next().flatten().filter(|_| !disabled);
+                let chip = div()
+                    .h(px(36.))
+                    .px(px(12.))
+                    .rounded_full()
+                    .border_1()
+                    .border_color(if selected {
+                        theme.accent
+                    } else {
+                        theme.outline_strong
+                    })
+                    .flex()
+                    .items_center()
+                    .opacity(if disabled { 0.45 } else { 1.0 })
+                    .text_size(theme::text_row_sub())
+                    .text_color(if selected {
+                        theme.accent
+                    } else {
+                        theme.fg_base
+                    })
+                    .child(chip_label.clone());
+                // Stateful only when it is a control. A gallery chip stays the
+                // element the drawn scenarios have always rendered.
+                chip_row = match action {
+                    Some(action) => chip_row.child(
+                        chip.id(("allowance-chip", index))
+                            .cursor_pointer()
+                            .on_click(move |event, window, cx| action(event, window, cx)),
+                    ),
+                    None => chip_row.child(chip),
+                };
+            }
+            // The typed cap, under the chips. A field with no input bound —
+            // the gallery's — still shows what is there and what is wrong
+            // with it, because that is the state being reviewed.
+            let live = input.take().zip(window);
+            let field = custom.as_ref().map(|input| {
+                // A real input when the page bound one; the drawn field
+                // otherwise, which is what the gallery reviews. Same
+                // primitive as the send screen's amount, so a cap and an
+                // amount are typed into the same-looking thing.
+                if let Some((field, window)) = live {
+                    let strings = crate::ui::NameFieldStrings {
+                        label: input.symbol.clone(),
+                        placeholder: input.placeholder.clone(),
+                        helper: SharedString::from(""),
+                        too_long_hint: SharedString::from(""),
+                    };
+                    let mut col = div()
+                        .flex()
+                        .flex_col()
+                        .gap(px(6.))
+                        .child(crate::ui::text_field(
+                            "allowance-cap",
+                            theme,
+                            &strings,
+                            &field.value,
+                            false,
+                            false,
+                            &field.focus,
+                            window,
+                            field.on_change,
+                        ));
+                    if let Some(error) = &input.error {
+                        col = col.child(
+                            div()
+                                .text_size(theme::text_row_sub())
+                                .text_color(tone_color(theme, Tone::Danger))
+                                .child(error.clone()),
+                        );
+                    }
+                    return col;
+                }
+                let mut col = div().flex().flex_col().gap(px(6.)).child(
                     div()
-                        .h(px(36.))
-                        .px(px(12.))
-                        .rounded_full()
-                        .border_1()
-                        .border_color(if selected {
-                            theme.accent
-                        } else {
-                            theme.outline_strong
-                        })
                         .flex()
                         .items_center()
-                        .opacity(if disabled { 0.45 } else { 1.0 })
-                        .text_size(theme::text_row_sub())
-                        .text_color(if selected { theme.accent } else { theme.fg_base })
-                        .child(chip_label.clone()),
+                        .justify_between()
+                        .gap(px(8.))
+                        .p(px(12.))
+                        .rounded(px(12.))
+                        .bg(theme.bg_sunken)
+                        .child(
+                            div()
+                                .font_family(theme::font_mono())
+                                .text_size(theme::text_mono_address())
+                                .text_color(if input.value.is_empty() {
+                                    theme.fg_subtle
+                                } else {
+                                    theme.fg_base
+                                })
+                                .child(if input.value.is_empty() {
+                                    input.placeholder.clone()
+                                } else {
+                                    input.value.clone()
+                                }),
+                        )
+                        .child(
+                            div()
+                                .text_size(theme::text_row_sub())
+                                .text_color(theme.fg_muted)
+                                .child(input.symbol.clone()),
+                        ),
                 );
-            }
+                if let Some(error) = &input.error {
+                    col = col.child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(tone_color(theme, Tone::Danger))
+                            .child(error.clone()),
+                    );
+                }
+                col
+            });
+
             let mut card = div()
                 .p(px(16.))
                 .rounded(px(16.))
@@ -307,6 +440,9 @@ pub fn block(theme: &Theme, icons: &mut IconCache, item: &Block) -> Div {
                         ),
                 )
                 .child(chip_row);
+            if let Some(field) = field {
+                card = card.child(field);
+            }
             if let Some(note) = note {
                 card = card.child(
                     div()
@@ -317,7 +453,13 @@ pub fn block(theme: &Theme, icons: &mut IconCache, item: &Block) -> Div {
             }
             let mut wrap = div().flex().flex_col().gap(px(12.)).child(card);
             if let Some((total_label, total_value)) = resulting_total {
-                wrap = wrap.child(kv_row(theme, total_label, total_value, Tone::Neutral, false));
+                wrap = wrap.child(kv_row(
+                    theme,
+                    total_label,
+                    total_value,
+                    Tone::Neutral,
+                    false,
+                ));
             }
             wrap
         }
@@ -547,7 +689,13 @@ pub fn block(theme: &Theme, icons: &mut IconCache, item: &Block) -> Div {
     }
 }
 
-fn kv_row(theme: &Theme, label: &SharedString, value: &SharedString, tone: Tone, mono: bool) -> Div {
+fn kv_row(
+    theme: &Theme,
+    label: &SharedString,
+    value: &SharedString,
+    tone: Tone,
+    mono: bool,
+) -> Div {
     div()
         .py(px(10.))
         .flex()
@@ -648,7 +796,13 @@ pub fn fee(theme: &Theme, icons: &mut IconCache, fee: &FeeModel) -> Option<Div> 
                                 .text_color(theme.fg_muted)
                                 .child(title.clone()),
                         )
-                        .child(icon_img(icons, Icon::ChevronDown, false, theme.fg_muted, 12.)),
+                        .child(icon_img(
+                            icons,
+                            Icon::ChevronDown,
+                            false,
+                            theme.fg_muted,
+                            12.,
+                        )),
                 );
             for option in options {
                 let mut row = div()
@@ -731,13 +885,17 @@ pub fn signer_row(
 /// The one way to confirm (spec 022 §4). There is no reject button beside it:
 /// closing the column IS the rejection, so the only deliberate act here is the
 /// affirmative one.
+/// The confirm. `action` is `None` for the mocks — a drawn slide that answers
+/// to nothing — and `Some` for a live request. It is only ever passed when
+/// `enabled`, so a shut slide cannot be fired by a click that lands on it.
 pub fn slide_to_confirm(
     theme: &Theme,
     icons: &mut IconCache,
     label: SharedString,
     enabled: bool,
+    action: Option<crate::flows::panels::Click>,
 ) -> Div {
-    div()
+    let slide = div()
         .h(px(SLIDE_H))
         .rounded_full()
         .bg(theme.bg_sunken)
@@ -754,7 +912,13 @@ pub fn slide_to_confirm(
                 .flex()
                 .items_center()
                 .justify_center()
-                .child(icon_img(icons, Icon::ArrowRight, false, theme.fg_inverse, 20.)),
+                .child(icon_img(
+                    icons,
+                    Icon::ArrowRight,
+                    false,
+                    theme.fg_inverse,
+                    20.,
+                )),
         )
         .child(
             div()
@@ -765,7 +929,12 @@ pub fn slide_to_confirm(
                 .text_color(theme.fg_muted)
                 .child(label),
         )
-        .child(div().w(px(SLIDE_KNOB)))
+        .child(div().w(px(SLIDE_KNOB)));
+    // A shut slide answers to nothing. The drawings have no reject button —
+    // closing the column IS the rejection — so the only thing this control
+    // can do is confirm, and it may only do that when all three machines
+    // agreed.
+    crate::flows::panels::clickable("signing-confirm", action, slide)
 }
 
 use super::fixtures::ChipState;

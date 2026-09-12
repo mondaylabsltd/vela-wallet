@@ -1,4 +1,5 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	/**
 	 * The scanner (spec 021 component 27) — S1 full-screen on the phone, DS1L
 	 * as a centred modal on the desktop.
@@ -16,11 +17,23 @@
 		model: ScanModel;
 		/** Desktop draws a titled modal; the phone goes edge to edge. */
 		variant?: 'screen' | 'modal';
+		/**
+		 * What fills the frame (spec 028 T422). Absent = the inert surface the
+		 * gallery draws; a live screen passes a `<video>`. The component stays
+		 * pure either way — it owns no camera and knows of none.
+		 */
+		feed?: Snippet;
+		/**
+		 * Why there is nothing to look at, when there is nothing to look at.
+		 * A viewfinder that just stays black tells a person their camera is
+		 * broken; the truth is usually a refusal they can undo.
+		 */
+		notice?: string;
 		onclose?: () => void;
 		ontool?: (id: 'gallery' | 'torch' | 'flip') => void;
 	}
 
-	let { model, variant = 'screen', onclose, ontool }: Props = $props();
+	let { model, variant = 'screen', feed, notice, onclose, ontool }: Props = $props();
 
 	const GLYPHS: Record<'gallery' | 'torch' | 'flip', UtilityIconId> = {
 		gallery: 'image',
@@ -46,14 +59,18 @@
 	{/if}
 
 	<div class="frame">
-		<span class="feed" aria-hidden="true"></span>
+		{#if feed}
+			{@render feed()}
+		{:else}
+			<span class="feed" aria-hidden="true"></span>
+		{/if}
 		<span class="corner tl" aria-hidden="true"></span>
 		<span class="corner tr" aria-hidden="true"></span>
 		<span class="corner bl" aria-hidden="true"></span>
 		<span class="corner br" aria-hidden="true"></span>
 	</div>
 
-	<p class="hint">{model.hint}</p>
+	<p class="hint">{notice ?? model.hint}</p>
 
 	<div class="tools">
 		{#each model.tools as tool (tool.id)}

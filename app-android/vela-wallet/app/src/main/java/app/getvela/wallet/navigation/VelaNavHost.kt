@@ -17,6 +17,13 @@ import androidx.navigation.compose.rememberNavController
 import app.getvela.wallet.VelaWalletApplication
 import app.getvela.wallet.core.data.ThemePreference
 import app.getvela.wallet.core.i18n.LocalVelaStrings
+import app.getvela.wallet.feature.explore.ExploreFixtures
+import app.getvela.wallet.feature.explore.ExploreScreen
+import app.getvela.wallet.feature.explore.ExploreScreenState
+import app.getvela.wallet.feature.explore.withIdentity
+import app.getvela.wallet.feature.signing.SigningFixtures
+import app.getvela.wallet.feature.signing.SigningScreenState
+import app.getvela.wallet.feature.signing.withIdentity as withSignerIdentity
 import app.getvela.wallet.feature.contacts.ContactsActions
 import app.getvela.wallet.feature.contacts.ContactsFixtures
 import app.getvela.wallet.feature.contacts.ContactsLive
@@ -87,6 +94,9 @@ object VelaDestinations {
     const val GALLERY = "gallery"
 
     // Spec 018: fixture-driven contacts screens + their preview gallery (D1).
+    // Spec 022: the explore browser, reachable in the app from the Explore tab
+    // and directly by intent extra for review.
+    const val EXPLORE = "explore"
     const val CONTACTS = "contacts"
     const val CONTACTS_GALLERY = "contacts-gallery"
 
@@ -111,6 +121,7 @@ object VelaDestinations {
         GALLERY,
         CONTACTS,
         CONTACTS_GALLERY,
+        EXPLORE,
         FLOWS_GALLERY,
         SETTINGS,
         SETTINGS_GALLERY,
@@ -299,7 +310,15 @@ fun VelaNavHost(
             }
 
             val flows = rememberFlowNavState()
+            // Which body the signed-in shell is showing. Survives rotation for
+            // the same reason the flow stack does.
+            var section by rememberSaveable { mutableStateOf(VelaTab.Wallet) }
+            // Back unwinds the flow stack first, then leaves 探索 for 钱包 —
+            // Back out of a browser should land on the wallet, not on Welcome.
             BackHandler(enabled = flows.isOpen) { flows.back() }
+            BackHandler(enabled = !flows.isOpen && section == VelaTab.Explore) {
+                section = VelaTab.Wallet
+            }
 
             val flowState = flows.top
             if (flowState != null) {
@@ -346,32 +365,75 @@ fun VelaNavHost(
                     onNavigate = { flows.push(it) },
                 )
             } else {
-                WalletScreen(
-                    model = WalletLive.home(model, balances, feed, currency, strings, chainNames),
-                    onSelectTab = { tab ->
+                // Spec 022/029: 探索 is a real destination now rather than an
+                // inert chip — the same signed-in shell with a different body,
+                // which is why it is a SECTION of this route and not a route of
+                // its own. A browser tab is not somewhere a person should be
+                // able to deep-link into before they have a wallet.
+                val select: (VelaTab) -> Unit = { tab ->
+                    when (tab) {
                         // 设置 has a screen now (spec 023), and the 退出登录 row
                         // inside it is where signing out lives. Until then the
                         // TAB itself signed you out — which meant tapping 设置
-                        // to change your language logged you out instead.
-                        //
+                        // to change your language logged you out instead. That
+                        // regression must not come back through this `when`.
+                        VelaTab.Settings -> navController.push(VelaDestinations.SETTINGS)
+                        VelaTab.Explore -> section = VelaTab.Explore
+                        VelaTab.Wallet -> section = VelaTab.Wallet
                         // 通讯录 refused to navigate for a good reason: it
                         // would have shown a signed-in person six strangers.
                         // That reason expired with spec 040 — the screen reads
                         // this device's own book now — so the tab works.
-                        // 探索 stays where it was: its screen is still a
-                        // fixture, and it has no destination on this base.
-                        when (tab) {
-                            VelaTab.Settings -> navController.push(VelaDestinations.SETTINGS)
-                            VelaTab.Contacts -> navController.push(VelaDestinations.CONTACTS)
-                            else -> Unit
-                        }
-                    },
-                    // The id says WHICH row was tapped. Without it every row
-                    // opened the same detail, so this person's own POL showed
-                    // somebody else's transaction.
-                    onFlow = { entry, id -> flows.enter(entry, id) },
-                )
+                        VelaTab.Contacts -> navController.push(VelaDestinations.CONTACTS)
+                    }
+                }
+                if (section == VelaTab.Explore) {
+                    // The browser shows the SIGNED-IN account, never the
+                    // fixture one: a connection panel naming a stranger's
+                    // account would be the wallet lying about what it just
+                    // granted.
+                    val exploreModel = remember(strings, session.address, session.activeName) {
+                        ExploreFixtures.buildState(ExploreScreenState.E2, strings)
+                            .withIdentity(session.activeName, session.address)
+                    }
+                    val signing = remember(strings, session.address, session.activeName) {
+                        SigningFixtures.build(SigningScreenState.CS12, strings)
+                            .withSignerIdentity(session.activeName, session.address)
+                    }
+                    ExploreScreen(
+                        model = exploreModel,
+                        signing = signing,
+                        onSelectTab = select,
+                    )
+                } else {
+                    // The holdings, the feed and the currency are this device's
+                    // own (spec 041); the fixture `model` only carries the
+                    // labels the live builder cannot compute.
+                    WalletScreen(
+                        model = WalletLive.home(model, balances, feed, currency, strings, chainNames),
+                        onSelectTab = select,
+                        // The id says WHICH row was tapped. Without it every row
+                        // opened the same detail, so this person's own POL showed
+                        // somebody else's transaction.
+                        onFlow = { entry, id -> flows.enter(entry, id) },
+                    )
+                }
             }
+        }
+
+        // Spec 022: the browser on its own route, for review. The in-app entry
+        // is the 探索 tab inside WALLET; this is the `vela.startDestination`
+        // door, which is why it is in DEVELOPER_ROUTES and exempt from the
+        // route guard.
+        composable(VelaDestinations.EXPLORE) {
+            val strings = LocalVelaStrings.current
+            val model = remember(strings) {
+                ExploreFixtures.buildState(ExploreScreenState.E2, strings)
+            }
+            val signing = remember(strings) {
+                SigningFixtures.build(SigningScreenState.CS12, strings)
+            }
+            ExploreScreen(model = model, signing = signing)
         }
 
         composable(VelaDestinations.GALLERY) {
@@ -721,6 +783,7 @@ internal val DEVELOPER_ROUTES = setOf(
     VelaDestinations.GALLERY,
     VelaDestinations.CONTACTS_GALLERY,
     VelaDestinations.CONTACTS,
+    VelaDestinations.EXPLORE,
     VelaDestinations.FLOWS_GALLERY,
     VelaDestinations.SETTINGS_GALLERY,
     VelaDestinations.IMPORT,

@@ -19,7 +19,13 @@
 </script>
 
 <div class="card">
-	<TokenIcon ticker={token.mark.ticker} badgeColor={token.mark.badgeColor} />
+	<TokenIcon
+		ticker={token.mark.ticker}
+		badgeColor={token.mark.badgeColor}
+		logoUrls={token.mark.logoUrls}
+		badgeLogoUrl={token.mark.badgeLogoUrl}
+		badgeHidden={token.mark.badgeHidden}
+	/>
 	<span class="text">
 		<span class="symbol">{token.symbol}</span>
 		<span class="detail">{token.detail}</span>

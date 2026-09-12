@@ -32,8 +32,15 @@ They are recorded with their evidence in [`research.md`](../../../specs/027-web-
    what lets the passkey ceremony run under the hosted site's relying party,
    which is what makes the extension the SAME wallet at the same address. Remove
    it and the extension quietly becomes a different, empty wallet.
-4. **A dApp request opens a dedicated window, never the action popup.** The
-   popup closes when the passkey prompt takes focus, mid-signature.
+4. **A dApp request opens the asking tab's SIDE PANEL, or a dedicated window —
+   never the action popup.** The popup closes when the passkey prompt takes
+   focus, mid-signature; the side panel and a window both survive it.
+   `chrome.sidePanel.open` needs a user gesture, and the gesture travels with
+   the page's message only until the worker's first `await` — so the panel is
+   opened synchronously in the message listener, and a request a page fired
+   without a click (no gesture) falls back to the window. Both show the same
+   `request.html`; the panel enters it through `panel.html`, because
+   `side_panel.default_path` is one static path and the pages are per locale.
 5. **No top-level name in `dist/` may start with `_`.** Chrome reserves that
    prefix and rejects the whole package — "Cannot load extension with file or
    directory name \_app … Could not load manifest." SvelteKit's `kit.appDir`
@@ -45,11 +52,31 @@ They are recorded with their evidence in [`research.md`](../../../specs/027-web-
 ## Layout (as phases land it)
 
 ```
-manifest.json      the four constraints above, plus a pinned id (`key`)
+manifest.json      the five constraints above, plus a pinned id (`key`)
+icons/             the toolbar and store icons, rendered from docs/design/icon/app-icon.svg
 inpage.js          MAIN world: the provider, its announcement, the legacy shim
 content.js         isolated world: the page bridge
-background.js      the service worker: routing, and no authoritative state
+background.js      the service worker: routing, the per-site chain, reads
+                   forwarded verbatim, and the page events — no authoritative state
+panel.html/.js     the side panel's doorway: picks the locale, opens request.html
 lib/protocol.js    the message shapes both sides agree on
+lib/locales.js     the packaged locales, negotiated the same way everywhere
 build.mjs          assembles the app's client build + these scripts into dist/
 dist/              build output — gitignored
 ```
+
+## What the worker answers, and from where
+
+| Method                                                                 | Answered by                                                                                    |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `eth_accounts`, `eth_chainId`, `net_version`, `wallet_getPermissions`  | the wallet's snapshot + the site's grant and chain pick                                        |
+| `eth_requestAccounts`, `wallet_requestPermissions`                     | the side panel (or window): `dapp_permissions`                                                 |
+| `personal_sign`, typed data, `eth_sendTransaction`, `wallet_sendCalls` | the side panel (or window): `sign_request`, on the site's chain                                |
+| `wallet_switchEthereumChain`, `wallet_addEthereumChain`                | the worker, against the catalog the wallet published (`vela.ext.chains`); unknown chain → 4902 |
+| `wallet_watchAsset`                                                    | `false` — tokens are added in the wallet                                                       |
+| node and bundler reads (allowlist in protocol.js)                      | forwarded to the catalog's endpoints for the site's chain                                      |
+| anything else                                                          | 4200                                                                                           |
+
+The page hears `accountsChanged` / `chainChanged` / `disconnect` when the
+site's grant or chain pick changes in storage — on connect, when the wallet
+switches accounts (the core re-pins the grant), on revoke, on a switch.

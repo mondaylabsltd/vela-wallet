@@ -1,32 +1,44 @@
 <script lang="ts">
 	/**
-	 * The window a dApp's request is answered in (spec 027 T322/T334).
+	 * The surface a dApp's request is answered in (spec 027 T322/T334).
 	 *
-	 * A dedicated window, not the action popup and not an in-page sheet: the
-	 * popup would be dismissed the moment a passkey prompt takes focus (D34),
-	 * and a sheet drawn in the page could be styled, covered or scrolled by the
-	 * very site asking for the signature.
+	 * Two doors, one page. A request a person clicked for opens in the SIDE
+	 * PANEL of the tab that asked (no `rid` in the URL: the panel asks the
+	 * worker what that tab owes). A request a page fired on its own — no user
+	 * gesture, so no panel — opens in a dedicated window (`?rid=`). Neither is
+	 * the action popup, which would be dismissed the moment a passkey prompt
+	 * takes focus (D34), and neither is an in-page sheet the site could style,
+	 * cover or scroll.
 	 *
-	 * Every decision here is `dapp_permissions`'. The window shows who is asking
-	 * — the browser's own fact about the origin, never the page's claim — and
-	 * performs what the core authors: the grant, the audit row, the answer.
+	 * Every decision here is `dapp_permissions`'. The surface shows who is
+	 * asking — the browser's own fact about the origin, never the page's claim —
+	 * and performs what the core authors: the grant, the audit row, the answer.
 	 *
 	 * Leaving is not neutral. An explicit Cancel is 4001, "nothing happened". A
-	 * window torn down with an answer still owed settles with the CORE's code,
+	 * surface torn down with an answer still owed settles with the CORE's code,
 	 * which is 4900 unknown-pending — because a dApp reads 4001 as a clean
 	 * decline and re-sends, double-spending an operation that may already be at
 	 * the bundler.
+	 *
+	 * In the panel, one request is one page load: when an answer has gone out
+	 * and the tab owes another, the page reloads into it — a fresh core, a fresh
+	 * fee session (026's one-owner rule), nothing carried over.
 	 */
 	import { onMount } from 'svelte';
 	import { session } from '$lib/session/core/session.svelte';
 	import { hostLabel } from '$lib/dapp/host';
 	import { publishExtSnapshot } from '$lib/dapp/core/ext-cache';
+	import { publishExtChains } from '$lib/dapp/core/ext-chains';
+	import { getOriginChain } from '$lib/dapp/grants';
 	import { approve, evaluate, type RequestStage } from '$lib/dapp/request';
 	import SigningHost from '$lib/signing/SigningHost.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import {
 		answerRequest,
+		currentPanelRequest,
+		panelDone,
+		panelTabId,
 		readRequest,
 		rejectRequest,
 		type ExtensionRequest
@@ -37,8 +49,12 @@
 
 	let request = $state<ExtensionRequest | null>(null);
 	let stage = $state<RequestStage>({ kind: 'loading' });
+	/** The chain the SITE is on — what the grant records and a signature is asked on. */
 	let chainId = $state(0);
 	let busy = $state(false);
+	/** Panel mode: no `rid` in the URL; the tab is asked for instead. */
+	let panel = $state(false);
+	let tabId: number | undefined;
 	/**
 	 * ONE live fee session for this window (026's rule): the quote the core
 	 * pre-checks against, the quote on screen and the quote that is signed are
@@ -55,14 +71,22 @@
 
 	onMount(() => {
 		const rid = new URLSearchParams(location.search).get('rid') ?? '';
+		panel = rid === '';
 		let disposed = false;
 
 		void (async () => {
 			await session.boot();
-			const incoming = await readRequest(rid);
+			let incoming: ExtensionRequest | null;
+			if (panel) {
+				tabId = await panelTabId();
+				incoming = await currentPanelRequest(tabId);
+			} else {
+				incoming = await readRequest(rid);
+			}
 			if (disposed) return;
 			if (!incoming) {
 				stage = { kind: 'refused', code: 4900, message: 'This request is no longer available' };
+				closeSoon();
 				return;
 			}
 			request = incoming;
@@ -70,15 +94,18 @@
 
 			// Publish what the worker will need to answer this origin instantly
 			// next time. The core authors it; this window only stores it.
-			const snapshot = await publishExtSnapshot({
-				isLoading: session.view.loading,
-				hasWallet: session.view.has_wallet,
-				accounts: session.view.accounts.map((row) => row.account),
-				active: session.view.accounts[session.view.active_index]?.account ?? null,
-				theme: 'dark',
-				locale: data.locale ?? 'en'
-			});
-			chainId = snapshot?.chain_id ?? 0;
+			const [snapshot] = await Promise.all([
+				publishExtSnapshot({
+					isLoading: session.view.loading,
+					hasWallet: session.view.has_wallet,
+					accounts: session.view.accounts.map((row) => row.account),
+					active: session.view.accounts[session.view.active_index]?.account ?? null,
+					theme: 'dark',
+					locale: data.locale ?? 'en'
+				}),
+				publishExtChains()
+			]);
+			chainId = await getOriginChain(incoming.origin, snapshot?.chain_id ?? 0);
 
 			stage = await evaluate(incoming, facts);
 			if (stage.kind === 'done' || stage.kind === 'refused') {
@@ -93,8 +120,8 @@
 			}
 		})();
 
-		// The window is going away with an answer still owed. The code is NOT this
-		// screen's to pick — it is asked of the core, once, in `settleOnClose`.
+		// The surface is going away with an answer still owed. The code is NOT
+		// this screen's to pick — it is asked of the core, once, in `settleOnClose`.
 		const settle = () => {
 			if (!owing) return;
 			const rid = owing;
@@ -120,6 +147,7 @@
 	async function handOffToSigning(incoming: ExtensionRequest, grantedAddress: string) {
 		await signRequest.boot();
 		signRequest.syncNetworks();
+		signRequest.syncAccounts();
 		const transportId = signRequest.registerTransport({
 			sendResponse: (_id, result, error) => {
 				owing = null;
@@ -135,7 +163,10 @@
 			origin: incoming.origin,
 			transport_id: transportId,
 			dedicated_transport: true,
-			per_request_chain: null,
+			// The chain the SITE is on (its `wallet_switchEthereumChain`, else the
+			// chain it connected on). A chain the wallet does not support is the
+			// machine's 4902, before any sheet.
+			per_request_chain: chainId > 0 ? chainId : null,
 			dapp: null,
 			// Invariant ⑨: the signature is pinned to the GRANT's address, never
 			// to whichever account happens to be active.
@@ -163,8 +194,27 @@
 		}
 	}
 
+	/**
+	 * Leave — after a short delay, so the answer reaches the page before the
+	 * document goes away. In the panel, first ask whether the tab owes another
+	 * answer: if so, reload into it (a fresh page per request); if not, the
+	 * worker dismisses the panel and this page closes itself as a backstop.
+	 */
 	function closeSoon(): void {
-		setTimeout(() => window.close(), 400);
+		setTimeout(() => {
+			if (!panel) {
+				window.close();
+				return;
+			}
+			void currentPanelRequest(tabId).then((next) => {
+				if (next) {
+					location.reload();
+					return;
+				}
+				void panelDone(tabId);
+				window.close();
+			});
+		}, 400);
 	}
 
 	async function onConnect(): Promise<void> {
@@ -188,7 +238,7 @@
 		const rid = owing;
 		owing = null;
 		if (rid) await rejectRequest(rid);
-		window.close();
+		closeSoon();
 	}
 </script>
 

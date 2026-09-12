@@ -86,6 +86,15 @@ pub fn account_established(mode: CompletionMode, cx: &mut App) {
 
 /// Open the sign-out confirmation. The core checks the pending-upload outbox
 /// before the dialog appears, so the warning is decided rather than guessed.
+/// The switcher picked a row.
+///
+/// `index` is a position in the ORIGINAL account list, not in whatever order a
+/// screen drew — the core's invariant ⑦, and the reason `SessionAccountRow`
+/// carries its own index rather than leaving the shell to count rows.
+pub fn switch_account(index: usize, cx: &mut App) {
+    dispatch(vela_core::app::session::Event::SwitchAccount { index }, cx);
+}
+
 pub fn sign_out(cx: &mut App) {
     dispatch(vela_core::app::session::Event::SignOut, cx);
 }
@@ -128,6 +137,58 @@ mod tests {
                 transports: "usb".to_owned(),
             }],
         }
+    }
+
+    /// Two accounts, and switching between them.
+    ///
+    /// `SwitchAccount` has existed since 019 with nothing to trigger it —
+    /// "an event with no control is dead code", as this file said about this
+    /// very event. The control is the settings account row, and this is the
+    /// property it depends on: the row's index is a position in the ORIGINAL
+    /// list (invariant ⑦), so a display reorder cannot switch to the wrong
+    /// wallet.
+    #[test]
+    fn switching_accounts_moves_the_active_address() {
+        crate::executor::storage::tests::with_temp_state("session-switch", || {
+            let first = account();
+            let mut second = account();
+            second.id = "cred1".to_owned();
+            second.name = "Spending".to_owned();
+            second.address = "0x88cCA0EeDbF2C4426110bbFc998F048689266894".to_owned();
+
+            if crate::executor::storage::save_account(&first).is_err()
+                || crate::executor::storage::save_account(&second).is_err()
+            {
+                unreachable!("could not seed");
+            }
+
+            let mut state = SessionState::new();
+            let pending = state.host.dispatch(Event::Boot);
+            state.pump(pending);
+            assert_eq!(state.view.accounts.len(), 2, "both wallets are listed");
+
+            let active = state.view.active_index;
+            let other = state
+                .view
+                .accounts
+                .iter()
+                .map(|row| row.index)
+                .find(|index| *index != active)
+                .unwrap_or_else(|| unreachable!("two accounts, two indices"));
+            let wanted = state.view.accounts[other].account.address.clone();
+
+            let pending = state.host.dispatch(Event::SwitchAccount { index: other });
+            state.pump(pending);
+            assert_eq!(state.view.active_index, other);
+            // The address is DERIVED from the active index (invariant ①), so
+            // this is what every money surface will now read.
+            assert_eq!(state.view.address, wanted);
+
+            // Switching to the row already active changes nothing.
+            let pending = state.host.dispatch(Event::SwitchAccount { index: other });
+            state.pump(pending);
+            assert_eq!(state.view.address, wanted);
+        });
     }
 
     /// Sign in, then sign out, and land back on Welcome.

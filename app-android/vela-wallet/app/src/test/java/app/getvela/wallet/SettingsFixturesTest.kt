@@ -33,7 +33,7 @@ class SettingsFixturesTest {
 
     /** The real engine over the real generated catalogs, same as the contacts test. */
     private fun strings(locale: String): I18nRuntime = I18nRuntime { tag ->
-        File(repoRoot, "public/i18n/$tag.json").readBytes()
+        File(repoRoot, "assets/i18n/$tag.json").readBytes()
     }.apply { initialize(locale) }
 
     @Test

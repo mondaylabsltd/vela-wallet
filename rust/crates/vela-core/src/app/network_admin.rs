@@ -200,6 +200,12 @@ pub struct NetBuiltinChain {
     pub native_symbol: &'static str,
     pub rpc_url: &'static str,
     pub explorer_url: &'static str,
+    /// How long a submitted operation USUALLY takes to land, in seconds —
+    /// block time × the relay's usual inclusion depth (spec 038 Part D, #D3).
+    /// A person waiting on the receipt screen gets this as "usually about
+    /// Ns", and "longer than usual" past twice it. Never a promise, never a
+    /// failure: a slow chain is still a submitted payment (invariant ⑤).
+    pub typical_inclusion_s: u16,
 }
 
 pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
@@ -210,6 +216,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "ETH",
         rpc_url: "https://ethereum-rpc.publicnode.com",
         explorer_url: "https://etherscan.io",
+        typical_inclusion_s: 24,
     },
     NetBuiltinChain {
         id: "bnb",
@@ -218,6 +225,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "BNB",
         rpc_url: "https://bsc-dataseed.binance.org",
         explorer_url: "https://bscscan.com",
+        typical_inclusion_s: 9,
     },
     NetBuiltinChain {
         id: "polygon",
@@ -226,6 +234,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "POL",
         rpc_url: "https://polygon-bor-rpc.publicnode.com",
         explorer_url: "https://polygonscan.com",
+        typical_inclusion_s: 6,
     },
     NetBuiltinChain {
         id: "arbitrum",
@@ -234,6 +243,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "ETH",
         rpc_url: "https://arb1.arbitrum.io/rpc",
         explorer_url: "https://arbiscan.io",
+        typical_inclusion_s: 4,
     },
     NetBuiltinChain {
         id: "optimism",
@@ -242,6 +252,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "ETH",
         rpc_url: "https://mainnet.optimism.io",
         explorer_url: "https://optimistic.etherscan.io",
+        typical_inclusion_s: 4,
     },
     NetBuiltinChain {
         id: "base",
@@ -250,6 +261,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "ETH",
         rpc_url: "https://mainnet.base.org",
         explorer_url: "https://basescan.org",
+        typical_inclusion_s: 4,
     },
     NetBuiltinChain {
         id: "avalanche",
@@ -258,6 +270,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "AVAX",
         rpc_url: "https://api.avax.network/ext/bc/C/rpc",
         explorer_url: "https://snowtrace.io",
+        typical_inclusion_s: 4,
     },
     NetBuiltinChain {
         id: "gnosis",
@@ -266,6 +279,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "xDAI",
         rpc_url: "https://rpc.gnosischain.com",
         explorer_url: "https://gnosisscan.io",
+        typical_inclusion_s: 15,
     },
     NetBuiltinChain {
         id: "unichain",
@@ -274,6 +288,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "ETH",
         rpc_url: "https://mainnet.unichain.org",
         explorer_url: "https://uniscan.xyz",
+        typical_inclusion_s: 3,
     },
     NetBuiltinChain {
         id: "tempo",
@@ -282,6 +297,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "USD",
         rpc_url: "https://rpc.mainnet.tempo.xyz",
         explorer_url: "https://explore.tempo.xyz",
+        typical_inclusion_s: 5,
     },
     NetBuiltinChain {
         id: "monad",
@@ -290,6 +306,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "MON",
         rpc_url: "https://rpc.monad.xyz",
         explorer_url: "https://monadscan.com",
+        typical_inclusion_s: 3,
     },
     NetBuiltinChain {
         id: "worldchain",
@@ -298,6 +315,7 @@ pub const BUILTIN_CHAINS: [NetBuiltinChain; 12] = [
         native_symbol: "ETH",
         rpc_url: "https://worldchain.drpc.org",
         explorer_url: "https://worldscan.org",
+        typical_inclusion_s: 4,
     },
 ];
 
@@ -957,6 +975,13 @@ pub enum NetWizardErrorKind {
     /// this FLATTENS an inconclusive RPC failure into not-compatible; the
     /// wizard keeps the distinction via [`NetCompatibility::rpc_failure`].
     NotCompatible { chain_id: u32 },
+    /// The check could not reach a verdict — the RPC probes failed, so
+    /// nothing was learned about the chain (spec 038 #E1). Distinct from
+    /// [`Self::NotCompatible`], which is a verdict: the scan path used to
+    /// flatten both into "not compatible" (ported verbatim from
+    /// `add-network.ts:47`), and a machine whose proxy was refusing told the
+    /// founder that Celo was incompatible. Celo is not. Additive.
+    CheckFailed { chain_id: u32 },
 }
 
 // ---------------------------------------------------------------------------
@@ -1892,11 +1917,19 @@ fn finish_check(model: &mut Model, compat: NetCompatibility) -> Command<NetEffec
         return save_custom_network(model, record);
     }
 
-    // Verbatim `add-network.ts:47`: rpcFailed and truly-incompatible both
-    // flatten to `not-compatible` on this path (module doc).
+    // Two verdicts, kept apart (spec 038 #E1): a probe that failed says
+    // "could not check" — with the retry the wizard already draws — and
+    // never "not compatible". `add-network.ts:47` flattened them; that was
+    // the trap, not a rule worth porting.
     model.wizard.phase = WizardPhase::Error {
-        kind: NetWizardErrorKind::NotCompatible {
-            chain_id: compat.chain_id,
+        kind: if compat.rpc_failure.is_some() {
+            NetWizardErrorKind::CheckFailed {
+                chain_id: compat.chain_id,
+            }
+        } else {
+            NetWizardErrorKind::NotCompatible {
+                chain_id: compat.chain_id,
+            }
         },
     };
     render()

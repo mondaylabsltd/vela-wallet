@@ -3,10 +3,13 @@
 <title>Test dApp</title>
 <body>
 	<h1>Test dApp</h1>
+	<!-- A REAL click: the one road to the side panel (a user gesture). -->
+	<button id="connect" type="button">Connect</button>
+	<button id="sign" type="button">Sign</button>
 	<pre id="out">waiting…</pre>
 	<script>
 		const out = document.getElementById('out');
-		const state = { announced: [], legacy: null, results: {} };
+		const state = { announced: [], legacy: null, results: {}, events: [] };
 		const show = () => (out.textContent = JSON.stringify(state, null, 2));
 
 		// EIP-6963: ask, and record every wallet that answers.
@@ -21,6 +24,14 @@
 				frozenInfo: Object.isFrozen(info)
 			});
 			window.__velaProvider = provider;
+			// Every EIP-1193 event the provider pushes, in order — what a dApp
+			// reacts to. Hooked on the announce, so nothing is asked for twice.
+			for (const event of ['accountsChanged', 'chainChanged', 'connect', 'disconnect']) {
+				provider.on(event, (data) => {
+					state.events.push({ event, data });
+					show();
+				});
+			}
 			show();
 		});
 		window.dispatchEvent(new Event('eip6963:requestProvider'));
@@ -57,6 +68,14 @@
 				},
 				window.location.origin
 			);
+
+		// Driven by a person (or a trusted click): the gesture the side panel needs.
+		document.getElementById('connect').addEventListener('click', () => {
+			window.__ask('eth_requestAccounts');
+		});
+		document.getElementById('sign').addEventListener('click', () => {
+			window.__ask('personal_sign', ['0x48656c6c6f2c2056656c61', window.ethereum.selectedAddress]);
+		});
 
 		// Driven by the test.
 		window.__ask = async (method, params) => {

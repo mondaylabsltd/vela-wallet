@@ -66,6 +66,8 @@ class SignRequest {
 	#nextTransportId = 0;
 	#assetSim: AssetSimResult | null = null;
 	#networksKey: string | null = null;
+	#accountsKey: string | null = null;
+	#stopAccountsMirror: (() => void) | null = null;
 	#lastHandoffHash = '';
 
 	/** Register a transport and get the id the core will name it by. */
@@ -124,16 +126,69 @@ class SignRequest {
 						if (session.view.active_index !== index) {
 							return refuseSwitch(index, intended, target);
 						}
+						// The machine consumes the ack by reading ITS OWN rows at
+						// `active_index` (`approve_with`), so the switch must be in
+						// them before the ack lands — not a microtask later.
+						this.syncAccounts();
 					}
 				}
 			});
 			this.#loop.start(this.#networksEvent());
+			// The session's rows are the machine's signers (§12.1.6): mirrored on
+			// boot and on every change — a sign-in, a switch, a sign-out. Expo's
+			// resident had `setSignAccounts` called from the wallet provider on
+			// each state change; on the web the session is app-resident state, so
+			// the mirror is an effect on it. Without this the machine has NO
+			// accounts, and `approve_with` finds no signer and returns silently:
+			// the slide commits, the gate is open, and nothing is ever signed
+			// (027's SC-304 finding).
+			this.syncAccounts();
+			this.#stopAccountsMirror?.();
+			this.#stopAccountsMirror = $effect.root(() => {
+				$effect(() => {
+					// Read the tracked fields; the key dedupes unchanged views.
+					void session.view.accounts;
+					void session.view.active_index;
+					void session.view.loading;
+					this.syncAccounts();
+				});
+			});
 		})();
 		return this.#booting;
 	}
 
 	dispatch(event: SignEvent): void {
 		void this.boot().then(() => this.#loop?.dispatch(event));
+	}
+
+	/**
+	 * Hand the machine the session's own rows — address and founding credential
+	 * — and the active position, in the session's domain (`SwitchAccount.index`
+	 * is consumed there). Unchanged rows are dropped: one string compare.
+	 * Nothing is sent while the session is still restoring; a stale list would
+	 * let a request reconcile against accounts that are about to be replaced.
+	 */
+	syncAccounts(): void {
+		const view = session.view;
+		if (view.loading) return;
+		const rows = view.accounts;
+		const key =
+			`${view.active_index}|` +
+			rows.map((row) => `${row.account.address.toLowerCase()}:${row.account.id}`).join(',');
+		if (key === this.#accountsKey) return;
+		this.#accountsKey = key;
+		const event: SignEvent = {
+			type: 'accounts_changed',
+			accounts: rows.map((row) => ({
+				address: row.account.address,
+				credential_id: row.account.id
+			})),
+			active_index: view.active_index
+		};
+		// Synchronous when the machine is up: a caller inside a port needs the
+		// rows in place before its ack resolves.
+		if (this.#loop) this.#loop.dispatch(event);
+		else this.dispatch(event);
 	}
 
 	/**

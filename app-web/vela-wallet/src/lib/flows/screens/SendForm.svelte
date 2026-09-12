@@ -31,6 +31,12 @@
 		onmax?: (index: number) => void;
 		onaddRecipient?: () => void;
 		/**
+		 * The split rows, typed into (spec 028 Phase 10): a patch to one row,
+		 * and the book opened for one row. Absent, the cards are the drawn ones.
+		 */
+		onrecipientRow?: (index: number, patch: { address?: string; amount?: string }) => void;
+		onpickRecipientRow?: (index: number) => void;
+		/**
 		 * The primary action (spec 026). Absent, the CTA is the drawn button it
 		 * has always been — the gallery renders a picture, not a dead promise.
 		 */
@@ -52,6 +58,8 @@
 		ondenom,
 		onmax,
 		onaddRecipient,
+		onrecipientRow,
+		onpickRecipientRow,
 		oncontinue,
 		onamount,
 		onrecipient,
@@ -77,6 +85,9 @@
 							ticker: row.symbol,
 							chain: row.balanceLabel,
 							badgeColor: row.mark.badgeColor,
+							logoUrls: row.mark.logoUrls,
+							badgeLogoUrl: row.mark.badgeLogoUrl,
+							badgeHidden: row.mark.badgeHidden,
 							balance: row.amount,
 							fiat: { kind: 'none' },
 							masked: false
@@ -105,6 +116,7 @@
 		<RecipientField
 			label={model.recipient.label}
 			lines={model.recipient.lines}
+			address={model.recipient.address}
 			identiconSvg={model.recipient.identiconSvg}
 			pickLabel={model.recipient.pickLabel}
 			scanLabel={model.recipient.scanLabel}
@@ -124,9 +136,15 @@
 
 	{#if model.recipients !== undefined}
 		<ul class="recipients">
-			{#each model.recipients as recipient, i (recipient.ordinal)}
+			{#each model.recipients as recipient, i (recipient.id ?? recipient.ordinal)}
 				<li>
-					<RecipientCard {recipient} onremove={() => onremoveRecipient?.(i)} />
+					<RecipientCard
+						{recipient}
+						symbol={model.token?.symbol}
+						onremove={() => onremoveRecipient?.(i)}
+						oninput={onrecipientRow ? (patch) => onrecipientRow(i, patch) : undefined}
+						onpick={onpickRecipientRow ? () => onpickRecipientRow(i) : undefined}
+					/>
 				</li>
 			{/each}
 		</ul>
@@ -144,6 +162,10 @@
 	{/if}
 
 	<FeeRow fee={model.fee} onopen={onfee} />
+
+	{#if model.alert !== undefined}
+		<p class="alert" role="alert">{model.alert}</p>
+	{/if}
 
 	<div class="cta">
 		<Button variant="primary" shape="rounded" onclick={oncontinue} disabled={ctaDisabled}>
@@ -223,5 +245,12 @@
 
 	.cta {
 		padding-block: var(--space-md) var(--space-xl);
+	}
+	/* The core's refusal, where the eye is when the button did nothing. */
+	.alert {
+		margin: 0;
+		padding-top: var(--space-md);
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-danger-base);
 	}
 </style>

@@ -80,6 +80,8 @@ export interface SettingsMessages {
 		invalid: string;
 		/** Template with `{{chainId}}`. */
 		chainId: string;
+		/** The delete control on a custom row — "Remove Network" (spec 028 Phase 8). */
+		remove: string;
 		rpcUrl: string;
 		explorer: string;
 		mismatch: string;
@@ -219,6 +221,8 @@ export interface SettingsMessages {
 		keeps: string;
 		confirm: string;
 		cancel: string;
+		/** The erase ran and something survived — said, never swallowed. */
+		failed: string;
 	};
 	bugReport: {
 		title: string;
@@ -289,7 +293,6 @@ export interface SettingsMessages {
 	};
 	shell: {
 		networksTitle: string;
-		commandBarPlaceholder: string;
 		allNetworks: string;
 	};
 	walletTitle: string;
@@ -359,6 +362,7 @@ export const SETTINGS_KEYS = [
 	'settings.networks.slow',
 	'settingsModals.health.offline',
 	'settingsModals.network.chainId',
+	'settingsModals.network.removeTitle',
 	'settingsModals.network.fieldRpcUrl',
 	'settingsModals.network.fieldExplorer',
 	'settingsModals.network.rpcChainMismatch',
@@ -463,6 +467,7 @@ export const SETTINGS_KEYS = [
 	'settings.eraseDevice.keeps',
 	'settings.eraseDevice.confirm',
 	'settings.eraseDevice.cancel',
+	'settings.eraseDevice.failed',
 	'componentsUi.bugReport.title',
 	'componentsUi.bugReport.subtitle',
 	'componentsUi.bugReport.whatPlaceholder',
@@ -516,7 +521,6 @@ export const SETTINGS_KEYS = [
 	'componentsUi.identiconViewer.close',
 	'componentsUi.identiconViewer.copyAddress',
 	'settingsModals.network.modalTitle',
-	'componentsUi.commandBar.placeholder',
 	'componentsUi.networkFilter.allNetworks',
 	'componentsUi.dock.send'
 ] as const;

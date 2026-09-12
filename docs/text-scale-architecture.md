@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the text-scale architecture of the React Native / Expo app (its style system, `createStyles`, the level table), retired and deleted in spec 039. The living rule is the `--text-scale` token layer in `app-web/vela-wallet/src/lib/tokens/` and the level table in `src/app.html`; the desktop and native shells scale through their platform APIs. Kept as the record of the level names and ratios.
+
 # Text Scale Architecture & Postmortem
 
 > This document records the full implementation journey of Vela Wallet's text scale feature: mistakes made, why each was wrong, and the design principles behind the final solution.  

@@ -9,8 +9,7 @@
 	 * is an outline.
 	 */
 	import Button from '$lib/ui/Button.svelte';
-	import Identicon from '$lib/wallet/ui/Identicon.svelte';
-	import TokenIcon from '$lib/wallet/ui/TokenIcon.svelte';
+	import Breakdown from '../ui/Breakdown.svelte';
 	import FactRow from '../ui/FactRow.svelte';
 	import type { SendConfirmModel } from '../model';
 
@@ -35,19 +34,11 @@
 	</ul>
 
 	{#if model.breakdown !== undefined}
-		<ul class="breakdown">
-			{#each model.breakdown as item (item.label)}
-				<li>
-					{#if item.lead !== undefined}
-						<TokenIcon ticker={item.lead.ticker} badgeColor={item.lead.badgeColor} size="inline" />
-					{:else if item.identiconSvg !== undefined}
-						<span class="mark"><Identicon svg={item.identiconSvg} size="row" /></span>
-					{/if}
-					<span class="label">{item.label}</span>
-					<span class="value">{item.value}</span>
-				</li>
-			{/each}
-		</ul>
+		<Breakdown rows={model.breakdown} />
+	{/if}
+
+	{#if model.alert !== undefined}
+		<p class="alert" role="alert">{model.alert}</p>
 	{/if}
 
 	<div class="cta">
@@ -98,44 +89,16 @@
 		border-top: var(--border-hairline) solid var(--color-border-base);
 	}
 
-	.breakdown li {
-		display: flex;
-		align-items: center;
-		gap: var(--space-md);
-		padding-block: var(--space-md);
-	}
-
-	.mark {
-		display: flex;
-		width: var(--icon-lg);
-		height: var(--icon-lg);
-		flex-shrink: 0;
-	}
-
-	.mark :global(> *) {
-		width: 100%;
-		height: 100%;
-	}
-
-	.breakdown .label {
-		flex: 1;
-		min-width: 0;
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		color: var(--color-fg-base);
-	}
-
-	.breakdown .value {
-		font-family: var(--font-numeric);
-		font-size: calc(var(--text-base) * var(--text-scale, 1));
-		font-variant-numeric: tabular-nums;
-		color: var(--color-fg-base);
-	}
-
 	/* Pushed to the bottom of the screen: confirming is the end of a journey,
 	   and the mocks leave the space between the facts and the button empty
 	   rather than filling it. */
 	.cta {
 		margin-top: auto;
 		padding-block: var(--space-3xl) var(--space-xl);
+	}
+	.alert {
+		margin: 0;
+		font-size: calc(var(--text-sm) * var(--text-scale, 1));
+		color: var(--color-danger-base);
 	}
 </style>

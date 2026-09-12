@@ -37,8 +37,16 @@ const VIEW: ContactsView = {
 	// Core order: favourites first, then recency — Anton before Alice would be
 	// the core's business; this fixture has Alice (fav) first.
 	contacts: [ALICE, ANTON, BOB, UNNAMED],
+	// What the core's initial rule says for these four (spec 028 US5 addendum).
+	sections: [
+		{ letter: 'A', addresses: [ALICE.address, ANTON.address] },
+		{ letter: 'B', addresses: [BOB.address] },
+		{ letter: '#', addresses: [UNNAMED.address] }
+	],
 	groups: [{ id: 'g1', name: 'Payroll', color: null, members: [ALICE, BOB] }],
 	last_import: null,
+	import_failure: null,
+	export: null,
 	recipient: null
 };
 
@@ -110,5 +118,181 @@ describe('buildContactsLive', () => {
 		});
 		expect(model.screen).toBe('group');
 		expect(model.group?.group.members.map((c) => c.name)).toEqual(['Alice', 'Bob']);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// 028 US5 — 最近往来 rows, the pickers, the import report
+// ---------------------------------------------------------------------------
+
+import type { FeedItem } from '$lib/core/generated/FeedItem';
+import type { FeedView } from '$lib/core/generated/FeedView';
+import {
+	contactActivityRow,
+	contactFeedItems,
+	groupPickModel,
+	importReport,
+	liveContactDetail,
+	memberPickModel,
+	RECENT_ACTIVITY_ROWS
+} from './live';
+
+const DAY = 86_400_000;
+const NOW = new Date(2026, 8, 5, 12, 0, 0).getTime();
+const TODAY = new Date(2026, 8, 5).getTime();
+
+function item(partial: Partial<FeedItem> & { id: string }): FeedItem {
+	return {
+		direction: 'out',
+		counterparty: ALICE.address,
+		alias: null,
+		value: '1.5',
+		symbol: 'xDAI',
+		decimals: 18,
+		usd_value: 1.5,
+		chain_id: 100,
+		timestamp: Math.floor(NOW / 1000),
+		day_start_ms: TODAY,
+		tx_hash: null,
+		batch: null,
+		...partial
+	};
+}
+
+const FEED: FeedView = {
+	rows: [
+		{ type: 'header', id: 'day-1', day_start_ms: TODAY, timestamp: Math.floor(NOW / 1000) },
+		{ type: 'item', item: item({ id: 't1' }) },
+		{ type: 'item', item: item({ id: 't2', direction: 'in', value: '20', symbol: 'USDC' }) },
+		// A different counterparty, and one spelled in checksum case.
+		{ type: 'item', item: item({ id: 't3', counterparty: BOB.address }) },
+		{
+			type: 'item',
+			item: item({
+				id: 't4',
+				counterparty: ALICE.address.toUpperCase().replace('0X', '0x'),
+				day_start_ms: TODAY - DAY
+			})
+		},
+		{ type: 'item', item: item({ id: 't5', day_start_ms: TODAY - 3 * DAY }) }
+	],
+	transactions: [],
+	new_item_id: null,
+	toast: null
+};
+
+describe('contactFeedItems', () => {
+	it('keeps only this counterparty, case-insensitively, in feed order', () => {
+		expect(contactFeedItems(FEED, ALICE.address).map((i) => i.id)).toEqual([
+			't1',
+			't2',
+			't4',
+			't5'
+		]);
+		expect(contactFeedItems(FEED, BOB.address).map((i) => i.id)).toEqual(['t3']);
+		expect(contactFeedItems(null, ALICE.address)).toEqual([]);
+	});
+});
+
+describe('contactActivityRow', () => {
+	it('signs the amount by direction and says the network and the day, not the person', () => {
+		const sent = contactActivityRow(item({ id: 't1' }), m, NOW);
+		expect(sent.kind).toBe('sent');
+		expect(sent.amount).toBe('-1.5');
+		expect(sent.unit).toBe('xDAI');
+		expect(sent.positive).toBe(false);
+		expect(sent.subtitle).toContain(m.activity.today);
+		expect(sent.subtitle).not.toContain('Alice');
+
+		const received = contactActivityRow(
+			item({ id: 't2', direction: 'in', value: '20', day_start_ms: TODAY - DAY }),
+			m,
+			NOW
+		);
+		expect(received.kind).toBe('received');
+		expect(received.amount).toBe('+20');
+		expect(received.subtitle).toContain(m.activity.yesterday);
+	});
+});
+
+describe('liveContactDetail with a feed', () => {
+	it('shows the recent few, all on request, and the empty state when there is nothing', () => {
+		const recent = liveContactDetail(ALICE, VIEW, m, identicon, { feed: FEED, now: NOW });
+		expect(recent.rows).toHaveLength(RECENT_ACTIVITY_ROWS);
+		expect(recent.rows.map((r) => r.id)).toEqual(['t1', 't2', 't4']);
+		expect(recent.emptyActivity).toBeUndefined();
+
+		const all = liveContactDetail(ALICE, VIEW, m, identicon, {
+			feed: FEED,
+			allActivity: true,
+			now: NOW
+		});
+		expect(all.rows).toHaveLength(4);
+
+		const none = liveContactDetail(UNNAMED, VIEW, m, identicon, { feed: FEED, now: NOW });
+		expect(none.rows).toEqual([]);
+		expect(none.emptyActivity).toBe(m.noActivity);
+	});
+});
+
+describe('the pickers', () => {
+	it("memberPickModel lists the whole book with the group's members ticked", () => {
+		const model = memberPickModel(VIEW, 'g1', m, identicon);
+		expect(model.title).toBe(m.addMember);
+		expect(model.rows.map((r) => [r.id, r.checked])).toEqual([
+			[ALICE.address, true],
+			[ANTON.address, false],
+			[BOB.address, true],
+			[UNNAMED.address, false]
+		]);
+		expect(model.rows[3].name).toMatch(/^0x/);
+	});
+
+	it('groupPickModel lists the groups holding this contact ticked', () => {
+		expect(groupPickModel(VIEW, ANTON.address, m).rows).toEqual([
+			{ id: 'g1', name: 'Payroll', detail: expect.stringContaining('2'), checked: false }
+		]);
+		expect(groupPickModel(VIEW, BOB.address, m).rows[0].checked).toBe(true);
+	});
+});
+
+describe('importReport', () => {
+	it('is nothing while nothing is pending, the counts after an import, the refusal after a bad file', () => {
+		expect(importReport(VIEW, m)).toBeUndefined();
+		const done = importReport(
+			{ ...VIEW, last_import: { added: 2, skipped: 1, invalid: 0, groups_created: 1 } },
+			m
+		);
+		expect(done?.title).toBe(m.importDoneTitle);
+		expect(done?.body).toContain('2');
+		expect(done?.body).not.toContain(m.importDoneInvalid.slice(0, 6));
+		const invalid = importReport(
+			{ ...VIEW, last_import: { added: 0, skipped: 0, invalid: 3, groups_created: 0 } },
+			m
+		);
+		expect(invalid?.body).toContain('3');
+		const refused = importReport({ ...VIEW, import_failure: { type: 'no_address_column' } }, m);
+		expect(refused).toEqual({ title: m.importFailTitle, body: m.importFailBody });
+	});
+});
+
+describe('the group screen says why its button is dead', () => {
+	it('an empty group captions the CTA with the reason; a filled one with the count', () => {
+		const emptyGroup = { id: 'g2', name: 'Nobody', color: null, members: [] };
+		const view: ContactsView = { ...VIEW, groups: [...VIEW.groups, emptyGroup] };
+		const empty = buildContactsLive(view, m, identicon, {
+			screen: 'group',
+			query: '',
+			selectedGroupId: 'g2'
+		});
+		expect(empty.group?.ctaCaption).toBe(m.batchSendNeedsMembers);
+		expect(empty.group?.captionTitled).toBe(m.batchSendNeedsMembers);
+		const filled = buildContactsLive(view, m, identicon, {
+			screen: 'group',
+			query: '',
+			selectedGroupId: 'g1'
+		});
+		expect(filled.group?.ctaCaption).toContain('2');
+		expect(filled.group?.ctaCaption).not.toBe(m.batchSendNeedsMembers);
 	});
 });

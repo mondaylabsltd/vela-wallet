@@ -25,9 +25,18 @@ The Expo failure twins are the authoritative shape reference
 | --- | --- | --- |
 | `read_store` | read `vela.contacts` + `.dismissed` + `vela.contactGroups` from KV; coerce defensively (unsalvageable → empty, as the TS `catch { [] }`) | `store_loaded` |
 | `write_contacts` / `write_dismissed` / `write_groups` | KV write, best-effort (storage error still answers) | `written` |
-| `load_send_history` | no web tx store yet → truthfully empty | `history_loaded { txs: [] }` |
+| `load_send_history` | ~~no web tx store yet → truthfully empty~~ **028 US5**: `records.loadTransactions()` (the 025 `vela.transactionHistory` store) mapped row-for-row — `type`→`kind` (absent stays `null`), `to`, `toName`, seconds→ms; which rows COUNT stays `contacts.rs`'s | `history_loaded { txs }` |
 | `resolve_identity` | fail-closed, no fetch | `identity_resolved { identity: null }` |
 | `classify_recipient` | fail-closed, no fetch | `recipient_classified { code: null }` (unknown ≠ verdict) |
+
+**028 US5 — the book as a file.** No operation was added. Files reach the
+core as EVENTS (`import_file { content, filename, into_group, now_ms }`) and
+leave it as a VIEW field (`export: ContactExportFile | null`, cleared by
+`export_taken`): the shell's whole part is `pickTextFile` in and
+`saveTextFile` out. Format (JSON/CSV sniffing, quoting, the address-column
+heuristics) is `contacts_io.rs`'s; policy (existing-wins, the counts, seating
+into a group) is `contacts.rs`'s. The refusals (`import_failure`) are the
+core's too — a shell shows `importFailTitle/Body` and acknowledges.
 
 ## network_admin (`NetworkAdminCore`)
 

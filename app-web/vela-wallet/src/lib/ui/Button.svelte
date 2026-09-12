@@ -19,13 +19,15 @@
 		shape?: 'pill' | 'rounded';
 		/** Renders an <a> when set (and not disabled), else a <button>. */
 		href?: string;
+		/** With `href`: a page outside the app (an explorer) — a new tab, no opener. */
+		external?: boolean;
 		disabled?: boolean;
 		/**
 		 * The action is running and this button is what the person is waiting
 		 * on. Deliberately not the same as `disabled`: a dimmed button reads as
 		 * "unavailable", which is the one thing "working" must never look like.
 		 * The button keeps full emphasis, holds its size, and turns a spinner
-		 * where its label was (DESIGN_SYSTEM.md — "Loading state:
+		 * where its label was (docs/design-system.md — "Loading state:
 		 * ActivityIndicator replacing text").
 		 */
 		loading?: boolean;
@@ -37,6 +39,7 @@
 		variant,
 		shape = 'pill',
 		href,
+		external = false,
 		disabled = false,
 		loading = false,
 		onclick,
@@ -45,8 +48,14 @@
 </script>
 
 {#if href !== undefined && !disabled && !loading}
-	<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- generic component; callers pass resolve()d paths -->
-	<a class="button {variant} {shape}" {href}>{@render children()}</a>
+	<!-- eslint-disable svelte/no-navigation-without-resolve -- generic component; callers pass resolve()d paths, or an external URL -->
+	<a
+		class="button {variant} {shape}"
+		{href}
+		target={external ? '_blank' : undefined}
+		rel={external ? 'noreferrer noopener' : undefined}>{@render children()}</a
+	>
+	<!-- eslint-enable svelte/no-navigation-without-resolve -->
 {:else}
 	<button
 		class="button {variant} {shape}"

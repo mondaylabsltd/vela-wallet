@@ -1,10 +1,13 @@
 # Native (iOS / Android) launch checklist — items that need you
 
-Context: the app was only ever tested as the **Expo Web** build. A 2026-07-01
-cross-platform audit found the native-only defects below. The low-risk, code-only
-fixes are **already done** (see "Fixed in code"). This doc is the remainder —
-things I can't do for you because they need your **Apple/Google accounts**, a
-**real device**, or a **product decision**.
+Context (2026-07-01): at the time, the app had only ever been tested as the
+Expo web build, and a cross-platform audit found the native-only defects
+below. **That app was retired in spec 039 (2026-09-11); the native shells
+`app-ios/` and `app-android/` are its successors**, so every item here is
+re-read against them — the account, device and product-decision items still
+apply, the code-only fixes listed under "Fixed in code" describe the old
+tree. This doc is the remainder — things that need your **Apple/Google
+accounts**, a **real device**, or a **product decision**.
 
 ---
 
@@ -115,9 +118,10 @@ This drives the design.
 
 ## D. Device verification matrix (please run on real hardware)
 
-The Kotlin/Swift/keyboard fixes compile-clean in my reasoning but I **cannot build
-native here** — please confirm on a device build (`npx expo run:ios` /
-`run:android`, or an EAS build):
+Please confirm on a device build of the native shells — `app-ios/VelaWallet`
+from Xcode on a real iPhone, and `app-android/vela-wallet` via
+`./gradlew :app:installDebug` on a real phone (see
+`docs/project-takeover/02-local-development.md`):
 
 **iOS (real iPhone, iOS 16+):**
 - [ ] Create wallet → passkey sheet appears (verifies presentation-anchor fix)

@@ -130,7 +130,24 @@ function guardBlock(guard: GuardView, m: SigningMessages): Block | null {
 		resultingTotal:
 			guard.increase_total === null || guard.increase_total.total === null
 				? undefined
-				: { label: m.labelResultingTotal, value: guard.increase_total.total }
+				: { label: m.labelResultingTotal, value: guard.increase_total.total },
+		// The field appears only on the chip that needs one, and it carries the
+		// CORE's text: a keystroke the machine rejected must not sit on screen
+		// as though it had been taken.
+		custom:
+			editor.mode === 'custom'
+				? {
+						value: editor.custom_text,
+						symbol,
+						placeholder: '0',
+						error:
+							editor.error === 'invalid_amount'
+								? m.invalidAmount
+								: editor.error === 'unlimited_disabled'
+									? m.unlimitedDisabled
+									: undefined
+					}
+				: undefined
 	};
 }
 
@@ -318,7 +335,8 @@ export function buildSigningModel(inputs: SigningLiveInputs): SigningModel | nul
 		signer: {
 			label: m.signingAccount,
 			name: identity.name,
-			identiconSvg: identicon(identity.address)
+			identiconSvg: identicon(identity.address),
+			address: identity.address
 		},
 		confirm: {
 			hint: m.slideToConfirm,

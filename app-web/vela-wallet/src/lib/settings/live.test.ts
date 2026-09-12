@@ -231,3 +231,68 @@ describe('liveRpcProviders', () => {
 		});
 	});
 });
+
+describe('liveAccountsSheet', () => {
+	const rows = [
+		{
+			index: 0,
+			account: {
+				id: 'a',
+				name: 'First',
+				address: '0xAAAA000000000000000000000000000000000001',
+				public_key_hex: '04',
+				created_at_iso: '2026-01-01T00:00:00.000Z',
+				keys: []
+			}
+		},
+		{
+			index: 1,
+			account: {
+				id: 'b',
+				name: 'Second',
+				address: '0xBBBB000000000000000000000000000000000002',
+				public_key_hex: '04',
+				created_at_iso: '2026-01-02T00:00:00.000Z',
+				keys: []
+			}
+		}
+	];
+	const usd = { code: 'USD', rate: 1, committed: true };
+
+	it('is the whole sheet from the session and the balance core alone', async () => {
+		const { liveAccountsSheet } = await import('./live');
+		const balances = new Map<string, number>([
+			[rows[0]!.account.address.toLowerCase(), 100],
+			[rows[1]!.account.address.toLowerCase(), 20.5]
+		]);
+		const sheet = liveAccountsSheet(
+			{
+				rows,
+				activeIndex: 1,
+				balances,
+				currency: usd,
+				identicon: (a) => `<svg data-seed="${a}"/>`
+			},
+			m.accounts
+		);
+		expect(sheet.title).toBe(m.accounts.title);
+		expect(sheet.primary).toBe(m.accounts.createNew);
+		expect(sheet.secondary).toBe(m.accounts.signInExisting);
+		expect(sheet.rows.map((r) => r.selected)).toEqual([false, true]);
+		// The viewer's seed rides on every row, verbatim — never the short form.
+		expect(sheet.rows.map((r) => r.addressFull)).toEqual(rows.map((r) => r.account.address));
+		expect(sheet.rows[0]!.identiconSvg).toContain(rows[0]!.account.address);
+		expect(sheet.rows[0]!.amount).toContain('100');
+		expect(sheet.summary).toContain('2');
+		expect(sheet.summary).toContain('120');
+	});
+
+	it('leaves an unpriced row blank rather than inventing a figure', async () => {
+		const { liveAccountsSheet } = await import('./live');
+		const sheet = liveAccountsSheet(
+			{ rows, activeIndex: 0, balances: new Map(), currency: usd, identicon: () => '' },
+			m.accounts
+		);
+		expect(sheet.rows.map((r) => r.amount)).toEqual(['', '']);
+	});
+});

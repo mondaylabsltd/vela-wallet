@@ -20,7 +20,8 @@
 </script>
 
 <div class="feedback">
-	<textarea placeholder={panel.placeholder} aria-label={panel.placeholder} rows="4"></textarea>
+	<textarea data-field placeholder={panel.placeholder} aria-label={panel.placeholder} rows="4"
+	></textarea>
 
 	<button type="button" class="steps">{panel.addSteps}</button>
 
@@ -65,10 +66,6 @@
 		color: var(--color-fg-base);
 		resize: vertical;
 		outline: none;
-	}
-
-	textarea:focus {
-		border-color: var(--color-accent-base);
 	}
 
 	textarea::placeholder {

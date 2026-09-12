@@ -6,3 +6,4 @@ target/
 # Cargo.lock is intentionally NOT ignored — this is a binary crate, and the
 # gpui/gpui_platform git dependencies are unpinned, so the lock file is the
 # only record of which zed revision a build used.
+dist

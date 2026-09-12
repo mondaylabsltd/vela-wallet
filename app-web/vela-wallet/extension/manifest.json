@@ -5,13 +5,28 @@
 	"description": "The passkey wallet, in your browser. One address across 12+ networks, no seed phrase.",
 	"key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA89Uff12cMQTDfMG3qy5xcMDpmbEEfwadtSo0p0JBkgjlNdjR5so87yxlH1vHHgIOXxR2tsY1lxnIAZu/o2+k9O4OX1kr9MV+KyEyFEG+EibqD50PAmVKzECUW1FObolM+bp5U3Z57tAitltdGsfa1ngsOO3/ewU+SH8DThoiGQHiyCpPiIqogRH8A2UNO5dOTkwgK9iCqZ1wMS4laoaHl1x1pyBwPLjZXe0XCKXeZwaOqppfXv+6Er4QHDnU3RDEcDNRDIe5+gObsQGhcXTKR7XdaBb/IotvTynXePnKwWYWJH6H7haHir3Y4m7BFBC7TkKwvyoXHlARytZbrYvRDQIDAQAB",
 	"minimum_chrome_version": "116",
+	"icons": {
+		"16": "icons/icon-16.png",
+		"32": "icons/icon-32.png",
+		"48": "icons/icon-48.png",
+		"128": "icons/icon-128.png"
+	},
 	"action": {
-		"default_title": "Vela Wallet"
+		"default_title": "Vela Wallet",
+		"default_icon": {
+			"16": "icons/icon-16.png",
+			"32": "icons/icon-32.png",
+			"48": "icons/icon-48.png",
+			"128": "icons/icon-128.png"
+		}
 	},
 	"background": {
 		"service_worker": "background.js"
 	},
-	"permissions": ["storage", "tabs"],
+	"side_panel": {
+		"default_path": "panel.html"
+	},
+	"permissions": ["storage", "tabs", "sidePanel"],
 	"host_permissions": ["https://getvela.app/*", "*://*/*"],
 	"content_security_policy": {
 		"extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"

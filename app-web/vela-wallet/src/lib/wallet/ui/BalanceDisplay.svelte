@@ -35,12 +35,14 @@
 			aria-label={balance.a11yHide}
 			onclick={ontoggle}
 		>
-			<span class="integer">{balance.integer}</span><span class="decimals">.{balance.decimals}</span
+			<span class="integer">{balance.integer}</span><span class="decimals"
+				>{balance.decimalMark ?? '.'}{balance.decimals}</span
 			>
 		</button>
 	{:else}
 		<p class="amount">
-			<span class="integer">{balance.integer}</span><span class="decimals">.{balance.decimals}</span
+			<span class="integer">{balance.integer}</span><span class="decimals"
+				>{balance.decimalMark ?? '.'}{balance.decimals}</span
 			>
 		</p>
 	{/if}

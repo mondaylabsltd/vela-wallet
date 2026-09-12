@@ -7,6 +7,7 @@
     "emptyTitle": "尚無任何交易",
     "emptyBody": "您發送的交易會顯示在這裡。您也可以在區塊鏈瀏覽器上查看完整記錄。",
     "viewOnExplorer": "在區塊鏈瀏覽器查看",
+    "deleteRecord": "刪除紀錄",
     "emptyFilter": "此網路上沒有任何交易",
     "txLabelDappTx": "dApp 交易",
     "txLabelSignMessage": "簽署訊息",

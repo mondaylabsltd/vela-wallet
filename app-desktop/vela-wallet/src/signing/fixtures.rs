@@ -28,7 +28,7 @@ pub struct AmountLine {
     pub tone: Tone,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ChipState {
     Idle,
     Selected,
@@ -37,6 +37,20 @@ pub enum ChipState {
 
 /// A key/value row: label, value, the value's tone, and whether it is mono.
 pub type Row = (SharedString, SharedString, Tone, bool);
+
+/// The custom-cap field, as data. The live page hands the same block a real
+/// input; the gallery draws this and nothing types into it.
+#[derive(Clone)]
+pub struct AllowanceInput {
+    /// What has been typed so far — the CORE's `custom_text`, never a local
+    /// echo, so a rejected keystroke never appears on screen.
+    pub value: SharedString,
+    /// The coin the number counts in, drawn as the field's label.
+    pub symbol: SharedString,
+    pub placeholder: SharedString,
+    /// The core's verdict on what is typed so far.
+    pub error: Option<SharedString>,
+}
 
 #[derive(Clone)]
 pub enum Block {
@@ -69,6 +83,14 @@ pub enum Block {
         chips: Vec<(SharedString, ChipState)>,
         note: Option<SharedString>,
         resulting_total: Option<(SharedString, SharedString)>,
+        /// The typed cap, when `Custom` is the chosen chip.
+        ///
+        /// Drawn UNDER the chips and above the note, so the reading order
+        /// stays "what the cap is · how to change it · what is wrong with
+        /// it". The big value above keeps counting as the number is typed —
+        /// that feedback is what makes typing a cap safe, and it is the
+        /// core's own recomputation rather than an echo of the keystrokes.
+        custom: Option<AllowanceInput>,
     },
     Party {
         label: SharedString,
@@ -145,17 +167,26 @@ pub struct SigningModel {
 }
 
 /// The eight scenarios the desktop mocks pinned (DCS1–8 + DE4), in order.
-#[allow(dead_code, reason = "cross-platform scenario inventory (data-model.md §3)")]
-pub const DESKTOP_STATES: [&str; 9] = [
-    "cs1", "cs5", "cs11", "cs16", "cs24", "cs26", "cs32", "cs33", "cs12",
+#[allow(
+    dead_code,
+    reason = "cross-platform scenario inventory (data-model.md §3)"
+)]
+pub const DESKTOP_STATES: [&str; 10] = [
+    "cs1", "cs5", "cs11", "cs16", "cs24", "cs26", "cs32", "cs33", "cs12", "cs34",
 ];
 
 /// Every scenario in the catalogue, phone and desktop alike.
-#[allow(dead_code, reason = "cross-platform scenario inventory (data-model.md §3)")]
-pub const ALL_STATES: [&str; 33] = [
+#[allow(
+    dead_code,
+    reason = "cross-platform scenario inventory (data-model.md §3)"
+)]
+pub const ALL_STATES: [&str; 35] = [
     "cs1", "cs2", "cs3", "cs4", "cs5", "cs6", "cs7", "cs8", "cs9", "cs10", "cs11", "cs12", "cs13",
     "cs14", "cs15", "cs16", "cs17", "cs18", "cs19", "cs20", "cs21", "cs22", "cs23", "cs24", "cs25",
     "cs26", "cs27", "cs28", "cs29", "cs30", "cs31", "cs32", "cs33",
+    // Spec 032 phase 39: the state nobody had drawn — a cap being TYPED, and
+    // the same field with the core refusing what is in it.
+    "cs34", "cs35",
 ];
 
 fn mark(letter: &'static str, hex: u32) -> Mark {
@@ -471,10 +502,12 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                             (s.chip_custom.clone(), ChipState::Idle),
                             (s.chip_revoke.clone(), ChipState::Idle),
                         ],
-                        note: Some(
-                            format!("{} {}", s.unlimited_disabled, s.choose_prompt).into(),
-                        ),
+                        // Two sentences, two LINES — the web's `AllowanceEditor.svelte`
+                        // rule: a space is not a sentence break in CJK, and
+                        // the first string carries no full stop.
+                        note: Some(format!("{}\n{}", s.unlimited_disabled, s.choose_prompt).into()),
                         resulting_total: None,
+                        custom: None,
                     },
                     Block::Party {
                         label: s.label_spender.clone(),
@@ -490,6 +523,100 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                 &s.intent_approve,
             );
             // Nothing to slide until a finite amount exists.
+            m.confirm_enabled = false;
+            m
+        }
+
+        // The typed cap. cs5 is where this starts — an unlimited request with
+        // its Requested chip dead — and this is what the card becomes once
+        // somebody picks Custom: the field under the chips, the big number
+        // above counting what has been typed, and the slide still shut until
+        // the core says the amount is finite and real.
+        "cs34" => {
+            let mut m = base(
+                s,
+                "cs34",
+                oneinch(),
+                vec![
+                    Block::Intent {
+                        text: s.intent_approve.clone(),
+                        tone: Tone::Neutral,
+                    },
+                    Block::Allowance {
+                        label: s.label_spending_cap.clone(),
+                        value: "500 USDC".into(),
+                        value_tone: Tone::Neutral,
+                        chips: vec![
+                            (s.chip_requested.clone(), ChipState::Disabled),
+                            (s.chip_balance.clone(), ChipState::Idle),
+                            (s.chip_custom.clone(), ChipState::Selected),
+                            (s.chip_revoke.clone(), ChipState::Idle),
+                        ],
+                        note: None,
+                        resulting_total: None,
+                        custom: Some(AllowanceInput {
+                            value: "500".into(),
+                            symbol: "USDC".into(),
+                            placeholder: "0".into(),
+                            error: None,
+                        }),
+                    },
+                    Block::Party {
+                        label: s.label_spender.clone(),
+                        name: "1inch Router".into(),
+                        address: Some(ONEINCH_ROUTER.into()),
+                        badge: verified(),
+                    },
+                ],
+                &s.intent_approve,
+            );
+            // A finite cap is a cap: the slide may arm.
+            m.confirm_enabled = true;
+            m
+        }
+
+        // The same field with something in it the core will not take. The
+        // number above falls back to what is still true — the request is
+        // unlimited — and the slide is shut, because a cap nobody could parse
+        // is not a cap.
+        "cs35" => {
+            let mut m = base(
+                s,
+                "cs35",
+                oneinch(),
+                vec![
+                    Block::Intent {
+                        text: s.intent_approve.clone(),
+                        tone: Tone::Neutral,
+                    },
+                    Block::Allowance {
+                        label: s.label_spending_cap.clone(),
+                        value: s.value_unlimited.clone(),
+                        value_tone: Tone::Danger,
+                        chips: vec![
+                            (s.chip_requested.clone(), ChipState::Disabled),
+                            (s.chip_balance.clone(), ChipState::Idle),
+                            (s.chip_custom.clone(), ChipState::Selected),
+                            (s.chip_revoke.clone(), ChipState::Idle),
+                        ],
+                        note: Some(format!("{}\n{}", s.unlimited_disabled, s.choose_prompt).into()),
+                        resulting_total: None,
+                        custom: Some(AllowanceInput {
+                            value: "12.3.4".into(),
+                            symbol: "USDC".into(),
+                            placeholder: "0".into(),
+                            error: Some(s.invalid_amount.clone()),
+                        }),
+                    },
+                    Block::Party {
+                        label: s.label_spender.clone(),
+                        name: "1inch Router".into(),
+                        address: Some(ONEINCH_ROUTER.into()),
+                        badge: verified(),
+                    },
+                ],
+                &s.intent_approve,
+            );
             m.confirm_enabled = false;
             m
         }
@@ -515,6 +642,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     ],
                     note: None,
                     resulting_total: None,
+                    custom: None,
                 },
                 Block::Sentence {
                     text: fill(
@@ -557,6 +685,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     // increaseAllowance is an INCREMENT: the number that
                     // matters is the one it lands on, so the sheet adds up.
                     resulting_total: Some((s.label_resulting_total.clone(), "350 USDC".into())),
+                    custom: None,
                 },
                 Block::Party {
                     label: s.label_spender.clone(),
@@ -589,6 +718,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     ],
                     note: None,
                     resulting_total: None,
+                    custom: None,
                 },
                 Block::Sentence {
                     text: fill(&s.summary_revoke, &[("spender", "1inch Router")]).into(),
@@ -656,6 +786,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     ],
                     note: None,
                     resulting_total: None,
+                    custom: None,
                 },
                 Block::Sentence {
                     text: fill(&s.summary_approve_nft, &[("operator", "OpenSea Conduit")]).into(),
@@ -996,7 +1127,11 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                     Block::Rows(vec![
                         row(s.label_typed_domain.clone(), "CoolProtocol · v2"),
                         row(s.label_type.clone(), "Order"),
-                        toned_row(s.label_signing_for.clone(), "dapp.example.com", Tone::Accent),
+                        toned_row(
+                            s.label_signing_for.clone(),
+                            "dapp.example.com",
+                            Tone::Accent,
+                        ),
                     ]),
                     Block::Code {
                         lines: vec![
@@ -1035,9 +1170,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                         ],
                         note: None,
                     },
-                    Block::Positive(
-                        fill(&s.ok_siwe, &[("domain", "app.ens.domains")]).into(),
-                    ),
+                    Block::Positive(fill(&s.ok_siwe, &[("domain", "app.ens.domains")]).into()),
                 ],
                 &s.sign_label,
             );
@@ -1110,9 +1243,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                             "060708091011121314151617181920".into(),
                             "2122232425262728293031…".into(),
                         ],
-                        note: Some(
-                            format!("({})", fill(&s.byte_size, &[("n", "80")])).into(),
-                        ),
+                        note: Some(format!("({})", fill(&s.byte_size, &[("n", "80")])).into()),
                     },
                     Block::Rows(vec![row(s.label_signing_for.clone(), "dapp.example.com")]),
                 ],
@@ -1312,9 +1443,7 @@ pub fn build(state: &str, s: &SigningStrings) -> SigningModel {
                 // too: a wrapper that showed only the outer call would show
                 // nothing at all.
                 Block::Card {
-                    title: Some(
-                        fill(&s.safe_inner_call, &[("action", &s.intent_send)]).into(),
-                    ),
+                    title: Some(fill(&s.safe_inner_call, &[("action", &s.intent_send)]).into()),
                     rows: vec![
                         row(s.label_amount.clone(), "250 USDC"),
                         row(s.label_recipient.clone(), "Alice Chen"),
@@ -1515,7 +1644,10 @@ mod tests {
         for state in ALL_STATES {
             let model = build(state, &strings);
             assert!(!model.blocks.is_empty(), "{state} has no blocks");
-            assert!(!model.confirm_label.is_empty(), "{state} has no slide label");
+            assert!(
+                !model.confirm_label.is_empty(),
+                "{state} has no slide label"
+            );
             assert!(!model.dapp_name.is_empty(), "{state} has no dApp name");
         }
     }
@@ -1528,9 +1660,9 @@ mod tests {
         let model = build("cs5", &strings);
         assert!(!model.confirm_enabled, "cs5 must not be confirmable");
         let disabled = model.blocks.iter().any(|b| match b {
-            Block::Allowance { chips, .. } => chips
-                .iter()
-                .any(|(_, state)| *state == ChipState::Disabled),
+            Block::Allowance { chips, .. } => {
+                chips.iter().any(|(_, state)| *state == ChipState::Disabled)
+            }
             _ => false,
         });
         assert!(disabled, "cs5 must disable the requested-amount chip");

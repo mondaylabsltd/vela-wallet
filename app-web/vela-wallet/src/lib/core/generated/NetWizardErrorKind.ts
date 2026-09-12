@@ -4,4 +4,4 @@
  * Why the wizard stopped. One variant per distinct TS outcome; the shell
  * owns the words.
  */
-export type NetWizardErrorKind = { "type": "already_added", chain_id: number, } | { "type": "not_found", chain_id: number, } | { "type": "no_rpc_endpoint" } | { "type": "not_compatible", chain_id: number, };
+export type NetWizardErrorKind = { "type": "already_added", chain_id: number, } | { "type": "not_found", chain_id: number, } | { "type": "no_rpc_endpoint" } | { "type": "not_compatible", chain_id: number, } | { "type": "check_failed", chain_id: number, };

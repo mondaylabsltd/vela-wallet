@@ -31,6 +31,19 @@ pub const KEY_ACTIVE_INDEX: &str = "vela.activeAccountIndex";
 pub const KEY_PENDING_UPLOADS: &str = "vela.pendingUploads";
 pub const KEY_SERVICE_ENDPOINTS: &str = "vela.serviceEndpoints";
 
+/// The keys the wallet-state machines own (spec 030). Same names, and the same
+/// camelCase FIELD names inside, as the web and Expo clients — a record written
+/// on one client has to stay legible on another, which is what makes copying a
+/// wallet between machines work at all.
+pub const KEY_CONTACTS: &str = "vela.contacts";
+pub const KEY_CONTACTS_DISMISSED: &str = "vela.contacts.dismissed";
+pub const KEY_CONTACT_GROUPS: &str = "vela.contactGroups";
+pub const KEY_CUSTOM_NETWORKS: &str = "vela.customNetworks";
+pub const KEY_NETWORK_CONFIG: &str = "vela.networkConfig";
+pub const KEY_RPC_PROVIDERS: &str = "vela.rpcProviders";
+pub const KEY_RPC_BANNED: &str = "vela.rpc.banned";
+pub const KEY_DISPLAY_CURRENCY: &str = "vela.displayCurrency";
+
 /// The storage failed in a way the core answers with `storage_failed`, never a
 /// crash: a read-only home directory, a full disk, a file another process holds.
 #[derive(Debug)]
@@ -112,6 +125,89 @@ fn read_list(key: &str) -> Result<Vec<Value>> {
         Some(Value::Array(items)) => items.clone(),
         _ => Vec::new(),
     })
+}
+
+/// Read one key, whole and unreshaped.
+///
+/// `None` means absent; a corrupt document reads as absent rather than failing,
+/// exactly as `read_all` decided for every other reader here.
+pub fn read_value(key: &str) -> Result<Option<Value>> {
+    Ok(read_all()?.get(key).cloned())
+}
+
+/// What this wallet is actually using on disk, and how many records it holds.
+///
+/// One JSON document, so the size is one `metadata` call and the record count
+/// is the sum of the array-valued keys plus one for each scalar. The settings
+/// screen said **2.4 MB / 216 records** to everybody; a person deciding whether
+/// to clear a cache deserves their own number.
+///
+/// `(bytes, records)`. Zero for both when the file is not there yet, which is a
+/// true statement about a wallet that has written nothing.
+#[must_use]
+pub fn usage() -> (u64, u32) {
+    let Ok(path) = path() else {
+        return (0, 0);
+    };
+    let bytes = fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
+    let records = read_all().map_or(0, |map| {
+        map.values()
+            .map(|value| match value {
+                // An array key holds N records; anything else is one.
+                Value::Array(items) => u32::try_from(items.len()).unwrap_or(u32::MAX),
+                Value::Null => 0,
+                _ => 1,
+            })
+            .sum()
+    });
+    (bytes, records)
+}
+
+/// Write one key, whole.
+///
+/// Codecs live in the executors, not here — which is what lets a new machine
+/// arrive without touching this file (spec 030 SC-004).
+pub fn write_value(key: &str, value: Value) -> Result<()> {
+    write_key(key, value)
+}
+
+/// Merge fields into an object-valued key, leaving its siblings alone.
+///
+/// `vela.serviceEndpoints` has two independent writers — onboarding's registry
+/// override and `network_admin`'s endpoint editor — and a whole-value write from
+/// either erases the other's fields. See `save_registry_endpoint`.
+pub fn merge_value(key: &str, fields: Map<String, Value>) -> Result<()> {
+    let Ok(_guard) = LOCK.lock() else {
+        return Err(StorageError("the storage lock is poisoned".to_owned()));
+    };
+    let mut map = read_all()?;
+    let mut object = match map.get(key) {
+        Some(Value::Object(existing)) => existing.clone(),
+        _ => Map::new(),
+    };
+    for (field, value) in fields {
+        if value.is_null() {
+            object.remove(&field);
+        } else {
+            object.insert(field, value);
+        }
+    }
+    map.insert(key.to_owned(), Value::Object(object));
+    write_all(map)
+}
+
+/// Remove one key entirely.
+///
+/// Not `write_value(key, Null)`: a stored null is a record the usage count and
+/// every future reader still have to step over, and a revoked permission
+/// should leave nothing behind that says a site was ever here.
+pub fn remove_value(key: &str) -> Result<()> {
+    let Ok(_guard) = LOCK.lock() else {
+        return Err(StorageError("the storage lock is poisoned".to_owned()));
+    };
+    let mut map = read_all()?;
+    map.remove(key);
+    write_all(map)
 }
 
 fn write_key(key: &str, value: Value) -> Result<()> {
@@ -228,18 +324,57 @@ pub fn remove_pending_upload(credential_id: &str) -> Result<()> {
 // Endpoints
 // ---------------------------------------------------------------------------
 
-/// The saved registry endpoint override, if any.
+/// The saved passkey-index endpoint override, if any.
+///
+/// Reads `passkeyIndexURL` and falls back to the legacy desktop-only `registry`.
+/// Those are the same fact under two names: the desktop's "registry" IS the
+/// passkey index (`executor/registry.rs` defaults to `p256-index-v2.getvela.app`
+/// and accepts the identity `webauthn-p256-publickey-index`), and every other
+/// client — web's `services/endpoints.ts`, the Expo client — spells it
+/// `passkeyIndexURL`. Until spec 030 the desktop wrote a name nothing else could
+/// read, so a self-hosted index configured here was invisible everywhere else.
 pub fn load_registry_endpoint() -> Option<String> {
-    read_all()
-        .ok()?
-        .get(KEY_SERVICE_ENDPOINTS)?
-        .get("registry")?
+    let endpoints = read_all().ok()?;
+    let object = endpoints.get(KEY_SERVICE_ENDPOINTS)?;
+    object
+        .get("passkeyIndexURL")
+        .or_else(|| object.get("registry"))?
         .as_str()
         .map(str::to_owned)
 }
 
+/// Save it under the cross-client name, and drop the legacy one in the same
+/// write so the two cannot disagree on the next launch.
+///
+/// MERGES rather than replaces. `network_admin` writes the other three fields of
+/// this key (`ethereumDataURL`, `bundlerServiceURL`, `fiatRatesURL`), and the
+/// whole-value write this used to do would have erased them — and theirs would
+/// have erased this.
+/// A first-run / replay flag: epoch milliseconds, or `None` when never
+/// written (spec 038). The two callers — the intro's "seen" and the launch
+/// animation's "played" — use the SAME key names as the web (`vela.intro.seen`,
+/// `vela.launch.played`) so the four shells share one vocabulary.
+pub fn read_epoch_ms(key: &str) -> Option<f64> {
+    read_value(key)
+        .ok()
+        .flatten()
+        .and_then(|value| value.as_f64())
+}
+
+/// Write such a flag. Best-effort in the same way the web's is: an unwritable
+/// store means a second viewing, which is cosmetic; a front door that fails
+/// because a decoration could not write is not.
+pub fn write_epoch_ms(key: &str, now_ms: f64) {
+    if let Err(error) = write_value(key, Value::from(now_ms)) {
+        eprintln!("[vela-wallet] {key} could not be saved: {error}");
+    }
+}
+
 pub fn save_registry_endpoint(url: &str) -> Result<()> {
-    write_key(KEY_SERVICE_ENDPOINTS, json!({ "registry": url }))
+    let mut fields = Map::new();
+    fields.insert("passkeyIndexURL".to_owned(), json!(url));
+    fields.insert("registry".to_owned(), Value::Null);
+    merge_value(KEY_SERVICE_ENDPOINTS, fields)
 }
 
 // ---------------------------------------------------------------------------
@@ -278,6 +413,145 @@ pub(crate) mod tests {
     /// one lock rather than run in parallel — the alternative is a shared
     /// document two tests rewrite at once, which is exactly the interleave the
     /// file lock in this module exists to prevent.
+    /// Two writers share `vela.serviceEndpoints`, and until spec 030 either
+    /// erased the other. Onboarding saves the passkey-index override;
+    /// `network_admin` saves the other three service URLs. The whole-value write
+    /// this replaced meant configuring a self-hosted index silently unset the
+    /// data, bundler and fiat endpoints — and saving those silently unset the
+    /// The storage panel's two figures, measured rather than asserted.
+    #[test]
+    fn usage_counts_records_and_measures_the_file() {
+        tests::with_temp_state("storage-usage", || {
+            // Nothing written yet: zero of both, which is true about a wallet
+            // that has stored nothing — not a failure to measure.
+            assert_eq!(usage(), (0, 0));
+
+            if write_value("vela.accounts", serde_json::json!([{ "a": 1 }, { "a": 2 }])).is_err()
+                || write_value("vela.balanceHidden", serde_json::json!("1")).is_err()
+                || write_value("vela.empty", serde_json::json!([])).is_err()
+            {
+                unreachable!("could not seed");
+            }
+            let (bytes, records) = usage();
+            // Two array entries plus one scalar. An empty array holds nothing
+            // and counts as nothing.
+            assert_eq!(records, 3);
+            assert!(bytes > 0, "the file is on disk and has a size");
+        });
+    }
+
+    /// index, sending the next launch back to the public default.
+    #[test]
+    fn saving_one_service_endpoint_leaves_its_siblings_alone() {
+        with_temp_state("endpoints-merge", || {
+            let mut others = Map::new();
+            others.insert("ethereumDataURL".to_owned(), json!("https://data.example"));
+            others.insert("fiatRatesURL".to_owned(), json!("https://rates.example"));
+            if merge_value(KEY_SERVICE_ENDPOINTS, others).is_err() {
+                unreachable!("could not seed the endpoints");
+            }
+
+            if save_registry_endpoint("https://idx.example").is_err() {
+                unreachable!("could not save the index endpoint");
+            }
+
+            let stored = read_value(KEY_SERVICE_ENDPOINTS)
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| unreachable!("the endpoints vanished"));
+            assert_eq!(
+                stored.get("ethereumDataURL").and_then(Value::as_str),
+                Some("https://data.example"),
+                "a sibling endpoint was erased"
+            );
+            assert_eq!(
+                stored.get("fiatRatesURL").and_then(Value::as_str),
+                Some("https://rates.example")
+            );
+            assert_eq!(
+                stored.get("passkeyIndexURL").and_then(Value::as_str),
+                Some("https://idx.example")
+            );
+        });
+    }
+
+    /// The desktop used to spell this field `registry`; every other client
+    /// spells it `passkeyIndexURL`. A record written by an older desktop must
+    /// still be read, and must converge on the shared name the moment anything
+    /// writes it — so the two names cannot disagree on the next launch.
+    #[test]
+    fn a_legacy_registry_endpoint_is_read_and_then_converged() {
+        with_temp_state("endpoints-legacy", || {
+            let mut legacy = Map::new();
+            legacy.insert("registry".to_owned(), json!("https://old.example"));
+            if merge_value(KEY_SERVICE_ENDPOINTS, legacy).is_err() {
+                unreachable!("could not seed the legacy record");
+            }
+            assert_eq!(
+                load_registry_endpoint().as_deref(),
+                Some("https://old.example"),
+                "an older desktop's record became unreadable"
+            );
+
+            if save_registry_endpoint("https://new.example").is_err() {
+                unreachable!("could not save");
+            }
+            let stored = read_value(KEY_SERVICE_ENDPOINTS)
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| unreachable!("the endpoints vanished"));
+            assert!(
+                stored.get("registry").is_none(),
+                "the legacy field survived, so two names can now disagree"
+            );
+            assert_eq!(
+                load_registry_endpoint().as_deref(),
+                Some("https://new.example")
+            );
+        });
+    }
+
+    /// Every key this cut's machines own round-trips whole, and reads as absent
+    /// rather than failing when it has never been written.
+    #[test]
+    fn the_wallet_state_keys_round_trip_and_start_absent() {
+        with_temp_state("wallet-state-keys", || {
+            for key in [
+                KEY_CUSTOM_NETWORKS,
+                KEY_NETWORK_CONFIG,
+                KEY_RPC_PROVIDERS,
+                KEY_DISPLAY_CURRENCY,
+            ] {
+                assert!(
+                    matches!(read_value(key), Ok(None)),
+                    "{key} should start absent"
+                );
+            }
+
+            let networks = json!([{ "id": "custom-100", "chainId": 100 }]);
+            if write_value(KEY_CUSTOM_NETWORKS, networks.clone()).is_err() {
+                unreachable!("could not write networks");
+            }
+            assert_eq!(
+                read_value(KEY_CUSTOM_NETWORKS).ok().flatten(),
+                Some(networks)
+            );
+
+            // A bare string, not an object — matching what the other clients store.
+            if write_value(KEY_DISPLAY_CURRENCY, json!("JPY")).is_err() {
+                unreachable!("could not write the currency");
+            }
+            assert_eq!(
+                read_value(KEY_DISPLAY_CURRENCY)
+                    .ok()
+                    .flatten()
+                    .as_ref()
+                    .and_then(Value::as_str),
+                Some("JPY")
+            );
+        });
+    }
+
     pub(crate) fn with_temp_state<T>(name: &str, body: impl FnOnce() -> T) -> T {
         static SERIAL: Mutex<()> = Mutex::new(());
         let Ok(_guard) = SERIAL.lock() else {

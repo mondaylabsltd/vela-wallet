@@ -5,9 +5,11 @@
 //! and the close button; these own only what is under them.
 
 use gpui::{
-    App, ClickEvent, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement,
-    SharedString, StatefulInteractiveElement as _, Styled, Window, div, px,
+    App, ClickEvent, Div, ElementId, FocusHandle, InteractiveElement as _, IntoElement,
+    ParentElement, SharedString, StatefulInteractiveElement as _, Styled, Window, div, px,
 };
+
+use gpui::prelude::FluentBuilder as _;
 
 use crate::icons::{Icon, IconCache};
 use crate::identicon::IdenticonCache;
@@ -20,9 +22,9 @@ use super::components::{
     status_chip, token_header_card,
 };
 use super::fixtures::{
-    AddToken, AddTokenResult, AssetsPanel, BatchImport, ContactPick, FeeTokenPick, FlowBody,
-    HistoryGroup, ReceiveList, ReceiveQr, ScanModal, SendConfirm, SendForm, SendPick, SendReceipt,
-    TxDetail,
+    AddToken, AddTokenResult, AssetsPanel, BatchImport, BreakdownRow, ContactPick, CtaState,
+    DepositEntry, FeeTokenPick, FlowBody, HistoryGroup, ReceiveList, ReceiveQr, ScanModal,
+    SendConfirm, SendForm, SendNotice, SendPick, SendReceipt, TxDetail,
 };
 
 /// One prepared click listener. The page builds these from `cx.listener`
@@ -37,9 +39,26 @@ pub type Click = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 #[derive(Default)]
 pub struct PanelActions {
     /// DR1L: a row's QR icon opens that network's code.
+    ///
+    /// The fixture panel binds ONE listener here and gives it to the first row,
+    /// because every mock row opens the same address anyway. A live panel binds
+    /// `open_qr_rows` instead — the rows are real networks and each one opens
+    /// its own code, so which row was clicked is now information.
     pub open_qr: Option<Click>,
+    /// DR2L: "I Understand" on the pre-receive warning — the gate that has to
+    /// be passed once per account before the address is handed over.
+    pub acknowledge: Option<Click>,
+    /// DR2L: 保存图片 — the share card as a PNG.
+    pub save_image: Option<Click>,
+    /// DR1L, live: one listener per network row. Empty falls back to `open_qr`.
+    pub open_qr_rows: Vec<Click>,
     /// DA1L: a row opens its transaction.
+    ///
+    /// The fixture binds one and gives it to the first row — every mock row
+    /// opens the same drawing. See `open_qr` for why a live panel needs more.
     pub open_tx: Option<Click>,
+    /// DA1L, live: one listener per row, in the order the groups render.
+    pub open_tx_rows: Vec<Click>,
     /// DSD1L: a row opens the send form for that token.
     pub open_send_form: Option<Click>,
     /// DSD2L: the fee row and the recipient picker.
@@ -54,6 +73,60 @@ pub struct PanelActions {
     pub open_scan: Option<Click>,
     /// The panel's own CTA — continue, confirm, done.
     pub advance: Option<Click>,
+    /// DT3L, live: the contract-address field, editable.
+    ///
+    /// `None` draws the mock's read-only well — a gallery has nothing to look
+    /// a contract up on, and a field that accepts typing and then does nothing
+    /// is worse than one that plainly does not.
+    pub address_field: Option<AddressField>,
+    /// DT3L, live: "add to wallet" on the found card.
+    pub add_to_wallet: Option<Click>,
+    /// DSD1L, live: one listener per token row. Empty falls back to
+    /// `open_send_form`, which the fixture gives to its first row.
+    pub open_send_rows: Vec<Click>,
+    /// SD1b, live: "select all valuable", and the CTA that either enters the
+    /// sweep or confirms the tokens ticked in it.
+    pub sweep_select_all: Option<Click>,
+    pub send_pick_cta: Option<Click>,
+    /// DSD2L, live: the amount and the recipient, editable. `None` draws the
+    /// mock's static figures.
+    pub amount_field: Option<AddressField>,
+    pub recipient_field: Option<AddressField>,
+    /// DSD2L, live: the Max chip.
+    pub tap_max: Option<Click>,
+    /// DSD2eL, live: one listener per contact row, in the book's order.
+    pub pick_contact_rows: Vec<Click>,
+    /// DSD2fL, live: one listener per fee-coin row, in the relay's order.
+    pub fee_rows: Vec<Click>,
+    /// DSD2cL, live: the unit toggle's two halves (fiat, token).
+    pub batch_unit: Option<(Click, Click)>,
+    /// DSD2cL, live: the paste box reads the clipboard when clicked — the
+    /// desktop's paste, since the drawn box is not a text editor.
+    pub batch_paste: Option<Click>,
+    pub batch_pick_file: Option<Click>,
+    pub batch_template: Option<Click>,
+    /// DSD2cL, live: the rate, editable — the shown string IS the applied rate.
+    pub batch_rate_field: Option<AddressField>,
+    pub batch_rate_reset: Option<Click>,
+    /// DSD2L / DSD3L, live: the way out the core's refusal offers — edit the
+    /// amount, add the network, check the top-up again.
+    pub notice_action: Option<Click>,
+    /// The relay-treasury stop's "Not now" — the core's `DismissTreasurySheet`.
+    pub notice_dismiss: Option<Click>,
+    /// DSD2eL, live: one listener per GROUP row — a whole group seeds a split.
+    pub pick_group_rows: Vec<Click>,
+    /// DSD2bL, live: each split row's own amount field and its remove — in the
+    /// order the rows draw, so row N edits payee N.
+    pub split_amount_fields: Vec<AddressField>,
+    pub remove_recipient_rows: Vec<Click>,
+}
+
+/// An editable field the page owns the state of.
+pub struct AddressField {
+    pub focus: FocusHandle,
+    pub value: String,
+    pub placeholder: SharedString,
+    pub on_change: Box<dyn Fn(String, &mut Window, &mut App) + 'static>,
 }
 
 /// Wrap an element so it answers to a click, when the page bound one.
@@ -61,7 +134,7 @@ pub struct PanelActions {
 /// The listener is MOVED in: each affordance is rendered once per pass, and an
 /// action with no listener renders as a plain element rather than as a
 /// cursor-pointer that does nothing.
-fn clickable(id: impl Into<ElementId>, action: Option<Click>, body: impl IntoElement) -> Div {
+pub fn clickable(id: impl Into<ElementId>, action: Option<Click>, body: impl IntoElement) -> Div {
     // The wrapper stays a plain `Div` so callers can keep composing columns;
     // the identified element lives inside it, because `.id()` changes the type.
     let wrap = div().flex().flex_col();
@@ -83,6 +156,62 @@ fn column() -> Div {
 }
 
 /// The hairline that separates rows in every list here.
+/// The parts of a batch (spec 038 #D2): every recipient of a split by name
+/// and avatar, every asset of a sweep by name — one list, drawn the same on
+/// the confirm, the receipt and the transaction detail, so what was signed,
+/// what is landing and what landed read as one thing.
+fn breakdown_list(
+    theme: &Theme,
+    identicons: &mut IdenticonCache,
+    title: Option<&SharedString>,
+    rows: &[BreakdownRow],
+) -> Div {
+    let mut block = div().flex().flex_col().gap(px(6.));
+    if let Some(title) = title {
+        block = block.child(
+            div()
+                .text_size(theme::text_label())
+                .text_color(theme.fg_subtle)
+                .child(title.clone()),
+        );
+    }
+    let mut list = div()
+        .flex()
+        .flex_col()
+        .px(px(12.))
+        .rounded(px(12.))
+        .bg(theme.bg_sunken);
+    for item in rows {
+        let mut row = div().flex().items_center().gap(px(8.)).py(px(8.));
+        if let Some(seed) = item.seed.as_ref() {
+            row = row.child(crate::wallet::components::identicon_avatar(
+                identicons,
+                seed.as_ref(),
+                24.,
+            ));
+        }
+        list = list.child(
+            row.child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .whitespace_nowrap()
+                    .truncate()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_base)
+                    .child(item.label.clone()),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_base)
+                    .child(item.value.clone()),
+            ),
+        );
+    }
+    block.child(list)
+}
+
 fn divider(theme: &Theme) -> Div {
     div().h(px(1.)).bg(theme.divider)
 }
@@ -94,26 +223,68 @@ pub fn render(
     theme: &Theme,
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
+    window: &Window,
     actions: PanelActions,
 ) -> Div {
     match body {
-        FlowBody::Receive(model) => receive(model, theme, icons, actions.open_qr),
-        FlowBody::ReceiveQr(model) => receive_qr(model, theme, icons, identicons),
-        FlowBody::History(groups) => history(groups, theme, icons, actions.open_tx),
+        FlowBody::Receive(model) => {
+            receive(model, theme, icons, actions.open_qr, actions.open_qr_rows)
+        }
+        FlowBody::ReceiveQr(model) => receive_qr(
+            model,
+            theme,
+            icons,
+            identicons,
+            actions.acknowledge,
+            actions.save_image,
+        ),
+        FlowBody::History(groups) => {
+            history(groups, theme, icons, actions.open_tx, actions.open_tx_rows)
+        }
         FlowBody::TxDetail(model) => tx_detail(model, theme, icons, identicons),
         FlowBody::Assets(model) => assets(model, theme, icons, actions.open_add_token),
-        FlowBody::AddToken(model) => add_token(model, theme, icons, identicons),
-        FlowBody::SendPick(model) => send_pick(model, theme, icons, actions.open_send_form),
-        FlowBody::SendForm(model) => send_form(model, theme, icons, identicons, actions),
-        FlowBody::ContactPick(model) => {
-            contact_pick(model, theme, icons, identicons, actions.open_scan)
+        FlowBody::AddToken(model) => add_token(
+            model,
+            theme,
+            icons,
+            identicons,
+            window,
+            actions.address_field,
+            actions.add_to_wallet,
+        ),
+        FlowBody::SendPick(model) => send_pick(
+            model,
+            theme,
+            icons,
+            actions.open_send_form,
+            actions.open_send_rows,
+            actions.sweep_select_all,
+            actions.send_pick_cta,
+        ),
+        FlowBody::SendForm(model) => send_form(model, theme, icons, identicons, window, actions),
+        FlowBody::ContactPick(model) => contact_pick(
+            model,
+            theme,
+            icons,
+            identicons,
+            actions.open_scan,
+            actions.pick_contact_rows,
+            actions.pick_group_rows,
+        ),
+        FlowBody::FeeToken(model) => fee_token(model, theme, icons, actions.fee_rows),
+        FlowBody::BatchImport(model) => batch_import(model, theme, icons, window, actions),
+        FlowBody::SendConfirm(model) => send_confirm(
+            model,
+            theme,
+            icons,
+            identicons,
+            actions.advance,
+            actions.notice_action,
+            actions.notice_dismiss,
+        ),
+        FlowBody::SendReceipt(model) => {
+            send_receipt(model, theme, icons, identicons, actions.advance)
         }
-        FlowBody::FeeToken(model) => fee_token(model, theme, icons),
-        FlowBody::BatchImport(model) => batch_import(model, theme, icons),
-        FlowBody::SendConfirm(model) => {
-            send_confirm(model, theme, icons, identicons, actions.advance)
-        }
-        FlowBody::SendReceipt(model) => send_receipt(model, theme, icons, actions.advance),
         // The page routes this away before it gets here; a column-shaped
         // viewfinder is the thing DS1L exists to avoid.
         FlowBody::Scan(model) => scan_placeholder(model, theme),
@@ -125,6 +296,7 @@ fn receive(
     theme: &Theme,
     icons: &mut IconCache,
     mut open_qr: Option<Click>,
+    per_row: Vec<Click>,
 ) -> Div {
     let mut col = column()
         .child(
@@ -134,13 +306,16 @@ fn receive(
                 .child(model.subtitle.clone()),
         )
         .child(flow_search(theme, icons, model.search_placeholder.clone()));
+    // A live panel binds one listener per row; the fixture binds one and gives
+    // it to the first, because every mock row opens the same address anyway.
+    let mut per_row = per_row.into_iter();
     for (i, row) in model.rows.iter().enumerate() {
         if i > 0 {
             col = col.child(divider(theme));
         }
-        // Only the first row carries the listener: the page has one bound
-        // action per render, and every row opens the same address anyway.
-        let action = if i == 0 { open_qr.take() } else { None };
+        let action = per_row
+            .next()
+            .or_else(|| if i == 0 { open_qr.take() } else { None });
         col = col.child(clickable(
             ElementId::from(("network", i)),
             action,
@@ -155,6 +330,8 @@ fn receive_qr(
     theme: &Theme,
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
+    acknowledge: Option<Click>,
+    save_image: Option<Click>,
 ) -> Div {
     let mut col = column().child(
         div()
@@ -186,6 +363,14 @@ fn receive_qr(
         );
     }
 
+    // The gate comes FIRST, and it replaces the code rather than sitting over
+    // it: a warning somebody can read around is one they will read around,
+    // and the whole point is that the address is not handed over until this
+    // has been read once.
+    if let Some(gate) = &model.gate {
+        return col.child(receive_gate(theme, gate, acknowledge));
+    }
+
     col.child(address_card(
         theme,
         icons,
@@ -193,6 +378,19 @@ fn receive_qr(
         model.account.name.clone(),
         model.account.seed.as_ref(),
         model.account.lines.clone(),
+        // The whole address, rejoined from the two halves the card draws. A
+        // receive screen's job is to hand this over, and the two ways it does
+        // that — the code and this card — were both decorative until 031.
+        //
+        // `can_copy` is the CORE's answer, and it is not "is there a payload":
+        // an address can be ready long before anybody has been told which
+        // networks it is safe on.
+        (model.qr_payload.is_some() && model.can_copy).then(|| {
+            SharedString::from(format!(
+                "{}{}",
+                model.account.lines.0, model.account.lines.1
+            ))
+        }),
     ))
     .child(div().flex().justify_center().child(qr_card(
         theme,
@@ -205,6 +403,7 @@ fn receive_qr(
             model.centre.ticker.as_ref(),
             model.centre.badge,
         )),
+        model.qr_payload.as_deref(),
     )))
     .child(
         div()
@@ -212,8 +411,86 @@ fn receive_qr(
             .text_color(theme.fg_subtle)
             .child(model.warning.clone()),
     )
-    .child(ghost_button(theme, model.save_image.clone()))
+    .child(clickable(
+        "receive-save-image",
+        save_image,
+        ghost_button(theme, model.save_image.clone()),
+    ))
     .child(ghost_button(theme, model.view_on_explorer.clone()))
+    .children(deposit_section(&model.deposits, theme))
+}
+
+/// Money that landed while the code was open.
+///
+/// Ported from `ReceiveScreen.tsx`'s `depositBox`: an open, de-boxed section
+/// under a hairline — no filled card — with success ink on the dot and the
+/// amount only, and the time, network and value in plain muted text. The
+/// restraint is the design's: a celebration that shouts is one somebody learns
+/// to distrust.
+///
+/// Absent when there is nothing, rather than an empty container: a hairline
+/// with nothing under it reads as a section that failed to load.
+fn deposit_section(deposits: &[DepositEntry], theme: &Theme) -> Option<Div> {
+    if deposits.is_empty() {
+        return None;
+    }
+    let mut section = div()
+        .flex()
+        .flex_col()
+        .pt(px(16.))
+        .border_t_1()
+        .border_color(theme.border_card);
+    for (i, entry) in deposits.iter().enumerate() {
+        let mut group = div().flex().flex_col().py(px(10.));
+        if i > 0 {
+            group = group.border_t_1().border_color(theme.border_card);
+        }
+        group = group.child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(8.))
+                .child(
+                    div()
+                        .w(px(6.))
+                        .h(px(6.))
+                        .rounded_full()
+                        .bg(theme.success_base),
+                )
+                .child(
+                    div()
+                        .text_size(theme::text_row_sub())
+                        .text_color(theme.fg_muted)
+                        .child(entry.time.clone()),
+                ),
+        );
+        for (amount, meta) in &entry.rows {
+            group = group.child(
+                div()
+                    .flex()
+                    .items_baseline()
+                    .justify_between()
+                    // Inset past the dot so amounts align under the time.
+                    .pl(px(14.))
+                    .pt(px(4.))
+                    .child(
+                        div()
+                            .text_size(theme::text_row_title())
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(theme.success_base)
+                            .child(amount.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_size(theme::text_row_sub())
+                            .text_color(theme.fg_muted)
+                            .child(meta.clone()),
+                    ),
+            );
+        }
+        section = section.child(group);
+    }
+    Some(section)
 }
 
 fn history(
@@ -221,8 +498,13 @@ fn history(
     theme: &Theme,
     icons: &mut IconCache,
     mut open_tx: Option<Click>,
+    per_row: Vec<Click>,
 ) -> Div {
     let mut col = div().flex().flex_col();
+    // Row order here IS the order the page bound its listeners in, because both
+    // walk the same groups. A live panel binds one per row; the fixture binds
+    // one and gives it to the first.
+    let mut per_row = per_row.into_iter();
     let mut index = 0usize;
     for group in groups {
         col = col.child(
@@ -234,7 +516,9 @@ fn history(
                 .child(group.label.clone()),
         );
         for row in &group.rows {
-            let action = if index == 0 { open_tx.take() } else { None };
+            let action = per_row
+                .next()
+                .or_else(|| if index == 0 { open_tx.take() } else { None });
             col = col.child(clickable(
                 ElementId::from(("history", index)),
                 action,
@@ -291,6 +575,14 @@ fn tx_detail(
             col = col.child(divider(theme));
         }
         col = col.child(fact_row(theme, icons, identicons, fact));
+    }
+    if !model.breakdown.is_empty() {
+        col = col.child(breakdown_list(
+            theme,
+            identicons,
+            model.breakdown_title.as_ref(),
+            &model.breakdown,
+        ));
     }
     col.child(ghost_button(theme, model.view_on_explorer.clone()))
 }
@@ -388,6 +680,9 @@ fn add_token(
     theme: &Theme,
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
+    window: &Window,
+    address_field: Option<AddressField>,
+    add_to_wallet: Option<Click>,
 ) -> Div {
     let mut col = column().child(segmented_toggle(
         theme,
@@ -423,11 +718,32 @@ fn add_token(
         );
     }
 
-    col = col.child(mono_field(
-        theme,
-        Some(model.field_label.clone()),
-        model.field_value.clone(),
-    ));
+    col = col.child(match address_field {
+        Some(field) => {
+            let strings = crate::ui::NameFieldStrings {
+                label: model.field_label.clone(),
+                placeholder: field.placeholder.clone(),
+                helper: SharedString::from(""),
+                too_long_hint: SharedString::from(""),
+            };
+            crate::ui::text_field(
+                "add-token-address",
+                theme,
+                &strings,
+                &field.value,
+                false,
+                false,
+                &field.focus,
+                window,
+                field.on_change,
+            )
+        }
+        None => mono_field(
+            theme,
+            Some(model.field_label.clone()),
+            model.field_value.clone(),
+        ),
+    });
 
     col = match &model.result {
         AddTokenResult::Token { mark, name, detail } => col.child(
@@ -495,7 +811,136 @@ fn add_token(
         }
     };
 
-    col.child(accent_button(theme, model.cta.clone()))
+    // The write that failed, said above the button that failed to do it.
+    // `live.rs` has filled this from `MtokView.save_error` since phase 6; the
+    // panel dropped it on the floor, and the only thing that noticed was a
+    // dead-code warning nobody read. Same defect as the picker that eats a
+    // file: the core said no and the screen went on looking fine.
+    if let Some(notice) = &model.notice {
+        col = col.child(notice_card(notice, theme, None, None));
+    }
+
+    col.child(clickable(
+        ElementId::from("add-token-cta"),
+        add_to_wallet,
+        accent_button(theme, model.cta.clone()),
+    ))
+}
+
+/// What the core refused, drawn where the person is looking.
+///
+/// Amber while they are still typing, red when nothing can proceed as things
+/// stand. The action is the way out the CORE offered — never a button this
+/// file invented.
+fn notice_card(
+    notice: &SendNotice,
+    theme: &Theme,
+    action: Option<Click>,
+    dismiss: Option<Click>,
+) -> Div {
+    let (tint, border) = if notice.error {
+        (theme.error_soft, theme.error_base)
+    } else {
+        (theme.warning_soft, theme.warning_border)
+    };
+    let mut card = div()
+        .flex()
+        .flex_col()
+        .gap(px(6.))
+        .p(px(12.))
+        .rounded(px(12.))
+        .bg(tint)
+        .border_1()
+        .border_color(border);
+    if let Some(title) = &notice.title {
+        card = card.child(
+            div()
+                .text_size(theme::text_row_title())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(if notice.error {
+                    theme.error_base
+                } else {
+                    theme.warning_base
+                })
+                .child(title.clone()),
+        );
+    }
+    card = card.child(
+        div()
+            .text_size(theme::text_row_sub())
+            .text_color(theme.fg_base)
+            .child(notice.body.clone()),
+    );
+    if let Some(detail) = &notice.detail {
+        card = card.child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .child(detail.clone()),
+        );
+    }
+    // Two ways out of the same card: the retry the core offered, and — where
+    // the stop has one — leaving it. Side by side, the retry first, because
+    // that is the one a person came here to press.
+    let mut row = div().flex().gap(px(8.));
+    let mut any = false;
+    if let Some(label) = &notice.action {
+        any = true;
+        row = row.child(clickable(
+            "flow-notice-action",
+            action,
+            pill(theme, label.clone()),
+        ));
+    }
+    if let Some(label) = &notice.dismiss {
+        any = true;
+        row = row.child(clickable(
+            "flow-notice-dismiss",
+            dismiss,
+            div()
+                .px(px(12.))
+                .py(px(6.))
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .child(label.clone()),
+        ));
+    }
+    if any { card.child(row) } else { card }
+}
+
+/// The panel's CTA in the state the core put it in. A shut button is drawn
+/// shut and answers to nothing; a busy one keeps its accent — busy is not
+/// disabled, and a person who pressed once should see the press took.
+fn cta_button(
+    id: &'static str,
+    theme: &Theme,
+    label: SharedString,
+    state: CtaState,
+    action: Option<Click>,
+) -> Div {
+    let button = accent_button(theme, label);
+    match state {
+        CtaState::Enabled => clickable(id, action, button),
+        CtaState::Busy => clickable(id, None, button.opacity(0.7)),
+        CtaState::Disabled => clickable(id, None, button.opacity(0.4)),
+    }
+}
+
+/// A bordered pill for a secondary action — the recipient-row actions and,
+/// live, the Max chip and the address-book affordance beside a typed field.
+fn pill(theme: &Theme, label: SharedString) -> Div {
+    div()
+        .px(px(12.))
+        .py(px(6.))
+        .rounded(px(999.))
+        .border_1()
+        .border_color(theme.border_card)
+        .flex()
+        .items_center()
+        .justify_center()
+        .text_size(theme::text_row_sub())
+        .text_color(theme.fg_base)
+        .child(label)
 }
 
 fn send_pick(
@@ -503,6 +948,9 @@ fn send_pick(
     theme: &Theme,
     icons: &mut IconCache,
     mut open_form: Option<Click>,
+    per_row: Vec<Click>,
+    select_all: Option<Click>,
+    cta: Option<Click>,
 ) -> Div {
     let (dots, pill_label) = &model.pill;
     let mut col = column()
@@ -516,25 +964,109 @@ fn send_pick(
                 .child(filter_chips(theme, &model.filters))
                 .child(network_pill(theme, icons, dots, pill_label.clone()).flex_none()),
         );
+
+    // SD1b's chain lock, in the corpus's own sentence: the first pick names
+    // the network and the greying that follows is explained rather than left
+    // to be guessed at.
+    if let Some((colour, letter, text)) = model
+        .selection
+        .as_ref()
+        .and_then(|selection| selection.notice.clone())
+    {
+        col = col.child(
+            div()
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .p(px(12.))
+                .rounded(px(10.))
+                .bg(theme.bg_well)
+                .child(crate::settings::components::chain_mark(letter, colour, 20.))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w(px(0.))
+                        .text_size(theme::text_row_sub())
+                        .line_height(px(18.))
+                        .text_color(theme.fg_muted)
+                        .child(text),
+                ),
+        );
+    }
+
+    // A live panel binds one listener per row; the fixture binds one and
+    // gives it to the first, because every mock row opens the same drawing.
+    let mut per_row = per_row.into_iter();
     for (i, row) in model.rows.iter().enumerate() {
-        let action = if i == 0 { open_form.take() } else { None };
+        let action = per_row
+            .next()
+            .or_else(|| if i == 0 { open_form.take() } else { None });
+        let selected = model
+            .selection
+            .as_ref()
+            .and_then(|s| s.selected.get(i).copied())
+            .unwrap_or(false);
+        let dimmed = model
+            .selection
+            .as_ref()
+            .and_then(|s| s.dimmed.get(i).copied())
+            .unwrap_or(false);
+        let drawn = asset_row(ElementId::from(("flow-send", i)), theme, icons, row);
+        let mut wrapper = div().when(selected, |el| {
+            el.rounded(px(10.)).bg(theme.accent.opacity(0.10))
+        });
+        wrapper = wrapper.child(if dimmed {
+            // Off-network rows are readable and inert. The core refuses them
+            // anyway; drawing them as pressable would be an offer it declines.
+            drawn.opacity(0.4).into_any_element()
+        } else {
+            clickable(ElementId::from(("flow-send-row", i)), action, drawn).into_any_element()
+        });
+        col = col.child(wrapper);
+    }
+
+    if let Some(selection) = model.selection.as_ref() {
         col = col.child(clickable(
-            ElementId::from(("flow-send-row", i)),
-            action,
-            asset_row(ElementId::from(("flow-send", i)), theme, icons, row),
+            "flow-send-select-all",
+            select_all,
+            div()
+                .py(px(8.))
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .child(selection.select_all.clone()),
         ));
     }
+
     // DSD1L sets this as a quiet centred link, not a button: sending several
     // tokens at once is a different journey, not the main one on this panel.
-    col.child(
-        div()
-            .flex()
-            .justify_center()
-            .py(px(8.))
-            .text_size(theme::text_row_sub())
-            .text_color(theme.fg_muted)
-            .child(model.cta.clone()),
-    )
+    // Once tokens ARE ticked it becomes the accent action, because then it is.
+    let label = div()
+        .flex()
+        .justify_center()
+        .py(px(8.))
+        .text_size(theme::text_row_sub())
+        .text_color(if model.cta_accent {
+            theme.fg_inverse
+        } else {
+            theme.fg_muted
+        })
+        .child(model.cta.clone());
+    col.child(clickable(
+        "flow-send-cta",
+        cta,
+        if model.cta_accent {
+            div()
+                .h(px(44.))
+                .rounded(px(12.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(theme.accent)
+                .child(label)
+        } else {
+            label
+        },
+    ))
 }
 
 fn send_form(
@@ -542,6 +1074,7 @@ fn send_form(
     theme: &Theme,
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
+    window: &Window,
     mut actions: PanelActions,
 ) -> Div {
     let (mark, symbol, detail, max) = &model.token;
@@ -553,7 +1086,45 @@ fn send_form(
         max.clone(),
     ));
 
-    if let Some((value, fiat)) = &model.amount {
+    if let Some(field) = actions.amount_field.take() {
+        // Live: a real field, labelled with the coin it counts in, the fiat
+        // line under it and the Max chip beside it. The value is the CORE's
+        // — it validates every keystroke — so the field holds no copy.
+        let strings = crate::ui::NameFieldStrings {
+            label: model.token.1.clone(),
+            placeholder: field.placeholder.clone(),
+            helper: SharedString::from(""),
+            too_long_hint: SharedString::from(""),
+        };
+        let block = column().child(crate::ui::text_field(
+            "send-amount",
+            theme,
+            &strings,
+            &field.value,
+            false,
+            false,
+            &field.focus,
+            window,
+            field.on_change,
+        ));
+        let mut under = div().flex().items_center().justify_between().gap(px(8.));
+        if let Some((_, fiat)) = &model.amount {
+            under = under.child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_muted)
+                    .child(fiat.clone()),
+            );
+        }
+        if let Some(max) = &model.token.3 {
+            under = under.child(clickable(
+                "send-max",
+                actions.tap_max.take(),
+                pill(theme, max.clone()),
+            ));
+        }
+        col = col.child(block.child(under));
+    } else if let Some((value, fiat)) = &model.amount {
         col = col.child(
             div()
                 .flex()
@@ -576,7 +1147,39 @@ fn send_form(
         );
     }
 
-    if let Some((label, lines, seed)) = &model.recipient {
+    if let Some(field) = actions.recipient_field.take() {
+        // Live: the address is typed (or pasted), and the book is one pill
+        // away. The label carries the core's trust line once it has one.
+        let label = model
+            .recipient
+            .as_ref()
+            .map(|(label, _, _)| label.clone())
+            .unwrap_or_default();
+        let strings = crate::ui::NameFieldStrings {
+            label,
+            placeholder: field.placeholder.clone(),
+            helper: SharedString::from(""),
+            too_long_hint: SharedString::from(""),
+        };
+        col = col.child(crate::ui::text_field(
+            "send-recipient",
+            theme,
+            &strings,
+            &field.value,
+            false,
+            false,
+            &field.focus,
+            window,
+            field.on_change,
+        ));
+        if let Some(pick) = &model.pick_contacts {
+            col = col.child(div().flex().child(clickable(
+                "flow-pick-contacts",
+                actions.open_contact_pick.take(),
+                pill(theme, pick.clone()),
+            )));
+        }
+    } else if let Some((label, lines, seed)) = &model.recipient {
         col = col
             .child(
                 div()
@@ -594,6 +1197,10 @@ fn send_form(
                     lines.0.clone(),
                     seed.as_ref(),
                     (lines.1.clone(), SharedString::default()),
+                    // The send form's recipient row: the whole card OPENS the
+                    // contact picker, so a copy click inside it would fight the
+                    // row it sits in.
+                    None,
                 ),
             ));
     }
@@ -609,8 +1216,21 @@ fn send_form(
         ));
     }
 
-    for recipient in &model.recipients {
-        col = col.child(recipient_card(theme, icons, identicons, recipient));
+    let mut amounts = actions.split_amount_fields.drain(..);
+    let mut removes = actions.remove_recipient_rows.drain(..);
+    for (index, recipient) in model.recipients.iter().enumerate() {
+        col = col.child(recipient_card(
+            theme,
+            icons,
+            identicons,
+            recipient,
+            index,
+            crate::flows::components::RecipientRowActions {
+                amount: amounts.next(),
+                remove: removes.next(),
+            },
+            window,
+        ));
     }
 
     if !model.recipient_actions.is_empty() {
@@ -664,15 +1284,25 @@ fn send_form(
         );
     }
 
+    if let Some(notice) = &model.notice {
+        col = col.child(notice_card(
+            notice,
+            theme,
+            actions.notice_action.take(),
+            actions.notice_dismiss.take(),
+        ));
+    }
     col.child(clickable(
         "flow-fee-row",
         actions.open_fee_token.take(),
         fee_row(theme, icons, &model.fee),
     ))
-    .child(clickable(
+    .child(cta_button(
         "flow-form-cta",
+        theme,
+        model.cta.clone(),
+        model.cta_state,
         actions.advance.take(),
-        accent_button(theme, model.cta.clone()),
     ))
 }
 
@@ -682,7 +1312,10 @@ fn contact_pick(
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
     open_scan: Option<Click>,
+    per_row: Vec<Click>,
+    mut group_rows: Vec<Click>,
 ) -> Div {
+    let mut per_row = per_row.into_iter();
     let mut col = column()
         .child(flow_search(theme, icons, model.search_placeholder.clone()))
         // Scan sits above the saved people: most sends go to someone already in
@@ -722,42 +1355,46 @@ fn contact_pick(
                 .child(model.groups_title.clone()),
         );
 
-    for (name, count, first, second) in &model.groups {
-        col = col.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(12.))
-                .py(px(8.))
-                // Two overlapping discs stand for "several people" without
-                // drawing any of them — a group has no single face to show.
-                .child(
-                    div()
-                        .flex()
-                        .child(div().w(px(28.)).h(px(28.)).rounded(px(14.)).bg(*first))
-                        .child(
-                            div()
-                                .w(px(28.))
-                                .h(px(28.))
-                                .rounded(px(14.))
-                                .bg(*second)
-                                .ml(px(-10.)),
-                        ),
-                )
-                .child(
-                    div()
-                        .flex_1()
-                        .text_size(theme::text_row_title())
-                        .text_color(theme.fg_base)
-                        .child(name.clone()),
-                )
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_subtle)
-                        .child(count.clone()),
-                ),
-        );
+    let mut per_group = std::mem::take(&mut group_rows).into_iter();
+    for (index, (name, count, first, second)) in model.groups.iter().enumerate() {
+        let row = div()
+            .flex()
+            .items_center()
+            .gap(px(12.))
+            .py(px(8.))
+            // Two overlapping discs stand for "several people" without
+            // drawing any of them — a group has no single face to show.
+            .child(
+                div()
+                    .flex()
+                    .child(div().w(px(28.)).h(px(28.)).rounded(px(14.)).bg(*first))
+                    .child(
+                        div()
+                            .w(px(28.))
+                            .h(px(28.))
+                            .rounded(px(14.))
+                            .bg(*second)
+                            .ml(px(-10.)),
+                    ),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .text_size(theme::text_row_title())
+                    .text_color(theme.fg_base)
+                    .child(name.clone()),
+            )
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_subtle)
+                    .child(count.clone()),
+            );
+        col = col.child(clickable(
+            ElementId::from(("flow-group", index)),
+            per_group.next(),
+            row,
+        ));
     }
 
     col = col.child(
@@ -768,7 +1405,7 @@ fn contact_pick(
             .child(model.contacts_title.clone()),
     );
 
-    for contact in &model.contacts {
+    for (i, contact) in model.contacts.iter().enumerate() {
         let mut name_row = div().flex().items_center().gap(px(6.)).child(
             div()
                 .text_size(theme::text_row_title())
@@ -786,45 +1423,54 @@ fn contact_pick(
                     .child(group.clone()),
             );
         }
-        col = col.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(12.))
-                .py(px(8.))
-                .child(crate::wallet::components::identicon_avatar(
-                    identicons,
-                    contact.seed.as_ref(),
-                    28.,
-                ))
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.))
-                        .flex()
-                        .flex_col()
-                        .child(name_row)
-                        .child(
-                            div()
-                                .font_family(theme::font_mono())
-                                .text_size(theme::text_mono_address())
-                                .text_color(theme.fg_subtle)
-                                .child(contact.address.clone()),
-                        ),
-                )
-                .child(icon_img(
-                    icons,
-                    Icon::ChevronRight,
-                    false,
-                    theme.fg_subtle,
-                    12.,
-                )),
-        );
+        let entry = div()
+            .flex()
+            .items_center()
+            .gap(px(12.))
+            .py(px(8.))
+            .child(crate::wallet::components::identicon_avatar(
+                identicons,
+                contact.seed.as_ref(),
+                28.,
+            ))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .flex()
+                    .flex_col()
+                    .child(name_row)
+                    .child(
+                        div()
+                            .font_family(theme::font_mono())
+                            .text_size(theme::text_mono_address())
+                            .text_color(theme.fg_subtle)
+                            .child(contact.address.clone()),
+                    ),
+            )
+            .child(icon_img(
+                icons,
+                Icon::ChevronRight,
+                false,
+                theme.fg_subtle,
+                12.,
+            ));
+        col = col.child(clickable(
+            ElementId::from(("flow-contact", i)),
+            per_row.next(),
+            entry,
+        ));
     }
     col
 }
 
-fn fee_token(model: &FeeTokenPick, theme: &Theme, icons: &mut IconCache) -> Div {
+fn fee_token(
+    model: &FeeTokenPick,
+    theme: &Theme,
+    icons: &mut IconCache,
+    per_row: Vec<Click>,
+) -> Div {
+    let mut per_row = per_row.into_iter();
     let mut col = column().child(
         // Paying gas in a stablecoin is unusual enough that someone seeing USDC
         // offered as a fee token will wonder whether they are being asked to
@@ -835,7 +1481,7 @@ fn fee_token(model: &FeeTokenPick, theme: &Theme, icons: &mut IconCache) -> Div 
             .text_color(theme.fg_muted)
             .child(model.hint.clone()),
     );
-    for row in &model.rows {
+    for (i, row) in model.rows.iter().enumerate() {
         let shell = div()
             .flex()
             .items_center()
@@ -891,40 +1537,139 @@ fn fee_token(model: &FeeTokenPick, theme: &Theme, icons: &mut IconCache) -> Div 
         if row.selected {
             entry = entry.child(icon_img(icons, Icon::Check, false, theme.accent, 14.));
         }
-        col = col.child(entry);
+        // A coin that cannot cover the fee is shown for context and answers
+        // to nothing (invariant ⑧) — the listener is dropped, not just dimmed.
+        let action = per_row.next();
+        let (entry, action) = if row.insufficient {
+            (entry.opacity(0.45), None)
+        } else {
+            (entry, action)
+        };
+        col = col.child(clickable(
+            ElementId::from(("flow-fee-row", i)),
+            action,
+            entry,
+        ));
     }
     col
 }
 
-fn batch_import(model: &BatchImport, theme: &Theme, icons: &mut IconCache) -> Div {
-    let mut col = column()
-        .child(segmented_toggle(
+fn batch_import(
+    model: &BatchImport,
+    theme: &Theme,
+    icons: &mut IconCache,
+    window: &Window,
+    mut actions: PanelActions,
+) -> Div {
+    // Live: two clickable halves drawn exactly like the one segmented control;
+    // the mock keeps the component itself.
+    let toggle = match actions.batch_unit.take() {
+        Some((fiat, token)) => {
+            let seg = |label: SharedString, on: bool| {
+                let base = div()
+                    .py(px(8.))
+                    .rounded(px(10.))
+                    .flex()
+                    .items_center()
+                    .justify_center();
+                let base = if on { base.bg(theme.bg_raised) } else { base };
+                base.text_size(theme::text_row_sub())
+                    .text_color(if on { theme.fg_base } else { theme.fg_muted })
+                    .child(label)
+            };
+            div()
+                .flex()
+                .gap(px(2.))
+                .p(px(2.))
+                .rounded(px(12.))
+                .bg(theme.bg_sunken)
+                .child(
+                    clickable(
+                        "batch-unit-fiat",
+                        Some(fiat),
+                        seg(model.unit_fiat.clone(), model.fiat_on),
+                    )
+                    .flex_1(),
+                )
+                .child(
+                    clickable(
+                        "batch-unit-token",
+                        Some(token),
+                        seg(model.unit_token.clone(), !model.fiat_on),
+                    )
+                    .flex_1(),
+                )
+        }
+        None => segmented_toggle(
             theme,
             model.unit_fiat.clone(),
             model.unit_token.clone(),
-            true,
+            model.fiat_on,
+        ),
+    };
+    let mut col = column()
+        .child(toggle)
+        .child(clickable(
+            "batch-paste",
+            actions.batch_paste.take(),
+            mono_field(theme, None, model.paste.clone()),
         ))
-        .child(mono_field(theme, None, model.paste.clone()))
         .child(
             div()
                 .flex()
                 .justify_center()
                 .gap(px(8.))
-                .child(
+                .child(clickable(
+                    "batch-pick-file",
+                    actions.batch_pick_file.take(),
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
                         .child(model.import_file.clone()),
-                )
-                .child(
+                ))
+                .child(clickable(
+                    "batch-template",
+                    actions.batch_template.take(),
                     div()
                         .text_size(theme::text_row_sub())
                         .text_color(theme.fg_muted)
                         .child(model.template.clone()),
-                ),
+                )),
         )
-        .child(divider(theme))
-        .child(
+        .child(divider(theme));
+    col = match actions.batch_rate_field.take() {
+        Some(field) => {
+            let strings = crate::ui::NameFieldStrings {
+                label: model.rate_section.clone(),
+                placeholder: field.placeholder.clone(),
+                helper: SharedString::from(""),
+                too_long_hint: SharedString::from(""),
+            };
+            let mut row = div()
+                .flex()
+                .items_end()
+                .gap(px(8.))
+                .child(div().flex_1().child(crate::ui::text_field(
+                    "batch-rate",
+                    theme,
+                    &strings,
+                    &field.value,
+                    false,
+                    false,
+                    &field.focus,
+                    window,
+                    field.on_change,
+                )));
+            if let Some(reset) = &model.rate_reset {
+                row = row.child(clickable(
+                    "batch-rate-reset",
+                    actions.batch_rate_reset.take(),
+                    pill(theme, reset.clone()),
+                ));
+            }
+            col.child(row)
+        }
+        None => col.child(
             div()
                 .flex()
                 .items_center()
@@ -941,7 +1686,9 @@ fn batch_import(model: &BatchImport, theme: &Theme, icons: &mut IconCache) -> Di
                         .text_color(theme.fg_base)
                         .child(model.rate_value.clone()),
                 ),
-        )
+        ),
+    };
+    col = col
         .child(
             div()
                 .text_size(theme::text_row_sub())
@@ -991,16 +1738,25 @@ fn batch_import(model: &BatchImport, theme: &Theme, icons: &mut IconCache) -> Di
         );
     }
 
-    col.child(
+    col = col.child(
         div()
             .text_size(theme::text_row_sub())
             .text_color(theme.error_base)
             .child(model.rejected.clone()),
-    )
+    );
+    if let Some(notice) = &model.notice {
+        col = col.child(notice_card(notice, theme, None, None));
+    }
     // Bad rows are marked and skipped, never silently dropped, and the CTA
     // counts only the good ones — a button that says "Import 3" and imports 2
-    // is how someone underpays a contractor.
-    .child(accent_button(theme, model.cta.clone()))
+    // is how someone underpays a contractor. A gate the core shut is drawn
+    // shut: dimmed, and it answers to nothing.
+    let cta = accent_button(theme, model.cta.clone());
+    if model.cta_enabled {
+        col.child(clickable("batch-apply", actions.advance.take(), cta))
+    } else {
+        col.child(cta.opacity(0.4))
+    }
 }
 
 fn send_confirm(
@@ -1009,6 +1765,8 @@ fn send_confirm(
     icons: &mut IconCache,
     identicons: &mut IdenticonCache,
     advance: Option<Click>,
+    notice_action: Option<Click>,
+    notice_dismiss: Option<Click>,
 ) -> Div {
     let mut col = column().child(
         div()
@@ -1046,42 +1804,19 @@ fn send_confirm(
     col = col.child(card);
 
     if !model.breakdown.is_empty() {
-        let mut list = div()
-            .flex()
-            .flex_col()
-            .px(px(12.))
-            .rounded(px(12.))
-            .bg(theme.bg_sunken);
-        for item in &model.breakdown {
-            list = list.child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .py(px(8.))
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_base)
-                            .child(item.label.clone()),
-                    )
-                    .child(
-                        div()
-                            .text_size(theme::text_row_sub())
-                            .text_color(theme.fg_base)
-                            .child(item.value.clone()),
-                    ),
-            );
-        }
-        col = col.child(list);
+        col = col.child(breakdown_list(theme, identicons, None, &model.breakdown));
     }
 
+    if let Some(notice) = &model.notice {
+        col = col.child(notice_card(notice, theme, notice_action, notice_dismiss));
+    }
     // Per the SPEC sheet this is the ONE accent CTA in the whole send journey.
-    col.child(clickable(
+    col.child(cta_button(
         "flow-confirm-cta",
+        theme,
+        model.cta.clone(),
+        model.cta_state,
         advance,
-        accent_button(theme, model.cta.clone()),
     ))
 }
 
@@ -1089,6 +1824,7 @@ fn send_receipt(
     model: &SendReceipt,
     theme: &Theme,
     icons: &mut IconCache,
+    identicons: &mut IdenticonCache,
     advance: Option<Click>,
 ) -> Div {
     let mut col = column().child(
@@ -1133,6 +1869,15 @@ fn send_receipt(
                 })
                 .child(caption.clone()),
         );
+    }
+
+    if !model.breakdown.is_empty() {
+        col = col.child(breakdown_list(
+            theme,
+            identicons,
+            model.breakdown_title.as_ref(),
+            &model.breakdown,
+        ));
     }
 
     if let Some((label, value)) = &model.hash {
@@ -1183,10 +1928,21 @@ fn scan_placeholder(model: &ScanModal, theme: &Theme) -> Div {
 ///
 /// A scanner is a viewfinder and a 400px column is the wrong shape for one, so
 /// this is the single flow the third column does not host.
-pub fn scan_modal(model: &ScanModal, theme: &Theme, icons: &mut IconCache) -> Div {
+pub fn scan_modal(
+    model: &ScanModal,
+    theme: &Theme,
+    icons: &mut IconCache,
+    mut tool_actions: Vec<Option<Click>>,
+    preview: Option<std::sync::Arc<gpui::RenderImage>>,
+) -> Div {
     let mut tools = div().flex().gap(px(8.));
-    for label in &model.tools {
-        tools = tools.child(ghost_button(theme, label.clone()));
+    let mut bound = tool_actions.drain(..);
+    for (i, label) in model.tools.iter().enumerate() {
+        tools = tools.child(clickable(
+            ElementId::from(("scan-tool", i)),
+            bound.next().flatten(),
+            ghost_button(theme, label.clone()),
+        ));
     }
 
     div()
@@ -1213,12 +1969,25 @@ pub fn scan_modal(model: &ScanModal, theme: &Theme, icons: &mut IconCache) -> Di
         )
         .child(
             // The viewfinder is landscape, not square — roughly what a webcam
-            // hands you, and what DS1L measures.
-            div()
-                .w_full()
-                .h(px(336.))
-                .rounded(px(8.))
-                .bg(theme.bg_sunken),
+            // hands you, and what DS1L measures. With a camera running it
+            // holds the camera; without one it stays the empty well it has
+            // always been, and the toolbar's other door still works.
+            {
+                let well = div()
+                    .w_full()
+                    .h(px(336.))
+                    .rounded(px(8.))
+                    .overflow_hidden()
+                    .bg(theme.bg_sunken);
+                match preview {
+                    Some(image) => well.child(
+                        gpui::img(gpui::ImageSource::Render(image))
+                            .w_full()
+                            .h(px(336.)),
+                    ),
+                    None => well,
+                }
+            },
         )
         .child(
             div()
@@ -1227,4 +1996,49 @@ pub fn scan_modal(model: &ScanModal, theme: &Theme, icons: &mut IconCache) -> Di
                 .child(model.hint.clone()),
         )
         .child(tools)
+}
+
+/// The warning that stands where the code will be.
+///
+/// Not an overlay ON the code: a cover somebody can read around is one they
+/// will read around. The button is withheld while the flag is still being
+/// read — a button that appears a frame later is one somebody clicks twice,
+/// and the second click would land on whatever took its place.
+fn receive_gate(
+    theme: &Theme,
+    gate: &crate::flows::fixtures::ReceiveGate,
+    act: Option<Click>,
+) -> Div {
+    let mut card = column()
+        .p(px(20.))
+        .rounded(px(16.))
+        .border_1()
+        .border_color(theme.border_card)
+        .child(
+            div()
+                .text_size(theme::text_row_title())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(theme.fg_base)
+                .child(gate.title.clone()),
+        )
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .child(gate.body.clone()),
+        )
+        .child(
+            div()
+                .text_size(theme::text_row_sub())
+                .text_color(theme.fg_muted)
+                .child(gate.counterfactual.clone()),
+        );
+    if !gate.loading {
+        card = card.child(clickable(
+            "receive-ack",
+            act,
+            accent_button(theme, gate.confirm.clone()),
+        ));
+    }
+    card
 }

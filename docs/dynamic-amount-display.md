@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. Living implementation: the amount and fiat formatting rules in `rust/crates/vela-core/src/l10n/` and their `app-web/vela-wallet/src/lib/ui/` renderers.
+
 # Dynamic Amount Display — the "atomic number" cascade
 
 A portable pattern for rendering money/number values that stay legible at any

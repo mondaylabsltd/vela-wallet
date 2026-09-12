@@ -76,7 +76,7 @@ object VelaSizing {
     val sheetHandleWidth: Dp = 36.dp
     val sheetHandleHeight: Dp = 4.dp
 
-    // Spec 021 wallet-flow geometry, measured off design/wallet-2 (not in the
+    // Spec 021 wallet-flow geometry, measured off docs/design/wallet-2 (not in the
     // DTCG export — kept outside the drift test like the two blocks above).
     /**
      * The receive QR card, measured 344x344 in R2. Fixed, NOT fluid: the SPEC

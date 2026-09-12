@@ -80,6 +80,11 @@ pub struct ChainRowModel {
     pub dot: Option<Hsla>,
     pub count: u32,
     pub selected: bool,
+    /// Which chain this row IS — `None` on the all-networks row, which is the
+    /// same `None` the filter itself uses. Carried on the row rather than
+    /// derived from its position, because a click has to name a chain and a
+    /// position is only a chain until the list re-sorts.
+    pub chain_id: Option<u32>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -166,6 +171,26 @@ pub fn balance_variants(s: &WalletStrings) -> Vec<BalanceModel> {
             status: Some((StatusKind::Refreshing, s.balance_stale.clone())),
         },
     ]
+}
+
+/// Which D1 row the celebration is about: the `+120 USDT` receipt at index 1.
+///
+/// The drawn state and the live one must be about the same thing — a glow on a
+/// row the toast is not about would teach the drawing's reader the wrong rule
+/// — so the index and the sentence below are two halves of one fixture.
+pub const CELEBRATED_ROW: usize = 1;
+
+/// D1b's celebration, in the words the corpus uses for the live one.
+///
+/// `+120 USDT` is what the row at [`CELEBRATED_ROW`] says, so the pill and the
+/// row underneath it agree; formatted here rather than parsed back out of that
+/// row's amount string, which is the reverse-parse the core removed.
+pub fn receipt_toast(s: &WalletStrings) -> SharedString {
+    SharedString::from(fill(
+        &fill(&s.toast_received, "amount", "120"),
+        "token",
+        "USDT",
+    ))
 }
 
 fn row(
@@ -328,11 +353,12 @@ pub fn assets_variants(s: &WalletStrings) -> Vec<AssetRowModel> {
 }
 
 pub fn chains(s: &WalletStrings) -> Vec<ChainRowModel> {
-    let chain = |name: &str, dot: Hsla, count: u32| ChainRowModel {
+    let chain = |name: &str, chain_id: u32, dot: Hsla, count: u32| ChainRowModel {
         name: name.into(),
         dot: Some(dot),
         count,
         selected: false,
+        chain_id: Some(chain_id),
     };
     vec![
         ChainRowModel {
@@ -340,13 +366,14 @@ pub fn chains(s: &WalletStrings) -> Vec<ChainRowModel> {
             dot: None,
             count: NETWORK_COUNT,
             selected: true,
+            chain_id: None,
         },
-        chain("BNB Chain", chain_bnb(), 1),
-        chain("Ethereum", chain_ethereum(), 3),
-        chain("Arbitrum", chain_arbitrum(), 1),
-        chain("Gnosis", chain_gnosis(), 1),
-        chain("Base", chain_base(), 1),
-        chain("Polygon", chain_polygon(), 1),
+        chain("BNB Chain", 56, chain_bnb(), 1),
+        chain("Ethereum", 1, chain_ethereum(), 3),
+        chain("Arbitrum", 42_161, chain_arbitrum(), 1),
+        chain("Gnosis", 100, chain_gnosis(), 1),
+        chain("Base", 8_453, chain_base(), 1),
+        chain("Polygon", 137, chain_polygon(), 1),
     ]
 }
 
@@ -374,6 +401,36 @@ pub fn bnb_activity(s: &WalletStrings) -> Vec<ActivityRowModel> {
             chain_bnb(),
         ),
     ]
+}
+
+/// D3, as one model.
+///
+/// Added in 031 so the live panel and the mock render through one body. The
+/// fixture constructor below reproduces the mock's content exactly, so the
+/// gallery is unchanged.
+#[derive(Clone)]
+pub struct AssetDetailModel {
+    pub ticker: SharedString,
+    pub badge: Hsla,
+    /// `0.8533 BNB`.
+    pub amount: SharedString,
+    /// `$496.46 · BNB Chain`.
+    pub sub: SharedString,
+    pub facts: Vec<(SharedString, SharedString)>,
+    pub activity: Vec<ActivityRowModel>,
+}
+
+/// D3 as the mocks draw it.
+#[must_use]
+pub fn asset_detail_default(s: &WalletStrings) -> AssetDetailModel {
+    AssetDetailModel {
+        ticker: "BNB".into(),
+        badge: chain_bnb(),
+        amount: "0.8533 BNB".into(),
+        sub: "$496.46 · BNB Chain".into(),
+        facts: bnb_facts(s),
+        activity: bnb_activity(s),
+    }
 }
 
 /// D3 fact rows.

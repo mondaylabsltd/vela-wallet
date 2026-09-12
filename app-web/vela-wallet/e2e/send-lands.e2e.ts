@@ -105,7 +105,18 @@ test('a send goes out and comes back confirmed, in the parallel space', async ({
 
 	// 2. Recipient and amount — typed, as a person types them.
 	await page.getByRole('textbox', { name: en('send.recipientLabel') }).fill(RECIPIENT);
+	// 最大 (spec 028 Phase 9, T489): the core's own reserve math fills the
+	// field with the balance NET of the fee it estimates — never the raw 1.5.
+	await page.getByRole('button', { name: en('send.maxBtn') }).click();
+	await expect(page.getByRole('textbox', { name: 'ETH' })).toHaveValue(/^1\.4\d+$/, {
+		timeout: 30_000
+	});
 	await page.getByRole('textbox', { name: 'ETH' }).fill('0.5');
+	// The fee is on the form before Continue (T490): the row names a figure in
+	// the fee coin, not the "—" the drawn row shows while nothing has quoted.
+	const feeRow = page.getByRole('button', { name: en('send.feeTokenLabel') });
+	await expect(feeRow).not.toContainText('—', { timeout: 30_000 });
+	await expect(feeRow).toContainText('ETH');
 
 	// 3. The relay's quote arrives and arms the CTA.
 	const advance = page.getByRole('button', { name: en('send.continueBtn') });

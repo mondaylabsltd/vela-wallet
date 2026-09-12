@@ -151,29 +151,20 @@ test.describe('signing for a dApp', () => {
 	});
 
 	/**
-	 * SC-304 IS NOT MET, and this is the test that says so.
+	 * SC-304, met in 028 Phase 8 — and the note of why it was not, kept so the
+	 * fix is legible.
 	 *
-	 * Marked `fixme` rather than deleted: the assertions are right and the
-	 * approve genuinely does not complete. What was measured while writing it,
-	 * so the next person does not start from zero:
-	 *
-	 *   - the slide control DOES commit — its fill goes 0% → 100%, so
-	 *     `onconfirm` fires and `approve_tapped` reaches the resident;
-	 *   - the confirm gate is open (`aria-disabled="false"`, which is the
-	 *     core's own `confirm_gate_open` ANDed with the guard and the fee);
-	 *   - and then nothing happens. No error on the sheet, no console output,
-	 *     no state change, and — the decisive one — `navigator.credentials.get`
-	 *     is NEVER called, so the passkey ceremony does not even start. The
-	 *     chain stops between `approve_tapped` and `sign_and_submit`.
-	 *
-	 * It is very likely NOT a 027 regression: 026 shipped `signing-scenarios`
-	 * with a rejection test and an unlimited-approval test, and never drove an
-	 * approve to completion either. This is the first time anything asked the
-	 * web signing path to finish, and it did not.
-	 *
-	 * Un-fixme it when the approve completes; do not weaken the assertions.
+	 * 027 measured: the slide committed, `approve_tapped` reached the resident,
+	 * the confirm gate was open, and `navigator.credentials.get` was never
+	 * called. The cause was not in the sheet or the transport: the web resident
+	 * never dispatched `accounts_changed`, so the machine had NO signer rows,
+	 * and `approve_with` (`sign_request.rs`) returned `Command::done()` at
+	 * `model.accounts.get(active_index)` — silently, by design of that guard.
+	 * Expo's resident fed the rows from the wallet provider (`setSignAccounts`);
+	 * the web resident now mirrors the session's rows on boot, on every change
+	 * and inside the account-switch ack (`syncAccounts`).
 	 */
-	test.fixme('SC-304: approving returns a signature the account’s own key made', async () => {
+	test('SC-304: approving returns a signature the account’s own key made', async () => {
 		const context = await loadExtension();
 		const id = extensionId();
 		await seedWallet(context, id);

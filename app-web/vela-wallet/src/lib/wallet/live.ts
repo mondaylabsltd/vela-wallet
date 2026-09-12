@@ -21,7 +21,13 @@ import type { BalanceView } from '$lib/core/generated/BalanceView';
 import type { CurrencyView } from '$lib/core/generated/CurrencyView';
 import type { FeedItem } from '$lib/core/generated/FeedItem';
 import type { FeedView } from '$lib/core/generated/FeedView';
-import { chainName } from '$lib/services/networks';
+import { formatDate, groupDigits, numberSeparators } from '$lib/services/locale-format';
+import { chainName, explorerAddressURL, explorerBaseURL } from '$lib/services/networks';
+import {
+	balanceTokenBadgeChainId,
+	balanceTokenLogoURLs,
+	chainLogoURL
+} from '$lib/services/tokens-model';
 import { shortenAddress } from './identity';
 import { fill } from './messages';
 import { currencyGlyph } from '$lib/settings/fixtures';
@@ -30,8 +36,10 @@ import type { WalletMessages } from './messages';
 import type {
 	ActivityGroupModel,
 	ActivityRowModel,
+	AssetDetailPanelModel,
 	AssetRowModel,
 	BalanceModel,
+	ChainRowModel,
 	SectionModel,
 	WalletDesktopModel,
 	WalletHomeModel
@@ -43,8 +51,83 @@ export interface WalletLiveInputs {
 	m: WalletMessages;
 	/** The feed, once Phase 4 boots it; `null` keeps the section a skeleton. */
 	feed?: FeedView | null;
-	/** For date headers older than yesterday — a presentation preset. */
-	locale?: string;
+	/** The sidebar's network filter: one chain, or `null` for every network. */
+	chainFilter?: number | null;
+	/** Chains the person added (spec 038 #E9): always listed, even at zero. */
+	customChainIds?: readonly number[];
+	/**
+	 * The held token whose detail the third column shows (spec 015's D3
+	 * panel, live). Absent, the column is closed — or the flow host's.
+	 */
+	selectedToken?: BalanceToken;
+}
+
+/** A held token's key — chain, contract (or `native`), symbol — for a tap to name. */
+export function balanceTokenId(token: BalanceToken): string {
+	return `${token.chain_id}:${token.token_address ?? 'native'}:${token.symbol}`;
+}
+
+// ---------------------------------------------------------------------------
+// The network filter
+// ---------------------------------------------------------------------------
+
+/**
+ * The sidebar's network rows, from what is actually held: 全部 first, then one
+ * row per chain with a holding, counted in tokens — the numbers the drawn
+ * board shows for its fixture wallet, made true for this one. `selected`
+ * follows the filter.
+ */
+export function liveChainRows(
+	view: BalanceView,
+	allNetworksLabel: string,
+	filter: number | null,
+	/**
+	 * Networks the person added themselves (spec 038 #E9). A chain earns a
+	 * row by holding something; one that was added on purpose is listed
+	 * whether or not its balance has been read yet — otherwise adding Celo
+	 * looks like nothing happened until the next fetch lands.
+	 */
+	customChainIds: readonly number[] = []
+): ChainRowModel[] {
+	const counts = new Map<number, number>();
+	for (const token of view.tokens)
+		counts.set(token.chain_id, (counts.get(token.chain_id) ?? 0) + 1);
+	for (const id of customChainIds) if (!counts.has(id)) counts.set(id, 0);
+	return [
+		{
+			name: allNetworksLabel,
+			dot: 'all',
+			count: view.tokens.length,
+			selected: filter === null,
+			chainId: null
+		},
+		...[...counts.entries()].map(([chainId, count]) => ({
+			name: chainName(chainId),
+			dot: chainColor(chainId),
+			logoUrl: chainLogoURL(chainId),
+			count,
+			selected: filter === chainId,
+			chainId
+		}))
+	];
+}
+
+/**
+ * The feed narrowed to one chain — the phone app's `filterFeedRowsByChain`.
+ * A day header whose items all fell away goes with them, or the list would
+ * show dates with nothing under them.
+ */
+export function narrowedFeed(feed: FeedView, filter: number | null): FeedView {
+	if (filter === null) return feed;
+	const kept = feed.rows.filter((row) => row.type === 'header' || row.item.chain_id === filter);
+	return {
+		...feed,
+		rows: kept.filter((row, i) => {
+			if (row.type !== 'header') return true;
+			const next = kept[i + 1];
+			return next !== undefined && next.type !== 'header';
+		})
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -65,22 +148,38 @@ export function moneyParts(
 	const amount = convertible ? usd * (currency.rate as number) : usd;
 	const fixed = Math.abs(amount).toFixed(2);
 	const [whole, frac] = fixed.split('.');
-	const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+	// The person's own number preset, not the platform's idea of one (spec 028
+	// D47). Money is where this stops being cosmetic: a wallet that groups one
+	// way here and another way on the next machine is a wallet whose totals a
+	// person has to re-read before believing.
+	const grouped = groupDigits(whole);
 	const glyph = currencyGlyph(code);
 	return { code, glyph, integer: `${glyph}${grouped}`, decimals: frac };
 }
 
 export function moneyText(usd: number, currency: CurrencyView): string {
 	const parts = moneyParts(usd, currency);
-	return `${parts.integer}.${parts.decimals}`;
+	return `${parts.integer}${numberSeparators().decimal}${parts.decimals}`;
 }
 
-/** A human decimal balance, tail trimmed — the number is the core's. */
+/**
+ * A human decimal balance, tail trimmed — the number is the core's.
+ *
+ * The DECIMAL MARK follows the chosen preset; the grouping deliberately does
+ * not. A decimal comma read as a thousands separator is a hundredfold mistake
+ * about an amount, which is the whole reason presets exist — but the mocks draw
+ * token amounts ungrouped, and this feature wires preferences rather than
+ * redrawing screens. Money (`moneyParts`) gets both.
+ *
+ * String operations only: a uint256 balance must never pass through a JS
+ * `number`, and a "tidy" `parseFloat` here would be a wrong figure on the
+ * screen someone signs from.
+ */
 export function trimBalance(balance: string, maxDecimals = 6): string {
 	if (!balance.includes('.')) return balance;
 	const [whole, frac] = balance.split('.');
 	const cut = frac.slice(0, maxDecimals).replace(/0+$/, '');
-	return cut === '' ? whole : `${whole}.${cut}`;
+	return cut === '' ? whole : `${whole}${numberSeparators().decimal}${cut}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,7 +211,16 @@ export function liveBalance(
 	// is the core's rule — this only chooses what to show meanwhile).
 	const total = view.display_total_usd ?? view.cached_total_usd;
 	if (total === null) {
-		return { ...base, currency: currency.rate !== null ? currency.code : 'USD', state: 'loading' };
+		return {
+			...base,
+			currency: currency.rate !== null ? currency.code : 'USD',
+			state: 'loading',
+			// Spec 038 finding 15: a first launch with no network is
+			// "unreachable" over the skeleton, never a settled-looking $0.
+			...(view.unreachable
+				? { status: { kind: 'warning' as const, text: m.balance.unreachable } }
+				: {})
+		};
 	}
 
 	const parts = moneyParts(total, currency);
@@ -148,6 +256,10 @@ export function liveBalance(
 		state: zeroLive ? 'zero-live' : 'normal',
 		integer: parts.integer,
 		decimals: parts.decimals,
+		// The mark between them is the preset's too (T480): `moneyParts`
+		// grouped the integer by it, and a `.` drawn after `1.575` read as a
+		// second thousands separator.
+		decimalMark: numberSeparators().decimal,
 		liveText: zeroLive ? m.balance.liveIndicator : undefined,
 		status
 	};
@@ -159,6 +271,7 @@ export function liveAssetRow(
 	m: WalletMessages,
 	hidden: boolean
 ): AssetRowModel {
+	const badgeChain = balanceTokenBadgeChainId(token);
 	const fiat: AssetRowModel['fiat'] = hidden
 		? { kind: 'masked' }
 		: token.price_usd === null
@@ -168,9 +281,13 @@ export function liveAssetRow(
 					text: moneyText((parseFloat(token.balance) || 0) * token.price_usd, currency)
 				};
 	return {
+		id: balanceTokenId(token),
 		ticker: token.symbol,
 		chain: chainName(token.chain_id),
 		badgeColor: chainColor(token.chain_id),
+		logoUrls: balanceTokenLogoURLs(token),
+		badgeLogoUrl: badgeChain === null ? undefined : chainLogoURL(badgeChain),
+		badgeHidden: badgeChain === null,
 		balance: hidden ? MASK : trimBalance(token.balance),
 		fiat,
 		masked: hidden
@@ -193,17 +310,15 @@ function localMidnight(ms: number): number {
 	return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
-/** "Today" / "Yesterday" from the corpus; older days as a short date. */
-export function dayLabel(
-	dayStartMs: number,
-	m: WalletMessages,
-	locale = 'en',
-	now = Date.now()
-): string {
+/** "Today" / "Yesterday" from the corpus; older days in the date preset. */
+export function dayLabel(dayStartMs: number, m: WalletMessages, now = Date.now()): string {
 	const today = localMidnight(now);
 	if (dayStartMs === today) return m.activity.today;
 	if (dayStartMs === today - 86_400_000) return m.activity.yesterday;
-	return new Date(dayStartMs).toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+	// Older days read in the person's own date preset — which is what the phone
+	// does (`activity.ts::dayGroupLabel` calls the same `formatDate`), so the
+	// two clients group a history the same way.
+	return formatDate(dayStartMs);
 }
 
 export function liveActivityRow(
@@ -227,6 +342,7 @@ export function liveActivityRow(
 			? String(item.batch?.count ?? '')
 			: `${received ? '+' : '-'}${trimBalance(item.value)}`;
 	return {
+		id: item.id,
 		kind,
 		title:
 			kind === 'received'
@@ -239,7 +355,8 @@ export function liveActivityRow(
 		unit: item.symbol,
 		positive: received,
 		masked: hidden,
-		badgeColor: chainColor(item.chain_id)
+		badgeColor: chainColor(item.chain_id),
+		badgeLogoUrl: chainLogoURL(item.chain_id)
 	};
 }
 
@@ -247,13 +364,12 @@ export function liveActivityRow(
 export function liveActivityGroups(
 	view: FeedView,
 	m: WalletMessages,
-	hidden: boolean,
-	locale = 'en'
+	hidden: boolean
 ): ActivityGroupModel[] {
 	const groups: ActivityGroupModel[] = [];
 	for (const row of view.rows) {
 		if (row.type === 'header') {
-			groups.push({ label: dayLabel(row.day_start_ms, m, locale), rows: [] });
+			groups.push({ label: dayLabel(row.day_start_ms, m), rows: [] });
 			continue;
 		}
 		const last = groups.at(-1);
@@ -277,38 +393,160 @@ function activityMode(view: BalanceView, feed: FeedView | null | undefined): Sec
 }
 
 // ---------------------------------------------------------------------------
-// Overlays
+// The asset-detail column (spec 015 D3, live)
 // ---------------------------------------------------------------------------
 
-/** Live balance + holdings over an identity-filled home model. */
-export function withLiveWallet(model: WalletHomeModel, inputs: WalletLiveInputs): WalletHomeModel {
+/**
+ * One held token in the third column: what the drawn D3 panel shows for its
+ * fixture BNB, for whichever row was tapped. The transactions under it are
+ * the feed's rows for this token on this chain — the same rows the home
+ * lists, narrowed the way the phone's token screen narrows them.
+ */
+export function liveAssetDetail(
+	token: BalanceToken,
+	inputs: WalletLiveInputs,
+	drawn: AssetDetailPanelModel
+): AssetDetailPanelModel {
 	const { balance: view, currency, m } = inputs;
+	const hidden = view.hidden;
+	const badgeChain = balanceTokenBadgeChainId(token);
+	const held = parseFloat(token.balance) || 0;
+	const fiat =
+		hidden || token.price_usd === null ? undefined : moneyText(held * token.price_usd, currency);
+	const rows = (inputs.feed?.rows ?? [])
+		.flatMap((row) => (row.type === 'item' ? [row.item] : []))
+		.filter((item) => item.chain_id === token.chain_id && item.symbol === token.symbol)
+		.map((item) => liveActivityRow(item, m, hidden));
 	return {
-		...model,
-		balance: liveBalance(view, currency, m),
-		assetsSection: { ...model.assetsSection, mode: assetsMode(view) },
-		assetRows: view.tokens.map((t) => liveAssetRow(t, currency, m, view.hidden)),
-		activitySection: { ...model.activitySection, mode: activityMode(view, inputs.feed) },
-		activityGroups: inputs.feed
-			? liveActivityGroups(inputs.feed, m, view.hidden, inputs.locale)
-			: []
+		...drawn,
+		id: balanceTokenId(token),
+		title: token.symbol,
+		token: {
+			ticker: token.symbol,
+			badgeColor: chainColor(token.chain_id),
+			balance: hidden ? MASK : `${trimBalance(token.balance)} ${token.symbol}`,
+			fiatLine: [fiat, chainName(token.chain_id)].filter((part) => part !== undefined).join(' · '),
+			logoUrls: balanceTokenLogoURLs(token),
+			badgeLogoUrl: badgeChain === null ? undefined : chainLogoURL(badgeChain),
+			badgeHidden: badgeChain === null
+		},
+		facts: [
+			{ label: m.assetDetail.labelName, value: token.name },
+			{
+				label: m.assetDetail.labelPrice,
+				value:
+					token.price_usd === null
+						? m.balance.noPrice
+						: fill(m.assetDetail.priceValue, {
+								symbol: token.symbol,
+								value: moneyText(token.price_usd, currency)
+							})
+			},
+			{
+				label: m.assetDetail.labelContract,
+				value:
+					token.token_address === null
+						? m.assetDetail.nativeToken
+						: shortenAddress(token.token_address),
+				// The shortened form is for reading; the copy writes the whole one.
+				copy: token.token_address === null ? undefined : m.identiconViewer.copyAddress,
+				copyValue: token.token_address ?? undefined
+			},
+			{ label: m.assetDetail.labelDecimals, value: String(token.decimals) }
+		],
+		rows,
+		explorerUrl: tokenExplorerURL(token, view.address)
 	};
 }
 
-/** The desktop shape of the same overlay. */
+/**
+ * Where "view on explorer" leads for a held token: the token page, scoped to
+ * this account, for an ERC-20; the account page for the chain's native coin.
+ * `null` for a chain with no explorer — no link rather than a wrong one.
+ */
+export function tokenExplorerURL(token: BalanceToken, account: string | null): string | undefined {
+	const base = explorerBaseURL(token.chain_id);
+	if (base === null) return undefined;
+	if (token.token_address === null) {
+		return account === null ? undefined : explorerAddressURL(token.chain_id, account);
+	}
+	const suffix = account === null ? '' : `?a=${account}`;
+	return `${base}/token/${token.token_address}${suffix}`;
+}
+
+// ---------------------------------------------------------------------------
+// Overlays
+// ---------------------------------------------------------------------------
+
+/**
+ * What both shapes share: the hero, and the two sections under the filter.
+ *
+ * The filter narrows the holdings and the feed the way the phone app's
+ * `selectedChainId` does (`HoldingsList.tsx`, `useHomeController.ts`); the
+ * hero total stays the whole wallet's, as it does there. A chain filtered
+ * down to nothing reads as the empty state, not as a blank list.
+ */
+function liveSections(inputs: WalletLiveInputs) {
+	const { balance: view, currency, m } = inputs;
+	const filter = inputs.chainFilter ?? null;
+	const tokens = filter === null ? view.tokens : view.tokens.filter((t) => t.chain_id === filter);
+	const feed = inputs.feed ? narrowedFeed(inputs.feed, filter) : inputs.feed;
+	return {
+		balance: liveBalance(view, currency, m),
+		assetsMode:
+			filter !== null && tokens.length === 0 && view.tokens.length > 0
+				? ('empty' as const)
+				: assetsMode(view),
+		assetRows: tokens.map((t) => liveAssetRow(t, currency, m, view.hidden)),
+		activityMode: activityMode(view, feed),
+		activityGroups: feed ? liveActivityGroups(feed, m, view.hidden) : []
+	};
+}
+
+/** Live balance + holdings over an identity-filled home model. */
+export function withLiveWallet(model: WalletHomeModel, inputs: WalletLiveInputs): WalletHomeModel {
+	const live = liveSections(inputs);
+	return {
+		...model,
+		balance: live.balance,
+		assetsSection: { ...model.assetsSection, mode: live.assetsMode },
+		assetRows: live.assetRows,
+		activitySection: { ...model.activitySection, mode: live.activityMode },
+		activityGroups: live.activityGroups
+	};
+}
+
+/** The desktop shape of the same overlay — plus the sidebar's network list. */
 export function withLiveWalletDesktop(
 	model: WalletDesktopModel,
 	inputs: WalletLiveInputs
 ): WalletDesktopModel {
-	const { balance: view, currency, m } = inputs;
+	const live = liveSections(inputs);
 	return {
 		...model,
-		balance: liveBalance(view, currency, m),
-		assetsSection: { ...model.assetsSection, mode: assetsMode(view) },
-		assetRows: view.tokens.map((t) => liveAssetRow(t, currency, m, view.hidden)),
-		activitySection: { ...model.activitySection, mode: activityMode(view, inputs.feed) },
-		activityGroups: inputs.feed
-			? liveActivityGroups(inputs.feed, m, view.hidden, inputs.locale)
-			: []
+		sidebar: {
+			...model.sidebar,
+			networks: liveChainRows(
+				inputs.balance,
+				inputs.m.networkFilter.allNetworks,
+				inputs.chainFilter ?? null,
+				inputs.customChainIds ?? []
+			)
+		},
+		balance: live.balance,
+		assetsSection: { ...model.assetsSection, mode: live.assetsMode },
+		assetRows: live.assetRows,
+		activitySection: { ...model.activitySection, mode: live.activityMode },
+		activityGroups: live.activityGroups,
+		// The third column is the model's to open on a live page: a tapped row
+		// puts its token here, and closing the column takes it away again.
+		panels:
+			inputs.selectedToken === undefined
+				? model.panels
+				: {
+						...model.panels,
+						assetDetail: liveAssetDetail(inputs.selectedToken, inputs, model.panels.assetDetail)
+					},
+		initialPanel: inputs.selectedToken === undefined ? 'none' : 'asset-detail'
 	};
 }

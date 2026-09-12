@@ -30,7 +30,13 @@
 	aria-pressed={selected ? true : undefined}
 	{onclick}
 >
-	<TokenIcon ticker={row.ticker} badgeColor={row.badgeColor} />
+	<TokenIcon
+		ticker={row.ticker}
+		badgeColor={row.badgeColor}
+		logoUrls={row.logoUrls}
+		badgeLogoUrl={row.badgeLogoUrl}
+		badgeHidden={row.badgeHidden}
+	/>
 	<span class="text">
 		<span class="ticker">{row.ticker}</span>
 		<span class="chain">{row.chain}</span>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Vela · 注册钥匙</title>
+    <link rel="stylesheet" href="../sheet.css" />
+  </head>
+  <body class="signing-body">
+    <main class="stage">
+      <div class="sheet">
+        <div class="grabber"></div>
+        <div class="intent-label">注册</div>
+        <p class="sentence">
+          这台设备上还没有这个账户的钥匙。下面创建一把 —— <b>创建就是创建</b>，
+          它和签名是两件事：新钥匙意味着一个新账户，绝不会在签名流程里悄悄发生。
+        </p>
+        <button class="cta" id="go" type="button" style="margin-top:16px">创建 passkey</button>
+        <p class="stage-status" id="status">等待你确认…</p>
+      </div>
+    </main>
+    <script src="../lib/i18n.js"></script>
+    <script src="../lib/locales/en.js"></script>
+    <script src="../lib/locales/zh.js"></script>
+    <script src="../lib/signer.js"></script>
+    <script src="../lib/enrol.js"></script>
+    <script src="enrol.js"></script>
+  </body>
+</html>

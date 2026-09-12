@@ -13,7 +13,7 @@ import org.junit.Test
 /**
  * SC-002b: differential evidence on the real engine (host dylib via JNA — the
  * jna.library.path is wired in app/build.gradle.kts; spec 005's native-rollout
- * precondition). Catalogs come from the generated public/i18n, the same files
+ * precondition). Catalogs come from the generated assets/i18n, the same files
  * the app packages as assets.
  */
 class I18nEngineSmokeTest {
@@ -24,7 +24,7 @@ class I18nEngineSmokeTest {
     )
 
     private fun newRuntime(): I18nRuntime = I18nRuntime { tag ->
-        File(repoRoot, "public/i18n/$tag.json").readBytes()
+        File(repoRoot, "assets/i18n/$tag.json").readBytes()
     }
 
     private val welcomeKeys = listOf(

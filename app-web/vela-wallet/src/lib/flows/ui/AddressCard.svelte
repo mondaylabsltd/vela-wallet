@@ -22,7 +22,7 @@
 </script>
 
 <div class="card">
-	<Identicon svg={account.identiconSvg} size="header" />
+	<Identicon svg={account.identiconSvg} size="header" address={account.lines.join('')} />
 	<span class="text">
 		<span class="name">{account.name}</span>
 		<span class="address">

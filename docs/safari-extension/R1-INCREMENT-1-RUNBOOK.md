@@ -1,3 +1,5 @@
+> **History (2026-09-11).** This document described the React Native / Expo app, retired and deleted in spec 039 (`specs/039-retire-expo-tree/`). It is kept as the design record; the paths and commands it names no longer exist. The iOS Safari extension has no packaging in the tree today (`targets/safari` and `packages/safari-extension` were Expo-only); re-homing it under `app-ios/` is its own spec — see spec 039 "Two packages".
+
 # R1 Spike — Increment 1: Packaging Skeleton (on-device runbook)
 
 **Goal:** get a Safari Web Extension target that **builds, installs on a physical iPhone, appears in Safari settings, and injects a content script that logs to the console** (visible via Safari Web Inspector) — with an App Group entitlement on both the app and the extension target. **Nothing else** (no App Group I/O, no native messaging, no signing). This de-risks packaging (`@bacons/apple-targets` on SDK 55) before any logic.

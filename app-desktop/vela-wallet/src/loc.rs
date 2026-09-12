@@ -17,11 +17,7 @@ impl Loc {
     /// `LC_MESSAGES` → `LANG` → `en` (spec 007 FR-007), resolved through the
     /// same ladder i18next uses (`resolve_language`).
     pub fn from_env() -> Self {
-        let requested = ["VELA_LANG", "LC_ALL", "LC_MESSAGES", "LANG"]
-            .iter()
-            .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()))
-            .map(|raw| normalize_posix_tag(&raw))
-            .unwrap_or_else(|| "en".to_owned());
+        let requested = requested_tag();
 
         let mut engine = match I18n::embedded() {
             Ok(engine) => engine,
@@ -107,6 +103,18 @@ impl Loc {
 /// `zh_CN.UTF-8` → `zh-CN`; strips the encoding suffix and maps `_` → `-`.
 /// `resolve_language` takes it from there (including `C`/`POSIX` → `en` via
 /// its unsupported-tag fallback).
+/// The tag the launch locale is resolved from: `VELA_LANG` → `LC_ALL` →
+/// `LC_MESSAGES` → `LANG` → `en`, as a BCP-47-shaped tag (`zh_CN.UTF-8` →
+/// `zh-CN`). Shared with the format presets (spec 038 #E3), so "Automatic"
+/// there means the same machine the strings mean.
+pub(crate) fn requested_tag() -> String {
+    ["VELA_LANG", "LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .find_map(|k| std::env::var(k).ok().filter(|v| !v.is_empty()))
+        .map(|raw| normalize_posix_tag(&raw))
+        .unwrap_or_else(|| "en".to_owned())
+}
+
 fn normalize_posix_tag(raw: &str) -> String {
     let no_encoding = raw.split('.').next().unwrap_or(raw);
     no_encoding.replace('_', "-")
@@ -321,6 +329,31 @@ mod tests {
             engine.load_catalog(Catalog::embedded(resolved).expect("catalog compiled in"));
         }
         engine
+    }
+
+    /// Spec 038: the desktop intro's nine keys resolve without echo in the
+    /// languages the visual pass uses.
+    #[test]
+    fn intro_keys_resolve_without_echo() {
+        const INTRO_KEYS: [&str; 9] = [
+            "onboarding.intro.skip",
+            "onboarding.intro.next",
+            "onboarding.intro.pageOf",
+            "onboarding.intro.noSeedTitle",
+            "onboarding.intro.noSeedBody",
+            "onboarding.intro.custodyTitle",
+            "onboarding.intro.custodyBody",
+            "onboarding.intro.chainsTitle",
+            "onboarding.intro.chainsBody",
+        ];
+        for lng in ["en", "zh", "de", "zh-TW", "ru"] {
+            let engine = engine_for(lng);
+            for key in INTRO_KEYS {
+                let value = engine.t(key, &Options::default()).expect("t() is total");
+                assert_ne!(value, key, "{lng}: {key} echoed");
+                assert!(has_words(&value), "{lng}: {key} has no words");
+            }
+        }
     }
 
     /// SC-004 as a test: no key echoes in the languages the visual pass uses,

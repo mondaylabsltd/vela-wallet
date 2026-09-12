@@ -2,6 +2,7 @@
 	import type { ActivityRowModel } from '../model';
 	import { UTILITY_ICONS } from '../icons';
 	import Icon from './Icon.svelte';
+	import RemoteLogo from './RemoteLogo.svelte';
 
 	interface Props {
 		row: ActivityRowModel;
@@ -22,7 +23,13 @@
 <button type="button" class="row" {onclick}>
 	<span class="lead" aria-hidden="true">
 		<Icon {icon} size="md" />
-		<span class="badge" style:background={row.badgeColor}></span>
+		<span
+			class="badge"
+			class:with-logo={row.badgeLogoUrl !== undefined}
+			style:background={row.badgeColor}
+		>
+			<RemoteLogo urls={row.badgeLogoUrl === undefined ? undefined : [row.badgeLogoUrl]} />
+		</span>
 	</span>
 	<span class="text">
 		<span class="title">{row.title}</span>
@@ -74,6 +81,12 @@
 		height: var(--icon-xs);
 		border-radius: var(--radius-full);
 		border: var(--border-emphasis) solid var(--color-bg-base);
+	}
+
+	/* A badge that may carry a logo is a size a logo can be read at. */
+	.badge.with-logo {
+		width: var(--icon-base);
+		height: var(--icon-base);
 	}
 
 	.text {

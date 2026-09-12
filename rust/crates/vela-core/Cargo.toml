@@ -63,6 +63,16 @@ crux = ["dep:crux_core"]
 # app-desktop (decodes via the `image` crate into a gpui RenderImage).
 identicon-raster = ["dep:resvg"]
 
+# The parallel space's fixed keyset (spec 032-desktop-money-wiring, US0): a
+# software P-256 signer whose assertions and registrations are byte-for-byte
+# what a real authenticator emits. DEFAULT OFF, and it must stay off for
+# `vela-core-uniffi` and `vela-core-wasm`: a production binary carries neither
+# the test scalars nor any path to a software signer. Only a client that also
+# gates the space at RUNTIME (an explicit switch plus an unconditional badge)
+# turns it on, and only in its own build. No extra dependency — the signer is
+# the same `p256` the registry group proof already uses.
+dev-fixtures = []
+
 # TypeScript mirrors of the wire types, emitted by
 # `src/bin/generate_onboarding_bindings.rs`. Build-time only.
 bindings = ["dep:ts-rs", "crux"]

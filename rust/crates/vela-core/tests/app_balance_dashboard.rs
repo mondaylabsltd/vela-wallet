@@ -447,9 +447,102 @@ fn slow_chains_keep_their_last_value_mid_refresh() {
         tokens: vec![token(1, "ETH", "15", Some(1.0))],
     });
     let view = sut.view();
-    assert_eq!(view.display_total_usd, Some(35.0), "56 kept its last value");
+    // Spec 038 #188: the LIST streams (56 kept its last value, 1 updated),
+    // but the FIGURE holds at the last settle until this refresh settles.
+    assert_eq!(view.display_total_usd, Some(30.0), "held until settle");
     assert_eq!(view.tokens.len(), 2);
     assert_eq!(view.tokens[0].symbol, "BNB", "sorted by USD value desc");
+    assert!(view.refreshing);
+    sut.resolve(settled(
+        ADDR_A,
+        vec![
+            token(1, "ETH", "15", Some(1.0)),
+            token(56, "BNB", "20", Some(1.0)),
+        ],
+        vec![],
+        vec![],
+    ));
+    assert_eq!(
+        sut.view().display_total_usd,
+        Some(35.0),
+        "moved once, at settle"
+    );
+}
+
+/// Spec 038 #188, the first load: seven chains answering one by one must not
+/// paint seven different totals, and "some tokens couldn't be priced" must
+/// not flash before the prices have arrived.
+#[test]
+fn the_figure_moves_once_per_refresh_and_unpriced_waits_for_settle() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: Some(62.0),
+    });
+    // Two chains land, one still unpriced.
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(1, "ETH", "50", Some(1.0))],
+    });
+    sut.dispatch(Event::ChainAssetsArrived {
+        address: ADDR_A.to_owned(),
+        tokens: vec![token(56, "BNB", "40", None)],
+    });
+    let view = sut.view();
+    assert_eq!(
+        view.display_total_usd,
+        Some(62.0),
+        "the cached figure holds"
+    );
+    assert_eq!(view.notice, None, "no unpriced notice mid-stream");
+    // Settle: everything priced now.
+    sut.resolve(settled(
+        ADDR_A,
+        vec![
+            token(1, "ETH", "50", Some(1.0)),
+            token(56, "BNB", "40", Some(1.0)),
+        ],
+        vec![],
+        vec![],
+    ));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(90.0));
+    assert_eq!(view.notice, None);
+    assert!(!view.unreachable);
+}
+
+/// Spec 038 finding 15: a first launch with the network cut is "unreachable",
+/// never a settled-looking $0.00.
+#[test]
+fn an_errored_first_load_is_unreachable_not_zero() {
+    let mut sut = boot(ADDR_A);
+    sut.resolve(Res::CachedTotalLoaded {
+        address: ADDR_A.to_owned(),
+        usd: None,
+    });
+    sut.resolve(Res::FetchErrored {
+        address: ADDR_A.to_owned(),
+        pull: false,
+    });
+    let view = sut.view();
+    assert!(view.unreachable);
+    assert!(
+        !view.balance_unknown,
+        "the skeleton closed; the reason is different"
+    );
+    assert_eq!(view.tokens.len(), 0);
+    // A later successful fetch clears it.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled(
+        ADDR_A,
+        vec![token(1, "ETH", "1", Some(1.0))],
+        vec![],
+        vec![],
+    ));
+    assert!(!sut.view().unreachable);
 }
 
 /// ⑤: a previous account's slow answers can never paint the new account —
@@ -953,6 +1046,64 @@ fn fix_resolved_removes_the_chain_and_reloads() {
 // Machine — invariant ⑩: the account switcher paints cache first
 // ===========================================================================
 
+/// Spec 038: the figure the hero shows after a complete settle is the figure
+/// the switcher's row for the same account shows — not whatever that row's
+/// own fetch found at another instant.
+#[test]
+fn a_complete_settle_is_the_switcher_s_figure_for_the_active_account() {
+    let mut sut = booted(
+        ADDR_A,
+        None,
+        settled(
+            ADDR_A,
+            vec![token(1, "ETH", "100", Some(1.0))],
+            vec![],
+            vec![],
+        ),
+    );
+    sut.resolve(Res::BalanceCacheWritten);
+    assert!(sut.view().switcher.balances.contains(&BalanceCacheEntry {
+        address: ADDR_A.to_owned(),
+        usd: 100.0
+    }));
+
+    // Prices move; the next settle moves the hero — and the row with it.
+    sut.dispatch(Event::RefreshRequested {
+        force: true,
+        pull: false,
+    });
+    sut.resolve(settled(
+        ADDR_A,
+        vec![token(1, "ETH", "100", Some(2.0))],
+        vec![],
+        vec![],
+    ));
+    let view = sut.view();
+    assert_eq!(view.display_total_usd, Some(200.0));
+    assert!(view.switcher.balances.contains(&BalanceCacheEntry {
+        address: ADDR_A.to_owned(),
+        usd: 200.0
+    }));
+    // A partial settle writes nothing — the row keeps the last complete figure.
+}
+
+#[test]
+fn celo_s_wrapped_native_is_the_native_and_weth_is_not() {
+    use vela_core::app::balance_dashboard::wrapped_native_is_the_native;
+    assert!(wrapped_native_is_the_native(
+        42220,
+        "0x471EcE3750Da237f93B8E339c536989b8978a438"
+    ));
+    assert!(!wrapped_native_is_the_native(
+        1,
+        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+    ));
+    assert!(!wrapped_native_is_the_native(
+        1,
+        "0x471ece3750da237f93b8e339c536989b8978a438"
+    ));
+}
+
 #[test]
 fn switcher_paints_cache_before_refreshing_every_account() {
     let mut sut = booted(
@@ -1105,5 +1256,11 @@ fn cached_balances_without_a_pending_open_are_ignored() {
         .is_empty());
     let view = sut.view();
     assert!(!view.switcher.open, "stale open must not pop on account B");
-    assert!(view.switcher.balances.is_empty());
+    // The stale answer's figure (1.0 for A) never lands; what A's row holds
+    // is its own last complete settle (0.0), which is the settle's business.
+    assert!(!view
+        .switcher
+        .balances
+        .iter()
+        .any(|entry| entry.address == ADDR_A && entry.usd == 1.0));
 }

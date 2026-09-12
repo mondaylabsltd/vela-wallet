@@ -172,6 +172,8 @@ export type UtilityIconId =
 	| 'sun'
 	| 'moon'
 	| 'monitor'
+	| 'laptop'
+	| 'smartphone'
 	| 'coins'
 	| 'hash'
 	| 'calendar'
@@ -588,6 +590,24 @@ export const UTILITY_ICONS: Record<UtilityIconId, IconDef> = {
 				tag: 'path',
 				d: 'M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401'
 			}
+		]
+	},
+	// Spec 038 (#190, founder's revision): "this device" is the device, not a
+	// vendor — a laptop where the pointer is fine, a phone where it is coarse.
+	laptop: {
+		style: 'stroke',
+		elements: [
+			{
+				tag: 'path',
+				d: 'M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16'
+			}
+		]
+	},
+	smartphone: {
+		style: 'stroke',
+		elements: [
+			{ tag: 'rect', width: '14', height: '20', x: '5', y: '2', rx: '2' },
+			{ tag: 'path', d: 'M12 18h.01' }
 		]
 	},
 	monitor: {

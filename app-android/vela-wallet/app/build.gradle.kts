@@ -59,7 +59,7 @@ android {
             // Generated uniffi Kotlin bindings are consumed in place (spec 008 FR-009 / research D1):
             // single committed copy, regenerated only via rust/scripts/smoke-kotlin.sh.
             kotlin.srcDir(velaRepoRoot.resolve("rust/bindings/kotlin"))
-            // Locale catalogs are synced from the generated public/i18n at build time (research D3).
+            // Locale catalogs are synced from the generated assets/i18n at build time (research D3).
             // Static File (not Provider): AGP 9 disallows Providers here; the task
             // dependency is carried by the merge*Assets wiring below.
             assets.srcDir(projectDir.resolve("build/generated/velaI18n"))
@@ -79,7 +79,7 @@ android {
             test.inputs.file(velaRepoRoot.resolve("docs/design-tokens.json"))
                 .withPathSensitivity(PathSensitivity.NONE)
                 .withPropertyName("velaDesignTokens")
-            test.inputs.dir(velaRepoRoot.resolve("public/i18n"))
+            test.inputs.dir(velaRepoRoot.resolve("assets/i18n"))
                 .withPathSensitivity(PathSensitivity.RELATIVE)
                 .withPropertyName("velaI18nCatalogs")
             // The ts-rs mirrors CoreWireDriftTest checks the Kotlin wire types
@@ -135,22 +135,22 @@ val cargoNdkBuild = tasks.register<Exec>("cargoNdkBuild") {
 }
 
 val syncVelaI18nAssets = tasks.register<Sync>("syncVelaI18nAssets") {
-    description = "Copies generated locale catalogs (public/i18n) into build assets (research D3)."
-    from(velaRepoRoot.resolve("public/i18n")) {
+    description = "Copies generated locale catalogs (assets/i18n) into build assets (research D3)."
+    from(velaRepoRoot.resolve("assets/i18n")) {
         include("*.json")
     }
     into(layout.buildDirectory.dir("generated/velaI18n/i18n"))
 }
 
-// Launch animations (spec 012 FR-001/FR-002): design/onboarding/launch is THE
+// Launch animations (spec 012 FR-001/FR-002): docs/design/onboarding/launch is THE
 // source of truth and no app keeps a copy. Only the `core` framings ship — the
 // `full` pair exists to pin the apps' box ratio and is never loaded (research D0/D3).
 //
 // The include pattern is a GLOB, not a list, so adding a second animation needs
 // no edit here (FR-004).
 val syncVelaAnimationAssets = tasks.register<Sync>("syncVelaAnimationAssets") {
-    description = "Copies launch animations (design/onboarding/launch) into build assets (spec 012)."
-    from(velaRepoRoot.resolve("design/onboarding/launch")) {
+    description = "Copies launch animations (docs/design/onboarding/launch) into build assets (spec 012)."
+    from(velaRepoRoot.resolve("docs/design/onboarding/launch")) {
         include("*-core-*.json")
     }
     into(layout.buildDirectory.dir("generated/velaAnimations/animations"))
@@ -160,7 +160,7 @@ val syncVelaAnimationAssets = tasks.register<Sync>("syncVelaAnimationAssets") {
         val produced = destinationDir.listFiles { f -> f.name.endsWith(".json") }?.size ?: 0
         check(produced >= 4) {
             "expected at least 4 launch animation assets, found $produced in $destinationDir — " +
-                "is design/onboarding/launch present and named " +
+                "is docs/design/onboarding/launch present and named " +
                 "vela-wallet-launch-{phone|desktop}-core-{dark|light}.json?"
         }
     }

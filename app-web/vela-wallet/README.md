@@ -13,11 +13,11 @@ tasks, and delivery report live there).
   `src/lib/tokens/tokens.ts`. Both are committed and drift-gated
   (`src/lib/tokens/tokens.test.ts` + `--check` in `build`/`check`). Product UI
   must use `var(--…)` only — a literal audit test enforces it. Token intent:
-  root `design-system.md`.
+  `docs/design-system.md`.
 - **i18n runs the real vela-core Rust engine at build time.** Every
   `/{locale}` page (15 locales) is prerendered; `src/lib/i18n/engine.server.ts`
   `initSync`s the wasm from `../../rust/pkg-web` and resolves strings from the
-  generated catalogs in `../../public/i18n/`. No translation runtime ships to
+  generated catalogs in `../../assets/i18n/`. No translation runtime ships to
   the client, and no wasm reaches the deployed Worker (it cannot compile wasm
   from bytes — e2e asserts `_worker.js` stays clean). The only runtime route
   is `/`, a wasm-free Accept-Language 307.

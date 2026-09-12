@@ -871,16 +871,66 @@ fn token_price_in_fiat(price_usd: Option<f64>, usd_to_fiat_rate: f64) -> f64 {
     price * rate
 }
 
-/// `fiatToTokenAmount` (`fiat-convert.ts:40-44`): truncated via `toFixed` to
-/// `decimals` so we never emit more precision than the token can carry —
-/// the same guard `to_base_units` applies on-chain-side. Returns "0" for a
-/// non-positive fiat OR an unknown (≤0) price.
+/// How many decimals a fiat→token conversion keeps (spec 038, founder's
+/// ruling "best practice and the person's experience"): six — the precision
+/// every balance row prints — or finer when one more place is worth more
+/// than a cent of the fiat (a token priced at 60,000 needs seven), never
+/// more than the token carries. The phone's port kept the token's full
+/// `decimals`, which turned 0.001 USD into `0.001000400160064026 XDAI` sixty
+/// times over on a confirm screen.
+fn conversion_decimals(price_in_fiat: f64, token_decimals: u32) -> u32 {
+    // The place worth a cent: 10^-d × price ≤ 0.01  ⇔  d ≥ log10(price / 0.01).
+    let cent_place = (price_in_fiat / 0.01).log10().ceil();
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let cent_place = if cent_place.is_finite() && cent_place > 0.0 {
+        cent_place as u32
+    } else {
+        0
+    };
+    cent_place.max(6).min(token_decimals)
+}
+
+/// `fiatToTokenAmount` (`fiat-convert.ts:40-44`), rounded to
+/// [`conversion_decimals`] — never more precision than the token can carry
+/// (the same guard `to_base_units` applies on-chain-side), and no longer the
+/// token's whole eighteen places. Returns "0" for a non-positive fiat OR an
+/// unknown (≤0) price.
 #[allow(clippy::neg_cmp_op_on_partial_ord)] // NaN must take the "0" branch
 fn fiat_to_token_amount(fiat: f64, price_in_fiat: f64, decimals: u32) -> String {
     if !(price_in_fiat > 0.0) || !(fiat > 0.0) {
         return "0".to_owned();
     }
-    strip_trailing_zeros(&js_to_fixed(fiat / price_in_fiat, decimals as usize))
+    let places = conversion_decimals(price_in_fiat, decimals) as usize;
+    strip_trailing_zeros(&js_to_fixed(fiat / price_in_fiat, places))
+}
+
+#[cfg(test)]
+mod conversion_precision {
+    use super::*;
+
+    #[test]
+    fn six_places_or_the_cent_place_whichever_is_finer_capped_by_the_token() {
+        assert_eq!(conversion_decimals(1.0, 18), 6);
+        assert_eq!(conversion_decimals(7.25, 18), 6);
+        assert_eq!(conversion_decimals(60_000.0, 8), 7);
+        assert_eq!(conversion_decimals(435_000.0, 8), 8);
+        assert_eq!(conversion_decimals(0.000_001, 18), 6);
+        assert_eq!(conversion_decimals(1.0, 2), 2);
+        assert_eq!(conversion_decimals(1.0, 0), 0);
+    }
+
+    #[test]
+    fn the_founder_s_sixty_lines_read_as_money_again() {
+        // 0.001 USD at 0.9996 USD per XDAI: 0.0010004001… → six places → 0.001.
+        assert_eq!(fiat_to_token_amount(0.001, 0.9996, 18), "0.001");
+        // 5,000 CNY at 7.25 CNY per USDT.
+        assert_eq!(fiat_to_token_amount(5000.0, 7.25, 6), "689.655172");
+        // 100 CNY of a coin at 435,000 CNY: a place is worth 0.0435 CNY at
+        // six decimals, so the eighth is kept and nothing is lost to rounding.
+        assert_eq!(fiat_to_token_amount(100.0, 435_000.0, 8), "0.00022989");
+        assert_eq!(fiat_to_token_amount(0.0, 1.0, 18), "0");
+        assert_eq!(fiat_to_token_amount(1.0, 0.0, 18), "0");
+    }
 }
 
 /// `toBaseUnits` (`eip681.ts:48-54`) on u128. `None` when the digit string

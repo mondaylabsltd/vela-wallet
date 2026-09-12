@@ -269,7 +269,10 @@ fn boot(tokens: Vec<SendToken>) -> Sut {
     sut
 }
 
-/// Select ETH and settle the credential prefetch.
+/// Select ETH and settle the credential prefetch — and the warm quote it
+/// starts (spec 028 Phase 10). The warm-up is answered FAILED here so every
+/// rule below still meets the form exactly as it did before the warm-up
+/// existed: no fee in hand, the pipeline idle.
 fn select_eth(sut: &mut Sut) {
     let ops = sut.dispatch(Event::SelectToken {
         token_id: eth("2").id(),
@@ -280,7 +283,30 @@ fn select_eth(sut: &mut Sut) {
             account_id: "cred-1".to_owned()
         }]
     );
-    assert!(sut.resolve(credential(Some(PK))).is_empty());
+    settle_warm_quote(sut);
+}
+
+/// The credential lands, the warm quote is asked, and is refused — the
+/// swallowed failure that leaves the model as a plain selection would.
+fn settle_warm_quote(sut: &mut Sut) {
+    let ops = sut.resolve(credential(Some(PK)));
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::EstimateFee {
+                tx: None,
+                batch: None,
+                ..
+            }]
+        ),
+        "a picked token warms a transfer-sized quote: {ops:?}"
+    );
+    let ops = sut.resolve(Res::FeeEstimated {
+        outcome: SendFeeOutcome::Failed {
+            kind: SendEstimateFailure::QuoteUnavailable,
+        },
+    });
+    assert!(ops.is_empty(), "a refused warm-up is swallowed: {ops:?}");
 }
 
 /// Select USDC (6 decimals, priced at 1 USD) and settle the credential
@@ -295,7 +321,7 @@ fn select_usdc(sut: &mut Sut) {
             account_id: "cred-1".to_owned()
         }]
     );
-    assert!(sut.resolve(credential(Some(PK))).is_empty());
+    settle_warm_quote(sut);
 }
 
 fn set_recipient(sut: &mut Sut, addr: &str) {
@@ -312,9 +338,41 @@ fn set_recipient(sut: &mut Sut, addr: &str) {
     }
 }
 
+/// The form's own quote (spec 028 Phase 9, T490) arms a debounce whenever the
+/// form is complete. Runs that walk the pre-check's FIFO drop it unanswered —
+/// the timer never fires in those runs, exactly like the 15s one — so the
+/// next `resolve` answers the pre-check, not the debounce.
+fn drain_form_quote(sut: &mut Sut) {
+    sut.drop_matching(|op| {
+        matches!(
+            op,
+            Op::StartTimer {
+                tag: SendTimerTag::FormEstimate,
+                ..
+            }
+        )
+    });
+}
+
+/// `ops` without the form quote's debounce, for assertions about the rest.
+fn without_form_quote(ops: Vec<Op>) -> Vec<Op> {
+    ops.into_iter()
+        .filter(|op| {
+            !matches!(
+                op,
+                Op::StartTimer {
+                    tag: SendTimerTag::FormEstimate,
+                    ..
+                }
+            )
+        })
+        .collect()
+}
+
 /// Run Continue to a settled confirm step with the given estimate.
 fn continue_to_confirm(sut: &mut Sut, fee: FeeEstimateView) {
     let ops = sut.dispatch(Event::Continue);
+    drain_form_quote(sut);
     assert!(
         matches!(
             ops.as_slice(),
@@ -752,6 +810,29 @@ fn progressive_chunks_paint_early_but_never_after_the_load_settled() {
     assert_eq!(sut.view().tokens.len(), 2);
 }
 
+/// A prefilled recipient (the address book's 转账, a scanned address) is the
+/// recipient from the first frame — before the token list answers, and even
+/// if it never does (spec 028 US5). The web hand-off found the old order: the
+/// form opened on nobody while the fetch was out.
+#[test]
+fn a_prefilled_recipient_is_shown_before_the_tokens_arrive() {
+    let mut sut = Sut::new();
+    sut.dispatch(open_event(SendOpenParams {
+        prefilled_recipient: Some(RECIPIENT.to_owned()),
+        ..SendOpenParams::default()
+    }));
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::EnterDetails, "optimistic step");
+    assert_eq!(view.recipient, RECIPIENT, "known before any token is");
+    assert!(view.selected_token.is_none());
+
+    // The tokens land: the highest-value one is picked, the recipient stays.
+    sut.resolve(loaded(vec![eth("2"), usdc("5")]));
+    let view = sut.view();
+    assert_eq!(view.recipient, RECIPIENT);
+    assert!(view.selected_token.is_some());
+}
+
 #[test]
 fn preselected_symbol_and_network_land_on_enter_details() {
     let mut sut = Sut::new();
@@ -779,8 +860,11 @@ fn prefilled_recipient_quick_send_picks_the_most_valuable_token() {
     }));
     let ops = sut.resolve(loaded(vec![usdc("5"), eth("2")]));
     assert!(
-        matches!(ops.as_slice(), [Op::ResolveIdentity { .. }]),
-        "recipient prefill resolves identity: {ops:?}"
+        matches!(
+            ops.as_slice(),
+            [Op::ResolveIdentity { .. }, Op::LoadAccountCredential { .. }]
+        ),
+        "recipient prefill resolves identity and warms a quote (Phase 10): {ops:?}"
     );
     let view = sut.view();
     assert_eq!(
@@ -839,7 +923,7 @@ fn locked_params(token: Option<&str>, amount_base: Option<&str>, chain: &str) ->
 fn locked_request_resolves_a_held_token_with_its_real_decimals() {
     let mut sut = Sut::new();
     sut.dispatch(open_event(locked_params(Some(USDC), Some("1500000"), "1")));
-    let ops = sut.resolve(loaded(vec![eth("2"), usdc("5")]));
+    let ops = without_form_quote(sut.resolve(loaded(vec![eth("2"), usdc("5")])));
     assert!(matches!(ops.as_slice(), [Op::ResolveIdentity { .. }]));
     let view = sut.view();
     // ⑫: 1_500_000 base units at the token's ON-CHAIN 6 decimals = 1.5.
@@ -868,6 +952,7 @@ fn locked_unknown_token_restores_the_amount_with_resolved_decimals() {
             decimals: 6,
         }),
     });
+    let ops = without_form_quote(ops);
     assert!(matches!(ops.as_slice(), [Op::ResolveIdentity { .. }]));
     let view = sut.view();
     assert_eq!(view.amount, "1.5");
@@ -1417,7 +1502,9 @@ fn collapsing_to_one_row_returns_to_single_mode_with_its_values() {
     let ops = sut.dispatch(Event::RecipientsChanged {
         recipients: vec![remaining],
     });
-    // The carried address re-resolves identity.
+    // The carried address re-resolves identity (and, the form being whole
+    // again, arms the form quote).
+    let ops = without_form_quote(ops);
     assert!(matches!(ops.as_slice(), [Op::ResolveIdentity { .. }]));
     let view = sut.view();
     assert!(!view.split_mode);
@@ -1859,6 +1946,7 @@ fn estimate_failure_surfaces_and_never_advances_with_a_fabricated_preview() {
     });
     let ops = sut.dispatch(Event::Continue);
     assert_eq!(ops.len(), 3);
+    drain_form_quote(&mut sut);
     assert!(sut.view().estimating_gas);
     let ops = sut.resolve(Res::FeeEstimated {
         outcome: SendFeeOutcome::Failed {
@@ -1902,6 +1990,16 @@ fn estimate_timeout_stays_put_and_a_late_quote_still_lands_ported_verbatim() {
         |op| matches!(op, Op::LoadAccountCredential { .. }),
         credential(Some(PK)),
     );
+    // The warm quote (Phase 10) is refused, so the pre-check's estimate below
+    // is the only `EstimateFee` left for the late answer to land on.
+    sut.resolve_where(
+        |op| matches!(op, Op::EstimateFee { tx: None, .. }),
+        Res::FeeEstimated {
+            outcome: SendFeeOutcome::Failed {
+                kind: SendEstimateFailure::QuoteUnavailable,
+            },
+        },
+    );
     sut.dispatch(Event::SetRecipient {
         recipient: RECIPIENT.to_owned(),
     });
@@ -1915,7 +2013,15 @@ fn estimate_timeout_stays_put_and_a_late_quote_still_lands_ported_verbatim() {
     sut.dispatch(Event::Continue);
     // The 15s timer fires FIRST.
     let ops = sut.resolve_where(
-        |op| matches!(op, Op::StartTimer { .. }),
+        |op| {
+            matches!(
+                op,
+                Op::StartTimer {
+                    tag: SendTimerTag::EstimateTimeout,
+                    ..
+                }
+            )
+        },
         Res::TimerElapsed {
             tag: SendTimerTag::EstimateTimeout,
         },
@@ -1962,6 +2068,7 @@ fn a_depleted_treasury_opens_the_bootstrap_sheet_instead_of_confirm() {
         amount: "1".to_owned(),
     });
     sut.dispatch(Event::Continue);
+    drain_form_quote(&mut sut);
     assert!(sut.resolve(fee_ok(native_fee(1, 1_000))).is_empty());
     let ops = sut.resolve(low_float());
     assert!(ops.is_empty(), "no confirm probes: {ops:?}");
@@ -2025,10 +2132,7 @@ fn the_signed_quote_is_exactly_the_displayed_estimate() {
 #[test]
 fn a_requote_before_the_slide_signs_the_new_number_not_the_old_one() {
     let mut sut = boot(vec![usdc("100")]);
-    sut.dispatch(Event::SelectToken {
-        token_id: usdc("100").id(),
-    });
-    sut.resolve(credential(Some(PK)));
+    select_usdc(&mut sut);
     set_recipient(&mut sut, RECIPIENT);
     sut.dispatch(Event::SetAmount {
         amount: "10".to_owned(),
@@ -2089,10 +2193,7 @@ fn a_quote_from_another_chain_is_never_shown_or_signed() {
 #[test]
 fn a_doomed_same_asset_batch_never_reaches_the_passkey() {
     let mut sut = boot(vec![usdc("5")]);
-    sut.dispatch(Event::SelectToken {
-        token_id: usdc("5").id(),
-    });
-    sut.resolve(credential(Some(PK)));
+    select_usdc(&mut sut);
     set_recipient(&mut sut, RECIPIENT);
     sut.dispatch(Event::SetAmount {
         amount: "4.5".to_owned(),
@@ -2105,8 +2206,10 @@ fn a_doomed_same_asset_batch_never_reaches_the_passkey() {
     assert_eq!(issue.fee_amount, "1000000");
     assert_eq!(issue.max_transfer_amount, "4000000");
     assert!(!view.can_confirm);
-    // The slide routes to "edit amount" — no lock, no ops, no signing.
-    let ops = sut.dispatch(Event::SlideConfirm);
+    // The slide routes to "edit amount" — no lock, no signing. (Back on the
+    // form with its fee coin reset, the form quote re-arms; that is the one
+    // op allowed here, and it is not a submit.)
+    let ops = without_form_quote(sut.dispatch(Event::SlideConfirm));
     assert!(ops.is_empty(), "⑧: {ops:?}");
     let view = sut.view();
     assert_eq!(view.stage, SendStage::EnterDetails);
@@ -2639,10 +2742,7 @@ fn relayer_unavailable_with_a_depleted_treasury_shows_the_honest_bootstrap_ask()
 #[test]
 fn leaving_confirm_resets_the_fee_asset_and_clears_a_stale_erc20_estimate() {
     let mut sut = boot(vec![usdc("100")]);
-    sut.dispatch(Event::SelectToken {
-        token_id: usdc("100").id(),
-    });
-    sut.resolve(credential(Some(PK)));
+    select_usdc(&mut sut);
     set_recipient(&mut sut, RECIPIENT);
     sut.dispatch(Event::SetAmount {
         amount: "10".to_owned(),
@@ -2757,6 +2857,41 @@ fn a_row_scoped_scan_takes_only_the_address_and_spares_the_other_rows() {
     assert!(!view.locked);
 }
 
+/// The picker is the core's state (spec 028 US5): opening it is an event,
+/// and a pick both fills the recipient and closes it — the shell never has
+/// to say "and now close it" as a second sentence.
+#[test]
+fn a_pick_from_the_book_fills_the_recipient_and_closes_the_picker() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    sut.dispatch(Event::OpenContactPicker { target: None });
+    assert!(sut.view().show_contact_picker);
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT.to_owned(),
+    });
+    let view = sut.view();
+    assert_eq!(view.recipient, RECIPIENT);
+    assert!(!view.show_contact_picker, "the pick closes the picker");
+    assert!(!view.split_mode);
+
+    // A row-scoped pick does the same for its row.
+    sut.dispatch(Event::EnterSplitMode);
+    let rows = sut.view().recipients;
+    let second = rows.get(1).map(|r| r.id.clone()).unwrap_or_default();
+    sut.dispatch(Event::OpenContactPicker {
+        target: Some(second.clone()),
+    });
+    sut.dispatch(Event::PickedAddress {
+        address: RECIPIENT_B.to_owned(),
+    });
+    let view = sut.view();
+    assert!(!view.show_contact_picker);
+    assert!(view
+        .recipients
+        .iter()
+        .any(|r| r.id == second && r.address == RECIPIENT_B));
+}
+
 #[test]
 fn an_untargeted_full_request_relocks_the_whole_flow() {
     let mut sut = boot(vec![eth("2"), usdc("5")]);
@@ -2776,7 +2911,7 @@ fn an_untargeted_full_request_relocks_the_whole_flow() {
         "{ops:?}"
     );
     assert!(sut.view().locked);
-    let ops = sut.resolve(loaded(vec![eth("2"), usdc("5")]));
+    let ops = without_form_quote(sut.resolve(loaded(vec![eth("2"), usdc("5")])));
     assert!(matches!(ops.as_slice(), [Op::ResolveIdentity { .. }]));
     let view = sut.view();
     assert_eq!(view.amount, "1.5");
@@ -2823,6 +2958,7 @@ fn a_missing_credential_alerts_account_unavailable_before_estimating() {
     });
     let ops = sut.dispatch(Event::Continue);
     assert!(matches!(ops.as_slice(), [Op::LoadAccountCredential { .. }]));
+    drain_form_quote(&mut sut);
     let ops = sut.resolve(credential(None));
     assert_eq!(
         ops,
@@ -2910,6 +3046,14 @@ fn an_unlocked_prefill_still_carries_its_recipient_across_a_token_change() {
         ..SendOpenParams::default()
     }));
     sut.resolve(loaded(vec![eth("2"), usdc("5")]));
+    // The prefill resolved an identity and warmed a quote (Phase 10); neither
+    // is this rule's subject, and a FIFO walk must not answer them by accident.
+    sut.drop_matching(|op| {
+        matches!(
+            op,
+            Op::ResolveIdentity { .. } | Op::LoadAccountCredential { .. }
+        )
+    });
     select_eth(&mut sut);
     sut.dispatch(Event::Back);
     assert_eq!(sut.view().recipient, "");
@@ -3031,4 +3175,163 @@ fn fee_estimates_that_do_not_parse_are_refused_not_guessed() {
     bad.total_wei = "not-a-number".to_owned();
     sut.dispatch(Event::FeeUpdated { estimate: bad });
     assert!(sut.view().fee.is_none());
+}
+
+// ===========================================================================
+// The form's own quote (spec 028 Phase 9, T490)
+// ===========================================================================
+
+#[test]
+fn a_complete_form_quotes_once_it_sits_still_and_shows_the_fee_before_continue() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    assert!(sut.view().fee.is_none(), "no amount yet, no quote");
+    let ops = sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::StartTimer {
+                ms: 400,
+                tag: SendTimerTag::FormEstimate
+            }]
+        ),
+        "the debounce is armed, not a quote: {ops:?}"
+    );
+    let ops = sut.resolve(Res::TimerElapsed {
+        tag: SendTimerTag::FormEstimate,
+    });
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::EstimateFee {
+                chain_id: 1,
+                tx: Some(_),
+                batch: None,
+                ..
+            }]
+        ),
+        "the exact transfer is quoted: {ops:?}"
+    );
+    assert!(sut.resolve(fee_ok(native_fee(1, 21_000))).is_empty());
+    let view = sut.view();
+    assert_eq!(view.stage, SendStage::EnterDetails, "still the form");
+    assert!(
+        view.fee.is_some(),
+        "the fee row has a figure before Continue"
+    );
+}
+
+#[test]
+fn typing_re_arms_the_debounce_and_a_stale_timer_asks_for_nothing() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    let first = sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    assert!(matches!(
+        first.as_slice(),
+        [Op::StartTimer {
+            tag: SendTimerTag::FormEstimate,
+            ..
+        }]
+    ));
+    let second = sut.dispatch(Event::SetAmount {
+        amount: "1.5".to_owned(),
+    });
+    assert!(matches!(
+        second.as_slice(),
+        [Op::StartTimer {
+            tag: SendTimerTag::FormEstimate,
+            ..
+        }]
+    ));
+    // Oldest first: the first timer fires late, and is not the armed one.
+    let ops = sut.resolve(Res::TimerElapsed {
+        tag: SendTimerTag::FormEstimate,
+    });
+    assert!(ops.is_empty(), "a stale debounce quotes nothing: {ops:?}");
+    let ops = sut.resolve(Res::TimerElapsed {
+        tag: SendTimerTag::FormEstimate,
+    });
+    assert!(matches!(ops.as_slice(), [Op::EstimateFee { .. }]));
+}
+
+#[test]
+fn continue_takes_over_from_a_pending_form_quote_and_a_landed_one_is_not_asked_twice() {
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    // Continue before the debounce elapsed: the pre-check owns the slot.
+    let ops = sut.dispatch(Event::Continue);
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [
+                Op::EstimateFee { .. },
+                Op::ProbeTreasury { .. },
+                Op::StartTimer {
+                    ms: 15_000,
+                    tag: SendTimerTag::EstimateTimeout
+                }
+            ]
+        ),
+        "{ops:?}"
+    );
+    // The debounce fires under the pre-check: it asks for nothing.
+    let late = sut.resolve_matching(
+        |op| {
+            matches!(
+                op,
+                Op::StartTimer {
+                    tag: SendTimerTag::FormEstimate,
+                    ..
+                }
+            )
+        },
+        Res::TimerElapsed {
+            tag: SendTimerTag::FormEstimate,
+        },
+    );
+    assert!(late.is_empty(), "{late:?}");
+
+    // A second form, quoted once: the same payee and token asked again does
+    // not re-arm the debounce while the quote in hand is about them.
+    let mut sut = boot(vec![eth("2")]);
+    select_eth(&mut sut);
+    set_recipient(&mut sut, RECIPIENT);
+    sut.dispatch(Event::SetAmount {
+        amount: "1".to_owned(),
+    });
+    sut.resolve(Res::TimerElapsed {
+        tag: SendTimerTag::FormEstimate,
+    });
+    assert!(sut.resolve(fee_ok(native_fee(1, 21_000))).is_empty());
+    let ops = sut.dispatch(Event::SetAmount {
+        amount: "1.25".to_owned(),
+    });
+    assert!(
+        ops.is_empty(),
+        "the amount alone is not a new question: {ops:?}"
+    );
+    // A different fee coin is.
+    let ops = sut.dispatch(Event::ChooseFeeToken {
+        token: Some(USDC.to_owned()),
+    });
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::StartTimer {
+                tag: SendTimerTag::FormEstimate,
+                ..
+            }]
+        ),
+        "{ops:?}"
+    );
 }

@@ -7,6 +7,7 @@
     "emptyTitle": "まだ取引はありません",
     "emptyBody": "送金した取引はここに表示されます。ブロックエクスプローラーで全履歴を確認することもできます。",
     "viewOnExplorer": "エクスプローラーで表示",
+    "deleteRecord": "記録を削除",
     "emptyFilter": "このネットワークに取引はありません",
     "txLabelDappTx": "dApp の取引",
     "txLabelSignMessage": "メッセージの署名",

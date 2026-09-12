@@ -1,16 +1,21 @@
-# Minimal CI gate — mirrors the local checks documented in
+# CI gate — mirrors the local checks documented in
 # docs/project-takeover/02-local-development.md.
 #
-# Expo wind-down (2026-08-12): CI no longer runs Expo at all. The app is
-# migrating off React Native + Expo onto vela-core plus one native shell per
-# platform (README → "The new architecture"), so:
-#   - the two EAS workflows that existed only to feed the Expo dev client
-#     (expo-preview.yml, expo-merged.yml) and .github/expo-preview-guide.md are
-#     deleted — nothing else read the EXPO_TOKEN secret, so it can be revoked;
-#   - the lint gate calls ESLint directly instead of through `expo lint`;
-#   - the web build gate is the SvelteKit app (`web` job), not `expo export`.
-# The Expo sources under src/ are still typechecked, linted and tested here —
-# they are still the shipping native app. Only the Expo TOOLCHAIN is gone.
+# Shape of the repository (since spec 039, 2026-09-11): one shared Rust core
+# (`rust/`) and four shells — app-web, app-desktop, app-ios, app-android —
+# each with its own toolchain and its own job below. The React Native / Expo
+# app that used to live under `src/` is gone; nothing in this file runs
+# Expo, Metro, Jest or a root TypeScript check any more.
+#
+# The `app` job is the TOOLING gate: the generators and the corpus oracles
+# that every shell depends on (identicon and i18n vectors replayed against
+# the pinned npm packages, the regenerated artefacts diffed against what is
+# committed, the Lottie and reachability lints, the parity gates, and the
+# Expo-residue check). The
+# npm package that installs the oracles lives in `scripts/` — the repository
+# root carries no npm state (founder ruling, spec 039). The job keeps the
+# name `app` because branch protection requires a check called that; what it
+# runs is what is listed here.
 #
 # Deployment coupling: the web wallet deploys from Cloudflare's own build of
 # app-web/vela-wallet (Workers app `vela-wallet-web`), which runs independently
@@ -19,11 +24,10 @@
 # build fails the PR instead of surfacing only after merge.
 #
 # Deliberately NOT included:
-#   - Playwright E2E: boots a Metro dev server + fixture relay; run locally via
-#     `npm run test:e2e` (see docs/PARALLEL-SPACE-E2E-PLAYBOOK.md). Promote to CI
-#     once it has a proven-stable record on a runner.
-#   - price-query real-RPC suite: opt-in only (RUN_NETWORK_TESTS=1) — it depends
-#     on third-party public RPC availability, not on our code.
+#   - app-web's Playwright e2e (`pnpm test:e2e` in app-web/vela-wallet): builds
+#     and serves the real worker; run locally. Promote once it has a
+#     proven-stable record on a runner.
+#   - the desktop gallery sweep (`sweep-gallery.sh`): opens real windows.
 #   - app-web/getvela.app: separate bun/SvelteKit project, own job below.
 name: CI
 
@@ -41,27 +45,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - name: Typecheck
-        run: npx tsc --noEmit
-      - name: Install Safe extension dependencies
-        run: npm ci --prefix packages/safe-recovery-extension
-      - name: Check Safe extension
-        run: |
-          npm run check --prefix packages/safe-recovery-extension
-          npm test --prefix packages/safe-recovery-extension
-          npm run build --prefix packages/safe-recovery-extension
-      - name: Build HTTPS wallet SDK
-        run: npm run build --prefix packages/vela-sdk
-      # ESLint with the flat config in eslint.config.js, over `src` — the same
-      # 991 files the old CLI wrapper covered, minus the wrapper. The cap is a
-      # ceiling on pre-existing warning debt (566 today), not a target; what
-      # this gate actually enforces is 0 errors, which includes the legacy-import
-      # quarantine rules in eslint.config.js.
-      - name: Lint
-        run: npx eslint src --max-warnings=10000
-      - name: Unit tests
-        run: npx jest --ci
+          cache-dependency-path: scripts/package-lock.json
+      # The tooling package (i18next, identicons-esm, @noble/*) — scripts/,
+      # not the root.
+      - run: npm ci --prefix scripts
       # Half of this gate retired with the TypeScript oracle it compared against.
       #
       # primitives/abi/eip712/safe/webauthn.json were extracted from the
@@ -78,7 +65,7 @@ jobs:
       # with it. The dump is byte-stable — no timestamp, no git sha.
       - name: Regenerable corpus still matches its npm oracles
         run: |
-          npm run dump:vectors
+          npm --prefix scripts run dump:vectors
           git diff --exit-code -- rust/crates/vela-core/tests/vectors/identicon.json \
                                   rust/crates/vela-core/tests/vectors/identicon-bulk.json \
                                   rust/crates/vela-core/tests/vectors/i18n-behaviour.json \
@@ -98,20 +85,20 @@ jobs:
             || { echo "::error::The identicon artwork no longer matches identicons-esm. Every existing account's avatar would change. Treat as a release blocker, not a chore: review the diff and confirm the dependency bump was intended."; exit 1; }
       # The i18n corpus lives in the crate and is THE source of truth (spec
       # 004-rust-i18n FR-010). Every downstream artefact — the shared Rust path
-      # table, the fifteen compiled-in catalogs, and the TypeScript resources the
-      # React Native app imports — is generated from it. Regenerating and requiring
-      # a zero diff is what stops the three drifting apart: an edit committed to the
-      # corpus without regenerating would leave the app rendering the old string
-      # while the Rust suite rendered the new one, and both would be green.
+      # table, the fifteen compiled-in catalogs, the datetime data, and the
+      # per-locale JSON under assets/i18n that app-ios, app-android and app-web
+      # all read — is generated from it. Regenerating and requiring a zero diff
+      # is what stops them drifting apart: an edit committed to the corpus
+      # without regenerating would leave a shell rendering the old string while
+      # the Rust suite rendered the new one, and both would be green.
       - name: i18n artefacts match the corpus
         run: |
           node scripts/gen-i18n.mjs
           git diff --exit-code -- rust/crates/vela-core/src/i18n/paths.rs \
                                   rust/crates/vela-core/src/i18n_catalogs \
                                   rust/crates/vela-core/src/l10n/datetime_data.rs \
-                                  src/i18n/resources.ts \
-                                  public/i18n \
-            || { echo "::error::The generated i18n artefacts no longer match rust/crates/vela-core/i18n/locales. Run 'npm run gen:i18n' and commit the result TOGETHER WITH the corpus change — a corpus edit and its regenerated artefacts belong in one commit."; exit 1; }
+                                  assets/i18n \
+            || { echo "::error::The generated i18n artefacts no longer match rust/crates/vela-core/i18n/locales. Run 'npm --prefix scripts run gen:i18n' and commit the result TOGETHER WITH the corpus change — a corpus edit and its regenerated artefacts belong in one commit."; exit 1; }
       # Reports the six known corpus defects (FR-018) and fails only on NEW ones.
       # It fixes nothing on purpose: silently "improving" a translated string during
       # an engine port makes every parity claim unverifiable.
@@ -133,6 +120,18 @@ jobs:
         run: |
           node scripts/lint-lottie-assets.mjs --self-test
           node scripts/lint-lottie-assets.mjs
+      # Every screen family a native client ships must be reachable from that
+      # client's navigation root. Spec 022 shipped 9,695 lines of drawn UI across
+      # three clients that no person could open, and every gate here stayed green
+      # — because on each platform the COMPILER was happy: rustc never reads a
+      # directory nobody declared, and Kotlin/Swift happily compile a screen
+      # nothing routes to. Only navigation can see it.
+      #
+      # Static on purpose: no cargo, no gradle, no xcodebuild, well under a
+      # second. A guard that needs a 25-minute toolchain is a guard somebody
+      # eventually skips — which is the failure mode it exists to prevent.
+      - name: Native screens are reachable
+        run: node scripts/check-native-reachability.mjs
       # Byte-parity between the Rust core and the JS library the app still ships on
       # native — over every address literal in the repo plus 200k random seeds.
       - name: Identicon parity (Rust core vs the shipped JS library)
@@ -145,9 +144,18 @@ jobs:
       # boundary, because JSON has no syntax for Infinity).
       - name: i18n parity (Rust core vs the shipped JS library)
         run: node scripts/verify-i18n-parity.mjs
+      # Spec 039 retired the React Native / Expo tree. This keeps it retired:
+      # a deleted path reappearing, an Expo/RN dependency in any package.json,
+      # an Expo term in a workflow step or npm script, or one of the old
+      # root-only Expo/EAS/`build:web` commands quoted in a living document
+      # all fail; prose mentions are only counted. The self-test runs first
+      # for the same reason the Lottie linter's does.
+      - name: No Expo residue
+        run: |
+          node scripts/check-expo-residue.mjs --self-test
+          node scripts/check-expo-residue.mjs
 
-  # The web wallet: app-web/vela-wallet (SvelteKit → Cloudflare Workers). This
-  # replaces the old `expo export --platform web` gate.
+  # The web wallet: app-web/vela-wallet (SvelteKit → Cloudflare Workers).
   #
   # Its own pnpm workspace, so pnpm is set up BEFORE setup-node (`cache: pnpm`
   # needs the binary to resolve the store path) and the version comes from that
@@ -214,15 +222,20 @@ jobs:
           workspaces: rust
       - name: Format
         run: cargo fmt --all --check
+      # `vela-core/dev-fixtures` is on for the LINT and the TEST steps only:
+      # the parallel space's software signer (spec 032) is compiled by no
+      # shipping crate, so this is the one place its golden addresses are
+      # locked and its bytes are checked against the real authenticator
+      # parsers. The wasm canary below deliberately does not enable it.
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --features vela-core/dev-fixtures -- -D warnings
       # `--features vela-core/i18n-all` is REQUIRED, not a nicety. vela-core's
       # default feature set is empty, so the compiled-in catalogs are absent and
       # 1,516 of the 3,554 conformance cases fail with `I18nCatalogUnavailable`.
       # A bare `cargo test --workspace` is red — spec 004 was verified locally
       # with the features on and this step was not updated to match.
       - name: Tests (conformance corpus + proptests)
-        run: cargo test --workspace --features vela-core/i18n-all
+        run: cargo test --workspace --features vela-core/i18n-all,vela-core/dev-fixtures
       - name: Wasm build (getrandom canary)
         run: cargo build --target wasm32-unknown-unknown -p vela-core-wasm
       # The Windows passkey path. It cannot be built by any job that builds the
@@ -252,7 +265,7 @@ jobs:
       # variant fails at RUNTIME, in a branch the e2e suites do not reach
       # (incompatible provider, non-discoverable credential) — see
       # specs/011-crux-onboarding-state/research.md D8.
-      - name: Onboarding wire types are current (src/services/onboarding-core/generated)
+      - name: Onboarding wire types are current (app-web/vela-wallet/src/lib/onboarding/generated)
         working-directory: .
         run: node rust/scripts/gen-onboarding-types.mjs --check
       - name: Swift bindings generate (compiled here, exercised in rust-macos)
@@ -293,3 +306,177 @@ jobs:
           workspaces: rust
       - name: Conformance corpus through the Swift bindings
         run: ./scripts/smoke-swift.sh
+
+  # ---------------------------------------------------------------------------
+  # The three native clients (spec 029).
+  #
+  # Until this feature nothing in CI built any of them. The only `app-desktop`
+  # reference in this file was `check-windows.sh`, which type-checks a DIFFERENT,
+  # C-free crate standalone — and whose own header records having missed exactly
+  # this class of bug once before ("left the Windows path unlinked, with this
+  # gate green throughout"). The desktop app crate is also not a member of the
+  # `rust/` workspace, so `cargo test --workspace` cannot reach it.
+  #
+  # What that cost: 9,695 lines of drawn, translated, fixture-complete UI shipped
+  # on three clients that no person could open, and every gate here stayed green.
+  #
+  # These three jobs are the compile half. The reachability half is static and
+  # runs in `app` above, because a screen nothing routes to still COMPILES on all
+  # three platforms — only navigation can see that, and only a toolchain-free
+  # check is cheap enough to never be skipped.
+  # ---------------------------------------------------------------------------
+
+  desktop:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: app-desktop/vela-wallet
+    steps:
+      # Checkout FIRST. Every `run` in this job inherits the working-directory
+      # above, and a step that runs before the checkout has no directory to
+      # start bash in — the job died on step 2 with "No such file or directory"
+      # and never reached a single line of Rust. apt does not care where it is
+      # run from, so the fix is the order, not an override.
+      - uses: actions/checkout@v4
+      - name: Install the gpui build dependencies
+        # Lifted from desktop-linux-packages.yml minus the packaging tools. The
+        # app cannot be cross-checked (its tree compiles ThorVG, resvg and
+        # hidapi C), so this is a native Linux build, not a `--target` check.
+        #
+        # libdbus-1-dev is not gpui's: BLE (the caBLE passkey channel) goes
+        # through btleplug, and on Linux that is BlueZ, and BlueZ is a D-Bus
+        # service — so libdbus-sys' build script wants dbus-1.pc. It has been
+        # missing since the list was written; nothing noticed, because the job
+        # never got as far as compiling.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang libclang-dev cmake pkg-config \
+            git ca-certificates curl file \
+            libwayland-dev libxkbcommon-x11-dev libx11-xcb-dev \
+            libfontconfig-dev libasound2-dev libssl-dev libzstd-dev \
+            libdbus-1-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app-desktop/vela-wallet
+          # gpui and gpui_platform are git dependencies on the whole Zed
+          # repository; without caching, every run re-clones it.
+          cache-all-crates: true
+      - name: Format
+        run: cargo fmt --all --check
+      # NOT `-D warnings`, and the reason is recorded rather than hidden: the
+      # BASELINE carries ten clippy warnings in caBLE/Noise transport code
+      # (7 in src/ctap/cable.rs, 1 in cable/l2cap.rs, 1 in hardware.rs, 1 in
+      # onboarding.rs), because nothing has ever run clippy on this crate. Fixing
+      # transport code is not spec 029's business (AI-CODING-RULES §2), and a
+      # gate that starts red is a gate somebody disables. Raising this to
+      # `-D warnings` is a task for whoever clears those ten.
+      - name: Clippy
+        run: cargo clippy --all-targets
+      - name: Tests
+        # `sweep-gallery.sh` is deliberately NOT here: it opens real windows and
+        # a CI runner has no display. It stays a local gate, and saying so keeps
+        # the next reader from assuming a coverage that does not exist.
+        run: cargo test
+
+  android:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - uses: gradle/actions/setup-gradle@v4
+      # A fresh checkout CANNOT build this app: `rust/bindings/kotlin/` is
+      # gitignored and consumed in place as a `kotlin.srcDir`, so the bindings
+      # have to be generated before Gradle runs. The JVM unit tests then load the
+      # HOST dylib through `jna.library.path`, which is the same artifact.
+      - name: Generate the Kotlin bindings
+        working-directory: rust
+        run: |
+          cargo build --release -p vela-core-uniffi
+          cargo run --release -p vela-core-uniffi --bin uniffi-bindgen -- generate \
+            --library target/release/libvela_core_uniffi.so \
+            --language kotlin --out-dir bindings/kotlin --no-format
+      # `-PvelaSkipRustBuild` skips the three-ABI NDK cross-compile, which the
+      # app's build.gradle.kts measures at ~6 minutes. Compiling and unit-testing
+      # is what catches an unrouted screen; producing an installable APK is not.
+      - name: Compile and unit-test
+        working-directory: app-android/vela-wallet
+        run: ./gradlew :app:assembleDebug :app:testDebugUnitTest -PvelaSkipRustBuild
+
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: aarch64-apple-ios-sim,aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      # Same story as Android: `app-ios/VelaCoreKit/Artifacts/` is gitignored, so
+      # the xcframework must be built before Xcode can resolve the local package.
+      # macos-15 minutes bill at ten times linux, so this is the step that decides
+      # the job's cost — cache it on the core's own sources, and it is a
+      # ~6-minute job rather than a ~25-minute one.
+      - name: Cache the xcframework
+        id: xcframework
+        uses: actions/cache@v4
+        with:
+          path: app-ios/VelaCoreKit/Artifacts
+          key: xcframework-${{ hashFiles('rust/crates/**', 'rust/Cargo.lock') }}
+      - name: Build the xcframework
+        if: steps.xcframework.outputs.cache-hit != 'true'
+        run: ./rust/scripts/build-ios-xcframework.sh
+      # The destination is RESOLVED, not spelled. Two traps, both hit while
+      # writing this job:
+      #   - `name=iPhone 16` is ambiguous the moment a machine has that device
+      #     under two runtimes, and xcodebuild answers by printing every
+      #     simulator it knows rather than picking one.
+      #   - `OS=latest` does not mean "newest runtime that has this device"; it
+      #     means the newest runtime, which may not offer that device at all.
+      # Asking simctl for a device that actually exists sidesteps both.
+      - name: Resolve a simulator that actually exists
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          best=None
+          for runtime, devices in d.items():
+              if "iOS" not in runtime: continue
+              ver=tuple(int(x) for x in runtime.split(".iOS-")[-1].split("-"))
+              for dev in devices:
+                  if dev.get("isAvailable") and dev["name"].startswith("iPhone"):
+                      if best is None or ver > best[0]: best=(ver, dev["udid"], dev["name"], runtime)
+          if best is None: sys.exit("no available iPhone simulator")
+          print(best[1])
+          print(f"using {best[2]} on {best[3]}", file=sys.stderr)
+          ')
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      # NOTE on reading this job's output: the XCTest reporter prints
+      # "Executed 0 tests" here and it is NOT a failure. VelaWalletTests uses
+      # Swift Testing (`@Test`), which reports on its own line — "Test run with
+      # 130 tests in 13 suites passed". Anything that greps this log for a pass
+      # signal must look for the second line, not the first.
+      - name: Build and test
+        working-directory: app-ios/VelaWallet
+        run: |
+          xcodebuild test \
+            -project VelaWallet.xcodeproj \
+            -scheme VelaWallet \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            CODE_SIGNING_ALLOWED=NO

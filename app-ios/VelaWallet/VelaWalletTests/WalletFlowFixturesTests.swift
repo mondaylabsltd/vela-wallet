@@ -4,7 +4,7 @@
 //
 //  Spec 021: every state in the matrix builds, and the canon reproduces the
 //  mock content verbatim once merged with the zh corpus (the mocks are zh
-//  renderings), so visual diffing against design/wallet-2/ stays meaningful.
+//  renderings), so visual diffing against docs/design/wallet-2/ stays meaningful.
 //
 
 import Foundation

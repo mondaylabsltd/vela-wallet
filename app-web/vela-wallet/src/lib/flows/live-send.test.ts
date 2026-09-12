@@ -15,6 +15,9 @@ import {
 	liveSendForm,
 	liveSendPick,
 	liveSendReceipt,
+	sendTokenClass,
+	sendTokenId,
+	visibleSendTokens,
 	type SendLiveInputs
 } from './live-send';
 
@@ -261,6 +264,45 @@ describe('the confirm screen', () => {
 	});
 });
 
+describe('the core’s refusals reach the screen (spec 038 #D4)', () => {
+	const alice = '0x' + 'ab'.repeat(20);
+	it('a failed estimate is a sentence on the form, and on the confirm', () => {
+		const form = liveSendForm(formModel(), {
+			...inputs({ selected_token: ETH, recipient: alice, amount: '1' }),
+			alert: { type: 'estimate_failed', kind: 'generic' as never }
+		});
+		expect(form.alert).toContain(m['send.alertEstimateFailedTitle']);
+		expect(form.alert).toContain(m['send.alertEstimateFailedBody']);
+		const confirm = liveSendConfirm(confirmModel(), {
+			...inputs({ selected_token: ETH, recipient: alice, confirm_amount: '1' }),
+			alert: { type: 'invalid_amount' }
+		});
+		expect(confirm.alert).toContain(m['send.alertInvalidAmountTitle']);
+	});
+
+	it('no refusal, no line', () => {
+		const form = liveSendForm(formModel(), inputs({ selected_token: ETH }));
+		expect(form.alert).toBeUndefined();
+	});
+
+	it('a split’s total is the core’s sum, not the single field', () => {
+		const form = liveSendForm(
+			formModel(),
+			inputs({
+				selected_token: ETH,
+				split_mode: true,
+				confirm_amount: '0.06',
+				token_amount: '',
+				recipients: [
+					{ id: 'a', address: alice, amount: '0.03', name: null },
+					{ id: 'b', address: '0x' + 'cd'.repeat(20), amount: '0.03', name: null }
+				]
+			})
+		);
+		expect(form.summary?.value).toBe('0.06 ETH');
+	});
+});
+
 describe('the receipt', () => {
 	const receipt = (status: 'submitted' | 'confirmed' | 'failed') => ({
 		status,
@@ -268,7 +310,9 @@ describe('the receipt', () => {
 		kind: null,
 		transfers: [],
 		amount: '0.5',
-		usd_value: 1500
+		usd_value: 1500,
+		submitted_at_ms: null,
+		typical_inclusion_s: null
 	});
 
 	it('signing shows the submitting state — nothing is accepted yet', () => {
@@ -311,6 +355,54 @@ describe('the receipt', () => {
 		expect(model.title).toContain('0.5');
 		expect(model.hash?.value).toBe('0xtx');
 		expect(model.ctaAccent).toBe(true);
+	});
+
+	it('a split lists every recipient the core froze and counts them in the caption (#D2)', () => {
+		const alice = '0x' + 'cd'.repeat(20);
+		const bob = '0x' + 'ef'.repeat(20);
+		const model = liveSendReceipt(
+			receiptModel(),
+			inputs({
+				tx_status: 'confirmed',
+				user_op_hash: '0xop',
+				tx_hash: '0xtx',
+				selected_token: ETH,
+				split_mode: true,
+				receipt: {
+					...receipt('confirmed'),
+					kind: 'split',
+					transfers: [
+						{
+							to: alice,
+							to_name: 'Alice',
+							amount: '0.2',
+							symbol: 'ETH',
+							logo_urls: [],
+							usd_value: 600
+						},
+						{ to: bob, to_name: null, amount: '0.3', symbol: 'ETH', logo_urls: [], usd_value: 900 }
+					]
+				}
+			})
+		);
+		expect(model.breakdownTitle).toContain('2');
+		expect(model.breakdown?.map((row) => row.label)).toEqual([
+			'Alice',
+			expect.stringMatching(/^0xef/)
+		]);
+		expect(model.breakdown?.map((row) => row.value)).toEqual(['0.2 ETH', '0.3 ETH']);
+		expect(model.breakdown?.[0].identiconSvg).toBeTruthy();
+		// Not "To " with nobody after it.
+		expect(model.captions[0]).toContain(model.breakdownTitle ?? '');
+	});
+
+	it('a single send carries no parts', () => {
+		const model = liveSendReceipt(
+			receiptModel(),
+			inputs({ tx_status: 'confirmed', tx_hash: '0xtx', receipt: receipt('confirmed') })
+		);
+		expect(model.breakdown).toBeUndefined();
+		expect(model.breakdownTitle).toBeUndefined();
 	});
 
 	it('a refused submit is the failed stage, worded by the core’s key', () => {
@@ -364,5 +456,71 @@ describe('the fee-coin sheet', () => {
 		expect(model.rows[0]).toMatchObject({ selected: true, fee: '~0.0021 ETH' });
 		// No quote for a coin that cannot pay — said, not guessed.
 		expect(model.rows[1].fee).toBe('—');
+	});
+});
+
+// ---------------------------------------------------------------------------
+// SD1's two narrowings (spec 028 Phase 10)
+// ---------------------------------------------------------------------------
+
+describe('the picker narrows to the sidebar chain and the class chips', () => {
+	const XDAI: SendToken = {
+		...ETH,
+		network: 'gnosis-mainnet',
+		chain_id: 100,
+		symbol: 'XDAI',
+		balance: '71.39',
+		price_usd: 1
+	};
+	const send = { tokens: [USDT, ETH, XDAI], stage: 'select_token' as const };
+
+	it('classes a chain coin as gas, a stable by symbol, the rest as other', () => {
+		expect(sendTokenClass(ETH)).toBe('gas');
+		expect(sendTokenClass(XDAI)).toBe('gas');
+		expect(sendTokenClass(USDT)).toBe('stable');
+		expect(sendTokenClass({ ...USDT, symbol: 'LINK' })).toBe('other');
+	});
+
+	it('shows every token with no filter, and the chips read "all" selected', () => {
+		const model = liveSendPick(pickModel(), inputs(send));
+		expect(model.rows.map((r) => r.ticker)).toEqual(['USDT', 'ETH', 'XDAI']);
+		expect(model.filters.find((f) => f.selected)?.id).toBe('all');
+		expect(model.header.pill?.label).toBe(m['componentsUi.networkFilter.pillAll']);
+	});
+
+	it('narrows to the chosen chain and names it on the pill', () => {
+		const model = liveSendPick(pickModel(), { ...inputs(send), chainFilter: 100 });
+		expect(model.rows.map((r) => r.ticker)).toEqual(['XDAI']);
+		expect(model.header.pill?.label).toBe('Gnosis');
+		expect(model.header.pill?.dots).toHaveLength(1);
+	});
+
+	it('narrows to a class, and the index a tap emits is into the same list', () => {
+		const filters = { classFilter: 'gas' as const };
+		const model = liveSendPick(pickModel(), { ...inputs(send), ...filters });
+		expect(model.rows.map((r) => r.ticker)).toEqual(['ETH', 'XDAI']);
+		expect(model.filters.find((f) => f.selected)?.id).toBe('gas');
+		// The page resolves the row the same way, so row 1 IS XDAI.
+		expect(visibleSendTokens({ ...EMPTY_SEND, ...send }, filters)[1]).toBe(XDAI);
+	});
+
+	it('keeps the sweep ticks aligned to the narrowed rows', () => {
+		const model = liveSendPick(pickModel(), {
+			...inputs({ ...send, multi_selected_ids: [sendTokenId(XDAI)], multi_chain_id: 100 }),
+			sweepPicking: true,
+			classFilter: 'gas'
+		});
+		expect(model.rows.map((r) => r.ticker)).toEqual(['ETH', 'XDAI']);
+		expect(model.selection?.selected).toEqual([false, true]);
+		expect(model.selection?.dimmed).toEqual([true, false]);
+	});
+
+	it('keeps a fee figure on screen while a re-quote is out', () => {
+		const model = liveSendForm(
+			formModel(),
+			inputs({ ...send, selected_token: ETH, fee: QUOTE, fee_busy: true })
+		);
+		expect(model.fee.value).not.toBe('…');
+		expect(model.fee.value).toMatch(/ETH/);
 	});
 });

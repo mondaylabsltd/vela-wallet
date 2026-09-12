@@ -10,8 +10,9 @@
  * empty exactly as the old `catch { [] }` did.
  *
  * Three web differences, all recorded in contracts/shell-operations.md:
- * - `load_send_history` answers truthfully empty — this app has no local
- *   transaction store yet (it arrives with spec 025/026).
+ * - `load_send_history` reads the local tx store 025 built (`records.ts`,
+ *   the Expo `vela.transactionHistory` bytes) — since spec 028 US5; before
+ *   that it answered truthfully empty.
  * - `resolve_identity` runs the identity waterfall (passkey index → name
  *   services); `classify_recipient` hands the raw `eth_getCode` answer back
  *   — the core owns both projections (address-book kind, risk badge). A
@@ -26,12 +27,15 @@
 
 import { resolveRecipientIdentity } from '$lib/services/recipient-identity';
 import { poolRpcCall } from '$lib/services/rpc-pool';
+import { loadTransactions } from '$lib/services/records';
 import { getItem, setItem } from '$lib/services/storage';
+import type { LocalTransaction } from '$lib/services/transactions-model';
 
 import type { Contact } from '$lib/core/generated/Contact';
 import type { ContactGroup } from '$lib/core/generated/ContactGroup';
 import type { ContactKind } from '$lib/core/generated/ContactKind';
 import type { ContactShellResult } from '$lib/core/generated/ContactShellResult';
+import type { ContactHistoryTx } from '$lib/core/generated/ContactHistoryTx';
 import type { ContactTombstone } from '$lib/core/generated/ContactTombstone';
 import type { ContactEffect } from './contacts-types';
 
@@ -185,6 +189,23 @@ async function readGroups(): Promise<ContactGroup[]> {
 		.map(toWireGroup);
 }
 
+/**
+ * One stored record → the four fields the book reads. `type` absent is a
+ * legacy row and stays `null` (the core keeps those OUT of suggestions and IN
+ * prior-interaction, verbatim); `timestamp` is stored in seconds, the core
+ * reads ms. Nothing here decides — a `receive` row goes through too, and the
+ * core is what declines it.
+ */
+export function toHistoryTx(tx: LocalTransaction): ContactHistoryTx {
+	return {
+		kind: tx.type ?? null,
+		to: typeof tx.to === 'string' && tx.to !== '' ? tx.to : null,
+		to_name: typeof tx.toName === 'string' && tx.toName !== '' ? tx.toName : null,
+		timestamp_ms:
+			typeof tx.timestamp === 'number' && Number.isFinite(tx.timestamp) ? tx.timestamp * 1000 : null
+	};
+}
+
 // ---------------------------------------------------------------------------
 // Executor
 // ---------------------------------------------------------------------------
@@ -210,8 +231,11 @@ export async function executeContactOperation(effect: ContactEffect): Promise<Co
 			await writeJson(GROUPS_KEY, operation.groups.map(toStoredGroup));
 			return { type: 'written' };
 		case 'load_send_history':
-			// Truthfully empty: no local tx store on web yet (spec 025/026).
-			return { type: 'history_loaded', txs: [] };
+			// The local tx store 025 built and 026 writes to (spec 028 US5): the
+			// core derives recent recipients from its `send` rows and judges
+			// first-interaction risk by every outgoing one. Shape only — which
+			// rows count is `contacts.rs`'s `derive_from_history`.
+			return { type: 'history_loaded', txs: (await loadTransactions()).map(toHistoryTx) };
 		case 'resolve_identity': {
 			// `null` = no identity anywhere; only `Some` is ever cached by the core.
 			const identity = await resolveRecipientIdentity(operation.address);

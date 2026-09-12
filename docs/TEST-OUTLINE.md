@@ -1,3 +1,5 @@
+> **勘误（2026-09-11，spec 039）**：本文写于 Expo / React Native 应用仍在仓库内的时期。该应用（`src/`、`e2e/`、`modules/`、`plugins/`、`targets/`）及其工具链已在 spec 039（`specs/039-retire-expo-tree/`）退役并删除；文中出现的 `src/**` 路径与 `npm run build:web`、`npx expo …`、`eas build`、`jest`、`playwright` 等根目录命令已不存在。现行实现与命令见 `app-web/vela-wallet`、`app-desktop/vela-wallet`、`app-ios`、`app-android` 各自的 README，以及根目录 `package.json` 里的工具脚本。正文按原样保留，作为历史记录。
+
 # Vela Wallet — 测试大纲（以用户故事为中心）
 
 > **本文档定位.** 这是 Vela Wallet 的**测试总纲**：先把系统拆成「**核心** vs **依赖**」，核心再拆成模块；然后从**真实用户流程**出发、以**用户故事（User Story）**为主轴，把每个故事映射到「命中哪些核心模块、依赖哪些外部系统、该在哪一层测、现有覆盖到没到」。

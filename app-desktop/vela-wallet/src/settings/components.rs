@@ -7,10 +7,12 @@
 //! labelled URL field, a checklist, a storage line and a key/value row. Every
 //! panel in `wallet::page` is a composition of these.
 
+use std::rc::Rc;
+
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Stateful, Styled, div, px,
-    rgb,
+    Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Stateful,
+    StatefulInteractiveElement as _, Styled, div, px, rgb,
 };
 
 use crate::icons::{Icon, IconCache};
@@ -226,14 +228,40 @@ pub fn dropdown_trigger(theme: &Theme, icons: &mut IconCache, value: gpui::Share
         ))
 }
 
+/// One row of a dropdown's menu: the example, an optional note, whether it is
+/// the one in force.
+pub type MenuRow = (gpui::SharedString, Option<gpui::SharedString>, bool);
+
 /// The menu an open dropdown drops (DST3). Rendered as an absolutely-positioned
 /// child of the trigger's cell, because the desktop SPEC requires it to escape
 /// the panel's clipping rather than push the rows below it down.
-pub fn dropdown_menu(
+///
+/// A picture of the control: the gallery's and the mock's. A menu whose rows
+/// answer to a click is [`dropdown_menu_picks`].
+pub fn dropdown_menu(theme: &Theme, icons: &mut IconCache, rows: &[MenuRow]) -> Div {
+    menu_of(theme, icons, rows, None)
+}
+
+/// The same menu, live (spec 038 #E3): `on_pick` is handed the index of the
+/// row the person chose.
+pub fn dropdown_menu_picks(
     theme: &Theme,
     icons: &mut IconCache,
-    rows: &[(gpui::SharedString, Option<gpui::SharedString>, bool)],
+    rows: &[MenuRow],
+    on_pick: impl Fn(usize, &mut gpui::Window, &mut gpui::App) + 'static,
 ) -> Div {
+    menu_of(theme, icons, rows, Some(Rc::new(on_pick)))
+}
+
+type PickAction = Rc<dyn Fn(usize, &mut gpui::Window, &mut gpui::App)>;
+
+fn menu_of(
+    theme: &Theme,
+    icons: &mut IconCache,
+    rows: &[MenuRow],
+    on_pick: Option<PickAction>,
+) -> Div {
+    let hover = theme.bg_sunken;
     let mut col = div()
         .absolute()
         .top_0()
@@ -278,7 +306,18 @@ pub fn dropdown_menu(
         if *selected {
             row = row.child(icon_img(icons, Icon::Check, false, theme.accent, 16.));
         }
-        col = col.child(row);
+        match on_pick.as_ref() {
+            Some(pick) => {
+                let pick = pick.clone();
+                col = col.child(
+                    row.id(ElementId::from(("dropdown-option", i)))
+                        .cursor_pointer()
+                        .hover(move |el| el.bg(hover))
+                        .on_click(move |_, window, cx| pick(i, window, cx)),
+                );
+            }
+            None => col = col.child(row),
+        }
         if i != last {
             col = col.child(div().h(px(1.)).bg(theme.divider));
         }
@@ -380,7 +419,7 @@ pub fn text_scale(theme: &Theme, steps: usize, index: usize) -> Div {
 // -- ChainMark / NetworkRow ---------------------------------------------------
 
 /// A chain's circular avatar — one letter over its own brand colour.
-pub fn chain_mark(letter: &'static str, color: u32, size: f32) -> Div {
+pub fn chain_mark(letter: gpui::SharedString, color: u32, size: f32) -> Div {
     div()
         .size(px(size))
         .flex_none()
@@ -406,14 +445,18 @@ pub fn network_row(
     id: impl Into<ElementId>,
     theme: &Theme,
     icons: &mut IconCache,
-    letter: &'static str,
+    // `SharedString`, not `&'static str`: a live network's name and
+    // lettermark come from the core at runtime (spec 030). The fixture
+    // path passes the same constants it always did, now via `.into()`.
+    letter: gpui::SharedString,
     color: u32,
-    name: &'static str,
+    name: gpui::SharedString,
     meta: gpui::SharedString,
     badge: Option<&Pill>,
     tag: Option<gpui::SharedString>,
     removable: bool,
     expanded: bool,
+    on_remove: Option<crate::contacts::components::MenuAction>,
 ) -> Stateful<Div> {
     let mut name_row = div().flex().items_center().gap(px(8.)).child(
         div()
@@ -463,13 +506,29 @@ pub fn network_row(
         row = row.child(status_pill(theme, badge));
     }
     if removable {
-        row = row.child(icon_img(
-            icons,
-            Icon::Trash2,
-            false,
-            theme.fg_subtle,
-            GLYPH_SM,
-        ));
+        // Its OWN target, and it stops there. Inside the row's own click this
+        // glyph did what the row does — expand the card — so the one control
+        // on this screen drawn as a destruction was the one control that did
+        // something else entirely.
+        row = row.child(
+            div()
+                .id("network-remove")
+                .p(px(4.))
+                .rounded(px(6.))
+                .cursor_pointer()
+                .hover(|el| el.bg(theme.error_soft))
+                .on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .child(icon_img(
+                    icons,
+                    Icon::Trash2,
+                    false,
+                    theme.error_base,
+                    GLYPH_SM,
+                ))
+                .when_some(on_remove, |el, action| {
+                    el.on_click(move |event, window, cx| action(event, window, cx))
+                }),
+        );
     }
     // The caret says what the tap DOES, which is why it flips rather than
     // pointing at the row: down opens this network's editor, up closes it. A
@@ -488,6 +547,81 @@ pub fn network_row(
 }
 
 // -- UrlField -----------------------------------------------------------------
+
+/// The same field, EDITABLE — the endpoint and provider-key surfaces.
+///
+/// 030 recorded these as "unfinished rather than blocked": the refusal behind
+/// them was already proven, and `ui::text_field` already existed. This is that
+/// field, wearing `url_field`'s clothes so a live panel and a mock one look
+/// identical.
+///
+/// The value lives in the CORE — `NetView`'s endpoint drafts, which the machine
+/// re-probes on every keystroke and persists on blur behind its own chain-id
+/// gate. A shell-side copy would be a second opinion about what was typed.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one field, one call site, all data"
+)]
+pub fn editable_url_field(
+    id: impl Into<gpui::ElementId>,
+    theme: &Theme,
+    label: Option<gpui::SharedString>,
+    value: &str,
+    placeholder: gpui::SharedString,
+    badge: Option<&Pill>,
+    hint: Option<gpui::SharedString>,
+    tone: Option<Tone>,
+    focus: &gpui::FocusHandle,
+    window: &gpui::Window,
+    on_change: impl Fn(String, &mut gpui::Window, &mut gpui::App) + 'static,
+) -> Div {
+    let mut col = div().flex().flex_col().gap(px(8.));
+    if label.is_some() || badge.is_some() {
+        let mut head = div().flex().items_center().justify_between().gap(px(8.));
+        if let Some(label) = label {
+            head = head.child(
+                div()
+                    .text_size(theme::text_label())
+                    .text_color(theme.fg_subtle)
+                    .child(label),
+            );
+        }
+        if let Some(badge) = badge {
+            head = head.child(status_pill(theme, badge));
+        }
+        col = col.child(head);
+    }
+    let strings = crate::ui::NameFieldStrings {
+        label: gpui::SharedString::from(""),
+        placeholder,
+        helper: gpui::SharedString::from(""),
+        too_long_hint: gpui::SharedString::from(""),
+    };
+    col = col.child(crate::ui::text_field(
+        id,
+        theme,
+        &strings,
+        value,
+        // The ERROR border is the core's verdict, not a length check: an
+        // endpoint that answered for another chain is the thing worth drawing
+        // red, and the core is what decided that.
+        matches!(tone, Some(Tone::Error)),
+        false,
+        focus,
+        window,
+        on_change,
+    ));
+    if let Some(hint) = hint {
+        col = col.child(
+            div()
+                .text_size(theme::text_label())
+                .line_height(px(16.))
+                .text_color(theme.fg_subtle)
+                .child(hint),
+        );
+    }
+    col
+}
 
 /// A labelled mono field: a label row that may carry a latency pill, the value
 /// in a sunken box, and an optional hint under it. Every endpoint on
@@ -811,35 +945,50 @@ pub fn rpc_banner(
     theme: &Theme,
     icons: &mut IconCache,
     text: gpui::SharedString,
-    chips: Vec<(&'static str, u32, &'static str, gpui::SharedString)>,
+    // Owned strings, not `&'static str`: the chips are a chain list, and since
+    // 031 that list can come from a live `BalanceView` — a network the person
+    // added has a name nobody could have written into this binary.
+    chips: Vec<(
+        gpui::SharedString,
+        u32,
+        gpui::SharedString,
+        gpui::SharedString,
+        Option<crate::flows::panels::Click>,
+    )>,
 ) -> Div {
     let mut row = div().flex().flex_wrap().gap(px(8.));
-    for (letter, color, name, action) in chips {
-        row = row.child(
-            div()
-                .flex()
-                .items_center()
-                .gap(px(8.))
-                .px(px(8.))
-                .py(px(6.))
-                .rounded_full()
-                .bg(theme.bg_base)
-                .child(chain_mark(letter, color, 20.))
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .text_color(theme.fg_base)
-                        .child(name),
-                )
-                // The only accent on this banner: the thing that fixes it.
-                .child(
-                    div()
-                        .text_size(theme::text_row_sub())
-                        .font_weight(gpui::FontWeight::SEMIBOLD)
-                        .text_color(theme.accent)
-                        .child(action),
-                ),
-        );
+    for (index, (letter, color, name, action, on_click)) in chips.into_iter().enumerate() {
+        // The chip IS the fix affordance — it names a chain and the thing to do
+        // about it, so clicking it must open that chain's editor rather than
+        // some other one's.
+        let chip = div()
+            .id(gpui::ElementId::from(("rpc-banner-chip", index)))
+            .flex()
+            .items_center()
+            .gap(px(8.))
+            .px(px(8.))
+            .py(px(6.))
+            .rounded_full()
+            .bg(theme.bg_base)
+            .child(chain_mark(letter, color, 20.))
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .text_color(theme.fg_base)
+                    .child(name),
+            )
+            // The only accent on this banner: the thing that fixes it.
+            .child(
+                div()
+                    .text_size(theme::text_row_sub())
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(theme.accent)
+                    .child(action),
+            );
+        row = row.child(match on_click {
+            Some(on_click) => chip.cursor_pointer().on_click(on_click).into_any_element(),
+            None => chip.into_any_element(),
+        });
     }
     div()
         .flex()

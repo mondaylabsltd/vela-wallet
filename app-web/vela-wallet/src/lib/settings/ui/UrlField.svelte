@@ -33,7 +33,7 @@
 		</div>
 	{/if}
 
-	<div class="box {field.tone ?? 'default'}">
+	<div class="box {field.tone ?? 'default'}" data-field data-tone={field.tone}>
 		<input
 			type="text"
 			value={field.value}
@@ -95,9 +95,7 @@
 		border-color: var(--color-success-base);
 	}
 
-	.box:focus-within {
-		border-color: var(--color-accent-base);
-	}
+	/* Focus: app.css's `data-field` edge, in the tone's colour when it has one. */
 
 	input {
 		flex: 1;

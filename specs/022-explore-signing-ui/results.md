@@ -19,7 +19,33 @@ states (E1–E7 / DE1–DE4) — assembled by the same universal block renderer.
 | Connection panel (E7) | ✅ | ✅ | ✅ | ✅ third column |
 | Signing sheet / panel | ✅ + desktop panel | ✅ | ✅ | ✅ third column |
 | Signing scenarios in fixtures | 33 | 33 | 33 | 33 |
-| Reachable in the real app | ✗ by design | Explore tab | Explore tab | sidebar 探索 |
+| Reachable in the real app | ✗ by design | ✗ **not shipped** | ✗ **not shipped** | ✗ **not shipped** — see the correction below |
+
+> ## ⚠️ Correction, 2026-09-04 (spec 029)
+>
+> **The paragraph below was written about work that did not reach `main`, and it
+> stood for two days as this repository's record of what shipped.** What 022
+> delivered on the three native clients was the *screens* — drawn, translated,
+> fixture-complete, and byte-identical to what was intended. What it did not
+> deliver was their *routes*.
+>
+> | Client | What `main` actually had |
+> |---|---|
+> | desktop | `main.rs` declared neither `mod explore;` nor `mod signing;`. 3,571 lines never reached rustc; 5 `#[test]` never ran; the sidebar 探索 row was built with `None` as its destination. |
+> | Android | No `EXPLORE` route in `VelaDestinations`, no `composable`. 4,353 lines compiled and were reached by nothing. |
+> | iOS | `PageOverride.Page` had no explore or signing case; `ExploreScreen(` was never instantiated. 1,771 lines. |
+>
+> **Cause.** The wiring exists in `969bf8fc` on the unmerged `020-intro-carousel`
+> branch. `feecb6e4` is a rebase of that work made to resolve an i18n-corpus
+> collision with a second session in flight; it kept the 25,976-line corpus half
+> and dropped the four wiring files. Nothing caught it because nothing in CI
+> built any native client, and because on every platform the *compiler* was
+> content — rustc does not read a directory nobody declared, and Kotlin and Swift
+> happily compile a screen nothing routes to.
+>
+> **Repaired by spec 029**, which lands the wiring on all three clients and adds
+> the guard (`scripts/check-native-reachability.mjs`) and the three CI jobs that
+> would have caught it. The claim below is true as of that feature, not this one.
 
 **Wired, not gallery-only.** Explore is a real destination in the signed-in
 shell on the three clients that can have one (iOS `RootView`, Android

@@ -69,28 +69,37 @@
 	</div>
 {/snippet}
 
-{#if desktop.current}
-	<div
-		class="scrim"
-		role="dialog"
-		aria-modal="true"
-		aria-label={copy.title}
-		tabindex="-1"
-		onkeydown={(event) => event.key === 'Escape' && close()}
-	>
-		<div class="card">{@render body()}</div>
-	</div>
-{:else}
-	<Sheet bind:this={sheet} label={copy.title} {onClose}>
-		{@render body()}
-	</Sheet>
-{/if}
+<!-- Its own stacking layer, above every sheet and dialog the artwork can be
+     tapped in: the account switcher's dialog sits at z 11, and a viewer under
+     the surface that opened it would be a tap that did nothing. -->
+<div class="layer">
+	{#if desktop.current}
+		<div
+			class="scrim"
+			role="dialog"
+			aria-modal="true"
+			aria-label={copy.title}
+			tabindex="-1"
+			onkeydown={(event) => event.key === 'Escape' && close()}
+		>
+			<div class="card">{@render body()}</div>
+		</div>
+	{:else}
+		<Sheet bind:this={sheet} label={copy.title} {onClose}>
+			{@render body()}
+		</Sheet>
+	{/if}
+</div>
 
 <style>
+	.layer {
+		position: relative;
+		z-index: 20;
+	}
+
 	.scrim {
 		position: fixed;
 		inset: 0;
-		z-index: 10;
 		display: grid;
 		place-items: center;
 		padding: var(--space-3xl);

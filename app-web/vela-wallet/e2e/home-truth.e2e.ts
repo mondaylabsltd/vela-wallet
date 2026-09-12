@@ -120,3 +120,37 @@ test('an unreachable chain is SAID, never shown as a confident zero (T152 findin
 	// Not "Live · listening for payments": a partial zero is not a live zero.
 	await expect(page.getByText(en('home.liveIndicator'), { exact: true })).toHaveCount(0);
 });
+
+test('an unreachable chain’s status line opens its RPC fix, and a working URL restores it (spec 028 Phase 8)', async ({
+	page
+}) => {
+	// The same dead endpoint as above; the JSON stub still answers any other
+	// path under /rpc/<n>, which is what makes a "working URL" possible here.
+	await page.route(/stub-rpc\.test\/rpc\/1$/, (route) =>
+		route.fulfill({ status: 500, body: 'no' })
+	);
+	await openHome(page);
+	await page.getByRole('button', { name: 'Ethereum RPC unavailable' }).click();
+
+	// SR2, for THIS chain, with its stored URL in the field.
+	const sheet = page.getByRole('dialog');
+	await expect(sheet.getByText(en('assets.rpcFixTitle')).first()).toBeVisible();
+	await expect(sheet.getByText('Ethereum', { exact: true })).toBeVisible();
+	await expect(sheet.getByText(en('assets.rpcFixWarning'))).toBeVisible();
+
+	// Save a URL that answers. The core probes it (chain id 1 — no mismatch),
+	// stores the override, and the sheet turns restored.
+	const field = sheet.getByRole('textbox');
+	await field.fill(`${STUB}/1?fixed`);
+	await sheet.getByRole('button', { name: en('assets.rpcFixSaveBtn') }).click();
+	await expect(sheet.getByText(en('assets.rpcFixRestored'))).toBeVisible({ timeout: 20_000 });
+
+	// Done tells the balance core the chain is back; it reads it and the
+	// status line goes.
+	await sheet.getByRole('button', { name: en('common.done') }).click();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	await expect(page.getByText('Ethereum RPC unavailable', { exact: true })).toHaveCount(0, {
+		timeout: 20_000
+	});
+	await expect(page.getByText('$4,500', { exact: true })).toBeVisible({ timeout: 20_000 });
+});

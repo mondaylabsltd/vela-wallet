@@ -32,10 +32,15 @@
 			<TokenIcon
 				ticker={fact.lead.mark.ticker}
 				badgeColor={fact.lead.mark.badgeColor}
+				logoUrls={fact.lead.mark.logoUrls}
+				badgeLogoUrl={fact.lead.mark.badgeLogoUrl}
+				badgeHidden={fact.lead.mark.badgeHidden}
 				size="inline"
 			/>
 		{:else if fact.lead?.kind === 'identicon'}
-			<span class="mark"><Identicon svg={fact.lead.svg} size="row" /></span>
+			<span class="mark"
+				><Identicon svg={fact.lead.svg} size="row" address={fact.lead.address} /></span
+			>
 		{/if}
 		<span class="value" class:mono={fact.mono}>{fact.value}</span>
 		{#if fact.copy !== undefined}

@@ -12,7 +12,7 @@ to show them in EUR / JPY / VND / … can reuse it.
 - **Provider-agnostic.** The rate endpoint is configurable and the parser accepts
   multiple response shapes.
 - **Framework-light.** The only platform dependency is a key/value store for caching
-  (React Native `AsyncStorage` here; swap for `localStorage`/Redis/etc.).
+  (the web shell's IndexedDB store here — `app-web/vela-wallet/src/lib/services/storage.ts`; swap for `localStorage`/Redis/etc.).
 
 ---
 

@@ -326,6 +326,14 @@ pub enum ShellResult {
     IndexHealth {
         ok: bool,
     },
+    /// The health probe could not get OUT of the machine: every route the
+    /// shell knows — system proxy, environment proxy, direct — refused before
+    /// anything reached the index (spec 038 Part B). Distinct from
+    /// `IndexHealth { ok: false }`, where a route existed and the service did
+    /// not answer: the first is the person's machine, the second is our
+    /// service, and the screen must never blame one for the other. Additive —
+    /// a shell that cannot tell the two apart keeps sending `IndexHealth`.
+    IndexTransportFailed,
     Waited,
     PromptAnswered {
         accepted: bool,

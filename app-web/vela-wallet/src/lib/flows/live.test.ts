@@ -18,6 +18,7 @@ const LOOKED: BalanceView = {
 	display_total_usd: 4500,
 	balance_unknown: false,
 	balance_partial: false,
+	unreachable: false,
 	notice: null,
 	hidden: false,
 	refreshing: false,

@@ -56,7 +56,9 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 // for the ALT-encoding measurement and for scratch runs; it must never be used to
 // write into tests/vectors under a different name — see ALT_SUITES below.
 const OUT_DIR = process.env.I18N_VECTORS_OUT ?? join(REPO_ROOT, 'rust/crates/vela-core/tests/vectors');
-const require = createRequire(join(REPO_ROOT, 'package.json'));
+// Resolved from this file's own location: the oracle is installed by the
+// tooling package in scripts/ (spec 039), not at the repository root.
+const require = createRequire(import.meta.url);
 const i18next = require('i18next');
 
 /// Encodings kept only to keep the 2.21x / 5.38x size measurement in research.md

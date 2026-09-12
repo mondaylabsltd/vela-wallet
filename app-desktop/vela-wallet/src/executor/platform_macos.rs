@@ -380,7 +380,28 @@ declare_class!(
             let failure = if error.code() == 1001 {
                 PasskeyFailure::cancelled()
             } else {
-                PasskeyFailure::other(error.localizedDescription().to_string())
+                {
+                    let description = error.localizedDescription().to_string();
+                    // ASAuthorization refuses a process with no application
+                    // identifier — a bare `cargo run` binary, not a signed
+                    // bundle. That is not a missing fingerprint, and the sheet
+                    // must not say it is (spec 038 finding 9). The fix is the
+                    // README's: the parallel space for development, or the
+                    // signed bundle from scripts/build-macos-app.sh.
+                    if description.contains("does not have an application identifier") {
+                        PasskeyFailure::classified(
+                            vela_core::app::FailureKind::NotSupported,
+                            format!(
+                                "This binary is not a signed app bundle, so macOS will not hand it \
+                                 the platform authenticator. Run the app from the bundle \
+                                 (scripts/build-macos-app.sh) or use the parallel space \
+                                 (VELA_PARALLEL_SPACE=1). {description}"
+                            ),
+                        )
+                    } else {
+                        PasskeyFailure::other(description)
+                    }
+                }
             };
             let _ = self.ivars().tx.send(Err(failure));
             reclaim((self as *const Self).cast());

@@ -22,7 +22,15 @@ a {
 	color: inherit;
 }
 
-:focus-visible {
+/*
+ * Keyboard focus, for controls that have no edge of their own: buttons,
+ * links, rows, tabs. Text entry is NOT one of them — a field is its own edge,
+ * and this halo around a field drew a second ring outside the first (founder,
+ * 2026-09-05: "不要这么多 active 边框"). Fields take the quiet rule below.
+ */
+:where(
+	:not(textarea, select, [data-field], input:not([type='checkbox'], [type='radio'], [type='range']))
+):focus-visible {
 	/* Transparent outline (not `none`): forced-colors mode repaints it, so
 	   keyboard focus stays visible in Windows High Contrast where the
 	   box-shadow ring is stripped. */
@@ -34,6 +42,45 @@ a {
 }
 
 /*
+ * Text entry is quiet (founder, 2026-09-05). The caret already says where
+ * you are; the field's own edge darkens one step and nothing else moves — a
+ * hairline in fg.muted drawn INSIDE the box, so no ring appears and nothing
+ * reflows, on the phone and the desktop alike. Never the accent: accent is
+ * for the one action that moves money, and a person typing is not there yet.
+ *
+ * `data-field` marks the box that carries the edge — the input itself when
+ * it is its own box, or the well around a borderless input — and every field
+ * in the app is one of these, so there is one focus look, defined here.
+ * A field with something to say about its value keeps saying it in its own
+ * colour while focused.
+ */
+[data-field]:focus-within {
+	outline: var(--border-hairline) solid var(--color-fg-muted);
+	outline-offset: calc(var(--border-hairline) * -1);
+}
+
+[data-field][aria-invalid='true']:focus-within,
+[data-field][data-tone='error']:focus-within {
+	outline-color: var(--color-error-base);
+}
+
+[data-field][data-tone='success']:focus-within {
+	outline-color: var(--color-success-base);
+}
+
+/* The inputs inside a well draw nothing of their own; the well does. (The
+   halo above already skips text entry, so only the browser default is left
+   to clear.) */
+[data-field] :where(input, textarea, select):focus,
+:where(
+	textarea,
+	select,
+	input:not([type='checkbox'], [type='radio'], [type='range'])
+):focus-visible {
+	outline: none;
+}
+
+/*
  * Spec 012: the page is hidden from the very first frame when the launch
  * animation is going to play, so the sequence is animation → Welcome and never
  * Welcome → animation → Welcome. The inline script in app.html sets the
@@ -41,5 +88,14 @@ a {
  * cross-dissolve starts.
  */
 html[data-launch='playing'] [data-launch-page] {
+	opacity: 0;
+}
+
+/*
+ * Spec 038: the first-run intro, decided by the same kind of inline script.
+ * Only the Welcome main carries the attribute; the intro is visible the frame
+ * it mounts, and the page removes `data-intro` as soon as the gate has spoken.
+ */
+html[data-intro='pending'] [data-intro-page] {
 	opacity: 0;
 }

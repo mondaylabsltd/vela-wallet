@@ -20,6 +20,7 @@ matrix, and the Linux packages.
 - [Build macOS packages](#build-macos-packages)
 - [Build Linux packages](#build-linux-packages)
 - [Build & run](#build--run)
+- [Sign in during development](#sign-in-during-development)
 - [What the first build does](#what-the-first-build-does)
 - [Environment pins](#environment-pins)
 - [Tests](#tests)
@@ -536,9 +537,9 @@ rather than a detail:
 
 ### Icons
 
-Every icon in the repository — this app's, the Expo app's, both native
-projects', and the marketing site's — is rendered from one vector source,
-[design/icon/](../../design/icon/):
+Every icon in the repository — this app's, both native projects', and the
+marketing site's — is rendered from one vector source,
+[docs/design/icon/](../../docs/design/icon/):
 
 | Source | Used for |
 |---|---|
@@ -551,7 +552,7 @@ package needs no image tooling:
 
 ```bash
 ./scripts/generate-desktop-icons.sh          # Linux hicolor + .ico + .iconset
-../../scripts/gen-app-icons.sh               # Expo, app-ios, app-android, getvela.app
+../../scripts/gen-app-icons.sh               # app-ios, app-android, getvela.app
 ```
 
 Four platform rules are encoded in those scripts, and every one of them fails
@@ -584,6 +585,43 @@ The window opens at **1280×800** — the mocks' logical size, which is also the
 minimum. Wider windows flex the card grid; the action panel keeps its width.
 
 ---
+
+## Sign in during development
+
+Two ways, and they are not interchangeable (spec 038):
+
+**The parallel space — no authenticator at all.** The real app with one
+substitution: where a passkey would sign, `vela-core`'s fixed keyset signs.
+Creating and signing in work end to end, the address is the same golden Safe
+the web's parallel space founds, and a badge marks every screen.
+
+```sh
+VELA_PARALLEL_SPACE=1 cargo dev          # = cargo run --features dev-fixtures
+```
+
+**The signed bundle — the real ceremony.** macOS hands the platform
+authenticator ("This device": Touch ID / iCloud passkeys) only to a process
+with an application identifier: a signed `.app` with a bundle id, the
+associated-domains entitlement and, under a team signature, an embedded
+provisioning profile. A bare `target/debug/vela-wallet` has none of these,
+and `ASAuthorization` refuses it with *"The calling process does not have an
+application identifier"* — the sheet now says so instead of blaming your
+fingerprint. Build and run the bundle instead:
+
+```sh
+VELA_SIGN_IDENTITY="Apple Development: …" \
+VELA_PROVISION_PROFILE=path/to/VelaWallet.provisionprofile \
+./scripts/build-macos-app.sh --no-dmg
+open "dist/macos/$(uname -m)/Vela Wallet.app"
+```
+
+The phone (caBLE) and USB security-key methods need neither: the phone runs
+the ceremony itself, and the USB key is driven by this app's own CTAP client.
+
+Other switches, all read at startup: `VELA_INTRO=1` shows the first-run intro
+again, `VELA_TEST_PANIC=1` panics once inside the next background task (to
+see the failure sheet), `VELA_STATE_DIR=<dir>` points storage somewhere
+disposable, `VELA_SKIP_LAUNCH_ANIMATION=1` skips the animation.
 
 ## What the first build does
 

@@ -37,3 +37,4 @@ static/vela_core_bg.*.wasm
 
 # spec 027: the packaged extension is build output
 extension/dist
+.pw-out*

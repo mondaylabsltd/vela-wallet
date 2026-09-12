@@ -147,6 +147,20 @@ struct RootView: View {
             SettingsScreen(model: SettingsFixtures.build(.st1, loc: loc), loc: loc)
         case .settingsGallery:
             SettingsGalleryScreen(loc: loc)
+        case .explore:
+            ExploreScreen(
+                model: ExploreFixtures.buildMobileState(
+                    ExploreStateId(rawValue: PageOverride.state ?? "e2") ?? .e2, loc: loc
+                ),
+                loc: loc,
+                signing: SigningFixtures.build(.cs12, loc: loc)
+            )
+        case .signing:
+            SigningSheet(
+                model: SigningFixtures.build(
+                    SigningStateId(rawValue: PageOverride.state ?? "cs1") ?? .cs1, loc: loc
+                )
+            )
         case nil:
             NavigationStack(path: path) {
                 signedInOrWelcome
@@ -236,6 +250,11 @@ struct RootView: View {
     /// create would be the app telling the person their money is somewhere it
     /// is not; a fixture NAME over their own address and identicon told them
     /// they were signed in as somebody else (device-found 2026-08-26).
+    /// Which of the wallet's four tabs is showing (spec 022). It lives here
+    /// rather than in a route because a browser tab is not somewhere a person
+    /// should be able to deep-link into before they have a wallet.
+    @State private var section: WalletSection = .wallet
+
     @ViewBuilder
     private var signedInOrWelcome: some View {
         if session.view.allowedRoute == .wallet {
@@ -252,27 +271,53 @@ struct RootView: View {
                 )
                 .transition(.move(edge: .trailing))
             } else {
-                WalletScreen(
-                    model: WalletFixtures
-                        .buildMobileState(.h1, loc: loc)
-                        .withAddress(session.view.address)
-                        .withName(session.view.activeName),
-                    loc: loc,
-                    onSelectTab: { tab in
-                        // 设置 has a screen now (spec 023), and the 退出登录 row
-                        // inside it is where signing out lives. Until then the
-                        // TAB itself signed you out — which meant tapping 设置
-                        // to change your language logged you out instead. 通讯录
-                        // and 探索 stay on this screen rather than navigating to
-                        // fixtures a signed-in person would read as their real
-                        // data.
-                        if tab == .settings { router.path.append(.settings) }
-                    },
-                    onFlow: { flows.enter($0) }
-                )
+                switch section {
+                case .wallet:
+                    WalletScreen(
+                        model: WalletFixtures
+                            .buildMobileState(.h1, loc: loc)
+                            .withAddress(session.view.address)
+                            .withName(session.view.activeName),
+                        loc: loc,
+                        onSelectTab: selectTab,
+                        onFlow: { flows.enter($0) }
+                    )
+                case .explore:
+                    // Spec 022/029: 探索 is a real destination now rather than an
+                    // inert chip. Its body is a fixture layer exactly like the
+                    // wallet's, but the account it shows a site is the REAL one —
+                    // a connection panel naming a stranger's account would be the
+                    // wallet lying about what it just granted.
+                    ExploreScreen(
+                        model: ExploreFixtures.buildMobileState(.e2, loc: loc)
+                            .withIdentity(name: session.view.activeName,
+                                          address: session.view.address),
+                        loc: loc,
+                        signing: SigningFixtures.build(.cs12, loc: loc)
+                            .withIdentity(name: session.view.activeName,
+                                          address: session.view.address),
+                        onSelectTab: selectTab
+                    )
+                }
             }
         } else {
             WelcomeScreen(loc: loc, model: model, signingIn: onboarding.loginView.busy)
+        }
+    }
+
+    /// The tab bar's four destinations (spec 022).
+    ///
+    /// 设置 has a screen now (spec 023), and the 退出登录 row inside it is where
+    /// signing out lives. Until then the TAB itself signed you out — which meant
+    /// tapping 设置 to change your language logged you out instead. That
+    /// regression must not come back through this switch. 通讯录 is still
+    /// fixture-only and stays put.
+    private func selectTab(_ tab: WalletTab) {
+        switch tab {
+        case .settings: router.path.append(.settings)
+        case .explore: section = .explore
+        case .wallet: section = .wallet
+        case .contacts: break
         }
     }
 
@@ -373,6 +418,9 @@ struct RootView: View {
     }
 }
 
+/// The signed-in shell's two live destinations (spec 022).
+enum WalletSection { case wallet, explore }
+
 /// `VELA_PAGE` launch override (spec 015 research D4, extended by spec 018
 /// research D1) — same idiom as `VELA_THEME`/`VELA_LANG`: `wallet` mounts
 /// the fixture-driven home, `gallery` the wallet preview gallery,
@@ -382,6 +430,7 @@ struct RootView: View {
 enum PageOverride {
     enum Page {
         case wallet, gallery, contacts, contactsGallery, flowsGallery, settings, settingsGallery
+        case explore, signing
     }
 
     static let page: Page? = {
@@ -393,9 +442,17 @@ enum PageOverride {
         case "flows-gallery": .flowsGallery
         case "settings": .settings
         case "settings-gallery": .settingsGallery
+        case "explore": .explore
+        case "signing": .signing
         default: nil
         }
     }()
+
+    /// WHICH fixture state the overridden page opens on — `VELA_STATE=e4`,
+    /// `VELA_STATE=cs5`. The same env-pin family as `VELA_PAGE`, and the same
+    /// reason the desktop grew `VELA_SETTINGS_STATE`: without it a screenshot
+    /// pass can only ever see the first state.
+    static let state: String? = ProcessInfo.processInfo.environment["VELA_STATE"]
 }
 
 /// Resolves every welcome-screen string from the corpus — existing keys only,

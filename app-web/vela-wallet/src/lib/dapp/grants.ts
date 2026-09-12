@@ -16,7 +16,7 @@
  * one piece of wallet state the worker may see, and it is a fact the core
  * authored — never a decision the worker makes.
  */
-import { PERM_PREFIX } from './keys';
+import { CHAIN_PREFIX, PERM_PREFIX } from './keys';
 
 /** The stored grant. `grantedAt` is kept even though no rule reads it — a wire
  *  shape that drops what is persisted is a wire shape that lies. */
@@ -74,6 +74,28 @@ export async function revokeGrant(origin: string): Promise<void> {
 	} catch {
 		/* best-effort */
 	}
+}
+
+/**
+ * The chain a site is on: its own switch (`vela.chain.<origin>`, written by
+ * the worker on `wallet_switchEthereumChain`), else the chain it connected
+ * on, else `fallback` (the snapshot's default). The same resolution the worker
+ * uses for `eth_chainId`, so the chain a signature is asked on is the chain
+ * the site believes it is on.
+ */
+export async function getOriginChain(origin: string, fallback: number): Promise<number> {
+	const store = area();
+	if (!store) return fallback;
+	try {
+		const all = await store.get([CHAIN_PREFIX + origin, grantKey(origin)]);
+		const picked = all[CHAIN_PREFIX + origin];
+		if (typeof picked === 'number' && Number.isFinite(picked) && picked > 0) return picked;
+		const grant = all[grantKey(origin)];
+		if (isGrant(grant) && grant.chainId > 0) return grant.chainId;
+	} catch {
+		/* unreadable → the default */
+	}
+	return fallback;
 }
 
 function isGrant(value: unknown): value is DAppGrant {

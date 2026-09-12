@@ -5,7 +5,7 @@
 //  The ONLY i18n touchpoint (FR-009): wraps vela-core's engine (uniffi
 //  bindings), resolves the device language with the same semantics the RN
 //  and web apps use (src/i18n/shared.ts — D6), and loads the bundled
-//  runtime catalogs (Localization/Catalogs, synced from public/i18n).
+//  runtime catalogs (Localization/Catalogs, synced from assets/i18n).
 //
 //  Failure model: a missing key or dead engine returns the key itself —
 //  the visible failure signal mandated by FR-005. A catalog that fails to

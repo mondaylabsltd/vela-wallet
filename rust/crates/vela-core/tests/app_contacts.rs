@@ -1430,3 +1430,522 @@ fn matches_query_on_address_name_resolved_name() {
     assert!(matches_query(&c, "aaaa"), "address substring");
     assert!(!matches_query(&c, "zzz"));
 }
+
+// ---------------------------------------------------------------------------
+// The book as a file (spec 028 US5, FR-408) — export, import, into a group
+// ---------------------------------------------------------------------------
+
+use vela_core::app::contacts::{
+    ContactExportFile, ContactExportScope, ContactFileFormat, ContactImportFailure,
+};
+use vela_core::app::contacts_io;
+
+const STAMP: &str = "2026-09-05T03:00:00.000Z";
+
+fn export(
+    sut: &mut Sut,
+    scope: ContactExportScope,
+    format: ContactFileFormat,
+) -> ContactExportFile {
+    let ops = sut.dispatch(Event::ExportRequested {
+        scope,
+        format,
+        exported_at_iso: STAMP.to_owned(),
+    });
+    assert!(
+        ops.is_empty(),
+        "an export asks the shell for nothing — the file is in the view"
+    );
+    sut.view().export.expect("the view carries the file")
+}
+
+fn import_file(
+    sut: &mut Sut,
+    content: &str,
+    filename: Option<&str>,
+    into_group: Option<&str>,
+) -> Vec<Op> {
+    sut.dispatch(Event::ImportFile {
+        content: content.to_owned(),
+        filename: filename.map(str::to_owned),
+        into_group: into_group.map(str::to_owned),
+        now_ms: 5_000.0,
+    })
+}
+
+fn member_addresses(view: &ContactsView, index: usize) -> Vec<&str> {
+    view.groups[index]
+        .members
+        .iter()
+        .map(|m| m.address.as_str())
+        .collect()
+}
+
+/// A backup written on one device restores a fresh book on another, whole —
+/// names, stars and groups — and re-importing it where it came from changes
+/// nothing (SC-408).
+#[test]
+fn export_then_import_restores_a_fresh_book_and_reimport_changes_nothing() {
+    let mut first = booted(
+        vec![
+            manual(A, Some("Alice"), true, 1_000.0),
+            manual(B, Some("Bob"), false, 500.0),
+        ],
+        vec![],
+        vec![group("grp_1", "Payroll", &[A, B])],
+        vec![],
+    );
+    let file = export(&mut first, ContactExportScope::All, ContactFileFormat::Json);
+    assert_eq!(file.filename, "vela-contacts-2026-09-05.json");
+    assert_eq!(file.mime, "application/json");
+    assert_eq!(file.contacts, 2);
+    assert!(file.content.contains("\"version\": 1"), "{}", file.content);
+    assert!(file
+        .content
+        .contains(&format!("\"exportedAt\": \"{STAMP}\"")));
+    // Taken = gone: the view does not keep offering the same download.
+    first.dispatch(Event::ExportTaken);
+    assert!(first.view().export.is_none());
+
+    let mut second = booted_empty();
+    let ops = import_file(&mut second, &file.content, Some(&file.filename), None);
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::WriteContacts { .. }, Op::WriteGroups { .. }]
+        ),
+        "{ops:?}"
+    );
+    ack_writes(&mut second, 2);
+    let view = second.view();
+    assert_eq!(
+        view.last_import,
+        Some(ContactImportReport {
+            added: 2,
+            skipped: 0,
+            invalid: 0,
+            groups_created: 1
+        })
+    );
+    assert_eq!(view.import_failure, None);
+    assert_eq!(find(&view, A).name.as_deref(), Some("Alice"));
+    assert!(find(&view, A).favorite);
+    assert_eq!(find(&view, B).name.as_deref(), Some("Bob"));
+    assert_eq!(view.groups[0].name, "Payroll");
+    assert_eq!(member_addresses(&view, 0), vec![A, B]);
+
+    // The same file back where it came from: every row already exists, no
+    // group gains a member, nothing is written.
+    let ops = import_file(&mut first, &file.content, Some(&file.filename), None);
+    assert!(ops.is_empty(), "{ops:?}");
+    let view = first.view();
+    assert_eq!(
+        view.last_import,
+        Some(ContactImportReport {
+            added: 0,
+            skipped: 2,
+            invalid: 0,
+            groups_created: 0
+        })
+    );
+    assert_eq!(find(&view, A).name.as_deref(), Some("Alice"));
+    assert_eq!(member_addresses(&view, 0), vec![A, B]);
+}
+
+/// "Import into this group": every valid row is seated in the group — the
+/// ones just added AND the ones already saved — while existing-wins still
+/// protects every saved name.
+#[test]
+fn import_into_group_seats_every_valid_row_but_never_renames_an_existing_contact() {
+    let mut sut = booted(
+        vec![manual(A, Some("Local Alice"), false, 1.0)],
+        vec![],
+        vec![group("grp_1", "Payroll", &[])],
+        vec![],
+    );
+    let csv = format!("address,name\n{A},Imported Alice\n{B},Bob\nnot-an-address,Nobody\n");
+    let ops = import_file(&mut sut, &csv, Some("team.csv"), Some("grp_1"));
+    assert!(
+        matches!(
+            ops.as_slice(),
+            [Op::WriteContacts { .. }, Op::WriteGroups { .. }]
+        ),
+        "{ops:?}"
+    );
+    ack_writes(&mut sut, 2);
+    let view = sut.view();
+    assert_eq!(
+        view.last_import,
+        Some(ContactImportReport {
+            added: 1,
+            skipped: 1,
+            invalid: 1,
+            groups_created: 0
+        })
+    );
+    assert_eq!(
+        find(&view, A).name.as_deref(),
+        Some("Local Alice"),
+        "existing-wins holds inside a group import"
+    );
+    assert_eq!(find(&view, B).name.as_deref(), Some("Bob"));
+    assert_eq!(member_addresses(&view, 0), vec![A, B]);
+}
+
+/// A file the core cannot read is REFUSED, with a reason, before anything is
+/// written (D50) — and the refusal clears when acknowledged.
+#[test]
+fn a_bad_file_is_refused_before_anything_is_written() {
+    let mut sut = booted(
+        vec![manual(A, Some("Alice"), false, 1.0)],
+        vec![],
+        vec![group("grp_1", "Payroll", &[A])],
+        vec![],
+    );
+    let stale_group = format!("address\n{B}\n");
+    let cases: [(&str, Option<&str>, Option<&str>, ContactImportFailure); 4] = [
+        (
+            "name,email\nAlice,a@example.com\nBob,b@example.com\n",
+            Some("theirs.csv"),
+            None,
+            ContactImportFailure::NoAddressColumn,
+        ),
+        (
+            "{ not json",
+            Some("x.json"),
+            None,
+            ContactImportFailure::MalformedJson,
+        ),
+        ("", Some("empty.csv"), None, ContactImportFailure::Empty),
+        (
+            stale_group.as_str(),
+            Some("ok.csv"),
+            Some("grp_99"),
+            ContactImportFailure::UnknownGroup,
+        ),
+    ];
+    for (content, filename, into_group, expected) in cases {
+        let ops = import_file(&mut sut, content, filename, into_group);
+        assert!(ops.is_empty(), "{expected:?}: a refusal writes nothing");
+        let view = sut.view();
+        assert_eq!(view.import_failure, Some(expected));
+        assert_eq!(view.last_import, None);
+        assert_eq!(addresses(&view), vec![A.to_owned()]);
+        assert_eq!(member_addresses(&view, 0), vec![A]);
+    }
+    sut.dispatch(Event::ImportAcknowledged);
+    assert_eq!(sut.view().import_failure, None);
+}
+
+/// Exporting one group carries its members only, names only that group, and
+/// an unsaved member still travels as its address (invariant ③).
+#[test]
+fn exporting_a_group_covers_its_members_only() {
+    let mut sut = booted(
+        vec![
+            manual(A, Some("Alice"), false, 1.0),
+            manual(B, Some("Bob"), false, 1.0),
+        ],
+        vec![],
+        vec![
+            group("grp_1", "Payroll", &[A, C]),
+            group("grp_2", "Friends", &[A, B]),
+        ],
+        vec![],
+    );
+    let file = export(
+        &mut sut,
+        ContactExportScope::Group {
+            id: "grp_1".to_owned(),
+        },
+        ContactFileFormat::Csv,
+    );
+    assert_eq!(file.filename, "vela-contacts-payroll-2026-09-05.csv");
+    assert_eq!(file.mime, "text/csv");
+    assert_eq!(file.contacts, 2);
+    let lines: Vec<&str> = file.content.lines().collect();
+    assert_eq!(lines[0], "address,name,note,favorite,groups");
+    assert_eq!(lines[1], format!("{A},Alice,,,Payroll"));
+    assert_eq!(lines[2], format!("{C},,,,Payroll"));
+    assert_eq!(lines.len(), 3, "Bob is not in Payroll");
+
+    // A group that no longer exists exports nothing.
+    sut.dispatch(Event::ExportRequested {
+        scope: ContactExportScope::Group {
+            id: "grp_9".to_owned(),
+        },
+        format: ContactFileFormat::Csv,
+        exported_at_iso: STAMP.to_owned(),
+    });
+    assert!(sut.view().export.is_none());
+}
+
+#[test]
+fn export_filename_dates_and_slugs() {
+    use ContactFileFormat::{Csv, Json};
+    assert_eq!(
+        contacts_io::export_filename(None, Json, "2026-09-05T03:00:00Z"),
+        "vela-contacts-2026-09-05.json"
+    );
+    assert_eq!(
+        contacts_io::export_filename(Some("Pay Roll / 2026"), Csv, "2026-09-05"),
+        "vela-contacts-pay-roll-2026-2026-09-05.csv"
+    );
+    // Any script's letters survive; a stamp that is not a date adds nothing.
+    assert_eq!(
+        contacts_io::export_filename(Some("家人"), Json, "not a date"),
+        "vela-contacts-家人.json"
+    );
+    assert_eq!(
+        contacts_io::export_filename(Some("***"), Csv, ""),
+        "vela-contacts-group.csv"
+    );
+}
+
+/// The three membership edits: union (normalised), remove, and one contact's
+/// whole answer at once — each writing only when something changed.
+#[test]
+fn add_remove_and_reseat_group_members() {
+    let mut sut = booted(
+        vec![manual(A, Some("Alice"), false, 1.0)],
+        vec![],
+        vec![
+            group("grp_1", "Payroll", &[A]),
+            group("grp_2", "Friends", &[]),
+        ],
+        vec![],
+    );
+    // Union, normalised: a mixed-case B lowercases, a duplicate and a
+    // malformed entry vanish, A is already seated.
+    let mixed = format!("0x{}", B[2..].to_uppercase());
+    let ops = sut.dispatch(Event::AddGroupMembers {
+        id: "grp_1".to_owned(),
+        members: vec![mixed, B.to_owned(), A.to_owned(), "nope".to_owned()],
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::WriteGroups { groups }]
+            if groups[0].members == vec![A.to_owned(), B.to_owned()]),
+        "{ops:?}"
+    );
+    ack_writes(&mut sut, 1);
+    // Seating what is already seated writes nothing.
+    assert!(sut
+        .dispatch(Event::AddGroupMembers {
+            id: "grp_1".to_owned(),
+            members: vec![A.to_owned()],
+        })
+        .is_empty());
+    // An unknown group writes nothing.
+    assert!(sut
+        .dispatch(Event::AddGroupMembers {
+            id: "grp_9".to_owned(),
+            members: vec![B.to_owned()],
+        })
+        .is_empty());
+
+    let ops = sut.dispatch(Event::RemoveGroupMember {
+        id: "grp_1".to_owned(),
+        address: B.to_uppercase(),
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::WriteGroups { groups }] if groups[0].members == vec![A.to_owned()]),
+        "{ops:?}"
+    );
+    ack_writes(&mut sut, 1);
+
+    // Reseat: A leaves Payroll and joins Friends in ONE write.
+    let ops = sut.dispatch(Event::SetContactGroups {
+        address: A.to_owned(),
+        group_ids: vec!["grp_2".to_owned()],
+    });
+    assert!(
+        matches!(ops.as_slice(), [Op::WriteGroups { groups }]
+            if groups[0].members.is_empty() && groups[1].members == vec![A.to_owned()]),
+        "{ops:?}"
+    );
+    ack_writes(&mut sut, 1);
+    // The same answer again changes nothing; a malformed address is ignored.
+    assert!(sut
+        .dispatch(Event::SetContactGroups {
+            address: A.to_owned(),
+            group_ids: vec!["grp_2".to_owned()],
+        })
+        .is_empty());
+    assert!(sut
+        .dispatch(Event::SetContactGroups {
+            address: "nope".to_owned(),
+            group_ids: vec!["grp_1".to_owned()],
+        })
+        .is_empty());
+    let view = sut.view();
+    assert!(view.groups[0].members.is_empty());
+    assert_eq!(member_addresses(&view, 1), vec![A]);
+}
+
+// ---------------------------------------------------------------------------
+// The file format itself (contacts_io.rs) — the heuristics every shell shares
+// ---------------------------------------------------------------------------
+
+/// A foreign header that does not say "address" — the data says where it is.
+/// Falling back to column 0 is what made an import report "0 added, 0 already
+/// existed": nothing imported, nothing explained.
+#[test]
+fn a_foreign_header_is_read_from_the_data_not_from_column_zero() {
+    let csv = format!("label,wallet\nAlice,{A}\nBob,{B}\n");
+    let parsed = contacts_io::parse(&csv, Some("theirs.csv")).expect("it has addresses");
+    assert_eq!(parsed.contacts.len(), 2);
+    assert_eq!(parsed.contacts[0].address, A);
+    // The label beside it is the one unambiguous extra.
+    assert_eq!(parsed.contacts[0].name.as_deref(), Some("Alice"));
+}
+
+/// A headerless file in our own order, and one whose address is elsewhere.
+#[test]
+fn a_headerless_file_is_positional_only_when_the_address_leads() {
+    let ours = format!("{A},Alice,a note,true,Family\n");
+    let parsed = contacts_io::parse(&ours, None).expect("valid");
+    assert_eq!(parsed.contacts[0].name.as_deref(), Some("Alice"));
+    assert_eq!(parsed.contacts[0].note.as_deref(), Some("a note"));
+    assert_eq!(parsed.contacts[0].favorite, Some(true));
+    assert_eq!(parsed.groups[0].name, "Family");
+    assert_eq!(parsed.groups[0].members, vec![A.to_owned()]);
+
+    // Address in column 1: the file has told us nothing about columns 2+, so
+    // only the label beside it is taken.
+    let theirs = format!("Alice,{A},something,else\n");
+    let parsed = contacts_io::parse(&theirs, None).expect("valid");
+    assert_eq!(parsed.contacts[0].address, A);
+    assert_eq!(parsed.contacts[0].name.as_deref(), Some("Alice"));
+    assert_eq!(parsed.contacts[0].note, None, "column 2 means nothing here");
+}
+
+/// Quoting round-trips, and a malformed row is CARRIED so `apply_import` can
+/// count it as invalid rather than having it swallowed before the count.
+#[test]
+fn csv_quoting_round_trips_and_a_bad_row_reaches_the_policy() {
+    let mut alice = manual(A, Some("Alice, the one"), true, 1.0);
+    alice.note = Some("said \"hi\"".to_owned());
+    let text = contacts_io::to_csv(&[alice], &[group("grp_1", "Family", &[A])]);
+    assert!(text.contains("\"Alice, the one\""), "{text}");
+    assert!(text.contains("\"said \"\"hi\"\"\""), "{text}");
+    let parsed = contacts_io::parse(&text, Some("book.csv")).expect("our own file");
+    assert_eq!(parsed.contacts[0].name.as_deref(), Some("Alice, the one"));
+    assert_eq!(parsed.contacts[0].note.as_deref(), Some("said \"hi\""));
+    assert_eq!(parsed.contacts[0].favorite, Some(true));
+    assert_eq!(parsed.groups[0].members, vec![A.to_owned()]);
+
+    let csv = format!("address,name\n{A},Alice\nnot-an-address,Nobody\n");
+    let parsed = contacts_io::parse(&csv, Some("book.csv")).expect("one is valid");
+    assert_eq!(
+        parsed.contacts.len(),
+        2,
+        "the bad row is the policy's to judge"
+    );
+    assert_eq!(parsed.contacts[1].address, "not-an-address");
+}
+
+/// An absent field is OMITTED (never `"name": ""`); a spreadsheet's `"true"`
+/// string is a star; an object with neither key is an empty backup, not a
+/// malformed one.
+#[test]
+fn json_omits_absent_fields_and_reads_string_true() {
+    let text = contacts_io::to_json(&[manual(A, None, false, 1.0)], &[], STAMP);
+    assert!(!text.contains("\"name\""), "{text}");
+    assert!(!text.contains("\"favorite\""), "{text}");
+    let theirs =
+        format!("{{\"contacts\":[{{\"address\":\"{B}\",\"favorite\":\"true\",\"name\":\"\"}}]}}");
+    let parsed = contacts_io::parse(&theirs, None).expect("an object");
+    assert_eq!(parsed.contacts[0].favorite, Some(true));
+    assert_eq!(parsed.contacts[0].name, None, "an empty name is no name");
+    assert_eq!(
+        contacts_io::parse("{}", Some("x.json")),
+        Ok(contacts_io::ParsedContactsFile::default())
+    );
+    // A BOM in front of `{` is still JSON.
+    assert!(contacts_io::parse("\u{feff}{}", None).is_ok());
+}
+
+// ---------------------------------------------------------------------------
+// The A–Z directory (spec 028 US5 addendum) — the drawing's rule, in the core
+// ---------------------------------------------------------------------------
+
+use vela_core::app::contacts::{initial_of, section_contacts};
+use vela_core::app::contacts_initials::section_letter;
+
+/// Every name in the drawn roster (app-web `contacts/fixtures.ts`, the 018
+/// canon) files where the drawing files it. The web filed every Chinese name
+/// under `#` for two specs; this is the assertion that would have caught it.
+#[test]
+fn the_drawn_roster_files_where_the_drawing_files_it() {
+    let roster = [
+        ("Alice", 'A'),
+        ("阿豪", 'A'),
+        ("Bartholomew Vanderbilt-Konstantinopoulos.eth", 'B'),
+        ("Bob · 泵泵", 'B'),
+        ("Charlie", 'C'),
+        ("DAO 金库", 'D'),
+        ("hold on", 'H'),
+        ("妈妈", 'M'),
+        ("表弟", 'B'),
+    ];
+    for (name, letter) in roster {
+        assert_eq!(section_letter(name), letter, "{name}");
+    }
+}
+
+/// The edges of the rule: diacritics fold, a nameless address is `#`, so is
+/// a symbol, a digit, whitespace-only and the empty string; polyphones take
+/// their common reading.
+#[test]
+fn initials_fold_diacritics_and_file_the_nameless_under_hash() {
+    assert_eq!(section_letter("éclair"), 'E');
+    assert_eq!(section_letter("Ñandú"), 'N');
+    assert_eq!(section_letter("  zoë"), 'Z');
+    assert_eq!(section_letter("0x1234…abcd"), '#');
+    assert_eq!(section_letter("Ø"), '#');
+    assert_eq!(section_letter("42"), '#');
+    assert_eq!(section_letter("   "), '#');
+    assert_eq!(section_letter(""), '#');
+    assert_eq!(initial_of('曾'), 'C');
+    assert_eq!(initial_of('重'), 'Z');
+    assert_eq!(initial_of('金'), 'J');
+    // The scripts the app ships locales for (ja, ko) and two more ICU knows —
+    // the iOS shell's transliteration filed these; the core must not do worse.
+    assert_eq!(section_letter("さくら"), 'S');
+    assert_eq!(section_letter("スズキ"), 'S');
+    assert_eq!(initial_of('ヴ'), 'V');
+    assert_eq!(section_letter("김민준"), 'G');
+    assert_eq!(
+        section_letter("안녕"),
+        'A',
+        "a silent ㅇ files under its vowel"
+    );
+    assert_eq!(section_letter("한"), 'H');
+    assert_eq!(section_letter("Ελένη"), 'E');
+    assert_eq!(section_letter("Дмитрий"), 'D');
+    // Outside every table: Arabic, Devanagari, Thai file under `#` today.
+    assert_eq!(initial_of('ع'), '#');
+    assert_eq!(initial_of('क'), '#');
+}
+
+/// Sections run A–Z then `#`, and inside a letter the book's order holds —
+/// favourites first, then most-recent — so the person you pay most stays on
+/// top of their letter.
+#[test]
+fn sections_run_a_to_z_then_hash_and_keep_the_books_order_within_a_letter() {
+    let mut anton = manual(A, Some("Anton"), false, 900.0);
+    anton.address = A.to_owned();
+    let alice = manual(B, Some("Alice"), true, 100.0); // starred → first overall
+    let mama = manual(C, Some("妈妈"), false, 500.0);
+    let nobody = manual(ME, None, false, 50.0); // unnamed → `#`
+    let sut = booted(vec![anton, alice, mama, nobody], vec![], vec![], vec![]);
+    let view = sut.view();
+    let letters: Vec<&str> = view.sections.iter().map(|s| s.letter.as_str()).collect();
+    assert_eq!(letters, vec!["A", "M", "#"]);
+    // Alice (starred) before Anton (more recent, unstarred) — the book's order.
+    assert_eq!(view.sections[0].addresses, vec![B.to_owned(), A.to_owned()]);
+    assert_eq!(view.sections[1].addresses, vec![C.to_owned()]);
+    assert_eq!(view.sections[2].addresses, vec![ME.to_owned()]);
+    // The pure function agrees with the view.
+    assert_eq!(section_contacts(&view.contacts), view.sections);
+}

@@ -7,6 +7,7 @@
     "emptyTitle": "No Transactions Yet",
     "emptyBody": "Your sent transactions will appear here. You can also view full history on the block explorer.",
     "viewOnExplorer": "View on Explorer",
+    "deleteRecord": "Delete record",
     "emptyFilter": "No transactions on this network",
     "txLabelDappTx": "dApp Transaction",
     "txLabelSignMessage": "Sign Message",

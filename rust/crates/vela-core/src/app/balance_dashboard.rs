@@ -154,6 +154,29 @@ pub fn token_balance_double(balance: &str) -> f64 {
     }
 }
 
+/// Chains whose native asset is itself an ERC-20 (spec 038, the founder's
+/// Celo report): the chain data names that contract as the "wrapped" native,
+/// but nothing is wrapped — `balanceOf` there and the native balance are ONE
+/// balance, and a shell that lists both counts the holding twice (CELO 6.96 +
+/// WCELO 6.96). Every shell's balance walk asks here before adding the
+/// wrapped slot; the address still serves the native price quote.
+#[must_use]
+pub fn native_token_as_erc20(chain_id: u32) -> Option<&'static str> {
+    match chain_id {
+        // Celo mainnet — the GoldToken.
+        42220 => Some("0x471ece3750da237f93b8e339c536989b8978a438"),
+        // Celo Alfajores.
+        44787 => Some("0xf194afdf50b03e69bd7d057c1aa9e10c9954e4c9"),
+        _ => None,
+    }
+}
+
+/// Whether the chain's "wrapped" native at `address` is the native itself.
+#[must_use]
+pub fn wrapped_native_is_the_native(chain_id: u32, address: &str) -> bool {
+    native_token_as_erc20(chain_id).is_some_and(|known| known.eq_ignore_ascii_case(address))
+}
+
 /// `tokenUsdValue` (`models/types.ts:68-70`): balance × (price ?? 0).
 pub fn token_usd_value(token: &BalanceToken) -> f64 {
     token_balance_double(&token.balance) * token.price_usd.unwrap_or(0.0)
@@ -230,48 +253,44 @@ pub fn best_native_dex_price(groups: &[NativeQuoteGroup]) -> Option<f64> {
     best
 }
 
-/// The first usable price across quote groups, each scaled by ITS OWN quote
-/// token's decimals — the custom-ERC-20 rule (`firstGroupedQuotePrice`,
-/// `wallet-api.ts:682-693`).
+/// `firstGroupedQuotePrice` (`wallet-api.ts:648-662`): the first usable price
+/// across quote groups, each scaled by ITS OWN quote token's decimals.
 ///
-/// **Why FIRST here and MAX in [`best_native_dex_price`].** They answer
-/// different questions. The native path quotes one coin against every stable at
-/// once and picks the deepest pool, because a near-empty pool on one stable
-/// would otherwise price the coin. This path walks the stables in a preference
-/// order the shell chose — native USDC, then any USDC, then USDT — and takes
-/// the first that answers, because for an arbitrary token the *preferred* venue
-/// is the trustworthy one and a deeper pool elsewhere may be a different asset
-/// with a similar ticker.
+/// The CUSTOM-token counterpart of [`best_native_dex_price`], and deliberately
+/// a different rule. The native path takes the maximum because every group
+/// prices the same coin and the deepest pool is the least distorted. A custom
+/// token's groups are tried in a stated ORDER — the preferred stablecoin first
+/// (`pickQuoteToken`), then the rest in chain order — so the first pool that
+/// answers is the one the caller asked for, and taking a maximum would silently
+/// promote whichever stable happened to quote highest.
 ///
-/// **The 10^12 trap this exists to prevent.** The rule it replaced took the
-/// first surviving quote out of a flat list that MIXED quote tokens and divided
-/// it by one token's `decimals()`. On any chain whose stablecoin list holds
-/// both a 6-decimal (USDC/USDT) and an 18-decimal (DAI/WXDAI) entry, a token
-/// with no USDC pool but a live DAI pool was priced a trillion times too high —
-/// and that number is what a portfolio total, a sort order and an ingest
-/// valuation all consume.
+/// The rule this replaced took the first surviving quote out of a FLAT list
+/// that mixed quote tokens and divided it by ONE token's `decimals()`. On any
+/// chain whose stablecoin list holds both a 6-decimal (USDC/USDT) and an
+/// 18-decimal (DAI/WXDAI) entry, a custom token with no USDC pool but a live
+/// DAI pool was priced 10^12 times too high — and that number is what the
+/// portfolio total, the sort order and the ingest valuation all consume.
 ///
-/// `quote_decimals: None` means THAT group's `decimals()` read failed, and it
-/// falls back to [`DEFAULT_QUOTE_DECIMALS`] — its own default, never a
-/// neighbour's real value. A zero amount does not price: a zero-output quote is
-/// a dead pool, not a free token.
-///
-/// Ported to Rust in spec 041 because it had no owner: it existed only in the
-/// web's TypeScript, and Android needed it to price a custom token. A second
-/// hand-written copy of a rule whose entire history is a mispricing was not
-/// worth having.
+/// `quote_decimals: None` falls back to [`DEFAULT_QUOTE_DECIMALS`] — the SAME
+/// group's fallback, never a neighbour's real value. A zero amount does not
+/// price: a zero-output quote is a dead pool, not a free token.
+#[must_use]
 pub fn first_grouped_quote_price(groups: &[NativeQuoteGroup]) -> Option<f64> {
     for group in groups {
         let decimals = group.quote_decimals.unwrap_or(DEFAULT_QUOTE_DECIMALS);
         let scale = 10f64.powi(i32::try_from(decimals).unwrap_or(i32::MAX));
         for amount in &group.amounts_out {
+            // The TS calls `BigInt(raw)`, which THROWS on a malformed string
+            // and would abort the whole lookup. Nothing malformed can reach it
+            // there (the decoder only emits digits), so skipping is the same
+            // behaviour on every input that actually occurs — and a safer one
+            // on the input that does not.
             let Ok(value) = amount.trim().parse::<f64>() else {
                 continue;
             };
-            if value <= 0.0 || !value.is_finite() {
-                continue;
+            if value > 0.0 && value.is_finite() {
+                return Some(value / scale);
             }
-            return Some(value / scale);
         }
     }
     None
@@ -571,6 +590,18 @@ pub struct Model {
     notice_allowed: bool,
     /// Outstanding pull-gesture fetches; the spinner shows while > 0.
     pending_pulls: u32,
+    /// A fetch (silent or pulled) is out. While it is, the FIGURE holds at
+    /// `last_settled_total` even as chains stream in (#188): the number a
+    /// person reads must not climb $62 → $98 as seven networks answer one by
+    /// one. The token LIST still merges per chain — that is what "streaming"
+    /// is for.
+    fetch_in_flight: bool,
+    /// The figure the last settle produced (complete or partial), seeded from
+    /// the cache. Shown while `fetch_in_flight`.
+    last_settled_total: Option<f64>,
+    /// The first fetch threw with nothing known — no tokens, no cache. The home
+    /// says "unreachable", never $0.00 (spec 038 finding 15).
+    errored_without_data: bool,
     hidden: bool,
     /// Hydrate OR toggle — whichever lands first wins
     /// (`use-balance-privacy.ts:19`).
@@ -622,6 +653,9 @@ pub struct BalanceView {
     pub display_total_usd: Option<f64>,
     pub balance_unknown: bool,
     pub balance_partial: bool,
+    /// Nothing could be read and nothing is known: the first fetch failed
+    /// with no cache to fall back on. A skeleton and a reason, never a zero.
+    pub unreachable: bool,
     /// `Some` only when partial AND the silent retries are exhausted
     /// (invariant ③).
     pub notice: Option<BalanceNotice>,
@@ -740,7 +774,10 @@ impl App for BalanceDashboard {
         // `useHomeController.ts:186-188`).
         let unknown =
             model.tokens.is_empty() && model.cached_total.is_none() && !model.bootstrapped;
-        let notice = if partial && model.notice_allowed {
+        // Never mid-refresh: before prices arrive every token is unpriced,
+        // and "some tokens couldn't be priced" flashing while chains are still
+        // answering was #188's second half.
+        let notice = if partial && model.notice_allowed && !model.fetch_in_flight {
             Some(if model.failed_chain_ids.is_empty() {
                 BalanceNotice::Unpriced
             } else {
@@ -770,6 +807,9 @@ impl App for BalanceDashboard {
             },
             balance_unknown: unknown,
             balance_partial: partial,
+            unreachable: model.errored_without_data
+                && model.tokens.is_empty()
+                && model.cached_total.is_none(),
             notice,
             hidden: model.hidden,
             refreshing: model.pending_pulls > 0,
@@ -812,6 +852,9 @@ fn account_changed(model: &mut Model, address: String) -> Command<BalanceEffect,
     model.notice_allowed = false;
     model.live_timer = None; // drop any pending retry from the old account
     model.pending_pulls = 0; // stale pull settles are dropped by attempt
+    model.fetch_in_flight = false;
+    model.last_settled_total = None;
+    model.errored_without_data = false;
     model.switcher_open = false;
     model.switcher_roster.clear();
     model.switcher_pinned_total = None;
@@ -841,6 +884,7 @@ fn begin_fetch(model: &mut Model, force: bool, pull: bool) -> Command<BalanceEff
     if pull {
         model.pending_pulls = model.pending_pulls.saturating_add(1);
     }
+    model.fetch_in_flight = true;
     request(
         model,
         BalanceOperation::FetchTokens {
@@ -939,6 +983,11 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             model.failed_chain_ids = failed_chain_ids;
             model.last_refreshed_at_ms = Some(now_ms);
             model.rate_limited_chain_ids = rate_limited_chain_ids;
+            model.fetch_in_flight = false;
+            model.errored_without_data = false;
+            // The figure this settle produced, under the same rule the screen
+            // reads — held through the NEXT refresh (#188).
+            model.last_settled_total = Some(display_total(model));
 
             let unpriced = has_unpriced(&model.tokens);
             let partial = !model.failed_chain_ids.is_empty() || unpriced;
@@ -953,6 +1002,13 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
                     usd,
                 });
                 model.cached_total = Some(usd);
+                // The switcher's row for THIS account is this figure too (spec
+                // 038, the founder's "10,289 here, 10,315 there"): the row used
+                // to keep whatever its own per-account fetch had found at some
+                // other instant, so the hero and the account list disagreed by
+                // however far prices had moved in between. One settle, one
+                // number, every screen.
+                upsert_balance(&mut model.switcher_balances, &address, usd);
             }
             // `clearTimeout` at every settle (`:352`): a previously armed
             // retry may no longer fire.
@@ -997,6 +1053,10 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // `catch { /* keep last-known tokens + total */ }` then
             // `setBootstrapped(true)` (`:367-369`).
             model.bootstrapped = true;
+            model.fetch_in_flight = false;
+            // Nothing known at all: the home must say so rather than show a
+            // settled-looking $0.00 (spec 038 finding 15).
+            model.errored_without_data = model.tokens.is_empty() && model.cached_total.is_none();
             render()
         }
 
@@ -1007,6 +1067,9 @@ fn accept(model: &mut Model, result: BalanceShellResult) -> Command<BalanceEffec
             // Only a present value commits (`if (v != null)`, `:413`).
             if let Some(usd) = usd {
                 model.cached_total = Some(usd);
+                if model.last_settled_total.is_none() {
+                    model.last_settled_total = Some(usd);
+                }
             }
             render()
         }
@@ -1080,6 +1143,14 @@ fn balance_partial(model: &Model) -> bool {
 /// cached; partial → `max(live, cached)` — never the confident undercount;
 /// otherwise the live sum.
 fn display_total(model: &Model) -> f64 {
+    // #188: while a fetch is out the figure holds at the last settle. Live
+    // replaces it once, at settle. (A first fetch with nothing settled and
+    // nothing cached falls through: there is nothing to hold.)
+    if model.fetch_in_flight {
+        if let Some(held) = model.last_settled_total {
+            return held;
+        }
+    }
     let live = live_total(&model.tokens);
     let has_live = !model.tokens.is_empty();
     match model.cached_total {

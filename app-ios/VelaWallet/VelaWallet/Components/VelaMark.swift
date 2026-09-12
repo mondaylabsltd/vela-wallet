@@ -3,7 +3,7 @@
 //  VelaWallet
 //
 //  The Vela sailboat mark drawn from the design geometry of
-//  design/onboarding/logo-{light,dark}.svg (viewBox 258×260) — FR-008.
+//  docs/design/onboarding/logo-{light,dark}.svg (viewBox 258×260) — FR-008.
 //  Sails are mode-invariant; the hull is themed (Brand constants).
 //
 

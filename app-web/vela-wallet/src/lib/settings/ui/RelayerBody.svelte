@@ -12,6 +12,7 @@
 	import { UTILITY_ICONS } from '$lib/wallet/icons';
 	import Icon from '$lib/wallet/ui/Icon.svelte';
 	import QRPlaceholder from '$lib/wallet/ui/QRPlaceholder.svelte';
+	import QRCard from '$lib/flows/ui/QRCard.svelte';
 	import Callout from './Callout.svelte';
 	import ChainMark from './ChainMark.svelte';
 
@@ -35,7 +36,12 @@
 		</span>
 	</div>
 
-	<div class="qr"><QRPlaceholder caption={panel.qrCaption} /></div>
+	{#if panel.code !== undefined}
+		<!-- A live sheet encodes the treasury's real address (spec 028 Phase 8). -->
+		<div class="qr"><QRCard label={panel.qrCaption} code={panel.code} /></div>
+	{:else}
+		<div class="qr"><QRPlaceholder caption={panel.qrCaption} /></div>
+	{/if}
 
 	<button type="button" class="address" onclick={oncopy}>
 		<span>{panel.addressDisplay}</span>

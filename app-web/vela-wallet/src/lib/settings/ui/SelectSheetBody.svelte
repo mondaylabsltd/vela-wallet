@@ -19,7 +19,7 @@
 </script>
 
 {#if sheet.searchPlaceholder !== undefined}
-	<label class="search">
+	<label class="search" data-field>
 		<Icon icon={UTILITY_ICONS.search} size="md" />
 		<input
 			type="search"

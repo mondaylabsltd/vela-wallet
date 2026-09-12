@@ -12,8 +12,11 @@
 //! title, and a chevron has to lead somewhere.
 
 pub mod components;
+pub mod eip681;
 pub mod fixtures;
+pub mod live;
 pub mod panels;
+pub mod share_card;
 
 use gpui::SharedString;
 
@@ -200,6 +203,11 @@ pub struct FlowStrings {
     pub share_card_note: String,
     pub token_contract: SharedString,
     pub warning_reminder: SharedString,
+    /// The gate a person passes once per account, in the corpus's words.
+    pub warning_title: SharedString,
+    pub warning_body: SharedString,
+    pub warning_counterfactual: SharedString,
+    pub warning_confirm: SharedString,
     pub save_image: SharedString,
     pub share_card_headline: SharedString,
 
@@ -220,6 +228,11 @@ pub struct FlowStrings {
     pub from_name: String,
     pub view_on_explorer: SharedString,
     pub status_confirmed: SharedString,
+    /// A pending or failed transfer must not wear the confirmed chip. Same key
+    /// family the RN `TxStatusBadge` reads, so the three clients say the same
+    /// word about the same state.
+    pub status_pending: SharedString,
+    pub status_failed: SharedString,
     pub detail_from: SharedString,
     pub detail_to: SharedString,
     pub detail_chain: SharedString,
@@ -245,6 +258,12 @@ pub struct FlowStrings {
     pub label_decimals: SharedString,
     pub token_address_label: SharedString,
     pub add_to_wallet: SharedString,
+    /// DT3L live states. "Not found" and "not searched yet" are different
+    /// answers, and a card that says neither is a card that says nothing.
+    pub not_found_title: SharedString,
+    pub not_found_message: SharedString,
+    pub searching_networks: SharedString,
+    pub search_token_btn: SharedString,
     pub net_search_label: SharedString,
     pub net_search_placeholder: SharedString,
     pub net_picker_search: SharedString,
@@ -252,6 +271,8 @@ pub struct FlowStrings {
     pub label_native_token: SharedString,
     pub compatible: SharedString,
     pub add_network_btn: SharedString,
+    pub add_token_error_title: SharedString,
+    pub add_token_error_save: SharedString,
 
     // Send.
     /// The plain verb, not the "Send {{symbol}}" template — DSD4L's bar keeps
@@ -264,6 +285,11 @@ pub struct FlowStrings {
     pub filter_gas: SharedString,
     pub filter_other: SharedString,
     pub multi_send_title: SharedString,
+    /// The sweep picker's three sentences. `chain_notice` and `continue` are
+    /// templates (`{{network}}`, `{{n}}` + `{{chain}}`) — the phone drew this
+    /// screen, so every word is already translated.
+    pub multi_send_chain_notice: String,
+    pub multi_send_continue: String,
     pub select_all_valuable: SharedString,
     /// Templates carrying `{{symbol}}` / `{{amount}}` / `{{n}}` / `{{count}}`.
     pub send_title: String,
@@ -320,10 +346,84 @@ pub struct FlowStrings {
     // Send · receipt.
     pub tx_submitted_title: SharedString,
     pub tx_waiting_confirm: SharedString,
+    /// The two holds the core distinguishes on a receipt
+    /// (`SendReceiptView.hold_reason`). Both sentences were already in the
+    /// corpus and no shell — desktop or web — was saying either.
+    pub tx_held_fees: SharedString,
+    pub tx_rejected_fees: SharedString,
     pub tx_typical_time: String,
+    /// Spec 038 #D3: the two lines beside the usual-time sentence.
+    pub tx_slow_confirm: SharedString,
+    pub tx_elapsed: String,
+    pub recipient_count_other: String,
     pub tx_close_background: SharedString,
     pub tx_hash: SharedString,
     pub done: SharedString,
+
+    // Send · live (spec 032). The receipt's other three states, the two error
+    // wordings the core chooses between, and the recipient trust line.
+    /// Template carrying `{{amount}}` / `{{symbol}}`.
+    pub tx_confirmed_title: String,
+    pub tx_submitting: SharedString,
+    pub tx_preparing: SharedString,
+    pub tx_background_hint: SharedString,
+    pub tx_error_generic: SharedString,
+    pub tx_error_bundler_fund: SharedString,
+    pub first_time_tag: SharedString,
+    pub fee_pending: SharedString,
+
+    // Send · the core's refusals, live (spec 032 phase 6). Every one of these
+    // is a sentence the core computed and this client used to throw away: a
+    // person over-typing their balance saw a button that would not move and
+    // nothing that said why.
+    /// Templates carrying `{{symbol}}` / `{{sym}}` / `{{code}}`.
+    pub warn_not_enough_token: String,
+    pub warn_insufficient_for_gas: String,
+    pub warn_need_gas: String,
+    pub warn_cannot_convert: String,
+    /// The same-asset fee ceiling: the transfer and its fee draw on one coin.
+    pub same_fee_title: String,
+    pub same_fee_body: String,
+    pub same_fee_max: String,
+    pub same_fee_edit: SharedString,
+    pub insufficient_title: SharedString,
+    pub insufficient_body: SharedString,
+    pub estimating: SharedString,
+    /// The relay's float is empty and someone has to top it up before this
+    /// chain can carry anything.
+    pub funding_title: SharedString,
+    pub funding_lead: String,
+    pub funding_address_label: SharedString,
+    pub funding_amount_label: SharedString,
+    pub funding_check_now: SharedString,
+    /// "Not now" — the phone's own word for leaving this stop. The desktop
+    /// draws the stop inline rather than as a sheet, so this is the way back
+    /// to the form.
+    pub funding_close: SharedString,
+    /// A locked payment request that cannot be fulfilled.
+    pub lock_net_title: SharedString,
+    pub lock_net_body: String,
+    pub lock_token_title: SharedString,
+    pub lock_token_body: SharedString,
+    pub lock_add_network: SharedString,
+    pub lock_net_not_found: SharedString,
+    pub lock_net_not_compatible: SharedString,
+    pub lock_net_add_error: SharedString,
+
+    // Send · batch import, live (spec 032 phase 5).
+    pub batch_paste_placeholder: SharedString,
+    pub batch_template_saved: SharedString,
+    pub batch_rate_loading: SharedString,
+    pub batch_rate_failed: SharedString,
+    pub batch_rate_reset: SharedString,
+    pub batch_over_cap: SharedString,
+    pub batch_over_balance: SharedString,
+    pub batch_reading: SharedString,
+    pub batch_rejected_other: String,
+    pub batch_apply_empty: SharedString,
+    pub batch_no_price: SharedString,
+    pub batch_import_failed_title: SharedString,
+    pub batch_import_failed_body: SharedString,
 }
 
 impl FlowStrings {
@@ -347,6 +447,10 @@ impl FlowStrings {
             share_card_note: raw("receive.shareCardNetworkNote"),
             token_contract: s("receive.tokenContract"),
             warning_reminder: s("receive.warningReminder"),
+            warning_title: s("receive.warningTitle"),
+            warning_body: s("receive.warningBody"),
+            warning_counterfactual: s("receive.warningCounterfactual"),
+            warning_confirm: s("receive.warningConfirm"),
             save_image: s("receive.request.saveImage"),
             share_card_headline: s("receive.shareCardHeadline"),
 
@@ -365,6 +469,8 @@ impl FlowStrings {
             from_name: raw("history.fromName"),
             view_on_explorer: s("history.viewOnExplorer"),
             status_confirmed: s("componentsTx.receipt.statusConfirmed"),
+            status_pending: s("componentsTx.detail.statusPending"),
+            status_failed: s("componentsTx.detail.statusFailed"),
             detail_from: s("componentsTx.detail.from"),
             detail_to: s("componentsTx.detail.to"),
             detail_chain: s("componentsTx.detail.labelChain"),
@@ -388,6 +494,10 @@ impl FlowStrings {
             label_decimals: s("addToken.labelDecimals"),
             token_address_label: s("addToken.tokenAddressLabel"),
             add_to_wallet: s("addToken.addToWalletBtn"),
+            not_found_title: s("addToken.notFoundTitle"),
+            not_found_message: s("addToken.notFoundMessage"),
+            searching_networks: s("addToken.searchingNetworks"),
+            search_token_btn: s("addToken.searchTokenBtn"),
             net_search_label: s("addToken.netSearchLabel"),
             net_search_placeholder: s("addToken.netSearchPlaceholder"),
             net_picker_search: s("addToken.netPickerSearchPlaceholder"),
@@ -395,6 +505,8 @@ impl FlowStrings {
             label_native_token: s("addToken.labelNativeToken"),
             compatible: s("addToken.compatible"),
             add_network_btn: s("addToken.addNetworkBtn"),
+            add_token_error_title: s("addToken.errorTitle"),
+            add_token_error_save: s("addToken.errorSaveToken"),
 
             send_action: s("componentsUi.dock.send"),
             select_token_title: s("send.selectTokenTitle"),
@@ -404,6 +516,8 @@ impl FlowStrings {
             filter_gas: s("send.filterGas"),
             filter_other: s("send.filterOther"),
             multi_send_title: s("send.multiSendTitle"),
+            multi_send_chain_notice: raw("send.multiSendChainNotice"),
+            multi_send_continue: raw("send.multiSendContinue"),
             select_all_valuable: s("send.selectAllValuable"),
             send_title: raw("send.sendTitle"),
             balance_label: raw("send.balanceLabel"),
@@ -454,10 +568,64 @@ impl FlowStrings {
 
             tx_submitted_title: s("send.txSubmittedTitle"),
             tx_waiting_confirm: s("send.txWaitingConfirm"),
+            tx_held_fees: s("send.txHeldFees"),
+            tx_rejected_fees: s("send.txRejectedFees"),
             tx_typical_time: raw("send.txTypicalTime"),
+            tx_slow_confirm: s("send.txSlowConfirm"),
+            tx_elapsed: raw("send.txElapsed"),
+            recipient_count_other: raw("send.recipientCount_other"),
             tx_close_background: s("send.txCloseBackground"),
             tx_hash: s("componentsTx.receipt.txHash"),
             done: s("componentsTx.receipt.done"),
+
+            tx_confirmed_title: raw("send.txConfirmedTitle"),
+            tx_submitting: s("send.txSubmitting"),
+            tx_preparing: s("send.txPreparingBiometric"),
+            tx_background_hint: s("send.txBackgroundHint"),
+            tx_error_generic: s("send.txErrorGeneric"),
+            tx_error_bundler_fund: s("send.txErrorBundlerFund"),
+            first_time_tag: s("componentsUi.signing.firstTimeTag"),
+            fee_pending: SharedString::from("…"),
+
+            warn_not_enough_token: raw("send.warnNotEnoughToken"),
+            warn_insufficient_for_gas: raw("send.warnInsufficientForGas"),
+            warn_need_gas: raw("send.warnNeedGas"),
+            warn_cannot_convert: raw("send.warnCannotConvert"),
+            same_fee_title: raw("send.sameFeeTokenTitle"),
+            same_fee_body: raw("send.sameFeeTokenBody"),
+            same_fee_max: raw("send.sameFeeTokenMax"),
+            same_fee_edit: s("send.sameFeeTokenEdit"),
+            insufficient_title: s("send.alertInsufficientBalanceTitle"),
+            insufficient_body: s("send.alertInsufficientBalanceBody"),
+            estimating: s("componentsUi.gas.estimating"),
+            funding_title: s("componentsUi.funding.title"),
+            funding_lead: raw("componentsUi.funding.lead"),
+            funding_address_label: s("componentsUi.funding.addressLabel"),
+            funding_amount_label: s("componentsUi.funding.amountLabel"),
+            funding_check_now: s("componentsUi.funding.checkNow"),
+            funding_close: s("componentsUi.funding.cancel"),
+            lock_net_title: s("send.lock.netTitle"),
+            lock_net_body: raw("send.lock.netBody"),
+            lock_token_title: s("send.lock.tokenTitle"),
+            lock_token_body: s("send.lock.tokenBody"),
+            lock_add_network: s("send.lock.addNetwork"),
+            lock_net_not_found: s("send.lock.netNotFound"),
+            lock_net_not_compatible: s("send.lock.netNotCompatible"),
+            lock_net_add_error: s("send.lock.netAddError"),
+
+            batch_paste_placeholder: s("send.batchPastePlaceholder"),
+            batch_template_saved: s("send.batchTemplateSaved"),
+            batch_rate_loading: s("send.batchRateLoading"),
+            batch_rate_failed: s("send.batchRateFailed"),
+            batch_rate_reset: s("send.batchRateReset"),
+            batch_over_cap: s("send.batchOverCap"),
+            batch_over_balance: s("send.batchOverBalance"),
+            batch_reading: s("send.batchReading"),
+            batch_rejected_other: raw("send.batchRejected_other"),
+            batch_apply_empty: s("send.batchApplyEmpty"),
+            batch_no_price: s("send.batchNoPrice"),
+            batch_import_failed_title: s("send.batchImportFailedTitle"),
+            batch_import_failed_body: s("send.batchImportFailedBody"),
         }
     }
 }

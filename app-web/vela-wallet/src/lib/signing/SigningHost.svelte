@@ -23,7 +23,7 @@
 	import { signingSheet } from '$lib/signing/core/sheet.svelte';
 	import { signRequest } from '$lib/signing/core/sign-resident.svelte';
 	import { session } from '$lib/session/core/session.svelte';
-	import { identiconSvgForClient } from '$lib/wallet/identicon';
+	import { avatarSvgForClient } from '$lib/wallet/identicon';
 	import { IDLE_FEE_VIEW, type FeeQuote } from '$lib/flows/core/fee-quote.svelte';
 	import type { SigningMessages } from '$lib/signing/messages';
 
@@ -44,7 +44,10 @@
 			? {
 					name: view.accounts[view.active_index]?.account.name ?? '',
 					address: view.address,
-					identiconSvg: identiconSvgForClient(view.address)
+					identiconSvg: avatarSvgForClient(
+						view.address,
+						view.accounts[view.active_index]?.account.name ?? ''
+					)
 				}
 			: null
 	);
@@ -69,7 +72,7 @@
 			fee: fee.view ?? IDLE_FEE_VIEW,
 			m: messages,
 			identity,
-			identicon: identiconSvgForClient
+			identicon: avatarSvgForClient
 		});
 	});
 
@@ -97,6 +100,17 @@
 			signingSheet.dispatchGuard({ type: 'preset_selected', mode: id });
 		}
 	}
+
+	/**
+	 * Every keystroke in the cap field, back to the machine that validates it.
+	 *
+	 * The core owns the parse (`custom_amount_changed` is already dot-normalized
+	 * by the shell, as payment_request's amount is), so nothing here decides
+	 * whether what was typed is a number — it only carries it.
+	 */
+	function guardCustom(text: string): void {
+		signingSheet.dispatchGuard({ type: 'custom_amount_changed', text });
+	}
 </script>
 
 {#if model}
@@ -109,6 +123,7 @@
 		onclose={() => signRequest.dispatch({ type: 'reject_tapped' })}
 		onconfirm={() => signRequest.dispatch({ type: 'approve_tapped', opts: approveOpts() })}
 		onchip={guardChip}
+		oncustom={guardCustom}
 		{onfee}
 	/>
 {/if}

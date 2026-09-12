@@ -393,7 +393,7 @@ object I18nKeys {
     }
 
     /**
-     * Receive / Send / Activity / Assets (spec 021, design/wallet-2).
+     * Receive / Send / Activity / Assets (spec 021, docs/design/wallet-2).
      *
      * Most of this vocabulary already existed: the legacy React Native app left
      * `receive.*`, `send.*`, `history.*`, `assets.*`, `addToken.*`,
