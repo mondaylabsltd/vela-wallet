@@ -185,6 +185,8 @@ object FlowLive {
         strings: VelaStrings,
         chainNames: Map<Int, String> = emptyMap(),
         explorers: Map<Int, String> = emptyMap(),
+        /** Spec 049: the display currency; without one the fiat line is dollars, said so. */
+        money: WalletLive.Money? = null,
     ): TxDetailModel? {
         val item = feed.rows
             .filterIsInstance<FeedRow.Item>()
@@ -193,10 +195,9 @@ object FlowLive {
             ?: return null
 
         val received = item.direction == FeedDirection.In
-        val amount = item.value?.toBigDecimalOrNull()
-            ?.stripTrailingZeros()
-            ?.toPlainString()
-            .orEmpty()
+        val amount = Formats.current.plain(
+            item.value?.toBigDecimalOrNull()?.stripTrailingZeros()?.toPlainString().orEmpty(),
+        )
         val counterparty = item.counterparty.orEmpty()
         val hash = item.tx_hash?.takeIf { it.isNotBlank() } ?: item.id
         // Spec 043 phase 4 (device-found): the notification's deep link opened
@@ -208,7 +209,7 @@ object FlowLive {
                     label = strings.t(if (received) I18nKeys.Flows.DETAIL_FROM else I18nKeys.Flows.DETAIL_TO),
                     value = item.alias ?: shortAddress(counterparty),
                     copyValue = counterparty,
-                    lead = counterparty.takeIf { it.isNotBlank() }?.let { FactLead.Identicon(it) },
+                    lead = counterparty.takeIf { it.isNotBlank() }?.let { FactLead.Identicon(it, item.alias) },
                     mono = item.alias == null,
                     copy = strings.t(I18nKeys.Flows.COPY_ADDRESS),
                 ),
@@ -246,10 +247,9 @@ object FlowLive {
             // The fiat line is the core's own `usd_value`, which is 0 when
             // nothing could price it — and a confident "$0.00" on a detail
             // screen is the same lie the hero told once.
+            // Spec 049: the chosen currency and preset (the web's `moneyText`), never a bare `$`.
             fiat = if (item.usd_value > 0) {
-                "$" + java.math.BigDecimal(item.usd_value)
-                    .setScale(2, java.math.RoundingMode.DOWN)
-                    .toPlainString()
+                "≈ " + (money?.fiat(item.usd_value) ?: ("$" + Formats.current.fixed2(item.usd_value)))
             } else {
                 ""
             },

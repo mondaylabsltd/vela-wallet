@@ -55,6 +55,8 @@ fun IdenticonViewerSheet(
     /** The seed, verbatim: what the artwork was drawn from. */
     address: String,
     onDismiss: () -> Unit,
+    /** Spec 049: the name the opener showed, so the initials style draws the same disc big. */
+    name: String? = null,
 ) {
     val strings = LocalVelaStrings.current
     val colors = VelaTheme.colors
@@ -85,6 +87,7 @@ fun IdenticonViewerSheet(
                 seed = address,
                 size = WalletMetrics.identiconViewerSize,
                 contentDescription = null,
+                name = name,
             )
 
             Text(

@@ -33,6 +33,7 @@ import app.getvela.wallet.core.designsystem.components.VelaLaunchAnimation
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.theme.isDarkEffective
 import app.getvela.wallet.core.i18n.LocalVelaStrings
+import app.getvela.wallet.core.identicon.LocalAvatarStyle
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.onboarding.core.SecurityKeyCeremony
 import app.getvela.wallet.feature.onboarding.gallery.GalleryScreen
@@ -342,6 +343,8 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(
                     LocalVelaStrings provides strings,
                     LocalLayoutDirection provides layoutDirection,
+                    // Spec 049: every avatar reads the chosen style from here.
+                    LocalAvatarStyle provides prefs.avatarStyle,
                 ) {
                     // One continuous surface. Both the launch screen and Welcome
                     // sit on this exact colour, which is what lets them

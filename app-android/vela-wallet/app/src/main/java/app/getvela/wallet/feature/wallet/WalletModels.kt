@@ -44,6 +44,12 @@ data class BalanceModel(
     val integer: String? = null,
     /** e.g. "28" — rendered de-emphasised after the separator. */
     val decimals: String? = null,
+    /**
+     * Spec 049: the mark between the two is the number preset's (the web's
+     * `decimalMark`). A `.` drawn after `1.575` read as a second thousands
+     * separator.
+     */
+    val decimalMark: String = ".",
     val liveText: String? = null,
     val status: BalanceStatusModel? = null,
     val a11yHide: String,

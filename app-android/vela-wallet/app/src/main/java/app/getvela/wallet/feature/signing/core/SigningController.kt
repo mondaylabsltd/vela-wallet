@@ -5,6 +5,7 @@ import app.getvela.wallet.core.crux.CoreHost
 import app.getvela.wallet.core.crux.JsonShell
 import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.diagnostics.VelaLog
+import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.feature.send.core.FeeCall
 import app.getvela.wallet.feature.send.core.FeeEvent
 import app.getvela.wallet.feature.send.core.FeeExecutor
@@ -283,9 +284,9 @@ class SigningController(
         fun clearKickoff(method: String, paramsJson: String, chainId: Int, origin: String?): ClearSigningEvent? = when {
             method == "eth_sendTransaction" || method == "wallet_sendCalls" -> {
                 val call = firstCall(paramsJson)
-                ClearSigningEvent.ResolveTransaction(to = call?.first, data = call?.second, value = call?.third, chain_id = chainId, locale = ClearLocale())
+                ClearSigningEvent.ResolveTransaction(to = call?.first, data = call?.second, value = call?.third, chain_id = chainId, locale = ClearLocale.fromFormats(Formats.current))
             }
-            method.contains("signTypedData") -> ClearSigningEvent.ResolveTypedData(typed_data_json = typedDataOf(paramsJson), chain_id = chainId, locale = ClearLocale())
+            method.contains("signTypedData") -> ClearSigningEvent.ResolveTypedData(typed_data_json = typedDataOf(paramsJson), chain_id = chainId, locale = ClearLocale.fromFormats(Formats.current))
             method == "personal_sign" || method == "eth_sign" -> ClearSigningEvent.MessagePresented(
                 method = if (method == "eth_sign") ClearSignMethod.EthSign else ClearSignMethod.PersonalSign,
                 params = stringParams(paramsJson),

@@ -47,6 +47,8 @@ import app.getvela.wallet.feature.send.core.BatchUnit as WireBatchUnit
 import app.getvela.wallet.feature.send.core.SendController
 import app.getvela.wallet.feature.send.core.SendScan
 import org.junit.Test
+import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.format.NumberFormatKey
 
 /**
  * The live send builders (spec 043 T031): every figure from the view, the
@@ -448,5 +450,26 @@ class SendLiveTest {
         val text = SendController.scanOf("  $recipient ") as SendScan.Text
         assertEquals(recipient, text.data)
         assertTrue(SendController.scanOf("ethereum:0xddafbb505ad214d7b80b1f830fccc89b60fb7a83@1/approve?address=$recipient&uint256=1") is SendScan.Text)
+    }
+
+    /** Spec 049: every drawn amount takes the preset's mark; the editable field keeps its raw digits. */
+    @Test
+    fun `the form and the confirm follow the number preset, the raw amount does not`() {
+        val saved = Formats.current
+        Formats.current = Formats(NumberFormatKey.DotComma)
+        try {
+            val form = FlowFixtures.build(FlowState.SD2, strings).base as FlowBase.SendForm
+            val view = SendView(stage = SendStage.EnterDetails, selected_token = xdai, recipient = recipient, amount = "0.001", token_amount = "0.001", fee = fee(), can_continue = true)
+            val live = SendLive.form(form.model, view, FeeView(), ctx())
+            assertEquals("0.001", live.amount!!.raw)
+            assertTrue(live.token!!.detail, live.token!!.detail.contains("0,71697"))
+            assertTrue(live.fee.value, live.fee.value.contains("0,0021"))
+
+            val confirmDrawn = FlowFixtures.build(FlowState.SD3, strings).base as FlowBase.SendConfirm
+            val confirm = SendLive.confirm(confirmDrawn.model, SendView(stage = SendStage.Confirm, selected_token = xdai, recipient = recipient, confirm_amount = "0.001", fee = fee(), can_confirm = true), ctx())
+            assertEquals("0,001 XDAI", confirm.amount)
+        } finally {
+            Formats.current = saved
+        }
     }
 }

@@ -348,7 +348,7 @@ object SendLive {
 
     private fun amountModel(view: SendView, symbol: String, fiatLine: String, ctx: Context) = AmountFieldModel(
         value = view.amount.ifEmpty { "0" },
-        fiat = if (view.amount_fiat_code != null) "${view.token_amount} $symbol" else fiatLine,
+        fiat = if (view.amount_fiat_code != null) "${Formats.current.plain(view.token_amount)} $symbol" else fiatLine,
         denomLabel = view.amount_fiat_code ?: ctx.money.code,
         raw = view.amount,
     )
@@ -357,6 +357,7 @@ object SendLive {
         label = ctx.strings.t(I18nKeys.Flows.RECIPIENT_LABEL),
         lines = addressLines(view.recipient),
         identiconSeed = view.recipient.takeIf { ADDRESS.matches(it) } ?: "0x0000000000000000000000000000000000000000",
+        name = view.recipient_identity?.name,
         pickLabel = ctx.strings.t(I18nKeys.Flows.RECIPIENT_PICK_ARIA),
         scanLabel = null,
         note = view.recipient_identity?.name,
@@ -370,7 +371,7 @@ object SendLive {
             ordinal = s.t(I18nKeys.Flows.RECIPIENT_N, mapOf("n" to (index + 1).toString())),
             name = draft.name ?: if (ADDRESS.matches(draft.address)) shortAddress(draft.address) else "",
             identiconSeed = draft.address.takeIf { ADDRESS.matches(it) } ?: "0x0000000000000000000000000000000000000000",
-            amount = "${draft.amount} $symbol".trim(),
+            amount = "${Formats.current.plain(draft.amount)} $symbol".trim(),
             removeLabel = s.t(I18nKeys.Flows.REMOVE_RECIPIENT),
             id = draft.id,
             address = draft.address,
@@ -388,7 +389,7 @@ object SendLive {
         } ?: ""
         return SummaryLineModel(
             label = "${s.t(I18nKeys.Flows.SPLIT_TOTAL)} · ${s.t(I18nKeys.Flows.RECIPIENT_COUNT, mapOf("count" to view.recipients.size.toString()))}",
-            value = "${view.confirm_amount} $symbol".trim() + fiat,
+            value = "${Formats.current.plain(view.confirm_amount)} $symbol".trim() + fiat,
         )
     }
 
@@ -505,10 +506,10 @@ object SendLive {
         val recipientName = view.recipient_identity?.name
         val split = view.split_mode && view.recipients.isNotEmpty()
         return fallback.copy(
-            amount = "${view.confirm_amount} $symbol",
+            amount = "${Formats.current.plain(view.confirm_amount)} $symbol",
             subline = view.confirm_amount_issue?.let { s.t(I18nKeys.Flows.CANNOT_CONVERT, mapOf("code" to it.code, "symbol" to it.symbol)) } ?: fiat,
             facts = listOf(
-                FactRowModel(label = s.t(I18nKeys.Flows.FROM_LABEL), value = ctx.fromName.ifBlank { shortAddress(ctx.fromAddress) }, lead = FactLead.Identicon(ctx.fromAddress)),
+                FactRowModel(label = s.t(I18nKeys.Flows.FROM_LABEL), value = ctx.fromName.ifBlank { shortAddress(ctx.fromAddress) }, lead = FactLead.Identicon(ctx.fromAddress, ctx.fromName.ifBlank { null })),
                 // SD3b (spec 038 #D2): a split names its count here and every
                 // one of its people below, so what is signed can be read in full.
                 if (split) {
@@ -520,7 +521,7 @@ object SendLive {
                     FactRowModel(
                         label = s.t(I18nKeys.Flows.TO_LABEL),
                         value = recipientName?.let { "$it · ${shortAddress(view.recipient)}" } ?: shortAddress(view.recipient),
-                        lead = FactLead.Identicon(view.recipient),
+                        lead = FactLead.Identicon(view.recipient, recipientName),
                         mono = recipientName == null,
                     )
                 },
@@ -539,7 +540,7 @@ object SendLive {
                     BreakdownRowModel(
                         identiconSeed = draft.address.takeIf { ADDRESS.matches(it) },
                         label = draft.name ?: shortAddress(draft.address),
-                        value = "${draft.amount} $symbol".trim(),
+                        value = "${Formats.current.plain(draft.amount)} $symbol".trim(),
                     )
                 }
             } else {
@@ -620,7 +621,7 @@ object SendLive {
                 stage = ReceiptStage.Confirmed,
                 // A split's title carries the core's SUM (`confirm_amount`), not
                 // the single-send scalar the receipt view keeps for one person.
-                title = s.t(I18nKeys.Flows.TX_CONFIRMED_TITLE, mapOf("amount" to (if (receipt.transfers.size > 1 && view.confirm_amount.isNotEmpty()) view.confirm_amount else receipt.amount), "symbol" to symbol)),
+                title = s.t(I18nKeys.Flows.TX_CONFIRMED_TITLE, mapOf("amount" to Formats.current.plain(if (receipt.transfers.size > 1 && view.confirm_amount.isNotEmpty()) view.confirm_amount else receipt.amount), "symbol" to symbol)),
                 // A split's parts on the receipt as on the confirm (spec 038
                 // #D2): the count, then every person with their amount.
                 captions = if (receipt.transfers.size > 1) {
@@ -685,12 +686,13 @@ object SendLive {
     /** A base-unit decimal string as a human decimal, trailing zeros dropped. */
     fun fromBase(units: String, decimals: Int): String {
         val value = units.toBigDecimalOrNull() ?: return units
-        return value.movePointLeft(decimals).stripTrailingZeros().toPlainString()
+        // Display only (every caller draws it): the decimal mark is the preset's (spec 049).
+        return Formats.current.plain(value.movePointLeft(decimals).stripTrailingZeros().toPlainString())
     }
 
     private fun trim(human: String): String {
         val parsed = human.toBigDecimalOrNull() ?: return human
-        return parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString()
+        return Formats.current.plain(parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString())
     }
 
     private fun amount(human: String): Double = human.toDoubleOrNull() ?: 0.0

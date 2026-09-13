@@ -149,7 +149,7 @@ fun BrowserToolbar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
-            IdenticonAvatar(tappable = false, seed = browser.accountSeed, size = ExploreMetrics.chipAvatar)
+            IdenticonAvatar(tappable = false, seed = browser.accountSeed, size = ExploreMetrics.chipAvatar, name = browser.accountName)
             if (browser.connected) {
                 Box(
                     Modifier

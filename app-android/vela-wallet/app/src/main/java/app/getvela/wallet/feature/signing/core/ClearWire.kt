@@ -1,5 +1,9 @@
 package app.getvela.wallet.feature.signing.core
 
+import app.getvela.wallet.core.format.DateFormatKey
+import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.format.NumberFormatKey
+import app.getvela.wallet.core.format.TimeFormatKey
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -134,7 +138,34 @@ data class ClearLocale(
     val date_format: ClearDateFormat = ClearDateFormat.Iso,
     val time_format: ClearTimeFormat = ClearTimeFormat.H24,
     val tz_offset_minutes: Int = 0,
-)
+) {
+    companion object {
+        /**
+         * Spec 049: the person's resolved presets and the phone's UTC offset
+         * now — the web's `toClearLocale(resolvedFormatKeys())` shape. The
+         * constant that stood in before printed a dApp's amounts in a format
+         * the person had not chosen.
+         */
+        fun fromFormats(formats: Formats, nowMs: Long = System.currentTimeMillis()): ClearLocale = ClearLocale(
+            number_format = when (formats.resolvedNumber()) {
+                NumberFormatKey.DotComma -> ClearNumberFormat.DotComma
+                NumberFormatKey.SpaceComma -> ClearNumberFormat.SpaceComma
+                NumberFormatKey.Indian -> ClearNumberFormat.Indian
+                NumberFormatKey.CommaDot, NumberFormatKey.Auto -> ClearNumberFormat.CommaDot
+            },
+            date_format = when (formats.resolvedDate()) {
+                DateFormatKey.YmdSlash -> ClearDateFormat.YmdSlash
+                DateFormatKey.MdySlash -> ClearDateFormat.MdySlash
+                DateFormatKey.DmySlash -> ClearDateFormat.DmySlash
+                DateFormatKey.DmyDot -> ClearDateFormat.DmyDot
+                DateFormatKey.Iso, DateFormatKey.Auto -> ClearDateFormat.Iso
+            },
+            time_format = if (formats.resolvedTime() == TimeFormatKey.H12) ClearTimeFormat.H12 else ClearTimeFormat.H24,
+            // Minutes to ADD to UTC (the web negates `getTimezoneOffset()`).
+            tz_offset_minutes = java.util.TimeZone.getDefault().getOffset(nowMs) / 60_000,
+        )
+    }
+}
 
 @Serializable
 sealed class ClearConfirm {

@@ -22,6 +22,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.format.NumberFormatKey
 
 /**
  * The live wallet-home builders.
@@ -436,5 +438,30 @@ class WalletLiveTest {
             "$100",
             home(view, currency = gbp(rate = Double.POSITIVE_INFINITY)).balance.integer,
         )
+    }
+
+    /** Spec 049: the founder stored `dot_comma` and the hero printed `CN¥3` `.63` — a mark that reads as a second thousands separator. */
+    @Test
+    fun `the hero and the rows follow the number preset`() {
+        val saved = Formats.current
+        Formats.current = Formats(NumberFormatKey.DotComma)
+        try {
+            val view = BalanceView(
+                display_total_usd = 1234.5,
+                tokens = listOf(token("POL", "10.25", price = 120.0)),
+            )
+
+            val model = home(view)
+
+            assertEquals("$1.234", model.balance.integer)
+            assertEquals("50", model.balance.decimals)
+            assertEquals(",", model.balance.decimalMark)
+            assertEquals(AssetFiatModel.Value("$1.230,00"), model.assetRows[0].fiat)
+            // Token amounts take the mark and stay ungrouped (the web's `trimBalance`).
+            assertTrue(model.assetRows[0].balance, model.assetRows[0].balance.startsWith("10,25 "))
+        } finally {
+            Formats.current = saved
+        }
+        assertEquals(".", home(BalanceView(display_total_usd = 1.0, tokens = listOf(token("POL", "1", price = 1.0)))).balance.decimalMark)
     }
 }

@@ -39,6 +39,7 @@ import app.getvela.wallet.feature.send.core.SendTreasuryStatus
 import app.getvela.wallet.feature.send.core.SendTreasuryProbe
 import app.getvela.wallet.core.format.TimeFormatKey
 import app.getvela.wallet.core.format.TextScaleLevel
+import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.core.format.NumberFormatKey
 import app.getvela.wallet.core.format.DateFormatKey
 import app.getvela.wallet.core.diagnostics.VelaLog
@@ -300,8 +301,8 @@ fun VelaNavHost(
     // Spec 048: the identicon viewer, hosted once — every artwork drawn from an
     // address opens it (see IdenticonImage.tappable), so twelve screens do not
     // each carry a sheet of their own.
-    var identiconViewer by remember { mutableStateOf<String?>(null) }
-    CompositionLocalProvider(LocalIdenticonViewer provides { seed -> identiconViewer = seed }) {
+    var identiconViewer by remember { mutableStateOf<Pair<String, String?>?>(null) }
+    CompositionLocalProvider(LocalIdenticonViewer provides { seed, name -> identiconViewer = seed to name }) {
         NavHost(navController = navController, startDestination = startDestination) {
             composable(VelaDestinations.WELCOME) {
                 val welcome: WelcomeViewModel = viewModel()
@@ -699,7 +700,7 @@ fun VelaNavHost(
                     val explorers = remember(networks.networks) {
                         networks.networks.associate { it.chain_id.toInt() to it.explorer_url }
                     }
-                    val flowModel = remember(liveState, sendView, feeView, batchView, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking, chainFilter, classFilter) {
+                    val flowModel = remember(liveState, sendView, feeView, batchView, contactsBook, strings, currency, chainNames, explorers, session.address, sweepPicking, chainFilter, classFilter, Formats.current) {
                         val drawn = FlowFixtures.build(liveState, strings)
                         val ctx = SendLive.Context(
                             strings = strings,
@@ -873,6 +874,8 @@ fun VelaNavHost(
                         currency,
                         flows.selected,
                         manageTokens,
+                        // Spec 049: a figure baked into this model follows the presets.
+                        Formats.current,
                     ) {
                         FlowFixtures.build(flowState, strings).let { drawn ->
                             liveFlow(
@@ -1563,9 +1566,10 @@ fun VelaNavHost(
                                     prefsStore.setLanguage(id)
                                     application.container.applyLanguage(id)
                                 }
-                                SettingsOverlay.NumberFormat -> SettingsLive.numberKeyAt(id)?.let { prefsStore.setNumberFormat(NumberFormatKey.of(it)) }
-                                SettingsOverlay.DateFormat -> SettingsLive.dateKeyAt(id)?.let { prefsStore.setDateFormat(DateFormatKey.of(it)) }
-                                SettingsOverlay.TimeFormat -> SettingsLive.timeKeyAt(id)?.let { prefsStore.setTimeFormat(TimeFormatKey.of(it)) }
+                                // Spec 049: the row id IS the wire key (the web's `formatSheet`).
+                                SettingsOverlay.NumberFormat -> prefsStore.setNumberFormat(NumberFormatKey.of(id))
+                                SettingsOverlay.DateFormat -> prefsStore.setDateFormat(DateFormatKey.of(id))
+                                SettingsOverlay.TimeFormat -> prefsStore.setTimeFormat(TimeFormatKey.of(id))
                                 else -> Unit
                             }
                         },
@@ -1614,8 +1618,8 @@ fun VelaNavHost(
             }
         }
     }
-    identiconViewer?.let { seed ->
-        IdenticonViewerSheet(address = seed, onDismiss = { identiconViewer = null })
+    identiconViewer?.let { (seed, name) ->
+        IdenticonViewerSheet(address = seed, name = name, onDismiss = { identiconViewer = null })
     }
 
     // Hosted OUTSIDE the NavHost, deliberately. A prompt can be raised by either
@@ -1878,7 +1882,7 @@ private fun liveFlow(
         // about the wrong payment and one about the right payment look equally
         // authoritative, and only one of them is wrong.
         is FlowSheet.TxDetail ->
-            FlowLive.txDetail(sheet.model, feed, selected, strings, chainNames, explorers)?.let(FlowSheet::TxDetail)
+            FlowLive.txDetail(sheet.model, feed, selected, strings, chainNames, explorers, WalletLive.Money.of(currency))?.let(FlowSheet::TxDetail)
         is FlowSheet.TokenDetail -> FlowLive.tokenDetail(
             fallback = sheet.model,
             view = balances,

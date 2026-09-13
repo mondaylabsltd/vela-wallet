@@ -199,7 +199,7 @@ object WalletLive {
     private fun signedAmount(item: FeedItem, received: Boolean): String {
         val raw = item.value ?: return item.batch?.count?.toString() ?: ""
         val parsed = raw.toBigDecimalOrNull() ?: return raw
-        val trimmed = parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString()
+        val trimmed = Formats.current.plain(parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString())
         return if (received) "+$trimmed" else "−$trimmed"
     }
 
@@ -313,6 +313,7 @@ object WalletLive {
             state = if (rounded.signum() == 0) BalanceStateKind.ZeroLive else BalanceStateKind.Normal,
             integer = money.symbol + Formats.current.groupDigits(whole.toString()),
             decimals = cents.toString().padStart(2, '0'),
+            decimalMark = Formats.current.decimalMark(),
             // The label beside the figure names the currency it is in.
             currency = money.code,
             status = fallback.status?.takeIf { view.refreshing || view.balance_partial },
@@ -359,7 +360,8 @@ object WalletLive {
      */
     private fun trimAmount(balance: String): String {
         val parsed = balance.toBigDecimalOrNull() ?: return balance
-        return parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString()
+        // The decimal mark is the preset's; the grouping stays off (spec 049, the web's `trimBalance`).
+        return Formats.current.plain(parsed.setScale(6, RoundingMode.DOWN).stripTrailingZeros().toPlainString())
     }
 
     private fun amountAsDouble(balance: String): Double = balance.toDoubleOrNull() ?: 0.0
@@ -434,7 +436,7 @@ object WalletLive {
      * hero showed for the whole of phases 4 and 5, correctly, before there was
      * a rate to use.
      */
-    internal class Money private constructor(
+    class Money private constructor(
         val code: String,
         val symbol: String,
         private val rate: Double?,

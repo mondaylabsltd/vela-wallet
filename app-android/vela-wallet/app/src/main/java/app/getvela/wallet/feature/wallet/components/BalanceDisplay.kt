@@ -82,7 +82,7 @@ private fun AmountRow(model: BalanceModel, onToggle: () -> Unit = {}) {
         )
         model.decimals?.let { decimals ->
             Text(
-                text = ".$decimals",
+                text = model.decimalMark + decimals,
                 color = colors.fgSubtle,
                 fontFamily = VelaFontFamily,
                 fontWeight = VelaFontWeight.bold,

@@ -1269,6 +1269,7 @@ internal fun AccountsSheetBody(sheet: AccountsSheetModel, onSelect: (Int) -> Uni
                 seed = row.addressFull,
                 size = VelaSpacing.xl4,
                 contentDescription = row.name,
+                name = row.name,
             )
             Column(
                 modifier = Modifier.weight(1f),

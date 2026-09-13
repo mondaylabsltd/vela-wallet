@@ -1,5 +1,6 @@
 package app.getvela.wallet.core.format
 
+import androidx.compose.runtime.mutableStateOf
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DecimalFormatSymbols
@@ -151,13 +152,50 @@ class Formats(
 
     fun dateTime(epochMs: Long): String = "${date(epochMs)} ${time(epochMs)}"
 
+    /** The resolved preset's decimal mark. */
+    fun decimalMark(): String = style().decimal
+
+    /**
+     * A plain decimal string (`0.001`) with the preset's decimal mark and NO
+     * grouping — the web's `trimBalance` rule for token amounts: a decimal
+     * comma read as a thousands separator is a hundredfold mistake, but the
+     * mocks draw token amounts ungrouped. Money (`number`/`fixed2`) gets both.
+     */
+    fun plain(text: String): String {
+        val mark = decimalMark()
+        return if (mark == ".") text else text.replaceFirst(".", mark)
+    }
+
+    /** The settings row's sample — the web's `formatNumber(1234567.89, 2, 2)`. */
+    fun example(): String = number(BigDecimal("1234567.89"), 2, 2)
+    fun dateExample(): String = date(sampleMs())
+    fun timeExample(): String = time(sampleMs())
+
+    /** 2026-06-13 13:45 local — the web's `FORMAT_SAMPLE`. */
+    private fun sampleMs(): Long = Calendar.getInstance(locale).run {
+        clear()
+        set(2026, Calendar.JUNE, 13, 13, 45, 0)
+        timeInMillis
+    }
+
     companion object {
         /**
          * The process-wide formats the live builders read (spec 047 D2). Set
          * by the preferences once loaded and on every change; tests set it
          * explicitly. Rendering-only state, so a holder rather than a machine.
+         *
+         * Spec 049: Compose state, not a `@Volatile` field. A screen that read
+         * a static holder was drawn once and never told the preset changed —
+         * the founder picked `1.234.567,89` and the home kept its dots until
+         * the next balance refresh. Read in composition this subscribes the
+         * reader; a `remember` that bakes a figure in must key on it too.
          */
-        @Volatile
-        var current: Formats = Formats()
+        private val holder = mutableStateOf(Formats())
+
+        var current: Formats
+            get() = holder.value
+            set(value) {
+                holder.value = value
+            }
     }
 }

@@ -27,6 +27,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.format.NumberFormatKey
 
 /**
  * The receive screens.
@@ -278,7 +280,7 @@ class FlowLiveTest {
         assertTrue(detail.amount.startsWith("+120"))
         assertTrue(detail.amount.contains("USDT"))
         assertEquals(true, detail.positive)
-        assertEquals("$120.00", detail.fiat)
+        assertEquals("≈ $120.00", detail.fiat)
     }
 
     /**
@@ -395,5 +397,23 @@ class FlowLiveTest {
         val detail = detailFor(view, FeedView(), id = "143:native")!!
 
         assertEquals("—", detail.fiat)
+    }
+
+    /** Spec 049: the detail's amount takes the preset's mark; its fiat line is the display currency, never a bare `$`. */
+    @Test
+    fun `a transaction detail follows the number preset and the display currency`() {
+        val saved = Formats.current
+        Formats.current = Formats(NumberFormatKey.DotComma)
+        try {
+            val feed = feedOf(feedItem("sent", received = false, value = "0.001", symbol = "XDAI", chainId = 100, usd = 1.0))
+            val money = WalletLive.Money.of(CurrencyView(code = "GBP", rate = 0.78, committed = true))
+            val detail = FlowLive.txDetail(txFixture(), feed, id = "sent", strings = strings, chainNames = mapOf(100 to "Gnosis"), money = money)!!
+            assertEquals("−0,001 XDAI", detail.amount)
+            assertEquals("≈ £0,78", detail.fiat)
+            val dollars = FlowLive.txDetail(txFixture(), feed, id = "sent", strings = strings, chainNames = mapOf(100 to "Gnosis"))!!
+            assertEquals("≈ $1,00", dollars.fiat)
+        } finally {
+            Formats.current = saved
+        }
     }
 }

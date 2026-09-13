@@ -804,7 +804,7 @@ fun SignerRow(label: String, name: String, seed: String, modifier: Modifier = Mo
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
-            IdenticonAvatar(seed = seed, size = VelaIconSize.base)
+            IdenticonAvatar(seed = seed, size = VelaIconSize.base, name = name)
             Text(
                 text = name,
                 color = colors.fgBase,

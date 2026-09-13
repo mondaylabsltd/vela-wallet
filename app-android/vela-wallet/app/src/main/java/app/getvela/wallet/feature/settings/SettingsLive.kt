@@ -7,7 +7,10 @@ import app.getvela.wallet.feature.send.core.SendTreasuryStatus
 import app.getvela.wallet.feature.send.core.SendTreasuryAsset
 import app.getvela.wallet.feature.send.SendLive
 import app.getvela.wallet.feature.settings.core.DeviceStorage
+import app.getvela.wallet.core.format.DateFormatKey
+import app.getvela.wallet.core.format.NumberFormatKey
 import app.getvela.wallet.core.format.TextScaleLevel
+import app.getvela.wallet.core.format.TimeFormatKey
 import app.getvela.wallet.core.marks.Marks
 import app.getvela.wallet.core.format.Formats
 import app.getvela.wallet.core.i18n.I18nKeys
@@ -331,20 +334,32 @@ object SettingsLive {
 
     // -- Spec 047 US1: the rows that read the device, not a fixture -----------------
 
-    private val NUMBER_KEYS = listOf("auto", "comma_dot", "dot_comma", "space_comma", "indian")
-    private val DATE_KEYS = listOf("auto", "ymd_slash", "mdy_slash", "dmy_slash", "dmy_dot", "iso")
-    private val TIME_KEYS = listOf("auto", "h24", "h12")
-
-    /** The sheets' rows are drawn samples indexed 0..n in the web's key order; the selected one is the preference. */
-    private fun selectSheet(sheet: SelectSheetModel, keys: List<String>, chosen: String): SelectSheetModel {
-        val index = keys.indexOf(chosen).coerceAtLeast(0)
-        return sheet.copy(rows = sheet.rows.mapIndexed { i, row -> row.copy(selected = i == index) })
-    }
-
-    fun formatKeyAt(keys: List<String>, rowId: String): String? = rowId.toIntOrNull()?.let { keys.getOrNull(it) }
-    fun numberKeyAt(rowId: String) = formatKeyAt(NUMBER_KEYS, rowId)
-    fun dateKeyAt(rowId: String) = formatKeyAt(DATE_KEYS, rowId)
-    fun timeKeyAt(rowId: String) = formatKeyAt(TIME_KEYS, rowId)
+    /**
+     * A format sheet with LIVE examples (spec 049 — the web's `formatSheet`
+     * over `numberFormatOptions()`): each row is its preset's rendering of
+     * the same sample, its id the wire key, and 自动 shows what this device's
+     * locale resolves to. Before this the rows were the mocks' strings, so
+     * 自动 said `1,234,567.89` on a German phone. The drawn rows' notes
+     * (自动 · 系统, 印度计数, 24 小时制…) are kept by position — the enums are
+     * in the fixture's order.
+     */
+    private fun <K> formatSheet(
+        sheet: SelectSheetModel,
+        keys: List<K>,
+        wire: (K) -> String,
+        chosen: String,
+        example: (K) -> String,
+    ): SelectSheetModel = sheet.copy(
+        rows = keys.mapIndexed { i, key ->
+            SelectRowModel(
+                id = wire(key),
+                label = example(key),
+                note = sheet.rows.getOrNull(i)?.note,
+                selected = wire(key) == chosen,
+                mono = true,
+            )
+        },
+    )
 
     /**
      * Language, the three formats, the text scale and the avatar style, from
@@ -360,19 +375,26 @@ object SettingsLive {
     ): SettingsScreenModel {
         val endonym = { tag: String -> SettingsFixtures.LOCALE_ENDONYMS.firstOrNull { it.first == tag }?.second ?: tag }
         val languageValue = if (prefs.language == "system") "${endonym(activeLanguage)} · ${strings.t(I18nKeys.SettingsUi.COMMON_SYSTEM)}" else endonym(prefs.language)
-        val numberSheet = selectSheet(model.numberSheet, NUMBER_KEYS, prefs.numberFormat.wire)
-        val dateSheet = selectSheet(model.dateSheet, DATE_KEYS, prefs.dateFormat.wire)
-        val timeSheet = selectSheet(model.timeSheet, TIME_KEYS, prefs.timeFormat.wire)
-        fun sample(sheet: SelectSheetModel) = sheet.rows.firstOrNull { it.selected }?.label ?: sheet.rows.firstOrNull()?.label.orEmpty()
+        val formats = Formats.current
+        val numberSheet = formatSheet(model.numberSheet, NumberFormatKey.entries, { it.wire }, prefs.numberFormat.wire) {
+            Formats(number = it, locale = formats.locale).example()
+        }
+        val dateSheet = formatSheet(model.dateSheet, DateFormatKey.entries, { it.wire }, prefs.dateFormat.wire) {
+            Formats(date = it, locale = formats.locale).dateExample()
+        }
+        val timeSheet = formatSheet(model.timeSheet, TimeFormatKey.entries, { it.wire }, prefs.timeFormat.wire) {
+            Formats(time = it, locale = formats.locale).timeExample()
+        }
         return model.copy(
             sections = model.sections.map { section ->
                 section.copy(
                     rows = section.rows.map { row ->
                         when (row.id) {
                             "language" -> row.copy(value = languageValue)
-                            "number-format" -> row.copy(value = sample(numberSheet))
-                            "date-format" -> row.copy(value = sample(dateSheet))
-                            "time-format" -> row.copy(value = sample(timeSheet))
+                            // The row shows the CURRENT rendering (the web's `currentExamples`).
+                            "number-format" -> row.copy(value = formats.example())
+                            "date-format" -> row.copy(value = formats.dateExample())
+                            "time-format" -> row.copy(value = formats.timeExample())
                             else -> row
                         }
                     },

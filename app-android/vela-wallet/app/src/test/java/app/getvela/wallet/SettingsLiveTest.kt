@@ -26,6 +26,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import app.getvela.wallet.core.data.PrefsView
+import app.getvela.wallet.core.format.Formats
+import app.getvela.wallet.core.format.NumberFormatKey
+import app.getvela.wallet.core.format.TimeFormatKey
+import java.util.Locale
 
 /**
  * The live settings builders: a core view in, the drawn display models out.
@@ -374,5 +379,33 @@ class SettingsLiveTest {
         val add = SettingsLive.withWizard(base(), view, strings).addNetwork
 
         assertTrue(add.candidate!!.tag!!.isNotBlank())
+    }
+
+    /** Spec 049: the sheets carry the wire keys and LIVE examples; the rows say the current rendering. */
+    @Test
+    fun `the format sheets are live examples keyed by preset`() {
+        val saved = Formats.current
+        Formats.current = Formats(number = NumberFormatKey.DotComma, time = TimeFormatKey.H12, locale = Locale.US)
+        try {
+            val prefs = PrefsView(numberFormat = NumberFormatKey.DotComma, timeFormat = TimeFormatKey.H12, loaded = true)
+            val live = SettingsLive.withPreferences(base(), prefs, "en", strings, theme = "auto")
+
+            assertEquals(listOf("auto", "comma_dot", "dot_comma", "space_comma", "indian"), live.numberSheet.rows.map { it.id })
+            assertEquals("1.234.567,89", live.numberSheet.rows.single { it.selected }.label)
+            assertEquals("dot_comma", live.numberSheet.rows.single { it.selected }.id)
+            // 自动 shows what THIS locale resolves to, and keeps the drawn "自动 · 系统" note.
+            assertEquals("1,234,567.89", live.numberSheet.rows[0].label)
+            assertEquals(base().numberSheet.rows[0].note, live.numberSheet.rows[0].note)
+            assertEquals("12,34,567.89", live.numberSheet.rows[4].label)
+            assertEquals(listOf("auto", "h24", "h12"), live.timeSheet.rows.map { it.id })
+            assertEquals("1:45 PM", live.timeSheet.rows.single { it.selected }.label)
+
+            val rows = live.sections.flatMap { it.rows }
+            assertEquals("1.234.567,89", rows.single { it.id == "number-format" }.value)
+            assertEquals("1:45 PM", rows.single { it.id == "time-format" }.value)
+            assertEquals("06/13/2026", rows.single { it.id == "date-format" }.value)
+        } finally {
+            Formats.current = saved
+        }
     }
 }

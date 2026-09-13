@@ -88,8 +88,10 @@ class Preferences(
     }
 
     private fun publish(view: PrefsView) {
-        _view.value = view
+        // The formats first: a reader woken by the view must already find the
+        // presets it is about to draw with (spec 049).
         onFormats(Formats(number = view.numberFormat, date = view.dateFormat, time = view.timeFormat, locale = locale()))
+        _view.value = view
     }
 
     companion object {
