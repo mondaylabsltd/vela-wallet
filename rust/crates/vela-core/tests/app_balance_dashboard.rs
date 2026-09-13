@@ -13,10 +13,10 @@ mod support;
 
 use support::DomainDriver;
 use vela_core::app::balance_dashboard::{
-    best_group_price, best_native_dex_price, choose_native_price, token_balance_double,
-    token_usd_value, BalanceCacheEntry, BalanceDashboard, BalanceNotice, BalanceOperation as Op,
-    BalanceShellResult as Res, BalanceToken, Event, NativePriceSource, NativeQuoteGroup,
-    FALLBACK_RETRY_DELAY_MS, MAX_PARTIAL_RETRIES, PARTIAL_RETRY_DELAYS_MS,
+    best_group_price, best_native_dex_price, choose_native_price, first_grouped_quote_price,
+    token_balance_double, token_usd_value, BalanceCacheEntry, BalanceDashboard, BalanceNotice,
+    BalanceOperation as Op, BalanceShellResult as Res, BalanceToken, Event, NativePriceSource,
+    NativeQuoteGroup, FALLBACK_RETRY_DELAY_MS, MAX_PARTIAL_RETRIES, PARTIAL_RETRY_DELAYS_MS,
 };
 
 type Sut = DomainDriver<BalanceDashboard>;
@@ -185,6 +185,78 @@ fn native_dex_price_maxes_across_stable_groups_with_their_own_decimals() {
     ];
     assert_eq!(best_native_dex_price(&mixed), Some(6.0));
     assert_eq!(best_native_dex_price(&[]), None);
+}
+
+#[test]
+fn first_grouped_quote_price_takes_the_preferred_venue_not_the_deepest_pool() {
+    // The two rules answer different questions and must not converge. Groups
+    // arrive in the shell's preference order — native USDC, then any USDC,
+    // then USDT — and the FIRST that answers wins, even when a later one
+    // quotes higher. For an arbitrary token the preferred venue is the
+    // trustworthy one; a deeper pool elsewhere may be a different asset with a
+    // similar ticker.
+    let groups = vec![
+        NativeQuoteGroup {
+            amounts_out: vec!["2000000".to_owned()], // $2 on the preferred stable
+            quote_decimals: Some(6),
+        },
+        NativeQuoteGroup {
+            amounts_out: vec!["9000000".to_owned()], // $9 somewhere else
+            quote_decimals: Some(6),
+        },
+    ];
+    assert_eq!(first_grouped_quote_price(&groups), Some(2.0));
+    // The native rule, on the same input, takes the deepest.
+    assert_eq!(best_native_dex_price(&groups), Some(9.0));
+}
+
+#[test]
+fn first_grouped_quote_price_scales_each_group_by_its_own_decimals() {
+    // **The 10^12 trap.** A chain whose stablecoin list holds both a 6-decimal
+    // USDC and an 18-decimal DAI, where only the DAI pool answers. Scaling that
+    // quote by the neighbouring USDC's decimals prices the token a trillion
+    // times too high — and that number reaches a portfolio total, a sort order
+    // and an ingest valuation.
+    let groups = vec![
+        NativeQuoteGroup {
+            amounts_out: vec![], // USDC: dead pool
+            quote_decimals: Some(6),
+        },
+        NativeQuoteGroup {
+            amounts_out: vec!["250000000000000000".to_owned()], // 0.25 DAI
+            quote_decimals: Some(18),
+        },
+    ];
+    assert_eq!(first_grouped_quote_price(&groups), Some(0.25));
+}
+
+#[test]
+fn first_grouped_quote_price_defaults_within_its_own_group() {
+    // A failed `decimals()` read falls back to THIS group's default, never to
+    // a neighbour's real value.
+    let groups = vec![NativeQuoteGroup {
+        amounts_out: vec!["3000000".to_owned()],
+        quote_decimals: None, // ⇒ DEFAULT_QUOTE_DECIMALS (6)
+    }];
+    assert_eq!(first_grouped_quote_price(&groups), Some(3.0));
+}
+
+#[test]
+fn first_grouped_quote_price_refuses_zero_and_junk() {
+    // A zero-output quote is a dead pool, not a free token; it must not price,
+    // and it must not stop a later group from doing so.
+    let groups = vec![
+        NativeQuoteGroup {
+            amounts_out: vec!["0".to_owned(), "not a number".to_owned()],
+            quote_decimals: Some(6),
+        },
+        NativeQuoteGroup {
+            amounts_out: vec!["1500000".to_owned()],
+            quote_decimals: Some(6),
+        },
+    ];
+    assert_eq!(first_grouped_quote_price(&groups), Some(1.5));
+    assert_eq!(first_grouped_quote_price(&[]), None);
 }
 
 #[test]

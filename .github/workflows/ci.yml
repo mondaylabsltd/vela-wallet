@@ -409,6 +409,13 @@ jobs:
           cargo run --release -p vela-core-uniffi --bin uniffi-bindgen -- generate \
             --library target/release/libvela_core_uniffi.so \
             --language kotlin --out-dir bindings/kotlin --no-format
+      # The parallel space's keyset is a SECOND, debug-only library with its own
+      # bindings (spec 043, research D2): the debug source set compiles against
+      # rust/bindings/kotlin-dev and the JVM tests load the host .so beside
+      # vela-core-uniffi's. Host only — the ABIs are not needed to compile.
+      - name: Generate the debug-only fixtures bindings
+        working-directory: rust
+        run: bash scripts/build-dev-fixtures.sh --host
       # `-PvelaSkipRustBuild` skips the three-ABI NDK cross-compile, which the
       # app's build.gradle.kts measures at ~6 minutes. Compiling and unit-testing
       # is what catches an unrouted screen; producing an installable APK is not.

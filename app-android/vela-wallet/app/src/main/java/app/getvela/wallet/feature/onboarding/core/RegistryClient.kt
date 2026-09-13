@@ -250,6 +250,33 @@ class RegistryClient(baseUrl: String = DEFAULT_REGISTRY_URL) {
     }
 
     /**
+     * The name behind a wallet ADDRESS, if the index knows one.
+     *
+     * The same `/api/query` the rest of this class uses, keyed by `walletRef` —
+     * the address as a 32-byte word. It answers the question "who is this
+     * person I am about to pay", and it is the reason a Vela wallet can show a
+     * name where every other wallet shows forty hex characters.
+     *
+     * Best-effort by construction: a slow or unreachable index degrades to
+     * "unknown recipient" and never blocks a payment. The zero address is
+     * skipped rather than sent — it is a mint or burn counterparty, and asking
+     * would spend a round trip on a certain 404.
+     */
+    suspend fun nameForAddress(address: String): String? {
+        if (!ADDRESS.matches(address)) return null
+        if (address.removePrefix("0x").all { it == '0' }) return null
+        val walletRef = "0x" + address.removePrefix("0x").lowercase().padStart(64, '0')
+        return try {
+            get("/api/query?walletRef=${encode(walletRef)}", READ_TIMEOUT_MS, "Wallet name")
+                .nullableString("name")
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+        } catch (_: RegistryFailure) {
+            null
+        }
+    }
+
+    /**
      * The v1 index's display name for a credential — the only place a v1-era
      * wallet's name survives. Best-effort and read-only: a lost name degrades
      * the label, never the flow.
@@ -338,6 +365,9 @@ class RegistryClient(baseUrl: String = DEFAULT_REGISTRY_URL) {
     companion object {
         /** The v2 registry. Overridable so a self-hosted stack is a setting, not a fork. */
         const val DEFAULT_REGISTRY_URL = "https://p256-index-v2.getvela.app"
+
+        /** A 20-byte hex address, and nothing else, reaches the index. */
+        private val ADDRESS = Regex("^0x[0-9a-fA-F]{40}$")
 
         /**
          * The health identities this endpoint accepts — the legacy index and the

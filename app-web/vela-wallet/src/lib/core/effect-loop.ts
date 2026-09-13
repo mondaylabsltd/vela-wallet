@@ -36,7 +36,12 @@ export type EffectLoopOptions<View, Effect extends EffectWithId, Result> = {
 	execute(effect: Effect, signal: AbortSignal): Promise<Result>;
 	/** Turn a thrown error into the result variant this operation answers with. */
 	toFailure(effect: Effect, error: unknown): Result;
-	/** A core-level fault: malformed event, serialization failure. Never a user error. */
+	/**
+	 * A core-level fault: malformed event, serialization failure. Never a user
+	 * error. Optional, but never silent (spec 048): a loop with no handler
+	 * reports to the console — the one fault nobody listened to, an answer the
+	 * core refused to read, hid a sign-in hang behind a busy button for a day.
+	 */
 	onError?(error: unknown): void;
 };
 
@@ -51,6 +56,11 @@ export function createEffectLoop<View, Event, Effect extends EffectWithId, Resul
 	options: EffectLoopOptions<View, Effect, Result>
 ): EffectLoop<Event> {
 	const controllers = new Map<number, AbortController>();
+	/** The effect behind each in-flight id, so a refused answer can be re-answered as its failure. */
+	const report = options.onError ?? ((error: unknown) => console.error('[core] fault:', error));
+	const inFlight = new Map<number, Effect>();
+	/** Effects already answered with their failure — a second refusal only reports. */
+	const failed = new Set<number>();
 	let disposed = false;
 
 	function start(event: Event) {
@@ -63,7 +73,7 @@ export function createEffectLoop<View, Event, Effect extends EffectWithId, Resul
 		try {
 			apply(core.dispatch(event));
 		} catch (error) {
-			options.onError?.(error);
+			report(error);
 		}
 	}
 
@@ -89,6 +99,7 @@ export function createEffectLoop<View, Event, Effect extends EffectWithId, Resul
 	async function run(effect: Effect) {
 		const controller = new AbortController();
 		controllers.set(effect.id, controller);
+		inFlight.set(effect.id, effect);
 
 		let result: Result;
 		try {
@@ -108,10 +119,24 @@ export function createEffectLoop<View, Event, Effect extends EffectWithId, Resul
 
 	function resolve(effectId: number, result: Result) {
 		if (disposed) return;
+		const effect = inFlight.get(effectId);
 		try {
 			apply(core.resolve(effectId, result));
+			inFlight.delete(effectId);
+			failed.delete(effectId);
 		} catch (error) {
-			options.onError?.(error);
+			report(error);
+			// The core refused the answer — a shape it cannot read, the way the
+			// retired client's records were (spec 048). The machine is still
+			// waiting on this effect, so it gets the effect's own failure once:
+			// login's `storage_failed`, the session's `accounts_unavailable`.
+			// Anything else is a spinner that never stops.
+			if (effect !== undefined && !failed.has(effectId)) {
+				failed.add(effectId);
+				resolve(effectId, options.toFailure(effect, error));
+			} else {
+				inFlight.delete(effectId);
+			}
 		}
 	}
 

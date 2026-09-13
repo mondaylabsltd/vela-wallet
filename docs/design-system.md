@@ -183,3 +183,22 @@ two properties animate on one element at once; an entrance completes within
   sentences in `color.fg.muted`, then the call to action.
 - **Confirmation card**: a raised card of label/value rows separated by 1px
   dividers — label muted, value semibold.
+
+## Haptics (spec 048, the founder's rule of 2026-09-12: 很多地方应该加，但不能泛滥)
+
+Vibration marks what the eye cannot confirm and what really changed. Nothing else.
+
+| Class | When | Android constant |
+|---|---|---|
+| Press | a button under the finger (press = deformation + haptic, the standing rule) | VIRTUAL_KEY |
+| Detent | a slider step crossed, a picker snapping, the signing slider's threshold, the index rail's letters | SEGMENT_TICK (34+) / CLOCK_TICK |
+| Select | a selection that takes effect: a switch, a class or network filter, a network / fee-token / account pick, a favourite, a copy | CONFIRM (30+) / KEYBOARD_TAP |
+| Success | an outcome the core decided: money sent, money arrived | the two-beat pattern (`Haptics.success`) |
+| Reject | an outcome the core decided: a refusal | the heavy click (`Haptics.error`) |
+
+Never: scrolling, a row tap that navigates, a tab switch, Back, a sheet opening or closing, typing, an animation, or a value the app changed by itself.
+
+Three hard rules: one per gesture; none on a control that also navigates; no repeat inside the same step while dragging.
+
+One helper — `VelaHaptic` + `rememberVelaHaptic()` — through `View.performHapticFeedback`, so the phone's own haptics switch is honoured; every call leaves a `haptic <class>` log line so the scripted device pass can count them. `Haptics.success/error/moneyIn` remain the core-decided outcomes.
+

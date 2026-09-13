@@ -1,5 +1,24 @@
 # Known bugs
 
+## ANDROID-1 (open, 2026-09-12, spec 047) — the parallel-space flag was found off at 047's first launch
+
+**Symptom:** after 046's last device run (badge on, fixture account active), 047's first
+launch showed the founder's real account and the light theme; `shared_prefs/vela.parallel.xml`
+read `active=false`. No sign-out was tapped and no launch carried `vela.parallelSpace=false`.
+**Status:** not reproduced since; re-entered with `--ez vela.parallelSpace true`. Watch for a
+second occurrence before hunting; `DebugParallelSpace.leave()` is the only writer.
+
+## ANDROID-2 (open, 2026-09-12, spec 045) — the sweep pick opened during the first launch after install once showed no rows
+
+**Symptom:** tapping 发送多个代币 before the balances had arrived, on the first launch after
+an install, left the pick empty for the wait's length; the plain pick and later cold starts
+showed rows in ~2 s. Not reproduced.
+
+## ANDROID-3 (fixed 2026-09-12, spec 046) — SIWE verdicts printed the corpus placeholders
+
+**Symptom:** 044's signing sheet showed `已验证登录到 {{domain}}` raw. **Fix:** the words take
+the domain and the origin (`SigningLive.messageBlocks`).
+
 ## BUG-7 (✅ FIXED 2026-07-09, fund-path) — an extension sign could be double-submitted on a re-launch
 
 **Symptom / risk:** the App-Group sign mailbox had no lifecycle — `sign-req-<rid>.json`
@@ -272,3 +291,36 @@ device concurrent proof is **2/4** (extension real-signature ✓, no-leak ✓; w
 blocked). Harness ready → 4/4 once the app's wallet holds a session. Keepalive workaround is
 impossible (`DAppSession.ping()` no-ops unless `connected`, dapp-session.ts:294; the drop isn't
 idle-based — a lone peer waits 38s+ clean).
+
+## ANDROID-4 (fixed 2026-09-12, spec 047) — 探索 did nothing on 通讯录 and 设置
+
+The tab bars of the two routes pushed over the wallet answered only 钱包; 探索 (and the other pushed route) were dead taps — no state change, no frame. The wallet section state was `rememberSaveable` inside the wallet route, unreachable from a pushed route. Fixed by hoisting `section` to the NavHost and giving the pushed routes a real tab handler.
+
+## ANDROID-5 (fixed 2026-09-12, spec 047) — a double 钱包 tap left a blank app under the badge
+
+A bare `popBackStack()` on 钱包 from 通讯录/设置: the fading route still takes taps for ~700 ms, so a second tap popped the wallet itself and emptied the NavHost. With predictive back moving the task to the back and `singleTop`, only a swipe-kill recovered. Fixed with `popBackStack(WALLET, inclusive = false)` and `popUnlessRoot()`.
+
+## ANDROID-6 (fixed 2026-09-12, spec 047) — a `/pay` link was received and then nothing
+
+`LaunchedEffect(payLink)` cleared its own trigger first, which re-keyed the effect to null and cancelled the coroutine waiting for the core's verdict. The link is consumed when the work is done; the verdict read is the one this dispatch produced.
+
+## ANDROID-7 (closed by design 2026-09-12, spec 047) — no offline line from the connectivity callback
+
+The manifest refuses `ACCESS_NETWORK_STATE` (recorded 2026-08-25: a connectivity check lies behind captive portals and on VPNs), so a default-network callback never fires. The offline line comes from `NetHealth`: three consecutive calls that never reached a server.
+
+## WEB-LOGIN-1 (fixed 2026-09-12, spec 048) — sign-in signed and then nothing, until the browser's storage was cleared
+
+Since `wallet.getvela.app` moved to the SvelteKit shell (2026-09-11) the site reads the retired Expo client's `vela.accounts` at the same origin — written in camelCase (`publicKeyHex`, `createdAt`, `keys[].credentialId`). The core's `Account` read snake_case only; the wasm bridge refused the answer; the login and session effect loops had no error handler, so the machine stayed in `LoadingAccounts` with the button busy. Fixed on three layers: the core reads both spellings (hand-written readers; `#[serde(alias)]` trips ts-rs), the web normalises and rewrites the list once and tolerates absent `keys`, and a refused answer is now answered to the machine as its failure (`storage_failed` / `accounts_unavailable`) with a visible prompt: sign in again, or reset this browser's copy.
+
+## DESKTOP-1 (open, 2026-09-12, spec 048) — an unreadable account record is skipped silently
+
+The desktop's own store (`wallet.json`) is written only by the current core, so the old spelling never reaches it; but `load_accounts` skips a record it cannot read without saying so — a wallet that "looks signed out". Recorded, not changed in 048.
+
+## ANDROID-8 (open, 2026-09-13, spec 048) — the test phone's own account record was dropped from `vela.accounts`
+
+At 22:42:21 UTC on 2026-09-12 the Xiaomi's stored account list was rewritten to the parallel-space fixture alone (its `created_at_iso` is that instant — `DebugParallelSpace.enter()` re-created it), and the founder's account (0x7687…D141) is no longer in the list. The app had just been launched by the scripted pass while the phone was dozing. No logcat from that moment survives. The mechanism that fits: a read of the list that came back empty (an unreadable value maps to an empty array in `AccountStore.readList`, and a thrown read maps to `accounts_unavailable` → `Empty`), followed by the fixture add, whose upsert merged with the same empty read and wrote the list back — so a transient read failure became a permanent loss. Signing in again with the passkey rebuilds the record (any key logs in and restores the account). Hardened in 048: an unreadable stored list is refused, never treated as empty (`AccountStore.readList` throws); every upsert logs its before/after counts (`accounts upsert`); the parallel-space hook refuses to add the fixture — and does not enter — when the stored list cannot be read or the session shows fewer records than the store holds (`parallel enter refused`).
+
+
+## WEB-CLEAR-LOCALE-1 (open, 2026-09-13, spec 049) — the web's clear-signing sheet formats in a constant locale
+
+`sheet.svelte.ts:98` hands the core `toClearLocale({ number: 'comma_dot', date: 'iso', time: 'h24' })` with a zero UTC offset, whatever the person chose under 数字格式 / 日期格式 / 时间格式 — so a dApp's amounts and deadlines on the signing sheet ignore the presets every other screen honours, and a deadline is judged against UTC. Android fixed its copy in 049 (`ClearLocale.fromFormats(Formats.current)` from the resolved presets and the phone's offset); the web should call `toClearLocale(resolvedFormatKeys())` at the same point. Recorded for the web owner, not changed here.

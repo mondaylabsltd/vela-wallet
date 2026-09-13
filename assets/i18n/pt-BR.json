@@ -814,6 +814,12 @@
    "pickTitle": "Qual carteira?",
    "pickBody": "A {{product}} guarda mais de uma carteira Vela. Escolha em qual você quer entrar.",
    "pickUnnamed": "Carteira sem nome"
+  },
+  "storage": {
+   "unreadableTitle": "Os dados da carteira neste navegador não podem ser lidos",
+   "unreadableBody": "A lista de carteiras salva está em um formato que esta versão não consegue ler. Entre de novo para reconstruí-la a partir da sua passkey, ou redefina a cópia deste navegador. A carteira em si está intacta: ela vive na chain, atrás da sua passkey.",
+   "signInAgain": "Entrar de novo",
+   "resetCopy": "Redefinir a cópia deste navegador"
   }
  },
  "connect": {

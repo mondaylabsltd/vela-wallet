@@ -1,6 +1,15 @@
 package app.getvela.wallet.feature.flows.components
 
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
@@ -24,6 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -62,6 +72,7 @@ import app.getvela.wallet.feature.flows.SummaryLineModel
 import app.getvela.wallet.feature.flows.TokenMarkModel
 import app.getvela.wallet.feature.wallet.components.TokenIcon
 import kotlin.math.min
+import uniffi.vela_core_uniffi.qrMatrix
 
 /** The blocks of the wallet flows (spec 021 components 8, 16–22, 24–26). */
 
@@ -87,7 +98,7 @@ fun AddressCard(
             .padding(vertical = VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IdenticonImage(seed = account.identiconSeed, size = VelaSizing.doneAvatar)
+        IdenticonImage(seed = account.identiconSeed, size = VelaSizing.doneAvatar, name = account.name)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -134,17 +145,39 @@ fun AddressCard(
  *   mark: a card whose address was doctored would carry artwork that no longer
  *   matches the characters printed under it.
  *
- * The modules are the deterministic demo pattern spec 015 established, never
- * real encoded data — a code that looked scannable but was not would be worse
- * than one that plainly is not.
+ * **The modules are real when a payload is given.** They were the deterministic
+ * demo pattern spec 015 established, on the reasoning that a code which looked
+ * scannable but was not would be worse than one that plainly is not — and by
+ * spec 041 the screen around it had become entirely real: this person's name,
+ * this person's address, their own identicon, at full size. The pattern stopped
+ * plainly not being a code and started looking exactly like one, which is the
+ * failure that reasoning was guarding against, arrived from the other side.
+ *
+ * The gallery still passes no payload, so its canon is unchanged.
  */
 @Composable
 fun QrCard(
     label: String,
     modifier: Modifier = Modifier,
+    /**
+     * What the code encodes.
+     *
+     * `null` draws the placeholder pattern — the gallery's canon, so its
+     * screenshots stay identical between runs. **A real screen must always pass
+     * this.** A receive code that encodes nothing looks completely finished and
+     * does nothing when somebody scans it, which is the one failure on this
+     * screen that is not discovered until money fails to arrive.
+     */
+    payload: String? = null,
     centre: (@Composable () -> Unit)? = null,
 ) {
     val ink = VelaTheme.colors.fixed.shadowInk
+    // The SAME encoder every Vela platform uses, over the bridge. Four
+    // hand-rolled encoders would be four subtly different codes, and the one
+    // that failed would fail only on somebody else's camera.
+    val matrix = remember(payload) {
+        payload?.let { text -> runCatching { qrMatrix(text) }.getOrNull() }
+    }
     Box(
         modifier = modifier
             .size(VelaSizing.qrCard)
@@ -157,11 +190,12 @@ fun QrCard(
         contentAlignment = Alignment.Center,
     ) {
         Canvas(modifier = Modifier.fillMaxWidth().height(VelaSizing.qrCard - VelaSpacing.xl3 * 2)) {
-            val cells = QR_MODULES
+            val cells = matrix?.width?.toInt() ?: QR_MODULES
             val module = min(size.width, size.height) / cells
             for (r in 0 until cells) {
                 for (c in 0 until cells) {
-                    if (qrCell(r, c)) {
+                    val dark = matrix?.modules?.getOrNull(r * cells + c) ?: qrCell(r, c)
+                    if (dark) {
                         drawRect(
                             color = ink,
                             topLeft = androidx.compose.ui.geometry.Offset(c * module, r * module),
@@ -234,6 +268,8 @@ fun AmountInput(
     amount: AmountFieldModel,
     modifier: Modifier = Modifier,
     onDenom: () -> Unit = {},
+    /** Spec 043: present ⇒ the figure is typed here, in the same type as the drawn one. */
+    onValueChange: ((String) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Column(
@@ -242,15 +278,51 @@ fun AmountInput(
             .padding(vertical = VelaSpacing.xl3),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text = amount.value,
+        val heroStyle = TextStyle(
             color = colors.fgBase,
             fontFamily = VelaFontFamily,
             fontWeight = VelaFontWeight.bold,
             fontSize = VelaTextSize.xl5,
             lineHeight = VelaLeading.amountHero * VelaTextSize.xl5,
-            maxLines = 1,
+            textAlign = TextAlign.Center,
         )
+        if (onValueChange != null && amount.raw != null) {
+            // Local echo (spec 043, device-found): every keystroke goes to the
+            // machine, but the field shows what was typed until the machine's
+            // OWN value changes for another reason (Max, ⇄). Driving the field
+            // straight from the round trip dropped characters under fast
+            // typing — "0.001" arrived as ".01".
+            var typed by remember { mutableStateOf(amount.raw) }
+            // Every value this field SENT, so a machine view that lags behind
+            // the typing (device-found: a 42-character paste lost six
+            // characters to stale intermediate views) is recognised as an echo
+            // and ignored; only a value the field never sent — Max, ⇄, a
+            // picked contact, the core's own normalisation — resyncs it.
+            val sent = remember { ArrayDeque<String>().apply { addLast(amount.raw) } }
+            LaunchedEffect(amount.raw) { if (amount.raw !in sent) typed = amount.raw }
+            BasicTextField(
+                value = typed,
+                onValueChange = { next ->
+                    typed = next
+                    sent.addLast(next)
+                    if (sent.size > 256) sent.removeFirst()
+                    onValueChange(next)
+                },
+                singleLine = true,
+                textStyle = heroStyle,
+                cursorBrush = SolidColor(colors.accentBase),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.Center) {
+                        if (typed.isEmpty()) Text(text = "0", style = heroStyle.copy(color = colors.fgSubtle))
+                        inner()
+                    }
+                },
+            )
+        } else {
+            Text(text = amount.value, style = heroStyle, maxLines = 1)
+        }
         Spacer(modifier = Modifier.height(VelaSpacing.sm))
         Row(
             modifier = Modifier.clickable(onClick = onDenom).padding(VelaSpacing.xs),
@@ -492,7 +564,7 @@ fun NoticeBanner(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         mark?.let {
-            TokenIcon(ticker = it.ticker, badgeColor = it.badgeColor, inline = true)
+            TokenIcon(mark = it, inline = true)
             Spacer(modifier = Modifier.width(VelaSpacing.md))
         }
         Text(
@@ -524,7 +596,7 @@ fun TokenHeaderCard(
             .padding(VelaSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        TokenIcon(ticker = token.mark.ticker, badgeColor = token.mark.badgeColor)
+        TokenIcon(mark = token.mark)
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -579,6 +651,8 @@ fun RecipientField(
     modifier: Modifier = Modifier,
     onPick: () -> Unit = {},
     onScan: () -> Unit = {},
+    /** Spec 043: present ⇒ the address is typed or pasted here. */
+    onValueChange: ((String) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -596,19 +670,56 @@ fun RecipientField(
                 .padding(VelaSpacing.lg),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IdenticonImage(seed = field.identiconSeed, size = VelaIconSize.xl2)
+            IdenticonImage(seed = field.identiconSeed, size = VelaIconSize.xl2, name = field.name)
             Spacer(modifier = Modifier.width(VelaSpacing.md))
             Column(modifier = Modifier.weight(1f)) {
-                listOf(field.lines.first, field.lines.second)
-                    .filter { it.isNotEmpty() }
-                    .forEach { line ->
-                        Text(
-                            text = line,
-                            color = colors.fgBase,
-                            fontFamily = VelaMonoFontFamily,
-                            fontSize = VelaTextSize.base,
-                        )
-                    }
+                if (onValueChange != null && field.raw != null) {
+                    val monoStyle = TextStyle(
+                        color = colors.fgBase,
+                        fontFamily = VelaMonoFontFamily,
+                        fontSize = VelaTextSize.base,
+                    )
+                    // Same local echo as the amount: a pasted address must
+                    // not lose characters to the round trip.
+                    var typed by remember { mutableStateOf(field.raw) }
+                    // Every value this field SENT, so a machine view that lags behind
+                    // the typing (device-found: a 42-character paste lost six
+                    // characters to stale intermediate views) is recognised as an echo
+                    // and ignored; only a value the field never sent — Max, ⇄, a
+                    // picked contact, the core's own normalisation — resyncs it.
+                    val sent = remember { ArrayDeque<String>().apply { addLast(field.raw) } }
+                    LaunchedEffect(field.raw) { if (field.raw !in sent) typed = field.raw }
+                    BasicTextField(
+                        value = typed,
+                        onValueChange = { next ->
+                            typed = next
+                            sent.addLast(next)
+                            if (sent.size > 256) sent.removeFirst()
+                            onValueChange(next)
+                        },
+                        maxLines = 2,
+                        textStyle = monoStyle,
+                        cursorBrush = SolidColor(colors.accentBase),
+                        modifier = Modifier.fillMaxWidth(),
+                        decorationBox = { inner ->
+                            if (typed.isEmpty()) {
+                                Text(text = "0x…", style = monoStyle.copy(color = colors.fgSubtle))
+                            }
+                            inner()
+                        },
+                    )
+                } else {
+                    listOf(field.lines.first, field.lines.second)
+                        .filter { it.isNotEmpty() }
+                        .forEach { line ->
+                            Text(
+                                text = line,
+                                color = colors.fgBase,
+                                fontFamily = VelaMonoFontFamily,
+                                fontSize = VelaTextSize.base,
+                            )
+                        }
+                }
             }
             FlowIconButton(
                 icon = VelaIcons.UserRound,
@@ -730,7 +841,7 @@ fun FeeRow(fee: FeeRowModel, modifier: Modifier = Modifier, onOpen: () -> Unit =
             fontSize = VelaTextSize.base,
         )
         Spacer(modifier = Modifier.weight(1f))
-        TokenIcon(ticker = fee.mark.ticker, badgeColor = fee.mark.badgeColor, inline = true)
+        TokenIcon(mark = fee.mark, inline = true)
         Spacer(modifier = Modifier.width(VelaSpacing.sm))
         Text(
             text = fee.value,

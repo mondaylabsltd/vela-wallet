@@ -1,7 +1,10 @@
 package app.getvela.wallet
 
+import app.getvela.wallet.feature.wallet.core.PayLink
+import kotlinx.coroutines.flow.first
 import android.graphics.Color
 import android.os.Bundle
+import app.getvela.wallet.dev.ParallelSpaceHook
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -30,6 +33,7 @@ import app.getvela.wallet.core.designsystem.components.VelaLaunchAnimation
 import app.getvela.wallet.core.designsystem.theme.VelaTheme
 import app.getvela.wallet.core.designsystem.theme.isDarkEffective
 import app.getvela.wallet.core.i18n.LocalVelaStrings
+import app.getvela.wallet.core.identicon.LocalAvatarStyle
 import app.getvela.wallet.core.i18n.VelaStrings
 import app.getvela.wallet.feature.onboarding.core.SecurityKeyCeremony
 import app.getvela.wallet.feature.onboarding.gallery.GalleryScreen
@@ -56,6 +60,20 @@ class MainActivity : ComponentActivity() {
      * [securityKeyCeremony] it must be registered before STARTED, so it lives
      * here and the onboarding flow calls [requestBluetoothPermission].
      */
+    /** Spec 046: the camera, for the scanner; registered before STARTED like the others. */
+    private lateinit var cameraPermissionLauncher:
+        androidx.activity.result.ActivityResultLauncher<String>
+    private var cameraPermissionAnswer:
+        kotlinx.coroutines.CompletableDeferred<Boolean>? = null
+
+    suspend fun requestCameraPermission(): Boolean {
+        if (checkSelfPermission(android.Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) return true
+        val answer = kotlinx.coroutines.CompletableDeferred<Boolean>()
+        cameraPermissionAnswer = answer
+        cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+        return answer.await()
+    }
+
     private lateinit var bluetoothPermissionLauncher:
         androidx.activity.result.ActivityResultLauncher<Array<String>>
     private var bluetoothPermissionAnswer:
@@ -197,6 +215,27 @@ class MainActivity : ComponentActivity() {
      */
     private fun startFlowState(): String? = intent?.getStringExtra("vela.flowState")
 
+    /**
+     * The notification's door (spec 043 phase 4): a send's verdict landed while
+     * the app was away; open the wallet on that row.
+     */
+    private fun receiptRequested(): String? = intent?.getStringExtra("vela.receipt")?.takeIf { it.startsWith("0x") }
+
+    /**
+     * The parallel space's door (spec 043, research D2). Debug builds only —
+     * release builds have no provider behind the hook, and the extra does
+     * nothing there. Remembered across relaunches; sign-out leaves.
+     *
+     *   adb shell am start -n app.getvela.wallet/.MainActivity --ez vela.parallelSpace true
+     *   … --ez vela.parallelSpace false   # leave without signing the device out
+     */
+    private fun parallelSpaceRequested(): Boolean? =
+        if (intent?.hasExtra("vela.parallelSpace") == true) {
+            intent?.getBooleanExtra("vela.parallelSpace", false)
+        } else {
+            null
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         // A fresh process, not a configuration change or a restored activity.
@@ -204,6 +243,13 @@ class MainActivity : ComponentActivity() {
         val coldStart = savedInstanceState == null && !launchAnimationDisabled() && !galleryRequested()
         super.onCreate(savedInstanceState)
         securityKeyCeremony = SecurityKeyCeremony(this)
+        cameraPermissionLauncher = registerForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        ) { granted ->
+            cameraPermissionAnswer?.complete(granted)
+            cameraPermissionAnswer = null
+        }
+        (application as VelaWalletApplication).container.documents = app.getvela.wallet.feature.documents.ActivityDocumentPorts(this)
         bluetoothPermissionLauncher = registerForActivityResult(
             androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions(),
         ) { grants ->
@@ -225,7 +271,23 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val container = (application as VelaWalletApplication).container
-        container.applySystemLocale()
+        // Spec 047: the stored language wins over the system once the preferences are read.
+        lifecycleScope.launch {
+            val prefs = container.preferences.view.first { it.loaded }
+            if (prefs.language != "system") container.applyLanguage(prefs.language) else container.applySystemLocale()
+        }
+        receiptRequested()?.let { container.pendingReceipt.value = it }
+        intent?.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
+        routeDeepLink(intent, container)
+        // Spec 047 US4: a forced crash for the device pass — debug builds only.
+        if (BuildConfig.DEBUG && intent?.getBooleanExtra("vela.testPanic", false) == true) {
+            android.os.Handler(mainLooper).postDelayed({ throw IllegalStateException("vela.testPanic") }, 2_000)
+        }
+        when (parallelSpaceRequested()) {
+            true -> ParallelSpaceHook.enter()
+            false -> ParallelSpaceHook.leave()
+            null -> Unit
+        }
 
         // Null until the persisted preference is actually read — the splash stays up,
         // so the first frame can never render the wrong palette (data-model MainUiState).
@@ -267,7 +329,8 @@ class MainActivity : ComponentActivity() {
             val layoutDirection =
                 if (i18nState.direction == "rtl") LayoutDirection.Rtl else LayoutDirection.Ltr
 
-            VelaTheme(darkTheme = darkTheme) {
+            val prefs by container.preferences.view.collectAsStateWithLifecycle()
+            VelaTheme(darkTheme = darkTheme, fontScale = prefs.textScale.factor) {
                 val colors = VelaTheme.colors
 
                 // Spec 012. `coldStart` is true only for a fresh process — a
@@ -280,6 +343,8 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(
                     LocalVelaStrings provides strings,
                     LocalLayoutDirection provides layoutDirection,
+                    // Spec 049: every avatar reads the chosen style from here.
+                    LocalAvatarStyle provides prefs.avatarStyle,
                 ) {
                     // One continuous surface. Both the launch screen and Welcome
                     // sit on this exact colour, which is what lets them
@@ -326,6 +391,24 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val container = (application as VelaWalletApplication).container
+        intent.getStringExtra("vela.openUrl")?.let { container.browser.open(it, fromOutside = true) }
+        routeDeepLink(intent, container)
+    }
+
+    /** Spec 047 D8: `velawallet://` and `/pay` links, tokenized here, validated by the core on the wallet route. */
+    private fun routeDeepLink(intent: android.content.Intent?, container: AppContainer) {
+        val data = intent?.data ?: return
+        when (val link = PayLink.parse(data.toString())) {
+            is PayLink.Open -> container.browser.open(link.url, fromOutside = true)
+            is PayLink.Pay -> container.pendingPayLink.value = data
+            null -> Unit
         }
     }
 }

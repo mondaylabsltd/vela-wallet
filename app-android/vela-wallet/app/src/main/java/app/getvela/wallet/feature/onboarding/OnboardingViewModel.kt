@@ -7,9 +7,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.getvela.wallet.VelaWalletApplication
+import app.getvela.wallet.core.crux.CoreDriver
+import app.getvela.wallet.core.crux.asBridge
 import app.getvela.wallet.core.diagnostics.VelaLog
 import app.getvela.wallet.feature.onboarding.core.AccountStore
-import app.getvela.wallet.feature.onboarding.core.CoreDriver
 import app.getvela.wallet.feature.onboarding.core.HybridCeremony
 import app.getvela.wallet.feature.onboarding.core.CreateView
 import app.getvela.wallet.feature.onboarding.core.KeyMethod
@@ -20,7 +21,6 @@ import app.getvela.wallet.feature.onboarding.core.PromptKind
 import app.getvela.wallet.feature.onboarding.core.RegistryClient
 import app.getvela.wallet.feature.onboarding.core.SessionController
 import app.getvela.wallet.feature.onboarding.core.UsbSecurityKeyCeremony
-import app.getvela.wallet.feature.onboarding.core.asBridge
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -227,6 +227,13 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
      * Called from the composition on every entry. Cheap and idempotent — it
      * rebuilds only the passkey executor, which holds the context.
      */
+    /**
+     * Spec 043: the send path signs with the same ceremony sign-in uses —
+     * this executor, attached to the real activity. `null` until attached.
+     */
+    fun signer(): app.getvela.wallet.feature.send.core.UserOpSigner? =
+        passkey?.let { app.getvela.wallet.feature.send.core.PasskeyUserOpSigner(it) }
+
     fun attach(activityContext: android.content.Context) {
         if (passkey == null) {
             val isRealActivity = activityContext is app.getvela.wallet.MainActivity
@@ -285,6 +292,7 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 )
                 createView = next
             },
+            escapedFailure = OnboardingExecutor::escapedFailure,
             onFault = { error ->
                 VelaLog.failure("create.fault", "core fault", error)
                 fault = error.message ?: error.toString()
@@ -341,6 +349,7 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 }
                 loginView = next
             },
+            escapedFailure = OnboardingExecutor::escapedFailure,
             onFault = { error ->
                 VelaLog.failure("login.fault", "core fault", error)
                 fault = error.message ?: error.toString()

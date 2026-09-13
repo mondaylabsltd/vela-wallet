@@ -1154,3 +1154,509 @@ mod tests {
         assert_eq!(padded.call_gas_limit, 600_000);
     }
 }
+
+// ---------------------------------------------------------------------------
+// The submit spine's pure half (spec 043)
+// ---------------------------------------------------------------------------
+//
+// What every shell's executor composes and none may re-derive: the call
+// codec, the operation drafts with their floors, the padded estimate, the
+// signature envelope, the batch shapes. The ORDER — which read happens before
+// which, what is fatal and what falls back — and the transports stay in the
+// shell (the desktop's `executor/user_op.rs`, the web's `send-executor.ts`,
+// Android's `SendExecutor.kt`). Ported from the desktop's copy on 2026-09-12;
+// until the desktop is re-pointed here it carries a twin, recorded in
+// `specs/043-android-money-wiring/results.md`.
+
+/// `TEMPO_VERIFICATION_GAS_UNDEPLOYED` (`tempo.ts:89`): the one Tempo constant
+/// `fee_policy` does not carry, because only the submit path requests it.
+pub const TEMPO_VERIFICATION_GAS_UNDEPLOYED: u128 = 6_000_000;
+
+/// The core's call — base units as a DECIMAL string, `0x`-hex data — onto the
+/// MultiSend call, whose value is HEX (`toShellCall`, spec 026 D25). The one
+/// codec that decides whether the displayed amount is the signed amount: hex
+/// where a decimal is owed is refused, and so is a fraction.
+pub fn to_multi_send_call(to: &str, value: &str, data: &str) -> Result<MultiSendCall, CoreError> {
+    let parsed: u128 = value.trim().parse().map_err(|_| {
+        CoreError::InvalidQuantity(format!("call value is not a base-unit integer: `{value}`"))
+    })?;
+    let data = if data.is_empty() || data == "0x" {
+        Vec::new()
+    } else {
+        primitives::from_hex(data)?
+    };
+    Ok(MultiSendCall {
+        to: to.to_owned(),
+        value_hex: format!("0x{parsed:x}"),
+        data,
+    })
+}
+
+/// A displayed quote is usable when it is positive and names a real address.
+#[must_use]
+pub fn quoted_fee_usable(amount: u128, recipient: &str) -> bool {
+    amount > 0
+        && recipient.len() == 42
+        && recipient.starts_with("0x")
+        && recipient[2..].bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// Any call other than a plain transfer: a batch carrying one can burn far
+/// more than the defaults, so a failed estimate must refuse rather than
+/// submit an operation that will run out of gas on chain.
+#[must_use]
+pub fn batch_has_contract_call(calls: &[MultiSendCall]) -> bool {
+    calls.iter().any(|call| !is_plain_transfer_call(&call.data))
+}
+
+/// The gas floors a draft starts from and its padded estimate is held to.
+/// They differ by path — deployed / undeployed / Tempo — so the caller names
+/// them once and every step reads the same pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GasFloors {
+    pub verification: u128,
+    pub call: u128,
+}
+
+impl GasFloors {
+    /// The in-band floors (`sendUserOpInBand`).
+    #[must_use]
+    pub fn in_band(deployed: bool) -> Self {
+        GasFloors {
+            verification: if deployed {
+                VERIFICATION_GAS_DEPLOYED
+            } else {
+                VERIFICATION_GAS_UNDEPLOYED
+            },
+            call: CALL_GAS_LIMIT,
+        }
+    }
+
+    /// The Tempo floors: the deployed verification floor or Tempo's own
+    /// undeployed one, and a call floor that grows with the sub-call count.
+    #[must_use]
+    pub fn tempo(deployed: bool, call_floor: u128) -> Self {
+        GasFloors {
+            verification: if deployed {
+                VERIFICATION_GAS_DEPLOYED
+            } else {
+                TEMPO_VERIFICATION_GAS_UNDEPLOYED
+            },
+            call: call_floor,
+        }
+    }
+}
+
+/// The in-band batch: the person's calls plus one fee leg. For the estimate
+/// the leg is a PLACEHOLDER whose recipient is the Safe itself and whose
+/// amount is 1 — a self-transfer always succeeds and has the real leg's exact
+/// calldata shape, where `transfer(0x0, …)` would revert and poison every
+/// stablecoin estimate.
+pub fn in_band_batch(
+    inner: &[MultiSendCall],
+    gas_fee_token: Option<&str>,
+    recipient: &str,
+    amount: u128,
+) -> Result<Vec<MultiSendCall>, CoreError> {
+    let mut calls = inner.to_vec();
+    calls.push(build_in_band_fee_leg(gas_fee_token, recipient, amount)?);
+    Ok(calls)
+}
+
+/// The Tempo batch: the person's calls plus the stablecoin reimbursement to
+/// the relay's collector.
+pub fn tempo_batch(
+    inner: &[MultiSendCall],
+    fee_token: &str,
+    collector: &str,
+    reimbursement: u128,
+) -> Result<Vec<MultiSendCall>, CoreError> {
+    let mut calls = inner.to_vec();
+    calls.push(MultiSendCall {
+        to: fee_token.to_owned(),
+        value_hex: "0".to_owned(),
+        data: encode_erc20_transfer(collector, reimbursement)?,
+    });
+    Ok(calls)
+}
+
+/// A draft: the batch as MultiSend calldata, the floors as limits, zero
+/// native fee fields (every Vela operation is reimbursed in band), and the
+/// estimation dummy as its signature. Submission always wraps the calls in a
+/// MultiSend, so the estimate does too — byte-identical shapes.
+pub fn draft_operation(
+    sender: &str,
+    nonce: &str,
+    init_code: Vec<u8>,
+    calls: &[MultiSendCall],
+    floors: GasFloors,
+) -> Result<UserOperation, CoreError> {
+    Ok(UserOperation {
+        sender: sender.to_owned(),
+        nonce: nonce.to_owned(),
+        init_code,
+        call_data: build_multi_send_execute_call_data(calls)?,
+        verification_gas_limit: floors.verification,
+        call_gas_limit: floors.call,
+        pre_verification_gas: PRE_VERIFICATION_GAS,
+        max_fee_per_gas: 0,
+        max_priority_fee_per_gas: 0,
+        paymaster_and_data: Vec::new(),
+        signature: build_dummy_signature()?,
+    })
+}
+
+/// The relay's raw estimate onto the draft, padded and floored.
+pub fn apply_estimate(op: &mut UserOperation, estimate: GasEstimate, floors: GasFloors) {
+    let padded = pad_gas_estimate(estimate, floors.verification, floors.call);
+    op.verification_gas_limit = padded.verification_gas_limit;
+    op.call_gas_limit = padded.call_gas_limit;
+    op.pre_verification_gas = padded.pre_verification_gas;
+}
+
+/// The batch with the SETTLED fee leg, onto a draft whose gas the estimate
+/// already sized. Nothing else changes: same nonce, same limits.
+pub fn replace_calls(op: &mut UserOperation, calls: &[MultiSendCall]) -> Result<(), CoreError> {
+    op.call_data = build_multi_send_execute_call_data(calls)?;
+    Ok(())
+}
+
+/// The assertion as the Safe's contract signature: compatibility-checked,
+/// DER→raw low-S, the client-data fields cut out, the verifier named by the
+/// credential that signed. `credential_id` is the one the authenticator
+/// answered with; a credential outside the wallet is refused, never
+/// mis-encoded.
+pub fn envelope_signature(
+    authenticator_data: &[u8],
+    client_data_json: &[u8],
+    signature_der: &[u8],
+    credential_id: &str,
+    keys: &[WalletKey],
+) -> Result<Vec<u8>, CoreError> {
+    if let Err(reason) = crate::webauthn::validate_client_data(
+        crate::ClientDataKind::Get,
+        client_data_json,
+        authenticator_data,
+    ) {
+        return Err(CoreError::InvalidClientData(format!(
+            "Your device's identity provider is not compatible with Vela Wallet. Please switch to Google Password Manager.\n\n{reason}"
+        )));
+    }
+    let raw = crate::webauthn::der_signature_to_raw_low_s(signature_der)?;
+    if raw.len() != 64 {
+        return Err(CoreError::InvalidSignature(format!(
+            "raw signature is {} bytes, not 64",
+            raw.len()
+        )));
+    }
+    let fields = extract_client_data_fields(client_data_json);
+    let signer = signer_address_for(keys, Some(credential_id))?;
+    build_user_op_signature(authenticator_data, &fields, &raw[..32], &raw[32..], &signer)
+}
+
+/// `parseBundlerUnderfunded`: is this the relay saying the per-Safe gas
+/// account is short? Wording-tolerant — the relay has reworded it before
+/// ("…bundler EOA" → "…bundler gas account … Deposit to:").
+/// The assertion as an EIP-1271 signature (spec 044): the same
+/// compatibility check, DER → raw low-S, client-data fields and signer
+/// lookup as [`envelope_signature`], encoded WITHOUT the validity window —
+/// `Safe4337Module.isValidSignature` calls `checkNSignatures` directly.
+pub fn eip1271_envelope_signature(
+    authenticator_data: &[u8],
+    client_data_json: &[u8],
+    signature_der: &[u8],
+    credential_id: &str,
+    keys: &[WalletKey],
+) -> Result<Vec<u8>, CoreError> {
+    if let Err(reason) = crate::webauthn::validate_client_data(
+        crate::ClientDataKind::Get,
+        client_data_json,
+        authenticator_data,
+    ) {
+        return Err(CoreError::InvalidClientData(format!(
+            "Your device's identity provider is not compatible with Vela Wallet. Please switch to Google Password Manager.\n\n{reason}"
+        )));
+    }
+    let raw = crate::webauthn::der_signature_to_raw_low_s(signature_der)?;
+    if raw.len() != 64 {
+        return Err(CoreError::InvalidSignature(format!(
+            "raw signature is {} bytes, not 64",
+            raw.len()
+        )));
+    }
+    let fields = extract_client_data_fields(client_data_json);
+    let signer = signer_address_for(keys, Some(credential_id))?;
+    build_eip1271_signature(authenticator_data, &fields, &raw[..32], &raw[32..], &signer)
+}
+
+#[must_use]
+pub fn is_bundler_underfunded(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    lower.contains("dedicated bundler gas account")
+        || lower.contains("dedicated bundler eoa")
+        || (lower.contains("deposit to:")
+            && lower
+                .split("deposit to:")
+                .nth(1)
+                .is_some_and(|rest| rest.trim_start().starts_with("0x"))
+            && lower.contains("required:"))
+}
+
+/// Why the relay refused a submit, on the axis the send machine speaks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RelayRejection {
+    RelayerUnavailable,
+    BundlerUnderfunded,
+    /// Diagnostics only; the core words the screen.
+    Other(String),
+}
+
+/// The relay's sentence, classified the way `classifySubmit` does.
+#[must_use]
+pub fn classify_relay_rejection(message: &str) -> RelayRejection {
+    if message
+        .to_lowercase()
+        .contains("gas relayer is unavailable")
+    {
+        return RelayRejection::RelayerUnavailable;
+    }
+    if is_bundler_underfunded(message) {
+        return RelayRejection::BundlerUnderfunded;
+    }
+    RelayRejection::Other(message.to_owned())
+}
+
+/// `parseBundlerError`: the relay's error member as one sentence. The known
+/// AA codes get the words the Expo client always gave them; everything else
+/// is the relay's own message, cleaned. `error_json` is the JSON-RPC `error`
+/// member (an object, or anything else — a missing one is "unknown error").
+#[must_use]
+pub fn relay_error_message(error_json: &str) -> String {
+    let Ok(error) = serde_json::from_str::<Value>(error_json) else {
+        return "Transaction failed: unknown error".to_owned();
+    };
+    if error.is_null() {
+        return "Transaction failed: unknown error".to_owned();
+    }
+    let message = error
+        .get("message")
+        .and_then(Value::as_str)
+        .or_else(|| error.get("data").and_then(Value::as_str))
+        .unwrap_or_default();
+    let has = |needle: &str| message.contains(needle);
+    if has("insufficient funds") || has("balance too low") {
+        return "Insufficient balance to cover gas fees. Please fund your account.".to_owned();
+    }
+    if has("could not load bundle") || has("simulation failed") {
+        return "Transaction simulation failed. The network may be congested or the transaction parameters are invalid. Please try again.".to_owned();
+    }
+    if has("AA21") || has("didn't pay prefund") {
+        return "Insufficient gas funds. The bundler account needs more balance on this network."
+            .to_owned();
+    }
+    if has("AA10") || has("sender already constructed") {
+        return "Wallet deployment conflict. Please try again.".to_owned();
+    }
+    if has("AA13") || has("initCode failed") {
+        return "Wallet deployment failed. Required contracts may not be deployed on this network."
+            .to_owned();
+    }
+    if has("AA23") || has("reverted") {
+        return "Transaction reverted during simulation. Check recipient address and amount."
+            .to_owned();
+    }
+    if has("AA25") || has("invalid account nonce") {
+        return "Transaction nonce mismatch. Please try again.".to_owned();
+    }
+    if has("rate limit") || has("429") {
+        return "Bundler rate limit reached. Please wait a moment and try again.".to_owned();
+    }
+    let clean = message
+        .trim_start_matches("execution reverted:")
+        .trim_start_matches("Execution reverted:")
+        .trim();
+    if !clean.is_empty() {
+        return format!("Transaction failed: {clean}");
+    }
+    let text = error.to_string();
+    format!("Transaction failed: {}", &text[..text.len().min(200)])
+}
+
+#[cfg(test)]
+mod submit_spine_tests {
+    use super::*;
+
+    /// The fund-safety codec: a decimal base-unit string becomes hex, and
+    /// nothing else is accepted.
+    #[test]
+    fn the_call_codec_turns_decimal_units_into_hex() {
+        let to = "0x1111111111111111111111111111111111111111";
+        let shell = to_multi_send_call(to, "1000000000000000", "0x")
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(shell.value_hex, "0x38d7ea4c68000");
+        assert!(shell.data.is_empty());
+        let with_data =
+            to_multi_send_call(to, "0", "0xa9059cbb").unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(with_data.value_hex, "0x0");
+        assert_eq!(with_data.data, vec![0xa9, 0x05, 0x9c, 0xbb]);
+        // Hex where a decimal is owed is refused: a decimal reading of
+        // "0x10" would move sixteen units and a hex one a different number.
+        assert!(to_multi_send_call(to, "0x10", "0x").is_err());
+        assert!(to_multi_send_call(to, "1.5", "0x").is_err());
+    }
+
+    #[test]
+    fn a_displayed_quote_is_only_usable_when_positive_and_addressed() {
+        let good = "0x1111111111111111111111111111111111111111";
+        assert!(quoted_fee_usable(1, good));
+        assert!(!quoted_fee_usable(0, good));
+        assert!(!quoted_fee_usable(1, "0x11"));
+        assert!(!quoted_fee_usable(
+            1,
+            "0xzz11111111111111111111111111111111111111"
+        ));
+    }
+
+    #[test]
+    fn the_relay_s_sentence_is_classified_the_way_classify_submit_does() {
+        assert_eq!(
+            classify_relay_rejection("The gas relayer is unavailable right now."),
+            RelayRejection::RelayerUnavailable
+        );
+        assert_eq!(
+            classify_relay_rejection("dedicated bundler gas account is short"),
+            RelayRejection::BundlerUnderfunded
+        );
+        assert!(matches!(
+            classify_relay_rejection("AA25 invalid account nonce"),
+            RelayRejection::Other(_)
+        ));
+        assert_eq!(
+            relay_error_message(r#"{"message":"AA25 invalid account nonce"}"#),
+            "Transaction nonce mismatch. Please try again."
+        );
+        // "reverted" is classified before the generic clean-up, as the web does.
+        assert_eq!(
+            relay_error_message(r#"{"message":"execution reverted: nope"}"#),
+            "Transaction reverted during simulation. Check recipient address and amount."
+        );
+        assert_eq!(
+            relay_error_message(r#"{"message":"something odd"}"#),
+            "Transaction failed: something odd"
+        );
+        assert_eq!(
+            relay_error_message("null"),
+            "Transaction failed: unknown error"
+        );
+        assert_eq!(
+            relay_error_message("not json"),
+            "Transaction failed: unknown error"
+        );
+    }
+
+    #[test]
+    fn the_underfunded_wording_is_recognised_in_both_spellings() {
+        assert!(is_bundler_underfunded(
+            "dedicated bundler gas account is short"
+        ));
+        assert!(is_bundler_underfunded(
+            "Dedicated bundler EOA has insufficient funds"
+        ));
+        assert!(is_bundler_underfunded(
+            "Deposit to: 0xabc… Required: 0.01 ETH"
+        ));
+        assert!(!is_bundler_underfunded("AA25 invalid account nonce"));
+    }
+
+    /// A draft is estimable-shaped: floors as limits, zero fee fields, the
+    /// dummy signature, and a MultiSend even for one call. The estimate then
+    /// pads and floors, and the settled fee leg replaces only the calldata.
+    #[test]
+    fn a_draft_is_padded_by_the_estimate_and_keeps_its_gas_when_the_fee_settles() {
+        let safe = "0x88cCA0EeDbF2C4426110bbFc998F048689266894";
+        let inner = vec![to_multi_send_call(
+            "0x031d7D57c99CAF891e1C250554691Fd12D84772b",
+            "1000000000000000",
+            "0x",
+        )
+        .unwrap_or_else(|e| unreachable!("{e}"))];
+        let floors = GasFloors::in_band(true);
+        let placeholder =
+            in_band_batch(&inner, None, safe, 1).unwrap_or_else(|e| unreachable!("{e}"));
+        let mut op = draft_operation(safe, "0x7", Vec::new(), &placeholder, floors)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(op.verification_gas_limit, VERIFICATION_GAS_DEPLOYED);
+        assert_eq!(op.call_gas_limit, CALL_GAS_LIMIT);
+        assert_eq!(op.max_fee_per_gas, 0);
+        assert!(!batch_has_contract_call(&placeholder));
+        let dummy = op.signature.clone();
+
+        apply_estimate(
+            &mut op,
+            GasEstimate {
+                verification_gas_limit: 100_000,
+                call_gas_limit: 300_000,
+                pre_verification_gas: 50_000,
+            },
+            floors,
+        );
+        // ×1.5 then floored: 150k < 300k floor → 300k; 450k > 200k floor → 450k; +10k.
+        assert_eq!(op.verification_gas_limit, 300_000);
+        assert_eq!(op.call_gas_limit, 450_000);
+        assert_eq!(op.pre_verification_gas, 60_000);
+
+        let settled = in_band_batch(
+            &inner,
+            None,
+            "0x2222222222222222222222222222222222222222",
+            12_345,
+        )
+        .unwrap_or_else(|e| unreachable!("{e}"));
+        let before = op.call_data.clone();
+        replace_calls(&mut op, &settled).unwrap_or_else(|e| unreachable!("{e}"));
+        assert_ne!(op.call_data, before);
+        assert_eq!(op.call_gas_limit, 450_000);
+        assert_eq!(op.signature, dummy);
+        assert!(calculate_safe_op_hash(&op, 100).is_ok());
+    }
+
+    /// The signature envelope is built from the parallel space's assertion —
+    /// the fixture signs the SafeOp hash and the envelope names the shared
+    /// verifier for the first key, the key's own proxy for a later one.
+    #[cfg(feature = "dev-fixtures")]
+    #[test]
+    fn the_fixture_assertion_becomes_a_contract_signature() {
+        use crate::dev_fixtures as fixtures;
+        let accounts = fixtures::accounts().unwrap_or_else(|e| unreachable!("{e}"));
+        let keys: Vec<WalletKey> = accounts
+            .iter()
+            .map(|a| WalletKey {
+                credential_id: a.credential_id_hex.clone(),
+                public_key_hex: a.public_key_hex.clone(),
+            })
+            .collect();
+        let challenge = [0x42u8; 32];
+        let signed =
+            fixtures::build_assertion(&accounts[1], &challenge, fixtures::RP_ID, fixtures::ORIGIN)
+                .unwrap_or_else(|e| unreachable!("{e}"));
+        let auth = primitives::from_hex(&signed.authenticator_data_hex)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        let client = primitives::from_hex(&signed.client_data_json_hex)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        let der =
+            primitives::from_hex(&signed.signature_der_hex).unwrap_or_else(|e| unreachable!("{e}"));
+        let sig = envelope_signature(&auth, &client, &der, &signed.credential_id_hex, &keys)
+            .unwrap_or_else(|e| unreachable!("{e:?}"));
+        let key = crate::safe::parse_public_key(&keys[1].public_key_hex)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        let proxy = crate::safe::compute_webauthn_signer_address(&key.x, &key.y)
+            .unwrap_or_else(|e| unreachable!("{e}"));
+        assert_eq!(&sig[..12], &[0u8; 12]);
+        assert_eq!(
+            primitives::to_hex(&sig[24..44], true).to_lowercase(),
+            proxy.to_lowercase()
+        );
+        // A credential outside the wallet is refused, never mis-encoded.
+        assert!(envelope_signature(&auth, &client, &der, "cafe", &keys).is_err());
+    }
+}

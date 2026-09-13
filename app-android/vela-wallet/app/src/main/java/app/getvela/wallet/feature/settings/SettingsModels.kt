@@ -174,7 +174,7 @@ data class ConfirmSheetModel(
 
 /** A chain's circular avatar: a letter over a fixture-supplied brand colour. */
 @Immutable
-data class ChainMarkModel(val letter: String, val colorArgb: Long)
+data class ChainMarkModel(val letter: String, val colorArgb: Long, /** Spec 047: the chain's logo from the chain-data endpoint; the letter is the fallback. */ val logoUrl: String? = null)
 
 @Immutable
 data class NetworkRowModel(
@@ -212,6 +212,8 @@ data class NetworkDetailModel(
     val rpc: UrlFieldModel,
     val explorer: UrlFieldModel,
     val callout: CalloutModel? = null,
+    /** Spec 048: which chain the overrides are written for. */
+    val chainId: Long = 0,
 )
 
 @Immutable
@@ -222,6 +224,8 @@ data class AddNetworkModel(
     val title: String,
     val subtitle: String,
     val searchPlaceholder: String,
+    /** What is typed in the search box — the core's, so a keystroke round-trips. */
+    val query: String = "",
     val results: List<NetworkRowModel> = emptyList(),
     val candidate: NetworkRowModel? = null,
     val checksTitle: String? = null,

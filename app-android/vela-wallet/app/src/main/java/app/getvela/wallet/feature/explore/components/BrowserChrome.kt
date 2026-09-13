@@ -124,6 +124,9 @@ fun BrowserToolbar(
     onAccount: () -> Unit,
     onTabs: () -> Unit,
     modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
+    onForward: () -> Unit = {},
+    onBookmark: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Row(
@@ -134,8 +137,8 @@ fun BrowserToolbar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        ToolbarIcon(VelaIcons.ArrowLeft, backLabel, browser.canBack) {}
-        ToolbarIcon(VelaIcons.ArrowRight, forwardLabel, browser.canForward) {}
+        ToolbarIcon(VelaIcons.ArrowLeft, backLabel, browser.canBack) { onBack() }
+        ToolbarIcon(VelaIcons.ArrowRight, forwardLabel, browser.canForward) { onForward() }
 
         Row(
             modifier = Modifier
@@ -146,7 +149,7 @@ fun BrowserToolbar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(VelaSpacing.md),
         ) {
-            IdenticonAvatar(seed = browser.accountSeed, size = ExploreMetrics.chipAvatar)
+            IdenticonAvatar(tappable = false, seed = browser.accountSeed, size = ExploreMetrics.chipAvatar, name = browser.accountName)
             if (browser.connected) {
                 Box(
                     Modifier
@@ -156,7 +159,7 @@ fun BrowserToolbar(
             }
         }
 
-        ToolbarIcon(VelaIcons.Star, bookmarkLabel, enabled = true) {}
+        ToolbarIcon(VelaIcons.Star, bookmarkLabel, enabled = true) { onBookmark() }
         Box(
             modifier = Modifier
                 .defaultMinSize(ExploreMetrics.tabCount, ExploreMetrics.tabCount)

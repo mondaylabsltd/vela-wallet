@@ -44,6 +44,12 @@ data class BalanceModel(
     val integer: String? = null,
     /** e.g. "28" — rendered de-emphasised after the separator. */
     val decimals: String? = null,
+    /**
+     * Spec 049: the mark between the two is the number preset's (the web's
+     * `decimalMark`). A `.` drawn after `1.575` read as a second thousands
+     * separator.
+     */
+    val decimalMark: String = ".",
     val liveText: String? = null,
     val status: BalanceStatusModel? = null,
     val a11yHide: String,
@@ -54,6 +60,14 @@ enum class ActivityKind { Sent, Received, Dapp }
 
 @Immutable
 data class ActivityRowModel(
+    /**
+     * Which transaction this row is.
+     *
+     * Every row opened the same detail screen before this existed, so tapping
+     * one payment showed another. A row that can be tapped has to be able to
+     * say what it is.
+     */
+    val id: String = "",
     val kind: ActivityKind,
     val title: String,
     val subtitle: String,
@@ -83,12 +97,18 @@ sealed interface AssetFiatModel {
 
 @Immutable
 data class AssetRowModel(
+    /** `chainId:contract`, or `chainId:native` — which holding this row is. */
+    val id: String = "",
     val ticker: String,
     val chain: String,
     val badgeColor: Color,
     val balance: String,
     val fiat: AssetFiatModel,
     val masked: Boolean,
+    /** Spec 047: the web's logo rules — candidates in order, the badge's logo, the badge hidden when it repeats the token. */
+    val logoUrls: List<String> = emptyList(),
+    val badgeLogoUrl: String? = null,
+    val badgeHidden: Boolean = false,
 )
 
 enum class SectionMode { Rows, Empty, Loading }

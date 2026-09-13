@@ -13,6 +13,7 @@
 
 import { loadOnboardingCore, SessionCore } from '$lib/onboarding/core/wasm-client';
 import { createJsonWasmShell } from '$lib/core/json-shell';
+import { clearSignedInWallet, STORAGE_KEYS } from '$lib/onboarding/core/storage';
 import type { EffectLoop } from '$lib/core/effect-loop';
 import { executeSession, sessionFailure, type SessionEffect } from './executor';
 
@@ -34,6 +35,8 @@ const BOOTING: SessionView = {
 
 class Session {
 	view = $state<SessionView>(BOOTING);
+	/** A core fault the welcome page turns into the storage prompt (spec 048). */
+	fault = $state<string | null>(null);
 	#loop: EffectLoop<SessionEvent> | null = null;
 	#booted: Promise<void> | null = null;
 
@@ -55,7 +58,14 @@ class Session {
 					this.view = view;
 				},
 				execute: (effect) => executeSession(effect),
-				toFailure: sessionFailure
+				toFailure: sessionFailure,
+				// Spec 048: a refused answer (the retired client's records) used to
+				// leave the route on `loading` forever. The loop now answers the
+				// machine with `accounts_unavailable`; this is where a person is told.
+				onError: (error) => {
+					console.error('[session] core fault:', error);
+					this.fault = error instanceof Error ? error.message : String(error);
+				}
 			});
 			this.#loop.start({ type: 'boot' });
 		})();
@@ -63,6 +73,26 @@ class Session {
 	}
 
 	/** Onboarding's exit. The core persists; this only forwards. */
+	/**
+	 * "Reset this browser's copy": drop the stored wallet list and start
+	 * over. The wallet itself lives on the chain behind the passkey; only this
+	 * browser's records go.
+	 */
+	async resetLocalCopy(): Promise<void> {
+		clearSignedInWallet();
+		try {
+			localStorage.removeItem(STORAGE_KEYS.pendingUploads);
+		} catch {
+			// Nothing to clear where there is no storage.
+		}
+		this.#loop?.dispose();
+		this.#loop = null;
+		this.#booted = null;
+		this.fault = null;
+		this.view = BOOTING;
+		await this.boot();
+	}
+
 	accountEstablished(mode: CompletionMode): void {
 		this.#loop?.dispatch({ type: 'account_established', mode });
 	}

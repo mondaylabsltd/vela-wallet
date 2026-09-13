@@ -1,5 +1,17 @@
 package app.getvela.wallet.feature.flows
 
+import androidx.compose.foundation.text.BasicTextField
+import app.getvela.wallet.core.platform.rememberVelaHaptic
+import app.getvela.wallet.core.platform.VelaHaptic
+import app.getvela.wallet.core.platform.Clipboard
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -106,6 +119,8 @@ fun ReceiveListBody(
     val colors = VelaTheme.colors
     var query by remember { mutableStateOf("") }
     val (copied, setCopied) = rememberCopyTick()
+    val context = LocalContext.current
+    val haptic = rememberVelaHaptic()
     val shown = remember(query, model.rows) {
         if (query.isBlank()) {
             model.rows.withIndex().toList()
@@ -147,7 +162,7 @@ fun ReceiveListBody(
                 NetworkRow(
                     row = entry.value,
                     copied = copied == entry.index,
-                    onCopy = { setCopied(entry.index) },
+                    onCopy = { if (Clipboard.copy(context, entry.value.copyLabel, model.address)) { haptic(VelaHaptic.Select); setCopied(entry.index) } },
                     onQr = { onQr(entry.index) },
                 )
             }
@@ -165,6 +180,8 @@ fun ReceiveQrBody(
 ) {
     val colors = VelaTheme.colors
     val (copied, setCopied) = rememberCopyTick()
+    val context = LocalContext.current
+    val haptic = rememberVelaHaptic()
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -200,18 +217,25 @@ fun ReceiveQrBody(
                     tint = if (copied == 1) colors.successBase else colors.fgSubtle,
                     modifier = Modifier
                         .size(VelaIconSize.sm)
-                        .clickable { setCopied(1) },
+                        .clickable { if (Clipboard.copy(context, contract.copyLabel, contract.copyValue ?: contract.value)) { haptic(VelaHaptic.Select); setCopied(1) } },
                 )
             }
         }
         AddressCard(
             account = model.account,
             copied = copied == 0,
-            onCopy = { setCopied(0) },
+            onCopy = { if (Clipboard.copy(context, model.account.copyLabel, model.account.lines.first + model.account.lines.second)) { haptic(VelaHaptic.Select); setCopied(0) } },
         )
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            QrCard(label = model.title) {
+            QrCard(
+                label = model.title,
+                // The address the card is showing, rejoined — a scanner reads
+                // this, so it must be the same string the two lines above spell
+                // out and never a shortened one.
+                payload = (model.account.lines.first + model.account.lines.second)
+                    .takeIf { it.isNotEmpty() },
+            ) {
                 Box(
                     modifier = Modifier
                         .size(VelaIconSize.xl3)
@@ -314,6 +338,8 @@ fun TxDetailBody(
 ) {
     val colors = VelaTheme.colors
     val (copied, setCopied) = rememberCopyTick()
+    val context = LocalContext.current
+    val haptic = rememberVelaHaptic()
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -331,7 +357,7 @@ fun TxDetailBody(
         HairlineDivider()
         model.facts.forEachIndexed { index, fact ->
             if (index > 0) HairlineDivider()
-            FactRow(fact = fact, copied = copied == index, onCopy = { setCopied(index) })
+            FactRow(fact = fact, copied = copied == index, onCopy = { if (Clipboard.copy(context, fact.copy ?: fact.label, fact.copyValue ?: fact.value)) { haptic(VelaHaptic.Select); setCopied(index) } })
         }
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
         FlowCta(
@@ -436,10 +462,12 @@ fun TokenDetailBody(
 ) {
     val colors = VelaTheme.colors
     val (copied, setCopied) = rememberCopyTick()
+    val context = LocalContext.current
+    val haptic = rememberVelaHaptic()
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TokenIcon(ticker = model.mark.ticker, badgeColor = model.mark.badgeColor)
+            TokenIcon(mark = model.mark)
             Spacer(modifier = Modifier.width(VelaSpacing.lg))
             Column {
                 Text(
@@ -494,7 +522,7 @@ fun TokenDetailBody(
         HairlineDivider()
         model.facts.forEachIndexed { index, fact ->
             if (index > 0) HairlineDivider()
-            FactRow(fact = fact, copied = copied == index, onCopy = { setCopied(index) })
+            FactRow(fact = fact, copied = copied == index, onCopy = { if (Clipboard.copy(context, fact.copy ?: fact.label, fact.copyValue ?: fact.value)) { haptic(VelaHaptic.Select); setCopied(index) } })
         }
         Spacer(modifier = Modifier.height(VelaSpacing.xl))
         Text(
@@ -533,6 +561,8 @@ fun AddTokenBody(
     onTab: (String) -> Unit = {},
     onNetwork: () -> Unit = {},
     onSubmit: () -> Unit = {},
+    /** Spec 043: present ⇒ the address is typed or pasted here. */
+    onValueChange: ((String) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -551,9 +581,7 @@ fun AddTokenBody(
                     .padding(horizontal = VelaSpacing.lg, vertical = VelaSpacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TokenIcon(
-                    ticker = network.mark.ticker,
-                    badgeColor = network.mark.badgeColor,
+                TokenIcon(mark = network.mark,
                     inline = true,
                 )
                 Spacer(modifier = Modifier.width(VelaSpacing.md))
@@ -574,12 +602,35 @@ fun AddTokenBody(
             }
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
         }
-        FlowMonoField(
-            value = model.fieldValue,
-            label = model.fieldLabel,
-            placeholder = model.fieldPlaceholder,
-            error = model.fieldError,
-        )
+        if (onValueChange != null) {
+            // Local echo: the field shows what was typed the instant it was
+            // typed, and the core's echo of it is ignored — only a value the
+            // field never sent (a paste the core normalised, a reset) replaces
+            // the text. Round-tripping every keystroke dropped characters on
+            // the device (spec 043 phase 3).
+            var typed by remember { mutableStateOf(model.fieldValue) }
+            val sent = remember { ArrayDeque<String>().apply { addLast(model.fieldValue) } }
+            LaunchedEffect(model.fieldValue) { if (model.fieldValue !in sent) typed = model.fieldValue }
+            FlowMonoField(
+                value = typed,
+                label = model.fieldLabel,
+                placeholder = model.fieldPlaceholder,
+                error = model.fieldError,
+                onValueChange = { next ->
+                    typed = next
+                    sent.addLast(next)
+                    while (sent.size > 8) sent.removeFirst()
+                    onValueChange(next)
+                },
+            )
+        } else {
+            FlowMonoField(
+                value = model.fieldValue,
+                label = model.fieldLabel,
+                placeholder = model.fieldPlaceholder,
+                error = model.fieldError,
+            )
+        }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
         when (val result = model.result) {
             AddTokenResult.None -> Unit
@@ -596,7 +647,7 @@ fun AddTokenBody(
                     .padding(VelaSpacing.lg),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TokenIcon(ticker = result.mark.ticker, badgeColor = result.mark.badgeColor)
+                TokenIcon(mark = result.mark)
                 Spacer(modifier = Modifier.width(VelaSpacing.lg))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -633,7 +684,7 @@ fun AddTokenBody(
                     .padding(VelaSpacing.lg),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TokenIcon(ticker = result.mark.ticker, badgeColor = result.mark.badgeColor)
+                    TokenIcon(mark = result.mark)
                     Spacer(modifier = Modifier.width(VelaSpacing.lg))
                     Text(
                         text = result.name,
@@ -776,6 +827,11 @@ fun SendFormBody(
     onMax: (Int) -> Unit = {},
     onAddRecipient: () -> Unit = {},
     onContinue: () -> Unit = {},
+    onAmountChange: ((String) -> Unit)? = null,
+    onRecipientChange: ((String) -> Unit)? = null,
+    onRecipientAmount: ((Int, String) -> Unit)? = null,
+    onRecipientAddress: ((Int, String) -> Unit)? = null,
+    onRecipientPick: ((Int) -> Unit)? = null,
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -804,6 +860,9 @@ fun SendFormBody(
                         ticker = row.symbol,
                         chain = row.balanceLabel,
                         badgeColor = row.mark.badgeColor,
+                        logoUrls = row.mark.logoUrls,
+                        badgeLogoUrl = row.mark.badgeLogoUrl,
+                        badgeHidden = row.mark.badgeHidden,
                         balance = row.amount,
                         fiat = AssetFiatModel.None,
                         masked = false,
@@ -832,10 +891,25 @@ fun SendFormBody(
             Spacer(modifier = Modifier.height(VelaSpacing.sm))
         }
         model.amount?.let {
-            AmountInput(amount = it, onDenom = onDenom)
+            AmountInput(amount = it, onDenom = onDenom, onValueChange = onAmountChange)
+        }
+        model.warning?.let {
+            Text(
+                text = it,
+                color = colors.warningBase,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                modifier = Modifier.padding(bottom = VelaSpacing.lg),
+            )
         }
         model.recipient?.let {
-            RecipientField(field = it, onPick = onPickRecipient, onScan = onScan)
+            RecipientField(
+                field = it,
+                onPick = onPickRecipient,
+                onScan = onScan,
+                onValueChange = onRecipientChange,
+            )
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
         }
         model.addRecipient?.let {
@@ -853,7 +927,13 @@ fun SendFormBody(
             Spacer(modifier = Modifier.height(VelaSpacing.lg))
         }
         model.recipients.forEachIndexed { index, recipient ->
-            RecipientCard(recipient = recipient, onRemove = { onRemoveRecipient(index) })
+            RecipientCard(
+                recipient = recipient,
+                onRemove = { onRemoveRecipient(index) },
+                onAmountChange = onRecipientAmount?.let { edit -> { text -> edit(index, text) } },
+                onAddressChange = onRecipientAddress?.let { edit -> { text -> edit(index, text) } },
+                onPick = onRecipientPick?.let { pick -> { pick(index) } },
+            )
             Spacer(modifier = Modifier.height(VelaSpacing.sm))
         }
         if (model.recipientActions.isNotEmpty()) {
@@ -872,6 +952,7 @@ fun SendFormBody(
             onClick = onContinue,
             accent = true,
             modifier = Modifier.fillMaxWidth(),
+            enabled = model.ctaEnabled,
         )
     }
 }
@@ -1047,6 +1128,9 @@ fun BatchImportBody(
     onFile: () -> Unit = {},
     onTemplate: () -> Unit = {},
     onApply: () -> Unit = {},
+    onPaste: ((String) -> Unit)? = null,
+    onRate: ((String) -> Unit)? = null,
+    onRateReset: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -1056,11 +1140,30 @@ fun BatchImportBody(
             onSelect = onUnit,
         )
         Spacer(modifier = Modifier.height(VelaSpacing.md))
-        FlowMonoField(
-            value = model.pasteValue,
-            placeholder = model.pastePlaceholder,
-            minLines = 4,
-        )
+        if (onPaste != null) {
+            // Local echo, as the amount hero: the machine's view lags fast typing.
+            var typed by remember { mutableStateOf(model.pasteValue) }
+            val sent = remember { ArrayDeque<String>().apply { addLast(model.pasteValue) } }
+            LaunchedEffect(model.pasteValue) { if (model.pasteValue !in sent) typed = model.pasteValue }
+            FlowMonoField(
+                value = typed,
+                placeholder = model.pastePlaceholder,
+                minLines = 4,
+                modifier = Modifier.semantics { contentDescription = "batch-paste" },
+                onValueChange = { next ->
+                    typed = next
+                    sent.addLast(next)
+                    if (sent.size > 256) sent.removeFirst()
+                    onPaste(next)
+                },
+            )
+        } else {
+            FlowMonoField(
+                value = model.pasteValue,
+                placeholder = model.pastePlaceholder,
+                minLines = 4,
+            )
+        }
         Spacer(modifier = Modifier.height(VelaSpacing.md))
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1110,12 +1213,46 @@ fun BatchImportBody(
                 fontSize = VelaTextSize.base,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                text = "${model.rateLabel} ${model.rateValue}",
-                color = colors.fgBase,
-                fontFamily = VelaFontFamily,
-                fontSize = VelaTextSize.base,
-            )
+            if (onRate != null && model.rateInput != null) {
+                // The rate is the core's number; edited here it goes back as text.
+                val rateStyle = TextStyle(color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base, textAlign = TextAlign.End)
+                var typedRate by remember { mutableStateOf(model.rateInput) }
+                val sentRate = remember { ArrayDeque<String>().apply { addLast(model.rateInput) } }
+                LaunchedEffect(model.rateInput) { if (model.rateInput !in sentRate) typedRate = model.rateInput }
+                Text(text = model.rateLabel, color = colors.fgBase, fontFamily = VelaFontFamily, fontSize = VelaTextSize.base)
+                Spacer(modifier = Modifier.width(VelaSpacing.xs))
+                BasicTextField(
+                    value = typedRate,
+                    onValueChange = { next ->
+                        typedRate = next
+                        sentRate.addLast(next)
+                        if (sentRate.size > 256) sentRate.removeFirst()
+                        onRate(next)
+                    },
+                    singleLine = true,
+                    textStyle = rateStyle,
+                    cursorBrush = SolidColor(colors.accentBase),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.width(88.dp).semantics { contentDescription = "batch-rate" },
+                )
+                if (model.rateEdited && model.rateReset != null) {
+                    Spacer(modifier = Modifier.width(VelaSpacing.xs))
+                    Text(
+                        text = model.rateReset,
+                        color = colors.accentBase,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.sm,
+                        modifier = Modifier.clickable(onClick = onRateReset),
+                    )
+                }
+            } else {
+                Text(
+                    text = "${model.rateLabel} ${model.rateValue}",
+                    color = colors.fgBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.base,
+                )
+            }
             Spacer(modifier = Modifier.width(VelaSpacing.sm))
             Icon(
                 imageVector = VelaIcons.Pencil,
@@ -1177,6 +1314,15 @@ fun BatchImportBody(
             )
         }
         Spacer(modifier = Modifier.height(VelaSpacing.lg))
+        model.note?.let {
+            Text(
+                text = it,
+                color = colors.fgMuted,
+                fontFamily = VelaFontFamily,
+                fontSize = VelaTextSize.sm,
+                modifier = Modifier.padding(bottom = VelaSpacing.md),
+            )
+        }
         FlowCta(
             label = model.cta,
             onClick = onApply,
@@ -1200,6 +1346,8 @@ fun SendConfirmBody(
     model: SendConfirmModel,
     modifier: Modifier = Modifier,
     onConfirm: () -> Unit = {},
+    onNoticeAction: () -> Unit = {},
+    onNoticeSecondary: () -> Unit = {},
 ) {
     val colors = VelaTheme.colors
     Column(modifier = modifier.fillMaxWidth()) {
@@ -1251,9 +1399,7 @@ fun SendConfirmBody(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         item.lead?.let {
-                            TokenIcon(
-                                ticker = it.ticker,
-                                badgeColor = it.badgeColor,
+                            TokenIcon(mark = it,
                                 inline = true,
                             )
                             Spacer(modifier = Modifier.width(VelaSpacing.md))
@@ -1281,12 +1427,48 @@ fun SendConfirmBody(
                 }
             }
         }
+        model.notice?.let { notice ->
+            Spacer(modifier = Modifier.height(VelaSpacing.lg))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.bgRaised, RoundedCornerShape(VelaRadius.lg))
+                    .padding(VelaSpacing.lg),
+            ) {
+                Text(
+                    text = notice,
+                    color = colors.warningBase,
+                    fontFamily = VelaFontFamily,
+                    fontSize = VelaTextSize.sm,
+                    lineHeight = VelaTextSize.sm * VelaLeading.normal,
+                )
+                model.noticeAction?.let { action ->
+                    Spacer(modifier = Modifier.height(VelaSpacing.md))
+                    FlowCta(label = action, onClick = onNoticeAction, accent = false, modifier = Modifier.fillMaxWidth())
+                }
+                model.noticeSecondary?.let { secondary ->
+                    Spacer(modifier = Modifier.height(VelaSpacing.sm))
+                    Text(
+                        text = secondary,
+                        color = colors.fgMuted,
+                        fontFamily = VelaFontFamily,
+                        fontSize = VelaTextSize.sm,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onNoticeSecondary)
+                            .padding(vertical = VelaSpacing.sm),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
         Spacer(modifier = Modifier.height(VelaSpacing.xl4))
         FlowCta(
             label = model.cta,
             onClick = onConfirm,
             accent = true,
             modifier = Modifier.fillMaxWidth(),
+            enabled = model.ctaEnabled,
         )
     }
 }
@@ -1312,6 +1494,8 @@ fun SendReceiptBody(
 ) {
     val colors = VelaTheme.colors
     var copied by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val haptic = rememberVelaHaptic()
 
     Column(modifier = modifier.fillMaxWidth()) {
         StatusHero(stage = model.stage, title = model.title, captions = model.captions)
@@ -1345,7 +1529,7 @@ fun SendReceiptBody(
                     tint = if (copied) colors.successBase else colors.fgSubtle,
                     modifier = Modifier
                         .size(VelaIconSize.sm)
-                        .clickable { copied = true },
+                        .clickable { if (Clipboard.copy(context, hash.copyLabel, hash.copyValue ?: hash.value)) { haptic(VelaHaptic.Select); copied = true } },
                 )
             }
             Spacer(modifier = Modifier.height(VelaSpacing.md))

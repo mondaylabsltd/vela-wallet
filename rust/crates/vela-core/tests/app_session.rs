@@ -743,3 +743,57 @@ fn mispaired_results_are_inert() {
         .is_empty());
     assert_eq!(sut.view(), before, "no dialog from an unrequested answer");
 }
+
+// ---------------------------------------------------------------------------
+// Spec 048: the retired client's records restore the session too
+// ---------------------------------------------------------------------------
+
+#[test]
+fn an_expo_era_record_restores_the_session() {
+    let stored = Account {
+        id: "cred-a".to_owned(),
+        name: "Ann".to_owned(),
+        address: ADDR_A.to_owned(),
+        public_key_hex: "04ab".to_owned(),
+        created_at_iso: "2026-08-25T10:00:00.000Z".to_owned(),
+        keys: vec![AccountKey {
+            credential_id: "cred-a".to_owned(),
+            public_key_hex: "04ab".to_owned(),
+            name: "Ann".to_owned(),
+            transports: String::new(),
+        }],
+    };
+    let json = serde_json::to_string(&Res::AccountsLoaded {
+        accounts: vec![stored.clone()],
+    })
+    .unwrap()
+    .replace("\"public_key_hex\"", "\"publicKeyHex\"")
+    .replace("\"created_at_iso\"", "\"createdAt\"")
+    .replace("\"credential_id\"", "\"credentialId\"")
+    .replace(",\"transports\":\"\"", "");
+    let loaded: Res =
+        serde_json::from_str(&json).expect("the core reads the retired client's spelling");
+    assert_eq!(
+        loaded,
+        Res::AccountsLoaded {
+            accounts: vec![stored]
+        }
+    );
+
+    let mut sut = Sut::new();
+    let ops = sut.dispatch(Event::Boot);
+    assert_eq!(ops, vec![Op::LoadAccounts, Op::LoadActiveIndex]);
+    assert!(sut.resolve(loaded).is_empty());
+    let ops = sut.resolve(Res::ActiveIndexLoaded { index: 0 });
+    for op in ops {
+        let ack = match op {
+            Op::SaveAccount { .. } => Res::AccountSaved,
+            Op::SaveActiveIndex { .. } => Res::ActiveIndexSaved,
+            other => panic!("unexpected restore op {other:?}"),
+        };
+        sut.resolve(ack);
+    }
+    let view = sut.view();
+    assert_eq!(view.address, ADDR_A);
+    assert_eq!(view.allowed_route, SessionRoute::Wallet);
+}

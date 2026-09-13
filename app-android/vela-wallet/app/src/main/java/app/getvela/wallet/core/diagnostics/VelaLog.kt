@@ -74,7 +74,20 @@ object VelaLog {
     /** One line: a step that failed, with the exception's own chain. */
     fun failure(scope: String, message: String, error: Throwable, vararg fields: Pair<String, Any?>) {
         write(scope, message, fields.toList(), error)
+        if (scope.endsWith(".fault")) onFault?.invoke(scope, error)
+        synchronized(recent) {
+            recent.addLast("$scope: $message (${error.javaClass.simpleName})")
+            if (recent.size > 8) recent.removeFirst()
+        }
     }
+
+    /** Spec 047 D10: a core fault reaches the failure sheet like a crash would. */
+    @Volatile
+    var onFault: ((String, Throwable) -> Unit)? = null
+
+    /** The last few failures, for the bug report's preview (spec 047). */
+    private val recent = ArrayDeque<String>()
+    fun recentFailures(): List<String> = synchronized(recent) { recent.toList() }
 
     /**
      * Credential ids are long and the interesting part is whether two lines are
@@ -123,8 +136,27 @@ object VelaLog {
                 }
             }
         }
-        Log.i(TAG, line)
+        logcat(line)
         appendToFile(line)
+    }
+
+    /**
+     * **A log line must never become a failure.**
+     *
+     * `android.util.Log` is a stub on the JVM and throws "not mocked" — so the
+     * first executor to log inside an operation threw instead of answering, and
+     * the machine waiting on that answer hung until the test's own timeout. A
+     * shell operation that never answers is the one contract violation this
+     * codebase cannot recover from, and it arrived through a diagnostic.
+     *
+     * The file write below has always been guarded; Logcat was not.
+     */
+    private fun logcat(line: String) {
+        try {
+            Log.i(TAG, line)
+        } catch (_: Throwable) {
+            // No Android runtime (unit tests). The file, if any, still has it.
+        }
     }
 
     @Synchronized
@@ -136,7 +168,11 @@ object VelaLog {
         } catch (error: Exception) {
             // A diagnostic that crashes the thing it is diagnosing is worse than
             // no diagnostic. Logcat still has the line.
-            Log.w(TAG, "could not write the log file", error)
+            // Same rule as above: reporting the failure must not become one.
+            try {
+                Log.w(TAG, "could not write the log file", error)
+            } catch (_: Throwable) {
+            }
         }
     }
 

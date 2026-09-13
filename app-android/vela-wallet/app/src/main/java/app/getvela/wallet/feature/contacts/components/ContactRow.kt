@@ -177,6 +177,7 @@ private fun ContactRowContent(
             seed = contact.addressFull,
             size = avatarSize,
             contentDescription = contact.name,
+            name = contact.name,
         )
         Spacer(modifier = Modifier.width(VelaSpacing.lg))
         Column(modifier = Modifier.weight(1f)) {

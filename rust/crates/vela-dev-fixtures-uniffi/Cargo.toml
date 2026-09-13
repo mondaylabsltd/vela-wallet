@@ -1,0 +1,22 @@
+[package]
+name = "vela-dev-fixtures-uniffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "The parallel space's fixed keyset for DEBUG Android builds — a second, debug-only uniffi library (spec 043, research D2)."
+
+[lib]
+name = "vela_dev_fixtures"
+crate-type = ["cdylib", "lib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
+[dependencies]
+# `dev-fixtures` ON: this crate exists to carry the keyset, and nothing that
+# ships in a release APK depends on it — the debug source set is the only
+# consumer. `vela-core-uniffi` must never enable the feature.
+vela-core = { workspace = true, features = ["dev-fixtures"] }
+uniffi = { workspace = true, features = ["cli"] }
+thiserror = { workspace = true }

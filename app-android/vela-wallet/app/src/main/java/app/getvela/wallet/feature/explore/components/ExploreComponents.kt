@@ -240,6 +240,10 @@ fun ExploreSearchField(
                     value = text,
                     onValueChange = { text = it },
                     singleLine = true,
+                    // Spec 044: the keyboard's Go submits the address, as the scan icon's tap does.
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Go),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { onSubmit(text) }),
+
                     cursorBrush = SolidColor(colors.accentBase),
                     textStyle = TextStyle(
                         color = colors.fgBase,

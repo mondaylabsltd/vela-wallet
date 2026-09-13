@@ -37,6 +37,8 @@ cd ../app-android/vela-wallet && ./gradlew :app:installDebug
 
 新 clone 建不出 iOS/Android 的原因与解法都在 `.github/workflows/ci.yml` 的 `ios`/`android` job 注释里(绑定产物不入库)。
 
+Android 真机安装/验证循环（平行空间、uiautomator 驱动、测试 dApp、深链、门禁）见 `docs/android/install-verify-loop.md`（spec 047）。
+
 ## 常用命令与门禁
 
 工具包(`scripts/package.json`;下表命令在根目录写作 `npm --prefix scripts run <name>`,或 `cd scripts` 后 `npm run <name>`;每条脚本都先切回仓库根再执行):
